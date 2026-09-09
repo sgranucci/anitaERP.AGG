@@ -3,10 +3,12 @@
 namespace App\Services\Contable\LibroIvaDigital;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Configuracion\Empresa;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
@@ -37,12 +39,19 @@ class LibroIvaDigitalComprasGenerador
         $hasta = date('Y-m-t', strtotime($desde));
         $prorrateoGlobal = (bool) ($opciones['prorrateo_cf_global'] ?? false);
         $completarAnita = (bool) ($opciones['completar_compras_anita'] ?? true);
+        $cuitInformante = LibroIvaDigitalComprasCuitSupport::soloDigitos(
+            (string) (Empresa::query()->whereKey($empresaId)->value('nroinscripcion') ?? ''),
+        );
 
         $lineasCbte = [];
         $lineasAlicuotas = [];
         $registros = [];
         $conteo = 0;
         $conteoAnita = 0;
+        $omitidosSinCuit = 0;
+        $omitidosCuitInformante = 0;
+        /** @var list<array<string, mixed>> $omitidosDetalle */
+        $omitidosDetalle = [];
         $totalImporte = 0.0;
         $totalIva = 0.0;
         /** @var array<string, true> $clavesUsadas */
@@ -89,6 +98,32 @@ class LibroIvaDigitalComprasGenerador
                         || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte),
                 ];
                 $this->adjuntarConceptoIvaSimple($registro, $fila['conceptos'], (string) ($compra['com_letra'] ?? 'A'));
+                if (! LibroIvaDigitalComprasCuitSupport::tieneCuitVendedor($registro)) {
+                    $omitidosSinCuit++;
+                    $omitidosDetalle[] = $this->filaOmitido(
+                        $registro,
+                        'sin_cuit',
+                        'Sin CUIT de vendedor (ARCA exige código 80)',
+                        'anita',
+                        (string) ($compra['com_proveedor'] ?? ''),
+                        (string) ($compra['com_tipo'] ?? ''),
+                        (string) ($compra['com_letra'] ?? ''),
+                    );
+                    continue;
+                }
+                if (LibroIvaDigitalComprasCuitSupport::esCuitInformante($registro, $cuitInformante)) {
+                    $omitidosCuitInformante++;
+                    $omitidosDetalle[] = $this->filaOmitido(
+                        $registro,
+                        'cuit_informante',
+                        'CUIT del vendedor igual al CUIT del informante',
+                        'anita',
+                        (string) ($compra['com_proveedor'] ?? ''),
+                        (string) ($compra['com_tipo'] ?? ''),
+                        (string) ($compra['com_letra'] ?? ''),
+                    );
+                    continue;
+                }
                 $this->acumularRegistro(
                     $registro,
                     abs((float) ($compra['com_monto'] ?? 0)),
@@ -125,6 +160,10 @@ class LibroIvaDigitalComprasGenerador
                 &$nrosInternosUsados,
                 $prorrateoGlobal,
                 &$registros,
+                &$omitidosSinCuit,
+                &$omitidosCuitInformante,
+                &$omitidosDetalle,
+                $cuitInformante,
             ): void {
                 $nroInterno = (int) ($cp->anita_nro_interno ?? 0);
                 if ($nroInterno > 0 && isset($nrosInternosUsados[$nroInterno])) {
@@ -151,6 +190,35 @@ class LibroIvaDigitalComprasGenerador
                 $registro['iva_simple']['restitucion'] = (bool) ($registro['iva_simple']['restitucion'] ?? false)
                     || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte);
 
+                if (! LibroIvaDigitalComprasCuitSupport::tieneCuitVendedor($registro)) {
+                    $omitidosSinCuit++;
+                    $omitidosDetalle[] = $this->filaOmitido(
+                        $registro,
+                        'sin_cuit',
+                        'Sin CUIT de vendedor (ARCA exige código 80)',
+                        'erp',
+                        (string) ($cp->proveedores->codigo ?? ''),
+                        (string) ($cp->tipotransaccion_compras->abreviatura ?? ''),
+                        (string) ($cp->letra ?? ''),
+                    );
+
+                    return;
+                }
+                if (LibroIvaDigitalComprasCuitSupport::esCuitInformante($registro, $cuitInformante)) {
+                    $omitidosCuitInformante++;
+                    $omitidosDetalle[] = $this->filaOmitido(
+                        $registro,
+                        'cuit_informante',
+                        'CUIT del vendedor igual al CUIT del informante',
+                        'erp',
+                        (string) ($cp->proveedores->codigo ?? ''),
+                        (string) ($cp->tipotransaccion_compras->abreviatura ?? ''),
+                        (string) ($cp->letra ?? ''),
+                    );
+
+                    return;
+                }
+
                 $this->acumularRegistro(
                     $registro,
                     abs((float) $cp->total),
@@ -169,9 +237,13 @@ class LibroIvaDigitalComprasGenerador
             'compras_cbte' => implode("\r\n", $lineasCbte),
             'compras_alicuotas' => implode("\r\n", $lineasAlicuotas),
             'registros' => $registros,
+            'omitidos' => $omitidosDetalle,
             'resumen' => [
                 'comprobantes' => $conteo,
                 'comprobantes_anita' => $conteoAnita,
+                'omitidos_sin_cuit' => $omitidosSinCuit,
+                'omitidos_cuit_informante' => $omitidosCuitInformante,
+                'omitidos_total' => count($omitidosDetalle),
                 'alicuotas' => count($lineasAlicuotas),
                 'importe_total' => round($totalImporte, 2),
                 'total_iva' => round($totalIva, 2),
@@ -182,6 +254,54 @@ class LibroIvaDigitalComprasGenerador
                 'prorrateo_cf_global' => $prorrateoGlobal,
                 'completar_compras_anita' => $completarAnita,
             ],
+        ];
+    }
+
+    /**
+     * @param  array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>}  $registro
+     * @return array{
+     *     motivo: string,
+     *     motivo_texto: string,
+     *     origen: string,
+     *     fecha: string,
+     *     tipo_comprobante: string,
+     *     punto_venta: int,
+     *     numero_comprobante: int,
+     *     codigo_documento: string,
+     *     numero_identificacion: string,
+     *     nombre_vendedor: string,
+     *     importe_total: float,
+     *     proveedor_codigo: string,
+     *     tipo_abrev: string,
+     *     letra: string
+     * }
+     */
+    private function filaOmitido(
+        array $registro,
+        string $motivo,
+        string $motivoTexto,
+        string $origen,
+        string $proveedorCodigo = '',
+        string $tipoAbrev = '',
+        string $letra = '',
+    ): array {
+        $cab = $registro['cabecera'] ?? [];
+
+        return [
+            'motivo' => $motivo,
+            'motivo_texto' => $motivoTexto,
+            'origen' => $origen,
+            'fecha' => (string) ($cab['fecha'] ?? ''),
+            'tipo_comprobante' => str_pad((string) ($cab['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT),
+            'punto_venta' => (int) ($cab['punto_venta'] ?? 0),
+            'numero_comprobante' => (int) ($cab['numero_comprobante'] ?? 0),
+            'codigo_documento' => (string) ($cab['codigo_documento'] ?? ''),
+            'numero_identificacion' => (string) ($cab['numero_identificacion'] ?? ''),
+            'nombre_vendedor' => (string) ($cab['nombre_vendedor'] ?? ''),
+            'importe_total' => round((float) ($cab['importe_total'] ?? 0), 2),
+            'proveedor_codigo' => $proveedorCodigo,
+            'tipo_abrev' => $tipoAbrev,
+            'letra' => strtoupper(substr(trim($letra), 0, 1)),
         ];
     }
 

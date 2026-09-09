@@ -548,6 +548,25 @@ class ApiController extends Controller
             $avisosConceptos = array_merge($cotejoIibb['correcciones'], $cotejoIibb['avisos']);
             $revisarPorIibb = $cotejoIibb['revisar'];
 
+            // Descuento/importe negativo espurio del agente: si sin él el total ya cierra, se descarta.
+            $filtroNegativos = ComprobanteProveedorConceptosIvaCoherenciaSupport::descartarLineasNegativasSiTotalYaCuadra(
+                $lineasConcepto,
+                $totalRequest
+            );
+            if ($filtroNegativos['descartó']) {
+                $lineasConcepto = $filtroNegativos['lineas'];
+                $montosDescartados = array_map(
+                    static fn (array $l): float => round((float) ($l['monto'] ?? 0), 2),
+                    $filtroNegativos['descartadas']
+                );
+                $avisosConceptos[] = 'Se omitió importe negativo del agente porque la suma de conceptos ya cierra con el total (montos descartados: '
+                    .implode(', ', $montosDescartados).').';
+                $log->info('recibe_comprobante.descuento_negativo_descartado', [
+                    'total' => $totalRequest,
+                    'descartadas' => $filtroNegativos['descartadas'],
+                ]);
+            }
+
             $netoGravado = ComprobanteProveedorConceptosIvaCoherenciaSupport::netoGravadoDesdeLineas($lineasConcepto);
             $cuadre = ComprobanteProveedorConceptosIvaCoherenciaSupport::cuadreConTotal(
                 $lineasConcepto,

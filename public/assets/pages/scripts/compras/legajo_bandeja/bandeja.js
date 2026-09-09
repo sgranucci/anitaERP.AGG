@@ -91,62 +91,122 @@
         }
     }
 
-    function renderAsignar(paquete) {
-        var $fac = $('#bandejaAsignarPrecarga').empty();
+    var asignarEstado = {
+        mapa: {},
+        activo: null,
+        coms: [],
+        facs: [],
+        urlCorregirTipo: ''
+    };
+
+    function badgeComDoc(fac) {
+        var tipo = String(fac.tipo || 'FC').toUpperCase();
+        var exige = fac.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
+        if (!exige) {
+            var label = tipo === 'ND' ? 'ND sin COM' : (tipo === 'NC' ? 'NC sin COM' : 'no exige COM');
+            return '<span class="badge badge-light border text-muted">' + label + '</span>';
+        }
+        var ids = asignarEstado.mapa[String(fac.id)] || [];
+        if (ids.length) {
+            return '<span class="badge badge-primary">COM ×' + ids.length + '</span>';
+        }
+        return '<span class="badge badge-warning">sin COM</span>';
+    }
+
+    function renderAsignarComsActivo() {
         var $coms = $('#bandejaAsignarComs').empty();
+        var activo = asignarEstado.activo;
+        if (!activo) {
+            $coms.append('<p class="text-muted mb-0 small">Seleccioná un comprobante a la izquierda.</p>');
+            return;
+        }
+        var fac = asignarEstado.facs.find(function (f) { return String(f.id) === String(activo); });
+        var tipoActual = String((fac && (fac.tipo_label || fac.tipo)) || 'FC').toUpperCase();
+        if (fac && (fac.origen || 'precarga') === 'precarga' && /^\d+$/.test(String(fac.id))) {
+            $coms.append(
+                '<div class="form-group mb-2">' +
+                '<label class="small mb-1" for="bandejaAsigTipoDoc">Tipo del comprobante</label>' +
+                '<select id="bandejaAsigTipoDoc" class="form-control form-control-sm js-bandeja-asig-tipo" data-precarga-id="' + esc(String(fac.id)) + '">' +
+                '<option value="FC"' + (tipoActual === 'FC' ? ' selected' : '') + '>FC — Factura</option>' +
+                '<option value="NC"' + (tipoActual === 'NC' ? ' selected' : '') + '>NC — Nota de crédito (no exige COM)</option>' +
+                '<option value="ND"' + (tipoActual === 'ND' ? ' selected' : '') + '>ND — Nota de débito (no exige COM)</option>' +
+                '</select></div>'
+            );
+        }
+        var tipoFac = String((fac && fac.tipo) || 'FC').toUpperCase();
+        var exige = !fac || (fac.exige_com !== false && tipoFac !== 'NC' && tipoFac !== 'ND');
+        if (!exige) {
+            var textoTipo = tipoFac === 'ND' ? 'nota de débito' : (tipoFac === 'NC' ? 'nota de crédito' : 'este tipo');
+            $coms.append('<p class="text-muted mb-2 small">Este comprobante es ' + textoTipo + ': no exige recepción COM.</p>');
+        }
+        if (!asignarEstado.coms.length) {
+            $coms.append('<p class="text-muted mb-0">No hay COM confirmada para asignar.</p>');
+            return;
+        }
+        var idsAsig = asignarEstado.mapa[String(activo)] || [];
+        asignarEstado.coms.forEach(function (c) {
+            var checked = idsAsig.indexOf(c.id) !== -1 || idsAsig.indexOf(String(c.id)) !== -1;
+            $coms.append(
+                '<div class="form-check">' +
+                '<input class="form-check-input js-bandeja-asig-com" type="checkbox" data-com-id="' + c.id + '" id="ban_com_' + c.id + '"' + (checked ? ' checked' : '') + '>' +
+                '<label class="form-check-label" for="ban_com_' + c.id + '">' + esc(c.documento) +
+                (c.fecha ? ' <small class="text-muted">' + esc(c.fecha) + '</small>' : '') + '</label></div>'
+            );
+        });
+    }
+
+    function renderAsignarListaDocs() {
+        var $fac = $('#bandejaAsignarPrecarga').empty();
+        if (!asignarEstado.facs.length) {
+            $fac.append('<div class="p-2 text-muted small">No hay factura precargada. Adjuntela al enviar el legajo o desde la OC.</div>');
+            return;
+        }
+        asignarEstado.facs.forEach(function (f) {
+            var activo = String(asignarEstado.activo) === String(f.id);
+            var tipo = esc(f.tipo_label || f.tipo || 'FC');
+            $fac.append(
+                '<a href="#" class="list-group-item list-group-item-action js-bandeja-asig-doc py-2' + (activo ? ' active' : '') + '" data-doc-id="' + esc(String(f.id)) + '">' +
+                '<div class="d-flex justify-content-between align-items-start">' +
+                '<div><span class="badge badge-dark mr-1">' + tipo + '</span>' + esc(f.etiqueta || ('#' + f.id)) +
+                (f.fecha ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.fecha) + '</small>' : '') +
+                (f.origen_label ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.origen_label) + '</small>' : '') +
+                '</div><div class="ml-2 text-right">' + badgeComDoc(f) + '</div></div></a>'
+            );
+        });
+    }
+
+    function renderAsignar(paquete) {
         var facs = (paquete && paquete.facturas) || [];
         var coms = ((paquete && paquete.coms) || []).filter(function (c) { return c.confirmada; });
         var asignadas = (paquete && paquete.asignadas) || {};
-        if (!facs.length) {
-            $fac.append('<p class="text-muted mb-0">No hay factura precargada. Adjuntela al enviar el legajo o desde la OC.</p>');
-        } else {
-            var idxDefault = 0;
-            var hayPrecarga = false;
-            facs.forEach(function (f, i) {
-                if (!hayPrecarga && (f.origen || 'precarga') === 'precarga') {
-                    idxDefault = i;
-                    hayPrecarga = true;
-                }
-            });
-            facs.forEach(function (f, i) {
-                $fac.append(
-                    '<div class="form-check">' +
-                    '<input class="form-check-input" type="radio" name="precarga_id" id="ban_pre_' + f.id + '" value="' + f.id + '"' + (i === idxDefault ? ' checked' : '') + '>' +
-                    '<label class="form-check-label" for="ban_pre_' + f.id + '">' + esc(f.etiqueta) +
-                    (f.fecha ? ' <small class="text-muted">' + esc(f.fecha) + '</small>' : '') + '</label></div>'
-                );
-            });
-        }
-        if (!coms.length) {
-            $coms.append('<p class="text-muted mb-0">No hay COM confirmada para asignar.</p>');
-        } else {
-            var preId = 0;
-            Object.keys(asignadas).forEach(function (k) {
-                if (!preId && asignadas[k] && asignadas[k].length) {
-                    preId = k;
-                }
-            });
-            if (!preId && facs.length && (facs[0].origen || 'precarga') === 'precarga') {
-                preId = facs[0].id;
+        asignarEstado.facs = facs;
+        asignarEstado.coms = coms;
+        asignarEstado.mapa = {};
+        facs.forEach(function (f) {
+            var key = String(f.id);
+            var ids = asignadas[key] || asignadas[f.id] || [];
+            asignarEstado.mapa[key] = ids.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; });
+        });
+        var idxDefault = 0;
+        facs.forEach(function (f, i) {
+            if ((f.origen || 'precarga') === 'precarga' && idxDefault === 0) {
+                idxDefault = i;
             }
-            var idsAsig = asignadas[preId] || [];
-            coms.forEach(function (c) {
-                var checked = idsAsig.indexOf(c.id) !== -1 || idsAsig.indexOf(String(c.id)) !== -1;
-                $coms.append(
-                    '<div class="form-check">' +
-                    '<input class="form-check-input" type="checkbox" name="recepcion_ids[]" id="ban_com_' + c.id + '" value="' + c.id + '"' + (checked ? ' checked' : '') + '>' +
-                    '<label class="form-check-label" for="ban_com_' + c.id + '">' + esc(c.documento) +
-                    (c.fecha ? ' <small class="text-muted">' + esc(c.fecha) + '</small>' : '') + '</label></div>'
-                );
-            });
-        }
+        });
+        asignarEstado.activo = facs.length ? String(facs[idxDefault].id) : null;
+        renderAsignarListaDocs();
+        renderAsignarComsActivo();
+
         var $atajos = $('#bandejaAsignarAtajos').empty();
         if (paquete && paquete.url_cargar_cxp) {
-            $atajos.append('<a href="' + esc(paquete.url_cargar_cxp) + '" class="btn btn-sm btn-primary mr-1"><i class="fa fa-plus"></i> Cargar factura en CxP</a>');
+            var etqSig = (paquete.siguiente_pendiente && paquete.siguiente_pendiente.etiqueta)
+                ? paquete.siguiente_pendiente.etiqueta
+                : 'siguiente pendiente';
+            $atajos.append('<a href="' + esc(paquete.url_cargar_cxp) + '" class="btn btn-sm btn-primary mr-1"><i class="fa fa-plus"></i> Cargar ' + esc(etqSig) + '</a>');
         }
         if (paquete && paquete.comprobantes) {
             paquete.comprobantes.forEach(function (cp) {
-                $atajos.append('<a href="' + esc(cp.url) + '" class="btn btn-sm btn-outline-info mr-1">FC ' + esc(cp.etiqueta) + '</a>');
+                $atajos.append('<a href="' + esc(cp.url) + '" class="btn btn-sm btn-outline-info mr-1">CP ' + esc(cp.etiqueta) + '</a>');
             });
         }
         if (paquete && paquete.pagos) {
@@ -217,17 +277,47 @@
         });
 
         $('.js-bandeja-enviar-cxp').on('click', function () {
+            var $btn = $(this);
+            var ocId = $btn.data('ordencompra-id') || '';
             var $form = $('#formBandejaEnviarCxp');
-            $form.attr('action', $(this).data('url'));
+            var opts = { forzarPaquete: true, forzarCxp: true };
+            var base = (typeof window.carpetaBase !== 'undefined' && window.carpetaBase) ? window.carpetaBase : '';
+
+            $form.attr('action', $btn.data('url'));
             $form.find('input[name=observacion]').val('');
             $form.find('textarea[name=leyenda]').val('');
             $form.find('input[type=file]').val('');
-            $form.data('ordencompra-id', $(this).data('ordencompra-id') || '');
+            $form.data('ordencompra-id', ocId);
             if (window.OcCambiarSectorLegajo) {
-                window.OcCambiarSectorLegajo.initForm($form, { forzarPaquete: true });
-                window.OcCambiarSectorLegajo.setOrdencompraId($form, $(this).data('ordencompra-id') || '');
+                window.OcCambiarSectorLegajo.initForm($form, opts);
             }
-            $('#modalBandejaEnviarCxp').modal('show');
+
+            if (!ocId) {
+                alert('No se pudo identificar el legajo.');
+                return;
+            }
+
+            $btn.prop('disabled', true);
+            $.getJSON(base + '/compras/ordencompra/' + ocId + '/gate-cuentas-a-pagar?preflight=1')
+                .done(function (gate) {
+                    if (!gate || !gate.ok) {
+                        var errs = (gate && gate.errores && gate.errores.length)
+                            ? gate.errores.join('\n')
+                            : 'El legajo no cumple los requisitos para enviar a Cuentas a pagar.';
+                        alert(errs);
+                        return;
+                    }
+                    if (window.OcCambiarSectorLegajo) {
+                        window.OcCambiarSectorLegajo.setOrdencompraId($form, ocId, opts);
+                    }
+                    $('#modalBandejaEnviarCxp').modal('show');
+                })
+                .fail(function () {
+                    alert('No se pudo validar el legajo antes del envío.');
+                })
+                .always(function () {
+                    $btn.prop('disabled', false);
+                });
         });
 
         $('.js-bandeja-historia').on('click', function () {
@@ -237,6 +327,51 @@
             $('#modalBandejaHistoria').modal('show');
             $.get($(this).data('url')).done(renderHistoria).fail(function () {
                 $('#tablaBandejaHistoria tbody').html('<tr><td colspan="5" class="text-center text-danger">No se pudo leer la historia.</td></tr>');
+            });
+        });
+
+        $('.js-bandeja-nota').on('click', function () {
+            var $btn = $(this);
+            var numero = $btn.data('numero') || '';
+            var $form = $('#formBandejaNota');
+            $form.attr('action', $btn.data('url'));
+            $form.data('btn', $btn);
+            $('#modalBandejaNota .modal-title').text('Nota del legajo OC ' + numero);
+            $('#bandeja_nota_texto').val($btn.attr('data-nota') || '');
+            $('#modalBandejaNota').modal('show');
+        });
+
+        $('#formBandejaNota').on('submit', function (e) {
+            e.preventDefault();
+            var $form = $(this);
+            var $btn = $form.data('btn');
+            $.ajax({
+                url: $form.attr('action'),
+                method: 'POST',
+                data: $form.serialize(),
+                headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' }
+            }).done(function (resp) {
+                $('#modalBandejaNota').modal('hide');
+                var nota = (resp && resp.nota_legajo) ? String(resp.nota_legajo) : '';
+                var tiene = !!(resp && resp.tiene_nota);
+                if ($btn && $btn.length) {
+                    $btn.attr('data-nota', nota);
+                    $btn.attr('title', tiene ? ('Nota: ' + nota) : 'Agregar nota al legajo');
+                    $btn.toggleClass('btn-warning', tiene)
+                        .toggleClass('btn-outline-secondary', !tiene);
+                    $btn.find('i').attr('class', tiene ? 'fa fa-sticky-note' : 'fa fa-sticky-note-o');
+                }
+                if (resp && resp.mensaje) {
+                    alert(resp.mensaje);
+                }
+            }).fail(function (xhr) {
+                var msg = 'No se pudo guardar la nota.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                } else if (xhr.responseJSON && xhr.responseJSON.errors) {
+                    msg = Object.values(xhr.responseJSON.errors).join(' ');
+                }
+                alert(msg);
             });
         });
 
@@ -270,21 +405,85 @@
         $('.js-bandeja-asignar-com').on('click', function () {
             var $btn = $(this);
             var numero = $btn.data('numero') || '';
+            var urlPaquete = $btn.data('url-paquete') || '';
             $('#formBandejaAsignarCom').attr('action', $btn.data('url-asignar'));
-            $('#modalBandejaAsignarCom .modal-title').text('Asignar COM a la factura — OC ' + numero);
-            $('#bandejaAsignarPrecarga, #bandejaAsignarComs').html('<p class="text-muted">Cargando…</p>');
+            $('#modalBandejaAsignarCom .modal-title').text('Asignar COM — OC ' + numero);
+            $('#bandejaAsignarPrecarga, #bandejaAsignarComs').html('<p class="text-muted p-2 mb-0">Cargando…</p>');
             $('#bandejaAsignarAtajos').empty();
+            asignarEstado.urlCorregirTipo = String(urlPaquete).replace(/\/paquete\/?(\?.*)?$/, '/corregir-tipo-documento');
             $('#modalBandejaAsignarCom').modal('show');
-            cargarPaquete($btn.data('url-paquete'), renderAsignar);
+            cargarPaquete(urlPaquete, renderAsignar);
+        });
+
+        $(document).on('click', '.js-bandeja-asig-doc', function (e) {
+            e.preventDefault();
+            asignarEstado.activo = String($(this).data('doc-id'));
+            renderAsignarListaDocs();
+            renderAsignarComsActivo();
+        });
+
+        $(document).on('change', '.js-bandeja-asig-tipo', function () {
+            var $sel = $(this);
+            var precargaId = parseInt($sel.data('precarga-id'), 10) || 0;
+            var tipo = String($sel.val() || '').toUpperCase();
+            var url = asignarEstado.urlCorregirTipo || '';
+            if (!url || precargaId <= 0 || !tipo) {
+                return;
+            }
+            $sel.prop('disabled', true);
+            $.ajax({
+                url: url,
+                method: 'POST',
+                data: { precarga_id: precargaId, tipo: tipo },
+                headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' }
+            }).done(function (resp) {
+                if (resp && resp.paquete) {
+                    var mapa = asignarEstado.mapa;
+                    var activo = asignarEstado.activo;
+                    renderAsignar(resp.paquete);
+                    asignarEstado.mapa = mapa;
+                    asignarEstado.activo = activo || asignarEstado.activo;
+                    renderAsignarListaDocs();
+                    renderAsignarComsActivo();
+                }
+            }).fail(function (xhr) {
+                var msg = (xhr.responseJSON && (xhr.responseJSON.message || (xhr.responseJSON.errors && xhr.responseJSON.errors.tipo && xhr.responseJSON.errors.tipo[0]))) || 'No se pudo corregir el tipo.';
+                alert(msg);
+            }).always(function () {
+                $sel.prop('disabled', false);
+            });
+        });
+
+        $(document).on('change', '.js-bandeja-asig-com', function () {
+            var activo = String(asignarEstado.activo || '');
+            if (!activo) {
+                return;
+            }
+            var ids = [];
+            $('#bandejaAsignarComs .js-bandeja-asig-com:checked').each(function () {
+                ids.push(parseInt($(this).data('com-id'), 10));
+            });
+            asignarEstado.mapa[activo] = ids.filter(function (id) { return id > 0; });
+            renderAsignarListaDocs();
         });
 
         $('#formBandejaAsignarCom').on('submit', function (e) {
             e.preventDefault();
             var $form = $(this);
+            var asignaciones = [];
+            Object.keys(asignarEstado.mapa).forEach(function (preId) {
+                asignaciones.push({
+                    precarga_id: preId,
+                    recepcion_ids: asignarEstado.mapa[preId] || []
+                });
+            });
             $.ajax({
                 url: $form.attr('action'),
                 method: 'POST',
-                data: $form.serialize(),
+                data: {
+                    _token: csrf(),
+                    asignaciones: asignaciones
+                },
                 headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' }
             }).done(function (resp) {
                 $('#modalBandejaAsignarCom').modal('hide');

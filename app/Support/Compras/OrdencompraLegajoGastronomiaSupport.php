@@ -34,6 +34,7 @@ final class OrdencompraLegajoGastronomiaSupport
      */
     public static function circuitoDeEmpresa(int $empresaId): array
     {
+        static $cache = [];
         $vacio = [
             'aplica' => false,
             'arbol_id' => 0,
@@ -44,15 +45,18 @@ final class OrdencompraLegajoGastronomiaSupport
         if ($empresaId <= 0) {
             return $vacio;
         }
+        if (array_key_exists($empresaId, $cache)) {
+            return $cache[$empresaId];
+        }
 
         $arbol = app(ArbolaprobacionService::class)->arbolOrdencompraActivoParaEmpresa($empresaId);
         if (! $arbol) {
-            return $vacio;
+            return $cache[$empresaId] = $vacio;
         }
 
         $ccId = (int) ($arbol->oc_sector_cambio_centrocosto_id ?? 0);
         if ($ccId <= 0) {
-            return $vacio;
+            return $cache[$empresaId] = $vacio;
         }
 
         $disparoId = (int) ($arbol->oc_sector_disparo_aprobacion_id ?? 0);
@@ -67,7 +71,7 @@ final class OrdencompraLegajoGastronomiaSupport
             );
         }
 
-        return [
+        return $cache[$empresaId] = [
             'aplica' => $disparoId > 0,
             'arbol_id' => (int) $arbol->id,
             'centrocosto_id' => $ccId,
@@ -91,12 +95,7 @@ final class OrdencompraLegajoGastronomiaSupport
 
     public static function esSectorGastronomia(int $sectorId): bool
     {
-        if ($sectorId <= 0) {
-            return false;
-        }
-        $nombre = \App\Models\Compras\Sector_Legajocompra::query()->whereKey($sectorId)->value('nombre');
-
-        return strtoupper(trim((string) $nombre)) === self::SECTOR_GASTRONOMIA;
+        return $sectorId > 0 && $sectorId === self::sectorGastronomiaId();
     }
 
     public static function sectorGastronomiaId(): int
@@ -111,13 +110,7 @@ final class OrdencompraLegajoGastronomiaSupport
 
     public static function esSectorFinalizado(int $sectorId): bool
     {
-        if ($sectorId <= 0) {
-            return false;
-        }
-
-        $nombre = \App\Models\Compras\Sector_Legajocompra::query()->whereKey($sectorId)->value('nombre');
-
-        return strtoupper(trim((string) $nombre)) === self::SECTOR_FINALIZADO;
+        return $sectorId > 0 && $sectorId === self::sectorFinalizadoId();
     }
 
     /** @return list<int> */
@@ -172,12 +165,7 @@ final class OrdencompraLegajoGastronomiaSupport
 
     public static function esSectorPagos(int $sectorId): bool
     {
-        if ($sectorId <= 0) {
-            return false;
-        }
-        $nombre = \App\Models\Compras\Sector_Legajocompra::query()->whereKey($sectorId)->value('nombre');
-
-        return strtoupper(trim((string) $nombre)) === OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_PAGOS;
+        return $sectorId > 0 && $sectorId === self::sectorPagosId();
     }
 
     public static function tieneFacturaCargada(?Ordencompra $oc): bool
@@ -195,7 +183,7 @@ final class OrdencompraLegajoGastronomiaSupport
             ->exists();
     }
 
-    public static function puedeMostrarEnviarPagos(?Ordencompra $oc): bool
+    public static function puedeMostrarEnviarPagos(?Ordencompra $oc, ?bool $tieneFacturaCargada = null): bool
     {
         if (! $oc || ! $oc->id) {
             return false;
@@ -208,7 +196,7 @@ final class OrdencompraLegajoGastronomiaSupport
             return false;
         }
 
-        return self::tieneFacturaCargada($oc);
+        return $tieneFacturaCargada ?? self::tieneFacturaCargada($oc);
     }
 
     public static function puedeDevolverACuentasAPagar(?Ordencompra $oc): bool

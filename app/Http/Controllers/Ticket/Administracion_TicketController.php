@@ -18,8 +18,9 @@ use App\Models\Ticket\Ticket_Estado;
 use App\Models\Ticket\Ticket_Tarea_Novedad;
 use App\Queries\Ticket\TicketQueryInterface;
 use App\Exports\Ticket\AdministracionTicketListadoExport;
-use App\Support\Ticket\AdministracionTicketListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Ticket\AdministracionTicketListadoFiltros;
+use App\Support\Ticket\TicketEmpresaSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -154,7 +155,11 @@ class Administracion_TicketController extends Controller
         $estado_enum = Ticket_Estado::$enumEstado;
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class);
         $empresa_query = $this->empresaRepository->allFiltrado();
-        $empresa_id = old('empresa_id', session('empresa_id'));
+        $empresa_id = old('empresa_id');
+        if (! (int) $empresa_id) {
+            $salaOld = (int) old('sala_id', 0);
+            $empresa_id = $salaOld > 0 ? TicketEmpresaSupport::empresaIdDesdeSala($salaOld) : null;
+        }
 
         return view('ticket.administracion_ticket.crear', compact('areadestino_query', 'sector_query', 'sala_query',
                                                                 'turno_query', 'estado_novedad_enum',
@@ -193,6 +198,7 @@ class Administracion_TicketController extends Controller
         can('editar-ticket');
 
 		$data = $this->ticketRepository->find($id);
+        $data->loadMissing('salas');
         $areadestino_query = $this->areadestinoRepository->all();
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
@@ -201,8 +207,11 @@ class Administracion_TicketController extends Controller
         $estado_novedad_json = json_encode(Ticket_Tarea_Novedad::$enumEstado);
         $estado_enum = Ticket_Estado::$enumEstado;
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class);
-        $empresa_query = $this->empresaRepository->allFiltrado();
-        $empresa_id = old('empresa_id', $data->empresa_id ?? session('empresa_id'));
+        $empresa_id = old('empresa_id', TicketEmpresaSupport::empresaIdDesdeTicket($data));
+        $empresa_query = TicketEmpresaSupport::asegurarEnColeccion(
+            $this->empresaRepository->allFiltrado(),
+            (int) $empresa_id
+        );
 
         return view('ticket.administracion_ticket.editar', compact('data', 'areadestino_query', 'sector_query', 
                                                                     'sala_query', 'turno_query', 'estado_novedad_enum',

@@ -18,19 +18,33 @@
     $mostrarId = $mostrar_id ?? false;
     $mostrarOpcionVacia = $mostrar_opcion_vacia ?? ($permiteVacio || $esRequerido);
     $selectClass = trim(($select_class ?? '').' form-control');
+    $usarFouc = $data_fouc ?? false;
     $bloqueado = ($solo_lectura ?? false) || ($empresaUnica && ! $permiteVacio);
+    $empresaIdValorInt = (int) $empresaIdValor;
+    $empresaRegistro = $empresaIdValorInt > 0
+        ? $empresasDisponibles->first(static function ($emp) use ($empresaIdValorInt) {
+            return (int) ($emp->id ?? 0) === $empresaIdValorInt;
+        })
+        : null;
 @endphp
-@if ($bloqueado && $empresaUnicaRegistro)
+@if ($bloqueado && $empresaIdValorInt > 0)
+    <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="{{ $select_class ?? '' }}" value="{{ $empresaIdValorInt }}"/>
+    <input type="text" class="form-control" readonly value="{{ $empresaRegistro->nombre ?? '—' }}"/>
+@elseif ($bloqueado && $empresaUnicaRegistro)
     <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="{{ $select_class ?? '' }}" value="{{ $empresaUnicaRegistro->id }}"/>
     <input type="text" class="form-control" readonly value="{{ $empresaUnicaRegistro->nombre }}"/>
 @elseif ($bloqueado && ! $empresaUnicaRegistro)
-    @php
-        $empresaNombre = $empresasDisponibles->firstWhere('id', (int) $empresaIdValor)?->nombre ?? '—';
-    @endphp
     <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="{{ $select_class ?? '' }}" value="{{ $empresaIdValor }}"/>
-    <input type="text" class="form-control" readonly value="{{ $empresaNombre }}"/>
+    <input type="text" class="form-control" readonly value="—"/>
 @else
-    <select name="{{ $inputName }}" id="{{ $inputId }}" class="{{ $selectClass }}" @if($esRequerido) required @endif @if($data_fouc ?? false) data-fouc @endif>
+    <select name="{{ $inputName }}" id="{{ $inputId }}" class="{{ $selectClass }}"
+        @if ($esRequerido)
+            required
+        @endif
+        @if ($usarFouc)
+            data-fouc
+        @endif
+    >
         @if ($mostrarOpcionVacia)
             <option value="">{{ $opcionVacia }}</option>
         @endif
@@ -39,7 +53,9 @@
                 $etiquetaEmp = $mostrarId ? trim($emp->id.' '.$emp->nombre) : $emp->nombre;
             @endphp
             <option value="{{ $emp->id }}"
-                    @if(isset($emp->codigo)) data-codigo="{{ $emp->codigo }}" @endif
+                    @if (isset($emp->codigo))
+                        data-codigo="{{ $emp->codigo }}"
+                    @endif
                     @selected((string) $empresaIdValor === (string) $emp->id)>{{ $etiquetaEmp }}</option>
         @endforeach
     </select>

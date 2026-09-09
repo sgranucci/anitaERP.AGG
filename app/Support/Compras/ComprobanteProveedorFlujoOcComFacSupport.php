@@ -21,8 +21,12 @@ final class ComprobanteProveedorFlujoOcComFacSupport
         if ($empresaId <= 0) {
             return false;
         }
+        static $cache = [];
+        if (array_key_exists($empresaId, $cache)) {
+            return $cache[$empresaId];
+        }
 
-        return (bool) Configuracion_ComprobanteProveedor::query()
+        return $cache[$empresaId] = (bool) Configuracion_ComprobanteProveedor::query()
             ->where('empresa_id', $empresaId)
             ->where('exige_flujo_oc_com_fac', true)
             ->value('exige_flujo_oc_com_fac');

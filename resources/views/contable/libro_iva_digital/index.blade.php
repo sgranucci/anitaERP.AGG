@@ -188,6 +188,73 @@
                         </div>
                     @endif
 
+                    @php
+                        $comprasOmitidas = $resultado['compras']['omitidos'] ?? [];
+                    @endphp
+                    @if ($comprasOmitidas !== [])
+                        <div class="alert alert-danger mb-3">
+                            <strong>Compras omitidas del archivo ARCA ({{ count($comprasOmitidas) }})</strong>
+                            <p class="mb-2 small">
+                                No se incluyeron en <code>COMPRAS_CBTE</code> porque el Portal las rechaza.
+                                Corregí el CUIT en Anita/ERP o revisá si el comprobante debe presentarse.
+                                El detalle también va en <code>{{ LibroIvaDigitalArchivosSupport::COMPRAS_OMITIDOS }}</code> al descargar el ZIP.
+                            </p>
+                            <div class="table-responsive mb-0">
+                                <table class="table table-bordered table-sm mb-0 bg-white" id="tabla-compras-omitidas-lid">
+                                    <thead style="background-color:#F5B7B1;color:#17202A;">
+                                        <tr>
+                                            <th>Motivo</th>
+                                            <th>Origen</th>
+                                            <th>Fecha</th>
+                                            <th>Comprobante</th>
+                                            <th>Proveedor / vendedor</th>
+                                            <th>CUIT</th>
+                                            <th class="text-right">Importe</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($comprasOmitidas as $omitida)
+                                            @php
+                                                $fechaOm = (string) ($omitida['fecha'] ?? '');
+                                                if (preg_match('/^\d{8}$/', $fechaOm)) {
+                                                    $fechaOm = substr($fechaOm, 6, 2).'/'.substr($fechaOm, 4, 2).'/'.substr($fechaOm, 0, 4);
+                                                }
+                                                $tipoAfip = (string) ($omitida['tipo_comprobante'] ?? '');
+                                                $pv = (int) ($omitida['punto_venta'] ?? 0);
+                                                $nro = (int) ($omitida['numero_comprobante'] ?? 0);
+                                                $letra = (string) ($omitida['letra'] ?? '');
+                                                $abrev = (string) ($omitida['tipo_abrev'] ?? '');
+                                                $compLabel = trim(
+                                                    ($abrev !== '' ? $abrev.' ' : '')
+                                                    .($letra !== '' ? $letra.' ' : '')
+                                                    .str_pad((string) $pv, 5, '0', STR_PAD_LEFT)
+                                                    .'-'
+                                                    .str_pad((string) $nro, 8, '0', STR_PAD_LEFT)
+                                                    .' (AFIP '.$tipoAfip.')'
+                                                );
+                                            @endphp
+                                            <tr>
+                                                <td>{{ $omitida['motivo_texto'] ?? $omitida['motivo'] ?? '' }}</td>
+                                                <td>{{ strtoupper((string) ($omitida['origen'] ?? '')) }}</td>
+                                                <td>{{ $fechaOm }}</td>
+                                                <td><code>{{ $compLabel }}</code></td>
+                                                <td>
+                                                    @if (($omitida['proveedor_codigo'] ?? '') !== '')
+                                                        <span class="text-muted">{{ $omitida['proveedor_codigo'] }}</span>
+                                                        —
+                                                    @endif
+                                                    {{ $omitida['nombre_vendedor'] ?? '—' }}
+                                                </td>
+                                                <td><code>{{ $omitida['numero_identificacion'] ?? '0' }}</code></td>
+                                                <td class="text-right">${{ number_format((float) ($omitida['importe_total'] ?? 0), 2, ',', '.') }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    @endif
+
                     <div class="table-responsive mb-4">
                         <table class="table table-bordered table-sm" id="tabla-resumen-lid">
                             <thead style="background-color:#85C1E9;color:#17202A;">

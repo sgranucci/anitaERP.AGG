@@ -927,11 +927,20 @@ class ArcaWsfeFacturaElectronicaService
             if (! is_array($row)) {
                 continue;
             }
-            $items[] = [
+            $item = [
                 'Tipo' => (int) ($row['tipo'] ?? 0),
                 'PtoVta' => (int) ($row['ptovta'] ?? 0),
                 'Nro' => (int) ($row['nro'] ?? 0),
             ];
+            $cuit = preg_replace('/\D+/', '', (string) ($row['cuit'] ?? '')) ?? '';
+            if ($cuit !== '') {
+                $item['Cuit'] = $cuit;
+            }
+            $fch = preg_replace('/\D+/', '', (string) ($row['cbtefch'] ?? $row['fecha'] ?? '')) ?? '';
+            if (strlen($fch) >= 8) {
+                $item['CbteFch'] = substr($fch, 0, 8);
+            }
+            $items[] = $item;
         }
 
         return $items === [] ? null : ['CbteAsoc' => $items];

@@ -25,7 +25,7 @@
             @endphp
             @include('includes.form-empresa-asignada', [
                 'empresa_query' => $empresa_query ?? collect(),
-                'empresa_id' => $empresa_id ?? ($data->empresa_id ?? session('empresa_id')),
+                'empresa_id' => $empresa_id,
                 'col_label' => 'col-lg-3 control-label text-right pr-2',
                 'col_input' => 'col-lg-7',
                 'solo_lectura' => ! $esAltaTicket,
@@ -77,11 +77,22 @@
                 <select name="sala_id" id="sala_id" data-placeholder="Sala" class="col-lg-7 form-control required" data-fouc required>
                     <option value="">-- Seleccionar sala --</option>
                     @foreach($sala_query as $key => $value)
-                        @if( (int) $value->id == (int) old('sala_id', $data->sala_id ?? ''))
-                            <option value="{{ $value->id }}" selected="select">{{ $value->id }} {{ $value->nombre }}</option>    
-                        @else
-                            <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-                        @endif
+                        @php
+                            $salaSeleccionada = (int) $value->id === (int) old('sala_id', $data->sala_id ?? '');
+                        @endphp
+                        <option value="{{ $value->id }}"
+                                data-empresa-id="{{ (int) ($value->empresa_id ?? 0) }}"
+                                data-empresa-nombre="{{ $value->empresas?->nombre ?? '' }}"
+                            @if ($salaSeleccionada)
+                                selected
+                            @endif
+                        >
+                            @if ($salaSeleccionada)
+                                {{ $value->id }} {{ $value->nombre }}
+                            @else
+                                {{ $value->nombre }}
+                            @endif
+                        </option>
                     @endforeach
                 </select>
             </div>

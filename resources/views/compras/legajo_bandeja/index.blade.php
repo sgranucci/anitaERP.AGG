@@ -5,6 +5,28 @@ Bandeja de legajos
 
 @section('styles')
 <link rel="stylesheet" href="{{ asset('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css') }}?v={{ @filemtime(public_path('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css')) ?: time() }}">
+<style>
+    .bandeja-col-facturas {
+        max-width: 10.5rem;
+        min-width: 7rem;
+        white-space: normal;
+        word-wrap: break-word;
+        overflow-wrap: anywhere;
+        line-height: 1.3;
+        vertical-align: top;
+    }
+    .bandeja-fac-item + .bandeja-fac-item {
+        margin-top: 0.35rem;
+        padding-top: 0.35rem;
+        border-top: 1px dashed #dee2e6;
+    }
+    .bandeja-fac-origen {
+        display: block;
+        font-size: 0.78em;
+        color: #6c757d;
+        line-height: 1.2;
+    }
+</style>
 @endsection
 
 @section('scripts')
@@ -33,7 +55,7 @@ Bandeja de legajos
             'atajo' => $atajo === $nuevo ? '' : $nuevo,
         ])));
     };
-    $vistas = [
+    $vistasTodas = [
         OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES => 'Pendientes',
         OrdencompraLegajoBandejaFiltros::VISTA_ESTADOS => 'En circuito',
         OrdencompraLegajoBandejaFiltros::VISTA_CXP => 'Cuentas a pagar',
@@ -41,6 +63,14 @@ Bandeja de legajos
         OrdencompraLegajoBandejaFiltros::VISTA_ARCHIVADOS => 'Archivados',
         OrdencompraLegajoBandejaFiltros::VISTA_HISTORICO => 'Histórico',
     ];
+    $vistasPermitidas = $vistasPermitidas ?? null;
+    $vistas = $vistasTodas;
+    if (is_array($vistasPermitidas) && $vistasPermitidas !== []) {
+        $vistas = array_intersect_key($vistasTodas, array_flip($vistasPermitidas));
+        if ($vistas === []) {
+            $vistas = $vistasTodas;
+        }
+    }
     $atajos = [
         OrdencompraLegajoBandejaFiltros::ATAJO_SIN_FACTURA => 'Sin factura',
         OrdencompraLegajoBandejaFiltros::ATAJO_SIN_COM => 'Sin COM',
@@ -226,6 +256,29 @@ Bandeja de legajos
         </div>
     </div>
 </div>
+<div class="modal fade" id="modalBandejaNota" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" id="formBandejaNota" action="">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">Nota del legajo</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <label for="bandeja_nota_texto" class="small font-weight-bold">Nota interna</label>
+                    <textarea name="nota_legajo" id="bandeja_nota_texto" class="form-control" rows="5" maxlength="4000"
+                              placeholder="Escriba una nota visible para quienes trabajan el legajo…"></textarea>
+                    <p class="text-muted small mb-0 mt-2">Deje vacío y guarde para quitar la nota. El ícono queda destacado mientras haya texto.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">Guardar nota</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 <div class="modal fade" id="modalBandejaComs" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered" role="document" style="max-width: 96vw;">
         <div class="modal-content">
@@ -278,29 +331,35 @@ Bandeja de legajos
 </div>
 @if (!empty($puede_asignar_com))
 <div class="modal fade" id="modalBandejaAsignarCom" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <form method="POST" id="formBandejaAsignarCom" action="">
                 @csrf
                 <div class="modal-header">
-                    <h5 class="modal-title">Asignar COM a la factura</h5>
+                    <h5 class="modal-title">Asignar COM a los comprobantes</h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small">Deja la COM vinculada a la factura para que Cuentas a pagar abra el alta con esa recepción ya elegida. Si la factura viene de scan Anita, el origen queda como <strong>scan manual (no IA)</strong>.</p>
-                    <div class="mb-3">
-                        <label class="small font-weight-bold">Factura</label>
-                        <div id="bandejaAsignarPrecarga"></div>
+                    <p class="text-muted small mb-3">
+                        Seleccioná cada comprobante (FC, NC, ND) y asignale sus COM.
+                        Si el tipo está mal (p.ej. ND marcada como FIS), corregilo con el selector a la derecha.
+                        Las notas de crédito y de débito no exigen recepción. Al guardar se persisten todas las asignaciones.
+                    </p>
+                    <div class="row">
+                        <div class="col-md-5 mb-3">
+                            <label class="small font-weight-bold">Comprobantes del legajo</label>
+                            <div id="bandejaAsignarPrecarga" class="list-group list-group-flush border rounded" style="max-height: 50vh; overflow:auto;"></div>
+                        </div>
+                        <div class="col-md-7 mb-3">
+                            <label class="small font-weight-bold">COM para el comprobante seleccionado</label>
+                            <div id="bandejaAsignarComs" class="border rounded p-2" style="min-height: 8rem; max-height: 50vh; overflow:auto;"></div>
+                        </div>
                     </div>
-                    <div>
-                        <label class="small font-weight-bold">COM confirmadas</label>
-                        <div id="bandejaAsignarComs"></div>
-                    </div>
-                    <div id="bandejaAsignarAtajos" class="mt-3"></div>
+                    <div id="bandejaAsignarAtajos" class="mt-2"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary">Guardar asignación</button>
+                    <button type="submit" class="btn btn-primary">Guardar asignaciones</button>
                 </div>
             </form>
         </div>
@@ -320,6 +379,11 @@ Bandeja de legajos
                         'titulo' => 'Guía: bandeja de legajos (COM y envío)',
                         'clase' => 'btn btn-outline-light btn-sm mr-1',
                     ])
+                    @if (can('listar-seguimiento-legajo-compra', false))
+                    <a href="{{ route('consultar_seguimiento_legajo_compra') }}" class="btn btn-outline-light btn-sm mr-1">
+                        <i class="fa fa-search"></i> Seguimiento
+                    </a>
+                    @endif
                     <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-light btn-sm mr-1">
                         <i class="fa fa-file-text-o"></i> Órdenes de compra
                     </a>
@@ -442,6 +506,7 @@ Bandeja de legajos
                             <th>Sector</th>
                             <th>Días</th>
                             <th>Paquete</th>
+                            <th class="bandeja-col-facturas">Facturas</th>
                             @if ($vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES)
                                 <th>Decisión</th>
                             @endif
@@ -454,6 +519,11 @@ Bandeja de legajos
                                 <td>{{ $row['id'] }}</td>
                                 <td>
                                     <a href="{{ $row['url_oc'] }}" target="_blank" rel="noopener">{{ $row['numero'] }}</a>
+                                    @if (!empty($row['es_anticipada']))
+                                        <span class="badge badge-warning" title="Legajo anticipado (factura antes de recepción)">
+                                            <i class="fa fa-clock-o"></i> Anticipado
+                                        </span>
+                                    @endif
                                     @if (!empty($row['es_gastronomia']))
                                         <span class="badge badge-info">Gastro</span>
                                     @endif
@@ -494,6 +564,25 @@ Bandeja de legajos
                                         <span class="badge badge-success" title="Orden de pago">{{ !empty($row['etiqueta_pago']) ? $row['etiqueta_pago'] : 'OP' }}</span>
                                     @endif
                                 </td>
+                                <td class="small bandeja-col-facturas">
+                                    @if (!empty($row['facturas_legajo']))
+                                        @foreach ($row['facturas_legajo'] as $facLeg)
+                                            <div class="bandeja-fac-item">
+                                                <span>{{ $facLeg['numero'] ?? '' }}</span>
+                                                @if (!empty($facLeg['estado']))
+                                                    <span class="badge {{ ($facLeg['estado'] ?? '') === 'cargada' ? 'badge-info' : 'badge-secondary' }}">
+                                                        {{ ($facLeg['estado'] ?? '') === 'cargada' ? 'cargada' : 'pendiente' }}
+                                                    </span>
+                                                @endif
+                                                @if (!empty($facLeg['origen']))
+                                                    <span class="bandeja-fac-origen">{{ $facLeg['origen'] }}</span>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    @else
+                                        <span class="text-muted">—</span>
+                                    @endif
+                                </td>
                                 @if ($vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES)
                                     <td>
                                         @if (($row['decision'] ?? '') === 'Aprobado')
@@ -526,13 +615,23 @@ Bandeja de legajos
                                         </button>
                                     @endif
                                     @if (!empty($row['url_factura']))
-                                        <button type="button" class="btn btn-xs btn-outline-danger js-bandeja-ver-factura"
-                                                data-url-pdf="{{ $row['url_factura'] }}"
-                                                data-url-paquete="{{ $row['url_paquete'] }}"
-                                                data-numero="{{ $row['numero'] }}"
-                                                title="Ver factura">
-                                            <i class="fa fa-file-pdf-o"></i>
-                                        </button>
+                                        @if ($vista === OrdencompraLegajoBandejaFiltros::VISTA_CXP)
+                                            <a href="{{ $row['url_factura'] }}"
+                                               class="btn btn-xs btn-outline-danger"
+                                               target="_blank"
+                                               rel="noopener noreferrer"
+                                               title="Ver factura">
+                                                <i class="fa fa-file-pdf-o"></i>
+                                            </a>
+                                        @else
+                                            <button type="button" class="btn btn-xs btn-outline-danger js-bandeja-ver-factura"
+                                                    data-url-pdf="{{ $row['url_factura'] }}"
+                                                    data-url-paquete="{{ $row['url_paquete'] }}"
+                                                    data-numero="{{ $row['numero'] }}"
+                                                    title="Ver factura">
+                                                <i class="fa fa-file-pdf-o"></i>
+                                            </button>
+                                        @endif
                                     @else
                                         <button type="button" class="btn btn-xs btn-outline-secondary" disabled title="Sin PDF de factura">
                                             <i class="fa fa-file-pdf-o"></i>
@@ -557,6 +656,14 @@ Bandeja de legajos
                                             title="Historia de asignación del legajo">
                                         <i class="fa fa-history"></i>
                                     </button>
+                                    <button type="button"
+                                            class="btn btn-xs js-bandeja-nota {{ !empty($row['tiene_nota']) ? 'btn-warning' : 'btn-outline-secondary' }}"
+                                            data-url="{{ $row['url_nota'] }}"
+                                            data-numero="{{ $row['numero'] }}"
+                                            data-nota="{{ $row['nota_legajo'] ?? '' }}"
+                                            title="{{ !empty($row['tiene_nota']) ? ('Nota: '.$row['nota_legajo']) : 'Agregar nota al legajo' }}">
+                                        <i class="fa fa-sticky-note{{ !empty($row['tiene_nota']) ? '' : '-o' }}"></i>
+                                    </button>
                                     @if (!empty($puede_asignar_com) && !empty($row['tiene_factura']) && !empty($row['tiene_com']))
                                         <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-asignar-com"
                                                 data-url-asignar="{{ $row['url_asignar_com'] }}"
@@ -567,7 +674,8 @@ Bandeja de legajos
                                         </button>
                                     @endif
                                     @if (!empty($puede_cargar_cxp) && !empty($row['url_cargar_cxp']))
-                                        <a href="{{ $row['url_cargar_cxp'] }}" class="btn btn-xs btn-primary" title="Cargar factura en Cuentas a pagar">
+                                        <a href="{{ $row['url_cargar_cxp'] }}" class="btn btn-xs btn-primary"
+                                           title="Cargar {{ $row['siguiente_pendiente'] ?? 'comprobante' }} en Cuentas a pagar">
                                             <i class="fa fa-plus"></i>
                                         </a>
                                     @endif
@@ -631,7 +739,7 @@ Bandeja de legajos
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES ? 11 : 10 }}" class="text-center text-muted">
+                                <td colspan="{{ $vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES ? 12 : 11 }}" class="text-center text-muted">
                                     @if (!empty($sinSectorAsignado))
                                         No tiene sector de legajo asignado. No se muestran registros.
                                     @else

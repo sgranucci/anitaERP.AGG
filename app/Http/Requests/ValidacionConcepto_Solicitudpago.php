@@ -15,6 +15,20 @@ class ValidacionConcepto_Solicitudpago extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        // Sin CC: el select puede mandar "" o "0"; "0" rompe exists:centrocosto,id.
+        $ccIds = $this->input('centrocosto_ids');
+        if (is_array($ccIds)) {
+            $this->merge([
+                'centrocosto_ids' => array_map(
+                    static fn ($v) => ($v === null || $v === '' || (int) $v === 0) ? null : $v,
+                    $ccIds
+                ),
+            ]);
+        }
+    }
+
     public function rules()
     {
         $id = $this->route('id');

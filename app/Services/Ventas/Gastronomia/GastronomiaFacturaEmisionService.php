@@ -462,8 +462,8 @@ final class GastronomiaFacturaEmisionService
                 $waitryTrasRespuesta = filter_var(config('gastronomia.waitry_tras_respuesta', true), FILTER_VALIDATE_BOOLEAN)
                     && $cfg->waitryHabilitadoEnTerminal();
 
-                // Waitry/ticket se registran antes que Anita en terminating(): la comanda de cocina
-                // no debe esperar al bridge HTTP Informix (502, cleanup, duplicate key, etc.).
+                // Waitry (sync cobro + estado KDS) y ticket con papelito: después de la respuesta al POS.
+                // La comanda de cocina no debe esperar al bridge HTTP Informix.
                 if ($waitryTrasRespuesta && ! $impresionTicketTrasWaitry) {
                     $profiler?->marcar('antes_ticket');
                     $resultado = $this->aplicarImpresionTicketTrasEmision($resultado, $cfg, $cuenta);
@@ -1013,10 +1013,12 @@ final class GastronomiaFacturaEmisionService
 
         if ($waitryEncolado && $displayId === '') {
             if ($waitryOrderId > 0) {
-                $mensaje .= ' Waitry se actualizará en segundo plano.';
+                $mensaje .= ' Waitry/KDS se actualizarán en segundo plano.';
             } else {
                 $mensaje .= ' El código de pedido en pantalla se imprimirá en el ticket.';
             }
+        } elseif ($waitryEncolado && $waitryOrderId > 0) {
+            $mensaje .= ' Waitry/KDS se actualizarán en segundo plano.';
         } elseif (($resultado['waitry_pago'] ?? '') === 'ok') {
             $mensaje .= ' Pago registrado en Waitry.';
         } elseif (($resultado['waitry_comanda'] ?? '') === 'ok' && $displayId === '') {
@@ -1230,8 +1232,7 @@ final class GastronomiaFacturaEmisionService
             return $resultado;
         }
 
-        // defer() ya se ejecutó (middleware terminate) antes de app()->terminating().
-        // Waitry post-respuesta corre en terminating: imprimir ahí debe ser sincrónico.
+        // Tras waitry_tras_respuesta el ticket con papelito corre en afterResponse (síncrono ahí).
         $imp = $sincrono
             ? $this->facturaTicketService->imprimirTrasEmision($ventaId, $cfg, $cuenta)
             : $this->facturaTicketService->imprimirTrasEmisionEncolado($ventaId, $cfg, $cuenta);
@@ -1290,7 +1291,9 @@ final class GastronomiaFacturaEmisionService
         $cfgId = (int) $cfg->id;
         $mediosPagoCopia = $mediosPago;
 
-        app()->terminating(function () use (
+        // Después de enviar la respuesta al POS (pantalla liberada): sync cobro + estado KDS
+        // y, si aplica, ticket con papelito. No usar terminating(): en FPM puede demorar el cierre.
+        dispatch(function () use (
             $resultado,
             $cuentaId,
             $cfgId,
@@ -1337,7 +1340,7 @@ final class GastronomiaFacturaEmisionService
                     'msg' => $e->getMessage(),
                 ]);
             }
-        });
+        })->afterResponse();
     }
 
     /**

@@ -96,6 +96,10 @@ class ContabilidadCuentaAutomaticaSeedService
             return;
         }
 
+        if (! Schema::hasTable('empresa') || ! DB::table('empresa')->where('id', $empresaId)->exists()) {
+            return;
+        }
+
         foreach (CuentaAutomaticaClaves::catalogo() as $clave => $meta) {
             $soloEmpresas = $meta['solo_empresas'] ?? null;
             if (is_array($soloEmpresas) && $soloEmpresas !== [] && ! in_array($empresaId, $soloEmpresas, true)) {

@@ -43,7 +43,44 @@
 			}
 			actualizarTiempoInsumidoTotal();
 		});
+
+		$(document).on('change', '#sala_id', function () {
+			precargarEmpresaDesdeSala(true);
+		});
+		precargarEmpresaDesdeSala(false);
     });
+
+	function precargarEmpresaDesdeSala(forzar) {
+		let sala = document.getElementById('sala_id');
+		let empresa = document.getElementById('empresa_id');
+		if (!sala || !empresa) {
+			return;
+		}
+		let opt = sala.options[sala.selectedIndex];
+		if (!opt) {
+			return;
+		}
+		let empresaId = (opt.getAttribute('data-empresa-id') || '').toString();
+		if (!empresaId || empresaId === '0') {
+			return;
+		}
+		let actual = (empresa.value || '').toString().trim();
+		if (!forzar && actual !== '' && actual !== '0') {
+			return;
+		}
+		empresa.value = empresaId;
+		if (empresa.tagName === 'SELECT') {
+			$(empresa).trigger('change');
+			return;
+		}
+		let nombre = opt.getAttribute('data-empresa-nombre') || '';
+		let readonly = empresa.parentNode
+			? empresa.parentNode.querySelector('input[type="text"][readonly]')
+			: null;
+		if (readonly && nombre) {
+			readonly.value = nombre;
+		}
+	}
 
 	function enviarFormularioAdministracionTicket(event) {
 		event.preventDefault();

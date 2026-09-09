@@ -26,9 +26,10 @@ final class ArcaCaeaInformeDatosDesdeVentaSupport
             'venta_impuestos',
             'venta_emisiones',
             'tipotransacciones',
-            'puntoventas',
+            'puntoventas.empresas',
             'clientes.tipodocumentos',
             'monedas',
+            'ventaOrigen',
         ]);
 
         $puntoventa = $venta->puntoventas;
@@ -71,6 +72,24 @@ final class ArcaCaeaInformeDatosDesdeVentaSupport
             ];
         }
 
+        $comprobantesAsociados = [];
+        $opcionales = [];
+        $origen = $venta->ventaOrigen;
+        if ($origen) {
+            $asoc = ArcaFceNcMostradorSupport::parsearCodigoComprobante(trim((string) ($origen->codigo ?? '')));
+            if ($asoc !== null) {
+                $comprobantesAsociados[] = ArcaFceNcMostradorSupport::enriquecerAsociadoConEmisor(
+                    $asoc,
+                    $puntoventa->empresas ?? null,
+                    $origen
+                );
+            }
+        }
+        $anulacion = ArcaFceNcMostradorSupport::leerAnulacionDesdeLeyenda((string) ($venta->leyenda ?? ''));
+        if ($anulacion !== null && ArcaFceNcMostradorSupport::esTipoNcNdFce($cbteTipo)) {
+            $opcionales[] = ArcaFceDatosAdicionalesSupport::opcionalAnulacion($anulacion);
+        }
+
         return [
             'cbte_tipo' => $cbteTipo,
             'letra' => $letra,
@@ -91,11 +110,12 @@ final class ArcaCaeaInformeDatosDesdeVentaSupport
             'cotizacion' => $cotizacion,
             'tributos' => $tributos,
             'impuestos' => $impuestos,
-            'comprobantesasociados' => [],
-            'fechaasignaciondesde' => $fechaAsignacion->format('Ymd'),
-            'fechaasignacionhasta' => $fechaFactura->format('Ymd'),
+            'comprobantesasociados' => $comprobantesAsociados,
+            'fechaasignaciondesde' => $comprobantesAsociados === [] ? $fechaAsignacion->format('Ymd') : null,
+            'fechaasignacionhasta' => $comprobantesAsociados === [] ? $fechaFactura->format('Ymd') : null,
             'concepto' => 1,
             'items' => $items,
+            'opcionales' => $opcionales,
         ];
     }
 

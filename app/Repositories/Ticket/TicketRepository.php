@@ -68,6 +68,7 @@ class TicketRepository implements TicketRepositoryInterface
 									->with("ticket_articulos")
                   ->with("ticket_archivos")
 									->with("usuarios")
+									->with("salas:id,nombre,empresa_id")
 									->find($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }

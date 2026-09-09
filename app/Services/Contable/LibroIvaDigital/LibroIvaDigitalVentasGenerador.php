@@ -316,7 +316,7 @@ class LibroIvaDigitalVentasGenerador
             'cabecera' => $cabecera,
             'alicuotas' => $alicuotas,
         ]);
-        $registro['iva_simple'] = $this->metaIvaSimpleVenta($venta, $signoRaw < 0);
+        $registro['iva_simple'] = $this->metaIvaSimpleVenta($venta, $signo < 0);
 
         return $registro;
     }

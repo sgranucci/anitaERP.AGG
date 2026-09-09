@@ -80,6 +80,8 @@ use App\Support\Ventas\TipoComprobantePreviewSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
+use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
+use App\Support\Ventas\ArcaFceNcMostradorSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
@@ -2877,6 +2879,35 @@ class FacturacionService
 		$leyenda = $data['leyendafactura'] ?? '';
 		$moneda_id = $data['moneda_id'];
 
+		// Solo facturación mostrador (no POS gastronomía/estacionamiento AGG).
+		$esMostradorNcFce = $signo < 0 && ! $this->esEmisionPos($data);
+		$forzarNcNdFce = false;
+		$fceAnulacionSn = null;
+		$comprobantesAsociadosMostrador = null;
+		if ($esMostradorNcFce) {
+			$refCodigo = trim((string) ($data['fce_comprobante_referenciado'] ?? ''));
+			if ($refCodigo === '' && is_string($referenciaFactura)) {
+				$refCodigo = trim($referenciaFactura);
+			}
+			$asocParsed = ArcaFceNcMostradorSupport::parsearCodigoComprobante($refCodigo);
+			$origenEsFce = ArcaFceNcMostradorSupport::facturaEsFce($factura)
+				|| ($asocParsed !== null && ArcaFceNcMostradorSupport::esTipoFacturaFce((int) $asocParsed['tipo']));
+
+			if ($origenEsFce) {
+				if ($asocParsed === null || ! ArcaFceNcMostradorSupport::esTipoFacturaFce((int) $asocParsed['tipo'])) {
+					return ['error' => 'Debe indicar el comprobante FCE referenciado (ej. FCE A-00008-00001234).'];
+				}
+				$fceAnulacionSn = ArcaFceNcMostradorSupport::normalizarAnulacion($data['fce_anulacion'] ?? null);
+				if ($fceAnulacionSn === null) {
+					return ['error' => 'Debe indicar si la NC es anulación de FCE rechazada (S) o no (N) — opcional ARCA 22.'];
+				}
+				$forzarNcNdFce = true;
+				$referenciaFactura = $refCodigo;
+				$comprobantesAsociadosMostrador = [$asocParsed];
+				$leyenda = ArcaFceNcMostradorSupport::anexarMarcaAnulacionLeyenda((string) $leyenda, $fceAnulacionSn);
+			}
+		}
+
 		if (isset($data['cotizacion']))
 			$cotizacion = $data['cotizacion'];
 		else
@@ -2962,7 +2993,7 @@ class FacturacionService
 
 			$modoClienteFce = $this->hidratarContextoFceCliente($data, $cliente, $totalComprobante);
 			$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
-																	$puntoventa, $totalComprobante);
+																	$puntoventa, $totalComprobante, $forzarNcNdFce);
 			$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
 			$reservaCaeaErr = $this->aplicarReservaNumeracionCaeaEnData($data, $puntoventa, $tipotransaccion, $letra);
@@ -3065,7 +3096,19 @@ class FacturacionService
 					$this->facturaelectronicaService->armaImpuesto($conceptosTotales, $impuestos);
 
 					// NC/ND: asociar la factura origen (ARCA MTXCA/WSFE exige comprobante o rango).
-					$comprobantesAsociados = $this->armaComprobantesAsociadosDesdeFactura($factura);
+					// Mostrador FCE: usa referencia informada (obligatoria) + CUIT/fecha emisor.
+					if (is_array($comprobantesAsociadosMostrador) && $comprobantesAsociadosMostrador !== []) {
+						$comprobantesAsociados = [];
+						foreach ($comprobantesAsociadosMostrador as $asocRow) {
+							$comprobantesAsociados[] = ArcaFceNcMostradorSupport::enriquecerAsociadoConEmisor(
+								$asocRow,
+								$empresa,
+								$factura
+							);
+						}
+					} else {
+						$comprobantesAsociados = $this->armaComprobantesAsociadosDesdeFactura($factura, $empresa);
+					}
 
 					[$fechaAsignacionDesdeYmd, $fechaAsignacionHastaYmd] = $this->resolverFechasAsignacionPeriodoAsoc(
 						$data,
@@ -3130,6 +3173,11 @@ class FacturacionService
 							'numeroordenventa' => '',
 							'items' => $dataFactura
 					];
+					if ($fceAnulacionSn !== null) {
+						$dataCAE['opcionales'] = [
+							ArcaFceDatosAdicionalesSupport::opcionalAnulacion($fceAnulacionSn),
+						];
+					}
 				}
 				$opcionesEmision = $data['opciones_emision'] ?? [];
 				if (! is_array($opcionesEmision)) {
@@ -6781,29 +6829,16 @@ class FacturacionService
 	/**
 	 * Comprobantes asociados ARCA desde una venta origen (NC/ND).
 	 *
-	 * @return list<array{tipo: int, ptovta: int, nro: int}>
+	 * @return list<array{tipo: int, ptovta: int, nro: int, cuit?: string, cbtefch?: string}>
 	 */
-	private function armaComprobantesAsociadosDesdeFactura($factura): array
+	private function armaComprobantesAsociadosDesdeFactura($factura, $empresa = null): array
 	{
-		if (! is_object($factura)) {
+		$asoc = ArcaFceNcMostradorSupport::parsearCodigoComprobante(trim((string) ($factura->codigo ?? '')));
+		if ($asoc === null) {
 			return [];
 		}
 
-		$codigo = trim((string) ($factura->codigo ?? ''));
-		if ($codigo === '' || ! preg_match('/^([A-Z]{3})\s+([A-Z])-(\d+)-(\d+)$/i', $codigo, $m)) {
-			return [];
-		}
-
-		$tipoAfip = ArcaCaeaAnitaTipoAfipSupport::tipoAfipDesdeAnita((string) $m[1], (string) $m[2]);
-		if ($tipoAfip <= 0) {
-			return [];
-		}
-
-		return [[
-			'tipo' => $tipoAfip,
-			'ptovta' => (int) $m[3],
-			'nro' => (int) $m[4],
-		]];
+		return [ArcaFceNcMostradorSupport::enriquecerAsociadoConEmisor($asoc, $empresa, $factura)];
 	}
 
 	public function leeNumeroOperacionSubdiario()
@@ -7857,6 +7892,16 @@ class FacturacionService
 			array_splice($unidadmedida_query, 1, 1);
 		}
 
+		$ncOrigenEsFce = false;
+		$fceComprobanteReferenciado = old('fce_comprobante_referenciado', '');
+		$fceAnulacion = old('fce_anulacion', '');
+		if (isset($flGeneraNotaDeCredito) && ArcaFceNcMostradorSupport::facturaEsFce($data)) {
+			$ncOrigenEsFce = true;
+			if ($fceComprobanteReferenciado === '') {
+				$fceComprobanteReferenciado = trim((string) ($data->codigo ?? ''));
+			}
+		}
+
         return view('ventas.factura.editar', compact('data', 
 			'mventa_query', 'modulo_query', 
 			'listaprecio_query', 
@@ -7865,7 +7910,8 @@ class FacturacionService
             'deposito_query', 'lote_query', 'cliente_query','vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'flGeneraNotaDeCredito', 'moneda_query',
 			'actividad_arca_query', 'urlOrigen', 'consultaFacturasDia',
-			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query')); 
+			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query',
+			'ncOrigenEsFce', 'fceComprobanteReferenciado', 'fceAnulacion')); 
 	}
 
 	/*

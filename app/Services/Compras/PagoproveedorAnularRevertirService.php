@@ -16,6 +16,7 @@ use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -89,6 +90,8 @@ class PagoproveedorAnularRevertirService
                     IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($mov);
                 }
             }
+
+            PagoproveedorAnitaRetencionEscrituraSupport::eliminarDesdePago($pago);
 
             CajaMovimientoEloquentDeleteSupport::eliminarPorQuery(
                 Caja_Movimiento::query()->where('pagoproveedor_id', (int) $pago->id)
@@ -175,6 +178,17 @@ class PagoproveedorAnularRevertirService
                 $cheque->estado = 'A';
                 $cheque->save();
             }
+
+            $retencionesOrigen = Pagoproveedor_Retencion::query()
+                ->with('provincias')
+                ->where('pagoproveedor_id', (int) $pago->id)
+                ->get();
+
+            PagoproveedorAnitaRetencionEscrituraSupport::grabarReversoDesdeRetenciones(
+                $pago,
+                $reverso,
+                $retencionesOrigen,
+            );
 
             EloquentAuditDeleteSupport::each(
                 Pagoproveedor_Retencion::query()->where('pagoproveedor_id', (int) $pago->id)

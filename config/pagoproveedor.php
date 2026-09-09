@@ -13,6 +13,8 @@ return [
     'anita_tcomp_clave' => env('PAGOPROVEEDOR_ANITA_TCOMP_CLAVE', 'OPP'),
     'anita_sistema_tcomp' => env('PAGOPROVEEDOR_ANITA_SISTEMA_TCOMP', 'compras'),
     'anita_sistema_numerador' => env('PAGOPROVEEDOR_ANITA_SISTEMA_NUMERADOR', 'ventas'),
+    /** Sistema Anita para retmov / retibrmov / retimov / retsmov. */
+    'anita_sistema_retenciones' => env('PAGOPROVEEDOR_ANITA_SISTEMA_RETENCIONES', 'compras'),
     'anita_escritura_habilitada' => filter_var(
         env('PAGOPROVEEDOR_ANITA_ESCRITURA_HABILITADA', true),
         FILTER_VALIDATE_BOOLEAN

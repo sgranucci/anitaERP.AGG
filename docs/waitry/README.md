@@ -100,7 +100,8 @@ Al facturar una cuenta importada desde Waitry (`cuenta_gastronomia.waitry_order_
 
 | Campo | Valor |
 |-------|--------|
-| `order_id` | `waitry_order_id` de la cuenta |
+| `placeId` | Place Waitry de la empresa (`WAITRY_PLACE_ID_POR_EMPRESA`) — obligatorio desde cambio Waitry ~sep 2026 |
+| `orderId` | `waitry_order_id` de la cuenta (camelCase; no `order_id`) |
 | `event` | `accepted` (`WAITRY_SYNC_STATUS_POS_EVENT`) |
 | `paid` | `true` |
 | `totalPaid` | suma de montos cobrados en Anita (obligatorio para registrar el pago en Waitry) |
@@ -113,6 +114,17 @@ Al facturar una cuenta importada desde Waitry (`cuenta_gastronomia.waitry_order_
 
 Si falla la API, la factura **no** se revierte; el POS recibe aviso en `warn` (`waitry_pago` / `waitry_pago_mensaje`).
 
+### Estado KDS (updateexternal)
+
+`syncStatusPOS` registra el cobro pero **no** mueve Solicitada → Aceptado en el historial/KDS. Tras un sync OK, Anita llama:
+
+`POST /live/order/updateexternal` (`WAITRY_UPDATE_ORDER_STATUS_URL`)
+
+| Campo | Valor |
+|-------|--------|
+| `placeId` | mismo place de la empresa |
+| `orderId` | `waitry_order_id` |
+| `event` | mismo enum (`accepted` por defecto) |
 ## Push Orders — pago externo (interface)
 
 Waitry registra cobros de **pushExternalOrder** con `payment.type` = **`interface`** (no `cash` / `credit_card` en el tipo principal). El medio real va en `payment.payments[]` **al enviar**:

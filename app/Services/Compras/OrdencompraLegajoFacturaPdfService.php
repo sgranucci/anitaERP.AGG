@@ -7,6 +7,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Proveedor;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use App\Models\Compras\Tipotransaccion_Compra;
+use App\Models\Configuracion\Moneda;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
@@ -93,6 +94,7 @@ class OrdencompraLegajoFacturaPdfService
 
         $abrev = (string) (Tipotransaccion_Compra::query()->whereKey($tipoId)->value('abreviatura') ?? 'FAC');
         $ruta = $this->guardarPdfCanonico($pdf, $proveedor, $fechaYmd, $abrev, $letra, $sucursal, $numerocomprobante);
+        $monedaId = $this->monedaIdParaPrecarga($oc);
 
         $payload = [
             'empresa_id' => $empresaId,
@@ -107,6 +109,8 @@ class OrdencompraLegajoFacturaPdfService
             'estado' => 'PENDIENTE',
             'pararevisar' => 1,
             'origen_entrada' => PrecargaComprobanteOrigenEntrada::LEGAJO,
+            'moneda_id' => $monedaId,
+            'moneda' => $this->monedaEtiqueta($monedaId),
             'cotizacion' => 1,
         ];
 
@@ -172,6 +176,7 @@ class OrdencompraLegajoFacturaPdfService
         }
 
         $numeroProvisorio = $this->numeroProvisorioUnico($empresaId, $tipoId, $proveedorId);
+        $monedaId = $this->monedaIdParaPrecarga($oc);
 
         return $this->precargaRepository->create([
             'empresa_id' => $empresaId,
@@ -188,8 +193,48 @@ class OrdencompraLegajoFacturaPdfService
             'estado' => 'PENDIENTE',
             'origen_entrada' => PrecargaComprobanteOrigenEntrada::MANUAL,
             'pararevisar' => 1,
+            'moneda_id' => $monedaId,
+            'moneda' => $this->monedaEtiqueta($monedaId),
             'cotizacion' => 1,
         ]);
+    }
+
+    /**
+     * Moneda de la precarga: primer ítem de la OC, contrato, o primera moneda válida.
+     */
+    public function monedaIdParaPrecarga(Ordencompra $oc): int
+    {
+        $oc->loadMissing('ordencompra_articulos');
+        $candidatos = [];
+        $linea = $oc->ordencompra_articulos->first();
+        if ($linea) {
+            $candidatos[] = (int) ($linea->moneda_id ?? 0);
+        }
+        $candidatos[] = (int) ($oc->contrato_moneda_id ?? 0);
+        $candidatos[] = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+
+        foreach ($candidatos as $id) {
+            if ($id > 0 && Moneda::query()->whereKey($id)->exists()) {
+                return $id;
+            }
+        }
+
+        $fallback = (int) (Moneda::query()->orderBy('id')->value('id') ?? 0);
+        if ($fallback <= 0) {
+            throw new RuntimeException('No hay una moneda válida para crear la precarga del legajo.');
+        }
+
+        return $fallback;
+    }
+
+    private function monedaEtiqueta(int $monedaId): string
+    {
+        $moneda = Moneda::query()->whereKey($monedaId)->first();
+        if (! $moneda) {
+            return 'PESOS';
+        }
+
+        return strtoupper(trim((string) ($moneda->abreviatura ?: $moneda->nombre ?: 'PESOS')));
     }
 
     private function guardarPdfLegajo(UploadedFile $pdf, Ordencompra $oc, Proveedor $proveedor): string

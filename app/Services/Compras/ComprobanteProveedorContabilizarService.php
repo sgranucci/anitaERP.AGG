@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
+use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
@@ -11,6 +12,7 @@ use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
+use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\Auth;
@@ -125,6 +127,8 @@ class ComprobanteProveedorContabilizarService
                 'anita_sync_at' => now(),
             ])->save();
 
+            $this->enviarLegajoAPagosTrasContabilizar($comprobante);
+
             return $comprobante->fresh();
         } catch (Throwable $e) {
             $this->compensarAnitaTrasFallo(
@@ -154,6 +158,57 @@ class ComprobanteProveedorContabilizarService
             ]);
 
             throw $e;
+        }
+    }
+
+    /**
+     * Tras contabilizar OK: si el comprobante está atado a un legajo en CxP,
+     * lo manda a Pagos solo cuando no quedan otros documentos pendientes de carga.
+     */
+    private function enviarLegajoAPagosTrasContabilizar(Comprobante_Proveedor $comprobante): void
+    {
+        $ordencompraId = (int) ($comprobante->ordencompra_id ?? 0);
+        if ($ordencompraId <= 0) {
+            return;
+        }
+
+        try {
+            $oc = Ordencompra::query()->find($ordencompraId);
+            if (! $oc) {
+                return;
+            }
+            $pendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc);
+            if ($pendientes !== []) {
+                Log::info('comprobante_proveedor.envio_pagos_diferido_pendientes', [
+                    'comprobante_id' => $comprobante->id,
+                    'ordencompra_id' => $ordencompraId,
+                    'pendientes' => count($pendientes),
+                    'siguiente' => $pendientes[0]['etiqueta'] ?? null,
+                ]);
+
+                return;
+            }
+
+            /** @var OrdencompraGestionService $gestion */
+            $gestion = app(OrdencompraGestionService::class);
+            $ret = $gestion->enviarAPagos(
+                $ordencompraId,
+                'Envío automático a Pagos tras contabilizar la última factura del legajo #'.$comprobante->id,
+                null
+            );
+            if (($ret['mensaje'] ?? '') !== 'ok' && ($ret['mensaje'] ?? '') !== 'success') {
+                Log::info('comprobante_proveedor.envio_pagos_tras_contabilizar', [
+                    'comprobante_id' => $comprobante->id,
+                    'ordencompra_id' => $ordencompraId,
+                    'resultado' => $ret,
+                ]);
+            }
+        } catch (Throwable $e) {
+            Log::warning('comprobante_proveedor.envio_pagos_tras_contabilizar_fallo', [
+                'comprobante_id' => $comprobante->id,
+                'ordencompra_id' => $ordencompraId,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

@@ -21,6 +21,7 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupport;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
@@ -703,12 +704,15 @@ class PagoproveedorService
                 'pagoproveedor_id' => $pago->id,
                 'numero' => $pago->numerotransaccion,
             ]);
+            PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
 
             return;
         }
 
         $movimiento = Caja_Movimiento::query()->find($cajaId);
         if ($movimiento === null) {
+            PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
+
             return;
         }
 
@@ -718,6 +722,7 @@ class PagoproveedorService
 
         IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($movimiento->fresh());
         $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $pago->id);
+        PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
     }
 
     /**
@@ -838,6 +843,8 @@ class PagoproveedorService
                     // Sin líneas contables en request: no fuerza asiento vacío.
                 }
             });
+
+            $this->sincronizarAnitaTesoreria($this->pagoproveedorRepository->findOrFail($id), true);
 
             return ['mensaje' => 'ok'];
         } catch (\Throwable $e) {

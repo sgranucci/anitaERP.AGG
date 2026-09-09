@@ -986,11 +986,20 @@ class ArcaMtxcaFacturaElectronicaService
             if (! is_array($row)) {
                 continue;
             }
-            $out[] = [
+            $item = [
                 'codigoTipoComprobante' => (int) ($row['tipo'] ?? 0),
                 'numeroPuntoVenta' => (int) ($row['ptovta'] ?? 0),
                 'numeroComprobante' => (int) ($row['nro'] ?? 0),
             ];
+            $cuit = preg_replace('/\D+/', '', (string) ($row['cuit'] ?? '')) ?? '';
+            if ($cuit !== '') {
+                $item['cuit'] = (float) $cuit;
+            }
+            $fch = preg_replace('/\D+/', '', (string) ($row['cbtefch'] ?? $row['fecha'] ?? '')) ?? '';
+            if (strlen($fch) >= 8) {
+                $item['fechaEmision'] = $this->formatFechaSalida(substr($fch, 0, 8));
+            }
+            $out[] = $item;
         }
 
         if ($out === []) {

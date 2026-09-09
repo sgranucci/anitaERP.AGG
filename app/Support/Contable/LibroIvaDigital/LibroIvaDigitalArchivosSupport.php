@@ -32,12 +32,15 @@ final class LibroIvaDigitalArchivosSupport
 
     public const IVA_SIMPLE_RESTITUCION_CREDITO_FISCAL = 'IVA_SIMPLE_RESTITUCION_CREDITO_FISCAL.csv';
 
+    /** Informe interno (no se importa en ARCA): compras omitidas del TXT. */
+    public const COMPRAS_OMITIDOS = 'INFORME_COMPRAS_OMITIDOS.csv';
+
     /**
      * @return array<string, string>
      */
     public static function archivosLibroIvaDigital(array $resultado): array
     {
-        return [
+        $archivos = [
             self::VENTAS_CBTE => LibroIvaDigitalFormatoSupport::lineasDesdeContenido(
                 (string) ($resultado['ventas']['ventas_cbte'] ?? ''),
             ),
@@ -63,6 +66,60 @@ final class LibroIvaDigitalArchivosSupport
                 (string) ($resultado['importaciones']['importacion_servicios'] ?? ''),
             ),
         ];
+
+        $omitidosCsv = self::csvComprasOmitidos($resultado['compras']['omitidos'] ?? []);
+        if ($omitidosCsv !== '') {
+            $archivos[self::COMPRAS_OMITIDOS] = $omitidosCsv;
+        }
+
+        return $archivos;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $omitidos
+     */
+    public static function csvComprasOmitidos(array $omitidos): string
+    {
+        if ($omitidos === []) {
+            return '';
+        }
+
+        $lineas = [
+            'Motivo;Origen;Fecha;Tipo AFIP;PV;Número;Letra;Tipo Anita;Proveedor;CUIT;Vendedor;Importe;Detalle',
+        ];
+        foreach ($omitidos as $fila) {
+            $fecha = (string) ($fila['fecha'] ?? '');
+            if (preg_match('/^\d{8}$/', $fecha)) {
+                $fecha = substr($fecha, 6, 2).'/'.substr($fecha, 4, 2).'/'.substr($fecha, 0, 4);
+            }
+            $importe = number_format((float) ($fila['importe_total'] ?? 0), 2, ',', '');
+            $lineas[] = implode(';', [
+                self::csvCampo((string) ($fila['motivo_texto'] ?? $fila['motivo'] ?? '')),
+                self::csvCampo((string) ($fila['origen'] ?? '')),
+                self::csvCampo($fecha),
+                self::csvCampo((string) ($fila['tipo_comprobante'] ?? '')),
+                self::csvCampo((string) ($fila['punto_venta'] ?? '')),
+                self::csvCampo((string) ($fila['numero_comprobante'] ?? '')),
+                self::csvCampo((string) ($fila['letra'] ?? '')),
+                self::csvCampo((string) ($fila['tipo_abrev'] ?? '')),
+                self::csvCampo((string) ($fila['proveedor_codigo'] ?? '')),
+                self::csvCampo((string) ($fila['numero_identificacion'] ?? '')),
+                self::csvCampo((string) ($fila['nombre_vendedor'] ?? '')),
+                self::csvCampo($importe),
+                self::csvCampo((string) ($fila['motivo'] ?? '')),
+            ]);
+        }
+
+        return LibroIvaDigitalFormatoSupport::lineasDesdeContenido(
+            LibroIvaDigitalFormatoSupport::aAscii(implode("\r\n", $lineas)),
+        );
+    }
+
+    private static function csvCampo(string $valor): string
+    {
+        $valor = str_replace(["\r", "\n", ';'], [' ', ' ', ','], $valor);
+
+        return $valor;
     }
 
     /**

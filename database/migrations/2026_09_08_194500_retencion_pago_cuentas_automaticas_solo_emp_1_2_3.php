@@ -30,7 +30,23 @@ return new class extends Migration
             ->whereNotIn('empresa_id', self::EMPRESAS)
             ->delete();
 
-        app(ContabilidadCuentaAutomaticaSeedService::class)->asegurarCatalogoEmpresas(self::EMPRESAS);
+        if (! Schema::hasTable('empresa')) {
+            return;
+        }
+
+        // Evita FK en lab Postgres / entornos sin empresas 1/2/3 todavía.
+        $empresaIds = DB::table('empresa')
+            ->whereIn('id', self::EMPRESAS)
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        if ($empresaIds === []) {
+            return;
+        }
+
+        app(ContabilidadCuentaAutomaticaSeedService::class)->asegurarCatalogoEmpresas($empresaIds);
     }
 
     public function down(): void

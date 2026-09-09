@@ -25,6 +25,9 @@ final class ArcaFceDatosAdicionalesSupport
 
     public const TIPO_CBU_EMISOR = 21;
 
+    /** Anulación S/N — obligatorio en NC/ND FCE (203/208/…). */
+    public const TIPO_ANULACION = 22;
+
     public const TIPO_OPCION_TRANSFERENCIA = 27;
 
     /**
@@ -37,6 +40,11 @@ final class ArcaFceDatosAdicionalesSupport
     public static function requiereCbuEmisor(int $cbteTipo): bool
     {
         return in_array($cbteTipo, self::TIPOS_FACTURA_FCE, true);
+    }
+
+    public static function requiereAnulacion(int $cbteTipo): bool
+    {
+        return ArcaFceNcMostradorSupport::esTipoNcNdFce($cbteTipo);
     }
 
     /**
@@ -66,7 +74,8 @@ final class ArcaFceDatosAdicionalesSupport
     }
 
     /**
-     * Completa 21/27 si faltan. No pisa valores ya mandados en el payload.
+     * Completa 21/27 (factura FCE) si faltan. No pisa valores ya mandados.
+     * El opcional 22 (anulación) lo arma el emisor mostrador; aquí no se inventa.
      *
      * @param  list<array<string, mixed>>  $lista
      * @return list<array<string, mixed>>
@@ -82,7 +91,7 @@ final class ArcaFceDatosAdicionalesSupport
             if (! is_array($row)) {
                 continue;
             }
-            $t = (int) ($row['t'] ?? $row['codigo'] ?? 0);
+            $t = (int) ($row['t'] ?? $row['codigo'] ?? $row['Id'] ?? 0);
             if ($t > 0) {
                 $tiene[$t] = true;
             }
@@ -98,6 +107,19 @@ final class ArcaFceDatosAdicionalesSupport
         }
 
         return $lista;
+    }
+
+    /**
+     * @return array{t:int, c1:string}
+     */
+    public static function opcionalAnulacion(string $anulacionSn): array
+    {
+        $sn = ArcaFceNcMostradorSupport::normalizarAnulacion($anulacionSn);
+        if ($sn === null) {
+            throw new InvalidArgumentException('Anulación FCE debe ser S o N (opcional 22).');
+        }
+
+        return ['t' => self::TIPO_ANULACION, 'c1' => $sn];
     }
 
     public static function cbuEmisor(int $empresaId = 0): string

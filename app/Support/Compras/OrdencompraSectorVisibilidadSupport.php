@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Models\Compras\Sector_Legajocompra;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Auth;
@@ -13,6 +14,9 @@ use Illuminate\Support\Facades\DB;
  * - Administrador o listar-todos-sector-legajo-compra: ve todos los sectores.
  * - Con sector_legajocompra_id en el usuario: solo ese sector.
  * - Sin sector: no ve nada.
+ *
+ * En la bandeja, usuarios de CUENTAS A PAGAR / PAGOS quedan fijos en esa vista
+ * (no pueden cambiar de pestaña a otros sectores).
  */
 final class OrdencompraSectorVisibilidadSupport
 {
@@ -32,6 +36,50 @@ final class OrdencompraSectorVisibilidadSupport
     public static function puedeVerTodos(): bool
     {
         return can(self::PERMISO_VER_TODOS, false);
+    }
+
+    /** Nombre del sector del usuario (mayúsculas), o null. */
+    public static function nombreSectorUsuario(): ?string
+    {
+        $id = self::sectorUsuarioId();
+        if ($id === null) {
+            return null;
+        }
+
+        $nombre = Sector_Legajocompra::query()->whereKey($id)->value('nombre');
+        $nombre = strtoupper(trim((string) $nombre));
+
+        return $nombre !== '' ? $nombre : null;
+    }
+
+    /**
+     * Vista de bandeja forzada por el sector del usuario.
+     * null = puede usar cualquier vista (ve todos o sector no CxP/Pagos).
+     */
+    public static function vistaBandejaForzada(): ?string
+    {
+        if (self::puedeVerTodos()) {
+            return null;
+        }
+
+        return match (self::nombreSectorUsuario()) {
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR => OrdencompraLegajoBandejaFiltros::VISTA_CXP,
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_PAGOS => OrdencompraLegajoBandejaFiltros::VISTA_PAGOS,
+            default => null,
+        };
+    }
+
+    /**
+     * @return list<string>|null  null = todas las vistas; lista = solo esas pestañas
+     */
+    public static function vistasBandejaPermitidas(): ?array
+    {
+        $forzada = self::vistaBandejaForzada();
+        if ($forzada === null) {
+            return null;
+        }
+
+        return [$forzada];
     }
 
     /**

@@ -38,7 +38,7 @@ class Ordencompra extends Model
 
     protected $fillable = [
         'fecha', 'fechaentrega', 'empresa_id', 'numeroordencompra', 'requisicion_id', 'centrocosto_id',
-        'comentario', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'proveedor_id',
+        'comentario', 'nota_legajo', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'proveedor_id',
         'condicioncompra_id', 'condicionentrega_id', 'condicionpago_id', 'descuento', 'descuento_tipo', 'estadoordencompra', 'sector_legajocompra_id',
         'condiciones_contratacion', 'creousuario_id',
         'es_contrato', 'es_suscripcion', 'suscripcion_nombre', 'suscripcion_proveedor_nombre',

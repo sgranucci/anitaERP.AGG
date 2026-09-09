@@ -151,6 +151,36 @@
 				<small id="aviso-tipo-fce" class="form-text text-info d-none"></small>
 			</div>
 		</div>
+		@php
+			$ncOrigenEsFce = ! empty($ncOrigenEsFce);
+			$fceComprobanteReferenciado = old('fce_comprobante_referenciado', $fceComprobanteReferenciado ?? '');
+			$fceAnulacion = old('fce_anulacion', $fceAnulacion ?? '');
+		@endphp
+		<div id="fce-nc-mostrador-wrap" class="{{ $ncOrigenEsFce ? '' : 'd-none' }}" data-nc-origen-fce="{{ $ncOrigenEsFce ? '1' : '0' }}">
+			<div class="form-group row">
+				<label for="fce_comprobante_referenciado" class="col-lg-3 control-label text-right pr-2 requerido">Comprobante referenciado</label>
+				<input type="text" name="fce_comprobante_referenciado" id="fce_comprobante_referenciado"
+					class="col-lg-5 form-control"
+					value="{{ $fceComprobanteReferenciado }}"
+					placeholder="FCE A-00008-00001234"
+					autocomplete="off"
+					@if ($ncOrigenEsFce) required @endif>
+				<div class="col-lg-4">
+					<small class="form-text text-muted">FCE a asociar en ARCA (CbteAsoc).</small>
+				</div>
+			</div>
+			<div class="form-group row">
+				<label for="fce_anulacion" class="col-lg-3 control-label text-right pr-2 requerido">Anulación FCE (opc. 22)</label>
+				<select name="fce_anulacion" id="fce_anulacion" class="col-lg-3 form-control" data-fouc @if ($ncOrigenEsFce) required @endif>
+					<option value="">-- Seleccionar --</option>
+					<option value="N" @if ($fceAnulacion === 'N') selected @endif>N — No es anulación (ajuste / cancela sin rechazo)</option>
+					<option value="S" @if ($fceAnulacion === 'S') selected @endif>S — Anulación de FCE rechazada</option>
+				</select>
+				<div class="col-lg-5">
+					<small class="form-text text-muted">Obligatorio en NCE. S solo si la FCE fue rechazada en el Registro.</small>
+				</div>
+			</div>
+		</div>
 		<div id="concepto-venta-comprobante-wrap" class="{{ $mostrarConceptoCabecera ? '' : 'd-none' }}">
 			@include('ventas.partials.campo_consulta_concepto_venta', [
 				'conceptoId' => $conceptoCabeceraId,

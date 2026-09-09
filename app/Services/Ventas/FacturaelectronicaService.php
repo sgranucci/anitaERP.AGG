@@ -703,7 +703,10 @@ class FacturaElectronicaService
 			return -1;
 	}
 
-	public function armaTipoTransaccion($letra, $modofacturacion, &$tipotransaccion, $puntoventa, $totalcomprobante)
+	/**
+	 * @param  bool  $forzarNcNdFce  Mostrador: NC/ND sobre FCE → NCE/NDE aunque el total sea &lt; tope MiPyME.
+	 */
+	public function armaTipoTransaccion($letra, $modofacturacion, &$tipotransaccion, $puntoventa, $totalcomprobante, bool $forzarNcNdFce = false)
 	{
 		if ($letra == 'B') {
 			$tipotransaccion += 5;
@@ -713,12 +716,23 @@ class FacturaElectronicaService
 			$tipotransaccion += 50;
 		}
 
+		$tipo = (int) $tipotransaccion;
+		if ($tipo >= 200) {
+			return;
+		}
+
+		$esNcNd = in_array($tipo, [2, 3, 7, 8, 52, 53], true);
+		if ($forzarNcNdFce && $esNcNd) {
+			$tipotransaccion = $tipo + 200;
+
+			return;
+		}
+
 		if (
 			$modofacturacion == 'C'
-			&& (int) $tipotransaccion < 200
 			&& (float) $totalcomprobante >= ParametroSistemaSupport::limiteFce()
 		) {
-			$tipotransaccion += 200;
+			$tipotransaccion = $tipo + 200;
 		}
 	}
 

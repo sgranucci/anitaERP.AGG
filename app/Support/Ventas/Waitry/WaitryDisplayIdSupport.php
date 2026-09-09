@@ -74,7 +74,8 @@ final class WaitryDisplayIdSupport
      */
     public static function extraerDesdeOrden(array $orden): string
     {
-        foreach (['sequence', 'external_delivery_id', 'externalDeliveryId'] as $campo) {
+        // Contador de monitor: sequence / external_delivery_id / display_id numérico (cambio Waitry ~sep 2026).
+        foreach (['sequence', 'external_delivery_id', 'externalDeliveryId', 'display_id', 'displayId'] as $campo) {
             if (! array_key_exists($campo, $orden)) {
                 continue;
             }
@@ -96,6 +97,7 @@ final class WaitryDisplayIdSupport
             }
         }
 
+        // Legacy: display_id / external_reference alfanumérico (W-…, E-…).
         foreach (['display_id', 'displayId', 'external_reference_id'] as $campo) {
             $valor = trim((string) ($orden[$campo] ?? ''));
             if (self::esCodigoMonitorAlfanumerico($valor)) {

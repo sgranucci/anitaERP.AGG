@@ -16,6 +16,7 @@ use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
+use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
@@ -37,9 +38,24 @@ class OrdencompraLegajoBandejaPaqueteService
 
     public function encontrarOcVisible(int $id): Ordencompra
     {
+        return $this->encontrarOc($id, false);
+    }
+
+    /**
+     * Lectura global (seguimiento): empresas asignadas, sin recorte por sector de legajo.
+     */
+    public function encontrarOcConsulta(int $id): Ordencompra
+    {
+        return $this->encontrarOc($id, true);
+    }
+
+    private function encontrarOc(int $id, bool $consultaGlobal): Ordencompra
+    {
         $query = Ordencompra::query()->whereKey($id);
         app(EmpresaRepository::class)->aplicarFiltroEmpresasAsignadas($query, 'ordencompra.empresa_id');
-        OrdencompraSectorVisibilidadSupport::aplicarFiltro($query);
+        if (! $consultaGlobal) {
+            OrdencompraSectorVisibilidadSupport::aplicarFiltro($query);
+        }
         $oc = $query->with('empresas:id,codigo,nombre')->first();
         if (! $oc) {
             abort(404, 'Orden de compra no encontrada.');
@@ -68,8 +84,9 @@ class OrdencompraLegajoBandejaPaqueteService
         $asignadas = $this->asignacionesPorPrecarga($precargaIds);
         $comprobantes = $this->comprobantesDelLegajo($oc, $precargaIds);
         $pagos = $this->pagosDeComprobantes(array_map(static fn (array $c) => (int) $c['id'], $comprobantes));
-        $primeraPrecargaId = $precargaIds[0] ?? 0;
-        $tieneComprobante = $comprobantes !== [];
+        $pendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc);
+        $siguiente = $pendientes[0] ?? null;
+        $enCxp = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0));
 
         return [
             'ordencompra_id' => (int) $oc->id,
@@ -82,12 +99,13 @@ class OrdencompraLegajoBandejaPaqueteService
             'asignadas' => $asignadas,
             'comprobantes' => $comprobantes,
             'pagos' => $pagos,
-            'url_cargar_cxp' => (! $tieneComprobante
-                && OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0)))
+            'pendientes_carga' => count($pendientes),
+            'siguiente_pendiente' => $siguiente,
+            'url_cargar_cxp' => ($enCxp && $siguiente !== null)
                 ? route('crear_comprobante_proveedor', array_filter([
                     'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
                     'ordencompra_id' => (int) $oc->id,
-                    'precarga_id' => $primeraPrecargaId > 0 ? $primeraPrecargaId : null,
+                    'precarga_id' => ($siguiente['precarga_id'] ?? null) ?: null,
                 ]))
                 : null,
             'url_oc' => can('editar-ordencompra', false)
@@ -101,22 +119,59 @@ class OrdencompraLegajoBandejaPaqueteService
      */
     public function asignar(Ordencompra $oc, int|string $facturaRef, array $recepcionIds): void
     {
-        $precargaId = (int) $this->resolverPrecargaParaAsignacion($oc, $facturaRef)->id;
-        $ids = array_values(array_unique(array_filter(
-            array_map(static fn ($id) => (int) $id, $recepcionIds),
-            static fn (int $id) => $id > 0
-        )));
+        $this->asignarMultiples($oc, [[
+            'precarga_id' => $facturaRef,
+            'recepcion_ids' => $recepcionIds,
+        ]]);
+    }
 
-        if ($ids !== []) {
+    /**
+     * @param  list<array{precarga_id: int|string, recepcion_ids?: list<mixed>}>  $asignaciones
+     */
+    public function asignarMultiples(Ordencompra $oc, array $asignaciones): void
+    {
+        if ($asignaciones === []) {
+            throw ValidationException::withMessages([
+                'asignaciones' => 'Indique al menos un comprobante para asignar COM.',
+            ]);
+        }
+
+        $normalizadas = [];
+        foreach ($asignaciones as $item) {
+            $ref = $item['precarga_id'] ?? null;
+            if ($ref === null || $ref === '') {
+                continue;
+            }
+            $ids = array_values(array_unique(array_filter(
+                array_map(static fn ($id) => (int) $id, (array) ($item['recepcion_ids'] ?? [])),
+                static fn (int $id) => $id > 0
+            )));
+            $precargaId = (int) $this->resolverPrecargaParaAsignacion($oc, $ref)->id;
+            $normalizadas[$precargaId] = $ids;
+        }
+        if ($normalizadas === []) {
+            throw ValidationException::withMessages([
+                'asignaciones' => 'No se pudo resolver ningún comprobante del legajo.',
+            ]);
+        }
+
+        $todosIds = [];
+        foreach ($normalizadas as $ids) {
+            foreach ($ids as $id) {
+                $todosIds[] = $id;
+            }
+        }
+        $todosIds = array_values(array_unique($todosIds));
+        if ($todosIds !== []) {
             $validas = Recepcion_Proveedor::query()
                 ->where('ordencompra_id', $oc->id)
                 ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
                 ->where('estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
-                ->whereIn('id', $ids)
+                ->whereIn('id', $todosIds)
                 ->pluck('id')
                 ->map(static fn ($id) => (int) $id)
                 ->all();
-            $faltan = array_values(array_diff($ids, $validas));
+            $faltan = array_values(array_diff($todosIds, $validas));
             if ($faltan !== []) {
                 throw ValidationException::withMessages([
                     'recepcion_ids' => 'Hay COM que no pertenecen a esta OC o no están confirmadas.',
@@ -124,16 +179,18 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
 
-        DB::transaction(function () use ($precargaId, $ids) {
-            Precarga_Comprobante_Proveedor_Recepcion::query()
-                ->where('precarga_comprobante_proveedor_id', $precargaId)
-                ->delete();
-            foreach ($ids as $orden => $recepcionId) {
-                Precarga_Comprobante_Proveedor_Recepcion::query()->create([
-                    'precarga_comprobante_proveedor_id' => $precargaId,
-                    'recepcion_proveedor_id' => $recepcionId,
-                    'orden' => $orden + 1,
-                ]);
+        DB::transaction(function () use ($normalizadas) {
+            foreach ($normalizadas as $precargaId => $ids) {
+                Precarga_Comprobante_Proveedor_Recepcion::query()
+                    ->where('precarga_comprobante_proveedor_id', $precargaId)
+                    ->delete();
+                foreach ($ids as $orden => $recepcionId) {
+                    Precarga_Comprobante_Proveedor_Recepcion::query()->create([
+                        'precarga_comprobante_proveedor_id' => $precargaId,
+                        'recepcion_proveedor_id' => $recepcionId,
+                        'orden' => $orden + 1,
+                    ]);
+                }
             }
         });
     }
@@ -198,16 +255,30 @@ class OrdencompraLegajoBandejaPaqueteService
             ->get([
                 'id', 'letra', 'sucursal', 'numerocomprobante', 'fechafactura',
                 'total', 'rutaalmacenamiento', 'estado', 'origen_entrada',
+                'tipotransaccion_compra_id',
             ]);
 
         $out = [];
         foreach ($rows as $pre) {
             $id = (int) $pre->id;
+            $pre->loadMissing('tipotransaccion_compras:id,abreviatura,codigoafip');
+            $tipo = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($pre);
+            $abrev = strtoupper(trim((string) ($pre->tipotransaccion_compras->abreviatura ?? '')));
+            $numero = trim(sprintf(
+                '%s %04d-%08d',
+                $pre->letra ?: 'FC',
+                (int) $pre->sucursal,
+                (int) $pre->numerocomprobante
+            ));
+            $base = $abrev !== '' ? $abrev.' '.$numero : $numero;
             $out[] = [
                 'id' => $id,
                 'origen' => 'precarga',
                 'origen_label' => PrecargaComprobanteOrigenEntrada::etiqueta($pre->origen_entrada ?? null),
-                'etiqueta' => $this->etiquetaFactura($pre),
+                'tipo' => $tipo,
+                'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
+                'exige_com' => OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo),
+                'etiqueta' => OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $base),
                 'letra' => (string) ($pre->letra ?? ''),
                 'sucursal' => (int) ($pre->sucursal ?? 0),
                 'numerocomprobante' => (int) ($pre->numerocomprobante ?? 0),
@@ -219,7 +290,11 @@ class OrdencompraLegajoBandejaPaqueteService
                     'precarga' => $id,
                     'inline' => 1,
                 ]),
-                'url_cargar_cxp' => route('crear_comprobante_proveedor', ['precarga_id' => $id]),
+                'url_cargar_cxp' => route('crear_comprobante_proveedor', [
+                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+                    'ordencompra_id' => (int) $oc->id,
+                    'precarga_id' => $id,
+                ]),
             ];
         }
 
@@ -417,7 +492,8 @@ class OrdencompraLegajoBandejaPaqueteService
 
         $empresaId = (int) $oc->empresa_id;
         $proveedorId = (int) $oc->proveedor_id;
-        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc);
+        $tipoGenerico = $this->tipoComprobanteDesdeScanAnita($fila);
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc, $tipoGenerico);
         if ($empresaId <= 0 || $proveedorId <= 0 || $tipoId <= 0) {
             throw ValidationException::withMessages([
                 'precarga_id' => 'No se puede crear la precarga del legajo para asignar la COM (faltan empresa, proveedor o tipo de factura).',
@@ -448,7 +524,13 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
 
-        $monedaId = $this->monedaIdParaPrecarga($oc);
+        try {
+            $monedaId = $this->facturaPdfService->monedaIdParaPrecarga($oc);
+        } catch (\RuntimeException $e) {
+            throw ValidationException::withMessages([
+                'precarga_id' => $e->getMessage(),
+            ]);
+        }
         $moneda = Moneda::query()->whereKey($monedaId)->first();
 
         $precarga = Precarga_Comprobante_Proveedor::query()->create([
@@ -511,8 +593,9 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
 
-        return OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajo($oc)
-            ?? $delLegajo->first();
+        // No reutilizar otra precarga del legajo: en multi-comprobante eso
+        // pisa el tipo (p.ej. una ND queda como FIS por un scan FC distinto).
+        return null;
     }
 
     private function fechaYmdDesdeScanAnita(string $ymd): string
@@ -586,6 +669,7 @@ class OrdencompraLegajoBandejaPaqueteService
         array $fila,
     ): Precarga_Comprobante_Proveedor {
         $precarga = $this->marcarOrigenScanAnitaSiNoEsIa($precarga);
+        $precarga = $this->alinearTipoPrecargaConScanAnita($oc, $precarga, $fila);
         $ruta = trim((string) ($precarga->rutaalmacenamiento ?? ''));
         if ($ruta !== '' && $this->scanPathResolver->resolve($ruta)) {
             return $precarga;
@@ -600,7 +684,10 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         $tipoId = (int) ($precarga->tipotransaccion_compra_id
-            ?: OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc));
+            ?: OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra(
+                $oc,
+                $this->tipoComprobanteDesdeScanAnita($fila)
+            ));
         $tipoAbrev = (string) (Tipotransaccion_Compra::query()->whereKey($tipoId)->value('abreviatura') ?? 'FAC');
         $fecha = $this->fechaYmdDesdeScanAnita((string) ($fila['ifecha'] ?? ''));
         if ($precarga->fechafactura) {
@@ -629,30 +716,72 @@ class OrdencompraLegajoBandejaPaqueteService
         return $precarga;
     }
 
-    private function monedaIdParaPrecarga(Ordencompra $oc): int
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function tipoComprobanteDesdeScanAnita(array $fila): string
     {
-        $oc->loadMissing('ordencompra_articulos');
-        $candidatos = [];
-        $linea = $oc->ordencompra_articulos->first();
-        if ($linea) {
-            $candidatos[] = (int) ($linea->moneda_id ?? 0);
-        }
-        $candidatos[] = (int) ($oc->contrato_moneda_id ?? 0);
+        return \App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport::normalizar(
+            (string) ($fila['ctipo'] ?? 'FC')
+        );
+    }
 
-        foreach ($candidatos as $id) {
-            if ($id > 0 && Moneda::query()->whereKey($id)->exists()) {
-                return $id;
-            }
+    /**
+     * Si el scan Anita trae ctipo NC/ND y la precarga quedó como FIS/FC, alinea el tipo fino.
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    private function alinearTipoPrecargaConScanAnita(
+        Ordencompra $oc,
+        Precarga_Comprobante_Proveedor $precarga,
+        array $fila,
+    ): Precarga_Comprobante_Proveedor {
+        // Solo alinear si el scan es del mismo número; si no, no tocar el tipo de otra precarga.
+        $scanNro = (int) ($fila['inumero'] ?? 0);
+        $preNro = (int) ($precarga->numerocomprobante ?? 0);
+        if ($scanNro > 0 && $preNro > 0 && $scanNro !== $preNro) {
+            return $precarga;
         }
 
-        $fallback = (int) (Moneda::query()->orderBy('id')->value('id') ?? 0);
-        if ($fallback <= 0) {
+        $esperado = $this->tipoComprobanteDesdeScanAnita($fila);
+        $actual = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($precarga);
+        if ($esperado === $actual) {
+            return $precarga;
+        }
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc, $esperado);
+        if ($tipoId <= 0 || $tipoId === (int) $precarga->tipotransaccion_compra_id) {
+            return $precarga;
+        }
+        $precarga->tipotransaccion_compra_id = $tipoId;
+        $precarga->save();
+
+        return $precarga->fresh(['tipotransaccion_compras']) ?? $precarga;
+    }
+
+    /**
+     * Corrige el tipo genérico FC/NC/ND de una precarga del legajo (abreviatura fina según OC).
+     *
+     * @param  'FC'|'NC'|'ND'|string  $tipoGenerico
+     */
+    public function corregirTipoDocumento(Ordencompra $oc, int $precargaId, string $tipoGenerico): Precarga_Comprobante_Proveedor
+    {
+        $precarga = $this->assertPrecargaDelLegajo($oc, $precargaId);
+        $tipo = \App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport::normalizar($tipoGenerico);
+        if (! in_array($tipo, ['FC', 'NC', 'ND'], true)) {
             throw ValidationException::withMessages([
-                'precarga_id' => 'No hay una moneda válida para crear la precarga del scan Anita.',
+                'tipo' => 'Tipo de comprobante inválido. Usá FC, NC o ND.',
             ]);
         }
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc, $tipo);
+        if ($tipoId <= 0) {
+            throw ValidationException::withMessages([
+                'tipo' => 'No se pudo resolver el tipo contable para esta OC.',
+            ]);
+        }
+        $precarga->tipotransaccion_compra_id = $tipoId;
+        $precarga->save();
 
-        return $fallback;
+        return $precarga->fresh(['tipotransaccion_compras']) ?? $precarga;
     }
 
     private function marcarOrigenScanAnitaSiNoEsIa(Precarga_Comprobante_Proveedor $precarga): Precarga_Comprobante_Proveedor

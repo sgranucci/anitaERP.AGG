@@ -17,6 +17,8 @@ final class RetencionGananciasResultado
 
     public const MOTIVO_MANUAL_REQUERIDO = 'manual_requerido';
 
+    public const MOTIVO_EXCLUIDO = 'excluido';
+
     public const MOTIVO_OK = 'ok';
 
     public const MOTIVO_OK_MANUAL = 'ok_manual';

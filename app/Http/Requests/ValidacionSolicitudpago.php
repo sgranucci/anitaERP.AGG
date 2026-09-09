@@ -39,6 +39,16 @@ class ValidacionSolicitudpago extends FormRequest
             $merge['fecha_entrega'] = $fechaSp;
         }
 
+        // Sin CC: el select puede mandar "" o "0" (consulta de cuenta sin manejaccosto).
+        // "0" no es nullable para exists → hay que anularlo antes de validar.
+        $ccIds = $this->input('centrocosto_ids');
+        if (is_array($ccIds)) {
+            $merge['centrocosto_ids'] = array_map(
+                static fn ($v) => ($v === null || $v === '' || (int) $v === 0) ? null : $v,
+                $ccIds
+            );
+        }
+
         if ($merge !== []) {
             $this->merge($merge);
         }

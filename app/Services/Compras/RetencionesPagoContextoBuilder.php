@@ -3,6 +3,7 @@
 namespace App\Services\Compras;
 
 use App\Models\Compras\Proveedor;
+use App\Support\Compras\Retencion\ProveedorExclusionRetencionSupport;
 use App\Support\Compras\Retencion\RetencionGananciasAcumuladoMesSupport;
 use App\Support\Compras\Retencion\RetencionesPagoBasesDesdeConceptosSupport;
 use App\Support\Compras\Retencion\RetencionesPagoBasesResultado;
@@ -80,6 +81,12 @@ class RetencionesPagoContextoBuilder
             ? $bases->netoGravado
             : $bases->netoDocumental();
 
+        $exclusiones = ProveedorExclusionRetencionSupport::mapaVigentes((int) $proveedor->id, $fecha);
+        $pctG = (float) ($exclusiones[ProveedorExclusionRetencionSupport::TIPO_GANANCIAS]['porcentaje'] ?? 0);
+        $pctI = (float) ($exclusiones[ProveedorExclusionRetencionSupport::TIPO_IVA]['porcentaje'] ?? 0);
+        $pctS = (float) ($exclusiones[ProveedorExclusionRetencionSupport::TIPO_SUSS]['porcentaje'] ?? 0);
+        $pctB = (float) ($exclusiones[ProveedorExclusionRetencionSupport::TIPO_IIBB]['porcentaje'] ?? 0);
+
         $input = new RetencionesPagoInput(
             proveedor: $proveedor,
             importeNetoPago: $netoIvaSuss,
@@ -100,12 +107,19 @@ class RetencionesPagoContextoBuilder
             importeNetoGanancias: $bases->netoGanancias,
             importeNetoIibb: $bases->netoIibb,
             importeNetoSuss: $netoIvaSuss,
+            ivaExcluido: $pctI >= 100.0,
+            porcentajeExclusionIva: $pctI,
+            porcentajeExclusionSuss: $pctS,
+            porcentajeExclusionIibb: $pctB,
+            porcentajeExclusionGanancias: $pctG,
+            exclusionesVigentes: $exclusiones,
         );
 
         return [
             'input' => $input,
             'bases' => $bases,
             'acumulado_ganancias' => $acumMeta,
+            'exclusiones' => $exclusiones,
         ];
     }
 }

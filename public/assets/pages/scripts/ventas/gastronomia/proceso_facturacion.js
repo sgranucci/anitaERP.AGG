@@ -618,10 +618,107 @@
 
     function tieneOpcionalesPendientesWaitry(data) {
         if (!data) return false;
+        if (Array.isArray(data.lineas_opcionales_pendientes) && data.lineas_opcionales_pendientes.length) {
+            return true;
+        }
         if (Array.isArray(data.skus_opcionales_pendientes) && data.skus_opcionales_pendientes.length) {
             return true;
         }
         return !!data.requiere_carga_opcionales_en_pos;
+    }
+
+    /**
+     * @returns {Array<{sku: string, cantidad: number, precio_unitario: number|null}>}
+     */
+    function pendientesOpcionalesDesdeImportWaitry(data) {
+        if (!data) return [];
+        if (Array.isArray(data.lineas_opcionales_pendientes) && data.lineas_opcionales_pendientes.length) {
+            return data.lineas_opcionales_pendientes
+                .map((ln) => {
+                    const sku = String((ln && ln.sku) || '').trim();
+                    if (!sku) return null;
+                    let cantidad = parseFloat(ln.cantidad);
+                    if (!(cantidad > 0)) cantidad = 1;
+                    const pu = ln.precio_unitario != null ? parseFloat(ln.precio_unitario) : null;
+                    return {
+                        sku: sku,
+                        cantidad: cantidad,
+                        precio_unitario: pu != null && !isNaN(pu) ? pu : null,
+                    };
+                })
+                .filter(Boolean);
+        }
+        const skus = [];
+        if (Array.isArray(data.skus_opcionales_pendientes) && data.skus_opcionales_pendientes.length) {
+            data.skus_opcionales_pendientes.forEach((s) => {
+                if (s && typeof s === 'object' && s.sku) {
+                    let cantidad = parseFloat(s.cantidad);
+                    if (!(cantidad > 0)) cantidad = 1;
+                    skus.push({
+                        sku: String(s.sku).trim(),
+                        cantidad: cantidad,
+                        precio_unitario:
+                            s.precio_unitario != null && !isNaN(parseFloat(s.precio_unitario))
+                                ? parseFloat(s.precio_unitario)
+                                : null,
+                    });
+                    return;
+                }
+                const sku = String(s || '').trim();
+                if (sku) skus.push({ sku: sku, cantidad: 1, precio_unitario: null });
+            });
+            return skus.filter((v, i, a) => a.findIndex((x) => x.sku === v.sku) === i);
+        }
+        const errores = Array.isArray(data.errores) ? data.errores : [];
+        errores.forEach((err) => {
+            const s = String(err || '');
+            if (
+                s.indexOf('requiere opcionales') < 0 &&
+                s.indexOf('modal de opcionales') < 0 &&
+                s.indexOf('Debe seleccionar opcional') < 0
+            ) {
+                return;
+            }
+            let m = s.match(/SKU «([^»]+)»(?:\s*\(([^)]*)\))?(?:\s*×\s*([0-9]+(?:[.,][0-9]+)?))?/);
+            if (m) {
+                let cantidad = m[3] ? parseFloat(String(m[3]).replace(',', '.')) : 1;
+                if (!(cantidad > 0)) cantidad = 1;
+                skus.push({ sku: m[1], cantidad: cantidad, precio_unitario: null });
+                return;
+            }
+            m = s.match(/^([A-Za-z0-9]+):\s*Debe seleccionar opcional/);
+            if (m) skus.push({ sku: m[1], cantidad: 1, precio_unitario: null });
+        });
+        return skus.filter((v, i, a) => a.findIndex((x) => x.sku === v.sku) === i);
+    }
+
+    function etiquetaPendienteOpcionalWaitry(item) {
+        if (!item) return '';
+        if (typeof item === 'string') return item;
+        const sku = String(item.sku || '').trim();
+        const cant = parseFloat(item.cantidad);
+        if (!(cant > 0) || Math.abs(cant - 1) < 0.0001) return sku;
+        const cantLabel = Math.abs(cant - Math.round(cant)) < 0.0001 ? String(Math.round(cant)) : String(cant);
+        return sku + ' ×' + cantLabel;
+    }
+
+    function skuDePendienteColaWaitry(item) {
+        if (!item) return '';
+        if (typeof item === 'string') return String(item).trim();
+        return String(item.sku || '').trim();
+    }
+
+    function cantidadDePendienteColaWaitry(item) {
+        if (!item || typeof item === 'string') return 1;
+        const n = parseFloat(item.cantidad);
+        return n > 0 ? n : 1;
+    }
+
+    function precioDePendienteColaWaitry(item) {
+        if (!item || typeof item === 'string') return null;
+        if (item.precio_unitario == null) return null;
+        const n = parseFloat(item.precio_unitario);
+        return !isNaN(n) && n >= 0 ? n : null;
     }
 
     function formatearTextoAviso(msg) {
@@ -866,30 +963,7 @@
     }
 
     function skusOpcionalesPendientesDesdeImportWaitry(data) {
-        if (!data) return [];
-        if (Array.isArray(data.skus_opcionales_pendientes) && data.skus_opcionales_pendientes.length) {
-            return data.skus_opcionales_pendientes.slice();
-        }
-        const errores = Array.isArray(data.errores) ? data.errores : [];
-        const skus = [];
-        errores.forEach((err) => {
-            const s = String(err || '');
-            if (
-                s.indexOf('requiere opcionales') < 0 &&
-                s.indexOf('modal de opcionales') < 0 &&
-                s.indexOf('Debe seleccionar opcional') < 0
-            ) {
-                return;
-            }
-            let m = s.match(/SKU «([^»]+)»/);
-            if (m) {
-                skus.push(m[1]);
-                return;
-            }
-            m = s.match(/^([A-Za-z0-9]+):\s*Debe seleccionar opcional/);
-            if (m) skus.push(m[1]);
-        });
-        return skus.filter((v, i, a) => a.indexOf(v) === i);
+        return pendientesOpcionalesDesdeImportWaitry(data).map((p) => p.sku);
     }
 
     function normalizarSkuColaWaitry(sku) {
@@ -909,19 +983,20 @@
 
     /**
      * Tras importar Waitry: los ítems con fórmula opcional no entran automáticamente.
-     * Encola TODOS los SKUs pendientes y abre el asistente uno tras otro (antes solo el primero).
+     * Encola TODOS los pendientes (SKU + cantidad Waitry) y abre el asistente uno tras otro.
      */
     async function cargarPendientesOpcionalesTrasImportWaitry(data) {
-        const skus = skusOpcionalesPendientesDesdeImportWaitry(data);
-        if (!skus.length || !cuentaId) {
+        const pendientes = pendientesOpcionalesDesdeImportWaitry(data);
+        if (!pendientes.length || !cuentaId) {
             colaSkusOpcionalesWaitry = [];
             return;
         }
 
-        colaSkusOpcionalesWaitry = skus.slice();
+        colaSkusOpcionalesWaitry = pendientes.slice();
+        const etiquetas = pendientes.map(etiquetaPendienteOpcionalWaitry).filter(Boolean);
         toast(
-            'Complete en el POS los opcionales de: ' + skus.join(', ') +
-                (skus.length > 1 ? ' (se pedirán uno por uno).' : '.'),
+            'Complete en el POS los opcionales de: ' + etiquetas.join(', ') +
+                (pendientes.length > 1 ? ' (se pedirán uno por uno).' : '.'),
             'warning',
             { soloToast: true, timeOut: 10000, extendedTimeOut: 5000, closeButton: true, progressBar: true },
         );
@@ -941,7 +1016,10 @@
         }
 
         while (colaSkusOpcionalesWaitry.length > 0) {
-            const sku = colaSkusOpcionalesWaitry[0];
+            const pendiente = colaSkusOpcionalesWaitry[0];
+            const sku = skuDePendienteColaWaitry(pendiente);
+            const cantidadWaitry = cantidadDePendienteColaWaitry(pendiente);
+            const precioWaitry = precioDePendienteColaWaitry(pendiente);
             const fullSku = normalizarSkuColaWaitry(sku);
             if (!fullSku) {
                 colaSkusOpcionalesWaitry.shift();
@@ -957,9 +1035,13 @@
                     continue;
                 }
 
+                if (precioWaitry != null) {
+                    a.precio_sugerido = precioWaitry;
+                }
+
                 const grupos = await fetchGruposOpcionales(a.id);
                 if (!grupos.length) {
-                    const ok = await agregarLineaApi(a, 1, {});
+                    const ok = await agregarLineaApi(a, cantidadWaitry, {});
                     if (ok) {
                         colaSkusOpcionalesWaitry.shift();
                     } else if (modalElementoVisible('modal-opcionales')) {
@@ -976,7 +1058,7 @@
 
                 pendingOpcionalesCtx = {
                     articulo: a,
-                    cantidad: 1,
+                    cantidad: cantidadWaitry,
                     modo: 'agregar-directo',
                     grupos: grupos,
                     colaWaitry: true,
@@ -1000,12 +1082,13 @@
             return;
         }
         const skuCtx = String(ctx.skuWaitry || '').trim();
-        if (skuCtx && colaSkusOpcionalesWaitry[0] === skuCtx) {
+        const headSku = skuDePendienteColaWaitry(colaSkusOpcionalesWaitry[0]);
+        if (skuCtx && headSku === skuCtx) {
             colaSkusOpcionalesWaitry.shift();
             return;
         }
         if (skuCtx) {
-            const idx = colaSkusOpcionalesWaitry.indexOf(skuCtx);
+            const idx = colaSkusOpcionalesWaitry.findIndex((item) => skuDePendienteColaWaitry(item) === skuCtx);
             if (idx >= 0) {
                 colaSkusOpcionalesWaitry.splice(idx, 1);
                 return;
@@ -6820,7 +6903,10 @@
                               skuWaitry: pendingOpcionalesCtx.skuWaitry,
                           }
                         : colaSkusOpcionalesWaitry.length
-                          ? { colaWaitry: true, skuWaitry: colaSkusOpcionalesWaitry[0] }
+                          ? {
+                                colaWaitry: true,
+                                skuWaitry: skuDePendienteColaWaitry(colaSkusOpcionalesWaitry[0]),
+                            }
                           : {};
                 pendingOpcionalesCtx = Object.assign(
                     {
@@ -7678,7 +7764,8 @@
                         sacarSkuActualColaWaitry(ctxCancelado);
                         if (colaSkusOpcionalesWaitry.length) {
                             toast(
-                                'Opcional omitido. Siguiente pendiente: ' + colaSkusOpcionalesWaitry.join(', '),
+                                'Opcional omitido. Siguiente pendiente: ' +
+                                    colaSkusOpcionalesWaitry.map(etiquetaPendienteOpcionalWaitry).join(', '),
                                 'warning',
                                 { soloToast: true, timeOut: 8000 },
                             );

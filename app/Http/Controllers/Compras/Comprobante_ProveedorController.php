@@ -43,6 +43,8 @@ use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
+use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
+use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Models\Compras\Ordencompra;
@@ -265,7 +267,7 @@ class Comprobante_ProveedorController extends Controller
                 $this->redirectTrasGuardarComprobante(
                     $request,
                     $comprobante,
-                    'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.',
+                    $this->mensajeContabilizadoConLegajo($comprobante),
                     'index'
                 ),
                 $avisos
@@ -630,7 +632,7 @@ class Comprobante_ProveedorController extends Controller
         return $this->redirectTrasGuardarComprobante(
             $request,
             $comprobante,
-            'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.',
+            $this->mensajeContabilizadoConLegajo($comprobante),
             'index'
         );
     }
@@ -1207,6 +1209,38 @@ class Comprobante_ProveedorController extends Controller
         return redirect()
             ->route('comprobante_proveedor', $this->queryRetornoListado($request))
             ->with('mensaje', $mensaje);
+    }
+
+    private function mensajeContabilizadoConLegajo(mixed $comprobante): string
+    {
+        $base = 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.';
+        $ocId = (int) ($comprobante->ordencompra_id ?? 0);
+        if ($ocId <= 0) {
+            return $base;
+        }
+
+        $oc = \App\Models\Compras\Ordencompra::query()->find($ocId);
+        if (! $oc) {
+            return $base;
+        }
+
+        $pendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc);
+        if ($pendientes !== []) {
+            $n = count($pendientes);
+            $sig = (string) ($pendientes[0]['etiqueta'] ?? '');
+            $msg = $base.' Quedan '.$n.' comprobante'.($n === 1 ? '' : 's').' por cargar';
+            if ($sig !== '') {
+                $msg .= ' (siguiente: '.$sig.')';
+            }
+
+            return $msg.'.';
+        }
+
+        if (OrdencompraLegajoGastronomiaSupport::esSectorPagos((int) ($oc->sector_legajocompra_id ?? 0))) {
+            return $base.' El legajo se envió automáticamente a Pagos.';
+        }
+
+        return $base;
     }
 
     private function redirectTrasGuardarComprobante(

@@ -378,6 +378,14 @@
 			return;
 		}
 
+		if (typeof window.validarFceNcMostradorAntesSubmit === 'function'
+			&& window.validarFceNcMostradorAntesSubmit() === false) {
+			if (window.FacturaProcesoOverlay) {
+				window.FacturaProcesoOverlay.detener();
+			}
+			return;
+		}
+
 		if (typeof validarPadronOperacionAntesSubmitForm === 'function') {
 			var evPadron = { preventDefault: function () {}, target: form, defaultPrevented: false };
 			if (validarPadronOperacionAntesSubmitForm(evPadron) === false) {
@@ -508,6 +516,12 @@
 		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof sincronizarCantidadesItemsFactura === 'function') {
 			sincronizarCantidadesItemsFactura();
 		}
+
+		if (typeof window.validarFceNcMostradorAntesSubmit === 'function'
+			&& window.validarFceNcMostradorAntesSubmit() === false) {
+			return;
+		}
+
         // Controla datos correctos
 		var item = 0;
 		var flError = false;
@@ -2330,5 +2344,55 @@
 		$("#tbody-tabla-total-factura").append(renglon);
     }
 
+	function facturaTipoEsNotaCreditoMostrador() {
+		var op = ($('#tipotransaccion_id option:selected').data('operacion') || '').toString().toUpperCase();
+		return op === 'C';
+	}
 
-	
+	function fceNcMostradorRefEsFce(ref) {
+		return /^FCE\s+[A-Z]-/i.test($.trim(ref || ''));
+	}
+
+	window.actualizarFceNcMostrador = function () {
+		var $wrap = $('#fce-nc-mostrador-wrap');
+		if (!$wrap.length) {
+			return;
+		}
+		var origenFce = String($wrap.attr('data-nc-origen-fce') || '0') === '1';
+		var ref = $('#fce_comprobante_referenciado').val() || '';
+		var mostrar = origenFce || facturaTipoEsNotaCreditoMostrador();
+		$wrap.toggleClass('d-none', !mostrar);
+		var exigir = origenFce || fceNcMostradorRefEsFce(ref);
+		$('#fce_comprobante_referenciado').prop('required', !!exigir);
+		$('#fce_anulacion').prop('required', !!exigir);
+	};
+
+	window.validarFceNcMostradorAntesSubmit = function () {
+		var $wrap = $('#fce-nc-mostrador-wrap');
+		if (!$wrap.length || $wrap.hasClass('d-none')) {
+			return true;
+		}
+		var origenFce = String($wrap.attr('data-nc-origen-fce') || '0') === '1';
+		var ref = $.trim($('#fce_comprobante_referenciado').val() || '');
+		var anul = $.trim($('#fce_anulacion').val() || '').toUpperCase();
+		if (!origenFce && !fceNcMostradorRefEsFce(ref)) {
+			return true;
+		}
+		if (!fceNcMostradorRefEsFce(ref)) {
+			alert('Debe indicar el comprobante FCE referenciado (ej. FCE A-00008-00001234).');
+			$('#fce_comprobante_referenciado').focus();
+			return false;
+		}
+		if (anul !== 'S' && anul !== 'N') {
+			alert('Debe indicar anulación FCE S/N (opcional ARCA 22).');
+			$('#fce_anulacion').focus();
+			return false;
+		}
+		return true;
+	};
+
+	$(function () {
+		$(document).on('change', '#tipotransaccion_id', window.actualizarFceNcMostrador);
+		$(document).on('input change', '#fce_comprobante_referenciado', window.actualizarFceNcMostrador);
+		window.actualizarFceNcMostrador();
+	});

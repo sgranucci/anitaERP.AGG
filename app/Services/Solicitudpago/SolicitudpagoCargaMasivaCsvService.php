@@ -8,6 +8,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Solicitudpago\Concepto_Solicitudpago;
+use App\Models\Solicitudpago\Concepto_Solicitudpago_Cuenta;
 use App\Models\Solicitudpago\Formapagosol;
 use App\Models\Solicitudpago\Sector_Solicitudpago;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -208,9 +209,28 @@ class SolicitudpagoCargaMasivaCsvService
         $cuentas = [];
         foreach (Cuentacontable::query()->get(['id', 'empresa_id', 'codigo', 'nombre']) as $c) {
             $emp = (int) $c->empresa_id;
-            $cod = (string) (int) preg_replace('/\D/', '', (string) $c->codigo);
+            $cod = $this->normalizarCodigoCuenta((string) $c->codigo);
             $cuentas[$emp][$cod] = $c;
             $cuentas[$emp][(string) $c->codigo] = $c;
+        }
+
+        // Plantilla de asiento del concepto: concepto_id → empresa_id → codigo_cuenta → meta
+        $conceptoCuentas = [];
+        $plantillas = Concepto_Solicitudpago_Cuenta::query()
+            ->with(['cuentacontables:id,codigo,nombre'])
+            ->get(['id', 'concepto_solicitudpago_id', 'empresa_id', 'cuentacontable_id', 'centrocosto_id', 'debe_haber']);
+        foreach ($plantillas as $linea) {
+            $cod = $this->normalizarCodigoCuenta((string) (optional($linea->cuentacontables)->codigo ?? ''));
+            if ($cod === '' || $cod === '0') {
+                continue;
+            }
+            $conceptoCuentas[(int) $linea->concepto_solicitudpago_id][(int) $linea->empresa_id][$cod] = [
+                'cuentacontable_id' => (int) $linea->cuentacontable_id,
+                'centrocosto_id' => $linea->centrocosto_id ? (int) $linea->centrocosto_id : null,
+                'debe_haber' => strtoupper((string) ($linea->debe_haber ?? 'D')) === 'H' ? 'H' : 'D',
+                'codigo' => $cod,
+                'nombre' => (string) (optional($linea->cuentacontables)->nombre ?? ''),
+            ];
         }
 
         return [
@@ -221,8 +241,16 @@ class SolicitudpagoCargaMasivaCsvService
             'monedas' => Moneda::query()->get(['id', 'codigo', 'nombre'])->keyBy(fn ($m) => (string) (int) $m->codigo),
             'proveedores' => $proveedores,
             'cuentas' => $cuentas,
+            'concepto_cuentas' => $conceptoCuentas,
             'cc99' => Centrocosto::query()->where('codigo', 99)->orWhere('codigo', '99')->value('id'),
         ];
+    }
+
+    private function normalizarCodigoCuenta(string $codigo): string
+    {
+        $digits = preg_replace('/\D/', '', $codigo) ?? '';
+
+        return $digits !== '' ? (string) (int) $digits : '0';
     }
 
     /**
@@ -280,7 +308,7 @@ class SolicitudpagoCargaMasivaCsvService
             $errores[] = "Moneda {$monCod} inexistente";
         }
 
-        $monto = (float) $raw['monto'];
+        $monto = round((float) $raw['monto'], 2);
         if (abs($monto) < 0.0000001) {
             $errores[] = 'Monto en cero (se omite como en Anita)';
         }
@@ -296,30 +324,63 @@ class SolicitudpagoCargaMasivaCsvService
         $dhs = [];
         $montos = [];
         $cuentasVista = [];
+        $totalDebeVista = 0.0;
+        $totalHaberVista = 0.0;
+
+        $plantillaConcepto = [];
+        if ($concepto !== null && $empresa !== null) {
+            $plantillaConcepto = $mapas['concepto_cuentas'][(int) $concepto->id][(int) $empresa->id] ?? [];
+        }
 
         if ($empresa !== null) {
-            foreach ($raw['cuentas'] as $cta) {
-                $codCta = (string) (int) ($cta['cuenta_codigo'] ?? 0);
+            foreach ($raw['cuentas'] as $idxCta => $cta) {
+                $codCta = $this->normalizarCodigoCuenta((string) ($cta['cuenta_codigo'] ?? '0'));
+                $importe = (float) ($cta['monto'] ?? 0);
+                if ($importe <= 0) {
+                    // Pares vacíos o en cero: se omiten (el CSV suele traer columnas de más).
+                    continue;
+                }
+
+                $plantilla = $plantillaConcepto[$codCta] ?? null;
                 $cuenta = $mapas['cuentas'][(int) $empresa->id][$codCta] ?? null;
                 if ($cuenta === null) {
                     $errores[] = "Cuenta {$codCta} inexistente en empresa {$empCod}";
                     continue;
                 }
-                $importe = (float) ($cta['monto'] ?? 0);
-                if ($importe <= 0) {
-                    $errores[] = "Importe de cuenta {$codCta} inválido";
-                    continue;
+
+                // D/H: 1) plantilla del concepto 2) encabezado CSV (Haber/Debe) 3) Anita (par: H, impar: D)
+                if ($plantilla !== null) {
+                    $dh = $plantilla['debe_haber'];
+                    $ccFila = ($plantilla['centrocosto_id'] ?? null) ?: $ccLinea;
+                    $desdeConcepto = true;
+                } else {
+                    $hint = $cta['debe_haber'] ?? null;
+                    if ($hint === 'H' || $hint === 'D') {
+                        $dh = $hint;
+                    } else {
+                        $dh = ($idxCta % 2 === 0) ? 'H' : 'D';
+                    }
+                    $ccFila = $ccLinea;
+                    $desdeConcepto = false;
                 }
+
                 $empresaIds[] = (int) $empresa->id;
                 $cuentaIds[] = (int) $cuenta->id;
-                $ccIds[] = $ccLinea;
-                $dhs[] = ($cta['debe_haber'] ?? 'D') === 'H' ? 'H' : 'D';
+                $ccIds[] = $ccFila;
+                $dhs[] = $dh;
                 $montos[] = $importe;
+                if ($dh === 'H') {
+                    $totalHaberVista += $importe;
+                } else {
+                    $totalDebeVista += $importe;
+                }
                 $cuentasVista[] = [
                     'codigo' => $codCta,
-                    'nombre' => (string) $cuenta->nombre,
-                    'debe_haber' => end($dhs),
+                    'nombre' => (string) ($cuenta->nombre ?? ($plantilla['nombre'] ?? '')),
+                    'debe_haber' => $dh,
                     'monto' => $importe,
+                    'centrocosto_id' => $ccFila,
+                    'desde_concepto' => $desdeConcepto,
                 ];
             }
         }
@@ -338,17 +399,31 @@ class SolicitudpagoCargaMasivaCsvService
             $detalle = mb_substr($detalle, 0, 180);
         }
 
-
-        if ($errores === [] && $cuentaIds !== []) {
-            $totalDebe = 0.0;
-            $totalHaber = 0.0;
+        // Redondeo a 2 decimales + ajuste fino típico de Excel/AFIP (centavos).
+        if ($cuentaIds !== []) {
             foreach ($montos as $i => $importeCta) {
-                if (($dhs[$i] ?? 'D') === 'H') {
-                    $totalHaber += (float) $importeCta;
-                } else {
-                    $totalDebe += (float) $importeCta;
+                $montos[$i] = round((float) $importeCta, 2);
+                if (isset($cuentasVista[$i])) {
+                    $cuentasVista[$i]['monto'] = $montos[$i];
                 }
             }
+            $this->equilibrarCentavosAsiento($montos, $dhs, $cuentasVista, $monto);
+            $totalDebeVista = 0.0;
+            $totalHaberVista = 0.0;
+            foreach ($montos as $i => $importeCta) {
+                if (($dhs[$i] ?? 'D') === 'H') {
+                    $totalHaberVista += (float) $importeCta;
+                } else {
+                    $totalDebeVista += (float) $importeCta;
+                }
+            }
+            $totalDebeVista = round($totalDebeVista, 2);
+            $totalHaberVista = round($totalHaberVista, 2);
+        }
+
+        if ($errores === [] && $cuentaIds !== []) {
+            $totalDebe = $totalDebeVista;
+            $totalHaber = $totalHaberVista;
             if (abs($totalDebe - $totalHaber) >= 0.009) {
                 $errores[] = 'Asiento no balancea: Debe ('.number_format($totalDebe, 2, ',', '.').') '
                     .'≠ Haber ('.number_format($totalHaber, 2, ',', '.').')';
@@ -377,6 +452,9 @@ class SolicitudpagoCargaMasivaCsvService
             'monto' => $monto,
             'n_cuentas' => count($cuentaIds),
             'cuentas' => $cuentasVista,
+            'total_debe' => round($totalDebeVista, 2),
+            'total_haber' => round($totalHaberVista, 2),
+            'balanceado' => abs($totalDebeVista - $totalHaberVista) < 0.009,
             'errores' => $errores,
             'estado_label' => $errores === [] ? 'OK' : 'Error',
         ];
@@ -413,6 +491,70 @@ class SolicitudpagoCargaMasivaCsvService
         ];
 
         return ['ok' => true, 'errores' => [], 'vista' => $vista, 'payload' => $payload];
+    }
+
+    /**
+     * Corrige desbalances de hasta 5 centavos (redondeo CSV/Excel) sobre la última línea Debe.
+     *
+     * @param  list<float>  $montos
+     * @param  list<string>  $dhs
+     * @param  list<array<string, mixed>>  $cuentasVista
+     */
+    private function equilibrarCentavosAsiento(array &$montos, array $dhs, array &$cuentasVista, float $montoSp): void
+    {
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+        foreach ($montos as $i => $importe) {
+            if (($dhs[$i] ?? 'D') === 'H') {
+                $totalHaber += (float) $importe;
+            } else {
+                $totalDebe += (float) $importe;
+            }
+        }
+        $totalDebe = round($totalDebe, 2);
+        $totalHaber = round($totalHaber, 2);
+        $diffDh = round($totalHaber - $totalDebe, 2);
+        if (abs($diffDh) < 0.009 || abs($diffDh) > 0.05) {
+            // Si ya balancea D/H pero difiere del monto SP por centavos, ajustar Haber (o Debe).
+            $diffMonto = round($montoSp - $totalHaber, 2);
+            if (abs($diffDh) < 0.009 && abs($diffMonto) >= 0.009 && abs($diffMonto) <= 0.05) {
+                $this->ajustarUltimaLinea($montos, $dhs, $cuentasVista, 'H', $diffMonto);
+            }
+
+            return;
+        }
+
+        $this->ajustarUltimaLinea($montos, $dhs, $cuentasVista, 'D', $diffDh);
+    }
+
+    /**
+     * @param  list<float>  $montos
+     * @param  list<string>  $dhs
+     * @param  list<array<string, mixed>>  $cuentasVista
+     */
+    private function ajustarUltimaLinea(
+        array &$montos,
+        array $dhs,
+        array &$cuentasVista,
+        string $lado,
+        float $delta
+    ): void {
+        for ($i = count($montos) - 1; $i >= 0; $i--) {
+            if (($dhs[$i] ?? '') !== $lado) {
+                continue;
+            }
+            $nuevo = round((float) $montos[$i] + $delta, 2);
+            if ($nuevo <= 0) {
+                continue;
+            }
+            $montos[$i] = $nuevo;
+            if (isset($cuentasVista[$i])) {
+                $cuentasVista[$i]['monto'] = $nuevo;
+                $cuentasVista[$i]['ajuste_centavos'] = $delta;
+            }
+
+            return;
+        }
     }
 
     private function estimarProximoCodigo(): int

@@ -254,6 +254,7 @@ class OrdencompraController extends Controller
         if (! can('listar-ordencompra', false)
             && ! can('editar-ordencompra', false)
             && ! can('listar-legajo-compra', false)
+            && ! can('listar-seguimiento-legajo-compra', false)
         ) {
             can('listar-ordencompra');
         }
@@ -966,7 +967,7 @@ class OrdencompraController extends Controller
         return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
     }
 
-    public function gateCuentasAPagar(int $id): JsonResponse
+    public function gateCuentasAPagar(Request $request, int $id): JsonResponse
     {
         can('actualizar-ordencompra');
 
@@ -975,20 +976,21 @@ class OrdencompraController extends Controller
             return response()->json(['ok' => false, 'errores' => ['Orden de compra inexistente.']], 404);
         }
 
-        $paquete = OrdencompraEnvioCuentasAPagarGateSupport::evaluar($oc);
-        $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluarCuentasAPagar($oc);
+        if ($request->boolean('preflight')) {
+            $gate = OrdencompraEnvioCuentasAPagarGateSupport::preflightCuentasAPagar($oc);
+        } else {
+            $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluarCuentasAPagar($oc);
+            $gate['paquete_ok'] = $gate['ok'];
+            $gate['paquete_errores'] = $gate['errores'];
+        }
+
         $gate['sector_cuentas_a_pagar_id'] = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
             OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
         );
         $gate['sector_gastronomia_id'] = OrdencompraLegajoGastronomiaSupport::sectorGastronomiaId();
-        $gate['requiere_gastronomia'] = OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc);
+        $gate['requiere_gastronomia'] = $gate['requiere_gastronomia']
+            ?? OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc);
         $gate['puede_enviar_gastronomia'] = OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviar($oc);
-        $gate['paquete_ok'] = $paquete['ok'];
-        $gate['paquete_errores'] = $paquete['errores'];
-        $gate['requiere_pdf'] = $paquete['requiere_pdf'];
-        $gate['tiene_factura'] = $paquete['tiene_factura'];
-        $gate['tiene_com'] = $paquete['tiene_com'];
-        $gate['exige_com'] = $paquete['exige_com'];
 
         return response()->json($gate);
     }

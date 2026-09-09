@@ -24,6 +24,17 @@ return [
         'https://api.waitry.net/1/interface/interface/syncStatusPOS'
     ),
 
+    /**
+     * Actualiza estado de la comanda en KDS (Solicitada → Aceptado, etc.).
+     * syncStatusPOS solo registra el cobro; desde ~sep 2026 no mueve el estado del monitor.
+     *
+     * @see POST /live/order/updateexternal
+     */
+    'update_order_status_url' => env(
+        'WAITRY_UPDATE_ORDER_STATUS_URL',
+        'https://api.waitry.net/1/live/order/updateexternal'
+    ),
+
     /** Evento enviado al registrar cobro de una orden importada (enum Waitry). */
     'sync_status_pos_event' => env('WAITRY_SYNC_STATUS_POS_EVENT', 'accepted'),
 

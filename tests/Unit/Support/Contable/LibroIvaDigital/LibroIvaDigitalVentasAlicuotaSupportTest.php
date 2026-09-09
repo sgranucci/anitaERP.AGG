@@ -323,6 +323,49 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertSame(1, $registro['cabecera']['punto_venta']);
     }
 
+    public function test_compra_ico_resuelve_mercado_pago_afip_arba_y_visa(): void
+    {
+        $this->assertSame(
+            LibroIvaDigitalComprasCuitSupport::CUIT_MERCADO_PAGO,
+            LibroIvaDigitalComprasCuitSupport::resolver('', 'MERCADO PAGO        15161/0'),
+        );
+        $this->assertSame(
+            LibroIvaDigitalComprasCuitSupport::CUIT_AFIP,
+            LibroIvaDigitalComprasCuitSupport::resolver('0', 'AFIP'),
+        );
+        $this->assertSame(
+            LibroIvaDigitalComprasCuitSupport::CUIT_ARBA,
+            LibroIvaDigitalComprasCuitSupport::resolver('', 'ARBA'),
+        );
+        $this->assertSame(
+            LibroIvaDigitalComprasCuitSupport::CUIT_MUNICIPALIDAD_AVELLANEDA,
+            LibroIvaDigitalComprasCuitSupport::resolver('', 'MUNICIPALIDAD DE AVELLANEDA'),
+        );
+        $this->assertSame(
+            LibroIvaDigitalComprasCuitSupport::CUIT_VISA_PRISMA,
+            LibroIvaDigitalComprasCuitSupport::resolver('', 'VISA CORPORATE'),
+        );
+
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '002',
+                'punto_venta' => 1,
+                'numero_comprobante' => 15403,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '0',
+                'nombre_vendedor' => 'MERCADO PAGO        15161/0',
+                'cantidad_alicuotas' => 0,
+                'codigo_operacion' => ' ',
+                'operaciones_exentas' => 100.0,
+            ],
+            'alicuotas' => [],
+        ]);
+
+        $this->assertSame('80', $registro['cabecera']['codigo_documento']);
+        $this->assertSame(LibroIvaDigitalComprasCuitSupport::CUIT_MERCADO_PAGO, $registro['cabecera']['numero_identificacion']);
+        $this->assertTrue(LibroIvaDigitalComprasCuitSupport::tieneCuitVendedor($registro));
+    }
+
     public function test_compra_sin_cuit_ni_alias_usa_documento_99(): void
     {
         $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
@@ -343,6 +386,7 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertSame('99', $registro['cabecera']['codigo_documento']);
         $this->assertSame('0', $registro['cabecera']['numero_identificacion']);
         $this->assertSame('99', $registro['alicuotas'][0]['codigo_documento']);
+        $this->assertFalse(LibroIvaDigitalComprasCuitSupport::tieneCuitVendedor($registro));
     }
 
     public function test_identificacion_80_o_96_con_cero_pasa_a_99(): void
@@ -437,6 +481,49 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertSame(0, $registro['cabecera']['cantidad_alicuotas']);
         $this->assertSame([], $registro['alicuotas']);
         $this->assertEqualsWithDelta(500000.0, $registro['cabecera']['no_integra_neto'], 0.001);
+    }
+
+    public function test_compra_factura_b_exenta_no_informa_alicuotas(): void
+    {
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '006',
+                'punto_venta' => 1,
+                'numero_comprobante' => 124278,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '30648839088',
+                'importe_total' => 3563158.51,
+                'operaciones_exentas' => 3563158.51,
+                'cantidad_alicuotas' => 1,
+                'codigo_operacion' => 'E',
+            ],
+            'alicuotas' => [[
+                'tipo_comprobante' => '006',
+                'punto_venta' => 1,
+                'numero_comprobante' => 124278,
+                'neto_gravado' => 0.0,
+                'alicuota_iva' => '0003',
+                'impuesto_liquidado' => 0.0,
+            ]],
+        ]);
+
+        $this->assertSame(0, $registro['cabecera']['cantidad_alicuotas']);
+        $this->assertSame([], $registro['alicuotas']);
+        $this->assertEqualsWithDelta(3563158.51, $registro['cabecera']['importe_total'], 0.001);
+        $this->assertEqualsWithDelta(3563158.51, $registro['cabecera']['operaciones_exentas'], 0.001);
+    }
+
+    public function test_cuit_vendedor_igual_informante_se_detecta(): void
+    {
+        $registro = [
+            'cabecera' => [
+                'codigo_documento' => '80',
+                'numero_identificacion' => '30-68240367-1',
+            ],
+            'alicuotas' => [],
+        ];
+        $this->assertTrue(LibroIvaDigitalComprasCuitSupport::esCuitInformante($registro, '30682403671'));
+        $this->assertFalse(LibroIvaDigitalComprasCuitSupport::esCuitInformante($registro, '30710310862'));
     }
 
     public function test_cuit_vendedor_con_mas_de_once_digitos_queda_en_11(): void

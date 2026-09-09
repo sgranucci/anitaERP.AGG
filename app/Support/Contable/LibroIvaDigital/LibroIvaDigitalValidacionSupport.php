@@ -286,13 +286,19 @@ final class LibroIvaDigitalValidacionSupport
             $tipoCambio = LibroIvaDigitalFormatoSupport::parseTipoCambio10(substr($linea, 227, 10));
             $tipo = substr($linea, 8, 3);
             $cantAlic = (int) substr($linea, 237, 1);
-            $esTipoC = in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
+            $esSinAlicuota = in_array($tipo, LibroIvaDigitalComprasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
             $codDoc = substr($linea, 52, 2);
             $nroDoc = ltrim(substr($linea, 54, 20), '0');
             if ($nroDoc === '' && $codDoc !== '99') {
                 self::agregar(
                     $avisos,
                     'COMPRAS_CBTE línea '.($i + 1).": nro. de documento 0 solo es válido con código 99 (tiene {$codDoc}).",
+                );
+            }
+            if ($codDoc === '99') {
+                self::agregar(
+                    $avisos,
+                    'COMPRAS_CBTE línea '.($i + 1).': el Portal exige código documento 80 (CUIT) del vendedor; no informar 99.',
                 );
             }
             if ($codDoc === '80' && strlen($nroDoc) > 11) {
@@ -303,10 +309,10 @@ final class LibroIvaDigitalValidacionSupport
                 $pesTipoCambioMal++;
                 $primera ??= $i + 1;
             }
-            if ($esTipoC && $cantAlic !== 0) {
-                self::agregar($avisos, 'COMPRAS_CBTE línea '.($i + 1).": comprobante C debe informar cantidad de alícuotas 0 (tiene {$cantAlic}).");
+            if ($esSinAlicuota && $cantAlic !== 0) {
+                self::agregar($avisos, 'COMPRAS_CBTE línea '.($i + 1).": comprobante B/C debe informar cantidad de alícuotas 0 (tiene {$cantAlic}).");
             }
-            if (! $esTipoC && $cantAlic < 1) {
+            if (! $esSinAlicuota && $cantAlic < 1) {
                 self::agregar($avisos, 'COMPRAS_CBTE línea '.($i + 1).": tipo {$tipo} debe informar alícuotas IVA (tiene {$cantAlic}).");
             }
 
@@ -362,6 +368,20 @@ final class LibroIvaDigitalValidacionSupport
         }
         if ($cuitLargo > 0) {
             self::agregar($avisos, "Hay {$cuitLargo} CUIT(s) de vendedor con más de 11 dígitos (tipo documento 80).");
+        }
+        $omitidos = (int) data_get($resultado, 'compras.resumen.omitidos_sin_cuit', 0);
+        if ($omitidos > 0) {
+            self::agregar(
+                $avisos,
+                "Se omitieron {$omitidos} compra(s) sin CUIT de vendedor (ARCA exige código 80). Ver tabla «Compras omitidas» e INFORME_COMPRAS_OMITIDOS.csv en el ZIP.",
+            );
+        }
+        $omitidosInformante = (int) data_get($resultado, 'compras.resumen.omitidos_cuit_informante', 0);
+        if ($omitidosInformante > 0) {
+            self::agregar(
+                $avisos,
+                "Se omitieron {$omitidosInformante} compra(s) con CUIT de vendedor igual al informante. Ver tabla «Compras omitidas» e INFORME_COMPRAS_OMITIDOS.csv en el ZIP.",
+            );
         }
         if ($pesTipoCambioMal > 0) {
             self::agregar(

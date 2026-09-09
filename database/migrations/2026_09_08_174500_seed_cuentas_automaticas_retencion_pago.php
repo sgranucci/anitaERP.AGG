@@ -17,7 +17,18 @@ return new class extends Migration
             return;
         }
 
-        $empresaIds = [1, 2, 3];
+        // Solo empresas operativas 1/2/3 que ya existan (lab Postgres puede no tenerlas aún).
+        $empresaIds = DB::table('empresa')
+            ->whereIn('id', [1, 2, 3])
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        if ($empresaIds === []) {
+            return;
+        }
+
         app(ContabilidadCuentaAutomaticaSeedService::class)->asegurarCatalogoEmpresas($empresaIds);
     }
 

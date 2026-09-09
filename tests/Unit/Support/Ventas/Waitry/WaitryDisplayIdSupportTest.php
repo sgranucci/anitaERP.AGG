@@ -41,6 +41,18 @@ final class WaitryDisplayIdSupportTest extends TestCase
         ]));
     }
 
+    public function test_prioriza_display_id_numerico_sobre_external_reference_w(): void
+    {
+        // Cambio Waitry (~sep 2026): display_id = nro monitor; external_reference_id = W-…
+        $this->assertSame('103', WaitryDisplayIdSupport::extraerDesdeOrden([
+            'id' => 18730072,
+            'display_id' => '103',
+            'external_reference_id' => 'W-9E0450',
+            'sequence' => null,
+            'external_delivery_id' => null,
+        ]));
+    }
+
     public function test_prioriza_external_delivery_id_numerico_sobre_display_id(): void
     {
         $this->assertSame('301', WaitryDisplayIdSupport::extraerDesdeOrden([

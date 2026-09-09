@@ -18,7 +18,7 @@ class ComprobanteProveedorAltaSinBloqueoAnitaTest extends TestCase
         $params = $method->getParameters();
         $this->assertSame('sincronizarAnita', $params[2]->getName());
         $this->assertTrue($params[2]->isDefaultValueAvailable());
-        $this->assertTrue($params[2]->getDefaultValue());
+        $this->assertFalse($params[2]->getDefaultValue());
     }
 
     public function test_controles_al_guardar_no_resincronizan_com_anita(): void

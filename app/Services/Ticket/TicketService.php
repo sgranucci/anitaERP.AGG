@@ -15,6 +15,7 @@ use App\Models\Ticket\Ticket_Tarea_Novedad;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Support\Ticket\AdministracionTicketListadoFiltros;
+use App\Support\Ticket\TicketEmpresaSupport;
 use App\Support\Ticket\TicketEstadisticaSupport;
 use App\Support\Ticket\TicketModoOperacionSupport;
 use Illuminate\Support\Facades\Storage;
@@ -162,13 +163,16 @@ class TicketService
 	}
 
 	/**
-	 * Empresa de origen del ticket: request → sesión → única empresa del usuario.
+	 * Empresa de origen del ticket: request → sala → sesión → única empresa del usuario.
 	 */
 	private function resolverEmpresaIdAlta(array $data): ?int
 	{
-		$empresaId = (int) ($data['empresa_id'] ?? 0);
-		if ($empresaId > 0) {
-			return $empresaId;
+		$desdeTicket = TicketEmpresaSupport::resolver(
+			(int) ($data['empresa_id'] ?? 0),
+			(int) ($data['sala_id'] ?? 0)
+		);
+		if ($desdeTicket) {
+			return $desdeTicket;
 		}
 
 		$empresaId = (int) (session('empresa_id') ?? 0);
@@ -318,6 +322,14 @@ class TicketService
 		$ticketActual = $this->ticketRepository->find($id);
 		$estadoAnterior = (string) ($ticketActual->estado_ticket ?? '');
 		$estadoNuevo = (string) ($data['estado_ticket'] ?? $estadoAnterior);
+        $resuelto = TicketEmpresaSupport::resolver(
+			(int) ($data['empresa_id'] ?? 0),
+			(int) ($data['sala_id'] ?? $ticketActual->sala_id ?? 0),
+			(int) ($ticketActual->empresa_id ?? 0)
+		);
+		if ($resuelto) {
+			$data['empresa_id'] = $resuelto;
+		}
 		$data = TicketEstadisticaSupport::aplicarAlGuardar($ticketActual, $data);
 
 		// Graba ticket

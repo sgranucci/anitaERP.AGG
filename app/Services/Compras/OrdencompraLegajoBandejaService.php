@@ -11,13 +11,17 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\OrdencompraLegajoBandejaFiltros;
+use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
+use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -65,6 +69,8 @@ class OrdencompraLegajoBandejaService
                 'ordencompra.centrocosto_id',
                 'ordencompra.sector_legajocompra_id',
                 'ordencompra.estadoordencompra',
+                'ordencompra.tratamiento',
+                'ordencompra.nota_legajo',
                 'ordencompra.es_contrato',
                 'ordencompra.contrato_requiere_recepcion',
                 'ordencompra.contrato_vigencia_desde',
@@ -114,7 +120,14 @@ class OrdencompraLegajoBandejaService
         $sectorFin = OrdencompraLegajoGastronomiaSupport::sectorFinalizadoId();
 
         $vista = (string) ($filtros['vista'] ?? OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES);
-        if ($vista === OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES) {
+        $lookupNumerico = $this->esBusquedaNumericaLookup($filtros);
+        if ($lookupNumerico && $vista !== OrdencompraLegajoBandejaFiltros::VISTA_HISTORICO) {
+            // Lookup por número: no filtrar por pestaña (sí respeta alcance de sector del usuario).
+            $todos = array_values(array_filter([$sectorCompras, $sectorGastro, $sectorCxp, $sectorPagos, $sectorFin]));
+            if ($todos !== []) {
+                $query->whereIn('ordencompra.sector_legajocompra_id', $todos);
+            }
+        } elseif ($vista === OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES) {
             $query->where(function ($q) use ($sectorCompras) {
                 $q->where('ordencompra.sector_legajocompra_id', $sectorCompras);
                 if ($sectorCompras <= 0) {
@@ -154,7 +167,33 @@ class OrdencompraLegajoBandejaService
 
         $this->aplicarAtajo($query, (string) ($filtros['atajo'] ?? ''));
 
+        if ($vista === OrdencompraLegajoBandejaFiltros::VISTA_CXP) {
+            $query->reorder()->orderBy('ordencompra.id');
+        }
+
         return $query;
+    }
+
+    /**
+     * Búsqueda solo-dígitos (nº OC / factura / COM / OP): no restringir por pestaña de vista,
+     * para que un legajo en COMPRAS aparezca aunque el usuario esté en CxP.
+     */
+    private function esBusquedaNumericaLookup(array $filtros): bool
+    {
+        if (($filtros['modo'] ?? OrdencompraListadoFiltros::MODO_TODOS) === OrdencompraListadoFiltros::MODO_TODOS) {
+            $valor = trim((string) ($filtros['valor'] ?? ''));
+            if ($valor !== '' && ctype_digit($valor)) {
+                return true;
+            }
+        }
+        foreach (['nro_oc', 'nro_factura', 'nro_com', 'nro_op'] as $campo) {
+            $v = trim((string) ($filtros[$campo] ?? ''));
+            if ($v !== '' && ctype_digit($v)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -167,13 +206,19 @@ class OrdencompraLegajoBandejaService
         $historias = $this->ultimaHistoriaPorOc($ids);
         $facturas = $this->facturasPorOc($ocs);
         foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasPorOcs($ocs) as $ocId => $anita) {
-            $facturas[$ocId] = array_merge($facturas[$ocId] ?? [], $anita);
+            $facturas[$ocId] = $this->fusionarScansAnitaSinDuplicar($facturas[$ocId] ?? [], $anita);
         }
         $coms = $this->comsPorOc($ids);
         $precargaIds = [];
         foreach ($facturas as $lista) {
             foreach ($lista as $fac) {
-                $precargaIds[] = (int) $fac['id'];
+                if (($fac['origen'] ?? 'precarga') !== 'precarga') {
+                    continue;
+                }
+                $preId = (int) ($fac['id'] ?? 0);
+                if ($preId > 0) {
+                    $precargaIds[] = $preId;
+                }
             }
         }
         $asignadas = $this->asignacionesPorPrecarga($precargaIds);
@@ -200,13 +245,6 @@ class OrdencompraLegajoBandejaService
             $esGastro = OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc);
             $primeraFac = $facs[0] ?? null;
             $primeraCom = $comList[0] ?? null;
-            $comAsignada = false;
-            foreach ($facs as $fac) {
-                if (! empty($asignadas[(int) $fac['id']])) {
-                    $comAsignada = true;
-                    break;
-                }
-            }
             $cps = $comprobantes[$id] ?? [];
             $primeraCp = $cps[0] ?? null;
             $pago = null;
@@ -216,6 +254,44 @@ class OrdencompraLegajoBandejaService
                     break;
                 }
             }
+            $notaLegajo = trim((string) ($oc->nota_legajo ?? ''));
+            $facturasLegajo = $this->resumenFacturasLegajo($cps, $facs);
+            $etiquetasFactura = array_map(
+                static fn (array $f) => (string) ($f['numero'] ?? ''),
+                $facturasLegajo
+            );
+            // Derivar de datos ya hidratados (evitar N+1 Anita/SQL por fila).
+            $pendientes = $this->documentosPendientesDesdeHidratacion($facs, $cps);
+            $siguiente = $pendientes[0] ?? null;
+            $enCxp = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0));
+            $urlCargar = null;
+            if ($enCxp && $siguiente !== null) {
+                $facPend = null;
+                if (! empty($siguiente['precarga_id'])) {
+                    foreach ($facs as $f) {
+                        if ((int) ($f['id'] ?? 0) === (int) $siguiente['precarga_id']) {
+                            $facPend = $f;
+                            break;
+                        }
+                    }
+                } elseif (! empty($siguiente['anita_id'])) {
+                    foreach ($facs as $f) {
+                        if ((string) ($f['id'] ?? '') === (string) $siguiente['anita_id']) {
+                            $facPend = $f;
+                            break;
+                        }
+                    }
+                }
+                $urlCargar = $this->urlCargarFacturaDesdeLegajo($id, $facPend ?? [
+                    'origen' => ! empty($siguiente['anita_id']) ? 'anita' : 'precarga',
+                    'id' => $siguiente['precarga_id'] ?? $siguiente['anita_id'] ?? 0,
+                ]);
+            }
+            $faltanComDocs = $exigeCom
+                ? $this->documentosSinComDesdeHidratacion($facs, $cps, $asignadas)
+                : [];
+            $comAsignadaOk = ! $exigeCom || $faltanComDocs === [];
+            $tieneCpCargado = $primeraCp !== null;
 
             return [
                 'id' => $id,
@@ -231,15 +307,22 @@ class OrdencompraLegajoBandejaService
                 'fecha_ubicacion' => $desde ? $desde->format('d/m/Y H:i') : '',
                 'tiene_factura' => $tieneFactura,
                 'tiene_com' => $tieneCom,
-                'tiene_com_asignada' => $comAsignada,
-                'tiene_comprobante' => $primeraCp !== null,
+                'tiene_com_asignada' => $comAsignadaOk,
+                'tiene_comprobante' => $tieneCpCargado,
                 'tiene_pago' => $pago !== null,
                 'exige_com' => $exigeCom,
-                'paquete_ok' => $tieneFactura && (! $exigeCom || $tieneCom),
+                'paquete_ok' => $tieneFactura && (! $exigeCom || ($tieneCom && $comAsignadaOk)),
+                'es_anticipada' => ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc),
                 'es_gastronomia' => $esGastro,
+                'nota_legajo' => $notaLegajo,
+                'tiene_nota' => $notaLegajo !== '',
+                'facturas_legajo' => $facturasLegajo,
+                'etiquetas_factura' => $etiquetasFactura,
+                'pendientes_carga' => count($pendientes),
+                'siguiente_pendiente' => $siguiente['etiqueta'] ?? null,
                 'puede_enviar' => $esGastro && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviar($oc),
                 'puede_enviar_cxp' => ! $esGastro && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarCuentasAPagar($oc),
-                'puede_enviar_pagos' => OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarPagos($oc),
+                'puede_enviar_pagos' => OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarPagos($oc, $tieneCpCargado),
                 'puede_devolver_cxp' => OrdencompraLegajoGastronomiaSupport::puedeDevolverACuentasAPagar($oc),
                 'puede_devolver_compras' => OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($oc),
                 'puede_finalizar' => OrdencompraLegajoGastronomiaSupport::puedeFinalizar($oc),
@@ -254,12 +337,10 @@ class OrdencompraLegajoBandejaService
                 'url_com' => $primeraCom['url_pdf'] ?? null,
                 'url_historia' => route('ordencompra_legajo_bandeja_historia', ['id' => $id]),
                 'url_paquete' => route('ordencompra_legajo_bandeja_paquete', ['id' => $id]),
+                'url_nota' => route('ordencompra_legajo_bandeja_nota', ['id' => $id]),
                 'url_asignar_com' => route('ordencompra_legajo_bandeja_asignar_com', ['id' => $id]),
                 'url_asignar_factura' => route('ordencompra_asignar_factura_pdf', ['id' => $id]),
-                'url_cargar_cxp' => (empty($primeraCp)
-                    && OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0)))
-                    ? $this->urlCargarFacturaDesdeLegajo($id, $primeraFac)
-                    : null,
+                'url_cargar_cxp' => $urlCargar,
                 'url_comprobante' => $primeraCp['url'] ?? null,
                 'url_pago' => $pago['url'] ?? null,
                 'etiqueta_pago' => $pago['etiqueta'] ?? '',
@@ -290,6 +371,142 @@ class OrdencompraLegajoBandejaService
     }
 
     /**
+     * Pendientes de carga CxP a partir de facturas/CPs ya hidratados (sin queries extra).
+     *
+     * @param  list<array<string, mixed>>  $facs
+     * @param  list<array<string, mixed>>  $cps
+     * @return list<array{precarga_id: int|null, anita_id: string|null, tipo: string, etiqueta: string, fecha: string|null, orden: int}>
+     */
+    private function documentosPendientesDesdeHidratacion(array $facs, array $cps): array
+    {
+        $cargadas = [];
+        $preConCp = [];
+        foreach ($cps as $cp) {
+            $clave = $this->claveFacturaEtiqueta((string) ($cp['numero'] ?? $cp['etiqueta'] ?? ''));
+            if ($clave !== '') {
+                $cargadas[$clave] = true;
+            }
+            $preId = (int) ($cp['precarga_id'] ?? 0);
+            if ($preId > 0) {
+                $preConCp[$preId] = true;
+            }
+        }
+
+        $docs = [];
+        foreach ($facs as $fac) {
+            $origen = (string) ($fac['origen'] ?? 'precarga');
+            if ($origen === 'precarga' && isset($preConCp[(int) ($fac['id'] ?? 0)])) {
+                continue;
+            }
+            $etiqueta = trim((string) ($fac['etiqueta'] ?? $fac['numero'] ?? ''));
+            $clave = $this->claveFacturaEtiqueta($etiqueta);
+            if ($clave !== '' && isset($cargadas[$clave])) {
+                continue;
+            }
+            $tipo = (string) ($fac['tipo'] ?? 'FC');
+            $fecha = null;
+            $fechaRaw = (string) ($fac['fecha'] ?? '');
+            if ($fechaRaw !== '') {
+                // d/m/Y o Y-m-d
+                if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $fechaRaw, $m)) {
+                    $fecha = $m[3].'-'.$m[2].'-'.$m[1];
+                } elseif (preg_match('/^\d{4}-\d{2}-\d{2}/', $fechaRaw)) {
+                    $fecha = substr($fechaRaw, 0, 10);
+                }
+            }
+            $docs[] = [
+                'precarga_id' => $origen === 'precarga' ? (int) ($fac['id'] ?? 0) : null,
+                'anita_id' => $origen === 'anita' ? (string) ($fac['id'] ?? '') : null,
+                'tipo' => $tipo,
+                'etiqueta' => $etiqueta !== ''
+                    ? OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $etiqueta)
+                    : OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
+                'fecha' => $fecha,
+                'orden' => OrdencompraLegajoDocumentoTipoSupport::prioridadCarga($tipo),
+            ];
+        }
+
+        usort($docs, static function (array $a, array $b): int {
+            $po = ((int) $a['orden']) <=> ((int) $b['orden']);
+            if ($po !== 0) {
+                return $po;
+            }
+            $fa = (string) ($a['fecha'] ?? '');
+            $fb = (string) ($b['fecha'] ?? '');
+            if ($fa !== $fb) {
+                return $fa <=> $fb;
+            }
+
+            return ((int) ($a['precarga_id'] ?? 0)) <=> ((int) ($b['precarga_id'] ?? 0));
+        });
+
+        return array_values($docs);
+    }
+
+    /**
+     * Documentos que exigen COM y aún no la tienen, desde hidratación.
+     *
+     * @param  list<array<string, mixed>>  $facs
+     * @param  array<int, list<int>>  $asignadas
+     * @return list<string>
+     */
+    /**
+     * Documentos que exigen COM y aún no la tienen, desde hidratación.
+     * Ignora facturas ya cargadas en CxP (aunque la precarga no tenga COM).
+     *
+     * @param  list<array<string, mixed>>  $facs
+     * @param  list<array<string, mixed>>  $cps
+     * @param  array<int, list<int>>  $asignadas
+     * @return list<string>
+     */
+    private function documentosSinComDesdeHidratacion(array $facs, array $cps, array $asignadas): array
+    {
+        $cargadas = [];
+        $preConCp = [];
+        foreach ($cps as $cp) {
+            $clave = $this->claveFacturaEtiqueta((string) ($cp['numero'] ?? $cp['etiqueta'] ?? ''));
+            if ($clave !== '') {
+                $cargadas[$clave] = true;
+            }
+            $preId = (int) ($cp['precarga_id'] ?? 0);
+            if ($preId > 0) {
+                $preConCp[$preId] = true;
+            }
+        }
+
+        $out = [];
+        foreach ($facs as $fac) {
+            $origen = (string) ($fac['origen'] ?? 'precarga');
+            if ($origen === 'precarga' && isset($preConCp[(int) ($fac['id'] ?? 0)])) {
+                continue;
+            }
+            $etiqueta = trim((string) ($fac['etiqueta'] ?? $fac['numero'] ?? ''));
+            $clave = $this->claveFacturaEtiqueta($etiqueta);
+            if ($clave !== '' && isset($cargadas[$clave])) {
+                continue;
+            }
+            $tipo = (string) ($fac['tipo'] ?? 'FC');
+            $exige = array_key_exists('exige_com', $fac)
+                ? (bool) $fac['exige_com']
+                : OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo);
+            if (! $exige) {
+                continue;
+            }
+            if ($origen === 'precarga') {
+                $preId = (int) ($fac['id'] ?? 0);
+                if ($preId > 0 && ! empty($asignadas[$preId])) {
+                    continue;
+                }
+            }
+            $out[] = $etiqueta !== ''
+                ? OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $etiqueta)
+                : OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo);
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  Builder<\App\Models\Compras\Ordencompra>  $query
      * @param  array<string, mixed>  $filtros
      */
@@ -302,15 +519,120 @@ class OrdencompraLegajoBandejaService
             return;
         }
 
+        $valor = trim((string) ($filtros['valor'] ?? ''));
+        $modo = $filtros['modo'] ?? OrdencompraListadoFiltros::MODO_TODOS;
+
+        // Solo dígitos: igualdad indexada. Sin LIKE ni EXISTS correlacionados (cuelgan el COUNT).
+        if ($modo === OrdencompraListadoFiltros::MODO_TODOS && $valor !== '' && ctype_digit($valor)) {
+            $id = (int) $valor;
+            $ocIdsDoc = $this->ocIdsPorNumeroDocumentoExacto($id);
+            $query->where(function ($q) use ($id, $ocIdsDoc) {
+                $q->where('ordencompra.id', $id)
+                    ->orWhere('ordencompra.numeroordencompra', $id)
+                    ->orWhere('requisicion.numerorequisicion', $id);
+                if ($ocIdsDoc !== []) {
+                    $q->orWhereIn('ordencompra.id', $ocIdsDoc);
+                }
+            });
+
+            return;
+        }
+
         $query->where(function ($q) use ($filtros) {
             $inner = $filtros;
             $inner['empresa_id'] = null;
             OrdencompraListadoFiltros::aplicar($q, $inner);
-            $valor = trim((string) ($filtros['valor'] ?? ''));
-            if ($valor !== '' && ($filtros['modo'] ?? OrdencompraListadoFiltros::MODO_TODOS) === OrdencompraListadoFiltros::MODO_TODOS) {
-                $this->aplicarBusquedaDocumento($q, $valor);
+            $valorInner = trim((string) ($filtros['valor'] ?? ''));
+            if ($valorInner !== '' && ($filtros['modo'] ?? OrdencompraListadoFiltros::MODO_TODOS) === OrdencompraListadoFiltros::MODO_TODOS) {
+                // Texto libre: no expandir a EXISTS de documentos (usar Nº factura/COM/OP del panel).
             }
         });
+    }
+
+    /**
+     * OCs que tienen factura/COM/OP con ese número exacto (consultas indexadas, no EXISTS por fila).
+     *
+     * @return list<int>
+     */
+    private function ocIdsPorNumeroDocumentoExacto(int $numero): array
+    {
+        if ($numero <= 0) {
+            return [];
+        }
+
+        $ids = [];
+
+        foreach (
+            \Illuminate\Support\Facades\DB::table('comprobante_proveedor')
+                ->where('numerocomprobante', $numero)
+                ->where(function ($w) {
+                    $w->whereNull('estado')
+                        ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+                })
+                ->whereNotNull('ordencompra_id')
+                ->where('ordencompra_id', '>', 0)
+                ->limit(200)
+                ->pluck('ordencompra_id') as $ocId
+        ) {
+            $ids[(int) $ocId] = true;
+        }
+
+        $pares = \Illuminate\Support\Facades\DB::table('precarga_comprobante_proveedor')
+            ->where('numerocomprobante', $numero)
+            ->whereNotNull('numeroordencompra')
+            ->where('numeroordencompra', '!=', '')
+            ->limit(200)
+            ->get(['empresa_id', 'numeroordencompra']);
+        if ($pares->isNotEmpty()) {
+            $ocQuery = Ordencompra::query()->select('id');
+            $ocQuery->where(function ($q) use ($pares) {
+                foreach ($pares as $par) {
+                    $q->orWhere(function ($w) use ($par) {
+                        $w->where('empresa_id', (int) $par->empresa_id)
+                            ->where('numeroordencompra', (int) $par->numeroordencompra);
+                    });
+                }
+            });
+            foreach ($ocQuery->limit(200)->pluck('id') as $ocId) {
+                $ids[(int) $ocId] = true;
+            }
+        }
+
+        foreach (
+            \Illuminate\Support\Facades\DB::table('recepcion_proveedor')
+                ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+                ->where(function ($w) use ($numero) {
+                    $w->where('id', $numero)
+                        ->orWhere('anita_nro', $numero)
+                        ->orWhere('numerorecepcion', (string) $numero);
+                })
+                ->whereNotNull('ordencompra_id')
+                ->where('ordencompra_id', '>', 0)
+                ->limit(200)
+                ->pluck('ordencompra_id') as $ocId
+        ) {
+            $ids[(int) $ocId] = true;
+        }
+
+        foreach (
+            \Illuminate\Support\Facades\DB::table('proveedor_cuentacorriente as pcc')
+                ->join('comprobante_proveedor as cp', 'cp.id', '=', 'pcc.comprobante_proveedor_id')
+                ->join('pagoproveedor as pp', 'pp.id', '=', 'pcc.pagoproveedor_id')
+                ->where('pcc.pagoproveedor_id', '>', 0)
+                ->where(function ($w) use ($numero) {
+                    $w->where('pp.id', $numero)
+                        ->orWhere('pp.numerotransaccion', $numero)
+                        ->orWhere('pp.numerotransaccion', (string) $numero);
+                })
+                ->whereNotNull('cp.ordencompra_id')
+                ->where('cp.ordencompra_id', '>', 0)
+                ->limit(200)
+                ->pluck('cp.ordencompra_id') as $ocId
+        ) {
+            $ids[(int) $ocId] = true;
+        }
+
+        return array_keys($ids);
     }
 
     /**
@@ -322,7 +644,7 @@ class OrdencompraLegajoBandejaService
         $nroOc = trim((string) ($filtros['nro_oc'] ?? ''));
         if ($nroOc !== '') {
             $soloDigitos = preg_replace('/\D+/', '', $nroOc) ?? '';
-            if ($soloDigitos !== '') {
+            if ($soloDigitos !== '' && ctype_digit($soloDigitos)) {
                 $query->where('ordencompra.numeroordencompra', (int) $soloDigitos);
             } else {
                 $query->where('ordencompra.numeroordencompra', 'like', '%'.$nroOc.'%');
@@ -330,22 +652,113 @@ class OrdencompraLegajoBandejaService
         }
         $nroFac = trim((string) ($filtros['nro_factura'] ?? ''));
         if ($nroFac !== '') {
-            $query->where(function ($q) use ($nroFac) {
-                $this->whereExisteFacturaNumero($q, $nroFac);
-            });
+            $digitos = preg_replace('/\D+/', '', $nroFac) ?: '';
+            if ($digitos !== '' && ctype_digit($digitos)) {
+                $idsFac = $this->ocIdsPorFacturaExacta((int) $digitos);
+                $query->whereIn('ordencompra.id', $idsFac !== [] ? $idsFac : [0]);
+            } else {
+                $query->where(function ($q) use ($nroFac) {
+                    $this->whereExisteFacturaNumero($q, $nroFac);
+                });
+            }
         }
         $nroCom = trim((string) ($filtros['nro_com'] ?? ''));
         if ($nroCom !== '') {
-            $query->where(function ($q) use ($nroCom) {
-                $this->whereExisteComNumero($q, $nroCom);
-            });
+            if (ctype_digit($nroCom)) {
+                $n = (int) $nroCom;
+                $ids = \Illuminate\Support\Facades\DB::table('recepcion_proveedor')
+                    ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+                    ->where(function ($w) use ($n, $nroCom) {
+                        $w->where('id', $n)
+                            ->orWhere('anita_nro', $n)
+                            ->orWhere('numerorecepcion', $nroCom);
+                    })
+                    ->where('ordencompra_id', '>', 0)
+                    ->limit(200)
+                    ->pluck('ordencompra_id')
+                    ->map(static fn ($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
+                $query->whereIn('ordencompra.id', $ids !== [] ? $ids : [0]);
+            } else {
+                $query->where(function ($q) use ($nroCom) {
+                    $this->whereExisteComNumero($q, $nroCom);
+                });
+            }
         }
         $nroOp = trim((string) ($filtros['nro_op'] ?? ''));
         if ($nroOp !== '') {
-            $query->where(function ($q) use ($nroOp) {
-                $this->whereExistePagoNumero($q, $nroOp);
-            });
+            if (ctype_digit($nroOp)) {
+                $n = (int) $nroOp;
+                $ids = \Illuminate\Support\Facades\DB::table('proveedor_cuentacorriente as pcc')
+                    ->join('comprobante_proveedor as cp', 'cp.id', '=', 'pcc.comprobante_proveedor_id')
+                    ->join('pagoproveedor as pp', 'pp.id', '=', 'pcc.pagoproveedor_id')
+                    ->where('pcc.pagoproveedor_id', '>', 0)
+                    ->where(function ($w) use ($n, $nroOp) {
+                        $w->where('pp.id', $n)
+                            ->orWhere('pp.numerotransaccion', $n)
+                            ->orWhere('pp.numerotransaccion', $nroOp);
+                    })
+                    ->where('cp.ordencompra_id', '>', 0)
+                    ->limit(200)
+                    ->pluck('cp.ordencompra_id')
+                    ->map(static fn ($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
+                $query->whereIn('ordencompra.id', $ids !== [] ? $ids : [0]);
+            } else {
+                $query->where(function ($q) use ($nroOp) {
+                    $this->whereExistePagoNumero($q, $nroOp);
+                });
+            }
         }
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function ocIdsPorFacturaExacta(int $numero): array
+    {
+        if ($numero <= 0) {
+            return [];
+        }
+        $ids = [];
+        foreach (
+            \Illuminate\Support\Facades\DB::table('comprobante_proveedor')
+                ->where('numerocomprobante', $numero)
+                ->where(function ($w) {
+                    $w->whereNull('estado')
+                        ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+                })
+                ->where('ordencompra_id', '>', 0)
+                ->limit(200)
+                ->pluck('ordencompra_id') as $ocId
+        ) {
+            $ids[(int) $ocId] = true;
+        }
+        $pares = \Illuminate\Support\Facades\DB::table('precarga_comprobante_proveedor')
+            ->where('numerocomprobante', $numero)
+            ->whereNotNull('numeroordencompra')
+            ->where('numeroordencompra', '!=', '')
+            ->limit(200)
+            ->get(['empresa_id', 'numeroordencompra']);
+        if ($pares->isNotEmpty()) {
+            $ocQuery = Ordencompra::query()->select('id')->where(function ($q) use ($pares) {
+                foreach ($pares as $par) {
+                    $q->orWhere(function ($w) use ($par) {
+                        $w->where('empresa_id', (int) $par->empresa_id)
+                            ->where('numeroordencompra', (int) $par->numeroordencompra);
+                    });
+                }
+            });
+            foreach ($ocQuery->limit(200)->pluck('id') as $ocId) {
+                $ids[(int) $ocId] = true;
+            }
+        }
+
+        return array_keys($ids);
     }
 
     /**
@@ -402,22 +815,6 @@ class OrdencompraLegajoBandejaService
                 $this->whereExistePago($q, false);
             });
         }
-    }
-
-    /**
-     * @param  Builder<\App\Models\Compras\Ordencompra>  $q
-     */
-    private function aplicarBusquedaDocumento(Builder $q, string $valor): void
-    {
-        $q->orWhere(function ($w) use ($valor) {
-            $this->whereExisteFacturaNumero($w, $valor);
-        });
-        $q->orWhere(function ($w) use ($valor) {
-            $this->whereExisteComNumero($w, $valor);
-        });
-        $q->orWhere(function ($w) use ($valor) {
-            $this->whereExistePagoNumero($w, $valor);
-        });
     }
 
     /**
@@ -536,23 +933,49 @@ class OrdencompraLegajoBandejaService
     private function whereExisteFacturaNumero(Builder $q, string $valor): void
     {
         $digitos = preg_replace('/\D+/', '', $valor) ?: $valor;
+        $esEntero = ctype_digit((string) $digitos);
+        $n = $esEntero ? (int) $digitos : 0;
         $like = '%'.addcslashes($valor, '%_\\').'%';
-        $q->whereExists(function ($e) use ($digitos, $like) {
+        $q->whereExists(function ($e) use ($digitos, $like, $esEntero, $n) {
             $e->selectRaw('1')
                 ->from('precarga_comprobante_proveedor as pcp')
                 ->whereColumn('pcp.empresa_id', 'ordencompra.empresa_id')
                 ->whereColumn('pcp.numeroordencompra', 'ordencompra.numeroordencompra')
-                ->where(function ($w) use ($digitos, $like) {
-                    $w->where('pcp.numerocomprobante', 'like', '%'.$digitos.'%')
-                        ->orWhere('pcp.numerocomprobante', 'like', $like);
+                ->where(function ($w) use ($digitos, $like, $esEntero, $n) {
+                    if ($esEntero && $n > 0) {
+                        $w->where('pcp.numerocomprobante', $n);
+                    } else {
+                        $w->where('pcp.numerocomprobante', 'like', '%'.$digitos.'%')
+                            ->orWhere('pcp.numerocomprobante', 'like', $like);
+                    }
                 });
-        })->orWhereExists(function ($e) use ($digitos, $like) {
+        })->orWhereExists(function ($e) use ($digitos, $like, $esEntero, $n) {
             $e->selectRaw('1')
                 ->from('comprobante_proveedor as cp')
-                ->whereColumn('cp.ordencompra_id', 'ordencompra.id')
-                ->where(function ($w) use ($digitos, $like) {
-                    $w->where('cp.numerocomprobante', 'like', '%'.$digitos.'%')
-                        ->orWhere('cp.numerocomprobante', 'like', $like);
+                ->where(function ($w) {
+                    $w->whereColumn('cp.ordencompra_id', 'ordencompra.id')
+                        ->orWhere(function ($p) {
+                            $p->whereNotNull('cp.precarga_comprobante_proveedor_id')
+                                ->whereExists(function ($pre) {
+                                    $pre->selectRaw('1')
+                                        ->from('precarga_comprobante_proveedor as pcp')
+                                        ->whereColumn('pcp.id', 'cp.precarga_comprobante_proveedor_id')
+                                        ->whereColumn('pcp.empresa_id', 'ordencompra.empresa_id')
+                                        ->whereColumn('pcp.numeroordencompra', 'ordencompra.numeroordencompra');
+                                });
+                        });
+                })
+                ->where(function ($w) {
+                    $w->whereNull('cp.estado')
+                        ->orWhereRaw('UPPER(TRIM(cp.estado)) != ?', ['ANULADA']);
+                })
+                ->where(function ($w) use ($digitos, $like, $esEntero, $n) {
+                    if ($esEntero && $n > 0) {
+                        $w->where('cp.numerocomprobante', $n);
+                    } else {
+                        $w->where('cp.numerocomprobante', 'like', '%'.$digitos.'%')
+                            ->orWhere('cp.numerocomprobante', 'like', $like);
+                    }
                 });
         });
     }
@@ -663,16 +1086,27 @@ class OrdencompraLegajoBandejaService
             })
             ->orderByDesc('id');
         $out = [];
-        foreach ($query->get(['id', 'empresa_id', 'numeroordencompra']) as $pre) {
+        foreach ($query->with('tipotransaccion_compras:id,abreviatura')->get([
+            'id', 'empresa_id', 'numeroordencompra', 'letra', 'sucursal', 'numerocomprobante',
+            'tipotransaccion_compra_id', 'origen_entrada',
+        ]) as $pre) {
             $clave = ((int) $pre->empresa_id).'|'.trim((string) $pre->numeroordencompra);
             if (! isset($claves[$clave])) {
                 continue;
             }
             $ocId = $claves[$clave];
             $preId = (int) $pre->id;
+            $numero = $this->numeroFacturaPrecarga($pre);
+            $tipo = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($pre);
             $out[$ocId][] = [
                 'id' => $preId,
                 'origen' => 'precarga',
+                'tipo' => $tipo,
+                'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
+                'exige_com' => OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo),
+                'numero' => OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $numero),
+                'origen_label' => PrecargaComprobanteOrigenEntrada::etiqueta($pre->origen_entrada ?? null),
+                'etiqueta' => OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $numero),
                 'url_pdf' => route('ordencompra_legajo_bandeja_factura_pdf', [
                     'id' => $ocId,
                     'precarga' => $preId,
@@ -757,7 +1191,10 @@ class OrdencompraLegajoBandejaService
             }
         });
         $out = [];
-        foreach ($query->orderByDesc('id')->get(['id', 'ordencompra_id', 'precarga_comprobante_proveedor_id']) as $cp) {
+        foreach ($query->orderByDesc('id')->with('tipotransaccion_compras:id,abreviatura,codigoafip')->get([
+            'id', 'ordencompra_id', 'precarga_comprobante_proveedor_id',
+            'letra', 'sucursal', 'numerocomprobante', 'origen_entrada', 'tipotransaccion_compra_id',
+        ]) as $cp) {
             $ocId = (int) ($cp->ordencompra_id ?? 0);
             if ($ocId <= 0) {
                 $ocId = $preAOc[(int) $cp->precarga_comprobante_proveedor_id] ?? 0;
@@ -765,13 +1202,219 @@ class OrdencompraLegajoBandejaService
             if ($ocId <= 0) {
                 continue;
             }
+            $tipo = OrdencompraLegajoDocumentoTipoSupport::desdeAbreviatura(
+                $cp->tipotransaccion_compras->abreviatura ?? null,
+                $cp->tipotransaccion_compras->codigoafip !== null
+                    ? (string) $cp->tipotransaccion_compras->codigoafip
+                    : null
+            );
+            $numero = trim(sprintf(
+                '%s %04d-%08d',
+                $cp->letra ?: 'FC',
+                (int) $cp->sucursal,
+                (int) $cp->numerocomprobante
+            ));
+            $numero = OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $numero);
             $out[$ocId][] = [
                 'id' => (int) $cp->id,
+                'precarga_id' => (int) ($cp->precarga_comprobante_proveedor_id ?? 0) ?: null,
+                'tipo' => $tipo,
+                'numero' => $numero,
+                'origen_label' => ComprobanteProveedorOrigenEntrada::etiqueta(
+                    (string) ($cp->origen_entrada ?? ComprobanteProveedorOrigenEntrada::PRECARGA)
+                ),
+                'etiqueta' => $numero,
                 'url' => route('editar_comprobante_proveedor', ['id' => (int) $cp->id]),
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * Facturas visibles en la grilla: número + origen + tipo + estado de carga.
+     *
+     * @param  list<array<string, mixed>>  $comprobantes
+     * @param  list<array<string, mixed>>  $facturas
+     * @return list<array{numero: string, origen: string, tipo: string, tipo_label: string, estado: string, capa: string}>
+     */
+    private function resumenFacturasLegajo(array $comprobantes, array $facturas): array
+    {
+        $out = [];
+        $vistos = [];
+        foreach ($comprobantes as $cp) {
+            $numero = trim((string) ($cp['numero'] ?? $cp['etiqueta'] ?? ''));
+            $clave = $this->claveFacturaEtiqueta($numero);
+            if ($numero === '' || ($clave !== '' && isset($vistos[$clave]))) {
+                continue;
+            }
+            if ($clave !== '') {
+                $vistos[$clave] = true;
+            }
+            $tipo = (string) ($cp['tipo'] ?? 'FC');
+            $out[] = [
+                'numero' => $numero,
+                'origen' => (string) ($cp['origen_label'] ?? 'Comprobante cargado en CxP'),
+                'tipo' => $tipo,
+                'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
+                'estado' => 'cargada',
+                'capa' => 'comprobante',
+            ];
+        }
+        $preConCp = [];
+        foreach ($comprobantes as $cp) {
+            $preId = (int) ($cp['precarga_id'] ?? 0);
+            if ($preId > 0) {
+                $preConCp[$preId] = true;
+            }
+        }
+        foreach ($facturas as $fac) {
+            $capaOrigen = (string) ($fac['origen'] ?? 'precarga');
+            if ($capaOrigen === 'precarga' && isset($preConCp[(int) ($fac['id'] ?? 0)])) {
+                continue;
+            }
+            $numero = trim((string) ($fac['numero'] ?? $fac['etiqueta'] ?? ''));
+            $clave = $this->claveFacturaEtiqueta($numero);
+            if ($numero === '' || ($clave !== '' && isset($vistos[$clave]))) {
+                continue;
+            }
+            if ($clave !== '') {
+                $vistos[$clave] = true;
+            }
+            $origen = trim((string) ($fac['origen_label'] ?? ''));
+            if ($origen === '') {
+                $origen = $capaOrigen === 'anita'
+                    ? PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA)
+                    : 'Precarga';
+            }
+            $tipo = (string) ($fac['tipo'] ?? 'FC');
+            $out[] = [
+                'numero' => $numero,
+                'origen' => $origen,
+                'tipo' => $tipo,
+                'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
+                'estado' => 'pendiente',
+                'capa' => $capaOrigen === 'anita' ? 'anita' : 'precarga',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Evita listar el mismo comprobante dos veces (precarga materializada + scan Anita crudo).
+     *
+     * @param  list<array<string, mixed>>  $precargas
+     * @param  list<array<string, mixed>>  $scansAnita
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarScansAnitaSinDuplicar(array $precargas, array $scansAnita): array
+    {
+        $claves = [];
+        foreach ($precargas as $fac) {
+            $clave = $this->claveFacturaEtiqueta((string) ($fac['numero'] ?? $fac['etiqueta'] ?? ''));
+            if ($clave !== '') {
+                $claves[$clave] = true;
+            }
+        }
+        foreach ($scansAnita as $scan) {
+            $clave = $this->claveFacturaEtiqueta((string) ($scan['numero'] ?? $scan['etiqueta'] ?? ''));
+            if ($clave !== '' && isset($claves[$clave])) {
+                continue;
+            }
+            if ($clave !== '') {
+                $claves[$clave] = true;
+            }
+            $precargas[] = $scan;
+        }
+
+        return $precargas;
+    }
+
+    /** Clave letra|sucursal|número para deduplicar etiquetas (ignora prefijo FGA, origen Anita, etc.). */
+    private function claveFacturaEtiqueta(string $etiqueta): string
+    {
+        $etiqueta = strtoupper(trim($etiqueta));
+        if (preg_match('/([A-Z])\s+(\d{1,5})-(\d{1,8})/', $etiqueta, $m)) {
+            return $m[1].'|'.((int) $m[2]).'|'.((int) $m[3]);
+        }
+
+        return $etiqueta;
+    }
+
+    /**
+     * @param  \App\Models\Compras\Precarga_Comprobante_Proveedor  $pre
+     */
+    private function numeroFacturaPrecarga($pre): string
+    {
+        $abrev = strtoupper(trim((string) ($pre->tipotransaccion_compras->abreviatura ?? '')));
+        $letra = trim((string) ($pre->letra ?? ''));
+        $suc = (int) ($pre->sucursal ?? 0);
+        $nro = (int) ($pre->numerocomprobante ?? 0);
+        $numero = ($letra !== '' || $nro > 0)
+            ? trim(sprintf('%s %04d-%08d', $letra !== '' ? $letra : 'FC', $suc, $nro))
+            : 'Factura #'.$pre->id;
+
+        return $abrev !== '' ? $abrev.' '.$numero : $numero;
+    }
+
+    /**
+     * Consulta global de legajos (sin recorte por sector). Requiere criterio de documento.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return Collection<int, array<string, mixed>>
+     */
+    public function buscarSeguimiento(array $filtros, int $limite = 50): Collection
+    {
+        if (! $this->tieneCriterioSeguimiento($filtros)) {
+            return collect();
+        }
+
+        $query = Ordencompra::query()
+            ->select([
+                'ordencompra.id',
+                'ordencompra.numeroordencompra',
+                'ordencompra.fecha',
+                'ordencompra.empresa_id',
+                'ordencompra.proveedor_id',
+                'ordencompra.centrocosto_id',
+                'ordencompra.sector_legajocompra_id',
+                'ordencompra.estadoordencompra',
+                'ordencompra.tratamiento',
+                'ordencompra.nota_legajo',
+                'ordencompra.es_contrato',
+                'ordencompra.contrato_requiere_recepcion',
+                'ordencompra.contrato_vigencia_desde',
+                'ordencompra.contrato_vigencia_hasta',
+                'ordencompra.created_at',
+            ])
+            ->with([
+                'empresas:id,codigo,nombre',
+                'proveedores:id,codigo,nombre',
+                'centrocostos:id,codigo,nombre',
+                'sector_legajocompras:id,nombre',
+            ]);
+
+        app(EmpresaRepository::class)->aplicarFiltroEmpresasAsignadas($query, 'ordencompra.empresa_id');
+        $this->aplicarFiltrosBusqueda($query, $filtros);
+        $this->aplicarFiltrosDocumento($query, $filtros);
+        $query->orderByDesc('ordencompra.id')->limit($limite);
+
+        return $this->hidratar($query->get());
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function tieneCriterioSeguimiento(array $filtros): bool
+    {
+        foreach (['nro_oc', 'nro_factura', 'nro_com', 'nro_op', 'valor'] as $k) {
+            if (trim((string) ($filtros[$k] ?? '')) !== '') {
+                return true;
+            }
+        }
+
+        return OrdencompraListadoFiltros::tieneCriteriosTexto($filtros);
     }
 
     /**

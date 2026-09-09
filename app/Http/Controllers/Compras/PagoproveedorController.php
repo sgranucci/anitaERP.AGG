@@ -496,6 +496,7 @@ class PagoproveedorController extends Controller
             ],
             'bases' => $bases->toArray(),
             'acumulado_ganancias' => $ctx['acumulado_ganancias'],
+            'exclusiones' => $ctx['exclusiones'] ?? null,
             'total' => $resultado->totalRetenciones(),
         ]);
     }

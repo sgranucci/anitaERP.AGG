@@ -50,7 +50,8 @@
             return;
         }
         var n = parseDecimal(el.value);
-        el.value = n === 0 && String(el.value).trim() === '' ? '' : String(n);
+        // Si está en cero (0 / 0,00), vaciar al foco para facilitar la carga.
+        el.value = n === 0 ? '' : String(n);
     }
 
     function jqueryDisponible() {

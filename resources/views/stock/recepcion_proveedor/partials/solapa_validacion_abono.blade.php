@@ -121,7 +121,7 @@
                                 <span class="text-muted">—</span>
                             @endif
                         </td>
-                        <td>{{ $respuesta->comentario ?: '—' }}</td>
+                        <td>{{ $respuesta?->comentario ?: '—' }}</td>
                         <td>
                             @if ($esTickets)
                                 <span class="badge badge-info">Ingresos seguridad</span>

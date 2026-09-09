@@ -24,12 +24,13 @@ class ComprobanteProveedorRecepcionesSupport
 
     /**
      * Recepciones CONFIRMADAS de la OC con provisión contable y sin factura contabilizada previa.
-     * Completa desde Anita las COM de la OC que aún no están en ERP (o están huérfanas),
-     * salvo que $sincronizarAnita sea false (apertura del formulario: no bloquear la UI).
+     *
+     * Por defecto NO sincroniza Anita: las COM deben estar ya en ERP (importación / job / alta local).
+     * Pasar $sincronizarAnita = true solo en flujos explícitos de resync.
      *
      * @return Collection<int, Recepcion_Proveedor>
      */
-    public function listarDisponibles(int $ordencompraId, ?int $comprobanteId = null, bool $sincronizarAnita = true): Collection
+    public function listarDisponibles(int $ordencompraId, ?int $comprobanteId = null, bool $sincronizarAnita = false): Collection
     {
         if ($sincronizarAnita) {
             $this->asegurarRecepcionesDesdeAnita($ordencompraId);

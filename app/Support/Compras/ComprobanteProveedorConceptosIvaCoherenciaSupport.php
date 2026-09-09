@@ -20,6 +20,9 @@ use RuntimeException;
  * Si el agente manda el neto en un concepto que no es G (p. ej. «No gravado» código 1 /
  * monotributo) junto con IVA liquidado, se descarta esa línea y se recrea el gravado
  * correcto. Tolerancia de cuadre IVA↔neto tras el ajuste: $0,90.
+ *
+ * Si el agente manda un importe negativo (descuento espurio) y la suma de montos ≥ 0
+ * ya cierra con el total de la factura, se omite ese negativo al generar la precarga.
  */
 final class ComprobanteProveedorConceptosIvaCoherenciaSupport
 {
@@ -168,6 +171,64 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
                 .') no coincide con el total del comprobante ('.number_format($total, 2, ',', '.')
                 .'). Diferencia '.number_format($diferencia, 2, ',', '.')
                 .' (tolerancia $'.number_format($tolerancia, 2, ',', '.').').',
+        ];
+    }
+
+    /**
+     * Descarta líneas con importe negativo cuando la suma de los montos ≥ 0 ya cierra
+     * con el total de la factura (caso típico: el agente externo manda un «descuento»
+     * espurio —p. ej. No gravado −1200— que solo desalinea el cuadre).
+     *
+     * Si el negativo es necesario para llegar al total, se conserva.
+     * No afecta NC con todos los conceptos en negativo (sin montos ≥ 0 que cierren).
+     *
+     * @param  list<array<string, mixed>>  $lineas  Claves `monto` (o `$campoMonto`)
+     * @return array{
+     *     lineas: list<array<string, mixed>>,
+     *     descartadas: list<array<string, mixed>>,
+     *     descartó: bool
+     * }
+     */
+    public static function descartarLineasNegativasSiTotalYaCuadra(
+        array $lineas,
+        float $total,
+        float $tolerancia = self::TOLERANCIA,
+        string $campoMonto = 'monto',
+    ): array {
+        $vacio = ['lineas' => $lineas, 'descartadas' => [], 'descartó' => false];
+        $total = round(abs($total), 2);
+        if ($total <= 0 || $lineas === []) {
+            return $vacio;
+        }
+
+        $positivas = [];
+        $negativas = [];
+        foreach ($lineas as $linea) {
+            $monto = (float) ($linea[$campoMonto] ?? 0);
+            if ($monto < -0.0001) {
+                $negativas[] = $linea;
+            } else {
+                $positivas[] = $linea;
+            }
+        }
+
+        if ($negativas === [] || $positivas === []) {
+            return $vacio;
+        }
+
+        $sumaPositivas = 0.0;
+        foreach ($positivas as $linea) {
+            $sumaPositivas = round($sumaPositivas + (float) ($linea[$campoMonto] ?? 0), 2);
+        }
+
+        if (round(abs($sumaPositivas - $total), 2) > $tolerancia) {
+            return $vacio;
+        }
+
+        return [
+            'lineas' => $positivas,
+            'descartadas' => $negativas,
+            'descartó' => true,
         ];
     }
 

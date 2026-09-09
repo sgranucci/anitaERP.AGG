@@ -17,6 +17,8 @@ final class RetencionIibbResultado
 
     public const MOTIVO_BAJO_MINIMO_RETENCION = 'bajo_minimo_retencion';
 
+    public const MOTIVO_EXCLUIDO = 'excluido';
+
     public const MOTIVO_OK = 'ok';
 
     /**

@@ -1,12 +1,14 @@
 /**
  * Carga masiva SP desde CSV Anita (p-cargasolpm).
- * Modal en index: subir → preview → confirmar.
+ * Modal en index: subir → preview (con asiento expandible) → confirmar.
  */
 (function ($) {
     'use strict';
 
     var token = null;
     var aGenerar = 0;
+    var filasPreview = [];
+    var filtroActual = 'todas';
 
     function csrfToken() {
         var $t = $('input[name="_token"]').first();
@@ -57,6 +59,8 @@
     function resetModal() {
         token = null;
         aGenerar = 0;
+        filasPreview = [];
+        filtroActual = 'todas';
         $('#sp-carga-archivo').val('');
         $('#sp-carga-archivo-error').addClass('d-none').text('');
         $('#sp-carga-resumen').empty();
@@ -64,14 +68,160 @@
         $('#sp-carga-errores').empty();
         $('#sp-carga-tabla tbody').empty();
         $('#sp-carga-resultado-body').empty();
+        $('#sp-carga-preview-estado').removeClass().addClass('badge badge-secondary').text('—');
+        $('#sp-carga-filtro-info').text('');
+        $('[data-sp-filtro]').removeClass('active');
+        $('[data-sp-filtro="todas"]').addClass('active');
         $('#sp-carga-btn-generar').prop('disabled', true).html('<i class="fa fa-check"></i> Generar solicitudes');
         mostrarPaso('archivo');
+    }
+
+    function htmlAsientoDetalle(f) {
+        var cuentas = f.cuentas || [];
+        if (!cuentas.length) {
+            return '<div class="small text-muted mb-0">Sin líneas de asiento.</div>';
+        }
+
+        var html =
+            '<div class="small mb-2">' +
+            'Debe: <strong>$ ' + fmtMonto(f.total_debe) + '</strong> · ' +
+            'Haber: <strong>$ ' + fmtMonto(f.total_haber) + '</strong> · ';
+        if (f.balanceado) {
+            html += '<span class="badge badge-success">Balanceado</span>';
+        } else {
+            html += '<span class="badge badge-danger">Desbalance</span>';
+        }
+        html +=
+            ' · Monto SP: <strong>$ ' + fmtMonto(f.monto) + '</strong>' +
+            '</div>';
+
+        html +=
+            '<div class="table-responsive"><table class="table table-sm table-bordered mb-0 bg-white">' +
+            '<thead style="background:#D6EAF8;color:#17202A"><tr>' +
+            '<th>Cuenta</th><th>Nombre</th><th class="text-center">D/H</th>' +
+            '<th class="text-right">Debe</th><th class="text-right">Haber</th><th>Origen</th>' +
+            '</tr></thead><tbody>';
+
+        cuentas.forEach(function (c) {
+            var dh = String(c.debe_haber || 'D').toUpperCase() === 'H' ? 'H' : 'D';
+            var debe = dh === 'D' ? fmtMonto(c.monto) : '';
+            var haber = dh === 'H' ? fmtMonto(c.monto) : '';
+            var origen = c.desde_concepto
+                ? '<span class="badge badge-info">Concepto</span>'
+                : '<span class="badge badge-secondary">CSV</span>';
+            html +=
+                '<tr>' +
+                '<td>' + esc(c.codigo) + '</td>' +
+                '<td><small>' + esc(c.nombre || '—') + '</small></td>' +
+                '<td class="text-center">' + esc(dh) + '</td>' +
+                '<td class="text-right">' + debe + '</td>' +
+                '<td class="text-right">' + haber + '</td>' +
+                '<td>' + origen + '</td>' +
+                '</tr>';
+        });
+
+        html += '</tbody></table></div>';
+
+        if (f.errores && f.errores.length) {
+            html += '<ul class="mb-0 mt-2 pl-3 text-danger small">';
+            f.errores.forEach(function (e) {
+                html += '<li>' + esc(e) + '</li>';
+            });
+            html += '</ul>';
+        }
+
+        return html;
+    }
+
+    function filaPasaFiltro(f) {
+        if (filtroActual === 'ok') {
+            return !!f.ok;
+        }
+        if (filtroActual === 'error') {
+            return !f.ok;
+        }
+        return true;
+    }
+
+    function renderTablaFilas() {
+        var $tb = $('#sp-carga-tabla tbody').empty();
+        var visibles = 0;
+
+        filasPreview.forEach(function (f, idx) {
+            if (!filaPasaFiltro(f)) {
+                return;
+            }
+            visibles++;
+
+            var detalle = String(f.detalle || '');
+            if (detalle.length > 48) {
+                detalle = detalle.substring(0, 45) + '…';
+            }
+
+            var badge = f.ok
+                ? '<span class="badge badge-success">OK</span>'
+                : '<span class="badge badge-danger">Error</span>';
+
+            var balBadge = '';
+            if (f.n_cuentas > 0) {
+                balBadge = f.balanceado
+                    ? ' <span class="badge badge-light border text-success" title="Asiento balanceado">' +
+                      esc(f.n_cuentas) + ' ctas</span>'
+                    : ' <span class="badge badge-light border text-danger" title="Asiento desbalanceado">' +
+                      esc(f.n_cuentas) + ' ctas</span>';
+            } else {
+                balBadge = ' <span class="badge badge-light border">0</span>';
+            }
+
+            var detId = 'sp-carga-det-' + idx;
+            $tb.append(
+                '<tr class="sp-carga-fila-cab ' + (f.ok ? '' : 'table-danger') + '" data-idx="' + idx + '">' +
+                '<td class="text-center">' +
+                '<button type="button" class="btn btn-link btn-sm p-0 sp-carga-toggle" data-target="#' + detId + '" ' +
+                'title="Ver asiento" aria-expanded="false">' +
+                '<i class="fa fa-chevron-right"></i></button></td>' +
+                '<td>' + esc(f.nro_linea) + '</td>' +
+                '<td>' + esc(f.empresa_codigo) + (f.empresa_nombre ? ' <small class="text-muted">' + esc(f.empresa_nombre) + '</small>' : '') + '</td>' +
+                '<td>' + esc(f.proveedor_codigo) + ' ' + esc(f.proveedor_nombre) + '</td>' +
+                '<td>' + esc(f.concepto_codigo) + ' ' + esc(f.concepto_nombre) + '</td>' +
+                '<td title="' + esc(f.detalle) + '">' + esc(detalle) + '</td>' +
+                '<td>' + esc(f.fecha_vencimiento || '—') + '</td>' +
+                '<td class="text-right">' + fmtMonto(f.monto) + '</td>' +
+                '<td class="text-center">' + balBadge + '</td>' +
+                '<td>' + badge + '</td>' +
+                '</tr>' +
+                '<tr class="sp-carga-fila-det d-none" id="' + detId + '">' +
+                '<td colspan="10" class="bg-light">' + htmlAsientoDetalle(f) + '</td>' +
+                '</tr>'
+            );
+        });
+
+        var total = filasPreview.length;
+        var label = filtroActual === 'ok' ? 'OK' : (filtroActual === 'error' ? 'con error' : '');
+        $('#sp-carga-filtro-info').text(
+            visibles === total
+                ? (total + ' fila' + (total === 1 ? '' : 's'))
+                : (visibles + ' de ' + total + (label ? ' (' + label + ')' : ''))
+        );
     }
 
     function renderPreview(data) {
         token = data.token;
         var r = data.resumen || {};
         aGenerar = Number(r.a_generar) || 0;
+        filasPreview = data.filas || [];
+        filtroActual = 'todas';
+        $('[data-sp-filtro]').removeClass('active');
+        $('[data-sp-filtro="todas"]').addClass('active');
+
+        var $estado = $('#sp-carga-preview-estado');
+        if (aGenerar > 0 && !(r.con_error > 0)) {
+            $estado.removeClass().addClass('badge badge-success').text('Listo para generar');
+        } else if (aGenerar > 0) {
+            $estado.removeClass().addClass('badge badge-warning').text('Revisar filas con error');
+        } else {
+            $estado.removeClass().addClass('badge badge-danger').text('Nada para generar');
+        }
 
         var cards = [
             { label: 'Leídas', value: r.leidas, cls: 'secondary' },
@@ -91,7 +241,7 @@
         var htmlCards = '';
         cards.forEach(function (c) {
             htmlCards +=
-                '<div class="col-md-4 col-lg-2 mb-2">' +
+                '<div class="col-6 col-md-4 col-lg-2 mb-2">' +
                 '<div class="border rounded p-2 h-100 text-center bg-light">' +
                 '<div class="small text-muted">' + esc(c.label) + '</div>' +
                 '<div class="h5 mb-0 text-' + c.cls + '">' + esc(c.value) + '</div>' +
@@ -137,29 +287,7 @@
             );
         }
 
-        var $tb = $('#sp-carga-tabla tbody').empty();
-        (data.filas || []).forEach(function (f) {
-            var detalle = String(f.detalle || '');
-            if (detalle.length > 60) {
-                detalle = detalle.substring(0, 57) + '…';
-            }
-            var badge = f.ok
-                ? '<span class="badge badge-success">OK</span>'
-                : '<span class="badge badge-danger" title="' + esc((f.errores || []).join('; ')) + '">Error</span>';
-            $tb.append(
-                '<tr class="' + (f.ok ? '' : 'table-danger') + '">' +
-                '<td>' + esc(f.nro_linea) + '</td>' +
-                '<td>' + esc(f.empresa_codigo) + '</td>' +
-                '<td>' + esc(f.proveedor_codigo) + ' ' + esc(f.proveedor_nombre) + '</td>' +
-                '<td>' + esc(f.concepto_codigo) + ' ' + esc(f.concepto_nombre) + '</td>' +
-                '<td title="' + esc(f.detalle) + '">' + esc(detalle) + '</td>' +
-                '<td>' + esc(f.fecha_vencimiento || '—') + '</td>' +
-                '<td class="text-right">' + fmtMonto(f.monto) + '</td>' +
-                '<td class="text-center">' + esc(f.n_cuentas) + '</td>' +
-                '<td>' + badge + '</td>' +
-                '</tr>'
-            );
-        });
+        renderTablaFilas();
 
         $('#sp-carga-btn-generar')
             .prop('disabled', aGenerar < 1)
@@ -227,7 +355,7 @@
         fd.append('_token', csrfToken());
 
         var url = $('#modal-carga-masiva-sp').data('preview-url');
-        overlayMostrar('Analizando CSV…', 'Validando maestros y armando vista previa.');
+        overlayMostrar('Analizando CSV…', 'Validando maestros, concepto y asiento.');
 
         $.ajax({
             url: url,
@@ -301,6 +429,23 @@
         $('#sp-carga-btn-generar').on('click', generar);
         $('#sp-carga-btn-cerrar').on('click', function () {
             window.location.reload();
+        });
+
+        $(document).on('click', '#sp-carga-tabla .sp-carga-toggle', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var $det = $($btn.data('target'));
+            var abierto = !$det.hasClass('d-none');
+            $det.toggleClass('d-none', abierto);
+            $btn.attr('aria-expanded', abierto ? 'false' : 'true');
+            $btn.find('i').toggleClass('fa-chevron-right', abierto).toggleClass('fa-chevron-down', !abierto);
+        });
+
+        $(document).on('click', '[data-sp-filtro]', function () {
+            filtroActual = String($(this).data('sp-filtro') || 'todas');
+            $('[data-sp-filtro]').removeClass('active');
+            $(this).addClass('active');
+            renderTablaFilas();
         });
 
         $('#modal-carga-masiva-sp').on('hidden.bs.modal', function () {

@@ -14,6 +14,8 @@ use App\Repositories\Configuracion\SalaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Ticket\TicketService;
 use App\Services\Ticket\TicketTareaComentarioUsuarioService;
+use App\Support\Ticket\TicketAlcanceCentrocostoSupport;
+use App\Support\Ticket\TicketEmpresaSupport;
 use App\Models\Ticket\Ticket_Estado;
 use App\Queries\Ticket\TicketQueryInterface;
 use App\Exports\Ticket\TicketExport;
@@ -136,7 +138,11 @@ class TicketController extends Controller
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
-        $empresa_id = old('empresa_id', session('empresa_id'));
+        $empresa_id = old('empresa_id');
+        if (! (int) $empresa_id) {
+            $salaOld = (int) old('sala_id', 0);
+            $empresa_id = $salaOld > 0 ? TicketEmpresaSupport::empresaIdDesdeSala($salaOld) : null;
+        }
 
         return view('ticket.ticket.crear', compact(
             'areadestino_query',
@@ -177,15 +183,19 @@ class TicketController extends Controller
         can('editar-ticket');
 
 		$data = $this->ticketRepository->find($id);
-        if (! \App\Support\Ticket\TicketAlcanceCentrocostoSupport::puedeAccederTicketCarga($data)) {
+        if (! TicketAlcanceCentrocostoSupport::puedeAccederTicketCarga($data)) {
             abort(403, 'No tiene acceso a este ticket.');
         }
+        $data->loadMissing('salas');
         $areadestino_query = $this->areadestinoRepository->allParaPedido();
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
         $estado_enum = Ticket_Estado::$enumEstado;
-        $empresa_query = $this->empresaRepository->allFiltrado();
-        $empresa_id = old('empresa_id', $data->empresa_id ?? session('empresa_id'));
+        $empresa_id = old('empresa_id', TicketEmpresaSupport::empresaIdDesdeTicket($data));
+        $empresa_query = TicketEmpresaSupport::asegurarEnColeccion(
+            $this->empresaRepository->allFiltrado(),
+            (int) $empresa_id
+        );
 
         return view('ticket.ticket.editar', compact(
             'data',
@@ -212,7 +222,7 @@ class TicketController extends Controller
         // Una vez creado el ticket, el usuario no puede cambiar sala/sector/área/título/comentario
         // ni la categoría/subcategoría que asignó el área técnica.
         $ticket = $this->ticketRepository->find($id);
-        if (! \App\Support\Ticket\TicketAlcanceCentrocostoSupport::puedeAccederTicketCarga($ticket)) {
+        if (! TicketAlcanceCentrocostoSupport::puedeAccederTicketCarga($ticket)) {
             abort(403, 'No tiene acceso a este ticket.');
         }
         $request->merge([
@@ -224,6 +234,8 @@ class TicketController extends Controller
             'subcategoria_ticket_id' => $ticket->subcategoria_ticket_id,
             'categoria_ticket_id' => $ticket->subcategoria_tickets?->categoria_ticket_id
                 ?? $request->input('categoria_ticket_id'),
+            'empresa_id' => $request->input('empresa_id')
+                ?: TicketEmpresaSupport::empresaIdDesdeTicket($ticket),
         ]);
 
         $this->ticketService->actualizaTicket($request, $id);

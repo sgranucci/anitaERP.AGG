@@ -76,17 +76,27 @@ final class LibroIvaDigitalComprasImportesSupport
     }
 
     /**
-     * Factura C (011-016): sin alícuotas. El total tiene que ir a no gravado
-     * para que ARCA acepte Importe Total = suma. El tipo identifica monotributo;
-     * IVA Simple no suma este campo en «Exento / no grav.».
+     * Factura C (011-016) y, en compras, también B (006-008): sin alícuotas.
+     * El residual del total va a no gravado para que ARCA acepte Importe Total = suma.
      *
      * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
      * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}
      */
     public static function equilibrarTipoC(array $registro): array
     {
+        return self::equilibrarSinAlicuotas($registro);
+    }
+
+    /**
+     * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
+     * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}
+     */
+    public static function equilibrarSinAlicuotas(array $registro): array
+    {
         $tipo = str_pad((string) ($registro['cabecera']['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT);
-        if (! in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true)) {
+        $sinAlicuota = in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true)
+            || in_array($tipo, LibroIvaDigitalComprasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
+        if (! $sinAlicuota) {
             return $registro;
         }
 
@@ -114,13 +124,14 @@ final class LibroIvaDigitalComprasImportesSupport
     }
 
     /**
-     * Tipo C: el ajuste va a no gravado (el tipo identifica monotributo).
+     * Sin alícuotas (C; en compras también B): el ajuste va a no gravado.
      * Resto: Otros tributos, para no inflar «Exento / no grav.» del cruce con Anita.
      */
     public static function campoAjusteCabecera(array $registro): string
     {
         $tipo = str_pad((string) ($registro['cabecera']['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT);
-        if (in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true)) {
+        if (in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true)
+            || in_array($tipo, LibroIvaDigitalComprasAlicuotaSupport::TIPOS_B, true)) {
             return 'no_integra_neto';
         }
 

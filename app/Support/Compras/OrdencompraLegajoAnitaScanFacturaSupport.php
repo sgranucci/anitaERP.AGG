@@ -11,6 +11,12 @@ use Illuminate\Support\Facades\Log;
  */
 final class OrdencompraLegajoAnitaScanFacturaSupport
 {
+    /** @var array<string, list<array<string, mixed>>> */
+    private static array $filasPorNrosCache = [];
+
+    /** @var array<int, list<array<string, mixed>>> */
+    private static array $facturasPorOcCache = [];
+
     /**
      * @param  list<Ordencompra>  $ocs
      * @return array<int, list<array<string, mixed>>>
@@ -18,16 +24,31 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
     public static function facturasPorOcs(iterable $ocs): array
     {
         $porClave = [];
+        $pendientes = [];
         foreach ($ocs as $oc) {
+            $ocId = (int) $oc->id;
+            if ($ocId > 0 && array_key_exists($ocId, self::$facturasPorOcCache)) {
+                continue;
+            }
             $nro = (int) preg_replace('/\D+/', '', (string) $oc->numeroordencompra);
             $emp = self::empresaAnitaId($oc);
             if ($nro <= 0 || $emp <= 0) {
+                if ($ocId > 0) {
+                    self::$facturasPorOcCache[$ocId] = [];
+                }
                 continue;
             }
-            $porClave[$emp.'|'.$nro] = (int) $oc->id;
+            $porClave[$emp.'|'.$nro] = $ocId;
+            $pendientes[] = $oc;
         }
         if ($porClave === []) {
-            return [];
+            $out = [];
+            foreach ($ocs as $oc) {
+                $ocId = (int) $oc->id;
+                $out[$ocId] = self::$facturasPorOcCache[$ocId] ?? [];
+            }
+
+            return $out;
         }
 
         $nros = array_values(array_unique(array_map(
@@ -35,7 +56,9 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
             array_keys($porClave)
         )));
         $filas = self::listarScanFactura($nros);
-        $out = [];
+        foreach ($porClave as $ocId) {
+            self::$facturasPorOcCache[$ocId] = self::$facturasPorOcCache[$ocId] ?? [];
+        }
         foreach ($filas as $fila) {
             $emp = (int) ($fila['iempresaid'] ?? 0);
             $nro = (int) ($fila['iotid'] ?? 0);
@@ -44,12 +67,22 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
             if ($ocId === null || $docId <= 0) {
                 continue;
             }
-            $out[$ocId][] = [
+            $numero = self::numero($fila);
+            $tipoGen = \App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport::normalizar(
+                (string) ($fila['ctipo'] ?? 'FC')
+            );
+            $tipoLabel = OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipoGen);
+            $etiqueta = OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipoGen, $numero);
+            self::$facturasPorOcCache[$ocId][] = [
                 'id' => 'anita-'.$docId,
                 'origen' => 'anita',
                 'origen_label' => PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA),
                 'documento_id' => $docId,
-                'etiqueta' => self::etiqueta($fila),
+                'tipo' => $tipoGen,
+                'tipo_label' => $tipoLabel,
+                'exige_com' => OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipoGen),
+                'numero' => $etiqueta,
+                'etiqueta' => $etiqueta,
                 'fecha' => self::fecha($fila['ifecha'] ?? ''),
                 'total' => null,
                 'estado' => PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA),
@@ -62,6 +95,12 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
             ];
         }
 
+        $out = [];
+        foreach ($ocs as $oc) {
+            $ocId = (int) $oc->id;
+            $out[$ocId] = self::$facturasPorOcCache[$ocId] ?? [];
+        }
+
         return $out;
     }
 
@@ -70,7 +109,12 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
      */
     public static function facturasDeOc(Ordencompra $oc): array
     {
-        return self::facturasPorOcs([$oc])[(int) $oc->id] ?? [];
+        $ocId = (int) $oc->id;
+        if ($ocId > 0 && array_key_exists($ocId, self::$facturasPorOcCache)) {
+            return self::$facturasPorOcCache[$ocId];
+        }
+
+        return self::facturasPorOcs([$oc])[$ocId] ?? [];
     }
 
     public static function rutaPdf(int $documentoId): ?string
@@ -151,6 +195,11 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         }
 
         try {
+            $cacheKey = implode(',', $nrosOc).'|'.(int) ($documentoId ?? 0);
+            if (array_key_exists($cacheKey, self::$filasPorNrosCache)) {
+                return self::$filasPorNrosCache[$cacheKey];
+            }
+
             $raw = (new ApiAnita())->apiCall([
                 'acc' => 'list',
                 'sistema' => 'base_admin',
@@ -162,7 +211,7 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         } catch (\Throwable $e) {
             Log::warning('bandeja.anita_scan_factura', ['error' => $e->getMessage()]);
 
-            return [];
+            return self::$filasPorNrosCache[$cacheKey ?? ''] = [];
         }
 
         $filas = ApiAnita::decodificarListaFilas(is_string($raw) ? $raw : json_encode($raw));
@@ -171,22 +220,21 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
             $out[] = (array) $fila;
         }
 
-        return $out;
+        return self::$filasPorNrosCache[$cacheKey] = $out;
     }
 
     /** @param  array<string, mixed>  $fila */
-    private static function etiqueta(array $fila): string
+    private static function numero(array $fila): string
     {
         $letra = trim((string) ($fila['cletra'] ?? ''));
         $suc = (int) ($fila['isucursal'] ?? 0);
         $nro = (int) ($fila['inumero'] ?? 0);
 
         return trim(sprintf(
-            '%s %04d-%08d (%s)',
+            '%s %04d-%08d',
             $letra !== '' ? $letra : 'FC',
             $suc,
-            $nro,
-            PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA)
+            $nro
         ));
     }
 

@@ -14,6 +14,7 @@ use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
+use App\Support\Ventas\Waitry\WaitryOpcionalesPendientesSupport;
 use App\Support\Ventas\Waitry\WaitryTotemImporteFacturaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -66,12 +67,14 @@ final class WaitryOrdenesExternasService
     }
 
     /**
-     * Completa waitry_display_id en cuenta si falta (consulta Waitry por orderId).
+     * Completa waitry_display_id en cuenta si falta, o actualiza W-/E- legacy
+     * cuando Waitry ya expone el contador numérico del monitor en display_id.
      */
     public function completarDisplayIdEnCuenta(CuentaGastronomia $cuenta): void
     {
         $actual = trim((string) ($cuenta->waitry_display_id ?? ''));
-        if ($actual !== '' && WaitryDisplayIdSupport::esIdentificadorMonitorValido($actual)) {
+        $actualEsNumerico = $actual !== '' && WaitryDisplayIdSupport::esContadorMonitorNumerico($actual);
+        if ($actualEsNumerico) {
             return;
         }
 
@@ -82,6 +85,15 @@ final class WaitryOrdenesExternasService
 
         $displayId = $this->resolverDisplayIdPorOrderId((int) $cuenta->empresa_id, $orderId);
         if ($displayId === '') {
+            return;
+        }
+
+        // Si ya hay W-… y Waitry sigue sin número de monitor, no pisar.
+        if ($actual !== '' && ! WaitryDisplayIdSupport::esContadorMonitorNumerico($displayId)) {
+            return;
+        }
+
+        if ($actual === $displayId) {
             return;
         }
 
@@ -888,11 +900,16 @@ final class WaitryOrdenesExternasService
         }
 
         $errores = [];
+        /** @var list<array{sku:string,titulo:string,cantidad:float,precio_unitario:float}> $lineasOpcionalesPendientes */
+        $lineasOpcionalesPendientes = [];
         foreach ($lineasWaitry as $ln) {
             $sku = (string) $ln['sku'];
+            $tituloLn = trim((string) ($ln['titulo'] ?? ''));
+            $cantidadLn = max(0.0001, (float) ($ln['cantidad'] ?? 1));
+            $precioLn = (float) ($ln['precio_unitario'] ?? 0);
             $articulo = $this->resolverArticuloPorCodigoWaitry($cfg, $sku);
             if ($articulo === null) {
-                $errores[] = 'SKU «'.$sku.'» ('.($ln['titulo'] ?? '').') no está en catálogo gastronomía.';
+                $errores[] = 'SKU «'.$sku.'» ('.$tituloLn.') no está en catálogo gastronomía.';
 
                 continue;
             }
@@ -900,12 +917,20 @@ final class WaitryOrdenesExternasService
             if (FormulaArticuloGastronomia::opcionalesHabilitados()) {
                 $grupos = $this->opcionalesService()->gruposOpcionalesPorArticulo($articulo);
                 if ($grupos !== []) {
-                    $msgOpc = 'SKU «'.$sku.'» ('.($ln['titulo'] ?? '').') requiere opcionales de fórmula: '
+                    $cantLabel = WaitryOpcionalesPendientesSupport::sufijoCantidad($cantidadLn);
+                    $msgOpc = 'SKU «'.$sku.'» ('.$tituloLn.')'.$cantLabel.' requiere opcionales de fórmula: '
                         .'no se importa desde Waitry. Carguelo manualmente en el POS (modal de opcionales).';
                     $errores[] = $msgOpc;
+                    $lineasOpcionalesPendientes[] = [
+                        'sku' => $sku,
+                        'titulo' => $tituloLn,
+                        'cantidad' => $cantidadLn,
+                        'precio_unitario' => $precioLn,
+                    ];
                     Log::info('waitry.item_omitido_opcionales', [
                         'waitry_order_id' => $waitryOrderId,
                         'sku' => $sku,
+                        'cantidad' => $cantidadLn,
                         'articulo_id' => (int) $articulo->id,
                         'grupos_opcionales' => count($grupos),
                     ]);
@@ -918,8 +943,8 @@ final class WaitryOrdenesExternasService
                 $this->cuentaService()->agregarLinea(
                     $cuenta,
                     (int) $articulo->id,
-                    (float) $ln['cantidad'],
-                    (float) $ln['precio_unitario'],
+                    $cantidadLn,
+                    $precioLn,
                     [],
                     0.0,
                 );
@@ -974,6 +999,7 @@ final class WaitryOrdenesExternasService
                     'ok' => true,
                     'cuenta' => $cuenta,
                     'errores' => $errores,
+                    'lineas_opcionales_pendientes' => $lineasOpcionalesPendientes,
                     'requiere_carga_opcionales_en_pos' => true,
                     'waitry_monto_cobro' => $montoWaitry,
                     'total_cuenta' => 0.,
@@ -988,6 +1014,7 @@ final class WaitryOrdenesExternasService
                 'ok' => false,
                 'error' => 'No se pudo importar ningún ítem.',
                 'errores' => $errores,
+                'lineas_opcionales_pendientes' => $lineasOpcionalesPendientes,
             ];
         }
 
@@ -996,6 +1023,7 @@ final class WaitryOrdenesExternasService
                 'waitry_order_id' => $waitryOrderId,
                 'cuenta_id' => $cuenta->id,
                 'errores' => $errores,
+                'lineas_opcionales_pendientes' => $lineasOpcionalesPendientes,
             ]);
         }
 
@@ -1010,6 +1038,7 @@ final class WaitryOrdenesExternasService
             'ok' => true,
             'cuenta' => $cuenta,
             'errores' => $errores,
+            'lineas_opcionales_pendientes' => $lineasOpcionalesPendientes,
             'waitry_monto_cobro' => $montoWaitry,
             'total_cuenta' => $totalCuenta,
             'desfasaje_totem' => $desfasajeTotem,

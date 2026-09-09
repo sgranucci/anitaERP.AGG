@@ -3710,9 +3710,13 @@ Route::post('compras/ordencompra/{id}/finalizar-legajo', 'Compras\OrdencompraCon
 Route::get('compras/ordencompra/{id}/gate-cuentas-a-pagar', 'Compras\OrdencompraController@gateCuentasAPagar')->name('ordencompra_gate_cuentas_a_pagar');
 Route::get('compras/legajos', 'Compras\OrdencompraLegajoBandejaController@index')->name('consultar_legajo_compra');
 Route::get('compras/lista-legajos/{formato?}', 'Compras\OrdencompraLegajoBandejaController@exportar')->name('listar_legajo_compra');
+Route::get('compras/legajos/seguimiento', 'Compras\OrdencompraLegajoSeguimientoController@index')->name('consultar_seguimiento_legajo_compra');
+Route::get('compras/legajos/seguimiento/{id}/ficha', 'Compras\OrdencompraLegajoSeguimientoController@ficha')->name('ficha_seguimiento_legajo_compra');
 Route::get('compras/legajos/{id}/historia', 'Compras\OrdencompraLegajoBandejaController@historia')->name('ordencompra_legajo_bandeja_historia');
 Route::get('compras/legajos/{id}/paquete', 'Compras\OrdencompraLegajoBandejaController@paquete')->name('ordencompra_legajo_bandeja_paquete');
+Route::post('compras/legajos/{id}/nota', 'Compras\OrdencompraLegajoBandejaController@guardarNota')->name('ordencompra_legajo_bandeja_nota');
 Route::post('compras/legajos/{id}/asignar-com', 'Compras\OrdencompraLegajoBandejaController@asignarCom')->name('ordencompra_legajo_bandeja_asignar_com');
+Route::post('compras/legajos/{id}/corregir-tipo-documento', 'Compras\OrdencompraLegajoBandejaController@corregirTipoDocumento')->name('ordencompra_legajo_bandeja_corregir_tipo');
 Route::get('compras/legajos/{id}/factura-pdf/{precarga}', 'Compras\OrdencompraLegajoBandejaController@verFacturaPdf')->name('ordencompra_legajo_bandeja_factura_pdf');
 Route::get('compras/legajos/{id}/factura-anita-pdf/{documento}', 'Compras\OrdencompraLegajoBandejaController@verFacturaAnitaPdf')->name('ordencompra_legajo_bandeja_factura_anita_pdf');
 Route::get('compras/legajos/{id}/com-pdf/{recepcion}', 'Compras\OrdencompraLegajoBandejaController@verComPdf')->name('ordencompra_legajo_bandeja_com_pdf');

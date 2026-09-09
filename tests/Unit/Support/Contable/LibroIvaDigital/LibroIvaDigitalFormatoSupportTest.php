@@ -2,12 +2,42 @@
 
 namespace Tests\Unit\Support\Contable\LibroIvaDigital;
 
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalArchivosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use PHPUnit\Framework\TestCase;
 
 class LibroIvaDigitalFormatoSupportTest extends TestCase
 {
+    public function test_csv_compras_omitidos_incluye_comprobante_y_motivo(): void
+    {
+        $csv = LibroIvaDigitalArchivosSupport::csvComprasOmitidos([
+            [
+                'motivo' => 'cuit_informante',
+                'motivo_texto' => 'CUIT del vendedor igual al CUIT del informante',
+                'origen' => 'anita',
+                'fecha' => '20260815',
+                'tipo_comprobante' => '001',
+                'punto_venta' => 1,
+                'numero_comprobante' => 124233,
+                'letra' => 'A',
+                'tipo_abrev' => 'FAC',
+                'proveedor_codigo' => '000123',
+                'numero_identificacion' => '30682403671',
+                'nombre_vendedor' => 'BIYEMAS S.A.',
+                'importe_total' => 1500.5,
+            ],
+        ]);
+
+        $this->assertStringContainsString('INFORME', LibroIvaDigitalArchivosSupport::COMPRAS_OMITIDOS);
+        $this->assertStringContainsString('Motivo;Origen;Fecha', $csv);
+        $this->assertStringContainsString('15/08/2026', $csv);
+        $this->assertStringContainsString('BIYEMAS S.A.', $csv);
+        $this->assertStringContainsString('30682403671', $csv);
+        $this->assertStringContainsString('124233', $csv);
+        $this->assertStringContainsString('cuit_informante', $csv);
+    }
+
     public function test_compras_cbte_en_pesos_no_reconvierte_dolares(): void
     {
         $cabecera = LibroIvaDigitalMapeosSupport::cabeceraImportesEnPesos([

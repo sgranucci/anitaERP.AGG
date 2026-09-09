@@ -37,6 +37,7 @@ use App\Support\Ventas\GastronomiaCuentacajaIconoSupport;
 use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
+use App\Support\Ventas\Waitry\WaitryOpcionalesPendientesSupport;
 use App\Support\Ventas\Waitry\WaitryTotemImporteFacturaSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\Gastronomia\GastronomiaAnularCuentaPendienteClaveSupport;
@@ -369,7 +370,19 @@ class GastronomiaProcesoFacturacionController extends Controller
         }
 
         $erroresImport = $resultado['errores'] ?? [];
-        $skusOpcionalesPendientes = $this->extraerSkusOpcionalesPendientesDesdeErroresWaitry($erroresImport);
+        $lineasOpcionalesPendientes = WaitryOpcionalesPendientesSupport::normalizarLineas(
+            is_array($resultado['lineas_opcionales_pendientes'] ?? null)
+                ? $resultado['lineas_opcionales_pendientes']
+                : []
+        );
+        if ($lineasOpcionalesPendientes === []) {
+            $lineasOpcionalesPendientes = WaitryOpcionalesPendientesSupport::desdeErrores($erroresImport);
+        }
+        $skusOpcionalesPendientes = array_values(array_unique(array_map(
+            static fn (array $ln): string => $ln['sku'],
+            $lineasOpcionalesPendientes
+        )));
+        $etiquetasOpcionales = WaitryOpcionalesPendientesSupport::etiquetasParaAviso($lineasOpcionalesPendientes);
         $soloOpcionalesEnPos = (bool) ($resultado['requiere_carga_opcionales_en_pos'] ?? false);
         $desfasajeTotem = (bool) ($resultado['desfasaje_totem'] ?? false);
         $montoWaitry = round((float) ($resultado['waitry_monto_cobro'] ?? 0), 2);
@@ -383,8 +396,8 @@ class GastronomiaProcesoFacturacionController extends Controller
                 $identificadorPapelito,
             );
         } elseif ($erroresImport !== []) {
-            $warn = $skusOpcionalesPendientes !== []
-                ? 'Faltan en la cuenta (opcionales): '.implode(', ', $skusOpcionalesPendientes)
+            $warn = $etiquetasOpcionales !== []
+                ? 'Faltan en la cuenta (opcionales): '.implode(', ', $etiquetasOpcionales)
                     .'. Se abrirá el asistente para cargarlos.'
                 : 'Importación parcial: algunos ítems no se cargaron (ver detalle).';
         }
@@ -395,6 +408,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'cuenta' => $resultado['cuenta'],
             'errores' => $erroresImport,
             'skus_opcionales_pendientes' => $skusOpcionalesPendientes,
+            'lineas_opcionales_pendientes' => $lineasOpcionalesPendientes,
             'requiere_carga_opcionales_en_pos' => $soloOpcionalesEnPos,
             'waitry_monto_cobro' => $montoWaitry,
             'total_cuenta' => $totalCuenta,
@@ -1705,30 +1719,16 @@ class GastronomiaProcesoFacturacionController extends Controller
     }
 
     /**
+     * @deprecated Usar {@see WaitryOpcionalesPendientesSupport::desdeErrores()}
+     *
      * @param  list<string>  $errores
      * @return list<string>
      */
     private function extraerSkusOpcionalesPendientesDesdeErroresWaitry(array $errores): array
     {
-        $skus = [];
-        foreach ($errores as $err) {
-            $err = trim((string) $err);
-            if ($err === '') {
-                continue;
-            }
-            $esOpcional = str_contains($err, 'requiere opcionales de fórmula')
-                || str_contains($err, 'modal de opcionales')
-                || str_contains($err, 'Debe seleccionar opcional');
-            if (! $esOpcional) {
-                continue;
-            }
-            if (preg_match('/SKU «([^»]+)»/u', $err, $m)) {
-                $skus[] = $m[1];
-            } elseif (preg_match('/^([A-Za-z0-9]+):\s*Debe seleccionar opcional/u', $err, $m)) {
-                $skus[] = $m[1];
-            }
-        }
-
-        return array_values(array_unique($skus));
+        return array_values(array_unique(array_map(
+            static fn (array $ln): string => $ln['sku'],
+            WaitryOpcionalesPendientesSupport::desdeErrores($errores)
+        )));
     }
 }

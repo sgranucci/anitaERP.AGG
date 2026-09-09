@@ -5,6 +5,9 @@ namespace App\Support\Solicitudpago;
 /**
  * Parseo del CSV de carga masiva Anita (p-cargasolpm.c).
  * Separadores: coma o punto y coma. Pares cuenta/importe desde col 11.
+ *
+ * Si hay fila de encabezado con "Cuenta Haber" / "Cuenta Debe", se usa eso
+ * para el D/H de cada par (p. ej. SUSS: 1 Haber + N Debe).
  */
 final class SolicitudpagoCargaMasivaCsvParser
 {
@@ -23,7 +26,7 @@ final class SolicitudpagoCargaMasivaCsvParser
      *   detalle: string,
      *   fecha_vencimiento: ?string,
      *   monto: float,
-     *   cuentas: list<array{cuenta_codigo: string, monto: float, debe_haber: string}>
+     *   cuentas: list<array{cuenta_codigo: string, monto: float, debe_haber: ?string}>
      * }>
      */
     public function parsear(string $contenido): array
@@ -31,10 +34,17 @@ final class SolicitudpagoCargaMasivaCsvParser
         $lineas = preg_split("/\r\n|\n|\r/", $contenido) ?: [];
         $out = [];
         $nro = 0;
+        /** @var list<?string>|null $hintsDh */
+        $hintsDh = null;
 
         foreach ($lineas as $raw) {
             $nro++;
             if ($raw === '' || trim($raw) === '') {
+                continue;
+            }
+
+            if ($this->esEncabezado($raw)) {
+                $hintsDh = $this->extraerHintsDhDesdeEncabezado($raw);
                 continue;
             }
 
@@ -53,8 +63,10 @@ final class SolicitudpagoCargaMasivaCsvParser
 
             $fechaVto = $this->parseFechaVto($this->extraeCampo(9, $raw));
             $monto = $this->parseMonto($this->extraeCampo(10, $raw));
-            $cuentas = $this->parseCuentas($raw);
+            $cuentas = $this->parseCuentas($raw, $hintsDh);
 
+            // Anita: si el 1er importe de cuenta viene en 0, asume una sola imputación
+            // (Haber + Debe) con el monto de cabecera.
             if ($cuentas !== [] && abs(($cuentas[0]['monto'] ?? 0.0)) < 0.0000001) {
                 $limite = min(2, count($cuentas));
                 $cuentas = array_slice($cuentas, 0, $limite);
@@ -107,10 +119,58 @@ final class SolicitudpagoCargaMasivaCsvParser
         return rtrim($valor, "\r\n");
     }
 
+    private function esEncabezado(string $buffer): bool
+    {
+        $c1 = mb_strtolower(trim($this->extraeCampo(1, $buffer)));
+        if ($c1 === '' || is_numeric($c1)) {
+            return false;
+        }
+
+        return str_starts_with($c1, 'empresa');
+    }
+
     /**
-     * @return list<array{cuenta_codigo: string, monto: float, debe_haber: string}>
+     * @return list<?string> D/H por cada par cuenta/importe (null si no se reconoce)
      */
-    private function parseCuentas(string $buffer): array
+    private function extraerHintsDhDesdeEncabezado(string $buffer): array
+    {
+        $hints = [];
+        $offCampo = 0;
+
+        do {
+            $labelCuenta = trim($this->extraeCampo(11 + $offCampo, $buffer));
+            $labelImporte = trim($this->extraeCampo(12 + $offCampo, $buffer));
+            if ($labelCuenta === '' && $labelImporte === '') {
+                break;
+            }
+
+            $hints[] = $this->inferirDhDesdeTexto($labelCuenta.' '.$labelImporte);
+            $offCampo += 2;
+        } while ($offCampo < 200);
+
+        return $hints;
+    }
+
+    private function inferirDhDesdeTexto(string $texto): ?string
+    {
+        $t = mb_strtolower($texto);
+        $tieneHaber = str_contains($t, 'haber');
+        $tieneDebe = str_contains($t, 'debe');
+        if ($tieneHaber && ! $tieneDebe) {
+            return 'H';
+        }
+        if ($tieneDebe && ! $tieneHaber) {
+            return 'D';
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<?string>|null  $hintsDh
+     * @return list<array{cuenta_codigo: string, monto: float, debe_haber: ?string}>
+     */
+    private function parseCuentas(string $buffer, ?array $hintsDh): array
     {
         $cuentas = [];
         $offCampo = 0;
@@ -126,7 +186,11 @@ final class SolicitudpagoCargaMasivaCsvParser
             $codigoDigits = $codigoDigits !== '' ? (string) (int) $codigoDigits : '0';
 
             $monto = $this->parseMonto($this->extraeCampo(12 + $offCampo, $buffer));
-            $dh = (count($cuentas) % 2 === 0) ? 'H' : 'D';
+            $idx = count($cuentas);
+            $dh = null;
+            if (is_array($hintsDh) && array_key_exists($idx, $hintsDh)) {
+                $dh = $hintsDh[$idx];
+            }
 
             $cuentas[] = [
                 'cuenta_codigo' => $codigoDigits,

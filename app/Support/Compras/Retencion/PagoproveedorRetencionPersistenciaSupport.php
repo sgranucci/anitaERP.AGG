@@ -10,6 +10,8 @@ use App\Support\Compras\Retencion\RetencionesPagoResultado;
 /**
  * Persiste el resultado del orquestador en pagoproveedor_retencion (fuente SICORE ERP)
  * y asigna nro_certificado vía numeradores Anita (retgan/retiva/retsmov/retibr.fc).
+ * La réplica a retmov/retibrmov/retimov/retsmov corre en
+ * {@see \App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport}.
  */
 final class PagoproveedorRetencionPersistenciaSupport
 {

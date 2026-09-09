@@ -208,6 +208,14 @@ final class ComprobanteProveedorPdfIaService
             )
         );
 
+        $filtroNegativos = ComprobanteProveedorConceptosIvaCoherenciaSupport::descartarLineasNegativasSiTotalYaCuadra(
+            $lineasConcepto,
+            (float) ($resuelto['total'] ?? 0)
+        );
+        if ($filtroNegativos['descartó']) {
+            $lineasConcepto = $filtroNegativos['lineas'];
+        }
+
         [$letra, $sucursal, $numeroFactura] = $this->resolverLetraSucursalNumero($resuelto);
 
         $tipoAutorizacion = ComprobanteProveedorTipoAutorizacion::normalizar(
@@ -451,8 +459,19 @@ final class ComprobanteProveedorPdfIaService
             $conceptosPermitidos
         );
 
-        $totalAsignado = round(array_sum(array_column($conceptosAsignados, 'importe')), 2);
         $totalFactura = $this->parsearImporte($extraido['total'] ?? null) ?? 0.0;
+        $filtroNegativos = ComprobanteProveedorConceptosIvaCoherenciaSupport::descartarLineasNegativasSiTotalYaCuadra(
+            $conceptosAsignados,
+            $totalFactura,
+            ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA,
+            'importe'
+        );
+        if ($filtroNegativos['descartó']) {
+            $conceptosAsignados = $filtroNegativos['lineas'];
+            $advertencias[] = 'Se omitió importe negativo porque la suma de conceptos ya cierra con el total de la factura.';
+        }
+
+        $totalAsignado = round(array_sum(array_column($conceptosAsignados, 'importe')), 2);
         $subtotalFactura = $this->parsearImporte($extraido['subtotal'] ?? null) ?? 0.0;
 
         // Si la cabecera vino mal casteada (ej. (float)"1.183.650,16" → 1.18), reconstruir desde conceptos.
