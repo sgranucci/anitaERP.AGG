@@ -10,11 +10,9 @@ use App\Support\Configuracion\ParametroSistemaSupport;
  * NC/ND FCE en facturación mostrador (no POS gastronomía/estacionamiento).
  *
  * ARCA (MTXCA):
- * - Origen FCE → siempre NCE/NDE (203/208/…): un CbteAsoc FCE + CUIT (209/210)
- *   + opcional 22. El tope MiPyME (obs. 151/152) aplica a emitir FCE, no a la NC.
- * - NC 003/008 con origen FAC: CbteAsoc FAC sin CUIT (204). Periodo solo si no hay puntual.
- * - NC 003 no puede asociar FCE (obs. 213) ni alcanzar con solo período si emisor/receptor
- *   son candidatos FCE.
+ * - NCE/NDE (202/203/…) → FCE asociada obligatoria + CUIT + opcional 22 (obs. 212/209/329).
+ * - NC/ND FE (003/008/…) → asociación optativa; vacío = periodoComprobantesAsociados.
+ * - El tope MiPyME (151/152) aplica a emitir FCE, no a la NC.
  */
 final class ArcaFceNcMostradorSupport
 {
@@ -47,6 +45,26 @@ final class ArcaFceNcMostradorSupport
     public static function esTipoNcNdFce(int $tipoAfip): bool
     {
         return in_array($tipoAfip, self::TIPOS_NC_ND_FCE, true);
+    }
+
+    /**
+     * Código AFIP numérico desde tipotransaccion.codigo (puede traer basura no numérica).
+     */
+    public static function codigoAfipDesdeTipo(?object $tipotransaccion): int
+    {
+        if (! is_object($tipotransaccion)) {
+            return 0;
+        }
+
+        return (int) preg_replace('/\D+/', '', (string) ($tipotransaccion->codigo ?? ''));
+    }
+
+    /**
+     * NCE/NDE: asociación FCE obligatoria. NC/ND FE: optativa.
+     */
+    public static function exigeAsociacionFce(int $codigoTipoAfip): bool
+    {
+        return self::esTipoNcNdFce($codigoTipoAfip);
     }
 
     /**

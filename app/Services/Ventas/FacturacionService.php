@@ -2881,34 +2881,42 @@ class FacturacionService
 
 		// Solo facturación mostrador (no POS gastronomía/estacionamiento AGG).
 		// NCG/NCE en AGG pueden tener signo S; manda operacion=C.
+		// NCE/NDE: FCE asociada obligatoria. NC/ND FE: asociación optativa (vacío → período).
 		$esMostradorNcFce = $tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data);
 		$forzarNcNdFce = false;
 		$fceAnulacionSn = null;
 		$comprobantesAsociadosMostrador = null;
 		if ($esMostradorNcFce) {
 			$refCodigo = trim((string) ($data['fce_comprobante_referenciado'] ?? ''));
-			if ($refCodigo === '' && is_string($referenciaFactura)) {
-				$refCodigo = trim($referenciaFactura);
-			}
-			$asocParsed = ArcaFceNcMostradorSupport::parsearCodigoComprobante($refCodigo);
-			$origenEsFce = ArcaFceNcMostradorSupport::facturaEsFce($factura)
-				|| ($asocParsed !== null && ArcaFceNcMostradorSupport::esTipoFacturaFce((int) $asocParsed['tipo']));
+			$asocParsed = $refCodigo !== ''
+				? ArcaFceNcMostradorSupport::parsearCodigoComprobante($refCodigo)
+				: null;
+			$codigoTipoSeleccionado = ArcaFceNcMostradorSupport::codigoAfipDesdeTipo($tipotransaccion);
+			$exigeFce = ArcaFceNcMostradorSupport::exigeAsociacionFce($codigoTipoSeleccionado);
 
-			if ($origenEsFce) {
-				if ($asocParsed === null || ! ArcaFceNcMostradorSupport::esTipoFacturaFce((int) $asocParsed['tipo'])) {
-					return ['error' => 'Debe indicar el comprobante FCE referenciado (ej. FCE A-00008-00001234).'];
+			if ($refCodigo === '') {
+				if ($exigeFce) {
+					return ['error' => 'La NCE/NDE requiere un comprobante FCE asociado (obs. ARCA 212).'];
 				}
+				// NC/ND FE sin asociación: no informar CbteAsoc; MTXCA usa periodoComprobantesAsociados.
+				$comprobantesAsociadosMostrador = [];
+			} elseif ($asocParsed === null) {
+				return ['error' => 'Comprobante referenciado inválido (ej. FCE A-00008-00001234 o FAC A-00008-00001234).'];
+			} elseif (ArcaFceNcMostradorSupport::esTipoFacturaFce((int) $asocParsed['tipo'])) {
 				$referenciaFactura = $refCodigo;
 				$comprobantesAsociadosMostrador = [$asocParsed];
-				// ARCA 212: FCE solo se ajusta con NCE/NDE + CbteAsoc FCE.
-				// El tope MiPyME (151/152) aplica a emitir FCE, no a la NC sobre FCE.
-				// NC 003 + FCE o solo período → 213 (emisor/receptor candidatos FCE).
 				$forzarNcNdFce = true;
 				$fceAnulacionSn = ArcaFceNcMostradorSupport::normalizarAnulacion($data['fce_anulacion'] ?? null);
 				if ($fceAnulacionSn === null) {
-					return ['error' => 'Debe indicar si la NC es anulación de FCE rechazada (S) o no (N) — opcional ARCA 22.'];
+					return ['error' => 'Indique anulación S/N (opcional ARCA 22).'];
 				}
 				$leyenda = ArcaFceNcMostradorSupport::anexarMarcaAnulacionLeyenda((string) $leyenda, $fceAnulacionSn);
+			} elseif ($exigeFce) {
+				return ['error' => 'La NCE/NDE requiere asociar una FCE (no FAC ni otro FE).'];
+			} else {
+				// FAC u otro FE sobre NC 003/…: asociado puntual sin forzar NCE.
+				$referenciaFactura = $refCodigo;
+				$comprobantesAsociadosMostrador = [$asocParsed];
 			}
 		}
 
@@ -3099,15 +3107,17 @@ class FacturacionService
 					$impuestos = [];
 					$this->facturaelectronicaService->armaImpuesto($conceptosTotales, $impuestos);
 
-					// NC/ND: asociar factura origen. Mostrador FCE: filtrar según tipo ARCA
-					// (NCE→FCE+CUIT; NC 003→sin FCE, período — obs. 213/204/209).
-					if (is_array($comprobantesAsociadosMostrador) && $comprobantesAsociadosMostrador !== []) {
-						$comprobantesAsociados = ArcaFceNcMostradorSupport::asociadosParaArca(
-							$comprobantesAsociadosMostrador,
-							(int) $codigoTipoTransaccion,
-							$empresa,
-							$factura
-						);
+					// NC mostrador: [] = sin asociación → período ARCA; lista = CbteAsoc.
+					// null = otros flujos (usar factura origen si hay).
+					if (is_array($comprobantesAsociadosMostrador)) {
+						$comprobantesAsociados = $comprobantesAsociadosMostrador === []
+							? []
+							: ArcaFceNcMostradorSupport::asociadosParaArca(
+								$comprobantesAsociadosMostrador,
+								(int) $codigoTipoTransaccion,
+								$empresa,
+								$factura
+							);
 					} else {
 						$comprobantesAsociados = $this->armaComprobantesAsociadosDesdeFactura(
 							$factura,
@@ -3179,7 +3189,20 @@ class FacturacionService
 							'numeroordenventa' => '',
 							'items' => $dataFactura
 					];
-					if ($fceAnulacionSn !== null) {
+					// NCE/NDE: opcional 22 (obs. 329) y sin período (obs. 159).
+					if (ArcaFceNcMostradorSupport::esTipoNcNdFce((int) $codigoTipoTransaccion)) {
+						if ($fceAnulacionSn === null) {
+							$fceAnulacionSn = ArcaFceNcMostradorSupport::normalizarAnulacion($data['fce_anulacion'] ?? null);
+						}
+						if ($fceAnulacionSn === null) {
+							return ['error' => 'Indique anulación S/N (opcional ARCA 22).'];
+						}
+						$dataCAE['opcionales'] = [
+							ArcaFceDatosAdicionalesSupport::opcionalAnulacion($fceAnulacionSn),
+						];
+						$dataCAE['fechaasignaciondesde'] = null;
+						$dataCAE['fechaasignacionhasta'] = null;
+					} elseif ($fceAnulacionSn !== null) {
 						$dataCAE['opcionales'] = [
 							ArcaFceDatosAdicionalesSupport::opcionalAnulacion($fceAnulacionSn),
 						];

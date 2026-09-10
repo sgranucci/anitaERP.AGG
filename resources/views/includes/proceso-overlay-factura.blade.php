@@ -3,7 +3,7 @@
      role="status"
      aria-live="assertive"
      aria-hidden="true"
-     style="position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 2050; display: flex; align-items: center; justify-content: center; padding: 1.25rem; pointer-events: all;">
+     style="position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 2050; display: none; align-items: center; justify-content: center; padding: 1.25rem; pointer-events: none;">
     <div class="alert alert-warning shadow-lg mb-0 text-center px-4 py-3 border border-warning"
          style="max-width: 28rem; min-width: 20rem; width: 92vw; font-size: 1rem;">
         <div id="factura-procesando-spinner">

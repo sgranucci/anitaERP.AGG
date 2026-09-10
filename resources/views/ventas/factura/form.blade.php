@@ -138,6 +138,7 @@
 					@php
 						$conceptoTipo = $value->conceptoVenta ?? null;
 						$attrsConcepto = 'data-abreviatura="'.e((string) ($value->abreviatura ?? '')).'"'
+							.' data-codigo="'.e((string) ($value->codigo ?? '')).'"'
 							.' data-operacion="'.e((string) ($value->operacion ?? '')).'"'
 							.' data-usa-concepto="'.(($value->usaConceptoVentaEnFacturador() ?? false) ? '1' : '0').'"'
 							.' data-concepto-venta-id="'.e((string) ($value->concepto_venta_id ?? '')).'"'
@@ -203,7 +204,7 @@
 			data-nc-origen-fce="{{ $ncOrigenEsFce ? '1' : '0' }}"
 			data-limite-fce="{{ \App\Support\Configuracion\ParametroSistemaSupport::limiteFce() }}">
 			<div class="form-group row tm-fce-referencia-campo">
-				<label for="fce_comprobante_referenciado" class="col-lg-3 control-label text-right pr-2 requerido" title="Comprobante a asociar en ARCA (CbteAsoc)">Comprobante ref.</label>
+				<label for="fce_comprobante_referenciado" id="fce_comprobante_referenciado_label" class="col-lg-3 control-label text-right pr-2" title="Obligatorio en NCE/NDE. En NC/ND FE es optativo (vac&iacute;o = per&iacute;odo ARCA).">Comprobante ref.</label>
 				<div class="col-lg-8">
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<button type="button" title="Consulta comprobantes del cliente (F1)" class="btn-accion-tabla consultafacturareferencia tooltipsC flex-shrink-0">
@@ -212,16 +213,15 @@
 						<input type="text" name="fce_comprobante_referenciado" id="fce_comprobante_referenciado"
 							class="form-control"
 							value="{{ $fceComprobanteReferenciado }}"
-							placeholder="FAC A-00008-00001234"
-							title="C&oacute;digo del comprobante; Enter valida; F1 consulta"
-							autocomplete="off"
-							@if ($ncOrigenEsFce) required @endif>
+							placeholder="FCE A-00008-00001234"
+							title="NCE: FCE obligatoria. NC: opcional (vac&iacute;o = per&iacute;odo ARCA)."
+							autocomplete="off">
 					</div>
 				</div>
 			</div>
 			<div class="form-group row" id="fce-anulacion-wrap">
-				<label for="fce_anulacion" class="col-lg-3 control-label text-right pr-2 requerido" id="fce_anulacion_label" title="Obligatorio en NCE (ARCA opcional 22). S solo si la FCE fue rechazada en el Registro.">Anulaci&oacute;n FCE</label>
-				<select name="fce_anulacion" id="fce_anulacion" class="col-lg-8 form-control" data-fouc @if ($ncOrigenEsFce) required @endif>
+				<label for="fce_anulacion" class="col-lg-3 control-label text-right pr-2" id="fce_anulacion_label" title="Obligatorio si asocia FCE o emite NCE (opcional ARCA 22).">Anulaci&oacute;n FCE</label>
+				<select name="fce_anulacion" id="fce_anulacion" class="col-lg-8 form-control" data-fouc>
 					<option value="">-- Seleccionar --</option>
 					<option value="N" @if ($fceAnulacion === 'N') selected @endif>N — No es anulación</option>
 					<option value="S" @if ($fceAnulacion === 'S') selected @endif>S — Anulación FCE rechazada</option>

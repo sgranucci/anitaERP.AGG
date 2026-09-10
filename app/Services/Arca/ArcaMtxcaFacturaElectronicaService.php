@@ -1010,6 +1010,9 @@ class ArcaMtxcaFacturaElectronicaService
     }
 
     /**
+     * Periodo de asociados: solo NC/ND de FE común (obs. 160).
+     * NCE/NDE MiPyME (202/203/207/208) no admiten período (obs. 159).
+     *
      * @return array{fechaDesde: string, fechaHasta: string}|null
      */
     private function buildPeriodoAsocIfApplies(int $cbteTipo, array $datos): ?array
@@ -1019,7 +1022,7 @@ class ArcaMtxcaFacturaElectronicaService
         if ($desde <= 0 || count($asoc) > 0) {
             return null;
         }
-        if (! in_array($cbteTipo, [2, 3, 7, 8, 202, 203, 207, 208, 53], true)) {
+        if (! in_array($cbteTipo, [2, 3, 7, 8, 52, 53], true)) {
             return null;
         }
 

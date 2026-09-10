@@ -57,4 +57,13 @@ final class ArcaFceNcMostradorSupportTest extends TestCase
         self::assertSame(1, $asocs[0]['tipo']);
         self::assertArrayNotHasKey('cuit', $asocs[0]);
     }
+
+    public function test_nce_exige_asociacion_fce_nc_no(): void
+    {
+        self::assertTrue(ArcaFceNcMostradorSupport::exigeAsociacionFce(203));
+        self::assertTrue(ArcaFceNcMostradorSupport::exigeAsociacionFce(202));
+        self::assertFalse(ArcaFceNcMostradorSupport::exigeAsociacionFce(3));
+        self::assertFalse(ArcaFceNcMostradorSupport::exigeAsociacionFce(8));
+        self::assertSame(203, ArcaFceNcMostradorSupport::codigoAfipDesdeTipo((object) ['codigo' => '203']));
+    }
 }

@@ -901,7 +901,7 @@ class ArcaWsfeFacturaElectronicaService
         if ($desde <= 0 || count($asoc) > 0) {
             return null;
         }
-        if (! in_array($cbteTipo, [3, 8, 203, 53], true)) {
+        if (! in_array($cbteTipo, [3, 8, 52, 53], true)) {
             return null;
         }
 

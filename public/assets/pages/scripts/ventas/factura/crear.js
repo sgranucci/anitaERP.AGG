@@ -93,10 +93,14 @@
 			if (on) {
 				el.classList.remove('d-none');
 				el.style.display = 'flex';
+				el.style.pointerEvents = 'all';
 				el.setAttribute('aria-hidden', 'false');
 			} else {
 				el.classList.add('d-none');
-				el.style.display = '';
+				// Forzar oculto: el markup trae display:flex inline y sin esto
+				// el overlay puede seguir capturando clics tras un error ARCA.
+				el.style.display = 'none';
+				el.style.pointerEvents = 'none';
 				el.setAttribute('aria-hidden', 'true');
 			}
 		}
@@ -213,7 +217,11 @@
 				overlayActivo = false;
 				onResultadoCerrar = null;
 				$('.factura-carga-bloqueable').filter('button, .btn, input[type="submit"], input[type="button"]').prop('disabled', false);
+				$('[data-padron-accion-factura]').prop('disabled', false).removeClass('disabled');
 				mostrarOverlay(false);
+				if (typeof window.liberarPantallaModalesBloqueados === 'function') {
+					window.liberarPantallaModalesBloqueados();
+				}
 			},
 			mostrarResultado: function (opciones) {
 				if (overlayTimer) {
@@ -386,15 +394,9 @@
 			return;
 		}
 
-		if (typeof validarPadronOperacionAntesSubmitForm === 'function') {
-			var evPadron = { preventDefault: function () {}, target: form, defaultPrevented: false };
-			if (validarPadronOperacionAntesSubmitForm(evPadron) === false) {
-				if (window.FacturaProcesoOverlay) {
-					window.FacturaProcesoOverlay.detener();
-				}
-				return;
-			}
-		}
+		// El padrón ARCA se valida solo en validarSubmitFacturaConOverlay / onsubmit.
+		// Revalidarlo acá reentraba con trigger('submit') y tras un error ARCA
+		// el Grabar quedaba sin respuesta (overlay/huérfano o bucle de submit).
 
 		iniciarOverlayProcesoFactura();
 
@@ -444,18 +446,14 @@
 	}
 
 	window.validarSubmitFacturaConOverlay = function (event) {
-		var ok = true;
-		if (typeof validarPadronOperacionAntesSubmitForm === 'function') {
-			ok = validarPadronOperacionAntesSubmitForm(event) !== false;
-		}
-		if (!ok) {
-			if (window.FacturaProcesoOverlay) {
-				window.FacturaProcesoOverlay.detener();
-			}
-			return false;
-		}
 		if (event && typeof event.preventDefault === 'function') {
 			event.preventDefault();
+		}
+		// false = bloqueado o re-disparo async con omitir; no detener overlay acá
+		// (el re-disparo anidado puede estar iniciando el AJAX en el mismo tick).
+		if (typeof validarPadronOperacionAntesSubmitForm === 'function'
+			&& validarPadronOperacionAntesSubmitForm(event) === false) {
+			return false;
 		}
 		enviarComprobanteFacturaMostradorAjax();
 		return false;
@@ -575,9 +573,15 @@
 		});
 
 		if (!flError) {
-			enviarComprobanteFacturaMostradorAjax();
+			// Pasar por onsubmit: padrón una sola vez, luego AJAX con overlay.
+			var form = document.getElementById('formgeneral');
+			if (form) {
+				$(form).trigger('submit');
+			}
 		}
 	}
+
+	window.subm = subm;
 
 	function completarCliente_Entrega(cliente_id){
         var loc_id;
@@ -2352,18 +2356,19 @@
 		return op === 'C';
 	}
 
+	function facturaTipoCodigoAfipMostrador() {
+		var raw = ($('#tipotransaccion_id option:selected').data('codigo') || '').toString();
+		var digits = raw.replace(/\D+/g, '');
+		return digits ? parseInt(digits, 10) : 0;
+	}
+
+	function facturaTipoEsNcNdFceMostrador() {
+		var cod = facturaTipoCodigoAfipMostrador();
+		return [202, 203, 207, 208, 212, 213].indexOf(cod) >= 0;
+	}
+
 	function fceNcMostradorRefEsFce(ref) {
 		return /^FCE\s+[A-Z]-/i.test($.trim(ref || ''));
-	}
-
-	function facturaTotalComprobanteMostrador() {
-		var t = parseFloat($('#montototalfactura').val() || '0');
-		return isNaN(t) ? 0 : t;
-	}
-
-	/** NCE siempre que el origen/ref sea FCE (ARCA 212); opcional 22 obligatorio. */
-	function fceNcEmiteNcePorMonto() {
-		return true;
 	}
 
 	window.actualizarFceNcMostrador = function () {
@@ -2373,18 +2378,16 @@
 		}
 		var origenFce = String($wrap.attr('data-nc-origen-fce') || '0') === '1';
 		var ref = $('#fce_comprobante_referenciado').val() || '';
+		var esNce = facturaTipoEsNcNdFceMostrador();
 		var mostrar = origenFce || facturaTipoEsNotaCreditoMostrador();
-		var estabaOculto = $wrap.hasClass('d-none');
 		$wrap.toggleClass('d-none', !mostrar);
-		var exigirRef = origenFce || fceNcMostradorRefEsFce(ref);
-		var exigirAnulacion = exigirRef;
-		$('#fce_comprobante_referenciado').prop('required', !!exigirRef);
+		// NCE/NDE: FCE + anulación obligatorias. NC/ND FE: ref optativa; anulación solo si hay FCE.
+		var exigirAsoc = esNce;
+		var exigirAnulacion = esNce || fceNcMostradorRefEsFce(ref);
+		$('#fce_comprobante_referenciado').prop('required', !!exigirAsoc);
+		$('#fce_comprobante_referenciado_label').toggleClass('requerido', !!exigirAsoc);
 		$('#fce_anulacion').prop('required', !!exigirAnulacion);
 		$('#fce_anulacion_label').toggleClass('requerido', !!exigirAnulacion);
-		if (mostrar && estabaOculto && parseInt($('#cliente_id').val() || '0', 10) > 0
-			&& $.trim($('#fce_comprobante_referenciado').val() || '') === '') {
-			$('#fce_comprobante_referenciado').focus();
-		}
 	};
 
 	window.validarFceNcMostradorAntesSubmit = function () {
@@ -2392,21 +2395,39 @@
 		if (!$wrap.length || $wrap.hasClass('d-none')) {
 			return true;
 		}
-		var origenFce = String($wrap.attr('data-nc-origen-fce') || '0') === '1';
 		var ref = $.trim($('#fce_comprobante_referenciado').val() || '');
-		var anul = $.trim($('#fce_anulacion').val() || '').toUpperCase();
-		if (!origenFce && !fceNcMostradorRefEsFce(ref)) {
+		var esNce = facturaTipoEsNcNdFceMostrador();
+
+		if (esNce) {
+			if (ref === '') {
+				alert('La NCE/NDE requiere un comprobante FCE asociado.');
+				$('#fce_comprobante_referenciado').focus();
+				return false;
+			}
+			if (!fceNcMostradorRefEsFce(ref)) {
+				alert('La NCE/NDE requiere asociar una FCE (ej. FCE A-00010-00000009).');
+				$('#fce_comprobante_referenciado').focus();
+				return false;
+			}
+			var anulNce = $.trim($('#fce_anulacion').val() || '').toUpperCase();
+			if (anulNce !== 'S' && anulNce !== 'N') {
+				alert('Indique anulación S/N (opcional ARCA 22).');
+				$('#fce_anulacion').focus();
+				return false;
+			}
 			return true;
 		}
-		if (!fceNcMostradorRefEsFce(ref)) {
-			alert('Debe indicar el comprobante FCE referenciado (ej. FCE A-00008-00001234).');
-			$('#fce_comprobante_referenciado').focus();
-			return false;
+
+		if (ref === '') {
+			return true;
 		}
-		if (anul !== 'S' && anul !== 'N') {
-			alert('Debe indicar anulación FCE S/N (opcional ARCA 22). Obligatorio en NCE.');
-			$('#fce_anulacion').focus();
-			return false;
+		if (fceNcMostradorRefEsFce(ref)) {
+			var anul = $.trim($('#fce_anulacion').val() || '').toUpperCase();
+			if (anul !== 'S' && anul !== 'N') {
+				alert('Si asocia una FCE, indique anulación S/N (opcional ARCA 22).');
+				$('#fce_anulacion').focus();
+				return false;
+			}
 		}
 		return true;
 	};
@@ -2414,6 +2435,5 @@
 	$(function () {
 		$(document).on('change', '#tipotransaccion_id', window.actualizarFceNcMostrador);
 		$(document).on('input change', '#fce_comprobante_referenciado', window.actualizarFceNcMostrador);
-		$(document).on('input change', '#montototalfactura', window.actualizarFceNcMostrador);
 		window.actualizarFceNcMostrador();
 	});

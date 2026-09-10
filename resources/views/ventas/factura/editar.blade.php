@@ -58,14 +58,8 @@
             return false;
         }
 
-        if (typeof enviarComprobanteFacturaMostradorAjax === 'function') {
-            enviarComprobanteFacturaMostradorAjax();
-            return false;
-        }
-        if (typeof iniciarOverlayProcesoFactura === 'function') {
-            iniciarOverlayProcesoFactura();
-        }
-        $('#formgeneral').submit();
+        // onsubmit → padrón + overlay AJAX (no llamar enviar directo: reentraba padrón).
+        $('#formgeneral').trigger('submit');
         return false;
     }
     $(function () {
