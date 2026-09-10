@@ -66,6 +66,9 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 
 	private function guardarCaja_Movimiento_Cuentacaja($data, $funcion, $id = null)
 	{
+		$caja_movimiento_cuentacaja = null;
+		$i = 0;
+
 		if ($funcion == 'update')
 		{
 			// Trae todos los id
@@ -86,11 +89,11 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 				else
 					$signo = -1;
 			}
-			$cuentacaja_ids = $data['cuentacaja_ids'];
-			$moneda_ids = $data['moneda_ids'];
+			$cuentacaja_ids = $data['cuentacaja_ids'] ?? [];
+			$moneda_ids = $data['moneda_ids'] ?? [];
 			$montos = NumeroDecimalLocalSupport::listaAFloat($data['montos'] ?? []);
 			$cotizaciones = NumeroDecimalLocalSupport::listaAFloat($data['cotizaciones'] ?? [], 1.0);
-			$observaciones = $data['observaciones'];
+			$observaciones = $data['observaciones'] ?? [];
 			$fecha = $data['fecha'];
 			
 			if ($funcion == 'update')
@@ -117,10 +120,10 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 									"caja_movimiento_id" => $id,
 									"fecha" => $fecha,
 									"cuentacaja_id" => $cuentacaja_ids[$i],
-									"moneda_id" => $moneda_ids[$i],
+									"moneda_id" => $moneda_ids[$i] ?? 1,
 									"monto" => $monto,
 									"cotizacion" => $cotizaciones[$i] ?? 1.0,
-									"observacion" => $observaciones[$i]
+									"observacion" => $observaciones[$i] ?? ' '
 									]);
 					}
 				}
@@ -142,7 +145,7 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 						"caja_movimiento_id" => $id,
 						"fecha" => $fecha,
 						"cuentacaja_id" => $cuentacaja_ids[$i_movimiento],
-						"moneda_id" => $moneda_ids[$i_movimiento],
+						"moneda_id" => $moneda_ids[$i_movimiento] ?? 1,
 						"monto" => $monto,
 						"cotizacion" => $cotizaciones[$i_movimiento] ?? 1.0,
 						"observacion" => $observaciones[$i_movimiento]

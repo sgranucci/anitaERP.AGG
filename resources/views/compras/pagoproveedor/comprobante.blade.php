@@ -174,12 +174,12 @@
         <tbody>
             @foreach ($cheques as $cheque)
                 <tr>
-                    <td>{{ optional($cheque->fechavencimiento)->format('d/m/Y') ?: optional($cheque->fecha)->format('d/m/Y') }}</td>
+                    <td>{{ $cheque->fecha }}</td>
                     <td>{{ $cheque->numerocheque }}</td>
-                    <td>{{ optional($cheque->bancos)->nombre }}</td>
-                    <td>{{ $cheque->caracter ?? $cheque->origen ?? '' }}</td>
-                    <td class="num">{{ number_format((float) $cheque->importe, 2, ',', '.') }}</td>
-                    <td>{{ optional($cheque->monedas)->abreviatura }}</td>
+                    <td>{{ $cheque->banco }}{{ $cheque->anombrede !== '' ? ' — '.$cheque->anombrede : '' }}</td>
+                    <td>{{ $cheque->caracter }}</td>
+                    <td class="num">{{ number_format((float) $cheque->monto, 2, ',', '.') }}</td>
+                    <td>{{ $cheque->moneda }}</td>
                 </tr>
             @endforeach
         </tbody>
@@ -256,7 +256,7 @@
         <tbody>
             @foreach ($asientoLineas as $lin)
                 <tr>
-                    <td>{{ $lin['cuenta'] }}</td>
+                    <td>{{ $lin['cuenta'] }}{{ ! empty($lin['obs']) ? ' — '.$lin['obs'] : '' }}</td>
                     <td class="num">{{ $lin['debe'] !== null ? number_format($lin['debe'], 2, ',', '.') : '' }}</td>
                     <td class="num">{{ $lin['haber'] !== null ? number_format($lin['haber'], 2, ',', '.') : '' }}</td>
                     <td>{{ $lin['centrocosto'] }}</td>

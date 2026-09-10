@@ -18,15 +18,18 @@
 <script>
     @php
         $ppOldAplicaciones = [];
-        foreach ((array) old('idcuentacorrientes', []) as $i => $id) {
+        $ppIds = (array) old('idcuentacorrientes', []);
+        $ppMontos = (array) old('montoaplicadocomprobantes', []);
+        foreach ($ppIds as $i => $id) {
             $id = (int) $id;
-            $monto = (float) old('montoaplicadocomprobantes.'.$i, 0);
+            $monto = (float) ($ppMontos[$i] ?? 0);
             if ($id > 0 && $monto > 0) {
                 $ppOldAplicaciones[] = ['id' => $id, 'monto' => $monto];
             }
         }
     @endphp
     window.ppOldAplicaciones = @json($ppOldAplicaciones);
+    window.ppOldRetencionesJson = @json(old('pp_retenciones_json', ''));
     $(function () {
         if (typeof activa_eventos_consulta_cbu_pago === 'function') {
             activa_eventos_consulta_cbu_pago();

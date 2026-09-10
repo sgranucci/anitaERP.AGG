@@ -109,8 +109,57 @@ var flModificaAsiento = false;
             var extra = sumaMontosChequesIngresoEgreso();
             cheques = (extra.extraHaber || 0) + (extra.extraDebe || 0);
         }
+        if ($trExcluir && $trExcluir.closest('#tbody-cheque-emitido-table').length) {
+            cheques -= importeChequeEmitidoEnMonedaPago($trExcluir);
+        }
         var resto = Math.round((aplicado - retenciones - caja - cheques) * 100) / 100;
         return resto > 0 ? resto : 0;
+    }
+
+    function importeChequeEmitidoEnMonedaPago($tr) {
+        var monto = parseFloat($tr.find('.montocheque_emitido').val()) || 0;
+        if (monto <= 0) {
+            return 0;
+        }
+        var monedaDefault = $('#tbody-cuenta-table').children(':first').find('.moneda').val()
+            || $('#moneda_id').val()
+            || 1;
+        var moneda = $tr.find('.moneda_emitido_id').val();
+        var cot = $tr.find('.cotizacioncheque_emitido').val();
+        var coef = 1;
+        if (typeof calculaCoeficienteMoneda === 'function') {
+            coef = calculaCoeficienteMoneda(monedaDefault, moneda, cot) || 1;
+        }
+        return monto * coef;
+    }
+
+    function precargarMontoRestanteEnCheque($tr, forzar) {
+        if (!$tr || !$tr.length) {
+            return;
+        }
+        var $monto = $tr.find('.montocheque_emitido');
+        if (!$monto.length) {
+            return;
+        }
+        var actual = parseFloat($monto.val()) || 0;
+        if (!forzar && actual > 0) {
+            return;
+        }
+        var resto = montoRestanteCaja($tr);
+        if (resto > 0) {
+            $monto.val(resto.toFixed(2));
+            sumaMonto();
+        }
+    }
+
+    function sugerirMontoChequeDesdeAplicado() {
+        var $filas = $('#tbody-cheque-emitido-table tr');
+        var $vacia = $filas.filter(function () {
+            return !(parseFloat($(this).find('.montocheque_emitido').val()) > 0);
+        }).first();
+        if ($vacia.length) {
+            precargarMontoRestanteEnCheque($vacia, true);
+        }
     }
 
     function precargarMontoRestanteEnFila($tr, forzar) {
@@ -653,7 +702,15 @@ var flModificaAsiento = false;
         $('#botonform3').on('click', function () {
             ocultarForms();
             $('.form3').show();
-            sumaMonto();
+            var aplicar = function () {
+                sugerirMontoChequeDesdeAplicado();
+                sumaMonto();
+            };
+            if (typeof window.calcularRetencionesPagoproveedor === 'function') {
+                window.calcularRetencionesPagoproveedor().always(aplicar);
+            } else {
+                aplicar();
+            }
         });
         $('#botonform4').on('click', function () {
             ocultarForms();
@@ -755,13 +812,22 @@ var flModificaAsiento = false;
 
         $(document).on('click', '#agrega_renglon_cheque_emitido', function () {
             setTimeout(function () {
+                var $row = $('#tbody-cheque-emitido-table tr:last');
                 var nombre = $('#descripcionproveedor').val() || '';
-                $('#tbody-cheque-emitido-table tr:last .anombrede_emitido').val(nombre);
+                $row.find('.anombrede_emitido').val(nombre);
+                precargarMontoRestanteEnCheque($row, true);
             }, 50);
         });
 
         // Al abrir editar/crear: pintar medios ya cargados (cuentas/cheques) en la barra superior.
         setTimeout(function () {
+            $('#tbody-cheque-emitido-table tr.item-cheque-emitido').each(function () {
+                var $tr = $(this);
+                var cid = $tr.find('.cuentacaja_emitido_id').val();
+                if (cid && typeof filtrarChequerasChequeEmitido === 'function') {
+                    filtrarChequerasChequeEmitido($tr, cid, false);
+                }
+            });
             sumaMonto();
         }, 0);
     });

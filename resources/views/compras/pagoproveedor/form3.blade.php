@@ -2,6 +2,12 @@
     $chequesMovimiento = isset($data) ? ($data->cheques ?? collect()) : collect();
     $chequesEmitidos = $chequesMovimiento->where('origen', 'E')->whereNull('cheque_reemplaza_id')->values();
     $chequesRecibidos = $chequesMovimiento->where('origen', 'R')->whereNull('cheque_reemplaza_id')->values();
+    if ($chequesEmitidos->isEmpty()) {
+        $chequesEmitidos = \App\Support\Caja\ChequeFormOldInputSupport::emitidosDesdeOld();
+    }
+    if ($chequesRecibidos->isEmpty()) {
+        $chequesRecibidos = \App\Support\Caja\ChequeFormOldInputSupport::recibidosDesdeOld();
+    }
 @endphp
 <div class="card form3" style="display: none">
     <div class="card-body">

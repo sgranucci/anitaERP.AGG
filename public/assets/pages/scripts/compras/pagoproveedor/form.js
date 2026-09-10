@@ -217,7 +217,9 @@
         $('.pp-deuda-tfoot').toggle(hayFilas);
         actualizarCheckTodas();
         window.ppResumenDeuda = d;
-        $('#tbody-cuenta-table .monto').attr('placeholder', desembolsar > 0 ? desembolsar.toFixed(2) : '');
+        var ph = desembolsar > 0 ? desembolsar.toFixed(2) : '';
+        $('#tbody-cuenta-table .monto').attr('placeholder', ph);
+        $('#tbody-cheque-emitido-table .montocheque_emitido').attr('placeholder', ph);
         return d;
     }
 
@@ -286,6 +288,7 @@
 
         var seleccionPrevia = capturarSeleccionDeuda();
         // Tras error de grabación: old() de aplicaciones (page reload pierde la grilla).
+        // No se descarta hasta pintar, por si hay dos cargas en paralelo.
         if (Object.keys(seleccionPrevia).length === 0 && window.ppOldAplicaciones && window.ppOldAplicaciones.length) {
             window.ppOldAplicaciones.forEach(function (a) {
                 var id = parseInt(a.id || a.cc_id || '0', 10);
@@ -294,7 +297,6 @@
                     seleccionPrevia[id] = { checked: true, monto: monto };
                 }
             });
-            window.ppOldAplicaciones = null;
         }
         var reqId = ++deudaReqSeq;
         if (deudaXhr && deudaXhr.readyState !== 4) {
@@ -358,6 +360,15 @@
                 $tb.html(html);
                 refrescarCotDia(filas);
                 sincronizarCamposAplicacion();
+                window.ppOldAplicaciones = null;
+                if (window.ppOldRetencionesJson) {
+                    try {
+                        pintarResumenRetenciones(JSON.parse(window.ppOldRetencionesJson));
+                    } catch (e) { /* ignore */ }
+                    window.ppOldRetencionesJson = null;
+                } else if (typeof window.calcularRetencionesPagoproveedor === 'function') {
+                    window.calcularRetencionesPagoproveedor();
+                }
             })
             .fail(function (xhr, status) {
                 if (status === 'abort' || reqId !== deudaReqSeq) {

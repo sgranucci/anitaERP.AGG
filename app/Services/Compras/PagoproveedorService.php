@@ -618,6 +618,9 @@ class PagoproveedorService
         }
 
         $payload = $data;
+        $payload['moneda_ids'] = array_values($payload['moneda_ids'] ?? []);
+        $payload['montos'] = array_values($payload['montos'] ?? []);
+        $payload['observaciones'] = array_values($payload['observaciones'] ?? []);
         $tipoOppId = (int) ($pago->tipotransaccion_caja_id ?: IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig());
         if ($tipoOppId <= 0) {
             throw new Exception('No hay tipo de transacción OPP configurado para el movimiento de caja de la OP.');

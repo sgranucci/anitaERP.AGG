@@ -124,7 +124,27 @@ class PagoproveedorComprobantePdfService
 
         $aplicaciones = $this->armarAplicaciones($pago);
         $mediosCaja = $this->armarMediosCaja($pago);
-        $cheques = $pago->cheques ?? collect();
+        $cheques = ($pago->cheques ?? collect())->map(function ($cheque) {
+            $fecha = $cheque->fechapago ?: $cheque->fechaemision;
+            $caracter = (string) ($cheque->caracter ?? '');
+            $caracterNombre = '';
+            foreach (\App\Models\Caja\Cheque::$enumCaracter as $item) {
+                if (($item['valor'] ?? '') === $caracter) {
+                    $caracterNombre = (string) ($item['nombre'] ?? '');
+                    break;
+                }
+            }
+
+            return (object) [
+                'fecha' => $fecha ? Carbon::parse($fecha)->format('d/m/Y') : '',
+                'numerocheque' => (string) ($cheque->numerocheque ?? ''),
+                'banco' => (string) (optional($cheque->bancos)->nombre ?? ''),
+                'caracter' => $caracterNombre !== '' ? $caracterNombre : $caracter,
+                'monto' => (float) ($cheque->monto ?? 0),
+                'moneda' => (string) (optional($cheque->monedas)->abreviatura ?? ''),
+                'anombrede' => (string) ($cheque->anombrede ?? ''),
+            ];
+        })->values();
         $retenciones = ($pago->pagoproveedor_retenciones ?? collect())
             ->filter(fn ($r) => (float) $r->importe > 0)
             ->values();
@@ -132,7 +152,7 @@ class PagoproveedorComprobantePdfService
 
         $totalOp = (float) $pago->monto;
         $totalRetenciones = (float) $retenciones->sum('importe');
-        $totalMedios = (float) $mediosCaja->sum('monto_abs') + (float) $cheques->sum('importe');
+        $totalMedios = (float) $mediosCaja->sum('monto_abs') + (float) $cheques->sum('monto');
 
         $direccionEmpresa = trim((string) ($empresa->domicilio ?? ''));
         $localidadEmpresa = trim((string) (optional($empresa->localidad)->nombre ?? ''));
