@@ -52,3 +52,4 @@ composer.lock
 /binlog.*
 binlog.*
 deploy/backup/backup.local.conf
+package-lock.json
