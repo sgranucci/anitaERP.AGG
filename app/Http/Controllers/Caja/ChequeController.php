@@ -59,12 +59,15 @@ class ChequeController extends Controller
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $origen_enum = Cheque::$enumOrigen;
         $caracter_enum = Cheque::$enumCaracter;
+        $para_dep_enum = Cheque::$enumParaDep;
+        $negociable_enum = Cheque::$enumNegociable;
         $estado_enum = cheque::$enumEstado;
         $chequera_query = $this->chequeraRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.cheque.crear', compact('cuentacaja_query',
                                                 'origen_enum', 'caracter_enum',
+                                                'para_dep_enum', 'negociable_enum',
                                                 'estado_enum', 'chequera_query', 'empresa_query'));
     }
 
@@ -95,12 +98,16 @@ class ChequeController extends Controller
         
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $origen_enum = cheque::$enumOrigen;
+        $caracter_enum = Cheque::$enumCaracter;
+        $para_dep_enum = Cheque::$enumParaDep;
+        $negociable_enum = Cheque::$enumNegociable;
         $estado_enum = cheque::$enumEstado;
         $chequera_query = $this->chequeraRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.cheque.editar', compact('data', 'cuentacaja_query',
-                                                'origen_enum', 
+                                                'origen_enum', 'caracter_enum',
+                                                'para_dep_enum', 'negociable_enum',
                                                 'estado_enum', 'chequera_query', 'empresa_query'));
     }
 

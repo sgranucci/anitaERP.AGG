@@ -46,6 +46,26 @@ class ChequePropioCpromaeAnitaMapperTest extends TestCase
         $this->assertSame('1', $out['cpro_modelo']);
     }
 
+    public function test_para_dep_y_negociable_explicitos(): void
+    {
+        $out = ChequePropioCpromaeAnitaMapper::mapear([
+            'cuenta' => '127',
+            'nro' => 10,
+            'fecha_emision' => '2026-09-10',
+            'fecha_pago' => '2026-09-10',
+            'importe' => 1,
+            'chequera_tipo' => 'F',
+            'para_dep' => 'N',
+            'negociable' => 'E',
+            'nro_echeq' => 'ECH-99',
+            'fecha_entrega' => '2026-09-11',
+        ]);
+        $this->assertSame('N', $out['cpro_para_dep']);
+        $this->assertSame('E', $out['cpro_negociable']);
+        $this->assertSame('ECH-99', $out['cpro_nro_e_cheq']);
+        $this->assertSame('20260911', $out['cpro_fecha_entrega']);
+    }
+
     public function test_echeq_pone_negociable_y_nro(): void
     {
         $out = ChequePropioCpromaeAnitaMapper::mapear([

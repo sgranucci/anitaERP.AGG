@@ -20,6 +20,8 @@ use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -73,6 +75,7 @@ class OrdencompraLegajoBandejaPaqueteService
         $this->materializarPdfsScanAnita($oc);
         $facturas = $this->facturasDelLegajo($oc);
         $facturas = array_merge($facturas, $this->scansAnitaSinPrecarga($oc, $facturas));
+        $tiposOpciones = $this->tiposOpcionesCorreccion($oc);
         $coms = $this->comsDelLegajo($oc);
         $devoluciones = $this->devolucionesDelLegajo($oc);
         $precargaIds = [];
@@ -94,6 +97,7 @@ class OrdencompraLegajoBandejaPaqueteService
             'es_anticipada' => \App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc),
             'tratamiento' => (string) ($oc->tratamiento ?? ''),
             'facturas' => $facturas,
+            'tipos_opciones' => $tiposOpciones,
             'coms' => $coms,
             'devoluciones' => $devoluciones,
             'asignadas' => $asignadas,
@@ -276,7 +280,8 @@ class OrdencompraLegajoBandejaPaqueteService
                 'origen' => 'precarga',
                 'origen_label' => PrecargaComprobanteOrigenEntrada::etiqueta($pre->origen_entrada ?? null),
                 'tipo' => $tipo,
-                'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
+                'tipo_abrev' => $abrev !== '' ? $abrev : $tipo,
+                'tipo_label' => $abrev !== '' ? $abrev : OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
                 'exige_com' => OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo),
                 'etiqueta' => OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $base),
                 'letra' => (string) ($pre->letra ?? ''),
@@ -721,7 +726,7 @@ class OrdencompraLegajoBandejaPaqueteService
      */
     private function tipoComprobanteDesdeScanAnita(array $fila): string
     {
-        return \App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport::normalizar(
+        return PrecargaProveedorTipoComprobanteSupport::normalizar(
             (string) ($fila['ctipo'] ?? 'FC')
         );
     }
@@ -759,29 +764,59 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
-     * Corrige el tipo genérico FC/NC/ND de una precarga del legajo (abreviatura fina según OC).
+     * Corrige el tipo de una precarga del legajo.
+     * FC/NC/ND re-resuelven el fino según el primer CC de la OC;
+     * FIB/FGA/… graban esa abreviatura (útil en OC con varios centros de costo).
      *
-     * @param  'FC'|'NC'|'ND'|string  $tipoGenerico
+     * @param  'FC'|'NC'|'ND'|string  $tipoPedido
      */
-    public function corregirTipoDocumento(Ordencompra $oc, int $precargaId, string $tipoGenerico): Precarga_Comprobante_Proveedor
+    public function corregirTipoDocumento(Ordencompra $oc, int $precargaId, string $tipoPedido): Precarga_Comprobante_Proveedor
     {
         $precarga = $this->assertPrecargaDelLegajo($oc, $precargaId);
-        $tipo = \App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport::normalizar($tipoGenerico);
-        if (! in_array($tipo, ['FC', 'NC', 'ND'], true)) {
+        $tipo = strtoupper(trim($tipoPedido));
+        if (! preg_match('/^[A-Z]{2,6}$/', $tipo)) {
             throw ValidationException::withMessages([
-                'tipo' => 'Tipo de comprobante inválido. Usá FC, NC o ND.',
+                'tipo' => 'Tipo de comprobante inválido.',
             ]);
         }
-        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc, $tipo);
+
+        if (PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico($tipo)) {
+            $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc, $tipo);
+        } else {
+            try {
+                $tipoId = (int) (Tipotransaccion_Compra::query()
+                    ->where('abreviatura', $tipo)
+                    ->value('id') ?? 0);
+            } catch (\Throwable) {
+                $tipoId = 0;
+            }
+        }
+
         if ($tipoId <= 0) {
             throw ValidationException::withMessages([
-                'tipo' => 'No se pudo resolver el tipo contable para esta OC.',
+                'tipo' => 'No se pudo resolver el tipo contable «'.$tipo.'».',
             ]);
         }
         $precarga->tipotransaccion_compra_id = $tipoId;
         $precarga->save();
 
         return $precarga->fresh(['tipotransaccion_compras']) ?? $precarga;
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    private function tiposOpcionesCorreccion(Ordencompra $oc): array
+    {
+        try {
+            return PrecargaProveedorAbreviaturaTipoSupport::opcionesCorreccionTipo($oc);
+        } catch (\Throwable) {
+            return [
+                ['value' => 'FC', 'label' => 'FC — Factura (según primer centro de costo de la OC)'],
+                ['value' => 'NC', 'label' => 'NC — Nota de crédito (no exige COM)'],
+                ['value' => 'ND', 'label' => 'ND — Nota de débito (no exige COM)'],
+            ];
+        }
     }
 
     private function marcarOrigenScanAnitaSiNoEsIa(Precarga_Comprobante_Proveedor $precarga): Precarga_Comprobante_Proveedor

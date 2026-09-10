@@ -20,10 +20,10 @@ class Cheque extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [ 
-            'origen', 'chequera_id', 'caracter', 'estado', 'fechaemision', 'fechapago', 'cuentacaja_id',
+            'origen', 'chequera_id', 'caracter', 'para_dep', 'negociable', 'estado', 'fechaemision', 'fechapago', 'fecha_entrega', 'cuentacaja_id',
             'empresa_id', 'caja_id', 'caja_movimiento_id', 
             'cobranza_id', 'pagoproveedor_id', 'cheque_reemplaza_id',
-            'numerocheque', 'moneda_id', 'monto', 'cotizacion', 'proveedor_id', 'cliente_id',
+            'numerocheque', 'nro_echeq', 'moneda_id', 'monto', 'cotizacion', 'proveedor_id', 'cliente_id',
             'tipodocumento_id', 'numerodocumento', 'entregado', 'anombrede', 'estadocheque_banco_id', 
             'sucursalpago', 'tipodistribucion', 'banco_id', 'cuentalibradora'
                             ];

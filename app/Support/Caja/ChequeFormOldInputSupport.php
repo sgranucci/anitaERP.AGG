@@ -47,6 +47,16 @@ final class ChequeFormOldInputSupport
             'numerocheque' => $nro,
             'fechapago' => self::at($old, 'fechapago_emitidos', $i, ''),
             'caracter' => self::at($old, 'caracter_emitidos', $i, 'O') ?: 'O',
+            'para_dep' => ChequePropioInstrumentoSupport::paraDep(
+                (string) self::at($old, 'para_dep_emitidos', $i, ChequePropioInstrumentoSupport::paraDepDefault()),
+                ChequePropioInstrumentoSupport::paraDepDefault()
+            ),
+            'negociable' => ChequePropioInstrumentoSupport::negociable(
+                (string) self::at($old, 'negociable_emitidos', $i, ''),
+                (string) ($chequera?->tipochequera ?? 'F')
+            ),
+            'nro_echeq' => (string) self::at($old, 'nro_echeq_emitidos', $i, ''),
+            'fecha_entrega' => self::at($old, 'fecha_entrega_emitidos', $i, ''),
             'anombrede' => (string) self::at($old, 'anombrede_emitidos', $i, ''),
             'moneda_id' => (int) self::at($old, 'moneda_emitido_ids', $i, 1) ?: 1,
             'monto' => $monto,

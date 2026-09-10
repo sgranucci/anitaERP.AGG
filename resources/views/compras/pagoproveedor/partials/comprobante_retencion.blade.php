@@ -242,12 +242,23 @@
 <table class="firma-box no-border">
     <tr>
         <td style="width:50%;">
-            <div class="firma-linea"></div>
-            Recib&iacute; conforme
+            @php
+                $firmaAgenteRetencion = $firmaAgenteRetencion
+                    ?? \App\Support\Compras\PagoproveedorFirmaAgenteRetencionSupport::dataUri();
+            @endphp
+            @if (! empty($firmaAgenteRetencion))
+                <div class="firma-hueco">
+                    <img class="firma-agente" src="{{ $firmaAgenteRetencion }}" alt="">
+                </div>
+            @else
+                <div class="firma-linea"></div>
+            @endif
+            Firma agente de retenci&oacute;n
         </td>
         <td style="width:50%;">
             <div class="firma-linea"></div>
-            Firma agente de retenci&oacute;n
+            Recib&iacute; conforme<br>
+            <span class="muted">(firma del proveedor)</span>
         </td>
     </tr>
 </table>

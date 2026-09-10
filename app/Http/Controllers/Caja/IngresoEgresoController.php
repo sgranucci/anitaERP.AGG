@@ -190,6 +190,8 @@ class IngresoEgresoController extends Controller
         $centrocosto_query = $this->centrocostoRepository->all();
         $chequera_query = $this->chequeraRepository->all();
         $caracter_enum = Cheque::$enumCaracter;
+        $para_dep_enum = Cheque::$enumParaDep;
+        $negociable_enum = Cheque::$enumNegociable;
 
         $nombreCaja = '';
         $origen = 'ingresoegreso';
@@ -279,6 +281,7 @@ class IngresoEgresoController extends Controller
                 'conceptogasto_query',
                 'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
                 'centrocosto_query', 'chequera_query', 'caracter_enum',
+                'para_dep_enum', 'negociable_enum',
                 'caja_id', 'nombreCaja', 'origen', 'data', 'solicitudpagoOrigen'),
             $this->datosComprobantesIva(null),
         ));
@@ -324,6 +327,8 @@ class IngresoEgresoController extends Controller
         $centrocosto_query = $this->centrocostoRepository->all();
         $chequera_query = $this->chequeraRepository->all();
         $caracter_enum = Cheque::$enumCaracter;
+        $para_dep_enum = Cheque::$enumParaDep;
+        $negociable_enum = Cheque::$enumNegociable;
         $caja_id = $data->caja_id;
 
         $nombreCaja = '';
@@ -341,6 +346,7 @@ class IngresoEgresoController extends Controller
                 'conceptogasto_query',
                 'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
                 'centrocosto_query', 'chequera_query', 'caracter_enum',
+                'para_dep_enum', 'negociable_enum',
                 'caja_id', 'nombreCaja', 'origen', 'solicitudpagoOrigen'),
             $this->datosComprobantesIva((int) $id),
         ));

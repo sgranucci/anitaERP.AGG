@@ -62,6 +62,44 @@
 	</select>
 </div>
 <div class="form-group row">
+	<label for="para_dep" class="col-lg-3 col-form-label">Para depositar (Anita)</label>
+	<select id="para_dep" name="para_dep" class="col-lg-4 form-control">
+    	@php $paraDepEnum = $para_dep_enum ?? \App\Models\Caja\Cheque::$enumParaDep; @endphp
+       	@foreach($paraDepEnum as $paraDep)
+			@if ($paraDep['valor'] == old('para_dep',$data->para_dep ?? 'E'))
+       			<option value="{{ $paraDep['valor'] }}" selected>{{ $paraDep['nombre'] }}</option>
+			@else
+			    <option value="{{ $paraDep['valor'] }}">{{ $paraDep['nombre'] }}</option>
+			@endif
+    	@endforeach
+	</select>
+</div>
+<div class="form-group row">
+	<label for="negociable" class="col-lg-3 col-form-label">Negociable (Anita)</label>
+	<select id="negociable" name="negociable" class="col-lg-4 form-control">
+    	@php $negociableEnum = $negociable_enum ?? \App\Models\Caja\Cheque::$enumNegociable; @endphp
+       	@foreach($negociableEnum as $negociable)
+			@if ($negociable['valor'] == old('negociable',$data->negociable ?? 'N'))
+       			<option value="{{ $negociable['valor'] }}" selected>{{ $negociable['nombre'] }}</option>
+			@else
+			    <option value="{{ $negociable['valor'] }}">{{ $negociable['nombre'] }}</option>
+			@endif
+    	@endforeach
+	</select>
+</div>
+<div class="form-group row">
+	<label for="nro_echeq" class="col-lg-3 col-form-label">Nro. e-cheq</label>
+	<div class="col-lg-4">
+		<input type="text" name="nro_echeq" id="nro_echeq" class="form-control" value="{{old('nro_echeq', $data->nro_echeq ?? '')}}" maxlength="50">
+	</div>
+</div>
+<div class="form-group row">
+	<label for="fecha_entrega" class="col-lg-3 col-form-label">Fecha entrega</label>
+	<div class="col-lg-3">
+		<input type="date" name="fecha_entrega" id="fecha_entrega" class="form-control" value="{{old('fecha_entrega', $data->fecha_entrega ?? '')}}">
+	</div>
+</div>
+<div class="form-group row">
 	<label for="monto" class="col-lg-6 col-form-label">Monto</label>
 	<div class="col-lg-6">
 		<input type="number" name="monto" id="monto" class="form-control" value="{{old('monto', $data->monto ?? '0')}}">

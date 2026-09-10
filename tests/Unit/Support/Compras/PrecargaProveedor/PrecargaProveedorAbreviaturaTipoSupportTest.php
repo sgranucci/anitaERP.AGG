@@ -46,4 +46,37 @@ class PrecargaProveedorAbreviaturaTipoSupportTest extends TestCase
             PrecargaProveedorAbreviaturaTipoSupport::abreviatura('NC', 103, 'Indirecto', 'B')
         );
     }
+
+    public function test_oc_con_varios_cc_incluye_fib_y_fga(): void
+    {
+        $porFamilia = PrecargaProveedorAbreviaturaTipoSupport::abreviaturasFinoDesdeCentros([
+            ['codigo' => 103, 'tipoiva' => 'Indirecto'],
+            ['codigo' => 85, 'tipoiva' => 'Directo'],
+        ], 'B', false);
+
+        $this->assertContains('FIB', $porFamilia['FC']);
+        $this->assertContains('FGA', $porFamilia['FC']);
+        $this->assertContains('CIB', $porFamilia['NC']);
+        $this->assertContains('CGA', $porFamilia['NC']);
+    }
+
+    public function test_siempre_ofrece_gastronomia_aunque_la_oc_no_tenga_cc_85(): void
+    {
+        $porFamilia = PrecargaProveedorAbreviaturaTipoSupport::abreviaturasFinoDesdeCentros([
+            ['codigo' => 103, 'tipoiva' => 'Indirecto'],
+        ], 'B', true);
+
+        $this->assertContains('FIB', $porFamilia['FC']);
+        $this->assertContains('FGA', $porFamilia['FC']);
+        $this->assertContains('CGA', $porFamilia['NC']);
+        $this->assertContains('DGA', $porFamilia['ND']);
+    }
+
+    public function test_fc_nc_nd_son_tipos_genericos(): void
+    {
+        $this->assertTrue(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('FC'));
+        $this->assertTrue(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('nc'));
+        $this->assertFalse(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('FGA'));
+        $this->assertFalse(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('FIB'));
+    }
 }

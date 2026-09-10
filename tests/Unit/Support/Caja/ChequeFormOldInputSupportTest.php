@@ -16,6 +16,8 @@ class ChequeFormOldInputSupportTest extends TestCase
             'chequera_emitido_ids' => ['3'],
             'fechapago_emitidos' => ['2026-09-10'],
             'caracter_emitidos' => ['O'],
+            'para_dep_emitidos' => ['E'],
+            'negociable_emitidos' => ['N'],
             'anombrede_emitidos' => ['YAFEMA S.R.L.'],
             'moneda_emitido_ids' => ['1'],
             'cotizacioncheque_emitidos' => ['1'],
@@ -32,6 +34,8 @@ class ChequeFormOldInputSupportTest extends TestCase
         $this->assertSame(12, $fila->cuentacaja_id);
         $this->assertSame('3', (string) $fila->chequera_id);
         $this->assertSame('YAFEMA S.R.L.', $fila->anombrede);
+        $this->assertSame('E', $fila->para_dep);
+        $this->assertSame('N', $fila->negociable);
         $this->assertSame('00000127', $fila->cuentacajas->codigo);
     }
 

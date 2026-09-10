@@ -6,6 +6,8 @@ namespace App\Support\Contable\LibroIvaDigital;
 
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra;
+use App\Support\Compras\ComprobanteProveedorInternoTipos;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -48,18 +50,9 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
     public static function armarRegistro(array $compra, array $conceptos, bool $prorrateoGlobal): ?array
     {
         $letra = strtoupper(substr(trim((string) ($compra['com_letra'] ?? 'A')), 0, 1));
-        if ($letra === '' || $letra === 'E') {
-            return null;
-        }
-
         $tipoAbrev = (string) ($compra['com_tipo'] ?? '');
         $tipo = self::tipoPorAbreviatura($tipoAbrev);
-        if ($tipo === null) {
-            return null;
-        }
-
-        $subdiario = strtoupper(trim((string) ($tipo->getRawOriginal('subdiario') ?? $tipo->subdiario ?? '')));
-        if ($subdiario !== 'C' && $subdiario !== 'G') {
+        if ($tipo === null || ! self::esTipoInformableIvaCompras($tipo, $letra)) {
             return null;
         }
 
@@ -69,9 +62,6 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             '0',
             STR_PAD_LEFT,
         );
-        if (strncmp($codigoAfip, '04', 2) === 0) {
-            return null;
-        }
 
         $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, $letra);
         $puntoVenta = (int) ($compra['com_sucursal'] ?? 0);
@@ -296,6 +286,57 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             'credito_computable' => $cantidad > 0 ? $credito : 0.0,
             'alicuotas' => $cantidad > 0 ? $filas : [],
         ];
+    }
+
+    /**
+     * p-rg3685.c procesa_compra(): solo tcomp_subdiar C/G, no tipo AFIP 04, no letra E.
+     * FIN/CIN (t_comp compras, subdiario N) son internos y no van al portal IVA compras.
+     */
+    public static function esInformableIvaCompras(
+        string $abreviatura,
+        string $subdiario,
+        string $codigoAfip,
+        string $letra,
+    ): bool {
+        if (ComprobanteProveedorInternoTipos::esInterno($abreviatura)) {
+            return false;
+        }
+
+        $sub = strtoupper(trim($subdiario));
+        if ($sub !== 'C' && $sub !== 'G') {
+            return false;
+        }
+
+        $codigo = str_pad(preg_replace('/\D+/', '', $codigoAfip) ?: '0', 2, '0', STR_PAD_LEFT);
+        if (strncmp($codigo, '04', 2) === 0) {
+            return false;
+        }
+
+        $let = strtoupper(substr(trim($letra), 0, 1));
+
+        return $let !== '' && $let !== 'E';
+    }
+
+    public static function esTipoInformableIvaCompras(?Tipotransaccion_Compra $tipo, string $letra): bool
+    {
+        if ($tipo === null) {
+            return false;
+        }
+
+        return self::esInformableIvaCompras(
+            (string) ($tipo->abreviatura ?? ''),
+            (string) ($tipo->getRawOriginal('subdiario') ?? $tipo->subdiario ?? ''),
+            (string) ($tipo->codigoafip ?? ''),
+            $letra,
+        );
+    }
+
+    public static function restringirQueryTiposInformables(Builder $query): Builder
+    {
+        return $query->whereHas('tipotransaccion_compras', function (Builder $q): void {
+            $q->whereIn('subdiario', ['C', 'G'])
+                ->whereNotIn('abreviatura', ComprobanteProveedorInternoTipos::abreviaturas());
+        });
     }
 
     public static function normalizarAbreviaturaTipo(string $abrev): string

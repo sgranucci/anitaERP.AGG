@@ -32,6 +32,15 @@
                 <input type="text" name="numerocomprobante" id="numerocomprobante" class="form-control" placeholder="N&uacute;mero" aria-label="Numero de Comprobante" value="{{$data->numerocomprobante ?? ''}}" readonly style="width: 6.5rem; flex-shrink: 0;">
             </div>
         </div>
+        <div class="form-group row mt-n2 mb-2">
+            <div class="offset-lg-3 col-lg-9">
+                <small class="form-text text-muted">
+                    En OC con varios centros de costo el tipo se arma con el primer CC (p. ej. FIB).
+                    Si corresponde gastronom&iacute;a, cambi&aacute; a <strong>FGA</strong>
+                    (en NC/ND: CGA / DGA).
+                </small>
+            </div>
+        </div>
         @include('includes.compras.campo_proveedor_consulta', [
             'proveedor_id' => ($data ?? null)?->proveedor_id,
             'codigo_proveedor' => ($data ?? null)?->proveedores?->codigo,

@@ -38,6 +38,8 @@
                     Emisi&oacute;n de cheques propios. Cuenta: c&oacute;digo + Enter · F1 o lupa.
                     El nro. sale del numerador Anita: cheque al d&iacute;a o diferido seg&uacute;n F. pago vs fecha del comprobante.
                     Chequera: lupa o F1 (tipo, rango y estado).
+                    Car&aacute;cter es el legal impreso (A la orden / No a la orden).
+                    Para dep. y F&iacute;sico/Electr&oacute;nico van a Anita (cpro_para_dep / cpro_negociable).
                 </p>
                 <div class="table-responsive">
                 <table class="table table-sm table-bordered" id="cheque-emitido-table">
@@ -48,7 +50,7 @@
                             <th style="width:16%;">Chequera</th>
                             <th style="width:8%;">Nro.</th>
                             <th style="width:10%;">F. pago</th>
-                            <th style="width:10%;">Car&aacute;cter</th>
+                            <th style="width:12%;">Car&aacute;cter / Anita</th>
                             <th>A nombre de</th>
                             <th style="width:6%;">Mon.</th>
                             <th style="width:9%;">Monto</th>

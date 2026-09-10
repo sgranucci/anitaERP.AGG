@@ -96,7 +96,8 @@
         activo: null,
         coms: [],
         facs: [],
-        urlCorregirTipo: ''
+        urlCorregirTipo: '',
+        tiposOpciones: []
     };
 
     function badgeComDoc(fac) {
@@ -121,16 +122,28 @@
             return;
         }
         var fac = asignarEstado.facs.find(function (f) { return String(f.id) === String(activo); });
-        var tipoActual = String((fac && (fac.tipo_label || fac.tipo)) || 'FC').toUpperCase();
+        var tipoActual = String((fac && (fac.tipo_abrev || fac.tipo_label || fac.tipo)) || 'FC').toUpperCase();
         if (fac && (fac.origen || 'precarga') === 'precarga' && /^\d+$/.test(String(fac.id))) {
+            var opciones = (asignarEstado.tiposOpciones && asignarEstado.tiposOpciones.length)
+                ? asignarEstado.tiposOpciones
+                : [
+                    { value: 'FC', label: 'FC — Factura' },
+                    { value: 'NC', label: 'NC — Nota de crédito (no exige COM)' },
+                    { value: 'ND', label: 'ND — Nota de débito (no exige COM)' }
+                ];
+            var optsHtml = opciones.map(function (opt) {
+                var val = String(opt.value || '').toUpperCase();
+                var lab = opt.label || val;
+                return '<option value="' + esc(val) + '"' + (val === tipoActual ? ' selected' : '') + '>' + esc(lab) + '</option>';
+            }).join('');
             $coms.append(
                 '<div class="form-group mb-2">' +
                 '<label class="small mb-1" for="bandejaAsigTipoDoc">Tipo del comprobante</label>' +
                 '<select id="bandejaAsigTipoDoc" class="form-control form-control-sm js-bandeja-asig-tipo" data-precarga-id="' + esc(String(fac.id)) + '">' +
-                '<option value="FC"' + (tipoActual === 'FC' ? ' selected' : '') + '>FC — Factura</option>' +
-                '<option value="NC"' + (tipoActual === 'NC' ? ' selected' : '') + '>NC — Nota de crédito (no exige COM)</option>' +
-                '<option value="ND"' + (tipoActual === 'ND' ? ' selected' : '') + '>ND — Nota de débito (no exige COM)</option>' +
-                '</select></div>'
+                optsHtml +
+                '</select>' +
+                '<small class="form-text text-muted">En OC con varios centros de costo podés pasar de FIB a FGA (gastronomía).</small>' +
+                '</div>'
             );
         }
         var tipoFac = String((fac && fac.tipo) || 'FC').toUpperCase();
@@ -181,6 +194,7 @@
         var asignadas = (paquete && paquete.asignadas) || {};
         asignarEstado.facs = facs;
         asignarEstado.coms = coms;
+        asignarEstado.tiposOpciones = (paquete && paquete.tipos_opciones) || [];
         asignarEstado.mapa = {};
         facs.forEach(function (f) {
             var key = String(f.id);

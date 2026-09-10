@@ -576,6 +576,8 @@ class PagoproveedorController extends Controller
             'chequera_query' => $this->chequeraRepository->all(),
             'centrocosto_query' => $this->centrocostoRepository->all(),
             'caracter_enum' => Cheque::$enumCaracter,
+            'para_dep_enum' => Cheque::$enumParaDep,
+            'negociable_enum' => Cheque::$enumNegociable,
             'modos' => Pagoproveedor::$enumModoCotizacion,
         ];
     }

@@ -10,6 +10,7 @@ use App\Models\Configuracion\Empresa;
 use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
 use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
 use App\Support\Caja\ChequePropioImputacionSupport;
+use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Caja\BancoRepositoryInterface;
@@ -328,6 +329,10 @@ class ChequeRepository implements ChequeRepositoryInterface
         $montos = $data['montocheque_emitidos'] ?? [];
         $cotizaciones = $data['cotizacioncheque_emitidos'] ?? [];
         $caracteres = $data['caracter_emitidos'] ?? [];
+        $paraDeps = $data['para_dep_emitidos'] ?? [];
+        $negociables = $data['negociable_emitidos'] ?? [];
+        $nrosEcheq = $data['nro_echeq_emitidos'] ?? [];
+        $fechasEntrega = $data['fecha_entrega_emitidos'] ?? [];
         $anombrede = $data['anombrede_emitidos'] ?? [];
         $proveedorIds = $data['proveedor_emitido_ids'] ?? [];
 
@@ -345,21 +350,38 @@ class ChequeRepository implements ChequeRepositoryInterface
             }
 
             $fechaPago = (string) ($fechasPago[$i] ?? $fechaOperacion);
+            $chequeraId = ($chequeraIds[$i] ?? '') !== '' ? (int) $chequeraIds[$i] : null;
+            $chequera = $chequeraId ? $this->chequeraRepository->find($chequeraId) : null;
+            $negociable = ChequePropioInstrumentoSupport::negociable(
+                (string) ($negociables[$i] ?? ''),
+                (string) ($chequera->tipochequera ?? 'F')
+            );
+            $nroCheque = $numero;
             $payload = [
                 'origen' => 'E',
-                'chequera_id' => ($chequeraIds[$i] ?? '') !== '' ? (int) $chequeraIds[$i] : null,
+                'chequera_id' => $chequeraId,
                 'caracter' => ($caracteres[$i] ?? '') !== '' ? (string) $caracteres[$i] : 'O',
+                'para_dep' => ChequePropioInstrumentoSupport::paraDep(
+                    (string) ($paraDeps[$i] ?? ''),
+                    ChequePropioInstrumentoSupport::paraDepDefault()
+                ),
+                'negociable' => $negociable,
                 'estado' => ChequePropioImputacionSupport::estadoInicialEmitido($fechaOperacion, $fechaPago),
                 'fechaemision' => $fechaOperacion,
                 'fechapago' => $fechaPago,
+                'fecha_entrega' => (string) ($fechasEntrega[$i] ?? '') ?: null,
                 'cuentacaja_id' => $cuentacajaId,
                 'empresa_id' => $empresaId,
                 'caja_id' => $cajaId,
                 'caja_movimiento_id' => $cajaMovimientoId,
-                'numerocheque' => $numero,
+                'numerocheque' => $nroCheque,
+                'nro_echeq' => ChequePropioInstrumentoSupport::nroEcheq(
+                    $negociable,
+                    (string) ($nrosEcheq[$i] ?? $nroCheque)
+                ) ?: null,
                 'moneda_id' => (int) ($monedaIds[$i] ?? 1),
-                'monto' => (float) ($montos[$i] ?? 0),
                 'cotizacion' => ChequePropioCpromaeAnitaMapper::cotizacion((float) ($cotizaciones[$i] ?? 1)),
+                'monto' => (float) ($montos[$i] ?? 0),
                 'proveedor_id' => ($proveedorIds[$i] ?? '') !== '' ? (int) $proveedorIds[$i] : null,
                 'anombrede' => (string) ($anombrede[$i] ?? ''),
                 'banco_id' => $bancoId,
@@ -504,22 +526,35 @@ class ChequeRepository implements ChequeRepositoryInterface
             if ($tipoReemplazo === 'E') {
                 $cuentacajaId = (int) ($cuentacajaReemplazo[$i] ?? $anulado->cuentacaja_id ?? 0);
                 $cuentacaja = $this->cuentacajaRepository->find($cuentacajaId);
+                $chequeraId = ($chequeraReemplazo[$i] ?? '') !== '' ? (int) $chequeraReemplazo[$i] : $anulado->chequera_id;
+                $chequera = $chequeraId ? $this->chequeraRepository->find($chequeraId) : null;
+                $negociable = ChequePropioInstrumentoSupport::negociable(
+                    (string) ($anulado->negociable ?? ''),
+                    (string) ($chequera->tipochequera ?? 'F')
+                );
                 $payload = [
                     'origen' => 'E',
-                    'chequera_id' => ($chequeraReemplazo[$i] ?? '') !== '' ? (int) $chequeraReemplazo[$i] : $anulado->chequera_id,
+                    'chequera_id' => $chequeraId,
                     'caracter' => $anulado->caracter ?: 'O',
+                    'para_dep' => ChequePropioInstrumentoSupport::paraDep(
+                        (string) ($anulado->para_dep ?? ''),
+                        ChequePropioInstrumentoSupport::paraDepDefault()
+                    ),
+                    'negociable' => $negociable,
                     'estado' => ChequePropioImputacionSupport::estadoInicialEmitido($fechaOperacion, $fechaPago),
                     'fechaemision' => $fechaOperacion,
                     'fechapago' => $fechaPago,
+                    'fecha_entrega' => $anulado->fecha_entrega,
                     'cuentacaja_id' => $cuentacajaId,
                     'empresa_id' => $empresaId,
                     'caja_id' => $cajaId,
                     'caja_movimiento_id' => $cajaMovimientoId,
                     'cheque_reemplaza_id' => $anuladoId,
                     'numerocheque' => $numeroReemplazo,
+                    'nro_echeq' => ChequePropioInstrumentoSupport::nroEcheq($negociable, $numeroReemplazo) ?: null,
                     'moneda_id' => (int) ($monedaReemplazo[$i] ?? $anulado->moneda_id),
                     'monto' => $montoReemplazo,
-                    'cotizacion' => (float) ($cotizReemplazo[$i] ?? $anulado->cotizacion),
+                    'cotizacion' => ChequePropioCpromaeAnitaMapper::cotizacion((float) ($cotizReemplazo[$i] ?? $anulado->cotizacion)),
                     'proveedor_id' => $anulado->proveedor_id,
                     'anombrede' => $anulado->anombrede,
                     'banco_id' => (int) ($cuentacaja->banco_id ?? $anulado->banco_id),

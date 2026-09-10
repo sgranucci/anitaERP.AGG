@@ -190,10 +190,6 @@ class PagoproveedorAnularRevertirService
                 $retencionesOrigen,
             );
 
-            EloquentAuditDeleteSupport::each(
-                Pagoproveedor_Retencion::query()->where('pagoproveedor_id', (int) $pago->id)
-            );
-
             $asientoOrig = Asiento::query()
                 ->with('asiento_movimientos')
                 ->where('pagoproveedor_id', (int) $pago->id)
@@ -226,6 +222,10 @@ class PagoproveedorAnularRevertirService
             $this->registrarEstado($pago, 'REVERTIDA', $leyenda.' (compensatorio OP '.$reverso->id.')');
 
             $this->sincronizarAnulacionAnita($pago, $reverso, $cajaReverso);
+
+            EloquentAuditDeleteSupport::each(
+                Pagoproveedor_Retencion::query()->where('pagoproveedor_id', (int) $pago->id)
+            );
 
             return [
                 'mensaje' => 'ok',

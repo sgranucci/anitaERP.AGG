@@ -342,6 +342,17 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/comprobante-proveedor-anita-auditoria-schedule.log'))
             ->when(fn () => (bool) config('comprobante_proveedor_anita.auditoria_diaria.habilitada', true));
 
+        $ventanaAuditoriaOp = max(1, (int) config('pagoproveedor.auditoria_diaria.ventana_dias', 7));
+        $schedule->command('pagoproveedor:auditoria-anita-diaria', [
+            '--desde' => Carbon::today()->subDays($ventanaAuditoriaOp - 1)->toDateString(),
+            '--hasta' => Carbon::today()->toDateString(),
+        ])
+            ->dailyAt((string) config('pagoproveedor.auditoria_diaria.hora', '08:45'))
+            ->runInBackground()
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/pagoproveedor-anita-auditoria-schedule.log'))
+            ->when(fn () => (bool) config('pagoproveedor.auditoria_diaria.habilitada', true));
+
         $ventanaMayorCc = max(1, (int) config('comprobante_proveedor_anita.conciliacion_mayor_cc.ventana_dias', 30));
         $schedule->command('comprobante-proveedor:conciliar-mayor-cc', [
             '--desde' => Carbon::today()->subDays($ventanaMayorCc - 1)->toDateString(),

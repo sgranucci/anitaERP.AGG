@@ -37,6 +37,7 @@
         <div class="d-flex align-items-center flex-nowrap" style="gap:4px;">
             <input type="hidden" name="chequera_emitido_ids[]" class="chequera_emitido_id" value="{{ $cheque?->chequera_id ?? '' }}">
             <input type="hidden" class="chequera_emitido_tipo" value="{{ $tipoChequeraFila }}">
+            <input type="hidden" class="chequera_emitido_tipochequera" value="{{ $chequeraFila?->tipochequera ?? '' }}">
             <button type="button" title="Consulta chequeras (F1)" class="btn-accion-tabla consultachequera_emitido tooltipsC flex-shrink-0">
                 <i class="fa fa-search text-primary"></i>
             </button>
@@ -57,13 +58,38 @@
             value="{{ $cheque?->fechapago ?? '' }}">
     </td>
     <td>
-        <select name="caracter_emitidos[]" class="form-control form-control-sm caracter_emitido">
-            @foreach ($caracter_enum as $car)
+        @php
+            $caracterEnum = $caracter_enum ?? \App\Models\Caja\Cheque::$enumCaracter;
+            $paraDepEnum = $para_dep_enum ?? \App\Models\Caja\Cheque::$enumParaDep;
+            $negociableEnum = $negociable_enum ?? \App\Models\Caja\Cheque::$enumNegociable;
+            $paraDepVal = \App\Support\Caja\ChequePropioInstrumentoSupport::paraDep(
+                (string) ($cheque?->para_dep ?? ''),
+                \App\Support\Caja\ChequePropioInstrumentoSupport::paraDepDefault()
+            );
+            $negociableVal = \App\Support\Caja\ChequePropioInstrumentoSupport::negociable(
+                (string) ($cheque?->negociable ?? ''),
+                (string) ($chequeraFila?->tipochequera ?? 'F')
+            );
+        @endphp
+        <select name="caracter_emitidos[]" class="form-control form-control-sm caracter_emitido" title="Carácter legal (impreso)">
+            @foreach ($caracterEnum as $car)
                 @if ($car['valor'] !== 'R')
-                    <option value="{{ $car['valor'] }}" @selected($cheque && $car['valor'] === $cheque->caracter)>{{ $car['nombre'] }}</option>
+                    <option value="{{ $car['valor'] }}" @selected($cheque && $car['valor'] === ($cheque->caracter ?? 'O'))>{{ $car['nombre'] }}</option>
                 @endif
             @endforeach
         </select>
+        <select name="para_dep_emitidos[]" class="form-control form-control-sm para_dep_emitido mt-1" title="Anita para depositar (cpro_para_dep)">
+            @foreach ($paraDepEnum as $pd)
+                <option value="{{ $pd['valor'] }}" @selected($pd['valor'] === $paraDepVal)>{{ $pd['nombre'] }}</option>
+            @endforeach
+        </select>
+        <select name="negociable_emitidos[]" class="form-control form-control-sm negociable_emitido mt-1" title="Anita negociable: físico / electrónico">
+            @foreach ($negociableEnum as $neg)
+                <option value="{{ $neg['valor'] }}" @selected($neg['valor'] === $negociableVal)>{{ $neg['nombre'] }}</option>
+            @endforeach
+        </select>
+        <input type="hidden" name="nro_echeq_emitidos[]" class="nro_echeq_emitido" value="{{ $cheque?->nro_echeq ?? '' }}">
+        <input type="hidden" name="fecha_entrega_emitidos[]" class="fecha_entrega_emitido" value="{{ $cheque?->fecha_entrega ?? '' }}">
     </td>
     <td>
         <input type="text" name="anombrede_emitidos[]" class="form-control form-control-sm anombrede_emitido"

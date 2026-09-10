@@ -431,6 +431,29 @@ class LibroIvaDigitalIvaSimpleGenerador
         if ($completarAnita) {
             foreach ($this->comprasAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta) as $fila) {
                 $compra = $fila['compra'];
+                $tipoAbrev = (string) ($compra['com_tipo'] ?? '');
+                $letraAnita = (string) ($compra['com_letra'] ?? '');
+                $tipo = LibroIvaDigitalComprasAnitaArmadoSupport::tipoPorAbreviatura($tipoAbrev);
+                $clave = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural(
+                    (string) ($compra['com_proveedor'] ?? ''),
+                    $tipoAbrev,
+                    $letraAnita,
+                    (int) ($compra['com_sucursal'] ?? 0),
+                    (int) ($compra['com_nro'] ?? 0),
+                );
+                $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
+
+                if ($tipo !== null
+                    && ! LibroIvaDigitalComprasAnitaArmadoSupport::esTipoInformableIvaCompras($tipo, $letraAnita)) {
+                    if ($clave !== '') {
+                        $clavesUsadas[$clave] = true;
+                    }
+                    if ($nroInterno > 0) {
+                        $nrosInternosUsados[$nroInterno] = true;
+                    }
+                    continue;
+                }
+
                 $registro = LibroIvaDigitalComprasAnitaArmadoSupport::armarRegistro(
                     $compra,
                     $fila['conceptos'],
@@ -440,14 +463,6 @@ class LibroIvaDigitalIvaSimpleGenerador
                     continue;
                 }
 
-                $clave = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural(
-                    (string) ($compra['com_proveedor'] ?? ''),
-                    (string) ($compra['com_tipo'] ?? ''),
-                    (string) ($compra['com_letra'] ?? ''),
-                    (int) ($compra['com_sucursal'] ?? 0),
-                    (int) ($compra['com_nro'] ?? 0),
-                );
-                $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
                 if ($clave !== '') {
                     $clavesUsadas[$clave] = true;
                 }
@@ -455,9 +470,7 @@ class LibroIvaDigitalIvaSimpleGenerador
                     $nrosInternosUsados[$nroInterno] = true;
                 }
 
-                $letra = strtoupper(substr(trim((string) ($compra['com_letra'] ?? 'A')), 0, 1));
-                $tipoAbrev = (string) ($compra['com_tipo'] ?? '');
-                $tipo = LibroIvaDigitalComprasAnitaArmadoSupport::tipoPorAbreviatura($tipoAbrev);
+                $letra = strtoupper(substr(trim($letraAnita !== '' ? $letraAnita : 'A'), 0, 1));
                 $tipoCbte = (string) ($registro['cabecera']['tipo_comprobante'] ?? '');
                 $esNc = LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($tipo)
                     || LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura($tipoAbrev)
@@ -481,10 +494,12 @@ class LibroIvaDigitalIvaSimpleGenerador
             }
         }
 
-        Comprobante_Proveedor::query()
-            ->where('comprobante_proveedor.empresa_id', $empresaId)
-            ->whereBetween('comprobante_proveedor.fechaiva', [$desde, $hasta])
-            ->where('comprobante_proveedor.estado', '<>', ComprobanteProveedorEstados::ANULADO)
+        LibroIvaDigitalComprasAnitaArmadoSupport::restringirQueryTiposInformables(
+            Comprobante_Proveedor::query()
+                ->where('comprobante_proveedor.empresa_id', $empresaId)
+                ->whereBetween('comprobante_proveedor.fechaiva', [$desde, $hasta])
+                ->where('comprobante_proveedor.estado', '<>', ComprobanteProveedorEstados::ANULADO)
+        )
             ->with([
                 'proveedores',
                 'tipotransaccion_compras',
@@ -509,6 +524,12 @@ class LibroIvaDigitalIvaSimpleGenerador
                 }
 
                 $letra = strtoupper((string) ($cp->letra ?: 'A'));
+                if (! LibroIvaDigitalComprasAnitaArmadoSupport::esTipoInformableIvaCompras(
+                    $cp->tipotransaccion_compras,
+                    $letra,
+                )) {
+                    return;
+                }
                 $totales = LibroIvaDigitalConceptoIvacompraSupport::desglosarComprobante(
                     $cp->comprobante_proveedor_conceptos,
                     $letra,

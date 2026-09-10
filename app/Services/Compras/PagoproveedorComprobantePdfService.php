@@ -6,6 +6,7 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Contable\Asiento;
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
+use App\Support\Compras\PagoproveedorFirmaAgenteRetencionSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Sueldos\NumeroALetrasEs;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -194,6 +195,7 @@ class PagoproveedorComprobantePdfService
             'fechaDdjjGanancias' => $this->fechaPresentacionGanancias($pago->fecha),
             'periodoSuss' => $this->periodoQuincenaSuss($pago->fecha),
             'leyendasLegales' => $this->leyendasLegales(),
+            'firmaAgenteRetencion' => PagoproveedorFirmaAgenteRetencionSupport::dataUri(),
         ];
     }
 

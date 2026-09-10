@@ -222,8 +222,14 @@ final class PagoproveedorListadoUnificadoSupport
             ->values()
             ->all();
 
-        $cuentasPp = $this->mapCuentasCajaPagoproveedor($ppIds);
-        $cuentasIe = $this->mapCuentasCajaIeOpp($ieIds);
+        $cuentasPp = $this->fusionarCuentasCajaYCheques(
+            $this->mapCuentasCajaPagoproveedor($ppIds),
+            $this->mapCuentasChequePagoproveedor($ppIds)
+        );
+        $cuentasIe = $this->fusionarCuentasCajaYCheques(
+            $this->mapCuentasCajaIeOpp($ieIds),
+            $this->mapCuentasChequeIeOpp($ieIds)
+        );
 
         return $filas->map(function (PagoproveedorListadoFila $fila) use ($cuentasPp, $cuentasIe) {
             $texto = $fila->esIeOpp()
@@ -240,7 +246,7 @@ final class PagoproveedorListadoUnificadoSupport
 
     /**
      * @param  list<int>  $pagoproveedorIds
-     * @return array<int, string>
+     * @return array<int, array<int, string>>
      */
     private function mapCuentasCajaPagoproveedor(array $pagoproveedorIds): array
     {
@@ -248,43 +254,66 @@ final class PagoproveedorListadoUnificadoSupport
             return [];
         }
 
-        $etiqueta = $this->sqlEtiquetaCuentaCaja();
-
-        $porFk = DB::table('caja_movimiento as cmx')
-            ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'cmx.id')
-            ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
-            ->whereIn('cmx.pagoproveedor_id', $pagoproveedorIds)
-            ->groupBy('cmx.pagoproveedor_id')
-            ->select('cmx.pagoproveedor_id as id')
-            ->selectRaw("GROUP_CONCAT(DISTINCT {$etiqueta} SEPARATOR ' | ') as cuentas_caja")
-            ->pluck('cuentas_caja', 'id')
-            ->all();
+        $porFk = $this->mapCuentasPorCuentacajaId(
+            DB::table('caja_movimiento as cmx')
+                ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'cmx.id')
+                ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
+                ->whereIn('cmx.pagoproveedor_id', $pagoproveedorIds),
+            'cmx.pagoproveedor_id'
+        );
 
         $sinFk = array_values(array_diff($pagoproveedorIds, array_map('intval', array_keys($porFk))));
         if ($sinFk === []) {
-            return array_map(static fn ($v) => trim((string) $v), $porFk);
+            return $porFk;
         }
 
-        $porCajaMov = DB::table('pagoproveedor as pp')
-            ->join('caja_movimiento as cmx', 'cmx.id', '=', 'pp.caja_movimiento_id')
-            ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'cmx.id')
-            ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
-            ->whereIn('pp.id', $sinFk)
-            ->whereNotNull('pp.caja_movimiento_id')
-            ->groupBy('pp.id')
-            ->select('pp.id')
-            ->selectRaw("GROUP_CONCAT(DISTINCT {$etiqueta} SEPARATOR ' | ') as cuentas_caja")
-            ->pluck('cuentas_caja', 'id')
-            ->all();
+        $porCajaMov = $this->mapCuentasPorCuentacajaId(
+            DB::table('pagoproveedor as pp')
+                ->join('caja_movimiento as cmx', 'cmx.id', '=', 'pp.caja_movimiento_id')
+                ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'cmx.id')
+                ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
+                ->whereIn('pp.id', $sinFk)
+                ->whereNotNull('pp.caja_movimiento_id'),
+            'pp.id'
+        );
 
-        $out = $porFk + $porCajaMov;
+        return $porFk + $porCajaMov;
+    }
 
-        return array_map(static fn ($v) => trim((string) $v), $out);
+    /**
+     * @param  list<int>  $pagoproveedorIds
+     * @return array<int, array<int, string>>
+     */
+    private function mapCuentasChequePagoproveedor(array $pagoproveedorIds): array
+    {
+        if ($pagoproveedorIds === []) {
+            return [];
+        }
+
+        $porFk = $this->mapCuentasChequePorId(
+            DB::table('cheque as ch')
+                ->join('cuentacaja as cc', 'cc.id', '=', 'ch.cuentacaja_id')
+                ->whereIn('ch.pagoproveedor_id', $pagoproveedorIds)
+                ->where('ch.origen', 'E'),
+            'ch.pagoproveedor_id'
+        );
+
+        $porCajaMov = $this->mapCuentasChequePorId(
+            DB::table('pagoproveedor as pp')
+                ->join('cheque as ch', 'ch.caja_movimiento_id', '=', 'pp.caja_movimiento_id')
+                ->join('cuentacaja as cc', 'cc.id', '=', 'ch.cuentacaja_id')
+                ->whereIn('pp.id', $pagoproveedorIds)
+                ->whereNotNull('pp.caja_movimiento_id')
+                ->where('ch.origen', 'E'),
+            'pp.id'
+        );
+
+        return $this->combinarMapasPorCuenta($porFk, $porCajaMov);
     }
 
     /**
      * @param  list<int>  $cajaMovimientoIds
-     * @return array<int, string>
+     * @return array<int, array<int, string>>
      */
     private function mapCuentasCajaIeOpp(array $cajaMovimientoIds): array
     {
@@ -292,17 +321,127 @@ final class PagoproveedorListadoUnificadoSupport
             return [];
         }
 
-        $etiqueta = $this->sqlEtiquetaCuentaCaja();
+        return $this->mapCuentasPorCuentacajaId(
+            DB::table('caja_movimiento_cuentacaja as cmc')
+                ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
+                ->whereIn('cmc.caja_movimiento_id', $cajaMovimientoIds),
+            'cmc.caja_movimiento_id'
+        );
+    }
 
-        return DB::table('caja_movimiento_cuentacaja as cmc')
-            ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
-            ->whereIn('cmc.caja_movimiento_id', $cajaMovimientoIds)
-            ->groupBy('cmc.caja_movimiento_id')
-            ->select('cmc.caja_movimiento_id as id')
-            ->selectRaw("GROUP_CONCAT(DISTINCT {$etiqueta} SEPARATOR ' | ') as cuentas_caja")
-            ->pluck('cuentas_caja', 'id')
-            ->map(static fn ($v) => trim((string) $v))
-            ->all();
+    /**
+     * @param  list<int>  $cajaMovimientoIds
+     * @return array<int, array<int, string>>
+     */
+    private function mapCuentasChequeIeOpp(array $cajaMovimientoIds): array
+    {
+        if ($cajaMovimientoIds === []) {
+            return [];
+        }
+
+        return $this->mapCuentasChequePorId(
+            DB::table('cheque as ch')
+                ->join('cuentacaja as cc', 'cc.id', '=', 'ch.cuentacaja_id')
+                ->whereIn('ch.caja_movimiento_id', $cajaMovimientoIds)
+                ->where('ch.origen', 'E'),
+            'ch.caja_movimiento_id'
+        );
+    }
+
+    /**
+     * @param  array<int, array<int, string>>  $a
+     * @param  array<int, array<int, string>>  $b
+     * @return array<int, array<int, string>>
+     */
+    private function combinarMapasPorCuenta(array $a, array $b): array
+    {
+        $out = $a;
+        foreach ($b as $id => $porCuenta) {
+            foreach ($porCuenta as $cuentaId => $etiqueta) {
+                $out[(int) $id][$cuentaId] = $etiqueta;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int, array<int, string>>  $caja
+     * @param  array<int, array<int, string>>  $cheques
+     * @return array<int, string>
+     */
+    private function fusionarCuentasCajaYCheques(array $caja, array $cheques): array
+    {
+        $ids = array_unique(array_merge(array_keys($caja), array_keys($cheques)));
+        $out = [];
+        foreach ($ids as $id) {
+            $porCuenta = ($caja[$id] ?? []) + [];
+            foreach ($cheques[$id] ?? [] as $cuentaId => $etiquetaChp) {
+                $porCuenta[$cuentaId] = $etiquetaChp;
+            }
+            $etiquetas = array_values(array_filter(
+                array_map('trim', $porCuenta),
+                static fn (string $item): bool => $item !== ''
+            ));
+            if ($etiquetas === []) {
+                continue;
+            }
+            $out[(int) $id] = implode(' | ', $etiquetas);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<int, array<int, string>>
+     */
+    private function mapCuentasPorCuentacajaId(QueryBuilder $query, string $idCol): array
+    {
+        $etiqueta = $this->sqlEtiquetaCuentaCaja();
+        $filas = $query
+            ->groupBy($idCol, 'cc.id', 'cc.codigo', 'cc.nombre')
+            ->selectRaw("{$idCol} as id")
+            ->selectRaw('cc.id as cuentacaja_id')
+            ->selectRaw("{$etiqueta} as etiqueta")
+            ->get();
+
+        return $this->indexarEtiquetasPorCuenta($filas);
+    }
+
+    /**
+     * @return array<int, array<int, string>>
+     */
+    private function mapCuentasChequePorId(QueryBuilder $query, string $idCol): array
+    {
+        $etiqueta = $this->sqlEtiquetaCuentaCaja();
+        $filas = $query
+            ->groupBy($idCol, 'cc.id', 'cc.codigo', 'cc.nombre')
+            ->selectRaw("{$idCol} as id")
+            ->selectRaw('cc.id as cuentacaja_id')
+            ->selectRaw("CONCAT({$etiqueta}, ' · CHP ', GROUP_CONCAT(DISTINCT TRIM(ch.numerocheque) ORDER BY ch.numerocheque SEPARATOR ', ')) as etiqueta")
+            ->get();
+
+        return $this->indexarEtiquetasPorCuenta($filas);
+    }
+
+    /**
+     * @param  Collection<int, object>  $filas
+     * @return array<int, array<int, string>>
+     */
+    private function indexarEtiquetasPorCuenta(Collection $filas): array
+    {
+        $out = [];
+        foreach ($filas as $fila) {
+            $id = (int) ($fila->id ?? 0);
+            $cuentaId = (int) ($fila->cuentacaja_id ?? 0);
+            $etiqueta = trim((string) ($fila->etiqueta ?? ''));
+            if ($id <= 0 || $cuentaId <= 0 || $etiqueta === '') {
+                continue;
+            }
+            $out[$id][$cuentaId] = $etiqueta;
+        }
+
+        return $out;
     }
 
     private function sqlEtiquetaCuentaCaja(): string

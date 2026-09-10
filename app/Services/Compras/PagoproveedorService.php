@@ -35,6 +35,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 
@@ -1124,6 +1125,8 @@ class PagoproveedorService
                             'moneda_emitido_ids' => [$monedaId],
                             'cotizacioncheque_emitidos' => [1],
                             'caracter_emitidos' => ['O'],
+                            'para_dep_emitidos' => [ChequePropioInstrumentoSupport::paraDepDefault()],
+                            'negociable_emitidos' => [ChequePropioInstrumentoSupport::negociableDesdeChequera((string) ($chequera->tipochequera ?? 'F'))],
                             'anombrede_emitidos' => [$nombreProveedorCheque ?: ('Proveedor #'.$proveedorId)],
                             'proveedor_emitido_ids' => [$proveedorId],
                             'empresa_id' => $empresaId,

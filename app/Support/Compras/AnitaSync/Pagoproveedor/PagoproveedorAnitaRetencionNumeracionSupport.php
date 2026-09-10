@@ -65,6 +65,21 @@ final class PagoproveedorAnitaRetencionNumeracionSupport
         };
     }
 
+    /**
+     * axp_tipo_ap de tesorería (pago.c tvalores.tipo / graba_auxpag TES).
+     * Siempre RGP/RIP/RSP/RTP: G1/T1 son solo numeradores.
+     */
+    public static function tipoApAuxpag(string $tiporetencion): ?string
+    {
+        return match ($tiporetencion) {
+            Pagoproveedor_Retencion::TIPO_GANANCIAS => self::MONO_GANANCIAS,
+            Pagoproveedor_Retencion::TIPO_IVA => self::MONO_IVA,
+            Pagoproveedor_Retencion::TIPO_SUSS => self::MONO_SUSS,
+            Pagoproveedor_Retencion::TIPO_IIBB => self::MONO_IIBB,
+            default => null,
+        };
+    }
+
     public static function claveTesParaEmpresa(string $prefijo, int $empresaId): string
     {
         if (! self::esMultiempresa()) {

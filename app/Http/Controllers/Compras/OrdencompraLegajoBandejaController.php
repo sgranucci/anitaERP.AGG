@@ -170,7 +170,7 @@ class OrdencompraLegajoBandejaController extends Controller
 
         $validated = $request->validate([
             'precarga_id' => 'required|integer|min:1',
-            'tipo' => 'required|string|in:FC,NC,ND',
+            'tipo' => ['required', 'string', 'max:8', 'regex:/^[A-Za-z]{2,6}$/'],
         ]);
 
         $oc = $this->paqueteService->encontrarOcVisible($id);

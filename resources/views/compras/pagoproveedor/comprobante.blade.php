@@ -31,6 +31,8 @@
         .firma-box { margin-top: 28px; }
         .firma-box td { border: none; text-align: center; padding-top: 6px; vertical-align: top; }
         .firma-linea { border-top: 1px solid #333; width: 75%; margin: 32px auto 4px auto; }
+        .firma-agente { max-height: 52px; max-width: 160px; display: block; margin: 0 auto 2px auto; }
+        .firma-hueco { min-height: 52px; }
         .page-break { page-break-before: always; }
         .badge-op {
             display: inline-block; border: 1px solid #0d3b66; padding: 2px 8px;
@@ -321,6 +323,7 @@
         'fechaDdjjGanancias' => $fechaDdjjGanancias,
         'periodoSuss' => $periodoSuss,
         'leyendasLegales' => $leyendasLegales,
+        'firmaAgenteRetencion' => $firmaAgenteRetencion ?? null,
         'pageBreak' => empty($soloRetencion) || ! $loop->first,
     ])
 @endforeach

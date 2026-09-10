@@ -5,9 +5,11 @@ namespace App\Support\Caja;
 use App\ApiAnita;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cheque;
+use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplicacionCuentacorrienteAnitaLadoSupport;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -16,6 +18,7 @@ use Illuminate\Support\Facades\Log;
  * Escritura Anita che_ban al emitir IE/OPP (a-movim.c + pago.c):
  * - pago (cabecera)
  * - auxpag TES + tesmov por cada línea de cuentacaja (pago.c TES / a-movim.c OPP)
+ * - auxpag TES + tesmov por retenciones RGP/RIP/RSP/RTP (pago.c inserta_valores + graba_auxpag TES)
  * - auxpag FAC por factura aplicada (pago.c graba_auxpag(FAC))
  * - si hay cheques propios emitidos: cpromae + auxpag CHP + tesmov CHP
  */
@@ -23,6 +26,9 @@ final class IngresoEgresoAnitaTesmovSupport
 {
     /** @var array<string, string> imputacion 8 dígitos => tctes_clave */
     private static array $cacheTipoApPorCuenta = [];
+
+    /** @var array<string, array{imputacion: string, desc: string}|null> tctes_clave => fila */
+    private static array $cacheTctesPorClave = [];
 
     public static function estaHabilitada(): bool
     {
@@ -157,6 +163,17 @@ final class IngresoEgresoAnitaTesmovSupport
             self::insertAuxpagFacturasAplicadas($ctx, (int) $movimiento->pagoproveedor_id, (float) $ctx['factor']);
         }
 
+        $pagoIdRet = (int) ($movimiento->pagoproveedor_id ?? 0);
+        if ($movimientoChequesOrigen !== null) {
+            $orig = (int) ($movimientoChequesOrigen->pagoproveedor_id ?? 0);
+            if ($orig > 0) {
+                $pagoIdRet = $orig;
+            }
+        }
+        if ($pagoIdRet > 0) {
+            self::insertAuxpagTesRetenciones($ctx, $pagoIdRet);
+        }
+
         if ($movimientoChequesOrigen !== null) {
             foreach ($movimientoChequesOrigen->cheques as $cheque) {
                 if (strtoupper((string) $cheque->origen) !== 'E') {
@@ -217,7 +234,7 @@ final class IngresoEgresoAnitaTesmovSupport
 
     /**
      * Backfill MultiEmpresa: axp_sucursal_cob = sucursal/empresa en líneas de cuenta-caja.
-     * No toca CHP (ahí axp_sucursal_cob es nro de cheque). pago no tiene sucursal_cob;
+     * No toca CHP: ahí axp_sucursal es el nro de cheque y axp_sucursal_cob es la empresa.
      * pag_sucursal ya lleva nroemp.
      *
      * @return array{
@@ -654,6 +671,185 @@ final class IngresoEgresoAnitaTesmovSupport
     }
 
     /**
+     * pago.c inserta_valores(RGP/RIP/RSP/RTP) + graba_tesoreria + graba_auxpag(TES):
+     * una fila auxpag y una tesmov OPP por tipo, importe = suma de certificados.
+     * axp_nro/axp_fecha_co/axp_sucursal = 0; axp_banco = tctes_imputacion.
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private static function insertAuxpagTesRetenciones(array $ctx, int $pagoproveedorId): void
+    {
+        $retenciones = Pagoproveedor_Retencion::query()
+            ->where('pagoproveedor_id', $pagoproveedorId)
+            ->orderBy('id')
+            ->get();
+
+        $totales = [];
+        $monedaId = 1;
+        foreach ($retenciones as $ret) {
+            $importeAbs = round(abs((float) $ret->importe), 2);
+            if ($importeAbs < 0.01) {
+                continue;
+            }
+            $tipoAp = PagoproveedorAnitaRetencionNumeracionSupport::tipoApAuxpag((string) $ret->tiporetencion);
+            if ($tipoAp === null) {
+                continue;
+            }
+            $totales[$tipoAp] = ($totales[$tipoAp] ?? 0.0) + $importeAbs;
+            if ((int) ($ret->moneda_id ?: 0) > 0) {
+                $monedaId = (int) $ret->moneda_id;
+            }
+        }
+
+        $cotizacion = self::cotizacionTesmov($monedaId, (float) ($ctx['cotizacion'] ?? 1));
+
+        foreach ($totales as $tipoAp => $importeAbs) {
+            $tctes = self::tctesPorClave($tipoAp);
+            if ($tctes === null) {
+                throw new \RuntimeException(
+                    'Tipo de tesorería Anita inexistente para retención '.$tipoAp.' (tctes).'
+                );
+            }
+            $imputacion = $tctes['imputacion'];
+            if ($imputacion === '' || $imputacion === '00000000') {
+                Log::warning('caja.ie.anita.retencion_sin_imputacion', [
+                    'tipo_ap' => $tipoAp,
+                    'pagoproveedor_id' => $pagoproveedorId,
+                ]);
+
+                continue;
+            }
+
+            $importe = round($importeAbs * (float) $ctx['factor'], 2);
+            self::insertAuxpagTesValor($ctx, $tipoAp, $imputacion, $importe, $monedaId);
+            self::insertTesmovComprobante($ctx, $imputacion, $importe, $monedaId, $cotizacion);
+        }
+    }
+
+    /**
+     * pago.c TES (retención): axp_tipo_ap = RGP/RIP/RSP/RTP, axp_nro=0,
+     * axp_sucursal=0, axp_sucursal_cob = empresa, axp_banco = tctes_imputacion.
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private static function insertAuxpagTesValor(
+        array $ctx,
+        string $tipoAp,
+        string $imputacion,
+        float $importe,
+        int $monedaId
+    ): void {
+        $letraComp = self::esc($ctx['letra'] ?? ' ');
+
+        $raw = (new ApiAnita)->apiCallEscritura([
+            'tabla' => 'auxpag',
+            'acc' => 'insert',
+            'sistema' => self::sistema(),
+            'campos' => '
+                axp_pro,
+                axp_fecha,
+                axp_rec,
+                axp_tipo,
+                axp_nro,
+                axp_tipo_ap,
+                axp_monto_ap,
+                axp_cod_mon_co,
+                axp_fecha_co,
+                axp_banco,
+                axp_letra_comp,
+                axp_sucursal,
+                axp_letra_cob,
+                axp_sucursal_cob,
+                axp_vendedor,
+                axp_nro_interno,
+                axp_empresa,
+                axp_concepto,
+                axp_cbu',
+            'valores' => "
+                '".$ctx['proveedorCodigo']."',
+                '".$ctx['fecha']."',
+                '".$ctx['nro']."',
+                '".self::esc($ctx['tipo'])."',
+                '0',
+                '".self::esc($tipoAp)."',
+                '".$importe."',
+                '".$monedaId."',
+                '0',
+                '".self::esc($imputacion)."',
+                '".$letraComp."',
+                '0',
+                '".self::esc($ctx['letra'])."',
+                '".$ctx['empresa']."',
+                '0',
+                '0',
+                '".$ctx['empresa']."',
+                '0',
+                ' '",
+        ], 'caja IE auxpag '.$tipoAp);
+
+        self::assertOk($raw, 'auxpag '.$tipoAp, (int) $ctx['nro']);
+    }
+
+    /**
+     * @return array{imputacion: string, desc: string}|null
+     */
+    private static function tctesPorClave(string $clave): ?array
+    {
+        $clave = strtoupper(substr(trim($clave), 0, 3));
+        if ($clave === '') {
+            return null;
+        }
+        if (array_key_exists($clave, self::$cacheTctesPorClave)) {
+            return self::$cacheTctesPorClave[$clave];
+        }
+
+        try {
+            $raw = (new ApiAnita)->apiCallEscritura([
+                'acc' => 'list',
+                'sistema' => self::sistema(),
+                'tabla' => 'tctes',
+                'campos' => 'tctes_clave,tctes_imputacion,tctes_numero,tctes_desc',
+                'whereArmado' => ' WHERE tctes_clave = '.self::escSql($clave),
+            ], 'caja IE tctes por clave '.$clave);
+
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err !== null) {
+                Log::warning('caja.ie.anita.tctes_clave_error', [
+                    'clave' => $clave,
+                    'error' => $err,
+                ]);
+                self::$cacheTctesPorClave[$clave] = null;
+
+                return null;
+            }
+
+            $fila = ApiAnita::primeraFilaLista((string) $raw);
+            if ($fila === null) {
+                self::$cacheTctesPorClave[$clave] = null;
+
+                return null;
+            }
+
+            $imputacion = self::imputacionTctesDesdeCodigo(trim((string) ($fila->tctes_imputacion ?? '')));
+            $desc = trim((string) ($fila->tctes_desc ?? ''));
+            self::$cacheTctesPorClave[$clave] = [
+                'imputacion' => $imputacion,
+                'desc' => $desc,
+            ];
+
+            return self::$cacheTctesPorClave[$clave];
+        } catch (\Throwable $e) {
+            Log::warning('caja.ie.anita.tctes_clave_exception', [
+                'clave' => $clave,
+                'error' => $e->getMessage(),
+            ]);
+            self::$cacheTctesPorClave[$clave] = null;
+
+            return null;
+        }
+    }
+
+    /**
      * pago.c graba_auxpag(FAC): una fila por factura aplicada.
      * axp_tipo_ap = tipo del comprobante (FNB/FAC/… o APA si es OPA),
      * axp_nro / letra_comp / axp_sucursal = clave de la factura (sucursal_comp),
@@ -867,6 +1063,7 @@ final class IngresoEgresoAnitaTesmovSupport
         $cotizacion = ChequePropioCpromaeAnitaMapper::cotizacion((float) ($cheque->cotizacion ?? 0));
         $monedaId = (int) ($cheque->moneda_id ?: 1);
         $fechaChe = ChequePropioCpromaeAnitaMapper::ymd((string) ($cheque->fechapago ?: $cheque->fechaemision ?: $movimiento->fecha));
+        $fechaEmi = ChequePropioCpromaeAnitaMapper::ymd((string) ($cheque->fechaemision ?: $movimiento->fecha));
 
         $proveedorCodigo = $ctx['proveedorCodigo'];
         if ($cheque->proveedores) {
@@ -874,6 +1071,7 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         $entregado = self::recortar((string) ($cheque->entregado ?: $ctx['entregadoA']), 30);
+        $sucursalesAxp = ChequePropioAuxpagAnitaMapper::sucursales($nroCheque, (int) $ctx['empresa']);
         $filaCpromae = ChequePropioCpromaeAnitaMapper::mapear([
             'cuenta' => $codigoCuenta,
             'nro' => $nroCheque,
@@ -890,6 +1088,10 @@ final class IngresoEgresoAnitaTesmovSupport
             'chequera_codigo' => (string) ($cheque->chequeras->codigo ?? '0'),
             'chequera_tipo' => (string) ($cheque->chequeras->tipochequera ?? 'F'),
             'caracter' => (string) ($cheque->caracter ?? ''),
+            'para_dep' => (string) ($cheque->para_dep ?? ''),
+            'negociable' => (string) ($cheque->negociable ?? ''),
+            'nro_echeq' => (string) ($cheque->nro_echeq ?? ''),
+            'fecha_entrega' => (string) ($cheque->fecha_entrega ?? ''),
             'sucursal_pago' => (string) ($cheque->sucursalpago ?? ''),
             'tipo_distrib' => (string) ($cheque->tipodistribucion ?? ''),
             'estado_erp' => (string) ($cheque->estado ?? ''),
@@ -945,9 +1147,9 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$fechaChe."',
                 '".str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT)."',
                 ' ',
-                '".$ctx['sucursal']."',
+                '".$sucursalesAxp['axp_sucursal']."',
                 ' ',
-                '".$nroCheque."',
+                '".$sucursalesAxp['axp_sucursal_cob']."',
                 '0',
                 '0',
                 '".$ctx['empresa']."',
@@ -1068,6 +1270,7 @@ final class IngresoEgresoAnitaTesmovSupport
             $proveedorCodigo = str_pad((string) $cheque->proveedores->codigo, 6, '0', STR_PAD_LEFT);
         }
 
+        $sucursalesAxp = ChequePropioAuxpagAnitaMapper::sucursales($nroCheque, (int) $ctx['empresa']);
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'auxpag',
             'acc' => 'insert',
@@ -1104,9 +1307,9 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$ctx['fecha']."',
                 '".$cuentaPad."',
                 ' ',
-                '".$ctx['sucursal']."',
+                '".$sucursalesAxp['axp_sucursal']."',
                 '".self::esc($ctx['letra'])."',
-                '0',
+                '".$sucursalesAxp['axp_sucursal_cob']."',
                 '0',
                 '0',
                 '".$ctx['empresa']."',

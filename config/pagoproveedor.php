@@ -35,6 +35,15 @@ return [
     'letra_default' => ' ',
     'sucursal_default' => 1,
 
+    /**
+     * Imagen de firma del agente (pie de certificados de retención de la OP).
+     * Izquierda del pie; a la derecha queda "Recibí conforme" del proveedor.
+     */
+    'firma_agente_retencion' => env(
+        'PAGOPROVEEDOR_FIRMA_AGENTE_RETENCION',
+        resource_path('firmas/firma_acosta.jpg')
+    ),
+
     /** Modo cotización default al abrir el formulario. */
     'modo_cotizacion_default' => env('PAGOPROVEEDOR_MODO_COTIZACION_DEFAULT', 'factura'),
 
@@ -46,6 +55,17 @@ return [
         env('PAGOPROVEEDOR_CHEQUE_DIFERIDOS', true),
         FILTER_VALIDATE_BOOLEAN
     ),
+
+    'auditoria_diaria' => [
+        'habilitada' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('PAGOPROVEEDOR_AUDITORIA_ANITA_HORA', '08:45'),
+        'usuario_id' => (int) env('PAGOPROVEEDOR_AUDITORIA_ANITA_USUARIO_ID', 1),
+        'email' => env('PAGOPROVEEDOR_AUDITORIA_ANITA_EMAIL', env('COMPROBANTE_PROVEEDOR_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com')),
+        'ventana_dias' => max(1, (int) env('PAGOPROVEEDOR_AUDITORIA_ANITA_VENTANA_DIAS', 7)),
+        'auto_reparar' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_AUTO_REPARAR', false), FILTER_VALIDATE_BOOLEAN),
+        'mail_siempre' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_MAIL_SIEMPRE', false), FILTER_VALIDATE_BOOLEAN),
+        'mail_si_reparo' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_MAIL_SI_REPARO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
 
     'numeracion_lock_segundos' => (int) env('PAGOPROVEEDOR_NUMERACION_LOCK', 15),
 

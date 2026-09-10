@@ -52,9 +52,23 @@ function chequeraDesdeLista(lista, idActual, preferirDiferido) {
 function pintarChequeraEmitido($tr, ch) {
     $tr.find('.chequera_emitido_id').val(ch && ch.id ? ch.id : '');
     $tr.find('.chequera_emitido_tipo').val(ch && ch.tipocheque ? ch.tipocheque : '');
+    $tr.find('.chequera_emitido_tipochequera').val(ch && ch.tipochequera ? ch.tipochequera : '');
     var etiqueta = ch ? (ch.etiqueta_completa || ch.etiqueta || '') : '';
     $tr.find('.chequera_emitido_lbl').val(etiqueta);
     $tr.find('.chequera_emitido_lbl').attr('title', etiqueta || 'F1 consulta chequera de la cuenta');
+    if (ch && ch.tipochequera) {
+        $tr.find('.negociable_emitido').val(String(ch.tipochequera).toUpperCase() === 'E' ? 'E' : 'N');
+    }
+    sincronizarNroEcheqEmitido($tr);
+}
+
+function sincronizarNroEcheqEmitido($tr) {
+    if (!$tr || !$tr.length) {
+        return;
+    }
+    var neg = String($tr.find('.negociable_emitido').val() || 'N').toUpperCase();
+    var nro = String($tr.find('.numerocheque_emitido').val() || '').trim();
+    $tr.find('.nro_echeq_emitido').val(neg === 'E' ? nro : '');
 }
 
 function filtrarChequerasChequeEmitido($tr, cuentacajaId, preferirDiferido, lista) {
@@ -361,6 +375,11 @@ function activaEventosChequesIngresoEgreso() {
 
     $(document).on('input', '.numerocheque_emitido', function () {
         $(this).data('auto', 0);
+        sincronizarNroEcheqEmitido($(this).closest('tr'));
+    });
+
+    $(document).on('change', '.negociable_emitido', function () {
+        sincronizarNroEcheqEmitido($(this).closest('tr'));
     });
 
     $(document).on('change', '.fechapago_emitido', function () {

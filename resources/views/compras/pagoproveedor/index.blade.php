@@ -112,7 +112,17 @@
                                     @if (count($cuentasCaja) > 0)
                                         <ul class="mb-0 pl-3 small">
                                             @foreach ($cuentasCaja as $cuentaCaja)
-                                                <li>{{ $cuentaCaja }}</li>
+                                                <li>
+                                                    @if (str_contains($cuentaCaja, ' · CHP '))
+                                                        @php
+                                                            [$ctaTxt, $nrosChp] = explode(' · CHP ', $cuentaCaja, 2);
+                                                        @endphp
+                                                        {{ $ctaTxt }}
+                                                        <span class="badge badge-info ml-1" title="Cuenta de los cheques emitidos">CHP {{ $nrosChp }}</span>
+                                                    @else
+                                                        {{ $cuentaCaja }}
+                                                    @endif
+                                                </li>
                                             @endforeach
                                         </ul>
                                     @endif

@@ -103,14 +103,173 @@ final class PrecargaProveedorAbreviaturaTipoSupport
 
     public static function centrocostoDestinoDesdeOrdencompra(Ordencompra $oc): ?Centrocosto
     {
+        foreach (self::centrocostosDestinoTodosDesdeOrdencompra($oc) as $cc) {
+            return $cc;
+        }
+
+        return null;
+    }
+
+    /**
+     * Todos los CC destino de líneas (y cabecera), en orden. Sirve para OC mixtas (FIB + FGA).
+     *
+     * @return list<Centrocosto>
+     */
+    public static function centrocostosDestinoTodosDesdeOrdencompra(Ordencompra $oc): array
+    {
+        $oc->loadMissing([
+            'centrocostos:id,codigo,tipoiva',
+            'ordencompra_articulos.centrocostos_destino:id,codigo,tipoiva',
+        ]);
+
+        $out = [];
+        $seen = [];
         foreach ($oc->ordencompra_articulos ?? [] as $linea) {
             $cc = $linea->centrocostos_destino;
-            if ($cc && trim((string) ($cc->codigo ?? '')) !== '' && (string) $cc->codigo !== '0') {
-                return $cc;
+            if (! $cc || trim((string) ($cc->codigo ?? '')) === '' || (string) $cc->codigo === '0') {
+                continue;
+            }
+            $key = (string) $cc->codigo;
+            if (isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $out[] = $cc;
+        }
+
+        $header = $oc->centrocostos;
+        if ($header && trim((string) ($header->codigo ?? '')) !== '' && (string) $header->codigo !== '0') {
+            $key = (string) $header->codigo;
+            if (! isset($seen[$key])) {
+                $out[] = $header;
             }
         }
 
-        return $oc->centrocostos;
+        return $out;
+    }
+
+    /**
+     * Abreviaturas finas (FIB/FGA/…) por familia AFIP, a partir de varios CC.
+     *
+     * @param  list<array{codigo?: int|string, tipoiva?: string}>  $centros
+     * @return array{FC: list<string>, NC: list<string>, ND: list<string>}
+     */
+    public static function abreviaturasFinoDesdeCentros(
+        array $centros,
+        string $tipoItem,
+        bool $incluirGastronomia = true,
+    ): array {
+        $out = ['FC' => [], 'NC' => [], 'ND' => []];
+        foreach (['FC', 'NC', 'ND'] as $gen) {
+            $set = [];
+            foreach ($centros as $cc) {
+                $abrev = self::abreviatura(
+                    $gen,
+                    $cc['codigo'] ?? 0,
+                    (string) ($cc['tipoiva'] ?? ''),
+                    $tipoItem,
+                );
+                if ($abrev !== '') {
+                    $set[$abrev] = true;
+                }
+            }
+            if ($incluirGastronomia) {
+                $gastro = self::abreviatura($gen, 85, 'I', $tipoItem);
+                if ($gastro !== '') {
+                    $set[$gastro] = true;
+                }
+            }
+            $out[$gen] = array_keys($set);
+        }
+
+        return $out;
+    }
+
+    public static function esTipoGenerico(string $tipo): bool
+    {
+        return in_array(strtoupper(trim($tipo)), ['FC', 'NC', 'ND'], true);
+    }
+
+    /**
+     * Opciones para corregir el tipo en precarga / bandeja (finos de todos los CC + gastronomía).
+     *
+     * @return list<array{value: string, label: string}>
+     */
+    public static function opcionesCorreccionTipo(Ordencompra $oc, ?string $abrevActual = null): array
+    {
+        $centros = [];
+        foreach (self::centrocostosDestinoTodosDesdeOrdencompra($oc) as $cc) {
+            $centros[] = [
+                'codigo' => $cc->codigo ?? '',
+                'tipoiva' => (string) ($cc->tipoiva ?? ''),
+            ];
+        }
+
+        $tipoItem = 'B';
+        try {
+            $tipoItem = self::tipoItemDesdeOrdencompra($oc);
+        } catch (Throwable) {
+            $tipoItem = 'B';
+        }
+
+        $porFamilia = self::abreviaturasFinoDesdeCentros($centros, $tipoItem, true);
+        $abrevActual = strtoupper(trim((string) $abrevActual));
+        if ($abrevActual !== '' && ! self::esTipoGenerico($abrevActual)) {
+            $fam = match (substr($abrevActual, 0, 1)) {
+                'C' => 'NC',
+                'D' => 'ND',
+                default => 'FC',
+            };
+            $porFamilia[$fam][] = $abrevActual;
+            $porFamilia[$fam] = array_values(array_unique($porFamilia[$fam]));
+        }
+
+        $abrevs = [];
+        foreach ($porFamilia as $lista) {
+            foreach ($lista as $a) {
+                $abrevs[$a] = true;
+            }
+        }
+
+        $nombres = [];
+        try {
+            if ($abrevs !== []) {
+                $nombres = Tipotransaccion_Compra::query()
+                    ->whereIn('abreviatura', array_keys($abrevs))
+                    ->pluck('nombre', 'abreviatura')
+                    ->all();
+            }
+        } catch (Throwable) {
+            $nombres = [];
+        }
+
+        $opciones = [];
+        $seen = [];
+        foreach (['FC', 'NC', 'ND'] as $fam) {
+            foreach ($porFamilia[$fam] ?? [] as $abrev) {
+                if (isset($seen[$abrev])) {
+                    continue;
+                }
+                $seen[$abrev] = true;
+                $nombre = trim((string) ($nombres[$abrev] ?? ''));
+                $opciones[] = [
+                    'value' => $abrev,
+                    'label' => $nombre !== '' ? $abrev.' — '.$nombre : $abrev,
+                ];
+            }
+        }
+
+        foreach ([
+            'FC' => 'FC — Factura (según primer centro de costo de la OC)',
+            'NC' => 'NC — Nota de crédito (no exige COM)',
+            'ND' => 'ND — Nota de débito (no exige COM)',
+        ] as $val => $label) {
+            if (! isset($seen[$val])) {
+                $opciones[] = ['value' => $val, 'label' => $label];
+            }
+        }
+
+        return $opciones;
     }
 
     public static function tipoItemDesdeOrdencompra(Ordencompra $oc): string
