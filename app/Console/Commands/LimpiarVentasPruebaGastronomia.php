@@ -155,6 +155,7 @@ class LimpiarVentasPruebaGastronomia extends Command
         DB::table('cliente_cuentacorriente_aplicacion')->where('ventaaplicado_id', $ventaId)->delete();
 
         DB::table('waitry_comanda_envio')->where('venta_id', $ventaId)->delete();
+        DB::table('waitry_sync_status_pos')->where('venta_id', $ventaId)->delete();
         DB::table('ticketcanje_gastronomia')->where('venta_id', $ventaId)->delete();
         DB::table('tickettarjeta_gastronomia')->where('venta_id', $ventaId)->delete();
         DB::table('categoriafidelidad_entrega_gastronomia')->where('venta_id', $ventaId)->delete();

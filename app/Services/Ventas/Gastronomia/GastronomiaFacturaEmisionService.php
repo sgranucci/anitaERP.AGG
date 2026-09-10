@@ -471,6 +471,9 @@ final class GastronomiaFacturaEmisionService
                 }
 
                 if ($waitryTrasRespuesta) {
+                    // Persist + cola Laravel acá (antes de afterResponse): si FPM muere,
+                    // el syncStatusPOS no se pierde. afterResponse sigue para push de comandas nuevas.
+                    $resultado = $this->encolarWaitrySyncPagoSiCorresponde($resultado, $cuenta, $mediosPago);
                     $this->encolarWaitryTrasRespuesta(
                         $resultado,
                         $cuenta,
@@ -1019,6 +1022,8 @@ final class GastronomiaFacturaEmisionService
             }
         } elseif ($waitryEncolado && $waitryOrderId > 0) {
             $mensaje .= ' Waitry/KDS se actualizarán en segundo plano.';
+        } elseif (($resultado['waitry_pago'] ?? '') === 'encolado') {
+            $mensaje .= ' Waitry/KDS se actualizarán en segundo plano.';
         } elseif (($resultado['waitry_pago'] ?? '') === 'ok') {
             $mensaje .= ' Pago registrado en Waitry.';
         } elseif (($resultado['waitry_comanda'] ?? '') === 'ok' && $displayId === '') {
@@ -1272,6 +1277,29 @@ final class GastronomiaFacturaEmisionService
     }
 
     /**
+     * Orden importada: persiste syncStatusPOS/KDS y lo despacha a cola (no HTTP en Apache).
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
+     * @return array<string, mixed>
+     */
+    private function encolarWaitrySyncPagoSiCorresponde(
+        array $resultado,
+        CuentaGastronomia $cuenta,
+        array $mediosPago,
+    ): array {
+        $cuenta->refresh();
+        $waitryOrderId = (int) ($cuenta->waitry_order_id ?? 0);
+        $sinCobranza = ! empty($resultado['sin_cobranza']);
+        $pagada = ! $sinCobranza && $mediosPago !== [];
+        if ($waitryOrderId <= 0 || ! $pagada || $cuenta->waitry_cobro_totem) {
+            return $resultado;
+        }
+
+        return $this->aplicarWaitrySyncPagoTrasEmision($resultado, $cuenta, $mediosPago);
+    }
+
+    /**
      * @param  array<string, mixed>  $resultado
      * @param  list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
      */
@@ -1444,7 +1472,8 @@ final class GastronomiaFacturaEmisionService
         array $mediosPago,
     ): array {
         try {
-            $sync = $this->waitrySyncStatusPosService->sincronizarPagoTrasFactura($cuenta, $mediosPago);
+            $ventaId = (int) ($resultado['venta_id'] ?? $cuenta->venta_id ?? 0);
+            $sync = $this->waitrySyncStatusPosService->encolarPagoTrasFactura($cuenta, $mediosPago, $ventaId);
         } catch (Throwable $e) {
             Log::error('gastronomia.waitry.sync_pago.excepcion', [
                 'cuenta_id' => $cuenta->id,
@@ -1462,7 +1491,7 @@ final class GastronomiaFacturaEmisionService
         }
 
         if (! empty($sync['ok'])) {
-            $resultado['waitry_pago'] = 'ok';
+            $resultado['waitry_pago'] = ! empty($sync['encolada']) ? 'encolado' : 'ok';
 
             return $resultado;
         }

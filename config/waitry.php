@@ -233,6 +233,14 @@ return [
     'job_backoff_segundos' => [60, 300, 900],
     'cola' => env('WAITRY_COLA', 'default'),
 
+    /**
+     * syncStatusPOS / KDS de órdenes facturadas: persistir y despachar a cola Laravel
+     * (no afterResponse en el worker Apache). Requiere QUEUE_CONNECTION=database|redis.
+     */
+    'sync_status_pos_en_cola' => filter_var(env('WAITRY_SYNC_STATUS_POS_EN_COLA', true), FILTER_VALIDATE_BOOLEAN),
+    'sync_status_pos_job_timeout' => max(60, (int) env('WAITRY_SYNC_STATUS_POS_JOB_TIMEOUT', 180)),
+    'sync_status_pos_stale_minutos' => max(2, (int) env('WAITRY_SYNC_STATUS_POS_STALE_MINUTOS', 5)),
+
     /** Ruta relativa en storage/app para cache del token OAuth. */
     'token_storage_path' => env('WAITRY_TOKEN_STORAGE_PATH', 'waitry/oauth_token.json'),
 ];

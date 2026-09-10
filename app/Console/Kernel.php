@@ -434,6 +434,13 @@ class Kernel extends ConsoleKernel
                 ->when(fn () => (bool) config('gastronomia.cierre_jornada_automatico.habilitado', false));
         }
 
+        $schedule->command('waitry:reintentar-sync-status-pos', ['--limite' => 50])
+            ->everyMinute()
+            ->runInBackground()
+            ->withoutOverlapping(5)
+            ->appendOutputTo(storage_path('logs/waitry-sync-status-pos-reintento.log'))
+            ->when(fn () => (bool) config('waitry.habilitado', false));
+
         $intervaloMin = max(5, (int) config('contable_cierre.job_intervalo_minutos', 15));
         $schedule->command('contable:procesar-aperturas-periodo')
             ->cron('*/'.$intervaloMin.' * * * *')
