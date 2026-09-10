@@ -238,7 +238,7 @@ class FacturacionController extends Controller
                 return $bloqueo;
             }
 
-            if (config('app.empresa') == 'CALZADOS FERLI')
+            if (config('app.empresa') === 'Calzados Ferli')
                 $data = $this->facturacionService->generaFacturaPorItemOt($request->all());
             else
                 $data = $this->facturacionService->generaComprobanteGeneral($request->all());
