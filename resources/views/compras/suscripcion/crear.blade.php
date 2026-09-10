@@ -8,6 +8,7 @@
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}" type="text/javascript"></script>
 <script>
 (function () {
@@ -24,6 +25,9 @@
         }
         if (typeof activa_eventos_consultaproveedor === 'function') {
             activa_eventos_consultaproveedor();
+        }
+        if (typeof activa_eventos_consultaarticulo === 'function') {
+            activa_eventos_consultaarticulo();
         }
         if (typeof activa_eventos_consultausuario === 'function') {
             activa_eventos_consultausuario();
@@ -176,6 +180,10 @@
     $proveedorId = (int) old('proveedor_id', 0);
     $proveedorCodigo = old('codigoproveedor', '');
     $proveedorNombre = old('nombreproveedor', '');
+    $articuloDefault = $articulo_default ?? null;
+    $articuloId = (int) old('articulo_id', optional($articuloDefault)->id);
+    $articuloSku = old('codigoarticulo', optional($articuloDefault)->sku);
+    $articuloNombre = old('nombrearticulo', optional($articuloDefault)->descripcion);
     $ownerId = (int) old('suscripcion_owner_usuario_id', 0);
     $ownerCodigo = old('suscripcion_owner_usuario_codigo', '');
     $ownerNombre = old('suscripcion_owner_usuario_nombre', '');
@@ -212,9 +220,10 @@
                     <div class="tab-pane fade show active" id="tab-datos" role="tabpanel">
                         <div class="card-body">
                             <p class="text-muted small">
-                                Se genera una OC marcada como contrato, sin recepción, con cuenta del contrato.
-                                Al enviar entra al árbol de <strong>Suscripciones</strong>: la autoriza el gerente
-                                del sector en un nivel único (en Anita el N° de OC se asigna al crear).
+                                Se genera una OC marcada como contrato, con un ítem obligatorio (para recepción
+                                y contabilización posteriores). Al enviar entra al árbol de
+                                <strong>Suscripciones</strong>: la autoriza el gerente del sector en un nivel único
+                                (en Anita el N° de OC se asigna al crear).
                             </p>
 
                             <h5 class="mb-3">Datos principales</h5>
@@ -246,6 +255,32 @@
                                         Podés buscarlo en el padrón (código / F1) o escribir el nombre a mano si no está dado de alta.
                                     </small>
                                 </div>
+                            </div>
+
+                            <div class="form-group tm-articulo-campo">
+                                <label>Ítem de la OC <span class="text-danger">*</span></label>
+                                <div class="d-flex flex-nowrap align-items-center" style="gap:4px;">
+                                    <input type="hidden" name="articulo_id" id="articulo_id" class="articulo_id"
+                                           value="{{ $articuloId ?: '' }}" required>
+                                    <button type="button" title="Consulta artículos (F1)"
+                                            class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
+                                        <i class="fa fa-search text-primary"></i>
+                                    </button>
+                                    <input type="text" name="codigoarticulo" id="codigoarticulo"
+                                           class="form-control codigoarticulo" value="{{ $articuloSku }}"
+                                           placeholder="SKU" autocomplete="off" required
+                                           style="width:7.5rem;flex-shrink:0;"
+                                           title="SKU + Enter; F1 o lupa">
+                                    <input type="text" name="nombrearticulo" id="nombrearticulo"
+                                           class="form-control descripcionarticulo nombrearticulo"
+                                           value="{{ $articuloNombre }}"
+                                           placeholder="Descripción" readonly style="min-width:0;flex:1 1 auto;">
+                                </div>
+                                <small class="text-muted">
+                                    Obligatorio: sin ítem no se puede recibir ni contabilizar.
+                                    Por ahora se precarga <code>{{ \App\Support\Compras\SuscripcionSupport::ARTICULO_SKU_DEFAULT }}</code>
+                                    ({{ optional($articuloDefault)->descripcion ?: 'SUSCRIPCION DIARIOS RULERO' }}).
+                                </small>
                             </div>
 
                             <div class="form-row">
@@ -490,5 +525,6 @@
 @include('includes.contable.modalconsultacentrocosto')
 @include('includes.contable.modalconsultacuentacontable')
 @include('includes.compras.modalconsultaproveedor')
+@include('includes.stock.modalconsultaarticulo')
 @include('includes.admin.modalconsultausuario')
 @endsection

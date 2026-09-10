@@ -147,6 +147,34 @@
         return { saldo: saldo, aplicado: aplicado, equiv: equiv, dc: dc, n: n };
     }
 
+    function actualizarCheckTodas() {
+        var $todas = $('#pp-sel-deuda-todas');
+        if (!$todas.length) {
+            return;
+        }
+        var $checks = $('#tabla-deuda-proveedor tbody .pp-sel-deuda');
+        var n = $checks.length;
+        var nChecked = $checks.filter(':checked').length;
+        $todas.prop('disabled', n === 0);
+        $todas.prop('indeterminate', n > 0 && nChecked > 0 && nChecked < n);
+        $todas.prop('checked', n > 0 && nChecked === n);
+    }
+
+    function aplicarInclusionFila($tr, checked) {
+        var $chk = $tr.find('.pp-sel-deuda');
+        var $monto = $tr.find('.pp-monto-aplicar');
+        if (!$chk.length) {
+            return;
+        }
+        $chk.prop('checked', checked);
+        if (checked && $monto.length) {
+            var actual = parseFloat($monto.val() || '0') || 0;
+            if (!actual) {
+                $monto.val($monto.data('saldo'));
+            }
+        }
+    }
+
     function textoDc(dc) {
         if (Math.abs(dc) < 0.01) {
             return '—';
@@ -187,6 +215,7 @@
         $dif.toggleClass('text-success', Math.abs(dif) >= 0.01 && dif > 0);
         var hayFilas = $('#tabla-deuda-proveedor tbody .pp-monto-aplicar').length > 0;
         $('.pp-deuda-tfoot').toggle(hayFilas);
+        actualizarCheckTodas();
         window.ppResumenDeuda = d;
         $('#tbody-cuenta-table .monto').attr('placeholder', desembolsar > 0 ? desembolsar.toFixed(2) : '');
         return d;
@@ -402,6 +431,18 @@
         pintarResumenDesembolso();
     }
 
+    $(document).on('change', '#pp-sel-deuda-todas', function () {
+        var checked = this.checked;
+        $('#tabla-deuda-proveedor tbody tr').each(function () {
+            aplicarInclusionFila($(this), checked);
+        });
+        sincronizarCamposAplicacion();
+        programarCalculoRetenciones();
+        if (typeof flModificaAsiento !== 'undefined') {
+            flModificaAsiento = true;
+        }
+    });
+
     $(document).on('change', '.pp-sel-deuda', function () {
         var $tr = $(this).closest('tr');
         var $monto = $tr.find('.pp-monto-aplicar');
@@ -531,15 +572,21 @@
                 html += '<div class="mt-3 small"><strong>Acumulado '
                     + (acum.desde || '') + ' → ' + (acum.hasta || '')
                     + ': neto ' + fmt(acum.neto) + ' / retenido ' + fmt(acum.retenido)
-                    + ' (' + (acum.pagos || 0) + ' OP)</strong></div>';
+                    + ' (' + (acum.pagos || 0) + ' OP'
+                    + ((acum.pagos_anita > 0) ? ', ' + acum.pagos_anita + ' desde Anita' : '')
+                    + ')</strong></div>';
                 var lista = acum.detalle_pagos || [];
                 if (lista.length) {
                     html += '<div class="table-responsive mt-2"><table class="table table-sm table-bordered mb-0"><thead><tr>'
                         + '<th>Fecha</th><th>OP</th><th class="text-right">Neto</th><th class="text-right">Retenido</th>'
                         + '</tr></thead><tbody>';
                     lista.forEach(function (p) {
+                        var etiquetaOp = p.nro || ('#' + p.pagoproveedor_id);
+                        if (p.origen === 'anita') {
+                            etiquetaOp += ' (Anita)';
+                        }
                         html += '<tr><td>' + (p.fecha || '—') + '</td><td>'
-                            + $('<div>').text(p.nro || ('#' + p.pagoproveedor_id)).html()
+                            + $('<div>').text(etiquetaOp).html()
                             + '</td><td class="text-right">' + fmt(p.neto)
                             + '</td><td class="text-right">' + fmt(p.retenido) + '</td></tr>';
                     });
@@ -620,9 +667,12 @@
         var pie = '';
         if (res.bases && res.bases.origen) {
             pie = 'Bases: ' + res.bases.origen;
-            if (res.acumulado_ganancias && res.acumulado_ganancias.neto > 0) {
+        if (res.acumulado_ganancias && res.acumulado_ganancias.neto > 0) {
                 pie += ' · Acum. Gan. mes neto ' + fmt(res.acumulado_ganancias.neto)
                     + ' / ret. ' + fmt(res.acumulado_ganancias.retenido);
+                if (res.acumulado_ganancias.pagos_anita > 0) {
+                    pie += ' (incl. Anita)';
+                }
             }
         }
         $('#pp-retenciones-pie').text(pie || '');
@@ -719,6 +769,7 @@
         sincronizarCamposAplicacion();
     });
 
+    actualizarCheckTodas();
     if ($('#proveedor_id').val()) {
         cargarDeuda();
     }

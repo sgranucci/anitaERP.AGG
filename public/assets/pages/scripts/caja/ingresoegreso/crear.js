@@ -744,14 +744,24 @@ var montoPendienteSp = 0;
 
     	$(document).off('click.ieCuentaElige', '.eligeconsultacuentacaja').on('click.ieCuentaElige', '.eligeconsultacuentacaja', function () {
 			if (typeof cuentacajaxcodigoEmitido !== 'undefined' && cuentacajaxcodigoEmitido && cuentacajaxcodigoEmitido.length) {
-				var seleccionE = $(this).parents("tr").children().html();
-				var nombreE = $(this).parents("tr").find(".nombre").html();
-				var codigoE = $(this).parents("tr").find(".codigo").html();
-				var monedaE = $(this).parents("tr").find(".moneda_id").html();
-				cuentacajaxcodigoEmitido.find('.cuentacaja_emitido_id').val(seleccionE);
-				cuentacajaxcodigoEmitido.find('.codigo_emitido').val(codigoE);
-				cuentacajaxcodigoEmitido.find('.nombre_emitido').val(nombreE);
-				cuentacajaxcodigoEmitido.find('.moneda_emitido_id').val(monedaE);
+				var $trE = cuentacajaxcodigoEmitido;
+				var dataE = {
+					id: $(this).parents("tr").find(".cuentacaja_id").text() || $(this).parents("tr").children().first().text(),
+					nombre: $(this).parents("tr").find(".nombre").text(),
+					codigo: $(this).parents("tr").find(".codigo").text(),
+					moneda_id: $(this).parents("tr").find(".moneda_id").html()
+				};
+				if (typeof aplicarCuentaChequeEmitido === 'function') {
+					aplicarCuentaChequeEmitido($trE, dataE, false);
+				} else {
+					$trE.find('.cuentacaja_emitido_id').val(dataE.id);
+					$trE.find('.codigo_emitido').val(dataE.codigo);
+					$trE.find('.nombre_emitido').val(dataE.nombre);
+					$trE.find('.moneda_emitido_id').val(dataE.moneda_id);
+				}
+				if (typeof cargarEmisionChequeEmitido === 'function') {
+					cargarEmisionChequeEmitido($trE, { forzarNumero: true });
+				}
 				cuentacajaxcodigoEmitido = null;
 				$('#consultacuentacajaModal').modal('hide');
 				flModificaAsiento = true;

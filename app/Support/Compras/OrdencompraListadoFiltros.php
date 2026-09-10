@@ -91,6 +91,7 @@ class OrdencompraListadoFiltros
             return array_merge(self::filtrosVacios(), [
                 'empresa_id' => $empresaId,
                 'empresa_scope' => $empresaScope,
+                'estado' => self::normalizarEstadoExterno($request->input('estado')),
             ]);
         }
 
@@ -126,7 +127,18 @@ class OrdencompraListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
+            'estado' => self::normalizarEstadoExterno($request->input('estado')),
         ];
+    }
+
+    public static function normalizarEstadoExterno($estado): string
+    {
+        $valor = strtoupper(trim((string) $estado));
+        if ($valor === '' || ! OrdencompraEstados::esNombreValido($valor)) {
+            return '';
+        }
+
+        return $valor;
     }
 
     /**
@@ -183,7 +195,7 @@ class OrdencompraListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, empresa_id: ?int, empresa_scope: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, empresa_id: ?int, empresa_scope: string, estado: string}
      */
     public static function filtrosVacios(): array
     {
@@ -196,6 +208,7 @@ class OrdencompraListadoFiltros
             'busqueda' => '',
             'empresa_id' => null,
             'empresa_scope' => 'una',
+            'estado' => '',
         ];
     }
 
@@ -228,18 +241,23 @@ class OrdencompraListadoFiltros
     /**
      * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
      *
-     * @return array<string, int>
+     * @return array<string, int|string>
      */
     public static function paraQueryStringEmpresa(array $filtros): array
     {
+        $params = [];
         if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
-            return ['empresa_todas' => 1];
-        }
-        if (! empty($filtros['empresa_id'])) {
-            return ['empresa_id' => (int) $filtros['empresa_id']];
+            $params['empresa_todas'] = 1;
+        } elseif (! empty($filtros['empresa_id'])) {
+            $params['empresa_id'] = (int) $filtros['empresa_id'];
         }
 
-        return [];
+        $estado = self::normalizarEstadoExterno($filtros['estado'] ?? '');
+        if ($estado !== '') {
+            $params['estado'] = $estado;
+        }
+
+        return $params;
     }
 
     /**
@@ -249,6 +267,11 @@ class OrdencompraListadoFiltros
     {
         if (! empty($filtros['empresa_id'])) {
             $query->where('ordencompra.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        $estado = self::normalizarEstadoExterno($filtros['estado'] ?? '');
+        if ($estado !== '') {
+            $query->where('ordencompra.estadoordencompra', $estado);
         }
 
         if (! self::tieneCriteriosTexto($filtros)) {

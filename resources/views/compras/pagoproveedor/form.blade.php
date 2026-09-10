@@ -133,7 +133,9 @@
             <table class="table table-sm table-bordered table-hover" id="tabla-deuda-proveedor">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
-                        <th class="text-center" style="width:2.5rem;">Incl.</th>
+                        <th class="text-center" style="width:2.5rem;">
+                            <input type="checkbox" id="pp-sel-deuda-todas" class="pp-sel-deuda-todas" title="Tildar todas las facturas impagas">
+                        </th>
                         <th>Comprobante</th>
                         <th>Vto</th>
                         <th>Moneda</th>

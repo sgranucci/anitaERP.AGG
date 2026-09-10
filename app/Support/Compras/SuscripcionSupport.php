@@ -31,6 +31,9 @@ final class SuscripcionSupport
 
     public const AVISO_DIAS_DEFAULT = '60,30,15';
 
+    /** SKU de ítem de la OC de suscripción (recepción / contabilización). Temporal hasta que haya uno específico. */
+    public const ARTICULO_SKU_DEFAULT = '900000-081';
+
     /**
      * Áreas solicitantes del circuito (misma lista en solicitud y maestros).
      *

@@ -42,6 +42,19 @@
                         <table class="table table-sm table-bordered">
                             <tr><th style="width:40%">OC N°</th><td>{{ $oc->numeroordencompra ?: '—' }}</td></tr>
                             <tr><th>Proveedor</th><td>{{ \App\Support\Compras\SuscripcionSupport::etiquetaProveedor($oc) ?: '—' }}</td></tr>
+                            <tr>
+                                <th>Ítem OC</th>
+                                <td>
+                                    @php $linea = $oc->ordencompra_articulos->first(); @endphp
+                                    @if ($linea)
+                                        {{ optional($linea->articulos)->sku ?: '—' }}
+                                        {{ optional($linea->articulos)->descripcion }}
+                                        <small class="text-muted">· cant. {{ number_format((float) $linea->cantidad, 0, ',', '.') }}</small>
+                                    @else
+                                        <span class="text-danger">Sin ítem (no se puede recibir ni contabilizar)</span>
+                                    @endif
+                                </td>
+                            </tr>
                             <tr><th>Empresa</th><td>{{ optional($oc->empresas)->nombre ?? '—' }}</td></tr>
                             <tr><th>Área</th><td>{{ $oc->suscripcion_area ?: '—' }}</td></tr>
                             <tr><th>Centro de costo</th><td>{{ trim((optional($oc->centrocostos)->codigo ?? '').' '.(optional($oc->centrocostos)->nombre ?? '')) }}</td></tr>

@@ -264,4 +264,17 @@ class WaitryOrdenesExternasServiceTest extends TestCase
         $this->assertCount(1, $lineas);
         $this->assertSame('V0288', $lineas[0]['sku']);
     }
+
+    public function test_no_results_de_waitry_es_lista_vacia_no_error(): void
+    {
+        $svc = $this->app->make(WaitryOrdenesExternasService::class);
+
+        $this->assertTrue($svc->esRespuestaGetOrdersPosVacia(['message' => 'No results']));
+        $this->assertTrue($svc->esRespuestaGetOrdersPosVacia(['orders' => []]));
+        $this->assertFalse($svc->esRespuestaGetOrdersPosVacia(['ok' => false, 'message' => 'No results']));
+        $this->assertFalse($svc->esRespuestaGetOrdersPosVacia(['message' => 'Invalid placeId']));
+        $this->assertFalse($svc->esRespuestaGetOrdersPosVacia([
+            'orders' => [['id' => 1]],
+        ]));
+    }
 }

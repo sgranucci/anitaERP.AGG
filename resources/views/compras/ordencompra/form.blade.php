@@ -87,10 +87,12 @@
 <div id="oc-solapa-principal" class="oc-solapa">
     <div class="row">
         <div class="col-md-6">
+            <div class="oc-bloque">
+                <h6 class="oc-bloque-titulo">Identificación</h6>
             <input type="hidden" name="requisicion_id" id="requisicion_id" value="{{ old('requisicion_id', (isset($data) && $data) ? ($data->requisicion_id ?? '') : '') }}">
 
             <div class="form-group row">
-                <label class="col-lg-4 control-label">Requisición origen</label>
+                <label class="col-lg-4 control-label text-right pr-2">Requisición origen</label>
                 <div class="col-lg-8">
                     <div class="input-group">
                         <input type="text" class="form-control" id="requisicion_display" readonly
@@ -120,19 +122,19 @@
                 'empresa_query' => $empresa_query,
                 'empresa_id' => (isset($data) && $data) ? $data->empresa_id : null,
                 'solo_lectura' => $soloLectura,
-                'col_label' => 'col-lg-4',
+                'col_label' => 'col-lg-4 text-right pr-2',
                 'col_input' => 'col-lg-8',
             ])
 
             <div class="form-group row">
-                <label for="solicitante_show" class="col-lg-4 control-label">Solicitante</label>
+                <label for="solicitante_show" class="col-lg-4 control-label text-right pr-2">Solicitante</label>
                 <div class="col-lg-8">
                     <input type="text" id="solicitante_show" class="form-control" value="{{ $solicitanteTexto }}" readonly tabindex="-1">
                 </div>
             </div>
 
             <div class="form-group row">
-                <label class="col-lg-4 control-label">Estado</label>
+                <label class="col-lg-4 control-label text-right pr-2">Estado</label>
                 <div class="col-lg-8">
                     <input type="text" class="form-control" readonly tabindex="-1"
                         value="{{ (isset($data) && $data) ? ($data->estadoordencompra ?? '—') : \App\Support\Compras\OrdencompraEstados::PENDIENTE }}">
@@ -140,7 +142,7 @@
             </div>
 
             <div class="form-group row align-items-end">
-                <label for="fecha" class="col-lg-4 control-label requerido">Fecha / entrega</label>
+                <label for="fecha" class="col-lg-4 control-label text-right pr-2 requerido">Fecha / entrega</label>
                 <div class="col-lg-4">
                     <small class="text-muted d-block">Fecha documento</small>
                     <input type="date" name="fecha" id="fecha" class="form-control" required
@@ -156,7 +158,7 @@
             </div>
 
             <div class="form-group row" id="oc-centrocosto-select-row">
-                <label for="centrocosto_id" class="col-lg-4 control-label requerido">Centro costo</label>
+                <label for="centrocosto_id" class="col-lg-4 control-label text-right pr-2 requerido">Centro costo</label>
                 <div class="col-lg-8">
                     <select name="centrocosto_id" id="centrocosto_id" class="form-control" required
                         data-oc-editable="{{ $soloLectura ? '0' : '1' }}"
@@ -180,7 +182,7 @@
             </div>
 
             <div class="form-group row align-items-center" id="div-proveedor-oc">
-                <label for="codigoproveedor" class="col-lg-4 control-label">Proveedor</label>
+                <label for="codigoproveedor" class="col-lg-4 control-label text-right pr-2">Proveedor</label>
                 <div class="col-lg-8">
                     <input type="hidden" id="proveedor_id" name="proveedor_id" value="{{ old('proveedor_id', (isset($data) && $data) ? ($data->proveedor_id ?? '') : '') }}">
                     <div class="d-flex flex-wrap align-items-center">
@@ -196,12 +198,15 @@
                     </div>
                 </div>
             </div>
+            </div>
         </div>
 
         <div class="col-md-6">
+            <div class="oc-bloque">
+                <h6 class="oc-bloque-titulo">Condiciones y circuito</h6>
             @if (isset($data) && $data)
                 <div class="form-group row">
-                    <label class="col-lg-4 control-label">Sector legajo</label>
+                    <label class="col-lg-4 control-label text-right pr-2">Sector legajo</label>
                     <div class="col-lg-8">
                         <input type="text" class="form-control" readonly value="{{ optional($data->sector_legajocompras)->nombre ?? '—' }}">
                     </div>
@@ -214,7 +219,7 @@
                 $tratamientoDisabled = $soloLectura || $tratamientoBloqueado;
             @endphp
             <div class="form-group row">
-                <label for="tratamiento" class="col-lg-4 control-label requerido">Tratamiento</label>
+                <label for="tratamiento" class="col-lg-4 control-label text-right pr-2 requerido">Tratamiento</label>
                 <div class="col-lg-4">
                     @if ($tratamientoBloqueado)
                         <input type="hidden" name="tratamiento" value="{{ $tratamientoValorActual }}">
@@ -237,7 +242,7 @@
                         <small class="form-text text-muted">No se puede cambiar: la OC ya tiene recepción o factura asociada.</small>
                     @endif
                 </div>
-                <label for="numeroordencompra_show" class="col-lg-2 control-label">Nº OC</label>
+                <label for="numeroordencompra_show" class="col-lg-2 control-label text-right pr-2">Nº OC</label>
                 <div class="col-lg-2">
                     <input type="text" id="numeroordencompra_show" class="form-control" readonly tabindex="-1" aria-readonly="true"
                         value="{{ (isset($data) && $data) ? $data->numeroordencompra : (isset($proximoNumeroordencompra) ? $proximoNumeroordencompra : '') }}">
@@ -245,7 +250,7 @@
             </div>
 
             <div class="form-group row">
-                <label for="comentario" class="col-lg-4 control-label">Comentario</label>
+                <label for="comentario" class="col-lg-4 control-label text-right pr-2">Comentario</label>
                 <div class="col-lg-8">
                     <input type="text" name="comentario" id="comentario" class="form-control" maxlength="255"
                         value="{{ old('comentario', (isset($data) && $data) ? $data->comentario : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
@@ -254,7 +259,7 @@
 
             @if (empty($soloLectura) && empty($visualizar))
             <div class="form-group row">
-                <label for="comentario_envio_arbol" class="col-lg-4 control-label">Comentario al &aacute;rbol</label>
+                <label for="comentario_envio_arbol" class="col-lg-4 control-label text-right pr-2">Comentario al &aacute;rbol</label>
                 <div class="col-lg-8">
                     <textarea name="comentario_envio_arbol" id="comentario_envio_arbol" class="form-control" rows="2" maxlength="255"
                         placeholder="Opcional: se env&iacute;a al firmante si esta grabaci&oacute;n dispara el &aacute;rbol de aprobaci&oacute;n">{{ old('comentario_envio_arbol') }}</textarea>
@@ -264,7 +269,7 @@
             @endif
 
             <div class="form-group row">
-                <label for="condicioncompra_id" class="col-lg-4 control-label">Condición compra</label>
+                <label for="condicioncompra_id" class="col-lg-4 control-label text-right pr-2">Condición compra</label>
                 <div class="col-lg-8">
                     <select name="condicioncompra_id" id="condicioncompra_id" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         <option value="">—</option>
@@ -278,7 +283,7 @@
             </div>
 
             <div class="form-group row">
-                <label for="condicionentrega_id" class="col-lg-4 control-label">Condición entrega</label>
+                <label for="condicionentrega_id" class="col-lg-4 control-label text-right pr-2">Condición entrega</label>
                 <div class="col-lg-8">
                     <select name="condicionentrega_id" id="condicionentrega_id" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         <option value="">—</option>
@@ -292,7 +297,7 @@
             </div>
 
             <div class="form-group row">
-                <label for="condicionpago_id" class="col-lg-4 control-label">Condición pago</label>
+                <label for="condicionpago_id" class="col-lg-4 control-label text-right pr-2">Condición pago</label>
                 <div class="col-lg-8">
                     <select name="condicionpago_id" id="condicionpago_id" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         <option value="">—</option>
@@ -306,7 +311,7 @@
             </div>
 
             <div class="form-group row">
-                <label for="transporte_id" class="col-lg-4 control-label">Transporte</label>
+                <label for="transporte_id" class="col-lg-4 control-label text-right pr-2">Transporte</label>
                 <div class="col-lg-8">
                     <select name="transporte_id" id="transporte_id" class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
                         <option value="">—</option>
@@ -320,11 +325,12 @@
             </div>
 
             <div class="form-group row">
-                <label for="lugarentrega" class="col-lg-4 control-label">Lugar entrega</label>
+                <label for="lugarentrega" class="col-lg-4 control-label text-right pr-2">Lugar entrega</label>
                 <div class="col-lg-8">
                     <input type="text" name="lugarentrega" id="lugarentrega" class="form-control" maxlength="255"
                         value="{{ old('lugarentrega', (isset($data) && $data) ? ($data->lugarentrega ?? '') : '') }}" {{ $soloLectura ? 'readonly' : '' }}>
                 </div>
+            </div>
             </div>
         </div>
     </div>
@@ -333,7 +339,7 @@
         @php
             $detalleObligatorio = \App\Support\Compras\OrdencompraUiConfigSupport::detalleObligatorio();
         @endphp
-        <label for="detalle" class="col-lg-2 col-form-label{{ $detalleObligatorio ? ' requerido' : '' }}">Detalle</label>
+        <label for="detalle" class="col-lg-2 col-form-label text-right pr-2{{ $detalleObligatorio ? ' requerido' : '' }}">Detalle</label>
         <div class="col-lg-9">
             <textarea name="detalle" id="detalle" rows="3" class="form-control"{{ $detalleObligatorio ? ' required' : '' }} {{ $soloLectura ? 'readonly' : '' }}>{{ old('detalle', (isset($data) && $data) ? $data->detalle : '') }}</textarea>
         </div>
@@ -341,7 +347,7 @@
 
     @include('compras.ordencompra.partials.bloque_contrato')
 
-    <div class="card card-outline card-secondary mb-3">
+    <div class="card card-outline card-info mb-3">
         <div class="card-header">
             <strong>Condiciones de contratación</strong>
             <small class="text-muted">(resumen automático de comprobantes y cuotas; se actualiza al guardar)</small>
@@ -353,8 +359,8 @@
 </div>
 
     <div id="oc-solapa-articulos" class="oc-solapa" style="display:none;">
-    <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
-        <h5 class="mb-0">Artículos</h5>
+    <div class="oc-solapa-head">
+        <h5>Artículos</h5>
         @if (\App\Support\Compras\OrdencompraUiConfigSupport::entregaSemanal())
             <button type="button" class="btn btn-outline-info btn-sm oc-abrir-entrega-semanal-resumen"
                 title="Ver todas las entregas semanales de la orden (matriz por artículo y fecha)">
@@ -493,7 +499,7 @@
         data-oc-pedir-partida-capex="{{ $ocPedirPartidaCapex ? '1' : '0' }}"
         data-oc-mostrar-peso="{{ $ocMostrarPesoArticulo ? '1' : '0' }}"
         data-oc-entrega-semanal="{{ $ocEntregaSemanal ? '1' : '0' }}">
-        <thead>
+        <thead style="background:#85C1E9;color:#17202A;">
             <tr>
                 <th style="width: 9%;">Artículo</th>
                 <th style="width: 11%;">Descripción</th>
@@ -1058,18 +1064,17 @@
 </div>
 
 <div id="oc-solapa-comprobantes" class="oc-solapa" style="display:none;">
-    <h5>Comprobantes a venir</h5>
+    <div class="oc-solapa-head">
+        <h5>Comprobantes a venir</h5>
+        @if (!$soloLectura)
+            <button type="button" class="btn btn-outline-primary btn-sm" id="oc_btn_agregar_comprobante"><i class="fa fa-plus"></i> Agregar comprobante</button>
+        @endif
+    </div>
     <p class="text-muted small">Agregue cada comprobante esperado y defina sus cuotas con el asistente por condición de pago o de forma manual.</p>
-
-    @if (!$soloLectura)
-        <div class="mb-2">
-            <button type="button" class="btn btn-danger btn-sm" id="oc_btn_agregar_comprobante"><i class="fa fa-plus"></i> Agregar comprobante</button>
-        </div>
-    @endif
 
     <div class="table-responsive mb-3">
         <table class="table table-bordered table-sm" id="oc_tabla_comprobantes_resumen">
-            <thead class="thead-light">
+            <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
                     <th>#</th>
                     <th>Tipo</th>
@@ -1098,17 +1103,17 @@
 
 @if (isset($data) && $data)
     <div id="oc-solapa-historia-legajo" class="oc-solapa" style="display:none;">
-        <h5>Historia del legajo (sectores)</h5>
+        <div class="oc-solapa-head"><h5>Historia del legajo (sectores)</h5></div>
         <table class="table table-bordered table-sm" id="tabla-historia-legajo">
-            <thead><tr><th>Fecha</th><th>Sector</th><th>Observación</th><th>Leyenda</th><th>Usuario</th></tr></thead>
+            <thead style="background:#85C1E9;color:#17202A;"><tr><th>Fecha</th><th>Sector</th><th>Observación</th><th>Leyenda</th><th>Usuario</th></tr></thead>
             <tbody></tbody>
         </table>
     </div>
 
     <div id="oc-solapa-historia-estados" class="oc-solapa" style="display:none;">
-        <h5>Historia de estados</h5>
+        <div class="oc-solapa-head"><h5>Historia de estados</h5></div>
         <table class="table table-bordered table-sm" id="tabla-historia-estados">
-            <thead><tr><th>Fecha y hora</th><th>Estado</th><th>Observación</th></tr></thead>
+            <thead style="background:#85C1E9;color:#17202A;"><tr><th>Fecha y hora</th><th>Estado</th><th>Observación</th></tr></thead>
             <tbody></tbody>
         </table>
     </div>
@@ -1164,9 +1169,9 @@
     <div id="oc-solapa-arbol" class="oc-solapa" style="display:none;">
         <div id="oc-aviso-arbol" class="alert alert-warning d-none"></div>
         <div id="oc-panel-ia-arbol-solapa" class="d-none mb-3"></div>
-        <h5>Movimientos árbol de aprobación</h5>
+        <div class="oc-solapa-head"><h5>Movimientos árbol de aprobación</h5></div>
         <table class="table table-bordered table-sm" id="tabla-movimientos-arbol">
-            <thead><tr><th>Nivel</th><th>Estado mov.</th><th>Indicación OC</th><th>Obs.</th></tr></thead>
+            <thead style="background:#85C1E9;color:#17202A;"><tr><th>Nivel</th><th>Estado mov.</th><th>Indicación OC</th><th>Obs.</th></tr></thead>
             <tbody></tbody>
         </table>
     </div>

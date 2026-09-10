@@ -416,7 +416,17 @@ final class WaitryOrdenesExternasService
 
         if ($resultadoPos['ok'] ?? false) {
             $dataPos = is_array($resultadoPos['data'] ?? null) ? $resultadoPos['data'] : [];
-            if ($this->respuestaGetOrdersPosUtil($dataPos)) {
+            // HTTP 200 + "No results" / orders=[] es lista vacía. Reconsultar sin from/to
+            // cuelga el POS (timeout 30s × reintentos) y el banner queda girando.
+            if ($this->respuestaGetOrdersPosUtil($dataPos) || $this->esRespuestaGetOrdersPosVacia($dataPos)) {
+                if ($this->esRespuestaGetOrdersPosVacia($dataPos) && ! $this->respuestaGetOrdersPosUtil($dataPos)) {
+                    Log::info('waitry.get_orders_pos.sin_datos', [
+                        'place_id' => $placeId,
+                        'message' => $dataPos['message'] ?? null,
+                        'errors' => $dataPos['errors'] ?? null,
+                    ]);
+                }
+
                 return $this->guardarYDevolverOrdenesPos(
                     $placeId,
                     $query,
@@ -424,38 +434,11 @@ final class WaitryOrdenesExternasService
                 );
             }
 
-            Log::info('waitry.get_orders_pos.sin_datos', [
+            Log::info('waitry.get_orders_pos.payload_no_util', [
                 'place_id' => $placeId,
                 'message' => $dataPos['message'] ?? null,
                 'errors' => $dataPos['errors'] ?? null,
             ]);
-
-            // Reintento sin from/to si el filtro horario no devolvió órdenes (p. ej. formato o ventana vacía).
-            if (isset($query['from']) || isset($query['to'])) {
-                $querySinRango = ['placeId' => (string) $placeId];
-                $respuestaCacheSinRango = $this->consultarOrdenesGetOrdersPos($placeId, $querySinRango, $omitirCache);
-                if ($respuestaCacheSinRango !== null) {
-                    return $respuestaCacheSinRango;
-                }
-
-                $resultadoPosSinRango = $this->httpClient->getJson(
-                    $urlPos,
-                    $querySinRango,
-                    'get_orders_pos_sin_rango',
-                );
-                if ($resultadoPosSinRango['ok'] ?? false) {
-                    $dataPosSinRango = is_array($resultadoPosSinRango['data'] ?? null)
-                        ? $resultadoPosSinRango['data']
-                        : [];
-                    if ($this->respuestaGetOrdersPosUtil($dataPosSinRango)) {
-                        return $this->guardarYDevolverOrdenesPos(
-                            $placeId,
-                            $querySinRango,
-                            $this->extraerOrdenesDesdePayload($dataPosSinRango),
-                        );
-                    }
-                }
-            }
         }
 
         $errorPos = $resultadoPos['error'] ?? null;
@@ -553,6 +536,31 @@ final class WaitryOrdenesExternasService
         }
 
         return is_array($ordenes);
+    }
+
+    /**
+     * Waitry a veces responde HTTP 200 + { message: "No results" } sin clave `orders`.
+     * Es una lista vacía, no un error de formato.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function esRespuestaGetOrdersPosVacia(array $data): bool
+    {
+        if (array_key_exists('ok', $data) && $data['ok'] === false) {
+            return false;
+        }
+
+        $ordenes = $data['orders'] ?? $data['response']['orders'] ?? null;
+        if (is_array($ordenes) && $ordenes === []) {
+            return true;
+        }
+
+        $mensaje = strtolower(trim((string) ($data['message'] ?? $data['msg'] ?? '')));
+        if ($mensaje === '') {
+            return false;
+        }
+
+        return str_contains($mensaje, 'no results') || $mensaje === 'sin resultados';
     }
 
     /**
@@ -1252,7 +1260,6 @@ final class WaitryOrdenesExternasService
         $url = (string) config('waitry.get_orders_url');
         $estrategias = [
             ['placeId' => (string) $placeId, 'orderId' => $orderId],
-            ['placeId' => (string) $placeId],
         ];
 
         foreach ($estrategias as $query) {

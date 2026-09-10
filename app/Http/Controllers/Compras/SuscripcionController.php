@@ -239,6 +239,7 @@ class SuscripcionController extends Controller
                 ])
                 ->all(),
             'areas' => SuscripcionSupport::areas(),
+            'articulo_default' => $this->suscripcionService->articuloFormularioDefault(),
         ];
     }
 }

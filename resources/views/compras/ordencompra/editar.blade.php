@@ -4,6 +4,7 @@
 @endsection
 
 @section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/compras/ordencompra-ui.css') }}?v={{ @filemtime(public_path('assets/css/compras/ordencompra-ui.css')) ?: time() }}">
 <link rel="stylesheet" href="{{ asset('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css') }}?v={{ @filemtime(public_path('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css')) ?: time() }}">
 @endsection
 
@@ -57,7 +58,7 @@ $(function () {
         ? ['id' => $data->id] + ($filtrosQuery ?? [])
         : ($filtrosQuery ?? []);
 @endphp
-<div class="row" id="ordencompra-editar-root">
+<div class="row oc-ui" id="ordencompra-editar-root">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
@@ -341,7 +342,7 @@ $(function () {
             @endif
         @endif
 
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">
                     @if (isset($data) && $data)
@@ -353,105 +354,10 @@ $(function () {
                         <span class="badge badge-info ml-2">Desde requisición #{{ (int) $wizardRequisicionId }} — múltiples OC</span>
                     @endif
                 </h3>
-                <div class="card-tools">
-                    @if (empty($acceso_visualizacion_por_hash) && empty($ocultarVolver))
-                        <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
-                            <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                        </a>
-                    @endif
-                    @if (isset($data) && $data && (can('listar-ordencompra', false) || can('editar-ordencompra', false)))
-                        <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $data->id]) }}" class="btn btn-primary btn-sm" title="Descargar PDF de la orden de compra (Legal vertical)" target="_blank" rel="noopener noreferrer">
-                            <i class="fas fa-file-pdf"></i> Imprimir orden (PDF)
-                        </a>
-                        <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $data->id, 'formato' => 'apaisado']) }}" class="btn btn-outline-primary btn-sm" title="PDF en Legal apaisado (todas las columnas de ítems)" target="_blank" rel="noopener noreferrer">
-                            <i class="fas fa-file-pdf"></i> PDF apaisado
-                        </a>
-                    @endif
-                    @if (isset($data) && $data && can('editar-ordencompra', false) && !empty($oc_datos_envio_proveedor['puede_enviar']))
-                        <button type="button" class="btn btn-success btn-sm js-oc-enviar-proveedor" data-ordencompra-id="{{ $data->id }}" title="Enviar PDF de la OC al email del proveedor">
-                            <i class="fa fa-envelope"></i> Enviar al proveedor
-                        </button>
-                    @endif
-                    @if (isset($data) && $data && can('crear-comprobante-proveedor', false))
-                        <a href="{{ route('crear_comprobante_proveedor', ['ordencompra_id' => $data->id, 'origen' => 'oc']) }}" class="btn btn-outline-success btn-sm" title="Alta de comprobante de proveedor vinculado a esta OC">
-                            <i class="fa fa-file-text-o"></i> Facturar proveedor
-                        </a>
-                    @endif
-                    @if (can('crear-ingreso-proveedor', false) && !empty($mostrar_solapa_ingresos))
-                        <button type="button" class="btn btn-outline-light btn-sm js-ingreso-ticket-nuevo" title="Solicitar ticket de ingreso a planta">
-                            <i class="fa fa-id-badge"></i> Ticket de ingreso
-                        </button>
-                    @endif
-                    @if (isset($data) && $data && empty($visualizar) && can('actualizar-ordencompra', false) && !empty($data->proveedor_id))
-                        <button type="button" class="btn btn-outline-light btn-sm js-oc-asignar-factura"
-                                data-url="{{ route('ordencompra_asignar_factura_pdf', ['id' => $data->id]) }}"
-                                data-numero="{{ $data->numeroordencompra }}"
-                                data-proveedor="{{ $data->proveedores->nombre ?? '' }}">
-                            <i class="fa fa-file-pdf-o"></i> Asignar factura PDF
-                        </button>
-                    @endif
-                    @if (isset($data) && $data && empty($visualizar))
-                        @if (can('actualizar-ordencompra', false))
-                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcCambiarEstado">
-                                <i class="fa fa-random"></i> Cambiar estado
-                            </button>
-                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcCambiarSector">
-                                <i class="fa fa-folder-open"></i> Cambiar sector
-                            </button>
-                            @if (!empty($oc_puede_enviar_gastronomia))
-                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcEnviarGastronomia">
-                                <i class="fa fa-cutlery"></i> Enviar a Gastronomía
-                            </button>
-                            @endif
-                            @if (!empty($oc_puede_enviar_cuentas_a_pagar))
-                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcEnviarCuentasAPagar">
-                                <i class="fa fa-share"></i> Enviar a Cuentas a pagar
-                            </button>
-                            @endif
-                        @endif
-                        @if (!empty($oc_puede_enviar_pagos))
-                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcEnviarPagos">
-                                <i class="fa fa-share-square-o"></i> Enviar a Pagos
-                            </button>
-                        @endif
-                        @if (!empty($oc_puede_devolver_cxp))
-                            <button type="button" class="btn btn-outline-warning btn-sm" data-toggle="modal" data-target="#modalOcDevolverCxp">
-                                <i class="fa fa-undo"></i> Devolver a Cuentas a pagar
-                            </button>
-                        @endif
-                        @if (!empty($oc_puede_devolver_compras))
-                            <button type="button" class="btn btn-outline-warning btn-sm" data-toggle="modal" data-target="#modalOcDevolverCompras">
-                                <i class="fa fa-reply"></i> Devolver a Compras
-                            </button>
-                        @endif
-                        @if (!empty($oc_puede_finalizar_legajo))
-                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcFinalizarLegajo">
-                                <i class="fa fa-check"></i> Finalizar legajo
-                            </button>
-                        @endif
-                        @if (!empty($data->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-                            <a href="{{ route('editar_requisicion', ['id' => $data->requisicion_id]) }}" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener noreferrer" title="Abre la requisición que originó esta OC">
-                                <i class="fa fa-link"></i> Ver requisición
-                            </a>
-                        @endif
-                        @if (($data->estadoordencompra ?? '') === \App\Support\Compras\OrdencompraEstados::SUSPENDIDA && can('actualizar-ordencompra', false))
-                            <form action="{{ route('ordencompra_reactivar', ['id' => $data->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Pasar la orden de compra de SUSPENDIDA a PENDIENTE?');">
-                                @csrf
-                                <button type="submit" class="btn btn-warning btn-sm">Reactivar a pendiente</button>
-                            </form>
-                        @endif
-                        @if (!empty($oc_revertir_cierre_lineas['puede_revertir']) && can('actualizar-ordencompra', false))
-                            <form action="{{ route('ordencompra_revertir_cierre_lineas', ['id' => $data->id]) }}" method="POST" class="d-inline"
-                                onsubmit="return confirm('¿Reabrir {{ count($oc_revertir_cierre_lineas['lineas'] ?? []) }} línea(s) cerrada(s) por error?\n\nSaldo pendiente de recepción: {{ number_format((float) ($oc_revertir_cierre_lineas['cantidad_pendiente_total'] ?? 0), 2, ',', '.') }}\n\nLa OC volverá a APROBADA si corresponde según recepciones confirmadas.');">
-                                @csrf
-                                <button type="submit" class="btn btn-warning btn-sm" title="Reabre líneas cerradas por error en recepción y recalcula el saldo pendiente">
-                                    <i class="fa fa-undo"></i> Revertir cierre de líneas
-                                </button>
-                            </form>
-                        @endif
-                    @endif
-                </div>
+                @include('compras.ordencompra.partials.toolbar_acciones')
             </div>
+
+            @include('compras.ordencompra.partials.identidad')
 
             <form action="{{ isset($data) && $data ? route('actualizar_ordencompra', $formRouteParams) : route('guardar_ordencompra', $filtrosQuery ?? []) }}"
                 method="POST" id="form-ordencompra-general" class="form-horizontal form--label-right" enctype="multipart/form-data" autocomplete="off" novalidate>
@@ -464,31 +370,7 @@ $(function () {
                     <input type="hidden" name="vista" value="consulta">
                 @endif
 
-                <div class="text-center py-2 border-bottom rounded-top bg-white">
-                    <button type="button" id="oc-boton-principal" class="btn btn-primary btn-sm mx-1 oc-tab-solapa font-weight-bold">Datos principales</button>
-                    <button type="button" id="oc-boton-articulos" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Artículos</button>
-                    <button type="button" id="oc-boton-comprobantes" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Comprobantes a venir</button>
-                    <button type="button" id="oc-boton-archivos" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
-                        <span class="fa fa-paperclip"></span> Archivos asociados
-                    </button>
-                    @if (isset($data) && $data)
-                        <button type="button" id="oc-boton-historia-legajo" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Historia legajo</button>
-                        <button type="button" id="oc-boton-historia-estados" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Historia estados</button>
-                        <button type="button" id="oc-boton-recepciones" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
-                            <span class="fa fa-truck"></span> Recepciones
-                        </button>
-                        <button type="button" id="oc-boton-historia-precios" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
-                            <span class="fa fa-history"></span> Historia precios
-                        </button>
-                        <button type="button" id="oc-boton-arbol" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Árbol aprobación</button>
-                        @if (!empty($mostrar_solapa_ingresos))
-                            <button type="button" id="oc-boton-ingresos" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
-                                <span class="fa fa-id-badge"></span> Ingresos
-                                <span class="badge badge-light ml-1 ingreso-solapa-badge-count">{{ ($tickets_ingreso ?? collect())->count() }}</span>
-                            </button>
-                        @endif
-                    @endif
-                </div>
+                @include('compras.ordencompra.partials.tabs_header')
 
                 <div class="card-body">
                     @if (!empty($wizardRequisicionId))
@@ -501,7 +383,7 @@ $(function () {
                 </div>
 
                 @if (empty($visualizar))
-                    <div class="card-footer">
+                    <div class="card-footer oc-form-footer">
                         <button type="submit" class="btn btn-success">
                             <i class="fa fa-save"></i>
                             {{ isset($data) && $data ? 'Actualizar' : 'Guardar' }}
@@ -511,7 +393,7 @@ $(function () {
                         @endif
                     </div>
                 @elseif (!empty($soloConsulta))
-                    <div class="card-footer text-center">
+                    <div class="card-footer oc-form-footer text-center">
                         <button type="button" class="btn btn-secondary" onclick="window.close()">Cerrar solapa</button>
                     </div>
                 @endif

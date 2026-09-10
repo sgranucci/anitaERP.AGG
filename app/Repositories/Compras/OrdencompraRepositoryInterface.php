@@ -35,6 +35,12 @@ interface OrdencompraRepositoryInterface
 
     /**
      * @param  array<string, mixed>|string|null  $filtros
+     * @return array{total: int, por_estado: array<string, int>, pendiente: int, aprobada: int, cumplida: int, suspendida: int, cerrada: int}
+     */
+    public function resumenIndex($filtros, ?int $sectorUsuarioId): array;
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
      * @return \Illuminate\Support\Collection<int, \App\Models\Compras\Ordencompra>
      */
     public function listadoExport($filtros, ?int $sectorUsuarioId);

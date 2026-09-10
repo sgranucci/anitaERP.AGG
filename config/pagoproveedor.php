@@ -20,6 +20,16 @@ return [
         FILTER_VALIDATE_BOOLEAN
     ),
 
+    /**
+     * Período híbrido: al acumular Ganancias (RG 830) lee retmov Anita como
+     * respaldo de OPs que no están en pagoproveedor_retencion.
+     * Clave completa tipo|letra|sucursal|nro|empresa (Anita graba letra).
+     */
+    'acumulado_ganancias_anita_respaldo' => filter_var(
+        env('PAGOPROVEEDOR_ACUMULADO_GANANCIAS_ANITA_RESPALDO', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
     'tipocomprobante_default' => 'OPP',
     /** Anita MultiEmpresa (a-movim/pago) usa espacio; no grabar letra A. */
     'letra_default' => ' ',

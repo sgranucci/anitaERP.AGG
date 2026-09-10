@@ -12,7 +12,7 @@
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/cbu_pago.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/banco/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/cheques.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/cheques.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/cheques.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/form.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script>

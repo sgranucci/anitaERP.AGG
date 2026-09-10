@@ -166,6 +166,17 @@ return [
      * Escritura Anita che_ban al grabar/borrar IE (a-movim.c / pago.c):
      * pago + auxpag(tctes) + tesmov; cheques emitidos → cpromae + auxpag(CHP) + tesmov(CHP).
      */
+    /*
+     * Cheques propios: nro. desde Anita tctes (Ref. a números) + numerador.
+     * La cuenta de caja (tctes_imputacion) elige el tipo BMD/etc.; tctes_numero=000 no numera.
+     */
+    'cheque_propio_anita_numeracion_habilitada' => filter_var(
+        env('CAJA_CHEQUE_ANITA_NUMERACION_HABILITADA', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+    'cheque_propio_anita_sistema_numerador' => env('CAJA_CHEQUE_ANITA_SISTEMA_NUMERADOR', 'ventas'),
+    'cheque_propio_anita_sistema_numerador_fallback' => env('CAJA_CHEQUE_ANITA_SISTEMA_NUMERADOR_FALLBACK', 'che_ban'),
+
     'ingresoegreso_anita_tesmov_habilitada' => filter_var(
         env('CAJA_IE_ANITA_TESMOV_HABILITADA', true),
         FILTER_VALIDATE_BOOLEAN

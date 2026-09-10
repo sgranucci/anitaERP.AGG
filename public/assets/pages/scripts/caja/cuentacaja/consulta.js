@@ -78,7 +78,9 @@ function buscar_datos_cuentacaja(consulta) {
 $('input').keydown(function (e) {
     var keyCode = e.which;
     if (keyCode == 13) {
-        if ($(this).closest('#cuenta-table').length || $(this).is('#consultacuentacaja')) {
+        if ($(this).closest('#cuenta-table').length
+            || $(this).closest('#cheque-emitido-table').length
+            || $(this).is('#consultacuentacaja')) {
             return;
         }
         e.preventDefault();

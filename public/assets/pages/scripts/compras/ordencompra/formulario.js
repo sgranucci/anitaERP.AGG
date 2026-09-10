@@ -166,10 +166,10 @@ $(function () {
 	}
 
 	function ocMarcarTabActivo(btnDomId) {
-		$('.oc-tab-solapa').removeClass('font-weight-bold');
+		$('.oc-tab-solapa').removeClass('active font-weight-bold');
 		var $b = $('#' + btnDomId);
 		if ($b.length) {
-			$b.addClass('font-weight-bold');
+			$b.addClass('active font-weight-bold');
 		}
 	}
 

@@ -2,25 +2,24 @@
     use App\Support\Compras\OrdencompraEstados;
 
     $nombre = trim((string) ($estado ?? ''));
-    $clase = 'badge badge-light';
-    $texto = $nombre;
+    $clase = 'oc-pill oc-pill-neutro';
 
     switch ($nombre) {
         case OrdencompraEstados::PENDIENTE:
-            $clase = 'badge badge-info';
+            $clase = 'oc-pill oc-pill-pendiente';
             break;
         case OrdencompraEstados::APROBADA:
-            $clase = 'badge badge-primary';
+            $clase = 'oc-pill oc-pill-aprobada';
             break;
         case OrdencompraEstados::CUMPLIDA:
-            $clase = 'badge badge-success';
+            $clase = 'oc-pill oc-pill-cumplida';
             break;
         case OrdencompraEstados::SUSPENDIDA:
-            $clase = 'badge badge-warning text-dark';
+            $clase = 'oc-pill oc-pill-suspendida';
             break;
         case OrdencompraEstados::CERRADA:
-            $clase = 'badge badge-secondary';
+            $clase = 'oc-pill oc-pill-cerrada';
             break;
     }
 @endphp
-<span class="{{ $clase }}">{{ $texto }}</span>
+<span class="{{ $clase }}">{{ $nombre !== '' ? $nombre : '—' }}</span>

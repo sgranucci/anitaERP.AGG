@@ -1,0 +1,85 @@
+@php
+    $cheque = $cheque ?? null;
+    $etiquetaChequera = static function ($ch): string {
+        $tipo = (($ch->tipocheque ?? '') === 'D') ? 'Dif.' : 'Al día';
+
+        return trim((string) ($ch->codigo ?? $ch->id).' '.$tipo);
+    };
+@endphp
+<tr class="item-cheque-emitido">
+    <td>
+        <div class="d-flex align-items-center flex-nowrap" style="gap:4px;">
+            <input type="hidden" name="cheque_emitido_ids[]" class="cheque_emitido_id" value="{{ $cheque?->id ?? '' }}">
+            <input type="hidden" name="cuentacaja_emitido_ids[]" class="cuentacaja_emitido_id" value="{{ $cheque?->cuentacaja_id ?? '' }}">
+            <input type="hidden" name="tctes_numero_emitidos[]" class="tctes_numero_emitido" value="">
+            <input type="hidden" name="tctes_clave_emitidos[]" class="tctes_clave_emitido" value="">
+            <button type="button" title="Consulta cuentas (F1)" class="btn-accion-tabla consultacuentacaja_emitido tooltipsC flex-shrink-0">
+                <i class="fa fa-search text-primary"></i>
+            </button>
+            <input type="text" class="codigo_emitido form-control form-control-sm" name="codigo_emitido[]"
+                value="{{ $cheque?->cuentacajas?->codigo ?? '' }}"
+                placeholder="Cód." title="Código; Enter valida; F1 consulta" autocomplete="off"
+                style="width:5.5rem; flex-shrink:0;">
+        </div>
+    </td>
+    <td>
+        <input type="text" class="nombre_emitido form-control form-control-sm" readonly
+            value="{{ $cheque?->cuentacajas?->nombre ?? '' }}" placeholder="Nombre" title="Cuenta de tesorería">
+    </td>
+    <td>
+        <select name="chequera_emitido_ids[]" class="form-control form-control-sm chequera_emitido_id" title="Chequera de la cuenta (opcional)">
+            <option value="">—</option>
+            @foreach ($chequera_query as $ch)
+                <option value="{{ $ch->id }}"
+                    data-cuentacaja-id="{{ (int) $ch->cuentacaja_id }}"
+                    data-tipocheque="{{ $ch->tipocheque }}"
+                    @selected($cheque && (int) $ch->id === (int) $cheque->chequera_id)>
+                    {{ $etiquetaChequera($ch) }}
+                </option>
+            @endforeach
+        </select>
+    </td>
+    <td>
+        <input type="text" name="numerocheque_emitidos[]" class="form-control form-control-sm numerocheque_emitido"
+            value="{{ $cheque?->numerocheque ?? '' }}" placeholder="Nro."
+            title="Numerador Anita de la cuenta (se completa al elegirla)" inputmode="numeric">
+        <small class="tctes_emitido_lbl text-muted d-block" style="font-size:10px;line-height:1.2;"></small>
+    </td>
+    <td>
+        <input type="date" name="fechapago_emitidos[]" class="form-control form-control-sm fechapago_emitido"
+            value="{{ $cheque?->fechapago ?? '' }}">
+    </td>
+    <td>
+        <select name="caracter_emitidos[]" class="form-control form-control-sm caracter_emitido">
+            @foreach ($caracter_enum as $car)
+                @if ($car['valor'] !== 'R')
+                    <option value="{{ $car['valor'] }}" @selected($cheque && $car['valor'] === $cheque->caracter)>{{ $car['nombre'] }}</option>
+                @endif
+            @endforeach
+        </select>
+    </td>
+    <td>
+        <input type="text" name="anombrede_emitidos[]" class="form-control form-control-sm anombrede_emitido"
+            value="{{ $cheque?->anombrede ?? '' }}">
+    </td>
+    <td>
+        <select name="moneda_emitido_ids[]" class="form-control form-control-sm moneda_emitido_id">
+            @foreach ($moneda_query as $m)
+                <option value="{{ $m->id }}" @selected($cheque && (int) $m->id === (int) $cheque->moneda_id)>{{ $m->abreviatura }}</option>
+            @endforeach
+        </select>
+    </td>
+    <td>
+        <input type="number" name="montocheque_emitidos[]" class="form-control form-control-sm montocheque_emitido text-right"
+            min="0" step="0.01" value="{{ $cheque?->monto ?? '' }}">
+    </td>
+    <td>
+        <input type="number" name="cotizacioncheque_emitidos[]" class="form-control form-control-sm cotizacioncheque_emitido"
+            step="0.0001" value="{{ $cheque?->cotizacion ?? 0 }}">
+    </td>
+    <td class="text-center">
+        <button type="button" class="btn-accion-tabla eliminar_cheque_emitido tooltipsC" title="Eliminar">
+            <i class="fa fa-times-circle text-danger"></i>
+        </button>
+    </td>
+</tr>

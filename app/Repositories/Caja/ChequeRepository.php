@@ -7,6 +7,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
+use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
 use App\Support\Caja\ChequePropioImputacionSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -372,6 +373,8 @@ class ChequeRepository implements ChequeRepositoryInterface
                 $ids[] = (int) $cheque->id;
             }
         }
+
+        ChequePropioAnitaNumeracionSupport::actualizarDesdeFilasEmitidas($data);
 
         return $ids;
     }

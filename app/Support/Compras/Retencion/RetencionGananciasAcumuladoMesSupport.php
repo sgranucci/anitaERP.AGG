@@ -2,9 +2,12 @@
 
 namespace App\Support\Compras\Retencion;
 
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Retencionganancia;
+use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Acumulados mensuales de Ganancias (RG 830 / ARCA) para forma de cálculo S/O.
@@ -14,9 +17,20 @@ use Carbon\Carbon;
  *
  * Neto previo: suma de detalle_calculo.neto_pago (fallback base_calculo).
  * Retenido previo: suma de importe de retenciones G del período.
+ *
+ * Respaldo híbrido: retmov Anita (clave tipo|letra|sucursal|nro|empresa) para OPs
+ * que no están en el ERP. Si Anita no responde, queda solo el acumulado ERP.
  */
 final class RetencionGananciasAcumuladoMesSupport
 {
+    /** @var array<int, int> */
+    private array $cacheEmpresaAnita = [];
+
+    public function __construct(
+        private readonly RetencionGananciasAcumuladoAnitaRespaldoSupport $anitaRespaldo = new RetencionGananciasAcumuladoAnitaRespaldoSupport,
+    ) {
+    }
+
     /**
      * @return array{
      *     neto: float,
@@ -24,7 +38,8 @@ final class RetencionGananciasAcumuladoMesSupport
      *     desde: string,
      *     hasta: string,
      *     pagos: int,
-     *     detalle_pagos: list<array{pagoproveedor_id: int, fecha: string|null, neto: float, retenido: float, nro: string|null}>
+     *     pagos_anita: int,
+     *     detalle_pagos: list<array{pagoproveedor_id: int, fecha: string|null, neto: float, retenido: float, nro: string|null, origen?: string}>
      * }
      */
     public function acumular(
@@ -53,7 +68,10 @@ final class RetencionGananciasAcumuladoMesSupport
                 'pagoproveedor_retencion.base_calculo',
                 'pagoproveedor_retencion.detalle_calculo',
                 'pagoproveedor_retencion.retencionganancia_id',
+                'pagoproveedor_retencion.nro_certificado',
                 'pp.fecha as pp_fecha',
+                'pp.empresa_id as pp_empresa',
+                'pp.tipocomprobante as pp_tipo',
                 'pp.letra as pp_letra',
                 'pp.sucursal as pp_sucursal',
                 'pp.numerotransaccion as pp_numero',
@@ -92,6 +110,8 @@ final class RetencionGananciasAcumuladoMesSupport
         $neto = 0.0;
         $retenido = 0.0;
         $porPago = [];
+        $clavesOcupadas = [];
+        $certificadosOcupados = [];
 
         foreach ($filas as $fila) {
             $detalle = is_array($fila->detalle_calculo) ? $fila->detalle_calculo : [];
@@ -103,13 +123,24 @@ final class RetencionGananciasAcumuladoMesSupport
             $neto = round($neto + $netoPago, 2);
             $retenido = round($retenido + $importe, 2);
             $pagoId = (int) $fila->pagoproveedor_id;
+            $letra = (string) ($fila->pp_letra ?? '');
+            $suc = (int) ($fila->pp_sucursal ?? 0);
+            $num = (int) ($fila->pp_numero ?? 0);
+            $tipo = (string) ($fila->pp_tipo ?? 'OPP');
+            $empresaAnita = $this->empresaAnita((int) ($fila->pp_empresa ?? 0), $empresaId);
+            foreach (RetencionGananciasAcumuladoAnitaClaveSupport::clavesOcupacionDesdeErp(
+                $tipo, $letra, $suc > 0 ? $suc : 1, $num, $empresaAnita
+            ) as $clave) {
+                $clavesOcupadas[$clave] = true;
+            }
+            $cert = (int) preg_replace('/\D+/', '', (string) ($fila->nro_certificado ?? '0'));
+            if ($cert > 0) {
+                $certificadosOcupados[$cert] = true;
+            }
             if (! isset($porPago[$pagoId])) {
                 $nro = null;
-                $letra = trim((string) ($fila->pp_letra ?? ''));
-                $suc = (int) ($fila->pp_sucursal ?? 0);
-                $num = (int) ($fila->pp_numero ?? 0);
                 if ($letra !== '' || $suc > 0 || $num > 0) {
-                    $nro = sprintf('%s-%04d-%s', $letra !== '' ? $letra : 'X', $suc, $num > 0 ? (string) $num : '0');
+                    $nro = RetencionGananciasAcumuladoAnitaClaveSupport::etiqueta($tipo, $letra, $suc, $num);
                 }
                 $porPago[$pagoId] = [
                     'pagoproveedor_id' => $pagoId,
@@ -117,20 +148,141 @@ final class RetencionGananciasAcumuladoMesSupport
                     'neto' => 0.0,
                     'retenido' => 0.0,
                     'nro' => $nro,
+                    'origen' => 'erp',
                 ];
             }
             $porPago[$pagoId]['neto'] = round($porPago[$pagoId]['neto'] + $netoPago, 2);
             $porPago[$pagoId]['retenido'] = round($porPago[$pagoId]['retenido'] + $importe, 2);
         }
 
+        $this->ocuparClavesPagoExcluido($clavesOcupadas, $excluirPagoproveedorId, $empresaId);
+        $this->ocuparClavesPagosAnulados(
+            $clavesOcupadas,
+            $proveedorId,
+            $desde->toDateString(),
+            $hasta->toDateString(),
+            $empresaId,
+        );
+
+        $hastaCorte = min($fecha->toDateString(), $hasta->toDateString());
+        $pagosAnita = 0;
+        try {
+            $faltantes = $this->anitaRespaldo->listarFaltantes(
+                $proveedorId,
+                $desde->toDateString(),
+                $hastaCorte,
+                $empresaId,
+                $retenciongananciaId,
+                $clavesOcupadas,
+                $certificadosOcupados,
+            );
+            foreach ($faltantes as $anita) {
+                $neto = round($neto + (float) $anita['neto'], 2);
+                $retenido = round($retenido + (float) $anita['retenido'], 2);
+                $pagosAnita++;
+                $porPago['anita:'.($anita['clave'] ?? $pagosAnita)] = $anita;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('pagoproveedor.acumulado_ganancias.anita_respaldo', [
+                'proveedor_id' => $proveedorId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         return [
             'neto' => $neto,
             'retenido' => $retenido,
             'desde' => $desde->toDateString(),
-            'hasta' => min($fecha->toDateString(), $hasta->toDateString()),
+            'hasta' => $hastaCorte,
             'pagos' => count($porPago),
+            'pagos_anita' => $pagosAnita,
             'detalle_pagos' => array_values($porPago),
         ];
+    }
+
+    /**
+     * @param  array<string, true>  $clavesOcupadas
+     */
+    private function ocuparClavesPagoExcluido(array &$clavesOcupadas, ?int $pagoId, ?int $empresaId): void
+    {
+        if (! $pagoId || $pagoId <= 0) {
+            return;
+        }
+        $pago = Pagoproveedor::query()->whereKey($pagoId)->first([
+            'empresa_id', 'tipocomprobante', 'letra', 'sucursal', 'numerotransaccion',
+        ]);
+        if ($pago === null) {
+            return;
+        }
+        $this->marcarClavesErp(
+            $clavesOcupadas,
+            (string) ($pago->tipocomprobante ?: 'OPP'),
+            (string) ($pago->letra ?? ''),
+            (int) ($pago->sucursal ?: 0),
+            (int) $pago->numerotransaccion,
+            $this->empresaAnita((int) $pago->empresa_id, $empresaId),
+        );
+    }
+
+    /**
+     * @param  array<string, true>  $clavesOcupadas
+     */
+    private function ocuparClavesPagosAnulados(
+        array &$clavesOcupadas,
+        int $proveedorId,
+        string $desdeIso,
+        string $hastaIso,
+        ?int $empresaId,
+    ): void {
+        $q = Pagoproveedor::query()
+            ->where('proveedor_id', $proveedorId)
+            ->whereBetween('fecha', [$desdeIso, $hastaIso])
+            ->where('estado', 'ANULADA');
+        if ($empresaId && $empresaId > 0) {
+            $q->where('empresa_id', $empresaId);
+        }
+        foreach ($q->get(['empresa_id', 'tipocomprobante', 'letra', 'sucursal', 'numerotransaccion']) as $pago) {
+            $this->marcarClavesErp(
+                $clavesOcupadas,
+                (string) ($pago->tipocomprobante ?: 'OPP'),
+                (string) ($pago->letra ?? ''),
+                (int) ($pago->sucursal ?: 0),
+                (int) $pago->numerotransaccion,
+                $this->empresaAnita((int) $pago->empresa_id, $empresaId),
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, true>  $clavesOcupadas
+     */
+    private function marcarClavesErp(
+        array &$clavesOcupadas,
+        string $tipo,
+        string $letra,
+        int $sucursal,
+        int $nro,
+        int $empresaAnita,
+    ): void {
+        foreach (RetencionGananciasAcumuladoAnitaClaveSupport::clavesOcupacionDesdeErp(
+            $tipo, $letra, $sucursal > 0 ? $sucursal : 1, $nro, $empresaAnita
+        ) as $clave) {
+            $clavesOcupadas[$clave] = true;
+        }
+    }
+
+    private function empresaAnita(int $empresaErp, ?int $empresaIdFiltro): int
+    {
+        $id = $empresaErp > 0 ? $empresaErp : (int) ($empresaIdFiltro ?? 0);
+        if ($id <= 0) {
+            return 0;
+        }
+        if (isset($this->cacheEmpresaAnita[$id])) {
+            return $this->cacheEmpresaAnita[$id];
+        }
+        $anita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($id);
+
+        return $this->cacheEmpresaAnita[$id] = ($anita > 0 ? $anita : $id);
     }
 
     /**

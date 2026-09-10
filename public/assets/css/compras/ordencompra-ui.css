@@ -1,0 +1,494 @@
+/*
+ * Órdenes de compra — UI alineada al estándar reciente (tracking / CRUD moderna).
+ * Full-width AdminLTE; tokens acotados a .oc-ui para no contaminar otras pantallas.
+ */
+
+.oc-ui {
+    --oc-panel: #ffffff;
+    --oc-ink: #1f2937;
+    --oc-ink-soft: #64748b;
+    --oc-ink-faint: #94a3b8;
+    --oc-border: #e2e6ec;
+    --oc-navy: #17253f;
+    --oc-blue: #3b72ac;
+    --oc-blue-dark: #2e5c8a;
+    --oc-blue-soft: #e4eef7;
+    --oc-thead: #85C1E9;
+    --oc-thead-ink: #17202A;
+    --oc-green: #2e8b47;
+    --oc-green-dark: #256e39;
+    --oc-red: #bc4a3c;
+    --oc-amber: #d89b2e;
+    --oc-amber-text: #8a6417;
+    --oc-cream: #fdf8ea;
+    --oc-cream-hover: #f5efdd;
+    --oc-peach-bg: #f6deb8;
+    --oc-peach-text: #8a5a1e;
+    --oc-slate-bg: #e7eaf0;
+    --oc-slate-text: #55607a;
+
+    color: var(--oc-ink);
+}
+
+/* ---- encabezado del listado ---- */
+
+.oc-ui .oc-header {
+    background: var(--oc-blue);
+    color: #fff;
+    border-radius: 6px 6px 0 0;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.oc-ui .oc-header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.oc-ui .oc-header-acciones {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.oc-ui .oc-header .btn-light,
+.oc-ui .oc-header .btn-outline-info,
+.oc-ui .oc-header .btn-outline-success,
+.oc-ui .oc-header .btn-outline-light {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.55);
+    color: #fff;
+}
+
+.oc-ui .oc-header .btn-light:hover,
+.oc-ui .oc-header .btn-outline-info:hover,
+.oc-ui .oc-header .btn-outline-success:hover,
+.oc-ui .oc-header .btn-outline-light:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+}
+
+.oc-ui .oc-header a.btn-light[href*="crear"] {
+    background: #fff;
+    color: var(--oc-blue-dark);
+    font-weight: 700;
+    border-color: #fff;
+}
+
+.oc-ui .oc-header a.btn-light[href*="crear"]:hover {
+    background: var(--oc-blue-soft);
+    color: var(--oc-navy);
+}
+
+.oc-ui .oc-header .form-control {
+    background: #fff;
+    color: var(--oc-ink);
+}
+
+.oc-ui .oc-header .listado-filtros-input-activo {
+    background-color: #fffdf5;
+}
+
+.oc-ui .oc-panel {
+    background: var(--oc-panel);
+    border: 1px solid var(--oc-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+}
+
+.oc-ui .oc-intro {
+    font-size: 13.5px;
+    color: var(--oc-ink-soft);
+    max-width: 90ch;
+    margin: 0;
+    padding: 16px 20px 0;
+}
+
+.oc-ui .oc-alcance {
+    font-size: 12px;
+    color: var(--oc-ink-soft);
+    margin: 0;
+    padding: 8px 20px 0;
+}
+
+/* ---- KPIs ---- */
+
+.oc-ui .oc-resumen {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 16px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--oc-border);
+}
+
+.oc-ui .oc-kpi .oc-kpi-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--oc-ink-soft);
+    margin-bottom: 4px;
+}
+
+.oc-ui .oc-kpi .oc-kpi-valor {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--oc-ink);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+}
+
+.oc-ui .oc-kpi.is-pendiente .oc-kpi-valor { color: var(--oc-blue-dark); }
+.oc-ui .oc-kpi.is-ok .oc-kpi-valor { color: var(--oc-green-dark); }
+.oc-ui .oc-kpi.is-warn .oc-kpi-valor { color: var(--oc-amber-text); }
+.oc-ui .oc-kpi.is-mute .oc-kpi-valor { color: var(--oc-slate-text); }
+
+/* ---- segmentos y empresa ---- */
+
+.oc-ui .oc-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 14px 20px 8px;
+}
+
+.oc-ui .oc-seg {
+    display: flex;
+    border: 1px solid var(--oc-border);
+    border-radius: 5px;
+    overflow: hidden;
+    flex-wrap: wrap;
+}
+
+.oc-ui .oc-seg > a {
+    background: var(--oc-panel);
+    border: none;
+    border-right: 1px solid var(--oc-border);
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--oc-ink-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.oc-ui .oc-seg > a:last-child {
+    border-right: none;
+}
+
+.oc-ui .oc-seg > a:hover {
+    background: var(--oc-blue-soft);
+    color: var(--oc-blue-dark);
+    text-decoration: none;
+}
+
+.oc-ui .oc-seg > a.oc-activo {
+    background: var(--oc-blue);
+    color: #fff;
+    font-weight: 600;
+}
+
+.oc-ui .oc-seg .oc-conteo {
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+}
+
+.oc-ui .oc-empresas {
+    padding: 4px 20px 12px;
+    background: transparent;
+    border-bottom: none;
+}
+
+.oc-ui .oc-empresas.card-body {
+    padding: 4px 20px 12px;
+}
+
+.oc-ui .oc-empresas .oc-seg {
+    overflow: visible;
+}
+
+.oc-ui .oc-empresas .oc-emp-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--oc-ink-soft);
+    margin-right: 8px;
+}
+
+/* ---- grilla ---- */
+
+.oc-ui .oc-grilla {
+    margin-bottom: 0;
+}
+
+.oc-ui .oc-grilla thead th {
+    background: var(--oc-thead);
+    color: var(--oc-thead-ink);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 700;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-bottom: 2px solid #5DADE2;
+    border-top: none;
+}
+
+.oc-ui .oc-grilla tbody td {
+    padding: 10px 14px;
+    vertical-align: middle;
+    border-top: 1px solid var(--oc-border);
+}
+
+.oc-ui .oc-grilla tbody tr:nth-child(odd) {
+    background: var(--oc-cream);
+}
+
+.oc-ui .oc-grilla tbody tr:hover {
+    background: var(--oc-cream-hover);
+}
+
+.oc-ui .oc-grilla tbody tr.oc-fila-suspendida {
+    background: var(--oc-slate-bg);
+}
+
+.oc-ui .oc-grilla td.oc-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.oc-ui .oc-grilla .oc-numero {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-blue-dark);
+}
+
+.oc-ui .oc-grilla .oc-proveedor {
+    max-width: 280px;
+    white-space: normal;
+}
+
+.oc-ui .oc-grilla .oc-meta {
+    display: block;
+    font-size: 11px;
+    color: var(--oc-ink-faint);
+}
+
+.oc-ui .oc-acciones {
+    white-space: nowrap;
+}
+
+.oc-ui .oc-vacio {
+    padding: 46px 20px;
+    text-align: center;
+    color: var(--oc-ink-soft);
+}
+
+.oc-ui .oc-vacio i {
+    font-size: 32px;
+    color: var(--oc-ink-faint);
+    margin-bottom: 10px;
+    display: block;
+}
+
+.oc-ui .oc-vacio-titulo {
+    font-weight: 700;
+    color: var(--oc-ink);
+    margin-bottom: 4px;
+}
+
+.oc-ui .oc-footer {
+    padding: 10px 20px 14px;
+}
+
+/* ---- pills de estado ---- */
+
+.oc-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.oc-pill-pendiente { background: var(--oc-blue, #3b72ac); color: #fff; }
+.oc-pill-aprobada { background: #1B4F72; color: #fff; }
+.oc-pill-cumplida { background: var(--oc-green, #2e8b47); color: #fff; }
+.oc-pill-suspendida { background: var(--oc-amber, #d89b2e); color: #fff; }
+.oc-pill-cerrada { background: var(--oc-slate-bg, #e7eaf0); color: var(--oc-slate-text, #55607a); }
+.oc-pill-neutro { background: var(--oc-slate-bg, #e7eaf0); color: var(--oc-slate-text, #55607a); }
+
+/* ---- formulario ---- */
+
+.oc-ui .oc-identidad {
+    display: grid;
+    grid-template-columns: minmax(180px, 1.2fr) repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px 20px;
+    background: linear-gradient(180deg, #F4F9FD 0%, #fff 100%);
+    border-bottom: 1px solid var(--oc-border);
+}
+
+.oc-ui .oc-id-kicker {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--oc-ink-soft);
+    font-weight: 700;
+    margin-bottom: 2px;
+}
+
+.oc-ui .oc-id-valor {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--oc-navy);
+    line-height: 1.25;
+}
+
+.oc-ui .oc-id-valor.oc-id-total {
+    font-variant-numeric: tabular-nums;
+    font-size: 18px;
+    color: var(--oc-blue-dark);
+}
+
+.oc-ui .oc-id-sub {
+    font-size: 11px;
+    color: var(--oc-ink-faint);
+}
+
+.oc-ui .card-primary > .card-header {
+    overflow: visible;
+}
+
+.oc-ui .oc-form-toolbar .dropdown-menu {
+    min-width: 16rem;
+    font-size: 13px;
+    color: #1f2937;
+}
+
+.oc-ui .card-primary > .card-header .dropdown-menu,
+.oc-ui .card-primary > .card-header .dropdown-item,
+.oc-ui .oc-form-toolbar .dropdown-item {
+    color: #1f2937;
+}
+
+.oc-ui .card-primary > .card-header .dropdown-item:hover,
+.oc-ui .card-primary > .card-header .dropdown-item:focus {
+    background: #EBF5FB;
+    color: #1B4F72;
+}
+
+.oc-ui .oc-form-toolbar .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.4rem 1rem;
+}
+
+.oc-ui .oc-form-toolbar .dropdown-item i {
+    width: 1.1rem;
+    text-align: center;
+}
+
+.oc-ui .tabs-activas .nav-tabs {
+    border-bottom: 1px solid var(--oc-border);
+}
+
+.oc-ui .tabs-activas .nav-item .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.oc-ui .oc-bloque {
+    background: #fff;
+    border: 1px solid var(--oc-border);
+    border-radius: 6px;
+    padding: 14px 14px 6px;
+    margin-bottom: 12px;
+    height: 100%;
+}
+
+.oc-ui .oc-bloque-titulo {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #1B4F72;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--oc-border);
+}
+
+.oc-ui #tabla-articulos-ordencompra thead th,
+.oc-ui #oc_tabla_comprobantes_resumen thead th,
+.oc-ui #tabla-historia-legajo thead th,
+.oc-ui #tabla-historia-estados thead th,
+.oc-ui #tabla-movimientos-arbol thead th,
+.oc-ui #oc-archivo-table thead th {
+    background: var(--oc-thead);
+    color: var(--oc-thead-ink);
+    font-size: 12px;
+    font-weight: 700;
+    border-color: #5DADE2;
+}
+
+.oc-ui .oc-solapa-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.oc-ui .oc-solapa-head h5 {
+    margin: 0;
+    font-weight: 700;
+    color: var(--oc-navy);
+}
+
+.oc-ui .card-footer.oc-form-footer {
+    background: #F8FBFD;
+    border-top: 1px solid var(--oc-border);
+}
+
+.oc-ui .tabs-activas .nav-tabs .nav-link {
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    outline: none;
+    color: #17202A;
+}
+
+@media (max-width: 1199px) {
+    .oc-ui .oc-resumen {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    .oc-ui .oc-identidad {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 767px) {
+    .oc-ui .oc-resumen {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

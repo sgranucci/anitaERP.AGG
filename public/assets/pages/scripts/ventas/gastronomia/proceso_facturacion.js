@@ -5234,6 +5234,9 @@
         });
     }
 
+    let cargarOrdenesWaitryAbort = null;
+    let cargarOrdenesWaitrySeq = 0;
+
     async function cargarOrdenesWaitry(opciones) {
         opciones = opciones || {};
         const panel = document.getElementById('panel-waitry-lista');
@@ -5241,6 +5244,25 @@
         if (!panel || !waitryHabilitadoEnPos()) {
             return;
         }
+        const seq = ++cargarOrdenesWaitrySeq;
+        if (cargarOrdenesWaitryAbort) {
+            try {
+                cargarOrdenesWaitryAbort.abort();
+            } catch (_) {
+                /* ignore */
+            }
+        }
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        cargarOrdenesWaitryAbort = controller;
+        const timer = controller
+            ? window.setTimeout(function () {
+                  try {
+                      controller.abort();
+                  } catch (_) {
+                      /* ignore */
+                  }
+              }, 18000)
+            : null;
         panel.innerHTML =
             '<div class="col-12">' +
             htmlCargaProcesoInline(
@@ -5257,7 +5279,14 @@
                 (G.rutasWaitry && G.rutasWaitry.ordenesPendientes) ||
                 '/ventas/gastronomia/api/waitry-ordenes-pendientes';
             const url = opciones.refresh ? urlBase + (urlBase.indexOf('?') >= 0 ? '&' : '?') + 'refresh=1' : urlBase;
-            const data = await api(url, { headers: hdrJson() });
+            const fetchOpts = { headers: hdrJson() };
+            if (controller) {
+                fetchOpts.signal = controller.signal;
+            }
+            const data = await api(url, fetchOpts);
+            if (seq !== cargarOrdenesWaitrySeq) {
+                return;
+            }
             actualizarLeyendaFiltroWaitry(data.filtro);
             panel.innerHTML = '';
             const ordenes = data.ordenes || [];
@@ -5310,8 +5339,28 @@
                 panel.appendChild(btn);
             });
         } catch (e) {
+            if (seq !== cargarOrdenesWaitrySeq) {
+                return;
+            }
+            const abortado =
+                (e && e.name === 'AbortError') || /aborted|abort/i.test(String((e && e.message) || ''));
             panel.innerHTML = '';
-            toast(e.message || 'Error al cargar órdenes Waitry', 'error');
+            if (vacio) {
+                vacio.classList.remove('d-none');
+            }
+            toast(
+                abortado
+                    ? 'Waitry no respondió a tiempo. Pulse Actualizar.'
+                    : e.message || 'Error al cargar órdenes Waitry',
+                abortado ? 'warning' : 'error',
+            );
+        } finally {
+            if (timer) {
+                window.clearTimeout(timer);
+            }
+            if (cargarOrdenesWaitryAbort === controller) {
+                cargarOrdenesWaitryAbort = null;
+            }
         }
     }
 

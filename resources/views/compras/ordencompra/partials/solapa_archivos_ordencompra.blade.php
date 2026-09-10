@@ -26,7 +26,7 @@
                 @endif
             </p>
             <table class="table" id="oc-archivo-table">
-                <thead>
+                <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th>Archivo nuevo</th>
                         <th style="width: 90px;"></th>

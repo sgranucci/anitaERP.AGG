@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionCuentacaja;
 use App\Models\Caja\Cuentacaja;
+use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
 use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Repositories\Caja\UsocuentacajaRepositoryInterface;
@@ -311,6 +312,48 @@ class CuentacajaController extends Controller
         }
 
         return $cuenta;
+    }
+
+    public function apiChequeEmision(Request $request, $codigo = null)
+    {
+        $empresaId = (int) $request->query('empresa_id');
+        $cuentaId = (int) $request->query('cuentacaja_id');
+        $query = Cuentacaja::query();
+        if ($cuentaId > 0) {
+            $query->whereKey($cuentaId);
+        } else {
+            $codigo = trim((string) ($codigo ?? $request->query('codigo', '')));
+            if ($codigo === '') {
+                return response()->json(['id' => 0, 'error' => 'Indique cuenta de caja.'], 422);
+            }
+            $query->where('codigo', $codigo);
+        }
+        if ($empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        }
+
+        $cuenta = $query->first();
+        if ($cuenta === null) {
+            return response()->json([
+                'id' => 0,
+                'error' => $empresaId > 0
+                    ? 'No se encontró cuenta de caja para esa empresa.'
+                    : 'No se encontró cuenta de caja.',
+            ], 404);
+        }
+
+        $difRaw = $request->query('diferido');
+        $diferidoOverride = null;
+        if ($difRaw !== null && $difRaw !== '') {
+            $diferidoOverride = filter_var($difRaw, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        return response()->json(ChequePropioAnitaNumeracionSupport::payloadEmision(
+            $cuenta,
+            (string) $request->query('fecha_pago', ''),
+            (string) $request->query('fecha_emision', ''),
+            $diferidoOverride
+        ));
     }
 
     /**

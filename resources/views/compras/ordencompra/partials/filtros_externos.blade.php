@@ -17,19 +17,19 @@
     };
 @endphp
 @if (($empresa_query ?? collect())->count() > 1)
-<div class="card-body py-2 border-bottom bg-white">
+<div class="oc-empresas card-body py-2 border-bottom bg-white">
     <div class="d-flex flex-wrap align-items-center">
         <div class="mb-1">
-            <span class="text-muted small mr-2"><i class="fa fa-building"></i> Empresa:</span>
-            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro de empresa">
+            <span class="text-muted small mr-2 oc-emp-label"><i class="fa fa-building"></i> Empresa:</span>
+            <div class="btn-group btn-group-sm flex-wrap oc-seg" role="group" aria-label="Filtro de empresa">
                 @foreach ($empresa_query as $emp)
                     <a href="{{ $urlEmpresa($emp->id) }}"
-                       class="btn {{ ($empresaScope !== 'todas' && $empresaActual === (int) $emp->id) ? 'btn-info' : 'btn-outline-info' }}">
+                       class="btn {{ ($empresaScope !== 'todas' && $empresaActual === (int) $emp->id) ? 'btn-info oc-activo' : 'btn-outline-info' }}">
                         {{ $emp->nombre }}
                     </a>
                 @endforeach
                 <a href="{{ $urlEmpresa('todas') }}"
-                   class="btn {{ $empresaScope === 'todas' ? 'btn-primary' : 'btn-outline-primary' }}">
+                   class="btn {{ $empresaScope === 'todas' ? 'btn-primary oc-activo' : 'btn-outline-primary' }}">
                     Todas mis empresas
                 </a>
             </div>

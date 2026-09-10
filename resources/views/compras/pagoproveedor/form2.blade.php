@@ -56,7 +56,7 @@
                             <input type="hidden" name="cuentacaja[]" class="form-control iicuenta" readonly value="{{ $loop->iteration }}" />
                             <input type="hidden" class="cuentacaja_id" name="cuentacaja_ids[]" value="{{ $cuenta->cuentacaja_id ?? '' }}">
                             <input type="hidden" class="cuentacaja_id_previa" name="cuentacaja_id_previa[]" value="{{ $cuenta->cuentacaja_id ?? '' }}">
-                            <button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuentacaja tooltipsC">
+                            <button type="button" title="Consulta cuentas (F1)" style="padding:1;" class="btn-accion-tabla consultacuentacaja tooltipsC">
                                 <i class="fa fa-search text-primary"></i>
                             </button>
                             <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="{{ $cuenta->cuentacajas?->codigo ?? '' }}">

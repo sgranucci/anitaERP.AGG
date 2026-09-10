@@ -129,6 +129,55 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         return $this->queryListadoIndex($filtros, $sectorUsuarioId)->cursor();
     }
 
+    /**
+     * Conteos por estado con los mismos filtros del listado, excepto el chip de estado.
+     *
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return array{total: int, por_estado: array<string, int>, pendiente: int, aprobada: int, cumplida: int, suspendida: int, cerrada: int}
+     */
+    public function resumenIndex($filtros, ?int $sectorUsuarioId): array
+    {
+        $filtros = $this->normalizarFiltros($filtros);
+        $filtros['estado'] = '';
+
+        $porEstado = array_fill_keys(OrdencompraEstados::todos(), 0);
+        $total = 0;
+
+        $q = $this->model->query()
+            ->selectRaw('ordencompra.estadoordencompra as estado, COUNT(*) as cantidad')
+            ->leftJoin('empresa', 'empresa.id', '=', 'ordencompra.empresa_id')
+            ->leftJoin('centrocosto', 'centrocosto.id', '=', 'ordencompra.centrocosto_id')
+            ->leftJoin('proveedor', 'proveedor.id', '=', 'ordencompra.proveedor_id')
+            ->leftJoin('usuario', 'usuario.id', '=', 'ordencompra.creousuario_id')
+            ->leftJoin('sector_legajocompra', 'sector_legajocompra.id', '=', 'ordencompra.sector_legajocompra_id')
+            ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'ordencompra.condicioncompra_id')
+            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id');
+
+        $this->aplicarFiltrosListado($q, $filtros, $sectorUsuarioId);
+        $q->reorder();
+
+        foreach ($q->groupBy('ordencompra.estadoordencompra')->get() as $row) {
+            $estado = (string) ($row->estado ?? '');
+            $n = (int) $row->cantidad;
+            if ($estado !== '' && array_key_exists($estado, $porEstado)) {
+                $porEstado[$estado] = $n;
+            } elseif ($estado !== '') {
+                $porEstado[$estado] = ($porEstado[$estado] ?? 0) + $n;
+            }
+            $total += $n;
+        }
+
+        return [
+            'total' => $total,
+            'por_estado' => $porEstado,
+            'pendiente' => (int) ($porEstado[OrdencompraEstados::PENDIENTE] ?? 0),
+            'aprobada' => (int) ($porEstado[OrdencompraEstados::APROBADA] ?? 0),
+            'cumplida' => (int) ($porEstado[OrdencompraEstados::CUMPLIDA] ?? 0),
+            'suspendida' => (int) ($porEstado[OrdencompraEstados::SUSPENDIDA] ?? 0),
+            'cerrada' => (int) ($porEstado[OrdencompraEstados::CERRADA] ?? 0),
+        ];
+    }
+
     public function listadoExport($filtros, ?int $sectorUsuarioId): Collection
     {
         $collection = $this->queryListadoExport($filtros, $sectorUsuarioId)
@@ -172,6 +221,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
                 'busqueda' => $texto,
                 'empresa_id' => null,
                 'empresa_scope' => 'todas',
+                'estado' => '',
             ];
         }
 

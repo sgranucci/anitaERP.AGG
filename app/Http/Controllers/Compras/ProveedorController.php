@@ -877,17 +877,19 @@ class ProveedorController extends Controller
 
         // Reutiliza el índice paginado/filtrable de OC forzando el filtro por proveedor,
         // así comparte vista, filtros y exportaciones con el listado general.
-        $filtros = [
+        $filtros = array_merge(OrdencompraListadoFiltros::filtrosVacios(), [
             'modo' => OrdencompraListadoFiltros::MODO_CAMPO,
             'campo' => 'codigoproveedor',
             'operador' => 'igual',
             'valor' => $codigoproveedor,
             'valor_hasta' => '',
             'busqueda' => $codigoproveedor,
-        ];
+            'empresa_scope' => 'todas',
+        ]);
 
         // Sin restricción por sector: la vista del proveedor muestra todas sus OC.
-        $ordencompra = app(OrdencompraRepositoryInterface::class)->listadoIndex($filtros, null, true);
+        $repoOc = app(OrdencompraRepositoryInterface::class);
+        $ordencompra = $repoOc->listadoIndex($filtros, null, true);
 
         return view('compras.ordencompra.index', [
             'ordencompra' => $ordencompra,
@@ -898,6 +900,7 @@ class ProveedorController extends Controller
             'estados' => OrdencompraEstados::todos(),
             'sectores' => Sector_Legajocompra::orderBy('nombre')->get(),
             'sectorUsuario' => null,
+            'resumen' => $repoOc->resumenIndex($filtros, null),
         ]);
     }    
 

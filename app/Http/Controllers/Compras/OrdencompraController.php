@@ -112,6 +112,7 @@ class OrdencompraController extends Controller
         );
         $estados = OrdencompraEstados::todos();
         $sectores = OrdencompraLegajoGastronomiaSupport::sectoresParaCambio();
+        $resumen = $this->ordencompraRepository->resumenIndex($filtros, $sectorId);
 
         return view('compras.ordencompra.index', [
             'ordencompra' => $ordencompra,
@@ -124,6 +125,7 @@ class OrdencompraController extends Controller
             'sectores' => $sectores,
             'sectorUsuario' => ($sectorId !== null && $sectorId > 0) ? $sectorId : null,
             'alcanceSector' => OrdencompraSectorVisibilidadSupport::etiquetaAlcance(),
+            'resumen' => $resumen,
         ]);
     }
 

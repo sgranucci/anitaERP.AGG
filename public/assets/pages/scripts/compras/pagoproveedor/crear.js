@@ -306,14 +306,33 @@ var flModificaAsiento = false;
         }
         window.__ppCuentaTecladoActivo = true;
         document.addEventListener('keydown', function (e) {
-            if (e.key !== 'Enter' && e.which !== 13) {
-                return;
-            }
             var target = e.target;
             if (!target || !target.closest || !target.closest('#cuenta-table')) {
                 return;
             }
             var $t = $(target);
+            var $tr = $t.closest('tr');
+
+            if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
+                if (!$t.is('.codigo, .nombre')) {
+                    return;
+                }
+                var $modal = $('#consultacuentacajaModal');
+                if ($modal.length && ($modal.hasClass('show') || $modal.is(':visible'))) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof e.stopImmediatePropagation === 'function') {
+                    e.stopImmediatePropagation();
+                }
+                $tr.find('.consultacuentacaja').trigger('click');
+                return;
+            }
+
+            if (e.key !== 'Enter' && e.which !== 13) {
+                return;
+            }
             if (!$t.is('.codigo, .monto, .cotizacion, .observacion')) {
                 return;
             }
@@ -653,17 +672,28 @@ var flModificaAsiento = false;
 
         $(document).on('click', '.eligeconsultacuentacaja', function () {
             if (typeof cuentacajaxcodigoEmitido !== 'undefined' && cuentacajaxcodigoEmitido && cuentacajaxcodigoEmitido.length) {
-                var seleccionE = $(this).parents('tr').children().html();
-                var nombreE = $(this).parents('tr').find('.nombre').html();
-                var codigoE = $(this).parents('tr').find('.codigo').html();
-                var monedaE = $(this).parents('tr').find('.moneda_id').html();
-                cuentacajaxcodigoEmitido.find('.cuentacaja_emitido_id').val(seleccionE);
-                cuentacajaxcodigoEmitido.find('.codigo_emitido').val(codigoE);
-                cuentacajaxcodigoEmitido.find('.nombre_emitido').val(nombreE);
-                cuentacajaxcodigoEmitido.find('.moneda_emitido_id').val(monedaE);
+                var $trE = cuentacajaxcodigoEmitido;
+                var dataE = {
+                    id: $(this).parents('tr').find('.cuentacaja_id').text() || $(this).parents('tr').children().first().text(),
+                    nombre: $(this).parents('tr').find('.nombre').text(),
+                    codigo: $(this).parents('tr').find('.codigo').text(),
+                    moneda_id: $(this).parents('tr').find('.moneda_id').html()
+                };
+                if (typeof aplicarCuentaChequeEmitido === 'function') {
+                    aplicarCuentaChequeEmitido($trE, dataE, false);
+                } else {
+                    $trE.find('.cuentacaja_emitido_id').val(dataE.id);
+                    $trE.find('.codigo_emitido').val(dataE.codigo);
+                    $trE.find('.nombre_emitido').val(dataE.nombre);
+                    $trE.find('.moneda_emitido_id').val(dataE.moneda_id);
+                }
+                if (typeof cargarEmisionChequeEmitido === 'function') {
+                    cargarEmisionChequeEmitido($trE, { forzarNumero: true });
+                }
                 cuentacajaxcodigoEmitido = null;
                 $('#consultacuentacajaModal').modal('hide');
                 flModificaAsiento = true;
+                enfocarCampoPp($trE.find('.fechapago_emitido')[0] || $trE.find('.numerocheque_emitido')[0]);
                 return;
             }
             var seleccion = $(this).parents('tr').children().html();

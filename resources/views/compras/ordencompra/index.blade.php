@@ -4,6 +4,7 @@
 @endsection
 
 @section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/compras/ordencompra-ui.css') }}?v={{ @filemtime(public_path('assets/css/compras/ordencompra-ui.css')) ?: time() }}">
 <link rel="stylesheet" href="{{ asset('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css') }}?v={{ @filemtime(public_path('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css')) ?: time() }}">
 @endsection
 
@@ -14,6 +15,7 @@
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/erp-workspace-panel.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/erp-workspace-panel.js')) ?: time() }}" type="text/javascript"></script>
 @if (session('sugerir_envio_oc'))
 <script>
     window.ocSugerirEnvioProveedor = { ordencompra_id: {{ (int) session('sugerir_envio_oc') }} };
@@ -130,56 +132,69 @@ $(function () {
     </div>
 </div>
 
-<div class="row">
+<div class="row oc-ui erp-ws-host">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        @if (!empty($alcanceSector))
-            <p class="text-muted small mb-2">{{ $alcanceSector }}</p>
-        @endif
-        <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Órdenes de compra</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
-                    @include('includes.compras.boton-manual')
-                    @if (can('listar-legajo-compra', false) || can('listar-ordencompra', false))
-                        <a href="{{ route('consultar_legajo_compra') }}"
-                           class="btn btn-outline-light btn-sm mr-1"
-                           title="Bandeja de pendientes, estados e histórico de legajos">
-                            <i class="fa fa-folder-open"></i> Bandeja de legajos
-                        </a>
-                    @endif
-                    @if (can('listar-kpi-compras', false))
-                        <a href="{{ route('consultar_kpi_compras') }}"
-                           class="btn btn-outline-success btn-sm mr-1"
-                           title="Tablero de KPIs de proceso y productividad">
-                            <i class="fas fa-chart-line"></i> KPIs
-                        </a>
-                    @endif
-                    @include('includes.listado.filtros_toolbar', [
-                        'formId' => 'form-filtros-ordencompra',
-                        'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosTexto($filtros ?? []),
-                        'limpiarUrl' => route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
-                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
-                        'toggleTarget' => '#panel-filtros-ordencompra',
-                        'toggleId' => 'btn-toggle-filtros-ordencompra',
-                        'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_ordencompra', $retornoListadoQuery),
-                        'nuevoRegistroCan' => 'crear-ordencompra',
-                        'nuevoRegistroLabel' => 'Nueva orden',
-                    ])
-                </div>
+
+        <div class="oc-header">
+            <h1><i class="fa fa-shopping-cart"></i> Órdenes de compra</h1>
+            <div class="oc-header-acciones">
+                @include('includes.compras.boton-manual')
+                @if (can('listar-legajo-compra', false) || can('listar-ordencompra', false))
+                    <a href="{{ route('consultar_legajo_compra') }}"
+                       class="btn btn-outline-light btn-sm"
+                       title="Bandeja de pendientes, estados e histórico de legajos">
+                        <i class="fa fa-folder-open"></i> Bandeja de legajos
+                    </a>
+                @endif
+                @if (can('listar-kpi-compras', false))
+                    <a href="{{ route('consultar_kpi_compras') }}"
+                       class="btn btn-outline-success btn-sm"
+                       title="Tablero de KPIs de proceso y productividad">
+                        <i class="fas fa-chart-line"></i> KPIs
+                    </a>
+                @endif
+                @include('includes.listado.filtros_toolbar', [
+                    'formId' => 'form-filtros-ordencompra',
+                    'filtroValor' => $filtros['valor'] ?? '',
+                    'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                    'limpiarUrl' => route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
+                    'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                    'toggleTarget' => '#panel-filtros-ordencompra',
+                    'toggleId' => 'btn-toggle-filtros-ordencompra',
+                    'inputId' => 'filtro_valor',
+                    'nuevoRegistroUrl' => route('crear_ordencompra', $retornoListadoQuery),
+                    'nuevoRegistroCan' => 'crear-ordencompra',
+                    'nuevoRegistroLabel' => 'Nueva orden',
+                ])
             </div>
+        </div>
+
+        <div class="oc-panel">
+            <p class="oc-intro">
+                Circuito de compra: de la requisición a la recepción, el legajo y el pago. Filtre por estado, empresa o texto; abra la OC en solapa sin salir del listado.
+            </p>
+            @if (!empty($alcanceSector))
+                <p class="oc-alcance"><i class="fa fa-lock"></i> {{ $alcanceSector }}</p>
+            @endif
+
+            @include('compras.ordencompra.partials.resumen_index')
+            @include('compras.ordencompra.partials.segmentos_estado')
+            @include('compras.ordencompra.partials.filtros_externos')
+
             <form method="get" action="{{ route('consultar_ordencompra') }}" id="form-filtros-ordencompra" class="mb-0">
                 @include('compras.ordencompra.partials.filtros_listado')
             </form>
-            @include('compras.ordencompra.partials.filtros_externos')
-            <div class="card-body table-responsive p-0">
+
+            <div class="px-3 pt-2">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_ordencompra',
                     'queryparams' => $filtrosQuery ?? [],
                 ])
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+            </div>
+
+            <div class="table-responsive p-0">
+                <table class="table table-hover oc-grilla mb-0" id="tabla-paginada">
                     <thead>
                         <tr>
                             <th>Número</th>
@@ -195,100 +210,48 @@ $(function () {
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($ordencompra as $row)
+                        @forelse ($ordencompra as $row)
                             @php
                                 $esSuspendidaFila = ($row->estadoordencompra ?? '') === \App\Support\Compras\OrdencompraEstados::SUSPENDIDA;
                             @endphp
-                            <tr @if($esSuspendidaFila) class="table-secondary" @endif>
-                                <td>{{ $row->numeroordencompra }}</td>
-                                <td><small>{{ $row->nombreusuario ?? '' }}</small></td>
-                                <td>{{ date('d/m/Y', strtotime($row->fecha)) }}</td>
+                            <tr data-ws-id="{{ $row->id }}" @if($esSuspendidaFila) class="oc-fila-suspendida" @endif>
+                                <td>
+                                    <span class="oc-numero">{{ $row->numeroordencompra }}</span>
+                                    @if (!empty($row->requisicion_id))
+                                        <span class="oc-meta">Req. {{ $row->requisicion_id }}</span>
+                                    @endif
+                                </td>
+                                <td>{{ $row->nombreusuario ?? '—' }}</td>
+                                <td class="text-nowrap">{{ $row->fecha ? date('d/m/Y', strtotime($row->fecha)) : '—' }}</td>
                                 <td>{{ $row->nombreempresa }}</td>
-                                <td><small>{{ $row->nombrecentrocosto }}</small></td>
-                                <td><small>{{ $row->nombreproveedor }}</small></td>
-                                <td><small>{{ $row->nombresector ?? '—' }}</small></td>
+                                <td>{{ $row->nombrecentrocosto }}</td>
+                                <td class="oc-proveedor">{{ $row->nombreproveedor }}</td>
+                                <td>{{ $row->nombresector ?? '—' }}</td>
                                 <td>
                                     @include('compras.ordencompra.partials.estado_badge', ['estado' => $row->estadoordencompra ?? ''])
                                 </td>
-                                <td class="text-right text-nowrap">
-                                    <small>{{ number_format((float) ($row->monto_lineas ?? 0), 2, ',', '.') }}</small>
+                                <td class="oc-num">
+                                    {{ number_format((float) ($row->monto_lineas ?? 0), 2, ',', '.') }}
                                 </td>
                                 <td>
-                                    @if (can('editar-ordencompra', false))
-                                        <a href="{{ route('editar_ordencompra', ['id' => $row->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
-                                            <i class="fa fa-edit"></i>
-                                        </a>
-                                    @endif
-                                    @if (can('listar-ordencompra', false))
-                                        <a href="{{ route('solo_consulta_ordencompra', ['id' => $row->id]) }}" class="btn-accion-tabla tooltipsC" title="Solo consulta">
-                                            <i class="fa fa-eye"></i>
-                                        </a>
-                                    @endif
-                                    @if (can('listar-ordencompra', false) || can('editar-ordencompra', false))
-                                        <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $row->id]) }}" class="btn-accion-tabla tooltipsC" title="Imprimir orden (PDF vertical)" target="_blank" rel="noopener noreferrer">
-                                            <i class="fa fa-print"></i>
-                                        </a>
-                                        <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $row->id, 'formato' => 'apaisado']) }}" class="btn-accion-tabla tooltipsC" title="PDF Legal apaisado" target="_blank" rel="noopener noreferrer">
-                                            <i class="fa fa-arrows-alt-h"></i>
-                                        </a>
-                                    @endif
-                                    @if (can('editar-ordencompra', false) && !empty($row->proveedor_id))
-                                        <button type="button" class="btn-accion-tabla tooltipsC js-oc-enviar-proveedor text-success" title="Enviar OC al proveedor por email" data-ordencompra-id="{{ $row->id }}">
-                                            <i class="fa fa-envelope"></i>
-                                        </button>
-                                    @endif
-                                    @if (!empty($row->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-                                        <a href="{{ route('editar_requisicion', ['id' => $row->requisicion_id]) }}" class="btn-accion-tabla tooltipsC text-warning" title="Ver requisición" target="_blank" rel="noopener noreferrer">
-                                            <i class="fa fa-link"></i>
-                                        </a>
-                                    @endif
-                                    @if (can('actualizar-ordencompra', false) && !empty($row->proveedor_id))
-                                        <button type="button" class="btn-accion-tabla tooltipsC js-oc-asignar-factura btn-oc-asignar-factura"
-                                                title="Asignar PDF de factura al legajo"
-                                                data-url="{{ route('ordencompra_asignar_factura_pdf', ['id' => $row->id]) }}"
-                                                data-numero="{{ $row->numeroordencompra }}"
-                                                data-proveedor="{{ $row->nombreproveedor }}">
-                                            <i class="fa fa-file-pdf-o"></i>
-                                        </button>
-                                    @endif
-                                    @if (can('actualizar-ordencompra', false))
-                                        <button type="button" class="btn-accion-tabla tooltipsC js-oc-index-abrir-estado text-dark" title="Cambiar estado"
-                                            data-url="{{ route('ordencompra_cambiar_estado', ['id' => $row->id]) }}"
-                                            data-estado-actual="{{ $row->estadoordencompra }}">
-                                            <i class="fa fa-random"></i>
-                                        </button>
-                                        <button type="button" class="btn-accion-tabla tooltipsC js-oc-index-abrir-sector text-dark" title="Cambiar sector"
-                                            data-url="{{ route('ordencompra_cambiar_sector', ['id' => $row->id]) }}"
-                                            data-sector-id="{{ $row->sector_legajocompra_id }}"
-                                            data-ordencompra-id="{{ $row->id }}">
-                                            <i class="fa fa-folder-open"></i>
-                                        </button>
-                                    @endif
-                                    @if (($row->estadoordencompra ?? '') === \App\Support\Compras\OrdencompraEstados::SUSPENDIDA && can('actualizar-ordencompra', false))
-                                        <form action="{{ route('ordencompra_reactivar', ['id' => $row->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Reactivar a PENDIENTE?');">
-                                            @csrf
-                                            <button type="submit" class="btn-accion-tabla tooltipsC text-warning" title="Reactivar">
-                                                <i class="fa fa-undo"></i>
-                                            </button>
-                                        </form>
-                                    @endif
-                                    @if (can('borrar-ordencompra', false))
-                                        <form action="{{ route('eliminar_ordencompra', ['id' => $row->id]) }}" class="d-inline form-eliminar" method="POST">
-                                            @csrf
-                                            @method('delete')
-                                            <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
-                                                <i class="fa fa-times-circle text-danger"></i>
-                                            </button>
-                                        </form>
-                                    @endif
+                                    @include('compras.ordencompra.partials.acciones_grilla')
                                 </td>
                             </tr>
-                        @endforeach
+                        @empty
+                            <tr>
+                                <td colspan="10" class="oc-vacio">
+                                    <i class="fa fa-inbox"></i>
+                                    <div class="oc-vacio-titulo">No hay órdenes para este filtro</div>
+                                    Ajuste el estado, la empresa o el texto de búsqueda.
+                                </td>
+                            </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
+
             @if (method_exists($ordencompra, 'links'))
-            <div class="card-footer">
+            <div class="oc-footer">
                 {{ $ordencompra->appends(array_merge($filtrosQuery ?? [], request()->only(['origen', 'vista'])))->links() }}
             </div>
             @endif

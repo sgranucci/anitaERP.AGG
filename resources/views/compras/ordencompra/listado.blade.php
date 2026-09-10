@@ -24,7 +24,7 @@
 			word-wrap: break-word;
 		}
 		table.data tr:nth-child(even) { background-color: #f5f5f5; }
-		table.data thead tr { background-color: #d4e6f1; }
+		table.data thead tr { background-color: #85C1E9; }
 		table.data th { font-size: 7px; font-weight: bold; color: #1a1a1a; }
 		.listado-header { width: 100%; margin-bottom: 10px; border-bottom: 2px solid #333; padding-bottom: 6px; }
 		.listado-header td { vertical-align: middle; border: none; }

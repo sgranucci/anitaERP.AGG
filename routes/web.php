@@ -2525,6 +2525,7 @@ Route::delete('caja/cuentacaja/{id}', 'Caja\CuentacajaController@eliminar')->nam
 // Rutas de consulta de cuentas de caja
 Route::post('caja/cuentacaja/consultacuentacaja', 'Caja\CuentacajaController@consultaCuentaCaja')->name('consulta_cuentacaja');
 Route::get('caja/cuentacaja/leercuentacajaporcodigo/{codigo}', 'Caja\CuentacajaController@leerCuentaCajaPorCodigo')->name('leer_cuentacaja_por_codigo');
+Route::get('caja/cuentacaja/api/cheque-emision/{codigo?}', 'Caja\CuentacajaController@apiChequeEmision')->name('api_cuentacaja_cheque_emision');
 
 /*
  * Chequeras

@@ -3,8 +3,10 @@
 namespace App\Services\Compras;
 
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Ordencompra_Historia;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
+use App\Models\Stock\Articulo;
 use App\Repositories\Compras\Ordencompra_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Ordencompra_EstadoRepositoryInterface;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
@@ -14,6 +16,7 @@ use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\SuscripcionListadoFiltros;
 use App\Support\Compras\SuscripcionPresupuestoSupport;
 use App\Support\Compras\SuscripcionSupport;
+use App\Support\Stock\ArticuloSkuMatchSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -161,6 +164,7 @@ class SuscripcionService
                 'ordencompra_archivos',
                 'suscripcion_tarjetas',
                 'suscripcion_owners',
+                'ordencompra_articulos.articulos',
                 'suscripcion_cargos.suscripcion_conciliaciones',
                 'suscripcion_comprobantes.suscripcion_cargos',
             ])
@@ -187,6 +191,11 @@ class SuscripcionService
         $proveedorResuelto = $this->resolverProveedorAlta($request, $data);
         if ($proveedorResuelto['error'] !== null) {
             return ['mensaje' => 'error', 'errores' => $proveedorResuelto['error']];
+        }
+
+        $articuloResuelto = $this->resolverArticuloAlta($data);
+        if ($articuloResuelto['error'] !== null) {
+            return ['mensaje' => 'error', 'errores' => $articuloResuelto['error']];
         }
 
         try {
@@ -300,6 +309,7 @@ class SuscripcionService
             }
 
             $this->ordencompraArchivoRepository->create($request, $oc->id);
+            $this->asegurarLineaArticulo($oc, $articuloResuelto['articulo'], $monto, $renovacion);
 
             if ($enviarAprobacion) {
                 $this->dispararArbolSuscripcion(
@@ -529,6 +539,7 @@ class SuscripcionService
     {
         return [
             'suscripcion_nombre' => 'required|string|max:180',
+            'articulo_id' => 'required|integer|exists:articulo,id',
             'proveedor_id' => 'nullable|integer|exists:proveedor,id',
             'nombreproveedor' => 'nullable|string|max:180',
             'empresa_id' => 'required|integer|exists:empresa,id',
@@ -586,6 +597,95 @@ class SuscripcionService
             'nombre' => mb_substr($nombreLibre, 0, 180),
             'error' => null,
         ];
+    }
+
+    public function articuloFormularioDefault(): ?Articulo
+    {
+        return ArticuloSkuMatchSupport::resolverCanonico(SuscripcionSupport::ARTICULO_SKU_DEFAULT);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{articulo: ?Articulo, error: ?string}
+     */
+    private function resolverArticuloAlta(array $data): array
+    {
+        $articuloId = (int) ($data['articulo_id'] ?? 0);
+        if ($articuloId <= 0) {
+            return [
+                'articulo' => null,
+                'error' => 'El artículo de la orden de compra es obligatorio (recepción y contabilización).',
+            ];
+        }
+
+        $articulo = Articulo::query()->find($articuloId);
+        if (! $articulo) {
+            return [
+                'articulo' => null,
+                'error' => 'El artículo indicado no existe.',
+            ];
+        }
+
+        return ['articulo' => $articulo, 'error' => null];
+    }
+
+    /**
+     * Línea única de la OC de suscripción: 1 unidad al monto del período.
+     * Sin ítem no hay recepción ni contabilización posteriores.
+     */
+    public function asegurarLineaArticulo(
+        Ordencompra $oc,
+        ?Articulo $articulo = null,
+        ?float $precio = null,
+        ?string $fechaEntrega = null,
+    ): Ordencompra_Articulo {
+        $existente = Ordencompra_Articulo::query()
+            ->where('ordencompra_id', (int) $oc->id)
+            ->orderBy('id')
+            ->first();
+        if ($existente) {
+            return $existente;
+        }
+
+        $articulo ??= $this->articuloFormularioDefault();
+        if (! $articulo) {
+            throw new \RuntimeException(
+                'No se encontró el artículo '.SuscripcionSupport::ARTICULO_SKU_DEFAULT
+                .' para armar la línea de la suscripción.'
+            );
+        }
+
+        $precio ??= (float) ($oc->suscripcion_monto_periodo ?? 0);
+        $fecha = $this->fechaLineaOc($fechaEntrega, $oc);
+        $detalle = trim((string) ($oc->suscripcion_nombre ?: $articulo->descripcion ?: $articulo->sku));
+        $monedaId = (int) ($oc->contrato_moneda_id ?: 0) ?: 1;
+        $ccDestino = (int) ($oc->centrocosto_id ?? 0);
+        if ($ccDestino <= 0) {
+            throw new \RuntimeException('La suscripción no tiene centro de costo para la línea de la OC.');
+        }
+
+        return Ordencompra_Articulo::create([
+            'ordencompra_id' => (int) $oc->id,
+            'fechaentrega' => $fecha,
+            'articulo_id' => (int) $articulo->id,
+            'cantidad' => 1,
+            'precio' => $precio,
+            'moneda_id' => $monedaId,
+            'cotizacion' => 1,
+            'cantidadalternativa' => 0,
+            'detalle' => $detalle !== '' ? $detalle : (string) $articulo->sku,
+            'centrocostodestino_id' => $ccDestino,
+        ]);
+    }
+
+    private function fechaLineaOc(?string $fechaEntrega, Ordencompra $oc): string
+    {
+        $raw = $fechaEntrega ?: ($oc->fechaentrega ?? $oc->contrato_vigencia_hasta);
+        if ($raw) {
+            return Carbon::parse($raw)->toDateString();
+        }
+
+        return Carbon::today()->toDateString();
     }
 
     private function validarCuentaEmpresa(int $cuentaId, int $empresaId): void

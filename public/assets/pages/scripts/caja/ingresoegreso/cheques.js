@@ -1,6 +1,248 @@
 var cuentacajaxcodigoEmitido;
 var cuentacajaxcodigoReemplazo;
 
+function esTeclaF1ChequeEmitido(e) {
+    return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function esTeclaEnterChequeEmitido(e) {
+    return e && (e.key === 'Enter' || e.keyCode === 13 || e.which === 13);
+}
+
+function enfocarCampoCheque(el) {
+    if (!el) {
+        return;
+    }
+    setTimeout(function () {
+        el.focus();
+        if (typeof el.select === 'function' && el.tagName === 'INPUT' && el.type !== 'hidden') {
+            el.select();
+        }
+    }, 0);
+}
+
+function abrirConsultaCuentaChequeEmitido($tr) {
+    if (!$('#empresa_id').val()) {
+        alert('Debe ingresar empresa');
+        return;
+    }
+    cuentacajaxcodigoEmitido = $tr;
+    $('#consultacuentacaja').val('');
+    $('#datoscuentacaja').html('');
+    $('#consultacuentacajaModal').modal('show');
+}
+
+function filtrarChequerasChequeEmitido($tr, cuentacajaId, preferirDiferido) {
+    var $sel = $tr.find('.chequera_emitido_id');
+    if (!$sel.length) {
+        return;
+    }
+    cuentacajaId = String(cuentacajaId || '');
+    var actual = $sel.val();
+    var visibleIds = [];
+    $sel.find('option').each(function () {
+        var $o = $(this);
+        if (!$o.val()) {
+            $o.prop('hidden', false).prop('disabled', false);
+            return;
+        }
+        var match = String($o.data('cuentacaja-id') || '') === cuentacajaId;
+        $o.prop('hidden', !match).prop('disabled', !match);
+        if (match) {
+            visibleIds.push({
+                id: $o.val(),
+                tipo: String($o.data('tipocheque') || ''),
+                preferida: preferirDiferido ? String($o.data('tipocheque')) === 'D' : String($o.data('tipocheque')) !== 'D'
+            });
+        }
+    });
+    var actualOk = visibleIds.some(function (v) { return String(v.id) === String(actual); });
+    if (actualOk) {
+        return;
+    }
+    visibleIds.sort(function (a, b) { return (b.preferida ? 1 : 0) - (a.preferida ? 1 : 0); });
+    $tr.data('pp-skip-chequera', 1);
+    $sel.val(visibleIds.length ? visibleIds[0].id : '');
+    $tr.removeData('pp-skip-chequera');
+}
+
+function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
+    if (!$tr || !$tr.length || !data || !(parseInt(data.id, 10) > 0)) {
+        return;
+    }
+    $tr.find('.cuentacaja_emitido_id').val(data.id);
+    if (data.codigo != null) {
+        $tr.find('.codigo_emitido').val(data.codigo);
+    }
+    $tr.find('.nombre_emitido').val(data.nombre || '');
+    if (data.moneda_id) {
+        $tr.find('.moneda_emitido_id').val(data.moneda_id);
+    }
+    $tr.find('.tctes_numero_emitido').val(data.tctes_numero || '');
+    $tr.find('.tctes_clave_emitido').val(data.tctes_clave || '');
+    filtrarChequerasChequeEmitido($tr, data.id, !!data.diferido);
+    var $nro = $tr.find('.numerocheque_emitido');
+    var auto = $nro.data('auto') === 1 || !$nro.val();
+    if (data.proximo_numero && (forzarNumero || auto)) {
+        $nro.val(data.proximo_numero).data('auto', 1);
+    }
+    var titulo = 'Numerador Anita';
+    if (data.tctes_clave) {
+        titulo += ' ' + data.tctes_clave;
+        if (data.tctes_desc) {
+            titulo += ' — ' + data.tctes_desc;
+        }
+        if (data.tctes_numero) {
+            titulo += ' (ref. ' + data.tctes_numero + ')';
+        }
+    }
+    $nro.attr('title', titulo);
+    if (data.aviso && !data.proximo_numero) {
+        $nro.attr('title', data.aviso);
+    }
+    var lbl = '';
+    if (data.tctes_clave) {
+        lbl = data.tctes_clave;
+        if (data.tctes_desc) {
+            lbl += ' · ' + data.tctes_desc;
+        }
+        lbl += data.diferido ? ' (diferido)' : ' (al día)';
+    } else if (data.aviso) {
+        lbl = data.aviso;
+    }
+    $tr.find('.tctes_emitido_lbl').text(lbl);
+    if (typeof flModificaAsiento !== 'undefined') {
+        flModificaAsiento = true;
+    }
+}
+
+function cargarEmisionChequeEmitido($tr, extras, onOk) {
+    var empresaId = parseInt($('#empresa_id').val() || '0', 10);
+    var cuentaId = parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10);
+    var codigo = String($tr.find('.codigo_emitido').val() || '').trim();
+    extras = extras || {};
+    var params = {
+        empresa_id: empresaId,
+        fecha_pago: $tr.find('.fechapago_emitido').val() || $('#fecha').val() || '',
+        fecha_emision: $('#fecha').val() || ''
+    };
+    if (extras.diferido === 1 || extras.diferido === 0) {
+        params.diferido = extras.diferido;
+    }
+    var url = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/caja/cuentacaja/api/cheque-emision';
+    if (cuentaId > 0 && !extras.porCodigo) {
+        params.cuentacaja_id = cuentaId;
+    } else if (codigo) {
+        url += '/' + encodeURIComponent(codigo);
+    } else {
+        if (typeof onOk === 'function') {
+            onOk(false);
+        }
+        return;
+    }
+    $.getJSON(url, params)
+        .done(function (data) {
+            aplicarCuentaChequeEmitido($tr, data, !!extras.forzarNumero);
+            if (typeof onOk === 'function') {
+                onOk(true);
+            }
+        })
+        .fail(function (xhr) {
+            if (typeof avisoCuentaInexistente === 'function') {
+                avisoCuentaInexistente(xhr);
+            } else {
+                alert((xhr && xhr.responseJSON && xhr.responseJSON.error) || 'No existe la cuenta de caja');
+            }
+            if (typeof onOk === 'function') {
+                onOk(false);
+            }
+        });
+}
+
+window.aplicarCuentaChequeEmitido = aplicarCuentaChequeEmitido;
+window.cargarEmisionChequeEmitido = cargarEmisionChequeEmitido;
+window.abrirConsultaCuentaChequeEmitido = abrirConsultaCuentaChequeEmitido;
+
+function activarTecladoChequeEmitido() {
+    if (window.__chequeEmitidoTecladoActivo) {
+        return;
+    }
+    window.__chequeEmitidoTecladoActivo = true;
+    document.addEventListener('keydown', function (e) {
+        var target = e.target;
+        if (!target || !target.closest) {
+            return;
+        }
+        var tabla = target.closest('#cheque-emitido-table');
+        if (!tabla) {
+            return;
+        }
+        var $tr = $(target).closest('tr.item-cheque-emitido');
+        if (!$tr.length) {
+            return;
+        }
+        if (esTeclaF1ChequeEmitido(e)) {
+            if (!$(target).hasClass('codigo_emitido') && !$(target).hasClass('nombre_emitido')) {
+                return;
+            }
+            var $modal = $('#consultacuentacajaModal');
+            if ($modal.length && ($modal.hasClass('show') || $modal.is(':visible'))) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof e.stopImmediatePropagation === 'function') {
+                e.stopImmediatePropagation();
+            }
+            abrirConsultaCuentaChequeEmitido($tr);
+            return;
+        }
+        if (!esTeclaEnterChequeEmitido(e)) {
+            return;
+        }
+        if (document.querySelector('.modal.show')) {
+            return;
+        }
+        if (!$(target).is('.codigo_emitido, .numerocheque_emitido, .montocheque_emitido, .anombrede_emitido')) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+            e.stopImmediatePropagation();
+        }
+        if ($(target).hasClass('codigo_emitido')) {
+            if (!String(target.value || '').trim()) {
+                $tr.find('.cuentacaja_emitido_id, .nombre_emitido, .numerocheque_emitido, .tctes_numero_emitido, .tctes_clave_emitido').val('');
+                $tr.find('.tctes_emitido_lbl').text('');
+                return;
+            }
+            cargarEmisionChequeEmitido($tr, { porCodigo: true, forzarNumero: true }, function (ok) {
+                if (ok) {
+                    enfocarCampoCheque($tr.find('.fechapago_emitido')[0] || $tr.find('.numerocheque_emitido')[0]);
+                } else {
+                    enfocarCampoCheque(target);
+                }
+            });
+            return;
+        }
+        if ($(target).hasClass('numerocheque_emitido')) {
+            enfocarCampoCheque($tr.find('.fechapago_emitido')[0]);
+            return;
+        }
+        if ($(target).hasClass('anombrede_emitido')) {
+            enfocarCampoCheque($tr.find('.montocheque_emitido')[0]);
+            return;
+        }
+        if ($(target).hasClass('montocheque_emitido')) {
+            if (typeof sumaMonto === 'function') {
+                sumaMonto();
+            }
+            enfocarCampoCheque($tr.find('.cotizacioncheque_emitido')[0]);
+        }
+    }, true);
+}
+
 function activaEventosChequesIngresoEgreso() {
     $('#agrega_renglon_cheque_emitido').on('click', agregaRenglonChequeEmitido);
     $('#agrega_renglon_cheque_recibido').on('click', agregaRenglonChequeRecibido);
@@ -25,12 +267,39 @@ function activaEventosChequesIngresoEgreso() {
     });
 
     $(document).on('click', '.consultacuentacaja_emitido', function () {
-        cuentacajaxcodigoEmitido = $(this).closest('tr');
-        if (!$('#empresa_id').val()) {
-            alert('Debe ingresar empresa');
+        abrirConsultaCuentaChequeEmitido($(this).closest('tr'));
+    });
+
+    $(document).on('input', '.numerocheque_emitido', function () {
+        $(this).data('auto', 0);
+    });
+
+    $(document).on('change', '.fechapago_emitido', function () {
+        var $tr = $(this).closest('tr');
+        if (parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10) > 0) {
+            cargarEmisionChequeEmitido($tr, { forzarNumero: $tr.find('.numerocheque_emitido').data('auto') === 1 });
+        }
+    });
+
+    $(document).on('change', '.chequera_emitido_id', function () {
+        var $tr = $(this).closest('tr');
+        if ($tr.data('pp-skip-chequera')) {
             return;
         }
-        $('#consultacuentacajaModal').modal('show');
+        if (parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10) <= 0) {
+            return;
+        }
+        var tipo = String($(this).find('option:selected').data('tipocheque') || '').toUpperCase();
+        var extras = { forzarNumero: true };
+        if (tipo === 'D' || tipo === 'N') {
+            extras.diferido = tipo === 'D' ? 1 : 0;
+        }
+        cargarEmisionChequeEmitido($tr, extras);
+    });
+
+    activarTecladoChequeEmitido();
+    $('#tbody-cheque-emitido-table tr.item-cheque-emitido').each(function () {
+        filtrarChequerasChequeEmitido($(this), $(this).find('.cuentacaja_emitido_id').val(), false);
     });
 
     $(document).on('click', '.consultacuentacaja_reemplazo', function () {
@@ -115,6 +384,8 @@ function agregaRenglonChequeEmitido(e) {
     $('#tbody-cheque-emitido-table').append(html);
     var row = $('#tbody-cheque-emitido-table tr:last');
     row.find('.fechapago_emitido').val($('#fecha').val());
+    filtrarChequerasChequeEmitido(row, '', false);
+    enfocarCampoCheque(row.find('.codigo_emitido')[0]);
     flModificaAsiento = true;
 }
 
