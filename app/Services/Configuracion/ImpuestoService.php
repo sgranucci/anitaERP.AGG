@@ -714,7 +714,7 @@ class ImpuestoService extends FacturacionService
 
 		$empresaId = (int) ($dataCliente['empresa_id'] ?? 0);
 
-		return $this->IIBBService->calculaPercepcionIIBB(
+		$filas = $this->IIBBService->calculaPercepcionIIBB(
 			$baseNeto,
 			$nroInscripcion,
 			$condicioniibb_id,
@@ -725,6 +725,9 @@ class ImpuestoService extends FacturacionService
 			$forzarCaba,
 			$empresaId > 0 ? $empresaId : null
 		);
+
+		// NC parcial / no anulación: sin percepción Buenos Aires; otras provincias sí.
+		return NotaCreditoPercepcionIibbSupport::aplicarReglaBuenosAires($filas, $dataCliente);
 	}
 
 	// Busca un valor en array

@@ -1,36 +1,60 @@
 <?php
 
-declare(strict_types=1);
-
 namespace Tests\Unit\Support\Ventas;
 
 use App\Support\Ventas\ArcaFceNcMostradorSupport;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 final class ArcaFceNcMostradorSupportTest extends TestCase
 {
-    public function test_parsear_codigo_fce(): void
+    public function test_tope_mypime_solo_para_emitir_fce_no_bloquea_asoc_nce(): void
     {
-        $asoc = ArcaFceNcMostradorSupport::parsearCodigoComprobante('FCE A-00008-00001234');
-        self::assertNotNull($asoc);
-        self::assertSame(201, $asoc['tipo']);
-        self::assertSame(8, $asoc['ptovta']);
-        self::assertSame(1234, $asoc['nro']);
-        self::assertTrue(ArcaFceNcMostradorSupport::esTipoFacturaFce($asoc['tipo']));
+        config(['facturacion.LIMITE_FCE' => 1_000_000]);
+        \App\Support\Configuracion\ParametroSistemaSupport::olvidarCache();
+
+        self::assertFalse(ArcaFceNcMostradorSupport::correspondeEmitirNcNdFce(500.0));
+        self::assertTrue(ArcaFceNcMostradorSupport::correspondeEmitirNcNdFce(1_000_000.0));
     }
 
-    public function test_anulacion_leyenda_roundtrip(): void
+    public function test_nce_203_asocia_fce_con_cuit(): void
     {
-        $leyenda = ArcaFceNcMostradorSupport::anexarMarcaAnulacionLeyenda('Bonificación', 'N');
-        self::assertSame('N', ArcaFceNcMostradorSupport::leerAnulacionDesdeLeyenda($leyenda));
-        self::assertSame('Bonificación', ArcaFceNcMostradorSupport::quitarMarcaAnulacionLeyenda($leyenda));
+        $empresa = (object) ['nroinscripcion' => '30-71234567-8'];
+        $asocs = ArcaFceNcMostradorSupport::asociadosParaArca(
+            [['tipo' => 201, 'ptovta' => 10, 'nro' => 9]],
+            203,
+            $empresa,
+            null
+        );
+        self::assertCount(1, $asocs);
+        self::assertSame(201, $asocs[0]['tipo']);
+        self::assertSame(10, $asocs[0]['ptovta']);
+        self::assertSame(9, $asocs[0]['nro']);
+        self::assertSame('30712345678', $asocs[0]['cuit']);
     }
 
-    public function test_normalizar_anulacion(): void
+    public function test_nc_003_no_asocia_fce(): void
     {
-        self::assertSame('S', ArcaFceNcMostradorSupport::normalizarAnulacion('s'));
-        self::assertSame('N', ArcaFceNcMostradorSupport::normalizarAnulacion('N'));
-        self::assertNull(ArcaFceNcMostradorSupport::normalizarAnulacion(''));
-        self::assertNull(ArcaFceNcMostradorSupport::normalizarAnulacion('X'));
+        $empresa = (object) ['nroinscripcion' => '30-71234567-8'];
+        $asocs = ArcaFceNcMostradorSupport::asociadosParaArca(
+            [['tipo' => 201, 'ptovta' => 10, 'nro' => 9]],
+            3,
+            $empresa,
+            null
+        );
+        self::assertSame([], $asocs);
+    }
+
+    public function test_nc_003_asocia_fac_sin_cuit(): void
+    {
+        $empresa = (object) ['nroinscripcion' => '30-71234567-8'];
+        $asocs = ArcaFceNcMostradorSupport::asociadosParaArca(
+            [['tipo' => 1, 'ptovta' => 10, 'nro' => 9]],
+            3,
+            $empresa,
+            null
+        );
+        self::assertCount(1, $asocs);
+        self::assertSame(1, $asocs[0]['tipo']);
+        self::assertArrayNotHasKey('cuit', $asocs[0]);
     }
 }

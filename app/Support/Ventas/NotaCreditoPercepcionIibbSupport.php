@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Support\Ventas;
 
 use App\Models\Configuracion\Provincia;
+use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Support\Caja\CobranzaDescuentoConfigSupport;
+use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 
@@ -14,9 +16,13 @@ use App\Support\Configuracion\RegimenPercepcionSupport;
  * Percepciones IIBB en nota de crédito de mostrador administración:
  * se heredan de la factura origen y se prorratean por neto gravado.
  *
+ * Buenos Aires (902): solo en anulación completa (NC total del origen o
+ * fce_anulacion=S). NC parcial / ajuste: sin percepción BA; otras provincias sí.
+ *
+ * NC = tipotransaccion.operacion = C (NCG/NCE pueden tener signo S en AGG).
  * Corre en AGG (y el resto) solo en facturación mostrador admin.
  * No entra en POS (gastronomía / estacionamiento / canje).
- * No aplica a facturas / ND (solo signo Resta + venta origen).
+ * No aplica a facturas / ND.
  */
 final class NotaCreditoPercepcionIibbSupport
 {
@@ -43,6 +49,29 @@ final class NotaCreditoPercepcionIibbSupport
     }
 
     /**
+     * @param  array<string, mixed>  $dataCliente
+     */
+    public static function esNotaCreditoMostrador(array $dataCliente): bool
+    {
+        return ! empty($dataCliente[self::FLAG_ES_NC]);
+    }
+
+    /**
+     * Anulación completa: FCE opc.22 = S, o NC que cubre ≥99,9 % del neto origen.
+     *
+     * @param  array<string, mixed>  $dataCliente
+     */
+    public static function esAnulacionCompleta(array $dataCliente, float $factor = 0.0): bool
+    {
+        $anul = strtoupper(trim((string) ($dataCliente['fce_anulacion'] ?? '')));
+        if ($anul === 'S') {
+            return true;
+        }
+
+        return $factor >= 0.999;
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     public static function anexarOrigenSiCorresponde(array &$datosCliente, array $data, bool $esMostradorAdmin): void
@@ -55,13 +84,21 @@ final class NotaCreditoPercepcionIibbSupport
             return;
         }
 
-        $origenId = (int) ($data['venta_origen_id'] ?? $data['venta_id'] ?? 0);
-        if ($origenId <= 0 || ! self::payloadEsNotaCredito($data)) {
+        if (! self::payloadEsNotaCredito($data)) {
             return;
         }
 
         $datosCliente[self::FLAG_ES_NC] = true;
-        $datosCliente[self::FLAG_VENTA_ORIGEN] = $origenId;
+
+        $anul = ArcaFceNcMostradorSupport::normalizarAnulacion($data['fce_anulacion'] ?? null);
+        if ($anul !== null) {
+            $datosCliente['fce_anulacion'] = $anul;
+        }
+
+        $origenId = (int) ($data['venta_origen_id'] ?? $data['venta_id'] ?? 0);
+        if ($origenId > 0) {
+            $datosCliente[self::FLAG_VENTA_ORIGEN] = $origenId;
+        }
     }
 
     /**
@@ -69,13 +106,24 @@ final class NotaCreditoPercepcionIibbSupport
      */
     public static function payloadEsNotaCredito(array $data): bool
     {
+        // Frontend / tests pueden mandar la operación sin hidratar el ABM.
+        if (array_key_exists('tipotransaccion_operacion', $data)) {
+            return strtoupper(trim((string) $data['tipotransaccion_operacion'])) === 'C';
+        }
+
+        $tipoId = (int) ($data['tipotransaccion_id'] ?? 0);
+        if ($tipoId > 0) {
+            $tipo = Tipotransaccion::query()->find($tipoId);
+
+            return $tipo !== null && $tipo->esNotaCredito();
+        }
+
+        // Legacy: algunos POS mandan solo el signo contable.
         if (isset($data['tipotransaccion_signo'])) {
             return (string) $data['tipotransaccion_signo'] === 'R';
         }
 
-        return VentaNotaCreditoPrecioLiteralSupport::esNotaCreditoTipotransaccionId(
-            (int) ($data['tipotransaccion_id'] ?? 0)
-        );
+        return false;
     }
 
     /**
@@ -99,16 +147,51 @@ final class NotaCreditoPercepcionIibbSupport
             && is_array($dataCliente['percepciones_iibb_origen'])) {
             $filas = self::extraerFilasIibb($dataCliente['percepciones_iibb_origen']);
 
-            return self::prorratearFilas($filas, $netoNc, self::netoOrigen($filas));
+            return self::prorratearFilas(
+                $filas,
+                $netoNc,
+                self::netoOrigen($filas),
+                $dataCliente
+            );
         }
 
-        return self::desdeOrigen(self::ventaOrigenId($dataCliente), $netoNc);
+        return self::desdeOrigen(self::ventaOrigenId($dataCliente), $netoNc, $dataCliente);
     }
 
     /**
+     * Quita percepción Buenos Aires cuando la NC no es anulación completa.
+     * Otras provincias se conservan.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>  $dataCliente
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarReglaBuenosAires(array $filas, array $dataCliente, float $factor = 0.0): array
+    {
+        if (! self::esNotaCreditoMostrador($dataCliente)) {
+            return $filas;
+        }
+        if (self::esAnulacionCompleta($dataCliente, $factor)) {
+            return $filas;
+        }
+
+        $out = [];
+        foreach ($filas as $fila) {
+            $arr = self::filaComoArray($fila);
+            if (self::esFilaBuenosAires($arr)) {
+                continue;
+            }
+            $out[] = $arr;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $dataCliente
      * @return list<array<string, mixed>>|null
      */
-    public static function desdeOrigen(int $ventaOrigenId, float $netoNc): ?array
+    public static function desdeOrigen(int $ventaOrigenId, float $netoNc, array $dataCliente = []): ?array
     {
         if ($ventaOrigenId <= 0) {
             return null;
@@ -119,15 +202,20 @@ final class NotaCreditoPercepcionIibbSupport
             return null;
         }
 
-        return self::prorratearFilas($origen['filas'], $netoNc, $origen['neto']);
+        return self::prorratearFilas($origen['filas'], $netoNc, $origen['neto'], $dataCliente);
     }
 
     /**
      * @param  list<array<string, mixed>>  $filasOrigen
+     * @param  array<string, mixed>  $dataCliente
      * @return list<array<string, mixed>>
      */
-    public static function prorratearFilas(array $filasOrigen, float $netoNc, float $netoOrigen): array
-    {
+    public static function prorratearFilas(
+        array $filasOrigen,
+        float $netoNc,
+        float $netoOrigen,
+        array $dataCliente = []
+    ): array {
         if ($filasOrigen === []) {
             return [];
         }
@@ -143,8 +231,12 @@ final class NotaCreditoPercepcionIibbSupport
         }
 
         $esTotal = $factor >= 0.999;
+        $incluirBa = self::esAnulacionCompleta($dataCliente, $factor);
         $out = [];
         foreach ($filasOrigen as $fila) {
+            if (! $incluirBa && self::esFilaBuenosAires($fila)) {
+                continue;
+            }
             $importeOrigen = round((float) ($fila['importe'] ?? 0), 2);
             $baseOrigen = (float) ($fila['baseimponible'] ?? 0);
             $importe = $esTotal ? $importeOrigen : round($importeOrigen * $factor, 2);
@@ -233,6 +325,17 @@ final class NotaCreditoPercepcionIibbSupport
         return str_starts_with($c, 'perc.')
             || str_contains($c, 'percepcion iibb')
             || str_contains($c, 'perc. iibb');
+    }
+
+    /**
+     * Buenos Aires IIBB = jurisdicción AFIP 902 (inamovible).
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    public static function esFilaBuenosAires(array $fila): bool
+    {
+        return (int) ($fila['jurisdiccion'] ?? 0)
+            === PercepcionIibbJurisdiccionEntregaSupport::JURISDICCION_BUENOS_AIRES;
     }
 
     /**

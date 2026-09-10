@@ -108,13 +108,24 @@
 		flex: 1 1 auto;
 		height: calc(2.25rem + 2px);
 	}
+	.factura-datos-compactos .form-group {
+		margin-bottom: 0.35rem;
+	}
+	.factura-datos-compactos .form-text {
+		margin-top: 0.1rem;
+		line-height: 1.2;
+	}
+	.factura-datos-compactos .alert {
+		padding: 0.35rem 0.6rem;
+		margin-bottom: 0.35rem;
+	}
 </style>
 <div class="form1">
 <div class="card card-outline card-info mb-3">
 	<div class="card-header py-2">
 		<h3 class="card-title mb-0">Datos del comprobante</h3>
 	</div>
-	<div class="card-body pb-2">
+	<div class="card-body pb-2 factura-datos-compactos">
 <div class="row">
 	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query ?? ''}}" data-formapago="{{$formapago_query ?? ''}}" data-layout-items-pedido="{{ $layoutItemsPedido ? '1' : '0' }}">
 		<input type="hidden" id="codigofactura" class="form-control" value="{{old('codigofactura', $data->codigo ?? '')}}" />
@@ -151,71 +162,6 @@
 				<small id="aviso-tipo-fce" class="form-text text-info d-none"></small>
 			</div>
 		</div>
-		@php
-			$ncOrigenEsFce = ! empty($ncOrigenEsFce);
-			$fceComprobanteReferenciado = old('fce_comprobante_referenciado', $fceComprobanteReferenciado ?? '');
-			$fceAnulacion = old('fce_anulacion', $fceAnulacion ?? '');
-		@endphp
-		<div id="fce-nc-mostrador-wrap" class="{{ $ncOrigenEsFce ? '' : 'd-none' }}" data-nc-origen-fce="{{ $ncOrigenEsFce ? '1' : '0' }}">
-			<div class="form-group row">
-				<label for="fce_comprobante_referenciado" class="col-lg-3 control-label text-right pr-2 requerido">Comprobante referenciado</label>
-				<input type="text" name="fce_comprobante_referenciado" id="fce_comprobante_referenciado"
-					class="col-lg-5 form-control"
-					value="{{ $fceComprobanteReferenciado }}"
-					placeholder="FCE A-00008-00001234"
-					autocomplete="off"
-					@if ($ncOrigenEsFce) required @endif>
-				<div class="col-lg-4">
-					<small class="form-text text-muted">FCE a asociar en ARCA (CbteAsoc).</small>
-				</div>
-			</div>
-			<div class="form-group row">
-				<label for="fce_anulacion" class="col-lg-3 control-label text-right pr-2 requerido">Anulación FCE (opc. 22)</label>
-				<select name="fce_anulacion" id="fce_anulacion" class="col-lg-3 form-control" data-fouc @if ($ncOrigenEsFce) required @endif>
-					<option value="">-- Seleccionar --</option>
-					<option value="N" @if ($fceAnulacion === 'N') selected @endif>N — No es anulación (ajuste / cancela sin rechazo)</option>
-					<option value="S" @if ($fceAnulacion === 'S') selected @endif>S — Anulación de FCE rechazada</option>
-				</select>
-				<div class="col-lg-5">
-					<small class="form-text text-muted">Obligatorio en NCE. S solo si la FCE fue rechazada en el Registro.</small>
-				</div>
-			</div>
-		</div>
-		<div id="concepto-venta-comprobante-wrap" class="{{ $mostrarConceptoCabecera ? '' : 'd-none' }}">
-			@include('ventas.partials.campo_consulta_concepto_venta', [
-				'conceptoId' => $conceptoCabeceraId,
-				'codigo' => $conceptoCabeceraCodigo,
-				'descripcion' => $conceptoCabeceraNombre,
-				'required' => false,
-				'label' => 'Concepto',
-				'inputId' => 'concepto_venta_comprobante_id',
-				'inputName' => 'concepto_venta_id',
-				'ayuda_tooltip' => 'Default del tipo si tiene concepto asignado. En FAC se puede cambiar o elegir otro en el renglón.',
-			])
-			<div class="col-lg-8 offset-lg-3 mb-2">
-				<small id="aviso-concepto-venta-tipo" class="form-text text-muted">
-					Default del comprobante. En el renglón se puede cambiar y completar el detalle.
-				</small>
-			</div>
-		</div>
-		<div class="form-group row" id="puntoventa">
-			<label for="puntoventa_id" class="col-lg-3 control-label text-right pr-2 requerido">Punto de venta</label>
-			<input type="hidden" id="puntoventadefault_id" class="form-control" value="{{old('puntoventadefault_id', $puntoventadefault_id ?? ($data->puntoventa_id ?? ''))}}" />
-			<select name="puntoventa_id" id="puntoventa_id" data-placeholder="Punto de venta" class="col-lg-5 form-control required" data-fouc>
-			</select>
-			<label for="actividad_arca_id" class="col-lg-2 control-label text-right pr-2 requerido">Actividad</label>
-			<input type="hidden" id="actividad_arcadefault_id" class="form-control" value="{{old('actividad_arcadefault_id', $data->puntoventas->actividad_arca_id ?? '')}}" />
-			<select name="actividad_arca_id" id="actividad_arca_id" data-placeholder="Actividad ARCA" class="col-lg-2 form-control required" data-fouc>
-				<option value="">-- Seleccionar --</option>
-				@foreach($actividad_arca_query as $key => $value)
-					@if( (int) $value->id == (int) old('actividad_arca_id', $data->actividad_arca_id ?? ''))
-						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-					@else
-						<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-					@endif
-				@endforeach					
-			</select>
-		</div>
 		<div class="form-group row tm-cliente-campo">
    			<label for="codigocliente" class="col-lg-3 control-label text-right pr-2 requerido">Cliente</label>
 			<div class="col-lg-8">
@@ -246,8 +192,72 @@
 				<label id="nombretiposuspension" class="text-danger small mb-0"></label>
 			</div>
 		</div>
-		<div id="aviso-padron-operacion-factura" class="alert d-none col-12 mb-2" role="alert"></div>
+		<div id="aviso-padron-operacion-factura" class="alert d-none col-12" role="alert"></div>
 		@include('ventas.cliente.partials.arca_apoc_operacion_support')
+		@php
+			$ncOrigenEsFce = ! empty($ncOrigenEsFce);
+			$fceComprobanteReferenciado = old('fce_comprobante_referenciado', $fceComprobanteReferenciado ?? '');
+			$fceAnulacion = old('fce_anulacion', $fceAnulacion ?? '');
+		@endphp
+		<div id="fce-nc-mostrador-wrap" class="{{ $ncOrigenEsFce ? '' : 'd-none' }}"
+			data-nc-origen-fce="{{ $ncOrigenEsFce ? '1' : '0' }}"
+			data-limite-fce="{{ \App\Support\Configuracion\ParametroSistemaSupport::limiteFce() }}">
+			<div class="form-group row tm-fce-referencia-campo">
+				<label for="fce_comprobante_referenciado" class="col-lg-3 control-label text-right pr-2 requerido" title="Comprobante a asociar en ARCA (CbteAsoc)">Comprobante ref.</label>
+				<div class="col-lg-8">
+					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+						<button type="button" title="Consulta comprobantes del cliente (F1)" class="btn-accion-tabla consultafacturareferencia tooltipsC flex-shrink-0">
+							<i class="fa fa-search text-primary"></i>
+						</button>
+						<input type="text" name="fce_comprobante_referenciado" id="fce_comprobante_referenciado"
+							class="form-control"
+							value="{{ $fceComprobanteReferenciado }}"
+							placeholder="FAC A-00008-00001234"
+							title="C&oacute;digo del comprobante; Enter valida; F1 consulta"
+							autocomplete="off"
+							@if ($ncOrigenEsFce) required @endif>
+					</div>
+				</div>
+			</div>
+			<div class="form-group row" id="fce-anulacion-wrap">
+				<label for="fce_anulacion" class="col-lg-3 control-label text-right pr-2 requerido" id="fce_anulacion_label" title="Obligatorio en NCE (ARCA opcional 22). S solo si la FCE fue rechazada en el Registro.">Anulaci&oacute;n FCE</label>
+				<select name="fce_anulacion" id="fce_anulacion" class="col-lg-8 form-control" data-fouc @if ($ncOrigenEsFce) required @endif>
+					<option value="">-- Seleccionar --</option>
+					<option value="N" @if ($fceAnulacion === 'N') selected @endif>N — No es anulación</option>
+					<option value="S" @if ($fceAnulacion === 'S') selected @endif>S — Anulación FCE rechazada</option>
+				</select>
+			</div>
+		</div>
+		<div id="concepto-venta-comprobante-wrap" class="{{ $mostrarConceptoCabecera ? '' : 'd-none' }}">
+			@include('ventas.partials.campo_consulta_concepto_venta', [
+				'conceptoId' => $conceptoCabeceraId,
+				'codigo' => $conceptoCabeceraCodigo,
+				'descripcion' => $conceptoCabeceraNombre,
+				'required' => false,
+				'label' => 'Concepto',
+				'inputId' => 'concepto_venta_comprobante_id',
+				'inputName' => 'concepto_venta_id',
+				'ayuda_tooltip' => 'Default del tipo si tiene concepto asignado. En FAC se puede cambiar o elegir otro en el renglón.',
+			])
+		</div>
+		<div class="form-group row" id="puntoventa">
+			<label for="puntoventa_id" class="col-lg-3 control-label text-right pr-2 requerido">Punto de venta</label>
+			<input type="hidden" id="puntoventadefault_id" class="form-control" value="{{old('puntoventadefault_id', $puntoventadefault_id ?? ($data->puntoventa_id ?? ''))}}" />
+			<select name="puntoventa_id" id="puntoventa_id" data-placeholder="Punto de venta" class="col-lg-5 form-control required" data-fouc>
+			</select>
+			<label for="actividad_arca_id" class="col-lg-2 control-label text-right pr-2 requerido">Actividad</label>
+			<input type="hidden" id="actividad_arcadefault_id" class="form-control" value="{{old('actividad_arcadefault_id', $data->puntoventas->actividad_arca_id ?? '')}}" />
+			<select name="actividad_arca_id" id="actividad_arca_id" data-placeholder="Actividad ARCA" class="col-lg-2 form-control required" data-fouc>
+				<option value="">-- Seleccionar --</option>
+				@foreach($actividad_arca_query as $key => $value)
+					@if( (int) $value->id == (int) old('actividad_arca_id', $data->actividad_arca_id ?? ''))
+						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+					@else
+						<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+					@endif
+				@endforeach					
+			</select>
+		</div>
 		<div class="form-group row tm-vendedor-campo">
    			<label for="codigovendedor" class="col-lg-3 control-label text-right pr-2 requerido">Vendedor</label>
 			<div class="col-lg-8">
@@ -273,24 +283,6 @@
 				</div>
 			</div>
 		</div>
-		<div class="form-group row tm-transporte-campo">
-   			<label for="codigotransporte" class="col-lg-3 control-label text-right pr-2">{{ config('app.empresa') == 'EL BIERZO' ? 'Reparto' : 'Transporte' }}</label>
-			<div class="col-lg-8">
-				<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
-					<input type="hidden" class="transporte_id" id="transporte_id" name="transporte_id" value="{{ $transporteIdFactura }}">
-					<button type="button" title="Consulta {{ config('app.empresa') == 'EL BIERZO' ? 'repartos' : 'transportes' }} (F1)" class="btn-accion-tabla consultatransporte tooltipsC flex-shrink-0 factura-carga-bloqueable">
-						<i class="fa fa-search text-primary"></i>
-					</button>
-					<input type="text" class="form-control codigotransporte factura-carga-bloqueable flex-shrink-0" id="codigotransporte" name="codigotransporte"
-						value="{{ old('codigotransporte', $transporteFactura?->codigo ?? '') }}"
-						placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off" style="width: 5.5rem;">
-					<input type="text" class="form-control nombretransporte text-truncate" id="nombretransporte" name="nombretransporte"
-						value="{{ old('nombretransporte', $transporteFactura?->nombre ?? '') }}"
-						placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
-				</div>
-				<div id="aviso-deposito-facturacion-factura" class="aviso-deposito-facturacion small text-muted d-none mt-1 mb-0" role="status" style="font-size: 11px; line-height: 1.3;"></div>
-			</div>
-		</div>
 		<div class="form-group row" id="divlugar">
     		<label for="lugarentrega" class="col-lg-3 control-label text-right pr-2">Lugar de entrega</label>
     		<div class="col-lg-8">
@@ -314,7 +306,7 @@
 	</div>
 	<div class="col-sm-6">
 		<div class="form-group row">
-			<label for="fechafactura" class="col-lg-4 control-label text-right pr-2 requerido">Fecha</label>
+			<label for="fechafactura" class="col-lg-3 control-label text-right pr-2 requerido">Fecha</label>
 			@if (! empty($consultaFacturasDia))
 				@php
 					$fechaVenta = old('fechafactura', $data->fecha ?? date('Y-m-d'));
@@ -325,8 +317,8 @@
 					       value="{{ $fechaVentaYmd !== '' ? \Illuminate\Support\Carbon::parse($fechaVentaYmd)->format('d-m-Y') : '' }}">
 					<input type="hidden" name="fechafactura" id="fechafactura" value="{{ $fechaVentaYmd }}">
 				</div>
-				<label for="hora_creacion_factura" class="col-lg-2 control-label text-right pr-2">Hora creaci&oacute;n</label>
-				<div class="col-lg-3">
+				<label for="hora_creacion_factura" class="col-lg-2 control-label text-right pr-2">Hora</label>
+				<div class="col-lg-4">
 					<input type="text" id="hora_creacion_factura" class="form-control" readonly
 					       value="{{ $data->created_at ? $data->created_at->format('H:i:s') : '—' }}">
 				</div>
@@ -334,41 +326,70 @@
 				<div class="col-lg-3">
 					<input type="date" name="fechafactura" id="fechafactura" class="form-control" value="{{substr(old('fechafactura', $data->fecha ?? date('Y-m-d')),0,10)}}" required>
 				</div>
+				<label for="moneda_id" class="col-lg-2 control-label text-right pr-2 requerido">Moneda</label>
+				<select name="moneda_id" id="moneda_id" data-placeholder="Moneda" class="col-lg-4 form-control required" data-fouc>
+					<option value="">-- Seleccionar --</option>
+					@foreach($moneda_query as $key => $value)
+						@if( (int) $value->id == (int) old('moneda_id', $data->moneda_id ?? '1'))
+							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+						@else
+							<option value="{{ $value->id }}">{{ $value->nombre }}</option>
+						@endif
+					@endforeach
+				</select>
 			@endif
 		</div>
+		@if (! empty($consultaFacturasDia))
 		<div class="form-group row">
-			<label for="descuentolinea" class="col-lg-4 control-label text-right pr-2">Descuento de l&iacute;nea</label>
-			<div class="col-lg-4">
+			<label for="moneda_id" class="col-lg-3 control-label text-right pr-2 requerido">Moneda</label>
+			<select name="moneda_id" id="moneda_id" data-placeholder="Moneda" class="col-lg-5 form-control required" data-fouc>
+				<option value="">-- Seleccionar --</option>
+				@foreach($moneda_query as $key => $value)
+					@if( (int) $value->id == (int) old('moneda_id', $data->moneda_id ?? '1'))
+						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+					@else
+						<option value="{{ $value->id }}">{{ $value->nombre }}</option>
+					@endif
+				@endforeach
+			</select>
+		</div>
+		@endif
+		<div class="form-group row">
+			<label for="descuentolinea" class="col-lg-3 control-label text-right pr-2">Dto. l&iacute;nea</label>
+			<div class="col-lg-3">
 				<input type="number" id="descuentolinea" name="descuentolinea" class="form-control" value="">
 			</div>
-		</div>
-		<div class="form-group row">
-			<label for="descuentopie" class="col-lg-4 control-label text-right pr-2">Descuento pie factura</label>
-			<div class="col-lg-4">
+			<label for="descuentopie" class="col-lg-3 control-label text-right pr-2">Dto. pie</label>
+			<div class="col-lg-3">
 				<input type="number" id="descuentopie" name="descuentopie" class="form-control" value="{{$data->descuento ?? ''}}">
 				<input type="hidden" id="descuentoimportepie" name="descuentoimportepie" value="">
 			</div>
 		</div>
+		<div class="form-group row tm-transporte-campo">
+			<label for="codigotransporte" class="col-lg-3 control-label text-right pr-2">{{ config('app.empresa') == 'EL BIERZO' ? 'Reparto' : 'Transporte' }}</label>
+			<div class="col-lg-8">
+				<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+					<input type="hidden" class="transporte_id" id="transporte_id" name="transporte_id" value="{{ $transporteIdFactura }}">
+					<button type="button" title="Consulta {{ config('app.empresa') == 'EL BIERZO' ? 'repartos' : 'transportes' }} (F1)" class="btn-accion-tabla consultatransporte tooltipsC flex-shrink-0 factura-carga-bloqueable">
+						<i class="fa fa-search text-primary"></i>
+					</button>
+					<input type="text" class="form-control codigotransporte factura-carga-bloqueable flex-shrink-0" id="codigotransporte" name="codigotransporte"
+						value="{{ old('codigotransporte', $transporteFactura?->codigo ?? '') }}"
+						placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off" style="width: 5.5rem;">
+					<input type="text" class="form-control nombretransporte text-truncate" id="nombretransporte" name="nombretransporte"
+						value="{{ old('nombretransporte', $transporteFactura?->nombre ?? '') }}"
+						placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+				</div>
+				<div id="aviso-deposito-facturacion-factura" class="aviso-deposito-facturacion small text-muted d-none mt-1 mb-0" role="status" style="font-size: 11px; line-height: 1.3;"></div>
+			</div>
+		</div>
 		<div class="form-group row" id="puntoventaremito">
-			<label for="puntoventaremito_id" class="col-lg-4 control-label text-right pr-2 requerido">Pto. venta del remito</label>
+			<label for="puntoventaremito_id" class="col-lg-3 control-label text-right pr-2 requerido">Pto. venta remito</label>
 			<input type="hidden" id="puntoventaremitoori_id" class="form-control" value="{{old('puntoventaremitoori_id', $data->puntoventaremito_id ?? '')}}" />
-			<select name="puntoventaremito_id" id="puntoventaremito_id" data-placeholder="Punto de venta del remito" class="col-lg-5 form-control required" data-fouc>
+			<select name="puntoventaremito_id" id="puntoventaremito_id" data-placeholder="Punto de venta del remito" class="col-lg-8 form-control required" data-fouc>
 			</select>
 		</div>
 		<input type="hidden" id="cantidadbulto" name="cantidadbulto" value="0"></input>
-		<div class="form-group row">
-			<label for="moneda_id" class="col-lg-4 control-label text-right pr-2 requerido">Moneda</label>
-			<select name="moneda_id" id="moneda_id" data-placeholder="Moneda" class="col-lg-6 form-control required" data-fouc>
-				<option value="">-- Seleccionar moneda  --</option>
-				@foreach($moneda_query as $key => $value)
-					@if( (int) $value->id == (int) old('moneda_id', $data->moneda_id ?? '1'))
-						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-					@else
-						<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-					@endif
-				@endforeach
-			</select>
-		</div>		
 		@php
 			$depositoIdDefault = (int) config('facturacion.DEPOSITO_VENTA_ID', 1);
 			$depositoIdDesdeEmision = null;
@@ -393,7 +414,7 @@
 			'depositoId' => $depositoIdSeleccionado,
 			'codigo' => old('deposito_codigo', $depositoSeleccionado?->codigo ?? ''),
 			'descripcion' => old('deposito_descripcion', $depositoSeleccionado?->nombre ?? ''),
-			'col_label' => 'col-lg-4 control-label text-right pr-2',
+			'col_label' => 'col-lg-3 control-label text-right pr-2',
 			'col_input' => 'col-lg-8',
 			'codigoExtraClass' => 'factura-carga-bloqueable',
 		])
@@ -767,4 +788,5 @@
 @include('includes.ventas.modalconsultatransporte')
 @include('includes.ventas.modalconsultaconceptoventa')
 @include('includes.ventas.modalconsultacontratoventa')
+@include('includes.ventas.modalconsultafactura_referencia')
 <script src="{{ asset('assets/pages/scripts/ventas/contrato_venta/consulta.js') }}" type="text/javascript"></script>

@@ -2852,11 +2852,11 @@ class FacturacionService
 
 		$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
-		// Verifica si es nota de credito o factura
+		// Verifica si es nota de credito o factura (operacion C; no solo signo R).
 		$factura = null;
 		$ordenventa_id = null;
 		$referenciaFactura = null;
-		if ($signo < 0 && $venta_id > 0)
+		if ($tipotransaccion->esNotaCredito() && $venta_id > 0)
 		{
 			$factura = Self::leeFactura($venta_id);
 
@@ -2880,7 +2880,8 @@ class FacturacionService
 		$moneda_id = $data['moneda_id'];
 
 		// Solo facturación mostrador (no POS gastronomía/estacionamiento AGG).
-		$esMostradorNcFce = $signo < 0 && ! $this->esEmisionPos($data);
+		// NCG/NCE en AGG pueden tener signo S; manda operacion=C.
+		$esMostradorNcFce = $tipotransaccion->esNotaCredito() && ! $this->esEmisionPos($data);
 		$forzarNcNdFce = false;
 		$fceAnulacionSn = null;
 		$comprobantesAsociadosMostrador = null;
@@ -2897,13 +2898,16 @@ class FacturacionService
 				if ($asocParsed === null || ! ArcaFceNcMostradorSupport::esTipoFacturaFce((int) $asocParsed['tipo'])) {
 					return ['error' => 'Debe indicar el comprobante FCE referenciado (ej. FCE A-00008-00001234).'];
 				}
+				$referenciaFactura = $refCodigo;
+				$comprobantesAsociadosMostrador = [$asocParsed];
+				// ARCA 212: FCE solo se ajusta con NCE/NDE + CbteAsoc FCE.
+				// El tope MiPyME (151/152) aplica a emitir FCE, no a la NC sobre FCE.
+				// NC 003 + FCE o solo período → 213 (emisor/receptor candidatos FCE).
+				$forzarNcNdFce = true;
 				$fceAnulacionSn = ArcaFceNcMostradorSupport::normalizarAnulacion($data['fce_anulacion'] ?? null);
 				if ($fceAnulacionSn === null) {
 					return ['error' => 'Debe indicar si la NC es anulación de FCE rechazada (S) o no (N) — opcional ARCA 22.'];
 				}
-				$forzarNcNdFce = true;
-				$referenciaFactura = $refCodigo;
-				$comprobantesAsociadosMostrador = [$asocParsed];
 				$leyenda = ArcaFceNcMostradorSupport::anexarMarcaAnulacionLeyenda((string) $leyenda, $fceAnulacionSn);
 			}
 		}
@@ -3095,19 +3099,21 @@ class FacturacionService
 					$impuestos = [];
 					$this->facturaelectronicaService->armaImpuesto($conceptosTotales, $impuestos);
 
-					// NC/ND: asociar la factura origen (ARCA MTXCA/WSFE exige comprobante o rango).
-					// Mostrador FCE: usa referencia informada (obligatoria) + CUIT/fecha emisor.
+					// NC/ND: asociar factura origen. Mostrador FCE: filtrar según tipo ARCA
+					// (NCE→FCE+CUIT; NC 003→sin FCE, período — obs. 213/204/209).
 					if (is_array($comprobantesAsociadosMostrador) && $comprobantesAsociadosMostrador !== []) {
-						$comprobantesAsociados = [];
-						foreach ($comprobantesAsociadosMostrador as $asocRow) {
-							$comprobantesAsociados[] = ArcaFceNcMostradorSupport::enriquecerAsociadoConEmisor(
-								$asocRow,
-								$empresa,
-								$factura
-							);
-						}
+						$comprobantesAsociados = ArcaFceNcMostradorSupport::asociadosParaArca(
+							$comprobantesAsociadosMostrador,
+							(int) $codigoTipoTransaccion,
+							$empresa,
+							$factura
+						);
 					} else {
-						$comprobantesAsociados = $this->armaComprobantesAsociadosDesdeFactura($factura, $empresa);
+						$comprobantesAsociados = $this->armaComprobantesAsociadosDesdeFactura(
+							$factura,
+							$empresa,
+							(int) $codigoTipoTransaccion
+						);
 					}
 
 					[$fechaAsignacionDesdeYmd, $fechaAsignacionHastaYmd] = $this->resolverFechasAsignacionPeriodoAsoc(
@@ -6831,14 +6837,22 @@ class FacturacionService
 	 *
 	 * @return list<array{tipo: int, ptovta: int, nro: int, cuit?: string, cbtefch?: string}>
 	 */
-	private function armaComprobantesAsociadosDesdeFactura($factura, $empresa = null): array
+	private function armaComprobantesAsociadosDesdeFactura($factura, $empresa = null, int $codigoTipoNcNd = 0): array
 	{
+		if (! $factura) {
+			return [];
+		}
 		$asoc = ArcaFceNcMostradorSupport::parsearCodigoComprobante(trim((string) ($factura->codigo ?? '')));
 		if ($asoc === null) {
 			return [];
 		}
 
-		return [ArcaFceNcMostradorSupport::enriquecerAsociadoConEmisor($asoc, $empresa, $factura)];
+		return ArcaFceNcMostradorSupport::asociadosParaArca(
+			[$asoc],
+			$codigoTipoNcNd,
+			$empresa,
+			$factura
+		);
 	}
 
 	public function leeNumeroOperacionSubdiario()

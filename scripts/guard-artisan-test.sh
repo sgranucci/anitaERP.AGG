@@ -16,7 +16,8 @@ die() {
 read_env() {
   local key="$1"
   if [[ -f .env ]]; then
-    grep -E "^${key}=" .env | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'"
+    # grep exit 1 si la clave no existe; no abortar por set -e / pipefail
+    grep -E "^${key}=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true
   fi
 }
 

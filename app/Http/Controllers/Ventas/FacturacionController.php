@@ -36,6 +36,7 @@ use App\Models\Ventas\Venta;
 use App\Services\Ventas\ComprobanteImpresionSesionService;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
+use App\Support\Ventas\ComprobanteReferenciaConsultaSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
 class FacturacionController extends Controller
@@ -594,6 +595,106 @@ class FacturacionController extends Controller
         return back()->withInput()->with('errores', [
             $error !== null && $error !== '' ? $error : 'No se pudo generar el comprobante.',
         ]);
+    }
+
+    /**
+     * Modal de comprobantes a referenciar en NC (CbteAsoc / FCE).
+     * Une venta ERP + venta Anita del cliente.
+     */
+    public function consultaComprobanteReferencia(Request $request): JsonResponse
+    {
+        $this->assertPuedeConsultarReferenciaFactura();
+
+        $clienteId = (int) $request->input('cliente_id', 0);
+        if ($clienteId <= 0) {
+            return response()->json([
+                'data' => '<tr><td colspan="5" class="text-muted">Seleccione un cliente primero.</td></tr>',
+            ]);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $consulta = trim((string) $request->input('consulta', ''));
+        $soloFce = (int) $request->input('solo_fce', 0) === 1;
+
+        $filas = app(ComprobanteReferenciaConsultaSupport::class)->listar(
+            $clienteId,
+            $empresaId,
+            $consulta,
+            $soloFce
+        );
+
+        $puedeAbm = can('listar-factura', false) || can('editar-factura', false) || can('facturar', false);
+        if ($filas === []) {
+            return response()->json(['data' => '<tr><td colspan="5">Sin resultados</td></tr>']);
+        }
+
+        $html = '';
+        foreach ($filas as $row) {
+            $codigo = (string) ($row['codigo'] ?? '');
+            $total = number_format((float) ($row['total'] ?? 0), 2, ',', '.');
+            $html .= '<tr>';
+            $html .= '<td class="venta_codigo">'.e($codigo).'</td>';
+            $html .= '<td class="fecha_venta">'.e((string) ($row['fecha'] ?? '')).'</td>';
+            $html .= '<td class="text-right">'.e($total).'</td>';
+            $html .= '<td>'.e((string) ($row['origen'] ?? '')).'</td>';
+            $html .= '<td class="text-nowrap"><a class="btn btn-warning btn-sm eligeconsultafacturareferencia">Elegir</a>';
+            $ventaId = (int) ($row['venta_id'] ?? 0);
+            if ($puedeAbm && $ventaId > 0) {
+                $url = route('editar_factura', [
+                    'id' => $ventaId,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+                $html .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+            }
+            $html .= '</td></tr>';
+        }
+
+        return response()->json(['data' => $html]);
+    }
+
+    public function resolverComprobanteReferencia(Request $request): JsonResponse
+    {
+        $this->assertPuedeConsultarReferenciaFactura();
+
+        $clienteId = (int) $request->input('cliente_id', 0);
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $valor = trim((string) $request->input('valor', $request->input('codigo', '')));
+        if ($clienteId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Seleccione un cliente']);
+        }
+        if ($valor === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Ingrese el comprobante']);
+        }
+
+        $item = app(ComprobanteReferenciaConsultaSupport::class)->resolver($clienteId, $empresaId, $valor);
+        if ($item === null) {
+            return response()->json(['ok' => false, 'mensaje' => 'Comprobante no encontrado para el cliente']);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'item' => [
+                'id' => (int) ($item['venta_id'] ?? 0),
+                'codigo' => (string) ($item['codigo'] ?? ''),
+                'fecha' => (string) ($item['fecha'] ?? ''),
+                'total' => (float) ($item['total'] ?? 0),
+                'origen' => (string) ($item['origen'] ?? ''),
+            ],
+        ]);
+    }
+
+    private function assertPuedeConsultarReferenciaFactura(): void
+    {
+        if (
+            ! can('crear-factura', false)
+            && ! can('editar-factura', false)
+            && ! can('actualizar-factura', false)
+            && ! can('listar-factura', false)
+            && ! can('facturar', false)
+        ) {
+            abort(403, 'Sin permiso para consultar comprobantes de venta');
+        }
     }
 
     /**

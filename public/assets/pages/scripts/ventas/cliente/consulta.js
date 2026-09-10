@@ -44,6 +44,11 @@ window.bloquearClienteDespachoEnFacturacion = function (clienteId) {
 };
 
 function enfocarCampoTrasClienteCargado() {
+    var $fceWrap = $('#fce-nc-mostrador-wrap');
+    if ($fceWrap.length && !$fceWrap.hasClass('d-none') && $('#fce_comprobante_referenciado').length) {
+        $('#fce_comprobante_referenciado').focus();
+        return;
+    }
     if ($('#codigotransporte').length > 0) {
         $('#codigotransporte').focus();
     }

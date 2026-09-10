@@ -2407,6 +2407,8 @@ Route::get('ventas/impresion-sesion/cot/{id}', 'Ventas\ComprobanteImpresionSesio
 Route::post('ventas/impresion-sesion/ejecutar', 'Ventas\ComprobanteImpresionSesionController@ejecutar')->name('ejecutar_impresion_sesion');
 Route::get('ventas/impresion-sesion/descargar', 'Ventas\ComprobanteImpresionSesionController@descargar')->name('descargar_impresion_sesion');
 Route::get('ventas/factura/generanotadecredito/{id}', 'Ventas\FacturacionController@generaNotaDeCredito')->name('generar_notadecredito');
+Route::post('ventas/factura/consulta-referencia', 'Ventas\FacturacionController@consultaComprobanteReferencia')->name('consulta_factura_referencia');
+Route::get('ventas/factura/resolver-referencia', 'Ventas\FacturacionController@resolverComprobanteReferencia')->name('resolver_factura_referencia');
 Route::post('ventas/calcula_factura_general', 'Ventas\FacturacionController@calculaFacturaGeneral')->name('calcula_factura_general');
 
 /* PRODUCCION */

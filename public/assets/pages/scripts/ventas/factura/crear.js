@@ -2314,6 +2314,9 @@
 							$('#montototalfactura').val(item.importe.toFixed(2));
 							$('#total-factura-table').find('tr').last().find('.conceptototal').css('fontWeight', 'bold');
 							$('#total-factura-table').find('tr').last().find('.importetotal').css('fontWeight', 'bold');
+							if (typeof window.actualizarFceNcMostrador === 'function') {
+								window.actualizarFceNcMostrador();
+							}
 						}
 					}
 				});
@@ -2353,6 +2356,16 @@
 		return /^FCE\s+[A-Z]-/i.test($.trim(ref || ''));
 	}
 
+	function facturaTotalComprobanteMostrador() {
+		var t = parseFloat($('#montototalfactura').val() || '0');
+		return isNaN(t) ? 0 : t;
+	}
+
+	/** NCE siempre que el origen/ref sea FCE (ARCA 212); opcional 22 obligatorio. */
+	function fceNcEmiteNcePorMonto() {
+		return true;
+	}
+
 	window.actualizarFceNcMostrador = function () {
 		var $wrap = $('#fce-nc-mostrador-wrap');
 		if (!$wrap.length) {
@@ -2361,10 +2374,17 @@
 		var origenFce = String($wrap.attr('data-nc-origen-fce') || '0') === '1';
 		var ref = $('#fce_comprobante_referenciado').val() || '';
 		var mostrar = origenFce || facturaTipoEsNotaCreditoMostrador();
+		var estabaOculto = $wrap.hasClass('d-none');
 		$wrap.toggleClass('d-none', !mostrar);
-		var exigir = origenFce || fceNcMostradorRefEsFce(ref);
-		$('#fce_comprobante_referenciado').prop('required', !!exigir);
-		$('#fce_anulacion').prop('required', !!exigir);
+		var exigirRef = origenFce || fceNcMostradorRefEsFce(ref);
+		var exigirAnulacion = exigirRef;
+		$('#fce_comprobante_referenciado').prop('required', !!exigirRef);
+		$('#fce_anulacion').prop('required', !!exigirAnulacion);
+		$('#fce_anulacion_label').toggleClass('requerido', !!exigirAnulacion);
+		if (mostrar && estabaOculto && parseInt($('#cliente_id').val() || '0', 10) > 0
+			&& $.trim($('#fce_comprobante_referenciado').val() || '') === '') {
+			$('#fce_comprobante_referenciado').focus();
+		}
 	};
 
 	window.validarFceNcMostradorAntesSubmit = function () {
@@ -2384,7 +2404,7 @@
 			return false;
 		}
 		if (anul !== 'S' && anul !== 'N') {
-			alert('Debe indicar anulación FCE S/N (opcional ARCA 22).');
+			alert('Debe indicar anulación FCE S/N (opcional ARCA 22). Obligatorio en NCE.');
 			$('#fce_anulacion').focus();
 			return false;
 		}
@@ -2394,5 +2414,6 @@
 	$(function () {
 		$(document).on('change', '#tipotransaccion_id', window.actualizarFceNcMostrador);
 		$(document).on('input change', '#fce_comprobante_referenciado', window.actualizarFceNcMostrador);
+		$(document).on('input change', '#montototalfactura', window.actualizarFceNcMostrador);
 		window.actualizarFceNcMostrador();
 	});

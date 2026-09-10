@@ -78,8 +78,9 @@ final class ArcaCaeaInformeDatosDesdeVentaSupport
         if ($origen) {
             $asoc = ArcaFceNcMostradorSupport::parsearCodigoComprobante(trim((string) ($origen->codigo ?? '')));
             if ($asoc !== null) {
-                $comprobantesAsociados[] = ArcaFceNcMostradorSupport::enriquecerAsociadoConEmisor(
-                    $asoc,
+                $comprobantesAsociados = ArcaFceNcMostradorSupport::asociadosParaArca(
+                    [$asoc],
+                    $cbteTipo,
                     $puntoventa->empresas ?? null,
                     $origen
                 );

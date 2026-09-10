@@ -704,7 +704,7 @@ class FacturaElectronicaService
 	}
 
 	/**
-	 * @param  bool  $forzarNcNdFce  Mostrador: NC/ND sobre FCE → NCE/NDE aunque el total sea &lt; tope MiPyME.
+	 * @param  bool  $forzarNcNdFce  Mostrador: NC/ND sobre FCE → NCE/NDE (ARCA 212), sin mirar tope.
 	 */
 	public function armaTipoTransaccion($letra, $modofacturacion, &$tipotransaccion, $puntoventa, $totalcomprobante, bool $forzarNcNdFce = false)
 	{

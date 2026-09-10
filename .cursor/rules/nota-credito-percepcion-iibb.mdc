@@ -10,6 +10,8 @@ En **facturación mostrador de administración** (AGG y resto), la nota de créd
 
 Punto único: `App\Support\Ventas\NotaCreditoPercepcionIibbSupport`.
 
+NC se detecta por `tipotransaccion.operacion = C` (NCG/NCE en AGG pueden tener `signo = S`; no usar solo signo R).
+
 ## Dónde corre
 
 | Canal | ¿Prorratea? |
@@ -23,9 +25,13 @@ Punto único: `App\Support\Ventas\NotaCreditoPercepcionIibbSupport`.
 
 | NC | Percepción |
 |---|---|
-| Total | 100 % de lo percibido en la factura (mismas jur. y alícuotas) |
-| Parcial | `perc_FAC × (neto_NC / neto_FAC)` — sin volver a aplicar el mínimo |
+| Total / anulación completa (`fce_anulacion=S` o factor ≥ 99,9 %) | Hereda IIBB del origen (todas las jur., incl. Buenos Aires 902) |
+| Parcial / ajuste (no anulación completa) | **Sin Buenos Aires (902)**; **el resto de jurisdicciones sí** (CABA 901, Santa Fe, etc.) si correspondían en el origen |
 | Factura sin perc. | La NC no inventa percepción |
+
+**Buenos Aires = jurisdicción AFIP `902` (inamovible).** No se identifica por nombre de concepto ni `provincia_id`.
+
+NCE vs NC 003: solo NCE si el total ≥ tope MiPyME (`limite_fce`); debajo → NC ARCA 003 (`ArcaFceNcMostradorSupport::correspondeEmitirNcNdFce`).
 
 ## Correcto
 
@@ -36,6 +42,7 @@ NotaCreditoPercepcionIibbSupport::anexarOrigenSiCorresponde(
     ! $this->esEmisionPos($data)
 );
 // ImpuestoService: si paraNotaCredito() !== null, usar eso; no calculaPercepcionIIBB
+// Tras recálculo: aplicarReglaBuenosAires()
 ```
 
 ## Prohibido
@@ -45,11 +52,13 @@ NotaCreditoPercepcionIibbSupport::anexarOrigenSiCorresponde(
 $this->IIBBService->calculaPercepcionIIBB($netoNc, ...);
 
 // ❌ Enganchar el prorrateo en gastronomía / estacionamiento
+
+// ❌ Percibir Buenos Aires en NC parcial / fce_anulacion=N
 ```
 
 ## Comprobación rápida
 
 ```bash
-rg "NotaCreditoPercepcionIibbSupport" app --glob '*.php'
+rg "NotaCreditoPercepcionIibbSupport|aplicarReglaBuenosAires" app --glob '*.php'
 php -l app/Support/Ventas/NotaCreditoPercepcionIibbSupport.php
 ```
