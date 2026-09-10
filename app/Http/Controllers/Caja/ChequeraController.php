@@ -9,6 +9,8 @@ use App\Http\Requests\ValidacionChequera;
 use App\Models\Caja\Chequera;
 use App\Repositories\Caja\ChequeraRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
+use App\Support\Caja\ChequeConsultaChequeraSupport;
+use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
 
 class ChequeraController extends Controller
 {
@@ -128,5 +130,38 @@ class ChequeraController extends Controller
         } else {
             abort(404);
         }
+    }
+
+    public function consultaChequera(Request $request)
+    {
+        $cuentacajaId = (int) $request->input('cuentacaja_id');
+        $fechaPago = (string) $request->input('fecha_pago', '');
+        $fechaEmision = (string) $request->input('fecha_emision', '');
+        $preferirDiferido = ChequePropioAnitaNumeracionSupport::esFechaDiferida($fechaEmision, $fechaPago);
+        $difRaw = $request->input('diferido');
+        if ($difRaw !== null && $difRaw !== '') {
+            $preferirDiferido = filter_var($difRaw, FILTER_VALIDATE_BOOLEAN);
+        }
+
+        $filas = ChequeConsultaChequeraSupport::consultar([
+            'cuentacaja_id' => $cuentacajaId,
+            'consulta' => (string) $request->input('consulta', ''),
+            'preferir_diferido' => $preferirDiferido,
+            'incluir_terminadas' => filter_var($request->input('incluir_terminadas'), FILTER_VALIDATE_BOOLEAN),
+        ]);
+
+        $puedeConsultar = can('editar-chequera', false) || can('listar-chequera', false);
+        foreach ($filas as &$fila) {
+            $fila['url_abm'] = $puedeConsultar
+                ? route('editar_chequera', ['id' => (int) $fila['id']])
+                : null;
+        }
+        unset($fila);
+
+        return response()->json([
+            'data' => $filas,
+            'preferir_diferido' => $preferirDiferido,
+            'cuenta' => ChequeConsultaChequeraSupport::cuentaResumen($cuentacajaId),
+        ]);
     }
 }

@@ -37,6 +37,7 @@
                 <p class="text-muted small mb-2">
                     Emisi&oacute;n de cheques propios. Cuenta: c&oacute;digo + Enter · F1 o lupa.
                     El nro. sale del numerador Anita: cheque al d&iacute;a o diferido seg&uacute;n F. pago vs fecha del comprobante.
+                    Chequera: lupa o F1 (tipo, rango y estado).
                 </p>
                 <div class="table-responsive">
                 <table class="table table-sm table-bordered" id="cheque-emitido-table">
@@ -44,7 +45,7 @@
                         <tr>
                             <th style="width:12%;">C&oacute;digo</th>
                             <th style="width:16%;">Descripci&oacute;n</th>
-                            <th style="width:10%;">Chequera</th>
+                            <th style="width:16%;">Chequera</th>
                             <th style="width:8%;">Nro.</th>
                             <th style="width:10%;">F. pago</th>
                             <th style="width:10%;">Car&aacute;cter</th>
@@ -183,3 +184,4 @@
     </div>
 </div>
 @include('includes.caja.modalconsultabanco')
+@include('includes.caja.modalconsultachequera')

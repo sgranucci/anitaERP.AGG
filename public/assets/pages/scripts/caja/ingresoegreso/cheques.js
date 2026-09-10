@@ -32,39 +32,103 @@ function abrirConsultaCuentaChequeEmitido($tr) {
     $('#consultacuentacajaModal').modal('show');
 }
 
-function filtrarChequerasChequeEmitido($tr, cuentacajaId, preferirDiferido) {
-    var $sel = $tr.find('.chequera_emitido_id');
-    if (!$sel.length) {
-        return;
+function chequeraDesdeLista(lista, idActual, preferirDiferido) {
+    lista = lista || [];
+    if (!lista.length) {
+        return null;
     }
-    cuentacajaId = String(cuentacajaId || '');
-    var actual = $sel.val();
-    var visibleIds = [];
-    $sel.find('option').each(function () {
-        var $o = $(this);
-        if (!$o.val()) {
-            $o.prop('hidden', false).prop('disabled', false);
-            return;
-        }
-        var match = String($o.data('cuentacaja-id') || '') === cuentacajaId;
-        $o.prop('hidden', !match).prop('disabled', !match);
-        if (match) {
-            visibleIds.push({
-                id: $o.val(),
-                tipo: String($o.data('tipocheque') || ''),
-                preferida: preferirDiferido ? String($o.data('tipocheque')) === 'D' : String($o.data('tipocheque')) !== 'D'
-            });
-        }
+    var actual = lista.find(function (c) { return String(c.id) === String(idActual || ''); });
+    if (actual) {
+        return actual;
+    }
+    var preferidas = lista.filter(function (c) {
+        return preferirDiferido ? String(c.tipocheque) === 'D' : String(c.tipocheque) !== 'D';
     });
-    var actualOk = visibleIds.some(function (v) { return String(v.id) === String(actual); });
-    if (actualOk) {
+    var pool = preferidas.length ? preferidas : lista;
+    pool.sort(function (a, b) { return ((b.preferida ? 1 : 0) - (a.preferida ? 1 : 0)); });
+    return pool[0] || null;
+}
+
+function pintarChequeraEmitido($tr, ch) {
+    $tr.find('.chequera_emitido_id').val(ch && ch.id ? ch.id : '');
+    $tr.find('.chequera_emitido_tipo').val(ch && ch.tipocheque ? ch.tipocheque : '');
+    var etiqueta = ch ? (ch.etiqueta_completa || ch.etiqueta || '') : '';
+    $tr.find('.chequera_emitido_lbl').val(etiqueta);
+    $tr.find('.chequera_emitido_lbl').attr('title', etiqueta || 'F1 consulta chequera de la cuenta');
+}
+
+function filtrarChequerasChequeEmitido($tr, cuentacajaId, preferirDiferido, lista) {
+    if (!$tr || !$tr.length || !$tr.find('.chequera_emitido_id').length) {
         return;
     }
-    visibleIds.sort(function (a, b) { return (b.preferida ? 1 : 0) - (a.preferida ? 1 : 0); });
+    if (!(parseInt(cuentacajaId || '0', 10) > 0)) {
+        $tr.data('pp-skip-chequera', 1);
+        pintarChequeraEmitido($tr, null);
+        $tr.removeData('chequeras');
+        $tr.removeData('pp-skip-chequera');
+        return;
+    }
+    if (lista && lista.length) {
+        $tr.data('chequeras', lista);
+    }
+    lista = lista || $tr.data('chequeras') || [];
+    if (!lista.length) {
+        return;
+    }
+    var actual = $tr.find('.chequera_emitido_id').val();
+    var ch = chequeraDesdeLista(lista, actual, preferirDiferido);
     $tr.data('pp-skip-chequera', 1);
-    $sel.val(visibleIds.length ? visibleIds[0].id : '');
+    pintarChequeraEmitido($tr, ch);
     $tr.removeData('pp-skip-chequera');
 }
+
+function abrirConsultaChequeraEmitido($tr) {
+    if (!$tr || !$tr.length) {
+        return;
+    }
+    var cuentaId = parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10);
+    if (!(cuentaId > 0)) {
+        alert('Primero indique la cuenta de tesorería');
+        return;
+    }
+    if (typeof abrirModalConsultaChequera !== 'function') {
+        alert('No está disponible la consulta de chequeras');
+        return;
+    }
+    var codigo = String($tr.find('.codigo_emitido').val() || '').trim();
+    var nombre = String($tr.find('.nombre_emitido').val() || '').trim();
+    abrirModalConsultaChequera({
+        cuentacajaId: cuentaId,
+        cuentaLabel: (codigo + (nombre ? ' · ' + nombre : '')).trim(),
+        fechaPago: $tr.find('.fechapago_emitido').val() || $('#fecha').val() || '',
+        fechaEmision: $('#fecha').val() || '',
+        selectedId: $tr.find('.chequera_emitido_id').val(),
+        onElegir: function (ch) {
+            aplicarChequeraDesdeConsulta($tr, ch);
+        }
+    });
+}
+
+function aplicarChequeraDesdeConsulta($tr, ch) {
+    $tr.data('pp-skip-chequera', 1);
+    pintarChequeraEmitido($tr, ch);
+    $tr.removeData('pp-skip-chequera');
+    if (typeof flModificaAsiento !== 'undefined') {
+        flModificaAsiento = true;
+    }
+    if (parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10) <= 0) {
+        return;
+    }
+    var extras = { forzarNumero: true };
+    var tipo = String((ch && ch.tipocheque) || '').toUpperCase();
+    if (tipo === 'D' || tipo === 'N' || tipo === 'C') {
+        extras.diferido = tipo === 'D' ? 1 : 0;
+    }
+    cargarEmisionChequeEmitido($tr, extras);
+}
+
+window.abrirConsultaChequeraEmitido = abrirConsultaChequeraEmitido;
+window.pintarChequeraEmitido = pintarChequeraEmitido;
 
 function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
     if (!$tr || !$tr.length || !data || !(parseInt(data.id, 10) > 0)) {
@@ -80,7 +144,7 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
     }
     $tr.find('.tctes_numero_emitido').val(data.tctes_numero || '');
     $tr.find('.tctes_clave_emitido').val(data.tctes_clave || '');
-    filtrarChequerasChequeEmitido($tr, data.id, !!data.diferido);
+    filtrarChequerasChequeEmitido($tr, data.id, !!data.diferido, data.chequeras || []);
     var $nro = $tr.find('.numerocheque_emitido');
     var auto = $nro.data('auto') === 1 || !$nro.val();
     if (data.proximo_numero && (forzarNumero || auto)) {
@@ -182,6 +246,19 @@ function activarTecladoChequeEmitido() {
             return;
         }
         if (esTeclaF1ChequeEmitido(e)) {
+            if ($(target).hasClass('chequera_emitido_lbl')) {
+                var $modalCh = $('#consultachequeraModal');
+                if ($modalCh.length && ($modalCh.hasClass('show') || $modalCh.is(':visible'))) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof e.stopImmediatePropagation === 'function') {
+                    e.stopImmediatePropagation();
+                }
+                abrirConsultaChequeraEmitido($tr);
+                return;
+            }
             if (!$(target).hasClass('codigo_emitido') && !$(target).hasClass('nombre_emitido')) {
                 return;
             }
@@ -203,6 +280,12 @@ function activarTecladoChequeEmitido() {
         if (document.querySelector('.modal.show')) {
             return;
         }
+        if ($(target).hasClass('chequera_emitido_lbl')) {
+            e.preventDefault();
+            e.stopPropagation();
+            abrirConsultaChequeraEmitido($tr);
+            return;
+        }
         if (!$(target).is('.codigo_emitido, .numerocheque_emitido, .montocheque_emitido, .anombrede_emitido')) {
             return;
         }
@@ -215,6 +298,7 @@ function activarTecladoChequeEmitido() {
             if (!String(target.value || '').trim()) {
                 $tr.find('.cuentacaja_emitido_id, .nombre_emitido, .numerocheque_emitido, .tctes_numero_emitido, .tctes_clave_emitido').val('');
                 $tr.find('.tctes_emitido_lbl').text('');
+                filtrarChequerasChequeEmitido($tr, '', false, []);
                 return;
             }
             cargarEmisionChequeEmitido($tr, { porCodigo: true, forzarNumero: true }, function (ok) {
@@ -270,6 +354,11 @@ function activaEventosChequesIngresoEgreso() {
         abrirConsultaCuentaChequeEmitido($(this).closest('tr'));
     });
 
+    $(document).on('click', '.consultachequera_emitido, .chequera_emitido_lbl', function (e) {
+        e.preventDefault();
+        abrirConsultaChequeraEmitido($(this).closest('tr'));
+    });
+
     $(document).on('input', '.numerocheque_emitido', function () {
         $(this).data('auto', 0);
     });
@@ -289,9 +378,9 @@ function activaEventosChequesIngresoEgreso() {
         if (parseInt($tr.find('.cuentacaja_emitido_id').val() || '0', 10) <= 0) {
             return;
         }
-        var tipo = String($(this).find('option:selected').data('tipocheque') || '').toUpperCase();
+        var tipo = String($tr.find('.chequera_emitido_tipo').val() || '').toUpperCase();
         var extras = { forzarNumero: true };
-        if (tipo === 'D' || tipo === 'N') {
+        if (tipo === 'D' || tipo === 'N' || tipo === 'C') {
             extras.diferido = tipo === 'D' ? 1 : 0;
         }
         cargarEmisionChequeEmitido($tr, extras);

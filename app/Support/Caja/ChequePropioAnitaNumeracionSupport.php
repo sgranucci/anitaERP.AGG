@@ -3,7 +3,6 @@
 namespace App\Support\Caja;
 
 use App\ApiAnita;
-use App\Models\Caja\Chequera;
 use App\Models\Caja\Cuentacaja;
 use Illuminate\Support\Facades\Log;
 
@@ -321,39 +320,15 @@ final class ChequePropioAnitaNumeracionSupport
     }
 
     /**
-     * @return list<array{id:int,codigo:string,tipocheque:string,etiqueta:string}>
+     * @return list<array<string, mixed>>
      */
     public static function chequerasDeCuenta(int $cuentacajaId, bool $preferirDiferido = false): array
     {
-        if ($cuentacajaId <= 0) {
-            return [];
-        }
-
-        $rows = Chequera::query()
-            ->where('cuentacaja_id', $cuentacajaId)
-            ->where(function ($q) {
-                $q->where('estado', 'A')->orWhereNull('estado');
-            })
-            ->orderBy('codigo')
-            ->get();
-
-        $out = [];
-        foreach ($rows as $ch) {
-            $tipo = (string) ($ch->tipocheque ?? 'N');
-            $out[] = [
-                'id' => (int) $ch->id,
-                'codigo' => (string) ($ch->codigo ?? ''),
-                'tipocheque' => $tipo,
-                'etiqueta' => trim((string) ($ch->codigo ?? $ch->id).' '.($tipo === 'D' ? 'Dif.' : 'Al día')),
-                'preferida' => $preferirDiferido ? $tipo === 'D' : $tipo !== 'D',
-            ];
-        }
-
-        usort($out, static function (array $a, array $b): int {
-            return ((int) $b['preferida']) <=> ((int) $a['preferida']);
-        });
-
-        return $out;
+        return ChequeConsultaChequeraSupport::consultar([
+            'cuentacaja_id' => $cuentacajaId,
+            'preferir_diferido' => $preferirDiferido,
+            'incluir_terminadas' => false,
+        ]);
     }
 
     private static function ymd(string $fecha): string

@@ -1,10 +1,17 @@
 @php
     $cheque = $cheque ?? null;
-    $etiquetaChequera = static function ($ch): string {
-        $tipo = (($ch->tipocheque ?? '') === 'D') ? 'Dif.' : 'Al día';
-
-        return trim((string) ($ch->codigo ?? $ch->id).' '.$tipo);
-    };
+    $chequeraFila = $cheque?->chequeras ?? null;
+    $etiquetaChequera = '';
+    $tipoChequeraFila = '';
+    if ($chequeraFila) {
+        $etiquetaChequera = \App\Support\Caja\ChequeConsultaChequeraSupport::etiquetaCompleta(
+            (string) ($chequeraFila->codigo ?? ''),
+            (string) ($chequeraFila->tipocheque ?? 'N'),
+            $chequeraFila->desdenumerocheque ?? null,
+            $chequeraFila->hastanumerocheque ?? null
+        );
+        $tipoChequeraFila = (string) ($chequeraFila->tipocheque ?? '');
+    }
 @endphp
 <tr class="item-cheque-emitido">
     <td>
@@ -27,17 +34,17 @@
             value="{{ $cheque?->cuentacajas?->nombre ?? '' }}" placeholder="Nombre" title="Cuenta de tesorería">
     </td>
     <td>
-        <select name="chequera_emitido_ids[]" class="form-control form-control-sm chequera_emitido_id" title="Chequera de la cuenta (opcional)">
-            <option value="">—</option>
-            @foreach ($chequera_query as $ch)
-                <option value="{{ $ch->id }}"
-                    data-cuentacaja-id="{{ (int) $ch->cuentacaja_id }}"
-                    data-tipocheque="{{ $ch->tipocheque }}"
-                    @selected($cheque && (int) $ch->id === (int) $cheque->chequera_id)>
-                    {{ $etiquetaChequera($ch) }}
-                </option>
-            @endforeach
-        </select>
+        <div class="d-flex align-items-center flex-nowrap" style="gap:4px;">
+            <input type="hidden" name="chequera_emitido_ids[]" class="chequera_emitido_id" value="{{ $cheque?->chequera_id ?? '' }}">
+            <input type="hidden" class="chequera_emitido_tipo" value="{{ $tipoChequeraFila }}">
+            <button type="button" title="Consulta chequeras (F1)" class="btn-accion-tabla consultachequera_emitido tooltipsC flex-shrink-0">
+                <i class="fa fa-search text-primary"></i>
+            </button>
+            <input type="text" class="chequera_emitido_lbl form-control form-control-sm" readonly tabindex="0"
+                value="{{ $etiquetaChequera }}"
+                placeholder="Chequera" title="{{ $etiquetaChequera !== '' ? $etiquetaChequera : 'F1 consulta chequera de la cuenta' }}"
+                autocomplete="off" style="min-width:8.5rem; cursor:pointer;">
+        </div>
     </td>
     <td>
         <input type="text" name="numerocheque_emitidos[]" class="form-control form-control-sm numerocheque_emitido"
@@ -75,7 +82,7 @@
     </td>
     <td>
         <input type="number" name="cotizacioncheque_emitidos[]" class="form-control form-control-sm cotizacioncheque_emitido"
-            step="0.0001" value="{{ $cheque?->cotizacion ?? 0 }}">
+            step="0.0001" value="{{ $cheque?->cotizacion ?? 1 }}">
     </td>
     <td class="text-center">
         <button type="button" class="btn-accion-tabla eliminar_cheque_emitido tooltipsC" title="Eliminar">

@@ -92,7 +92,7 @@ class Pagoproveedor extends Model
     public function cheques()
     {
         return $this->hasMany(Cheque::class, 'pagoproveedor_id')
-            ->with(['monedas', 'bancos', 'cuentacajas']);
+            ->with(['monedas', 'bancos', 'cuentacajas', 'chequeras']);
     }
 
     public function caja_movimientos()

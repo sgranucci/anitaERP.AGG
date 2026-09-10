@@ -864,10 +864,9 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         $importe = round(abs((float) $cheque->monto), 2);
-        $cotizacion = (float) ($cheque->cotizacion ?: 1);
+        $cotizacion = ChequePropioCpromaeAnitaMapper::cotizacion((float) ($cheque->cotizacion ?? 0));
         $monedaId = (int) ($cheque->moneda_id ?: 1);
-        $fechaEmi = date('Ymd', strtotime((string) ($cheque->fechaemision ?: $movimiento->fecha)));
-        $fechaChe = date('Ymd', strtotime((string) ($cheque->fechapago ?: $cheque->fechaemision ?: $movimiento->fecha)));
+        $fechaChe = ChequePropioCpromaeAnitaMapper::ymd((string) ($cheque->fechapago ?: $cheque->fechaemision ?: $movimiento->fecha));
 
         $proveedorCodigo = $ctx['proveedorCodigo'];
         if ($cheque->proveedores) {
@@ -875,53 +874,38 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         $entregado = self::recortar((string) ($cheque->entregado ?: $ctx['entregadoA']), 30);
-        $aNombre = self::recortar((string) ($cheque->anombrede ?: $entregado), 40);
-        $modelo = (int) ($cheque->chequeras->codigo ?? 0);
-        $paraDep = self::mapearParaDepositar((string) ($cheque->caracter ?? ''));
-        $estado = ((int) $fechaChe <= (int) $fechaEmi) ? '*' : ' ';
+        $filaCpromae = ChequePropioCpromaeAnitaMapper::mapear([
+            'cuenta' => $codigoCuenta,
+            'nro' => $nroCheque,
+            'fecha_emision' => (string) ($cheque->fechaemision ?: $movimiento->fecha),
+            'fecha_pago' => (string) ($cheque->fechapago ?: $cheque->fechaemision ?: $movimiento->fecha),
+            'importe' => $importe,
+            'proveedor' => $proveedorCodigo,
+            'entregado' => $entregado,
+            'anombrede' => (string) ($cheque->anombrede ?: $entregado),
+            'nro_op' => $ctx['nro'],
+            'moneda_id' => $monedaId,
+            'cotizacion' => $cotizacion,
+            'empresa' => $ctx['empresa'],
+            'chequera_codigo' => (string) ($cheque->chequeras->codigo ?? '0'),
+            'chequera_tipo' => (string) ($cheque->chequeras->tipochequera ?? 'F'),
+            'caracter' => (string) ($cheque->caracter ?? ''),
+            'sucursal_pago' => (string) ($cheque->sucursalpago ?? ''),
+            'tipo_distrib' => (string) ($cheque->tipodistribucion ?? ''),
+            'estado_erp' => (string) ($cheque->estado ?? ''),
+        ]);
+        $camposCpromae = array_keys($filaCpromae);
+        $valoresCpromae = [];
+        foreach ($filaCpromae as $valor) {
+            $valoresCpromae[] = "'".self::esc((string) $valor)."'";
+        }
 
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'cpromae',
             'acc' => 'insert',
             'sistema' => self::sistema(),
-            'campos' => '
-                cpro_cuenta,
-                cpro_nro_cheque,
-                cpro_fecha_cheque,
-                cpro_fecha_emision,
-                cpro_importe,
-                cpro_proveedor,
-                cpro_entregado_a,
-                cpro_nro_op,
-                cpro_cod_mon,
-                cpro_cotizacion,
-                cpro_estado,
-                cpro_contrapartida,
-                cpro_fecha_anula,
-                cpro_fl_imprimio,
-                cpro_a_nombre_de,
-                cpro_modelo,
-                cpro_para_dep,
-                cpro_empresa',
-            'valores' => "
-                '".str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT)."',
-                '".$nroCheque."',
-                '".$fechaChe."',
-                '".$fechaEmi."',
-                '".$importe."',
-                '".$proveedorCodigo."',
-                '".self::esc($entregado)."',
-                '".$ctx['nro']."',
-                '".$monedaId."',
-                '".$cotizacion."',
-                '".$estado."',
-                ' ',
-                '0',
-                ' ',
-                '".self::esc($aNombre)."',
-                '".$modelo."',
-                '".self::esc($paraDep)."',
-                '".$ctx['empresa']."'",
+            'campos' => implode(",\n                ", $camposCpromae),
+            'valores' => implode(",\n                ", $valoresCpromae),
         ], 'caja IE cpromae '.$cheque->id);
         self::assertOk($raw, 'cpromae', $cheque->id);
 
@@ -1171,16 +1155,6 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$monedaId."'",
         ], 'caja IE tesmov CHP anula '.$cheque->id);
         self::assertOk($raw, 'tesmov CHP anula', $cheque->id);
-    }
-
-    private static function mapearParaDepositar(string $caracter): string
-    {
-        return match (strtoupper($caracter)) {
-            'S', 'D' => 'S',
-            'E' => 'E',
-            'O' => 'O',
-            default => ' ',
-        };
     }
 
     private static function deleteWhere(string $tabla, string $where, string $contexto): void

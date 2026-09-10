@@ -8,6 +8,7 @@ use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
+use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
 use App\Support\Caja\ChequePropioImputacionSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -358,7 +359,7 @@ class ChequeRepository implements ChequeRepositoryInterface
                 'numerocheque' => $numero,
                 'moneda_id' => (int) ($monedaIds[$i] ?? 1),
                 'monto' => (float) ($montos[$i] ?? 0),
-                'cotizacion' => (float) ($cotizaciones[$i] ?? 1),
+                'cotizacion' => ChequePropioCpromaeAnitaMapper::cotizacion((float) ($cotizaciones[$i] ?? 1)),
                 'proveedor_id' => ($proveedorIds[$i] ?? '') !== '' ? (int) $proveedorIds[$i] : null,
                 'anombrede' => (string) ($anombrede[$i] ?? ''),
                 'banco_id' => $bancoId,

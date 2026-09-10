@@ -2534,6 +2534,7 @@ Route::get('caja/cuentacaja/api/cheque-emision/{codigo?}', 'Caja\CuentacajaContr
 Route::get('caja/chequera', 'Caja\ChequeraController@index')->name('chequera');
 Route::get('caja/chequera/crear', 'Caja\ChequeraController@crear')->name('crear_chequera');
 Route::post('caja/chequera', 'Caja\ChequeraController@guardar')->name('guardar_chequera');
+Route::post('caja/chequera/consulta', 'Caja\ChequeraController@consultaChequera')->name('consulta_chequera');
 Route::get('caja/chequera/{id}/editar', 'Caja\ChequeraController@editar')->name('editar_chequera');
 Route::put('caja/chequera/{id}', 'Caja\ChequeraController@actualizar')->name('actualizar_chequera');
 Route::delete('caja/chequera/{id}', 'Caja\ChequeraController@eliminar')->name('eliminar_chequera');

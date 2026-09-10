@@ -23,7 +23,7 @@ final class ChequeFormOldInputSupport
     /**
      * @param  array<string, mixed>  $old
      */
-    public static function mapearFilaEmitido(array $old, int|string $i, ?object $cuenta = null): ?object
+    public static function mapearFilaEmitido(array $old, int|string $i, ?object $cuenta = null, ?object $chequera = null): ?object
     {
         $nro = trim((string) self::at($old, 'numerocheque_emitidos', $i, ''));
         $monto = (float) self::at($old, 'montocheque_emitidos', $i, 0);
@@ -52,6 +52,7 @@ final class ChequeFormOldInputSupport
             'monto' => $monto,
             'cotizacion' => self::at($old, 'cotizacioncheque_emitidos', $i, 1) ?: 1,
             'cuentacajas' => $cuenta,
+            'chequeras' => $chequera,
         ];
     }
 
@@ -67,20 +68,34 @@ final class ChequeFormOldInputSupport
             $indices = array_keys((array) ($old['cuentacaja_emitido_ids'] ?? []));
         }
         $ids = [];
+        $chequeraIds = [];
         foreach ($indices as $i) {
             $cid = (int) self::at($old, 'cuentacaja_emitido_ids', $i, 0);
             if ($cid > 0) {
                 $ids[] = $cid;
             }
+            $chid = (int) self::at($old, 'chequera_emitido_ids', $i, 0);
+            if ($chid > 0) {
+                $chequeraIds[] = $chid;
+            }
         }
         $cuentas = $ids === []
             ? collect()
             : \App\Models\Caja\Cuentacaja::query()->whereIn('id', array_values(array_unique($ids)))->get()->keyBy('id');
+        $chequeras = $chequeraIds === []
+            ? collect()
+            : \App\Models\Caja\Chequera::query()->whereIn('id', array_values(array_unique($chequeraIds)))->get()->keyBy('id');
 
         $out = [];
         foreach ($indices as $i) {
             $cid = (int) self::at($old, 'cuentacaja_emitido_ids', $i, 0);
-            $fila = self::mapearFilaEmitido($old, $i, $cid > 0 ? $cuentas->get($cid) : null);
+            $chid = (int) self::at($old, 'chequera_emitido_ids', $i, 0);
+            $fila = self::mapearFilaEmitido(
+                $old,
+                $i,
+                $cid > 0 ? $cuentas->get($cid) : null,
+                $chid > 0 ? $chequeras->get($chid) : null
+            );
             if ($fila !== null) {
                 $out[] = $fila;
             }

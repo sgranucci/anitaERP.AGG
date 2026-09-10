@@ -30,6 +30,7 @@ class ChequeFormOldInputSupportTest extends TestCase
         $this->assertSame('41561955', $fila->numerocheque);
         $this->assertEqualsWithDelta(1500.50, (float) $fila->monto, 0.001);
         $this->assertSame(12, $fila->cuentacaja_id);
+        $this->assertSame('3', (string) $fila->chequera_id);
         $this->assertSame('YAFEMA S.R.L.', $fila->anombrede);
         $this->assertSame('00000127', $fila->cuentacajas->codigo);
     }
