@@ -13,10 +13,11 @@ class ImportarPedidoAnitaCommand extends Command
     protected $signature = 'ventas:importar-pedido-anita
                             {--fecha= : Fecha de entrega Y-m-d (default: hoy)}
                             {--reparto= : Repartos (lista 101,95 o rango 10/20; vacío = todos)}
+                            {--solo-nuevos : No pisa cabeceras existentes; crea faltantes y trae pesada de Anita solo si el ERP aún no la tiene}
                             {--dry-run : Solo lista qué se importaría, sin grabar}
                             {--ejecutar : Persiste altas y actualizaciones}';
 
-    protected $description = 'Importa pedidos Anita (pendmae/pendmov) al ERP por fecha de entrega y reparto, incluida la pesada (penv_kilos_reales). El cron diario usa hoy y todos los repartos; el refresco diurno actualiza pesadas.';
+    protected $description = 'Importa pedidos Anita (pendmae/pendmov) al ERP por fecha de entrega y reparto. El cron de las 01:00 crea y puede actualizar; el refresco diurno (--solo-nuevos) solo da de alta pedidos nuevos y completa pesada si el ERP todavía no la tiene, sin tocar cabecera.';
 
     public function handle(PedidoImportarDesdeAnitaService $service): int
     {
@@ -51,6 +52,7 @@ class ImportarPedidoAnitaCommand extends Command
         }
 
         $reparto = trim((string) $this->option('reparto'));
+        $soloNuevos = (bool) $this->option('solo-nuevos');
         $filtros = [
             'filtro_reparto' => $reparto,
             'fecha_entrega_desde' => $fecha,
@@ -58,17 +60,18 @@ class ImportarPedidoAnitaCommand extends Command
         ];
 
         $this->info(sprintf(
-            'Importar pedidos Anita · entrega %s · repartos %s',
+            'Importar pedidos Anita · entrega %s · repartos %s%s',
             $fecha,
-            $reparto !== '' ? $reparto : 'todos'
+            $reparto !== '' ? $reparto : 'todos',
+            $soloNuevos ? ' · solo nuevos' : ''
         ));
 
         try {
             if ($dryRun) {
-                return $this->mostrarPreview($service, $filtros, $fecha, $reparto);
+                return $this->mostrarPreview($service, $filtros, $fecha, $reparto, $soloNuevos);
             }
 
-            return $this->ejecutarImportacion($service, $filtros, $fecha, $reparto);
+            return $this->ejecutarImportacion($service, $filtros, $fecha, $reparto, $soloNuevos);
         } catch (\Throwable $e) {
             Log::error('pedido.importar_anita.fallo', [
                 'fecha' => $fecha,
@@ -88,13 +91,16 @@ class ImportarPedidoAnitaCommand extends Command
         PedidoImportarDesdeAnitaService $service,
         array $filtros,
         string $fecha,
-        string $reparto
+        string $reparto,
+        bool $soloNuevos = false
     ): int {
-        $filas = $service->listarPreview($filtros);
+        $filas = $service->listarPreview($filtros, $soloNuevos);
         $conteos = [
             'nuevo' => 0,
             'existe' => 0,
+            'pesada' => 0,
             'omitido_facturado' => 0,
+            'omitido_existente' => 0,
             'omitido_despacho' => 0,
         ];
         foreach ($filas as $fila) {
@@ -105,11 +111,13 @@ class ImportarPedidoAnitaCommand extends Command
         }
 
         $this->table(
-            ['En Anita', 'Nuevos', 'A actualizar', 'Omitidos (facturados)', 'DESPACHO'],
+            ['En Anita', 'Nuevos', 'A actualizar', 'A pesar', 'Omitidos (ya en ERP)', 'Omitidos (facturados)', 'DESPACHO'],
             [[
                 count($filas),
                 $conteos['nuevo'],
                 $conteos['existe'],
+                $conteos['pesada'],
+                $conteos['omitido_existente'],
                 $conteos['omitido_facturado'],
                 $conteos['omitido_despacho'],
             ]]
@@ -136,9 +144,12 @@ class ImportarPedidoAnitaCommand extends Command
         Log::info('pedido.importar_anita.dry_run', [
             'fecha' => $fecha,
             'reparto' => $reparto !== '' ? $reparto : 'todos',
+            'solo_nuevos' => $soloNuevos,
             'total' => count($filas),
             'nuevos' => $conteos['nuevo'],
             'actualizar' => $conteos['existe'],
+            'pesadas' => $conteos['pesada'],
+            'omitidos_existentes' => $conteos['omitido_existente'],
             'omitidos_facturados' => $conteos['omitido_facturado'],
             'despacho' => $conteos['omitido_despacho'],
         ]);
@@ -155,16 +166,18 @@ class ImportarPedidoAnitaCommand extends Command
         PedidoImportarDesdeAnitaService $service,
         array $filtros,
         string $fecha,
-        string $reparto
+        string $reparto,
+        bool $soloNuevos = false
     ): int {
-        $resumen = $service->importar($filtros);
+        $resumen = $service->importar($filtros, null, $soloNuevos);
 
         $this->table(
-            ['En Anita', 'Creados', 'Actualizados', 'Omitidos', 'DESPACHO cerrados', 'Errores'],
+            ['En Anita', 'Creados', 'Actualizados', 'Pesadas', 'Omitidos', 'DESPACHO cerrados', 'Errores'],
             [[
                 $resumen['total'],
                 $resumen['creados'],
                 $resumen['actualizados'],
+                $resumen['pesadas'] ?? 0,
                 $resumen['omitidos'],
                 $resumen['cerrados'],
                 $resumen['errores'],
@@ -188,18 +201,21 @@ class ImportarPedidoAnitaCommand extends Command
         Log::info('pedido.importar_anita.ejecutado', [
             'fecha' => $fecha,
             'reparto' => $reparto !== '' ? $reparto : 'todos',
+            'solo_nuevos' => $soloNuevos,
             'total' => $resumen['total'],
             'creados' => $resumen['creados'],
             'actualizados' => $resumen['actualizados'],
+            'pesadas' => $resumen['pesadas'] ?? 0,
             'omitidos' => $resumen['omitidos'],
             'cerrados' => $resumen['cerrados'],
             'errores' => $resumen['errores'],
         ]);
 
         $this->info(sprintf(
-            'Importación finalizada: %d creados, %d actualizados, %d omitidos, %d DESPACHO, %d con error (total %d).',
+            'Importación finalizada: %d creados, %d actualizados, %d pesadas, %d omitidos, %d DESPACHO, %d con error (total %d).',
             $resumen['creados'],
             $resumen['actualizados'],
+            $resumen['pesadas'] ?? 0,
             $resumen['omitidos'],
             $resumen['cerrados'],
             $resumen['errores'],

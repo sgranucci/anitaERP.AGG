@@ -531,8 +531,8 @@ class Kernel extends ConsoleKernel
             ->when(fn () => EntornoEmpresaSupport::esElBierzo()
                 && (bool) config('pedido.importar_anita_diaria.habilitado', true));
 
-        // El Bierzo: refresco diurno para traer pesada/cajas reales cargadas en Anita después del alta.
-        $schedule->command('ventas:importar-pedido-anita --ejecutar')
+        // El Bierzo: cada 30 min, pedidos nuevos + pesada si el ERP aún no la tiene (no pisa cabecera/reparto).
+        $schedule->command('ventas:importar-pedido-anita --ejecutar --solo-nuevos')
             ->everyThirtyMinutes()
             ->between(
                 (string) config('pedido.importar_anita_diaria.refresco_desde', '05:00'),

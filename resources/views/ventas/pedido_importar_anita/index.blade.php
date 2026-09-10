@@ -41,7 +41,9 @@
                         @if (config('pedido.importar_anita_diaria.refresco_habilitado', true))
                             Entre las {{ config('pedido.importar_anita_diaria.refresco_desde', '05:00') }}
                             y las {{ config('pedido.importar_anita_diaria.refresco_hasta', '18:00') }}
-                            se refresca cada 30 minutos para traer las pesadas que se cargaron después.
+                            corre cada 30 minutos: importa pedidos nuevos y, en los ya importados,
+                            trae la pesada de Anita solo si el ERP todavía no la tiene.
+                            No pisa cabecera, reparto ni kilos de las líneas.
                         @endif
                     </p>
 

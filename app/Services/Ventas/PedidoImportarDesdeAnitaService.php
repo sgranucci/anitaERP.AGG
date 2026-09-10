@@ -49,9 +49,10 @@ class PedidoImportarDesdeAnitaService
 
     /**
      * @param  array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string}  $filtros
+     * @param  bool  $soloNuevos  Si true, no pisa cabeceras; marca pesada pendiente si el ERP no la tiene.
      * @return list<array<string, mixed>>
      */
-    public function listarPreview(array $filtros): array
+    public function listarPreview(array $filtros, bool $soloNuevos = false): array
     {
         $this->assertElBierzo();
 
@@ -74,6 +75,13 @@ class PedidoImportarDesdeAnitaService
             $existentes->pluck('id')->map(static fn ($id) => (int) $id)->all()
         );
 
+        $idsSinPesada = [];
+        if ($soloNuevos && $existentes->isNotEmpty()) {
+            $idsSinPesada = array_flip($this->idsPedidosConLineaSinPesada(
+                $existentes->pluck('id')->map(static fn ($id) => (int) $id)->all()
+            ));
+        }
+
         $clientesCache = [];
         $out = [];
 
@@ -89,6 +97,8 @@ class PedidoImportarDesdeAnitaService
                 $estadoErp = 'omitido_despacho';
             } elseif ($existe && $this->motivoOmitirReimport($existente, $idsConFactura) !== null) {
                 $estadoErp = 'omitido_facturado';
+            } elseif ($existe && $soloNuevos) {
+                $estadoErp = isset($idsSinPesada[(int) $existente->id]) ? 'pesada' : 'omitido_existente';
             } elseif ($existe) {
                 $estadoErp = 'existe';
             }
@@ -117,9 +127,11 @@ class PedidoImportarDesdeAnitaService
 
     /**
      * @param  array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string}  $filtros
+     * @param  bool  $soloNuevos  Si true, no pisa cabeceras; crea faltantes y trae pesada solo si el ERP no la tiene.
      * @return array{
      *   creados: int,
      *   actualizados: int,
+     *   pesadas: int,
      *   omitidos: int,
      *   cerrados: int,
      *   errores: int,
@@ -127,7 +139,7 @@ class PedidoImportarDesdeAnitaService
      *   detalle: list<array{codigo: string, estado: string, mensaje: string|null}>
      * }
      */
-    public function importar(array $filtros, ?int $usuarioId = null): array
+    public function importar(array $filtros, ?int $usuarioId = null, bool $soloNuevos = false): array
     {
         $this->assertElBierzo();
 
@@ -140,6 +152,7 @@ class PedidoImportarDesdeAnitaService
         $resumen = [
             'creados' => 0,
             'actualizados' => 0,
+            'pesadas' => 0,
             'omitidos' => 0,
             'cerrados' => 0,
             'errores' => 0,
@@ -150,11 +163,13 @@ class PedidoImportarDesdeAnitaService
         foreach ($cabeceras as $cab) {
             $codigo = $this->codigoErpDesdeCabecera($cab);
             try {
-                $resultado = $this->importarUno($cab, $usuarioId);
+                $resultado = $this->importarUno($cab, $usuarioId, $soloNuevos);
                 if ($resultado['estado'] === 'creado') {
                     $resumen['creados']++;
                 } elseif ($resultado['estado'] === 'actualizado') {
                     $resumen['actualizados']++;
+                } elseif ($resultado['estado'] === 'pesada') {
+                    $resumen['pesadas']++;
                 } elseif ($resultado['estado'] === 'omitido') {
                     $resumen['omitidos']++;
                 } elseif ($resultado['estado'] === 'cerrado') {
@@ -183,7 +198,7 @@ class PedidoImportarDesdeAnitaService
     /**
      * @return array{estado: string, mensaje: string|null, pedido_id: int|null}
      */
-    private function importarUno(object $cab, int $usuarioId): array
+    private function importarUno(object $cab, int $usuarioId, bool $soloNuevos = false): array
     {
         $codigo = $this->codigoErpDesdeCabecera($cab);
         $fechaAnita = (int) ($cab->penm_fecha ?? 0);
@@ -235,6 +250,9 @@ class PedidoImportarDesdeAnitaService
                     'mensaje' => $motivo,
                     'pedido_id' => (int) $pedidoExistente->id,
                 ];
+            }
+            if ($soloNuevos) {
+                return $this->aplicarPesadaFaltante($pedidoExistente, $cab);
             }
         }
 
@@ -323,6 +341,127 @@ class PedidoImportarDesdeAnitaService
                 'pedido_id' => (int) $pedido->id,
             ];
         });
+    }
+
+    /**
+     * Pedido ya importado: solo completa `pesada` en líneas que el ERP tiene en 0.
+     * No toca cabecera (reparto, cliente, zona) ni kilos/cajas/piezas de las líneas.
+     *
+     * @return array{estado: string, mensaje: string|null, pedido_id: int|null}
+     */
+    private function aplicarPesadaFaltante(Pedido $pedido, object $cab): array
+    {
+        $pedidoId = (int) $pedido->id;
+        $lineasErp = Pedido_Articulo::query()->where('pedido_id', $pedidoId)->get();
+        $faltan = $lineasErp->filter(static fn (Pedido_Articulo $linea): bool => (float) $linea->pesada <= 0);
+        if ($faltan->isEmpty()) {
+            return [
+                'estado' => 'omitido',
+                'mensaje' => 'Ya existe en ERP y ya tiene pesada.',
+                'pedido_id' => $pedidoId,
+            ];
+        }
+
+        $lineasAnita = $this->leerPendmov(
+            (string) ($cab->penm_tipo ?? 'PED'),
+            (string) ($cab->penm_letra ?? 'X'),
+            (int) ($cab->penm_sucursal ?? 0),
+            (int) ($cab->penm_nro ?? 0)
+        );
+        $pesadaPorClave = $this->pesadasAnitaPorClave($lineasAnita);
+
+        $aplicadas = 0;
+        $kg = 0.0;
+        DB::transaction(function () use ($faltan, $pesadaPorClave, &$aplicadas, &$kg): void {
+            foreach ($faltan as $linea) {
+                $clave = $this->claveLinea((int) $linea->numeroitem, (int) $linea->articulo_id);
+                $pesadaAnita = (float) ($pesadaPorClave[$clave] ?? 0);
+                if ($pesadaAnita <= 0) {
+                    continue;
+                }
+                $linea->pesada = $pesadaAnita;
+                $linea->save();
+                $aplicadas++;
+                $kg += $pesadaAnita;
+            }
+        });
+
+        if ($aplicadas === 0) {
+            return [
+                'estado' => 'omitido',
+                'mensaje' => 'Ya existe en ERP; Anita aún no tiene pesada en las líneas sin pesar.',
+                'pedido_id' => $pedidoId,
+            ];
+        }
+
+        Log::info('pedido.importar_anita.pesada', [
+            'codigo' => (string) $pedido->codigo,
+            'lineas' => $aplicadas,
+            'pesada' => $kg,
+        ]);
+
+        return [
+            'estado' => 'pesada',
+            'mensaje' => 'Pesada Anita '.number_format($kg, 2, ',', '.').' kg ('.$aplicadas.' líneas; cabecera sin cambios)',
+            'pedido_id' => $pedidoId,
+        ];
+    }
+
+    /**
+     * @param  list<int>  $pedidoIds
+     * @return list<int>
+     */
+    private function idsPedidosConLineaSinPesada(array $pedidoIds): array
+    {
+        if ($pedidoIds === []) {
+            return [];
+        }
+
+        return Pedido_Articulo::query()
+            ->whereIn('pedido_id', $pedidoIds)
+            ->where(function ($q) {
+                $q->whereNull('pesada')->orWhere('pesada', '<=', 0);
+            })
+            ->distinct()
+            ->pluck('pedido_id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * @param  list<object>  $lineasAnita
+     * @return array<string, float>
+     */
+    private function pesadasAnitaPorClave(array $lineasAnita): array
+    {
+        $out = [];
+        $i = 0;
+        $n = count($lineasAnita);
+        while ($i < $n) {
+            $row = $lineasAnita[$i];
+            $skuRaw = trim((string) ($row->penv_articulo ?? ''));
+            if ($skuRaw === '' || stripos($skuRaw, 'texto') === 0) {
+                $i++;
+                continue;
+            }
+            $articulo = $this->resolverArticulo($skuRaw);
+            if (! $articulo) {
+                $i++;
+                continue;
+            }
+            $numeroitem = (int) ($row->penv_orden ?? ($i + 1));
+            $ordenActual = $numeroitem;
+            $pesadaAnita = 0.0;
+            while ($i < $n && (int) ($lineasAnita[$i]->penv_orden ?? $ordenActual) === $ordenActual) {
+                $pesadaAnita += self::floatDesdeAnita($lineasAnita[$i]->penv_kilos_reales ?? 0);
+                $i++;
+            }
+            if ($pesadaAnita > 0) {
+                $out[$this->claveLinea($numeroitem, (int) $articulo->id)] = $pesadaAnita;
+            }
+        }
+
+        return $out;
     }
 
     /**
