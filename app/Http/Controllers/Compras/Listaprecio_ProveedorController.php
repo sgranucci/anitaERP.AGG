@@ -5,24 +5,20 @@ namespace App\Http\Controllers\Compras;
 use App\Exports\Compras\Listaprecio_ProveedorExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionListaprecio_Proveedor;
-use App\Imports\Compras\Listaprecio_ProveedorArticuloImport;
 use App\Models\Compras\Listaprecio_Proveedor;
 use App\Models\Compras\Listaprecio_Proveedor_Estado;
 use App\Queries\Compras\Listaprecio_ProveedorQueryInterface;
 use App\Repositories\Compras\CondicioncompraRepositoryInterface;
 use App\Repositories\Compras\CondicionentregaRepositoryInterface;
 use App\Repositories\Compras\CondicionpagoRepositoryInterface;
-use App\Repositories\Compras\Listaprecio_Proveedor_ArticuloRepositoryInterface;
 use App\Repositories\Compras\Listaprecio_ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
-use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Services\Compras\Listaprecio_ProveedorService;
 use App\Support\Compras\ListaprecioProveedorConsultaDesdeModal;
 use App\Support\Compras\ListaprecioProveedorListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use Auth;
 use Illuminate\Http\Request;
-use Maatwebsite\Excel\Facades\Excel;
 
 class Listaprecio_ProveedorController extends Controller
 {
@@ -34,8 +30,6 @@ class Listaprecio_ProveedorController extends Controller
         private CondicionentregaRepositoryInterface $condicionentregaRepository,
         private CondicioncompraRepositoryInterface $condicioncompraRepository,
         private MonedaRepositoryInterface $monedaRepository,
-        private Listaprecio_Proveedor_ArticuloRepositoryInterface $listaprecioArticuloRepository,
-        private ArticuloRepositoryInterface $articuloRepository,
     ) {}
 
     public function index(Request $request)
@@ -124,9 +118,17 @@ class Listaprecio_ProveedorController extends Controller
 
         $ret = $this->service->guarda($request);
         if ($ret['mensaje'] === 'ok') {
+            $msg = 'Lista de precios creada con éxito';
+            if (isset($ret['importados'])) {
+                $msg .= ' '.Listaprecio_ProveedorService::mensajeImportacion(
+                    (int) $ret['importados'],
+                    $ret['errores_excel'] ?? []
+                );
+            }
+
             return redirect()
                 ->route('consultar_listaprecio_proveedor', QueryRetornoListado::desdeRequest($request, ListaprecioProveedorListadoFiltros::class))
-                ->with('mensaje', 'Lista de precios creada con éxito');
+                ->with('mensaje', $msg);
         }
 
         return redirect()->back()->withInput()->with('mensaje', $ret['errores'] ?? 'Error al guardar');
@@ -249,29 +251,22 @@ class Listaprecio_ProveedorController extends Controller
             'archivoexcel' => 'required|file|mimes:xls,xlsx,csv|max:10240',
         ]);
 
-        $import = new Listaprecio_ProveedorArticuloImport(
-            (int) $id,
-            $request->input('fechavigencia'),
-            Auth::user()->id,
-            $this->listaprecioArticuloRepository,
-            $this->articuloRepository
-        );
-
         try {
-            set_time_limit(0);
-            Excel::import($import, $request->file('archivoexcel'));
+            $retImp = $this->service->importarDesdeArchivo(
+                $request->file('archivoexcel'),
+                (string) $request->input('fechavigencia'),
+                (int) $id,
+                Auth::user()->id
+            );
             $this->repository->persistirEnAnita((int) $id);
         } catch (\Exception $e) {
             return redirect()->back()->with('mensaje', 'Error al leer el archivo: '.$e->getMessage());
         }
 
-        $msg = 'Importación finalizada: '.$import->importados.' ítem(s) cargados.';
-        if ($import->errores !== []) {
-            $msg .= ' Advertencias: '.implode(' ', array_slice($import->errores, 0, 15));
-            if (count($import->errores) > 15) {
-                $msg .= '…';
-            }
-        }
+        $msg = Listaprecio_ProveedorService::mensajeImportacion(
+            $retImp['importados'],
+            $retImp['errores']
+        );
 
         return redirect()->route(
             'editar_listaprecio_proveedor',

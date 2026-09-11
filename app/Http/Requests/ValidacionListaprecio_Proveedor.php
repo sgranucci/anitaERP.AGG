@@ -36,6 +36,8 @@ class ValidacionListaprecio_Proveedor extends FormRequest
             'nombrearchivos.*' => 'nullable|file|max:20480',
             'nombresanteriores' => 'nullable|array',
             'nombresanteriores.*' => 'nullable|string|max:255',
+            'archivoexcel' => 'nullable|file|mimes:xls,xlsx,csv|max:10240',
+            'fechavigencia_excel' => 'nullable|required_with:archivoexcel|date',
         ];
     }
 }

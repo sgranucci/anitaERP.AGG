@@ -25,25 +25,22 @@
             : collect([new \App\Models\Compras\Listaprecio_Proveedor_Articulo()]);
     }
 @endphp
+@include('compras.listaprecio_proveedor.partials.card_importar_excel')
+
 <div class="card card-outline card-info mb-3">
-    <div class="card-header py-2 d-flex align-items-center justify-content-between flex-wrap">
+    <div class="card-header py-2">
         <h3 class="card-title mb-0"><i class="fa fa-list"></i> Precios por art&iacute;culo</h3>
-        @if (! $visualizar && isset($data) && $data && can('actualizar-listaprecio-proveedor', false))
-            <button type="button" class="btn btn-outline-success btn-sm" id="lp-btn-abrir-import-excel" title="Importar SKU, precio y descuento desde un archivo">
-                <i class="fa fa-file-excel-o"></i> Importar Excel
-            </button>
-        @endif
     </div>
     <div class="card-body">
         <p class="text-muted small mb-3">
             Puede repetir el mismo art&iacute;culo con distinta fecha de vigencia (hist&oacute;rico de precios).
-            F1 o la lupa resuelven el SKU. La importaci&oacute;n Excel agrega renglones con la vigencia indicada.
+            F1 o la lupa resuelven el SKU. Si importa un Excel, no hace falta cargar renglones a mano.
         </p>
         <div class="table-responsive">
             <table class="table table-sm table-bordered lp-grilla-articulos mb-2" id="tabla-articulos-listaprecio">
                 <thead>
                     <tr>
-                        <th style="width: 16%;">Art&iacute;culo</th>
+                        <th style="width: 18%;">Art&iacute;culo</th>
                         <th>Descripci&oacute;n</th>
                         <th style="width: 12%;">Precio</th>
                         <th style="width: 8%;">% Desc.</th>

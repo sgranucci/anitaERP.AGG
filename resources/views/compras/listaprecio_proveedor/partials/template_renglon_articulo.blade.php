@@ -2,12 +2,12 @@
     <tr class="item-listaprecio-articulo">
         <td>
             <input type="hidden" class="linea_id" name="linea_ids[]" value="">
-            <div class="form-group row celda-articulo-listaprecio mb-0">
+            <div class="form-group celda-articulo-listaprecio mb-0 d-flex align-items-center flex-nowrap">
                 <input type="hidden" class="articulo_id" name="articulo_ids[]" value="">
-                <button type="button" title="Consulta art&iacute;culos (F1)" class="btn-accion-tabla consultaarticulo tooltipsC">
+                <button type="button" title="Consulta art&iacute;culos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                     <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" class="codigoarticulo codigoarticulolocal form-control form-control-sm" name="codigoarticulos[]" value="" placeholder="SKU" title="F1 consulta; Enter resuelve el c&oacute;digo">
+                <input type="text" class="codigoarticulo codigoarticulolocal form-control flex-shrink-0" style="width: 140px; max-width: 15vw; height: 38px;" name="codigoarticulos[]" value="" placeholder="SKU" title="F1 consulta; Enter resuelve el c&oacute;digo">
             </div>
         </td>
         <td>

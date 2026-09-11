@@ -2,13 +2,17 @@
 
 namespace App\Services\Compras;
 
+use App\Imports\Compras\Listaprecio_ProveedorArticuloImport;
 use App\Models\Compras\Listaprecio_Proveedor_Estado;
 use App\Repositories\Compras\Listaprecio_Proveedor_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Listaprecio_Proveedor_ArticuloRepositoryInterface;
 use App\Repositories\Compras\Listaprecio_Proveedor_EstadoRepositoryInterface;
 use App\Repositories\Compras\Listaprecio_ProveedorRepositoryInterface;
+use App\Repositories\Stock\ArticuloRepositoryInterface;
 use Auth;
 use DB;
+use Illuminate\Http\UploadedFile;
+use Maatwebsite\Excel\Facades\Excel;
 
 class Listaprecio_ProveedorService
 {
@@ -17,6 +21,7 @@ class Listaprecio_ProveedorService
         private Listaprecio_Proveedor_EstadoRepositoryInterface $listaprecioProveedorEstadoRepository,
         private Listaprecio_Proveedor_ArticuloRepositoryInterface $listaprecioProveedorArticuloRepository,
         private Listaprecio_Proveedor_ArchivoRepositoryInterface $listaprecioProveedorArchivoRepository,
+        private ArticuloRepositoryInterface $articuloRepository,
     ) {}
 
     public function guarda($request): array
@@ -39,6 +44,7 @@ class Listaprecio_ProveedorService
             );
             $this->listaprecioProveedorArticuloRepository->syncFromRequest($data, $lista->id, Auth::user()->id);
             $this->listaprecioProveedorArchivoRepository->create($request, $lista->id);
+            $importacion = $this->importarExcelSiCorresponde($request, (int) $lista->id, Auth::user()->id);
             $this->listaprecioProveedorRepository->persistirEnAnita((int) $lista->id);
             DB::commit();
         } catch (\Exception $e) {
@@ -47,7 +53,13 @@ class Listaprecio_ProveedorService
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
-        return ['mensaje' => 'ok'];
+        $ok = ['mensaje' => 'ok'];
+        if ($importacion !== null) {
+            $ok['importados'] = $importacion['importados'];
+            $ok['errores_excel'] = $importacion['errores'];
+        }
+
+        return $ok;
     }
 
     public function actualiza($request, int $id): array
@@ -119,6 +131,57 @@ class Listaprecio_ProveedorService
                 'observacion' => $e->observacion ?? '',
             ];
         });
+    }
+
+    /**
+     * @return array{importados: int, errores: list<string>}
+     */
+    public function importarDesdeArchivo(UploadedFile $archivo, string $fechavigencia, int $listaId, int $usuarioId): array
+    {
+        $import = new Listaprecio_ProveedorArticuloImport(
+            $listaId,
+            $fechavigencia,
+            $usuarioId,
+            $this->listaprecioProveedorArticuloRepository,
+            $this->articuloRepository
+        );
+        set_time_limit(0);
+        Excel::import($import, $archivo);
+
+        return [
+            'importados' => $import->importados,
+            'errores' => $import->errores,
+        ];
+    }
+
+    public static function mensajeImportacion(int $importados, array $errores): string
+    {
+        $msg = 'Importación Excel: '.$importados.' ítem(s) cargados.';
+        if ($errores !== []) {
+            $msg .= ' Advertencias: '.implode(' ', array_slice($errores, 0, 15));
+            if (count($errores) > 15) {
+                $msg .= '…';
+            }
+        }
+
+        return $msg;
+    }
+
+    /**
+     * @return array{importados: int, errores: list<string>}|null
+     */
+    private function importarExcelSiCorresponde($request, int $listaId, int $usuarioId): ?array
+    {
+        if (! $request->hasFile('archivoexcel')) {
+            return null;
+        }
+
+        $fecha = trim((string) $request->input('fechavigencia_excel', ''));
+        if ($fecha === '') {
+            $fecha = date('Y-m-d');
+        }
+
+        return $this->importarDesdeArchivo($request->file('archivoexcel'), $fecha, $listaId, $usuarioId);
     }
 
     private function armaCabecera(array $data, bool $esAlta): array
