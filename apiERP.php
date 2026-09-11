@@ -79,7 +79,7 @@ if ($data['acc'] == "list" || $data['acc'] == "customSql") {
 	}
     $dataArr = array();
 	$archivo = fopen($_nombre_ret, 'r');
-	$camposArr = explode(',', (string) ($data['campos'] ?? ''));
+	$camposArr = explode(',', (string) (isset($data['campos']) ? $data['campos'] : ''));
 	while ($linea = fgets($archivo)) {
 		$linea = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '#', $linea);
 		$registroAssoc = array();

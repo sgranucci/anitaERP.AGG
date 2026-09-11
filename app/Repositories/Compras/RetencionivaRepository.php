@@ -5,6 +5,7 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Retencioniva;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 
 class RetencionivaRepository implements RetencionivaRepositoryInterface
 {
@@ -105,6 +106,9 @@ class RetencionivaRepository implements RetencionivaRepositoryInterface
 						'orderBy' => $this->keyField,
 						'tabla' => $this->tableAnita );
         $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (! is_array($dataAnita)) {
+            return;
+        }
         $datosLocal = $this->model->get();
         $datosLocalArray = [];
 
@@ -125,22 +129,14 @@ class RetencionivaRepository implements RetencionivaRepositoryInterface
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita, 
 			'sistema' => 'compras',
-            'campos' => '
-                reti_codigo,
-				reti_desc,
-				reti_porcentaje,
-				reti_minimo,
-				reti_cod_regimen,
-				reti_aplica,
-				reti_base,
-				reti_cant_per,
-				reti_valor_unit
-            ' , 
+            'campos' => $this->camposCabeceraAnita(),
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
-		if (count($dataAnita) > 0) 
-		{
+		if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return;
+        }
+
             $data = $dataAnita[0];
 
 			// Crea registro 
@@ -152,41 +148,52 @@ class RetencionivaRepository implements RetencionivaRepositoryInterface
 				'formacalculo' => $data->reti_aplica,
 				'porcentajeretencion' => $data->reti_porcentaje,
 				'minimoimponible' => $data->reti_minimo,
-				'baseimponible' => $data->reti_base,
-				'cantidadperiodoacumula' => $data->reti_cant_per,
-				'valorunitario' => $data->reti_valor_unit
+				'baseimponible' => AnitaRetencionEsquemaSupport::retivaIncluyeBasePeriodoValor()
+                    ? ($data->reti_base ?? 0)
+                    : 0,
+				'cantidadperiodoacumula' => AnitaRetencionEsquemaSupport::retivaIncluyeBasePeriodoValor()
+                    ? ($data->reti_cant_per ?? 0)
+                    : 0,
+				'valorunitario' => AnitaRetencionEsquemaSupport::retivaIncluyeBasePeriodoValor()
+                    ? ($data->reti_valor_unit ?? 0)
+                    : 0,
             ]);
-        }
     }
 
 	public function guardarAnita($request) {
 
         $apiAnita = new ApiAnita();
 
+        $campos = [
+            'reti_codigo',
+            'reti_desc',
+            'reti_porcentaje',
+            'reti_minimo',
+            'reti_cod_regimen',
+            'reti_aplica',
+        ];
+        $valores = [
+            "'".$request['codigo']."'",
+            "'".$request['nombre']."'",
+            "'".$request['porcentajeretencion']."'",
+            "'".$request['minimoimponible']."'",
+            "'".$request['regimen']."'",
+            "'".$request['formacalculo']."'",
+        ];
+        if (AnitaRetencionEsquemaSupport::retivaIncluyeBasePeriodoValor()) {
+            $campos[] = 'reti_base';
+            $campos[] = 'reti_cant_per';
+            $campos[] = 'reti_valor_unit';
+            $valores[] = "'".$request['baseimponible']."'";
+            $valores[] = "'".$request['cantidadperiodoacumula']."'";
+            $valores[] = "'".$request['valorunitario']."'";
+        }
+
         $data = array( 'tabla' => $this->tableAnita, 
 			'acc' => 'insert',
 			'sistema' => 'compras',
-            'campos' => '
-                reti_codigo,
-				reti_desc,
-				reti_porcentaje,
-				reti_minimo,
-				reti_cod_regimen,
-				reti_aplica,
-				reti_base,
-				reti_cant_per,
-				reti_valor_unit
-					',
-            'valores' => " 
-						'".$request['codigo']."', 
-						'".$request['nombre']."',
-						'".$request['porcentajeretencion']."',
-						'".$request['minimoimponible']."',
-						'".$request['regimen']."',
-						'".$request['formacalculo']."',
-						'".$request['baseimponible']."',
-						'".$request['cantidadperiodoacumula']."',
-						'".$request['valorunitario']."' "
+            'campos' => implode(",\n", $campos),
+            'valores' => implode(",\n", $valores),
         );
         $apiAnita->apiCallEscritura($data);
 	}
@@ -195,20 +202,24 @@ class RetencionivaRepository implements RetencionivaRepositoryInterface
 
         $apiAnita = new ApiAnita();
 
-		$data = array( 'acc' => 'update', 
-				'tabla' => $this->tableAnita,
-				'sistema' => 'compras',
-            	'valores' => " 
+        $valores = "
 							reti_codigo = '".$request['codigo']."', 
 							reti_desc = '".$request['nombre']."',
 							reti_porcentaje = '".$request['porcentajeretencion']."',
 							reti_minimo = '".$request['minimoimponible']."',
 							reti_cod_regimen = '".$request['regimen']."',
-							reti_aplica = '".$request['formacalculo']."',
+							reti_aplica = '".$request['formacalculo']."'";
+        if (AnitaRetencionEsquemaSupport::retivaIncluyeBasePeriodoValor()) {
+            $valores .= ",
 							reti_base = '".$request['baseimponible']."',
 							reti_cant_per = '".$request['cantidadperiodoacumula']."',
-							reti_valor_unit = '".$request['valorunitario']."'
-							", 
+							reti_valor_unit = '".$request['valorunitario']."'";
+        }
+
+		$data = array( 'acc' => 'update', 
+				'tabla' => $this->tableAnita,
+				'sistema' => 'compras',
+            	'valores' => $valores, 
             	'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request['codigo']."' " 
 				);
         $apiAnita->apiCallEscritura($data);
@@ -234,7 +245,9 @@ class RetencionivaRepository implements RetencionivaRepositoryInterface
 				);
 		$dataAnita = json_decode($apiAnita->apiCall($data));
 
-		if (isset($dataAnita)) 
+		if (is_array($dataAnita) && count($dataAnita) > 0
+            && isset($dataAnita[0]->{$this->keyFieldAnita})
+            && $dataAnita[0]->{$this->keyFieldAnita} !== null) 
 		{
 			$codigo = ltrim($dataAnita[0]->{$this->keyFieldAnita}, '0');
 			$codigo = $codigo + 1;
@@ -242,5 +255,28 @@ class RetencionivaRepository implements RetencionivaRepositoryInterface
 		else	
 			$codigo = 1;
 	}
+
+    /**
+     * Campos de cabecera Anita `retiva`.
+     * Ferli no tiene reti_base / reti_cant_per / reti_valor_unit.
+     */
+    private function camposCabeceraAnita(): string
+    {
+        $campos = [
+            'reti_codigo',
+            'reti_desc',
+            'reti_porcentaje',
+            'reti_minimo',
+            'reti_cod_regimen',
+            'reti_aplica',
+        ];
+        if (AnitaRetencionEsquemaSupport::retivaIncluyeBasePeriodoValor()) {
+            $campos[] = 'reti_base';
+            $campos[] = 'reti_cant_per';
+            $campos[] = 'reti_valor_unit';
+        }
+
+        return implode(",\n", $campos);
+    }
 		
 }

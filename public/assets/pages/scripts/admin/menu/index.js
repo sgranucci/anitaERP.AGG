@@ -4,13 +4,33 @@ $(document).ready(function () {
             menu: window.JSON.stringify($('#nestable').nestable('serialize')),
             _token: $('input[name=_token]').first().val()
         };
-        let gord = carpetaBase+'/admin/menu/guardar-orden';
+        // Usar route() (window.menuGuardarOrdenUrl): carpetaBase+/admin/menu/... falla cuando
+        // APP_CARPETA no coincide con APP_URL (p. ej. carpeta /anitaERP/public y rutas en /).
+        var gord = window.menuGuardarOrdenUrl
+            || ((typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/admin/menu/guardar-orden');
         $.ajax({
             url: gord,
             type: 'POST',
             dataType: 'JSON',
             data: data,
-            success: function (respuesta) {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            success: function () {
+                if (window.Biblioteca && typeof Biblioteca.notificaciones === 'function') {
+                    Biblioteca.notificaciones('Orden de menú guardado', 'Biblioteca', 'success');
+                }
+            },
+            error: function (xhr) {
+                var msg = 'No se pudo guardar el orden del menú.';
+                if (xhr.status === 419) {
+                    msg = 'Sesión vencida (CSRF). Recargue la página e intente de nuevo.';
+                } else if (xhr.status === 404) {
+                    msg = 'Ruta de guardado no encontrada. Verifique APP_URL / APP_CARPETA.';
+                }
+                if (window.Biblioteca && typeof Biblioteca.notificaciones === 'function') {
+                    Biblioteca.notificaciones(msg, 'Biblioteca', 'error');
+                } else {
+                    window.alert(msg);
+                }
             }
         });
     });
