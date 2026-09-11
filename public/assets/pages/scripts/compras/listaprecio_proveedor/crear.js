@@ -16,6 +16,10 @@ $(function () {
 		return new Date().toISOString().slice(0, 10);
 	}
 
+	window.lpFechaVigenciaExcel = function () {
+		return $('#fechavigencia_excel').val() || $('#fecha').val() || fechaHoyIso();
+	};
+
 	function agregarRenglonArticulo() {
 		var tpl = document.getElementById('template-renglon-listaprecio-articulo');
 		var tbody = document.querySelector('#tabla-articulos-listaprecio tbody');
@@ -43,6 +47,8 @@ $(function () {
 		$clone.find('input[name="fechavigencias[]"]').val(fechaHoyIso());
 		$('#tabla-articulos-listaprecio tbody').append($clone);
 	}
+
+	window.lpAgregarRenglonArticulo = agregarRenglonArticulo;
 
 	$('#agrega_renglon_listaprecio_articulo').on('click', function () {
 		agregarRenglonArticulo();
@@ -102,20 +108,6 @@ $(function () {
 		$(this).closest('.col-md-6').remove();
 	});
 
-	function abrirModalImportExcel() {
-		var $modal = $('#modal-importar-excel-lp');
-		if (!$modal.length) {
-			return;
-		}
-		$('a[href="#tab-precios"]').tab('show');
-		$modal.modal('show');
-	}
-
-	$(document).on('click', '#lp-btn-abrir-import-excel', function (event) {
-		event.preventDefault();
-		abrirModalImportExcel();
-	});
-
 	$('a[data-toggle="tab"][href="#tab-historia"]').on('shown.bs.tab', function () {
 		leeHistoria();
 	});
@@ -144,10 +136,6 @@ $(function () {
 				);
 			});
 		});
-	}
-
-	if (window.location.hash === '#importar-excel') {
-		setTimeout(abrirModalImportExcel, 150);
 	}
 
 	if ($('#crear').length) {

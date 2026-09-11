@@ -11,7 +11,12 @@ Nueva lista de precios proveedor
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script>
+    window.lpImportPreviewUrl = @json(route('importar_preview_listaprecio_proveedor'));
+    window.lpImportExcelUrl = null;
+</script>
 <script src="{{ asset('assets/pages/scripts/compras/listaprecio_proveedor/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/listaprecio_proveedor/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/listaprecio_proveedor/importar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/listaprecio_proveedor/importar.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')

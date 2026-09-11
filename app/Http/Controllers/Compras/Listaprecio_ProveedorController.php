@@ -14,11 +14,13 @@ use App\Repositories\Compras\CondicionpagoRepositoryInterface;
 use App\Repositories\Compras\Listaprecio_ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\Listaprecio_ProveedorService;
+use App\Services\Compras\ListaprecioProveedorImportPreviewService;
 use App\Support\Compras\ListaprecioProveedorConsultaDesdeModal;
 use App\Support\Compras\ListaprecioProveedorListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use Auth;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class Listaprecio_ProveedorController extends Controller
 {
@@ -30,6 +32,7 @@ class Listaprecio_ProveedorController extends Controller
         private CondicionentregaRepositoryInterface $condicionentregaRepository,
         private CondicioncompraRepositoryInterface $condicioncompraRepository,
         private MonedaRepositoryInterface $monedaRepository,
+        private ListaprecioProveedorImportPreviewService $importPreviewService,
     ) {}
 
     public function index(Request $request)
@@ -242,25 +245,66 @@ class Listaprecio_ProveedorController extends Controller
         return $this->service->leeHistoriaJson((int) $listaprecio_proveedor_id);
     }
 
+    public function previewImportacion(Request $request)
+    {
+        $this->autorizarImportarLista();
+
+        $request->validate($this->reglasArchivoImportacion([
+            'proveedor_id' => 'nullable|integer|min:1',
+        ]));
+
+        $archivo = $request->file('archivoexcel') ?? $request->file('archivo');
+
+        try {
+            $preview = $this->importPreviewService->previsualizar(
+                $archivo,
+                $request->filled('proveedor_id') ? (int) $request->input('proveedor_id') : null,
+                $request->input('col_sku'),
+                $request->input('col_descripcion'),
+                $request->input('col_precio'),
+                $request->input('col_descuento'),
+                $request->input('col_codigo_proveedor'),
+                $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
+                $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null
+            );
+
+            return response()->json($preview);
+        } catch (\Throwable $e) {
+            Log::warning('listaprecio_proveedor.importar_excel.preview_fallo', [
+                'mensaje' => $e->getMessage(),
+                'archivo' => $archivo?->getClientOriginalName(),
+            ]);
+
+            return response()->json(['message' => 'Error al analizar el Excel: '.$e->getMessage()], 422);
+        }
+    }
+
     public function importarExcel(Request $request, $id)
     {
-        can('actualizar-listaprecio-proveedor');
+        $this->autorizarModificarLista();
 
-        $request->validate([
+        $request->validate(array_merge($this->reglasArchivoImportacion(), [
             'fechavigencia' => 'required|date',
-            'archivoexcel' => 'required|file|mimes:xls,xlsx,csv|max:10240',
-        ]);
+        ]));
+
+        $archivo = $request->file('archivoexcel') ?? $request->file('archivo');
 
         try {
             $retImp = $this->service->importarDesdeArchivo(
-                $request->file('archivoexcel'),
+                $archivo,
                 (string) $request->input('fechavigencia'),
                 (int) $id,
-                Auth::user()->id
+                Auth::user()->id,
+                Listaprecio_ProveedorService::opcionesImportacionDesdeRequest($request)
             );
             $this->repository->persistirEnAnita((int) $id);
         } catch (\Exception $e) {
-            return redirect()->back()->with('mensaje', 'Error al leer el archivo: '.$e->getMessage());
+            $mensaje = 'Error al leer el archivo: '.$e->getMessage();
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['mensaje' => $mensaje], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $mensaje);
         }
 
         $msg = Listaprecio_ProveedorService::mensajeImportacion(
@@ -268,10 +312,70 @@ class Listaprecio_ProveedorController extends Controller
             $retImp['errores']
         );
 
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'ok' => true,
+                'mensaje' => $msg,
+                'importados' => $retImp['importados'],
+                'errores' => $retImp['errores'],
+            ]);
+        }
+
         return redirect()->route(
             'editar_listaprecio_proveedor',
             array_merge(['id' => (int) $id], QueryRetornoListado::desdeRequest($request, ListaprecioProveedorListadoFiltros::class))
         )->with('mensaje', $msg);
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function reglasArchivoImportacion(array $extra = []): array
+    {
+        return array_merge([
+            'archivoexcel' => [
+                'required_without:archivo',
+                'nullable',
+                'file',
+                'max:10240',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null) {
+                        return;
+                    }
+                    $ext = strtolower((string) $value->getClientOriginalExtension());
+                    if (! in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
+                        $fail('El archivo debe ser Excel (.xlsx, .xls) o CSV.');
+                    }
+                },
+            ],
+            'archivo' => [
+                'required_without:archivoexcel',
+                'nullable',
+                'file',
+                'max:10240',
+            ],
+            'col_sku' => 'nullable|string|max:100',
+            'col_descripcion' => 'nullable|string|max:100',
+            'col_precio' => 'nullable|string|max:100',
+            'col_descuento' => 'nullable|string|max:100',
+            'col_codigo_proveedor' => 'nullable|string|max:100',
+            'fila_encabezado' => 'nullable|integer|min:1|max:50',
+            'hoja_indice' => 'nullable|integer|min:1|max:50',
+        ], $extra);
+    }
+
+    private function autorizarImportarLista(): void
+    {
+        if (
+            can('crear-listaprecio-proveedor', false)
+            || can('actualizar-listaprecio-proveedor', false)
+            || can('editar-listaprecio-proveedor', false)
+        ) {
+            return;
+        }
+
+        abort(403);
     }
 
     private function puedeModificarLista(): bool

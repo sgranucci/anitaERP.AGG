@@ -72,3 +72,33 @@
         @endif
     </div>
 </div>
+
+<div class="card card-outline card-warning mb-3 d-none" id="lp-card-sin-sku">
+    <div class="card-header py-2">
+        <h3 class="card-title mb-0">
+            <i class="fa fa-exclamation-triangle"></i>
+            Precios sin SKU en el maestro
+            <span class="badge badge-warning" id="lp-sin-sku-contador">0</span>
+        </h3>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">
+            Tienen precio en el Excel pero no hay art&iacute;culo en el sistema (SKU vac&iacute;o o no existe).
+            Quedan a la vista para darlos de alta; <strong>no se graban</strong> al Guardar.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0" id="tabla-articulos-listaprecio-sin-sku">
+                <thead style="background:#F9E79F;color:#17202A;">
+                    <tr>
+                        <th style="width: 16%;">SKU Excel</th>
+                        <th>Descripci&oacute;n Excel</th>
+                        <th style="width: 14%;" class="text-right">Precio</th>
+                        <th style="width: 10%;" class="text-right">% Desc.</th>
+                        <th style="width: 16%;">C&oacute;d. art. proveedor</th>
+                    </tr>
+                </thead>
+                <tbody id="lp-tbody-sin-sku"></tbody>
+            </table>
+        </div>
+    </div>
+</div>

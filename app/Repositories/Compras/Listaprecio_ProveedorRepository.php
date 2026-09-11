@@ -11,6 +11,7 @@ use App\Models\Compras\Condicionentrega;
 use App\Models\Compras\Condicioncompra;
 use App\Models\Stock\Articulo;
 use App\Models\Compras\Listaprecio_Proveedor_Articulo;
+use App\Support\Compras\ListaprecioProveedorAnitaEsquemaSupport as AnitaEsquema;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
@@ -128,19 +129,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             'acc' => 'list',
             'tabla' => $this->tableAnita[0],
             'sistema' => 'compras',
-            'campos' => '
-                lispm_nro,
-                lispm_proveedor,
-                lispm_fecha,
-                lispm_cond_entrega,
-                lispm_cond_pago,
-                lispm_cond_compra,
-                lispm_nombre_prov,
-                lispm_estado,
-                lispm_nombre_lista,
-                lispm_cod_mon,
-                lispm_usuario
-            ',
+            'campos' => AnitaEsquema::sqlCamposCabecera(),
             'whereArmado' => " WHERE $this->keyFieldAnita = '".$nroLista."' ",
         ];
         $cab = json_decode($apiAnita->apiCall($data));
@@ -199,17 +188,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
                 'acc' => 'list',
                 'tabla' => $this->tableAnita[1],
                 'sistema' => 'compras',
-                'campos' => '
-                    listpv_nro,
-                    listpv_nro_orden,
-                    listpv_fecha,
-                    listpv_articulo,
-                    listpv_precio,
-                    listpv_proveedor,
-                    lispv_desc,
-                    lispv_art_prov,
-                    lispv_descuento
-                ',
+                'campos' => AnitaEsquema::sqlCamposMovimiento(),
                 'whereArmado' => " WHERE listpv_nro = '".$nroLista."' ",
                 'orderBy' => 'listpv_nro_orden',
             ];
@@ -261,36 +240,26 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
         $estado = $this->mapEstadoErpPrimeraLetra((string) ($lista->estado ?? 'Activa'));
         $usuario = substr((string) (Auth::user()?->nombre ?? Auth::user()?->name ?? 'system'), 0, 15);
 
+        $valoresCab = $this->valoresCabeceraAnita(
+            $listaprecio_proveedor_id,
+            $proveedorCodigo,
+            $fecha,
+            $condEntrega,
+            $condPago,
+            $condCompra,
+            (string) ($lista->proveedores?->nombre ?? ''),
+            $estado,
+            (string) ($lista->nombre ?? ''),
+            $monedaCodigo,
+            $usuario
+        );
+
         $dataCab = [
             'tabla' => $this->tableAnita[0],
             'acc' => 'insert',
             'sistema' => 'compras',
-            'campos' => '
-                lispm_nro,
-                lispm_proveedor,
-                lispm_fecha,
-                lispm_cond_entrega,
-                lispm_cond_pago,
-                lispm_cond_compra,
-                lispm_nombre_prov,
-                lispm_estado,
-                lispm_nombre_lista,
-                lispm_cod_mon,
-                lispm_usuario
-            ',
-            'valores' => "
-                '".$listaprecio_proveedor_id."',
-                '".$proveedorCodigo."',
-                '".$fecha."',
-                '".$condEntrega."',
-                '".$condPago."',
-                '".$condCompra."',
-                '".substr(preg_replace('([^A-Za-z0-9 ])', '', (string) ($lista->proveedores?->nombre ?? '')), 0, 30)."',
-                '".$estado."',
-                '".substr(preg_replace('([^A-Za-z0-9 ])', '', (string) ($lista->nombre ?? '')), 0, 30)."',
-                '".$monedaCodigo."',
-                '".$usuario."'
-            ",
+            'campos' => AnitaEsquema::sqlCamposCabecera(),
+            'valores' => $valoresCab,
         ];
         $apiAnita->apiCallEscritura($dataCab, null, 'listaprecio_proveedor.anita_bridge.fallo');
 
@@ -336,18 +305,18 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             'acc' => 'update',
             'tabla' => $this->tableAnita[0],
             'sistema' => 'compras',
-            'valores' => "
-                lispm_proveedor = '".$proveedorCodigo."',
-                lispm_fecha = '".$fecha."',
-                lispm_cond_entrega = '".$condEntrega."',
-                lispm_cond_pago = '".$condPago."',
-                lispm_cond_compra = '".$condCompra."',
-                lispm_nombre_prov = '".substr(preg_replace('([^A-Za-z0-9 ])', '', (string) ($lista->proveedores?->nombre ?? '')), 0, 30)."',
-                lispm_estado = '".$estado."',
-                lispm_nombre_lista = '".substr(preg_replace('([^A-Za-z0-9 ])', '', (string) ($lista->nombre ?? '')), 0, 30)."',
-                lispm_cod_mon = '".$monedaCodigo."',
-                lispm_usuario = '".$usuario."'
-            ",
+            'valores' => $this->valoresCabeceraAnitaUpdate(
+                $proveedorCodigo,
+                $fecha,
+                $condEntrega,
+                $condPago,
+                $condCompra,
+                (string) ($lista->proveedores?->nombre ?? ''),
+                $estado,
+                (string) ($lista->nombre ?? ''),
+                $monedaCodigo,
+                $usuario
+            ),
             'whereArmado' => " WHERE lispm_nro = '".$listaprecio_proveedor_id."' ",
         ];
         $apiAnita->apiCallEscritura($dataCab, null, 'listaprecio_proveedor.anita_bridge.fallo');
@@ -384,34 +353,22 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
             $sku = $ln->articulos?->sku ?? '';
             $sku = str_pad((string) $sku, 13, '0', STR_PAD_LEFT);
 
-            $desc = $ln->articulos?->descripcion ?? '';
-
             $dataMov = [
                 'tabla' => $this->tableAnita[1],
                 'acc' => 'insert',
                 'sistema' => 'compras',
-                'campos' => '
-                    listpv_nro,
-                    listpv_nro_orden,
-                    listpv_fecha,
-                    listpv_articulo,
-                    listpv_precio,
-                    listpv_proveedor,
-                    lispv_desc,
-                    lispv_art_prov,
-                    lispv_descuento
-                ',
-                'valores' => "
-                    '".$listaprecio_proveedor_id."',
-                    '".$orden."',
-                    '".$fecha."',
-                    '".$sku."',
-                    '".((float) $ln->precio)."',
-                    '".$proveedorCodigo."',
-                    '".substr(preg_replace('([^A-Za-z0-9 ])', '', (string) $desc), 0, 30)."',
-                    '".substr((string) ($ln->codigo_articulo_proveedor ?? ''), 0, 30)."',
-                    '".((float) ($ln->descuento ?? 0))."'
-                ",
+                'campos' => AnitaEsquema::sqlCamposMovimiento(),
+                'valores' => $this->valoresMovimientoAnita(
+                    $listaprecio_proveedor_id,
+                    $orden,
+                    $fecha,
+                    $sku,
+                    (float) $ln->precio,
+                    $proveedorCodigo,
+                    (string) ($ln->articulos?->descripcion ?? ''),
+                    (string) ($ln->codigo_articulo_proveedor ?? ''),
+                    (float) ($ln->descuento ?? 0)
+                ),
             ];
 
             $apiAnita->apiCallEscritura($dataMov, null, 'listaprecio_proveedor.anita_bridge.fallo');
@@ -419,6 +376,118 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
         }
 
         return ['success' => true];
+    }
+
+    private function valoresCabeceraAnita(
+        int $nro,
+        string $proveedorCodigo,
+        string $fecha,
+        mixed $condEntrega,
+        mixed $condPago,
+        mixed $condCompra,
+        string $nombreProv,
+        string $estado,
+        string $nombreLista,
+        string $monedaCodigo,
+        string $usuario
+    ): string {
+        $mapa = [
+            'lispm_nro' => $nro,
+            'lispm_proveedor' => $proveedorCodigo,
+            'lispm_fecha' => $fecha,
+            'lispm_cond_entrega' => $condEntrega,
+            'lispm_cond_pago' => $condPago,
+            'lispm_cond_compra' => $condCompra,
+            'lispm_nombre_prov' => substr($this->anitaAlfa($nombreProv), 0, 30),
+            'lispm_estado' => $estado,
+            'lispm_nombre_lista' => substr($this->anitaAlfa($nombreLista), 0, 30),
+            'lispm_cod_mon' => $monedaCodigo,
+            'lispm_usuario' => $usuario,
+        ];
+
+        $vals = [];
+        foreach (AnitaEsquema::camposCabecera() as $campo) {
+            $vals[] = "'".$this->anitaEscapar((string) ($mapa[$campo] ?? ''))."'";
+        }
+
+        return implode(",\n                ", $vals);
+    }
+
+    private function valoresCabeceraAnitaUpdate(
+        string $proveedorCodigo,
+        string $fecha,
+        mixed $condEntrega,
+        mixed $condPago,
+        mixed $condCompra,
+        string $nombreProv,
+        string $estado,
+        string $nombreLista,
+        string $monedaCodigo,
+        string $usuario
+    ): string {
+        $mapa = [
+            'lispm_proveedor' => $proveedorCodigo,
+            'lispm_fecha' => $fecha,
+            'lispm_cond_entrega' => $condEntrega,
+            'lispm_cond_pago' => $condPago,
+            'lispm_cond_compra' => $condCompra,
+            'lispm_nombre_prov' => substr($this->anitaAlfa($nombreProv), 0, 30),
+            'lispm_estado' => $estado,
+            'lispm_nombre_lista' => substr($this->anitaAlfa($nombreLista), 0, 30),
+            'lispm_cod_mon' => $monedaCodigo,
+            'lispm_usuario' => $usuario,
+        ];
+
+        $sets = [];
+        foreach (AnitaEsquema::camposCabecera() as $campo) {
+            if ($campo === AnitaEsquema::KEY_CABECERA) {
+                continue;
+            }
+            $sets[] = $campo." = '".$this->anitaEscapar((string) ($mapa[$campo] ?? ''))."'";
+        }
+
+        return implode(",\n                ", $sets);
+    }
+
+    private function valoresMovimientoAnita(
+        int $nro,
+        int $orden,
+        string $fecha,
+        string $sku,
+        float $precio,
+        string $proveedorCodigo,
+        string $descripcion,
+        string $codigoArtProv,
+        float $descuento
+    ): string {
+        $mapa = [
+            'listpv_nro' => $nro,
+            'listpv_nro_orden' => $orden,
+            'listpv_fecha' => $fecha,
+            'listpv_articulo' => $sku,
+            'listpv_precio' => $precio,
+            'listpv_proveedor' => $proveedorCodigo,
+            'lispv_desc' => substr($this->anitaAlfa($descripcion), 0, 30),
+            'lispv_art_prov' => substr($codigoArtProv, 0, 30),
+            'lispv_descuento' => $descuento,
+        ];
+
+        $vals = [];
+        foreach (AnitaEsquema::camposMovimiento() as $campo) {
+            $vals[] = "'".$this->anitaEscapar((string) ($mapa[$campo] ?? ''))."'";
+        }
+
+        return implode(",\n                    ", $vals);
+    }
+
+    private function anitaAlfa(string $texto): string
+    {
+        return (string) preg_replace('([^A-Za-z0-9 ])', '', $texto);
+    }
+
+    private function anitaEscapar(string $valor): string
+    {
+        return str_replace("'", "''", $valor);
     }
 
     private function anitaIntToDate(int $yyyymmdd): string
