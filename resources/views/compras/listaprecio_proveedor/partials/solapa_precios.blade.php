@@ -30,6 +30,14 @@
 <div class="card card-outline card-info mb-3">
     <div class="card-header py-2">
         <h3 class="card-title mb-0"><i class="fa fa-list"></i> Precios por art&iacute;culo</h3>
+        @if (isset($data) && $data && $data->id)
+            <div class="card-tools">
+                @include('compras.listaprecio_proveedor.partials.botones_exportar', [
+                    'listaId' => $data->id,
+                    'variant' => 'header',
+                ])
+            </div>
+        @endif
     </div>
     <div class="card-body">
         <p class="text-muted small mb-3">

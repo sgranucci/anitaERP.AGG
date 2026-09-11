@@ -47,8 +47,12 @@ Editar lista de precios proveedor
                     <small class="font-weight-normal">· ID {{ $data->id }}</small>
                 </h3>
                 <div class="card-tools">
+                    @include('compras.listaprecio_proveedor.partials.botones_exportar', [
+                        'listaId' => $data->id,
+                        'variant' => 'header',
+                    ])
                     @if (! $ocultarVolver)
-                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm ml-1">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @endif

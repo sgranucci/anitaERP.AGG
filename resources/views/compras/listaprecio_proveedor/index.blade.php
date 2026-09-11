@@ -102,6 +102,10 @@ Listas de precio — proveedores
                                 </td>
                                 <td>{{ $data->nombreusuario ?: '—' }}</td>
                                 <td class="text-nowrap">
+                                    @include('compras.listaprecio_proveedor.partials.botones_exportar', [
+                                        'listaId' => $data->id,
+                                        'variant' => 'row',
+                                    ])
                                     @if (can('editar-listaprecio-proveedor', false))
                                         <a href="{{ route('editar_listaprecio_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                             <i class="fa fa-edit"></i>

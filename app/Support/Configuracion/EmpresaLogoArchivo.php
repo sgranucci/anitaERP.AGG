@@ -82,6 +82,7 @@ final class EmpresaLogoArchivo
     {
         return match ($slugEmpresa) {
             'EL BIERZO' => ['logo-bierzo.png', 'Frig.El Bierzo SA.png'],
+            'INTERFORMING' => ['INTERFORMING S.A.png', 'INTERFORMING S.A..png'],
             default => [],
         };
     }

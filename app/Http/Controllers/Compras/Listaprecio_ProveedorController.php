@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Compras;
 
+use App\Exports\Compras\Listaprecio_ProveedorDetalleExport;
 use App\Exports\Compras\Listaprecio_ProveedorExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionListaprecio_Proveedor;
@@ -90,6 +91,49 @@ class Listaprecio_ProveedorController extends Controller
         }
 
         return redirect()->route('consultar_listaprecio_proveedor', ListaprecioProveedorListadoFiltros::paraQueryString($filtros));
+    }
+
+    public function exportar(Request $request, $id, $formato = null)
+    {
+        $this->autorizarExportarLista();
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $lista = $this->repository->find($id);
+        $formato = strtoupper((string) $formato);
+
+        switch ($formato) {
+            case 'PDF':
+                $letterhead = Listaprecio_ProveedorDetalleExport::letterhead($lista);
+                $view = \View::make('compras.listaprecio_proveedor.detalle', compact('lista', 'letterhead'))
+                    ->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombre_pdf = Listaprecio_ProveedorDetalleExport::nombreArchivo($lista, 'pdf');
+                $nombreSinExt = pathinfo($nombre_pdf, PATHINFO_FILENAME);
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombreSinExt.'.pdf');
+
+                return response()->download($path.'/'.$nombreSinExt.'.pdf');
+
+            case 'EXCEL':
+                return (new Listaprecio_ProveedorDetalleExport($lista))
+                    ->download(Listaprecio_ProveedorDetalleExport::nombreArchivo($lista, 'xlsx'));
+
+            case 'CSV':
+                return (new Listaprecio_ProveedorDetalleExport($lista))
+                    ->download(
+                        Listaprecio_ProveedorDetalleExport::nombreArchivo($lista, 'csv'),
+                        \Maatwebsite\Excel\Excel::CSV
+                    );
+        }
+
+        return redirect()->route('editar_listaprecio_proveedor', ['id' => $id]);
     }
 
     public function crear(Request $request)
@@ -363,6 +407,20 @@ class Listaprecio_ProveedorController extends Controller
             'fila_encabezado' => 'nullable|integer|min:1|max:50',
             'hoja_indice' => 'nullable|integer|min:1|max:50',
         ], $extra);
+    }
+
+    private function autorizarExportarLista(): void
+    {
+        if (
+            can('listar-listaprecio-proveedor', false)
+            || can('editar-listaprecio-proveedor', false)
+            || can('actualizar-listaprecio-proveedor', false)
+            || ListaprecioProveedorConsultaDesdeModal::puedeConsultar()
+        ) {
+            return;
+        }
+
+        abort(403);
     }
 
     private function autorizarImportarLista(): void

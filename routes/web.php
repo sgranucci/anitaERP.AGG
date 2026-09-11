@@ -3596,6 +3596,7 @@ Route::get('compras/listar_listaprecio_proveedor/{formato?}/{busqueda?}', 'Compr
 Route::get('compras/listaprecio_proveedor/crear', 'Compras\Listaprecio_ProveedorController@crear')->name('crear_listaprecio_proveedor');
 Route::post('compras/listaprecio_proveedor/api/importar-preview', 'Compras\Listaprecio_ProveedorController@previewImportacion')->name('importar_preview_listaprecio_proveedor');
 Route::post('compras/listaprecio_proveedor', 'Compras\Listaprecio_ProveedorController@guardar')->name('guardar_listaprecio_proveedor');
+Route::get('compras/listaprecio_proveedor/{id}/exportar/{formato}', 'Compras\Listaprecio_ProveedorController@exportar')->name('exportar_listaprecio_proveedor');
 Route::get('compras/listaprecio_proveedor/{id}/editar', 'Compras\Listaprecio_ProveedorController@editar')->name('editar_listaprecio_proveedor')->middleware('modo.consulta');
 Route::put('compras/listaprecio_proveedor/{id}', 'Compras\Listaprecio_ProveedorController@actualizar')->name('actualizar_listaprecio_proveedor')->middleware('modo.consulta');
 Route::delete('compras/listaprecio_proveedor/{id}', 'Compras\Listaprecio_ProveedorController@eliminar')->name('eliminar_listaprecio_proveedor');

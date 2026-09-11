@@ -54,7 +54,7 @@ class Listaprecio_ProveedorRepository implements Listaprecio_ProveedorRepository
     public function find($id)
     {
         if (null == $row = $this->model->with([
-            'proveedores',
+            'proveedores.empresas',
             'condicionpagos',
             'condicionentregas',
             'condicioncompras',
