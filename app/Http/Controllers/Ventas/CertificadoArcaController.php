@@ -22,9 +22,18 @@ class CertificadoArcaController extends Controller
         $filas = $this->csrService->inventariar();
         $puedeGenerar = can('generar-csr-certificados-arca', false);
         $puedeInstalar = can('instalar-certificados-arca', false);
+        $filasJs = collect($filas)->map(static function (array $f) {
+            return [
+                'id' => $f['id'],
+                'etiqueta' => $f['etiqueta'],
+                'alias' => $f['alias'] ?? '',
+                'cuit' => $f['cuit'] ?? '',
+            ];
+        })->values()->all();
 
         return view('ventas.certificados_arca.index', compact(
             'filas',
+            'filasJs',
             'puedeGenerar',
             'puedeInstalar'
         ));

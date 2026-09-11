@@ -5,14 +5,9 @@
 
 @section('scripts')
 <script>
-window.certificadosArcaFilas = @json(collect($filas)->map(fn ($f) => [
-    'id' => $f['id'],
-    'etiqueta' => $f['etiqueta'],
-    'alias' => $f['alias'] ?? '',
-    'cuit' => $f['cuit'] ?? '',
-])->values());
+window.certificadosArcaFilas = @json($filasJs ?? []);
 </script>
-<script src="{{ asset('assets/pages/scripts/ventas/certificados_arca/index.js') }}?v=20260911b"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/certificados_arca/index.js') }}?v=20260911c"></script>
 @endsection
 
 @section('contenido')
