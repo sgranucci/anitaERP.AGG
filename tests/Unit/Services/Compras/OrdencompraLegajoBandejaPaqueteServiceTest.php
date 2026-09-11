@@ -59,4 +59,58 @@ class OrdencompraLegajoBandejaPaqueteServiceTest extends TestCase
 
         $this->assertTrue($out[0]['cargado_cxp']);
     }
+
+    public function test_fusiona_comprobantes_sin_pdf_en_el_listado(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+        $out = $svc->fusionarComprobantesEnFacturas(
+            [
+                [
+                    'id' => 645,
+                    'origen' => 'precarga',
+                    'etiqueta' => 'ND A 0005-00004601',
+                    'cargado_cxp' => true,
+                    'url_pdf' => '/pdf/645',
+                ],
+            ],
+            [
+                [
+                    'id' => 27647,
+                    'precarga_id' => null,
+                    'letra' => 'A',
+                    'sucursal' => 5,
+                    'numerocomprobante' => 4601,
+                    'etiqueta' => 'ND A 0005-00004601',
+                    'tipo' => 'ND',
+                    'tipo_label' => 'ND',
+                    'fecha' => '01/04/2026',
+                    'origen_label' => 'Importado desde Anita',
+                    'url' => '/cxp/27647',
+                ],
+                [
+                    'id' => 27643,
+                    'precarga_id' => null,
+                    'letra' => 'A',
+                    'sucursal' => 5,
+                    'numerocomprobante' => 4419,
+                    'etiqueta' => 'ND A 0005-00004419',
+                    'tipo' => 'ND',
+                    'tipo_label' => 'ND',
+                    'fecha' => '15/03/2026',
+                    'origen_label' => 'Importado desde Anita',
+                    'url' => '/cxp/27643',
+                ],
+            ]
+        );
+
+        $this->assertCount(2, $out);
+        $porEtiqueta = [];
+        foreach ($out as $fila) {
+            $porEtiqueta[(string) ($fila['etiqueta'] ?? '')] = $fila;
+        }
+        $this->assertSame('/pdf/645', $porEtiqueta['ND A 0005-00004601']['url_pdf'] ?? null);
+        $this->assertSame('/cxp/27647', $porEtiqueta['ND A 0005-00004601']['url_comprobante'] ?? null);
+        $this->assertNull($porEtiqueta['ND A 0005-00004419']['url_pdf'] ?? null);
+        $this->assertSame('/cxp/27643', $porEtiqueta['ND A 0005-00004419']['url_comprobante'] ?? null);
+    }
 }

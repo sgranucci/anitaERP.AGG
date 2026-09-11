@@ -5,6 +5,7 @@ Bandeja de legajos
 
 @section('styles')
 <link rel="stylesheet" href="{{ asset('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css') }}?v={{ @filemtime(public_path('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css')) ?: time() }}">
+@include('includes.tabs-activas-estilos')
 <style>
     .bandeja-col-facturas {
         max-width: 10.5rem;
@@ -26,8 +27,27 @@ Bandeja de legajos
         color: #6c757d;
         line-height: 1.2;
     }
+    .bandeja-fac-consultar {
+        display: inline;
+        padding: 0;
+        font-size: 0.82em;
+        line-height: 1.2;
+        vertical-align: baseline;
+    }
     .oc-empresas-export {
         white-space: nowrap;
+    }
+    #modalBandejaLegajo thead th {
+        position: sticky;
+        top: 0;
+        background: #85C1E9;
+        color: #17202A;
+        z-index: 1;
+    }
+    #modalBandejaLegajo td {
+        font-size: 0.82rem;
+        padding: 0.28rem 0.4rem;
+        vertical-align: middle;
     }
 </style>
 @endsection
@@ -287,50 +307,72 @@ Bandeja de legajos
         </div>
     </div>
 </div>
-<div class="modal fade" id="modalBandejaComs" tabindex="-1" role="dialog" aria-hidden="true">
+<div class="modal fade" id="modalBandejaLegajo" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered" role="document" style="max-width: 96vw;">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">COM del legajo</h5>
+                <h5 class="modal-title" id="bandejaLegajoTitulo">Legajo</h5>
+                <a id="bandejaLegajoOc" href="#" class="btn btn-sm btn-outline-info ml-2" target="_blank" rel="noopener" style="display:none;">
+                    <i class="fa fa-file-text-o"></i> Abrir OC
+                </a>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
             </div>
             <div class="modal-body">
-                <div class="row">
-                    <div class="col-lg-4 mb-2">
-                        <div class="table-responsive" style="max-height: 75vh; overflow:auto;">
-                            <table class="table table-sm table-striped table-hover mb-0" id="tablaBandejaComs">
-                                <thead><tr><th>Documento</th><th>Fecha</th><th>Estado</th></tr></thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <div class="col-lg-8">
-                        <iframe id="bandejaComPdf" title="COM" style="width:100%; height:75vh; border:1px solid #dee2e6; background:#f8f9fa;"></iframe>
-                    </div>
+                <div class="tabs-activas mb-2">
+                    <ul class="nav nav-tabs" id="tabs-bandeja-legajo" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="bandeja-tab-facturas" data-toggle="tab" href="#tab-bandeja-facturas" role="tab">
+                                <i class="fa fa-file-pdf-o"></i> Facturas
+                                <span class="badge badge-secondary" id="bandejaLegajoNFac">0</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="bandeja-tab-coms" data-toggle="tab" href="#tab-bandeja-coms" role="tab">
+                                <i class="fa fa-cubes"></i> COM
+                                <span class="badge badge-secondary" id="bandejaLegajoNCom">0</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" id="bandeja-tab-pagos-item" style="display:none;">
+                            <a class="nav-link" id="bandeja-tab-pagos" data-toggle="tab" href="#tab-bandeja-pagos" role="tab">
+                                <i class="fa fa-money"></i> Pagos
+                                <span class="badge badge-secondary" id="bandejaLegajoNPago">0</span>
+                            </a>
+                        </li>
+                    </ul>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-<div class="modal fade" id="modalBandejaFacturas" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-centered" role="document" style="max-width: 96vw;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Factura del legajo</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-            </div>
-            <div class="modal-body">
-                <div class="row">
-                    <div class="col-lg-4 mb-2">
-                        <div class="table-responsive" style="max-height: 75vh; overflow:auto;">
-                            <table class="table table-sm table-striped table-hover mb-0" id="tablaBandejaFacturas">
-                                <thead><tr><th>Comprobante</th><th>Fecha</th><th>Origen</th></tr></thead>
-                                <tbody></tbody>
-                            </table>
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="tab-bandeja-facturas" role="tabpanel">
+                        <div class="row">
+                            <div class="col-lg-4 mb-2">
+                                <div class="table-responsive" style="max-height: 70vh; overflow:auto;">
+                                    <table class="table table-sm table-striped table-hover mb-0" id="tablaBandejaFacturas">
+                                        <thead><tr><th>Comprobante</th><th>Fecha</th><th>Origen</th><th>Estado</th></tr></thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="col-lg-8">
+                                <iframe id="bandejaFacturaPdf" title="Factura" style="width:100%; height:70vh; border:1px solid #dee2e6; background:#f8f9fa;"></iframe>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-lg-8">
-                        <iframe id="bandejaFacturaPdf" title="Factura" style="width:100%; height:75vh; border:1px solid #dee2e6; background:#f8f9fa;"></iframe>
+                    <div class="tab-pane fade" id="tab-bandeja-coms" role="tabpanel">
+                        <div class="row">
+                            <div class="col-lg-4 mb-2">
+                                <div class="table-responsive" style="max-height: 70vh; overflow:auto;">
+                                    <table class="table table-sm table-striped table-hover mb-0" id="tablaBandejaComs">
+                                        <thead><tr><th>Documento</th><th>Fecha</th><th>Estado</th></tr></thead>
+                                        <tbody></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="col-lg-8">
+                                <iframe id="bandejaComPdf" title="COM" style="width:100%; height:70vh; border:1px solid #dee2e6; background:#f8f9fa;"></iframe>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="tab-bandeja-pagos" role="tabpanel">
+                        <div id="bandejaLegajoPagos" class="p-2"></div>
                     </div>
                 </div>
             </div>
@@ -465,6 +507,8 @@ Bandeja de legajos
                     El legajo es la OC (sector, historia, factura y COM).
                     Compras envía; Cuentas a pagar carga la factura y envía a Pagos; Pagos ve solo lo que está en Pagos y archiva.
                     <strong>Listo para cargar</strong> abre Cuentas a pagar y muestra las OC con al menos una factura aún pendiente (aunque otras de la misma OC ya estén cargadas).
+                    La columna Facturas muestra solo lo pendiente; las ya ingresadas en CxP se consultan con
+                    <strong>N ya en CxP</strong> o el ícono PDF (abre el legajo: facturas, COM y OC).
                 </p>
                 @if (!empty($alcanceSector))
                     <p class="text-muted small mb-2">{{ $alcanceSector }}</p>
@@ -524,6 +568,12 @@ Bandeja de legajos
                     </thead>
                     <tbody>
                         @forelse ($filas as $row)
+                            @php
+                                $nCargadasFac = (int) ($row['facturas_cargadas_count'] ?? 0);
+                                $hayFacPendiente = ! empty($row['facturas_legajo']);
+                                $puedeConsultarFacturas = ! empty($row['url_paquete'])
+                                    && ($hayFacPendiente || $nCargadasFac > 0 || ! empty($row['url_factura']));
+                            @endphp
                             <tr>
                                 <td>{{ $row['id'] }}</td>
                                 <td>
@@ -576,23 +626,15 @@ Bandeja de legajos
                                     @endif
                                 </td>
                                 <td class="small bandeja-col-facturas">
-                                    @if (!empty($row['facturas_legajo']))
+                                    @if ($hayFacPendiente)
                                         @foreach ($row['facturas_legajo'] as $facLeg)
                                             <div class="bandeja-fac-item">
                                                 <span>{{ $facLeg['numero'] ?? '' }}</span>
                                                 @if (!empty($facLeg['estado']))
                                                     @php
                                                         $estadoFac = (string) ($facLeg['estado'] ?? '');
-                                                        $badgeFac = match ($estadoFac) {
-                                                            'cargada' => 'badge-info',
-                                                            'en_anita' => 'badge-success',
-                                                            default => 'badge-warning',
-                                                        };
-                                                        $textoFac = match ($estadoFac) {
-                                                            'cargada' => 'cargada',
-                                                            'en_anita' => 'en Anita',
-                                                            default => 'pendiente',
-                                                        };
+                                                        $badgeFac = $estadoFac === 'en_anita' ? 'badge-success' : 'badge-warning';
+                                                        $textoFac = $estadoFac === 'en_anita' ? 'en Anita' : 'pendiente';
                                                     @endphp
                                                     <span class="badge {{ $badgeFac }}">
                                                         {{ $textoFac }}
@@ -603,7 +645,19 @@ Bandeja de legajos
                                                 @endif
                                             </div>
                                         @endforeach
-                                    @else
+                                    @endif
+                                    @if ($nCargadasFac > 0)
+                                        <div class="bandeja-fac-item">
+                                            <button type="button"
+                                                    class="btn btn-link bandeja-fac-consultar js-bandeja-ver-legajo"
+                                                    data-url-paquete="{{ $row['url_paquete'] }}"
+                                                    data-numero="{{ $row['numero'] }}"
+                                                    data-tab="facturas"
+                                                    title="Consultar el legajo (facturas, COM y OC)">
+                                                {{ $nCargadasFac }} ya en CxP
+                                            </button>
+                                        </div>
+                                    @elseif (! $hayFacPendiente)
                                         <span class="text-muted">—</span>
                                     @endif
                                 </td>
@@ -638,35 +692,27 @@ Bandeja de legajos
                                             <i class="fa fa-cloud-upload"></i>
                                         </button>
                                     @endif
-                                    @if (!empty($row['url_factura']))
-                                        @if ($vista === OrdencompraLegajoBandejaFiltros::VISTA_CXP)
-                                            <a href="{{ $row['url_factura'] }}"
-                                               class="btn btn-xs btn-outline-danger"
-                                               target="_blank"
-                                               rel="noopener noreferrer"
-                                               title="Ver factura">
-                                                <i class="fa fa-file-pdf-o"></i>
-                                            </a>
-                                        @else
-                                            <button type="button" class="btn btn-xs btn-outline-danger js-bandeja-ver-factura"
-                                                    data-url-pdf="{{ $row['url_factura'] }}"
-                                                    data-url-paquete="{{ $row['url_paquete'] }}"
-                                                    data-numero="{{ $row['numero'] }}"
-                                                    title="Ver factura">
-                                                <i class="fa fa-file-pdf-o"></i>
-                                            </button>
-                                        @endif
+                                    @if ($puedeConsultarFacturas)
+                                        <button type="button" class="btn btn-xs btn-outline-danger js-bandeja-ver-legajo"
+                                                data-url-pdf="{{ $row['url_factura'] ?? '' }}"
+                                                data-url-paquete="{{ $row['url_paquete'] }}"
+                                                data-numero="{{ $row['numero'] }}"
+                                                data-tab="facturas"
+                                                title="Consultar facturas del legajo">
+                                            <i class="fa fa-file-pdf-o"></i>
+                                        </button>
                                     @else
                                         <button type="button" class="btn btn-xs btn-outline-secondary" disabled title="Sin PDF de factura">
                                             <i class="fa fa-file-pdf-o"></i>
                                         </button>
                                     @endif
                                     @if (!empty($row['tiene_com']))
-                                        <button type="button" class="btn btn-xs btn-outline-dark js-bandeja-ver-com"
+                                        <button type="button" class="btn btn-xs btn-outline-dark js-bandeja-ver-legajo"
                                                 data-url-pdf="{{ $row['url_com'] }}"
                                                 data-url-paquete="{{ $row['url_paquete'] }}"
                                                 data-numero="{{ $row['numero'] }}"
-                                                title="Ver COM">
+                                                data-tab="coms"
+                                                title="Consultar COM del legajo">
                                             <i class="fa fa-cubes"></i>
                                         </button>
                                     @else

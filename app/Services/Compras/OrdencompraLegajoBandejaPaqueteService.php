@@ -12,6 +12,7 @@ use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
+use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
@@ -88,6 +89,7 @@ class OrdencompraLegajoBandejaPaqueteService
         $asignadas = $this->asignacionesPorPrecarga($precargaIds);
         $comprobantes = $this->comprobantesDelLegajo($oc, $precargaIds);
         $facturas = $this->marcarFacturasCargadasEnCxp($facturas, $comprobantes);
+        $facturas = $this->fusionarComprobantesEnFacturas($facturas, $comprobantes);
         $pagos = $this->pagosDeComprobantes(array_map(static fn (array $c) => (int) $c['id'], $comprobantes));
         $pendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc);
         $siguiente = $pendientes[0] ?? null;
@@ -416,24 +418,40 @@ class OrdencompraLegajoBandejaPaqueteService
             ->orderByDesc('id');
 
         $out = [];
-        foreach ($query->get([
+        foreach ($query->with('tipotransaccion_compras:id,abreviatura,codigoafip')->get([
             'id', 'letra', 'sucursal', 'numerocomprobante', 'total', 'estado',
-            'precarga_comprobante_proveedor_id',
+            'precarga_comprobante_proveedor_id', 'tipotransaccion_compra_id',
+            'fechacomprobante', 'origen_entrada',
         ]) as $cp) {
+            $tipo = OrdencompraLegajoDocumentoTipoSupport::desdeAbreviatura(
+                $cp->tipotransaccion_compras->abreviatura ?? null,
+                $cp->tipotransaccion_compras->codigoafip !== null
+                    ? (string) $cp->tipotransaccion_compras->codigoafip
+                    : null
+            );
+            $numero = trim(sprintf(
+                '%s %04d-%08d',
+                $cp->letra ?: 'FC',
+                (int) $cp->sucursal,
+                (int) $cp->numerocomprobante
+            ));
+            $etiqueta = OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $numero);
             $out[] = [
                 'id' => (int) $cp->id,
                 'precarga_id' => (int) ($cp->precarga_comprobante_proveedor_id ?? 0) ?: null,
                 'letra' => (string) ($cp->letra ?? ''),
                 'sucursal' => (int) ($cp->sucursal ?? 0),
                 'numerocomprobante' => (int) ($cp->numerocomprobante ?? 0),
-                'etiqueta' => trim(sprintf(
-                    '%s %04d-%08d',
-                    $cp->letra ?: 'FC',
-                    (int) $cp->sucursal,
-                    (int) $cp->numerocomprobante
-                )),
+                'tipo' => $tipo,
+                'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
+                'etiqueta' => $etiqueta,
+                'fecha' => $cp->fechacomprobante ? $cp->fechacomprobante->format('d/m/Y') : '',
                 'total' => $cp->total !== null ? (float) $cp->total : null,
                 'estado' => (string) ($cp->estado ?? ''),
+                'origen_entrada' => (string) ($cp->origen_entrada ?? ''),
+                'origen_label' => ComprobanteProveedorOrigenEntrada::etiqueta(
+                    (string) ($cp->origen_entrada ?? ComprobanteProveedorOrigenEntrada::PRECARGA)
+                ),
                 'url' => route('editar_comprobante_proveedor', ['id' => (int) $cp->id]),
             ];
         }
@@ -881,6 +899,88 @@ class OrdencompraLegajoBandejaPaqueteService
             $fac['cargado_cxp'] = $cargado;
         }
         unset($fac);
+
+        return $facturas;
+    }
+
+    /**
+     * Completa el listado con CP de CxP que no tienen PDF de precarga (OC anuales / import Anita).
+     *
+     * @param  list<array<string, mixed>>  $facturas
+     * @param  list<array<string, mixed>>  $comprobantes
+     * @return list<array<string, mixed>>
+     */
+    public function fusionarComprobantesEnFacturas(array $facturas, array $comprobantes): array
+    {
+        $porClave = [];
+        $porPrecarga = [];
+        foreach ($facturas as $i => $fac) {
+            $clave = $this->claveFacturaEtiqueta((string) ($fac['etiqueta'] ?? $fac['numero'] ?? ''));
+            if ($clave !== '') {
+                $porClave[$clave] = $i;
+            }
+            if (($fac['origen'] ?? 'precarga') === 'precarga') {
+                $preId = (int) ($fac['id'] ?? 0);
+                if ($preId > 0) {
+                    $porPrecarga[$preId] = $i;
+                }
+            }
+        }
+
+        foreach ($comprobantes as $cp) {
+            $urlCp = (string) ($cp['url'] ?? '');
+            $preId = (int) ($cp['precarga_id'] ?? 0);
+            $clave = $this->claveFacturaEtiqueta((string) ($cp['etiqueta'] ?? ''));
+            if ($clave === '') {
+                $letra = strtoupper(trim((string) ($cp['letra'] ?? '')));
+                $suc = (int) ($cp['sucursal'] ?? 0);
+                $nro = (int) ($cp['numerocomprobante'] ?? 0);
+                if ($nro > 0) {
+                    $clave = ($letra !== '' ? $letra : 'FC').'|'.$suc.'|'.$nro;
+                }
+            }
+            $idx = null;
+            if ($preId > 0 && isset($porPrecarga[$preId])) {
+                $idx = $porPrecarga[$preId];
+            } elseif ($clave !== '' && isset($porClave[$clave])) {
+                $idx = $porClave[$clave];
+            }
+            if ($idx !== null) {
+                if ($urlCp !== '') {
+                    $facturas[$idx]['url_comprobante'] = $urlCp;
+                }
+                $facturas[$idx]['cargado_cxp'] = true;
+
+                continue;
+            }
+            $tipo = (string) ($cp['tipo'] ?? 'FC');
+            $facturas[] = [
+                'id' => 'cp-'.(int) ($cp['id'] ?? 0),
+                'origen' => 'comprobante',
+                'origen_label' => (string) ($cp['origen_label'] ?? 'Comprobante cargado en CxP'),
+                'tipo' => $tipo,
+                'tipo_label' => (string) ($cp['tipo_label'] ?? OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo)),
+                'exige_com' => false,
+                'etiqueta' => (string) ($cp['etiqueta'] ?? ''),
+                'fecha' => (string) ($cp['fecha'] ?? ''),
+                'total' => $cp['total'] ?? null,
+                'estado' => (string) ($cp['estado'] ?? ''),
+                'url_pdf' => null,
+                'url_cargar_cxp' => null,
+                'url_comprobante' => $urlCp !== '' ? $urlCp : null,
+                'cargado_cxp' => true,
+            ];
+        }
+
+        usort($facturas, static function (array $a, array $b): int {
+            $ea = ! empty($a['cargado_cxp']) ? 1 : 0;
+            $eb = ! empty($b['cargado_cxp']) ? 1 : 0;
+            if ($ea !== $eb) {
+                return $ea <=> $eb;
+            }
+
+            return strcmp((string) ($a['etiqueta'] ?? ''), (string) ($b['etiqueta'] ?? ''));
+        });
 
         return $facturas;
     }

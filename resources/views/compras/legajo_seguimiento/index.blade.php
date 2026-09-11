@@ -154,21 +154,38 @@ Seguimiento de legajos
                                     <td><strong>{{ $row['sector'] }}</strong></td>
                                     <td>{{ $row['dias'] }}</td>
                                     <td class="small">
-                                        @forelse (($row['facturas_legajo'] ?? []) as $facLeg)
-                                            <div class="@if (!$loop->first) mt-1 pt-1 border-top @endif">
-                                                <span>{{ $facLeg['numero'] ?? '' }}</span>
-                                                @if (!empty($facLeg['estado']))
-                                                    <span class="badge {{ ($facLeg['estado'] ?? '') === 'cargada' ? 'badge-info' : 'badge-secondary' }}">
-                                                        {{ ($facLeg['estado'] ?? '') === 'cargada' ? 'cargada' : 'pendiente' }}
-                                                    </span>
-                                                @endif
-                                                @if (!empty($facLeg['origen']))
-                                                    <small class="d-block text-muted">{{ $facLeg['origen'] }}</small>
-                                                @endif
+                                        @php
+                                            $nCargadasSeg = (int) ($row['facturas_cargadas_count'] ?? 0);
+                                            $hayFacPendienteSeg = ! empty($row['facturas_legajo']);
+                                        @endphp
+                                        @if ($hayFacPendienteSeg)
+                                            @foreach ($row['facturas_legajo'] as $facLeg)
+                                                <div @class(['mt-1 pt-1 border-top' => !$loop->first])>
+                                                    <span>{{ $facLeg['numero'] ?? '' }}</span>
+                                                    @if (!empty($facLeg['estado']))
+                                                        @php
+                                                            $esAnitaSeg = ($facLeg['estado'] ?? '') === 'en_anita';
+                                                        @endphp
+                                                        <span class="badge {{ $esAnitaSeg ? 'badge-success' : 'badge-secondary' }}">
+                                                            {{ $esAnitaSeg ? 'en Anita' : 'pendiente' }}
+                                                        </span>
+                                                    @endif
+                                                    @if (!empty($facLeg['origen']))
+                                                        <small class="d-block text-muted">{{ $facLeg['origen'] }}</small>
+                                                    @endif
+                                                </div>
+                                            @endforeach
+                                        @endif
+                                        @if ($nCargadasSeg > 0)
+                                            <div @class(['mt-1 pt-1 border-top' => $hayFacPendienteSeg])>
+                                                <a href="{{ $row['url_oc'] }}" class="text-primary" target="_blank" rel="noopener"
+                                                   title="Consultar el legajo completo (OC)">
+                                                    {{ $nCargadasSeg }} ya en CxP
+                                                </a>
                                             </div>
-                                        @empty
+                                        @elseif (! $hayFacPendienteSeg)
                                             <span class="text-muted">—</span>
-                                        @endforelse
+                                        @endif
                                     </td>
                                     <td>
                                         @if (!empty($row['paquete_ok']))

@@ -261,6 +261,7 @@ class OrdencompraLegajoBandejaService
                 static fn (array $f) => (string) ($f['numero'] ?? ''),
                 $facturasLegajo
             );
+            $grillaFacturas = $this->facturasParaGrilla($facturasLegajo);
             // Derivar de datos ya hidratados (evitar N+1 Anita/SQL por fila).
             $pendientes = $this->documentosPendientesDesdeHidratacion($facs, $cps);
             $siguiente = $pendientes[0] ?? null;
@@ -319,7 +320,8 @@ class OrdencompraLegajoBandejaService
                 'es_gastronomia' => $esGastro,
                 'nota_legajo' => $notaLegajo,
                 'tiene_nota' => $notaLegajo !== '',
-                'facturas_legajo' => $facturasLegajo,
+                'facturas_legajo' => $grillaFacturas['visibles'],
+                'facturas_cargadas_count' => $grillaFacturas['cargadas'],
                 'etiquetas_factura' => $etiquetasFactura,
                 'pendientes_carga' => count($pendientes),
                 'siguiente_pendiente' => $siguiente['etiqueta'] ?? null,
@@ -1319,7 +1321,31 @@ class OrdencompraLegajoBandejaService
     }
 
     /**
-     * Facturas visibles en la grilla: número + origen + tipo + estado de carga.
+     * La grilla no lista las ya cargadas en CxP (OC anuales saturaban la columna).
+     *
+     * @param  list<array{estado?: string}>  $facturas
+     * @return array{visibles: list<array<string, mixed>>, cargadas: int}
+     */
+    private function facturasParaGrilla(array $facturas): array
+    {
+        $visibles = [];
+        $cargadas = 0;
+        foreach ($facturas as $fac) {
+            if (($fac['estado'] ?? '') === 'cargada') {
+                $cargadas++;
+                continue;
+            }
+            $visibles[] = $fac;
+        }
+
+        return [
+            'visibles' => $visibles,
+            'cargadas' => $cargadas,
+        ];
+    }
+
+    /**
+     * Facturas del legajo: número + origen + tipo + estado de carga.
      *
      * @param  list<array<string, mixed>>  $comprobantes
      * @param  list<array<string, mixed>>  $facturas
