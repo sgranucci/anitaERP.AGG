@@ -23,11 +23,13 @@ use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
@@ -360,7 +362,30 @@ class ComprobanteProveedorPersistenciaService
                 ? Ordencompra::query()->find((int) $payload['ordencompra_id'])
                 : null);
         $modoCarga = (string) ($payload['modo_carga'] ?? '');
-        if ($ordencompra && ($seleccionCom !== [] || $modoCarga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION)) {
+        if ($ordencompra) {
+            $tieneCom = $this->recepcionesSupport
+                ->listarDisponibles((int) $ordencompra->id, null, false)
+                ->isNotEmpty();
+            if (! $tieneCom) {
+                $tieneCom = $this->recepcionesSupport->listarSinFacturarEnLegajo(
+                    (int) $ordencompra->proveedor_id,
+                    (int) $ordencompra->empresa_id,
+                    $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
+                    null,
+                )->isNotEmpty();
+            }
+            $tipoDoc = OrdencompraLegajoDocumentoTipoSupport::desdeTipotransaccionId(
+                (int) ($payload['tipotransaccion_compra_id'] ?? 0)
+            );
+            $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+                $ordencompra,
+                $tieneCom,
+                (string) ($payload['fechacomprobante'] ?? now()->format('Y-m-d')),
+                $tipoDoc
+            );
+            $modoCarga = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica, $modoCarga);
+            $payload['modo_carga'] = $modoCarga;
+
             $condicionivaId = Proveedor::query()->whereKey((int) ($payload['proveedor_id'] ?? 0))->value('condicioniva_id');
             $conceptos = collect($prefill['conceptos'] ?? [])->map(function ($linea) {
                 $conceptoId = (int) ($linea->concepto_ivacompra_id ?? 0);
@@ -388,6 +413,7 @@ class ComprobanteProveedorPersistenciaService
                 null,
                 false, // borrador desde precarga: no bloquear por diferencia COM
                 $prefill['articulos'] ?? collect(),
+                $tipoDoc,
             );
             $this->aplicarResultadoControles($resultadoControles);
             $idsEfectivos = $resultadoControles['recepcion_ids_efectivos'] ?? [];
@@ -547,6 +573,9 @@ class ComprobanteProveedorPersistenciaService
             'ordencompra_comprobante_id' => (int) $request->input('ordencompra_comprobante_id', 0) ?: null,
             'precarga_comprobante_proveedor_id' => $precargaId > 0 ? $precargaId : null,
             'condicionpago_id' => (int) $request->input('condicionpago_id', 0) ?: null,
+            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::idDesdeRequest(
+                $request->input('provincia_destino_id')
+            ),
             'letra' => strtoupper(substr((string) $request->input('letra'), 0, 1)),
             'sucursal' => (int) $request->input('sucursal'),
             'numerocomprobante' => (int) $request->input('numerocomprobante'),
@@ -817,10 +846,14 @@ class ComprobanteProveedorPersistenciaService
                     $excluirComprobanteId,
                 )->isNotEmpty();
             }
+            $tipoDoc = OrdencompraLegajoDocumentoTipoSupport::desdeTipotransaccionId(
+                (int) ($payload['tipotransaccion_compra_id'] ?? 0)
+            );
             $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
                 $ordencompra,
                 $tieneCom,
-                (string) ($payload['fechacomprobante'] ?? now()->format('Y-m-d'))
+                (string) ($payload['fechacomprobante'] ?? now()->format('Y-m-d')),
+                $tipoDoc
             );
             $modo = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica, $modo);
             $payload['modo_carga'] = $modo;
@@ -847,6 +880,9 @@ class ComprobanteProveedorPersistenciaService
                         $this->comprobanteRepository->find($excluirComprobanteId)
                     )
                     : collect()),
+            OrdencompraLegajoDocumentoTipoSupport::desdeTipotransaccionId(
+                (int) ($payload['tipotransaccion_compra_id'] ?? 0)
+            ),
         );
         $this->aplicarResultadoControles($resultadoControles);
 

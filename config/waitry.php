@@ -26,10 +26,16 @@ return [
 
     /**
      * Actualiza estado de la comanda en KDS (Solicitada → Aceptado, etc.).
-     * syncStatusPOS solo registra el cobro; desde ~sep 2026 no mueve el estado del monitor.
+     * Waitry indicó (sep 2026) que syncStatusPOS ya alcanza; el POST queda
+     * deshabilitado por defecto para reactivar sin redeploy si hace falta.
      *
      * @see POST /live/order/updateexternal
      */
+    'update_order_status_habilitado' => filter_var(
+        env('WAITRY_UPDATE_ORDER_STATUS_HABILITADO', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
     'update_order_status_url' => env(
         'WAITRY_UPDATE_ORDER_STATUS_URL',
         'https://api.waitry.net/1/live/order/updateexternal'

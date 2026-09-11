@@ -352,6 +352,13 @@
             </div>
         </div>
         @endif
+        @include('compras.partials.campo_provincia_destino', [
+            'data' => $data ?? null,
+            'col_label' => $cpColLabel,
+            'col_input' => $cpColInput,
+            'requerido' => true,
+            'help' => '',
+        ])
     </div>
     <div class="col-sm-6">
         @if ($desdePrecarga)

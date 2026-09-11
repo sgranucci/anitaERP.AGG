@@ -109,6 +109,23 @@ class WaitrySyncStatusPosServiceTest extends TestCase
         $this->assertSame((string) config('waitry.cola', 'default'), $job->queue);
     }
 
+    public function test_kds_updateexternal_se_omite_si_flag_deshabilitado(): void
+    {
+        config([
+            'waitry.update_order_status_habilitado' => false,
+            'waitry.update_order_status_url' => 'https://api.waitry.net/1/live/order/updateexternal',
+        ]);
+
+        $svc = $this->app->make(WaitrySyncStatusPosService::class);
+        $ref = new \ReflectionMethod($svc, 'actualizarEstadoKds');
+        $ref->setAccessible(true);
+
+        $r = $ref->invoke($svc, 123456, 11782, 7);
+
+        $this->assertTrue($r['ok']);
+        $this->assertTrue($r['omitida'] ?? false);
+    }
+
     private function cuentaStub(int $waitryOrderId): CuentaGastronomia
     {
         $cuenta = new CuentaGastronomia;

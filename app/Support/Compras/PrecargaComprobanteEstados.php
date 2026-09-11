@@ -54,4 +54,21 @@ final class PrecargaComprobanteEstados
     {
         return $estado === self::PENDIENTE;
     }
+
+    /** Ya está en Anita; no debe figurar como pendiente de carga en CxP / bandeja. */
+    public static function esCargadaAnita(?string $estado): bool
+    {
+        return strtoupper(trim((string) $estado)) === self::CARGADA_ANITA;
+    }
+
+    /**
+     * Precarga con PDF usable para “Listo para cargar” / pendientes de CxP.
+     * Excluye anuladas y las ya marcadas como cargadas en Anita.
+     */
+    public static function pendienteCargaEnCxp(?string $estado): bool
+    {
+        $e = strtoupper(trim((string) $estado));
+
+        return $e !== 'ANULADA' && $e !== self::CARGADA_ANITA;
+    }
 }

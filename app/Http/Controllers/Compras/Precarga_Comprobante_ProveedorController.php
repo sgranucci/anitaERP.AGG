@@ -10,6 +10,7 @@ use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
@@ -32,6 +33,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
     private $tipotransaccion_compraRepository;
     protected $concepto_ivacompraRepository;
     private $empresaRepository;
+    private MonedaRepositoryInterface $monedaRepository;
     private PrecargaComprobanteAnitaSyncService $precargaAnitaSync;
 
     private PrecargaFacturaScanPathResolver $facturaScanPathResolver;
@@ -43,6 +45,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
 	public function __construct(Precarga_Comprobante_ProveedorRepositoryInterface $precarga_comprobante_proveedorRepository,
                                 Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface $precarga_comprobante_proveedor_conceptoRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
+                                MonedaRepositoryInterface $monedaRepository,
                                 Tipotransaccion_CompraRepositoryInterface $tipotransaccion_comprarepository,
                                 Concepto_IvacompraRepositoryInterface $concepto_ivacompraRepository,
                                 PrecargaComprobanteAnitaSyncService $precargaAnitaSync,
@@ -54,6 +57,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $this->precarga_comprobante_proveedorRepository = $precarga_comprobante_proveedorRepository;
         $this->precarga_comprobante_proveedor_conceptoRepository = $precarga_comprobante_proveedor_conceptoRepository;
         $this->empresaRepository = $empresaRepository;
+        $this->monedaRepository = $monedaRepository;
         $this->tipotransaccion_compraRepository = $tipotransaccion_comprarepository;
         $this->concepto_ivacompraRepository = $concepto_ivacompraRepository;
         $this->precargaAnitaSync = $precargaAnitaSync;
@@ -334,12 +338,14 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $tipotransaccion_compra_query = $this->tipotransaccion_compraRepository->all('*');
         $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
+        $moneda_query = $this->monedaRepository->all();
         $retornoListadoQuery = $this->queryRetornoListado($request);
 
         return view('compras.precarga_comprobante_proveedor.crear', compact(
             'empresa_query',
             'tipotransaccion_compra_query',
             'concepto_ivacompra_query',
+            'moneda_query',
             'retornoListadoQuery'
         ));
     }
@@ -392,12 +398,13 @@ class Precarga_Comprobante_ProveedorController extends Controller
             can('editar-precarga-proveedores');
         }
 
-		$data = $this->precarga_comprobante_proveedorRepository->find($id);
-        $data->load('comprobante_proveedor:id,precarga_comprobante_proveedor_id,estado,letra,sucursal,numerocomprobante');
+        $data = $this->precarga_comprobante_proveedorRepository->find($id);
+        $data->loadMissing(['provinciaDestino', 'comprobante_proveedor:id,precarga_comprobante_proveedor_id,estado,letra,sucursal,numerocomprobante']);
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $tipotransaccion_compra_query = $this->tipotransaccion_compraRepository->all('*');
         $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
+        $moneda_query = $this->monedaRepository->all();
         $puedeActualizar = can('actualizar-precarga-proveedores', false);
         $soloLectura = $soloConsulta && ! $puedeActualizar;
         $retornoListadoQuery = $this->queryRetornoListado($request);
@@ -407,6 +414,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
             'empresa_query',
             'tipotransaccion_compra_query',
             'concepto_ivacompra_query',
+            'moneda_query',
             'soloConsulta',
             'soloLectura',
             'puedeActualizar',

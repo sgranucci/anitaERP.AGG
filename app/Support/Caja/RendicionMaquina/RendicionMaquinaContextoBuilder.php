@@ -51,6 +51,10 @@ final class RendicionMaquinaContextoBuilder
         if (array_key_exists('transferencia', $orquestador)) {
             $contexto['calc.transferencia'] = round((float) $orquestador['transferencia'], 2);
         }
+        if (array_key_exists('identidad_cierre_base', $orquestador)) {
+            $contexto['calc.identidad_cierre_base'] = round((float) $orquestador['identidad_cierre_base'], 2);
+            $contexto['meta.tiene_identidad_cierre_base'] = 1;
+        }
 
         $contexto['meta.empresa_id'] = $empresaId;
         $contexto['meta.fecha_ymd'] = str_replace('-', '', $fecha);

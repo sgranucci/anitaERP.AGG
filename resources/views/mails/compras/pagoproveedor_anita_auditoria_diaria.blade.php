@@ -14,9 +14,9 @@
     <strong>{{ ! empty($informe['auto_reparar']) ? 'sí' : 'no' }}</strong>
 </p>
 <p style="margin:0 0 16px 0; color:#555; font-size:13px;">
-    Verifica <code>pago</code>, <code>tesmov</code>, <code>auxpag</code>, <code>cpromae</code> (para_dep / negociable),
-    retenciones, el asiento ERP (Debe = Haber) y <code>ctamov</code> Anita.
-    Por default solo diagnostica.
+    Solo OP generadas en anitaERP (con asiento). Verifica <code>pago</code>, <code>tesmov</code>,
+    <code>auxpag</code>, <code>cpromae</code> (para_dep / negociable), retenciones, el asiento ERP
+    (Debe = Haber) y <code>ctamov</code> Anita. Por default solo diagnostica.
 </p>
 
 <h3 style="margin:18px 0 6px 0;">Resumen</h3>

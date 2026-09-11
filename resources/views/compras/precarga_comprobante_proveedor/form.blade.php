@@ -47,6 +47,13 @@
             'nombre_proveedor' => ($data ?? null)?->proveedores?->nombre,
             'requerido' => true,
         ])
+        @include('compras.partials.campo_provincia_destino', [
+            'data' => $data ?? null,
+            'col_label' => 'col-lg-3 control-label text-right pr-2',
+            'col_input' => 'col-lg-9',
+            'requerido' => true,
+            'solo_lectura' => $soloLectura ?? false,
+        ])
     </div>
     <div class="col-sm-6">
     	<div class="form-group row">
@@ -99,13 +106,32 @@
 			</div>
 		</div>   
         <div class="form-group row">
-			<label for="moneda" class="col-lg-3 col-form-label requerido">Moneda</label>
-			<div class="col-lg-2">
-				<input type="text" name="moneda" id="moneda" class="form-control" value="{{$data->monedas->nombre ?? ''}}" readonly>
+			<label for="moneda_id" class="col-lg-3 col-form-label text-right pr-2 requerido">Moneda</label>
+			<div class="col-lg-3">
+                @php
+                    $monedaSelId = (int) old('moneda_id', $data->moneda_id ?? 1);
+                @endphp
+                <select name="moneda_id" id="moneda_id" class="form-control" required
+                    @if (! empty($soloLectura)) disabled @endif>
+                    @foreach ($moneda_query ?? [] as $monedaOpt)
+                        <option value="{{ $monedaOpt->id }}"
+                            @selected($monedaSelId === (int) $monedaOpt->id)>
+                            {{ $monedaOpt->nombre }}@if (filled($monedaOpt->abreviatura ?? null)) ({{ $monedaOpt->abreviatura }})@endif
+                        </option>
+                    @endforeach
+                </select>
+                @if (! empty($soloLectura))
+                    <input type="hidden" name="moneda_id" value="{{ $monedaSelId }}">
+                @endif
 			</div>
-			<label for="Total" class="col-lg-2 col-form-label">Cotizacion</label>
+			<label for="cotizacion" class="col-lg-2 col-form-label text-right pr-2">Cotizaci&oacute;n</label>
             <div class="col-lg-3">
-			    <input type="text" id="cotizacion" name="cotizacion" class="form-control" value="{{ number_format((float) ($data->cotizacion ?? 0), 4, ',', '.') }}" readonly>
+			    <input type="number" step="0.0001" id="cotizacion" name="cotizacion" class="form-control text-right"
+                    value="{{ old('cotizacion', $data->cotizacion ?? 1) }}"
+                    @if (! empty($soloLectura)) readonly @endif>
+                <small class="form-text text-muted mt-0">
+                    En moneda local queda en 1. En ME us&aacute; el TC de la factura (no el de la OC).
+                </small>
             </div>
 		</div>           
     </div>

@@ -128,11 +128,85 @@ final class ComprobanteProveedorAsientoPreviewSupport
     }
 
     /**
+     * Política OC→COM→FAC del comprobante (COM disponible en el legajo, no solo la asignada).
+     *
+     * @return array<string, mixed>
+     */
+    public function politicaFlujo(Comprobante_Proveedor $comprobante): array
+    {
+        $comprobante->loadMissing(['ordencompras', 'tipotransaccion_compras']);
+        $oc = $comprobante->ordencompras;
+        $ocId = (int) ($oc?->id ?? $comprobante->ordencompra_id ?? 0);
+        $tieneCom = $ocId > 0 && OrdencompraEnvioCuentasAPagarGateSupport::tieneComDisponible($ocId);
+        if (! $tieneCom && $comprobante->relationLoaded('comprobante_proveedor_recepciones')) {
+            $tieneCom = $comprobante->comprobante_proveedor_recepciones->isNotEmpty();
+        }
+
+        return ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+            $oc,
+            $tieneCom,
+            $this->fechaYmd($comprobante->fechacomprobante ?? null),
+            OrdencompraLegajoDocumentoTipoSupport::desdeComprobante($comprobante)
+        );
+    }
+
+    public function tieneRecepcionAsignada(Comprobante_Proveedor $comprobante): bool
+    {
+        $vinculos = $comprobante->relationLoaded('comprobante_proveedor_recepciones')
+            ? $comprobante->comprobante_proveedor_recepciones
+            : $comprobante->comprobante_proveedor_recepciones()->get();
+
+        return $vinculos->contains(static fn ($vinculo) => (int) ($vinculo->recepcion_proveedor_id ?? 0) > 0);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $avisos
+     * @return list<array<string, mixed>>
+     */
+    public function unicosAvisos(array $avisos, ?string $error = null): array
+    {
+        $vistos = [];
+        $errorNorm = strtolower(trim((string) $error));
+        if ($errorNorm !== '') {
+            $vistos[$errorNorm] = true;
+        }
+
+        $out = [];
+        foreach ($avisos as $aviso) {
+            $mensaje = trim((string) ($aviso['mensaje'] ?? ''));
+            $clave = strtolower($mensaje);
+            if ($mensaje === '' || isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $out[] = $aviso;
+        }
+
+        return $out;
+    }
+
+    /**
      * @return list<array{tipo: string, mensaje: string, concepto_ivacompra_id?: int, nombre?: string}>
      */
     public function avisosFaltantes(Comprobante_Proveedor $comprobante): array
     {
         $avisos = [];
+        $politica = $this->politicaFlujo($comprobante);
+        $bloqueaSinCom = (bool) ($politica['bloquea_sin_com'] ?? false);
+        $tieneRecepcionAsignada = $this->tieneRecepcionAsignada($comprobante);
+        $debeAsignarCom = (bool) ($politica['debe_asignar_com'] ?? false) && ! $tieneRecepcionAsignada;
+        if ($bloqueaSinCom) {
+            $avisos[] = [
+                'tipo' => 'sin_com_flujo_estricto',
+                'mensaje' => ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaSinCom($politica),
+            ];
+        } elseif ($debeAsignarCom) {
+            $avisos[] = [
+                'tipo' => 'com_disponible_sin_asignar',
+                'mensaje' => ComprobanteProveedorFlujoOcComFacSupport::mensajeDebeAsignarCom($politica),
+            ];
+        }
+        $exigeAsignarCom = $bloqueaSinCom || $debeAsignarCom;
         $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
         $usaProvisionCom = $modoAsignaRecepcion
             && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
@@ -193,7 +267,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 }
             }
 
-            if ($comprobante->comprobante_proveedor_recepciones->isEmpty()) {
+            if ($comprobante->comprobante_proveedor_recepciones->isEmpty() && ! $debeAsignarCom) {
                 $avisos[] = [
                     'tipo' => 'sin_recepciones_com',
                     'mensaje' => 'Modo factura contra recepción: seleccione al menos una recepción COM.',
@@ -231,6 +305,11 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
 
             $tipoConcepto = (string) ($concepto->tipoconcepto ?? '');
+
+            // Sin COM asignada cuando el flujo la exige: el neto no usa la cuenta del concepto.
+            if ($exigeAsignarCom && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+                continue;
+            }
 
             if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 continue;

@@ -9,6 +9,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasImportesSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
@@ -373,11 +374,19 @@ class LibroIvaDigitalComprasGenerador
             $cp->monedas->codigo ?? null,
             $cp->monedas->nombre ?? null,
         );
+        $fechaDoc = (string) ($cp->fechaiva ?: $cp->fechacomprobante);
+        $coeficiente = LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteDesdeErp(
+            (int) ($cp->moneda_id ?? 1),
+            $cp->cotizacion,
+            $fechaDoc,
+            $codigoMoneda,
+        );
+        $totales = LibroIvaDigitalComprasImportesSupport::aplicarCoeficiente($totales, $coeficiente);
 
         $credito = $prorrateoGlobal ? 0.0 : (float) $totales['credito_computable'];
 
         $cabecera = [
-            'fecha' => date('Ymd', strtotime((string) ($cp->fechaiva ?: $cp->fechacomprobante))),
+            'fecha' => date('Ymd', strtotime($fechaDoc)),
             'tipo_comprobante' => $tipoComprobante,
             'punto_venta' => $puntoVenta,
             'numero_comprobante' => $numero,
@@ -385,7 +394,7 @@ class LibroIvaDigitalComprasGenerador
             'codigo_documento' => '80',
             'numero_identificacion' => $cuit !== '' ? $cuit : '0',
             'nombre_vendedor' => (string) ($cp->proveedores->nombre ?? $cp->proveedor_nombre_eventual ?? ''),
-            'importe_total' => abs((float) $cp->total),
+            'importe_total' => abs((float) $cp->total) * $coeficiente,
             'no_integra_neto' => $totales['no_integra'],
             'operaciones_exentas' => $totales['exento'],
             'percepciones_iva' => $totales['perc_iva'],

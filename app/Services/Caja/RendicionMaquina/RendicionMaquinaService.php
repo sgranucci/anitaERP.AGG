@@ -38,6 +38,7 @@ final class RendicionMaquinaService
     {
         $payload = $this->enriquecerPayloadConPrevias($payload);
         $payload = $this->enriquecerPayloadValoresCuentacaja($payload);
+        $payload = $this->alinearDropQrManianaEnPayload($payload);
         $contexto = RendicionMaquinaContextoBuilder::desdePayload($payload);
 
         return $this->calculoService->calcular($contexto);
@@ -85,10 +86,17 @@ final class RendicionMaquinaService
         $inputs = is_array($payload['inputs'] ?? null) ? $payload['inputs'] : [];
         // Paridad Anita: deposito se calcula (D25), no se tipea
         $inputs['deposito'] = $resultado->get('calc.deposito');
+        // Mañana: el drop QR alineado a TotalCoin − impuesto (planilla) tiene que persistir.
+        $inputs['dropqr_rodillo'] = $resultado->get('inputs.dropqr_rodillo');
         $wigosJson = is_array($payload['wigos_json'] ?? null) ? $payload['wigos_json'] : null;
         $lineasValor = is_array($payload['valores'] ?? null) ? $payload['valores'] : [];
         $lineasGasto = is_array($payload['gastos'] ?? null) ? $payload['gastos'] : [];
         $ajustes = is_array($payload['ajustes'] ?? null) ? $payload['ajustes'] : [];
+        $ajustes = $this->fusionarAjusteTotalCoinDesdePayload(
+            is_array($wigosJson) ? $wigosJson : [],
+            $lineasValor,
+            $ajustes
+        );
 
         return DB::transaction(function () use (
             $payload,
@@ -207,11 +215,18 @@ final class RendicionMaquinaService
         $vale = abs($valeGuardado) > 0.00001
             ? $valeGuardado
             : (float) ($previas['vale_rep_fondo'] ?? 0);
+        $varsGuardadas = is_array($rendicion?->calc_json['variables'] ?? null)
+            ? $rendicion->calc_json['variables']
+            : [];
         $calcOrquestador = [
-            'comprobante' => (float) ($rendicion?->calc_json['variables']['calc.comprobante']
-                ?? $previas['comprobante']),
+            'comprobante' => (float) ($varsGuardadas['calc.comprobante'] ?? $previas['comprobante']),
             'vale_rep_fondo' => $vale,
         ];
+        if (RendicionMaquinaTurno::esCompleto($turnoNorm) && $rendicion !== null) {
+            $calcOrquestador['fondo_cierre'] = round((float) ($varsGuardadas['calc.fondo_cierre'] ?? $rendicion->fondo_cierre ?? 0), 2);
+            $calcOrquestador['resultado_turno'] = round((float) ($varsGuardadas['calc.resultado_turno'] ?? $rendicion->resultado_turno ?? 0), 2);
+            $calcOrquestador['transferencia'] = round((float) ($varsGuardadas['calc.transferencia'] ?? $rendicion->transferencia ?? 0), 2);
+        }
 
         $payloadDemo = [
             'empresa_id' => $empresaId,
@@ -316,18 +331,25 @@ final class RendicionMaquinaService
                 && abs((float) ($previas['vale_rep_fondo'] ?? 0)) > 0.00001) {
                 $orq['vale_rep_fondo'] = round((float) $previas['vale_rep_fondo'], 2);
             }
-            $faltaCierre = abs((float) ($orq['fondo_cierre'] ?? 0)) < 0.00001
-                || abs((float) ($orq['resultado_turno'] ?? 0)) < 0.00001
-                || ! array_key_exists('transferencia', $orq);
-            if ($faltaCierre) {
+            $faltaFondoCierre = abs((float) ($orq['fondo_cierre'] ?? 0)) < 0.00001;
+            $faltaResultado = abs((float) ($orq['resultado_turno'] ?? 0)) < 0.00001;
+            $faltaTransfer = ! array_key_exists('transferencia', $orq);
+            if ($faltaFondoCierre || $faltaResultado || $faltaTransfer) {
                 $completo = RendicionMaquinaCompletoDelDiaSupport::consolidar(
                     $empresaId,
                     $fecha,
                     $exceptoId
                 );
-                $orq['fondo_cierre'] = round((float) ($completo['orquestador']['fondo_cierre'] ?? 0), 2);
-                $orq['resultado_turno'] = round((float) ($completo['orquestador']['resultado_turno'] ?? 0), 2);
-                $orq['transferencia'] = round((float) ($completo['orquestador']['transferencia'] ?? 0), 2);
+                if ($faltaFondoCierre) {
+                    $orq['fondo_cierre'] = round((float) ($completo['orquestador']['fondo_cierre'] ?? 0), 2);
+                }
+                if ($faltaResultado) {
+                    $orq['resultado_turno'] = round((float) ($completo['orquestador']['resultado_turno'] ?? 0), 2);
+                }
+                // 0 es un valor válido (suma M+T/N = 0). No pisar un ajuste/semilla enviada.
+                if ($faltaTransfer) {
+                    $orq['transferencia'] = round((float) ($completo['orquestador']['transferencia'] ?? 0), 2);
+                }
                 if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001) {
                     $orq['comprobante'] = round((float) ($completo['orquestador']['comprobante'] ?? 0), 2);
                 }
@@ -367,6 +389,27 @@ final class RendicionMaquinaService
             is_array($payload['valores'] ?? null) ? $payload['valores'] : [],
             (string) ($payload['fecha'] ?? date('Y-m-d')),
             (int) ($payload['empresa_id'] ?? 0)
+        );
+
+        return $payload;
+    }
+
+    /**
+     * Mañana: drop QR rodillo = TotalCoin QR Máquinas − impuesto QR (planilla).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function alinearDropQrManianaEnPayload(array $payload): array
+    {
+        $valores = RendicionMaquinaValorQrPrecargaSupport::hidratarNombresValores(
+            is_array($payload['valores'] ?? null) ? $payload['valores'] : []
+        );
+        $payload['valores'] = $valores;
+        $payload['inputs'] = RendicionMaquinaValorQrPrecargaSupport::alinearDropQrConTotalCoinManiana(
+            (string) ($payload['turno'] ?? RendicionMaquinaTurno::MANIANA),
+            is_array($payload['inputs'] ?? null) ? $payload['inputs'] : [],
+            $valores
         );
 
         return $payload;
@@ -688,7 +731,14 @@ final class RendicionMaquinaService
             return;
         }
 
-        if (! RendicionMaquinaAjusteWigosSupport::usuarioPuedeAjustar()) {
+        $hayCampoWigos = false;
+        foreach ($ajustes as $ajuste) {
+            if (RendicionMaquinaAjusteWigosSupport::requierePermisoAjustar((string) ($ajuste['campo'] ?? ''))) {
+                $hayCampoWigos = true;
+                break;
+            }
+        }
+        if ($hayCampoWigos && ! RendicionMaquinaAjusteWigosSupport::usuarioPuedeAjustar()) {
             throw new InvalidArgumentException('No tiene permiso para registrar ajustes WIGOS.');
         }
 
@@ -719,8 +769,26 @@ final class RendicionMaquinaService
     }
 
     /**
-     * Turno mañana: precarga TotalCoin QR Máquinas = drop QR rodillo + impuesto QR (WIGOS).
-     * No pisa el consolidado del Completo ni una lectura stub (WIGOS falló).
+     * TotalCoin QR Máquinas no es campo amarillo: si cambió vs la precarga WIGOS, entra al log.
+     *
+     * @param  array<string, mixed>  $wigosJson
+     * @param  list<array<string, mixed>>  $lineasValor
+     * @param  list<array<string, mixed>>  $ajustes
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarAjusteTotalCoinDesdePayload(array $wigosJson, array $lineasValor, array $ajustes): array
+    {
+        $valores = RendicionMaquinaValorQrPrecargaSupport::hidratarNombresValores($lineasValor);
+        $actual = RendicionMaquinaValorQrPrecargaSupport::montoTotalCoinEnValores($valores);
+        $original = RendicionMaquinaAjusteWigosSupport::valorOriginalTotalCoinDesdeWigosJson($wigosJson);
+
+        return RendicionMaquinaAjusteWigosSupport::fusionarAjusteTotalCoin($ajustes, $original, $actual);
+    }
+
+    /**
+     * Turno mañana y Completo: precarga TotalCoin QR Máquinas = drop QR rodillo + impuesto QR (WIGOS).
+     * En Completo el consolidado M+T+N suele quedar corto vs el QR del día.
+     * En mañana, si después se tipea el TotalCoin de la planilla, el drop QR se alinea al neto.
      *
      * @param  array<string, float|int|string>  $inputs
      * @return list<array{cuentacaja_id: int, monto: float}>|null
@@ -733,7 +801,10 @@ final class RendicionMaquinaService
         bool $esStub,
         bool $esCompleto
     ): ?array {
-        if ($esStub || $esCompleto || ! RendicionMaquinaTurno::esManiana($turno)) {
+        if ($esStub) {
+            return null;
+        }
+        if (! RendicionMaquinaTurno::esManiana($turno) && ! $esCompleto) {
             return null;
         }
 

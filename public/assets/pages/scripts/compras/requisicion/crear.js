@@ -424,7 +424,15 @@ $(function () {
 		}
 	}
 
+	function marcarSolapaRequisicion(btnId) {
+		$('.rq-tab-solapa').removeClass('active');
+		if (btnId) {
+			$('#' + btnId).addClass('active');
+		}
+	}
+
 	$("#botonform1").click(function(){
+		marcarSolapaRequisicion('botonform1');
 		$(".form1").show();
 		$(".form3").hide();
 		$(".form4").hide();
@@ -433,6 +441,7 @@ $(function () {
 		requisicionToggleFooterPresupuesto(false);
 	});
 	$("#botonform3").click(function(){
+		marcarSolapaRequisicion('botonform3');
 		$(".form1").hide();
 		$(".form3").show();
 		$(".form4").hide();
@@ -442,6 +451,7 @@ $(function () {
 		leeHistoria();
 	});
 	$("#botonform4").click(function(){
+		marcarSolapaRequisicion('botonform4');
 		$(".form1").hide();
 		$(".form3").hide();
 		$(".form4").show();
@@ -454,6 +464,7 @@ $(function () {
 		}
 	});
 	$("#botonform5").click(function(){
+		marcarSolapaRequisicion('botonform5');
 		$(".form1").hide();
 		$(".form3").hide();
 		$(".form4").hide();
@@ -464,6 +475,7 @@ $(function () {
 	});
 	$(document).on('click', '#boton-solapa-presupuesto-requisicion', function (e) {
 		e.preventDefault();
+		marcarSolapaRequisicion('boton-solapa-presupuesto-requisicion');
 		$(".form1").hide();
 		$(".form3").hide();
 		$(".form4").hide();
@@ -622,6 +634,7 @@ $(function () {
 
 	$(".form3,.form4,.form5,.form6").hide();
 	$(".form1").show();
+	marcarSolapaRequisicion('botonform1');
 	requisicionToggleFooterPresupuesto(false);
 
 	function claveUltimaEmpresaRequisicion() {

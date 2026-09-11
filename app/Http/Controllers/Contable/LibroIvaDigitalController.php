@@ -25,29 +25,43 @@ class LibroIvaDigitalController extends Controller
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $filtros = $this->filtrosDesdeRequest($request, $empresaQuery);
-        $consultado = $request->boolean('consultar');
         $resultado = null;
+        $consultado = false;
 
-        if ($consultado && $filtros['empresa_id'] && $filtros['periodo']) {
-            ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
-                'empresa_id' => $filtros['empresa_id'],
-                'periodo' => $filtros['periodo'],
-            ]);
-            foreach (['por_fecha_jornada', 'prorrateo_cf_global', 'completar_compras_anita', 'completar_fsl_anita'] as $campo) {
-                ReportePreferenciasUsuario::persistirBool(
-                    self::PREFERENCIAS_CLAVE,
-                    $campo,
-                    (bool) $filtros[$campo],
-                );
-            }
-            ini_set('memory_limit', '-1');
-            ini_set('max_execution_time', '0');
-            $resultado = $this->libroIvaDigitalService->generar(
+        if ($request->boolean('consultar') && $filtros['empresa_id'] && $filtros['periodo']) {
+            $this->persistirPreferencias($filtros);
+            $this->prepararRuntime(false);
+            ignore_user_abort(true);
+            $this->libroIvaDigitalService->generarYCachear(
                 (int) $filtros['empresa_id'],
                 (int) $filtros['anio'],
                 (int) $filtros['mes'],
                 $this->opcionesDesdeFiltros($filtros),
             );
+
+            return redirect()
+                ->route('libro_iva_digital', $this->queryFiltros($filtros, true))
+                ->with('mensaje', 'Libro IVA Digital listo. El ZIP usa este mismo resultado (no vuelve a generar).');
+        }
+
+        if ($request->boolean('mostrado') && $filtros['empresa_id'] && $filtros['periodo']) {
+            $this->prepararRuntime(false);
+            $resultado = $this->libroIvaDigitalService->leerCache(
+                (int) $filtros['empresa_id'],
+                (int) $filtros['anio'],
+                (int) $filtros['mes'],
+                $this->opcionesDesdeFiltros($filtros),
+            );
+            if ($resultado === null) {
+                ignore_user_abort(true);
+                $resultado = $this->libroIvaDigitalService->generarYCachear(
+                    (int) $filtros['empresa_id'],
+                    (int) $filtros['anio'],
+                    (int) $filtros['mes'],
+                    $this->opcionesDesdeFiltros($filtros),
+                );
+            }
+            $consultado = true;
         }
 
         return view('contable.libro_iva_digital.index', [
@@ -62,9 +76,6 @@ class LibroIvaDigitalController extends Controller
     {
         can('exportar-libro-iva-digital');
 
-        ini_set('memory_limit', '-1');
-        ini_set('max_execution_time', '0');
-
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $filtros = $this->filtrosDesdeRequest($request, $empresaQuery);
 
@@ -72,7 +83,10 @@ class LibroIvaDigitalController extends Controller
             abort(422, 'Debe indicar empresa y período.');
         }
 
-        $resultado = $this->libroIvaDigitalService->generar(
+        $this->prepararRuntime(true);
+        ignore_user_abort(true);
+
+        $resultado = $this->libroIvaDigitalService->obtenerParaExportar(
             (int) $filtros['empresa_id'],
             (int) $filtros['anio'],
             (int) $filtros['mes'],
@@ -88,9 +102,6 @@ class LibroIvaDigitalController extends Controller
     {
         can('exportar-libro-iva-digital');
 
-        ini_set('memory_limit', '-1');
-        ini_set('max_execution_time', '0');
-
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $filtros = $this->filtrosDesdeRequest($request, $empresaQuery);
 
@@ -98,7 +109,10 @@ class LibroIvaDigitalController extends Controller
             abort(422, 'Debe indicar empresa y período.');
         }
 
-        $resultado = $this->libroIvaDigitalService->generarIvaSimple(
+        $this->prepararRuntime(true);
+        ignore_user_abort(true);
+
+        $resultado = $this->libroIvaDigitalService->obtenerParaExportar(
             (int) $filtros['empresa_id'],
             (int) $filtros['anio'],
             (int) $filtros['mes'],
@@ -112,7 +126,7 @@ class LibroIvaDigitalController extends Controller
 
     /**
      * @param  array<string, mixed>  $filtros
-     * @return array{por_fecha_jornada: bool, prorrateo_cf_global: bool, completar_compras_anita: bool}
+     * @return array{por_fecha_jornada: bool, prorrateo_cf_global: bool, completar_compras_anita: bool, completar_fsl_anita: bool}
      */
     private function opcionesDesdeFiltros(array $filtros): array
     {
@@ -122,6 +136,59 @@ class LibroIvaDigitalController extends Controller
             'completar_compras_anita' => (bool) ($filtros['completar_compras_anita'] ?? true),
             'completar_fsl_anita' => (bool) ($filtros['completar_fsl_anita'] ?? true),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function persistirPreferencias(array $filtros): void
+    {
+        ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
+            'empresa_id' => $filtros['empresa_id'],
+            'periodo' => $filtros['periodo'],
+        ]);
+        foreach (['por_fecha_jornada', 'prorrateo_cf_global', 'completar_compras_anita', 'completar_fsl_anita'] as $campo) {
+            ReportePreferenciasUsuario::persistirBool(
+                self::PREFERENCIAS_CLAVE,
+                $campo,
+                (bool) $filtros[$campo],
+            );
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, int|string>
+     */
+    private function queryFiltros(array $filtros, bool $mostrado): array
+    {
+        $query = [
+            'empresa_id' => $filtros['empresa_id'],
+            'mes' => $filtros['mes'],
+            'anio' => $filtros['anio'],
+            'por_fecha_jornada' => (int) ($filtros['por_fecha_jornada'] ?? 0),
+            'prorrateo_cf_global' => (int) ($filtros['prorrateo_cf_global'] ?? 0),
+            'completar_compras_anita' => (int) ($filtros['completar_compras_anita'] ?? 0),
+            'completar_fsl_anita' => (int) ($filtros['completar_fsl_anita'] ?? 0),
+        ];
+        if ($mostrado) {
+            $query['mostrado'] = 1;
+        }
+
+        return $query;
+    }
+
+    private function prepararRuntime(bool $cerrarSesion): void
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+        if (! $cerrarSesion) {
+            return;
+        }
+        session()->save();
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
     }
 
     /**

@@ -3,6 +3,7 @@
 namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Support\Anita\AnitaTextoSanitizer;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 
@@ -101,12 +102,14 @@ final class ComprobanteProveedorAnitaContext
 
     public function escape(string $valor, int $maxLen = 0): string
     {
-        $texto = str_replace("'", '', $valor);
+        // Sanitizar antes de truncar: CRLF/UTF-8 en leyenda o razón social parten el
+        // INSERT de compra (Informix -202 illegal character, p.ej. línea 44 / pos. 13).
+        $texto = AnitaTextoSanitizer::sanitizar($valor);
         if ($maxLen > 0) {
-            $texto = mb_substr($texto, 0, $maxLen);
+            $texto = substr($texto, 0, $maxLen);
         }
 
-        return $texto;
+        return str_replace("'", "''", $texto);
     }
 
     public function numeroOrdenCompra(): string

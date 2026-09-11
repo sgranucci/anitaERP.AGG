@@ -20,7 +20,7 @@ namespace App\Support\Caja\RendicionMaquina;
  */
 final class RendicionMaquinaFormulaCatalogo
 {
-    public const VERSION = 3;
+    public const VERSION = 4;
 
     /**
      * @return list<FormulaDef>
@@ -125,13 +125,13 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'D30',
                 'destino' => 'calc.deposito_efectivo',
-                // Completo (calcula_rendicion_turno_completo): deposito_efectivo = 0.
-                // El extra drop−remesa va a la línea CAJA PESOS del arqueo (deposito total).
-                'expresion' => 'meta.es_completo > 0 ? 0 : (calc.drop_bill_rodillo + calc.drop_bill_ruleta - calc.vale_rep_fondo + calc.deposito - inputs.sobrantes)',
+                // El arqueo (calc.deposito) entra a salidas para que un ajuste WIGOS
+                // (impuesto QR, drop, etc.) se cancele en la transferencia.
+                'expresion' => 'calc.drop_bill_rodillo + calc.drop_bill_ruleta - calc.vale_rep_fondo + calc.deposito - inputs.sobrantes',
                 'seccion' => 'salidas',
                 'orden' => 130,
                 'activo' => true,
-                'detalle' => 'Depósito efectivo (0 en turno C; fórmula Anita en M/T/N)',
+                'detalle' => 'Depósito efectivo (drop − remesa + arqueo − sobrantes; también en C para recálculo con ajuste WIGOS)',
             ],
             [
                 'codigo' => 'D40',
@@ -145,22 +145,22 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'D50',
                 'destino' => 'calc.total_salida',
-                // Completo: la remesa no suma a salidas; el extra (si drop bruto M > remesa) va a CAJA PESOS.
-                'expresion' => 'meta.es_completo > 0 ? (calc.tito_rodillo + calc.tito_ruleta + inputs.salida_ruleta + inputs.pago_manual + calc.deposito_efectivo + inputs.hopper) : (calc.tito_rodillo + calc.tito_ruleta + calc.vale_rep_fondo + inputs.salida_ruleta + inputs.pago_manual + calc.deposito_efectivo + inputs.hopper)',
+                // Vale en D50 se cancela con −vale de D30; hace falta en C y en M/T/N
+                // para que el arqueo ajustado (WIGOS) llegue a la transferencia.
+                'expresion' => 'calc.tito_rodillo + calc.tito_ruleta + calc.vale_rep_fondo + inputs.salida_ruleta + inputs.pago_manual + calc.deposito_efectivo + inputs.hopper',
                 'seccion' => 'salidas',
                 'orden' => 150,
                 'activo' => true,
-                'detalle' => 'Total salidas (en C sin vale: la remesa ajusta CAJA PESOS del arqueo)',
+                'detalle' => 'Total salidas (vale se cancela con D30; el arqueo entra por depósito efectivo)',
             ],
             [
                 'codigo' => 'E10',
                 'destino' => 'calc.resultado_turno',
-                // Completo: conserva resultado de la Noche (lee_rendiciones_del_dia).
-                'expresion' => 'meta.es_completo > 0 ? calc.resultado_turno : (inputs.fondo_inicial + calc.comprobante + (inputs.variacion_ff > 0 ? inputs.variacion_ff : 0) + calc.total_ingreso - calc.total_salida - inputs.sobrantes)',
+                'expresion' => 'inputs.fondo_inicial + calc.comprobante + (inputs.variacion_ff > 0 ? inputs.variacion_ff : 0) + calc.total_ingreso - calc.total_salida - inputs.sobrantes',
                 'seccion' => 'cierre',
                 'orden' => 200,
                 'activo' => true,
-                'detalle' => 'Resultado del turno (en C = Noche)',
+                'detalle' => 'Resultado del turno (recalcula con WIGOS/arqueo actuales, también en C)',
             ],
             [
                 'codigo' => 'E20',
@@ -174,22 +174,22 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'E30',
                 'destino' => 'calc.fondo_cierre',
-                // Completo: conserva fondo_cierre de la Noche (lee_rendiciones_del_dia).
-                'expresion' => 'meta.es_completo > 0 ? calc.fondo_cierre : (calc.fondo_fijo + inputs.variacion_ff)',
+                'expresion' => 'calc.fondo_fijo + inputs.variacion_ff',
                 'seccion' => 'cierre',
                 'orden' => 220,
                 'activo' => true,
-                'detalle' => 'Fondo de cierre (en C = Noche)',
+                'detalle' => 'Fondo de cierre (fondo fijo + variación FF)',
             ],
             [
                 'codigo' => 'E40',
                 'destino' => 'calc.transferencia',
-                // Completo: suma transferencias M+T+N (lee_rendiciones_del_dia).
-                'expresion' => 'meta.es_completo > 0 ? calc.transferencia : (calc.fondo_cierre - calc.resultado_turno - inputs.pago_diferido - inputs.impuesto_venta - inputs.impuesto_qr - inputs.impuesto_pago - (inputs.variacion_ff < 0 ? inputs.variacion_ff : 0))',
+                // Semilla (0 en M/T/N; suma M+T+N en C) + residual con WIGOS/arqueo actuales.
+                // Si el depósito acompaña el ajuste (p. ej. TotalCoin = drop QR + impuesto QR), el residual es 0.
+                'expresion' => 'calc.transferencia + (calc.fondo_cierre - calc.resultado_turno - inputs.pago_diferido - inputs.impuesto_venta - inputs.impuesto_qr - inputs.impuesto_pago - (inputs.variacion_ff < 0 ? inputs.variacion_ff : 0))',
                 'seccion' => 'cierre',
                 'orden' => 230,
                 'activo' => true,
-                'detalle' => 'Transferencia (en C = suma M+T+N)',
+                'detalle' => 'Transferencia M/T/N. En C el motor deja la semilla (suma M+T+N)',
             ],
             [
                 'codigo' => 'E50',

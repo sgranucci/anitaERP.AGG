@@ -4,6 +4,7 @@ namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 
 /**
  * Cabecera tabla Informix compra (esquema real: 26 columnas, sin com_subtotal/com_total).
@@ -147,7 +148,8 @@ final class CompraCabeceraAnitaMapper
             $leyenda = trim((string) ($ctx->comprobante->tipotransaccion_compras?->nombre ?? ''));
         }
 
-        return mb_substr($leyenda, 0, 30);
+        // No truncar acá: escape() sanitiza CRLF/UTF-8 y recién después corta a 30.
+        return $leyenda;
     }
 
     private static function condicionIvaProveedor(ComprobanteProveedorAnitaContext $ctx): int
@@ -165,14 +167,16 @@ final class CompraCabeceraAnitaMapper
             ?? 1);
     }
 
+    /**
+     * Código Anita (provi_provincia) del destino de mercadería. Default Buenos Aires = 2.
+     */
     private static function provinciaIbr(ComprobanteProveedorAnitaContext $ctx): int
     {
-        $provincia = $ctx->comprobante->proveedores?->provincias;
-        if ($provincia && filled($provincia->codigo)) {
-            return (int) $provincia->codigo;
-        }
+        $ctx->comprobante->loadMissing('provinciaDestino');
 
-        return (int) ($ctx->comprobante->proveedores?->provincia_id ?? 0);
+        return ComprobanteProveedorProvinciaDestinoSupport::codigoAnita(
+            $ctx->comprobante->provinciaDestino
+        );
     }
 
     /**

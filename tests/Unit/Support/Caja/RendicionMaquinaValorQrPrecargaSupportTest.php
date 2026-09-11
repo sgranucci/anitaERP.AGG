@@ -47,4 +47,57 @@ class RendicionMaquinaValorQrPrecargaSupportTest extends TestCase
         $this->assertSame(225, $lineas[0]['cuentacaja_id']);
         $this->assertSame(100.0, $lineas[0]['monto']);
     }
+
+    public function test_drop_qr_es_totalcoin_menos_impuesto(): void
+    {
+        $this->assertSame(113372902.35, RendicionMaquinaValorQrPrecargaSupport::dropQrDesdeTotalCoin(
+            114449945.00,
+            1077042.65
+        ));
+    }
+
+    public function test_maniana_alinea_drop_qr_al_neto_de_la_planilla(): void
+    {
+        $inputs = RendicionMaquinaValorQrPrecargaSupport::alinearDropQrConTotalCoinManiana(
+            'M',
+            ['dropqr_rodillo' => 113322382.29, 'impuesto_qr' => 1077042.65],
+            [[
+                'cuentacaja_id' => 225,
+                'monto' => 114449945.00,
+                'nombre' => 'TotalCoin QR Maquina',
+            ]]
+        );
+
+        $this->assertSame(113372902.35, $inputs['dropqr_rodillo']);
+    }
+
+    public function test_completo_no_alinea_drop_qr(): void
+    {
+        $inputs = RendicionMaquinaValorQrPrecargaSupport::alinearDropQrConTotalCoinManiana(
+            'C',
+            ['dropqr_rodillo' => 113322382.29, 'impuesto_qr' => 1077042.65],
+            [[
+                'cuentacaja_id' => 225,
+                'monto' => 114449945.00,
+                'nombre' => 'TotalCoin QR Maquina',
+            ]]
+        );
+
+        $this->assertSame(113322382.29, $inputs['dropqr_rodillo']);
+    }
+
+    public function test_no_borra_drop_si_totalcoin_esta_vacio(): void
+    {
+        $inputs = RendicionMaquinaValorQrPrecargaSupport::alinearDropQrConTotalCoinManiana(
+            'M',
+            ['dropqr_rodillo' => 113322382.29, 'impuesto_qr' => 1077042.65],
+            [[
+                'cuentacaja_id' => 225,
+                'monto' => 0,
+                'nombre' => 'TotalCoin QR Maquina',
+            ]]
+        );
+
+        $this->assertSame(113322382.29, $inputs['dropqr_rodillo']);
+    }
 }

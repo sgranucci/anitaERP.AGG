@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Models\Compras\Requisicion_Estado;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Carbon\Carbon;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class RequisicionListadoFiltros
 {
+    public const SESSION_FILTROS = 'requisicion_listado_filtros';
+
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
@@ -91,6 +94,7 @@ class RequisicionListadoFiltros
             return array_merge(self::filtrosVacios(), [
                 'empresa_id' => $empresaId,
                 'empresa_scope' => $empresaScope,
+                'estado' => self::normalizarEstadoExterno($request->input('estado')),
             ]);
         }
 
@@ -126,7 +130,21 @@ class RequisicionListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
+            'estado' => self::normalizarEstadoExterno($request->input('estado')),
         ];
+    }
+
+    public static function normalizarEstadoExterno($estado): string
+    {
+        $valor = strtoupper(trim((string) $estado));
+        if ($valor === 'GENERO OC') {
+            $valor = 'GENERO ORDEN COMPRA';
+        }
+        if ($valor === '' || ! Requisicion_Estado::esNombreEstadoValido($valor)) {
+            return '';
+        }
+
+        return $valor;
     }
 
     /**
@@ -196,6 +214,7 @@ class RequisicionListadoFiltros
             'busqueda' => '',
             'empresa_id' => null,
             'empresa_scope' => 'una',
+            'estado' => '',
         ];
     }
 
@@ -221,25 +240,62 @@ class RequisicionListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
+        if (! empty($filtros['busqueda_rapida'])) {
+            $params['filtro_busqueda_rapida'] = 1;
+        }
 
         return $params;
     }
 
     /**
-     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     * @param  array<string, string|int|bool>  $filtrosQuery
+     */
+    public static function persistir(array $filtrosQuery): void
+    {
+        if ($filtrosQuery === []) {
+            session()->forget(self::SESSION_FILTROS);
+
+            return;
+        }
+
+        session([self::SESSION_FILTROS => $filtrosQuery]);
+    }
+
+    /**
+     * @return array<string, string|int|bool>
+     */
+    public static function guardados(): array
+    {
+        $guardados = session(self::SESSION_FILTROS, []);
+
+        return is_array($guardados) ? $guardados : [];
+    }
+
+    public static function olvidar(): void
+    {
+        session()->forget(self::SESSION_FILTROS);
+    }
+
+    /**
+     * Solo el filtro externo de empresa y estado (para Limpiar texto sin perder chips).
      *
-     * @return array<string, int>
+     * @return array<string, int|string>
      */
     public static function paraQueryStringEmpresa(array $filtros): array
     {
+        $params = [];
         if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
-            return ['empresa_todas' => 1];
-        }
-        if (! empty($filtros['empresa_id'])) {
-            return ['empresa_id' => (int) $filtros['empresa_id']];
+            $params['empresa_todas'] = 1;
+        } elseif (! empty($filtros['empresa_id'])) {
+            $params['empresa_id'] = (int) $filtros['empresa_id'];
         }
 
-        return [];
+        $estado = self::normalizarEstadoExterno($filtros['estado'] ?? '');
+        if ($estado !== '') {
+            $params['estado'] = $estado;
+        }
+
+        return $params;
     }
 
     /**
@@ -249,6 +305,15 @@ class RequisicionListadoFiltros
     {
         if (! empty($filtros['empresa_id'])) {
             $query->where('requisicion.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        $estado = self::normalizarEstadoExterno($filtros['estado'] ?? '');
+        if ($estado !== '') {
+            if ($estado === 'GENERO ORDEN COMPRA') {
+                $query->whereIn('requisicion.estado', ['GENERO ORDEN COMPRA', 'GENERO OC']);
+            } else {
+                $query->where('requisicion.estado', $estado);
+            }
         }
 
         if (! self::tieneCriteriosTexto($filtros)) {

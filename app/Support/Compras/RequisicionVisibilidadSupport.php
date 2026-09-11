@@ -15,6 +15,9 @@ use Illuminate\Support\Facades\Session;
  * - usuario-requisicion-resto: todas las de su CC de origen (incluye las propias).
  * - usuario-requisicion-compras: todas las de sus empresas asignadas (todos los CC).
  * - listar-todas-requisicion: sin restricción de alcance (supervisión / contaduría).
+ *
+ * Tablero de seguimiento (`aplicarFiltroTableroSeguimiento`): Enc-compras / listar-todas
+ * sin recorte por CC; resto sectores = origen o centrocostodestino_arbol_id del usuario.
  */
 final class RequisicionVisibilidadSupport
 {
@@ -90,6 +93,62 @@ final class RequisicionVisibilidadSupport
         }
 
         self::aplicarFiltroSoloCreador($query, $tabla);
+    }
+
+    /**
+     * Tablero de seguimiento: Enc-compras / listar-todas sin recorte por CC.
+     * Resto sectores: origen o CC destino del árbol del usuario (no el listado, que es solo origen).
+     *
+     * @param  EloquentBuilder<\App\Models\Compras\Requisicion>|QueryBuilder  $query
+     */
+    public static function aplicarFiltroTableroSeguimiento(EloquentBuilder|QueryBuilder $query, string $tabla = 'requisicion'): void
+    {
+        $tabla = trim($tabla) !== '' ? $tabla : 'requisicion';
+
+        if (self::puedeVerTodasSinRestriccion()) {
+            return;
+        }
+
+        self::aplicarFiltroEmpresasAsignadas($query, $tabla);
+
+        if (self::esUsuarioCompras()) {
+            self::aplicarFiltroOficinaComprasSiActivo($query, $tabla);
+
+            return;
+        }
+
+        if (self::esUsuarioRestoSectores()) {
+            $centrocostoId = self::centrocostoOrigenUsuario();
+            if ($centrocostoId !== null) {
+                self::aplicarFiltroCentrocostoOrigenODestinoArbol($query, $centrocostoId, $tabla);
+
+                return;
+            }
+            self::aplicarFiltroSoloCreador($query, $tabla);
+
+            return;
+        }
+
+        self::aplicarFiltroSoloCreador($query, $tabla);
+    }
+
+    /**
+     * @param  EloquentBuilder<\App\Models\Compras\Requisicion>|QueryBuilder  $query
+     */
+    public static function aplicarFiltroCentrocostoOrigenODestinoArbol(
+        EloquentBuilder|QueryBuilder $query,
+        int $centrocostoId,
+        string $tabla = 'requisicion'
+    ): void {
+        if ($centrocostoId <= 0) {
+            return;
+        }
+
+        $tabla = trim($tabla) !== '' ? $tabla : 'requisicion';
+        $query->where(function ($q) use ($tabla, $centrocostoId) {
+            $q->where($tabla.'.centrocosto_id', $centrocostoId)
+                ->orWhere($tabla.'.centrocostodestino_arbol_id', $centrocostoId);
+        });
     }
 
     /**

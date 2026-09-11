@@ -101,6 +101,9 @@
     };
 
     function badgeComDoc(fac) {
+        if (fac && fac.cargado_cxp) {
+            return '<span class="badge badge-success">en CxP</span>';
+        }
         var tipo = String(fac.tipo || 'FC').toUpperCase();
         var exige = fac.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
         if (!exige) {
@@ -146,6 +149,9 @@
                 '</div>'
             );
         }
+        if (fac && fac.cargado_cxp) {
+            $coms.prepend('<p class="text-success small mb-2">Ya está cargado en CxP. En una OC anual no forma parte de este envío.</p>');
+        }
         var tipoFac = String((fac && fac.tipo) || 'FC').toUpperCase();
         var exige = !fac || (fac.exige_com !== false && tipoFac !== 'NC' && tipoFac !== 'ND');
         if (!exige) {
@@ -168,24 +174,48 @@
         });
     }
 
+    function itemAsignarDoc(f) {
+        var activo = String(asignarEstado.activo) === String(f.id);
+        var tipo = esc(f.tipo_label || f.tipo || 'FC');
+        var extra = f.cargado_cxp ? ' text-muted' : '';
+        return '<a href="#" class="list-group-item list-group-item-action js-bandeja-asig-doc py-2' + (activo ? ' active' : '') + extra + '" data-doc-id="' + esc(String(f.id)) + '">' +
+            '<div class="d-flex justify-content-between align-items-start">' +
+            '<div><span class="badge badge-dark mr-1">' + tipo + '</span>' + esc(f.etiqueta || ('#' + f.id)) +
+            (f.fecha ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.fecha) + '</small>' : '') +
+            (f.origen_label ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.origen_label) + '</small>' : '') +
+            '</div><div class="ml-2 text-right">' + badgeComDoc(f) + '</div></div></a>';
+    }
+
     function renderAsignarListaDocs() {
         var $fac = $('#bandejaAsignarPrecarga').empty();
         if (!asignarEstado.facs.length) {
             $fac.append('<div class="p-2 text-muted small">No hay factura precargada. Adjuntela al enviar el legajo o desde la OC.</div>');
             return;
         }
+        var pendientes = [];
+        var cargados = [];
         asignarEstado.facs.forEach(function (f) {
-            var activo = String(asignarEstado.activo) === String(f.id);
-            var tipo = esc(f.tipo_label || f.tipo || 'FC');
-            $fac.append(
-                '<a href="#" class="list-group-item list-group-item-action js-bandeja-asig-doc py-2' + (activo ? ' active' : '') + '" data-doc-id="' + esc(String(f.id)) + '">' +
-                '<div class="d-flex justify-content-between align-items-start">' +
-                '<div><span class="badge badge-dark mr-1">' + tipo + '</span>' + esc(f.etiqueta || ('#' + f.id)) +
-                (f.fecha ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.fecha) + '</small>' : '') +
-                (f.origen_label ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.origen_label) + '</small>' : '') +
-                '</div><div class="ml-2 text-right">' + badgeComDoc(f) + '</div></div></a>'
-            );
+            if (f.cargado_cxp) {
+                cargados.push(f);
+            } else {
+                pendientes.push(f);
+            }
         });
+        if (pendientes.length) {
+            $fac.append('<div class="list-group-item bg-light py-1 small font-weight-bold">Este envío (' + pendientes.length + ')</div>');
+            pendientes.forEach(function (f) { $fac.append(itemAsignarDoc(f)); });
+        } else {
+            $fac.append('<div class="p-2 text-muted small">No hay comprobantes pendientes: todos ya están en CxP.</div>');
+        }
+        if (cargados.length) {
+            $fac.append(
+                '<a href="#" class="list-group-item bg-light py-1 small text-muted js-bandeja-toggle-cargados">' +
+                '▸ Ya en CxP — no se vuelven a mandar (' + cargados.length + ')</a>'
+            );
+            var $wrap = $('<div class="js-bandeja-cargados-wrap" style="display:none"></div>');
+            cargados.forEach(function (f) { $wrap.append(itemAsignarDoc(f)); });
+            $fac.append($wrap);
+        }
     }
 
     function renderAsignar(paquete) {
@@ -201,27 +231,36 @@
             var ids = asignadas[key] || asignadas[f.id] || [];
             asignarEstado.mapa[key] = ids.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; });
         });
-        var idxDefault = 0;
-        facs.forEach(function (f, i) {
-            if ((f.origen || 'precarga') === 'precarga' && idxDefault === 0) {
-                idxDefault = i;
-            }
-        });
-        asignarEstado.activo = facs.length ? String(facs[idxDefault].id) : null;
+        var pendientes = facs.filter(function (f) { return !f.cargado_cxp; });
+        var prefer = pendientes.find(function (f) {
+            var tipo = String(f.tipo || 'FC').toUpperCase();
+            return f.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
+        }) || pendientes[0] || facs[0] || null;
+        asignarEstado.activo = prefer ? String(prefer.id) : null;
         renderAsignarListaDocs();
         renderAsignarComsActivo();
 
         var $atajos = $('#bandejaAsignarAtajos').empty();
+        var pendientesFac = facs.filter(function (f) { return !f.cargado_cxp; });
         if (paquete && paquete.url_cargar_cxp) {
             var etqSig = (paquete.siguiente_pendiente && paquete.siguiente_pendiente.etiqueta)
                 ? paquete.siguiente_pendiente.etiqueta
                 : 'siguiente pendiente';
-            $atajos.append('<a href="' + esc(paquete.url_cargar_cxp) + '" class="btn btn-sm btn-primary mr-1"><i class="fa fa-plus"></i> Cargar ' + esc(etqSig) + '</a>');
-        }
-        if (paquete && paquete.comprobantes) {
-            paquete.comprobantes.forEach(function (cp) {
-                $atajos.append('<a href="' + esc(cp.url) + '" class="btn btn-sm btn-outline-info mr-1">CP ' + esc(cp.etiqueta) + '</a>');
+            $atajos.append('<a href="' + esc(paquete.url_cargar_cxp) + '" class="btn btn-sm btn-primary mr-1 mb-1"><i class="fa fa-plus"></i> Cargar ' + esc(etqSig) + '</a>');
+            pendientesFac.forEach(function (f) {
+                if (!f.url_cargar_cxp) {
+                    return;
+                }
+                var etq = String(f.etiqueta || '');
+                if (etq === etqSig) {
+                    return;
+                }
+                $atajos.append('<a href="' + esc(f.url_cargar_cxp) + '" class="btn btn-sm btn-outline-primary mr-1 mb-1"><i class="fa fa-plus"></i> Cargar ' + esc(etq) + '</a>');
             });
+        }
+        var nCp = (paquete && paquete.comprobantes) ? paquete.comprobantes.length : 0;
+        if (nCp > 0) {
+            $atajos.append('<span class="text-muted small align-middle">Ya hay ' + nCp + ' CP de esta OC anual; no se vuelven a cargar.</span>');
         }
         if (paquete && paquete.pagos) {
             paquete.pagos.forEach(function (op) {
@@ -237,6 +276,15 @@
     }
 
     $(function () {
+        $('#modalBandejaAsignarCom').on('click', '.js-bandeja-toggle-cargados', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var $wrap = $btn.next('.js-bandeja-cargados-wrap');
+            $wrap.toggle();
+            var n = $wrap.find('.js-bandeja-asig-doc').length;
+            $btn.text(($wrap.is(':visible') ? '▾ ' : '▸ ') + 'Ya en CxP — no se vuelven a mandar (' + n + ')');
+        });
+
         if (window.OcCambiarSectorLegajo) {
             window.OcCambiarSectorLegajo.initForm($('#formBandejaEnviarGastro'), { forzarPaquete: true });
             window.OcCambiarSectorLegajo.initForm($('#formBandejaEnviarCxp'), { forzarPaquete: true });

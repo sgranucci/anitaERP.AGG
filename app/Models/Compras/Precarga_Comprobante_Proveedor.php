@@ -10,11 +10,12 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Configuracion\Moneda;
+use App\Models\Configuracion\Provincia;
 
 class Precarga_Comprobante_Proveedor extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    protected $fillable = ['empresa_id', 'proveedor_id', 'identificacion_proveedor_cuit', 'tipotransaccion_compra_id', 'letra', 'sucursal', 
+    protected $fillable = ['empresa_id', 'provincia_destino_id', 'proveedor_id', 'identificacion_proveedor_cuit', 'tipotransaccion_compra_id', 'letra', 'sucursal', 
                             'numerocomprobante', 'fechafactura', 'fecharecepcionemail', 'fecharecepcionemail', 
                             'fechavencimientocaicae', 'fechavencimiento', 'numerocae', 'tipo_autorizacion', 'numeroordencompra', 'rutaalmacenamiento',
                             'pararevisar', 'marca_error', 'aviso_error', 'subtotal', 'total', 'estado', 'anita_nro_interno', 'origen_entrada', 'moneda', 'moneda_id', 'cotizacion'];
@@ -54,6 +55,11 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
     public function empresas()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
+    }
+
+    public function provinciaDestino()
+    {
+        return $this->belongsTo(Provincia::class, 'provincia_destino_id');
     }
 
     public function proveedores()

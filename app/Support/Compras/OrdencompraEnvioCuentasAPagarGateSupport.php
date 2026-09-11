@@ -247,6 +247,9 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             ->orderBy('fechafactura')
             ->orderBy('id')
             ->get() as $pre) {
+            if (! PrecargaComprobanteEstados::pendienteCargaEnCxp($pre->estado ?? null)) {
+                continue;
+            }
             $clave = self::claveNumeroFactura(
                 (string) ($pre->letra ?? ''),
                 (int) ($pre->sucursal ?? 0),
@@ -327,6 +330,9 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             ->whereNotNull('rutaalmacenamiento')
             ->where('rutaalmacenamiento', '!=', '')
             ->get() as $pre) {
+            if (! PrecargaComprobanteEstados::pendienteCargaEnCxp($pre->estado ?? null)) {
+                continue;
+            }
             $clave = self::claveNumeroFactura(
                 (string) ($pre->letra ?? ''),
                 (int) ($pre->sucursal ?? 0),
@@ -361,6 +367,9 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             ->whereNotNull('rutaalmacenamiento')
             ->where('rutaalmacenamiento', '!=', '')
             ->get() as $pre) {
+            if (! PrecargaComprobanteEstados::pendienteCargaEnCxp($pre->estado ?? null)) {
+                continue;
+            }
             $clave = self::claveNumeroFactura(
                 (string) ($pre->letra ?? ''),
                 (int) ($pre->sucursal ?? 0),

@@ -14,7 +14,9 @@ use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use Carbon\Carbon;
@@ -75,6 +77,7 @@ class ComprobanteProveedorPrefillService
             'moneda_id' => 1,
             'es_fce' => false,
             'pararevisar' => false,
+            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
         ]);
 
         return [
@@ -100,6 +103,7 @@ class ComprobanteProveedorPrefillService
                 'monedas',
                 'precarga_comprobante_proveedor_conceptos',
                 'precarga_comprobante_proveedor_articulos.articulos',
+                'provinciaDestino',
             ])
             ->findOrFail($precargaId);
 
@@ -114,9 +118,17 @@ class ComprobanteProveedorPrefillService
 
         $fecharecepcion = null;
 
+        $tieneCom = $ordencompra
+            && OrdencompraEnvioCuentasAPagarGateSupport::tieneComDisponible((int) $ordencompra->id);
+        $tipoDoc = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($precarga);
         $modoCarga = $ordencompra
             ? ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
-                ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($ordencompra, false, $fechacomprobante),
+                ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+                    $ordencompra,
+                    $tieneCom,
+                    $fechacomprobante,
+                    $tipoDoc
+                ),
                 ComprobanteProveedorModoCarga::ASIGNA_OC
             )
             : ComprobanteProveedorModoCarga::SIN_RECEPCION;
@@ -171,6 +183,9 @@ class ComprobanteProveedorPrefillService
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'es_fce' => false,
             'pararevisar' => (bool) $precarga->pararevisar,
+            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::idDesdeRequest(
+                $precarga->provincia_destino_id
+            ),
         ]);
 
         $data->setRelation('empresas', $ordencompra?->empresas ?? $precarga->empresas);
@@ -179,6 +194,9 @@ class ComprobanteProveedorPrefillService
         $data->setRelation('monedas', $precarga->monedas);
         $data->setRelation('ordencompras', $ordencompra);
         $data->setRelation('precarga_comprobante_proveedores', $precarga);
+        if ($precarga->provinciaDestino) {
+            $data->setRelation('provinciaDestino', $precarga->provinciaDestino);
+        }
 
         $conceptos = $precarga->precarga_comprobante_proveedor_conceptos->map(function ($c) {
             return new Comprobante_Proveedor_Concepto([
@@ -367,6 +385,7 @@ class ComprobanteProveedorPrefillService
             'cotizacion' => $cotizacion,
             'es_fce' => false,
             'pararevisar' => false,
+            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
         ]);
 
         $data->setRelation('empresas', $ordencompra->empresas);
@@ -418,6 +437,7 @@ class ComprobanteProveedorPrefillService
             'ordencompras',
             'ordencompras.sector_legajocompras',
             'precarga_comprobante_proveedores',
+            'provinciaDestino',
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'comprobante_proveedor_articulos.articulos',
             'comprobante_proveedor_cuotas',

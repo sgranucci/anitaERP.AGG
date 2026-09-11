@@ -38,6 +38,7 @@
         $yaRetenido = max(0, $periodoRet - (float) $retencion->importe);
     }
     $pagosAnteriores = (float) ($detalle['pagos_anteriores'] ?? 0);
+    $lineasRetencionPorId = $lineasRetencionPorId ?? [];
 @endphp
 
 @if (! empty($pageBreak))
@@ -161,7 +162,14 @@
             <td class="num" style="font-weight:bold;">{{ number_format((float) $retencion->importe, 2, ',', '.') }}</td>
         </tr>
     </table>
-    @if ($aplicaciones->count() > 0)
+    @php
+        $lineasSuss = collect($lineasRetencionPorId[$retencion->id] ?? []);
+        $totalGravadoSuss = 0.0;
+        foreach ($lineasSuss as $lineaSuss) {
+            $totalGravadoSuss += (float) ($lineaSuss['gravado'] ?? $lineaSuss['neto_gravado'] ?? 0);
+        }
+    @endphp
+    @if ($lineasSuss->count() > 0)
         <h3>Comprobantes</h3>
         <table>
             <thead>
@@ -172,19 +180,26 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach ($aplicaciones as $apl)
+                @foreach ($lineasSuss as $apl)
                     <tr>
                         <td>{{ $apl['numero'] }}</td>
                         <td>{{ $apl['fecha'] }}</td>
-                        <td class="num">{{ number_format($apl['neto_gravado'], 2, ',', '.') }}</td>
+                        <td class="num">{{ number_format((float) ($apl['gravado'] ?? $apl['neto_gravado'] ?? 0), 2, ',', '.') }}</td>
                     </tr>
                 @endforeach
+                <tr>
+                    <td colspan="2" class="num" style="font-weight:bold;">Total comprobantes</td>
+                    <td class="num" style="font-weight:bold;">{{ number_format($totalGravadoSuss, 2, ',', '.') }}</td>
+                </tr>
             </tbody>
         </table>
     @endif
 
 @else
     {{-- IVA / IIBB: detalle por comprobante aplicado --}}
+    @php
+        $lineasOp = collect($lineasRetencionPorId[$retencion->id] ?? []);
+    @endphp
     <h3>Detalle de operaciones</h3>
     <table>
         <thead>
@@ -198,20 +213,15 @@
             </tr>
         </thead>
         <tbody>
-            @if ($aplicaciones->count() > 0)
-                @php
-                    $cant = max(1, $aplicaciones->count());
-                    $importePorLinea = (float) $retencion->importe / $cant;
-                    $basePorLinea = (float) $retencion->base_calculo / $cant;
-                @endphp
-                @foreach ($aplicaciones as $apl)
+            @if ($lineasOp->count() > 0)
+                @foreach ($lineasOp as $apl)
                     <tr>
                         <td>{{ $apl['numero'] }}</td>
                         <td>{{ $apl['fecha'] }}</td>
-                        <td class="num">{{ number_format($apl['neto_gravado'], 2, ',', '.') }}</td>
-                        <td class="num">{{ number_format($basePorLinea, 2, ',', '.') }}</td>
-                        <td class="num">{{ number_format((float) $retencion->alicuota, 2, ',', '.') }}</td>
-                        <td class="num">{{ number_format($importePorLinea, 2, ',', '.') }}</td>
+                        <td class="num">{{ number_format((float) $apl['gravado'], 2, ',', '.') }}</td>
+                        <td class="num">{{ number_format((float) $apl['base_imp'], 2, ',', '.') }}</td>
+                        <td class="num">{{ number_format((float) ($apl['alicuota'] ?? $retencion->alicuota), 2, ',', '.') }}</td>
+                        <td class="num">{{ number_format((float) $apl['retencion'], 2, ',', '.') }}</td>
                     </tr>
                 @endforeach
             @else
@@ -225,7 +235,10 @@
                 </tr>
             @endif
             <tr>
-                <td colspan="5" class="num" style="font-weight:bold;">TOTAL RETENIDO</td>
+                <td colspan="2" class="num" style="font-weight:bold;">TOTAL</td>
+                <td class="num" style="font-weight:bold;">{{ number_format((float) ($lineasOp->count() > 0 ? $lineasOp->sum('gravado') : $retencion->base_calculo), 2, ',', '.') }}</td>
+                <td class="num" style="font-weight:bold;">{{ number_format((float) ($lineasOp->count() > 0 ? $lineasOp->sum('base_imp') : $retencion->base_calculo), 2, ',', '.') }}</td>
+                <td></td>
                 <td class="num" style="font-weight:bold;">{{ number_format((float) $retencion->importe, 2, ',', '.') }}</td>
             </tr>
         </tbody>

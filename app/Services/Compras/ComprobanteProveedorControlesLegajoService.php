@@ -12,6 +12,7 @@ use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
@@ -65,6 +66,7 @@ class ComprobanteProveedorControlesLegajoService
         ?int $excluirComprobanteId = null,
         bool $estricto = true,
         ?iterable $lineasFactura = null,
+        ?string $tipoDocumento = null,
     ): array {
         $resultado = [
             'ok' => true,
@@ -89,27 +91,20 @@ class ComprobanteProveedorControlesLegajoService
         $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
             $ordencompra,
             $tieneComDisponibles,
-            $fechaComprobanteYmd
+            $fechaComprobanteYmd,
+            $tipoDocumento
         );
 
         if ($politica['bloquea_sin_com']) {
             $resultado['ok'] = false;
-            if ($politica['contrato_vigente'] && ($politica['contrato_requiere_recepcion'] ?? false)) {
-                $resultado['errores'][] = 'El contrato vigente de esta OC exige recepción COM obligatoria. '
-                    .'Confirme una COM con provisión antes de cargar la factura.';
-            } else {
-                $resultado['errores'][] = 'Esta empresa exige el flujo OC/COM/factura: no hay recepción COM disponible '
-                    .'y la orden no es anticipada. Debe confirmar una COM con provisión o marcar la OC como anticipada.';
-            }
+            $resultado['errores'][] = ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaSinCom($politica);
 
             return $resultado;
         }
 
         if ($politica['debe_asignar_com'] && $modoCarga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
             $resultado['ok'] = false;
-            $resultado['errores'][] = ($politica['contrato_vigente'] ?? false)
-                ? 'El contrato vigente exige factura contra recepción (COM).'
-                : 'El legajo tiene recepciones COM disponibles: el modo de carga debe ser «Factura contra recepción (COM)».';
+            $resultado['errores'][] = ComprobanteProveedorFlujoOcComFacSupport::mensajeDebeAsignarCom($politica);
 
             return $resultado;
         }
@@ -218,10 +213,14 @@ class ComprobanteProveedorControlesLegajoService
 
         $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($ordencompra);
 
-        // a-compprov.c lee_recepcion: descuenta cantfact / _total_facturado antes de comparar.
-        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
-            (int) $ordencompra->id,
+        // Provisión de las COM asignadas − facturas ya imputadas a esas COM
+        // (en moneda de esta factura). No restar el resto del legajo.
+        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnRecepciones(
+            $ids->all(),
             $excluirComprobanteId,
+            $monedaId,
+            $cotizacionFactura,
+            $fechaComprobanteYmd,
         );
         $importeComDisponible = ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
             $importeComFactura,
@@ -235,7 +234,7 @@ class ComprobanteProveedorControlesLegajoService
         )) {
             $detalleYa = ((int) $yaFacturado['cantidad'] > 0)
                 ? sprintf(
-                    ' (COM %s − ya facturado en legajo %s)',
+                    ' (COM %s − ya facturado en estas COM %s)',
                     number_format($importeComFactura, 2, ',', '.'),
                     number_format((float) $yaFacturado['importe'], 2, ',', '.')
                 )
@@ -389,6 +388,7 @@ class ComprobanteProveedorControlesLegajoService
         $comprobante->loadMissing([
             'ordencompras',
             'proveedores',
+            'tipotransaccion_compras',
             'comprobante_proveedor_conceptos.concepto_ivacompras',
         ]);
 
@@ -409,6 +409,7 @@ class ComprobanteProveedorControlesLegajoService
             (int) $comprobante->id,
             true,
             ComprobanteProveedorLineasFacturaSupport::desdeComprobante($comprobante),
+            OrdencompraLegajoDocumentoTipoSupport::desdeComprobante($comprobante),
         );
     }
 

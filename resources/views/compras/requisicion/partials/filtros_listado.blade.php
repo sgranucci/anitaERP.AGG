@@ -21,6 +21,9 @@
     @elseif (! empty($fEmp))
         <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
     @endif
+    @if (RequisicionListadoFiltros::normalizarEstadoExterno($f['estado'] ?? '') !== '')
+        <input type="hidden" name="estado" value="{{ RequisicionListadoFiltros::normalizarEstadoExterno($f['estado'] ?? '') }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">

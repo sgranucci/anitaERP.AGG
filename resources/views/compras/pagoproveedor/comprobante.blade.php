@@ -157,6 +157,15 @@
         @empty
             <tr><td colspan="7" class="cen muted">Sin aplicaciones a cuenta corriente (anticipo / OPA).</td></tr>
         @endforelse
+        @if ($aplicaciones->isNotEmpty())
+            <tr>
+                <td colspan="3" class="num" style="font-weight:bold;">Total comprobantes</td>
+                <td class="num" style="font-weight:bold;">{{ number_format($totalAplicacionesMonto ?? $aplicaciones->sum('monto'), 2, ',', '.') }}</td>
+                <td>{{ $monedaAplicaciones ?? '' }}</td>
+                <td></td>
+                <td class="num" style="font-weight:bold;">{{ number_format($totalAplicacionesAplicado ?? $aplicaciones->sum('monto_aplicado'), 2, ',', '.') }}</td>
+            </tr>
+        @endif
     </tbody>
 </table>
 
@@ -184,6 +193,11 @@
                     <td>{{ $cheque->moneda }}</td>
                 </tr>
             @endforeach
+            <tr>
+                <td colspan="4" class="num" style="font-weight:bold;">Total cheques</td>
+                <td class="num" style="font-weight:bold;">{{ number_format($totalCheques ?? $cheques->sum('monto'), 2, ',', '.') }}</td>
+                <td></td>
+            </tr>
         </tbody>
     </table>
 @endif
@@ -208,6 +222,12 @@
                     <td class="num">{{ number_format($med['cotizacion'], 4, ',', '.') }}</td>
                 </tr>
             @endforeach
+            <tr>
+                <td class="num" style="font-weight:bold;">Total valores</td>
+                <td class="num" style="font-weight:bold;">{{ number_format($totalCaja ?? $mediosCaja->sum('monto_abs'), 2, ',', '.') }}</td>
+                <td></td>
+                <td></td>
+            </tr>
         </tbody>
     </table>
 @endif
@@ -264,6 +284,12 @@
                     <td>{{ $lin['centrocosto'] }}</td>
                 </tr>
             @endforeach
+            <tr>
+                <td class="num" style="font-weight:bold;">Totales</td>
+                <td class="num" style="font-weight:bold;">{{ number_format($totalAsientoDebe ?? 0, 2, ',', '.') }}</td>
+                <td class="num" style="font-weight:bold;">{{ number_format($totalAsientoHaber ?? 0, 2, ',', '.') }}</td>
+                <td></td>
+            </tr>
         </tbody>
     </table>
 @endif
@@ -319,6 +345,7 @@
         'nroOp' => $nroOp,
         'lugarFecha' => $lugarFecha,
         'aplicaciones' => $aplicaciones,
+        'lineasRetencionPorId' => $lineasRetencionPorId ?? [],
         'totalOp' => $totalOp,
         'fechaDdjjGanancias' => $fechaDdjjGanancias,
         'periodoSuss' => $periodoSuss,

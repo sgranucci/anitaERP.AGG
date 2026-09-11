@@ -13,6 +13,7 @@ use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoFacturaArcaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Compras\PrecargaProveedorMonedaFacturaSupport;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use Illuminate\Http\UploadedFile;
 use RuntimeException;
@@ -117,6 +118,8 @@ class OrdencompraLegajoFacturaPdfService
         $destino = $dup ?: $existenteLegajo;
         if ($destino) {
             $payload['estado'] = $destino->estado ?: 'PENDIENTE';
+            $payload = PrecargaProveedorMonedaFacturaSupport::payloadSinPisarMoneda($payload, $destino);
+            $payload = PrecargaProveedorMonedaFacturaSupport::payloadSinPisarOrigenFactura($payload, $destino);
             $this->precargaRepository->update($payload, $destino->id);
 
             return Precarga_Comprobante_Proveedor::query()->findOrFail($destino->id);

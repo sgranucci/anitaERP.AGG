@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
@@ -61,6 +62,10 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             null,
         );
 
+        $data['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::idDesdeRequest(
+            $data['provincia_destino_id'] ?? null
+        );
+
         $precarga_comprobante_proveedor = $this->model->create($data);
 
         $precargaId = (int) $precarga_comprobante_proveedor->id;
@@ -100,6 +105,12 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             (int) $data['proveedor_id'],
             null,
         );
+
+        if (array_key_exists('provincia_destino_id', $data)) {
+            $data['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::idDesdeRequest(
+                $data['provincia_destino_id'] ?? null
+            );
+        }
 
         $precarga_comprobante_proveedor = $this->model->findOrFail($id)
             ->update($data);

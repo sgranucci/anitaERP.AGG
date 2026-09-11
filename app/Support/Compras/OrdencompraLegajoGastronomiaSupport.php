@@ -183,8 +183,15 @@ final class OrdencompraLegajoGastronomiaSupport
             ->exists();
     }
 
-    public static function puedeMostrarEnviarPagos(?Ordencompra $oc, ?bool $tieneFacturaCargada = null): bool
-    {
+    /**
+     * @param  bool|null  $tieneFacturaCargada
+     * @param  bool|null  $tienePendientesCarga  Si hay FC/NC nuevas sin cargar, no mandar a Pagos.
+     */
+    public static function puedeMostrarEnviarPagos(
+        ?Ordencompra $oc,
+        ?bool $tieneFacturaCargada = null,
+        ?bool $tienePendientesCarga = null
+    ): bool {
         if (! $oc || ! $oc->id) {
             return false;
         }
@@ -195,8 +202,16 @@ final class OrdencompraLegajoGastronomiaSupport
         if (self::sectorPagosId() <= 0) {
             return false;
         }
+        $cargada = $tieneFacturaCargada ?? self::tieneFacturaCargada($oc);
+        if (! $cargada) {
+            return false;
+        }
+        $pendientes = $tienePendientesCarga;
+        if ($pendientes === null) {
+            $pendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc) !== [];
+        }
 
-        return $tieneFacturaCargada ?? self::tieneFacturaCargada($oc);
+        return ! $pendientes;
     }
 
     public static function puedeDevolverACuentasAPagar(?Ordencompra $oc): bool
@@ -339,7 +354,10 @@ final class OrdencompraLegajoGastronomiaSupport
         return $errores === [];
     }
 
-    public static function puedeMostrarEnviarCuentasAPagar(?Ordencompra $oc): bool
+    /**
+     * @param  bool|null  $tienePendientesCarga  Si viene informado, no consulta pendientes (bandeja hidratada).
+     */
+    public static function puedeMostrarEnviarCuentasAPagar(?Ordencompra $oc, ?bool $tienePendientesCarga = null): bool
     {
         if (! $oc || ! $oc->id) {
             return false;
@@ -348,8 +366,18 @@ final class OrdencompraLegajoGastronomiaSupport
         if (OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorId)) {
             return false;
         }
-        if (self::esSectorPagos($sectorId) || self::esSectorFinalizado($sectorId)) {
+        if (self::esSectorFinalizado($sectorId)) {
             return false;
+        }
+        // OC anual: desde Pagos se reenvía a CxP cuando hay FC/NC nuevas aún no cargadas.
+        if (self::esSectorPagos($sectorId)) {
+            $tienePendientes = $tienePendientesCarga;
+            if ($tienePendientes === null) {
+                $tienePendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc) !== [];
+            }
+            if (! $tienePendientes) {
+                return false;
+            }
         }
 
         return OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(

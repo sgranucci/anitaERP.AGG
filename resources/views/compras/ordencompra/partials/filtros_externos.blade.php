@@ -15,11 +15,14 @@
 
         return route($rutaIndex, $q);
     };
+    $mostrarEmpresas = ($empresa_query ?? collect())->count() > 1;
+    $mostrarExport = ! empty($exportRuta);
 @endphp
-@if (($empresa_query ?? collect())->count() > 1)
+@if ($mostrarEmpresas || $mostrarExport)
 <div class="oc-empresas card-body py-2 border-bottom bg-white">
     <div class="d-flex flex-wrap align-items-center">
-        <div class="mb-1">
+        @if ($mostrarEmpresas)
+        <div class="mb-1 mr-2">
             <span class="text-muted small mr-2 oc-emp-label"><i class="fa fa-building"></i> Empresa:</span>
             <div class="btn-group btn-group-sm flex-wrap oc-seg" role="group" aria-label="Filtro de empresa">
                 @foreach ($empresa_query as $emp)
@@ -34,6 +37,16 @@
                 </a>
             </div>
         </div>
+        @endif
+        @if ($mostrarExport)
+        <div class="mb-1 ml-auto oc-empresas-export">
+            @include('includes.exportar-tabla-queryparams', [
+                'ruta' => $exportRuta,
+                'queryparams' => $exportQueryparams ?? $filtrosQuery ?? [],
+                'variant' => 'compact',
+            ])
+        </div>
+        @endif
     </div>
 </div>
 @endif

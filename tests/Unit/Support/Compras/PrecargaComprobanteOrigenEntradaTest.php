@@ -40,4 +40,20 @@ class PrecargaComprobanteOrigenEntradaTest extends TestCase
         ));
         $this->assertStringContainsString('$0', PrecargaComprobanteOrigenEntrada::leyendaSinImportes());
     }
+
+    public function test_conservar_origen_al_adjuntar_pdf(): void
+    {
+        $this->assertTrue(PrecargaComprobanteOrigenEntrada::conservarOrigenAlAdjuntarPdf(
+            PrecargaComprobanteOrigenEntrada::API
+        ));
+        $this->assertTrue(PrecargaComprobanteOrigenEntrada::conservarOrigenAlAdjuntarPdf(
+            PrecargaComprobanteOrigenEntrada::MAIL
+        ));
+        $this->assertFalse(PrecargaComprobanteOrigenEntrada::conservarOrigenAlAdjuntarPdf(
+            PrecargaComprobanteOrigenEntrada::LEGAJO
+        ));
+        $this->assertFalse(PrecargaComprobanteOrigenEntrada::conservarOrigenAlAdjuntarPdf(
+            PrecargaComprobanteOrigenEntrada::SCAN_ANITA
+        ));
+    }
 }

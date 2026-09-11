@@ -21,4 +21,12 @@ interface RequisicionQueryInterface
      * Usuario con permiso crear-ordencompra, acceso a la requisición y estado APROBADA.
      */
     public function puedeUsuarioGenerarMultiplesOcDesdeRequisicion(Requisicion $r): bool;
+
+    /**
+     * Conteos por estado con los mismos filtros del listado, excepto el chip de estado.
+     *
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return array{total: int, por_estado: array<string, int>, provisorio: int, pendiente: int, en_compras: int, en_arbol: int, aprobada: int, genero_oc: int, cumplida: int, suspendida: int}
+     */
+    public function resumenIndex($filtros): array;
 }

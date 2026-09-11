@@ -40,9 +40,10 @@ class ContabilidadCuentaAutomaticaSeedService
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CAJA_TRANSITORIA => '111010004',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_DIFERENCIA_CAJA => '521280004',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_VENTAS_RULETA => '412020001',
-        CuentaAutomaticaClaves::CIERRE_MAQUINA_CANON_LOTERIA => '521020001',
+        // 521010 = cánones MÁQUINAS. No usar 521020 (cánones sala bingo).
+        CuentaAutomaticaClaves::CIERRE_MAQUINA_CANON_LOTERIA => '521010001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CONT_CANON_LOTERIA => '215010001',
-        CuentaAutomaticaClaves::CIERRE_MAQUINA_CANON_HOSPITAL => '521020002',
+        CuentaAutomaticaClaves::CIERRE_MAQUINA_CANON_HOSPITAL => '521010002',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CONT_CANON_HOSPITAL => '215010003',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_DEBE => '521040005',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_HABER => '211010009',

@@ -160,7 +160,7 @@ return [
 
     /*
      * Escritura Anita tesmov al grabar/borrar IE (OPP/EGR/ING/TRA).
-     * Una fila por línea de cuentacaja (mismo patrón que cobranza).
+     * TRA: tesmov TED (entrada/Debe) + TEH (salida/Haber), numerador tctes 314/316.
      */
     /*
      * Escritura Anita che_ban al grabar/borrar IE (a-movim.c / pago.c):

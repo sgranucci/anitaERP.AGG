@@ -5,6 +5,7 @@ namespace App\Support\Caja;
 use App\ApiAnita;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cheque;
+use App\Models\Compras\Pagoproveedor_Comprobante;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
@@ -12,22 +13,34 @@ use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplicacionCuentacorr
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Escritura Anita che_ban al emitir IE/OPP (a-movim.c + pago.c):
- * - pago (cabecera)
- * - auxpag TES + tesmov por cada línea de cuentacaja (pago.c TES / a-movim.c OPP)
+ * Escritura Anita che_ban al emitir IE/OPP (a-movim.c + pago.c / a-tesmov.c):
+ * - pago (cabecera, tipo ERP: OPP/ING/EGR/TRA)
+ * - auxpag TES + tesmov por cada línea de cuentacaja
+ * - TRA: tesmov TED (Debe / entrada) y TEH (Haber / salida) con numerador tctes 314/316,
+ *   como a-tesmov.c; auxpag.axp_nro = nro TED/TEH y axp_sucursal 0/1 (D/H)
  * - auxpag TES + tesmov por retenciones RGP/RIP/RSP/RTP (pago.c inserta_valores + graba_auxpag TES)
  * - auxpag FAC por factura aplicada (pago.c graba_auxpag(FAC))
  * - si hay cheques propios emitidos: cpromae + auxpag CHP + tesmov CHP
  */
 final class IngresoEgresoAnitaTesmovSupport
 {
+    public const TIPO_TESMOV_DEBE = 'TED';
+
+    public const TIPO_TESMOV_HABER = 'TEH';
+
+    /** auxpag.axp_sucursal en TRA nativa: 0 = debe (TED), 1 = haber (TEH). */
+    private const AXP_SUCURSAL_DEBE = 0;
+
+    private const AXP_SUCURSAL_HABER = 1;
+
     /** @var array<string, string> imputacion 8 dígitos => tctes_clave */
     private static array $cacheTipoApPorCuenta = [];
 
-    /** @var array<string, array{imputacion: string, desc: string}|null> tctes_clave => fila */
+    /** @var array<string, array{imputacion: string, desc: string, numero: int}|null> tctes_clave => fila */
     private static array $cacheTctesPorClave = [];
 
     public static function estaHabilitada(): bool
@@ -58,6 +71,68 @@ final class IngresoEgresoAnitaTesmovSupport
     public static function grabarDesdeMovimiento(Caja_Movimiento $movimiento): void
     {
         self::grabarInterno($movimiento, 1.0, null, null, null);
+    }
+
+    /**
+     * Completa auxpag TES + tesmov de retenciones que faltan (RGP/RIP/RSP/RTP).
+     * No toca FDT/GPK/CHP ni borra filas existentes.
+     *
+     * @return list<string> tipos AP insertados
+     */
+    public static function completarRetencionesTesoreriaDesdeMovimiento(Caja_Movimiento $movimiento): array
+    {
+        if (! self::estaHabilitada()) {
+            return [];
+        }
+
+        $movimiento->loadMissing([
+            'caja_movimiento_cuentacajas.cuentacajas',
+            'tipotransaccioncajas',
+            'proveedores',
+            'solicitudpagos',
+            'cheques.cuentacajas',
+            'cheques.proveedores',
+            'cheques.chequeras',
+        ]);
+
+        $ctx = self::contexto($movimiento);
+        if ($ctx === null) {
+            return [];
+        }
+        $ctx['factor'] = 1.0;
+
+        $pagoId = (int) ($movimiento->pagoproveedor_id ?? 0);
+        if ($pagoId <= 0) {
+            return [];
+        }
+
+        $where = ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
+            .' AND axp_rec = '.(int) $ctx['nro']
+            .' AND axp_empresa = '.(int) $ctx['empresa'];
+        $rawList = (new ApiAnita)->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => self::sistema(),
+            'tabla' => 'auxpag',
+            'campos' => 'axp_tipo_ap',
+            'whereArmado' => $where,
+        ], 'caja IE auxpag tipos AP '.$movimiento->id);
+
+        $parseado = ApiAnita::parsearRespuestaLista($rawList);
+        if ($parseado['error_lectura'] !== null) {
+            throw new \RuntimeException(
+                'Error al leer auxpag Anita OPP '.$ctx['nro'].': '.$parseado['error_lectura']
+            );
+        }
+
+        $existentes = [];
+        foreach ($parseado['filas'] as $fila) {
+            $t = strtoupper(substr(trim((string) ($fila->axp_tipo_ap ?? '')), 0, 3));
+            if ($t !== '') {
+                $existentes[$t] = true;
+            }
+        }
+
+        return self::insertAuxpagTesRetenciones($ctx, $pagoId, $existentes);
     }
 
     /**
@@ -128,6 +203,8 @@ final class IngresoEgresoAnitaTesmovSupport
 
         self::insertPago($movimiento, $ctx);
 
+        $esTra = self::esTransferenciaTipo((string) $ctx['tipo']);
+
         foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
             $cuenta = $linea->cuentacajas;
             $codigoCuenta = $cuenta ? trim((string) $cuenta->codigo) : '';
@@ -140,14 +217,44 @@ final class IngresoEgresoAnitaTesmovSupport
                 continue;
             }
 
-            $importeAbs = round(abs((float) $linea->monto), 2);
+            $signed = round((float) $linea->monto * (float) $ctx['factor'], 2);
+            $importeAbs = round(abs($signed), 2);
             if ($importeAbs < 0.01) {
                 continue;
             }
-            $importe = round($importeAbs * $ctx['factor'], 2);
             $monedaId = (int) ($linea->moneda_id ?: 1);
             $cotizacion = self::cotizacionTesmov($monedaId, (float) ($linea->cotizacion ?: 1));
 
+            if ($esTra) {
+                $lado = self::ladoTedTehDesdeImporte($signed);
+                $nroTedTeh = self::reservarNumeroTedTeh($lado);
+                $importe = $importeAbs;
+                $descTesmov = self::descripcionTesmovTedTeh($ctx);
+                self::insertAuxpagCuentaCaja(
+                    $ctx,
+                    $codigoCuenta,
+                    $importe,
+                    $monedaId,
+                    $cotizacion,
+                    false,
+                    $nroTedTeh,
+                    $lado === self::TIPO_TESMOV_DEBE ? self::AXP_SUCURSAL_DEBE : self::AXP_SUCURSAL_HABER
+                );
+                self::insertTesmovComprobante(
+                    $ctx,
+                    $codigoCuenta,
+                    $importe,
+                    $monedaId,
+                    $cotizacion,
+                    $lado,
+                    $nroTedTeh,
+                    $descTesmov
+                );
+
+                continue;
+            }
+
+            $importe = round($importeAbs * (float) $ctx['factor'], 2);
             self::insertAuxpagCuentaCaja(
                 $ctx,
                 $codigoCuenta,
@@ -171,7 +278,7 @@ final class IngresoEgresoAnitaTesmovSupport
             }
         }
         if ($pagoIdRet > 0) {
-            self::insertAuxpagTesRetenciones($ctx, $pagoIdRet);
+            self::insertAuxpagTesRetenciones($ctx, $pagoIdRet, []);
         }
 
         if ($movimientoChequesOrigen !== null) {
@@ -214,6 +321,10 @@ final class IngresoEgresoAnitaTesmovSupport
                 continue;
             }
             self::eliminarChequePropio($cheque, $ctx);
+        }
+
+        if (self::esTransferenciaTipo((string) $ctx['tipo'])) {
+            self::eliminarTesmovTedTehDeTransferencia($ctx, $movimiento->id);
         }
 
         self::deleteWhere('auxpag', ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
@@ -331,6 +442,173 @@ final class IngresoEgresoAnitaTesmovSupport
         ], 'caja IE auxpag update sucursal_cob '.$movimiento->id);
 
         $base['filas_actualizadas'] = ApiAnita::extraerFilasAfectadas($rawUpd) ?? $aCorregir;
+
+        return $base;
+    }
+
+    /**
+     * Pasa tesmov TRA (ambas piernas) a TED/TEH nativos de a-tesmov.c.
+     *
+     * @return array{
+     *   movimiento_id: int,
+     *   tipo: string,
+     *   nro: int,
+     *   empresa: int,
+     *   omitido: ?string,
+     *   filas: list<array<string, mixed>>,
+     *   filas_a_corregir: int,
+     *   filas_actualizadas: int
+     * }
+     */
+    public static function corregirTesmovTedTehDesdeMovimiento(Caja_Movimiento $movimiento, bool $ejecutar): array
+    {
+        $movimiento->loadMissing([
+            'caja_movimiento_cuentacajas.cuentacajas',
+            'tipotransaccioncajas',
+        ]);
+        $base = [
+            'movimiento_id' => (int) $movimiento->id,
+            'tipo' => '',
+            'nro' => 0,
+            'empresa' => 0,
+            'omitido' => null,
+            'filas' => [],
+            'filas_a_corregir' => 0,
+            'filas_actualizadas' => 0,
+        ];
+
+        if (! self::estaHabilitada()) {
+            $base['omitido'] = 'escritura Anita deshabilitada';
+
+            return $base;
+        }
+
+        $ctx = self::contexto($movimiento);
+        if ($ctx === null) {
+            $base['omitido'] = 'sin contexto Anita (tipo/nro)';
+
+            return $base;
+        }
+
+        $base['tipo'] = (string) $ctx['tipo'];
+        $base['nro'] = (int) $ctx['nro'];
+        $base['empresa'] = (int) $ctx['empresa'];
+
+        if (! self::esTransferenciaTipo((string) $ctx['tipo'])) {
+            $base['omitido'] = 'no es TRA';
+
+            return $base;
+        }
+
+        $tesmov = self::listarFilasAnita(
+            'tesmov',
+            'tesv_tipo,tesv_nro,tesv_cuenta,tesv_importe,tesv_desc_mov,tesv_empresa',
+            ' WHERE tesv_tipo = '.self::escSql($ctx['tipo'])
+                .' AND tesv_nro = '.(int) $ctx['nro']
+                .' AND tesv_empresa = '.(int) $ctx['empresa'],
+            'caja IE tesmov TRA list '.$movimiento->id
+        );
+
+        $tesmovPorCuenta = [];
+        foreach ($tesmov as $fila) {
+            $cta = self::imputacionTctesDesdeCodigo(trim((string) ($fila->tesv_cuenta ?? '')));
+            $tesmovPorCuenta[$cta] = $fila;
+        }
+
+        $plan = [];
+        foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
+            $cuenta = $linea->cuentacajas;
+            $codigoCuenta = $cuenta ? trim((string) $cuenta->codigo) : '';
+            if ($codigoCuenta === '') {
+                continue;
+            }
+            $signed = round((float) $linea->monto, 2);
+            if (abs($signed) < 0.01) {
+                continue;
+            }
+            $cta = self::imputacionTctesDesdeCodigo($codigoCuenta);
+            $lado = self::ladoTedTehDesdeImporte($signed);
+            $tes = $tesmovPorCuenta[$cta] ?? null;
+            if ($tes === null) {
+                $plan[] = [
+                    'cuenta' => $cta,
+                    'lado' => $lado,
+                    'skip' => 'sin tesmov TRA de esa cuenta',
+                ];
+
+                continue;
+            }
+            $plan[] = [
+                'cuenta' => $cta,
+                'lado' => $lado,
+                'tesv_tipo_old' => strtoupper(trim((string) ($tes->tesv_tipo ?? ''))),
+                'tesv_nro_old' => (int) ($tes->tesv_nro ?? 0),
+                'tesv_importe' => (float) ($tes->tesv_importe ?? 0),
+                'desc_old' => trim((string) ($tes->tesv_desc_mov ?? '')),
+                'desc_new' => self::descripcionTesmovTedTeh($ctx),
+                'axp_sucursal_new' => $lado === self::TIPO_TESMOV_DEBE
+                    ? self::AXP_SUCURSAL_DEBE
+                    : self::AXP_SUCURSAL_HABER,
+            ];
+        }
+
+        $aCorregir = 0;
+        foreach ($plan as $item) {
+            if (! isset($item['skip'])) {
+                $aCorregir++;
+            }
+        }
+        $base['filas'] = $plan;
+        $base['filas_a_corregir'] = $aCorregir;
+
+        if (! $ejecutar || $aCorregir === 0) {
+            return $base;
+        }
+
+        $actualizadas = 0;
+        foreach ($plan as $i => $item) {
+            if (isset($item['skip'])) {
+                continue;
+            }
+            $lado = (string) $item['lado'];
+            $nroNuevo = self::reservarNumeroTedTeh($lado);
+            $cuentaSql = self::escSql($item['cuenta']);
+            $whereTes = ' WHERE tesv_tipo = '.self::escSql($ctx['tipo'])
+                .' AND tesv_nro = '.(int) $ctx['nro']
+                .' AND tesv_cuenta = '.$cuentaSql
+                .' AND tesv_empresa = '.(int) $ctx['empresa'];
+            $rawTes = (new ApiAnita)->apiCallEscritura([
+                'tabla' => 'tesmov',
+                'acc' => 'update',
+                'sistema' => self::sistema(),
+                'valores' => 'tesv_tipo = '.self::escSql($lado)
+                    .', tesv_nro = '.(int) $nroNuevo
+                    .', tesv_desc_mov = '.self::escSql($item['desc_new']),
+                'whereArmado' => $whereTes,
+            ], 'caja IE tesmov TRA->'.$lado.' '.$movimiento->id);
+            self::assertOk($rawTes, 'tesmov TRA->'.$lado, (int) $ctx['nro']);
+
+            $whereAxp = ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
+                .' AND axp_rec = '.(int) $ctx['nro']
+                .' AND axp_banco = '.$cuentaSql
+                .' AND axp_empresa = '.(int) $ctx['empresa']
+                .' AND axp_tipo_ap <> '.self::escSql('CHP');
+            $rawAxp = (new ApiAnita)->apiCallEscritura([
+                'tabla' => 'auxpag',
+                'acc' => 'update',
+                'sistema' => self::sistema(),
+                'valores' => 'axp_nro = '.(int) $nroNuevo
+                    .', axp_sucursal = '.(int) $item['axp_sucursal_new'],
+                'whereArmado' => $whereAxp,
+            ], 'caja IE auxpag TRA TED/TEH '.$movimiento->id);
+            self::assertOk($rawAxp, 'auxpag TRA TED/TEH', (int) $ctx['nro']);
+
+            $plan[$i]['tesv_nro_new'] = $nroNuevo;
+            $actualizadas++;
+        }
+
+        $base['filas'] = $plan;
+        $base['filas_actualizadas'] = $actualizadas;
 
         return $base;
     }
@@ -610,16 +888,22 @@ final class IngresoEgresoAnitaTesmovSupport
         float $importe,
         int $monedaId,
         float $cotizacion,
-        bool $desdePagoProveedor = false
+        bool $desdePagoProveedor = false,
+        ?int $nroTesmovOverride = null,
+        ?int $sucursalAxpOverride = null
     ): void {
         $tipoAp = self::tipoAplicacionPorCuentaCaja($codigoCuenta);
         $imputacion = self::imputacionTctesDesdeCodigo($codigoCuenta);
         // pago.c TES: axp_nro=0, axp_fecha_co=0, letra_comp=letra OP.
         // axp_sucursal_cob = sucursal de la OP (empresa Anita / nroemp). Con 0 Anita no encuentra la OP.
-        $nroAp = $desdePagoProveedor ? 0 : (int) $ctx['nro'];
+        // TRA (a-tesmov.c): axp_nro = nro TED/TEH; axp_sucursal 0=debe / 1=haber.
+        $nroAp = $nroTesmovOverride !== null
+            ? $nroTesmovOverride
+            : ($desdePagoProveedor ? 0 : (int) $ctx['nro']);
         $fechaCo = $desdePagoProveedor ? '0' : $ctx['fecha'];
         $letraComp = $desdePagoProveedor ? self::esc($ctx['letra']) : ' ';
         $sucursalCob = $desdePagoProveedor ? (int) $ctx['empresa'] : (int) $ctx['sucursal'];
+        $sucursalAxp = $sucursalAxpOverride !== null ? $sucursalAxpOverride : (int) $ctx['sucursal'];
 
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'auxpag',
@@ -657,7 +941,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$fechaCo."',
                 '".$imputacion."',
                 '".$letraComp."',
-                '".$ctx['sucursal']."',
+                '".$sucursalAxp."',
                 '".self::esc($ctx['letra'])."',
                 '".$sucursalCob."',
                 '0',
@@ -676,9 +960,14 @@ final class IngresoEgresoAnitaTesmovSupport
      * axp_nro/axp_fecha_co/axp_sucursal = 0; axp_banco = tctes_imputacion.
      *
      * @param  array<string, mixed>  $ctx
+     * @param  array<string, true>  $omitirTiposAp  axp_tipo_ap ya presentes (no reinsertar)
+     * @return list<string>
      */
-    private static function insertAuxpagTesRetenciones(array $ctx, int $pagoproveedorId): void
-    {
+    private static function insertAuxpagTesRetenciones(
+        array $ctx,
+        int $pagoproveedorId,
+        array $omitirTiposAp = []
+    ): array {
         $retenciones = Pagoproveedor_Retencion::query()
             ->where('pagoproveedor_id', $pagoproveedorId)
             ->orderBy('id')
@@ -702,8 +991,12 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         $cotizacion = self::cotizacionTesmov($monedaId, (float) ($ctx['cotizacion'] ?? 1));
+        $insertados = [];
 
         foreach ($totales as $tipoAp => $importeAbs) {
+            if (isset($omitirTiposAp[$tipoAp])) {
+                continue;
+            }
             $tctes = self::tctesPorClave($tipoAp);
             if ($tctes === null) {
                 throw new \RuntimeException(
@@ -723,7 +1016,10 @@ final class IngresoEgresoAnitaTesmovSupport
             $importe = round($importeAbs * (float) $ctx['factor'], 2);
             self::insertAuxpagTesValor($ctx, $tipoAp, $imputacion, $importe, $monedaId);
             self::insertTesmovComprobante($ctx, $imputacion, $importe, $monedaId, $cotizacion);
+            $insertados[] = $tipoAp;
         }
+
+        return $insertados;
     }
 
     /**
@@ -791,7 +1087,7 @@ final class IngresoEgresoAnitaTesmovSupport
     }
 
     /**
-     * @return array{imputacion: string, desc: string}|null
+     * @return array{imputacion: string, desc: string, numero: int}|null
      */
     private static function tctesPorClave(string $clave): ?array
     {
@@ -835,6 +1131,7 @@ final class IngresoEgresoAnitaTesmovSupport
             self::$cacheTctesPorClave[$clave] = [
                 'imputacion' => $imputacion,
                 'desc' => $desc,
+                'numero' => (int) ($fila->tctes_numero ?? 0),
             ];
 
             return self::$cacheTctesPorClave[$clave];
@@ -850,9 +1147,9 @@ final class IngresoEgresoAnitaTesmovSupport
     }
 
     /**
-     * pago.c graba_auxpag(FAC): una fila por factura aplicada.
-     * axp_tipo_ap = tipo del comprobante (FNB/FAC/… o APA si es OPA),
-     * axp_nro / letra_comp / axp_sucursal = clave de la factura (sucursal_comp),
+     * pago.c graba_auxpag(FAC): una fila por comprobante aplicado (FIS/CIS/OPA…).
+     * Anita no usa importes negativos: axp_tipo_ap es el tipo del comprobante.
+     * axp_nro / letra_comp / axp_sucursal = clave del comprobante,
      * axp_sucursal_cob = sucursal de la OP (empresa Anita), clave MultiEmpresa,
      * axp_banco = nro de cuota (6 dígitos), axp_nro_interno = interno Anita.
      *
@@ -860,13 +1157,12 @@ final class IngresoEgresoAnitaTesmovSupport
      */
     private static function insertAuxpagFacturasAplicadas(array $ctx, int $pagoproveedorId, float $factor): void
     {
-        $aplicaciones = Proveedor_Cuentacorriente_Aplicacion::query()
+        $lineas = Pagoproveedor_Comprobante::query()
             ->where('pagoproveedor_id', $pagoproveedorId)
-            ->where('total', '<', 0)
             ->orderBy('id')
             ->get();
 
-        foreach ($aplicaciones as $apl) {
+        foreach ($lineas as $pc) {
             $deuda = Proveedor_Cuentacorriente::query()
                 ->with([
                     'proveedores',
@@ -877,7 +1173,7 @@ final class IngresoEgresoAnitaTesmovSupport
                     'comprobante_proveedor_cuotas',
                     'pagoproveedores',
                 ])
-                ->find((int) $apl->proveedor_cuentacorriente_id);
+                ->find((int) $pc->proveedor_cuentacorriente_id);
             if ($deuda === null) {
                 continue;
             }
@@ -897,7 +1193,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 $tipoAp = 'APA';
             }
 
-            $monto = round(abs((float) $apl->total) * ($factor < 0 ? -1.0 : 1.0), 2);
+            $monto = round(abs((float) $pc->montoaplicado) * ($factor < 0 ? -1.0 : 1.0), 2);
             if (abs($monto) < 0.01) {
                 continue;
             }
@@ -916,7 +1212,7 @@ final class IngresoEgresoAnitaTesmovSupport
             }
             $bancoCuota = str_pad((string) $cuota, 6, '0', STR_PAD_LEFT);
 
-            $codMon = (string) ((int) ($apl->moneda_id ?: $deuda->moneda_id ?: 1));
+            $codMon = (string) ((int) ($pc->moneda_id ?: $deuda->moneda_id ?: 1));
             $codMon = $codMon !== '' ? substr($codMon, 0, 1) : '1';
 
             // pago.c arrastra el concepto de cash-flow del comprobante aplicado (com_concepto
@@ -992,8 +1288,16 @@ final class IngresoEgresoAnitaTesmovSupport
         string $codigoCuenta,
         float $importe,
         int $monedaId,
-        float $cotizacion
+        float $cotizacion,
+        ?string $tipoTesmov = null,
+        ?int $nroTesmov = null,
+        ?string $descTesmov = null
     ): void {
+        $tipo = $tipoTesmov !== null && $tipoTesmov !== '' ? $tipoTesmov : (string) $ctx['tipo'];
+        $nro = $nroTesmov !== null ? $nroTesmov : (int) $ctx['nro'];
+        $desc = $descTesmov !== null && $descTesmov !== ''
+            ? $descTesmov
+            : self::recortar($ctx['entregadoA'] !== '' ? $ctx['entregadoA'] : $ctx['detalle'], 30);
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'tesmov',
             'acc' => 'insert',
@@ -1019,13 +1323,13 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT)."',
                 '".$ctx['fecha']."',
                 '".$ctx['fecha']."',
-                '".self::esc($ctx['tipo'])."',
+                '".self::esc($tipo)."',
                 ' ',
                 '".$ctx['sucursal']."',
-                '".$ctx['nro']."',
+                '".$nro."',
                 '".$importe."',
                 '".$cotizacion."',
-                '".self::esc(self::recortar($ctx['entregadoA'] !== '' ? $ctx['entregadoA'] : $ctx['detalle'], 30))."',
+                '".self::esc($desc)."',
                 ' ',
                 'S/C',
                 '0',
@@ -1034,7 +1338,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$monedaId."'",
         ], 'caja IE tesmov');
 
-        self::assertOk($raw, 'tesmov', (int) $ctx['nro']);
+        self::assertOk($raw, 'tesmov', (int) $nro);
     }
 
     /** @param  array<string, mixed>  $ctx */
@@ -1358,6 +1662,127 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$monedaId."'",
         ], 'caja IE tesmov CHP anula '.$cheque->id);
         self::assertOk($raw, 'tesmov CHP anula', $cheque->id);
+    }
+
+    public static function esTransferenciaTipo(string $tipo): bool
+    {
+        return strtoupper(substr(trim($tipo), 0, 3)) === IngresoEgresoTransferenciaSupport::ABREV_TRA;
+    }
+
+    private static function ladoTedTehDesdeImporte(float $signed): string
+    {
+        return $signed >= 0 ? self::TIPO_TESMOV_DEBE : self::TIPO_TESMOV_HABER;
+    }
+
+    /** @param  array<string, mixed>  $ctx */
+    private static function descripcionTesmovTedTeh(array $ctx): string
+    {
+        $leyenda = (string) ($ctx['entregadoA'] !== '' ? $ctx['entregadoA'] : $ctx['detalle']);
+
+        return self::recortar(trim($ctx['tipo'].' '.$ctx['nro'].' '.$leyenda), 30);
+    }
+
+    private static function claveNumeradorTedTeh(string $tipoTedTeh): int
+    {
+        $tctes = self::tctesPorClave($tipoTedTeh);
+        $clave = (int) ($tctes['numero'] ?? 0);
+        if ($clave <= 0) {
+            throw new \RuntimeException(
+                'Tipo de tesorería Anita '.$tipoTedTeh.' sin numerador (tctes_numero).'
+            );
+        }
+
+        return $clave;
+    }
+
+    private static function reservarNumeroTedTeh(string $tipoTedTeh): int
+    {
+        $clave = self::claveNumeradorTedTeh($tipoTedTeh);
+        $lock = Cache::lock('caja:anita:numerador:tedteh:'.$clave, 120);
+        if (! $lock->block(90)) {
+            throw new \RuntimeException(
+                'Otra terminal está numerando tesmov '.$tipoTedTeh.' en Anita. Reintente.'
+            );
+        }
+
+        try {
+            $ultimo = IngresoEgresoAnitaNumeracionSupport::leerUltimoNumero($clave);
+            $siguiente = $ultimo + 1;
+            IngresoEgresoAnitaNumeracionSupport::actualizarNumerador($clave, $siguiente);
+
+            return $siguiente;
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     */
+    private static function eliminarTesmovTedTehDeTransferencia(array $ctx, int $movimientoId): void
+    {
+        $filas = self::listarFilasAnita(
+            'auxpag',
+            'axp_tipo_ap,axp_nro,axp_banco,axp_sucursal',
+            ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
+                .' AND axp_rec = '.(int) $ctx['nro']
+                .' AND axp_empresa = '.(int) $ctx['empresa'],
+            'caja IE auxpag TRA tesmov '.$movimientoId
+        );
+
+        foreach ($filas as $fila) {
+            $tipoAp = strtoupper(substr(trim((string) ($fila->axp_tipo_ap ?? '')), 0, 3));
+            if ($tipoAp === 'CHP') {
+                continue;
+            }
+            $nroTes = (int) ($fila->axp_nro ?? 0);
+            $cuenta = trim((string) ($fila->axp_banco ?? ''));
+            if ($nroTes <= 0 || $cuenta === '') {
+                continue;
+            }
+            $sucursalAxp = (int) ($fila->axp_sucursal ?? -1);
+            $tipos = [];
+            if ($sucursalAxp === self::AXP_SUCURSAL_DEBE) {
+                $tipos[] = self::TIPO_TESMOV_DEBE;
+            } elseif ($sucursalAxp === self::AXP_SUCURSAL_HABER) {
+                $tipos[] = self::TIPO_TESMOV_HABER;
+            } else {
+                $tipos = [self::TIPO_TESMOV_DEBE, self::TIPO_TESMOV_HABER];
+            }
+            foreach ($tipos as $tipoTes) {
+                self::deleteWhere(
+                    'tesmov',
+                    ' WHERE tesv_tipo = '.self::escSql($tipoTes)
+                        .' AND tesv_nro = '.$nroTes
+                        .' AND tesv_cuenta = '.self::escSql($cuenta)
+                        .' AND tesv_empresa = '.(int) $ctx['empresa'],
+                    'caja IE tesmov '.$tipoTes.' delete '.$movimientoId
+                );
+            }
+        }
+    }
+
+    /**
+     * @return list<object>
+     */
+    private static function listarFilasAnita(string $tabla, string $campos, string $where, string $contexto): array
+    {
+        $raw = (new ApiAnita)->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => self::sistema(),
+            'tabla' => $tabla,
+            'campos' => $campos,
+            'whereArmado' => $where,
+        ], $contexto);
+
+        $parseado = ApiAnita::parsearRespuestaLista($raw);
+        if ($parseado['error_lectura'] !== null) {
+            throw new \RuntimeException(
+                'Error al leer '.$tabla.' Anita: '.$parseado['error_lectura']
+            );
+        }
+
+        return $parseado['filas'];
     }
 
     private static function deleteWhere(string $tabla, string $where, string $contexto): void

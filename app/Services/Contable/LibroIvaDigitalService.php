@@ -8,7 +8,10 @@ use App\Services\Contable\LibroIvaDigital\LibroIvaDigitalImportacionesGenerador;
 use App\Services\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleGenerador;
 use App\Services\Contable\LibroIvaDigital\LibroIvaDigitalVentasGenerador;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalArchivosSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalCacheSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalValidacionSupport;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use ZipArchive;
 
 class LibroIvaDigitalService
@@ -33,8 +36,23 @@ class LibroIvaDigitalService
      */
     public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
+        $t0 = microtime(true);
         $ventas = $this->ventasGenerador->generar($empresaId, $anio, $mes, $opciones);
+        Log::info('libro_iva_digital.generar.ventas', [
+            'empresa_id' => $empresaId,
+            'periodo' => sprintf('%04d-%02d', $anio, $mes),
+            'comprobantes' => $ventas['resumen']['comprobantes'] ?? 0,
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+        ]);
+
+        $t1 = microtime(true);
         $compras = $this->comprasGenerador->generar($empresaId, $anio, $mes, $opciones);
+        Log::info('libro_iva_digital.generar.compras', [
+            'empresa_id' => $empresaId,
+            'comprobantes' => $compras['resumen']['comprobantes'] ?? 0,
+            'ms' => round((microtime(true) - $t1) * 1000, 1),
+        ]);
+
         $importaciones = $this->importacionesGenerador->generar($empresaId, $anio, $mes, $opciones);
         $anulados = $this->anuladosGenerador->generar($empresaId, $anio, $mes, $opciones);
         $comprasRegistros = array_merge(
@@ -76,7 +94,78 @@ class LibroIvaDigitalService
 
         $resultado['validaciones'] = LibroIvaDigitalValidacionSupport::validar($resultado);
 
+        Log::info('libro_iva_digital.generar.ok', [
+            'empresa_id' => $empresaId,
+            'periodo' => sprintf('%04d-%02d', $anio, $mes),
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+            'mem_mb' => round(memory_get_peak_usage(true) / 1048576, 1),
+        ]);
+
         return $resultado;
+    }
+
+    /**
+     * @param  array{por_fecha_jornada?: bool, prorrateo_cf_global?: bool, completar_compras_anita?: bool, completar_fsl_anita?: bool}  $opciones
+     * @return array<string, mixed>
+     */
+    public function generarYCachear(int $empresaId, int $anio, int $mes, array $opciones = []): array
+    {
+        $firma = LibroIvaDigitalCacheSupport::firma($empresaId, $anio, $mes, $opciones);
+        $lock = Cache::lock(LibroIvaDigitalCacheSupport::lockKey($firma), 600);
+
+        try {
+            $lock->block(120);
+        } catch (\Illuminate\Contracts\Cache\LockTimeoutException) {
+            $cached = LibroIvaDigitalCacheSupport::leer($firma);
+            if ($cached !== null) {
+                return $cached;
+            }
+
+            throw new \RuntimeException(
+                'El Libro IVA Digital ya se está generando para este período. Espere un momento y vuelva a descargar el ZIP.'
+            );
+        }
+
+        try {
+            $cached = LibroIvaDigitalCacheSupport::leer($firma);
+            if ($cached !== null) {
+                return $cached;
+            }
+
+            $resultado = $this->generar($empresaId, $anio, $mes, $opciones);
+            LibroIvaDigitalCacheSupport::guardar($firma, $resultado);
+
+            return LibroIvaDigitalCacheSupport::compactar($resultado);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @param  array{por_fecha_jornada?: bool, prorrateo_cf_global?: bool, completar_compras_anita?: bool, completar_fsl_anita?: bool}  $opciones
+     * @return array<string, mixed>|null
+     */
+    public function leerCache(int $empresaId, int $anio, int $mes, array $opciones = []): ?array
+    {
+        return LibroIvaDigitalCacheSupport::leer(
+            LibroIvaDigitalCacheSupport::firma($empresaId, $anio, $mes, $opciones),
+        );
+    }
+
+    /**
+     * Cache si existe; si no, genera una sola vez (consultar o ZIP).
+     *
+     * @param  array{por_fecha_jornada?: bool, prorrateo_cf_global?: bool, completar_compras_anita?: bool, completar_fsl_anita?: bool}  $opciones
+     * @return array<string, mixed>
+     */
+    public function obtenerParaExportar(int $empresaId, int $anio, int $mes, array $opciones = []): array
+    {
+        $cached = $this->leerCache($empresaId, $anio, $mes, $opciones);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        return $this->generarYCachear($empresaId, $anio, $mes, $opciones);
     }
 
     /**

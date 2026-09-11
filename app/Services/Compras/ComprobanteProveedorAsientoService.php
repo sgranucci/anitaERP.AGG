@@ -23,6 +23,7 @@ use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
@@ -169,6 +170,19 @@ class ComprobanteProveedorAsientoService
             'comprobante_proveedor_recepciones.recepcion_proveedores',
         ]);
 
+        $politicaFlujo = $this->previewSupport->politicaFlujo($comprobante);
+        if ($politicaFlujo['bloquea_sin_com'] ?? false) {
+            throw new RuntimeException(
+                ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaSinCom($politicaFlujo)
+            );
+        }
+        if (($politicaFlujo['debe_asignar_com'] ?? false)
+            && ! $this->previewSupport->tieneRecepcionAsignada($comprobante)) {
+            throw new RuntimeException(
+                ComprobanteProveedorFlujoOcComFacSupport::mensajeDebeAsignarCom($politicaFlujo)
+            );
+        }
+
         // La moneda de la factura manda: todo el asiento se arma en ella y con su cotización.
         $monedaFactura = $this->monedaFactura($comprobante);
 
@@ -314,11 +328,20 @@ class ComprobanteProveedorAsientoService
 
         if ($usaProvisionCom) {
             $totalProvisionBruta = $this->totalProvisionRecepcionesVinculadas($comprobante);
-            // a-compprov.c lee_recepcion: disponible = recepción − ya facturado (aplicped).
-            // Sin esto, un anticipo 50/50 falla el asiento al aplicar la 2ª mitad contra la COM completa.
-            $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
-                (int) ($comprobante->ordencompra_id ?? 0),
+            // Disponible = COM asignadas − facturas ya imputadas a esas COM (moneda factura).
+            $recepcionIdsVinculadas = $comprobante->comprobante_proveedor_recepciones
+                ->pluck('recepcion_proveedor_id')
+                ->map(static fn ($id) => (int) $id)
+                ->filter(static fn (int $id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+            $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnRecepciones(
+                $recepcionIdsVinculadas,
                 (int) ($comprobante->id ?? 0) > 0 ? (int) $comprobante->id : null,
+                $monedaFactura['moneda_id'],
+                $monedaFactura['cotizacion'],
+                $monedaFactura['fecha'],
             );
             $totalProvision = ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
                 $totalProvisionBruta,
@@ -577,6 +600,11 @@ class ComprobanteProveedorAsientoService
             $preview['es_preview'] = true;
             unset($preview['asiento_id'], $preview['numeroasiento']);
         }
+
+        $preview['avisos'] = $this->previewSupport->unicosAvisos(
+            $preview['avisos'] ?? [],
+            $preview['error'] ?? null
+        );
 
         return $preview;
     }

@@ -75,6 +75,17 @@ final class PrecargaComprobanteOrigenEntrada
         return in_array($origen, [self::PDF_IA, self::BATCH_IA, self::MAIL], true);
     }
 
+    /**
+     * Precarga que ya trae datos de la factura (API, portal o IA). No pisar con moneda/origen de OC o scan.
+     */
+    public static function conservarOrigenAlAdjuntarPdf(?string $origen): bool
+    {
+        $origen = strtoupper(trim((string) $origen));
+
+        return self::esLecturaIa($origen)
+            || in_array($origen, [self::API, self::PORTAL], true);
+    }
+
     public static function origenComprobanteDesdePrecarga(?string $origenPrecarga): string
     {
         if ($origenPrecarga === self::SCAN_ANITA || $origenPrecarga === self::LEGAJO) {

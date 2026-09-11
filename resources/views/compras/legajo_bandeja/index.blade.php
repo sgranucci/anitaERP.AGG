@@ -26,6 +26,9 @@ Bandeja de legajos
         color: #6c757d;
         line-height: 1.2;
     }
+    .oc-empresas-export {
+        white-space: nowrap;
+    }
 </style>
 @endsection
 
@@ -51,9 +54,14 @@ Bandeja de legajos
         return route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString(array_merge($filtros, $extra)));
     };
     $qsAtajo = function (string $nuevo) use ($filtros, $atajo) {
-        return route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString(array_merge($filtros, [
+        $extra = [
             'atajo' => $atajo === $nuevo ? '' : $nuevo,
-        ])));
+        ];
+        if ($atajo !== $nuevo && $nuevo === OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR) {
+            $extra['vista'] = OrdencompraLegajoBandejaFiltros::VISTA_CXP;
+        }
+
+        return route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString(array_merge($filtros, $extra)));
     };
     $vistasTodas = [
         OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES => 'Pendientes',
@@ -341,9 +349,11 @@ Bandeja de legajos
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        Seleccioná cada comprobante (FC, NC, ND) y asignale sus COM.
+                        Este envío incluye solo los comprobantes pendientes (aún no cargados en CxP).
+                        En una OC anual las FC/NC ya contabilizadas quedan aparte y no se vuelven a mandar.
+                        Seleccioná cada pendiente y asignale COM si corresponde.
                         Si el tipo está mal (p.ej. ND marcada como FIS), corregilo con el selector a la derecha.
-                        Las notas de crédito y de débito no exigen recepción. Al guardar se persisten todas las asignaciones.
+                        Las notas de crédito y de débito no exigen recepción.
                     </p>
                     <div class="row">
                         <div class="col-md-5 mb-3">
@@ -447,11 +457,14 @@ Bandeja de legajos
                 'filtros' => $filtros,
                 'filtrosQuery' => $filtrosQuery ?? [],
                 'empresa_query' => $empresa_query ?? collect(),
+                'exportRuta' => 'listar_legajo_compra',
+                'exportQueryparams' => $filtrosQuery ?? [],
             ])
             <div class="card-body py-2">
                 <p class="text-muted small mb-2">
                     El legajo es la OC (sector, historia, factura y COM).
                     Compras envía; Cuentas a pagar carga la factura y envía a Pagos; Pagos ve solo lo que está en Pagos y archiva.
+                    <strong>Listo para cargar</strong> abre Cuentas a pagar y muestra las OC con al menos una factura aún pendiente (aunque otras de la misma OC ya estén cargadas).
                 </p>
                 @if (!empty($alcanceSector))
                     <p class="text-muted small mb-2">{{ $alcanceSector }}</p>
@@ -490,10 +503,6 @@ Bandeja de legajos
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'listar_legajo_compra',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
                 <table class="table table-striped table-bordered table-hover">
                     <thead>
                         <tr>
@@ -558,7 +567,9 @@ Bandeja de legajos
                                         <span class="badge badge-primary" title="COM asignada a la factura">asignada</span>
                                     @endif
                                     @if (!empty($row['tiene_comprobante']))
-                                        <span class="badge badge-info">cargada</span>
+                                        <span class="badge badge-info" title="Todas las facturas y NC del legajo están en CxP">cargada</span>
+                                    @elseif (!empty($row['tiene_comprobante_parcial']))
+                                        <span class="badge badge-warning" title="Hay comprobantes en CxP, pero quedan documentos pendientes">parcial</span>
                                     @endif
                                     @if (!empty($row['tiene_pago']))
                                         <span class="badge badge-success" title="Orden de pago">{{ !empty($row['etiqueta_pago']) ? $row['etiqueta_pago'] : 'OP' }}</span>
@@ -570,8 +581,21 @@ Bandeja de legajos
                                             <div class="bandeja-fac-item">
                                                 <span>{{ $facLeg['numero'] ?? '' }}</span>
                                                 @if (!empty($facLeg['estado']))
-                                                    <span class="badge {{ ($facLeg['estado'] ?? '') === 'cargada' ? 'badge-info' : 'badge-secondary' }}">
-                                                        {{ ($facLeg['estado'] ?? '') === 'cargada' ? 'cargada' : 'pendiente' }}
+                                                    @php
+                                                        $estadoFac = (string) ($facLeg['estado'] ?? '');
+                                                        $badgeFac = match ($estadoFac) {
+                                                            'cargada' => 'badge-info',
+                                                            'en_anita' => 'badge-success',
+                                                            default => 'badge-warning',
+                                                        };
+                                                        $textoFac = match ($estadoFac) {
+                                                            'cargada' => 'cargada',
+                                                            'en_anita' => 'en Anita',
+                                                            default => 'pendiente',
+                                                        };
+                                                    @endphp
+                                                    <span class="badge {{ $badgeFac }}">
+                                                        {{ $textoFac }}
                                                     </span>
                                                 @endif
                                                 @if (!empty($facLeg['origen']))
@@ -701,7 +725,7 @@ Bandeja de legajos
                                         <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-enviar-cxp"
                                                 data-url="{{ $row['url_enviar_cxp'] }}"
                                                 data-ordencompra-id="{{ $row['id'] }}"
-                                                title="Enviar a Cuentas a pagar">
+                                                title="{{ ((int) ($row['pendientes_carga'] ?? 0) > 0 && (int) ($row['sector_id'] ?? 0) > 0) ? 'Enviar FC/NC pendientes a Cuentas a pagar' : 'Enviar a Cuentas a pagar' }}">
                                             <i class="fa fa-share"></i>
                                         </button>
                                     @endif

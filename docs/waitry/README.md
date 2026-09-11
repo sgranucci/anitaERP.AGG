@@ -116,7 +116,9 @@ Si falla la API, la factura **no** se revierte; el POS recibe aviso en `warn` (`
 
 ### Estado KDS (updateexternal)
 
-`syncStatusPOS` registra el cobro pero **no** mueve Solicitada → Aceptado en el historial/KDS. Tras un sync OK, Anita llama:
+Waitry indicó (sep 2026) que `syncStatusPOS` ya alcanza para marcar la orden aceptada. El POST a KDS queda **apagado** (`WAITRY_UPDATE_ORDER_STATUS_HABILITADO=false`); el código se conserva para reactivar.
+
+Si se vuelve a habilitar, tras un sync OK Anita llama:
 
 `POST /live/order/updateexternal` (`WAITRY_UPDATE_ORDER_STATUS_URL`)
 

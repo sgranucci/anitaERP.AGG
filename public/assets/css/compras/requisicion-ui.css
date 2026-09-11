@@ -1,0 +1,99 @@
+/*
+ * Requisiciones — misma familia visual que órdenes de compra.
+ * Tokens y layout viven en ordencompra-ui.css (.oc-ui). Aquí solo extras del módulo.
+ */
+
+.rq-ui .oc-header .btn-outline-warning {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.55);
+    color: #fff;
+}
+
+.rq-ui .oc-header .btn-outline-warning:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+}
+
+.rq-ui .oc-resumen {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 8px 12px;
+}
+
+.rq-ui .oc-kpi .oc-kpi-label {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.rq-ui .oc-kpi .oc-kpi-valor {
+    font-size: 18px;
+}
+
+.rq-ui.rq-seguimiento .oc-resumen {
+    grid-template-columns: repeat(3, 1fr);
+}
+
+.rq-ui .oc-kpi.is-alerta .oc-kpi-valor {
+    color: var(--oc-red, #bc4a3c);
+}
+
+.rq-ui .oc-grilla tbody tr.rq-fila-provisorio {
+    background: var(--oc-slate-bg);
+}
+
+.rq-ui .oc-grilla tbody tr.rq-fila-provisorio:hover,
+.rq-ui .oc-grilla tbody tr.rq-fila-alerta:hover {
+    background: #ece4d4;
+}
+
+.rq-ui .oc-grilla tbody tr.rq-fila-alerta {
+    background: #fdecea;
+}
+
+.rq-ui .oc-grilla .rq-items {
+    max-width: 320px;
+    font-size: 12px;
+    color: var(--oc-ink-soft);
+    line-height: 1.35;
+}
+
+.rq-ui #tabla-articulos-requisicion thead th,
+.rq-ui .form3 table thead th,
+.rq-ui .form5 table thead th,
+.rq-ui .form6 table thead th,
+.rq-ui #tabla-lista-presupuestos thead th {
+    background: var(--oc-thead);
+    color: var(--oc-thead-ink);
+    font-size: 12px;
+    font-weight: 700;
+    border-color: #5DADE2;
+}
+
+.oc-pill-provisorio { background: #6c757d; color: #fff; }
+.oc-pill-en-compras { background: #007bff; color: #fff; }
+.oc-pill-en-arbol { background: #ffc107; color: #212529; }
+.oc-pill-genero-oc { background: #17a2b8; color: #fff; }
+
+.rq-ui .oc-pill-pendiente { background: #17a2b8; color: #fff; }
+.rq-ui .oc-pill-aprobada,
+.rq-ui .oc-pill-cumplida { background: #28a745; color: #fff; }
+.rq-ui .oc-pill-suspendida { background: #343a40; color: #fff; }
+
+@media (max-width: 1199px) {
+    .rq-ui .oc-resumen {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+    }
+    .rq-ui.rq-seguimiento .oc-resumen {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 767px) {
+    .rq-ui .oc-resumen {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+    .rq-ui.rq-seguimiento .oc-resumen {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

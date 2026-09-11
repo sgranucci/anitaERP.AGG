@@ -16,7 +16,8 @@ use App\Support\Contable\CuentaAutomaticaResolver;
  * Preview/armado de asiento TES para orden de pago.
  *
  * Debe: proveedores MN/ME (según OC del comprobante); anticipos por lo pagado sin comprobante.
- * Haber: cuentas de caja, cheques, retenciones (vía Contable → Cuentas automáticas, no como “valores” Anita).
+ * Haber: cuentas de caja, cheques, retenciones; NC restan de proveedores; OPA al Haber de anticipos
+ * (o de proveedores si la empresa no tiene cuenta de anticipo).
  *
  * Cotización (pago.c in_cotizacion): una sola TC del pago en TODAS las líneas del asiento
  * (también MN, para poder expresar el movimiento en ME). La diferencia vs cotización de
@@ -222,18 +223,29 @@ final class PagoproveedorAsientoArmadoSupport
             $ccId = (int) ($comp->proveedor_cuentacorriente_ids ?? $comp->idcuentacorrientes ?? 0);
             $cuentaId = 0;
             $monedaId = (int) ($comp->moneda_ids ?? 1);
+            $cc = null;
             if ($ccId > 0) {
                 $cc = Proveedor_Cuentacorriente::query()
                     ->with(['comprobante_proveedores.ordencompras.ordencompra_articulos', 'comprobante_proveedores.proveedores'])
                     ->find($ccId);
-                if ($cc?->comprobante_proveedores) {
-                    $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorDesdeComprobante(
-                        $cc->comprobante_proveedores,
-                        $proveedor
-                    );
-                    $monedaId = ProveedorCuentaContableMonedaSupport::monedaIdParaCuentaProveedor($cc->comprobante_proveedores)
-                        ?: $monedaId;
+            }
+            $esOpa = $cc !== null && PagoproveedorAplicacionLadoSupport::esOpa($cc);
+            $signo = $cc !== null ? PagoproveedorAplicacionLadoSupport::signo($cc) : 1;
+
+            if ($esOpa) {
+                $cuentaAnticipo = ProveedorAnticipoCuentaContableSupport::cuentaParaCreditoAplicado($cc);
+                if ($cuentaAnticipo) {
+                    $cuentaId = $cuentaAnticipo;
+                    $monedaId = (int) ($cc->moneda_id ?: $monedaId);
                 }
+            }
+            if ($cuentaId <= 0 && $cc?->comprobante_proveedores) {
+                $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorDesdeComprobante(
+                    $cc->comprobante_proveedores,
+                    $proveedor
+                );
+                $monedaId = ProveedorCuentaContableMonedaSupport::monedaIdParaCuentaProveedor($cc->comprobante_proveedores)
+                    ?: $monedaId;
             }
             if ($cuentaId <= 0) {
                 $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId($proveedor, $monedaId);
@@ -242,6 +254,7 @@ final class PagoproveedorAsientoArmadoSupport
                 continue;
             }
             // Misma TC del pago (no la de la factura). DC cubre la diferencia.
+            // Signo: factura DEBE; NC/OPA HABER (OPA a anticipos si hay cuenta).
             $cotLinea = self::cotizacionParaLinea($monedaId, $cotizacionPago);
             $key = $cuentaId.'|'.$monedaId.'|'.$cotLinea;
             if (! isset($totalesPorCuenta[$key])) {
@@ -252,20 +265,26 @@ final class PagoproveedorAsientoArmadoSupport
                     'monto' => 0.0,
                 ];
             }
-            $totalesPorCuenta[$key]['monto'] += $monto;
+            $totalesPorCuenta[$key]['monto'] += $signo * $monto;
             $dcLinea = isset($comp->diferencias_cambio) ? (float) $comp->diferencias_cambio : (float) ($comp->diferencia_cambio ?? 0);
             $dcTotal += $dcLinea;
-            $cuentaApRef = $cuentaId;
+            if ($signo > 0) {
+                $cuentaApRef = $cuentaId;
+            }
         }
 
         foreach ($totalesPorCuenta as $fila) {
+            $montoNeto = round((float) $fila['monto'], 4);
+            if (abs($montoNeto) < 0.0001) {
+                continue;
+            }
             self::agregaCuenta(
                 $asiento,
                 (int) $fila['cuentacontable_id'],
                 (int) $fila['moneda_id'],
                 (float) $fila['cotizacion'],
-                'D',
-                (float) $fila['monto'],
+                $montoNeto >= 0 ? 'D' : 'H',
+                abs($montoNeto),
                 $cuentacontableRepository,
                 $conceptoPago
             );

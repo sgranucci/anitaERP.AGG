@@ -6,7 +6,10 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Contable\Asiento;
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
+use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 use App\Support\Compras\PagoproveedorFirmaAgenteRetencionSupport;
+use App\Support\Compras\PagoproveedorRetencionCertificadoLineasSupport;
+use App\Support\Compras\Retencion\RetencionesPagoBasesDesdeConceptosSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Sueldos\NumeroALetrasEs;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -23,6 +26,7 @@ class PagoproveedorComprobantePdfService
 {
     public function __construct(
         private PagoproveedorRepositoryInterface $pagoproveedorRepository,
+        private RetencionesPagoBasesDesdeConceptosSupport $basesRetencionSupport,
     ) {
     }
 
@@ -97,6 +101,7 @@ class PagoproveedorComprobantePdfService
             'tipotransaccion_cajas',
             'pagoproveedor_comprobantes.monedas',
             'pagoproveedor_comprobantes.proveedor_cuentacorrientes.comprobante_proveedores.tipotransaccion_compras',
+            'pagoproveedor_comprobantes.proveedor_cuentacorrientes.pagoproveedores',
             'pagoproveedor_comprobantes.proveedor_cuentacorrientes.comprobante_proveedores.monedas',
             'pagoproveedor_retenciones.provincias',
             'pagoproveedor_retenciones.monedas',
@@ -124,6 +129,7 @@ class PagoproveedorComprobantePdfService
         $logo = EmpresaLogoArchivo::dataUriDesdeNombre($empresa->nombre ?? null);
 
         $aplicaciones = $this->armarAplicaciones($pago);
+        $lineasRetencionPorId = $this->armarLineasCertificadoRetencion($pago, $aplicaciones);
         $mediosCaja = $this->armarMediosCaja($pago);
         $cheques = ($pago->cheques ?? collect())->map(function ($cheque) {
             $fecha = $cheque->fechapago ?: $cheque->fechaemision;
@@ -153,7 +159,15 @@ class PagoproveedorComprobantePdfService
 
         $totalOp = (float) $pago->monto;
         $totalRetenciones = (float) $retenciones->sum('importe');
-        $totalMedios = (float) $mediosCaja->sum('monto_abs') + (float) $cheques->sum('monto');
+        $totalCheques = (float) $cheques->sum('monto');
+        $totalCaja = (float) $mediosCaja->sum('monto_abs');
+        $totalMedios = $totalCaja + $totalCheques;
+        $totalAplicacionesMonto = (float) $aplicaciones->sum('monto');
+        $totalAplicacionesAplicado = (float) $aplicaciones->sum('monto_aplicado');
+        $monedasApl = $aplicaciones->pluck('moneda')->unique()->filter()->values();
+        $monedaAplicaciones = $monedasApl->count() === 1 ? (string) $monedasApl->first() : '';
+        $totalAsientoDebe = (float) $asientoLineas->sum(fn ($l) => (float) ($l['debe'] ?? 0));
+        $totalAsientoHaber = (float) $asientoLineas->sum(fn ($l) => (float) ($l['haber'] ?? 0));
 
         $direccionEmpresa = trim((string) ($empresa->domicilio ?? ''));
         $localidadEmpresa = trim((string) (optional($empresa->localidad)->nombre ?? ''));
@@ -179,6 +193,7 @@ class PagoproveedorComprobantePdfService
             'direccionEmpresa' => $direccionEmpresa,
             'usuarioLogin' => $usuarioLogin,
             'aplicaciones' => $aplicaciones,
+            'lineasRetencionPorId' => $lineasRetencionPorId,
             'mediosCaja' => $mediosCaja,
             'cheques' => $cheques,
             'retenciones' => $retenciones,
@@ -186,7 +201,14 @@ class PagoproveedorComprobantePdfService
             'asientoLineas' => $asientoLineas,
             'totalOp' => $totalOp,
             'totalRetenciones' => $totalRetenciones,
+            'totalCheques' => $totalCheques,
+            'totalCaja' => $totalCaja,
             'totalMedios' => $totalMedios,
+            'totalAplicacionesMonto' => $totalAplicacionesMonto,
+            'totalAplicacionesAplicado' => $totalAplicacionesAplicado,
+            'monedaAplicaciones' => $monedaAplicaciones,
+            'totalAsientoDebe' => $totalAsientoDebe,
+            'totalAsientoHaber' => $totalAsientoHaber,
             'importeLetras' => mb_strtoupper(NumeroALetrasEs::monto($totalOp), 'UTF-8'),
             'monedaAbr' => (string) (optional($pago->monedas)->abreviatura ?? ''),
             'cotizacion' => (float) ($pago->cotizacion ?? 0),
@@ -208,31 +230,88 @@ class PagoproveedorComprobantePdfService
             $pcc = $apl->proveedor_cuentacorrientes;
             $cp = optional($pcc)->comprobante_proveedores;
             $tipo = optional(optional($cp)->tipotransaccion_compras)->abreviatura
-                ?: (string) (optional($cp)->tipocomprobante ?? 'CC');
+                ?: (string) (optional($cp)->tipocomprobante ?? '');
+            if ($tipo === '' && $pcc && PagoproveedorAplicacionLadoSupport::esOpa($pcc)) {
+                $tipo = (string) (optional($pcc->pagoproveedores)->tipocomprobante ?: 'OPA');
+            }
+            if ($tipo === '') {
+                $tipo = 'CC';
+            }
             $letra = (string) (optional($cp)->letra ?? '');
             $suc = (int) (optional($cp)->sucursal ?? 0);
             $nro = (string) (optional($cp)->numerocomprobante ?? optional($pcc)->id ?? '');
-            $nroFmt = $letra !== ''
-                ? sprintf('%s %s%04d-%08d', $tipo, $letra, $suc, (int) $nro)
-                : sprintf('%s %s', $tipo, $nro);
+            $nroFmt = $cp
+                ? ($letra !== ''
+                    ? sprintf('%s %s%04d-%08d', $tipo, $letra, $suc, (int) $nro)
+                    : sprintf('%s %s', $tipo, $nro))
+                : (string) (optional($pcc?->pagoproveedores)->etiquetaComprobante() ?: ('CC#'.(int) (optional($pcc)->id ?? 0)));
 
-            $montoDoc = (float) (optional($cp)->total ?? optional($pcc)->total ?? $apl->montoaplicado);
+            $signo = $pcc ? PagoproveedorAplicacionLadoSupport::signo($pcc) : 1;
+            $montoDoc = abs((float) (optional($cp)->total ?? optional($pcc)->total ?? $apl->montoaplicado));
             $fecha = optional($cp)->fechacomprobante ?? optional($pcc)->fecha;
 
             return [
+                'cc_id' => (int) ($apl->proveedor_cuentacorriente_id ?? optional($pcc)->id ?? 0),
                 'fecha' => $fecha ? Carbon::parse($fecha)->format('d/m/Y') : '',
                 'tipo' => $tipo,
                 'numero' => $nroFmt,
                 'nro_int' => (string) (optional($pcc)->id ?? ''),
-                'monto' => $montoDoc,
+                'monto' => $signo * $montoDoc,
                 'moneda' => (string) (optional($apl->monedas)->abreviatura
                     ?? optional(optional($cp)->monedas)->abreviatura
                     ?? ''),
                 'cotizacion' => (float) ($apl->cotizacion ?? optional($pcc)->cotizacion ?? 1),
-                'monto_aplicado' => (float) $apl->montoaplicado,
-                'neto_gravado' => (float) (optional($cp)->neto ?? optional($cp)->subtotal ?? $apl->montoaplicado),
+                'monto_aplicado' => $signo * abs((float) $apl->montoaplicado),
+                'neto_gravado' => $signo * abs((float) (optional($cp)->subtotal ?? $apl->montoaplicado)),
+                'signo' => $signo,
             ];
         })->values();
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $aplicaciones
+     * @return array<int, list<array<string, mixed>>>
+     */
+    private function armarLineasCertificadoRetencion(Pagoproveedor $pago, Collection $aplicaciones): array
+    {
+        $payload = [];
+        foreach ($pago->pagoproveedor_comprobantes ?? [] as $apl) {
+            $ccId = (int) ($apl->proveedor_cuentacorriente_id ?? 0);
+            $monto = abs((float) ($apl->montoaplicado ?? 0));
+            if ($ccId <= 0 || $monto <= 0) {
+                continue;
+            }
+            $payload[] = [
+                'proveedor_cuentacorriente_id' => $ccId,
+                'montoaplicado' => $monto,
+                'cotizacion_aplicada' => (float) ($apl->cotizacion_aplicada ?? $apl->cotizacion ?? 0),
+                'moneda_id' => (int) ($apl->moneda_id ?? 0) ?: null,
+            ];
+        }
+
+        $bases = $payload === []
+            ? null
+            : $this->basesRetencionSupport->desdeAplicaciones(
+                $payload,
+                (int) ($pago->moneda_id ?: 1),
+                (float) ($pago->cotizacion ?: 1)
+            );
+        $detalle = $bases?->detalle ?? [];
+        $filasApl = $aplicaciones->all();
+        $out = [];
+
+        foreach ($pago->pagoproveedor_retenciones ?? [] as $ret) {
+            $out[(int) $ret->id] = PagoproveedorRetencionCertificadoLineasSupport::lineas(
+                $filasApl,
+                $detalle,
+                (string) $ret->tiporetencion,
+                (float) $ret->base_calculo,
+                (float) $ret->importe,
+                (float) $ret->alicuota,
+            );
+        }
+
+        return $out;
     }
 
     /**
@@ -299,21 +378,22 @@ class PagoproveedorComprobantePdfService
     }
 
     /**
-     * Fecha de DDJJ Ganancias RG 830: día 14 del mes siguiente al pago (Anita dia_pres_retg).
+     * Período de la DDJJ Ganancias (mes siguiente al pago). Sin día: el vencimiento
+     * exacto no es fijo en el certificado.
      */
     private function fechaPresentacionGanancias($fecha): string
     {
         if (! $fecha) {
             return '—';
         }
-        $d = Carbon::parse($fecha)->startOfMonth()->addMonth()->day(14);
+        $d = Carbon::parse($fecha)->startOfMonth()->addMonth();
         $meses = [
             1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
             5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
             9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
         ];
 
-        return $d->day.' de '.($meses[(int) $d->month] ?? $d->month).' de '.$d->year;
+        return ($meses[(int) $d->month] ?? $d->month).' '.$d->year;
     }
 
     private function periodoQuincenaSuss($fecha): string

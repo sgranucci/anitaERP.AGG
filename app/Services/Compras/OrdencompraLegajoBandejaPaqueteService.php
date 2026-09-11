@@ -12,6 +12,7 @@ use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
+use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
@@ -86,6 +87,7 @@ class OrdencompraLegajoBandejaPaqueteService
         }
         $asignadas = $this->asignacionesPorPrecarga($precargaIds);
         $comprobantes = $this->comprobantesDelLegajo($oc, $precargaIds);
+        $facturas = $this->marcarFacturasCargadasEnCxp($facturas, $comprobantes);
         $pagos = $this->pagosDeComprobantes(array_map(static fn (array $c) => (int) $c['id'], $comprobantes));
         $pendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc);
         $siguiente = $pendientes[0] ?? null;
@@ -540,6 +542,7 @@ class OrdencompraLegajoBandejaPaqueteService
 
         $precarga = Precarga_Comprobante_Proveedor::query()->create([
             'empresa_id' => $empresaId,
+            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
             'proveedor_id' => $proveedorId,
             'tipotransaccion_compra_id' => $tipoId,
             'letra' => $letra,
@@ -821,16 +824,65 @@ class OrdencompraLegajoBandejaPaqueteService
 
     private function marcarOrigenScanAnitaSiNoEsIa(Precarga_Comprobante_Proveedor $precarga): Precarga_Comprobante_Proveedor
     {
-        if (PrecargaComprobanteOrigenEntrada::esLecturaIa((string) ($precarga->origen_entrada ?? ''))) {
-            return $precarga;
-        }
-        if ((string) ($precarga->origen_entrada ?? '') === PrecargaComprobanteOrigenEntrada::SCAN_ANITA) {
+        $origen = (string) ($precarga->origen_entrada ?? '');
+        if (PrecargaComprobanteOrigenEntrada::conservarOrigenAlAdjuntarPdf($origen)
+            || $origen === PrecargaComprobanteOrigenEntrada::SCAN_ANITA) {
             return $precarga;
         }
         $precarga->origen_entrada = PrecargaComprobanteOrigenEntrada::SCAN_ANITA;
         $precarga->save();
 
         return $precarga;
+    }
+
+    /**
+     * En OC anuales el mismo número acumula FC/NC de todo el año.
+     * Marca las que ya tienen CP en CxP para no tratarlas como parte de este envío.
+     *
+     * @param  list<array<string, mixed>>  $facturas
+     * @param  list<array<string, mixed>>  $comprobantes
+     * @return list<array<string, mixed>>
+     */
+    public function marcarFacturasCargadasEnCxp(array $facturas, array $comprobantes): array
+    {
+        $claves = [];
+        $preIds = [];
+        foreach ($comprobantes as $cp) {
+            $preId = (int) ($cp['precarga_id'] ?? 0);
+            if ($preId > 0) {
+                $preIds[$preId] = true;
+            }
+            $clave = $this->claveFacturaEtiqueta((string) ($cp['etiqueta'] ?? ''));
+            if ($clave !== '') {
+                $claves[$clave] = true;
+            }
+            $letra = strtoupper(trim((string) ($cp['letra'] ?? '')));
+            $suc = (int) ($cp['sucursal'] ?? 0);
+            $nro = (int) ($cp['numerocomprobante'] ?? 0);
+            if ($nro > 0) {
+                $claves[($letra !== '' ? $letra : 'FC').'|'.$suc.'|'.$nro] = true;
+            }
+        }
+
+        foreach ($facturas as &$fac) {
+            $cargado = false;
+            if (($fac['origen'] ?? 'precarga') === 'precarga') {
+                $id = (int) ($fac['id'] ?? 0);
+                if ($id > 0 && isset($preIds[$id])) {
+                    $cargado = true;
+                }
+            }
+            if (! $cargado) {
+                $clave = $this->claveFacturaEtiqueta((string) ($fac['etiqueta'] ?? ''));
+                if ($clave !== '' && isset($claves[$clave])) {
+                    $cargado = true;
+                }
+            }
+            $fac['cargado_cxp'] = $cargado;
+        }
+        unset($fac);
+
+        return $facturas;
     }
 
     public function precargaPerteneceAlLegajo(Ordencompra $oc, Precarga_Comprobante_Proveedor $precarga): bool

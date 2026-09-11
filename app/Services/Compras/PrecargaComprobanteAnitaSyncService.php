@@ -12,6 +12,7 @@ use App\Models\Configuracion\Moneda;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\AnitaSync\Precarga\PrecargaCabeceraAnitaMapper;
 use App\Support\Compras\AnitaSync\Precarga\PrecargaConceptoAnitaMapper;
+use App\Support\Compras\ComprobanteProveedorCotizacionIngresoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Illuminate\Database\Eloquent\Builder;
@@ -241,9 +242,28 @@ class PrecargaComprobanteAnitaSyncService
 
         $monedaId = (int) ($payload['moneda_id'] ?? 0);
         if ($monedaId > 0) {
-            $codigoMoneda = Moneda::query()->whereKey($monedaId)->value('codigo');
-            if ($codigoMoneda !== null && (string) $codigoMoneda !== '') {
-                $payload['codigo_moneda_anita'] = (string) $codigoMoneda;
+            $moneda = Moneda::query()->find($monedaId);
+            if ($moneda) {
+                if (filled($moneda->abreviatura)) {
+                    $payload['moneda'] = (string) $moneda->abreviatura;
+                } elseif (filled($moneda->nombre)) {
+                    $payload['moneda'] = (string) $moneda->nombre;
+                }
+                if (filled($moneda->codigo)) {
+                    $payload['codigo_moneda_anita'] = (string) $moneda->codigo;
+                }
+            }
+        }
+        if ($monedaId <= 1) {
+            $payload['moneda_id'] = $monedaId > 0 ? $monedaId : 1;
+            $payload['cotizacion'] = 1.0;
+            // Corrección manual a MN: limpia marcas de cotización heredadas de un TC erróneo.
+            $marca = (string) ($payload['marca_error'] ?? '');
+            if ($marca === ''
+                || $marca === ComprobanteProveedorCotizacionIngresoSupport::MARCA_INVALIDA
+                || $marca === ComprobanteProveedorCotizacionIngresoSupport::MARCA_ESCALA) {
+                $payload['marca_error'] = null;
+                $payload['aviso_error'] = null;
             }
         }
         if (empty($payload['codigo_moneda_anita'])) {

@@ -22,7 +22,8 @@ use Throwable;
 
 /**
  * Validaciones premium al grabar factura de proveedor:
- * WSCDC (comprobantes recibidos), WSAPOC (apócrifas), gravados↔alícuotas IVA, IIBB vs padrones.
+ * WSCDC (comprobantes recibidos), WSAPOC (apócrifas), gravados↔alícuotas IVA.
+ * IIBB vs padrones: al grabar solo avisa (el cotejo de concepto vive en precarga/agente).
  *
  * @phpstan-type ResultadoCompliance array{
  *     ok: bool,
@@ -277,6 +278,10 @@ class ComprobanteProveedorComplianceValidacionService
     }
 
     /**
+     * Cotejo alícuota implícita vs padrón. Al grabar el comprobante no bloquea:
+     * el importe es un hecho de la factura; en precarga/agente sí se usa para
+     * corregir el concepto (BA vs CABA, etc.).
+     *
      * @param  list<array{concepto_ivacompra_id: int, monto: float}>  $lineas
      * @param  ResultadoCompliance  $resultado
      */
@@ -341,7 +346,7 @@ class ComprobanteProveedorComplianceValidacionService
                 // Intentar ARBA/CABA por tasa.
                 $match = $this->resolverJurisdiccionPorTasa($cuitEmpresa, $tasaImplicita, $fecha);
                 if ($match === null) {
-                    $resultado['errores'][] = sprintf(
+                    $resultado['avisos'][] = sprintf(
                         'Percepción IIBB «%s» $%s (≈%s%%) no coincide con padrones ARBA/CABA y el concepto no tiene provincia/jurisdicción.',
                         $concepto->nombre,
                         number_format($importe, 2, ',', '.'),
@@ -369,7 +374,7 @@ class ComprobanteProveedorComplianceValidacionService
                 )) {
                     continue;
                 }
-                $resultado['errores'][] = sprintf(
+                $resultado['avisos'][] = sprintf(
                     'Percepción IIBB «%s» (jur. %s): el CUIT %s no figura en el padrón descargado o no hay alícuota vigente.',
                     $concepto->nombre,
                     $jurisdiccion,
@@ -379,7 +384,7 @@ class ComprobanteProveedorComplianceValidacionService
             }
 
             if (abs($tasaImplicita - $tasaPadron) > self::TOLERANCIA_IIBB_PP) {
-                $resultado['errores'][] = sprintf(
+                $resultado['avisos'][] = sprintf(
                     'Percepción IIBB «%s» ≈ %s%% vs padrón jurisdicción %s %s%% (tol. %s pp) para %s.',
                     $concepto->nombre,
                     number_format($tasaImplicita, 2, ',', '.'),

@@ -6,6 +6,7 @@ use App\Models\Caja\Caja_Movimiento;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
+use App\Models\Configuracion\Provincia;
 use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
@@ -21,7 +22,7 @@ class Comprobante_Proveedor extends Model implements Auditable
     protected $fillable = [
         'empresa_id', 'proveedor_id', 'tipotransaccion_compra_id', 'ordencompra_id',
         'ordencompra_comprobante_id', 'precarga_comprobante_proveedor_id', 'condicionpago_id',
-        'conceptogasto_id',
+        'conceptogasto_id', 'provincia_destino_id',
         'letra', 'sucursal', 'numerocomprobante', 'fechacomprobante', 'fechaiva', 'fechavencimiento',
         'fecharecepcion', 'subtotal', 'total', 'moneda_id', 'cotizacion', 'numerocae', 'tipo_autorizacion',
         'fechavencimientocae', 'es_fce',         'leyenda', 'modo_carga', 'origen_entrada', 'tipo_tesoreria', 'estado', 'asiento_id',
@@ -86,6 +87,11 @@ class Comprobante_Proveedor extends Model implements Auditable
     public function conceptogastos()
     {
         return $this->belongsTo(\App\Models\Caja\Conceptogasto::class, 'conceptogasto_id');
+    }
+
+    public function provinciaDestino()
+    {
+        return $this->belongsTo(Provincia::class, 'provincia_destino_id');
     }
 
     public function condicionpagos()

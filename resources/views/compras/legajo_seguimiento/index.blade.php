@@ -174,10 +174,21 @@ Seguimiento de legajos
                                         @if (!empty($row['paquete_ok']))
                                             <span class="badge badge-success">OK</span>
                                         @else
-                                            @if (!empty($row['tiene_factura']))<span class="badge badge-secondary">FC</span>@endif
-                                            @if (!empty($row['tiene_com']))<span class="badge badge-secondary">COM</span>@endif
-                                            @if (!empty($row['tiene_comprobante']))<span class="badge badge-info">cargada</span>@endif
-                                            @if (!empty($row['tiene_pago']))<span class="badge badge-success">{{ $row['etiqueta_pago'] ?: 'OP' }}</span>@endif
+                                            @if (!empty($row['tiene_factura']))
+                                                <span class="badge badge-secondary">FC</span>
+                                            @endif
+                                            @if (!empty($row['tiene_com']))
+                                                <span class="badge badge-secondary">COM</span>
+                                            @endif
+                                            @if (!empty($row['tiene_comprobante']))
+                                                <span class="badge badge-info" title="Todas las facturas y NC del legajo están en CxP">cargada</span>
+                                            @endif
+                                            @if (!empty($row['tiene_comprobante_parcial']))
+                                                <span class="badge badge-warning" title="Hay comprobantes en CxP, pero quedan documentos pendientes">parcial</span>
+                                            @endif
+                                            @if (!empty($row['tiene_pago']))
+                                                <span class="badge badge-success">{{ $row['etiqueta_pago'] ?: 'OP' }}</span>
+                                            @endif
                                             @if (empty($row['tiene_factura']) && empty($row['tiene_com']))
                                                 <span class="text-muted">—</span>
                                             @endif

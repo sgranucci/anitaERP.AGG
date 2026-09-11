@@ -226,6 +226,10 @@
     margin-right: 8px;
 }
 
+.oc-ui .oc-empresas-export {
+    white-space: nowrap;
+}
+
 /* ---- grilla ---- */
 
 .oc-ui .oc-grilla {

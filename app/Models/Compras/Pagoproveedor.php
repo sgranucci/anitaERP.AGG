@@ -11,6 +11,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use App\Traits\Compras\PagoproveedorEstadoTrait;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class Pagoproveedor extends Model
@@ -105,6 +106,14 @@ class Pagoproveedor extends Model
     {
         return $this->hasOne(Asiento::class, 'pagoproveedor_id')
             ->with('asiento_movimientos');
+    }
+
+    /**
+     * OP armada en anitaERP (tiene asiento). Excluye stubs importados de Anita (RG 830, etc.).
+     */
+    public function scopeGeneradaEnErp(Builder $query): Builder
+    {
+        return $query->where('asiento_id', '>', 0);
     }
 
     public function etiquetaComprobante(): string

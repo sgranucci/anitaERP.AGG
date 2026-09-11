@@ -22,4 +22,17 @@ class PrecargaComprobanteEstadosTest extends TestCase
         $this->assertFalse(PrecargaComprobanteEstados::puedeMarcarCargadaAnita(PrecargaComprobanteEstados::GENERADA));
         $this->assertFalse(PrecargaComprobanteEstados::puedeMarcarCargadaAnita(PrecargaComprobanteEstados::CARGADA_ANITA));
     }
+
+    public function test_cargada_anita_no_pendiente_carga_cxp(): void
+    {
+        $this->assertTrue(PrecargaComprobanteEstados::esCargadaAnita(PrecargaComprobanteEstados::CARGADA_ANITA));
+        $this->assertTrue(PrecargaComprobanteEstados::esCargadaAnita('cargada_anita'));
+        $this->assertFalse(PrecargaComprobanteEstados::esCargadaAnita(PrecargaComprobanteEstados::PENDIENTE));
+
+        $this->assertTrue(PrecargaComprobanteEstados::pendienteCargaEnCxp(PrecargaComprobanteEstados::PENDIENTE));
+        $this->assertTrue(PrecargaComprobanteEstados::pendienteCargaEnCxp(null));
+        $this->assertTrue(PrecargaComprobanteEstados::pendienteCargaEnCxp(PrecargaComprobanteEstados::GENERADA));
+        $this->assertFalse(PrecargaComprobanteEstados::pendienteCargaEnCxp(PrecargaComprobanteEstados::CARGADA_ANITA));
+        $this->assertFalse(PrecargaComprobanteEstados::pendienteCargaEnCxp('ANULADA'));
+    }
 }

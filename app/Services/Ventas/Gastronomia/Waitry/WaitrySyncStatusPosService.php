@@ -13,7 +13,9 @@ use Throwable;
 /**
  * Tras facturar una orden importada desde Waitry:
  * 1) syncStatusPOS — registra el cobro en Waitry
- * 2) updateexternal — mueve el estado en KDS (Solicitada → Aceptado)
+ * 2) updateexternal — mueve el estado en KDS (Solicitada → Aceptado).
+ *    Apagado por defecto (`WAITRY_UPDATE_ORDER_STATUS_HABILITADO`); el código queda
+ *    para reactivar si Waitry vuelve a pedirlo.
  *
  * El POS persiste y encola; el HTTP corre en worker (reintentos + cron de seguridad).
  *
@@ -341,6 +343,17 @@ final class WaitrySyncStatusPosService
         int $placeId,
         int $cuentaId,
     ): array {
+        if (! filter_var(config('waitry.update_order_status_habilitado', false), FILTER_VALIDATE_BOOLEAN)) {
+            Log::info('waitry.update_order_status.omitido', [
+                'waitry_order_id' => $waitryOrderId,
+                'cuenta_id' => $cuentaId,
+                'place_id' => $placeId,
+                'motivo' => 'WAITRY_UPDATE_ORDER_STATUS_HABILITADO=false',
+            ]);
+
+            return ['ok' => true, 'omitida' => true];
+        }
+
         $url = trim((string) config('waitry.update_order_status_url', ''));
         if ($url === '') {
             return ['ok' => true];

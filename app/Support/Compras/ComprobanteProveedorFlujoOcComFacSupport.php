@@ -51,6 +51,7 @@ final class ComprobanteProveedorFlujoOcComFacSupport
      *   o seguir anticipada; acá no forzamos: el operador elige el modo.
      *
      * Contrato vigente: sobrescribe la política (ruta con/sin recepción del contrato).
+     * NC / ND / REC no exigen COM aunque el contrato o el flujo de la empresa sí lo pidan para facturas.
      *
      * @return array{
      *     exige_flujo: bool,
@@ -60,6 +61,8 @@ final class ComprobanteProveedorFlujoOcComFacSupport
      *     permite_factura_anticipada: bool,
      *     anticipada_elige_modo: bool,
      *     bloquea_sin_com: bool,
+     *     sin_com_por_tipo: bool,
+     *     tipo_documento: string|null,
      *     contrato_es: bool,
      *     contrato_vigente: bool,
      *     contrato_requiere_recepcion: bool|null,
@@ -68,7 +71,12 @@ final class ComprobanteProveedorFlujoOcComFacSupport
      *     contrato_fuera_de_vigencia: bool
      * }
      */
-    public static function resolverPolitica(?Ordencompra $oc, bool $tieneComDisponibles, ?string $fechaYmd = null): array
+    public static function resolverPolitica(
+        ?Ordencompra $oc,
+        bool $tieneComDisponibles,
+        ?string $fechaYmd = null,
+        ?string $tipoDocumento = null,
+    ): array
     {
         $empresaId = (int) ($oc->empresa_id ?? 0);
         $exige = $oc ? self::exigeFlujo($empresaId) : false;
@@ -113,6 +121,16 @@ final class ComprobanteProveedorFlujoOcComFacSupport
             }
         }
 
+        $sinComPorTipo = $tipoDocumento !== null
+            && $tipoDocumento !== ''
+            && ! OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipoDocumento);
+        if ($sinComPorTipo) {
+            $debeAsignarCom = false;
+            $bloqueaSinCom = false;
+            $permiteAnticipada = false;
+            $anticipadaEligeModo = false;
+        }
+
         return [
             'exige_flujo' => $exige,
             'es_anticipada' => $anticipada,
@@ -121,6 +139,8 @@ final class ComprobanteProveedorFlujoOcComFacSupport
             'permite_factura_anticipada' => $permiteAnticipada,
             'anticipada_elige_modo' => $anticipadaEligeModo,
             'bloquea_sin_com' => $bloqueaSinCom,
+            'sin_com_por_tipo' => $sinComPorTipo,
+            'tipo_documento' => $tipoDocumento,
             'contrato_es' => (bool) ($contrato['es_contrato'] ?? false),
             'contrato_vigente' => (bool) ($contrato['aplica'] ?? false),
             'contrato_requiere_recepcion' => $contrato['aplica'] ? (bool) $contrato['requiere_recepcion'] : null,
@@ -132,6 +152,10 @@ final class ComprobanteProveedorFlujoOcComFacSupport
 
     public static function modoCargaSugerido(array $politica, ?string $modoActual = null): string
     {
+        if ($politica['sin_com_por_tipo'] ?? false) {
+            return ComprobanteProveedorModoCarga::SIN_RECEPCION;
+        }
+
         if ($politica['contrato_vigente'] ?? false) {
             if ($politica['contrato_requiere_recepcion'] ?? false) {
                 return ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
@@ -168,5 +192,31 @@ final class ComprobanteProveedorFlujoOcComFacSupport
         }
 
         return ComprobanteProveedorModoCarga::SIN_RECEPCION;
+    }
+
+    /**
+     * @param  array<string, mixed>  $politica
+     */
+    public static function mensajeBloqueaSinCom(array $politica): string
+    {
+        if (! empty($politica['contrato_vigente']) && ($politica['contrato_requiere_recepcion'] ?? false)) {
+            return 'El contrato vigente de esta OC exige recepción COM obligatoria. '
+                .'Confirme una COM con provisión antes de cargar la factura.';
+        }
+
+        return 'Esta empresa exige el flujo OC → COM → factura: no hay recepción COM disponible '
+            .'y la orden no es anticipada. Confirme una COM con provisión o marque la OC como anticipada.';
+    }
+
+    /**
+     * @param  array<string, mixed>  $politica
+     */
+    public static function mensajeDebeAsignarCom(array $politica): string
+    {
+        if (! empty($politica['contrato_vigente']) && ($politica['contrato_requiere_recepcion'] ?? false)) {
+            return 'El contrato vigente exige factura contra recepción (COM). Asigne una COM antes de guardar.';
+        }
+
+        return 'Hay recepción COM disponible en el legajo: debe asignarla a la factura. No se puede guardar sin COM.';
     }
 }
