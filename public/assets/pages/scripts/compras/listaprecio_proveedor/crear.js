@@ -8,17 +8,44 @@ $(function () {
 	if (typeof activa_eventos_consultaarticulo === 'function') {
 		activa_eventos_consultaarticulo();
 	}
+	if (typeof activa_eventos_consultaproveedor === 'function') {
+		activa_eventos_consultaproveedor();
+	}
 
-	$('#agrega_renglon_listaprecio_articulo').on('click', function () {
-		var $tbody = $('#tabla-articulos-listaprecio tbody');
-		var $first = $tbody.find('tr.item-listaprecio-articulo').first();
+	function fechaHoyIso() {
+		return new Date().toISOString().slice(0, 10);
+	}
+
+	function agregarRenglonArticulo() {
+		var tpl = document.getElementById('template-renglon-listaprecio-articulo');
+		var tbody = document.querySelector('#tabla-articulos-listaprecio tbody');
+		if (!tpl || !tbody) {
+			return;
+		}
+		var node;
+		if (tpl.content) {
+			node = document.importNode(tpl.content, true);
+			var fecha = node.querySelector('input[name="fechavigencias[]"]');
+			if (fecha) {
+				fecha.value = fechaHoyIso();
+			}
+			tbody.appendChild(node);
+			return;
+		}
+		var $first = $('#tabla-articulos-listaprecio tbody tr.item-listaprecio-articulo').first();
+		if (!$first.length) {
+			return;
+		}
 		var $clone = $first.clone();
 		$clone.find('input,select').not('.descripcionarticulo').val('');
 		$clone.find('.linea_id').val('');
 		$clone.find('.descripcionarticulo').val('');
-		var hoy = new Date().toISOString().slice(0, 10);
-		$clone.find('input[name="fechavigencias[]"]').val(hoy);
-		$tbody.append($clone);
+		$clone.find('input[name="fechavigencias[]"]').val(fechaHoyIso());
+		$('#tabla-articulos-listaprecio tbody').append($clone);
+	}
+
+	$('#agrega_renglon_listaprecio_articulo').on('click', function () {
+		agregarRenglonArticulo();
 	});
 
 	$(document).on('click', '.eliminar_listaprecio_articulo', function (event) {
@@ -27,64 +54,42 @@ $(function () {
 		var $rows = $tbody.find('tr.item-listaprecio-articulo');
 		if ($rows.length > 1) {
 			$(this).closest('tr.item-listaprecio-articulo').remove();
-		} else {
-			$(this).closest('tr.item-listaprecio-articulo').find('input,select').each(function () {
-				if ($(this).hasClass('linea_id')) {
-					$(this).val('');
-				} else if ($(this).hasClass('articulo_id')) {
-					$(this).val('');
-				} else if ($(this).hasClass('descripcionarticulo')) {
-					$(this).val('');
-				} else if ($(this).attr('name') === 'fechavigencias[]') {
-					$(this).val(new Date().toISOString().slice(0, 10));
-				} else {
-					$(this).val('');
-				}
-			});
+			return;
 		}
+		$(this).closest('tr.item-listaprecio-articulo').find('input,select').each(function () {
+			if ($(this).hasClass('linea_id') || $(this).hasClass('articulo_id') || $(this).hasClass('descripcionarticulo')) {
+				$(this).val('');
+			} else if ($(this).attr('name') === 'fechavigencias[]') {
+				$(this).val(fechaHoyIso());
+			} else if ($(this).attr('name') === 'descuentos[]') {
+				$(this).val('0');
+			} else {
+				$(this).val('');
+			}
+		});
 	});
 
-	$("#botonform1").click(function () {
-		$(".form1").show();
-		$(".form3").hide();
-		$(".form4").hide();
-		$("#importar-excel").hide();
-	});
-	$("#botonform3").click(function () {
-		$(".form1").hide();
-		$(".form3").show();
-		$(".form4").hide();
-		$("#importar-excel").hide();
-		leeHistoria();
-	});
-	$("#botonform4").click(function () {
-		$(".form1").hide();
-		$(".form3").hide();
-		$(".form4").show();
-		$("#importar-excel").hide();
-	});
-
-	$('#agrega_renglon_archivo_listaprecio').on('click', function (event) {
+	$('#lp-agrega-renglon-archivo').on('click', function (event) {
 		event.preventDefault();
-		var tpl = document.getElementById('template-renglon-archivo-listaprecio');
-		var tbody = document.getElementById('tbody-tabla-archivo-listaprecio');
+		var tpl = document.getElementById('lp-template-renglon-archivo');
+		var tbody = document.getElementById('lp-tbody-tabla-archivo');
 		if (!tpl || !tbody) {
 			return;
 		}
-		// jQuery .html() sobre <template> suele devolver vacío; usar el fragmento del template.
 		if (tpl.content) {
 			tbody.appendChild(document.importNode(tpl.content, true));
-		} else {
-			var html = $(tpl).html();
-			if (html) {
-				$('#tbody-tabla-archivo-listaprecio').append(html);
-			}
 		}
 	});
 
-	$(document).on('click', '#tbody-tabla-archivo-listaprecio .eliminararchivo', function (event) {
+	$(document).on('click', '#lp-tbody-tabla-archivo .lp-eliminararchivo', function (event) {
 		event.preventDefault();
-		$(this).parents('tr').remove();
+		var $tbody = $('#lp-tbody-tabla-archivo');
+		var $rows = $tbody.find('tr.item-archivo-lp');
+		if ($rows.length > 1) {
+			$(this).closest('tr.item-archivo-lp').remove();
+			return;
+		}
+		$(this).closest('tr.item-archivo-lp').find('input[type=file]').val('');
 	});
 
 	$(document).on('click', '.eliminar-archivo-listaprecio', function (event) {
@@ -97,54 +102,60 @@ $(function () {
 		$(this).closest('.col-md-6').remove();
 	});
 
-	$("#botonform-importexcel").on("click", function () {
-		var $target = $("#importar-excel");
-		if (!$target.length) {
+	function abrirModalImportExcel() {
+		var $modal = $('#modal-importar-excel-lp');
+		if (!$modal.length) {
 			return;
 		}
-		$(".form1").show();
-		$(".form3").hide();
-		$(".form4").hide();
-		$target.show();
-		$("html, body").animate(
-			{ scrollTop: $target.offset().top - 72 },
-			350
-		);
+		$('a[href="#tab-precios"]').tab('show');
+		$modal.modal('show');
+	}
+
+	$(document).on('click', '#lp-btn-abrir-import-excel', function (event) {
+		event.preventDefault();
+		abrirModalImportExcel();
+	});
+
+	$('a[data-toggle="tab"][href="#tab-historia"]').on('shown.bs.tab', function () {
+		leeHistoria();
 	});
 
 	function leeHistoria() {
-		var id = $("#listaprecio_proveedor_id").val();
-		if (!id) return;
+		var id = $('#listaprecio_proveedor_id').val();
+		if (!id) {
+			return;
+		}
 		var url = carpetaBase + '/compras/leer_historia_listaprecio_proveedor/' + id;
 		$.get(url, function (historia) {
-			var $w = $(".container-historia").empty();
+			var $w = $('.container-historia').empty();
+			if (!historia || !historia.length) {
+				$w.append('<tr><td colspan="4" class="text-muted text-center py-3">Sin movimientos de estado.</td></tr>');
+				return;
+			}
 			$.each(historia, function (_, value) {
 				var fecha = value.fecha ? String(value.fecha).substring(0, 16) : '';
+				var usuario = value.usuarios && value.usuarios.nombre ? value.usuarios.nombre : '';
+				var obs = (value.observacion || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 				$w.append(
-					'<tr><td><input type="text" class="form-control" value="' + fecha + '" readonly></td>' +
-					'<td><input type="text" class="form-control" value="' + (value.estado || '') + '" readonly></td>' +
-					'<td><input type="text" class="form-control" value="' + (value.usuarios && value.usuarios.nombre ? value.usuarios.nombre : '') + '" readonly></td>' +
-					'<td><input type="text" class="form-control" value="' + (value.observacion || '').replace(/"/g, '&quot;') + '" readonly></td></tr>'
+					'<tr><td>' + fecha + '</td>' +
+					'<td>' + (value.estado || '') + '</td>' +
+					'<td>' + usuario + '</td>' +
+					'<td>' + obs + '</td></tr>'
 				);
 			});
 		});
 	}
 
-	$(".form3,.form4").hide();
-	$(".form1").show();
-	var $imp = $("#importar-excel");
-	if ($imp.length && window.location.hash === "#importar-excel") {
-		$imp.show();
-		setTimeout(function () {
-			$("html, body").animate({ scrollTop: $imp.offset().top - 72 }, 200);
-		}, 100);
-	} else {
-		$imp.hide();
+	if (window.location.hash === '#importar-excel') {
+		setTimeout(abrirModalImportExcel, 150);
+	}
+
+	if ($('#crear').length) {
+		var $codigoProveedor = $('#codigoproveedor');
+		if ($codigoProveedor.length && !$codigoProveedor.prop('readonly') && !$codigoProveedor.prop('disabled')) {
+			setTimeout(function () {
+				$codigoProveedor.trigger('focus');
+			}, 0);
+		}
 	}
 });
-
-function actualizaArchivo(elem) {
-	var fn = $(elem).val();
-	var filename = fn.match(/[^\\/]*$/)[0];
-	$(elem).parents('tr').find('.nombresanteriores').val(filename);
-}

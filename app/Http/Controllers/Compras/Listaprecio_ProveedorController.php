@@ -8,7 +8,6 @@ use App\Http\Requests\ValidacionListaprecio_Proveedor;
 use App\Imports\Compras\Listaprecio_ProveedorArticuloImport;
 use App\Models\Compras\Listaprecio_Proveedor;
 use App\Models\Compras\Listaprecio_Proveedor_Estado;
-use App\Models\Compras\Proveedor;
 use App\Queries\Compras\Listaprecio_ProveedorQueryInterface;
 use App\Repositories\Compras\CondicioncompraRepositoryInterface;
 use App\Repositories\Compras\CondicionentregaRepositoryInterface;
@@ -19,6 +18,8 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Services\Compras\Listaprecio_ProveedorService;
 use App\Support\Compras\ListaprecioProveedorConsultaDesdeModal;
+use App\Support\Compras\ListaprecioProveedorListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Auth;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -45,11 +46,15 @@ class Listaprecio_ProveedorController extends Controller
             $this->repository->sincronizarConAnita();
         }
 
-        $busqueda = $request->busqueda;
-        $listas = $this->query->leeListas($busqueda, true);
-        $estado_enum = Listaprecio_Proveedor_Estado::$enumEstado;
+        $filtros = ListaprecioProveedorListadoFiltros::resolverDesdeRequest($request);
+        $listas = $this->query->leeListas($filtros, true);
 
-        return view('compras.listaprecio_proveedor.index', compact('listas', 'busqueda', 'estado_enum'));
+        return view('compras.listaprecio_proveedor.index', [
+            'listas' => $listas,
+            'filtros' => $filtros,
+            'filtrosQuery' => ListaprecioProveedorListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ListaprecioProveedorListadoFiltros::CAMPOS,
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -59,11 +64,13 @@ class Listaprecio_ProveedorController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = ListaprecioProveedorListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
         switch ($formato) {
             case 'PDF':
-                $listas = $this->query->leeListas($busqueda, false);
+                $listas = $this->query->leeListas($filtros, false);
 
-                $view = \View::make('compras.listaprecio_proveedor.listado', compact('listas'))
+                $view = \View::make('compras.listaprecio_proveedor.listado', compact('listas', 'filtros'))
                     ->render();
                 $path = storage_path('pdf/listados');
                 $nombre_pdf = 'listado_listaprecio_proveedor';
@@ -76,41 +83,38 @@ class Listaprecio_ProveedorController extends Controller
 
             case 'EXCEL':
                 return (new Listaprecio_ProveedorExport($this->query))
-                    ->parametros($busqueda)
+                    ->parametros($filtros)
                     ->download('listaprecio_proveedor.xlsx');
 
             case 'CSV':
                 return (new Listaprecio_ProveedorExport($this->query))
-                    ->parametros($busqueda)
+                    ->parametros($filtros)
                     ->download('listaprecio_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        $listas = $this->query->leeListas($busqueda, true);
-        $estado_enum = Listaprecio_Proveedor_Estado::$enumEstado;
-
-        return view('compras.listaprecio_proveedor.index', compact('listas', 'busqueda', 'estado_enum'));
+        return redirect()->route('consultar_listaprecio_proveedor', ListaprecioProveedorListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-listaprecio-proveedor');
 
-        $proveedor_query = Proveedor::orderBy('nombre')->get();
         $condicionpago_query = $this->condicionpagoRepository->all();
         $condicionentrega_query = $this->condicionentregaRepository->all();
         $condicioncompra_query = $this->condicioncompraRepository->all();
         $moneda_query = $this->monedaRepository->all();
         $estado_enum = Listaprecio_Proveedor_Estado::$enumEstado;
         $data = null;
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, ListaprecioProveedorListadoFiltros::class);
 
         return view('compras.listaprecio_proveedor.crear', compact(
             'data',
-            'proveedor_query',
             'condicionpago_query',
             'condicionentrega_query',
             'condicioncompra_query',
             'moneda_query',
-            'estado_enum'
+            'estado_enum',
+            'filtrosQuery'
         ));
     }
 
@@ -120,15 +124,17 @@ class Listaprecio_ProveedorController extends Controller
 
         $ret = $this->service->guarda($request);
         if ($ret['mensaje'] === 'ok') {
-            return redirect()->route('consultar_listaprecio_proveedor')->with('mensaje', 'Lista de precios creada con éxito');
+            return redirect()
+                ->route('consultar_listaprecio_proveedor', QueryRetornoListado::desdeRequest($request, ListaprecioProveedorListadoFiltros::class))
+                ->with('mensaje', 'Lista de precios creada con éxito');
         }
 
         return redirect()->back()->withInput()->with('mensaje', $ret['errores'] ?? 'Error al guardar');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         if ($soloConsulta) {
             if (! ListaprecioProveedorConsultaDesdeModal::puedeConsultar()) {
                 abort(403);
@@ -138,7 +144,6 @@ class Listaprecio_ProveedorController extends Controller
         }
 
         $data = $this->repository->find($id);
-        $proveedor_query = Proveedor::orderBy('nombre')->get();
         $condicionpago_query = $this->condicionpagoRepository->all();
         $condicionentrega_query = $this->condicionentregaRepository->all();
         $condicioncompra_query = $this->condicioncompraRepository->all();
@@ -147,10 +152,10 @@ class Listaprecio_ProveedorController extends Controller
         $ocultarVolver = $soloConsulta;
         $puedeModificarLista = $this->puedeModificarLista();
         $visualizar = $soloConsulta && ! $puedeModificarLista;
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, ListaprecioProveedorListadoFiltros::class);
 
         return view('compras.listaprecio_proveedor.editar', compact(
             'data',
-            'proveedor_query',
             'condicionpago_query',
             'condicionentrega_query',
             'condicioncompra_query',
@@ -159,7 +164,8 @@ class Listaprecio_ProveedorController extends Controller
             'soloConsulta',
             'ocultarVolver',
             'puedeModificarLista',
-            'visualizar'
+            'visualizar',
+            'filtrosQuery'
         ));
     }
 
@@ -179,7 +185,10 @@ class Listaprecio_ProveedorController extends Controller
                     ->with('mensaje', 'Lista de precios actualizada con éxito');
             }
 
-            return redirect()->route('consultar_listaprecio_proveedor')->with('mensaje', 'Lista de precios actualizada con éxito');
+            return redirect()->route(
+                'consultar_listaprecio_proveedor',
+                QueryRetornoListado::desdeRequest($request, ListaprecioProveedorListadoFiltros::class)
+            )->with('mensaje', 'Lista de precios actualizada con éxito');
         }
 
         return redirect()->back()->withInput()->with('mensaje', $ret['errores'] ?? 'Error al actualizar');
@@ -215,7 +224,10 @@ class Listaprecio_ProveedorController extends Controller
         }
 
         if ($ret['mensaje'] === 'ok') {
-            return redirect()->route('consultar_listaprecio_proveedor')->with('mensaje', 'Estado actualizado');
+            return redirect()->route(
+                'consultar_listaprecio_proveedor',
+                QueryRetornoListado::desdeRequest($request, ListaprecioProveedorListadoFiltros::class)
+            )->with('mensaje', 'Estado actualizado');
         }
 
         return redirect()->back()->with('mensaje', $ret['errores'] ?? 'No se pudo cambiar el estado');
@@ -261,7 +273,10 @@ class Listaprecio_ProveedorController extends Controller
             }
         }
 
-        return redirect()->route('editar_listaprecio_proveedor', ['id' => $id])->with('mensaje', $msg);
+        return redirect()->route(
+            'editar_listaprecio_proveedor',
+            array_merge(['id' => (int) $id], QueryRetornoListado::desdeRequest($request, ListaprecioProveedorListadoFiltros::class))
+        )->with('mensaje', $msg);
     }
 
     private function puedeModificarLista(): bool

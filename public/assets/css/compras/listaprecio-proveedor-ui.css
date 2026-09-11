@@ -1,0 +1,268 @@
+/*
+ * Listas de precio proveedores — misma familia visual que OC (tokens acotados a .lp-ui).
+ */
+
+.lp-ui {
+    --lp-panel: #ffffff;
+    --lp-ink: #1f2937;
+    --lp-ink-soft: #64748b;
+    --lp-ink-faint: #94a3b8;
+    --lp-border: #e2e6ec;
+    --lp-navy: #17253f;
+    --lp-blue: #3b72ac;
+    --lp-blue-dark: #2e5c8a;
+    --lp-blue-soft: #e4eef7;
+    --lp-thead: #85C1E9;
+    --lp-thead-ink: #17202A;
+    --lp-green: #2e8b47;
+    --lp-green-dark: #256e39;
+    --lp-cream: #fdf8ea;
+    --lp-cream-hover: #f5efdd;
+    --lp-slate-bg: #e7eaf0;
+    color: var(--lp-ink);
+}
+
+.lp-ui .lp-header {
+    background: var(--lp-blue);
+    color: #fff;
+    border-radius: 6px 6px 0 0;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.lp-ui .lp-header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.lp-ui .lp-header-acciones {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.lp-ui .lp-header .btn-light,
+.lp-ui .lp-header .btn-outline-info,
+.lp-ui .lp-header .btn-outline-light {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.55);
+    color: #fff;
+}
+
+.lp-ui .lp-header .btn-light:hover,
+.lp-ui .lp-header .btn-outline-info:hover,
+.lp-ui .lp-header .btn-outline-light:hover {
+    background: rgba(255, 255, 255, 0.22);
+    color: #fff;
+}
+
+.lp-ui .lp-header a.btn-light[href*="crear"] {
+    background: #fff;
+    color: var(--lp-blue-dark);
+    font-weight: 700;
+    border-color: #fff;
+}
+
+.lp-ui .lp-header a.btn-light[href*="crear"]:hover {
+    background: var(--lp-blue-soft);
+    color: var(--lp-navy);
+}
+
+.lp-ui .lp-header .form-control {
+    background: #fff;
+    color: var(--lp-ink);
+}
+
+.lp-ui .lp-header .listado-filtros-input-activo {
+    background-color: #fffdf5;
+}
+
+.lp-ui .lp-panel {
+    background: var(--lp-panel);
+    border: 1px solid var(--lp-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+}
+
+.lp-ui .lp-intro {
+    font-size: 13.5px;
+    color: var(--lp-ink-soft);
+    max-width: 90ch;
+    margin: 0;
+    padding: 16px 20px 0;
+}
+
+.lp-ui .lp-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--lp-border);
+}
+
+.lp-ui .lp-seg {
+    display: flex;
+    border: 1px solid var(--lp-border);
+    border-radius: 5px;
+    overflow: hidden;
+    flex-wrap: wrap;
+}
+
+.lp-ui .lp-seg > a {
+    background: var(--lp-panel);
+    border: none;
+    border-right: 1px solid var(--lp-border);
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--lp-ink-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.lp-ui .lp-seg > a:last-child {
+    border-right: none;
+}
+
+.lp-ui .lp-seg > a:hover {
+    background: var(--lp-blue-soft);
+    color: var(--lp-blue-dark);
+    text-decoration: none;
+}
+
+.lp-ui .lp-seg > a.lp-activo {
+    background: var(--lp-blue);
+    color: #fff;
+    font-weight: 600;
+}
+
+.lp-ui .lp-grilla {
+    margin-bottom: 0;
+}
+
+.lp-ui .lp-grilla thead th {
+    background: var(--lp-thead);
+    color: var(--lp-thead-ink);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 700;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-bottom: 2px solid #5DADE2;
+    border-top: none;
+}
+
+.lp-ui .lp-grilla tbody td {
+    padding: 10px 14px;
+    vertical-align: middle;
+    border-top: 1px solid var(--lp-border);
+}
+
+.lp-ui .lp-grilla tbody tr:nth-child(odd) {
+    background: var(--lp-cream);
+}
+
+.lp-ui .lp-grilla tbody tr:hover {
+    background: var(--lp-cream-hover);
+}
+
+.lp-ui .lp-grilla tbody tr.lp-fila-inactiva {
+    background: var(--lp-slate-bg);
+}
+
+.lp-ui .lp-numero {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--lp-blue-dark);
+}
+
+.lp-ui .lp-meta {
+    display: block;
+    font-size: 11px;
+    color: var(--lp-ink-faint);
+}
+
+.lp-ui .lp-vacio {
+    padding: 46px 20px;
+    text-align: center;
+    color: var(--lp-ink-soft);
+}
+
+.lp-ui .lp-vacio i {
+    font-size: 32px;
+    color: var(--lp-ink-faint);
+    margin-bottom: 10px;
+    display: block;
+}
+
+.lp-ui .lp-vacio-titulo {
+    font-weight: 700;
+    color: var(--lp-ink);
+}
+
+.lp-ui .lp-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--lp-border);
+}
+
+.lp-ui .lp-badge-activa {
+    background: #d5f5e3;
+    color: var(--lp-green-dark);
+    font-weight: 700;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+
+.lp-ui .lp-badge-inactiva {
+    background: var(--lp-slate-bg);
+    color: #55607a;
+    font-weight: 700;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+}
+
+.lp-ui .lp-toolbar .btn.bg-danger,
+.lp-ui .lp-toolbar .btn.bg-success,
+.lp-ui .lp-toolbar .btn.bg-warning {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.lp-form .lp-grilla-articulos thead th {
+    background: #85C1E9;
+    color: #17202A;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 700;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-bottom: 2px solid #5DADE2;
+}
+
+.lp-form .lp-grilla-articulos tbody td {
+    vertical-align: middle;
+}
+
+.lp-form .celda-articulo-listaprecio {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
