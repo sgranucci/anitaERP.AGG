@@ -25,6 +25,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\LocalidadRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\Compras\ProveedorAnitaEsquemaSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Compras\ProveedorListadoFiltros;
@@ -483,124 +484,11 @@ class ProveedorRepository implements ProveedorRepositoryInterface
      * @return 'insertado'|'actualizado'|null
      */
     /**
-     * Campos promae legibles en Anita.
-     * Surmar/Bierzo (filtro_empresa): sin columnas AGG (cta_me, cc_default, ag_perc_*, etc.).
+     * Campos promae legibles en Anita (AGG / Surmar / Interforming).
      */
     private function camposPromaeLecturaAnita(): string
     {
-        if (config('proveedor.filtro_empresa')) {
-            return '
-				prom_proveedor,
-				prom_nombre,
-				prom_contacto,
-				prom_direccion,
-				prom_localidad,
-				prom_cod_postal,
-				prom_provincia,
-				prom_telefono,
-				prom_cuit,
-				prom_cond_iva,
-				prom_letra,
-				prom_cond_pago,
-				prom_cta_contable,
-				prom_credito,
-				prom_dias_atraso,
-				prom_nro_interno,
-				prom_agente_ret,
-				prom_cond_gan,
-				prom_incl_impuesto,
-				prom_cond_compra,
-				prom_cond_entrega,
-				prom_tipo_empresa,
-				prom_prov_vario,
-				prom_retiene_iva,
-				prom_cod_retgan,
-				prom_cod_retiva,
-				prom_a_nombre_de,
-				prom_ret_suss,
-				prom_ret_ibr,
-				prom_nro_ret_ibr,
-				prom_nro_reemp_ib,
-				prom_excl_retiva,
-				prom_pais,
-				prom_fecha_alta,
-				prom_estado_pro,
-				prom_fantasia,
-				prom_regimen,
-				prom_fecha_excl,
-				prom_excl_retgan,
-				prom_fecha_exclrg,
-				prom_cod_localidad,
-				prom_tipo_emp_alfa,
-				prom_e_mail,
-				prom_fax,
-				prom_fecha_boletin,
-				prom_ret_ibr_bsas,
-				prom_emite_cert,
-				prom_nro_estab
-			';
-        }
-
-        return '
-				prom_proveedor ,
-				prom_nombre,
-				prom_contacto,
-				prom_direccion,
-				prom_localidad,
-				prom_cod_postal,
-				prom_provincia,
-				prom_telefono,
-				prom_cuit,
-				prom_cond_iva,
-				prom_letra,
-				prom_cond_pago,
-				prom_cta_contable,
-				prom_credito,
-				prom_dias_atraso,
-				prom_nro_interno,
-				prom_agente_ret,
-				prom_cond_gan,
-				prom_incl_impuesto,
-				prom_cond_compra,
-				prom_cond_entrega,
-				prom_tipo_empresa,
-				prom_prov_vario,
-				prom_retiene_iva,
-				prom_cod_retgan,
-				prom_cod_retiva,
-				prom_a_nombre_de,
-				prom_ret_suss,
-				prom_ret_ibr,
-				prom_nro_ret_ibr,
-				prom_nro_reemp_ib,
-				prom_excl_retiva,
-				prom_pais,
-				prom_fecha_alta,
-				prom_estado_pro,
-				prom_fantasia,
-				prom_regimen,
-				prom_fecha_excl,
-				prom_excl_retgan,
-				prom_fecha_exclrg,
-				prom_cod_localidad,
-				prom_tipo_emp_alfa,
-				prom_e_mail,
-				prom_fax,
-				prom_fecha_boletin,
-				prom_cod_ret_suss,
-				prom_cta_cont_me,
-				prom_cta_default,
-				prom_cc_default,
-				prom_concepto,
-				prom_descuento,
-				prom_fecha_exclib,
-				prom_excl_retib,
-				prom_fe_ini_excl,
-				prom_fe_ini_exclrg,
-				prom_fe_ini_exclib,
-				prom_ag_perc_ib,
-				prom_ag_perc_iva
-			';
+        return ProveedorAnitaEsquemaSupport::camposPromaeLectura();
     }
 
     private function normalizarFilaPromaeAnita(object $data): object
@@ -660,10 +548,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         ]);
         $dataleyAnita = json_decode($apiAnita->apiCall($data));
 
-		// Surmar: promadic/proexcl/propago no estan alineados o no existen; el bridge puede
-		// devolver filas ajenas si el WHERE no aplica. Solo leerlas en esquema AGG.
+		// Surmar/Interforming: promadic no alineado o vacío; solo leer en esquema AGG.
 		$dataAdicionalAnita = [];
-		if (! config('proveedor.filtro_empresa')) {
+		if (ProveedorAnitaEsquemaSupport::leeTablasHijasAgg()) {
 			$data = $this->withAnitaPath([
 				'acc' => 'list', 'tabla' => 'promadic',
 				'sistema' => 'compras',
@@ -967,6 +854,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				"emailoc" => $emailOc,
 				"regimenfacturacion" => $regimenFacturacion,
 				"tiposervicio_proveedor_id" => $tipoServicio_id,
+				"tipoalta" => substr((string) config('proveedor.tipoalta'), 0, 1) ?: 'D',
 				"usuario_id" => $usuario_id,
             	];
 
@@ -1017,33 +905,11 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
     private function consultarPromaeAnita(ApiAnita $apiAnita, string $key): ?object
     {
-        $campos = config('proveedor.filtro_empresa')
-            ? '
-				prom_proveedor,
-				prom_nombre,
-				prom_excl_retiva,
-				prom_fecha_excl,
-				prom_excl_retgan,
-				prom_fecha_exclrg
-			'
-            : '
-				prom_proveedor,
-				prom_nombre,
-				prom_excl_retiva,
-				prom_fecha_excl,
-				prom_fe_ini_excl,
-				prom_excl_retgan,
-				prom_fecha_exclrg,
-				prom_fe_ini_exclrg,
-				prom_excl_retib,
-				prom_fecha_exclib,
-				prom_fe_ini_exclib
-			';
         $data = $this->withAnitaPath([
             'acc' => 'list',
             'tabla' => $this->tableAnita[0],
             'sistema' => 'compras',
-            'campos' => $campos,
+            'campos' => ProveedorAnitaEsquemaSupport::camposPromaeExclusionPreview(),
             'whereArmado' => " WHERE {$this->keyFieldAnita} = '{$key}' ",
         ]);
         $filas = ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
@@ -1057,7 +923,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
      */
     private function consultarProexclAnita(ApiAnita $apiAnita, string $key): array
     {
-        if (config('proveedor.filtro_empresa')) {
+        if (! ProveedorAnitaEsquemaSupport::leeTablasHijasAgg()) {
             return [];
         }
 
@@ -1085,7 +951,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
      */
     private function consultarPropagoAnita(ApiAnita $apiAnita, string $key): array
     {
-        if (config('proveedor.filtro_empresa')) {
+        if (! ProveedorAnitaEsquemaSupport::leeTablasHijasAgg()) {
             return [];
         }
 
