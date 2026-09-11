@@ -141,6 +141,27 @@ class CertificadoArcaController extends Controller
             );
     }
 
+    public function probar(Request $request): RedirectResponse
+    {
+        can('listar-certificados-arca');
+
+        $id = trim((string) $request->input('certificado_id', ''));
+        if ($id === '') {
+            return $this->volverError('Indique el certificado.');
+        }
+
+        try {
+            $entrada = $this->csrService->buscarPorId($id);
+            $r = $this->csrService->probarConexion($entrada);
+        } catch (Exception $e) {
+            return $this->volverError($e->getMessage());
+        }
+
+        return redirect()
+            ->route('certificados_arca')
+            ->with('prueba_certificado_arca', $r);
+    }
+
     /**
      * @return list<string>
      */

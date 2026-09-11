@@ -6,8 +6,9 @@
 @section('scripts')
 <script>
 window.certificadosArcaFilas = @json($filasJs ?? []);
+window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
 </script>
-<script src="{{ asset('assets/pages/scripts/ventas/certificados_arca/index.js') }}?v=20260911c"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/certificados_arca/index.js') }}?v=20260911e"></script>
 @endsection
 
 @section('contenido')
@@ -122,6 +123,15 @@ window.certificadosArcaFilas = @json($filasJs ?? []);
                                                 <i class="fa fa-upload"></i>
                                             </button>
                                         @endif
+                                        @if (empty($f['error']))
+                                            <form method="post" action="{{ route('probar_certificado_arca') }}" class="d-inline form-probar-cert-arca">
+                                                @csrf
+                                                <input type="hidden" name="certificado_id" value="{{ $f['id'] }}">
+                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Probar conexión ARCA (WSAA + dummy)">
+                                                    <i class="fa fa-plug"></i>
+                                                </button>
+                                            </form>
+                                        @endif
                                     </td>
                                 </tr>
                             @empty
@@ -172,6 +182,37 @@ window.certificadosArcaFilas = @json($filasJs ?? []);
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-prueba-cert-arca" tabindex="-1" role="dialog" aria-labelledby="modal-prueba-cert-arca-titulo" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header" id="modal-prueba-cert-arca-header">
+                <h5 class="modal-title" id="modal-prueba-cert-arca-titulo">Resultado de la prueba</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3" id="modal-prueba-cert-arca-resumen"></p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th style="width: 4rem;">Estado</th>
+                                <th style="width: 12rem;">Paso</th>
+                                <th>Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modal-prueba-cert-arca-pasos"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-dismiss="modal">Cerrar</button>
+            </div>
         </div>
     </div>
 </div>

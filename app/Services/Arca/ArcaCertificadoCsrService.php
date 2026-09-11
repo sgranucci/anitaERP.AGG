@@ -348,6 +348,145 @@ class ArcaCertificadoCsrService
     }
 
     /**
+     * Prueba WSAA + dummy (o solo WSAA si el WS no tiene Dummy).
+     * Borra el TA cacheado para forzar loginCms con el certificado vigente.
+     *
+     * @param  array<string, mixed>  $entrada
+     * @return array{ok: bool, servicio: string, etiqueta: string, alias: ?string, pasos: list<array{nombre: string, ok: bool, detalle: string}>}
+     */
+    public function probarConexion(array $entrada): array
+    {
+        if (empty($entrada['existe_cert'])) {
+            throw new Exception('No hay certificado vigente en '.$entrada['cert_path']);
+        }
+        if (! is_readable((string) $entrada['private_key_path'])) {
+            throw new Exception('No se puede leer la clave privada en '.$entrada['private_key_path']);
+        }
+
+        $this->borrarCacheTa($entrada);
+
+        $servicio = (string) $entrada['servicio'];
+        $pasos = [];
+        $pasos[] = [
+            'nombre' => 'Certificado',
+            'ok' => true,
+            'detalle' => 'alias '.($entrada['alias'] ?? '—').
+                ' CUIT '.($entrada['cuit'] ?? '—').
+                ' vence '.($entrada['valid_to'] ?? '—').
+                ' ('.$this->rutaCorta((string) $entrada['cert_path']).')',
+        ];
+
+        try {
+            $detalle = $this->ejecutarPruebaServicio($entrada);
+            $pasos[] = [
+                'nombre' => $detalle['nombre'],
+                'ok' => true,
+                'detalle' => $detalle['detalle'],
+            ];
+        } catch (Exception $e) {
+            $pasos[] = [
+                'nombre' => 'Conexión ARCA',
+                'ok' => false,
+                'detalle' => $e->getMessage(),
+            ];
+
+            return [
+                'ok' => false,
+                'servicio' => $servicio,
+                'etiqueta' => (string) ($entrada['etiqueta'] ?? $servicio),
+                'alias' => $entrada['alias'] ?? null,
+                'pasos' => $pasos,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'servicio' => $servicio,
+            'etiqueta' => (string) ($entrada['etiqueta'] ?? $servicio),
+            'alias' => $entrada['alias'] ?? null,
+            'pasos' => $pasos,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     * @return array{nombre: string, detalle: string}
+     */
+    private function ejecutarPruebaServicio(array $entrada): array
+    {
+        $servicio = (string) $entrada['servicio'];
+        $empresaId = (int) ($entrada['empresa_id'] ?? 0);
+
+        return match ($servicio) {
+            self::SERVICIO_MTXCA => $this->formatearDummy(
+                'WSAA + MTXCA dummy',
+                app(ArcaMtxcaFacturaElectronicaService::class)->dummy($empresaId)
+            ),
+            self::SERVICIO_WSFE => $this->formatearDummy(
+                'WSAA + WSFE FEDummy',
+                app(ArcaWsfeFacturaElectronicaService::class)->feDummy($empresaId)
+            ),
+            self::SERVICIO_WSREMCARNE => $this->formatearDummy(
+                'WSAA + wsremcarne dummy',
+                app(ArcaWsremcarneService::class)->dummy($empresaId)
+            ),
+            self::SERVICIO_WSAPOC => $this->formatearDummy(
+                'WSAA + WSAPOC Dummy',
+                app(WsapocConsultaService::class)->dummy()
+            ),
+            self::SERVICIO_PADRON, self::SERVICIO_WSCDC => $this->probarSoloWsaa($entrada),
+            default => throw new Exception("No hay prueba definida para el servicio «{$servicio}»."),
+        };
+    }
+
+    /**
+     * @param  array<string, mixed>  $dummy
+     * @return array{nombre: string, detalle: string}
+     */
+    private function formatearDummy(string $nombre, array $dummy): array
+    {
+        $parts = [];
+        foreach (['appserver', 'dbserver', 'authserver'] as $k) {
+            if (array_key_exists($k, $dummy) && $dummy[$k] !== null && $dummy[$k] !== '') {
+                $parts[] = $k.'='.$dummy[$k];
+            }
+        }
+        if ($parts === []) {
+            $parts[] = json_encode($dummy, JSON_UNESCAPED_UNICODE) ?: '';
+        }
+
+        return [
+            'nombre' => $nombre,
+            'detalle' => implode(' · ', $parts),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     * @return array{nombre: string, detalle: string}
+     */
+    private function probarSoloWsaa(array $entrada): array
+    {
+        $serviceId = (string) ($entrada['wsaa_service_id'] ?? '');
+        if ($serviceId === '') {
+            throw new Exception('Falta wsaa_service_id para la prueba.');
+        }
+        $ctx = [
+            'cert_path' => (string) $entrada['cert_path'],
+            'private_key_path' => (string) $entrada['private_key_path'],
+            'private_key_passphrase' => (string) ($entrada['private_key_passphrase'] ?? ''),
+            'ta_storage_dir' => (string) ($entrada['ta_storage_dir'] ?? ''),
+            'cache_key' => (string) ($entrada['cache_key'] ?? $entrada['id'] ?? $serviceId),
+        ];
+        $ta = app(WsaaService::class)->getTokenSign($serviceId, $ctx);
+
+        return [
+            'nombre' => 'WSAA loginCms ('.$serviceId.')',
+            'detalle' => 'token OK, vence '.($ta['expirationTime'] ?? '—'),
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function inventarioSimple(
@@ -447,17 +586,44 @@ class ArcaCertificadoCsrService
      */
     public function instalarDesdeUpload(array $entrada, string $contenidoCrt, bool $force = false, array $replicarIds = []): array
     {
-        $dir = $this->ultimaRenovacion($entrada);
+        $dirPreferido = $this->ultimaRenovacion($entrada);
         $pem = ArcaCertificadoCsrSupport::normalizarPemCertificado($contenidoCrt);
-        $destinoCrt = $dir.'/cert.crt';
+        $destinoCrt = $dirPreferido.'/cert.crt';
         if (@file_put_contents($destinoCrt, $pem) === false) {
             throw new Exception("No se pudo guardar el certificado en {$destinoCrt}.");
         }
         @chmod($destinoCrt, 0644);
 
+        $pass = (string) ($entrada['private_key_passphrase'] ?? '');
+        $dir = $dirPreferido;
+        if (! ArcaCertificadoCsrSupport::certCoincideConClave($destinoCrt, $dir.'/privada.key', $pass)) {
+            $dirMatch = $this->buscarRenovacionQueCoincideConCert($entrada, $pem, $pass);
+            if ($dirMatch === null) {
+                $meta = $this->metaCertPem($pem);
+                @unlink($destinoCrt);
+                throw new Exception(
+                    'El certificado no coincide con la clave privada del CSR pendiente'.
+                    ' (pedido '.basename($dirPreferido).').'.
+                    ($meta !== '' ? ' El .crt subido es: '.$meta.'.' : '').
+                    ' Descargue de nuevo el CSR de esta pantalla, péguelo en ARCA (mismo alias) y suba el .crt de ese pedido.'.
+                    ' Si generó el CSR más de una vez, use el de la fila actual (no uno anterior).'
+                );
+            }
+            $destinoMatch = $dirMatch.'/cert.crt';
+            if ($dirMatch !== $dirPreferido) {
+                if (@file_put_contents($destinoMatch, $pem) === false) {
+                    @unlink($destinoCrt);
+                    throw new Exception("No se pudo guardar el certificado en {$destinoMatch}.");
+                }
+                @chmod($destinoMatch, 0644);
+                @unlink($destinoCrt);
+            }
+            $dir = $dirMatch;
+        }
+
         $validacion = $this->validarCrtRenovacion($entrada, $dir, $force);
         if (! $validacion['ok']) {
-            @unlink($destinoCrt);
+            @unlink($dir.'/cert.crt');
             throw new Exception(implode(' ', $validacion['errores']));
         }
 
@@ -467,6 +633,82 @@ class ArcaCertificadoCsrService
             'validacion' => $validacion,
             'dir' => $dir,
         ]);
+    }
+
+    /**
+     * Si regeneraron el CSR después de pedirlo en ARCA, el .crt puede matchear una renovación anterior.
+     *
+     * @param  array<string, mixed>  $entrada
+     */
+    private function buscarRenovacionQueCoincideConCert(array $entrada, string $pem, string $pass): ?string
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'arca_crt_');
+        if ($tmp === false) {
+            return null;
+        }
+        try {
+            file_put_contents($tmp, $pem);
+            foreach ($this->listarRenovaciones($entrada) as $dir) {
+                $key = $dir.'/privada.key';
+                if (! is_readable($key)) {
+                    continue;
+                }
+                if (ArcaCertificadoCsrSupport::certCoincideConClave($tmp, $key, $pass)) {
+                    return $dir;
+                }
+            }
+        } finally {
+            @unlink($tmp);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     * @return list<string>
+     */
+    private function listarRenovaciones(array $entrada): array
+    {
+        $dirs = [];
+        $certPath = (string) ($entrada['cert_path'] ?? '');
+        $id = (string) ($entrada['id'] ?? '');
+        $candidatos = [];
+        if ($certPath !== '') {
+            $candidatos[] = dirname($certPath).'/renovacion';
+        }
+        if ($id !== '') {
+            $candidatos[] = storage_path('app/arca/renovacion/'.$this->idSeguro($id));
+        }
+        foreach ($candidatos as $root) {
+            if (! is_dir($root)) {
+                continue;
+            }
+            foreach (glob($root.'/*', GLOB_ONLYDIR) ?: [] as $dir) {
+                $dirs[] = $dir;
+            }
+        }
+        rsort($dirs, SORT_STRING);
+
+        return $dirs;
+    }
+
+    private function metaCertPem(string $pem): string
+    {
+        try {
+            $tmp = tempnam(sys_get_temp_dir(), 'arca_meta_');
+            if ($tmp === false) {
+                return '';
+            }
+            file_put_contents($tmp, $pem);
+            $leido = ArcaCertificadoCsrSupport::leerCertificado($tmp);
+            @unlink($tmp);
+
+            return 'alias «'.($leido['alias'] ?? '?').'» CUIT '.($leido['cuit'] ?? '?').
+                ' vence '.($leido['valid_to'] ?? '?');
+        } catch (Exception) {
+            return '';
+        }
     }
 
     /**
@@ -501,7 +743,7 @@ class ArcaCertificadoCsrService
         if (! is_readable($keyPath)) {
             $errores[] = 'No hay privada.key de la renovación. Genere el CSR primero.';
         } elseif (! ArcaCertificadoCsrSupport::certCoincideConClave($certPath, $keyPath, $pass)) {
-            $errores[] = 'El certificado no coincide con la clave privada generada para este CSR.';
+            $errores[] = 'El certificado no coincide con la clave privada generada para este CSR (pedido '.basename($dir).').';
         }
 
         $aliasEsperado = trim((string) ($entrada['alias'] ?? ''));
@@ -583,26 +825,7 @@ class ArcaCertificadoCsrService
      */
     private function ultimaRenovacion(array $entrada): string
     {
-        $dirs = [];
-        $certPath = (string) ($entrada['cert_path'] ?? '');
-        $id = (string) ($entrada['id'] ?? '');
-        $candidatos = [];
-        if ($certPath !== '') {
-            $candidatos[] = dirname($certPath).'/renovacion';
-        }
-        if ($id !== '') {
-            $candidatos[] = storage_path('app/arca/renovacion/'.$this->idSeguro($id));
-        }
-        foreach ($candidatos as $root) {
-            if (! is_dir($root)) {
-                continue;
-            }
-            foreach (glob($root.'/*', GLOB_ONLYDIR) ?: [] as $dir) {
-                $dirs[] = $dir;
-            }
-        }
-        rsort($dirs, SORT_STRING);
-        foreach ($dirs as $dir) {
+        foreach ($this->listarRenovaciones($entrada) as $dir) {
             if (is_readable($dir.'/privada.key')) {
                 return $dir;
             }

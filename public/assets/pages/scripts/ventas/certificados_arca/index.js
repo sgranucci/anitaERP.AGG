@@ -98,6 +98,48 @@
         return extraerTexto(lab) || chk.value;
     }
 
+    function mostrarModalPrueba(prueba) {
+        if (!prueba || typeof prueba !== 'object') {
+            return;
+        }
+        var ok = !!prueba.ok;
+        var titulo = document.getElementById('modal-prueba-cert-arca-titulo');
+        var resumen = document.getElementById('modal-prueba-cert-arca-resumen');
+        var tbody = document.getElementById('modal-prueba-cert-arca-pasos');
+        var header = document.getElementById('modal-prueba-cert-arca-header');
+        if (!titulo || !resumen || !tbody) {
+            return;
+        }
+        titulo.textContent = ok ? 'Prueba OK' : 'Prueba falló';
+        if (header) {
+            header.classList.remove('bg-success', 'bg-danger', 'text-white');
+            header.classList.add(ok ? 'bg-success' : 'bg-danger', 'text-white');
+        }
+        var alias = prueba.alias ? ' — alias «' + prueba.alias + '»' : '';
+        resumen.textContent = (prueba.etiqueta || 'Certificado') + alias +
+            '. Se pidió ticket WSAA' + (ok ? ' y respondió el endpoint Dummy.' : '. Revise el detalle de cada paso.');
+        tbody.innerHTML = '';
+        (prueba.pasos || []).forEach(function (paso) {
+            var tr = document.createElement('tr');
+            var tdEstado = document.createElement('td');
+            tdEstado.className = paso.ok ? 'text-success font-weight-bold' : 'text-danger font-weight-bold';
+            tdEstado.textContent = paso.ok ? 'OK' : 'ERROR';
+            var tdPaso = document.createElement('td');
+            tdPaso.textContent = paso.nombre || '';
+            var tdDetalle = document.createElement('td');
+            tdDetalle.style.whiteSpace = 'pre-wrap';
+            tdDetalle.style.wordBreak = 'break-word';
+            tdDetalle.textContent = paso.detalle || '';
+            tr.appendChild(tdEstado);
+            tr.appendChild(tdPaso);
+            tr.appendChild(tdDetalle);
+            tbody.appendChild(tr);
+        });
+        if (window.jQuery) {
+            window.jQuery('#modal-prueba-cert-arca').modal('show');
+        }
+    }
+
     document.addEventListener('submit', function (ev) {
         var form = ev.target;
         if (!(form instanceof HTMLFormElement)) {
@@ -109,6 +151,14 @@
                 return;
             }
             mostrarOverlay('Generando CSR…', 'No cierre la página.');
+            return;
+        }
+        if (form.classList.contains('form-probar-cert-arca')) {
+            if (!window.confirm('¿Probar conexión con ARCA? Se pide un ticket WSAA y se llama al endpoint Dummy (no emite comprobantes).')) {
+                ev.preventDefault();
+                return;
+            }
+            mostrarOverlay('Probando conexión ARCA…', 'WSAA + dummy. No cierre la página.');
             return;
         }
         if (form.id === 'form-instalar-crt-arca') {
@@ -152,4 +202,10 @@
     });
 
     window.addEventListener('pageshow', ocultarOverlay);
+
+    if (window.certificadosArcaPrueba) {
+        document.addEventListener('DOMContentLoaded', function () {
+            mostrarModalPrueba(window.certificadosArcaPrueba);
+        });
+    }
 })();

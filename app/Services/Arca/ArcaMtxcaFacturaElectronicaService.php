@@ -517,8 +517,8 @@ class ArcaMtxcaFacturaElectronicaService
             throw new Exception($this->formatSoapFault('dummy', $e, $client));
         }
 
-        $r = $raw->dummyResponse ?? null;
-        if ($r === null) {
+        $r = $raw->dummyResponse ?? $raw;
+        if (! is_object($r) || (! isset($r->appserver) && ! isset($r->dbserver) && ! isset($r->authserver))) {
             throw new Exception('MTXCA: dummy sin resultado.');
         }
 
