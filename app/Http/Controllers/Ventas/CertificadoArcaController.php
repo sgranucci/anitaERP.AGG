@@ -92,6 +92,29 @@ class CertificadoArcaController extends Controller
         ]);
     }
 
+    public function exportarPar(Request $request): BinaryFileResponse|RedirectResponse
+    {
+        can('instalar-certificados-arca');
+
+        $id = trim((string) $request->query('id', ''));
+        if ($id === '') {
+            return $this->volverError('Indique el certificado.');
+        }
+
+        try {
+            $entrada = $this->csrService->buscarPorId($id);
+            $r = $this->csrService->exportarPar($entrada);
+        } catch (Exception $e) {
+            return $this->volverError($e->getMessage());
+        }
+
+        return response()
+            ->download($r['zip_path'], $r['download_name'], [
+                'Content-Type' => 'application/zip',
+            ])
+            ->deleteFileAfterSend(true);
+    }
+
     public function instalar(Request $request): RedirectResponse
     {
         can('instalar-certificados-arca');

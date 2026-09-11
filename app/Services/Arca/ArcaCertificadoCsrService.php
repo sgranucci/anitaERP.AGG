@@ -563,6 +563,60 @@ class ArcaCertificadoCsrService
     }
 
     /**
+     * Arma un ZIP con cert.crt + privada.key vigentes (para llevar el par a otro ERP).
+     *
+     * @param  array<string, mixed>  $entrada
+     * @return array{zip_path: string, download_name: string}
+     */
+    public function exportarPar(array $entrada): array
+    {
+        $certPath = (string) ($entrada['cert_path'] ?? '');
+        $keyPath = (string) ($entrada['private_key_path'] ?? '');
+        if ($certPath === '' || ! is_readable($certPath)) {
+            throw new Exception('No hay certificado vigente para exportar.');
+        }
+        if ($keyPath === '' || ! is_readable($keyPath)) {
+            throw new Exception('No se puede leer la clave privada para exportar.');
+        }
+
+        $servicio = preg_replace('/[^a-zA-Z0-9._-]+/', '_', (string) ($entrada['servicio'] ?? 'arca')) ?: 'arca';
+        $alias = preg_replace('/[^a-zA-Z0-9._-]+/', '_', (string) ($entrada['alias'] ?? 'cert')) ?: 'cert';
+        $downloadName = $servicio.'_'.$alias.'_par.zip';
+
+        $tmp = tempnam(sys_get_temp_dir(), 'arca_par_');
+        if ($tmp === false) {
+            throw new Exception('No se pudo crear archivo temporal para el ZIP.');
+        }
+        @unlink($tmp);
+        $zipPath = $tmp.'.zip';
+
+        $zip = new \ZipArchive;
+        if ($zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
+            throw new Exception('No se pudo crear el ZIP del certificado.');
+        }
+        $zip->addFile($certPath, 'cert.crt');
+        $zip->addFile($keyPath, 'privada.key');
+        $readme = "Par certificado ARCA\n".
+            'Servicio: '.($entrada['etiqueta'] ?? $entrada['servicio'] ?? '')."\n".
+            'Alias: '.($entrada['alias'] ?? '')."\n".
+            'CUIT: '.($entrada['cuit'] ?? '')."\n".
+            'Vence: '.($entrada['valid_to'] ?? '')."\n".
+            'Origen: '.$this->rutaCorta($certPath)."\n".
+            "Copiar cert.crt y privada.key en la carpeta del webservice del otro ERP.\n";
+        $zip->addFromString('readme.txt', $readme);
+        $zip->close();
+
+        if (! is_readable($zipPath)) {
+            throw new Exception('No se pudo generar el ZIP del certificado.');
+        }
+
+        return [
+            'zip_path' => $zipPath,
+            'download_name' => $downloadName,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function buscarPorId(string $id): array

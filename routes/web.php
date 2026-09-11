@@ -2203,6 +2203,7 @@ Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/movimientos',
 Route::get('ventas/certificados-arca', 'Ventas\CertificadoArcaController@index')->name('certificados_arca');
 Route::post('ventas/certificados-arca/generar-csr', 'Ventas\CertificadoArcaController@generarCsr')->name('generar_csr_certificado_arca');
 Route::get('ventas/certificados-arca/csr', 'Ventas\CertificadoArcaController@descargarCsr')->name('descargar_csr_certificado_arca');
+Route::get('ventas/certificados-arca/exportar-par', 'Ventas\CertificadoArcaController@exportarPar')->name('exportar_par_certificado_arca');
 Route::post('ventas/certificados-arca/instalar', 'Ventas\CertificadoArcaController@instalar')->name('instalar_certificado_arca');
 Route::post('ventas/certificados-arca/probar', 'Ventas\CertificadoArcaController@probar')->name('probar_certificado_arca');
 

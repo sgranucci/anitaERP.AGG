@@ -34,6 +34,7 @@ window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
                     Cada fila es independiente: generar o instalar <strong>WSAPOC</strong> no toca padrón ni WSCDC
                     (pueden ser el certificado de la consultora, sin delegación en las empresas del cliente).
                     Al instalar, por default solo se actualiza <strong>ese</strong> webservice; opcionalmente puede copiar el mismo certificado a otros.
+                    Con el ícono de archivo ZIP puede <strong>exportar</strong> el par vigente (<code>cert.crt</code> + <code>privada.key</code>) para llevarlo a otro ERP.
                     El certificado vigente no se reemplaza hasta que suba el <code>.crt</code> de ARCA.
                 </p>
                 <ol class="small mb-3 pl-3">
@@ -122,6 +123,13 @@ window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
                                                     data-etiqueta="{{ $f['etiqueta'] }}">
                                                 <i class="fa fa-upload"></i>
                                             </button>
+                                        @endif
+                                        @if ($puedeInstalar && empty($f['error']))
+                                            <a href="{{ route('exportar_par_certificado_arca', ['id' => $f['id']]) }}"
+                                               class="btn-accion-tabla tooltipsC"
+                                               title="Exportar certificado + clave privada (ZIP)">
+                                                <i class="fa fa-file-archive-o"></i>
+                                            </a>
                                         @endif
                                         @if (empty($f['error']))
                                             <form method="post" action="{{ route('probar_certificado_arca') }}" class="d-inline form-probar-cert-arca">
