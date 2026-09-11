@@ -121,6 +121,20 @@
         return d.getFullYear() + '-' + m + '-' + day;
     }
 
+    function fechaAr(ymd) {
+        var s = String(ymd || '').slice(0, 10);
+        var m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) {
+            return s;
+        }
+        return m[3] + '/' + m[2] + '/' + m[1];
+    }
+
+    function signoFila($tr) {
+        var s = parseInt($tr.data('signo') || '1', 10);
+        return s < 0 ? -1 : 1;
+    }
+
     function calcularResumenDeuda() {
         var saldo = 0;
         var aplicado = 0;
@@ -133,13 +147,14 @@
             if (!$monto.length) {
                 return;
             }
-            saldo += parseFloat($monto.data('saldo') || '0') || 0;
+            var signo = signoFila($tr);
+            saldo += signo * (parseFloat($monto.data('saldo') || '0') || 0);
             var liq = pintarFila($tr);
             var monto = parseFloat($monto.val() || '0') || 0;
             var chk = $tr.find('.pp-sel-deuda').is(':checked');
             if (chk && monto > 0) {
-                aplicado += monto;
-                equiv += liq.equivalente || 0;
+                aplicado += signo * monto;
+                equiv += signo * (liq.equivalente || 0);
                 dc += liq.dc || 0;
                 n += 1;
             }
@@ -231,8 +246,10 @@
             return { equivalente: 0 };
         }
         var liq = liquidarFila($monto);
+        var signo = signoFila($tr);
+        var equivMostrar = liq.equivalente * signo;
         $tr.find('.pp-cot-liq').text(liq.cot_aplicada.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
-        $tr.find('.pp-equiv').text(fmt(liq.equivalente));
+        $tr.find('.pp-equiv').text(fmt(equivMostrar)).toggleClass('text-success', signo < 0);
         var $dc = $tr.find('.pp-dc');
         if (Math.abs(liq.dc) < 0.01) {
             $dc.text('—').removeClass('text-danger text-success');
@@ -323,7 +340,8 @@
                 var html = '';
                 var hoy = hoyYmd();
                 filas.forEach(function (f) {
-                    var vencida = f.vencimiento && String(f.vencimiento) < hoy;
+                    var esCredito = Number(f.signo) < 0 || f.lado === 'credito';
+                    var vencida = !esCredito && f.vencimiento && String(f.vencimiento) < hoy;
                     var aplicadoOp = parseFloat(f.aplicado_op || 0) || 0;
                     var prev = seleccionPrevia[f.id];
                     var montoIni = aplicadoOp > 0 ? aplicadoOp : 0;
@@ -336,15 +354,25 @@
                     }
                     var linkComp = '';
                     if (f.comprobante_url) {
+                        var tituloLink = f.es_opa ? 'Ver OPA' : (esCredito ? 'Ver nota de crédito' : 'Ver factura');
                         linkComp = ' <a class="btn-accion-tabla tooltipsC text-primary" href="'
                             + $('<div>').text(f.comprobante_url).html()
-                            + '" target="_blank" rel="noopener" title="Ver factura">'
+                            + '" target="_blank" rel="noopener" title="' + tituloLink + '">'
                             + '<i class="fa fa-edit"></i></a>';
                     }
-                    html += '<tr data-cc-id="' + f.id + '"' + (vencida ? ' class="table-danger"' : '') + '>'
+                    var clases = [];
+                    if (vencida) {
+                        clases.push('table-danger');
+                    } else if (esCredito) {
+                        clases.push('pp-fila-credito');
+                    }
+                    html += '<tr data-cc-id="' + f.id + '" data-signo="' + (esCredito ? '-1' : '1') + '"'
+                        + ' data-lado="' + (esCredito ? 'credito' : 'deuda') + '"'
+                        + (f.es_opa ? ' data-es-opa="1"' : '')
+                        + (clases.length ? ' class="' + clases.join(' ') + '"' : '') + '>'
                         + '<td class="text-center"><input type="checkbox" class="pp-sel-deuda"' + (checked ? ' checked' : '') + '></td>'
                         + '<td>' + $('<div>').text(f.comprobante).html() + linkComp + '</td>'
-                        + '<td>' + (f.vencimiento || '') + '</td>'
+                        + '<td class="text-nowrap">' + fechaAr(f.vencimiento) + '</td>'
                         + '<td>' + (f.moneda || '') + '</td>'
                         + '<td class="text-right text-nowrap">' + fmt(f.saldo) + '</td>'
                         + '<td class="text-right pp-col-aplicar">'
@@ -435,10 +463,9 @@
             $form.append($('<input type="hidden" name="cotizacioncomprobantes[]">').val($monto.data('cotizacion')));
             $form.append($('<input type="hidden" name="cotizacion_aplicada_dia[]">').val(liq.cot_aplicada));
             $form.append($('<input type="hidden" name="diferencias_cambio[]">').val(liq.dc));
-            totalPago += liq.equivalente;
+            totalPago += signoFila($tr) * liq.equivalente;
         });
         $('#monto').val(totalPago.toFixed(2));
-        $('#importe_neto_retencion').val(totalPago.toFixed(2));
         pintarResumenDesembolso();
     }
 

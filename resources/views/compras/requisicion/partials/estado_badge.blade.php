@@ -1,31 +1,33 @@
 @php
     $nombre = trim((string) ($estado ?? ''));
-    $clase = 'badge badge-light';
-    $texto = $nombre;
+    $clase = 'oc-pill oc-pill-neutro';
 
     switch ($nombre) {
         case 'PROVISORIO':
-            $clase = 'badge badge-secondary';
+            $clase = 'oc-pill oc-pill-provisorio';
             break;
         case 'PENDIENTE':
-            $clase = 'badge badge-info';
+            $clase = 'oc-pill oc-pill-pendiente';
             break;
         case 'EN COMPRAS':
-            $clase = 'badge badge-primary';
+            $clase = 'oc-pill oc-pill-en-compras';
             break;
         case 'EN ARBOL APROBACION':
-            $clase = 'badge badge-warning';
+            $clase = 'oc-pill oc-pill-en-arbol';
             break;
         case 'APROBADA':
+            $clase = 'oc-pill oc-pill-aprobada';
+            break;
         case 'CUMPLIDA':
-            $clase = 'badge badge-success';
+            $clase = 'oc-pill oc-pill-cumplida';
             break;
         case 'SUSPENDIDA':
-            $clase = 'badge badge-dark';
+            $clase = 'oc-pill oc-pill-suspendida';
             break;
         case 'GENERO ORDEN COMPRA':
-            $clase = 'badge badge-info';
+        case 'GENERO OC':
+            $clase = 'oc-pill oc-pill-genero-oc';
             break;
     }
 @endphp
-<span class="{{ $clase }}">{{ $texto }}</span>
+<span class="{{ $clase }}">{{ $nombre !== '' ? $nombre : '—' }}</span>

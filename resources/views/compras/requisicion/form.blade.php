@@ -20,6 +20,8 @@
 <div id="tab1" class="form1 tab-content">
     <div class="row">
         <div class="col-sm-6">
+            <div class="oc-bloque">
+                <h6 class="oc-bloque-titulo">Identificación</h6>
             <input type="hidden" name="requisicion_id" id="requisicion_id" value="{{ (isset($data) && $data) ? $data->id : '' }}">
             @if($edicionLimitadaAprobada && isset($data))
                 <input type="hidden" name="empresa_id" value="{{ old('empresa_id', $data->empresa_id) }}">
@@ -158,8 +160,11 @@
                     <span id="nombretiposuspension" class="col-form-label text-danger small mb-0 d-block"></span>
                 </div>
             </div>
+            </div>
         </div>
         <div class="col-sm-6">
+            <div class="oc-bloque">
+                <h6 class="oc-bloque-titulo">Condiciones</h6>
             <div class="form-group row">
                 <label for="formapago_id" class="col-lg-3 control-label">Forma de pago</label>
                 <div class="col-lg-4">
@@ -240,18 +245,21 @@
                 </div>
             </div>
             @endif
+            </div>
         </div>
     </div>
-    <div class="col-md-12">
+    <div class="oc-bloque">
+        <h6 class="oc-bloque-titulo">Detalle</h6>
         <div class="form-group row">
             <label for="detalle" class="col-lg-3 col-form-label">Detalle</label>
-            <div class="col-lg-6">
+            <div class="col-lg-8">
                 <textarea name="detalle" id="detalle" rows="3" class="form-control" {{ $cabeceraSoloLectura ? 'readonly' : '' }}>{{ old('detalle', (isset($data) && $data) ? $data->detalle : '') }}</textarea>
             </div>
         </div>
     </div>
-    <hr>
-    <h5>Artículos</h5>
+    <div class="oc-solapa-head">
+        <h5>Artículos</h5>
+    </div>
     <p class="text-muted small mb-2">
         Si el art&iacute;culo tiene datos en la solapa <strong>Proveedores</strong> del maestro (<code>articulo_proveedor</code>),
         al cargarlo se completan nombre, precio de lista, UM de compra y proveedor de la l&iacute;nea.

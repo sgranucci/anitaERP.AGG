@@ -3,6 +3,7 @@
 namespace Tests\Unit\Support\Contable\LibroIvaDigital;
 
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalArchivosSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasImportesSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use PHPUnit\Framework\TestCase;
@@ -75,5 +76,61 @@ class LibroIvaDigitalFormatoSupportTest extends TestCase
     {
         $this->assertSame(10, strlen(LibroIvaDigitalFormatoSupport::tipoCambio10(1_000_000.0)));
         $this->assertSame(15, strlen(LibroIvaDigitalFormatoSupport::importe15(12.34)));
+    }
+
+    public function test_compra_dolares_erp_pasa_a_pesos_antes_del_portal(): void
+    {
+        $totales = LibroIvaDigitalComprasImportesSupport::aplicarCoeficiente([
+            'neto_gravado' => 60.19,
+            'iva' => 12.64,
+            'exento' => 0.0,
+            'credito_computable' => 12.64,
+            'alicuotas' => [[
+                'neto' => 60.19,
+                'iva' => 12.64,
+                'tasa' => 21.0,
+            ]],
+        ], 1495.0);
+
+        $this->assertEqualsWithDelta(89984.05, $totales['neto_gravado'], 0.001);
+        $this->assertEqualsWithDelta(18896.80, $totales['iva'], 0.001);
+        $this->assertEqualsWithDelta(18896.80, $totales['credito_computable'], 0.001);
+        $this->assertEqualsWithDelta(89984.05, $totales['alicuotas'][0]['neto'], 0.001);
+        $this->assertEqualsWithDelta(18896.80, $totales['alicuotas'][0]['iva'], 0.001);
+
+        $importeTotal = round(72.83 * 1495.0, 2);
+        $this->assertEqualsWithDelta(108880.85, $importeTotal, 0.001);
+
+        $cabecera = LibroIvaDigitalMapeosSupport::cabeceraImportesEnPesos([
+            'fecha' => '20260803',
+            'tipo_comprobante' => '001',
+            'punto_venta' => 4,
+            'numero_comprobante' => 3596,
+            'codigo_documento' => '80',
+            'numero_identificacion' => '30718194233',
+            'nombre_vendedor' => 'SOLIDO SUPPLY',
+            'importe_total' => $importeTotal,
+            'codigo_moneda' => 'DOL',
+            'tipo_cambio' => 1495.0,
+            'cantidad_alicuotas' => 1,
+            'credito_fiscal_computable' => $totales['credito_computable'],
+        ]);
+
+        $linea = LibroIvaDigitalFormatoSupport::registroComprasCbte($cabecera);
+        $this->assertSame('PES', rtrim(substr($linea, 224, 3)));
+        $this->assertEqualsWithDelta(
+            1.0,
+            LibroIvaDigitalFormatoSupport::parseTipoCambio10(substr($linea, 227, 10)),
+            0.000001,
+        );
+        $this->assertEqualsWithDelta(
+            108880.85,
+            LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 104, 15)),
+            0.001,
+        );
+        $this->assertSame(
+            LibroIvaDigitalComprasImportesSupport::aplicarCoeficiente(['neto_gravado' => 10.0], 1.0)['neto_gravado'],
+            10.0,
+        );
     }
 }

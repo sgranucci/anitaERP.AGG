@@ -92,6 +92,7 @@
         <p class="text-muted small mb-2">
             El monto a aplicar va en moneda de la factura (alineado a la derecha, como el saldo). Si la OP está en otra moneda se convierte con la cotización de liquidación
             (factura o del día según el modo). La DC se asienta; no abre un ítem extra en pesos.
+            Las notas de crédito y las OPA restan del total a desembolsar. Las NC también restan de Ganancias e IIBB; las OPA no, porque ya se retuvo al generarlas.
         </p>
         <div class="row no-gutters mb-2 pp-resumen-deuda-cards">
             <div class="col-6 col-md-3 pr-1 mb-1">
@@ -128,13 +129,14 @@
                 display: block;
                 text-align: right;
             }
+            #tabla-deuda-proveedor tr.pp-fila-credito { background: #e8f8f0; }
         </style>
         <div class="table-responsive">
             <table class="table table-sm table-bordered table-hover" id="tabla-deuda-proveedor">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th class="text-center" style="width:2.5rem;">
-                            <input type="checkbox" id="pp-sel-deuda-todas" class="pp-sel-deuda-todas" title="Tildar todas las facturas impagas">
+                            <input type="checkbox" id="pp-sel-deuda-todas" class="pp-sel-deuda-todas" title="Tildar todos los comprobantes pendientes">
                         </th>
                         <th>Comprobante</th>
                         <th>Vto</th>

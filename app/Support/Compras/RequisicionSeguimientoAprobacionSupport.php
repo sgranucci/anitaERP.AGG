@@ -131,7 +131,7 @@ final class RequisicionSeguimientoAprobacionSupport
             ->orderBy('requisicion.created_at')
             ->orderBy('requisicion.id');
 
-        RequisicionVisibilidadSupport::aplicarFiltroListado($query);
+        RequisicionVisibilidadSupport::aplicarFiltroTableroSeguimiento($query);
         self::aplicarFiltroEmpresa($query, $empresaId);
 
         return $query;
@@ -274,7 +274,7 @@ final class RequisicionSeguimientoAprobacionSupport
         $queryRq = Requisicion::query()
             ->from('requisicion')
             ->whereIn('requisicion.estado', $estados);
-        RequisicionVisibilidadSupport::aplicarFiltroListado($queryRq);
+        RequisicionVisibilidadSupport::aplicarFiltroTableroSeguimiento($queryRq);
         self::aplicarFiltroEmpresa($queryRq, $empresaId);
 
         $ids = (clone $queryRq)->pluck('requisicion.id')->map(fn ($id) => (int) $id)->all();

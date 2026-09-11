@@ -26,6 +26,7 @@ use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use Illuminate\Support\Facades\DB;
@@ -449,6 +450,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::ANITA_IMPORT,
             'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
             'identificacion_proveedor_cuit' => $item['cuit'] !== '' ? $item['cuit'] : null,
+            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
             'anita_nro_interno' => $item['nro_interno'] > 0 ? $item['nro_interno'] : null,
             'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::IMPORTADO,
             'anita_sync_at' => now(),

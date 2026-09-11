@@ -79,6 +79,7 @@ final class PagoproveedorAnitaAuditoriaDiariaService
                 'asientos.asiento_movimientos',
                 'pagoproveedor_retenciones',
             ])
+            ->generadaEnErp()
             ->whereIn('estado', ['CONFIRMADA', 'PAGADA', 'CONCILIADA']);
 
         if ($nro !== null && $nro > 0) {

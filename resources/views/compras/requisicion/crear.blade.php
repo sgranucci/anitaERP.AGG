@@ -3,6 +3,11 @@
 Requisiciones
 @endsection
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/compras/ordencompra-ui.css') }}?v={{ @filemtime(public_path('assets/css/compras/ordencompra-ui.css')) ?: time() }}">
+<link rel="stylesheet" href="{{ asset('assets/css/compras/requisicion-ui.css') }}?v={{ @filemtime(public_path('assets/css/compras/requisicion-ui.css')) ?: time() }}">
+@endsection
+
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
@@ -41,29 +46,21 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 @if(!empty($modo_provisorio))
 @include('compras.requisicion.partials.modal_confirmar_envio_arbol')
 @endif
-<div class="row" id="crear">
+<div class="row oc-ui rq-ui" id="crear">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Nueva requisición</h3>
-                <div class="card-tools">
-                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                    </a>
-                </div>
+                @include('compras.requisicion.partials.toolbar_acciones')
             </div>
+
+            @include('compras.requisicion.partials.identidad')
+
             <form action="{{ route('guardar_requisicion', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-paperclip"></span> Archivos asociados
-                    </button>
-                </div>
+                @include('compras.requisicion.partials.tabs_header')
                 <div class="card-body">
                     @if(!empty($modo_provisorio))
                     <div class="alert alert-info mb-3" role="alert">
@@ -77,20 +74,15 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
                         @include('compras.requisicion.partials.solapa_agregar_archivos', ['data' => $data ?? null])
                     </div>
                 </div>
-                <div class="card-footer">
-                    <div class="row">
-                        <div class="col-lg-3"></div>
-                        <div class="col-lg-6">
-                            <button type="button" id="botonform0" class="btn btn-success">
-                                <i class="fa fa-save"></i>
-                                @if(!empty($modo_provisorio))
-                                    Guardar provisorio
-                                @else
-                                    Guardar
-                                @endif
-                            </button>
-                        </div>
-                    </div>
+                <div class="card-footer oc-form-footer">
+                    <button type="button" id="botonform0" class="btn btn-success">
+                        <i class="fa fa-save"></i>
+                        @if(!empty($modo_provisorio))
+                            Guardar provisorio
+                        @else
+                            Guardar
+                        @endif
+                    </button>
                 </div>
             </form>
         </div>

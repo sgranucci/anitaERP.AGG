@@ -3,10 +3,8 @@
 namespace App\Support\Contable\LibroIvaDigital;
 
 use App\Models\Ventas\Venta;
-use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Período de ventas para Libro IVA Digital / IVA Simple.
@@ -14,14 +12,14 @@ use Illuminate\Support\Facades\DB;
  */
 final class LibroIvaDigitalVentasPeriodoSupport
 {
+    public static function columnaFecha(bool $porFechaJornada, string $alias = 'venta'): string
+    {
+        return $porFechaJornada ? $alias.'.fechajornada' : $alias.'.fecha';
+    }
+
     public static function expresionFechaSql(bool $porFechaJornada, string $alias = 'venta'): string
     {
-        $fecha = $alias.'.fecha';
-        if (! $porFechaJornada) {
-            return $fecha;
-        }
-
-        return SqlDialectSupport::coalesce($alias.'.fechajornada', $fecha);
+        return self::columnaFecha($porFechaJornada, $alias);
     }
 
     /**
@@ -34,8 +32,7 @@ final class LibroIvaDigitalVentasPeriodoSupport
         bool $porFechaJornada,
         string $alias = 'venta',
     ): void {
-        $expr = SqlDialectSupport::fecha(self::expresionFechaSql($porFechaJornada, $alias));
-        $query->whereBetween(DB::raw($expr), [$desde, $hasta]);
+        $query->whereBetween(self::columnaFecha($porFechaJornada, $alias), [$desde, $hasta]);
     }
 
     /**

@@ -17,6 +17,9 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
 {
     private const DIAS_POR_LOTE = 10;
 
+    /** Timeout corto del intento de mes completo; si Anita no responde, se parte en lotes. */
+    private const TIMEOUT_MES_COMPLETO = 45;
+
     /** @var array<string, list<array<string, mixed>>> */
     private static array $cachePeriodo = [];
 
@@ -45,14 +48,14 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
             return self::$cachePeriodo[$cacheKey] = [];
         }
 
-        $filas = $this->listarVentaRango($empresaAnita, $desde, $hasta, $porFechaJornada);
+        $filas = $this->listarVentaRango($empresaAnita, $desde, $hasta, $porFechaJornada, self::TIMEOUT_MES_COMPLETO);
         if ($filas !== null) {
             return self::$cachePeriodo[$cacheKey] = $filas;
         }
 
         $acumulado = [];
         foreach (LibroIvaDigitalAnitaPeriodoSupport::partirRangoYmd($desde, $hasta, self::DIAS_POR_LOTE) as [$loteDesde, $loteHasta]) {
-            $lote = $this->listarVentaRango($empresaAnita, $loteDesde, $loteHasta, $porFechaJornada);
+            $lote = $this->listarVentaRango($empresaAnita, $loteDesde, $loteHasta, $porFechaJornada, 90);
             if ($lote === null) {
                 continue;
             }
@@ -72,6 +75,7 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
         int $desde,
         int $hasta,
         bool $porFechaJornada,
+        ?int $curlTimeout = null,
     ): ?array {
         $campoFecha = $porFechaJornada ? 'ven_fecha_vto' : 'ven_fecha';
         // Descripción / textos al final: evita corrimiento por | en el bridge.
@@ -97,21 +101,28 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
             .' AND '.$campoFecha.' >= '.$desde
             .' AND '.$campoFecha.' <= '.$hasta;
 
+        $payload = [
+            'acc' => 'list',
+            'sistema' => 'ventas',
+            'tabla' => 'venta',
+            'campos' => $campos,
+            'whereArmado' => $where,
+            'orderBy' => $campoFecha.', ven_sucursal, ven_nro',
+        ];
+        if ($curlTimeout !== null) {
+            $payload['curl_timeout'] = $curlTimeout;
+        }
+
+        $t0 = microtime(true);
         try {
-            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita())->apiCall([
-                'acc' => 'list',
-                'sistema' => 'ventas',
-                'tabla' => 'venta',
-                'campos' => $campos,
-                'whereArmado' => $where,
-                'orderBy' => $campoFecha.', ven_sucursal, ven_nro',
-            ]));
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita())->apiCall($payload));
         } catch (\Throwable $e) {
             Log::warning('libro_iva_digital.fsl_anita_bridge', [
                 'empresa_anita' => $empresaAnita,
                 'desde' => $desde,
                 'hasta' => $hasta,
                 'error' => $e->getMessage(),
+                'ms' => round((microtime(true) - $t0) * 1000, 1),
             ]);
 
             return null;
@@ -123,6 +134,7 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
                 'desde' => $desde,
                 'hasta' => $hasta,
                 'error' => $parsed['error_lectura'],
+                'ms' => round((microtime(true) - $t0) * 1000, 1),
             ]);
 
             return null;
@@ -132,6 +144,14 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
         foreach ($parsed['filas'] as $fila) {
             $resultado[] = (array) $fila;
         }
+
+        Log::info('libro_iva_digital.fsl_anita_bridge', [
+            'empresa_anita' => $empresaAnita,
+            'desde' => $desde,
+            'hasta' => $hasta,
+            'filas' => count($resultado),
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+        ]);
 
         return $resultado;
     }

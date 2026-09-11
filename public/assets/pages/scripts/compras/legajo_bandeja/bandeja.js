@@ -37,7 +37,22 @@
         if (!$iframe.length) {
             return;
         }
+        $iframe.removeAttr('srcdoc');
         $iframe.attr('src', url || 'about:blank');
+    }
+
+    function mostrarSinPdf($iframe, urlCxp) {
+        if (!$iframe.length) {
+            return;
+        }
+        var html = '<div style="font-family:sans-serif;padding:24px;color:#333;">'
+            + '<p style="margin:0 0 12px 0;">Este comprobante no tiene PDF en el legajo (ingresó por importación a CxP).</p>';
+        if (urlCxp) {
+            html += '<p style="margin:0;"><a href="' + esc(urlCxp) + '" target="_blank" rel="noopener">Abrir en Cuentas a pagar</a></p>';
+        }
+        html += '</div>';
+        $iframe.attr('srcdoc', html);
+        $iframe.removeAttr('src');
     }
 
     function renderComs(paquete) {
@@ -71,24 +86,77 @@
         var facs = (paquete && paquete.facturas) || [];
         mostrarPdf($pdf, '');
         if (!facs.length) {
-            $tb.append('<tr><td colspan="3" class="text-center text-muted">No hay PDF de factura (precarga ni escaneo Anita).</td></tr>');
+            $tb.append('<tr><td colspan="4" class="text-center text-muted">No hay facturas ni comprobantes en este legajo.</td></tr>');
             return;
         }
         facs.forEach(function (f, i) {
             var origen = f.origen_label || ((f.origen === 'anita') ? 'Scan Anita (manual, no IA)' : (f.estado || 'Precarga'));
+            var estadoHtml = f.cargado_cxp
+                ? '<span class="badge badge-info">cargada</span>'
+                : '<span class="badge badge-warning">pendiente</span>';
+            if (f.url_comprobante) {
+                estadoHtml += ' <a href="' + esc(f.url_comprobante) + '" target="_blank" rel="noopener" class="js-bandeja-abrir-cxp" title="Abrir en CxP">CxP</a>';
+            }
             var $tr = $('<tr class="js-bandeja-pdf-row" style="cursor:pointer;"></tr>');
             $tr.attr('data-url-pdf', f.url_pdf || '');
+            $tr.attr('data-url-cxp', f.url_comprobante || '');
             $tr.append('<td>' + esc(f.etiqueta || ('#' + f.id)) + '</td>');
             $tr.append('<td>' + esc(f.fecha || '') + '</td>');
             $tr.append('<td>' + esc(origen) + '</td>');
+            $tr.append('<td>' + estadoHtml + '</td>');
             if (i === 0) {
                 $tr.addClass('table-info');
             }
             $tb.append($tr);
         });
-        if (facs[0] && facs[0].url_pdf) {
-            mostrarPdf($pdf, facs[0].url_pdf);
+        var primero = facs[0] || {};
+        if (primero.url_pdf) {
+            mostrarPdf($pdf, primero.url_pdf);
+        } else {
+            mostrarSinPdf($pdf, primero.url_comprobante || '');
         }
+    }
+
+    function renderPagos(paquete) {
+        var $box = $('#bandejaLegajoPagos').empty();
+        var pagos = (paquete && paquete.pagos) || [];
+        var n = pagos.length;
+        $('#bandejaLegajoNPago').text(n);
+        if (n) {
+            $('#bandeja-tab-pagos-item').show();
+        } else {
+            $('#bandeja-tab-pagos-item').hide();
+        }
+        if (!pagos.length) {
+            $box.append('<p class="text-muted mb-0">No hay órdenes de pago en este legajo.</p>');
+            return;
+        }
+        pagos.forEach(function (op) {
+            $box.append(
+                '<a href="' + esc(op.url || '#') + '" class="btn btn-outline-success btn-sm mr-1 mb-1" target="_blank" rel="noopener">' +
+                esc(op.etiqueta || ('OP #' + op.id)) + '</a>'
+            );
+        });
+    }
+
+    function activarTabLegajo(tab) {
+        var id = tab === 'coms' ? '#bandeja-tab-coms' : (tab === 'pagos' ? '#bandeja-tab-pagos' : '#bandeja-tab-facturas');
+        $(id).tab('show');
+    }
+
+    function renderLegajo(paquete, tab) {
+        $('#bandejaLegajoNFac').text(((paquete && paquete.facturas) || []).length);
+        $('#bandejaLegajoNCom').text(((paquete && paquete.coms) || []).length);
+        var $oc = $('#bandejaLegajoOc');
+        if (paquete && paquete.url_oc) {
+            $oc.attr('href', paquete.url_oc).show();
+        } else {
+            $oc.hide();
+        }
+        renderFacturas(paquete);
+        renderComs(paquete);
+        renderPagos(paquete);
+        activarTabLegajo(tab || 'facturas');
     }
 
     var asignarEstado = {
@@ -101,6 +169,9 @@
     };
 
     function badgeComDoc(fac) {
+        if (fac && fac.cargado_cxp) {
+            return '<span class="badge badge-success">en CxP</span>';
+        }
         var tipo = String(fac.tipo || 'FC').toUpperCase();
         var exige = fac.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
         if (!exige) {
@@ -146,6 +217,9 @@
                 '</div>'
             );
         }
+        if (fac && fac.cargado_cxp) {
+            $coms.prepend('<p class="text-success small mb-2">Ya está cargado en CxP. En una OC anual no forma parte de este envío.</p>');
+        }
         var tipoFac = String((fac && fac.tipo) || 'FC').toUpperCase();
         var exige = !fac || (fac.exige_com !== false && tipoFac !== 'NC' && tipoFac !== 'ND');
         if (!exige) {
@@ -168,24 +242,48 @@
         });
     }
 
+    function itemAsignarDoc(f) {
+        var activo = String(asignarEstado.activo) === String(f.id);
+        var tipo = esc(f.tipo_label || f.tipo || 'FC');
+        var extra = f.cargado_cxp ? ' text-muted' : '';
+        return '<a href="#" class="list-group-item list-group-item-action js-bandeja-asig-doc py-2' + (activo ? ' active' : '') + extra + '" data-doc-id="' + esc(String(f.id)) + '">' +
+            '<div class="d-flex justify-content-between align-items-start">' +
+            '<div><span class="badge badge-dark mr-1">' + tipo + '</span>' + esc(f.etiqueta || ('#' + f.id)) +
+            (f.fecha ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.fecha) + '</small>' : '') +
+            (f.origen_label ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.origen_label) + '</small>' : '') +
+            '</div><div class="ml-2 text-right">' + badgeComDoc(f) + '</div></div></a>';
+    }
+
     function renderAsignarListaDocs() {
         var $fac = $('#bandejaAsignarPrecarga').empty();
         if (!asignarEstado.facs.length) {
             $fac.append('<div class="p-2 text-muted small">No hay factura precargada. Adjuntela al enviar el legajo o desde la OC.</div>');
             return;
         }
+        var pendientes = [];
+        var cargados = [];
         asignarEstado.facs.forEach(function (f) {
-            var activo = String(asignarEstado.activo) === String(f.id);
-            var tipo = esc(f.tipo_label || f.tipo || 'FC');
-            $fac.append(
-                '<a href="#" class="list-group-item list-group-item-action js-bandeja-asig-doc py-2' + (activo ? ' active' : '') + '" data-doc-id="' + esc(String(f.id)) + '">' +
-                '<div class="d-flex justify-content-between align-items-start">' +
-                '<div><span class="badge badge-dark mr-1">' + tipo + '</span>' + esc(f.etiqueta || ('#' + f.id)) +
-                (f.fecha ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.fecha) + '</small>' : '') +
-                (f.origen_label ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.origen_label) + '</small>' : '') +
-                '</div><div class="ml-2 text-right">' + badgeComDoc(f) + '</div></div></a>'
-            );
+            if (f.cargado_cxp) {
+                cargados.push(f);
+            } else {
+                pendientes.push(f);
+            }
         });
+        if (pendientes.length) {
+            $fac.append('<div class="list-group-item bg-light py-1 small font-weight-bold">Este envío (' + pendientes.length + ')</div>');
+            pendientes.forEach(function (f) { $fac.append(itemAsignarDoc(f)); });
+        } else {
+            $fac.append('<div class="p-2 text-muted small">No hay comprobantes pendientes: todos ya están en CxP.</div>');
+        }
+        if (cargados.length) {
+            $fac.append(
+                '<a href="#" class="list-group-item bg-light py-1 small text-muted js-bandeja-toggle-cargados">' +
+                '▸ Ya en CxP — no se vuelven a mandar (' + cargados.length + ')</a>'
+            );
+            var $wrap = $('<div class="js-bandeja-cargados-wrap" style="display:none"></div>');
+            cargados.forEach(function (f) { $wrap.append(itemAsignarDoc(f)); });
+            $fac.append($wrap);
+        }
     }
 
     function renderAsignar(paquete) {
@@ -201,27 +299,36 @@
             var ids = asignadas[key] || asignadas[f.id] || [];
             asignarEstado.mapa[key] = ids.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; });
         });
-        var idxDefault = 0;
-        facs.forEach(function (f, i) {
-            if ((f.origen || 'precarga') === 'precarga' && idxDefault === 0) {
-                idxDefault = i;
-            }
-        });
-        asignarEstado.activo = facs.length ? String(facs[idxDefault].id) : null;
+        var pendientes = facs.filter(function (f) { return !f.cargado_cxp; });
+        var prefer = pendientes.find(function (f) {
+            var tipo = String(f.tipo || 'FC').toUpperCase();
+            return f.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
+        }) || pendientes[0] || facs[0] || null;
+        asignarEstado.activo = prefer ? String(prefer.id) : null;
         renderAsignarListaDocs();
         renderAsignarComsActivo();
 
         var $atajos = $('#bandejaAsignarAtajos').empty();
+        var pendientesFac = facs.filter(function (f) { return !f.cargado_cxp; });
         if (paquete && paquete.url_cargar_cxp) {
             var etqSig = (paquete.siguiente_pendiente && paquete.siguiente_pendiente.etiqueta)
                 ? paquete.siguiente_pendiente.etiqueta
                 : 'siguiente pendiente';
-            $atajos.append('<a href="' + esc(paquete.url_cargar_cxp) + '" class="btn btn-sm btn-primary mr-1"><i class="fa fa-plus"></i> Cargar ' + esc(etqSig) + '</a>');
-        }
-        if (paquete && paquete.comprobantes) {
-            paquete.comprobantes.forEach(function (cp) {
-                $atajos.append('<a href="' + esc(cp.url) + '" class="btn btn-sm btn-outline-info mr-1">CP ' + esc(cp.etiqueta) + '</a>');
+            $atajos.append('<a href="' + esc(paquete.url_cargar_cxp) + '" class="btn btn-sm btn-primary mr-1 mb-1"><i class="fa fa-plus"></i> Cargar ' + esc(etqSig) + '</a>');
+            pendientesFac.forEach(function (f) {
+                if (!f.url_cargar_cxp) {
+                    return;
+                }
+                var etq = String(f.etiqueta || '');
+                if (etq === etqSig) {
+                    return;
+                }
+                $atajos.append('<a href="' + esc(f.url_cargar_cxp) + '" class="btn btn-sm btn-outline-primary mr-1 mb-1"><i class="fa fa-plus"></i> Cargar ' + esc(etq) + '</a>');
             });
+        }
+        var nCp = (paquete && paquete.comprobantes) ? paquete.comprobantes.length : 0;
+        if (nCp > 0) {
+            $atajos.append('<span class="text-muted small align-middle">Ya hay ' + nCp + ' CP de esta OC anual; no se vuelven a cargar.</span>');
         }
         if (paquete && paquete.pagos) {
             paquete.pagos.forEach(function (op) {
@@ -237,6 +344,15 @@
     }
 
     $(function () {
+        $('#modalBandejaAsignarCom').on('click', '.js-bandeja-toggle-cargados', function (e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var $wrap = $btn.next('.js-bandeja-cargados-wrap');
+            $wrap.toggle();
+            var n = $wrap.find('.js-bandeja-asig-doc').length;
+            $btn.text(($wrap.is(':visible') ? '▾ ' : '▸ ') + 'Ya en CxP — no se vuelven a mandar (' + n + ')');
+        });
+
         if (window.OcCambiarSectorLegajo) {
             window.OcCambiarSectorLegajo.initForm($('#formBandejaEnviarGastro'), { forzarPaquete: true });
             window.OcCambiarSectorLegajo.initForm($('#formBandejaEnviarCxp'), { forzarPaquete: true });
@@ -389,31 +505,38 @@
             });
         });
 
-        $(document).on('click', '.js-bandeja-pdf-row', function () {
+        $(document).on('click', '.js-bandeja-pdf-row', function (e) {
+            if ($(e.target).closest('a').length) {
+                return;
+            }
             var url = $(this).data('url-pdf');
+            var urlCxp = $(this).data('url-cxp');
             var $modal = $(this).closest('.modal');
             $(this).addClass('table-info').siblings().removeClass('table-info');
-            mostrarPdf($modal.find('iframe'), url);
+            var $iframe = $modal.find('.tab-pane.active iframe');
+            if (!$iframe.length) {
+                $iframe = $modal.find('iframe').first();
+            }
+            if (url) {
+                mostrarPdf($iframe, url);
+            } else {
+                mostrarSinPdf($iframe, urlCxp || '');
+            }
         });
 
-        $('.js-bandeja-ver-com').on('click', function () {
+        $(document).on('click', '.js-bandeja-ver-legajo, .js-bandeja-ver-factura, .js-bandeja-ver-com', function () {
             var urlPaquete = $(this).data('url-paquete');
             var numero = $(this).data('numero') || '';
-            $('#modalBandejaComs .modal-title').text('COM del legajo OC ' + numero);
+            var tab = $(this).data('tab') || ($(this).hasClass('js-bandeja-ver-com') ? 'coms' : 'facturas');
+            $('#bandejaLegajoTitulo').text('Legajo OC ' + numero);
+            $('#tablaBandejaFacturas tbody').html('<tr><td colspan="4" class="text-center text-muted">Cargando…</td></tr>');
             $('#tablaBandejaComs tbody').html('<tr><td colspan="3" class="text-center text-muted">Cargando…</td></tr>');
-            mostrarPdf($('#bandejaComPdf'), '');
-            $('#modalBandejaComs').modal('show');
-            cargarPaquete(urlPaquete, renderComs);
-        });
-
-        $('.js-bandeja-ver-factura').on('click', function () {
-            var urlPaquete = $(this).data('url-paquete');
-            var numero = $(this).data('numero') || '';
-            $('#modalBandejaFacturas .modal-title').text('Factura del legajo OC ' + numero);
-            $('#tablaBandejaFacturas tbody').html('<tr><td colspan="3" class="text-center text-muted">Cargando…</td></tr>');
             mostrarPdf($('#bandejaFacturaPdf'), '');
-            $('#modalBandejaFacturas').modal('show');
-            cargarPaquete(urlPaquete, renderFacturas);
+            mostrarPdf($('#bandejaComPdf'), '');
+            $('#modalBandejaLegajo').modal('show');
+            cargarPaquete(urlPaquete, function (paquete) {
+                renderLegajo(paquete, tab);
+            });
         });
 
         $('.js-bandeja-asignar-com').on('click', function () {

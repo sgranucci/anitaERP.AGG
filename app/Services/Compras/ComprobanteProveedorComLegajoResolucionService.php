@@ -13,6 +13,7 @@ use App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
+use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
@@ -78,13 +79,17 @@ class ComprobanteProveedorComLegajoResolucionService
             return $forzada;
         }
 
-        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
-            (int) ($ordencompra?->id ?? 0),
+        $yaPorCom = ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
+            $recepciones->pluck('id')->all(),
+            null,
+            (int) ($precarga->moneda_id ?? 1),
+            (float) ($precarga->cotizacion ?? 0),
+            $precarga->fechafactura ?? null,
         );
         $seleccion = $this->resolverSeleccion(
             $recepciones,
             $importeFactura,
-            (float) $yaFacturado['importe'],
+            $yaPorCom,
         );
 
         return [
@@ -115,7 +120,10 @@ class ComprobanteProveedorComLegajoResolucionService
         if ($precarga->fechafactura) {
             $fechaFactura = \Carbon\Carbon::parse($precarga->fechafactura)->format('Y-m-d');
         }
-        if (OrdencompraContratoRutaFacturaSupport::aplicaSinRecepcion($ordencompra, $fechaFactura)) {
+        if (OrdencompraContratoRutaFacturaSupport::aplicaSinRecepcion($ordencompra, $fechaFactura)
+            || ! OrdencompraLegajoDocumentoTipoSupport::exigeCom(
+                OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($precarga)
+            )) {
             /** @var \App\Models\Compras\Comprobante_Proveedor $data */
             $data = $prefill['data'];
             $data->modo_carga = ComprobanteProveedorModoCarga::SIN_RECEPCION;
@@ -210,20 +218,23 @@ class ComprobanteProveedorComLegajoResolucionService
         // Manda la moneda de la factura.
         $importe = (float) $importeMeta['importe'];
 
-        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
-            (int) $ordencompra->id,
+        $yaPorCom = ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
+            $recepciones->pluck('id')->all(),
             $excluirComprobanteId,
+            $monedaId,
+            $cotizacion,
+            $fechaFacturaYmd,
         );
-        $yaImporte = (float) $yaFacturado['importe'];
 
-        $provisionFactura = static function (Recepcion_Proveedor $rec) use ($yaImporte): float {
+        $provisionFactura = static function (Recepcion_Proveedor $rec) use ($yaPorCom): float {
             $bruta = (float) (
                 $rec->importe_provision_com_factura
                 ?? $rec->importe_provision_com
                 ?? 0
             );
+            $ya = (float) ($yaPorCom[(int) $rec->id] ?? 0);
 
-            return ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible($bruta, $yaImporte);
+            return ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible($bruta, $ya);
         };
 
         if ($recepciones->isEmpty()) {
@@ -424,13 +435,14 @@ class ComprobanteProveedorComLegajoResolucionService
 
     /**
      * @param  Collection<int, Recepcion_Proveedor>  $recepciones
+     * @param  array<int, float>  $yaFacturadoPorRecepcion
      *
      * @return array{ids: list<int>, ambigua: bool, mensaje: string|null, ordencompra_id: int|null}
      */
     private function resolverSeleccion(
         Collection $recepciones,
         float $importeComprobante,
-        float $yaFacturadoComparable = 0.0,
+        array $yaFacturadoPorRecepcion = [],
     ): array {
         if ($recepciones->isEmpty()) {
             return [
@@ -452,7 +464,7 @@ class ComprobanteProveedorComLegajoResolucionService
             ];
         }
 
-        $coincidencias = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importeComprobante, $yaFacturadoComparable) {
+        $coincidencias = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importeComprobante, $yaFacturadoPorRecepcion) {
             $importeComBruto = (float) (
                 $rec->importe_provision_com_factura
                 ?? $rec->importe_provision_com
@@ -460,7 +472,7 @@ class ComprobanteProveedorComLegajoResolucionService
             );
             $importeCom = ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
                 $importeComBruto,
-                $yaFacturadoComparable,
+                (float) ($yaFacturadoPorRecepcion[(int) $rec->id] ?? 0),
             );
 
             return ComprobanteProveedorImporteComparacionComSupport::coinciden($importeComprobante, $importeCom);

@@ -104,20 +104,45 @@ class RequisicionController extends Controller
         }
 
         $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
-        $filtros = RequisicionListadoFiltros::resolverDesdeRequest(
-            $request,
-            null,
-            $empresaDefault ? (int) $empresaDefault : null
-        );
+        $empresaDefault = $empresaDefault ? (int) $empresaDefault : null;
+
+        if ($request->boolean('limpiar_filtros')) {
+            RequisicionListadoFiltros::olvidar();
+            $filtrosEmpresa = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+
+            return redirect()->route(
+                'consultar_requisicion',
+                RequisicionListadoFiltros::paraQueryStringEmpresa($filtrosEmpresa)
+            );
+        }
+
+        if (QueryRetornoListado::requestTraeContextoIndex($request)) {
+            $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+            $filtrosQuery = RequisicionListadoFiltros::paraQueryString($filtros);
+            $page = (int) $request->query('page', 0);
+            if ($page > 1) {
+                $filtrosQuery['page'] = $page;
+            }
+            RequisicionListadoFiltros::persistir($filtrosQuery);
+        } else {
+            $guardados = RequisicionListadoFiltros::guardados();
+            if ($guardados !== []) {
+                return redirect()->route('consultar_requisicion', $guardados);
+            }
+            $filtros = RequisicionListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+            $filtrosQuery = RequisicionListadoFiltros::paraQueryString($filtros);
+        }
 
         $requisicion = $this->requisicionQuery->leeRequisicion($filtros, true, true);
+        $resumen = $this->requisicionQuery->resumenIndex($filtros);
 
         $estadoAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
         $datas = [
             'requisicion' => $requisicion,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
-            'filtrosQuery' => RequisicionListadoFiltros::paraQueryString($filtros),
+            'filtrosQuery' => $filtrosQuery,
+            'resumen' => $resumen,
             'camposFiltro' => RequisicionListadoFiltros::CAMPOS,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'estado_enum' => Requisicion_Estado::$enumEstado,
@@ -235,7 +260,7 @@ class RequisicionController extends Controller
         $data = null;
         $modo_provisorio = RequisicionProvisorioSupport::usuarioUsaModoProvisorio();
         $estado_provisorio = RequisicionProvisorioSupport::nombreEstadoProvisorio();
-        $filtrosQuery = QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class);
+        $filtrosQuery = $this->queryRetornoListado($request);
         $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
         $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
 
@@ -272,15 +297,13 @@ class RequisicionController extends Controller
 
         if ($ret['mensaje'] == 'ok') {
             if (! empty($ret['modo_provisorio']) && ! empty($ret['requisicion_id'])) {
-                return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                return redirect()->route('editar_requisicion', $this->paramsRutaEditarRequisicion(
                     $request,
-                    RequisicionListadoFiltros::class,
                     (int) $ret['requisicion_id']
                 ))->with('mensaje', 'Requisición guardada en PROVISORIO. Revise los datos y confirme.');
             }
 
-            return redirect()->route('consultar_requisicion', QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class))
-                ->with('mensaje', 'Requisición creada con éxito');
+            return $this->redirectConsultarRequisicion($request, 'Requisición creada con éxito');
         }
 
         return redirect()->back()->withInput()->with('mensaje-error', $ret['errores']);
@@ -377,14 +400,14 @@ class RequisicionController extends Controller
         return $this->filasOrdenesCompraVinculadasDesdeColeccion($ocs);
     }
 
-    public function imprimirPdf($id)
+    public function imprimirPdf(Request $request, $id)
     {
         if (! can('listar-requisicion', false) && ! can('editar-requisicion', false)) {
             return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para imprimir la requisición');
         }
 
         if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
-            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+            return $this->redirectConsultarRequisicion($request, 'Requisición no encontrada o sin acceso.');
         }
 
         $data = $this->requisicionRepository->find($id);
@@ -424,12 +447,12 @@ class RequisicionController extends Controller
         can('editar-requisicion');
 
         if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
-            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+            return $this->redirectConsultarRequisicion($request, 'Requisición no encontrada o sin acceso.');
         }
 
         $data = $this->requisicionRepository->find($id);
         if (! $this->requisicionService->usuarioPuedeEditarRequisicionEnCompras($data)) {
-            return redirect()->route('solo_consulta_requisicion', $id)
+            return redirect()->route('solo_consulta_requisicion', $this->paramsRutaEditarRequisicion($request, (int) $id))
                 ->with('mensaje', 'No puede modificar esta requisición en compras: su oficina de compra no coincide con la de la requisición.');
         }
 
@@ -454,7 +477,7 @@ class RequisicionController extends Controller
             $edicionLimitadaAprobada = true;
         }
         if (! $estadoPermitido) {
-            return redirect()->route('solo_consulta_requisicion', $id)
+            return redirect()->route('solo_consulta_requisicion', $this->paramsRutaEditarRequisicion($request, (int) $id))
                 ->with('mensaje', 'No puede modificar esta requisición por no estar pendiente o en compras.');
         }
 
@@ -477,7 +500,7 @@ class RequisicionController extends Controller
 
         $acceso_visualizacion_por_hash = false;
         $visualizar = false;
-        $filtrosQuery = QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class);
+        $filtrosQuery = $this->queryRetornoListado($request);
         $datosOc = $this->datosOcRequisicion($data, $filtrosQuery);
         $tiene_ordencompra_asociada = $datosOc['tiene_ordencompra_asociada'];
         $ordenes_compra_vinculadas = $datosOc['ordenes_compra_vinculadas'];
@@ -490,6 +513,7 @@ class RequisicionController extends Controller
         $cambios_articulo = app(RequisicionArticuloCambioService::class)->listarPorRequisicion((int) $id);
         $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
         $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
+        RequisicionTotalesCabecera::aplicarAtributosVirtuales($data, app(CotizacionQueryInterface::class));
 
         return view('compras.requisicion.editar', compact(
             'data',
@@ -532,7 +556,7 @@ class RequisicionController extends Controller
         can('actualizar-requisicion');
 
         if (! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
-            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+            return $this->redirectConsultarRequisicion($request, 'Requisición no encontrada o sin acceso.');
         }
 
         $ret = $this->requisicionService->actualizaRequisicion($request, $id);
@@ -550,15 +574,13 @@ class RequisicionController extends Controller
                 ? 'Proveedor sugerido actualizado con éxito'
                 : 'Requisición actualizada con éxito';
             if (! empty($ret['modo_provisorio']) || ! empty($ret['solo_proveedor_aprobada'])) {
-                return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                return redirect()->route('editar_requisicion', $this->paramsRutaEditarRequisicion(
                     $request,
-                    RequisicionListadoFiltros::class,
                     (int) $id
                 ))->with('mensaje', $mensaje);
             }
 
-            return redirect()->route('consultar_requisicion', QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class))
-                ->with('mensaje', $mensaje);
+            return $this->redirectConsultarRequisicion($request, $mensaje);
         } else {
             return redirect()->back()->withInput()->with('mensaje-error', $ret['errores'] ?? 'No se pudo actualizar la requisición.');
         }
@@ -573,7 +595,7 @@ class RequisicionController extends Controller
                 return response()->json(['mensaje' => 'error', 'errores' => 'Requisición no encontrada o sin acceso.'], 404);
             }
 
-            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+            return $this->redirectConsultarRequisicion($request, 'Requisición no encontrada o sin acceso.');
         }
 
         $centrocostoArbolId = (int) $request->input('centrocostodestino_arbol_id', 0);
@@ -590,9 +612,8 @@ class RequisicionController extends Controller
                 return response()->json($ret);
             }
 
-            return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+            return redirect()->route('editar_requisicion', $this->paramsRutaEditarRequisicion(
                 $request,
-                RequisicionListadoFiltros::class,
                 $id
             ))->with('mensaje', 'Debe seleccionar el centro de costo de destino para el árbol de aprobación.');
         }
@@ -601,17 +622,15 @@ class RequisicionController extends Controller
             if ($request->ajax() || $request->wantsJson()) {
                 return response()->json([
                     'mensaje' => 'ok',
-                    'redirect' => route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+                    'redirect' => route('editar_requisicion', $this->paramsRutaEditarRequisicion(
                         $request,
-                        RequisicionListadoFiltros::class,
                         $id
                     )),
                 ]);
             }
 
-            return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+            return redirect()->route('editar_requisicion', $this->paramsRutaEditarRequisicion(
                 $request,
-                RequisicionListadoFiltros::class,
                 $id
             ))->with('mensaje', 'Requisición confirmada. Árbol de aprobación y Anita actualizados.');
         }
@@ -620,9 +639,8 @@ class RequisicionController extends Controller
             return response()->json($ret, 422);
         }
 
-        return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+        return redirect()->route('editar_requisicion', $this->paramsRutaEditarRequisicion(
             $request,
-            RequisicionListadoFiltros::class,
             $id
         ))->with('mensaje', $ret['errores'] ?? 'Error al confirmar la requisición.');
     }
@@ -659,7 +677,7 @@ class RequisicionController extends Controller
                 return response()->json(['mensaje' => 'ok']);
             }
 
-            return redirect()->route('consultar_requisicion')->with('mensaje', 'Provisorio eliminado.');
+            return $this->redirectConsultarRequisicion($request, 'Provisorio eliminado.');
         }
 
         if ($request->ajax()) {
@@ -749,15 +767,14 @@ class RequisicionController extends Controller
         can('volver-compras-requisicion');
 
         if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
-            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+            return $this->redirectConsultarRequisicion($request, 'Requisición no encontrada o sin acceso.');
         }
 
         $ret = $this->requisicionService->volverAComprasDesdeArbol($id);
 
         if ($ret['mensaje'] === 'ok') {
-            return redirect()->route('editar_requisicion', QueryRetornoListado::paramsRutaEditar(
+            return redirect()->route('editar_requisicion', $this->paramsRutaEditarRequisicion(
                 $request,
-                RequisicionListadoFiltros::class,
                 $id
             ))->with('mensaje', 'Requisición devuelta a compras. Las autorizaciones pendientes del árbol quedaron sin efecto; puede modificarla y volver a enviarla.');
         }
@@ -770,7 +787,7 @@ class RequisicionController extends Controller
         can('actualizar-requisicion');
 
         if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
-            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+            return $this->redirectConsultarRequisicion($request, 'Requisición no encontrada o sin acceso.');
         }
 
         $ret = $this->requisicionService->marcarComoCumplida($id);
@@ -813,7 +830,7 @@ class RequisicionController extends Controller
         }
 
         if ($ret['mensaje'] === 'ok') {
-            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición eliminada.');
+            return $this->redirectConsultarRequisicion($request, 'Requisición eliminada.');
         }
 
         return redirect()->back()->with('mensaje', $ret['errores'] ?? 'No se pudo eliminar la requisición.');
@@ -1198,7 +1215,7 @@ class RequisicionController extends Controller
 
         if ($flEncontro) {
             if (! $hash && ! $this->requisicionQuery->requisicionAccesiblePorUsuario((int) $id)) {
-                return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+                return $this->redirectConsultarRequisicion($request, 'Requisición no encontrada o sin acceso.');
             }
 
             $data = $this->requisicionRepository->find($id);
@@ -1217,7 +1234,7 @@ class RequisicionController extends Controller
             $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
             $visualizar = true;
             $acceso_visualizacion_por_hash = filled($hash);
-            $filtrosQuery = QueryRetornoListado::desdeRequest($request, RequisicionListadoFiltros::class);
+            $filtrosQuery = $this->queryRetornoListado($request);
             $datosOc = $this->datosOcRequisicion($data, $filtrosQuery);
             $tiene_ordencompra_asociada = $datosOc['tiene_ordencompra_asociada'];
             $ordenes_compra_vinculadas = $datosOc['ordenes_compra_vinculadas'];
@@ -1227,6 +1244,7 @@ class RequisicionController extends Controller
             $cambios_articulo = app(RequisicionArticuloCambioService::class)->listarPorRequisicion((int) $id);
             $color_query = Color::query()->orderBy('nombre')->get(['id', 'nombre']);
             $talle_query = Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
+            RequisicionTotalesCabecera::aplicarAtributosVirtuales($data, app(CotizacionQueryInterface::class));
 
             return view('compras.requisicion.editar', compact(
                 'data',
@@ -1258,6 +1276,44 @@ class RequisicionController extends Controller
         }
 
         return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para visualizar la requisición')->send();
+    }
+
+    /**
+     * Query de retorno al listado: query string del ABM si vino del index, si no el último filtro en sesión.
+     *
+     * @return array<string, string|int|bool>
+     */
+    private function queryRetornoListado(Request $request): array
+    {
+        $query = QueryRetornoListado::desdeRequestSiIndex($request, RequisicionListadoFiltros::class);
+        if ($query !== []) {
+            return $query;
+        }
+
+        return RequisicionListadoFiltros::guardados();
+    }
+
+    /**
+     * @return array<string, string|int|bool>
+     */
+    private function paramsRutaEditarRequisicion(Request $request, int $id): array
+    {
+        if (QueryRetornoListado::esModalConsulta($request)) {
+            return [
+                'id' => $id,
+                'origen' => 'modal_consulta',
+                'vista' => 'consulta',
+            ];
+        }
+
+        return array_merge(['id' => $id], $this->queryRetornoListado($request));
+    }
+
+    private function redirectConsultarRequisicion(Request $request, string $mensaje)
+    {
+        return redirect()
+            ->route('consultar_requisicion', $this->queryRetornoListado($request))
+            ->with('mensaje', $mensaje);
     }
 
     private function tieneOrdencompraAsociadaRequisicion(int $requisicionId): bool

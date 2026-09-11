@@ -3,6 +3,11 @@
 Requisiciones
 @endsection
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/compras/ordencompra-ui.css') }}?v={{ @filemtime(public_path('assets/css/compras/ordencompra-ui.css')) ?: time() }}">
+<link rel="stylesheet" href="{{ asset('assets/css/compras/requisicion-ui.css') }}?v={{ @filemtime(public_path('assets/css/compras/requisicion-ui.css')) ?: time() }}">
+@endsection
+
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
@@ -13,6 +18,7 @@ Requisiciones
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/volver-compras.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/marcar-cumplida.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/erp-workspace-panel.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/erp-workspace-panel.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_confirmando_styles')
 @include('compras.requisicion.partials.banner_enviando_arbol_styles')
 @include('compras.requisicion.partials.comprobantes_asociados_script')
@@ -28,56 +34,69 @@ Requisiciones
 @include('compras.requisicion.partials.modal_firmante_retome_arbol')
 @include('compras.requisicion.partials.modal_confirmar_envio_arbol')
 @include('compras.requisicion.partials.modal_centrocosto_retome_arbol')
-<div class="row">
+
+<div class="row oc-ui rq-ui erp-ws-host">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Requisiciones</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
-                    @include('includes.compras.boton-manual')
-                    @if (can('seguimiento-aprobacion-requisicion', false))
-                        <a href="{{ route('seguimiento_aprobacion_requisicion') }}"
-                           class="btn btn-outline-warning btn-sm mr-1"
-                           title="Tablero de requisiciones pendientes de aprobación">
-                            <i class="fas fa-tasks"></i> Seguimiento aprobación
-                        </a>
-                    @endif
-                    @if (can('listar-kpi-compras', false))
-                        <a href="{{ route('consultar_kpi_compras') }}"
-                           class="btn btn-outline-success btn-sm mr-1"
-                           title="Tablero de KPIs de proceso y productividad">
-                            <i class="fas fa-chart-line"></i> KPIs
-                        </a>
-                    @endif
-                    @include('includes.listado.filtros_toolbar', [
-                        'formId' => 'form-filtros-requisicion',
-                        'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => RequisicionListadoFiltros::tieneCriteriosTexto($filtros ?? []),
-                        'limpiarUrl' => route('consultar_requisicion', RequisicionListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
-                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
-                        'toggleTarget' => '#panel-filtros-requisicion',
-                        'toggleId' => 'btn-toggle-filtros-requisicion',
-                        'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_requisicion', $retornoListadoQuery),
-                        'nuevoRegistroCan' => 'crear-requisicion',
-                        'nuevoRegistroLabel' => 'Nuevo registro',
-                    ])
-                </div>
+
+        <div class="oc-header">
+            <h1><i class="fa fa-file-text-o"></i> Requisiciones</h1>
+            <div class="oc-header-acciones">
+                @include('includes.compras.boton-manual')
+                @if (can('seguimiento-aprobacion-requisicion', false))
+                    <a href="{{ route('seguimiento_aprobacion_requisicion') }}"
+                       class="btn btn-outline-warning btn-sm"
+                       title="Tablero de requisiciones pendientes de aprobación">
+                        <i class="fas fa-tasks"></i> Seguimiento aprobación
+                    </a>
+                @endif
+                @if (can('listar-kpi-compras', false))
+                    <a href="{{ route('consultar_kpi_compras', ['origen' => 'requisicion']) }}"
+                       class="btn btn-outline-success btn-sm"
+                       title="Tablero de KPIs de proceso y productividad">
+                        <i class="fas fa-chart-line"></i> KPIs
+                    </a>
+                @endif
+                @include('includes.listado.filtros_toolbar', [
+                    'formId' => 'form-filtros-requisicion',
+                    'filtroValor' => $filtros['valor'] ?? '',
+                    'tieneCriterios' => RequisicionListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                    'limpiarUrl' => route('consultar_requisicion', array_merge(
+                        RequisicionListadoFiltros::paraQueryStringEmpresa($filtros ?? []),
+                        ['limpiar_filtros' => 1]
+                    )),
+                    'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                    'toggleTarget' => '#panel-filtros-requisicion',
+                    'toggleId' => 'btn-toggle-filtros-requisicion',
+                    'inputId' => 'filtro_valor',
+                    'nuevoRegistroUrl' => route('crear_requisicion', $retornoListadoQuery),
+                    'nuevoRegistroCan' => 'crear-requisicion',
+                    'nuevoRegistroLabel' => 'Nueva requisición',
+                ])
             </div>
+        </div>
+
+        <div class="oc-panel">
+            <p class="oc-intro">
+                Circuito de requisición: del pedido a la aprobación, la orden de compra y el cumplimiento. Filtre por estado, empresa o texto; abra la RQ en solapa sin salir del listado.
+            </p>
+
+            @include('compras.requisicion.partials.resumen_index')
+            @include('compras.requisicion.partials.segmentos_estado')
+            @include('compras.requisicion.partials.filtros_externos', [
+                'exportRuta' => 'listar_requisicion',
+                'exportQueryparams' => $filtrosQuery ?? [],
+            ])
+
             <form method="get" action="{{ route('consultar_requisicion') }}" id="form-filtros-requisicion" class="mb-0">
                 @include('compras.requisicion.partials.filtros_listado')
             </form>
-            @include('compras.requisicion.partials.filtros_externos')
-            <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'listar_requisicion',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+
+            <div class="table-responsive p-0">
+                <table class="table table-hover oc-grilla mb-0" id="tabla-paginada">
                     <thead>
                         <tr>
-                            <th class="width10">Número</th>
+                            <th>Número</th>
                             <th>Solicitante</th>
                             <th>Fecha</th>
                             <th>Empresa</th>
@@ -85,140 +104,68 @@ Requisiciones
                             <th>Proveedor</th>
                             <th>Estado</th>
                             <th class="text-right">Total</th>
-                            <th>Items</th>
+                            <th>Ítems</th>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach ($requisicion as $data)
-                        @php
-                            $esProvisorioFila = ($data->estado ?? '') === ($estado_provisorio ?? 'PROVISORIO');
-                        @endphp
-                        <tr @if($esProvisorioFila) class="table-secondary" @endif>
-                            <td>
-                                @if($esProvisorioFila)
-                                    <strong>{{ $data->numerorequisicion }}</strong>
-                                @else
-                                    {{ $data->numerorequisicion }}
-                                @endif
-                            </td>
-                            <td><small>{{ $data->nombreusuario ?? '' }}</small></td>
-                            <td>{{ date('d/m/Y', strtotime($data->fecha)) }}</td>
-                            <td>{{ $data->nombreempresa }}</td>
-                            <td><small>{{ $data->nombrecentrocosto }}</small></td>
-                            <td><small>{{ $data->nombreproveedor }}</small></td>
-                            <td>
-                                @include('compras.requisicion.partials.estado_badge', ['estado' => $data->estado ?? ''])
-                            </td>
-                            <td class="text-right text-nowrap">
-                                <small>{{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }} {{ $data->monedacabecera_abreviatura ?? '' }}</small>
-                            </td>
-                            <td>
-                                @foreach ($data->requisicion_articulos as $item)
-                                    <small>{{ $item->articulos->sku ?? '' }}-{{ $item->articulos->descripcion ?? '' }}-Cant.:{{ $item->cantidad }}-Precio:{{ $item->precio }}</small><br>
-                                @endforeach
-                            </td>
-                            <td>
-                                @if (can('editar-requisicion', false))
-                                <a href="{{ route('editar_requisicion', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="{{ $esProvisorioFila ? 'Editar provisorio' : 'Editar' }}">
-                                    <i class="fas fa-edit"></i>
-                                </a>
-                                @if ($esProvisorioFila && can('confirmar-requisicion', false))
-                                <form action="{{ route('confirmar_requisicion', $data->id) }}" class="d-inline form-confirmar-requisicion" method="POST"
-                                      data-confirm-msg="¿Confirmar requisición {{ $data->numerorequisicion }}? Enviará al árbol de aprobación y sincronizará con Anita."
-                                      data-preview-cc-url="{{ route('centros_costo_arbol_requisicion', ['id' => $data->id]) }}">
-                                    @csrf
-                                    <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Confirmar requisición">
-                                        <i class="fa fa-check"></i>
-                                    </button>
-                                </form>
-                                @endif
-                                @if (($data->estado ?? '') === ($estado_en_compras ?? 'EN COMPRAS'))
-                                <button type="button"
-                                        class="btn-accion-tabla tooltipsC text-success js-enviar-arbol-requisicion"
-                                        title="Envía al árbol de aprobación"
-                                        data-requisicion-id="{{ $data->id }}"
-                                        data-preview-url="{{ route('firmantes_retome_arbol_requisicion', ['id' => $data->id]) }}"
-                                        data-post-url="{{ route('enviar_arbol_requisicion', ['id' => $data->id]) }}"
-                                        data-redirect-url="{{ route('consultar_requisicion') }}">
-                                    <i class="fas fa-sitemap"></i>
-                                </button>
-                                @endif
-                                @endif
-                                @include('compras.requisicion.partials.boton_volver_compras', [
-                                    'data' => $data,
-                                    'filtrosQuery' => $retornoListadoQuery,
-                                    'claseBoton' => 'btn-accion-tabla tooltipsC text-warning',
-                                ])
-                                @if (can('listar-requisicion', false) || can('editar-requisicion', false))
-                                <a href="{{ route('imprimir_pdf_requisicion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Listar la requisición (PDF)" target="_blank" rel="noopener noreferrer">
-                                    <i class="fas fa-print"></i>
-                                </a>
-                                @endif
-                                @php
-                                    $estadoReq = $data->estado ?? '';
-                                    $puedeWizardOcListado = can('crear-ordencompra', false)
-                                        && (
-                                            $estadoReq === ($estado_aprobada_requisicion ?? '')
-                                            || $estadoReq === ($estado_genero_oc_requisicion ?? 'GENERO ORDEN COMPRA')
-                                            || $estadoReq === 'GENERO OC'
-                                        );
-                                @endphp
-                                @if ($puedeWizardOcListado)
-                                <a href="{{ route('requisicion_wizard_multiples_oc', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC text-success" title="Generar órdenes de compra (ítems pendientes; permisos al abrir)">
-                                    <i class="fa fa-shopping-cart"></i>
-                                </a>
-                                @endif
-                                @php
-                                    $puedeCumplirListado = can('cumplir-requisicion-compra', false)
-                                        && ($data->estado ?? '') === ($estado_aprobada_requisicion ?? 'APROBADA');
-                                @endphp
-                                @if ($puedeCumplirListado)
-                                <a href="{{ route('crear_cumplir_requisicion_compra', ['requisicion_id' => $data->id]) }}" class="btn-accion-tabla tooltipsC text-info" title="Cumplir requisición (genera transferencia)">
-                                    <i class="fa fa-truck-loading"></i>
-                                </a>
-                                @endif
-                                @include('compras.requisicion.partials.boton_marcar_cumplida', [
-                                    'data' => $data,
-                                    'filtrosQuery' => $retornoListadoQuery,
-                                    'claseBoton' => 'btn-accion-tabla tooltipsC text-secondary',
-                                    'soloIcono' => true,
-                                ])
-                                @if ((int) ($data->ordencompra_vinculadas_count ?? 0) > 0 && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-                                <button type="button" class="btn-accion-tabla tooltipsC text-warning js-requisicion-comprobantes" title="Ver órdenes de compra vinculadas" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
-                                    <i class="fa fa-shopping-cart"></i>
-                                </button>
-                                @endif
-                                @if (can('borrar-requisicion', false)
-                                    && ($data->estado ?? '') !== ($estado_provisorio ?? 'PROVISORIO')
-                                    && (int) ($data->ordencompra_vinculadas_count ?? 0) === 0)
-                                <form action="{{ route('eliminar_requisicion', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
-                                    @csrf @method("delete")
-                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
-                                        <i class="fas fa-times-circle text-danger"></i>
-                                    </button>
-                                </form>
-                                @endif
-                                @if (can('actualizar-requisicion', false)
-                                    && ($data->estado ?? '') === ($estado_provisorio ?? 'PROVISORIO')
-                                    && (int) ($data->ordencompra_vinculadas_count ?? 0) === 0)
-                                <form action="{{ route('eliminar_requisicion_provisorio', $data->id) }}" class="d-inline form-eliminar-provisorio" method="POST"
-                                      onsubmit="return confirm('¿Eliminar este provisorio? Esta acción no se puede deshacer.');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar provisorio">
-                                        <i class="fas fa-times-circle text-danger"></i>
-                                    </button>
-                                </form>
-                                @endif
-                            </td>
-                        </tr>
-                        @endforeach
+                        @forelse ($requisicion as $data)
+                            @php
+                                $esProvisorioFila = ($data->estado ?? '') === ($estado_provisorio ?? 'PROVISORIO');
+                                $items = $data->requisicion_articulos ?? collect();
+                                $itemsCount = $items->count();
+                                $primerItem = $items->first();
+                                $primerDesc = trim(implode(' ', array_filter([
+                                    optional(optional($primerItem)->articulos)->sku,
+                                    optional(optional($primerItem)->articulos)->descripcion,
+                                ])));
+                            @endphp
+                            <tr data-ws-id="{{ $data->id }}" @if($esProvisorioFila) class="rq-fila-provisorio" @endif>
+                                <td>
+                                    <span class="oc-numero">{{ $data->numerorequisicion }}</span>
+                                    <span class="oc-meta">ID {{ $data->id }}</span>
+                                </td>
+                                <td>{{ $data->nombreusuario ?? '—' }}</td>
+                                <td class="text-nowrap">{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '—' }}</td>
+                                <td>{{ $data->nombreempresa }}</td>
+                                <td>{{ $data->nombrecentrocosto }}</td>
+                                <td class="oc-proveedor">{{ $data->nombreproveedor ?: '—' }}</td>
+                                <td>
+                                    @include('compras.requisicion.partials.estado_badge', ['estado' => $data->estado ?? ''])
+                                </td>
+                                <td class="oc-num">
+                                    {{ number_format((float) ($data->monto ?? 0), 2, ',', '.') }}
+                                    <span class="oc-meta">{{ $data->monedacabecera_abreviatura ?? '' }}</span>
+                                </td>
+                                <td class="rq-items">
+                                    @if ($itemsCount > 0)
+                                        <strong>{{ $itemsCount }}</strong>
+                                        @if ($primerDesc !== '')
+                                            <span class="oc-meta">{{ $primerDesc }}{{ $itemsCount > 1 ? '…' : '' }}</span>
+                                        @endif
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td>
+                                    @include('compras.requisicion.partials.acciones_grilla')
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="10" class="oc-vacio">
+                                    <i class="fa fa-inbox"></i>
+                                    <div class="oc-vacio-titulo">No hay requisiciones para este filtro</div>
+                                    Ajuste el estado, la empresa o el texto de búsqueda.
+                                </td>
+                            </tr>
+                        @endforelse
                     </tbody>
                 </table>
             </div>
-            @if(method_exists($requisicion, 'links'))
-            <div class="card-footer">
+
+            @if (method_exists($requisicion, 'links'))
+            <div class="oc-footer">
                 {{ $requisicion->appends($filtrosQuery ?? [])->links() }}
             </div>
             @endif

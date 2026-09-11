@@ -909,7 +909,14 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
         }
         if (! OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarCuentasAPagar($oc)) {
-            return ['mensaje' => 'error', 'errores' => 'Este legajo no se puede enviar a Cuentas a pagar.'];
+            $enPagos = OrdencompraLegajoGastronomiaSupport::esSectorPagos((int) ($oc->sector_legajocompra_id ?? 0));
+
+            return [
+                'mensaje' => 'error',
+                'errores' => $enPagos
+                    ? 'El legajo está en Pagos y no hay FC/NC pendientes de carga. Para devolverlo usá Devolver a Cuentas a pagar.'
+                    : 'Este legajo no se puede enviar a Cuentas a pagar.',
+            ];
         }
         $sectorId = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
             OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
@@ -935,7 +942,20 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
         }
         if (! OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarPagos($oc)) {
-            return ['mensaje' => 'error', 'errores' => 'El legajo debe estar en Cuentas a pagar y tener la factura cargada.'];
+            $enCxp = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0));
+            $pendientes = $enCxp
+                ? OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc)
+                : [];
+
+            return [
+                'mensaje' => 'error',
+                'errores' => $pendientes !== []
+                    ? 'Quedan comprobantes pendientes de carga ('.implode(', ', array_map(
+                        static fn (array $d) => (string) ($d['etiqueta'] ?? ''),
+                        $pendientes
+                    )).'). Cargalos antes de enviar a Pagos.'
+                    : 'El legajo debe estar en Cuentas a pagar y tener la factura cargada.',
+            ];
         }
         $sectorId = OrdencompraLegajoGastronomiaSupport::sectorPagosId();
         if ($sectorId <= 0) {

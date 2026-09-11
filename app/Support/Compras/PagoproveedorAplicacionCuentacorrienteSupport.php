@@ -10,7 +10,9 @@ use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use RuntimeException;
 
 /**
- * Aplica montos de OP a deuda de proveedor (espejo de Cobranza_ComprobanteRepository).
+ * Aplica montos de OP a deuda y crédito de proveedor (espejo de Cobranza_ComprobanteRepository).
+ *
+ * Factura: fila OP en Haber. NC/OPA: fila OP en Debe (consume el crédito; no duplica Haber).
  */
 final class PagoproveedorAplicacionCuentacorrienteSupport
 {
@@ -72,7 +74,9 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 continue;
             }
 
-            $deuda = Proveedor_Cuentacorriente::query()->with('comprobante_proveedores')->findOrFail($ccId);
+            $deuda = Proveedor_Cuentacorriente::query()
+                ->with(['comprobante_proveedores.tipotransaccion_compras', 'pagoproveedores'])
+                ->findOrFail($ccId);
             $monedaId = (int) ($deuda->moneda_id ?? $apl['moneda_id'] ?? 1);
             // Libro = TC de la deuda/factura. Liquidación/crédito OP = TC del pago (misma que caja/asiento).
             $cotFactura = (float) ($deuda->cotizacion ?? $apl['cotizacion'] ?? 1);
@@ -98,12 +102,13 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
             }
 
             $codigoComp = self::codigoComprobante($deuda);
+            $importesCc = PagoproveedorAplicacionLadoSupport::importesAplicacionOp($deuda, $monto);
 
             $ccPago = Proveedor_Cuentacorriente::query()->create([
                 'fecha' => $fecha,
                 'fechavencimiento' => $fecha,
                 'proveedor_id' => $pago->proveedor_id,
-                'total' => -$monto,
+                'total' => $importesCc['total_fila_pago'],
                 'moneda_id' => $monedaId,
                 'cotizacion' => $cotPago,
                 'empresa_id' => $pago->empresa_id,
@@ -115,7 +120,7 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
             Proveedor_Cuentacorriente_Aplicacion::query()->create([
                 'fecha' => $fecha,
                 'proveedor_cuentacorriente_id' => $deuda->id,
-                'total' => -$monto,
+                'total' => $importesCc['apl_documento'],
                 'moneda_id' => $monedaId,
                 'cotizacion' => $cotFactura,
                 'cotizacion_liquidacion' => $cotAplicada,
@@ -129,7 +134,7 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
             Proveedor_Cuentacorriente_Aplicacion::query()->create([
                 'fecha' => $fecha,
                 'proveedor_cuentacorriente_id' => $ccPago->id,
-                'total' => $monto,
+                'total' => $importesCc['apl_fila_pago'],
                 'moneda_id' => $monedaId,
                 'cotizacion' => $cotPago,
                 'cotizacion_liquidacion' => $cotAplicada,
@@ -284,7 +289,9 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
     {
         $c = $deuda->comprobante_proveedores;
         if ($c === null) {
-            return 'CC#'.$deuda->id;
+            $etiquetaPago = $deuda->pagoproveedores?->etiquetaComprobante();
+
+            return $etiquetaPago !== null && $etiquetaPago !== '' ? $etiquetaPago : 'CC#'.$deuda->id;
         }
 
         $tipo = (string) ($c->tipotransaccion_compras?->abreviatura ?? 'FAC');

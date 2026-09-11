@@ -8,6 +8,13 @@ use PHPUnit\Framework\TestCase;
 
 class PagoproveedorAnitaAuditoriaCompareSupportTest extends TestCase
 {
+    public function test_op_generada_en_erp_requiere_asiento(): void
+    {
+        $this->assertFalse(PagoproveedorAnitaAuditoriaCompareSupport::esGeneradaEnErp(null));
+        $this->assertFalse(PagoproveedorAnitaAuditoriaCompareSupport::esGeneradaEnErp(0));
+        $this->assertTrue(PagoproveedorAnitaAuditoriaCompareSupport::esGeneradaEnErp(164220));
+    }
+
     public function test_estado_espacio_igual_vacio(): void
     {
         $this->assertSame(' ', PagoproveedorAnitaAuditoriaCompareSupport::normalizarChar1(''));

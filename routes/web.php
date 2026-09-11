@@ -2200,6 +2200,11 @@ Route::get('ventas/lista-gastronomia-articulos-vendidos/{formato}', 'Ventas\Gast
 Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/facturas', 'Ventas\GastronomiaArticulosVendidosController@apiFacturas')->name('gastronomia_articulos_vendidos_api_facturas');
 Route::get('ventas/gastronomia/articulos-vendidos/api/{articuloId}/movimientos', 'Ventas\GastronomiaArticulosVendidosController@apiMovimientos')->name('gastronomia_articulos_vendidos_api_movimientos');
 
+Route::get('ventas/certificados-arca', 'Ventas\CertificadoArcaController@index')->name('certificados_arca');
+Route::post('ventas/certificados-arca/generar-csr', 'Ventas\CertificadoArcaController@generarCsr')->name('generar_csr_certificado_arca');
+Route::get('ventas/certificados-arca/csr', 'Ventas\CertificadoArcaController@descargarCsr')->name('descargar_csr_certificado_arca');
+Route::post('ventas/certificados-arca/instalar', 'Ventas\CertificadoArcaController@instalar')->name('instalar_certificado_arca');
+
 Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_caea');
 Route::get('ventas/arca-caea/{id}/estado-informe', 'Ventas\ArcaCaeaController@estadoInforme')->name('arca_caea_estado_informe');
 Route::get('ventas/arca-caea/{id}/proximos-manual', 'Ventas\ArcaCaeaController@proximosManual')->name('arca_caea_proximos_manual');

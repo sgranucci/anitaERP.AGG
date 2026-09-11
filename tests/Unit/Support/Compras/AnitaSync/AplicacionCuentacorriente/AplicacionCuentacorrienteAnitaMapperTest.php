@@ -92,6 +92,22 @@ class AplicacionCuentacorrienteAnitaMapperTest extends TestCase
         $this->assertStringContainsString("prov_ref_nro = '0'", $valores);
     }
 
+    public function test_promov_cabecera_op_usa_monto_del_pago_y_t_pagado_cero(): void
+    {
+        $valores = \App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagoAnitaMapper::valoresUpdateCabecera(146912851.56);
+        $this->assertStringContainsString("prov_monto = '146912851.5600'", $valores);
+        $this->assertStringContainsString("prov_t_pagado = '0'", $valores);
+        $this->assertStringContainsString("prov_ref_nro = '0'", $valores);
+    }
+
+    public function test_promov_insert_op_respeta_cuota_cero(): void
+    {
+        $lado = AplicacionCuentacorrienteAnitaLadoSupport::armar('4518', 'OPP', ' ', 1, 124883, 0, 0, 1);
+        $this->assertSame(0, $lado['nro_cuota']);
+        $valores = \App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagoAnitaMapper::valoresInsert($lado, 146912851.56, '20260911');
+        $this->assertStringContainsString("'146912851.5600'", $valores);
+    }
+
     public function test_promov_opa_sin_interno_no_filtra_nro_interno(): void
     {
         $opa = AplicacionCuentacorrienteAnitaLadoSupport::armar('3593', 'OPA', 'A', 1, 124102);

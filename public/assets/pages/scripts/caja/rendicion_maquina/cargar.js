@@ -12,6 +12,8 @@
     var wigosOriginales = {};
     /** Semillas Completo (fondo_cierre/resultado/transfer) que no tienen input en pantalla. */
     var orquestadorCompletoExtra = {};
+    var qrMaquinasMontoOriginal = null;
+    var identidadCierreBase = null;
     var ajustesPendientes = [];
     var recargandoLineas = false;
     var wigosLeidoOk = false;
@@ -97,7 +99,8 @@
 
     function getTurno() {
         var el = document.getElementById('turno_rendicion');
-        return el ? el.value : (app.dataset.turno || 'M');
+        var v = el && el.value ? el.value : '';
+        return v || app.dataset.turno || 'M';
     }
 
     function claseBadgeTurno(turno) {
@@ -124,7 +127,7 @@
         badge.classList.add(claseBadgeTurno(turno));
         var avisoQr = document.getElementById('aviso-precarga-qr-maquinas');
         if (avisoQr) {
-            avisoQr.style.display = turno === 'M' ? '' : 'none';
+            avisoQr.style.display = (turno === 'M' || turno === 'C') ? '' : 'none';
         }
     }
 
@@ -220,9 +223,19 @@
         return orq;
     }
 
+    function transferenciaCompletoSemilla() {
+        if (orquestadorCompletoExtra && orquestadorCompletoExtra.transferencia !== undefined) {
+            return parseNum(orquestadorCompletoExtra.transferencia);
+        }
+        return 0;
+    }
+
     function pintarTotales(totales) {
         if (!totales) {
             return;
+        }
+        if (getTurno() === 'C') {
+            totales.transferencia = transferenciaCompletoSemilla();
         }
         app.querySelectorAll('[data-total]').forEach(function (el) {
             var key = el.dataset.total;
@@ -265,11 +278,11 @@
             dropqr_rodillo: 0,
             total_ingreso: 0,
             total_salida: 0,
+            deposito: 0,
             resultado_turno: 0,
             fondo_cierre: 0,
             transferencia: 0,
-            dif_caja: 0,
-            deposito: 0
+            dif_caja: 0
         });
     }
 
@@ -521,7 +534,11 @@
 
     function calcular() {
         var empresaId = getEmpresaId();
-        if (empresaId <= 0 || recargandoLineas) {
+        if (empresaId <= 0) {
+            return;
+        }
+        if (recargandoLineas) {
+            calcularDebounced();
             return;
         }
 
@@ -539,6 +556,12 @@
             }
         }).catch(function (err) {
             console.warn('Calcular rendición:', err.message);
+            if (getTurno() === 'C') {
+                var elTransf = app.querySelector('[data-total="transferencia"]');
+                if (elTransf) {
+                    elTransf.textContent = '$' + fmtMoney(transferenciaCompletoSemilla());
+                }
+            }
         });
     }
 
@@ -641,6 +664,146 @@
             });
     }
 
+    function filaTotalCoinQrMaquinas() {
+        var encontrada = null;
+        app.querySelectorAll('#tabla-valores-rendicion tbody tr[data-cuentacaja-id]').forEach(function (tr) {
+            if (encontrada) {
+                return;
+            }
+            var nombre = String(tr.querySelector('.col-desc')?.getAttribute('title')
+                || tr.querySelector('.col-desc')?.textContent || '').toLowerCase();
+            if (nombre.indexOf('totalcoin') < 0 && nombre.indexOf('total coin') < 0) {
+                return;
+            }
+            if (nombre.indexOf('maquin') < 0) {
+                return;
+            }
+            if (nombre.indexOf('caja') >= 0) {
+                return;
+            }
+            encontrada = tr;
+        });
+        return encontrada;
+    }
+
+    function leerMontoTotalCoinQr() {
+        var tr = filaTotalCoinQrMaquinas();
+        var inp = tr ? tr.querySelector('.js-valor-monto') : null;
+        return inp ? parseNum(inp.value) : 0;
+    }
+
+    function escribirMontoTotalCoinQr(monto) {
+        var tr = filaTotalCoinQrMaquinas();
+        var inp = tr ? tr.querySelector('.js-valor-monto') : null;
+        if (inp) {
+            inp.value = fmtMoney(monto);
+        }
+        marcarAjusteTotalCoin();
+    }
+
+    var CAMPO_TOTALCOIN_QR = 'valores.totalcoin_qr_maquinas';
+
+    function marcarAjusteTotalCoin() {
+        if (qrMaquinasMontoOriginal === null) {
+            return;
+        }
+        var actual = leerMontoTotalCoinQr();
+        if (Math.abs(qrMaquinasMontoOriginal - actual) < 0.005) {
+            ajustesPendientes = ajustesPendientes.filter(function (a) { return a.campo !== CAMPO_TOTALCOIN_QR; });
+            return;
+        }
+        var existente = ajustesPendientes.findIndex(function (a) { return a.campo === CAMPO_TOTALCOIN_QR; });
+        var reg = {
+            campo: CAMPO_TOTALCOIN_QR,
+            valor_wigos: qrMaquinasMontoOriginal,
+            valor_ajustado: actual,
+            motivo: null
+        };
+        if (existente >= 0) {
+            ajustesPendientes[existente] = reg;
+        } else {
+            ajustesPendientes.push(reg);
+        }
+    }
+
+    function recolectarWigosJson() {
+        var out = {};
+        Object.keys(wigosOriginales).forEach(function (k) {
+            out[k] = wigosOriginales[k];
+        });
+        if (qrMaquinasMontoOriginal !== null) {
+            out[CAMPO_TOTALCOIN_QR] = qrMaquinasMontoOriginal;
+        }
+        return out;
+    }
+
+    function inputDropQrRodillo() {
+        return document.getElementById('input_dropqr_rodillo');
+    }
+
+    function escribirDropQrRodillo(monto) {
+        var inp = inputDropQrRodillo();
+        if (!inp) {
+            return;
+        }
+        if (Math.abs(parseNum(inp.value) - monto) < 0.005) {
+            return;
+        }
+        if (document.activeElement === inp) {
+            return;
+        }
+        inp.value = fmtMoney(monto);
+        marcarAjuste(inp);
+    }
+
+    /**
+     * TotalCoin QR Máquinas = drop QR rodillo + impuesto QR (WIGOS del día).
+     * En Completo el consolidado M+T+N no trae ese QR; hay que precargarlo para el depósito.
+     */
+    function aplicarTotalCoinDesdeWigos() {
+        var turno = getTurno();
+        if (turno !== 'M' && turno !== 'C') {
+            return;
+        }
+        var inputs = recolectarInputs();
+        escribirMontoTotalCoinQr(parseNum(inputs.dropqr_rodillo) + parseNum(inputs.impuesto_qr));
+    }
+
+    /**
+     * Mañana: al ajustar drop/impuesto QR, TotalCoin sigue a drop + impuesto.
+     * Completo: el TotalCoin se fija al Traer WIGOS (no pisar un arreglo a mano).
+     */
+    function sincronizarValorQrDesdeWigos() {
+        if (getTurno() !== 'M') {
+            return;
+        }
+        aplicarTotalCoinDesdeWigos();
+    }
+
+    /**
+     * Planilla: Neto drop QR = TotalCoin − impuesto QR.
+     * Si tipea el TotalCoin de la planilla, el drop amarillo sigue al neto
+     * para que la transferencia no se mueva.
+     */
+    function sincronizarDropQrDesdeTotalCoin() {
+        if (getTurno() !== 'M') {
+            return;
+        }
+        var totalCoin = leerMontoTotalCoinQr();
+        var impuesto = parseNum(recolectarInputs().impuesto_qr);
+        if (Math.abs(totalCoin) < 0.005) {
+            return;
+        }
+        escribirDropQrRodillo(totalCoin - impuesto);
+        marcarAjusteTotalCoin();
+    }
+
+    function esInputTotalCoinQr(el) {
+        var tr = el && el.closest ? el.closest('#tabla-valores-rendicion tr[data-cuentacaja-id]') : null;
+        var fila = filaTotalCoinQrMaquinas();
+        return !!(tr && fila && tr === fila);
+    }
+
     function marcarAjuste(inp) {
         if (app.dataset.puedeAjustar !== '1') {
             return;
@@ -719,6 +882,8 @@
         if (Array.isArray(data.precarga_valores)) {
             aplicarPrecargaValores(data.precarga_valores);
         }
+        aplicarTotalCoinDesdeWigos();
+        qrMaquinasMontoOriginal = leerMontoTotalCoinQr();
         if (Array.isArray(data.gastos)) {
             renderGastos(data.gastos);
         }
@@ -730,6 +895,7 @@
             }
         });
         ajustesPendientes = [];
+        identidadCierreBase = null;
         calcularDebounced();
     }
 
@@ -849,7 +1015,7 @@
             valores: recolectarValores(),
             gastos: recolectarGastos(),
             calc_orquestador: recolectarCalcOrquestador(),
-            wigos_json: wigosOriginales,
+            wigos_json: recolectarWigosJson(),
             supervisor_usuario_id: document.getElementById('supervisor_usuario_id')?.value || null,
             auxiliar_usuario_id: document.getElementById('auxiliar_usuario_id')?.value || null,
             cajero_usuario_id: document.getElementById('cajero_usuario_id')?.value || null,
@@ -931,6 +1097,19 @@
         if (esInputMonto(el)) {
             formatearInputMonto(el);
         }
+        if (el && el.classList && (
+            el.classList.contains('js-valor-monto')
+            || el.classList.contains('js-gasto-monto')
+        )) {
+            if (getTurno() === 'C' && el.classList.contains('js-valor-monto')) {
+                identidadCierreBase = null;
+            }
+            if (el.classList.contains('js-valor-monto') && esInputTotalCoinQr(el)) {
+                sincronizarDropQrDesdeTotalCoin();
+                marcarAjusteTotalCoin();
+            }
+            calcular();
+        }
     });
 
     app.addEventListener('input', function (event) {
@@ -940,6 +1119,10 @@
         }
         if (el.classList.contains('js-input-wigos')) {
             marcarAjuste(el);
+            var clave = el.dataset.clave || '';
+            if (clave === 'dropqr_rodillo' || clave === 'impuesto_qr') {
+                sincronizarValorQrDesdeWigos();
+            }
             calcularDebounced();
             return;
         }
@@ -949,6 +1132,13 @@
             || el.classList.contains('js-gasto-monto')
             || el.classList.contains('js-calc-orq')
         ) {
+            if (getTurno() === 'C' && el.classList.contains('js-valor-monto')) {
+                identidadCierreBase = null;
+            }
+            if (el.classList.contains('js-valor-monto') && esInputTotalCoinQr(el)) {
+                sincronizarDropQrDesdeTotalCoin();
+                marcarAjusteTotalCoin();
+            }
             calcularDebounced();
         }
     });
@@ -957,6 +1147,7 @@
     document.getElementById('fecha_rendicion')?.addEventListener('change', function () {
         app.dataset.fecha = getFecha();
         marcarWigosLeido(false);
+        identidadCierreBase = null;
         if (esAlta) {
             blanquearTotales();
             blanquearFondoInput();
@@ -973,6 +1164,7 @@
         app.dataset.turno = getTurno();
         actualizarBadgeTurno();
         marcarWigosLeido(false);
+        identidadCierreBase = null;
         if (esAlta) {
             blanquearTotales();
             blanquearFondoInput();
@@ -1137,7 +1329,13 @@
         if (target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON') {
             return;
         }
-        if (!esCampoNav(target) && !(target.classList && target.classList.contains('usuario_codigo_arbol'))) {
+
+        var esValorOGasto = target.classList
+            && (target.classList.contains('js-valor-monto') || target.classList.contains('js-gasto-monto'));
+        if (!esCampoNav(target)
+            && !(target.classList && target.classList.contains('usuario_codigo_arbol'))
+            && !esValorOGasto
+        ) {
             return;
         }
 
@@ -1149,7 +1347,11 @@
             return;
         }
 
-        // Al pasar el foco, focusout formatea montos; change de fecha/select ya corrió al editar
+        if (esInputMonto(target)) {
+            formatearInputMonto(target);
+        }
+        calcular();
+
         var next = siguienteCampoNav(target);
         if (next) {
             enfocarCampo(next);
@@ -1168,6 +1370,33 @@
     actualizarEquivPesosValores(app);
     actualizarAvisoWigos();
 
+    if (getTurno() === 'C') {
+        try {
+            var extraAttr = app.dataset.orquestadorCompleto;
+            if (extraAttr) {
+                var parsedExtra = JSON.parse(extraAttr);
+                if (parsedExtra && typeof parsedExtra === 'object') {
+                    orquestadorCompletoExtra = {
+                        fondo_cierre: parseNum(parsedExtra.fondo_cierre),
+                        resultado_turno: parseNum(parsedExtra.resultado_turno),
+                        transferencia: parseNum(parsedExtra.transferencia)
+                    };
+                }
+            }
+        } catch (e) {
+            orquestadorCompletoExtra = {};
+        }
+    }
+
+    qrMaquinasMontoOriginal = leerMontoTotalCoinQr();
+
+    if (getTurno() === 'C') {
+        var elTransf = app.querySelector('[data-total="transferencia"]');
+        if (elTransf) {
+            elTransf.textContent = '$' + fmtMoney(transferenciaCompletoSemilla());
+        }
+    }
+
     app.addEventListener('input', function (ev) {
         var el = ev.target;
         if (el && el.classList && el.classList.contains('js-valor-monto')) {
@@ -1183,10 +1412,11 @@
 
     // Alta: pie en cero hasta Traer WIGOS / editar montos (Ctrl+R no debe dejar totales viejos).
     // Edición: recalcular con lo grabado.
-    if (esAlta) {
+    if (esAlta && getTurno() !== 'C') {
         blanquearTotales();
-    } else {
-        calcularDebounced();
+    }
+    if (getEmpresaId() > 0 && getFecha()) {
+        calcular();
     }
 
     // bfcache (atrás / a veces Ctrl+R): forzar pie en cero en alta

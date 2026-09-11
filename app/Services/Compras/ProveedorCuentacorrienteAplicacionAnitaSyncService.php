@@ -60,18 +60,7 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
             ->all();
 
         $this->syncPorIdsAplicacion($ids);
-
-        $ccs = Proveedor_Cuentacorriente::query()
-            ->with(self::RELACIONES_CC)
-            ->where('pagoproveedor_id', $pagoproveedorId)
-            ->get();
-        foreach ($ccs as $cc) {
-            $lado = AplicacionCuentacorrienteAnitaLadoSupport::desdeCc($cc);
-            if ($lado === null || ! $this->esTipoPagoAnita($lado['tipo'])) {
-                continue;
-            }
-            $this->actualizarPromov($cc, $lado, $this->ultimaRef($cc), false);
-        }
+        $this->sincronizarPromovCabeceraPago($pagoproveedorId);
     }
 
     public function syncAplicar(Proveedor_Cuentacorriente_Aplicacion $apl): void
@@ -154,11 +143,25 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
             );
         }
 
-        $esDeuda = (float) $apl->total < 0;
-        $deudaCc = $esDeuda ? $propia : $otra;
-        $creditoCc = $esDeuda ? $otra : $propia;
-        $deuda = $esDeuda ? $ladoPropio : $ladoOtro;
-        $credito = $esDeuda ? $ladoOtro : $ladoPropio;
+        $pagoId = (int) ($apl->pagoproveedor_id ?? 0);
+        if ($pagoId > 0) {
+            // OP: el tipo Anita (FIS/CIS/OPP) manda, no el signo ERP de la aplicación.
+            $propiaEsDoc = AplicacionCuentacorrienteAnitaLadoSupport::propiaEsDocumentoDelPago(
+                $pagoId,
+                (int) ($propia->pagoproveedor_id ?? 0),
+                (int) ($otra->pagoproveedor_id ?? 0)
+            );
+            $deudaCc = $propiaEsDoc ? $propia : $otra;
+            $creditoCc = $propiaEsDoc ? $otra : $propia;
+            $deuda = $propiaEsDoc ? $ladoPropio : $ladoOtro;
+            $credito = $propiaEsDoc ? $ladoOtro : $ladoPropio;
+        } else {
+            $esDeuda = (float) $apl->total < 0;
+            $deudaCc = $esDeuda ? $propia : $otra;
+            $creditoCc = $esDeuda ? $otra : $propia;
+            $deuda = $esDeuda ? $ladoPropio : $ladoOtro;
+            $credito = $esDeuda ? $ladoOtro : $ladoPropio;
+        }
 
         $fecha = $apl->fecha?->format('Y-m-d') ?? '';
         $fechaYmd = (string) ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($fecha);
@@ -264,6 +267,10 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         ?array $ref,
         bool $obligatorio,
     ): void {
+        if ($this->esTipoPagoAnita((string) ($lado['tipo'] ?? ''))) {
+            return;
+        }
+
         $suma = (float) Proveedor_Cuentacorriente_Aplicacion::query()
             ->where('proveedor_cuentacorriente_id', $cc->id)
             ->sum('total');
@@ -297,18 +304,6 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
             Log::warning('anita_bridge.fallo', ['contexto' => 'promov list '.$lado['etiqueta'], 'mensaje' => $error]);
 
             return;
-        }
-        if ($parsed['filas'] === []) {
-            if ($this->esTipoPagoAnita((string) $lado['tipo'])) {
-                $this->insertarPromovPago($cc, $lado);
-                $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
-                    'acc' => 'list',
-                    'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
-                    'tabla' => 'promov',
-                    'campos' => 'prov_t_pagado, prov_nro_cuota',
-                    'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
-                ]));
-            }
         }
         if ($parsed['filas'] === []) {
             $error = 'No está en promov Anita: '.$lado['etiqueta'];
@@ -347,9 +342,73 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
     }
 
     /**
+     * Un solo promov de la OP (tipo OPP/OPA). Monto = total del pago, t_pagado = 0.
+     * No pisar con cada factura aplicada: eso dejaba monto de la primera y t_pagado de la última.
+     */
+    private function sincronizarPromovCabeceraPago(int $pagoproveedorId): void
+    {
+        $ccPago = Proveedor_Cuentacorriente::query()
+            ->with(self::RELACIONES_CC)
+            ->where('pagoproveedor_id', $pagoproveedorId)
+            ->orderBy('id')
+            ->first();
+        if ($ccPago === null) {
+            return;
+        }
+
+        $lado = AplicacionCuentacorrienteAnitaLadoSupport::desdeCc($ccPago);
+        if ($lado === null || ! $this->esTipoPagoAnita((string) $lado['tipo'])) {
+            return;
+        }
+
+        $monto = abs((float) ($ccPago->pagoproveedores?->monto ?? 0));
+        if ($monto < 0.0001) {
+            $monto = abs((float) $ccPago->total);
+        }
+
+        $api = new ApiAnita;
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'tabla' => 'promov',
+            'campos' => 'prov_monto, prov_t_pagado',
+            'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
+        ]));
+        if ($parsed['error_lectura'] !== null) {
+            Log::warning('anita_bridge.fallo', [
+                'contexto' => 'promov list OP '.$lado['etiqueta'],
+                'mensaje' => $parsed['error_lectura'],
+            ]);
+
+            return;
+        }
+
+        if ($parsed['filas'] === []) {
+            $this->insertarPromovPago($ccPago, $lado, $monto);
+
+            return;
+        }
+
+        try {
+            $api->apiCallEscritura([
+                'acc' => 'update',
+                'tabla' => 'promov',
+                'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+                'valores' => PromovPagoAnitaMapper::valoresUpdateCabecera($monto),
+                'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
+            ], 'promov cabecera OP '.$lado['etiqueta']);
+        } catch (RuntimeException $e) {
+            Log::warning('anita_bridge.fallo', [
+                'contexto' => 'promov cabecera OP '.$lado['etiqueta'],
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * @param  Lado  $lado
      */
-    private function insertarPromovPago(Proveedor_Cuentacorriente $cc, array $lado): void
+    private function insertarPromovPago(Proveedor_Cuentacorriente $cc, array $lado, float $monto): void
     {
         $fechaYmd = (string) ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso(
             $cc->fecha?->format('Y-m-d') ?? ''
@@ -363,7 +422,7 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
             'tabla' => 'promov',
             'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
             'campos' => PromovPagoAnitaMapper::camposInsert(),
-            'valores' => PromovPagoAnitaMapper::valoresInsert($lado, abs((float) $cc->total), $fechaYmd),
+            'valores' => PromovPagoAnitaMapper::valoresInsert($lado, $monto, $fechaYmd),
         ], 'promov insert OP '.$lado['etiqueta']);
     }
 

@@ -49,6 +49,19 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
         $this->assertNull($filtros['empresa_id']);
     }
 
+    public function test_listo_cargar_desde_pendientes_abre_cuentas_a_pagar(): void
+    {
+        $filtros = OrdencompraLegajoBandejaFiltros::resolverDesdeRequest(
+            Request::create('/compras/legajos', 'GET', [
+                'vista' => OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES,
+                'atajo' => OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR,
+            ])
+        );
+
+        $this->assertSame(OrdencompraLegajoBandejaFiltros::VISTA_CXP, $filtros['vista']);
+        $this->assertSame(OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR, $filtros['atajo']);
+    }
+
     public function test_query_string_incluye_bandeja_y_filtros_inteligentes(): void
     {
         $q = OrdencompraLegajoBandejaFiltros::paraQueryString([

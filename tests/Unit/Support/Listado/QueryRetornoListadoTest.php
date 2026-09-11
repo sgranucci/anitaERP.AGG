@@ -4,6 +4,7 @@ namespace Tests\Unit\Support\Listado;
 
 use App\Support\Caja\Bingo\BingoCartonListadoFiltros;
 use App\Support\Caja\Estacionamiento\ItemEstacionamientoListadoFiltros;
+use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use PHPUnit\Framework\TestCase;
@@ -76,5 +77,28 @@ class QueryRetornoListadoTest extends TestCase
             ['empresa_id' => 1],
             QueryRetornoListado::desdeRequestSiIndex($conContexto, BingoCartonListadoFiltros::class),
         );
+    }
+
+    public function test_desde_request_si_index_no_fabrica_empresa_todas_en_requisicion(): void
+    {
+        $sinContexto = Request::create('/compras/requisicion/1/editar', 'GET');
+        $this->assertSame([], QueryRetornoListado::desdeRequestSiIndex($sinContexto, RequisicionListadoFiltros::class));
+    }
+
+    public function test_desde_request_si_index_conserva_filtro_de_requisicion(): void
+    {
+        $conFiltro = Request::create(
+            '/compras/requisicion/1/editar?filtro_valor=APROBADA&filtro_modo=campo&filtro_campo=estado&filtro_operador=igual&empresa_id=1&page=2',
+            'GET'
+        );
+
+        $query = QueryRetornoListado::desdeRequestSiIndex($conFiltro, RequisicionListadoFiltros::class);
+
+        $this->assertSame('APROBADA', $query['filtro_valor']);
+        $this->assertSame('campo', $query['filtro_modo']);
+        $this->assertSame('estado', $query['filtro_campo']);
+        $this->assertSame('igual', $query['filtro_operador']);
+        $this->assertSame(1, $query['empresa_id']);
+        $this->assertSame(2, $query['page']);
     }
 }

@@ -288,12 +288,22 @@ $(function () {
         }
 
         var mensajes = [];
+        var vistos = {};
+        function pushUnico(msg) {
+            var texto = String(msg || '').trim();
+            var clave = texto.toLowerCase();
+            if (!texto || vistos[clave]) {
+                return;
+            }
+            vistos[clave] = true;
+            mensajes.push(texto);
+        }
         if (error) {
-            mensajes.push(error);
+            pushUnico(error);
         }
         (avisos || []).forEach(function (aviso) {
             if (aviso && aviso.mensaje) {
-                mensajes.push(aviso.mensaje);
+                pushUnico(aviso.mensaje);
             }
         });
 

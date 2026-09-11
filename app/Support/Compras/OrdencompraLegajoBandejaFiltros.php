@@ -73,6 +73,11 @@ final class OrdencompraLegajoBandejaFiltros
         if ($atajo !== '' && ! in_array($atajo, self::ATAJOS, true)) {
             $atajo = '';
         }
+        // Cargar factura es trabajo de CxP. Pendientes+Listo para cargar dejaba
+        // vacía la grilla: el envío ya sacó el legajo de COMPRAS.
+        if ($atajo === self::ATAJO_LISTO_CARGAR && $vista === self::VISTA_PENDIENTES) {
+            $vista = self::VISTA_CXP;
+        }
 
         $listado = OrdencompraListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
 

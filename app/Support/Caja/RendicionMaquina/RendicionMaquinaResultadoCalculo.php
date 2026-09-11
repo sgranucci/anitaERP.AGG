@@ -87,6 +87,7 @@ final class RendicionMaquinaResultadoCalculo
             'deposito' => $this->get('calc.deposito'),
             'deposito_efectivo' => $this->get('calc.deposito_efectivo'),
             'deposito_pesos' => $this->get('calc.deposito_pesos'),
+            'identidad_cierre' => $this->get('calc.identidad_cierre'),
             'gastos_total' => $this->get('gastos.total'),
             'valores_total' => $this->get('valores.total'),
         ];

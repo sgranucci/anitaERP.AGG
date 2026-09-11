@@ -21,6 +21,10 @@ KPIs de Compras
             ? '<span class="badge badge-success">Cumple meta</span>'
             : '<span class="badge badge-danger">Fuera de meta</span>';
     };
+
+    $origenKpi = $origen ?? '';
+    $btnVolverRq = ($origenKpi === 'requisicion') ? 'btn-outline-info' : 'btn-outline-secondary';
+    $btnVolverOc = ($origenKpi === 'ordencompra' || $origenKpi === '') ? 'btn-outline-info' : 'btn-outline-secondary';
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -31,9 +35,20 @@ KPIs de Compras
                     <i class="fas fa-chart-line"></i> KPIs de Compras
                 </h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
-                    <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-info btn-sm" title="Volver a órdenes de compra">
-                        <i class="fa fa-reply-all"></i> Volver a OC
-                    </a>
+                    @if (can('listar-requisicion', false))
+                        <a href="{{ route('consultar_requisicion') }}"
+                           class="btn {{ $btnVolverRq }} btn-sm mr-1"
+                           title="Volver a requisiciones">
+                            <i class="fa fa-reply-all"></i> Volver a requisiciones
+                        </a>
+                    @endif
+                    @if (can('listar-ordencompra', false))
+                        <a href="{{ route('consultar_ordencompra') }}"
+                           class="btn {{ $btnVolverOc }} btn-sm"
+                           title="Volver a órdenes de compra">
+                            <i class="fa fa-reply-all"></i> Volver a OC
+                        </a>
+                    @endif
                 </div>
             </div>
 
@@ -48,6 +63,9 @@ KPIs de Compras
                         <input type="hidden" name="empresa_todas" value="1">
                     @elseif (!empty($filtros['empresa_id']))
                         <input type="hidden" name="empresa_id" value="{{ (int) $filtros['empresa_id'] }}">
+                    @endif
+                    @if (in_array($origen ?? '', ['requisicion', 'ordencompra'], true))
+                        <input type="hidden" name="origen" value="{{ $origen }}">
                     @endif
                     <label class="mr-2 mb-2" for="fecha_desde">Desde</label>
                     <input type="date" class="form-control form-control-sm mr-3 mb-2" id="fecha_desde"

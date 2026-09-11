@@ -290,4 +290,54 @@ final class LibroIvaDigitalComprasImportesSupport
 
         return $registro;
     }
+
+    /**
+     * Pasa un desglose en moneda del comprobante a pesos (× cotización).
+     * El TXT de Portal IVA se informa siempre en PES con tipo de cambio 1.
+     *
+     * @param  array<string, mixed>  $totales
+     * @return array<string, mixed>
+     */
+    public static function aplicarCoeficiente(array $totales, float $coeficiente): array
+    {
+        if (abs($coeficiente - 1.0) < 0.000001) {
+            return $totales;
+        }
+
+        foreach ([
+            'neto_gravado',
+            'iva',
+            'exento',
+            'no_integra',
+            'perc_iva',
+            'perc_iibb',
+            'perc_municipal',
+            'perc_nacional',
+            'imp_interno',
+            'otros',
+            'credito_computable',
+        ] as $campo) {
+            if (! array_key_exists($campo, $totales)) {
+                continue;
+            }
+            $totales[$campo] = round((float) $totales[$campo] * $coeficiente, 2);
+        }
+
+        if (isset($totales['alicuotas']) && is_array($totales['alicuotas'])) {
+            foreach ($totales['alicuotas'] as $i => $fila) {
+                foreach (['neto', 'iva', 'neto_gravado', 'impuesto_liquidado'] as $campo) {
+                    if (! array_key_exists($campo, $fila)) {
+                        continue;
+                    }
+                    $totales['alicuotas'][$i][$campo] = round((float) $fila[$campo] * $coeficiente, 2);
+                }
+            }
+            $ivas = array_column($totales['alicuotas'], 'iva');
+            if ($ivas !== []) {
+                $totales['credito_computable'] = round(array_sum($ivas), 2);
+            }
+        }
+
+        return $totales;
+    }
 }

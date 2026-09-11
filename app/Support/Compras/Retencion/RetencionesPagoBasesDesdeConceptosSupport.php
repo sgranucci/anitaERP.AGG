@@ -4,15 +4,20 @@ namespace App\Support\Compras\Retencion;
 
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
+
 /**
  * Arma bases de retención desde conceptos del comprobante aplicado.
  *
  * - Ganancias / IIBB: líneas con retieneganancia=S / retieneIIBB=S
+ * - IIBB ARBA: solo facturas con destino Buenos Aires (provincia_destino_id)
  * - SUSS / IVA-sobre-neto: tipoconcepto G (gravado); IVA discriminado = tipoconcepto I
  * - Exento / no gravado: tipoconcepto E / N (para documental y SUSS si se amplía)
  *
  * Prorratea por monto aplicado / total del comprobante y convierte a moneda de pago
  * con la cotización de la aplicación (misma lógica que el desembolso).
+ * NC (CC < 0) restan; OPA no entran (ya se retuvo al generarlas).
  */
 final class RetencionesPagoBasesDesdeConceptosSupport
 {
@@ -38,6 +43,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
         $netoNg = 0.0;
         $iva = 0.0;
         $bruto = 0.0;
+        $brutoIibbBa = 0.0;
         $detalle = [];
         $tuvoConceptos = false;
 
@@ -51,6 +57,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
             $cc = Proveedor_Cuentacorriente::query()
                 ->with([
                     'comprobante_proveedores.comprobante_proveedor_conceptos.concepto_ivacompras',
+                    'comprobante_proveedores.provinciaDestino',
                     'monedas',
                 ])
                 ->find($ccId);
@@ -59,17 +66,34 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                 continue;
             }
 
+            // OPA: restan del desembolso en la UI, no de Ganancias/IIBB/IVA/SUSS.
+            if (! PagoproveedorAplicacionLadoSupport::afectaRetenciones($cc)) {
+                $detalle[] = [
+                    'cc_id' => $ccId,
+                    'omitido_retencion' => 'opa',
+                    'monto_aplicado' => $montoApl,
+                ];
+                continue;
+            }
+
+            $signo = PagoproveedorAplicacionLadoSupport::signo($cc);
             $cotApl = $this->resolverCotizacionAplicada($apl, $cc, $cotizacionPagoHeader);
             $monedaDeudaId = (int) ($apl['moneda_id'] ?? $cc->moneda_id ?? 1);
-            $equivPago = $this->aMonedaPago($montoApl, $monedaDeudaId, $monedaPagoId, $cotApl);
+            $equivPago = round($signo * $this->aMonedaPago($montoApl, $monedaDeudaId, $monedaPagoId, $cotApl), 2);
             $bruto = round($bruto + $equivPago, 2);
 
             $cp = $cc->comprobante_proveedores;
+            $destinoBa = ComprobanteProveedorProvinciaDestinoSupport::esDestinoBuenosAires($cp);
+            if ($destinoBa) {
+                $brutoIibbBa = round($brutoIibbBa + $equivPago, 2);
+            }
             $lineas = $cp?->comprobante_proveedor_conceptos ?? collect();
             if ($cp === null || $lineas->isEmpty()) {
                 $detalle[] = [
                     'cc_id' => $ccId,
                     'sin_conceptos' => true,
+                    'signo' => $signo,
+                    'destino_buenos_aires' => $destinoBa,
                     'monto_aplicado' => $montoApl,
                     'equivalente_pago' => $equivPago,
                 ];
@@ -99,7 +123,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                 }
 
                 $porcionDeuda = round($montoLinea * $ratio, 4);
-                $porcionPago = $this->aMonedaPago($porcionDeuda, $monedaDeudaId, $monedaPagoId, $cotApl);
+                $porcionPago = round($signo * $this->aMonedaPago($porcionDeuda, $monedaDeudaId, $monedaPagoId, $cotApl), 2);
                 $tipo = strtoupper(trim((string) ($concepto->tipoconcepto ?? '')));
                 $retGan = strtoupper(trim((string) ($concepto->retieneganancia ?? 'N'))) === 'S';
                 $retIibb = strtoupper(trim((string) ($concepto->retieneIIBB ?? 'N'))) === 'S';
@@ -107,7 +131,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                 if ($retGan) {
                     $netoGan = round($netoGan + $porcionPago, 2);
                 }
-                if ($retIibb) {
+                if ($retIibb && $destinoBa) {
                     $netoIibb = round($netoIibb + $porcionPago, 2);
                 }
 
@@ -129,6 +153,8 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                     'tipoconcepto' => $tipo,
                     'retieneganancia' => $retGan ? 'S' : 'N',
                     'retieneIIBB' => $retIibb ? 'S' : 'N',
+                    'destino_buenos_aires' => $destinoBa,
+                    'signo' => $signo,
                     'monto_linea' => $montoLinea,
                     'porcion_pago' => $porcionPago,
                     'ratio' => $ratio,
@@ -138,16 +164,21 @@ final class RetencionesPagoBasesDesdeConceptosSupport
         }
 
         if (! $tuvoConceptos) {
-            // Sin desglose: el bruto aplicado es la mejor aproximación (comportamiento previo).
+            $soloOpa = $detalle !== []
+                && count($detalle) === count(array_filter(
+                    $detalle,
+                    static fn (array $d) => ($d['omitido_retencion'] ?? '') === 'opa'
+                ));
+
             return new RetencionesPagoBasesResultado(
                 netoGanancias: $bruto,
-                netoIibb: $bruto,
+                netoIibb: $brutoIibbBa,
                 netoGravado: $bruto,
                 netoExento: 0.0,
                 netoNogravado: 0.0,
                 importeIva: 0.0,
                 brutoAplicado: $bruto,
-                origen: 'fallback_bruto',
+                origen: $soloOpa ? 'opa_omitida' : 'fallback_bruto',
                 detalle: $detalle,
             );
         }

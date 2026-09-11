@@ -7,8 +7,10 @@ namespace App\Support\Contable\LibroIvaDigital;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Support\Compras\ComprobanteProveedorInternoTipos;
+use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Armado de registros LID desde compra+concmov Anita (maestro conceptos ERP).
@@ -377,6 +379,37 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         }
 
         return $cotizacion > 0.000001 ? $cotizacion : 1.0;
+    }
+
+    /**
+     * Cotización para pasar importes del comprobante ERP a pesos (Portal IVA = PES / TC 1).
+     * No degrada 0/1 en moneda extranjera: usa la del documento o la vigente.
+     */
+    public static function coeficienteDesdeErp(
+        int $monedaId,
+        mixed $cotizacion,
+        ?string $fechaYmd,
+        string $codigoMonedaAfip = 'PES',
+    ): float {
+        if ($monedaId > 0 && ComprobanteProveedorMonedaMotor::esMonedaExtranjera($monedaId)) {
+            try {
+                return ComprobanteProveedorMonedaMotor::cotizacionValida(
+                    $monedaId,
+                    $cotizacion,
+                    $fechaYmd,
+                    'libro iva digital compras ERP',
+                );
+            } catch (\RuntimeException $e) {
+                Log::warning('libro_iva_digital.compras_erp_sin_cotizacion', [
+                    'moneda_id' => $monedaId,
+                    'cotizacion' => $cotizacion,
+                    'fecha' => $fechaYmd,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return self::coeficienteMoneda($codigoMonedaAfip, (float) ($cotizacion ?? 1));
     }
 
     public static function esNotaCreditoAbreviatura(string $abrev): bool

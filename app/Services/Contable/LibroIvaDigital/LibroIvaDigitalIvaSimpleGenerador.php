@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasImportesSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
@@ -503,6 +504,7 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->with([
                 'proveedores',
                 'tipotransaccion_compras',
+                'monedas',
                 'comprobante_proveedor_conceptos.concepto_ivacompras.impuestos',
             ])
             ->orderBy('comprobante_proveedor.fechaiva')
@@ -534,6 +536,17 @@ class LibroIvaDigitalIvaSimpleGenerador
                     $cp->comprobante_proveedor_conceptos,
                     $letra,
                 );
+                $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
+                    $cp->monedas->codigo ?? null,
+                    $cp->monedas->nombre ?? null,
+                );
+                $coeficiente = LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteDesdeErp(
+                    (int) ($cp->moneda_id ?? 1),
+                    $cp->cotizacion,
+                    (string) ($cp->fechaiva ?: $cp->fechacomprobante),
+                    $codigoMoneda,
+                );
+                $totales = LibroIvaDigitalComprasImportesSupport::aplicarCoeficiente($totales, $coeficiente);
                 $codigoAfip = (string) ($cp->tipotransaccion_compras->codigoafip ?? '001');
                 $tipoCbte = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, $letra);
                 $esNc = LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($cp->tipotransaccion_compras)

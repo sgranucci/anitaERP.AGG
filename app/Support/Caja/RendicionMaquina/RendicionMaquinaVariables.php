@@ -24,6 +24,7 @@ final class RendicionMaquinaVariables
         'meta.es_tarde',
         'meta.es_noche',
         'meta.es_completo',
+        'meta.tiene_identidad_cierre_base',
         'meta.empresa_id',
         'meta.fecha_ymd',
         'meta.modo_wigos',
@@ -92,6 +93,8 @@ final class RendicionMaquinaVariables
     public const CALC_ORQUESTADOR = [
         'calc.comprobante',
         'calc.vale_rep_fondo',
+        'calc.identidad_cierre_base',
+        'calc.identidad_cierre',
     ];
 
     /** Destinos del pipeline AST (seed canónico). */

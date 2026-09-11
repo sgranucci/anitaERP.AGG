@@ -185,7 +185,15 @@
     $camposManuales = $d['campos_manuales'] ?? [];
     $retornoListadoQuery = $filtrosQuery ?? [];
     $turnoActual = (string) ($turno ?? 'M');
-    $mostrarAvisoPrecargaQr = $turnoActual === 'M';
+    $orqCompletoExtra = [];
+    if ($turnoActual === 'C') {
+        $orqCompletoExtra = [
+            'fondo_cierre' => (float) ($calcOrq['fondo_cierre'] ?? $totales['fondo_cierre'] ?? 0),
+            'resultado_turno' => (float) ($calcOrq['resultado_turno'] ?? $totales['resultado_turno'] ?? 0),
+            'transferencia' => (float) ($calcOrq['transferencia'] ?? $totales['transferencia'] ?? 0),
+        ];
+    }
+    $mostrarAvisoPrecargaQr = $turnoActual === 'M' || $turnoActual === 'C';
     $badgeTurno = match ($turnoActual) {
         'C' => 'badge-warning',
         'N' => 'badge-dark',
@@ -230,6 +238,7 @@
      data-empresa-id="{{ (int) $empresa_id }}"
      data-fecha="{{ $fecha ?? date('Y-m-d') }}"
      data-turno="{{ $turnoActual }}"
+     data-orquestador-completo='@json($orqCompletoExtra ?? [])'
      data-modo-edicion="{{ $modoEdicion ? '1' : '0' }}"
      data-puede-ajustar="{{ ! empty($puede_ajustar_wigos) ? '1' : '0' }}"
      data-url-index="{{ route('rendicion_maquina', $retornoListadoQuery) }}">
@@ -527,7 +536,8 @@
                                 <strong>Valores (cuentas de caja)</strong>
                                 <small class="text-muted d-block font-weight-normal" id="aviso-precarga-qr-maquinas"
                                        style="{{ $mostrarAvisoPrecargaQr ? '' : 'display:none' }}">
-                                    En turno mañana, TotalCoin QR Máquina se precarga al traer WIGOS (drop QR rodillo + impuesto QR).
+                                    En mañana, TotalCoin QR Máquina, impuesto QR y drop QR van juntos (neto = TotalCoin − impuesto).
+                                    Si ponés el TotalCoin de la planilla, el drop QR se ajusta para que la transferencia no se mueva.
                                 </small>
                             </div>
                             <div class="card-body p-0 table-responsive">
@@ -681,6 +691,7 @@
                     <div class="tot-item"><span class="lbl">Drop QR rodillo</span><span class="val" data-total="dropqr_rodillo">${{ number_format((float) ($totales['dropqr_rodillo'] ?? $inputs['dropqr_rodillo'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item"><span class="lbl">Total ingreso</span><span class="val" data-total="total_ingreso">${{ number_format((float) ($totales['total_ingreso'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item"><span class="lbl">Total salida</span><span class="val" data-total="total_salida">${{ number_format((float) ($totales['total_salida'] ?? 0), 2, ',', '.') }}</span></div>
+                    <div class="tot-item is-destacado"><span class="lbl">Depósito</span><span class="val" data-total="deposito">${{ number_format((float) ($totales['deposito'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item is-destacado"><span class="lbl">Resultado turno</span><span class="val" data-total="resultado_turno">${{ number_format((float) ($totales['resultado_turno'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item"><span class="lbl">Fondo cierre</span><span class="val" data-total="fondo_cierre">${{ number_format((float) ($totales['fondo_cierre'] ?? 0), 2, ',', '.') }}</span></div>
                     <div class="tot-item is-destacado"><span class="lbl">Transferencia</span><span class="val" data-total="transferencia">${{ number_format((float) ($totales['transferencia'] ?? 0), 2, ',', '.') }}</span></div>
@@ -695,9 +706,10 @@
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
             <div class="modal-header bg-info">
-                <h5 class="modal-title text-white">Log de ajustes WIGOS</h5>
+                <h5 class="modal-title text-white">Log de ajustes</h5>
                 <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
+            <p class="px-3 pt-2 mb-0 small text-muted">Incluye campos WIGOS (amarillos) y TotalCoin QR M&aacute;quinas.</p>
             <div class="modal-body p-0">
                 <table class="table table-sm table-striped mb-0">
                     <thead>

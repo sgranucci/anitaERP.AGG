@@ -40,7 +40,7 @@ class ComprobanteProveedorAnitaSyncService
             'comprobante_proveedor_articulos.articulos',
             'empresas', 'proveedores.condicionivas', 'proveedores.provincias',
             'proveedor_condicioniva_eventual', 'condicionpagos',
-            'tipotransaccion_compras', 'monedas',
+            'tipotransaccion_compras', 'monedas', 'provinciaDestino',
             'ordencompras.ordencompra_articulos.articulos',
         ]);
 
@@ -73,7 +73,7 @@ class ComprobanteProveedorAnitaSyncService
             'comprobante_proveedor_articulos.articulos',
             'empresas', 'proveedores.condicionivas', 'proveedores.provincias',
             'proveedor_condicioniva_eventual', 'condicionpagos',
-            'tipotransaccion_compras', 'monedas',
+            'tipotransaccion_compras', 'monedas', 'provinciaDestino',
             'ordencompras.ordencompra_articulos.articulos',
         ]);
 

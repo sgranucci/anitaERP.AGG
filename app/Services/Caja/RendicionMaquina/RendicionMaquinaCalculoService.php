@@ -84,6 +84,12 @@ final class RendicionMaquinaCalculoService
             ];
         }
 
+        if ($esCompleto) {
+            $this->aplicarAjusteTransferenciaCompleto($entorno, $contexto);
+        } else {
+            $entorno->set('calc.identidad_cierre', $this->identidadCierre($entorno));
+        }
+
         return new RendicionMaquinaResultadoCalculo(
             $entorno->snapshot(),
             $rastro,
@@ -138,5 +144,36 @@ final class RendicionMaquinaCalculoService
         }
 
         return RendicionMaquinaFormulaCatalogo::canonicos();
+    }
+
+    /**
+     * Completo: transferencia / fondo / resultado son las semillas (Noche y suma M+T+N).
+     * El arqueo (depósito) sí se recálcula; no se suma a la transferencia.
+     *
+     * @param  array<string, float|int|string|bool>  $contexto
+     */
+    private function aplicarAjusteTransferenciaCompleto(EntornoRendicionMaquina $entorno, array $contexto): void
+    {
+        $entorno->set('calc.identidad_cierre', $this->identidadCierre($entorno));
+        $entorno->set('calc.fondo_cierre', round((float) ($contexto['calc.fondo_cierre'] ?? 0), 2));
+        $entorno->set('calc.resultado_turno', round((float) ($contexto['calc.resultado_turno'] ?? 0), 2));
+        $entorno->set('calc.transferencia', round((float) ($contexto['calc.transferencia'] ?? 0), 2));
+    }
+
+    private function identidadCierre(EntornoRendicionMaquina $entorno): float
+    {
+        $variacion = $entorno->get('inputs.variacion_ff');
+        $variacionNeg = $variacion < 0 ? $variacion : 0.0;
+
+        return round(
+            $entorno->get('calc.fondo_cierre')
+            - $entorno->get('calc.resultado_turno')
+            - $entorno->get('inputs.pago_diferido')
+            - $entorno->get('inputs.impuesto_venta')
+            - $entorno->get('inputs.impuesto_qr')
+            - $entorno->get('inputs.impuesto_pago')
+            - $variacionNeg,
+            2
+        );
     }
 }

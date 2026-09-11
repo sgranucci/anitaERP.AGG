@@ -36,6 +36,7 @@ use App\Support\Compras\ComprobanteProveedorYaExistenteEnAnitaException;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -1010,7 +1011,10 @@ class Comprobante_ProveedorController extends Controller
                     'proveedores',
                     'comprobante_proveedor_recepciones',
                 ]);
-                $asientoPreview['avisos'] = $this->asientoPreviewSupport->avisosFaltantes($data);
+                $asientoPreview['avisos'] = $this->asientoPreviewSupport->unicosAvisos(
+                    $this->asientoPreviewSupport->avisosFaltantes($data),
+                    $asientoPreview['error'] ?? null
+                );
             }
         }
 
@@ -1041,7 +1045,13 @@ class Comprobante_ProveedorController extends Controller
             } elseif (filled($data->fechacomprobante ?? null)) {
                 $fechaPolitica = substr((string) $data->fechacomprobante, 0, 10);
             }
-            $comPolitica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($oc, $tieneCom, $fechaPolitica);
+            $tipoDoc = OrdencompraLegajoDocumentoTipoSupport::desdeComprobante($data);
+            $comPolitica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+                $oc,
+                $tieneCom,
+                $fechaPolitica,
+                $tipoDoc
+            );
             $comObligatoria = (bool) ($comPolitica['debe_asignar_com'] ?? false);
 
             $modoSugerido = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
@@ -1050,7 +1060,8 @@ class Comprobante_ProveedorController extends Controller
             );
             if ($comObligatoria
                 || ($comPolitica['permite_factura_anticipada'] ?? false)
-                || ($comPolitica['contrato_vigente'] ?? false)) {
+                || ($comPolitica['contrato_vigente'] ?? false)
+                || ($comPolitica['sin_com_por_tipo'] ?? false)) {
                 $data->modo_carga = $modoSugerido;
             }
         }

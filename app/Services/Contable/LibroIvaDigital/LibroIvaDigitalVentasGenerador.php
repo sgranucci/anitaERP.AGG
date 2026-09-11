@@ -15,7 +15,6 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeRead
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
-use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -68,9 +67,7 @@ class LibroIvaDigitalVentasGenerador
 
         $this->queryVentas($empresaId, $desde, $hasta, $porFechaJornada)
             ->with($this->relacionesVentas())
-            ->orderByRaw(SqlDialectSupport::fecha(
-                LibroIvaDigitalVentasPeriodoSupport::expresionFechaSql($porFechaJornada),
-            ))
+            ->orderBy(LibroIvaDigitalVentasPeriodoSupport::columnaFecha($porFechaJornada))
             ->orderBy('venta.puntoventa_id')
             ->orderBy('venta.tipotransaccion_id')
             ->orderBy('venta.numerocomprobante')

@@ -148,7 +148,7 @@ $(function () {
                     </a>
                 @endif
                 @if (can('listar-kpi-compras', false))
-                    <a href="{{ route('consultar_kpi_compras') }}"
+                    <a href="{{ route('consultar_kpi_compras', ['origen' => 'ordencompra']) }}"
                        class="btn btn-outline-success btn-sm"
                        title="Tablero de KPIs de proceso y productividad">
                         <i class="fas fa-chart-line"></i> KPIs
@@ -180,18 +180,14 @@ $(function () {
 
             @include('compras.ordencompra.partials.resumen_index')
             @include('compras.ordencompra.partials.segmentos_estado')
-            @include('compras.ordencompra.partials.filtros_externos')
+            @include('compras.ordencompra.partials.filtros_externos', [
+                'exportRuta' => 'listar_ordencompra',
+                'exportQueryparams' => $filtrosQuery ?? [],
+            ])
 
             <form method="get" action="{{ route('consultar_ordencompra') }}" id="form-filtros-ordencompra" class="mb-0">
                 @include('compras.ordencompra.partials.filtros_listado')
             </form>
-
-            <div class="px-3 pt-2">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'listar_ordencompra',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
-            </div>
 
             <div class="table-responsive p-0">
                 <table class="table table-hover oc-grilla mb-0" id="tabla-paginada">

@@ -7,8 +7,9 @@ use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use PHPUnit\Framework\TestCase;
 
 /**
- * a-compprov.c lee_recepcion: disponible = recepción − ya facturado.
- * Caso OC 223401: COM 1.600.000, 1ª FC 800.000 → 2ª FC 800.000 debe entrar en tolerancia 5%.
+ * Disponible = COM asignada − ya facturado en esas COM (no todo el legajo).
+ * Anticipo 50/50: ambas mitades vinculadas a la misma COM.
+ * Telefónica: COM USD convertida a pesos de la factura; otras FC del legajo no restan.
  */
 class ComprobanteProveedorImporteYaFacturadoLegajoSupportTest extends TestCase
 {
@@ -46,5 +47,36 @@ class ComprobanteProveedorImporteYaFacturadoLegajoSupportTest extends TestCase
         $this->assertSame(0.0, $suma['importe']);
         $this->assertSame(0, $suma['cantidad']);
         $this->assertSame([], $suma['items']);
+    }
+
+    public function test_sumar_sin_recepciones_devuelve_cero(): void
+    {
+        $suma = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnRecepciones([]);
+        $this->assertSame(0.0, $suma['importe']);
+        $this->assertSame(0, $suma['cantidad']);
+        $this->assertSame([], $suma['items']);
+    }
+
+    public function test_factura_pesos_contra_com_usd_convertida_sin_otras_fc_de_la_com(): void
+    {
+        // COM USD 280 × 1535 = 429.800 en moneda de la factura (pesos).
+        $comEnMonedaFactura = 429800.0;
+        $yaFacturadoEnEstasCom = 0.0;
+        $disponible = ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
+            $comEnMonedaFactura,
+            $yaFacturadoEnEstasCom
+        );
+
+        $this->assertFalse(
+            ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(429800.0, $disponible, 5.0)
+        );
+        $this->assertTrue(
+            ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
+                429800.0,
+                ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(429800.0, 1638113.28),
+                5.0
+            ),
+            'Restar todas las FC del legajo deja la COM en 0 (bug Telefónica).'
+        );
     }
 }

@@ -12,6 +12,15 @@ final class PagoproveedorAnitaAuditoriaCompareSupport
 {
     public const TOLERANCIA_IMPORTE = 0.05;
 
+    /**
+     * OP generada en anitaERP: el circuito de pago crea asiento. Los importes
+     * desde Anita (acumulado RG 830, etc.) quedan sin asiento_id.
+     */
+    public static function esGeneradaEnErp(int|string|null $asientoId): bool
+    {
+        return (int) $asientoId > 0;
+    }
+
     public static function normalizarChar1(string $valor): string
     {
         $v = strtoupper(trim($valor));

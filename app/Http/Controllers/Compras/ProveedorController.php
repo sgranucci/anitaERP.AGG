@@ -30,6 +30,7 @@ use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\MediopagoRepositoryInterface;
 use App\Queries\Compras\ProveedorQueryInterface;
 use App\Services\Configuracion\IIBBService;
+use App\Support\Compras\ProveedorPadronIibbEtiquetaSupport;
 use App\Services\Compras\RequisicionService;
 use App\Services\Compras\OrdencompraService;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
@@ -544,25 +545,16 @@ class ProveedorController extends Controller
 		{
             $fechaHoy = Carbon::now();
 
-			$tasaIibbArba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '902', $fechaHoy);
-            $tasaIibbCaba = $this->iibbService->leeTasaPercepcion($nroinscripcion, '901', $fechaHoy);
-
-            $tasaArbaValor = $this->tasaPercepcionDesdePadron($tasaIibbArba);
-            $tasaarba = $tasaArbaValor === null ? 'No esta en padron' : round($tasaArbaValor, 2).'%';
-
-            $tasaCabaValor = $this->tasaPercepcionDesdePadron($tasaIibbCaba);
-            $tasacaba = ($tasaCabaValor === null || $tasaCabaValor < 0.00001)
-                ? 'No esta en padron'
-                : round($tasaCabaValor, 2).'%';
+			$tasaarba = ProveedorPadronIibbEtiquetaSupport::retencion(
+                $this->iibbService->leeTasaRetencion($nroinscripcion, 902, $fechaHoy)
+            );
+            $tasacaba = ProveedorPadronIibbEtiquetaSupport::retencion(
+                $this->iibbService->leeTasaRetencion($nroinscripcion, 901, $fechaHoy)
+            );
 		}
 		else
 			$tasaarba = $tasacaba = '';
 	}
-
-    private function tasaPercepcionDesdePadron($registroPadron): ?float
-    {
-        return $this->iibbService->tasaPercepcionDesdePadron($registroPadron);
-    }
 
     // Reporte maestro de proveedores
     public function indexReporteProveedor()

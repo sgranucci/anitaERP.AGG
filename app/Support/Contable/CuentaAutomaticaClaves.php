@@ -378,7 +378,7 @@ final class CuentaAutomaticaClaves
             ],
             self::CIERRE_MAQUINA_CANON_LOTERIA => [
                 'grupo' => 'Cierre rendiciones máquinas',
-                'descripcion' => 'Canon lotería 34% (impcont 480)',
+                'descripcion' => 'Canon lotería 34% (impcont 480 → 521010001, no 521020 sala bingo)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,
@@ -392,7 +392,7 @@ final class CuentaAutomaticaClaves
             ],
             self::CIERRE_MAQUINA_CANON_HOSPITAL => [
                 'grupo' => 'Cierre rendiciones máquinas',
-                'descripcion' => 'Canon hospital 1% (impcont 482)',
+                'descripcion' => 'Canon hospital 1% (impcont 482 → 521010002, no 521020 sala bingo)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,

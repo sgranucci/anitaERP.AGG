@@ -51,7 +51,7 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
                 (int) $pago->sucursal,
                 $numero,
                 0,
-                1,
+                0,
                 (int) ($cc->empresas?->codigo ?? $pago->empresa_id ?? 0),
                 self::codMonDesdeCc($cc),
                 self::cotizacionDesdeCc($cc),
@@ -112,7 +112,7 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
             'sucursal' => $sucursal,
             'numero' => $numero,
             'nro_interno' => $nroInterno,
-            'nro_cuota' => $nroCuota > 0 ? $nroCuota : 1,
+            'nro_cuota' => $nroCuota < 0 ? 1 : $nroCuota,
             'empresa' => $empresa,
             'etiqueta' => ComprobanteProveedorAnitaImportClaveSupport::etiqueta($tipo, $letra, $sucursal, $numero),
             'cod_mon' => $codMon,
@@ -163,5 +163,21 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
         }
 
         return $texto;
+    }
+
+    /**
+     * En aplicaciones de OP, Anita identifica el comprobante por tipo (FIS/CIS/OPA),
+     * no por el signo del importe. La fila CC nacida de este pago tiene
+     * pagoproveedor_id = id de la OP; la otra es el documento (aplvp_*).
+     *
+     * @return bool true si $propiaPagoproveedorId es el documento, false si es la fila OP
+     */
+    public static function propiaEsDocumentoDelPago(int $pagoId, int $propiaPagoproveedorId, int $otraPagoproveedorId): bool
+    {
+        if ($pagoId <= 0) {
+            return $propiaPagoproveedorId <= 0;
+        }
+
+        return $propiaPagoproveedorId !== $pagoId;
     }
 }

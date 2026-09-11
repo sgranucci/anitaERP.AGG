@@ -22,6 +22,7 @@ use App\Services\Compras\PagoproveedorComprobantePdfService;
 use App\Services\Compras\PagoproveedorService;
 use App\Services\Compras\RetencionesPagoCalculator;
 use App\Services\Compras\RetencionesPagoContextoBuilder;
+use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 use App\Support\Compras\PagoproveedorListadoFiltros;
 use App\Support\Compras\PropuestaPagoModoSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
@@ -296,7 +297,12 @@ class PagoproveedorController extends Controller
         }
 
         $filasTodas = $this->proveedorCuentacorrienteRepository->listarDeudaProveedor('', $proveedorId, false);
-        $filas = $filasTodas->where('empresa_id', $empresaId)->values();
+        $creditos = $this->proveedorCuentacorrienteRepository->listarPendientesAplicacion(
+            $proveedorId,
+            'credito',
+            $empresaId
+        );
+        $filas = $filasTodas->where('empresa_id', $empresaId)->concat($creditos)->unique('id')->values();
         $aviso = null;
         if ($filas->isEmpty() && $filasTodas->isNotEmpty()) {
             $nombres = $filasTodas
@@ -309,14 +315,35 @@ class PagoproveedorController extends Controller
 
         $puedeVerComprobante = can('editar-comprobante-proveedor', false)
             || can('listar-comprobante-proveedor', false);
+        $puedeVerPago = can('editar-pagoproveedor', false)
+            || can('listar-pagoproveedor', false);
 
-        $mapearFila = static function ($cc, float $aplicadoOp = 0.0) use ($puedeVerComprobante): array {
+        $mapearFila = static function ($cc, float $aplicadoOp = 0.0) use ($puedeVerComprobante, $puedeVerPago): array {
             $comp = $cc->comprobante_proveedores;
             $aplicado = (float) ($cc->aplicado ?? 0);
             $saldoPendiente = abs((float) $cc->total + $aplicado);
             // Al editar una OP, el saldo editable incluye lo que esta OP ya aplicó.
             $saldo = round($saldoPendiente + $aplicadoOp, 4);
             $compId = $comp ? (int) $comp->id : 0;
+            $pagoOrigenId = (int) ($cc->pagoproveedor_id ?? 0);
+            $esOpa = PagoproveedorAplicacionLadoSupport::esOpa($cc);
+            $signo = PagoproveedorAplicacionLadoSupport::signo($cc);
+            $etiquetaPago = $cc->pagoproveedores?->etiquetaComprobante();
+
+            $comprobanteUrl = null;
+            if ($compId > 0 && $puedeVerComprobante) {
+                $comprobanteUrl = route('editar_comprobante_proveedor', [
+                    'id' => $compId,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+            } elseif ($esOpa && $pagoOrigenId > 0 && $puedeVerPago) {
+                $comprobanteUrl = route('editar_pagoproveedor', [
+                    'id' => $pagoOrigenId,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+            }
 
             return [
                 'id' => (int) $cc->id,
@@ -330,15 +357,9 @@ class PagoproveedorController extends Controller
                         (int) $comp->sucursal,
                         $comp->numerocomprobante
                     )
-                    : 'CC#'.$cc->id,
+                    : (string) ($etiquetaPago ?: ('CC#'.$cc->id)),
                 'comprobante_proveedor_id' => $compId > 0 ? $compId : null,
-                'comprobante_url' => ($compId > 0 && $puedeVerComprobante)
-                    ? route('editar_comprobante_proveedor', [
-                        'id' => $compId,
-                        'origen' => 'modal_consulta',
-                        'vista' => 'consulta',
-                    ])
-                    : null,
+                'comprobante_url' => $comprobanteUrl,
                 'moneda_id' => (int) $cc->moneda_id,
                 'moneda' => $cc->monedas?->abreviatura,
                 'cotizacion' => (float) $cc->cotizacion,
@@ -346,6 +367,11 @@ class PagoproveedorController extends Controller
                 'saldo' => $saldo,
                 'aplicado_op' => round($aplicadoOp, 4),
                 'ordencompra_id' => $comp?->ordencompra_id,
+                'signo' => $signo,
+                'lado' => $signo < 0 ? 'credito' : 'deuda',
+                'es_opa' => $esOpa,
+                'es_nc' => $signo < 0 && ! $esOpa,
+                'afecta_retenciones' => PagoproveedorAplicacionLadoSupport::afectaRetenciones($cc),
             ];
         };
 
@@ -358,6 +384,7 @@ class PagoproveedorController extends Controller
             $aplicaciones = Pagoproveedor_Comprobante::query()
                 ->with([
                     'proveedor_cuentacorrientes.comprobante_proveedores.tipotransaccion_compras',
+                    'proveedor_cuentacorrientes.pagoproveedores',
                     'proveedor_cuentacorrientes.monedas',
                     'proveedor_cuentacorrientes.empresas',
                 ])

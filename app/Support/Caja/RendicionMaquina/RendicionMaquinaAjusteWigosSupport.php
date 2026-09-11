@@ -50,12 +50,80 @@ final class RendicionMaquinaAjusteWigosSupport
         'inputs.impuesto_pago' => 'Impuesto / canje gastronomía',
     ];
 
+    public const CAMPO_TOTALCOIN_QR_MAQUINAS = 'valores.totalcoin_qr_maquinas';
+
+    /**
+     * Líneas de arqueo que también van al log (no son campo amarillo WIGOS).
+     *
+     * @var array<string, string>
+     */
+    public const CAMPOS_VALORES = [
+        self::CAMPO_TOTALCOIN_QR_MAQUINAS => 'TotalCoin QR Máquinas',
+    ];
+
     /**
      * @return array<string, string>
      */
     public static function camposAjustables(): array
     {
-        return self::CAMPOS_WIGOS + self::CAMPOS_IMPUESTOS;
+        return self::CAMPOS_WIGOS + self::CAMPOS_IMPUESTOS + self::CAMPOS_VALORES;
+    }
+
+    public static function requierePermisoAjustar(string $campo): bool
+    {
+        return isset(self::CAMPOS_WIGOS[$campo]) || isset(self::CAMPOS_IMPUESTOS[$campo]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $wigosJson
+     */
+    public static function valorOriginalTotalCoinDesdeWigosJson(array $wigosJson): ?float
+    {
+        if (array_key_exists(self::CAMPO_TOTALCOIN_QR_MAQUINAS, $wigosJson)
+            && $wigosJson[self::CAMPO_TOTALCOIN_QR_MAQUINAS] !== null
+            && $wigosJson[self::CAMPO_TOTALCOIN_QR_MAQUINAS] !== '') {
+            return round((float) $wigosJson[self::CAMPO_TOTALCOIN_QR_MAQUINAS], 2);
+        }
+
+        $drop = (float) ($wigosJson['inputs.dropqr_rodillo'] ?? $wigosJson['dropqr_rodillo'] ?? 0);
+        $impuesto = (float) ($wigosJson['inputs.impuesto_qr'] ?? $wigosJson['impuesto_qr'] ?? 0);
+        if (abs($drop) < 0.005 && abs($impuesto) < 0.005) {
+            return null;
+        }
+
+        return round($drop + $impuesto, 2);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $ajustes
+     * @return list<array<string, mixed>>
+     */
+    public static function fusionarAjusteTotalCoin(array $ajustes, ?float $valorOriginal, ?float $valorActual): array
+    {
+        if ($valorOriginal === null || $valorActual === null) {
+            return $ajustes;
+        }
+
+        $original = round($valorOriginal, 2);
+        $actual = round($valorActual, 2);
+        if (abs($original - $actual) < 0.005) {
+            return $ajustes;
+        }
+
+        foreach ($ajustes as $ajuste) {
+            if ((string) ($ajuste['campo'] ?? '') === self::CAMPO_TOTALCOIN_QR_MAQUINAS) {
+                return $ajustes;
+            }
+        }
+
+        $ajustes[] = [
+            'campo' => self::CAMPO_TOTALCOIN_QR_MAQUINAS,
+            'valor_wigos' => $original,
+            'valor_ajustado' => $actual,
+            'motivo' => null,
+        ];
+
+        return $ajustes;
     }
 
     /**

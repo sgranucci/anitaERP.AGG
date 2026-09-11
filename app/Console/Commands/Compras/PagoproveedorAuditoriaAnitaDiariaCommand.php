@@ -15,7 +15,7 @@ class PagoproveedorAuditoriaAnitaDiariaCommand extends Command
                             {--reparar : Repara tesorería Anita (override config)}
                             {--sin-reparar : Solo diagnostica, no repara}';
 
-    protected $description = 'Audita OP ERP ↔ Anita (pago/tesmov/auxpag/cpromae/ctamov/retenciones/asiento) y notifica';
+    protected $description = 'Audita OP generadas en anitaERP ↔ Anita (pago/tesmov/auxpag/cpromae/ctamov/retenciones/asiento) y notifica';
 
     public function handle(PagoproveedorAnitaAuditoriaDiariaService $service): int
     {

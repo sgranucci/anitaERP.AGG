@@ -62,6 +62,14 @@ class KpiComprasController extends Controller
         $filtrosQuery['fecha_desde'] = $desde;
         $filtrosQuery['fecha_hasta'] = $hasta;
 
+        $origen = (string) $request->input('origen', '');
+        if (! in_array($origen, ['requisicion', 'ordencompra'], true)) {
+            $origen = '';
+        }
+        if ($origen !== '') {
+            $filtrosQuery['origen'] = $origen;
+        }
+
         return view('compras.kpi.index', [
             'tablero' => $tablero,
             'empresa_query' => $empresaQuery,
@@ -69,6 +77,7 @@ class KpiComprasController extends Controller
             'filtrosQuery' => $filtrosQuery,
             'fecha_desde' => $desde,
             'fecha_hasta' => $hasta,
+            'origen' => $origen,
         ]);
     }
 }

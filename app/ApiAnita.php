@@ -110,6 +110,9 @@ class ApiAnita
             return json_encode(['Error' => 'Bridge HTTP Anita: '.$e->getMessage()]);
         }
 
+        $timeout = (int) ($data['curl_timeout'] ?? config('anita.bridge_timeout', 120));
+        unset($data['curl_timeout']);
+
         $curl = curl_init();
         $payload = json_encode($data);
 
@@ -118,7 +121,7 @@ class ApiAnita
         ]);
         curl_setopt($curl, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
         curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, (int) config('anita.bridge_connect_timeout', 10));
-        curl_setopt($curl, CURLOPT_TIMEOUT, (int) config('anita.bridge_timeout', 120));
+        curl_setopt($curl, CURLOPT_TIMEOUT, max(5, $timeout));
         $response = curl_exec($curl);
         if (curl_errno($curl)) {
             $errorMsg = curl_error($curl);

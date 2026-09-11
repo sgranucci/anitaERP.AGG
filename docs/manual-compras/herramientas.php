@@ -129,7 +129,7 @@ return [
         [
             'herramienta' => 'Seguimiento aprobación',
             'ubicacion' => $barraListado . ' (botón amarillo)',
-            'accion' => 'Abre el tablero de requisiciones pendientes de aprobación: responsable actual, días desde creación y alerta si supera el plazo (48 hs por defecto). Incluye botón para ver el árbol sin abrir la requisición.',
+            'accion' => 'Abre el tablero de requisiciones pendientes de aprobación: responsable actual, días desde creación y alerta si supera el plazo (48 hs por defecto). Enc-compras y quien tiene listar-todas ven todo el circuito. Usuarios de resto sectores solo las de su centro de costo (origen o destino del árbol). Incluye botón para ver el árbol sin abrir la requisición.',
             'permiso' => 'seguimiento-aprobacion-requisicion',
         ],
         [

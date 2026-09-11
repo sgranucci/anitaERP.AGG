@@ -151,6 +151,9 @@
                                    class="btn btn-outline-success btn-sm ml-1" id="btn-exportar-iva-simple">
                                     <i class="fa fa-download"></i> Solo IVA Simple (CSV)
                                 </a>
+                                <small class="form-text text-muted d-inline-block ml-1">
+                                    El ZIP reutiliza la consulta (no vuelve a leer Anita).
+                                </small>
                             @endif
                         </div>
                     </div>
@@ -618,24 +621,48 @@
 
         var btnZip = document.getElementById('btn-exportar-libro-iva-digital');
         if (btnZip) {
-            btnZip.addEventListener('click', function () {
-                mostrarProcesoOverlay(
-                    'Generando ZIP de Libro IVA Digital e IVA Simple…',
-                    'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
+            btnZip.addEventListener('click', function (event) {
+                event.preventDefault();
+                descargarConOverlay(
+                    btnZip.getAttribute('href'),
+                    'Armando ZIP de Libro IVA Digital…',
+                    'Si ya consultó, sale del resultado en cache. Pulse Esc para cerrar este aviso.'
                 );
-                window.addEventListener('focus', ocultarProcesoOverlay, { once: true });
             });
         }
 
         var btnIvaSimple = document.getElementById('btn-exportar-iva-simple');
         if (btnIvaSimple) {
-            btnIvaSimple.addEventListener('click', function () {
-                mostrarProcesoOverlay(
-                    'Generando IVA Simple…',
-                    'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
+            btnIvaSimple.addEventListener('click', function (event) {
+                event.preventDefault();
+                descargarConOverlay(
+                    btnIvaSimple.getAttribute('href'),
+                    'Armando ZIP de IVA Simple…',
+                    'Si ya consultó, sale del resultado en cache. Pulse Esc para cerrar este aviso.'
                 );
-                window.addEventListener('focus', ocultarProcesoOverlay, { once: true });
             });
+        }
+
+        function descargarConOverlay(url, titulo, subtitulo) {
+            if (!url) {
+                return;
+            }
+            mostrarProcesoOverlay(titulo, subtitulo);
+            var iframe = document.getElementById('lid-download-frame');
+            if (!iframe) {
+                iframe = document.createElement('iframe');
+                iframe.id = 'lid-download-frame';
+                iframe.setAttribute('title', 'Descarga Libro IVA Digital');
+                iframe.style.display = 'none';
+                document.body.appendChild(iframe);
+            }
+            iframe.src = url;
+            window.setTimeout(function () {
+                var sub = document.getElementById('libro-iva-digital-procesando-subtitulo');
+                if (sub && overlay.getAttribute('aria-hidden') === 'false') {
+                    sub.textContent = 'La descarga debería haber empezado. Pulse Esc para cerrar este aviso.';
+                }
+            }, 8000);
         }
 
         window.addEventListener('pageshow', ocultarProcesoOverlay);

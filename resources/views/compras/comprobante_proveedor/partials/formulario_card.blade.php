@@ -248,11 +248,30 @@
                         @if ($hayAvisosIniciales)
                         <strong><i class="fa fa-exclamation-triangle"></i> Asiento contable:</strong>
                         <ul class="mb-0 mt-1 pl-3">
-                            @if ($errorInicial)
-                            <li>{{ $errorInicial }}</li>
-                            @endif
-                            @foreach ($avisosIniciales as $aviso)
-                            <li>{{ $aviso['mensaje'] ?? '' }}</li>
+                            @php
+                                $mensajesBanner = [];
+                                if (! empty($errorInicial)) {
+                                    $mensajesBanner[] = (string) $errorInicial;
+                                }
+                                foreach ($avisosIniciales as $aviso) {
+                                    $txtAviso = trim((string) ($aviso['mensaje'] ?? ''));
+                                    if ($txtAviso === '') {
+                                        continue;
+                                    }
+                                    $yaEsta = false;
+                                    foreach ($mensajesBanner as $ya) {
+                                        if (strcasecmp($ya, $txtAviso) === 0) {
+                                            $yaEsta = true;
+                                            break;
+                                        }
+                                    }
+                                    if (! $yaEsta) {
+                                        $mensajesBanner[] = $txtAviso;
+                                    }
+                                }
+                            @endphp
+                            @foreach ($mensajesBanner as $msgBanner)
+                            <li>{{ $msgBanner }}</li>
                             @endforeach
                         </ul>
                         @endif
@@ -403,6 +422,7 @@
 </div>
 
 @include('includes.compras.modalconsultaproveedor')
+@include('includes.configuracion.modalconsultaprovincia')
 @include('includes.compras.modalconsultaconcepto_ivacompra')
 @include('includes.compras.modalconsultatipotransaccioncompra')
 @include('includes.contable.modalconsultacuentacontable')

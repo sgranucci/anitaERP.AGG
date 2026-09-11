@@ -300,10 +300,10 @@
     				</div>
     				<div class="col-lg-4">
 					@if ($tasaarba != '')
-    					<label for="Tasaarba" style="padding: 0px;" class="col-form-label">Tasa ARBA: {{$tasaarba}} %</label>
+    					<label for="Tasaarba" style="padding: 0px;" class="col-form-label">Tasa ret. ARBA: {{$tasaarba}}</label>
 					@endif
 					@if ($tasacaba != '')
-    					<label for="Tasacaba" style="padding: 0px;" class="col-form-label">Tasa CABA: {{$tasacaba}} %</label>
+    					<label for="Tasacaba" style="padding: 0px;" class="col-form-label">Tasa ret. CABA: {{$tasacaba}}</label>
 					@endif
                     @if (!empty($data->facturas_apocrifas))
                         <span id="proveedor-apoc-estado-badge" class="badge badge-danger ml-1">Facturas ap&oacute;crifas (ARCA)</span>

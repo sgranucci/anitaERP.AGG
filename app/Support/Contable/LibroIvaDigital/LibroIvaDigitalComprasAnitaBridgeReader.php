@@ -19,6 +19,9 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
 
     private const CHUNK_CONCMOV_RESPALDO = 500;
 
+    /** Timeout corto del intento de mes completo; si Anita no responde, se parte en lotes. */
+    private const TIMEOUT_MES_COMPLETO = 45;
+
     /** @var array<string, list<array{compra: array<string, mixed>, conceptos: list<array{concepto: int, importe: float}>}>> */
     private static array $cachePeriodo = [];
 
@@ -80,14 +83,14 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
      */
     private function listarCompraPeriodo(int $empresaAnita, int $desde, int $hasta): array
     {
-        $filas = $this->listarCompraRango($empresaAnita, $desde, $hasta);
+        $filas = $this->listarCompraRango($empresaAnita, $desde, $hasta, self::TIMEOUT_MES_COMPLETO);
         if ($filas !== null) {
             return $filas;
         }
 
         $acumulado = [];
         foreach (LibroIvaDigitalAnitaPeriodoSupport::partirRangoYmd($desde, $hasta, self::DIAS_POR_LOTE) as [$loteDesde, $loteHasta]) {
-            $lote = $this->listarCompraRango($empresaAnita, $loteDesde, $loteHasta);
+            $lote = $this->listarCompraRango($empresaAnita, $loteDesde, $loteHasta, 90);
             if ($lote === null) {
                 continue;
             }
@@ -102,7 +105,7 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
     /**
      * @return list<array<string, mixed>>|null
      */
-    private function listarCompraRango(int $empresaAnita, int $desde, int $hasta): ?array
+    private function listarCompraRango(int $empresaAnita, int $desde, int $hasta, ?int $curlTimeout = null): ?array
     {
         // Descripción / textos al final: evita corrimiento por | en el bridge.
         $campos = implode(', ', [
@@ -137,6 +140,7 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
                 'desde' => $desde,
                 'hasta' => $hasta,
             ],
+            $curlTimeout,
         );
     }
 
@@ -155,9 +159,11 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
         }
 
         $permitidos = array_fill_keys($nros, true);
-        $unaPasada = $this->listarConcmovIn($nros, $permitidos);
-        if ($unaPasada !== null) {
-            return $unaPasada;
+        if (count($nros) <= self::CHUNK_CONCMOV_RESPALDO) {
+            $unaPasada = $this->listarConcmovIn($nros, $permitidos);
+            if ($unaPasada !== null) {
+                return $unaPasada;
+            }
         }
 
         $porInterno = [];
@@ -190,6 +196,7 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
             'concv_nro_interno, concv_concepto',
             'compras_anita_bridge_concmov',
             ['lote' => count($nros)],
+            90,
         );
         if ($filas === null) {
             return null;
@@ -233,24 +240,37 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
         string $orderBy,
         string $logKey,
         array $contexto = [],
+        ?int $curlTimeout = null,
     ): ?array {
+        $payload = [
+            'acc' => 'list',
+            'sistema' => 'compras',
+            'tabla' => $tabla,
+            'campos' => $campos,
+            'whereArmado' => $where,
+            'orderBy' => $orderBy,
+        ];
+        if ($curlTimeout !== null) {
+            $payload['curl_timeout'] = $curlTimeout;
+        }
+
+        $t0 = microtime(true);
         try {
-            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita())->apiCall([
-                'acc' => 'list',
-                'sistema' => 'compras',
-                'tabla' => $tabla,
-                'campos' => $campos,
-                'whereArmado' => $where,
-                'orderBy' => $orderBy,
-            ]));
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita())->apiCall($payload));
         } catch (\Throwable $e) {
-            Log::warning('libro_iva_digital.'.$logKey, $contexto + ['error' => $e->getMessage()]);
+            Log::warning('libro_iva_digital.'.$logKey, $contexto + [
+                'error' => $e->getMessage(),
+                'ms' => round((microtime(true) - $t0) * 1000, 1),
+            ]);
 
             return null;
         }
 
         if ($parsed['error_lectura'] !== null) {
-            Log::warning('libro_iva_digital.'.$logKey, $contexto + ['error' => $parsed['error_lectura']]);
+            Log::warning('libro_iva_digital.'.$logKey, $contexto + [
+                'error' => $parsed['error_lectura'],
+                'ms' => round((microtime(true) - $t0) * 1000, 1),
+            ]);
 
             return null;
         }
@@ -259,6 +279,11 @@ final class LibroIvaDigitalComprasAnitaBridgeReader
         foreach ($parsed['filas'] as $fila) {
             $out[] = (array) $fila;
         }
+
+        Log::info('libro_iva_digital.'.$logKey, $contexto + [
+            'filas' => count($out),
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+        ]);
 
         return $out;
     }
