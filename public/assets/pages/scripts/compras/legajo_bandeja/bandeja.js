@@ -97,10 +97,14 @@
             if (f.url_comprobante) {
                 estadoHtml += ' <a href="' + esc(f.url_comprobante) + '" target="_blank" rel="noopener" class="js-bandeja-abrir-cxp" title="Abrir en CxP">CxP</a>';
             }
+            var etiqueta = esc(f.etiqueta || ('#' + f.id));
+            var etiquetaHtml = f.url_pdf
+                ? '<a href="' + esc(f.url_pdf) + '" class="text-primary" target="_blank" rel="noopener" title="Abrir PDF en pantalla completa">' + etiqueta + '</a>'
+                : etiqueta;
             var $tr = $('<tr class="js-bandeja-pdf-row" style="cursor:pointer;"></tr>');
             $tr.attr('data-url-pdf', f.url_pdf || '');
             $tr.attr('data-url-cxp', f.url_comprobante || '');
-            $tr.append('<td>' + esc(f.etiqueta || ('#' + f.id)) + '</td>');
+            $tr.append('<td>' + etiquetaHtml + '</td>');
             $tr.append('<td>' + esc(f.fecha || '') + '</td>');
             $tr.append('<td>' + esc(origen) + '</td>');
             $tr.append('<td>' + estadoHtml + '</td>');

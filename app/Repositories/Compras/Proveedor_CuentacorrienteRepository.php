@@ -96,8 +96,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
         ProveedorCuentacorrienteListadoFiltros::aplicar($query, $filtros);
 
-        $query->orderBy('proveedor_cuentacorriente.fecha', 'desc')
-            ->orderBy('proveedor_cuentacorriente.id', 'desc');
+        $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
+            ->orderBy('proveedor_cuentacorriente.id', 'asc');
 
         return $paginar ? $query->paginate(10) : $query->get();
     }
@@ -131,8 +131,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
         ProveedorCuentacorrienteListadoFiltros::aplicar($query, $filtros);
 
-        $query->orderBy('proveedor_cuentacorriente.fecha', 'desc')
-            ->orderBy('proveedor_cuentacorriente.id', 'desc');
+        $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
+            ->orderBy('proveedor_cuentacorriente.id', 'asc');
 
         return $paginar ? $query->paginate(10) : $query->get();
     }
