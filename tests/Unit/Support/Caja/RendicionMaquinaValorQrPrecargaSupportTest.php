@@ -100,4 +100,39 @@ class RendicionMaquinaValorQrPrecargaSupportTest extends TestCase
 
         $this->assertSame(113322382.29, $inputs['dropqr_rodillo']);
     }
+
+    public function test_completo_usa_totalcoin_de_maniana_dia_siguiente(): void
+    {
+        $desdeInputs = RendicionMaquinaValorQrPrecargaSupport::montoDesdeInputs([
+            'dropqr_rodillo' => 149189289.71,
+            'impuesto_qr' => 1077042.65,
+        ]);
+        $this->assertSame(150266332.36, $desdeInputs);
+
+        $conManiana = RendicionMaquinaValorQrPrecargaSupport::montoPrecargaCompleto(
+            ['dropqr_rodillo' => 149189289.71, 'impuesto_qr' => 1077042.65],
+            150606588.07
+        );
+        $this->assertSame(150606588.07, $conManiana);
+
+        $sinManiana = RendicionMaquinaValorQrPrecargaSupport::montoPrecargaCompleto(
+            ['dropqr_rodillo' => 149189289.71, 'impuesto_qr' => 1077042.65],
+            null
+        );
+        $this->assertSame(150266332.36, $sinManiana);
+    }
+
+    public function test_lineas_precarga_acepta_monto_override(): void
+    {
+        $lineas = RendicionMaquinaValorQrPrecargaSupport::lineasPrecarga(
+            ['dropqr_rodillo' => 80, 'impuesto_qr' => 20],
+            [
+                ['cuentacaja_id' => 225, 'nombre' => 'TotalCoin QR Maquina', 'nombre_maestro' => 'TOTAL COIN MAQUINAS'],
+            ],
+            150606588.07
+        );
+
+        $this->assertCount(1, $lineas);
+        $this->assertSame(150606588.07, $lineas[0]['monto']);
+    }
 }

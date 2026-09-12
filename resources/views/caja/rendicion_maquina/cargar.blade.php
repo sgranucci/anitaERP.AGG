@@ -516,9 +516,16 @@
                                                    value="{{ number_format($fondoFijoCalc, 2, ',', '.') }}">
                                         </div>
                                         <div class="form-group col-md-6 col-lg-4 mb-2">
-                                            <label class="small mb-0" for="calc_deposito"
+                                            <label class="small mb-0 d-flex align-items-center justify-content-between"
+                                                   for="calc_deposito"
                                                    title="valores + gastos (+ vta ant. gastro si hubiera)">
-                                                Dep&oacute;sito <span class="text-muted">(calculado)</span>
+                                                <span>Dep&oacute;sito <span class="text-muted">(calculado)</span></span>
+                                                <button type="button"
+                                                        class="btn btn-outline-info btn-xs py-0 px-1 ml-1"
+                                                        id="btn-desglose-deposito"
+                                                        title="Ver c&oacute;mo se compone el dep&oacute;sito">
+                                                    <i class="fa fa-list-ol"></i> Desglose
+                                                </button>
                                             </label>
                                             <input type="text" id="calc_deposito" readonly
                                                    class="form-control form-control-sm text-right bg-light"
@@ -724,6 +731,45 @@
                     </thead>
                     <tbody id="tbody-log-ajustes-wigos"></tbody>
                 </table>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modal-desglose-deposito" tabindex="-1" role="dialog" aria-labelledby="titulo-desglose-deposito">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-info">
+                <h5 class="modal-title text-white" id="titulo-desglose-deposito">
+                    Desglose del dep&oacute;sito calculado
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2" id="desglose-deposito-formula">
+                    F&oacute;rmula D25: <code>valores (en pesos) + gastos + vta ant. gastro</code>
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0" id="tabla-desglose-deposito">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th style="width:4rem;">#</th>
+                                <th style="width:5rem;">C&oacute;d.</th>
+                                <th>Concepto</th>
+                                <th class="text-right" style="width:8rem;">Monto</th>
+                                <th class="text-right" style="width:5rem;">Cotiz.</th>
+                                <th class="text-right" style="width:9rem;">Pesos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-desglose-deposito"></tbody>
+                        <tfoot id="tfoot-desglose-deposito"></tfoot>
+                    </table>
+                </div>
             </div>
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>

@@ -261,6 +261,151 @@
         }
     }
 
+    function textoCeldaDesc(tr) {
+        var td = tr.querySelector('.col-desc');
+        if (!td) {
+            return '';
+        }
+        var clone = td.cloneNode(true);
+        clone.querySelectorAll('.js-valor-ayuda-dolar').forEach(function (n) {
+            n.remove();
+        });
+        return String(clone.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function armarDesgloseDeposito() {
+        var filas = [];
+        var n = 0;
+        var totalValores = 0;
+        var totalGastos = 0;
+
+        app.querySelectorAll('#tabla-valores-rendicion tbody tr[data-cuentacaja-id]').forEach(function (tr) {
+            var monto = parseMontoInput(tr.querySelector('.js-valor-monto'));
+            if (Math.abs(monto) < 0.005) {
+                return;
+            }
+            var cot = parseFloat(tr.dataset.cotizacion || '1');
+            if (!isFinite(cot) || cot <= 0) {
+                cot = 1;
+            }
+            var monedaId = parseInt(tr.dataset.monedaId || '1', 10) || 1;
+            var pesos = monedaId > 1 ? Math.round(monto * cot * 100) / 100 : Math.round(monto * 100) / 100;
+            totalValores += pesos;
+            n += 1;
+            filas.push({
+                n: n,
+                seccion: 'valores',
+                codigo: String(tr.querySelector('.col-codigo')?.textContent || '').trim(),
+                concepto: textoCeldaDesc(tr) || ('Cuenta ' + (tr.dataset.cuentacajaId || '')),
+                monto: monto,
+                cotizacion: cot,
+                pesos: pesos,
+                monedaExtranjera: monedaId > 1
+            });
+        });
+
+        app.querySelectorAll('#tabla-gastos-rendicion tbody tr[data-apertura-gasto-id]').forEach(function (tr) {
+            var monto = parseMontoInput(tr.querySelector('.js-gasto-monto'));
+            if (Math.abs(monto) < 0.005) {
+                return;
+            }
+            totalGastos += monto;
+            n += 1;
+            filas.push({
+                n: n,
+                seccion: 'gastos',
+                codigo: String(tr.querySelector('.col-codigo')?.textContent || '').trim(),
+                concepto: textoCeldaDesc(tr) || ('Gasto ' + (tr.dataset.aperturaGastoId || '')),
+                monto: monto,
+                cotizacion: 1,
+                pesos: monto,
+                monedaExtranjera: false
+            });
+        });
+
+        var inputs = recolectarInputs();
+        var vtaAnt = parseNum(inputs.vta_ant_gastro);
+        if (Math.abs(vtaAnt) >= 0.005) {
+            n += 1;
+            filas.push({
+                n: n,
+                seccion: 'otros',
+                codigo: '',
+                concepto: 'Venta ant. gastronomía',
+                monto: vtaAnt,
+                cotizacion: 1,
+                pesos: vtaAnt,
+                monedaExtranjera: false
+            });
+        }
+
+        var total = Math.round((totalValores + totalGastos + vtaAnt) * 100) / 100;
+        return {
+            filas: filas,
+            totalValores: Math.round(totalValores * 100) / 100,
+            totalGastos: Math.round(totalGastos * 100) / 100,
+            vtaAnt: Math.round(vtaAnt * 100) / 100,
+            total: total
+        };
+    }
+
+    function mostrarDesgloseDeposito() {
+        var data = armarDesgloseDeposito();
+        var tbody = document.getElementById('tbody-desglose-deposito');
+        var tfoot = document.getElementById('tfoot-desglose-deposito');
+        if (!tbody || !tfoot) {
+            return;
+        }
+
+        if (!data.filas.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-3">No hay valores ni gastos con monto.</td></tr>';
+        } else {
+            var html = '';
+            var seccionPrev = '';
+            data.filas.forEach(function (f) {
+                if (f.seccion !== seccionPrev) {
+                    seccionPrev = f.seccion;
+                    var tituloSec = f.seccion === 'valores'
+                        ? 'Valores (cuentas de caja) → pesos'
+                        : (f.seccion === 'gastos' ? 'Gastos' : 'Otros');
+                    html += '<tr class="table-secondary"><td colspan="6"><strong>'
+                        + escapeHtml(tituloSec) + '</strong></td></tr>';
+                }
+                html += '<tr>'
+                    + '<td class="text-muted">' + f.n + '</td>'
+                    + '<td class="text-muted">' + escapeHtml(f.codigo) + '</td>'
+                    + '<td>' + escapeHtml(f.concepto) + '</td>'
+                    + '<td class="text-right">' + fmtMoney(f.monto) + '</td>'
+                    + '<td class="text-right">' + (f.monedaExtranjera ? fmtCotizacion(f.cotizacion) : '—') + '</td>'
+                    + '<td class="text-right font-weight-bold">' + fmtMoney(f.pesos) + '</td>'
+                    + '</tr>';
+            });
+            tbody.innerHTML = html;
+        }
+
+        tfoot.innerHTML = ''
+            + '<tr><td colspan="5" class="text-right">Subtotal valores</td><td class="text-right">' + fmtMoney(data.totalValores) + '</td></tr>'
+            + '<tr><td colspan="5" class="text-right">Subtotal gastos</td><td class="text-right">' + fmtMoney(data.totalGastos) + '</td></tr>'
+            + (Math.abs(data.vtaAnt) >= 0.005
+                ? '<tr><td colspan="5" class="text-right">Vta ant. gastro</td><td class="text-right">' + fmtMoney(data.vtaAnt) + '</td></tr>'
+                : '')
+            + '<tr style="background:#D5F5E3;"><td colspan="5" class="text-right"><strong>Depósito calculado</strong></td>'
+            + '<td class="text-right"><strong>' + fmtMoney(data.total) + '</strong></td></tr>';
+
+        var calcDep = document.getElementById('calc_deposito');
+        var mostrado = calcDep ? parseMontoInput(calcDep) : data.total;
+        var formulaEl = document.getElementById('desglose-deposito-formula');
+        if (formulaEl) {
+            var nota = 'Fórmula D25: valores (en pesos) + gastos + vta ant. gastro';
+            if (Math.abs(mostrado - data.total) >= 0.02) {
+                nota += ' · Pantalla: $' + fmtMoney(mostrado) + ' (puede diferir hasta recalcular)';
+            }
+            formulaEl.textContent = nota;
+        }
+
+        $('#modal-desglose-deposito').modal('show');
+    }
+
     /** Pie sticky a cero (alta / cambio cabecera / Ctrl+R con bfcache). */
     function blanquearTotales() {
         pintarTotales({
@@ -1417,6 +1562,14 @@
     }
     if (getEmpresaId() > 0 && getFecha()) {
         calcular();
+    }
+
+    var btnDesgloseDep = document.getElementById('btn-desglose-deposito');
+    if (btnDesgloseDep) {
+        btnDesgloseDep.addEventListener('click', function (e) {
+            e.preventDefault();
+            mostrarDesgloseDeposito();
+        });
     }
 
     // bfcache (atrás / a veces Ctrl+R): forzar pie en cero en alta
