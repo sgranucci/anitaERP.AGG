@@ -11,6 +11,7 @@ use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\RecepcionProveedorAnitaBridgeService;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
+use App\Support\Compras\SuscripcionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use Carbon\Carbon;
@@ -55,6 +56,7 @@ final class OrdencompraAnitaAuditoriaDiariaService
             'total_oc' => 0,
             'ok' => 0,
             'reparadas' => 0,
+            'omitidas_suscripcion_externa' => 0,
             'pendmovp_cobertura_detectadas' => 0,
             'pendmovp_cobertura_reparadas' => 0,
             'discrepancias' => [],
@@ -79,9 +81,15 @@ final class OrdencompraAnitaAuditoriaDiariaService
             ->orderBy('numeroordencompra')
             ->get();
 
-        $informe['total_oc'] = $ocs->count();
-
         foreach ($ocs as $oc) {
+            if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
+                $informe['omitidas_suscripcion_externa']++;
+
+                continue;
+            }
+
+            $informe['total_oc']++;
+
             try {
                 $fila = $this->auditarOc($oc, $autoReparar);
             } catch (\Throwable $e) {

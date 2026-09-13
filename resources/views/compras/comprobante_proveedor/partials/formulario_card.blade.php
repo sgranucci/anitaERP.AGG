@@ -132,6 +132,7 @@
                 data-contrato-cuentacontable-codigo="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->codigo ?? '' }}"
                 data-contrato-cuentacontable-nombre="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->nombre ?? '' }}"
                 data-precarga-id="{{ (int) ($data->precarga_comprobante_proveedor_id ?? 0) }}"
+                data-precarga-total="{{ number_format((float) (optional($data->precarga_comprobante_proveedores)->total ?? 0), 2, '.', '') }}"
                 data-ordencompra-id="{{ (int) ($data->ordencompra_id ?? 0) }}"
                 data-numero-oc="{{ $data->ordencompras->numeroordencompra ?? (optional($data->precarga_comprobante_proveedores)->numeroordencompra ?? '') }}"
                 data-anita-nro="{{ (int) ($data->anita_nro_interno ?? 0) }}"

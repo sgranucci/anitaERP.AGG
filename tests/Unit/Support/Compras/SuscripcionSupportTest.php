@@ -14,6 +14,29 @@ class SuscripcionSupportTest extends TestCase
         $this->assertSame('900000-081', SuscripcionSupport::ARTICULO_SKU_DEFAULT);
     }
 
+    public function test_proveedor_externo_sin_padron(): void
+    {
+        $externa = new \App\Models\Compras\Ordencompra([
+            'es_suscripcion' => true,
+            'proveedor_id' => null,
+            'suscripcion_proveedor_nombre' => 'APPLE',
+        ]);
+        $this->assertTrue(SuscripcionSupport::esProveedorExternoSinPadron($externa));
+
+        $conPadron = new \App\Models\Compras\Ordencompra([
+            'es_suscripcion' => true,
+            'proveedor_id' => 5067,
+            'suscripcion_proveedor_nombre' => 'X CORP',
+        ]);
+        $this->assertFalse(SuscripcionSupport::esProveedorExternoSinPadron($conPadron));
+
+        $ocComun = new \App\Models\Compras\Ordencompra([
+            'es_suscripcion' => false,
+            'proveedor_id' => null,
+        ]);
+        $this->assertFalse(SuscripcionSupport::esProveedorExternoSinPadron($ocComun));
+    }
+
     public function test_alta_exige_articulo_y_crea_linea_oc(): void
     {
         $src = (string) file_get_contents(

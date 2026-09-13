@@ -20,6 +20,7 @@ use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
+use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
@@ -29,6 +30,7 @@ use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
@@ -136,6 +138,13 @@ class ComprobanteProveedorPersistenciaService
         );
 
         $this->ejecutarControlesDesdeRequest($request, $payload, null);
+
+        ComprobanteProveedorPrecargaTotalSupport::assertCuadraConPrecarga(
+            isset($payload['precarga_comprobante_proveedor_id'])
+                ? (int) $payload['precarga_comprobante_proveedor_id']
+                : null,
+            (float) ($payload['total'] ?? 0),
+        );
 
         try {
             $comprobante = $this->comprobanteRepository->create($payload);
@@ -247,6 +256,13 @@ class ComprobanteProveedorPersistenciaService
         );
 
         $this->ejecutarControlesDesdeRequest($request, $payload, $id);
+
+        ComprobanteProveedorPrecargaTotalSupport::assertCuadraConPrecarga(
+            isset($payload['precarga_comprobante_proveedor_id'])
+                ? (int) $payload['precarga_comprobante_proveedor_id']
+                : null,
+            (float) ($payload['total'] ?? 0),
+        );
 
         try {
             $this->comprobanteRepository->update($payload, $id);
@@ -439,6 +455,11 @@ class ComprobanteProveedorPersistenciaService
         } else {
             $this->aplicarResultadoCompliance($resultadoCompliance);
         }
+
+        ComprobanteProveedorPrecargaTotalSupport::assertCuadraConPrecarga(
+            $precargaId > 0 ? $precargaId : null,
+            (float) ($payload['total'] ?? 0),
+        );
 
         try {
             $comprobante = $this->comprobanteRepository->create($payload);
@@ -733,6 +754,7 @@ class ComprobanteProveedorPersistenciaService
             'la factura del proveedor',
         );
 
+        $cuotasNormalizadas = [];
         foreach ($cuotas as $cuota) {
             $monedaCuotaId = (int) ($cuota['moneda_id'] ?? $monedaFacturaId);
             $cotizacionCuota = isset($cuota['cotizacion']) ? (float) $cuota['cotizacion'] : $cotizacionFactura;
@@ -749,11 +771,31 @@ class ComprobanteProveedorPersistenciaService
                 );
             }
 
+            $cuotasNormalizadas[] = array_merge($cuota, [
+                'monto' => $monto,
+                'moneda_id' => $monedaFacturaId,
+                'cotizacion' => $cotizacionFactura,
+            ]);
+        }
+
+        // Si el total cambió (conceptos) y las cuotas quedaron viejas, reescalarlas al total.
+        $cuotasNormalizadas = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta(
+            $cuotasNormalizadas,
+            (float) ($comprobante->total ?? 0),
+        );
+
+        // Candado final: no persistir cuotas desalineadas del total (CC/promov ≠ asiento/compra).
+        ComprobanteProveedorCuotasTotalSupport::assertCuadraConTotal(
+            (float) ($comprobante->total ?? 0),
+            $cuotasNormalizadas,
+        );
+
+        foreach ($cuotasNormalizadas as $cuota) {
             Comprobante_Proveedor_Cuota::query()->create([
                 'comprobante_proveedor_id' => $comprobante->id,
                 'numero_cuota' => (int) ($cuota['numero_cuota'] ?? 1),
                 'fechavencimiento' => $cuota['fechavencimiento'],
-                'monto' => $monto,
+                'monto' => (float) ($cuota['monto'] ?? 0),
                 'moneda_id' => $monedaFacturaId,
                 'cotizacion' => $cotizacionFactura,
                 'formapago_id' => (int) ($cuota['formapago_id'] ?? 1),

@@ -28,6 +28,12 @@
         <td>OC auditadas</td>
         <td align="right">{{ (int) ($informe['total_oc'] ?? 0) }}</td>
     </tr>
+    @if ((int) ($informe['omitidas_suscripcion_externa'] ?? 0) > 0)
+    <tr>
+        <td>Omitidas (suscripción proveedor externo)</td>
+        <td align="right">{{ (int) $informe['omitidas_suscripcion_externa'] }}</td>
+    </tr>
+    @endif
     <tr>
         <td>OK</td>
         <td align="right">{{ (int) ($informe['ok'] ?? 0) }}</td>
