@@ -8,6 +8,7 @@ use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrLineasParser;
 use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrMatcher;
 use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrNumeroOcExtractor;
 use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrTextoExtractor;
+use App\Support\Stock\RecepcionProveedorPrecioPendienteSupport;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -53,6 +54,10 @@ final class RecepcionProveedorOcrCoreService
         $numeroOcCargada = $numeroOcForm ?: (int) (optional($recepcion?->ordencompras)->numeroordencompra ?? 0);
 
         $resultado = $this->matcher->aplicar($ocData['lineas'], $lineasOcr);
+        $resultado['lineas'] = RecepcionProveedorPrecioPendienteSupport::aplicarPreciosOcrSegunPermiso(
+            $resultado['lineas'],
+            RecepcionProveedorPrecioPendienteSupport::puedeModificarPrecioEnRecepcion()
+        );
         $resumenArr = $resultado['resumen'];
         $resumenTexto = sprintf(
             'OCR: %d línea(s) emparejada(s), %d sin match en OC, %d ítem(s) OC sin dato OCR.',

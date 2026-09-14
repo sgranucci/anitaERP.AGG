@@ -2438,7 +2438,7 @@ $(function () {
 
 	function ocBadgesDiferencias(flags, resumen) {
 		var badges = [];
-		if (flags && flags.fl_precio_pendiente_aprobacion) badges.push('<span class="badge badge-info mr-1">Precio OC pend.</span>');
+		if (flags && flags.fl_precio_pendiente_aprobacion) badges.push('<span class="badge badge-info mr-1">Precio remito ≠ OC</span>');
 		if (flags && flags.fl_precio_diferencia) badges.push('<span class="badge badge-warning mr-1">Precio</span>');
 		if (flags && flags.fl_diferencia_cantidad) badges.push('<span class="badge badge-info mr-1">Cantidad</span>');
 		if (flags && flags.fl_articulo_extra) badges.push('<span class="badge badge-secondary mr-1">Extra</span>');

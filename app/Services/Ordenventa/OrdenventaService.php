@@ -60,6 +60,15 @@ class OrdenventaService
 	   	$data['observacionestados'][] = "Alta de Orden de Venta";
 
 		$data['creousuario_id'] = Auth::user()->id;
+		if (empty($data['estado'])) {
+			$data['estado'] = Ordenventa_Estado::$enumEstado[array_search('S', array_column(Ordenventa_Estado::$enumEstado, 'valor'))]['nombre'];
+		}
+
+		try {
+			$this->arbolaprobacionService->validaOrdenventaRequestContraArbol($data);
+		} catch (\RuntimeException $e) {
+			return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+		}
 
 		DB::beginTransaction();
 		try
@@ -76,7 +85,6 @@ class OrdenventaService
 			DB::commit();
 		} catch (\Exception $e) {
 			DB::rollback();
-			dd($e->getMessage());
 			return ['mensaje' => 'error', 'errores' => $e->getMessage()];
 		}
         return ['mensaje' => 'ok'];
@@ -103,6 +111,17 @@ class OrdenventaService
     public function actualizaOrdenventa($request, $id, $origen = null)
     {
 		$data = $request->all();
+		$nombreSolicitada = Ordenventa_Estado::$enumEstado[array_search('S', array_column(Ordenventa_Estado::$enumEstado, 'valor'))]['nombre'];
+
+		if (($data['estado'] ?? '') === $nombreSolicitada) {
+			try {
+				$this->arbolaprobacionService->validaOrdenventaRequestContraArbol(array_merge($data, [
+					'ordenventa_id' => (int) $id,
+				]));
+			} catch (\RuntimeException $e) {
+				return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+			}
+		}
 
 		DB::beginTransaction();
 		try
@@ -287,6 +306,17 @@ class OrdenventaService
 		];
 		if (! in_array($ordenventa->estado, $permitidos, true)) {
 			return ['mensaje' => 'error', 'errores' => 'Solo se puede reenviar al árbol una orden en estado SOLICITADA o RECHAZADA.'];
+		}
+
+		try {
+			$this->arbolaprobacionService->validaOrdenventaRequestContraArbol([
+				'centrocosto_id' => (int) $ordenventa->centrocosto_id,
+				'monto' => $ordenventa->monto,
+				'moneda_id' => (int) $ordenventa->moneda_id,
+				'fecha' => $ordenventa->fecha,
+			]);
+		} catch (\RuntimeException $e) {
+			return ['mensaje' => 'error', 'errores' => $e->getMessage()];
 		}
 
 		$nombreSolicitada = Ordenventa_Estado::$enumEstado[array_search('S', array_column(Ordenventa_Estado::$enumEstado, 'valor'))]['nombre'];

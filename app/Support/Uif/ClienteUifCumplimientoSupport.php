@@ -44,34 +44,67 @@ final class ClienteUifCumplimientoSupport
         }
 
         if (! $esSupervisor) {
-            if (self::parseFecha($cliente->fechafirmapep ?? null) === null) {
+            $ahora = Carbon::now();
+            $umbral6Meses = $ahora->copy()->subMonths(6);
+            $tieneVencimiento = false;
+
+            $parsedFirmaPep = self::parseFecha($cliente->fechafirmapep ?? null);
+            if ($parsedFirmaPep === null) {
                 $items[] = self::item(
                     'Pedí la firma PEP y cargá la fecha de última firma.',
                     '2',
                     '#div-fechafirmapep'
                 );
             }
-            if (self::parseFecha($cliente->fechaconfirmapep ?? null) === null) {
+
+            $parsedConfPep = self::parseFecha($cliente->fechaconfirmapep ?? null);
+            if ($parsedConfPep === null) {
                 $items[] = self::item(
                     'Falta validación de firma PEP (la completa Enc-UIF).',
                     '2',
                     '#div-fechaconfirmapep'
                 );
+            } elseif ($parsedConfPep->lt($umbral6Meses)) {
+                $items[] = self::item(
+                    'PEP: debe renovar firma (última validación: '.self::formateaFecha($parsedConfPep).').',
+                    '2',
+                    '#div-fechaconfirmapep'
+                );
+                $tieneVencimiento = true;
             }
-            if (self::parseFecha($cliente->fechavencimientodni ?? null) === null) {
+
+            $parsedDni = self::parseFecha($cliente->fechavencimientodni ?? null);
+            if ($parsedDni === null) {
                 $items[] = self::item(
                     'Pedí el DNI vigente; el vencimiento lo carga Enc-UIF.',
                     '2',
                     '#div-fechavencimientodni'
                 );
+            } elseif ($parsedDni->lt($ahora)) {
+                $items[] = self::item(
+                    'DNI: vencido el '.self::formateaFecha($parsedDni).'.',
+                    '2',
+                    '#div-fechavencimientodni'
+                );
+                $tieneVencimiento = true;
             }
-            if (self::parseFecha($cliente->fechavencimientoactividad ?? null) === null) {
+
+            $parsedVtoAct = self::parseFecha($cliente->fechavencimientoactividad ?? null);
+            if ($parsedVtoAct === null) {
                 $items[] = self::item(
                     'Pedí constancia de actividad económica (vencimiento lo carga Enc-UIF).',
                     '2',
                     '#div-fechavencimientoactividad'
                 );
+            } elseif ($parsedVtoAct->lt($umbral6Meses)) {
+                $items[] = self::item(
+                    'Actividad económica: vencimiento próximo o vencido ('.self::formateaFecha($parsedVtoAct).').',
+                    '2',
+                    '#div-fechavencimientoactividad'
+                );
+                $tieneVencimiento = true;
             }
+
             if (self::valorTexto($cliente->firmodeclaracionjurada ?? null) !== 'S') {
                 $items[] = self::item(
                     'Pedí la declaración jurada firmada de origen de ingresos/fondos.',
@@ -82,9 +115,13 @@ final class ClienteUifCumplimientoSupport
 
             return [
                 'items' => $items,
-                'titulo' => 'Pedí al cliente estos documentos y firmas',
-                'subtitulo' => 'Adjuntá lo que puedas ahora. Enc-UIF completa fechas de validación, vencimientos e informes.',
-                'claseBanner' => 'is-warning',
+                'titulo' => $tieneVencimiento
+                    ? 'Hay documentos o firmas vencidos / a renovar'
+                    : 'Pedí al cliente estos documentos y firmas',
+                'subtitulo' => $tieneVencimiento
+                    ? 'Pedí al cliente que vuelva a firmar o presente documentación vigente. Enc-UIF completa validaciones e informes.'
+                    : 'Adjuntá lo que puedas ahora. Enc-UIF completa fechas de validación, vencimientos e informes.',
+                'claseBanner' => $tieneVencimiento ? 'is-danger' : 'is-warning',
             ];
         }
 

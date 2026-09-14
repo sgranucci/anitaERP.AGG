@@ -110,7 +110,7 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                                 @include('stock.recepcion_proveedor.partials.estado_badge', ['estado' => $row->estado ?? ''])
                             </td>
                             <td class="text-nowrap">
-                                @if($precioPendiente)<span class="badge badge-info" title="Precio pendiente aprobación OC">$ OC</span>@endif
+                                @if($precioPendiente)<span class="badge badge-info" title="Precios de remito distintos a la OC (Compras notificado)">$ OC</span>@endif
                                 @if($row->fl_precio_diferencia)<span class="badge badge-warning" title="Precio">P</span>@endif
                                 @if($row->fl_diferencia_cantidad)<span class="badge badge-warning" title="Cantidad">C</span>@endif
                                 @if($row->fl_articulo_extra)<span class="badge badge-info" title="Extra/sustituto">A</span>@endif

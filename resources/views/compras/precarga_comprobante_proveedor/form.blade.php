@@ -36,7 +36,8 @@
             <div class="offset-lg-3 col-lg-9">
                 <small class="form-text text-muted">
                     En OC con varios centros de costo el tipo se arma con el primer CC (p. ej. FIB).
-                    Si corresponde gastronom&iacute;a, cambi&aacute; a <strong>FGA</strong>
+                    Si es servicio/prepaga, cambi&aacute; a <strong>FIS</strong> (o FNS seg&uacute;n IVA).
+                    Si corresponde gastronom&iacute;a, us&aacute; <strong>FGA</strong>
                     (en NC/ND: CGA / DGA).
                 </small>
             </div>

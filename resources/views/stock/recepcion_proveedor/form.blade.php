@@ -595,8 +595,8 @@
 
 @if($recepcion && $recepcion->fl_precio_pendiente_aprobacion)
 <div class="alert alert-info">
-    <strong>Precio pendiente de aprobaci&oacute;n en compras:</strong>
-    carg&oacute; precios de factura/remito distintos a la OC. Compras debe actualizar la orden de compra antes de confirmar esta recepci&oacute;n.
+    <strong>Precios de remito/factura distintos a la OC:</strong>
+    Compras fue notificado para actualizar la orden de compra. Puede confirmar esta recepción con los precios de la OC.
     @if($recepcion->comentario_precio)
         <br><span class="small">{!! nl2br(e($recepcion->comentario_precio)) !!}</span>
     @endif

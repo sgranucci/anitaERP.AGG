@@ -19,6 +19,7 @@ use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\IncotermRepositoryInterface;
 use App\Services\Ordenventa\OrdenventaService;
+use App\Services\Configuracion\ArbolaprobacionService;
 use App\Models\Ordenventa\Ordenventa_Estado;
 use App\Models\Ordenventa\Ordenventa;
 use App\Queries\Ordenventa\OrdenventaQueryInterface;
@@ -43,6 +44,7 @@ class OrdenventaController extends Controller
     private $formapagoRepository;
     private $ordenventaQuery;
     private $ordenventaService;
+    private $arbolaprobacionService;
     private $arbolaprobacion_movimientoRepository;
     private $puntoventaRepository;
 	private $tipotransaccionRepository;
@@ -59,6 +61,7 @@ class OrdenventaController extends Controller
                                 FormapagoRepositoryInterface $formapagorepository,
                                 MonedaRepositoryInterface $monedarepository,
                                 OrdenventaService $ordenventaservice,
+                                ArbolaprobacionService $arbolaprobacionservice,
                                 OrdenventaQueryInterface $ordenventaquery,
                                 PuntoventaRepositoryInterface $puntoventarepository,
 							    TipotransaccionRepositoryInterface $tipotransaccionrepository,
@@ -77,6 +80,7 @@ class OrdenventaController extends Controller
         $this->formapagoRepository = $formapagorepository;
         $this->monedaRepository = $monedarepository;
         $this->ordenventaService = $ordenventaservice;
+        $this->arbolaprobacionService = $arbolaprobacionservice;
         $this->ordenventaQuery = $ordenventaquery;
 		$this->puntoventaRepository = $puntoventarepository;
 		$this->tipotransaccionRepository = $tipotransaccionrepository;
@@ -189,12 +193,13 @@ class OrdenventaController extends Controller
     {
         $ordenventa = $this->ordenventaService->guardaOrdenventa($request);
 
-        if ($ordenventa['mensaje'] == 'ok')
-            $mensaje = 'Orden de venta creada con éxito';
-        else
-            $mensaje = $ordenventa['errores'];
+        if ($ordenventa['mensaje'] == 'ok') {
+            return redirect('ordenventa/ordenventa')->with('mensaje', 'Orden de venta creada con éxito');
+        }
 
-        return redirect('ordenventa/ordenventa')->with('mensaje', $mensaje);
+        return redirect()->back()
+            ->withInput()
+            ->with('mensaje-error', $ordenventa['errores'] ?? 'No se pudo crear la orden de venta.');
 	}
 
     /**
@@ -244,12 +249,13 @@ class OrdenventaController extends Controller
 
         $ordenventa = $this->ordenventaService->actualizaOrdenventa($request, $id);
 
-        if ($ordenventa['mensaje'] == 'ok')
-            $mensaje = 'Orden de venta actualizada con éxito';
-        else
-            $mensaje = $ordenventa['errores'];
+        if ($ordenventa['mensaje'] == 'ok') {
+            return redirect('ordenventa/ordenventa')->with('mensaje', 'Orden de venta actualizada con éxito');
+        }
 
-        return redirect('ordenventa/ordenventa')->with('mensaje', $mensaje);
+        return redirect()->back()
+            ->withInput()
+            ->with('mensaje-error', $ordenventa['errores'] ?? 'No se pudo actualizar la orden de venta.');
     }
 
     public function reenviarArbolAprobacion($id)
@@ -264,7 +270,32 @@ class OrdenventaController extends Controller
         }
 
         return redirect()->route('edita_ordenventa', ['id' => $id])
-            ->with('mensaje', $resultado['errores'] ?? 'No se pudo reenviar la orden al árbol de aprobación.');
+            ->with('mensaje-error', $resultado['errores'] ?? 'No se pudo reenviar la orden al árbol de aprobación.');
+    }
+
+    /**
+     * Aviso previo: bloquea generar OV si no hay árbol/nivel aplicable.
+     */
+    public function avisoArbolGrabacion(Request $request)
+    {
+        if (! can('ingresar-orden-de-venta', false) && ! can('editar-orden-de-venta', false) && ! can('actualizar-orden-de-venta', false)) {
+            return response()->json(['aviso' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $estado = (string) $request->query('estado', 'SOLICITADA');
+        if ($estado !== '' && $estado !== 'SOLICITADA') {
+            return response()->json(['aviso' => null]);
+        }
+
+        $aviso = $this->arbolaprobacionService->avisoGrabacionOrdenventaAjax([
+            'ordenventa_id' => (int) $request->query('ordenventa_id', 0),
+            'centrocosto_id' => (int) $request->query('centrocosto_id', 0),
+            'monto' => $request->query('monto', 0),
+            'moneda_id' => (int) $request->query('moneda_id', 0),
+            'fecha' => $request->query('fecha', date('Y-m-d')),
+        ]);
+
+        return response()->json(['aviso' => $aviso]);
     }
 
     /**

@@ -32,8 +32,10 @@ final class ClienteUifCumplimientoSupportTest extends TestCase
         $this->assertContains('Pedí la declaración jurada firmada de origen de ingresos/fondos.', $textos);
     }
 
-    public function test_cajero_completo_solo_queda_validacion_enc_uif(): void
+    public function test_cajero_completo_sin_avisos(): void
     {
+        Carbon::setTestNow(Carbon::parse('2026-08-25 12:00:00'));
+
         $cliente = $this->clienteBase([
             'fotodocumento' => 'dni.pdf',
             'cliente_archivos_uif' => [(object) ['id' => 1]],
@@ -47,6 +49,29 @@ final class ClienteUifCumplimientoSupportTest extends TestCase
         $eval = ClienteUifCumplimientoSupport::evaluar($cliente, false);
 
         $this->assertSame([], $eval['items']);
+    }
+
+    public function test_cajero_detecta_pep_y_actividad_vencidos(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-14 12:00:00'));
+
+        $cliente = $this->clienteBase([
+            'fotodocumento' => 'dni.pdf',
+            'cliente_archivos_uif' => [(object) ['id' => 1]],
+            'fechafirmapep' => '2026-03-04',
+            'fechaconfirmapep' => '2026-03-04',
+            'fechavencimientodni' => '2030-01-01',
+            'fechavencimientoactividad' => '2026-03-04',
+            'firmodeclaracionjurada' => 'S',
+        ]);
+
+        $eval = ClienteUifCumplimientoSupport::evaluar($cliente, false);
+
+        $this->assertSame('is-danger', $eval['claseBanner']);
+        $this->assertSame('Hay documentos o firmas vencidos / a renovar', $eval['titulo']);
+        $textos = array_column($eval['items'], 'texto');
+        $this->assertContains('PEP: debe renovar firma (última validación: 04-03-2026).', $textos);
+        $this->assertContains('Actividad económica: vencimiento próximo o vencido (04-03-2026).', $textos);
     }
 
     public function test_supervisor_detecta_dni_vencido_y_nosis_viejo(): void

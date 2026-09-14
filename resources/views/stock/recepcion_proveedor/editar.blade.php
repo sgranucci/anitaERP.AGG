@@ -47,7 +47,7 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                         <span class="badge badge-info ml-2">{{ $recepcion->estado }}</span>
                     @endif
                     @if($recepcion->fl_precio_pendiente_aprobacion)
-                        <span class="badge badge-info ml-2">Precio pendiente OC</span>
+                        <span class="badge badge-info ml-2" title="Compras notificado; se puede confirmar con precios de la OC">Precio remito ≠ OC</span>
                     @elseif($recepcion->fl_precio_diferencia)
                         <span class="badge badge-warning ml-2">Precio distinto a OC</span>
                     @endif
@@ -57,7 +57,7 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                         'recepcionId' => $recepcion->id,
                         'clase' => 'btn btn-danger btn-sm mr-2',
                     ])
-                    @if($recepcion->estado === 'BORRADOR' && empty($soloConsulta) && can('confirmar-recepcion-proveedor', false) && ! $recepcion->fl_precio_pendiente_aprobacion && ($validacionAbonoCompleta ?? true))
+                    @if($recepcion->estado === 'BORRADOR' && empty($soloConsulta) && can('confirmar-recepcion-proveedor', false) && ($validacionAbonoCompleta ?? true))
                     <button type="submit" class="btn btn-success btn-sm mr-2" form="form-recepcion-confirmar"
                             id="btn-confirmar-recepcion-proveedor">
                         <i class="fa fa-check"></i> Confirmar

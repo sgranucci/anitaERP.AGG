@@ -1149,6 +1149,12 @@
         }
 
         if (!esSupervisor) {
+            var fechaBaseCajero = new Date();
+            var fecha6MesesCajero = new Date(fechaBaseCajero.getTime());
+            fecha6MesesCajero.setMonth(fecha6MesesCajero.getMonth() - 6);
+            var umbral6MesesCajeroMs = fecha6MesesCajero.getTime();
+            var tieneVencimientoCajero = false;
+
             if (!parseFechaCampoUif($('#fechafirmapep').val())) {
                 avisos.push(avisoUif(
                     'Pedí la firma PEP y cargá la fecha de última firma.',
@@ -1157,30 +1163,62 @@
                 ));
                 marcarDivAlertaUif('#div-fechafirmapep', true);
             }
-            if (!parseFechaCampoUif($('#fechaconfirmapep').val())) {
+
+            var parsedConfPepCajero = parseFechaCampoUif($('#fechaconfirmapep').val());
+            if (!parsedConfPepCajero) {
                 avisos.push(avisoUif(
                     'Falta validación de firma PEP (la completa Enc-UIF).',
                     '2',
                     '#div-fechaconfirmapep'
                 ));
                 marcarDivAlertaUif('#div-fechaconfirmapep', true);
+            } else if (parsedConfPepCajero.ts < umbral6MesesCajeroMs) {
+                avisos.push(avisoUif(
+                    'PEP: debe renovar firma (última validación: ' + formateaFecha(parsedConfPepCajero.isoYmd) + ').',
+                    '2',
+                    '#div-fechaconfirmapep'
+                ));
+                marcarDivAlertaUif('#div-fechafirmapep', true);
+                marcarDivAlertaUif('#div-fechaconfirmapep', true);
+                tieneVencimientoCajero = true;
             }
-            if (!parseFechaCampoUif($('#fechavencimientodni').val())) {
+
+            var parsedDniCajero = parseFechaCampoUif($('#fechavencimientodni').val());
+            if (!parsedDniCajero) {
                 avisos.push(avisoUif(
                     'Pedí el DNI vigente; el vencimiento lo carga Enc-UIF.',
                     '2',
                     '#div-fechavencimientodni'
                 ));
                 marcarDivAlertaUif('#div-fechavencimientodni', true);
+            } else if (parsedDniCajero.ts < Date.now()) {
+                avisos.push(avisoUif(
+                    'DNI: vencido el ' + formateaFecha(parsedDniCajero.isoYmd) + '.',
+                    '2',
+                    '#div-fechavencimientodni'
+                ));
+                marcarDivAlertaUif('#div-fechavencimientodni', true);
+                tieneVencimientoCajero = true;
             }
-            if (!parseFechaCampoUif($('#fechavencimientoactividad').val())) {
+
+            var parsedVtoActCajero = parseFechaCampoUif($('#fechavencimientoactividad').val());
+            if (!parsedVtoActCajero) {
                 avisos.push(avisoUif(
                     'Pedí constancia de actividad económica (vencimiento lo carga Enc-UIF).',
                     '2',
                     '#div-fechavencimientoactividad'
                 ));
                 marcarDivAlertaUif('#div-fechavencimientoactividad', true);
+            } else if (parsedVtoActCajero.ts < umbral6MesesCajeroMs) {
+                avisos.push(avisoUif(
+                    'Actividad económica: vencimiento próximo o vencido (' + formateaFecha(parsedVtoActCajero.isoYmd) + ').',
+                    '2',
+                    '#div-fechavencimientoactividad'
+                ));
+                marcarDivAlertaUif('#div-fechavencimientoactividad', true);
+                tieneVencimientoCajero = true;
             }
+
             if ($('#firmodeclaracionjurada').val() !== 'S') {
                 avisos.push(avisoUif(
                     'Pedí la declaración jurada firmada de origen de ingresos/fondos.',
@@ -1190,9 +1228,13 @@
                 marcarDivAlertaUif('#div-firmodeclaracionjurada', true);
             }
             renderAlertasCumplimientoUif(avisos, {
-                titulo: 'Pedí al cliente estos documentos y firmas',
-                subtitulo: 'Adjuntá lo que puedas ahora. Enc-UIF completa fechas de validación, vencimientos e informes.',
-                claseBanner: 'is-warning'
+                titulo: tieneVencimientoCajero
+                    ? 'Hay documentos o firmas vencidos / a renovar'
+                    : 'Pedí al cliente estos documentos y firmas',
+                subtitulo: tieneVencimientoCajero
+                    ? 'Pedí al cliente que vuelva a firmar o presente documentación vigente. Enc-UIF completa validaciones e informes.'
+                    : 'Adjuntá lo que puedas ahora. Enc-UIF completa fechas de validación, vencimientos e informes.',
+                claseBanner: tieneVencimientoCajero ? 'is-danger' : 'is-warning'
             });
             return;
         }

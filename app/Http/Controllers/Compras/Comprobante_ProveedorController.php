@@ -1027,9 +1027,11 @@ class Comprobante_ProveedorController extends Controller
             'permite_factura_anticipada' => false,
             'anticipada_elige_modo' => false,
             'bloquea_sin_com' => false,
+            'sin_com_por_tipo' => false,
         ];
         if ($data) {
             $data->loadMissing([
+                'tipotransaccion_compras',
                 'ordencompras.sector_legajocompras',
                 'ordencompras.contrato_cuentacontables',
                 'ordencompras.centrocostos',
@@ -1164,7 +1166,8 @@ class Comprobante_ProveedorController extends Controller
             'tiene_pagos' => $tienePagos,
             'bloqueado_edicion' => $bloqueadoEdicion,
             'puede_actualizar' => $puedeActualizar,
-            'mostrarSolapaCom' => ! (($comPolitica['contrato_vigente'] ?? false) && ! ($comPolitica['contrato_requiere_recepcion'] ?? true))
+            'mostrarSolapaCom' => ! ($comPolitica['sin_com_por_tipo'] ?? false)
+                && ! (($comPolitica['contrato_vigente'] ?? false) && ! ($comPolitica['contrato_requiere_recepcion'] ?? true))
                 && (
                     $comObligatoria
                     || count($recepcionesSeleccionadas) > 0

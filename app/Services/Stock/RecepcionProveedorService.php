@@ -385,6 +385,7 @@ class RecepcionProveedorService
                     'estado' => RecepcionProveedorEstados::CONFIRMADA,
                     'movimientostock_id' => $movId,
                     'asiento_id' => $asientoId,
+                    'fl_precio_pendiente_aprobacion' => false,
                 ]);
 
                 if ($asientoId !== null && (int) $asientoId > 0) {

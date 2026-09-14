@@ -2743,9 +2743,85 @@ class ArbolaprobacionService
         return Arbolaprobacion::$enumTipoArbol[array_search('OC', array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
     }
 
+    public function nombreTipoArbolOrdenesVenta(): string
+    {
+        return Arbolaprobacion::$enumTipoArbol[array_search('OV', array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+    }
+
     public function nombreTipoArbolSuscripciones(): string
     {
         return Arbolaprobacion::$enumTipoArbol[array_search('SU', array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+    }
+
+    /**
+     * Impide grabar/enviar OV si no hay árbol activo o no hay nivel para CC/monto/moneda.
+     *
+     * @throws \RuntimeException
+     */
+    public function validaOrdenventaRequestContraArbol(array $data): void
+    {
+        $nombreTipo = $this->nombreTipoArbolOrdenesVenta();
+        $trees = $this->arbolaprobacionRepository->findPorTipoArbol($nombreTipo);
+        if ($trees->isEmpty()) {
+            throw new \RuntimeException('No hay un árbol de aprobación activo de órdenes de venta. Configure el árbol antes de generar la OV.');
+        }
+
+        $cc = (int) ($data['centrocosto_id'] ?? 0);
+        if ($cc <= 0) {
+            throw new \RuntimeException('Debe indicar el centro de costo para validar el árbol de aprobación de la orden de venta.');
+        }
+
+        $monto = (float) str_replace(',', '', (string) ($data['monto'] ?? 0));
+        $monedaId = (int) ($data['moneda_id'] ?? 0);
+        if ($monedaId <= 0) {
+            throw new \RuntimeException('Debe indicar la moneda para validar el árbol de aprobación de la orden de venta.');
+        }
+
+        $fecha = $data['fecha'] ?? date('Y-m-d');
+        $ordenventaId = (int) ($data['ordenventa_id'] ?? 0);
+        $nivelActual = $ordenventaId > 0
+            ? $this->leeAprobacionComprobante($nombreTipo, $ordenventaId)['nivelactual']
+            : 0;
+
+        $arbol = $trees->first();
+        $prox = $this->buscaProximoNivel($arbol, $cc, $nivelActual, $fecha, $monto, $monedaId);
+        if ((int) ($prox['proximonivel'] ?? 0) === 0) {
+            throw new \RuntimeException(
+                'El árbol de aprobación no tiene un nivel aplicable para el centro de costo, el monto y la moneda de la orden de venta. No se puede generar la OV hasta configurar el árbol.'
+            );
+        }
+    }
+
+    /**
+     * @throws \RuntimeException
+     */
+    public function validaOrdenventaModeloContraArbol($ordenventa): void
+    {
+        if (! $ordenventa) {
+            throw new \RuntimeException('Orden de venta no encontrada.');
+        }
+
+        $this->validaOrdenventaRequestContraArbol([
+            'ordenventa_id' => (int) $ordenventa->id,
+            'centrocosto_id' => (int) $ordenventa->centrocosto_id,
+            'monto' => $ordenventa->monto,
+            'moneda_id' => (int) $ordenventa->moneda_id,
+            'fecha' => $ordenventa->fecha,
+        ]);
+    }
+
+    /**
+     * Mensaje de aviso para el formulario (alta/edición) sin lanzar excepción.
+     */
+    public function avisoGrabacionOrdenventaAjax(array $data): ?string
+    {
+        try {
+            $this->validaOrdenventaRequestContraArbol($data);
+        } catch (\RuntimeException $e) {
+            return $e->getMessage();
+        }
+
+        return null;
     }
 
     /**

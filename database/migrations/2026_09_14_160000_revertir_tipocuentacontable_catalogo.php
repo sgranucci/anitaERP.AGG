@@ -21,16 +21,16 @@ return new class extends Migration
 
     public function up(): void
     {
-        $menuId = (int) (DB::table('menu')->where('url', self::MENU_URL)->value('id') ?? 0);
-        if ($menuId > 0) {
-            DB::table('menu_rol')->where('menu_id', $menuId)->delete();
-            DB::table('menu')->where('id', $menuId)->delete();
-        }
-
         $permisoIds = DB::table('permiso')->whereIn('slug', self::PERMISO_SLUGS)->pluck('id')->all();
         if ($permisoIds !== []) {
             DB::table('permiso_rol')->whereIn('permiso_id', $permisoIds)->delete();
             DB::table('permiso')->whereIn('id', $permisoIds)->delete();
+        }
+
+        $menuId = (int) (DB::table('menu')->where('url', self::MENU_URL)->value('id') ?? 0);
+        if ($menuId > 0) {
+            DB::table('menu_rol')->where('menu_id', $menuId)->delete();
+            DB::table('menu')->where('id', $menuId)->delete();
         }
 
         Schema::dropIfExists('tipocuentacontable');

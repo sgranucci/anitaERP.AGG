@@ -89,7 +89,6 @@ class RecepcionProveedorDiferenciaSupport
             if ($yaRecibidaOc <= 0.000001 && $ocArtId > 0) {
                 $yaRecibidaOc = (float) ($recibidosConfirmadosOc[$ocArtId] ?? 0);
             }
-            $cantRecTotal = $yaRecibidaOc + $cantRemito;
             $cantRechazada = (float) ($item['cantidad_rechazada'] ?? 0);
             $cantAceptada = (float) ($item['cantidad'] ?? 0);
             $precioOc = (float) ($item['precio_ordencompra'] ?? 0);
@@ -136,11 +135,13 @@ class RecepcionProveedorDiferenciaSupport
             }
             $tol = RecepcionProveedorToleranciaSupport::resolver($empresaId, $ccLinea);
 
-            $flCantDiff = ! $esDevolucion
-                && $accionLinea === RecepcionProveedorAccionLineaOc::RECIBIR
-                && $tipoLinea !== self::TIPO_EXTRA
-                && $cantOc > 0
-                && ! RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($cantOc, $cantRecTotal, $tol);
+            $itemAnalisisCant = array_merge($item, [
+                'tipo_linea' => $tipoLinea,
+                'cantidad_oc' => $cantOc,
+                'cantidad_recibida' => $yaRecibidaOc,
+            ]);
+            // Recepción parcial (queda saldo) es el circuito normal de COM, no una diferencia.
+            $flCantDiff = self::esDiferenciaCantidadReportable($itemAnalisisCant, $esDevolucion, $tol);
             $precioDistintoOc = ! $esDevolucion
                 && $tipoLinea !== self::TIPO_EXTRA
                 && $precioOc > 0
@@ -148,10 +149,6 @@ class RecepcionProveedorDiferenciaSupport
             $precioFueraTolerancia = ! $esDevolucion
                 && $precioOc > 0
                 && ! RecepcionProveedorToleranciaSupport::precioDentroTolerancia($precioOc, $precioRec, $tol);
-
-            $esParcialConSaldoPendiente = RecepcionProveedorAccionLineaOc::esRecepcionParcialConSaldoPendiente(
-                array_merge($item, ['cantidad_recibida' => $yaRecibidaOc])
-            );
 
             if ($flCantDiff) {
                 $flCant = true;
@@ -161,13 +158,11 @@ class RecepcionProveedorDiferenciaSupport
                 }
                 $resumenCant .= ", este remito {$cantRemito}";
                 $resumenes[] = $resumenCant;
-                if (! $esParcialConSaldoPendiente) {
-                    $comentCant = trim((string) ($item['comentario_diferencia'] ?? ''));
-                    if ($comentCant === '') {
-                        throw new \RuntimeException(
-                            'Línea '.($idx + 1)." ({$sku}): cantidad distinta a la OC. Indique comentario."
-                        );
-                    }
+                $comentCant = trim((string) ($item['comentario_diferencia'] ?? ''));
+                if ($comentCant === '') {
+                    throw new \RuntimeException(
+                        'Línea '.($idx + 1)." ({$sku}): cantidad distinta a la OC. Indique comentario."
+                    );
                 }
             }
             if ($precioDistintoOc) {
@@ -253,6 +248,44 @@ class RecepcionProveedorDiferenciaSupport
             'resumen_rechazos' => implode("\n", array_unique($resumenesRechazo)),
             'faltantes' => $faltantes,
         ];
+    }
+
+    /**
+     * Cantidad distinta reportable (exceso u otro desvío fuera de tolerancia).
+     * No incluye recepción parcial con saldo pendiente: es entrega incompleta normal.
+     *
+     * @param  array<string, mixed>  $item
+     * @param  array{cantidad_pct: float, precio_pct: float, precio_abs: float}  $tol
+     */
+    public static function esDiferenciaCantidadReportable(array $item, bool $esDevolucion, array $tol): bool
+    {
+        if ($esDevolucion) {
+            return false;
+        }
+
+        $tipoLinea = (string) ($item['tipo_linea'] ?? self::TIPO_OC);
+        if ($tipoLinea === self::TIPO_EXTRA) {
+            return false;
+        }
+
+        if (RecepcionProveedorAccionLineaOc::resolver($item) !== RecepcionProveedorAccionLineaOc::RECIBIR) {
+            return false;
+        }
+
+        $cantOc = (float) ($item['cantidad_oc'] ?? 0);
+        if ($cantOc <= 0) {
+            return false;
+        }
+
+        if (RecepcionProveedorAccionLineaOc::esRecepcionParcialConSaldoPendiente($item)) {
+            return false;
+        }
+
+        $cantRecTotal = (float) ($item['cantidad_recibida'] ?? 0)
+            + (float) ($item['cantidad'] ?? 0)
+            + (float) ($item['cantidad_rechazada'] ?? 0);
+
+        return ! RecepcionProveedorToleranciaSupport::cantidadDentroTolerancia($cantOc, $cantRecTotal, $tol);
     }
 
     private static function resolverCentrocostoLinea(Ordencompra $oc, array $item, int $ccOc): ?int

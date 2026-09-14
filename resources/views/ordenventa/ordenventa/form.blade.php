@@ -1,5 +1,8 @@
 <div class="card form1">
     <div id="form-errors"></div>
+    <div id="ov-aviso-arbol" class="alert alert-danger d-none" role="alert" style="margin: 0 1rem 1rem;">
+        <strong>Árbol de aprobación:</strong> <span class="ov-aviso-arbol-texto"></span>
+    </div>
     <div class="row" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query}}" data-formapago="{{$formapago_query}}"
         data-puntoventa_facturacion="{{json_encode($puntoventa_facturacion)}}">
         <div class="col-sm-6">

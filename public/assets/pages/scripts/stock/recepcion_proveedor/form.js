@@ -652,7 +652,7 @@
                 hay = true;
             }
             var precioOc = precioOcItem(item);
-            if (lineaTieneDiferenciaPrecio(precioOc, parseFloat(item.precio || 0))) {
+            if (lineaTieneDiferenciaPrecio(precioOc, precioEfectivoLinea(item))) {
                 hay = true;
             }
             if ((parseFloat(item.cantidad_rechazada || 0) || 0) > 0.000001) {
@@ -672,6 +672,10 @@
             return false;
         }
         if (accionLineaItem(item) !== 'RECIBIR') {
+            return false;
+        }
+        // Recepción parcial con saldo pendiente: no es diferencia (sigue el circuito COM).
+        if (lineaEsRecepcionParcialConSaldo(item)) {
             return false;
         }
         return item.cantidad_oc > 0
@@ -1117,7 +1121,7 @@
                 errores.push('Línea ' + (idx + 1) + ': indique comentario (diferencia de cantidad o cierre de línea OC).');
             }
             var precioOc = precioOcItem(item);
-            var precioRec = parseFloat(item.precio || 0);
+            var precioRec = precioEfectivoLinea(item);
             if (lineaTieneDiferenciaPrecio(precioOc, precioRec) && $.trim(item.comentario_precio || '') === '') {
                 errores.push('Línea ' + (idx + 1) + ': indique comentario de diferencia de precio.');
             }
@@ -1179,10 +1183,10 @@
                 });
             }
             var precioOc = precioOcItem(item);
-            if (lineaTieneDiferenciaPrecio(precioOc, parseFloat(item.precio || 0))) {
+            if (lineaTieneDiferenciaPrecio(precioOc, precioEfectivoLinea(item))) {
                 filas.push({
                     tipo: 'warning',
-                    texto: sku + ': precio OC ' + precioOc + ' vs rec. ' + parseFloat(item.precio || 0)
+                    texto: sku + ': precio OC ' + precioOc + ' vs remito/fact. ' + precioEfectivoLinea(item)
                         + (item.comentario_precio ? ' — ' + item.comentario_precio : '')
                 });
             }
@@ -1349,9 +1353,8 @@
             }
             var item = itemsActuales[idx];
             var precioOc = precioOcItem(item);
-            var precioRec = parseFloat(item.precio || 0);
-            var cantDiff = item && item.cantidad_oc > 0
-                && Math.abs(cantidadTotalAcumuladaOc(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
+            var precioRec = precioEfectivoLinea(item);
+            var cantDiff = lineaTieneDiferenciaCantidad(item);
             if (!lineaTieneDiferenciaPrecio(precioOc, precioRec) && !cantDiff
                 && item && item.tipo_linea !== 'EXTRA' && item.tipo_linea !== 'SUSTITUTO') {
                 $tr.removeClass('table-danger table-warning');
@@ -1369,7 +1372,7 @@
         }
         var item = itemsActuales[idx];
         var precioOc = precioOcItem(item);
-        var precioRec = parseFloat($tr.find('.item-precio').val()) || 0;
+        var precioRec = precioEfectivoLinea(item);
         var diff = lineaTieneDiferenciaPrecio(precioOc, precioRec);
         if (diff) {
             $sub.show();
@@ -1380,9 +1383,7 @@
                 $sub.find('.item-comentario-precio').val('');
             }
             if (item && item.tipo_linea !== 'EXTRA' && item.tipo_linea !== 'SUSTITUTO') {
-                var cantDiff = item.cantidad_oc > 0
-                    && Math.abs(cantidadTotalAcumuladaOc(item) - parseFloat(item.cantidad_oc)) >= 0.0001;
-                if (!cantDiff) {
+                if (!lineaTieneDiferenciaCantidad(item)) {
                     $tr.removeClass('table-warning');
                 }
             }
@@ -1760,7 +1761,8 @@
     function htmlCeldaImporteLinea(item, idx, soloLectura) {
         var importe = importeLineaRecepcion(item);
         var html = '<div class="celda-importe-linea">';
-        if (soloLectura) {
+        var importeSoloLectura = soloLectura || !puedeModificarPrecioRecepcion();
+        if (importeSoloLectura) {
             html += '<div class="d-flex align-items-center justify-content-end">';
             html += '<span class="item-importe-linea-text font-weight-bold mr-1">' + formatearImporteRecepcion(importe) + '</span>';
             html += '<button type="button" class="btn btn-sm btn-info btn-linea-precio-modal" data-idx="' + idx + '" title="Ver detalle de precios">';
@@ -2833,6 +2835,9 @@
 
         $(document).on('input', '.item-importe-linea', function () {
             if (sincronizandoImporteLinea) {
+                return;
+            }
+            if (!puedeModificarPrecioRecepcion()) {
                 return;
             }
             var $tr = $(this).closest('tr.item-recepcion-linea');

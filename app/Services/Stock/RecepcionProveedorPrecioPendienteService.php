@@ -61,12 +61,10 @@ class RecepcionProveedorPrecioPendienteService
 
     public function assertPuedeConfirmar(Recepcion_Proveedor $recepcion): void
     {
-        if ((bool) $recepcion->fl_precio_pendiente_aprobacion) {
-            throw new \RuntimeException(
-                'La recepción tiene cambio de precios pendiente de aprobación en compras. '
-                .'Espere a que actualicen la OC o solicite la corrección.'
-            );
-        }
+        unset($recepcion);
+        // La COM se confirma con precios de la OC aunque haya precios de remito/factura
+        // informados a Compras (fl_precio_pendiente_aprobacion). Capital Humano / logística
+        // no deben quedar bloqueados esperando la actualización de la OC.
     }
 
     /**

@@ -77,7 +77,7 @@ class OrdencompraLegajoBandejaPaqueteService
         $this->materializarPdfsScanAnita($oc);
         $facturas = $this->facturasDelLegajo($oc);
         $facturas = array_merge($facturas, $this->scansAnitaSinPrecarga($oc, $facturas));
-        $tiposOpciones = $this->tiposOpcionesCorreccion($oc);
+        $tiposOpciones = $this->tiposOpcionesCorreccion($oc, $facturas);
         $coms = $this->comsDelLegajo($oc);
         $devoluciones = $this->devolucionesDelLegajo($oc);
         $precargaIds = [];
@@ -148,6 +148,10 @@ class OrdencompraLegajoBandejaPaqueteService
         foreach ($asignaciones as $item) {
             $ref = $item['precarga_id'] ?? null;
             if ($ref === null || $ref === '') {
+                continue;
+            }
+            // Ids sintéticos de CP ya en CxP (cp-N) no son precargas asignables.
+            if (! $this->esReferenciaAsignable($ref)) {
                 continue;
             }
             $ids = array_values(array_unique(array_filter(
@@ -499,8 +503,31 @@ class OrdencompraLegajoBandejaPaqueteService
         if (preg_match('/^anita-(\d+)$/i', $ref, $m)) {
             return $this->precargaDesdeFacturaAnita($oc, (int) $m[1]);
         }
+        if (preg_match('/^cp-\d+$/i', $ref) || ! ctype_digit($ref) || (int) $ref <= 0) {
+            abort(404, 'La factura no pertenece a este legajo.');
+        }
 
         return $this->assertPrecargaDelLegajo($oc, (int) $ref);
+    }
+
+    /**
+     * Referencias que el modal Asignar COM puede persistir (precarga numérica o scan Anita).
+     * Los ids sintéticos cp-N (CP ya en CxP sin precarga) se ignoran.
+     */
+    public function esReferenciaAsignable(int|string $ref): bool
+    {
+        $ref = trim((string) $ref);
+        if ($ref === '') {
+            return false;
+        }
+        if (preg_match('/^anita-\d+$/i', $ref)) {
+            return true;
+        }
+        if (preg_match('/^cp-\d+$/i', $ref)) {
+            return false;
+        }
+
+        return ctype_digit($ref) && (int) $ref > 0;
     }
 
     private function precargaDesdeFacturaAnita(Ordencompra $oc, int $documentoId): Precarga_Comprobante_Proveedor
@@ -825,12 +852,21 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
+     * @param  list<array<string, mixed>>  $facturas
      * @return list<array{value: string, label: string}>
      */
-    private function tiposOpcionesCorreccion(Ordencompra $oc): array
+    private function tiposOpcionesCorreccion(Ordencompra $oc, array $facturas = []): array
     {
+        $abrevsActuales = [];
+        foreach ($facturas as $f) {
+            $abrev = strtoupper(trim((string) ($f['tipo_abrev'] ?? $f['tipo_label'] ?? '')));
+            if ($abrev !== '' && ! PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico($abrev)) {
+                $abrevsActuales[] = $abrev;
+            }
+        }
+
         try {
-            return PrecargaProveedorAbreviaturaTipoSupport::opcionesCorreccionTipo($oc);
+            return PrecargaProveedorAbreviaturaTipoSupport::opcionesCorreccionTipo($oc, $abrevsActuales);
         } catch (\Throwable) {
             return [
                 ['value' => 'FC', 'label' => 'FC — Factura (según primer centro de costo de la OC)'],

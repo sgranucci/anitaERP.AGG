@@ -95,6 +95,12 @@ class ComprobanteProveedorControlesLegajoService
             $tipoDocumento
         );
 
+        if ($politica['sin_com_por_tipo'] ?? false) {
+            $this->validarImputacionContratoSinRecepcion($resultado, $politica, $ordencompra, $conceptos);
+
+            return $resultado;
+        }
+
         if ($politica['bloquea_sin_com']) {
             $resultado['ok'] = false;
             $resultado['errores'][] = ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaSinCom($politica);

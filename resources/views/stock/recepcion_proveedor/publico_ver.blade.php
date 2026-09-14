@@ -39,8 +39,8 @@
 
         @if ($recepcion->fl_precio_pendiente_aprobacion)
             <div class="aviso" style="background:#fff3cd;border-color:#ffeeba;color:#856404;">
-                <strong>Precio pendiente de aprobaci&oacute;n en compras.</strong>
-                Los precios solicitados deben actualizarse en la OC antes de confirmar la recepci&oacute;n.
+                <strong>Precios de remito/factura distintos a la OC.</strong>
+                Compras fue notificado. La recepción puede confirmarse con los precios de la OC.
             </div>
         @endif
 

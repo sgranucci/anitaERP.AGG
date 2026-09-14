@@ -113,4 +113,54 @@ class OrdencompraLegajoBandejaPaqueteServiceTest extends TestCase
         $this->assertNull($porEtiqueta['ND A 0005-00004419']['url_pdf'] ?? null);
         $this->assertSame('/cxp/27643', $porEtiqueta['ND A 0005-00004419']['url_comprobante'] ?? null);
     }
+
+    public function test_referencia_cp_sintetica_no_es_asignable(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+
+        $this->assertTrue($svc->esReferenciaAsignable(490));
+        $this->assertTrue($svc->esReferenciaAsignable('490'));
+        $this->assertTrue($svc->esReferenciaAsignable('anita-12345'));
+        $this->assertFalse($svc->esReferenciaAsignable('cp-21671'));
+        $this->assertFalse($svc->esReferenciaAsignable('cp-0'));
+        $this->assertFalse($svc->esReferenciaAsignable('0'));
+        $this->assertFalse($svc->esReferenciaAsignable(''));
+        $this->assertFalse($svc->esReferenciaAsignable('abc'));
+    }
+
+    public function test_fusion_oc_anual_genera_ids_cp_que_no_son_asignables(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+        $out = $svc->fusionarComprobantesEnFacturas(
+            [
+                [
+                    'id' => 490,
+                    'origen' => 'precarga',
+                    'etiqueta' => 'FIS A 0070-00374589',
+                    'cargado_cxp' => false,
+                ],
+            ],
+            [
+                [
+                    'id' => 21671,
+                    'precarga_id' => null,
+                    'letra' => 'A',
+                    'sucursal' => 70,
+                    'numerocomprobante' => 354411,
+                    'etiqueta' => 'FC A 0070-00354411',
+                    'tipo' => 'FC',
+                    'tipo_label' => 'FC',
+                    'fecha' => '01/05/2026',
+                    'origen_label' => 'Comprobante cargado en CxP',
+                    'url' => '/cxp/21671',
+                ],
+            ]
+        );
+
+        $ids = array_map(static fn (array $f) => (string) $f['id'], $out);
+        $this->assertContains('490', $ids);
+        $this->assertContains('cp-21671', $ids);
+        $this->assertTrue($svc->esReferenciaAsignable('490'));
+        $this->assertFalse($svc->esReferenciaAsignable('cp-21671'));
+    }
 }

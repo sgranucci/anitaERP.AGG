@@ -21,6 +21,16 @@ final class OrdencompraLegajoDocumentoTipoSupportTest extends TestCase
     public function test_no_exige_com_para_nota_debito(): void
     {
         $this->assertFalse(OrdencompraLegajoDocumentoTipoSupport::exigeCom('ND'));
+        $this->assertFalse(OrdencompraLegajoDocumentoTipoSupport::exigeCom('NDA'));
+        $this->assertFalse(OrdencompraLegajoDocumentoTipoSupport::exigeCom('NDF'));
+    }
+
+    public function test_codigo_afip_007_es_nota_debito(): void
+    {
+        $this->assertSame('ND', OrdencompraLegajoDocumentoTipoSupport::desdeAbreviatura('XXX', '007'));
+        $this->assertFalse(OrdencompraLegajoDocumentoTipoSupport::exigeCom(
+            OrdencompraLegajoDocumentoTipoSupport::desdeAbreviatura('XXX', '007')
+        ));
     }
 
     public function test_no_exige_com_para_recibo(): void

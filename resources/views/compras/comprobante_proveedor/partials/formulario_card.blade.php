@@ -127,6 +127,7 @@
                 data-url-editar-concepto-iva="{{ url('compras/concepto_ivacompra/__ID__/editar') }}"
                 data-contrato-vigente="{{ ($com_politica['contrato_vigente'] ?? false) ? '1' : '0' }}"
                 data-contrato-requiere-recepcion="{{ ($com_politica['contrato_requiere_recepcion'] ?? false) ? '1' : '0' }}"
+                data-sin-com-por-tipo="{{ ($com_politica['sin_com_por_tipo'] ?? false) ? '1' : '0' }}"
                 data-contrato-imputacion="{{ $com_politica['contrato_imputacion'] ?? '' }}"
                 data-contrato-cuentacontable-id="{{ (int) ($com_politica['contrato_cuentacontable_id'] ?? 0) }}"
                 data-contrato-cuentacontable-codigo="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->codigo ?? '' }}"
@@ -298,7 +299,7 @@
                     <div class="tab-content">
                         <div class="tab-pane fade show active cp-solapa" id="cp-solapa-principal" role="tabpanel">
                             @include('compras.comprobante_proveedor.partials.solapa_datos')
-                            @if (! ($mostrarSolapaCom ?? false))
+                            @if (! ($mostrarSolapaCom ?? false) && ! ($com_politica['sin_com_por_tipo'] ?? false))
                                 {{-- Sin solapa dedicada: bloque embebido por si el modo cambia a ASIGNA_RECEPCION --}}
                                 <div id="cp-solapa-recepciones-com-inline" class="cp-solapa-inline mt-3">
                                     @include('compras.comprobante_proveedor.partials.solapa_recepciones_com')

@@ -31,12 +31,8 @@ return new class extends Migration
             }
         });
 
-        $impuestoId = (int) (DB::table('impuesto')->where('id', 3)->value('id')
-            ?? DB::table('impuesto')->orderBy('id')->value('id')
-            ?? 3);
-        $unidadId = (int) (DB::table('unidadmedida')->where('abreviatura', 'UNI')->value('id')
-            ?? DB::table('unidadmedida')->orderBy('id')->value('id')
-            ?? 3);
+        $impuestoId = $this->resolverImpuestoId();
+        $unidadId = $this->resolverUnidadmedidaId();
 
         $conceptoChequeId = $this->upsertConcepto(
             self::COD_CHEQUE,
@@ -87,6 +83,51 @@ return new class extends Migration
                 ->update(['concepto_venta_id' => null]);
             Concepto_Venta::query()->whereIn('id', $ids->all())->delete();
         }
+    }
+
+    private function resolverImpuestoId(): int
+    {
+        $id = (int) (DB::table('impuesto')->where('id', 3)->value('id')
+            ?? DB::table('impuesto')->orderBy('id')->value('id')
+            ?? 0);
+        if ($id > 0) {
+            return $id;
+        }
+
+        $ahora = now();
+        $payload = [
+            'nombre' => 'Exento lab',
+            'valor' => 0,
+            'fechavigencia' => '2000-01-01',
+            'codigo' => 'LAB-EXENTO',
+            'created_at' => $ahora,
+            'updated_at' => $ahora,
+        ];
+        if (Schema::hasColumn('impuesto', 'codigoarca')) {
+            $payload['codigoarca'] = '3';
+        }
+
+        return (int) DB::table('impuesto')->insertGetId($payload);
+    }
+
+    private function resolverUnidadmedidaId(): int
+    {
+        $id = (int) (DB::table('unidadmedida')->where('abreviatura', 'UNI')->value('id')
+            ?? DB::table('unidadmedida')->orderBy('id')->value('id')
+            ?? 0);
+        if ($id > 0) {
+            return $id;
+        }
+
+        $ahora = now();
+
+        return (int) DB::table('unidadmedida')->insertGetId([
+            'nombre' => 'Unidad',
+            'abreviatura' => 'UNI',
+            'codigo' => 'UNI',
+            'created_at' => $ahora,
+            'updated_at' => $ahora,
+        ]);
     }
 
     private function upsertConcepto(

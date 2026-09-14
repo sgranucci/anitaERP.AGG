@@ -1,7 +1,6 @@
 @php
     $mostrarGuardarConfirmar = can('confirmar-recepcion-proveedor', false)
-        && ($validacionAbonoCompleta ?? true)
-        && empty(optional($recepcion ?? null)->fl_precio_pendiente_aprobacion);
+        && ($validacionAbonoCompleta ?? true);
 @endphp
 @if ($mostrarGuardarConfirmar)
 <button type="submit"

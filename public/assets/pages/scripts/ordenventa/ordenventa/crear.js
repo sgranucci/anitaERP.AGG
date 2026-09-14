@@ -157,10 +157,90 @@
 					flError = true;
 				}
 
-				if (!flError)
-					$("#form-general").submit();
+				if (!flError) {
+					verificarAvisoArbolGrabacion(function (aviso) {
+						if (aviso) {
+							mostrarAvisoArbolOv(aviso);
+							alert(aviso);
+							return;
+						}
+						$("#form-general").submit();
+					});
+				}
 			}
 		});
+
+		function mostrarAvisoArbolOv(aviso) {
+			var $box = $('#ov-aviso-arbol');
+			if (!$box.length) {
+				return;
+			}
+			if (aviso) {
+				$box.find('.ov-aviso-arbol-texto').text(aviso);
+				$box.removeClass('d-none');
+			} else {
+				$box.addClass('d-none');
+				$box.find('.ov-aviso-arbol-texto').text('');
+			}
+		}
+
+		var timerAvisoArbolOv = null;
+		function verificarAvisoArbolGrabacion(callback) {
+			var estado = ($('#estado').val() || 'SOLICITADA').toString();
+			if (estado && estado !== 'SOLICITADA') {
+				mostrarAvisoArbolOv(null);
+				if (typeof callback === 'function') {
+					callback(null);
+				}
+				return;
+			}
+
+			var cc = parseInt($('#centrocosto_id').val() || '0', 10) || 0;
+			var moneda = parseInt($('#moneda_id').val() || '0', 10) || 0;
+			var monto = $('#monto').val() || '0';
+			var fecha = $('#fecha').val() || '';
+			var ordenventaId = parseInt($('#ordenventa_id').val() || '0', 10) || 0;
+
+			if (cc <= 0 || moneda <= 0) {
+				mostrarAvisoArbolOv(null);
+				if (typeof callback === 'function') {
+					callback(null);
+				}
+				return;
+			}
+
+			$.get((typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/ordenventa/ordenventa/aviso-arbol-grabacion', {
+				ordenventa_id: ordenventaId,
+				centrocosto_id: cc,
+				moneda_id: moneda,
+				monto: monto,
+				fecha: fecha,
+				estado: estado
+			}).done(function (resp) {
+				var aviso = (resp && resp.aviso) ? resp.aviso : null;
+				mostrarAvisoArbolOv(aviso);
+				if (typeof callback === 'function') {
+					callback(aviso);
+				}
+			}).fail(function () {
+				if (typeof callback === 'function') {
+					callback(null);
+				}
+			});
+		}
+
+		function programarVerificacionAvisoArbolOv() {
+			if (timerAvisoArbolOv) {
+				clearTimeout(timerAvisoArbolOv);
+			}
+			timerAvisoArbolOv = setTimeout(function () {
+				verificarAvisoArbolGrabacion();
+			}, 300);
+		}
+
+		$(document).on('change', '#centrocosto_id, #moneda_id, #fecha, #estado', programarVerificacionAvisoArbolOv);
+		$(document).on('input change blur', '#monto', programarVerificacionAvisoArbolOv);
+		programarVerificacionAvisoArbolOv();
 
 		let cliente_id = $('#cliente_id').val();
 

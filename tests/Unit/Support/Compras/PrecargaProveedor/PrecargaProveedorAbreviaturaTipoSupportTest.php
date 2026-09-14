@@ -72,6 +72,22 @@ class PrecargaProveedorAbreviaturaTipoSupportTest extends TestCase
         $this->assertContains('DGA', $porFamilia['ND']);
     }
 
+    public function test_union_b_y_s_incluye_fib_y_fis(): void
+    {
+        $bienes = PrecargaProveedorAbreviaturaTipoSupport::abreviaturasFinoDesdeCentros([
+            ['codigo' => 103, 'tipoiva' => 'Indirecto'],
+        ], 'B', true);
+        $servicios = PrecargaProveedorAbreviaturaTipoSupport::abreviaturasFinoDesdeCentros([
+            ['codigo' => 103, 'tipoiva' => 'Indirecto'],
+        ], 'S', true);
+
+        $fc = array_values(array_unique(array_merge($bienes['FC'], $servicios['FC'])));
+
+        $this->assertContains('FIB', $fc);
+        $this->assertContains('FIS', $fc);
+        $this->assertContains('FGA', $fc);
+    }
+
     public function test_fc_nc_nd_son_tipos_genericos(): void
     {
         $this->assertTrue(PrecargaProveedorAbreviaturaTipoSupport::esTipoGenerico('FC'));

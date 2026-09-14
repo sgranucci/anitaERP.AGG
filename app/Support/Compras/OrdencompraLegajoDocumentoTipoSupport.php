@@ -39,6 +39,11 @@ final class OrdencompraLegajoDocumentoTipoSupport
                     return 'ND';
                 }
             }
+
+            $porTexto = PrecargaProveedorTipoComprobanteSupport::normalizar($abrev);
+            if (in_array($porTexto, ['NC', 'ND', 'REC'], true)) {
+                return $porTexto;
+            }
         }
 
         $familia = TrackingComprobanteFamilia::desde($codigoAfip, $abreviatura);
@@ -50,6 +55,13 @@ final class OrdencompraLegajoDocumentoTipoSupport
         }
         if ($familia === TrackingComprobanteFamilia::RECIBO) {
             return 'REC';
+        }
+
+        if ($codigoAfip !== null && trim((string) $codigoAfip) !== '') {
+            $porCodigo = PrecargaProveedorTipoComprobanteSupport::normalizar((string) $codigoAfip);
+            if (in_array($porCodigo, ['NC', 'ND', 'REC'], true)) {
+                return $porCodigo;
+            }
         }
 
         return 'FC';
@@ -68,6 +80,11 @@ final class OrdencompraLegajoDocumentoTipoSupport
             return $desdeAbrev;
         }
 
+        $porNombre = PrecargaProveedorTipoComprobanteSupport::normalizar((string) ($tipo->nombre ?? ''));
+        if (in_array($porNombre, ['NC', 'ND', 'REC'], true)) {
+            return $porNombre;
+        }
+
         // Signo Resta (NC) aunque la abreviatura no siga la convención C**.
         if ((string) ($tipo->signo ?? 'S') === 'R') {
             return 'NC';
@@ -78,7 +95,7 @@ final class OrdencompraLegajoDocumentoTipoSupport
 
     public static function desdePrecarga(Precarga_Comprobante_Proveedor $pre): string
     {
-        $pre->loadMissing('tipotransaccion_compras:id,abreviatura,codigoafip,signo');
+        $pre->loadMissing('tipotransaccion_compras:id,abreviatura,codigoafip,signo,nombre');
 
         return self::desdeTipotransaccion($pre->tipotransaccion_compras);
     }
@@ -102,22 +119,35 @@ final class OrdencompraLegajoDocumentoTipoSupport
         if (! $tipoId || $tipoId <= 0) {
             return 'FC';
         }
-        $tipo = Tipotransaccion_Compra::query()->whereKey($tipoId)->first(['abreviatura', 'codigoafip', 'signo']);
+        $tipo = Tipotransaccion_Compra::query()->whereKey($tipoId)->first(['abreviatura', 'codigoafip', 'signo', 'nombre']);
 
         return self::desdeTipotransaccion($tipo);
     }
 
     public static function exigeCom(string $tipoGenerico): bool
     {
-        $t = PrecargaProveedorTipoComprobanteSupport::normalizar($tipoGenerico);
+        $t = self::desdeAbreviatura($tipoGenerico, $tipoGenerico);
 
         // NC y ND no exigen recepción; REC tampoco.
         return ! in_array($t, ['NC', 'ND', 'REC'], true);
     }
 
+    public static function mensajeSinRecepcionPorTipo(?string $tipoGenerico): string
+    {
+        return match (self::etiquetaCorta((string) $tipoGenerico)) {
+            'NC' => 'Las notas de crédito no requieren recepción COM.',
+            'ND' => 'Las notas de débito no requieren recepción COM.',
+            'REC' => 'Los recibos no requieren recepción COM.',
+            default => 'Este tipo de comprobante no requiere recepción COM.',
+        };
+    }
+
     public static function etiquetaCorta(string $tipoGenerico): string
     {
-        return match (PrecargaProveedorTipoComprobanteSupport::normalizar($tipoGenerico)) {
+        $t = self::desdeAbreviatura($tipoGenerico, $tipoGenerico);
+        $porTexto = PrecargaProveedorTipoComprobanteSupport::normalizar($tipoGenerico);
+
+        return match ($t !== 'FC' ? $t : $porTexto) {
             'NC' => 'NC',
             'ND' => 'ND',
             'REC' => 'REC',

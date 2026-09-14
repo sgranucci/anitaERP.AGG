@@ -209,6 +209,7 @@
                 @php
                     $comObligatoria = (bool) ($com_obligatoria ?? false);
                     $comPolitica = $com_politica ?? [];
+                    $sinComPorTipo = (bool) ($comPolitica['sin_com_por_tipo'] ?? false);
                     $permiteAnticipada = (bool) ($comPolitica['permite_factura_anticipada'] ?? false);
                     $anticipadaEligeModo = (bool) ($comPolitica['anticipada_elige_modo'] ?? false);
                     $bloqueaSinCom = (bool) ($comPolitica['bloquea_sin_com'] ?? false);
@@ -217,7 +218,9 @@
                     $contratoImputacion = (string) ($comPolitica['contrato_imputacion'] ?? '');
                     $contratoFueraVigencia = (bool) ($comPolitica['contrato_fuera_de_vigencia'] ?? false);
                     $modoActual = old('modo_carga', $data->modo_carga ?? '');
-                    if ($contratoVigente && $contratoRequiereRecepcion) {
+                    if ($sinComPorTipo) {
+                        $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION;
+                    } elseif ($contratoVigente && $contratoRequiereRecepcion) {
                         $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
                     } elseif ($contratoVigente && ! $contratoRequiereRecepcion) {
                         $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION;
@@ -233,7 +236,14 @@
                         $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
                     }
                 @endphp
-                @if ($contratoVigente && $contratoRequiereRecepcion)
+                @if ($sinComPorTipo)
+                    <input type="hidden" name="modo_carga" id="modo_carga" value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION }}">
+                    <input type="text" class="form-control" readonly
+                        value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION) }}">
+                    <small class="form-text text-muted" id="cp-ayuda-modo-carga">
+                        {{ \App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport::mensajeSinRecepcionPorTipo($comPolitica['tipo_documento'] ?? null) }}
+                    </small>
+                @elseif ($contratoVigente && $contratoRequiereRecepcion)
                     <input type="hidden" name="modo_carga" id="modo_carga" value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION }}">
                     <input type="text" class="form-control" readonly
                         value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) }}">

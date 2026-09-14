@@ -192,10 +192,12 @@ final class PrecargaProveedorAbreviaturaTipoSupport
 
     /**
      * Opciones para corregir el tipo en precarga / bandeja (finos de todos los CC + gastronomía).
+     * Incluye variantes bienes (B) y servicios (S) para poder pasar p. ej. FIB ↔ FIS en prepagas.
      *
+     * @param  string|list<string>|null  $abrevActual  Abreviatura(s) ya grabada(s) en precarga(s)
      * @return list<array{value: string, label: string}>
      */
-    public static function opcionesCorreccionTipo(Ordencompra $oc, ?string $abrevActual = null): array
+    public static function opcionesCorreccionTipo(Ordencompra $oc, string|array|null $abrevActual = null): array
     {
         $centros = [];
         foreach (self::centrocostosDestinoTodosDesdeOrdencompra($oc) as $cc) {
@@ -212,15 +214,31 @@ final class PrecargaProveedorAbreviaturaTipoSupport
             $tipoItem = 'B';
         }
 
-        $porFamilia = self::abreviaturasFinoDesdeCentros($centros, $tipoItem, true);
-        $abrevActual = strtoupper(trim((string) $abrevActual));
-        if ($abrevActual !== '' && ! self::esTipoGenerico($abrevActual)) {
-            $fam = match (substr($abrevActual, 0, 1)) {
+        // Unión B+S: la OC puede resolverse como bienes y aun así la factura ser servicio (prepaga/FIS).
+        $tiposItem = array_values(array_unique([$tipoItem, 'B', 'S']));
+        $porFamilia = ['FC' => [], 'NC' => [], 'ND' => []];
+        foreach ($tiposItem as $ti) {
+            $parcial = self::abreviaturasFinoDesdeCentros($centros, $ti, true);
+            foreach (['FC', 'NC', 'ND'] as $fam) {
+                $porFamilia[$fam] = array_values(array_unique(array_merge(
+                    $porFamilia[$fam],
+                    $parcial[$fam] ?? []
+                )));
+            }
+        }
+
+        $abrevsActuales = is_array($abrevActual) ? $abrevActual : [$abrevActual];
+        foreach ($abrevsActuales as $abrev) {
+            $abrev = strtoupper(trim((string) $abrev));
+            if ($abrev === '' || self::esTipoGenerico($abrev)) {
+                continue;
+            }
+            $fam = match (substr($abrev, 0, 1)) {
                 'C' => 'NC',
                 'D' => 'ND',
                 default => 'FC',
             };
-            $porFamilia[$fam][] = $abrevActual;
+            $porFamilia[$fam][] = $abrev;
             $porFamilia[$fam] = array_values(array_unique($porFamilia[$fam]));
         }
 

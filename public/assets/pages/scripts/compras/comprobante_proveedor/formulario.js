@@ -88,6 +88,105 @@ $(function () {
         return $('#modo_carga').val() === 'ASIGNA_RECEPCION';
     }
 
+    function normalizarTextoTipo(val) {
+        return String(val || '')
+            .toUpperCase()
+            .trim()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+    }
+
+    function tipoGenericoComprobante() {
+        var abrev = normalizarTextoTipo($('#tipotransaccion_compra_id_abreviatura').val());
+        var nombre = normalizarTextoTipo($('#tipotransaccion_compra_id_descripcion').val());
+        if (abrev.indexOf('NC') === 0) {
+            return 'NC';
+        }
+        if (abrev.indexOf('ND') === 0) {
+            return 'ND';
+        }
+        if (abrev.indexOf('REC') === 0) {
+            return 'REC';
+        }
+        if (abrev.length >= 3) {
+            var ini = abrev.charAt(0);
+            if (ini === 'C' && abrev !== 'COM' && abrev !== 'COV') {
+                return 'NC';
+            }
+            if (ini === 'D') {
+                return 'ND';
+            }
+        }
+        if (/NOTA\s+DE\s+DEBITO|\bND\b/.test(nombre)) {
+            return 'ND';
+        }
+        if (/NOTA\s+DE\s+CREDITO|\bNC\b/.test(nombre)) {
+            return 'NC';
+        }
+        if (/\bRECIBO\b/.test(nombre)) {
+            return 'REC';
+        }
+        return 'FC';
+    }
+
+    function tipoNoExigeCom() {
+        var t = tipoGenericoComprobante();
+        return t === 'NC' || t === 'ND' || t === 'REC'
+            || String($form.attr('data-sin-com-por-tipo') || '') === '1';
+    }
+
+    function mensajeSinComPorTipo(tipo) {
+        if (tipo === 'ND') {
+            return 'Las notas de débito no requieren recepción COM.';
+        }
+        if (tipo === 'NC') {
+            return 'Las notas de crédito no requieren recepción COM.';
+        }
+        if (tipo === 'REC') {
+            return 'Los recibos no requieren recepción COM.';
+        }
+        return 'Este tipo de comprobante no requiere recepción COM.';
+    }
+
+    function setModoCargaSinRecepcion(mensaje) {
+        var $modo = $('#modo_carga');
+        if (!$modo.length) {
+            return;
+        }
+        $modo.val('SIN_RECEPCION');
+        var $txt = $modo.siblings('input.form-control[readonly]').first();
+        if ($txt.length) {
+            $txt.val('Gasto sin recepción');
+        }
+        var $help = $modo.siblings('small.form-text').first();
+        if ($help.length && mensaje) {
+            $help.text(mensaje);
+        }
+        if ($modo.is('select')) {
+            $modo.trigger('change');
+        } else {
+            toggleBloqueRecepcionesCom();
+        }
+    }
+
+    function aplicarExcepcionComPorTipo() {
+        var tipo = tipoGenericoComprobante();
+        var abrev = normalizarTextoTipo($('#tipotransaccion_compra_id_abreviatura').val());
+        var detectado = tipo === 'NC' || tipo === 'ND' || tipo === 'REC';
+        if (detectado) {
+            $form.attr('data-sin-com-por-tipo', '1');
+        } else if (abrev !== '') {
+            $form.attr('data-sin-com-por-tipo', '0');
+        }
+        if (String($form.attr('data-sin-com-por-tipo') || '') !== '1') {
+            return;
+        }
+        setModoCargaSinRecepcion(mensajeSinComPorTipo(tipo));
+        $('#cp-boton-recepciones-com').closest('.nav-item').hide();
+        $('#cp-banner-com-datos').hide();
+        $('#cp-bloque-recepciones-com').hide();
+    }
+
     function contratoImputacionManual() {
         return String($form.attr('data-contrato-imputacion') || '') === 'manual'
             && String($form.attr('data-contrato-vigente') || '') === '1'
@@ -1053,6 +1152,7 @@ $(function () {
 
     function alCambiarTipoComprobante(tipoId) {
         actualizarAbreviaturaTipoComprobante();
+        aplicarExcepcionComPorTipo();
         // Si ya hay conceptos (p. ej. al editar FNB→CNB), conservarlos: el asiento
         // se recalcula con el signo del tipo nuevo (NC/ND invierte Debe/Haber).
         if (hayConceptosCargados()) {
@@ -1073,6 +1173,7 @@ $(function () {
     }
 
     actualizarAbreviaturaTipoComprobante();
+    aplicarExcepcionComPorTipo();
 
     $(document).on('cp:tipotransaccion-compra-elegido', function (e, tipoId) {
         alCambiarTipoComprobante(tipoId);
@@ -1116,7 +1217,7 @@ $(function () {
             return;
         }
         var modo = $('#modo_carga').val();
-        if (modo === 'ASIGNA_RECEPCION' && $('#cp-bloque-recepciones-com').length) {
+        if (!tipoNoExigeCom() && modo === 'ASIGNA_RECEPCION' && $('#cp-bloque-recepciones-com').length) {
             if ($('.cp-com-check:checked').length === 0) {
                 e.preventDefault();
                 if ($('#cp-solapa-recepciones-com').length) {

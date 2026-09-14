@@ -23,6 +23,10 @@ final class RecepcionProveedorPrecioPendienteSupport
     }
 
     /**
+     * Sin permiso de precio: la COM usa siempre el de la OC.
+     * Solo una solicitud explícita (`precio_solicitado` del modal) se conserva;
+     * no se infiere desde `precio` (OCR / importe) para no bloquear la recepción.
+     *
      * @param  list<array<string, mixed>>  $items
      * @return list<array<string, mixed>>
      */
@@ -40,17 +44,13 @@ final class RecepcionProveedorPrecioPendienteSupport
                 ? (float) $item['precio_solicitado']
                 : null;
 
-            if ($precioSolicitado === null && $precioOc > 0 && abs($precioEnviado - $precioOc) >= 0.0001) {
-                $precioSolicitado = $precioEnviado;
-            }
-
             $item['precio'] = $precioOc > 0 ? $precioOc : $precioEnviado;
-            $item['precio_solicitado'] = $precioSolicitado;
 
             $tieneSolicitud = $precioSolicitado !== null
                 && $precioOc > 0
                 && abs($precioSolicitado - $precioOc) >= 0.0001;
 
+            $item['precio_solicitado'] = $tieneSolicitud ? $precioSolicitado : null;
             $item['fl_precio_diferencia'] = $tieneSolicitud;
             if ($tieneSolicitud && trim((string) ($item['comentario_precio'] ?? '')) === '') {
                 throw new \RuntimeException(
@@ -62,6 +62,33 @@ final class RecepcionProveedorPrecioPendienteSupport
         }
 
         return $normalizados;
+    }
+
+    /**
+     * OCR aplica cantidades del remito; el precio unitario del remito solo si puede modificar precio.
+     * Sin permiso se conservan los de la OC para poder confirmar la COM.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarPreciosOcrSegunPermiso(array $lineas, bool $puedeModificarPrecio): array
+    {
+        if ($puedeModificarPrecio) {
+            return $lineas;
+        }
+
+        foreach ($lineas as &$linea) {
+            $precioOc = (float) ($linea['precio_ordencompra'] ?? 0);
+            if ($precioOc <= 0) {
+                continue;
+            }
+            $linea['precio'] = $precioOc;
+            unset($linea['precio_solicitado']);
+            $linea['fl_precio_diferencia'] = false;
+        }
+        unset($linea);
+
+        return $lineas;
     }
 
     /**

@@ -200,12 +200,18 @@
         var tipoActual = String((fac && (fac.tipo_abrev || fac.tipo_label || fac.tipo)) || 'FC').toUpperCase();
         if (fac && (fac.origen || 'precarga') === 'precarga' && /^\d+$/.test(String(fac.id))) {
             var opciones = (asignarEstado.tiposOpciones && asignarEstado.tiposOpciones.length)
-                ? asignarEstado.tiposOpciones
+                ? asignarEstado.tiposOpciones.slice()
                 : [
                     { value: 'FC', label: 'FC — Factura' },
                     { value: 'NC', label: 'NC — Nota de crédito (no exige COM)' },
                     { value: 'ND', label: 'ND — Nota de débito (no exige COM)' }
                 ];
+            var tieneActual = opciones.some(function (opt) {
+                return String(opt.value || '').toUpperCase() === tipoActual;
+            });
+            if (tipoActual && !tieneActual) {
+                opciones.unshift({ value: tipoActual, label: tipoActual });
+            }
             var optsHtml = opciones.map(function (opt) {
                 var val = String(opt.value || '').toUpperCase();
                 var lab = opt.label || val;
@@ -217,7 +223,7 @@
                 '<select id="bandejaAsigTipoDoc" class="form-control form-control-sm js-bandeja-asig-tipo" data-precarga-id="' + esc(String(fac.id)) + '">' +
                 optsHtml +
                 '</select>' +
-                '<small class="form-text text-muted">En OC con varios centros de costo podés pasar de FIB a FGA (gastronomía).</small>' +
+                '<small class="form-text text-muted">Podés corregir el tipo fino (p. ej. FIB ↔ FIS en servicios/prepagas, o FGA gastronomía).</small>' +
                 '</div>'
             );
         }
@@ -299,7 +305,14 @@
         asignarEstado.tiposOpciones = (paquete && paquete.tipos_opciones) || [];
         asignarEstado.mapa = {};
         facs.forEach(function (f) {
-            var key = String(f.id);
+            // Solo comprobantes pendientes del envío. Los cp-* (ya en CxP sin precarga) no se asignan.
+            var idStr = String(f.id);
+            var esPrecargaNum = /^\d+$/.test(idStr);
+            var esAnita = /^anita-\d+$/i.test(idStr);
+            if (f.cargado_cxp || (!esPrecargaNum && !esAnita)) {
+                return;
+            }
+            var key = idStr;
             var ids = asignadas[key] || asignadas[f.id] || [];
             asignarEstado.mapa[key] = ids.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; });
         });
@@ -613,6 +626,10 @@
             var $form = $(this);
             var asignaciones = [];
             Object.keys(asignarEstado.mapa).forEach(function (preId) {
+                var idStr = String(preId);
+                if (!/^\d+$/.test(idStr) && !/^anita-\d+$/i.test(idStr)) {
+                    return;
+                }
                 asignaciones.push({
                     precarga_id: preId,
                     recepcion_ids: asignarEstado.mapa[preId] || []
