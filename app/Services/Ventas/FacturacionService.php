@@ -5524,8 +5524,15 @@ class FacturacionService
 			RemitoFormularioLeyendaSupport::paraCompLeyenda((string) ($venta['leyenda'] ?? ''))
 		);
 
-		// Filtra lugar de entrega
-		$lugarEntrega = preg_replace('([^A-Za-z0-9])', '', $venta['lugarentrega']);
+		// Lugar de entrega a Anita: conservar espacios y puntuación habitual de domicilio.
+		// Solo se limpian caracteres problemáticos para el SQL Informix (comillas / backslash).
+		$lugarEntrega = trim((string) ($venta['lugarentrega'] ?? ''));
+		if (! \App\Support\Ventas\ClienteEntregaPedidoSupport::nombreEsUsable($lugarEntrega)) {
+			$lugarEntrega = '';
+		} else {
+			$lugarEntrega = str_replace(["'", '\\'], [' ', ''], $lugarEntrega);
+			$lugarEntrega = preg_replace('/\s+/', ' ', $lugarEntrega) ?? $lugarEntrega;
+		}
 
 		// Graba comprob
 		$exento = $dataCAE['exento']+$dataCAE['nogravado'];

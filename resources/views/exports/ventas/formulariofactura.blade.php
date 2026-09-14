@@ -41,10 +41,11 @@
             : ($nombreClienteFactura !== '' ? $nombreClienteFactura : $codigoClienteFactura);
     }
 
-    $itemsFactura = array_values(is_array($tblItem) ? $tblItem : []);
-    if ($facturaPdfEsFerli) {
-        $itemsFactura = RemitoPdfAgrupacionFerliSupport::agruparItemsFacturaPorSkuPrecio($itemsFactura);
-    }
+    $itemsOrigen = array_values(is_array($tblItem) ? $tblItem : []);
+    // Factura Ferli: agrupa por SKU+precio (sin talles). Remito usa el origen con medidas.
+    $itemsFactura = $facturaPdfEsFerli
+        ? RemitoPdfAgrupacionFerliSupport::agruparItemsFacturaPorSkuPrecio($itemsOrigen)
+        : $itemsOrigen;
     $totalesDocumento = [
         'cantidad' => 0.0,
         'kilodescuento' => 0.0,
@@ -66,8 +67,8 @@
     $tipoPaginacion = $facturaPdfRemitoDebajoCliente ? 'admin' : 'pos';
     $paginasFactura = FacturaPdfPaginacionSupport::paginas($itemsFactura, $tipoPaginacion);
     $itemsRemito = $facturaPdfEsFerli
-        ? RemitoPdfAgrupacionFerliSupport::agruparItems($itemsFactura)
-        : $itemsFactura;
+        ? RemitoPdfAgrupacionFerliSupport::agruparItems($itemsOrigen)
+        : $itemsOrigen;
     $totalesRemito = [
         'cantidad' => 0.0,
         'kilodescuento' => 0.0,
@@ -84,7 +85,7 @@
         || ($facturaPdfSoloHojaRemito ?? false);
     $valorAsegurado = \App\Support\Ventas\RemitoValorAseguradoSupport::desdeRemitoOItemsFactura(
         $venta->remitos?->remito_articulos,
-        $itemsFactura
+        $itemsOrigen
     );
     $leyendasRemito = \App\Support\Ventas\RemitoFormularioLeyendaSupport::desdeVenta($venta);
     $totalKilosRemito = (float) ($totalesDocumento['cantidad'] ?? 0);
