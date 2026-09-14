@@ -1,11 +1,12 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\SuitecrmPermiso;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Limpia permisos vinculados a menú Artículos (stock/articulo) que AGG no usa:
+ * AGG: limpia permisos vinculados a menú Artículos (stock/articulo) que AGG no usa:
  * - Ferli / product (diseño, técnica, contaduría, combinaciones)
  * - filtrar-articulos (sin can() en código)
  * - fórmula plural legacy (editar/actualizar-formula-articulos); el CRUD real usa
@@ -47,6 +48,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return;
+        }
+
         foreach (self::FORMULA_PLURAL_A_SINGULAR as $plural => $singular) {
             $this->transferirRoles($plural, $singular);
         }
@@ -62,6 +67,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return;
+        }
+
         $menuId = (int) (DB::table('menu')->where('url', 'stock/articulo')->value('id') ?? 0);
         if ($menuId <= 0) {
             return;

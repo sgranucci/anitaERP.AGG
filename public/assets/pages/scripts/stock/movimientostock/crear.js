@@ -144,6 +144,10 @@
 		}
 		var fl_todas_las_combinaciones = $tr.find('input:checkbox.checkCombinacion:checked').val();
 		var fl_todos_los_articulos = $tr.find('input:checkbox.checkSinFiltro:checked').val();
+		var selectedId = combinacion_id ? String(combinacion_id) : '';
+		if (!selectedId) {
+			selectedId = String($tr.find('.combinacion_id_previa').val() || '');
+		}
 
 		if (fl_todas_las_combinaciones == 'on' || fl_todos_los_articulos == 'on' || flsinfiltro)
 			var url_comb = carpetaBase+'/stock/leercombinaciones/';
@@ -151,17 +155,32 @@
 			var url_comb = carpetaBase+'/stock/leercombinacionesactivas/';
 
         $.get(url_comb+articulo_id, function(data){
-            var comb = $.map(data, function(value, index){
+            var comb = $.map(data || [], function(value){
                 return [value];
             });
-            $tr.find('.combinacion').empty();
-            $tr.find('.combinacion').append('<option value=""></option>');
+			var $sel = $tr.find('.combinacion');
+            $sel.empty();
+            $sel.append('<option value=""></option>');
+			var found = false;
             $.each(comb, function(index,value){
-				if (value.id == combinacion_id)
-                	$tr.find('.combinacion').append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
-				else
-                	$tr.find('.combinacion').append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
+				var idStr = String(value.id);
+				var label = value.codigo+'-'+value.nombre;
+				if (idStr === selectedId) {
+					$sel.append($('<option></option>').val(idStr).text(label).prop('selected', true));
+					found = true;
+				} else {
+					$sel.append($('<option></option>').val(idStr).text(label));
+				}
             });
+			// Históricos Ferli: muchas combinaciones están inactivas; si el AJAX
+			// filtró activas o falló el match, conservar la previa ya grabada.
+			if (selectedId && !found) {
+				var labelPrev = ($tr.find('.desc_combinacion').val() || '').trim() || selectedId;
+				$sel.append($('<option></option>').val(selectedId).text(labelPrev).prop('selected', true));
+			}
+			if (selectedId) {
+				$sel.val(selectedId);
+			}
         });
     }
 
@@ -171,26 +190,43 @@
 		if (!articulo_id) {
 			return;
 		}
+		var selectedId = modulo_id ? String(modulo_id) : '';
+		if (!selectedId) {
+			selectedId = String($tr.find('.modulo_id_previa').val() || '');
+		}
 		var flTieneModuloAbierto = false;
-        $.get(carpetaBase+'/stock/leermodulos/'+articulo_id+'/'+modulo_id, function(data){
-            var mod = $.map(data, function(value, index){
+        $.get(carpetaBase+'/stock/leermodulos/'+articulo_id+'/'+(selectedId || '0'), function(data){
+            var mod = $.map(data || [], function(value){
                 return [value];
             });
-            $tr.find('.modulo').empty();
-            $tr.find('.modulo').append('<option value=""></option>');
+			var $sel = $tr.find('.modulo');
+            $sel.empty();
+            $sel.append('<option value=""></option>');
 			flTieneModuloAbierto = false;
+			var found = false;
             $.each(mod, function(index,value){
-			  	if (value.id == 30)
+			  	if (String(value.id) === '30')
 				  	flTieneModuloAbierto = true;
 
-				if (value.id == modulo_id)
-                	$tr.find('.modulo').append('<option value="'+value.id+'" selected>'+value.nombre+'</option>');
-				else
-                	$tr.find('.modulo').append('<option value="'+value.id+'">'+value.nombre+'</option>');
+				var idStr = String(value.id);
+				if (idStr === selectedId) {
+                	$sel.append($('<option></option>').val(idStr).text(value.nombre).prop('selected', true));
+					found = true;
+				} else {
+                	$sel.append($('<option></option>').val(idStr).text(value.nombre));
+				}
             });
 
 			if (!flTieneModuloAbierto)
-            	$tr.find('.modulo').append('<option value="30">Abierto</option>');
+            	$sel.append('<option value="30">Abierto</option>');
+
+			if (selectedId && !found) {
+				var labelPrev = ($tr.find('.desc_modulo').val() || '').trim() || selectedId;
+				$sel.append($('<option></option>').val(selectedId).text(labelPrev).prop('selected', true));
+			}
+			if (selectedId) {
+				$sel.val(selectedId);
+			}
         });
     }
 

@@ -1270,6 +1270,17 @@ class CobranzaService
 
 				$ctermae = $apiAnita->apiCallEscritura($grabaAnita);
 
+				// Vincula nro interno Anita al cheque ERP recién grabado (cartera CHT).
+				$chequeErp = \App\Models\Caja\Cheque::query()
+					->where('origen', 'R')
+					->whereNull('nro_interno_anita')
+					->where('cliente_id', $data['cliente_id'] ?? null)
+					->where('numerocheque', (string) ($numerocheques[$i] ?? ''))
+					->orderByDesc('id')
+					->first();
+				if ($chequeErp) {
+					$this->chequeRepository->vincularNroInternoAnita((int) $chequeErp->id, (int) $numeroInterno);
+				}
 
 				// Graba auxpag del comprobante
 				$apiAnita = new ApiAnita();

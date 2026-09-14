@@ -7,6 +7,7 @@ use RuntimeException;
 
 /**
  * Lectura Anita: compra + promov + aplmovp (+ concmov como detalle de compra).
+ * Campos de compra/promov según instalación (Ferli sin *_empresa / FCE).
  */
 final class ComprobanteProveedorAnitaImportBridgeReader
 {
@@ -29,42 +30,23 @@ final class ComprobanteProveedorAnitaImportBridgeReader
         ?int $fechaDesdeYmd = null,
         ?int $fechaHastaYmd = null,
         ?int $empresaCodigo = null,
+        bool $filtrarPorFechaIva = false,
     ): array {
+        $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
         $prov = ComprobanteProveedorAnitaImportClaveSupport::proveedorCodigoAnita($proveedorCodigo);
+        $colFecha = $filtrarPorFechaIva ? 'com_fecha_iva' : 'com_fecha';
         $where = " WHERE com_proveedor = '".$this->esc($prov)."'";
         if ($fechaDesdeYmd !== null && $fechaDesdeYmd > 0) {
-            $where .= ' AND com_fecha >= '.(int) $fechaDesdeYmd;
+            $where .= ' AND '.$colFecha.' >= '.(int) $fechaDesdeYmd;
         }
         if ($fechaHastaYmd !== null && $fechaHastaYmd > 0) {
-            $where .= ' AND com_fecha <= '.(int) $fechaHastaYmd;
+            $where .= ' AND '.$colFecha.' <= '.(int) $fechaHastaYmd;
         }
-        if ($empresaCodigo !== null && $empresaCodigo > 0) {
+        if ($perfil['tiene_empresa'] && $empresaCodigo !== null && $empresaCodigo > 0) {
             $where .= ' AND com_empresa = '.(int) $empresaCodigo;
         }
 
-        $campos = implode(', ', [
-            'com_proveedor',
-            'com_tipo',
-            'com_letra',
-            'com_sucursal',
-            'com_nro',
-            'com_fecha',
-            'com_fecha_iva',
-            'com_monto',
-            'com_cod_mon',
-            'com_cotizacion',
-            'com_nro_interno',
-            'com_condicion_pago',
-            'com_cond_iva_prov',
-            'com_empresa',
-            'com_es_fce',
-            'com_fecha_prox_vto',
-            'com_cuit_prov',
-            'com_nombre_prov',
-            'com_leyenda',
-        ]);
-
-        return $this->listar('compra', $campos, $where, 'com_fecha, com_nro_interno');
+        return $this->listar('compra', $perfil['campos_compra'], $where, $colFecha.', com_nro_interno');
     }
 
     /**
@@ -76,15 +58,18 @@ final class ComprobanteProveedorAnitaImportBridgeReader
         ?int $fechaDesdeYmd = null,
         ?int $fechaHastaYmd = null,
         ?int $empresaCodigo = null,
+        bool $filtrarPorFechaIva = false,
     ): array {
+        $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $colFecha = $filtrarPorFechaIva ? 'com_fecha_iva' : 'com_fecha';
         $where = ' WHERE 1=1';
         if ($fechaDesdeYmd !== null && $fechaDesdeYmd > 0) {
-            $where .= ' AND com_fecha >= '.(int) $fechaDesdeYmd;
+            $where .= ' AND '.$colFecha.' >= '.(int) $fechaDesdeYmd;
         }
         if ($fechaHastaYmd !== null && $fechaHastaYmd > 0) {
-            $where .= ' AND com_fecha <= '.(int) $fechaHastaYmd;
+            $where .= ' AND '.$colFecha.' <= '.(int) $fechaHastaYmd;
         }
-        if ($empresaCodigo !== null && $empresaCodigo > 0) {
+        if ($perfil['tiene_empresa'] && $empresaCodigo !== null && $empresaCodigo > 0) {
             $where .= ' AND com_empresa = '.(int) $empresaCodigo;
         }
         // Informix: GROUP BY en whereArmado; el bridge no arma SELECT DISTINCT limpio.
@@ -111,6 +96,7 @@ final class ComprobanteProveedorAnitaImportBridgeReader
         ?int $fechaHastaYmd = null,
         ?int $empresaCodigo = null,
     ): array {
+        $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
         $prov = ComprobanteProveedorAnitaImportClaveSupport::proveedorCodigoAnita($proveedorCodigo);
         $where = " WHERE prov_proveedor = '".$this->esc($prov)."'";
         if ($fechaDesdeYmd !== null && $fechaDesdeYmd > 0) {
@@ -119,33 +105,16 @@ final class ComprobanteProveedorAnitaImportBridgeReader
         if ($fechaHastaYmd !== null && $fechaHastaYmd > 0) {
             $where .= ' AND prov_fecha <= '.(int) $fechaHastaYmd;
         }
-        if ($empresaCodigo !== null && $empresaCodigo > 0) {
+        if ($perfil['tiene_empresa'] && $empresaCodigo !== null && $empresaCodigo > 0) {
             $where .= ' AND prov_empresa = '.(int) $empresaCodigo;
         }
 
-        $campos = implode(', ', [
-            'prov_proveedor',
-            'prov_tipo',
-            'prov_letra',
-            'prov_sucursal',
-            'prov_nro',
-            'prov_ref_tipo',
-            'prov_ref_letra',
-            'prov_ref_sucursal',
-            'prov_ref_nro',
-            'prov_fecha',
-            'prov_fecha_vto',
-            'prov_monto',
-            'prov_cod_mon',
-            'prov_cotizacion',
-            'prov_nro_cuota',
-            'prov_t_pagado',
-            'prov_fecha_pago',
-            'prov_nro_interno',
-            'prov_empresa',
-        ]);
-
-        return $this->listar('promov', $campos, $where, 'prov_fecha, prov_nro, prov_nro_cuota');
+        return $this->listar(
+            $perfil['tabla_promov'],
+            $perfil['campos_promov'],
+            $where,
+            'prov_fecha, prov_nro, prov_nro_cuota'
+        );
     }
 
     /**
@@ -156,6 +125,7 @@ final class ComprobanteProveedorAnitaImportBridgeReader
         ?int $fechaDesdeYmd = null,
         ?int $fechaHastaYmd = null,
     ): array {
+        $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
         $prov = ComprobanteProveedorAnitaImportClaveSupport::proveedorCodigoAnita($proveedorCodigo);
         $where = " WHERE aplvp_proveedor = '".$this->esc($prov)."'";
         if ($fechaDesdeYmd !== null && $fechaDesdeYmd > 0) {
@@ -165,23 +135,9 @@ final class ComprobanteProveedorAnitaImportBridgeReader
             $where .= ' AND aplvp_fecha <= '.(int) $fechaHastaYmd;
         }
 
-        $campos = implode(', ', [
-            'aplvp_proveedor',
-            'aplvp_tipo',
-            'aplvp_letra',
-            'aplvp_sucursal',
-            'aplvp_nro',
-            'aplvp_fecha',
-            'aplvp_monto',
-            'aplvp_tipo_cob',
-            'aplvp_letra_cob',
-            'aplvp_sucursal_cob',
-            'aplvp_nro_cob',
-        ]);
-
         return $this->listar(
-            (string) config('comprobante_proveedor.anita_tabla_aplmovp', 'aplmovp'),
-            $campos,
+            $perfil['tabla_aplmovp'],
+            $perfil['campos_aplmovp'],
             $where,
             'aplvp_fecha, aplvp_nro'
         );
@@ -255,6 +211,6 @@ final class ComprobanteProveedorAnitaImportBridgeReader
 
     private function esc(string $valor): string
     {
-        return str_replace("'", '', $valor);
+        return str_replace("'", "''", $valor);
     }
 }

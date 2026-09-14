@@ -5,7 +5,7 @@ namespace App\Repositories\Caja;
 use App\Models\Caja\Conceptogasto;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
-use Auth;
+use Illuminate\Support\Facades\Log;
 
 class ConceptogastoRepository implements ConceptogastoRepositoryInterface
 {
@@ -141,11 +141,27 @@ class ConceptogastoRepository implements ConceptogastoRepositoryInterface
     		                        coper_concepto",
 						'tabla' => 'concoper',
                         'orderby' => 'coper_concepto');
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall($data));
 
-        foreach ($dataAnita as $value) {
-            if ($value->coper_concepto != '0')
-                $this->traerRegistroDeAnita($value->coper_concepto);
+        // En entornos sin tabla concoper (p. ej. Ferli) o sin filas: listado local vacío, sin error.
+        if ($parsed['error_lectura'] !== null) {
+            $this->logAnitaOpcional('conceptogasto.sync_anita', [
+                'mensaje' => $parsed['error_lectura'],
+                'tabla' => 'concoper',
+            ]);
+
+            return;
+        }
+
+        if ($parsed['filas'] === []) {
+            return;
+        }
+
+        foreach ($parsed['filas'] as $value) {
+            $codigo = (string) ($value->coper_concepto ?? '');
+            if ($codigo !== '0' && $codigo !== '') {
+                $this->traerRegistroDeAnita($codigo);
+            }
         }
 
         $this->traerRegistroDeAnita('0');
@@ -162,57 +178,79 @@ class ConceptogastoRepository implements ConceptogastoRepositoryInterface
 			',
             'whereArmado' => " WHERE coper_concepto = '".$key."' "
         );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall($data));
 
-		$usuario_id = Auth::user()->id;
-
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-			$arr_campos = [
-				"nombre" => $data->coper_desc,
-            	];
-	
-        	$conceptogasto = $this->model->create($arr_campos);
+        if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
+            return;
         }
+
+        $data = $parsed['filas'][0];
+
+        $arr_campos = [
+            "nombre" => $data->coper_desc,
+        ];
+
+        $this->model->create($arr_campos);
     }
 
 	public function guardarAnita($request, $id) {
-        $apiAnita = new ApiAnita();
-
-        $data = array( 'tabla' => 'concoper', 
+        $this->escribirAnitaOpcional(array(
+            'tabla' => 'concoper',
             'acc' => 'insert',
             'sistema' => 'che_ban',
-            'campos' => ' 
+            'campos' => '
                 coper_concepto,
                 coper_desc
 				',
-            'valores' => " 
-				'".$id."', 
+            'valores' => "
+				'".$id."',
                 '".$request['nombre']."' "
-        );
-        $apiAnita->apiCallEscritura($data);
+        ), 'concoper insert');
 	}
 
 	public function actualizarAnita($request, $id) {
-        $apiAnita = new ApiAnita();
-
-		$data = array( 'acc' => 'update', 
-                'tabla' => 'concoper', 
-                'sistema' => 'che_ban',
-				'valores' => " 
+        $this->escribirAnitaOpcional(array(
+            'acc' => 'update',
+            'tabla' => 'concoper',
+            'sistema' => 'che_ban',
+            'valores' => "
                 coper_desc = '".$request['nombre']."' "
-					,
-				'whereArmado' => " WHERE coper_concepto = '".$id."' " );
-        $apiAnita->apiCallEscritura($data);
+            ,
+            'whereArmado' => " WHERE coper_concepto = '".$id."' "
+        ), 'concoper update');
 	}
 
 	public function eliminarAnita($id) {
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 'tabla' => 'concoper', 
-                'sistema' => 'che_ban',
-				'whereArmado' => " WHERE coper_concepto = '".$id."' " );
-        $apiAnita->apiCallEscritura($data);
+        $this->escribirAnitaOpcional(array(
+            'acc' => 'delete',
+            'tabla' => 'concoper',
+            'sistema' => 'che_ban',
+            'whereArmado' => " WHERE coper_concepto = '".$id."' "
+        ), 'concoper delete');
 	}
+
+    /**
+     * Escritura Anita best-effort: si la tabla no existe en el entorno, no tumba el ABM local.
+     */
+    private function escribirAnitaOpcional(array $payload, string $contexto): void
+    {
+        try {
+            (new ApiAnita())->apiCallEscritura($payload, $contexto);
+        } catch (\Throwable $e) {
+            $this->logAnitaOpcional('conceptogasto.anita_escritura', [
+                'contexto' => $contexto,
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function logAnitaOpcional(string $evento, array $contexto): void
+    {
+        try {
+            Log::warning($evento, $contexto);
+        } catch (\Throwable $e) {
+            // No tumbar el ABM si el log no es escribible.
+        }
+    }
 	
 }

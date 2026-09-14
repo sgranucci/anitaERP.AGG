@@ -13,7 +13,8 @@ class Ordentrabajo_Combinacion_Talle extends Model
 
 	public function clientes()
 	{
-    	return $this->belongsTo(Cliente::class, 'cliente_id', 'id')->with('tipossuspensioncliente');
+    	// OT históricas deben mostrar el cliente aunque esté dado de baja (SoftDeletes)
+    	return $this->belongsTo(Cliente::class, 'cliente_id', 'id')->withTrashed()->with('tipossuspensioncliente');
 	}
 
 	public function pedido_combinacion_talles()

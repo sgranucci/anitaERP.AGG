@@ -2,6 +2,7 @@
 
 namespace App\Support\Stock;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
@@ -13,6 +14,7 @@ use Illuminate\Http\Request;
  *
  * El estado (activo/inactivo) es filtro externo principal; el panel inteligente
  * aplica sobre el subconjunto ya filtrado por estado.
+ * En Ferli: filtro externo adicional por canal (LOCAL / sin canal / todos).
  */
 class ArticuloListadoFiltros
 {
@@ -23,6 +25,12 @@ class ArticuloListadoFiltros
     public const ESTADO_ACTIVO = 'ACTIVO';
 
     public const ESTADO_INACTIVO = 'INACTIVO';
+
+    /** Sin filtro de canal (todos los artículos). */
+    public const CANAL_TODOS = '';
+
+    /** Artículos sin ninguna fila en articulo_canal. */
+    public const CANAL_SIN = 'SIN';
 
     /** Tipos de imputación de articulo_cuentacontable (venta / compra / gasto). */
     private const TIPOS_IMPUTACION_FILTRO = [
@@ -136,9 +144,17 @@ class ArticuloListadoFiltros
         'menor' => 'Menor que',
     ];
 
+    public static function filtroCanalActivo(): bool
+    {
+        return EntornoEmpresaSupport::esFerli();
+    }
+
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
         $estado = self::resolverEstadoExterno($request);
+        $canal = self::filtroCanalActivo()
+            ? self::resolverCanalExterno($request)
+            : self::CANAL_TODOS;
         [$empresaId, $empresaScope] = self::filtroEmpresaActivo()
             ? self::resolverEmpresaExterna($request, $empresaDefault)
             : [null, 'todas'];
@@ -146,6 +162,7 @@ class ArticuloListadoFiltros
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
             return array_merge(self::filtrosVacios(), [
                 'estado' => $estado,
+                'canal' => $canal,
                 'empresa_id' => $empresaId,
                 'empresa_scope' => $empresaScope,
             ]);
@@ -185,6 +202,7 @@ class ArticuloListadoFiltros
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
             'estado' => $estado,
+            'canal' => $canal,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
         ];
@@ -225,6 +243,26 @@ class ArticuloListadoFiltros
         return self::ESTADO_ACTIVO;
     }
 
+    /**
+     * Filtro externo Ferli: canal de venta (default todos).
+     * filtro_canal=TODOS | SIN | LOCAL (u otro código de canal activo).
+     */
+    private static function resolverCanalExterno(Request $request): string
+    {
+        $canalInput = strtoupper(trim((string) $request->input('filtro_canal', '')));
+        if ($canalInput === '' || $canalInput === 'TODOS' || $request->boolean('canal_todos')) {
+            return self::CANAL_TODOS;
+        }
+        if ($canalInput === self::CANAL_SIN) {
+            return self::CANAL_SIN;
+        }
+        if (preg_match('/^[A-Z0-9_-]{1,30}$/', $canalInput) === 1) {
+            return $canalInput;
+        }
+
+        return self::CANAL_TODOS;
+    }
+
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
         if (self::tieneCriteriosTexto($filtros)) {
@@ -232,6 +270,10 @@ class ArticuloListadoFiltros
         }
 
         if (($filtros['estado'] ?? self::ESTADO_ACTIVO) !== self::ESTADO_ACTIVO) {
+            return true;
+        }
+
+        if (self::filtroCanalActivo() && ($filtros['canal'] ?? self::CANAL_TODOS) !== self::CANAL_TODOS) {
             return true;
         }
 
@@ -267,7 +309,7 @@ class ArticuloListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, estado: string, empresa_id: ?int, empresa_scope: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, estado: string, canal: string, empresa_id: ?int, empresa_scope: string}
      */
     public static function filtrosVacios(): array
     {
@@ -279,6 +321,7 @@ class ArticuloListadoFiltros
             'valor_hasta' => '',
             'busqueda' => '',
             'estado' => self::ESTADO_ACTIVO,
+            'canal' => self::CANAL_TODOS,
             'empresa_id' => null,
             'empresa_scope' => 'una',
         ];
@@ -330,6 +373,13 @@ class ArticuloListadoFiltros
             $params['filtro_estado'] = $estado;
         }
 
+        if (self::filtroCanalActivo()) {
+            $canal = (string) ($filtros['canal'] ?? self::CANAL_TODOS);
+            if ($canal !== self::CANAL_TODOS) {
+                $params['filtro_canal'] = $canal;
+            }
+        }
+
         return $params;
     }
 
@@ -348,8 +398,11 @@ class ArticuloListadoFiltros
 
         $estado = $filtros['estado'] ?? self::ESTADO_ACTIVO;
         if ($estado !== '') {
-            $query->where('articulo.estado', $estado);
+            $canal = (string) ($filtros['canal'] ?? self::CANAL_TODOS);
+            \App\Support\Stock\ArticuloEstadoCanalSupport::aplicarFiltroEstadoListado($query, $estado, $canal);
         }
+
+        self::aplicarCanalExterno($query, $filtros);
 
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio') {
@@ -366,6 +419,40 @@ class ArticuloListadoFiltros
         }
 
         self::aplicarBusquedaGlobal($query, $operador, $valor);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Stock\Articulo>  $query
+     */
+    private static function aplicarCanalExterno(Builder $query, array $filtros): void
+    {
+        if (! self::filtroCanalActivo()) {
+            return;
+        }
+
+        $canal = (string) ($filtros['canal'] ?? self::CANAL_TODOS);
+        if ($canal === self::CANAL_TODOS) {
+            return;
+        }
+
+        if ($canal === self::CANAL_SIN) {
+            $query->whereNotExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('articulo_canal')
+                    ->whereColumn('articulo_canal.articulo_id', 'articulo.id');
+            });
+
+            return;
+        }
+
+        $query->whereExists(function ($q) use ($canal) {
+            $q->selectRaw('1')
+                ->from('articulo_canal')
+                ->join('canal', 'canal.id', '=', 'articulo_canal.canal_id')
+                ->whereColumn('articulo_canal.articulo_id', 'articulo.id')
+                ->where('canal.codigo', $canal)
+                ->where('canal.activo', true);
+        });
     }
 
     /**

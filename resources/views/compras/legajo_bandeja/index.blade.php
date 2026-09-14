@@ -629,7 +629,12 @@ Bandeja de legajos
                                     @if ($hayFacPendiente)
                                         @foreach ($row['facturas_legajo'] as $facLeg)
                                             <div class="bandeja-fac-item">
-                                                <span>{{ $facLeg['numero'] ?? '' }}</span>
+                                                @if (!empty($facLeg['url_pdf']))
+                                                    <a href="{{ $facLeg['url_pdf'] }}" class="text-primary" target="_blank" rel="noopener"
+                                                       title="Abrir PDF en pantalla completa">{{ $facLeg['numero'] ?? '' }}</a>
+                                                @else
+                                                    <span>{{ $facLeg['numero'] ?? '' }}</span>
+                                                @endif
                                                 @if (!empty($facLeg['estado']))
                                                     @php
                                                         $estadoFac = (string) ($facLeg['estado'] ?? '');

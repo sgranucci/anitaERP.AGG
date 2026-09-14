@@ -27,7 +27,7 @@ final class GastronomiaVentaDisplaySupport
             return trim((string) $venta->nombre);
         }
 
-        return trim((string) ($venta->clientes->nombre ?? '')) ?: '—';
+        return trim((string) ($venta->clientes?->nombre ?? '')) ?: '—';
     }
 
     public static function domicilioReceptorFactura(?Venta $venta): string
@@ -40,7 +40,7 @@ final class GastronomiaVentaDisplaySupport
             return trim((string) ($venta->domicilio ?? ''));
         }
 
-        return trim((string) ($venta->clientes->domicilio ?? ''));
+        return trim((string) ($venta->clientes?->domicilio ?? ''));
     }
 
     public static function documentoReceptorFactura(?Venta $venta): string
@@ -54,9 +54,13 @@ final class GastronomiaVentaDisplaySupport
             if ($doc !== '') {
                 return $doc;
             }
+            $cuit = trim((string) ($venta->nroinscripcion ?? ''));
+            if ($cuit !== '') {
+                return $cuit;
+            }
         }
 
-        return trim((string) ($venta->clientes->numerodocumento ?? ''));
+        return trim((string) ($venta->clientes?->numerodocumento ?? $venta->nroinscripcion ?? ''));
     }
 
     public static function abreviaturaDocumentoReceptorFactura(?Venta $venta): string
@@ -65,7 +69,7 @@ final class GastronomiaVentaDisplaySupport
             return 'Doc.';
         }
 
-        $abreviatura = trim((string) ($venta->clientes->tipodocumentos->abreviatura ?? ''));
+        $abreviatura = trim((string) ($venta->clientes?->tipodocumentos?->abreviatura ?? ''));
 
         return $abreviatura !== '' ? $abreviatura : 'Doc.';
     }
@@ -76,7 +80,7 @@ final class GastronomiaVentaDisplaySupport
             return '';
         }
 
-        return trim((string) ($venta->clientes->codigo ?? ''));
+        return trim((string) ($venta->clientes?->codigo ?? ''));
     }
 
     /**

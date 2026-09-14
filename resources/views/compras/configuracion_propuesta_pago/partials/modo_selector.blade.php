@@ -38,11 +38,11 @@
                 </div>
                 <div class="cp-flujo-diagrama" aria-hidden="true">
                     <div class="cp-flujo-track">
-                        <div class="cp-flujo-nodo"><span class="cp-flujo-nodo__code">PR</span><span class="cp-flujo-nodo__label">Propuesta</span></div>
+                        <div class="cp-flujo-nodo cp-flujo-nodo--fac"><span class="cp-flujo-nodo__code">PR</span><span class="cp-flujo-nodo__label">Propuesta</span></div>
                         <div class="cp-flujo-flecha"><span></span></div>
-                        <div class="cp-flujo-nodo cp-flujo-nodo--obligatorio"><span class="cp-flujo-nodo__code">AP</span><span class="cp-flujo-nodo__label">Árbol lote</span></div>
+                        <div class="cp-flujo-nodo cp-flujo-nodo--far cp-flujo-nodo--obligatorio"><span class="cp-flujo-nodo__code">AP</span><span class="cp-flujo-nodo__label">Árbol lote</span></div>
                         <div class="cp-flujo-flecha"><span></span></div>
-                        <div class="cp-flujo-nodo"><span class="cp-flujo-nodo__code">OP</span><span class="cp-flujo-nodo__label">Órdenes pago</span></div>
+                        <div class="cp-flujo-nodo cp-flujo-nodo--com"><span class="cp-flujo-nodo__code">OP</span><span class="cp-flujo-nodo__label">Órdenes pago</span></div>
                     </div>
                 </div>
                 <ul class="cp-flujo-card__bullets text-left mb-0">
@@ -68,11 +68,11 @@
                 </div>
                 <div class="cp-flujo-diagrama" aria-hidden="true">
                     <div class="cp-flujo-track">
-                        <div class="cp-flujo-nodo"><span class="cp-flujo-nodo__code">PR</span><span class="cp-flujo-nodo__label">Propuesta</span></div>
+                        <div class="cp-flujo-nodo cp-flujo-nodo--fac"><span class="cp-flujo-nodo__code">PR</span><span class="cp-flujo-nodo__label">Propuesta</span></div>
                         <div class="cp-flujo-flecha"><span></span></div>
-                        <div class="cp-flujo-nodo"><span class="cp-flujo-nodo__code">OK</span><span class="cp-flujo-nodo__label">Auto-autoriza</span></div>
+                        <div class="cp-flujo-nodo cp-flujo-nodo--oc"><span class="cp-flujo-nodo__code">OK</span><span class="cp-flujo-nodo__label">Auto-autoriza</span></div>
                         <div class="cp-flujo-flecha"><span></span></div>
-                        <div class="cp-flujo-nodo"><span class="cp-flujo-nodo__code">OP</span><span class="cp-flujo-nodo__label">Órdenes pago</span></div>
+                        <div class="cp-flujo-nodo cp-flujo-nodo--com"><span class="cp-flujo-nodo__code">OP</span><span class="cp-flujo-nodo__label">Órdenes pago</span></div>
                     </div>
                 </div>
                 <ul class="cp-flujo-card__bullets text-left mb-0">

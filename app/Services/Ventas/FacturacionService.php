@@ -43,8 +43,11 @@ use App\Repositories\Stock\LoteRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\ArcaFacturaQrSupport;
+use App\Support\Ventas\QrCodePngSupport;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
@@ -128,7 +131,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use LynX39\LaraPdfMerger\Facades\PdfMerger;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
 use Carbon\Carbon;
 use App;
 use Auth;
@@ -3469,7 +3471,54 @@ class FacturacionService
 			}
 		}
 		$this->sincronizarLugarEntregaFacturaOt($pedido);
+
+		return $this->emitirFacturaOtDesdeDataFactura(
+			$data,
+			$dataFactura,
+			$cliente,
+			$pedido,
+			$moneda_id,
+			$fechaFactura,
+			$leyenda,
+			$actividad_arca_id,
+			$deposito,
+			$puntoventa_id,
+			$tipoTransaccion_id,
+			$pedidos_combinacion_id,
+			$ordenestrabajo_id
+		);
+	}
+
+	/**
+	 * Emite factura desde $dataFactura ya armado (OT o picking).
+	 * Hook $despuesGrabarVenta corre dentro de la transacción tras marcar OT.
+	 *
+	 * @param  callable|null  $despuesGrabarVenta  fn($vta, array $dataFactura): void
+	 */
+	protected function emitirFacturaOtDesdeDataFactura(
+		array $data,
+		array $dataFactura,
+		$cliente,
+		$pedido,
+		$moneda_id,
+		$fechaFactura,
+		$leyenda,
+		$actividad_arca_id,
+		$deposito,
+		$puntoventa_id,
+		$tipoTransaccion_id,
+		array $pedidos_combinacion_id,
+		array $ordenestrabajo_id,
+		?callable $despuesGrabarVenta = null
+	)
+	{
 		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $pedido);
+
+		$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id);
+		$letra = 'Z';
+		if ($condicioniva) {
+			$letra = $condicioniva->letra;
+		}
 
 		// Lee punto de venta (empresa jurídica = sucursal elegida)
 		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
@@ -3570,8 +3619,8 @@ class FacturacionService
 					);
 					
 					// Lee moneda
+					$codigoMoneda = 'PES';
 					$moneda = Moneda::find($moneda_id);
-					$codigomoneda = 'PES';
 					if ($moneda)
 					{
 						$codigoMoneda = $moneda->codigo;
@@ -3580,10 +3629,21 @@ class FacturacionService
 							$this->monedaExportacion = $moneda->nombre;
 					}
 
+					$cotizacion = 1.;
+					if ($codigoMoneda !== 'PES') {
+						$cot = $this->cotizacionService->leeCotizacionDiaria($fechaFactura, $moneda_id);
+						$cotizacion = (float) ($cot['cotizacionventa'] ?? 0);
+						if ($cotizacion <= 0) {
+							$cotizacion = 1.;
+						}
+					}
+
 					$dataCAE = [
-							'codigoempresa' => 1,
-							'tipodoc' => 80,
+							'codigoempresa' => $empresa->codigo,
+							'tipodoc' => $cliente->tipodocumentos?->codigoexterno ?? 80,
 							'numerodocumento' => $cliente->numerodocumento,
+							'nroinscripcion' => $cliente->numerodocumento ?? $cliente->nroinscripcion ?? null,
+							'condicioniva_id' => $cliente->condicioniva_id,
 							'numerocomprobante' => $numero,
 							'fechacomprobante' => date('Ymd', strtotime($fechaFactura)),
 							'total' => $totalComprobante,
@@ -3595,7 +3655,7 @@ class FacturacionService
 							'tributo' => $totalTributo,
 							'fechavencimiento' => date('Ymd', strtotime($cuentacorriente[0]['fechavencimiento'])),
 							'moneda' => $codigoMoneda,
-							'cotizacion' => 1,
+							'cotizacion' => ($codigoMoneda === 'PES' ? 1. : $cotizacion),
 							'tributos' => $tributos,
 							'impuestos' => $impuestos,
 							'comprobantesasociados' => $comprobantesAsociados,
@@ -3604,11 +3664,14 @@ class FacturacionService
 							'pais' => $cliente->paises?->codigo ?? '',
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
-							'formapago' => $cliente->condicionventas->nombre,
+							'formapago' => $cliente->condicionventas?->nombre ?? '',
 							'formapagoexportacion' => $this->formaPagoExportacion,
 							'incoterms' => $this->abreviaturaIncoterm,
 							'items' => $dataFactura
 					];
+				}
+				else {
+					$cotizacion = 1.;
 				}
 				// Graba la factura
 				DB::beginTransaction();
@@ -3629,7 +3692,7 @@ class FacturacionService
 						'transporte_id' => $this->transporteIdFacturaOt($data, $pedido),
 						'total' => $totalComprobante * $signo,
 						'moneda_id' => $moneda_id,
-						'cotizacion' => 1,
+						'cotizacion' => $cotizacion,
 						'estado' => ' ',
 						'usuario_id' => Auth::id(),
 						'leyenda' => $leyenda,
@@ -3684,6 +3747,7 @@ class FacturacionService
 								$impuesto = null;
 
 							$data = [
+									'venta_id' => $vta->id,
 									'concepto' => $conc['concepto'],
 									'baseimponible' => $conc['baseimponible'] ?? 0,
 									'tasa' => $conc['tasa'],
@@ -3703,7 +3767,7 @@ class FacturacionService
 							'cliente_id' => $cliente->id,
 							'total' => $cuota['total'] * $signo,
 							'moneda_id' => $moneda_id,
-							'cotizacion' => 1,
+							'cotizacion' => $cotizacion,
 							'venta_id' => $vta->id,
 							'cobranza_id' => null,
 							'empresa_id' => $puntoventa->empresa_id
@@ -3791,12 +3855,15 @@ class FacturacionService
 					}
 					// Graba contabilidad
 
-					// Marca OT como facturada
+					// Marca OT como facturada (omitir ot_id=0 en picking sin OT)
 					for ($i = 0; $i < count($ordenestrabajo_id); $i++)
 					{
-						$ordentrabajo_id = $ordenestrabajo_id[$i];
+						$ordentrabajo_id = (int) $ordenestrabajo_id[$i];
 						$pedido_combinacion_id = $pedidos_combinacion_id[$i];
-					
+						if ($ordentrabajo_id <= 0) {
+							continue;
+						}
+
 						$data['ordentrabajo_id'] = $ordentrabajo_id;
 						$data['tarea_id'] = config("consprod.TAREA_FACTURADA"); 
 						$data['desdefecha'] = Carbon::now();
@@ -3809,6 +3876,10 @@ class FacturacionService
 						$data['venta_id'] = $vta->id;
 
 						$ordentrabajo = $this->ordentrabajo_tareaRepository->create($data);
+					}
+
+					if ($despuesGrabarVenta) {
+						$despuesGrabarVenta($vta, $dataFactura);
 					}
 
 					if ($puntoventa->modofacturacion != 'M')
@@ -3833,9 +3904,30 @@ class FacturacionService
 						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3), 
 							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id);
 					}
+
+					// Remito físico ERP (Ferli OT / Bierzo FAC): misma regla que facturación por pedido.
+					if ($emiteRemito && (int) $numeroremito > 0 && $puntoventaremito) {
+						$persistRemito = app(\App\Services\Ventas\RemitoService::class)->persistirDesdeFactura([
+							'venta' => $vta,
+							'pedido' => $pedido,
+							'puntoventa_id' => $this->puntoventaremito_id,
+							'numero' => $numeroremito,
+							'items' => $dataFactura,
+							'origen' => 'factura',
+							'estadoremito' => \App\Support\Ventas\RemitoEstadosSupport::ESTADOREMITO_FACTURADO,
+							'estado' => 'F',
+							'venta_id' => $vta->id,
+							'pedido_id' => $pedido->id ?? null,
+							'sin_transaction' => true,
+						]);
+						if (! empty($persistRemito['error'])) {
+							throw new Exception('Error grabando remito ERP: '.$persistRemito['error']);
+						}
+					}
+
 					DB::commit();
 
-					return ['factura' => $numero, 'error' => ''];
+					return ['factura' => $numero, 'error' => '', 'venta_id' => (int) $vta->id, 'remito_id' => (int) ($vta->fresh()->remito_id ?? 0)];
 				} catch (\Exception $e) {
 					DB::rollback();
 
@@ -3851,6 +3943,7 @@ class FacturacionService
 		else
 			return 'Error con punto de venta asignado';
 	}
+
 
 	protected function asignaPrecioLineaItemOt($articulo, $combinacion_id, $talle, $fechaFactura)
 	{
@@ -7564,26 +7657,62 @@ class FacturacionService
 			'gastronomiaEmision',
 			'venta_emisiones.articulos',
 			'venta_emisiones.conceptoVenta',
-			'clientes.tipodocumentos',
-			'clientes.condicioniibbs',
+			'venta_emisiones.combinaciones.coloresfondos',
+			'venta_emisiones.combinaciones.coloresforros',
+			'venta_emisiones.talles',
 			'condicionventas',
-			'clientes.condicionventas',
-			'clientes.localidades',
-			'clientes.provincias',
-			'clientes.paises',
+			'condicionivas',
 			'transportes',
 			'remitos.puntoventas',
 			'remitos.remito_articulos',
 			'puntoventaremito',
+			'puntoventas.empresas',
+			'puntoventas.localidades',
+			'puntoventas.provincias',
+			'monedas',
 		]);
+
+		// SoftDeletes + deleted_at '0000-00-00' ocultan el cliente; para reimpresión hay que traerlo igual.
+		// Si el maestro no existe (FK huérfana), armar stub con el snapshot grabado en la venta.
+		$cliente = Cliente::withTrashed()
+			->with([
+				'tipodocumentos',
+				'condicioniibbs',
+				'condicionventas',
+				'localidades',
+				'provincias',
+				'paises',
+				'condicionivas',
+			])
+			->find($venta->cliente_id);
+		if ($cliente === null) {
+			$cliente = new Cliente([
+				'nombre' => $venta->nombre,
+				'domicilio' => $venta->domicilio,
+				'telefono' => $venta->telefono,
+				'email' => $venta->email,
+				'codigopostal' => $venta->codigopostal,
+				'nroinscripcion' => $venta->nroinscripcion,
+				'numerodocumento' => $venta->nroinscripcion,
+				'condicioniva_id' => $venta->condicioniva_id,
+				'condicionventa_id' => $venta->condicionventa_id,
+			]);
+			$cliente->exists = false;
+			$cliente->setRelation('condicionivas', $venta->condicionivas);
+			$cliente->setRelation('condicionventas', $venta->condicionventas);
+			$cliente->setRelation('tipodocumentos', null);
+			$cliente->setRelation('condicioniibbs', null);
+			$cliente->setRelation('localidades', null);
+			$cliente->setRelation('provincias', null);
+			$cliente->setRelation('paises', null);
+		}
+		$venta->setRelation('clientes', $cliente);
 
 		$identificacionPdf = FacturaPdfIdentificacionSupport::desdeVenta($venta);
 		$letra = $identificacionPdf['letra'];
 		$codigoTipoTransaccion = $identificacionPdf['codigo_afip'];
 		$nombreTipoComprobanteImpresion = $identificacionPdf['nombre'];
 		$codigoTipoTransaccionPad = $identificacionPdf['codigo_afip_pad'];
-
-		$cliente = $this->clienteQuery->traeClienteporId($venta->cliente_id);
 		$tblItem = [];
 		$flConDescuento = false;
 		foreach ($venta->venta_emisiones as $ventaItem) {
@@ -7620,10 +7749,23 @@ class FacturacionService
 				$kiloDescuento = $ventaItem->cantidad - $cantidad;
 				$flConDescuento = true;
 			}
+			$colorLinea = trim((string) (
+				$ventaItem->combinaciones?->coloresfondos?->nombre
+				?? $ventaItem->combinaciones?->nombre
+				?? ''
+			));
+			$talle = $ventaItem->talles;
+			$medidaLabel = '';
+			if ($talle) {
+				$medidaLabel = trim((string) ($talle->codigo !== null && $talle->codigo !== ''
+					? $talle->codigo
+					: ($talle->nombre ?? '')));
+			}
 			$tblItem[] = [
 				'sku' => $sku,
 				'detalle' => $detalle,
 				'leyenda' => $leyendaItem,
+				'color' => $colorLinea,
 				'cantidad' => $cantidad,
 				'kilodescuento' => $kiloDescuento,
 				'caja' => $ventaItem->caja,
@@ -7636,6 +7778,12 @@ class FacturacionService
 				'moneda_id' => $ventaItem->moneda_id,
 				'impuesto_id' => $ventaItem->impuesto_id,
 				'id' => $ventaItem->id,
+				'articulo_id' => $ventaItem->articulo_id,
+				'combinacion_id' => $ventaItem->combinacion_id,
+				'talle_id' => $ventaItem->talle_id,
+				'medida' => $medidaLabel,
+				'talle_codigo' => $talle?->codigo,
+				'talle_nombre' => $talle?->nombre,
 			];
 		}
 
@@ -7643,23 +7791,6 @@ class FacturacionService
 			$venta,
 			$venta->venta_impuestos,
 		);
-		$cotizacion = $venta->moneda_id == 1 ? 1 : $venta->cotizacion;
-		$tipoCodAut = $venta->puntoventas->modofacturacion === 'C' ? 'E' : 'A';
-		$datos_cmp = [
-			'ver' => 1,
-			'fecha' => $venta->fecha,
-			'cuit' => intval(str_replace('-', '', $venta->puntoventas->empresas->nroinscripcion)),
-			'ptoVta' => intval($venta->puntoventas->codigo),
-			'tipoCmp' => $codigoTipoTransaccion,
-			'nroCmp' => $venta->numerocomprobante,
-			'importe' => floatval(number_format($venta->total, 2, '.', '')),
-			'moneda' => $venta->monedas->abreviatura,
-			'ctz' => floatval($cotizacion),
-			'tipoDocRec' => intval($venta->clientes->tipodocumentos->codigoexterno),
-			'nroDocRec' => intval(str_replace('-', '', $venta->clientes->numerodocumento)),
-			'tipoCodAut' => $tipoCodAut,
-			'codAut' => intval($venta->cae),
-		];
 		if (config('app.empresa') == 'EL BIERZO') {
 			$conceptosTotales = array_values(array_filter(
 				$conceptosTotales,
@@ -7681,11 +7812,13 @@ class FacturacionService
 			);
 		}
 
-		$qrPng = QrCode::encoding('UTF-8')->format('png')->size(500)->margin(10)->generate(
-			'https://www.arca.gob.ar/fe/qr/?p='.base64_encode(json_encode($datos_cmp))
-		);
+		$qrPng = QrCodePngSupport::png(ArcaFacturaQrSupport::urlParaVenta($venta), 500);
 		$logo = EmpresaLogoArchivo::dataUriDesdeNombre($venta->puntoventas->empresas->nombre ?? null);
-		$nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($venta->clientes)->nombre);
+		$nombreCliente = preg_replace(
+			'/[^\w\-]+/',
+			'_',
+			(string) ($venta->clientes?->nombre ?? $venta->nombre ?? '')
+		);
 		$pathDir = storage_path('pdf/ventas');
 		if (! is_dir($pathDir)) {
 			mkdir($pathDir, 0775, true);
@@ -7705,7 +7838,7 @@ class FacturacionService
 			'codigoTipoTransaccion' => $codigoTipoTransaccion,
 			'codigoTipoTransaccionPad' => $codigoTipoTransaccionPad,
 			'nombreTipoComprobanteImpresion' => $nombreTipoComprobanteImpresion,
-			'qrDataUri' => 'data:image/png;base64,'.base64_encode((string) $qrPng),
+			'qrDataUri' => $qrPng !== '' ? 'data:image/png;base64,'.base64_encode($qrPng) : '',
 			'logoEmpresaDataUri' => $logo['uri'] ?? null,
 			'pathDir' => $pathDir,
 			'nombreBase' => $venta->codigo.'-'.$nombreCliente,
@@ -8189,6 +8322,21 @@ class FacturacionService
 										'fechavencimientocae' => $cae['fechavencimientocae']
 										],
 										$venta_id);
+
+		if ($flGrabaCae && (int) $venta_id > 0) {
+			$ventaIdMail = (int) $venta_id;
+			\Illuminate\Support\Facades\DB::afterCommit(static function () use ($ventaIdMail) {
+				try {
+					app(\App\Services\Ventas\FacturaMailEnvioService::class)
+						->enviarAutomaticoSiCorresponde($ventaIdMail);
+				} catch (\Throwable $e) {
+					\Illuminate\Support\Facades\Log::warning('factura.mail.auto_post_cae', [
+						'venta_id' => $ventaIdMail,
+						'error' => $e->getMessage(),
+					]);
+				}
+			});
+		}
 
 		if ($puntoventa->modofacturacion != 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita)
 		{

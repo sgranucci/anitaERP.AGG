@@ -285,6 +285,175 @@ class PuntoventaController extends Controller
         return $this->repository->findOrFail($id);
     }
 
+    public function consultaPuntoventa(Request $request)
+    {
+        if (! $this->puedeConsultarPuntoventa()) {
+            abort(403);
+        }
+
+        $consulta = strtoupper(trim((string) ($request->get('consulta') ?? '')));
+        $empresaId = (int) $request->input('empresa_id', 0);
+
+        $query = Puntoventa::query()
+            ->select('puntoventa.id', 'puntoventa.codigo', 'puntoventa.nombre', 'puntoventa.empresa_id')
+            ->leftJoin('empresa', 'empresa.id', '=', 'puntoventa.empresa_id')
+            ->addSelect('empresa.nombre as empresa_nombre');
+
+        if ($empresaId > 0) {
+            $query->where(function ($q) use ($empresaId) {
+                $q->where('puntoventa.empresa_id', $empresaId)->orWhereNull('puntoventa.empresa_id');
+            });
+        } else {
+            $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'puntoventa.empresa_id');
+        }
+
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('puntoventa.codigo', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('puntoventa.nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('empresa.nombre', 'LIKE', '%'.$consulta.'%');
+            });
+        }
+
+        $data = $query->orderBy('puntoventa.codigo')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-puntos-de-venta', false) || can('listar-puntos-de-venta', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="5">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="empresa">'.e($row->empresa_nombre ?? '').'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultapuntoventa">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_puntoventa', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return response()->json($output);
+    }
+
+    public function resolverPuntoventa(Request $request)
+    {
+        if (! $this->puedeConsultarPuntoventa()) {
+            abort(403);
+        }
+
+        $codigo = trim((string) $request->input('codigo', ''));
+        if ($codigo === '') {
+            return response()->json(['error' => 'Código vacío'], 404);
+        }
+
+        // Solo por código (nunca por ID). Acepta 17 / 00017 como en el resto del ERP/ARCA.
+        $pv = $this->findPuntoventaPorCodigoIngresado(
+            $codigo,
+            (int) $request->input('empresa_id', 0)
+        );
+
+        if (! $pv) {
+            return response()->json(['error' => 'Punto de venta no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => $pv->id,
+            'codigo' => $pv->codigo,
+            'nombre' => $pv->nombre,
+        ]);
+    }
+
+    /**
+     * Resuelve PV por código operativo (pad ARCA 5 dígitos), sin fallback a id.
+     */
+    private function findPuntoventaPorCodigoIngresado(string $codigo, int $empresaId = 0): ?Puntoventa
+    {
+        $codigoNorm = Puntoventa::normalizarCodigoArca($codigo);
+        $codigoSinCeros = ltrim($codigo, '0');
+        if ($codigoSinCeros === '') {
+            $codigoSinCeros = '0';
+        }
+
+        $variantes = array_values(array_unique(array_filter([
+            $codigo,
+            $codigoNorm,
+            $codigoSinCeros !== $codigo ? $codigoSinCeros : null,
+        ], static fn ($v) => $v !== null && $v !== '')));
+
+        $query = Puntoventa::query()->whereIn('codigo', $variantes);
+        if ($empresaId > 0) {
+            $query->where(function ($q) use ($empresaId) {
+                $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
+            });
+        }
+
+        $candidatos = $query->get();
+
+        // Legacy: codigo "10" vs "00010" — mismo número ARCA.
+        if ($codigoNorm !== null && $candidatos->isEmpty()) {
+            $numero = (int) preg_replace('/\D+/', '', $codigo);
+            if ($numero > 0) {
+                $queryNum = Puntoventa::query()
+                    ->whereRaw('CAST(codigo AS UNSIGNED) = ?', [$numero]);
+                if ($empresaId > 0) {
+                    $queryNum->where(function ($q) use ($empresaId) {
+                        $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
+                    });
+                }
+                $candidatos = $queryNum->get();
+            }
+        }
+
+        if ($candidatos->isEmpty()) {
+            return null;
+        }
+
+        if ($codigoNorm !== null) {
+            $porNorm = $candidatos->first(static function (Puntoventa $row) use ($codigoNorm) {
+                return Puntoventa::normalizarCodigoArca((string) $row->codigo) === $codigoNorm;
+            });
+            if ($porNorm) {
+                return $porNorm;
+            }
+        }
+
+        return $candidatos->firstWhere('codigo', $codigo) ?? $candidatos->first();
+    }
+
+    public function leerUnPuntoventaPorCodigo(string $codigo)
+    {
+        if (! $this->puedeConsultarPuntoventa()) {
+            abort(403);
+        }
+
+        $request = request();
+        $request->merge(['codigo' => $codigo]);
+
+        return $this->resolverPuntoventa($request);
+    }
+
+    private function puedeConsultarPuntoventa(): bool
+    {
+        return can('listar-puntos-de-venta', false)
+            || can('editar-puntos-de-venta', false)
+            || can('crear-puntos-de-venta', false)
+            || can('listar-local-venta', false)
+            || can('crear-local-venta', false)
+            || can('editar-local-venta', false)
+            || can('actualizar-local-venta', false)
+            || can('usar-facturacion-local', false);
+    }
+
     /**
      * @return array<string, mixed>
      */

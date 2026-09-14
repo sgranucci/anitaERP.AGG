@@ -6,7 +6,7 @@ use App\Models\Caja\Mediopago;
 use App\Models\Configuracion\Empresa;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
-use Auth;
+use Illuminate\Support\Facades\Log;
 
 class MediopagoRepository implements MediopagoRepositoryInterface
 {
@@ -81,7 +81,24 @@ class MediopagoRepository implements MediopagoRepositoryInterface
 						'sistema' => 'che_ban',
 						'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita", 
 						'tabla' => $this->tableAnita );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall($data));
+
+        if ($parsed['error_lectura'] !== null) {
+            try {
+                Log::warning('mediopago.sync_anita', [
+                    'mensaje' => $parsed['error_lectura'],
+                    'tabla' => $this->tableAnita,
+                ]);
+            } catch (\Throwable $e) {
+                // ignore
+            }
+
+            return;
+        }
+
+        if ($parsed['filas'] === []) {
+            return;
+        }
 
         $datosLocal = Mediopago::all();
         $datosLocalArray = [];
@@ -89,7 +106,7 @@ class MediopagoRepository implements MediopagoRepositoryInterface
             $datosLocalArray[] = $value->{$this->keyField};
         }
 
-        foreach ($dataAnita as $value) {
+        foreach ($parsed['filas'] as $value) {
             if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
                 $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
             }
@@ -112,30 +129,30 @@ class MediopagoRepository implements MediopagoRepositoryInterface
 			',
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall($data));
 
-		$usuario_id = Auth::user()->id;
+        if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
+            return;
+        }
 
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
+        $data = $parsed['filas'][0];
 
-			if ($data->tctes_imputacion !== "00000000")
-			{
-				// Busca la cuenta de caja
-				$cuentacaja = $this->cuentacajaRepository->findPorCodigo(ltrim($data->tctes_imputacion,'0'));
+        if ($data->tctes_imputacion !== "00000000")
+        {
+            // Busca la cuenta de caja
+            $cuentacaja = $this->cuentacajaRepository->findPorCodigo(ltrim($data->tctes_imputacion,'0'));
 
-				if ($cuentacaja)
-				{
-					$arr_campos = [
-						"nombre" => $data->tctes_desc,
-						"codigo" => $data->tctes_clave,
-						"cuentacaja_id" => $cuentacaja->id,
-						"empresa_id" => $cuentacaja->empresa_id,
-						];
+            if ($cuentacaja)
+            {
+                $arr_campos = [
+                    "nombre" => $data->tctes_desc,
+                    "codigo" => $data->tctes_clave,
+                    "cuentacaja_id" => $cuentacaja->id,
+                    "empresa_id" => $cuentacaja->empresa_id,
+                    ];
 
-					$mediopago = $this->model->create($arr_campos);
-				}
-			}
+                $this->model->create($arr_campos);
+            }
         }
     }
 

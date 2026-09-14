@@ -19,6 +19,9 @@ Menú
 @endsection
 
 @section("scripts")
+<script>
+    window.menuGuardarOrdenUrl = @json(route('guardar_orden'));
+</script>
 <script src="{{asset("assets/pages/scripts/admin/menu/index.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/menu/index.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 

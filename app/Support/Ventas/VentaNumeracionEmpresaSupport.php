@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Numeración de ventas acotada por empresa (PV comparte sucursal Anita entre empresas).
  *
- * La secuencia CAEA/fiscal es por venta.codigo_afip + PV (misma clave que el unique El Bierzo).
+ * La secuencia fiscal es por venta.codigo_afip + PV (misma clave que el unique fiscal).
  * 201 FCE A y 1 FAC A son series distintas; no se numera por tipotransaccion_id ni por letra.
  */
 final class VentaNumeracionEmpresaSupport
@@ -123,8 +123,8 @@ final class VentaNumeracionEmpresaSupport
 
     /**
      * Próximo número que respeta el unique vigente.
-     * AGG: max del PV (todos los tipos) + 1.
-     * El Bierzo: max de la serie codigo_afip + PV + 1.
+     * Con venta.codigo_afip: max de la serie (codigo_afip + PV) + 1.
+     * Fallback legacy: max del PV (todos los tipos) + 1.
      *
      * $mayorQue fuerza a saltar un número que acabó de chocar (INSERT fallido no actualiza el max).
      */
@@ -139,7 +139,7 @@ final class VentaNumeracionEmpresaSupport
             return max(1, $mayorQue + 1);
         }
 
-        if (EntornoEmpresaSupport::esElBierzo()) {
+        if (Schema::hasColumn('venta', 'codigo_afip')) {
             $codigoAlmacenado = (int) (Tipotransaccion::query()
                 ->whereKey($tipotransaccionId)
                 ->value('codigo') ?? 0);

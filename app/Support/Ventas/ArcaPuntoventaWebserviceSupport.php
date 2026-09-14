@@ -13,11 +13,16 @@ final class ArcaPuntoventaWebserviceSupport
 
     public const WSMTXCA = 'wsmtxca';
 
+    public const WSFEX = 'wsfex_v1';
+
     /** @var list<string> */
     public const ALIASES_MTXCA = ['wsmtxca', 'mtxsca', 'mtxca'];
 
     /** @var list<string> */
-    public const ALIASES_WSFE = ['wsfev1', 'wsfe'];
+    public const ALIASES_WSFE = ['wsfev1', 'wsfe', 'wsfe_v1'];
+
+    /** @var list<string> */
+    public const ALIASES_WSFEX = ['wsfex_v1', 'wsfex', 'wsfexv1'];
 
     public static function normalizar(?string $webservice): string
     {
@@ -31,6 +36,10 @@ final class ArcaPuntoventaWebserviceSupport
             return self::WSFE;
         }
 
+        if (in_array($ws, self::ALIASES_WSFEX, true)) {
+            return self::WSFEX;
+        }
+
         return $ws;
     }
 
@@ -42,6 +51,11 @@ final class ArcaPuntoventaWebserviceSupport
     public static function esWsfe(?string $webservice): bool
     {
         return self::normalizar($webservice) === self::WSFE;
+    }
+
+    public static function esWsfex(?string $webservice): bool
+    {
+        return self::normalizar($webservice) === self::WSFEX;
     }
 
     public static function esSoapCaea(?string $webservice): bool

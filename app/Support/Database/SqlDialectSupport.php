@@ -319,4 +319,13 @@ final class SqlDialectSupport
             .' WHERE cliente_cuentacorriente_id = cliente_cuentacorriente.id), 0))'
             .' < ABS(cliente_cuentacorriente.total)';
     }
+
+    /**
+     * Filas de deuda (venta) sin cobranza asociada.
+     * El import Anita histórico grabó cobranza_id = 0 en vez de NULL.
+     */
+    public static function sqlSinCobranzaClienteCc(string $columna = 'cliente_cuentacorriente.cobranza_id'): string
+    {
+        return '('.$columna.' IS NULL OR '.$columna.' = 0)';
+    }
 }

@@ -40,11 +40,6 @@ Configuración comprobante proveedor
                         'empresa_id' => $empresa_id,
                     ])
 
-                    @include('compras.configuracion_comprobante_proveedor.partials.contabilidad_com_selector', [
-                        'comGeneraContabilidad' => $comGeneraContabilidad,
-                        'empresa_id' => $empresa_id,
-                    ])
-
                     @include('compras.configuracion_comprobante_proveedor.partials.controles_linea', [
                         'config' => $config,
                     ])

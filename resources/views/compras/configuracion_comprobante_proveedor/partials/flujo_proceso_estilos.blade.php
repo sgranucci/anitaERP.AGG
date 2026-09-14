@@ -1,5 +1,12 @@
 <style>
-.cp-flujo-proceso { --cp-oc: #1B4F72; --cp-com: #117A65; --cp-fac: #2471A3; --cp-far: #B9770E; --cp-line: #85929E; }
+.cp-flujo-proceso {
+    --cp-oc: #1B4F72;
+    --cp-com: #117A65;
+    --cp-fac: #2471A3;
+    --cp-far: #B9770E;
+    --cp-nodo: #2C3E50;
+    --cp-line: #85929E;
+}
 .cp-flujo-card {
     width: 100%;
     text-align: left;
@@ -83,6 +90,7 @@
     padding: 8px 6px;
     text-align: center;
     color: #fff;
+    background: var(--cp-nodo);
     box-shadow: inset 0 -2px 0 rgba(0,0,0,.08);
 }
 .cp-flujo-nodo--oc { background: var(--cp-oc); }

@@ -478,6 +478,10 @@ function activa_eventos_consultaproveedor() {
             if (!fila.id) {
                 return;
             }
+            if (typeof window.onProveedorElegidoEnConsulta === 'function'
+                && window.onProveedorElegidoEnConsulta(fila) === true) {
+                return;
+            }
             $('#consultaproveedorModal').modal('hide');
             leeUnProveedor(fila.id, 0);
         });

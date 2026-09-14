@@ -46,6 +46,7 @@
                         <input type="text" name="estado" id="estado" class="form-control" value="{{old('estado', $producto->estado ?? 'ACTIVO')}}" readonly>
                     </div>
               	</div>
+                @include('stock.articulo.partials.campo_canales_estados_ferli')
 				<div class="form-group row">
     				<label for="unidadmedida" class="col-lg-4 col-form-label text-right pr-2 requerido">Unidad de medida</label>
 					<div class="col-lg-4">

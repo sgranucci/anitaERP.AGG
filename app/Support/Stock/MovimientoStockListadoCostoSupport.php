@@ -13,8 +13,12 @@ use Illuminate\Support\Facades\DB;
 /**
  * Costo unitario/total para filas del listado unificado de movimientos de stock.
  *
+ * Modo completo (export PDF/Excel/CSV):
  * - Producto de venta (SKU catálogo gastronomía V…): lista 5000+mes de la fecha del documento.
- * - Resto (compras, insumos, descartables, etc.): precio de última compra.
+ * - Resto (compras, insumos, descartables, etc.): precio de última compra (ERP + Anita).
+ *
+ * Modo rápido (index paginado): promedio ponderado del precio/costo ya grabado en las
+ * líneas del comprobante — sin Anita ni listas de precios (misma columna, latencia baja).
  */
 final class MovimientoStockListadoCostoSupport
 {
@@ -22,17 +26,22 @@ final class MovimientoStockListadoCostoSupport
 
     public const ORIGEN_ULTIMA_COMPRA = 'ultima_compra';
 
+    public const ORIGEN_LINEA_GRABADA = 'linea_grabada';
+
     /**
      * @param  Collection<int, MovimientoStockListadoFila>  $filas
+     * @param  bool  $valorizacionCompleta  true = lista/última compra (Anita); false = precio de línea
      * @return Collection<int, MovimientoStockListadoFila>
      */
-    public static function enriquecer(Collection $filas): Collection
+    public static function enriquecer(Collection $filas, bool $valorizacionCompleta = true): Collection
     {
         if ($filas->isEmpty()) {
             return $filas;
         }
 
-        $costos = self::resolverCostosPorFila($filas);
+        $costos = $valorizacionCompleta
+            ? self::resolverCostosPorFila($filas)
+            : self::resolverCostosDesdeLineasGrabadas($filas);
 
         return $filas->map(static function (MovimientoStockListadoFila $fila) use ($costos): MovimientoStockListadoFila {
             $clave = self::claveFila($fila);
@@ -44,6 +53,62 @@ final class MovimientoStockListadoCostoSupport
                 $dato['origen'] ?? null,
             );
         });
+    }
+
+    /**
+     * Promedio ponderado de costo/precio ya persistido en líneas (sin Anita ni PrecioService).
+     *
+     * @param  Collection<int, MovimientoStockListadoFila>  $filas
+     * @return array<string, array{costo_unitario: float|null, costo_total: float|null, origen: string|null}>
+     */
+    private static function resolverCostosDesdeLineasGrabadas(Collection $filas): array
+    {
+        $lineasPorClave = self::cargarLineasConPrecio($filas);
+        if ($lineasPorClave === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($filas as $fila) {
+            $clave = self::claveFila($fila);
+            $lineas = $lineasPorClave[$clave] ?? [];
+            if ($lineas === []) {
+                $out[$clave] = ['costo_unitario' => null, 'costo_total' => null, 'origen' => null];
+
+                continue;
+            }
+
+            $totalCosto = 0.0;
+            $totalCant = 0.0;
+            $tienePrecio = false;
+
+            foreach ($lineas as $linea) {
+                $cantidad = abs((float) $linea['cantidad']);
+                $unit = (float) $linea['unitario'];
+                if ($cantidad <= 0.0000001) {
+                    continue;
+                }
+                $totalCant += $cantidad;
+                if ($unit > 0) {
+                    $tienePrecio = true;
+                    $totalCosto += $cantidad * $unit;
+                }
+            }
+
+            if (! $tienePrecio || $totalCant <= 0.0000001) {
+                $out[$clave] = ['costo_unitario' => null, 'costo_total' => null, 'origen' => null];
+
+                continue;
+            }
+
+            $out[$clave] = [
+                'costo_unitario' => round($totalCosto / $totalCant, 6),
+                'costo_total' => round($totalCosto, 2),
+                'origen' => self::ORIGEN_LINEA_GRABADA,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -193,6 +258,26 @@ final class MovimientoStockListadoCostoSupport
      */
     private static function cargarLineas(Collection $filas): array
     {
+        $conPrecio = self::cargarLineasConPrecio($filas);
+        $out = [];
+        foreach ($conPrecio as $clave => $lineas) {
+            foreach ($lineas as $linea) {
+                $out[$clave][] = [
+                    'articulo_id' => $linea['articulo_id'],
+                    'cantidad' => $linea['cantidad'],
+                ];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  Collection<int, MovimientoStockListadoFila>  $filas
+     * @return array<string, list<array{articulo_id:int, cantidad:float, unitario:float}>>
+     */
+    private static function cargarLineasConPrecio(Collection $filas): array
+    {
         $movIds = [];
         $tmIds = [];
         foreach ($filas as $fila) {
@@ -209,28 +294,40 @@ final class MovimientoStockListadoCostoSupport
 
         if ($movIds !== []) {
             $rows = DB::table('articulo_movimiento')
-                ->select(['movimientostock_id', 'articulo_id', 'cantidad'])
+                ->select(['movimientostock_id', 'articulo_id', 'cantidad', 'precio', 'costo'])
                 ->whereIn('movimientostock_id', $movIds)
                 ->get();
             foreach ($rows as $row) {
                 $clave = 'movimiento:'.(int) $row->movimientostock_id;
+                $costo = (float) ($row->costo ?? 0);
+                $precio = (float) ($row->precio ?? 0);
                 $out[$clave][] = [
                     'articulo_id' => (int) $row->articulo_id,
                     'cantidad' => (float) $row->cantidad,
+                    'unitario' => $costo > 0 ? $costo : $precio,
                 ];
             }
         }
 
         if ($tmIds !== []) {
             $rows = DB::table('transferencia_mercaderia_articulo')
-                ->select(['transferencia_mercaderia_id', 'articulo_destino_id', 'cantidad_destino'])
+                ->select([
+                    'transferencia_mercaderia_id',
+                    'articulo_destino_id',
+                    'cantidad_destino',
+                    'precio_costo_destino',
+                    'precio_costo_origen',
+                ])
                 ->whereIn('transferencia_mercaderia_id', $tmIds)
                 ->get();
             foreach ($rows as $row) {
                 $clave = 'transferencia:'.(int) $row->transferencia_mercaderia_id;
+                $destino = (float) ($row->precio_costo_destino ?? 0);
+                $origen = (float) ($row->precio_costo_origen ?? 0);
                 $out[$clave][] = [
                     'articulo_id' => (int) $row->articulo_destino_id,
                     'cantidad' => (float) $row->cantidad_destino,
+                    'unitario' => $destino > 0 ? $destino : $origen,
                 ];
             }
         }

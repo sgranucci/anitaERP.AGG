@@ -2234,6 +2234,10 @@ class OrdencompraGestionService
      */
     private function sincronizarAnitaAlta(Ordencompra $oc): void
     {
+        if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
+            return;
+        }
+
         if ($this->usaEscrituraAnitaSurmar($oc)) {
             $this->ordencompraSurmarAnitaBridge->sincronizarAlta($oc);
 
@@ -2251,6 +2255,10 @@ class OrdencompraGestionService
 
     private function sincronizarAnitaActualizacion(Ordencompra $oc): void
     {
+        if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
+            return;
+        }
+
         if ($this->usaEscrituraAnitaSurmar($oc)) {
             $this->ordencompraSurmarAnitaBridge->sincronizarActualizacion($oc);
 
@@ -2268,6 +2276,10 @@ class OrdencompraGestionService
 
     private function sincronizarAnitaBaja(Ordencompra $oc): void
     {
+        if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
+            return;
+        }
+
         if ($this->usaEscrituraAnitaSurmar($oc)) {
             $this->ordencompraSurmarAnitaBridge->sincronizarBaja($oc);
 

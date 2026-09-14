@@ -1014,6 +1014,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\TurnoLocalRepositoryInterface',
+            'App\Repositories\Ventas\TurnoLocalRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\CategoriafidelidadGastronomiaRepositoryInterface',
             'App\Repositories\Ventas\CategoriafidelidadGastronomiaRepository',
         );

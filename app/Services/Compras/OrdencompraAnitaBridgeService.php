@@ -11,6 +11,7 @@ use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaLineaSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaOcfpagoCuotaExpander;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
+use App\Support\Compras\SuscripcionSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaReferenciaSupport;
 use App\Support\Stock\SurmarSupport;
@@ -64,6 +65,9 @@ class OrdencompraAnitaBridgeService
     public function sincronizarAlta(Ordencompra $oc): void
     {
         if (! $this->habilitado()) {
+            return;
+        }
+        if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
             return;
         }
 
@@ -120,6 +124,9 @@ class OrdencompraAnitaBridgeService
     public function sincronizarActualizacion(Ordencompra $oc): void
     {
         if (! $this->habilitado()) {
+            return;
+        }
+        if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
             return;
         }
 
@@ -254,9 +261,21 @@ class OrdencompraAnitaBridgeService
      */
     public function diagnosticarSincronizacionAnita(Ordencompra $oc): array
     {
+        $numero = (int) $oc->numeroordencompra;
+        if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
+            return [
+                'numero' => $numero,
+                'problemas' => [],
+                'cabecera' => false,
+                'proveedor_anita' => null,
+                'proveedor_esperado' => '',
+                'lineas_anita' => 0,
+                'cantentr_por_interno' => [],
+            ];
+        }
+
         $this->cargarRelaciones($oc);
         $this->fijarEmpresaPath($oc);
-        $numero = (int) $oc->numeroordencompra;
         $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
         $ctx = OrdencompraAnitaErpContext::desdeUsuarioId(
             $oc->creousuario_id !== null ? (int) $oc->creousuario_id : null
@@ -355,6 +374,13 @@ class OrdencompraAnitaBridgeService
     {
         if (! $this->habilitado()) {
             throw new \RuntimeException('Escritura OC Anita deshabilitada.');
+        }
+        if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
+            return [
+                'numero' => (int) $oc->numeroordencompra,
+                'acciones' => [],
+                'problemas_restantes' => [],
+            ];
         }
 
         $this->cargarRelaciones($oc);
@@ -1148,6 +1174,9 @@ class OrdencompraAnitaBridgeService
     public function sincronizarBaja(Ordencompra $oc): void
     {
         if (! $this->habilitado()) {
+            return;
+        }
+        if (SuscripcionSupport::esProveedorExternoSinPadron($oc)) {
             return;
         }
 

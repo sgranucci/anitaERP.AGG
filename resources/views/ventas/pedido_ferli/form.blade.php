@@ -136,7 +136,8 @@
     				<th style="width: 5%;">Cantidad</th>
     				<th style="width: 9%; text-align: right;">Precio</th>
     				<th style="width: 8%; margin-right: 0;">O.T.</th>
-    				<th style="width: 15%; margin-right: 0;">Observaci&oacute;n</th>
+    				<th style="width: 14%; margin-right: 0;">Picking</th>
+    				<th style="width: 12%; margin-right: 0;">Observaci&oacute;n</th>
     				<th style="width: 1%; margin-right: 0;">A</th>
     				<th style="width: 1%; margin-right: 0;">C</th>
     			</tr>
@@ -207,6 +208,39 @@
                 					value="{{ (old('ot_ids.' . $loop->index) ?? optional($pedidoitem)->ordenestrabajo)->codigo ?? '-1' }}" readonly> 
                 				<input type="hidden" name="ot_ids[]" class="form-control ot" 
                 					value="{{ (old('ot_ids.' . $loop->index) ?? optional($pedidoitem)->ordenestrabajo)->id ?? '-1' }}"> 
+                			</td>
+                			<td class="picking-cell">
+								@php
+									$pickingMarcado = (old('picking.'.$loop->index, optional($pedidoitem)->picking ?? 'N') === 'S');
+									$pickingFacturado = (optional($pedidoitem)->picking_facturado ?? 'N') === 'S';
+									$pickingLote = old('picking_lote.'.$loop->index, optional($pedidoitem)->picking_lote_codigo ?? '');
+									$pickingDep = (int) old('picking_deposito.'.$loop->index, optional($pedidoitem)->picking_deposito_id ?? 0);
+									$depositosPicking = $depositos_picking_query ?? \App\Models\Stock\Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get(['id','codigo','nombre']);
+								@endphp
+								<div class="d-flex flex-wrap align-items-center">
+									<input type="checkbox" class="check-picking mr-1" title="Marcar picking"
+										@if ($pickingMarcado) checked @endif
+										@if ($pickingFacturado) disabled @endif>
+									<input type="text" class="form-control form-control-sm picking-lote mb-1" style="width:72px;"
+										placeholder="OT/lote" value="{{ $pickingLote }}"
+										@if ($pickingFacturado) readonly @endif>
+									<select class="form-control form-control-sm picking-deposito mb-1" style="width:110px;"
+										@if ($pickingFacturado) disabled @endif>
+										<option value="0">Dep&oacute;sito</option>
+										@foreach ($depositosPicking as $dep)
+											<option value="{{ $dep->id }}" @if ($pickingDep === (int) $dep->id) selected @endif>
+												{{ trim(($dep->codigo ?? '').'-'.($dep->nombre ?? ''), '-') }}
+											</option>
+										@endforeach
+									</select>
+									@if (! $pickingFacturado)
+										<button type="button" title="Guardar marca picking" class="btn-accion-tabla guarda-picking tooltipsC">
+											<i class="fa fa-save text-primary"></i>
+										</button>
+									@else
+										<span class="badge badge-success">Facturado</span>
+									@endif
+								</div>
                 			</td>
                 			<td>
                 				<input type="text" id="iobservacion" name="observaciones[]" class="form-control observacion" value="{{old('observaciones.'.$loop->index, optional($pedidoitem)->observacion)}}" />

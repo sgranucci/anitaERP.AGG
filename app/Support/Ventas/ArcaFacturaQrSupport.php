@@ -63,17 +63,40 @@ final class ArcaFacturaQrSupport
             return (int) config('arca_wsfe.receptor.consumidor_final_tipo_documento', 99);
         }
 
-        return (int) ($venta->clientes->tipodocumentos->codigoexterno ?? 99);
+        $tipo = (int) ($venta->clientes?->tipodocumentos?->codigoexterno ?? 0);
+        if ($tipo > 0) {
+            return $tipo;
+        }
+
+        $digits = preg_replace('/\D+/', '', self::documentoReceptorCrudo($venta)) ?? '';
+        if (strlen($digits) === 11) {
+            return 80;
+        }
+        if (strlen($digits) >= 7) {
+            return 96;
+        }
+
+        return 99;
     }
 
     private static function numeroDocumentoReceptor(Venta $venta): int
     {
-        $doc = GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta)
-            ? GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta)
-            : (string) ($venta->clientes->numerodocumento ?? '0');
-
-        $digits = preg_replace('/\D+/', '', $doc) ?? '';
+        $digits = preg_replace('/\D+/', '', self::documentoReceptorCrudo($venta)) ?? '';
 
         return $digits !== '' ? (int) $digits : 0;
+    }
+
+    private static function documentoReceptorCrudo(Venta $venta): string
+    {
+        if (GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta)) {
+            return GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta);
+        }
+
+        $doc = trim((string) ($venta->clientes?->numerodocumento ?? ''));
+        if ($doc !== '') {
+            return $doc;
+        }
+
+        return trim((string) ($venta->nroinscripcion ?? ''));
     }
 }

@@ -33,11 +33,24 @@ $resolveArcaWsfeEmpresas = static function (): array {
         'FRASLE' => [
             1 => 'frasle',
         ],
+        'Calzados Ferli' => [
+            1 => 'ferli',
+            3 => 'ferli',
+        ],
     ];
 
     $empresaInstalacion = trim((string) env('EMPRESA', 'AGG'), " \t\n\r\0\x0B'\"");
 
     $carpetas = $porEntorno[$empresaInstalacion] ?? [];
+    if ($carpetas === [] && $empresaInstalacion !== '') {
+        $upper = strtoupper($empresaInstalacion);
+        foreach ($porEntorno as $clave => $mapa) {
+            if (strtoupper((string) $clave) === $upper) {
+                $carpetas = $mapa;
+                break;
+            }
+        }
+    }
 
     $jsonOverride = env('ARCA_WSFE_EMPRESAS_JSON');
     if (is_string($jsonOverride) && $jsonOverride !== '') {
@@ -97,7 +110,7 @@ return [
     ],
 
     /** Raíz dedicada WSFE (no mezclar con app/arca/sr_padron del padrón) */
-    'base_storage' => storage_path('app/arca/wsfe'),
+    'base_storage' => env('ARCA_WSFE_BASE', storage_path('app/arca/wsfe')),
 
     /**
      * Mapeo por instalación (EMPRESA en .env). Referencia versionada en Git.
@@ -117,6 +130,10 @@ return [
         ],
         'FRASLE' => [
             1 => 'frasle',
+        ],
+        'Calzados Ferli' => [
+            1 => 'ferli',
+            3 => 'ferli',
         ],
     ],
 

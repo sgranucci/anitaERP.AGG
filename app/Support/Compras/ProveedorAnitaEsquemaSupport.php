@@ -11,6 +11,10 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  * - Surmar/Bierzo (`PROVEEDOR_FILTRO_EMPRESA`): lectura reducida; sin hijas AGG.
  * - Interforming: base Surmar sin campos BSAS (ret_ibr_bsas, emite_cert, nro_estab);
  *   sin columnas AGG; hijas vacías o no alineadas → no leer promadic ni exclusiones AGG.
+ * - Calzados Ferli (verificado 11/sep/2026 contra syscolumns /usr2/ferli):
+ *   50 columnas hasta prom_concepto; tiene cta_me/cc_default/concepto;
+ *   no tiene descuento, exclusiones IB, fe_ini_excl*, ag_perc_*, ni BSAS;
+ *   no existen promadic / proexcl / propago / listapmae / servicios.
  */
 final class ProveedorAnitaEsquemaSupport
 {
@@ -20,10 +24,16 @@ final class ProveedorAnitaEsquemaSupport
 
     public const VARIANTE_INTERFORMING = 'interforming';
 
+    public const VARIANTE_FERLI = 'ferli';
+
     public static function variante(): string
     {
         if (EntornoEmpresaSupport::esInterforming()) {
             return self::VARIANTE_INTERFORMING;
+        }
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            return self::VARIANTE_FERLI;
         }
 
         if (config('proveedor.filtro_empresa')) {
@@ -43,6 +53,11 @@ final class ProveedorAnitaEsquemaSupport
         return self::variante() === self::VARIANTE_INTERFORMING;
     }
 
+    public static function esFerli(): bool
+    {
+        return self::variante() === self::VARIANTE_FERLI;
+    }
+
     /**
      * Leer promadic / proexcl / propago con layout AGG.
      */
@@ -58,6 +73,7 @@ final class ProveedorAnitaEsquemaSupport
     {
         return match (self::variante()) {
             self::VARIANTE_INTERFORMING => self::camposPromaeInterforming(),
+            self::VARIANTE_FERLI => self::camposPromaeFerli(),
             self::VARIANTE_SURMAR => self::camposPromaeSurmar(),
             default => self::camposPromaeAgg(),
         };
@@ -91,6 +107,62 @@ final class ProveedorAnitaEsquemaSupport
 				prom_fecha_excl,
 				prom_excl_retgan,
 				prom_fecha_exclrg
+			';
+    }
+
+    private static function camposPromaeFerli(): string
+    {
+        return '
+				prom_proveedor,
+				prom_nombre,
+				prom_contacto,
+				prom_direccion,
+				prom_localidad,
+				prom_cod_postal,
+				prom_provincia,
+				prom_telefono,
+				prom_cuit,
+				prom_cond_iva,
+				prom_letra,
+				prom_cond_pago,
+				prom_cta_contable,
+				prom_credito,
+				prom_dias_atraso,
+				prom_nro_interno,
+				prom_agente_ret,
+				prom_cond_gan,
+				prom_incl_impuesto,
+				prom_cond_compra,
+				prom_cond_entrega,
+				prom_tipo_empresa,
+				prom_prov_vario,
+				prom_retiene_iva,
+				prom_cod_retgan,
+				prom_cod_retiva,
+				prom_a_nombre_de,
+				prom_ret_suss,
+				prom_ret_ibr,
+				prom_nro_ret_ibr,
+				prom_nro_reemp_ib,
+				prom_excl_retiva,
+				prom_pais,
+				prom_fecha_alta,
+				prom_estado_pro,
+				prom_fantasia,
+				prom_regimen,
+				prom_fecha_excl,
+				prom_excl_retgan,
+				prom_fecha_exclrg,
+				prom_cod_localidad,
+				prom_tipo_emp_alfa,
+				prom_e_mail,
+				prom_fax,
+				prom_fecha_boletin,
+				prom_cod_ret_suss,
+				prom_cta_cont_me,
+				prom_cta_default,
+				prom_cc_default,
+				prom_concepto
 			';
     }
 

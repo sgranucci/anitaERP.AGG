@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace App\Support\Configuracion;
 
+use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Empresa_Jurisdiccion_Iibb;
 use App\Models\Configuracion\Provincia;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
  * Nominación de agente IIBB por empresa jurídica × jurisdicción.
+ *
+ * Válido en todos los clientes (AGG, Interforming, El Bierzo, Ferli, etc.):
+ * sin filas → fallback .env; al guardar, manda la BD.
  *
  * Las alícuotas y mínimos viven en provincia / provincia_tasaiibb (patrimonio
  * del fisco). Esta tabla solo dice si ESTA empresa percibe o retiene ahí.
@@ -253,34 +258,89 @@ final class EmpresaJurisdiccionIibbSupport
             );
         }
 
-        foreach ($payload as $empresaId => $provincias) {
-            $empresaId = (int) $empresaId;
-            if ($empresaId <= 0 || ! is_array($provincias)) {
-                continue;
+        DB::transaction(static function () use ($payload): void {
+            // Primer guardado en AGG / Interforming / Ferli / etc. (tabla vacía):
+            // materializar el .env para TODAS las empresas jurídicas. Si solo se
+            // escribieran las del form (usuario con pocas asignadas), el resto
+            // perdería el fallback y dejaría de percibir/retener.
+            if (self::matrizUsaFallbackEnv()) {
+                self::materializarMatrizDesdeEnv();
             }
-            foreach ($provincias as $provinciaId => $flags) {
-                $provinciaId = (int) $provinciaId;
-                if ($provinciaId <= 0 || ! is_array($flags)) {
+
+            foreach ($payload as $empresaId => $provincias) {
+                $empresaId = (int) $empresaId;
+                if ($empresaId <= 0 || ! is_array($provincias)) {
                     continue;
                 }
-                $percibe = ! empty($flags['percepcion']);
-                $retiene = ! empty($flags['retencion']);
-                if (! $percibe && ! $retiene) {
-                    Empresa_Jurisdiccion_Iibb::query()
-                        ->where('empresa_id', $empresaId)
-                        ->where('provincia_id', $provinciaId)
-                        ->get()
-                        ->each(static fn (Empresa_Jurisdiccion_Iibb $f) => $f->delete());
-                    continue;
+                foreach ($provincias as $provinciaId => $flags) {
+                    $provinciaId = (int) $provinciaId;
+                    if ($provinciaId <= 0 || ! is_array($flags)) {
+                        continue;
+                    }
+                    // Siempre upsert (también false/false). Borrar al destildar
+                    // vaciaba la tabla y el .env volvía a tildar (parecía no grabar).
+                    Empresa_Jurisdiccion_Iibb::query()->updateOrCreate(
+                        ['empresa_id' => $empresaId, 'provincia_id' => $provinciaId],
+                        [
+                            'es_agente_percepcion' => self::flagActivo($flags['percepcion'] ?? null),
+                            'es_agente_retencion' => self::flagActivo($flags['retencion'] ?? null),
+                        ]
+                    );
                 }
+            }
+        });
+    }
+
+    /**
+     * Copia ANITA_AGENTE_PERCEPCION_IIBB / RETENCION a la grilla para cada empresa.
+     * Solo cuando la tabla está vacía (instalación sin nominación en BD).
+     */
+    private static function materializarMatrizDesdeEnv(): void
+    {
+        if (! self::matrizUsaFallbackEnv()) {
+            return;
+        }
+
+        $jursPercibe = self::desdeEnv('agente_percepcion_iibb');
+        $jursRetiene = self::desdeEnv('agente_retencion_iibb');
+        $provincias = self::provinciasParaMatriz();
+        $empresaIds = Empresa::query()
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+
+        foreach ($empresaIds as $empresaId) {
+            foreach ($provincias as $provincia) {
+                $jur = (int) $provincia->jurisdiccion;
                 Empresa_Jurisdiccion_Iibb::query()->updateOrCreate(
-                    ['empresa_id' => $empresaId, 'provincia_id' => $provinciaId],
                     [
-                        'es_agente_percepcion' => $percibe,
-                        'es_agente_retencion' => $retiene,
+                        'empresa_id' => $empresaId,
+                        'provincia_id' => (int) $provincia->id,
+                    ],
+                    [
+                        'es_agente_percepcion' => in_array($jur, $jursPercibe, true),
+                        'es_agente_retencion' => in_array($jur, $jursRetiene, true),
                     ]
                 );
             }
         }
+    }
+
+    /**
+     * Checkbox + hidden "0": el valor puede ser "0", "1", bool o array (último gana).
+     */
+    private static function flagActivo(mixed $valor): bool
+    {
+        if (is_array($valor)) {
+            $valor = end($valor);
+        }
+        if (is_bool($valor)) {
+            return $valor;
+        }
+
+        return in_array(strtolower(trim((string) $valor)), ['1', 'true', 's', 'si', 'sí', 'yes', 'on'], true);
     }
 }

@@ -13,12 +13,19 @@
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
+        @if (! empty($avisoAnita))
+            <div class="alert alert-warning alert-dismissible">
+                <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+                <h4><i class="icon fa fa-warning"></i> Aviso</h4>
+                <p class="mb-0">No se pudo sincronizar tipos de empresa desde Anita: {{ $avisoAnita }}</p>
+            </div>
+        @endif
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Tipos de Empresa</h3>
                 <div class="card-tools">
                     <a href="{{route('crear_tipoempresa')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-condicion-de-compra', false))
+                       	@if (can('crear-tipo-de-empresa', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
@@ -39,12 +46,12 @@
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>
-                       			@if (can('editar-condicion-de-compra', false))
+                       			@if (can('editar-tipo-de-empresa', false))
                                 	<a href="{{route('editar_tipoempresa', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                       			@if (can('borrar-condicion-de-compra', false))
+                       			@if (can('borrar-tipo-de-empresa', false))
                                 <form action="{{route('eliminar_tipoempresa', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">

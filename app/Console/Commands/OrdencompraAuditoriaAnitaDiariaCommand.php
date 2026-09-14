@@ -68,6 +68,7 @@ class OrdencompraAuditoriaAnitaDiariaCommand extends Command
             ['Concepto', 'Cantidad'],
             [
                 ['OC en alcance', (string) ($informe['total_oc'] ?? 0)],
+                ['Omitidas suscripción externa', (string) ($informe['omitidas_suscripcion_externa'] ?? 0)],
                 ['OK', (string) ($informe['ok'] ?? 0)],
                 ['Reparadas', (string) ($informe['reparadas'] ?? 0)],
                 ['Pendmovp cobertura detectada', (string) ($informe['pendmovp_cobertura_detectadas'] ?? 0)],

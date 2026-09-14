@@ -7,6 +7,7 @@ interface TipoempresaRepositoryInterface extends RepositoryInterface
 
     public function all();
     public function sincronizarConAnita();
+    public function ultimoErrorSync(): ?string;
     public function traerRegistroDeAnita($key);
 	public function guardarAnita($request);
 	public function actualizarAnita($request, $id);

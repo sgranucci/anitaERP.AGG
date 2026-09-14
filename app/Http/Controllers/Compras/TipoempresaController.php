@@ -27,8 +27,9 @@ class TipoempresaController extends Controller
     {
         can('listar-tipo-de-empresa');
 		$datas = $this->repository->all();
+        $avisoAnita = $this->repository->ultimoErrorSync();
 
-        return view('compras.tipoempresa.index', compact('datas'));
+        return view('compras.tipoempresa.index', compact('datas', 'avisoAnita'));
     }
 
     /**

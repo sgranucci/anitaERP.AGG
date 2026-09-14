@@ -6,6 +6,7 @@ use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Localidad;
 use App\Models\Ventas\Puntoventa;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Mapeo sucursal (Anita) → puntoventa (ERP), alineado a la lógica histórica del repositorio de ventas
@@ -14,6 +15,9 @@ use App\Models\Ventas\Puntoventa;
  *
  * En Anita (módulo ventas), suc_direccion almacena el código de actividad ARCA (ej. 561012, 524120),
  * no la calle del local. Se resuelve contra actividad_arca.codigoarca → puntoventa.actividad_arca_id.
+ *
+ * Calzados Ferli (suc_fiscal distinto a AGG): E = electrónica CAE, X = exportación WSFEX.
+ * pathafip (afip.php en disco) es legacy; con transporte SOAP no se sincroniza desde suc_leyenda2.
  */
 final class PuntoventaFieldMapper
 {
@@ -64,12 +68,27 @@ final class PuntoventaFieldMapper
     }
 
     /**
-     * Mismo criterio que el switch suc_fiscal del repositorio histórico:
-     * N→M, E→E, L→C, A→A, R→R, M→L, O→O, I→I.
+     * AGG / histórico: N→M, E→E, L→C, A→A, R→R, M→L, O→O, I→I.
+     * Ferli: E→C (electrónica CAE), X→E (exportación), F/N→M.
      */
     public static function mapModoFacturacion(object $row): string
     {
         $fiscal = strtoupper(trim((string) ($row->suc_fiscal ?? '')));
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            return match ($fiscal) {
+                'E' => 'C',
+                'X' => 'E',
+                'L' => 'C',
+                'A' => 'A',
+                'R' => 'R',
+                'M' => 'L',
+                'O' => 'O',
+                'I' => 'I',
+                'N', 'F' => 'M',
+                default => 'M',
+            };
+        }
 
         return match ($fiscal) {
             'N' => 'M',
@@ -82,6 +101,15 @@ final class PuntoventaFieldMapper
             'I' => 'I',
             default => 'M',
         };
+    }
+
+    public static function mapWebservice(object $row): string
+    {
+        if (EntornoEmpresaSupport::esFerli() && self::mapModoFacturacion($row) === 'E') {
+            return 'wsfex_v1';
+        }
+
+        return 'wsfev1';
     }
 
     /** suc_empresa == 'BAJA' → suspendido (repositorio usaba texto equivocado para el enum). */
@@ -198,8 +226,11 @@ final class PuntoventaFieldMapper
             'leyenda' => self::strProp($row, 'suc_leyenda1') ?: null,
             'modofacturacion' => self::mapModoFacturacion($row),
             'estado' => self::mapEstado($row),
-            'webservice' => 'wsfev1',
-            'pathafip' => self::strProp($row, 'suc_leyenda2') ?: null,
+            'webservice' => self::mapWebservice($row),
+            // Legacy afip.php: no mapear emails de suc_leyenda2 en Ferli (SOAP no usa pathafip).
+            'pathafip' => EntornoEmpresaSupport::esFerli()
+                ? null
+                : (self::strProp($row, 'suc_leyenda2') ?: null),
             'actividad_arca_id' => self::mapActividadArcaId($row),
             'division' => $division,
             'numeropoliza' => $numeropoliza,

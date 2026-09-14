@@ -141,9 +141,13 @@ Configuración general del sistema
                                 ({{ implode(', ', $matrizIibbJursEnv) }})
                             @else
                                 (vacío: no hay <code>ANITA_AGENTE_PERCEPCION_IIBB</code>)
-                            @endif.
-                            Buenos Aires es jurisdicción <strong>902</strong>. Al guardar, deja de usarse el
-                            <code>.env</code> y manda esta grilla.
+                            @endif
+                            para todas las empresas jurídicas de esta instalación.
+                            Buenos Aires es jurisdicción <strong>902</strong>; CABA es <strong>901</strong>.
+                            Usá el botón <strong>Guardar agentes IIBB</strong> de esta tarjeta (no el
+                            «Actualizar» de arriba). Al guardar se materializa el
+                            <code>.env</code> en BD para todas las empresas y luego aplican tus tildes;
+                            a partir de ahí manda esta grilla (también si destildás todo).
                         </div>
                     @endif
                     @if (count($matrizIibb) === 0)

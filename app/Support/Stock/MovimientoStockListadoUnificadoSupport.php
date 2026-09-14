@@ -27,8 +27,11 @@ final class MovimientoStockListadoUnificadoSupport
      */
     public function listar(array $filtros, bool $paginar = false): LengthAwarePaginator|Collection
     {
+        // Index paginado: costo desde líneas grabadas (sin Anita). Export: valorización completa.
+        $valorizacionCompleta = ! $paginar;
+
         if (! MovimientoStockListadoFiltros::tieneCriteriosInteligentes($filtros)) {
-            return $this->listarPorClaves($filtros, $paginar);
+            return $this->listarPorClaves($filtros, $paginar, $valorizacionCompleta);
         }
 
         $union = $this->queryUnion($filtros);
@@ -47,7 +50,7 @@ final class MovimientoStockListadoUnificadoSupport
                 ->forPage($page, $perPage)
                 ->get();
 
-            $items = $this->hidratarFilas($filasRaw);
+            $items = $this->hidratarFilas($filasRaw, null, null, $valorizacionCompleta);
 
             return new PaginatorImpl(
                 $items,
@@ -58,7 +61,7 @@ final class MovimientoStockListadoUnificadoSupport
             );
         }
 
-        return $this->hidratarFilas($query->get());
+        return $this->hidratarFilas($query->get(), null, null, $valorizacionCompleta);
     }
 
     /**
@@ -84,8 +87,9 @@ final class MovimientoStockListadoUnificadoSupport
         $movQuery = DB::table('movimientostock as ms')
             ->joinSub($amAgg, 'am_agg', fn ($j) => $j->on('am_agg.movimientostock_id', '=', 'ms.id'))
             ->leftJoin('depmae', 'depmae.id', '=', 'am_agg.deposito_id')
-            ->join('empresa', 'empresa.id', '=', 'depmae.empresa_id')
-            ->join('tipotransaccion_stock as tts', 'tts.id', '=', 'ms.tipotransaccion_stock_id')
+            // LEFT: depósitos legacy Ferli (L8) pueden tener empresa_id=0 / tipo_id=0 sin fila maestra.
+            ->leftJoin('empresa', 'empresa.id', '=', 'depmae.empresa_id')
+            ->leftJoin('tipotransaccion_stock as tts', 'tts.id', '=', 'ms.tipotransaccion_stock_id')
             ->leftJoin('mventa', 'mventa.id', '=', 'ms.mventa_id')
             ->leftJoin('usuario', 'usuario.id', '=', 'ms.usuario_id')
             ->whereNotExists(function ($sub) {
@@ -134,8 +138,8 @@ final class MovimientoStockListadoUnificadoSupport
 
         $tmQuery = DB::table('transferencia_mercaderia as tm')
             ->leftJoinSub($tmAgg, 'tma_agg', fn ($j) => $j->on('tma_agg.transferencia_mercaderia_id', '=', 'tm.id'))
-            ->join('tipotransaccion_stock as tts', 'tts.id', '=', 'tm.tipotransaccion_stock_id')
-            ->join('empresa', 'empresa.id', '=', 'tm.empresa_id')
+            ->leftJoin('tipotransaccion_stock as tts', 'tts.id', '=', 'tm.tipotransaccion_stock_id')
+            ->leftJoin('empresa', 'empresa.id', '=', 'tm.empresa_id')
             ->leftJoin('depmae as dep_o', 'dep_o.id', '=', 'tm.deposito_origen_id')
             ->leftJoin('depmae as dep_d', 'dep_d.id', '=', 'tm.deposito_destino_id')
             ->leftJoin('usuario as u_orig', 'u_orig.id', '=', 'tm.usuario_origen_id')
@@ -215,8 +219,11 @@ final class MovimientoStockListadoUnificadoSupport
      * @param  array<string, mixed>  $filtros
      * @return LengthAwarePaginator<int, MovimientoStockListadoFila>|Collection<int, MovimientoStockListadoFila>
      */
-    private function listarPorClaves(array $filtros, bool $paginar): LengthAwarePaginator|Collection
-    {
+    private function listarPorClaves(
+        array $filtros,
+        bool $paginar,
+        bool $valorizacionCompleta = true,
+    ): LengthAwarePaginator|Collection {
         $mov = $this->queryMovimientosClaves($filtros);
         $tm = $this->queryTransferenciasClaves($filtros);
 
@@ -238,7 +245,7 @@ final class MovimientoStockListadoUnificadoSupport
                 ->get();
 
             return new PaginatorImpl(
-                $this->hidratarDesdeClaves($claves),
+                $this->hidratarDesdeClaves($claves, $valorizacionCompleta),
                 $total,
                 $perPage,
                 $page,
@@ -246,7 +253,10 @@ final class MovimientoStockListadoUnificadoSupport
             );
         }
 
-        return $this->hidratarDesdeClaves($ordenado($mov->unionAll($tm))->get());
+        return $this->hidratarDesdeClaves(
+            $ordenado($mov->unionAll($tm))->get(),
+            $valorizacionCompleta
+        );
     }
 
     /**
@@ -373,7 +383,7 @@ final class MovimientoStockListadoUnificadoSupport
      * @param  Collection<int, object>|array<int, object>  $claves
      * @return Collection<int, MovimientoStockListadoFila>
      */
-    private function hidratarDesdeClaves($claves): Collection
+    private function hidratarDesdeClaves($claves, bool $valorizacionCompleta = true): Collection
     {
         $claves = collect($claves);
         if ($claves->isEmpty()) {
@@ -523,7 +533,7 @@ final class MovimientoStockListadoUnificadoSupport
             return $raw;
         });
 
-        return $this->hidratarFilas($filasRaw, $movimientos, $transferencias);
+        return $this->hidratarFilas($filasRaw, $movimientos, $transferencias, $valorizacionCompleta);
     }
 
     /**
@@ -680,8 +690,12 @@ final class MovimientoStockListadoUnificadoSupport
      * @param  Collection<int, Transferencia_Mercaderia>|null  $transferencias
      * @return Collection<int, MovimientoStockListadoFila>
      */
-    private function hidratarFilas($filasRaw, ?Collection $movimientos = null, ?Collection $transferencias = null): Collection
-    {
+    private function hidratarFilas(
+        $filasRaw,
+        ?Collection $movimientos = null,
+        ?Collection $transferencias = null,
+        bool $valorizacionCompleta = true,
+    ): Collection {
         $filasRaw = collect($filasRaw);
         if ($filasRaw->isEmpty()) {
             return collect();
@@ -721,6 +735,6 @@ final class MovimientoStockListadoUnificadoSupport
             return MovimientoStockListadoFila::desdeRaw($raw, $movimientos, $transferencias);
         });
 
-        return MovimientoStockListadoCostoSupport::enriquecer($filas);
+        return MovimientoStockListadoCostoSupport::enriquecer($filas, $valorizacionCompleta);
     }
 }

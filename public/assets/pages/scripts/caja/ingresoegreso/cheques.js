@@ -344,6 +344,10 @@ function activarTecladoChequeEmitido() {
 function activaEventosChequesIngresoEgreso() {
     $('#agrega_renglon_cheque_emitido').on('click', agregaRenglonChequeEmitido);
     $('#agrega_renglon_cheque_recibido').on('click', agregaRenglonChequeRecibido);
+    $('#agrega_renglon_cheque_cartera').on('click', function (e) {
+        e.preventDefault();
+        abrirCarteraParaNuevaFilaRecibido();
+    });
     $('#agrega_renglon_cheque_reemplazo').on('click', agregaRenglonChequeReemplazo);
 
     $(document).on('click', '.eliminar_cheque_emitido', borraRenglonChequeEmitido);
@@ -432,6 +436,29 @@ function activaEventosChequesIngresoEgreso() {
         $('#consultabancoModal').modal('show');
     });
 
+    $(document).on('click', '.consultachequecartera_recibido', function (e) {
+        e.preventDefault();
+        abrirCarteraParaFilaRecibido($(this).closest('tr'));
+    });
+
+    $(document).on('keydown', '.numerocheque_recibido', function (e) {
+        if (typeof esTeclaF1ChequeCartera === 'function' && esTeclaF1ChequeCartera(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            abrirCarteraParaFilaRecibido($(this).closest('tr'), String($(this).val() || '').trim());
+            return;
+        }
+        if (e.which === 13 || e.key === 'Enter') {
+            var val = String($(this).val() || '').trim();
+            if (val === '') {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            resolverChequeCarteraEnFila($(this).closest('tr'), val);
+        }
+    });
+
     $(document).on('click', '.consultabanco_reemplazo', function () {
         var $campo = $(this).closest('tr');
         ptrCampoBanco = $campo;
@@ -503,6 +530,55 @@ function agregaRenglonChequeRecibido(e) {
     $('#tbody-cheque-recibido-table').append(html);
     $('#tbody-cheque-recibido-table tr:last').find('.fechapago_recibido').val($('#fecha').val());
     flModificaAsiento = true;
+}
+
+function abrirCarteraParaNuevaFilaRecibido() {
+    var html = $('#template-renglon-cheque-recibido').html();
+    $('#tbody-cheque-recibido-table').append(html);
+    var $tr = $('#tbody-cheque-recibido-table tr.item-cheque-recibido').last();
+    $tr.find('.fechapago_recibido').val($('#fecha').val());
+    flModificaAsiento = true;
+    abrirCarteraParaFilaRecibido($tr);
+}
+
+function abrirCarteraParaFilaRecibido($tr, consultaInicial) {
+    if (typeof abrirModalConsultaChequeCartera !== 'function') {
+        alert('No est\u00e1 cargado el modal de cartera de cheques');
+        return;
+    }
+    abrirModalConsultaChequeCartera({
+        empresaId: $('#empresa_id').val() || '',
+        consultaInicial: consultaInicial || '',
+        onElegir: function (fila) {
+            if (typeof aplicarChequeCarteraAFila === 'function') {
+                aplicarChequeCarteraAFila($tr, fila);
+            }
+        }
+    });
+}
+
+function resolverChequeCarteraEnFila($tr, valor) {
+    $.ajax({
+        url: (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/caja/cheque/resolver-cartera',
+        type: 'POST',
+        dataType: 'json',
+        headers: {
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                || ($('input[name="_token"]').first().val() || '')
+        },
+        data: {
+            valor: valor,
+            empresa_id: $('#empresa_id').val() || ''
+        }
+    }).done(function (resp) {
+        if (resp && resp.mensaje === 'ok' && resp.data && typeof aplicarChequeCarteraAFila === 'function') {
+            aplicarChequeCarteraAFila($tr, resp.data);
+            return;
+        }
+        abrirCarteraParaFilaRecibido($tr, valor);
+    }).fail(function () {
+        abrirCarteraParaFilaRecibido($tr, valor);
+    });
 }
 
 function agregaRenglonChequeReemplazo(e) {

@@ -30,11 +30,12 @@ use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 /**
  * Importa comprobantes, CC (promov) y aplicaciones (aplmovp) Anita → ERP.
- * No escribe Anita. Las facturas ya cargadas en ERP se omiten.
+ * No escribe Anita. Las facturas ya cargadas en ERP se omiten (salvo completar conceptos IVA).
  *
  * Con $sinCuentaCorriente: solo documentos consultables (comprobante + conceptos +
  * cuotas; OPA como cabecera pagoproveedor). No crea proveedor_cuentacorriente ni
@@ -42,6 +43,30 @@ use RuntimeException;
  */
 class ComprobanteProveedorImportarDesdeAnitaService
 {
+    /** @var array<string, array{nombre:string,signo:string,codigoafip:string}> */
+    private const TIPOS_SEMILLA = [
+        'FAC' => ['nombre' => 'Factura', 'signo' => 'S', 'codigoafip' => '001'],
+        'FAS' => ['nombre' => 'Factura saldo', 'signo' => 'S', 'codigoafip' => '001'],
+        'FAJ' => ['nombre' => 'Factura ajuste', 'signo' => 'S', 'codigoafip' => '001'],
+        'FAL' => ['nombre' => 'Factura', 'signo' => 'S', 'codigoafip' => '001'],
+        'FAI' => ['nombre' => 'Factura importación', 'signo' => 'S', 'codigoafip' => '001'],
+        'FAM' => ['nombre' => 'Factura M', 'signo' => 'S', 'codigoafip' => '001'],
+        'FAN' => ['nombre' => 'Factura N', 'signo' => 'S', 'codigoafip' => '001'],
+        'FAF' => ['nombre' => 'Factura F', 'signo' => 'S', 'codigoafip' => '001'],
+        'DTC' => ['nombre' => 'Despacho / DTC', 'signo' => 'S', 'codigoafip' => '066'],
+        'NCD' => ['nombre' => 'Nota de crédito', 'signo' => 'R', 'codigoafip' => '003'],
+        'NCF' => ['nombre' => 'Nota de crédito', 'signo' => 'R', 'codigoafip' => '003'],
+        'NCB' => ['nombre' => 'Nota de crédito B', 'signo' => 'R', 'codigoafip' => '008'],
+        'NCS' => ['nombre' => 'Nota de crédito', 'signo' => 'R', 'codigoafip' => '003'],
+        'NCI' => ['nombre' => 'Nota de crédito interna', 'signo' => 'R', 'codigoafip' => '003'],
+        'NCA' => ['nombre' => 'Nota de crédito A', 'signo' => 'R', 'codigoafip' => '003'],
+        'NCN' => ['nombre' => 'Nota de crédito N', 'signo' => 'R', 'codigoafip' => '003'],
+        'NDF' => ['nombre' => 'Nota de débito', 'signo' => 'S', 'codigoafip' => '002'],
+        'NDB' => ['nombre' => 'Nota de débito B', 'signo' => 'S', 'codigoafip' => '007'],
+        'NDS' => ['nombre' => 'Nota de débito', 'signo' => 'S', 'codigoafip' => '002'],
+        'NDR' => ['nombre' => 'Nota de débito', 'signo' => 'S', 'codigoafip' => '002'],
+    ];
+
     /** @var array<string, int|null> */
     private array $cacheEmpresa = [];
 
@@ -73,10 +98,16 @@ class ComprobanteProveedorImportarDesdeAnitaService
         int $usuarioId = 1,
         ?int $limite = null,
         bool $sinCuentaCorriente = false,
+        bool $filtrarPorFechaIva = false,
+        bool $completarConceptos = true,
     ): array {
         $codigo = trim($codigoProveedor);
         if ($codigo === '') {
             throw new RuntimeException('Indique el código de proveedor.');
+        }
+
+        if (! $dryRun) {
+            $this->asegurarTiposBasicos();
         }
 
         $proveedor = $this->resolverProveedor($codigo);
@@ -89,8 +120,11 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $desdeYmd = $desdeIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso) : null;
         $hastaYmd = $hastaIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($hastaIso) : null;
 
-        $compras = $this->reader->listarCompra($codigo, $desdeYmd, $hastaYmd, $empresaCodigo);
-        $promovs = $this->reader->listarPromov($codigo, $desdeYmd, $hastaYmd, $empresaCodigo);
+        $compras = $this->reader->listarCompra($codigo, $desdeYmd, $hastaYmd, $empresaCodigo, $filtrarPorFechaIva);
+        // Con solo documentos + filtro IVA no hace falta promov histórico (cuota default desde compra).
+        $promovs = ($sinCuentaCorriente && $filtrarPorFechaIva)
+            ? []
+            : $this->reader->listarPromov($codigo, $desdeYmd, $hastaYmd, $empresaCodigo);
         $aplmovps = $sinCuentaCorriente
             ? []
             : $this->reader->listarAplmovp($codigo, $desdeYmd, $hastaYmd);
@@ -117,12 +151,14 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
         $stats = $this->statsVacios((int) $proveedor->id, (string) $proveedor->nombre);
         $stats['sin_cuenta_corriente'] = $sinCuentaCorriente;
+        $stats['filtrar_por_fecha_iva'] = $filtrarPorFechaIva;
         $stats['anita_compra'] = count($compras);
         $stats['anita_promov'] = count($promovs);
         $stats['anita_aplmovp'] = count($aplmovps);
         $stats['anita_concmov'] = array_sum(array_map('count', $concmov));
 
         $plan = [];
+        $planConceptos = [];
         $clavesLote = [];
         foreach ($compras as $compra) {
             $preparado = $this->prepararCompra(
@@ -132,7 +168,8 @@ class ComprobanteProveedorImportarDesdeAnitaService
                 $indice,
                 $promovPorClave,
                 $concmov,
-                $empresaCodigo
+                $empresaCodigo,
+                $completarConceptos,
             );
             if ($preparado['estado'] === 'omitida') {
                 $stats['omitidas_ya_en_erp']++;
@@ -140,8 +177,15 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
                 continue;
             }
+            if ($preparado['estado'] === 'completar_conceptos') {
+                $planConceptos[] = $preparado;
+                $stats['a_completar_conceptos']++;
+                $stats['conceptos'] += count($preparado['conceptos']);
+
+                continue;
+            }
             if ($preparado['estado'] !== 'ok') {
-                $stats[$preparado['estado']]++;
+                $stats[$preparado['estado']] = ($stats[$preparado['estado']] ?? 0) + 1;
                 if (! empty($preparado['error'])) {
                     $stats['errores'][] = $preparado['error'];
                 }
@@ -177,17 +221,23 @@ class ComprobanteProveedorImportarDesdeAnitaService
             $stats['conceptos'] += count($item['conceptos']);
         }
         $stats['muestra'] = array_map(static fn (array $i) => $i['resumen'], array_slice($plan, 0, 20));
+        $stats['muestra_conceptos'] = array_map(
+            static fn (array $i) => $i['resumen'],
+            array_slice($planConceptos, 0, 20)
+        );
 
         $pares = ComprobanteProveedorAnitaImportAplmovpSupport::paresDesdeFilas($aplmovps, $signoPorTipo);
         $stats['aplicaciones_anita'] = count($pares);
 
-        $adelantosPlan = $this->prepararAdelantos(
-            $promovs,
-            (int) $proveedor->id,
-            (string) $proveedor->codigo,
-            $empresaCodigo
-        );
-        $stats['adelantos_anita'] = count(array_filter(
+        $adelantosPlan = $sinCuentaCorriente
+            ? ['a_crear' => [], 'omitidos' => 0, 'errores' => []]
+            : $this->prepararAdelantos(
+                $promovs,
+                (int) $proveedor->id,
+                (string) $proveedor->codigo,
+                $empresaCodigo
+            );
+        $stats['adelantos_anita'] = $sinCuentaCorriente ? 0 : count(array_filter(
             $promovs,
             static fn (array $p) => ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto((string) ($p['prov_tipo'] ?? ''))
         ));
@@ -208,6 +258,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
         return DB::transaction(function () use (
             $plan,
+            $planConceptos,
             $pares,
             $adelantosPlan,
             $stats,
@@ -216,6 +267,10 @@ class ComprobanteProveedorImportarDesdeAnitaService
             $signoPorTipo,
             $sinCuentaCorriente,
         ) {
+            foreach ($planConceptos as $item) {
+                $stats['conceptos_completados'] += $this->persistirConceptosFaltantes($item);
+            }
+
             $ccPorClave = $sinCuentaCorriente
                 ? []
                 : $this->indexarCcExistente(
@@ -284,9 +339,10 @@ class ComprobanteProveedorImportarDesdeAnitaService
         array $promovPorClave,
         array $concmov,
         ?int $empresaCodigoFiltro,
+        bool $completarConceptos = true,
     ): array {
         $tipoAbrev = ComprobanteProveedorAnitaImportClaveSupport::tipo((string) ($compra['com_tipo'] ?? ''));
-        $tipo = $this->resolverTipo($tipoAbrev);
+        $tipo = $this->resolverTipo($tipoAbrev, permitirStub: true);
         if ($tipo === null) {
             return [
                 'estado' => 'sin_tipo',
@@ -316,15 +372,9 @@ class ComprobanteProveedorImportarDesdeAnitaService
             $compra,
             $empresaId,
             (int) $proveedor->id,
-            (int) $tipo->id,
+            (int) ($tipo->id ?: 0),
             $cuit,
         );
-        if ($existente !== null) {
-            return [
-                'estado' => 'omitida',
-                'omitida' => $existente,
-            ];
-        }
 
         $fecha = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha'] ?? '');
         $fechaIva = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha_iva'] ?? '') ?: $fecha;
@@ -342,6 +392,51 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $cotizacion = (float) ($compra['com_cotizacion'] ?? 1) ?: 1.0;
         $total = round((float) ($compra['com_monto'] ?? 0), 4);
         $vtoCab = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha_prox_vto'] ?? '') ?: $fecha;
+
+        $conceptos = [];
+        $orden = 1;
+        foreach ($concmov[$nroInterno] ?? [] as $linea) {
+            $conceptoId = $this->resolverConceptoId((int) ($linea['concepto'] ?? 0));
+            if (! $conceptoId) {
+                continue;
+            }
+            $conceptos[] = [
+                'concepto_ivacompra_id' => $conceptoId,
+                'orden' => $orden++,
+                'monto' => (float) ($linea['importe'] ?? 0),
+            ];
+        }
+
+        if ($existente !== null) {
+            $cpId = (int) ($existente['id'] ?? 0);
+            if ($completarConceptos && $cpId > 0 && $conceptos !== []) {
+                $yaTiene = Comprobante_Proveedor_Concepto::query()
+                    ->where('comprobante_proveedor_id', $cpId)
+                    ->exists();
+                if (! $yaTiene) {
+                    return [
+                        'estado' => 'completar_conceptos',
+                        'comprobante_proveedor_id' => $cpId,
+                        'conceptos' => $conceptos,
+                        'nro_interno' => $nroInterno,
+                        'resumen' => [
+                            'etiqueta' => ComprobanteProveedorAnitaImportExistenciaSupport::etiquetaCompra($compra),
+                            'fecha' => $fechaIva,
+                            'total' => $total,
+                            'conceptos' => count($conceptos),
+                            'nro_interno' => $nroInterno,
+                            'empresa_id' => $empresaId,
+                            'cp_id' => $cpId,
+                        ],
+                    ];
+                }
+            }
+
+            return [
+                'estado' => 'omitida',
+                'omitida' => $existente,
+            ];
+        }
 
         $cuotas = [];
         if ($cuotasAnita === []) {
@@ -364,20 +459,6 @@ class ComprobanteProveedorImportarDesdeAnitaService
                     'total_pagado' => abs((float) ($cuota['prov_t_pagado'] ?? 0)),
                 ];
             }
-        }
-
-        $conceptos = [];
-        $orden = 1;
-        foreach ($concmov[$nroInterno] ?? [] as $linea) {
-            $conceptoId = $this->resolverConceptoId((int) ($linea['concepto'] ?? 0));
-            if (! $conceptoId) {
-                continue;
-            }
-            $conceptos[] = [
-                'concepto_ivacompra_id' => $conceptoId,
-                'orden' => $orden++,
-                'monto' => (float) ($linea['importe'] ?? 0),
-            ];
         }
 
         $subtotal = $conceptos !== []
@@ -429,7 +510,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $tipo = $item['tipo'];
         $formapagoId = (int) config('comprobante_proveedor.import_anita.formapago_id', 1);
 
-        $comprobante = Comprobante_Proveedor::query()->create([
+        $datosCp = [
             'empresa_id' => $item['empresa_id'],
             'proveedor_id' => $proveedor->id,
             'tipotransaccion_compra_id' => $tipo->id,
@@ -450,12 +531,15 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::ANITA_IMPORT,
             'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
             'identificacion_proveedor_cuit' => $item['cuit'] !== '' ? $item['cuit'] : null,
-            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
             'anita_nro_interno' => $item['nro_interno'] > 0 ? $item['nro_interno'] : null,
             'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::IMPORTADO,
             'anita_sync_at' => now(),
             'creousuario_id' => $usuarioId,
-        ]);
+        ];
+        if (Schema::hasColumn('comprobante_proveedor', 'provincia_destino_id')) {
+            $datosCp['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID;
+        }
+        $comprobante = Comprobante_Proveedor::query()->create($datosCp);
 
         foreach ($item['conceptos'] as $concepto) {
             Comprobante_Proveedor_Concepto::query()->create([
@@ -1004,18 +1088,75 @@ class ComprobanteProveedorImportarDesdeAnitaService
         return $this->cacheTipoCaja[$abrev];
     }
 
-    private function resolverTipo(string $abrev): ?Tipotransaccion_Compra
+    private function persistirConceptosFaltantes(array $item): int
+    {
+        $cpId = (int) ($item['comprobante_proveedor_id'] ?? 0);
+        if ($cpId <= 0) {
+            return 0;
+        }
+        if (Comprobante_Proveedor_Concepto::query()->where('comprobante_proveedor_id', $cpId)->exists()) {
+            return 0;
+        }
+        $creados = 0;
+        foreach ($item['conceptos'] as $concepto) {
+            Comprobante_Proveedor_Concepto::query()->create([
+                'comprobante_proveedor_id' => $cpId,
+                'concepto_ivacompra_id' => $concepto['concepto_ivacompra_id'],
+                'orden' => $concepto['orden'],
+                'monto' => $concepto['monto'],
+            ]);
+            $creados++;
+        }
+        $subtotal = round(array_sum(array_column($item['conceptos'], 'monto')), 4);
+        Comprobante_Proveedor::query()->where('id', $cpId)->update([
+            'subtotal' => $subtotal,
+            'anita_sync_at' => now(),
+        ]);
+
+        return $creados;
+    }
+
+    private function asegurarTiposBasicos(): void
+    {
+        foreach (self::TIPOS_SEMILLA as $abrev => $data) {
+            if (Tipotransaccion_Compra::query()->where('abreviatura', $abrev)->exists()) {
+                continue;
+            }
+            Tipotransaccion_Compra::query()->create([
+                'nombre' => $data['nombre'],
+                'operacion' => 'L',
+                'abreviatura' => $abrev,
+                'codigoafip' => $data['codigoafip'],
+                'signo' => $data['signo'],
+                'subdiario' => 'C',
+                'asientocontable' => 'N',
+                'retieneiva' => 'N',
+                'retieneganancia' => 'N',
+                'retieneIIBB' => 'N',
+                'estado' => 'A',
+            ]);
+        }
+        $this->cacheTipo = [];
+    }
+
+    private function resolverTipo(string $abrev, bool $permitirStub = false): ?Tipotransaccion_Compra
     {
         if ($abrev === '') {
             return null;
         }
-        if (! array_key_exists($abrev, $this->cacheTipo)) {
-            $this->cacheTipo[$abrev] = Tipotransaccion_Compra::query()
-                ->where('abreviatura', $abrev)
-                ->first();
+        if (array_key_exists($abrev, $this->cacheTipo)) {
+            return $this->cacheTipo[$abrev];
+        }
+        $tipo = Tipotransaccion_Compra::query()->where('abreviatura', $abrev)->first();
+        if ($tipo === null && $permitirStub && isset(self::TIPOS_SEMILLA[$abrev])) {
+            $tipo = new Tipotransaccion_Compra([
+                'abreviatura' => $abrev,
+                'signo' => self::TIPOS_SEMILLA[$abrev]['signo'],
+                'nombre' => self::TIPOS_SEMILLA[$abrev]['nombre'],
+            ]);
         }
 
-        return $this->cacheTipo[$abrev];
+        return $this->cacheTipo[$abrev] = $tipo;
     }
 
     private function resolverCondicionpagoId(int $codigo): ?int
@@ -1076,6 +1217,8 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'anita_concmov' => 0,
             'a_crear' => 0,
             'creadas' => 0,
+            'a_completar_conceptos' => 0,
+            'conceptos_completados' => 0,
             'omitidas_ya_en_erp' => 0,
             'duplicadas_lote' => 0,
             'omitidas_detalle' => [],

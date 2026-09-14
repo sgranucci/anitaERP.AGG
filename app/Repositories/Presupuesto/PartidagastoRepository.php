@@ -37,11 +37,6 @@ class PartidagastoRepository implements PartidagastoRepositoryInterface
 		return $this->model->create($data);
     }
 
-    public function createDesdeAnita(array $data)
-    {
-		return $this->model->create($data);
-    }
-
     public function update(array $data, $id)
     {
 		$partidagasto = $this->model->findOrFail($id)->update($data);

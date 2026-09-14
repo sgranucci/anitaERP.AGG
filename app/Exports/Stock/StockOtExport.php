@@ -8,6 +8,7 @@ use App\Models\Stock\Linea;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Mventa;
 use App\Models\Stock\Depmae;
+use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -22,6 +23,7 @@ use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Carbon\Carbon;
 
@@ -34,6 +36,11 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, Shou
 
 	protected $dates = ['fecha'];
     private $articulo_movimientoService;
+
+	/** @var list<array<string, mixed>> */
+	private array $filasDatos = [];
+
+	private int $filaPrimeraDatosExcel = 8;
 
     public function __construct(
 								ArticuloQueryInterface $articuloquery,
@@ -115,6 +122,18 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, Shou
 				$this->desdecategoria_id, $this->hastacategoria_id,
 				$this->desdelote, $this->hastalote,
 				$this->estadoOt, $this->apertura, $this->deposito_id);
+
+		if ($this->imprimeFoto === 'CON_FOTO') {
+			foreach ($data as &$fila) {
+				$fila['foto_path'] = ArticuloCombinacionFotoSupport::rutaAbsoluta(
+					$fila['foto'] ?? null,
+					$fila['sku'] ?? null,
+					$fila['codigo'] ?? null
+				);
+			}
+			unset($fila);
+		}
+		$this->filasDatos = is_array($data) ? $data : (method_exists($data, 'all') ? $data->all() : []);
 
 		if ($this->deposito_id != 0)
 		{
@@ -263,11 +282,43 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, Shou
 
 	public function registerEvents(): array
     {
+		$filas = &$this->filasDatos;
+		$imprimeFoto = &$this->imprimeFoto;
+		$filaDatos = &$this->filaPrimeraDatosExcel;
+
         return [
-            AfterSheet::class    => function(AfterSheet $event) {
+            AfterSheet::class    => function(AfterSheet $event) use (&$filas, &$imprimeFoto, &$filaDatos) {
 
                 $event->sheet->getDelegate()->freezePane('A8');
 				$event->sheet->getDelegate()->getStyle('A:AP')->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+
+				if ($imprimeFoto !== 'CON_FOTO' || $filas === []) {
+					return;
+				}
+
+				$sheet = $event->sheet->getDelegate();
+				$sheet->getColumnDimension('A')->setWidth(14);
+				foreach ($filas as $idx => $fila) {
+					$excelRow = $filaDatos + $idx;
+					$path = $fila['foto_path'] ?? null;
+					if (! is_string($path) || $path === '' || ! is_file($path)) {
+						continue;
+					}
+					$sheet->getRowDimension($excelRow)->setRowHeight(78);
+					try {
+						$drawing = new Drawing;
+						$drawing->setName('foto-ot-'.$excelRow);
+						$drawing->setDescription((string) ($fila['sku'] ?? ''));
+						$drawing->setPath($path);
+						$drawing->setHeight(70);
+						$drawing->setCoordinates('A'.$excelRow);
+						$drawing->setOffsetX(4);
+						$drawing->setOffsetY(4);
+						$drawing->setWorksheet($sheet);
+					} catch (\Throwable $e) {
+						// sin foto si el archivo no es imagen válida
+					}
+				}
             },
         ];
     }

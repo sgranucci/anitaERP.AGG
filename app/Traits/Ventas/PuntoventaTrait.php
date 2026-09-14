@@ -24,7 +24,7 @@ trait PuntoventaTrait {
 	public static $enumWebservice = [
 		'wsfev1' => 'WSFE v1 — Comprobantes nacionales (ARCA SOAP)',
 		'wsmtxca' => 'WSMTXCA — Factura con detalle / ítems (ARCA SOAP)',
-		'wsfex_v1' => 'WSFEX v1 — Factura de exportación (módulo AFIP)',
+		'wsfex_v1' => 'WSFEX v1 — Factura de exportación (ARCA SOAP)',
 	];
 
 	/** Cantidad de dígitos del número de punto de venta ante ARCA/AFIP. */

@@ -37,11 +37,6 @@ class CapexRepository implements CapexRepositoryInterface
 		return $this->model->create($data);
     }
 
-    public function createDesdeAnita(array $data)
-    {
-		return $this->model->create($data);
-    }
-
     public function update(array $data, $id)
     {
 		$capex = $this->model->findOrFail($id)->update($data);

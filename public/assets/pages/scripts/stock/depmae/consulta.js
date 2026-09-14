@@ -3,7 +3,10 @@ var ptrCodigoDeposito_id;
 var ptrDescripcionDeposito;
 
 function esFormularioDepmaeAbm() {
-    return $('#form-general').length && $('#codigo[name="codigo"]').length;
+    // Solo el ABM depmae tiene tipodeposito; otros forms (local_venta, etc.) también usan #codigo.
+    return $('#form-general').length
+        && $('#codigo[name="codigo"]').length
+        && $('#tipodeposito[name="tipodeposito"]').length;
 }
 
 function descripcionDepositoConEmpresa(descripcion, empresaNombre) {
@@ -213,7 +216,10 @@ $('input').keydown(function (e) {
     if (e.which !== 13 && e.key !== 'Enter') {
         return;
     }
-    if ($(this).is('.codigodeposito, #consultadeposito')) {
+    if ($(this).is(
+        '.codigodeposito, #consultadeposito, #consultapuntoventa, #consultatipotransaccionventa,'
+        + ' #consultacuentacaja, #consultalistaprecio, #consultacuentacontable, #consultaarticulo'
+    )) {
         return;
     }
     if ($(this).is('#filtro_valor, #filtro_valor_panel') || $(this).attr('name') === 'filtro_valor') {
@@ -228,6 +234,13 @@ $('input').keydown(function (e) {
         return;
     }
     if ($(this).is('.surmar-enc-nav, .surmar-item-nav, .surmar-etiq-nav, #numero_oc_buscar, #certificado_senasa')) {
+        return;
+    }
+    if ($(this).hasClass('codigopuntoventa')
+        || $(this).hasClass('codigocuentacaja')
+        || $(this).hasClass('codigolistaprecio')
+        || $(this).hasClass('abreviaturatipotransaccionventa')
+        || $(this).hasClass('codigocuentacontable')) {
         return;
     }
     e.preventDefault();
@@ -284,9 +297,34 @@ if (!window.__depositoF1CaptureActivo) {
     window.__depositoF1CaptureActivo = true;
 }
 
-$(document).on('keyup', '#consultadeposito', function () {
+$(document).on('keyup', '#consultadeposito', function (e) {
+    if (e.which === 13 || e.key === 'Enter') {
+        return;
+    }
     buscar_datos_deposito($(this).val());
 });
+
+function elegirPrimerDepositoDelModal() {
+    var $btn = $('#datosdeposito .eligeconsultadeposito').first();
+    if ($btn.length) {
+        $btn.trigger('click');
+        return true;
+    }
+    return false;
+}
+
+$(document)
+    .off('keydown.consultaDepositoEnter', '#consultadeposito')
+    .on('keydown.consultaDepositoEnter', '#consultadeposito', function (e) {
+        if (e.which !== 13 && e.key !== 'Enter') {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (!elegirPrimerDepositoDelModal()) {
+            buscar_datos_deposito($(this).val());
+        }
+    });
 
 function activa_eventos_consultadeposito() {
     $('.consultadeposito')
@@ -335,7 +373,9 @@ function activa_eventos_consultadeposito() {
     $('#aceptaconsultadepositoModal')
         .off('click.consultaDeposito')
         .on('click.consultaDeposito', function () {
-            $('#consultadepositoModal').modal('hide');
+            if (!elegirPrimerDepositoDelModal()) {
+                $('#consultadepositoModal').modal('hide');
+            }
         });
 
     $(document)
@@ -350,7 +390,7 @@ function activa_eventos_consultadeposito() {
             var empresaNombreDep = $tr.find('.empresa-nombre').html() || '';
             descripcion = descripcionDepositoConEmpresa(descripcion, empresaNombreDep);
 
-            if ($('#form-general').length && $('#codigo[name="codigo"]').length
+            if (esFormularioDepmaeAbm()
                 && typeof window.aplicarDepositoEnFormularioAbm === 'function') {
                 if (window.aplicarDepositoEnFormularioAbm({
                     id: id,
@@ -484,7 +524,7 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
                 return;
             }
 
-            if ($('#form-general').length && $('#codigo[name="codigo"]').length
+            if (esFormularioDepmaeAbm()
                 && typeof window.aplicarDepositoEnFormularioAbm === 'function') {
                 if (window.aplicarDepositoEnFormularioAbm(data)) {
                     return;

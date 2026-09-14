@@ -1,9 +1,13 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\SuitecrmPermiso;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * AGG: menú y permisos Flash Report AGG.
+ */
 return new class extends Migration
 {
     private const MENU_URL = 'caja/flash/reporte';
@@ -28,6 +32,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return;
+        }
+
         $padreFlashId = $this->resolverMenuPadreFlashId();
         if ($padreFlashId <= 0) {
             return;
@@ -57,6 +65,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return;
+        }
+
         foreach (array_column(self::PERMISOS, 'slug') as $slug) {
             $permisoId = (int) (DB::table('permiso')->where('slug', $slug)->value('id') ?? 0);
             if ($permisoId > 0) {

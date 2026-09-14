@@ -47,6 +47,24 @@
         	<input type="text" name="ot_codigos[]" class="form-control otcodigo" 
         		value="{{ old('ot_codigos[]') ?? '-1' }}" readonly> 
         </td>
+        <td class="picking-cell">
+			@php
+				$depositosPickingTpl = $depositos_picking_query ?? \App\Models\Stock\Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get(['id','codigo','nombre']);
+			@endphp
+			<div class="d-flex flex-wrap align-items-center">
+				<input type="checkbox" class="check-picking mr-1" title="Marcar picking">
+				<input type="text" class="form-control form-control-sm picking-lote mb-1" style="width:72px;" placeholder="OT/lote" value="">
+				<select class="form-control form-control-sm picking-deposito mb-1" style="width:110px;">
+					<option value="0">Dep&oacute;sito</option>
+					@foreach ($depositosPickingTpl as $dep)
+						<option value="{{ $dep->id }}">{{ trim(($dep->codigo ?? '').'-'.($dep->nombre ?? ''), '-') }}</option>
+					@endforeach
+				</select>
+				<button type="button" title="Guardar marca picking" class="btn-accion-tabla guarda-picking tooltipsC">
+					<i class="fa fa-save text-primary"></i>
+				</button>
+			</div>
+        </td>
         <td>
         	<input type="text" id="iobservacion" name="observaciones[]" class="form-control observacion" value="" />
         </td>

@@ -7,6 +7,7 @@ use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Ventas\ArcaCaeaCbteFchHsGenSupport;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
+use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use SoapClient;
@@ -230,9 +231,11 @@ class ArcaWsfeFacturaElectronicaService
         ?int $soapTimeoutSeconds = null,
     ): array {
         $this->assertTransporteSoap();
-        if (($puntoventa->webservice ?? '') !== 'wsfev1') {
+        if (! ArcaPuntoventaWebserviceSupport::esWsfe((string) ($puntoventa->webservice ?? ''))) {
             throw new Exception('ARCA WSFE: solo aplica a webservice wsfev1 (comprobantes nacionales).');
         }
+
+        $puntoventa = ArcaPuntoventaWebserviceSupport::puntoventaParaSoap($puntoventa);
 
         $cuit = $this->cuitEmisor($empresaId);
         $ctx = $this->resolveWsaaContext($empresaId);
@@ -424,9 +427,11 @@ class ArcaWsfeFacturaElectronicaService
         array $caeaVigente,
     ): array {
         $this->assertTransporteSoap();
-        if (($puntoventa->webservice ?? '') !== 'wsfev1') {
+        if (! ArcaPuntoventaWebserviceSupport::esWsfe((string) ($puntoventa->webservice ?? ''))) {
             throw new Exception('ARCA WSFE: FECAEARegInformativo solo aplica a webservice wsfev1.');
         }
+
+        $puntoventa = ArcaPuntoventaWebserviceSupport::puntoventaParaSoap($puntoventa);
 
         $caeaNum = preg_replace('/\D+/', '', (string) ($caeaVigente['caea'] ?? '')) ?? '';
         if ($caeaNum === '') {

@@ -15,7 +15,6 @@ use App\Services\Compras\OrdencompraService;
 use App\Models\Presupuesto\Capex_Estado;
 use App\Models\Presupuesto\Capex;
 use App\Queries\Presupuesto\CapexQueryInterface;
-use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Presupuesto\CapexListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Presupuesto\CapexExport;
@@ -69,12 +68,6 @@ class CapexController extends Controller
     public function index(Request $request)
     {
         can('listar-capex');
-		
-        $hay_capex = $this->capexQuery->first();
-
-        if (! $hay_capex && AnitaSyncIndexSupport::autoImportHabilitado()) {
-			$this->capexService->sincronizarConAnita();
-		}
 
         $filtros = CapexListadoFiltros::resolverDesdeRequest($request);
 
@@ -269,8 +262,6 @@ class CapexController extends Controller
 
             if ($capex)
             {
-                $anita = $this->capexService->borraAnita($capex);
-       
             	if ($this->capexRepository->delete($id))
 			    	$fl_borro = true;
             }

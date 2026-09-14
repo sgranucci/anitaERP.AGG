@@ -161,7 +161,12 @@ Seguimiento de legajos
                                         @if ($hayFacPendienteSeg)
                                             @foreach ($row['facturas_legajo'] as $facLeg)
                                                 <div @class(['mt-1 pt-1 border-top' => !$loop->first])>
-                                                    <span>{{ $facLeg['numero'] ?? '' }}</span>
+                                                    @if (!empty($facLeg['url_pdf']))
+                                                        <a href="{{ $facLeg['url_pdf'] }}" class="text-primary" target="_blank" rel="noopener"
+                                                           title="Abrir PDF en pantalla completa">{{ $facLeg['numero'] ?? '' }}</a>
+                                                    @else
+                                                        <span>{{ $facLeg['numero'] ?? '' }}</span>
+                                                    @endif
                                                     @if (!empty($facLeg['estado']))
                                                         @php
                                                             $esAnitaSeg = ($facLeg['estado'] ?? '') === 'en_anita';

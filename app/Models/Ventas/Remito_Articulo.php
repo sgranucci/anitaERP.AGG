@@ -17,9 +17,10 @@ class Remito_Articulo extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [
-        'remito_id', 'articulo_id', 'unidadmedida_id', 'numeroitem', 'caja', 'pieza', 'kilo',
-        'precio', 'listaprecio_id', 'incluyeimpuesto', 'moneda_id', 'descuentoventa_id',
-        'descuento', 'descuentointegrado', 'lote_id', 'observacion', 'estado', 'pedido_articulo_id',
+        'remito_id', 'articulo_id', 'combinacion_id', 'talle_id', 'unidadmedida_id', 'numeroitem',
+        'caja', 'pieza', 'kilo', 'precio', 'listaprecio_id', 'incluyeimpuesto', 'moneda_id',
+        'descuentoventa_id', 'descuento', 'descuentointegrado', 'lote_id', 'observacion', 'estado',
+        'pedido_articulo_id',
     ];
 
     protected $table = 'remito_articulo';

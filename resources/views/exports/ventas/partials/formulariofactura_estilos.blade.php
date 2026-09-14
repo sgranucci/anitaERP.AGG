@@ -183,4 +183,21 @@
     }
     .factura-remito-pie-izq { width: 52%; padding-right: 10px !important; }
     .factura-remito-pie-der { width: 48%; }
+    table.tabla-medidas-remito-ferli {
+        width: auto;
+        border-collapse: collapse;
+        margin: 0;
+        font-size: 9px;
+    }
+    table.tabla-medidas-remito-ferli th,
+    table.tabla-medidas-remito-ferli td {
+        border: 1px solid #999;
+        padding: 1px 3px;
+        text-align: center;
+        min-width: 16px;
+    }
+    table.tabla-medidas-remito-ferli th {
+        background: #e9ecef;
+        font-weight: bold;
+    }
 </style>

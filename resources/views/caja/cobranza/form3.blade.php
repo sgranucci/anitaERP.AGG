@@ -67,7 +67,24 @@
                                 <a href="{{route('editar_cheque', ['id' => $cheque->id ?? 0, 'origen' => 'cobranza'])}}" class="btn-accion-tabla tooltipsC" title="Editar el cheque">
                                     <i class="fa fa-edit"></i>
                                 </a>
-                            @endif                            
+                            @endif
+                            @php
+                                $chequeIdNd = (int) ($cheque->id ?? 0);
+                                $puedeRechazarNdFila = ($puede_nd_cheque ?? false)
+                                    && $chequeIdNd > 0
+                                    && ($cheque->origen ?? 'R') === 'R'
+                                    && ! in_array((string) ($cheque->estado ?? ''), ['R', 'A'], true)
+                                    && empty($cheque->venta_nd_id)
+                                    && ! empty($cheque->cliente_id);
+                            @endphp
+                            @if ($puedeRechazarNdFila)
+                                <button type="button"
+                                        class="btn-accion-tabla tooltipsC btn-rechazo-nd-cheque"
+                                        title="Rechazar y emitir ND"
+                                        data-cheque-id="{{ $chequeIdNd }}">
+                                    <i class="fa fa-ban text-danger"></i>
+                                </button>
+                            @endif
                             <button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cobranza_cheque tooltipsC">
                                 <i class="fa fa-times-circle text-danger"></i>
                             </button>
@@ -93,3 +110,6 @@
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 @include('includes.caja.modalconsultabanco')
+@if ($puede_nd_cheque ?? false)
+    @include('caja.cheque.modal_rechazo_nd')
+@endif

@@ -96,4 +96,36 @@ switch(config('app.empresa'))
             'permitir_cuit_duplicado' => $permitirCuitDuplicado,
             ];        
     break;
+
+    case "Calzados Ferli":
+    default:
+        return [
+            "tipoalta" => [
+                        'DEFINITIVO' => ['D'],
+                        'PROVISORIO' => ['P'],
+                ],
+            "tiposuspension" => [
+                        'MOROSO' => '1',
+                        'PROFORMA' => '2',
+                        'MOROSOS' => '3',
+                        'NO_FACTURAR' => '4',
+                ],
+            'CLIENTE_STOCK_ID' => (string) env('CLIENTE_STOCK_ID', '620'),
+            'CLIENTE_DESPACHO_ID' => (int) env('CLIENTE_DESPACHO_ID', 0),
+            'MAIL_CLIENTE_PROVISORIO' => env('MAIL_CLIENTE_PROVISORIO', 'info@ferli.com.ar'),
+            'TOPE_DESCUENTO' => (int) env('CLIENTE_TOPE_DESCUENTO', 20),
+            'CATEGORIA_SECOS_ID' => 10,
+            'SUBCATEGORIA_MAQUINA_ID' => 1,
+            'SUBCATEGORIA_TIRA_ID' => 2,
+            'EMPRESA_DEFAULT_ID' => 1,
+            'DEUDORES_POR_VENTAS' => (int) env('CLIENTE_DEUDORES_POR_VENTAS', 0),
+            'ANTICIPO_DE_CLIENTES' => (int) env('CLIENTE_ANTICIPO_DE_CLIENTES', 0),
+            'ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO' => env('ENVIA_MAIL_ALTA_CLIENTE_DEFINITIVO', 'NO'),
+            'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) env('DESTINATARIO_ALTA_CLIENTE_DEFINITIVO', ''))
+            ))),
+            'SINCRONIZA_CLIMA_ANITA' => filter_var(env('CLIENTE_SINCRONIZA_CLIMA_ANITA', false), FILTER_VALIDATE_BOOLEAN),
+            'permitir_cuit_duplicado' => $permitirCuitDuplicado,
+        ];
 }

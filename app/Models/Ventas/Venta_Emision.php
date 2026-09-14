@@ -77,7 +77,7 @@ class Venta_Emision extends Model implements Auditable
 
     public function combinaciones()
     {
-        return $this->hasOne(Combinacion::class, 'combinacion_id', 'id');
+        return $this->belongsTo(Combinacion::class, 'combinacion_id');
     }
 
     public function modulos()
@@ -93,6 +93,11 @@ class Venta_Emision extends Model implements Auditable
     public function monedas()
     {
         return $this->belongsTo(Moneda::class, 'moneda_id');
+    }
+
+    public function talles()
+    {
+        return $this->belongsTo(\App\Models\Stock\Talle::class, 'talle_id');
     }
 
 }

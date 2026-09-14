@@ -216,7 +216,11 @@ class ListaprecioController extends Controller
             || can('crear-precios', false)
             || can('editar-precios', false)
             || can('actualizar-precios', false)
-            || can('listar-articulos', false);
+            || can('listar-articulos', false)
+            || can('listar-local-venta', false)
+            || can('crear-local-venta', false)
+            || can('editar-local-venta', false)
+            || can('actualizar-local-venta', false);
     }
 
     private function findListaprecioPorCodigo(string $codigo): ?Listaprecio

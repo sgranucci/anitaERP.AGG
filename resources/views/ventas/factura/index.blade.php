@@ -153,6 +153,14 @@ use App\Support\Ventas\PedidoListadoSupport;
                                 	<a href="{{route('lista_una_factura_copias', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Imprimir eligiendo copias">
                                    	<i class="fa fa-copy"></i>
                                 	</a>
+                                	@can('enviar-factura-mail')
+                                	<form action="{{ route('enviar_factura_mail', $comprobante->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar la factura por mail al cliente?');">
+                                		@csrf
+                                		<button type="submit" class="btn-accion-tabla tooltipsC" title="Enviar factura por mail" style="border:0;background:transparent;padding:0;">
+                                			<i class="fa fa-envelope text-primary"></i>
+                                		</button>
+                                	</form>
+                                	@endcan
 								@endif
                             	</td>
                         	</tr>

@@ -360,19 +360,26 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
         $usuario_id = Auth::id() ?? 1;
 
-        if (count($dataAnita) > 0) {
+        // Ferli (y bridges con tablas opcionales): ctaconc/ccosvalid pueden devolver
+        // {"Error":"…"} → stdClass; no usar count() sin is_array.
+        if (is_array($dataAnita) && count($dataAnita) > 0) {
             $data = $dataAnita[0];
             $ctamEmpresa = $data->ctam_empresa;
             $ctamCuenta = $data->ctam_cuenta;
 
-			switch($data->ctam_tipo)
+			// Anita ctam_tipo → ERP tipocuenta (igual que AGG):
+			// 0 título, 1 imputable, 2 totalizadora.
+			switch ((string) ($data->ctam_tipo ?? ''))
 			{
 			case '0':
-				$tipocuenta = '1';
+				$tipocuenta = '2'; // Título
 				break;
 			case '1':
+				$tipocuenta = '1'; // Imputable
+				break;
+			case '2':
 			case '3':
-				$tipocuenta = '2';
+				$tipocuenta = '3'; // Totalizadora
 				break;
 			default:
 				$tipocuenta = '3';
@@ -393,7 +400,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             $dataAnitaConc = json_decode($apiAnita->apiCall($dataConc));
 
             $conceptogasto_id = null;
-            if (count($dataAnitaConc) > 0)
+            if (is_array($dataAnitaConc) && count($dataAnitaConc) > 0)
             {
                 $dataConc = $dataAnitaConc[0];
 
@@ -417,6 +424,12 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             if ($empresaModel)
                 $empresa_id = $empresaModel->id;
 
+            $difCambioRaw = (string) ($data->ctam_cta_dif_cbio ?? '0');
+            $difCambioId = ($difCambioRaw !== '' && $difCambioRaw !== '0')
+                ? (Cuentacontable::query()->where('codigo', $difCambioRaw)->where('empresa_id', $empresa_id)->value('id')
+                    ?: null)
+                : null;
+
             try {
                 $cuentacontable = $this->model->create([
                     "empresa_id" => $empresa_id,
@@ -430,7 +443,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
                     "usuarioultcambio_id" => $usuario_id,
                     "ajustamonedaextranjera" => $data->ctam_aju_mon_ext,
                     "conceptogasto_id" => $conceptogasto_id,
-                    "cuentacontable_difcambio_id" => $data->ctam_cta_dif_cbio
+                    "cuentacontable_difcambio_id" => $difCambioId,
                 ]);
             } catch (Exception $e) {
                 throw $e;
@@ -448,7 +461,11 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 			);
 			$dataAnitaCcos = json_decode($apiAnita->apiCall($dataCcos));
 
-			foreach ((array) $dataAnitaCcos as $cuentacontable_centrocosto)
+			if (! is_array($dataAnitaCcos)) {
+				$dataAnitaCcos = [];
+			}
+
+			foreach ($dataAnitaCcos as $cuentacontable_centrocosto)
 			{
 				// Busca centro de costo
                 try {
@@ -646,16 +663,17 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 	public function cambia_para_grabar($request, &$codigo, &$tipocuenta, &$ajustable, 
                                         &$manejaccosto, &$cuenta, &$cuentacontable_difcambio)
 	{
-		switch($request['tipocuenta'])
+		// ERP tipocuenta → Anita ctam_tipo (espejo del import).
+		switch ((string) ($request['tipocuenta'] ?? ''))
 		{
 		case '1':
-			$tipocuenta = '0';
+			$tipocuenta = '1'; // Imputable
 			break;
 		case '2':
-			$tipocuenta = '1';
+			$tipocuenta = '0'; // Título
 			break;
 		default:
-			$tipocuenta = '2';
+			$tipocuenta = '2'; // Totalizadora
 		}
 
 		$ajustable = $request['monetaria'];

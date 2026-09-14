@@ -204,13 +204,351 @@ final class AnitaAsientoImportService
             (float) ($data['timings']['total_ms'] ?? 0),
         ));
 
+        $planes = $this->armarPlanesDesdeBridge(
+            $data,
+            $empresaErpId,
+            $mapaTipo,
+            $monedaDefaultId,
+            $usuarioId,
+            $importarResumenSinDetalle,
+            $out,
+        );
+
+        $numeros = array_values(array_unique(array_map(
+            static fn (array $p) => (int) $p['plan']['numeroasiento'],
+            $planes,
+        )));
+        $existentes = $this->cargarAsientosExistentesPorNumeros($empresaErpId, $numeros);
+
+        foreach ($planes as $item) {
+            $this->resolverPersistencia(
+                $item['plan'],
+                $existentes,
+                $dryRun,
+                $reemplazarDiferentes,
+                $out,
+                $item['origen'],
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * Auditoría solo lectura: ERP vs Anita (ctamov + subdiario/subhist) por asiento.
+     * Compara fecha, cuentas, montos y centros de costo. Lectura bridge por bloque (no por asiento).
+     *
+     * @param  list<int>  $empresasAnita
+     * @return array<string, mixed>
+     */
+    public function auditarRango(
+        string $desdeYmd,
+        string $hastaYmd,
+        array $empresasAnita = [1, 2, 3],
+        int $mesesBloque = 1,
+        bool $incluirResumenSinDetalle = false,
+        float $tolerancia = 0.01,
+        ?callable $logger = null,
+    ): array {
+        $desde = Carbon::createFromFormat('Y-m-d', $desdeYmd)->startOfDay();
+        $hasta = Carbon::createFromFormat('Y-m-d', $hastaYmd)->endOfDay();
+        if ($hasta->lt($desde)) {
+            throw new \InvalidArgumentException('hasta debe ser >= desde');
+        }
+        $mesesBloque = max(1, $mesesBloque);
+        $empresasAnita = array_values(array_unique(array_filter(
+            array_map('intval', $empresasAnita),
+            static fn (int $e) => $e > 0,
+        )));
+        if ($empresasAnita === []) {
+            throw new \InvalidArgumentException('Debe indicar al menos una empresa Anita');
+        }
+
+        $mapaEmpresa = $this->mapaEmpresaErp($empresasAnita);
+        $mapaTipo = $this->mapaTipoasiento();
+        $monedaDefaultId = (int) (DB::table('moneda')->where('codigo', '1')->value('id') ?: 1);
+
+        $resumen = [
+            'desde' => $desde->format('Y-m-d'),
+            'hasta' => $hasta->format('Y-m-d'),
+            'empresas' => $empresasAnita,
+            'tolerancia' => $tolerancia,
+            'ctamov_filas_leidas' => 0,
+            'subdiario_filas_leidas' => 0,
+            'subhist_filas_leidas' => 0,
+            'anita_asientos' => 0,
+            'erp_asientos_rango' => 0,
+            'ok' => 0,
+            'solo_anita' => 0,
+            'solo_erp' => 0,
+            'diferencias' => 0,
+            'ctamov_excluidos_cierre' => 0,
+            'ctamov_resumen_sin_detalle' => 0,
+            'cuentas_faltantes' => [],
+            'errores' => [],
+            'timings' => [],
+            'diferencias_detalle' => [],
+        ];
+
+        /** @var array<int, array<int, true>> empresa_erp_id => numeroasiento => true */
+        $numerosAnitaPorEmpresa = [];
+        /** @var array<int, array<int, array<string, mixed>>> */
+        $erpPorEmpresa = [];
+
+        $cursor = $desde->copy()->startOfMonth();
+        while ($cursor->lte($hasta)) {
+            $bloqueDesde = $cursor->copy();
+            $bloqueHasta = $cursor->copy()->addMonths($mesesBloque - 1)->endOfMonth();
+            if ($bloqueHasta->gt($hasta)) {
+                $bloqueHasta = $hasta->copy();
+            }
+            if ($bloqueDesde->lt($desde)) {
+                $bloqueDesde = $desde->copy();
+            }
+
+            foreach ($empresasAnita as $empAnita) {
+                $empresaErpId = $mapaEmpresa[$empAnita] ?? null;
+                if ($empresaErpId === null) {
+                    $msg = "Empresa Anita {$empAnita} sin mapeo ERP (codigo)";
+                    $resumen['errores'][] = $msg;
+                    $this->log($logger, $msg);
+
+                    continue;
+                }
+
+                $this->log(
+                    $logger,
+                    sprintf(
+                        'Auditoría bloque %s→%s emp Anita %d (ERP %d)',
+                        $bloqueDesde->format('Y-m-d'),
+                        $bloqueHasta->format('Y-m-d'),
+                        $empAnita,
+                        $empresaErpId,
+                    ),
+                );
+
+                $bloque = $this->procesarBloqueAuditoria(
+                    $empAnita,
+                    $empresaErpId,
+                    (int) $bloqueDesde->format('Ymd'),
+                    (int) $bloqueHasta->format('Ymd'),
+                    $bloqueDesde->format('Y-m-d'),
+                    $bloqueHasta->format('Y-m-d'),
+                    $mapaTipo,
+                    $monedaDefaultId,
+                    $incluirResumenSinDetalle,
+                    $tolerancia,
+                    $logger,
+                );
+
+                $resumen['ctamov_filas_leidas'] += (int) ($bloque['ctamov_filas_leidas'] ?? 0);
+                $resumen['subdiario_filas_leidas'] += (int) ($bloque['subdiario_filas_leidas'] ?? 0);
+                $resumen['subhist_filas_leidas'] += (int) ($bloque['subhist_filas_leidas'] ?? 0);
+                $resumen['anita_asientos'] += (int) ($bloque['anita_asientos'] ?? 0);
+                $resumen['ok'] += (int) ($bloque['ok'] ?? 0);
+                $resumen['solo_anita'] += (int) ($bloque['solo_anita'] ?? 0);
+                $resumen['diferencias'] += (int) ($bloque['diferencias'] ?? 0);
+                $resumen['ctamov_excluidos_cierre'] += (int) ($bloque['ctamov_excluidos_cierre'] ?? 0);
+                $resumen['ctamov_resumen_sin_detalle'] += (int) ($bloque['ctamov_resumen_sin_detalle'] ?? 0);
+                foreach ($bloque['cuentas_faltantes'] ?? [] as $codigo => $cant) {
+                    $resumen['cuentas_faltantes'][$codigo] = ($resumen['cuentas_faltantes'][$codigo] ?? 0) + (int) $cant;
+                }
+                $resumen['errores'] = array_merge($resumen['errores'], $bloque['errores'] ?? []);
+                $resumen['timings'] = array_merge($resumen['timings'], $bloque['timings'] ?? []);
+                $resumen['diferencias_detalle'] = array_merge(
+                    $resumen['diferencias_detalle'],
+                    $bloque['diferencias_detalle'] ?? [],
+                );
+
+                foreach ($bloque['numeros_anita'] ?? [] as $nro) {
+                    $numerosAnitaPorEmpresa[$empresaErpId][(int) $nro] = true;
+                }
+                foreach ($bloque['erp_en_rango'] ?? [] as $nro => $erp) {
+                    $erpPorEmpresa[$empresaErpId][(int) $nro] = $erp;
+                }
+            }
+
+            $cursor->addMonths($mesesBloque)->startOfMonth();
+        }
+
+        // solo_erp al cierre del rango: evita falsos positivos por fecha Anita en otro mes del mismo nro.
+        foreach ($erpPorEmpresa as $empresaErpId => $erpMap) {
+            $empresaAnita = 0;
+            foreach ($mapaEmpresa as $codAnita => $erpId) {
+                if ((int) $erpId === (int) $empresaErpId) {
+                    $empresaAnita = (int) $codAnita;
+                    break;
+                }
+            }
+            $resumen['erp_asientos_rango'] += count($erpMap);
+            $anitaNros = $numerosAnitaPorEmpresa[$empresaErpId] ?? [];
+            foreach ($erpMap as $nro => $erp) {
+                if (isset($anitaNros[$nro])) {
+                    continue;
+                }
+                $resumen['solo_erp']++;
+                $resumen['diferencias_detalle'][] = $this->filaDiferenciaAuditoria(
+                    'solo_erp',
+                    (int) $empresaErpId,
+                    $empresaAnita,
+                    'erp',
+                    null,
+                    $erp,
+                    ['Falta en Anita (ctamov/subdiario/subhist del rango; excluye resumen V/C/T)'],
+                );
+            }
+        }
+
+        return $resumen;
+    }
+
+    /**
+     * @param  array<string, int>  $mapaTipo
+     * @return array<string, mixed>
+     */
+    private function procesarBloqueAuditoria(
+        int $empresaAnita,
+        int $empresaErpId,
+        int $fechaDesdeYmd,
+        int $fechaHastaYmd,
+        string $desdeIso,
+        string $hastaIso,
+        array $mapaTipo,
+        int $monedaDefaultId,
+        bool $incluirResumenSinDetalle,
+        float $tolerancia,
+        ?callable $logger,
+    ): array {
+        $out = $this->resumenVacio();
+        $data = $this->bridgeReader->cargarBloque($empresaAnita, $fechaDesdeYmd, $fechaHastaYmd);
+        $out['errores'] = $data['errores'];
+        $out['timings'][] = array_merge(
+            ['empresa_anita' => $empresaAnita, 'desde' => $fechaDesdeYmd, 'hasta' => $fechaHastaYmd],
+            $data['timings'],
+        );
+        $out['ctamov_filas_leidas'] = count($data['ctamov']);
+        $out['subdiario_filas_leidas'] = count($data['subdiario']);
+        $out['subhist_filas_leidas'] = count($data['subhist']);
+
+        $this->log($logger, sprintf(
+            '  leído ctamov=%d subdiario=%d subhist=%d (%.0f ms)',
+            $out['ctamov_filas_leidas'],
+            $out['subdiario_filas_leidas'],
+            $out['subhist_filas_leidas'],
+            (float) ($data['timings']['total_ms'] ?? 0),
+        ));
+
+        $planes = $this->armarPlanesDesdeBridge(
+            $data,
+            $empresaErpId,
+            $mapaTipo,
+            $monedaDefaultId,
+            1,
+            $incluirResumenSinDetalle,
+            $out,
+        );
+
+        $numerosAnita = [];
+        foreach ($planes as $item) {
+            $numerosAnita[(int) $item['plan']['numeroasiento']] = true;
+        }
+
+        $existentesPorNro = $this->cargarAsientosExistentesParaAuditoria(
+            $empresaErpId,
+            array_keys($numerosAnita),
+            $desdeIso,
+            $hastaIso,
+        );
+
+        $resultado = [
+            'ctamov_filas_leidas' => $out['ctamov_filas_leidas'],
+            'subdiario_filas_leidas' => $out['subdiario_filas_leidas'],
+            'subhist_filas_leidas' => $out['subhist_filas_leidas'],
+            'ctamov_excluidos_cierre' => $out['ctamov_excluidos_cierre'],
+            'ctamov_resumen_sin_detalle' => $out['ctamov_resumen_sin_detalle'],
+            'cuentas_faltantes' => $out['cuentas_faltantes'],
+            'errores' => $out['errores'],
+            'timings' => $out['timings'],
+            'anita_asientos' => count($planes),
+            'ok' => 0,
+            'solo_anita' => 0,
+            'diferencias' => 0,
+            'diferencias_detalle' => [],
+            'numeros_anita' => array_keys($numerosAnita),
+            'erp_en_rango' => $existentesPorNro['en_rango'],
+        ];
+
+        foreach ($planes as $item) {
+            $plan = $item['plan'];
+            $nro = (int) $plan['numeroasiento'];
+            $erp = $existentesPorNro['por_numero'][$nro] ?? null;
+            if ($erp === null) {
+                $resultado['solo_anita']++;
+                $resultado['diferencias_detalle'][] = $this->filaDiferenciaAuditoria(
+                    'solo_anita',
+                    $empresaErpId,
+                    $empresaAnita,
+                    $item['origen'],
+                    $plan,
+                    null,
+                    ['Falta en ERP'],
+                );
+
+                continue;
+            }
+
+            $motivos = $this->motivosDiferenciaAuditoria($erp, $plan, $tolerancia);
+            if ($motivos === []) {
+                $resultado['ok']++;
+
+                continue;
+            }
+
+            $resultado['diferencias']++;
+            $resultado['diferencias_detalle'][] = $this->filaDiferenciaAuditoria(
+                'diferencia',
+                $empresaErpId,
+                $empresaAnita,
+                $item['origen'],
+                $plan,
+                $erp,
+                $motivos,
+            );
+        }
+
+        $this->log($logger, sprintf(
+            '  anita=%d erp_rango=%d ok=%d solo_anita=%d dif=%d',
+            $resultado['anita_asientos'],
+            count($existentesPorNro['en_rango']),
+            $resultado['ok'],
+            $resultado['solo_anita'],
+            $resultado['diferencias'],
+        ));
+
+        return $resultado;
+    }
+
+    /**
+     * @param  array{ctamov: list<object>, subdiario: list<object>, subhist: list<object>}  $data
+     * @param  array<string, int>  $mapaTipo
+     * @param  array<string, mixed>  $out
+     * @return list<array{origen: string, plan: array<string, mixed>}>
+     */
+    private function armarPlanesDesdeBridge(
+        array $data,
+        int $empresaErpId,
+        array $mapaTipo,
+        int $monedaDefaultId,
+        int $usuarioId,
+        bool $importarResumenSinDetalle,
+        array &$out,
+    ): array {
         $detalle = array_merge($data['subdiario'], $data['subhist']);
         $sistemasConDetalle = $this->sistemasConDetallePorMes($detalle);
 
-        // 1) Planificar ctamov (excluye resumen V/C/T; importa P/PER) + detalle subdiario/subhist
         $planes = [];
         $gruposCtamov = $this->agruparCtamov($data['ctamov']);
-        foreach ($gruposCtamov as $nroAsiento => $lineas) {
+        foreach ($gruposCtamov as $lineas) {
             $primera = $lineas[0];
             $esResumenSinDetalle = false;
             if (self::esAsientoResumenSubdiario($primera)) {
@@ -255,7 +593,7 @@ final class AnitaAsientoImportService
         }
 
         $gruposDetalle = $this->agruparSubdiario($detalle);
-        foreach ($gruposDetalle as $nroOperacion => $lineas) {
+        foreach ($gruposDetalle as $lineas) {
             $asientoPlan = $this->planDesdeSubdiario(
                 $lineas,
                 $empresaErpId,
@@ -271,21 +609,304 @@ final class AnitaAsientoImportService
             $planes[] = ['origen' => $origen, 'plan' => $asientoPlan];
         }
 
-        $numeros = array_values(array_unique(array_map(
-            static fn (array $p) => (int) $p['plan']['numeroasiento'],
-            $planes,
-        )));
-        $existentes = $this->cargarAsientosExistentesPorNumeros($empresaErpId, $numeros);
+        return $planes;
+    }
 
-        foreach ($planes as $item) {
-            $this->resolverPersistencia(
-                $item['plan'],
-                $existentes,
-                $dryRun,
-                $reemplazarDiferentes,
-                $out,
-                $item['origen'],
+    /**
+     * @param  list<int>  $numerosAnita
+     * @return array{
+     *   por_numero: array<int, array<string, mixed>>,
+     *   en_rango: array<int, array<string, mixed>>
+     * }
+     */
+    private function cargarAsientosExistentesParaAuditoria(
+        int $empresaErpId,
+        array $numerosAnita,
+        string $desdeIso,
+        string $hastaIso,
+    ): array {
+        $porNumero = [];
+        $enRango = [];
+
+        $hidratar = function ($asiento) use (&$porNumero): array {
+            $nro = (int) $asiento->numeroasiento;
+            $movs = [];
+            $suma = 0.0;
+            foreach ($asiento->asiento_movimientos as $mov) {
+                $monto = (float) $mov->monto;
+                $suma += $monto;
+                $movs[] = [
+                    'cuentacontable_id' => (int) $mov->cuentacontable_id,
+                    'centrocosto_id' => $mov->centrocosto_id !== null ? (int) $mov->centrocosto_id : null,
+                    'monto' => $monto,
+                    'cuenta_codigo' => (string) ($mov->cuentacontables->codigo ?? ''),
+                    'centrocosto_codigo' => (string) ($mov->centrocostos->codigo ?? ''),
+                ];
+            }
+
+            $fila = [
+                'id' => (int) $asiento->id,
+                'numeroasiento' => $nro,
+                'fecha' => Carbon::parse($asiento->fecha)->format('Y-m-d'),
+                'observacion' => (string) ($asiento->observacion ?? ''),
+                'lineas' => count($movs),
+                'suma_monto' => round($suma, 4),
+                'movimientos' => $movs,
+                'firma' => $this->firmaMovimientosAuditoria($movs),
+            ];
+            $porNumero[$nro] = $fila;
+
+            return $fila;
+        };
+
+        foreach (array_chunk(array_values(array_unique(array_map('intval', $numerosAnita))), 500) as $chunk) {
+            if ($chunk === []) {
+                continue;
+            }
+            Asiento::query()
+                ->where('empresa_id', $empresaErpId)
+                ->whereIn('numeroasiento', $chunk)
+                ->with([
+                    'asiento_movimientos:id,asiento_id,cuentacontable_id,centrocosto_id,monto',
+                    'asiento_movimientos.cuentacontables:id,codigo',
+                    'asiento_movimientos.centrocostos:id,codigo',
+                ])
+                ->get(['id', 'numeroasiento', 'fecha', 'observacion'])
+                ->each($hidratar);
+        }
+
+        Asiento::query()
+            ->where('empresa_id', $empresaErpId)
+            ->whereBetween('fecha', [$desdeIso, $hastaIso])
+            ->with([
+                'asiento_movimientos:id,asiento_id,cuentacontable_id,centrocosto_id,monto',
+                'asiento_movimientos.cuentacontables:id,codigo',
+                'asiento_movimientos.centrocostos:id,codigo',
+            ])
+            ->orderBy('numeroasiento')
+            ->get(['id', 'numeroasiento', 'fecha', 'observacion'])
+            ->each(function ($asiento) use ($hidratar, &$enRango) {
+                $fila = $hidratar($asiento);
+                $enRango[(int) $asiento->numeroasiento] = $fila;
+            });
+
+        return [
+            'por_numero' => $porNumero,
+            'en_rango' => $enRango,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $movimientos
+     */
+    private function firmaMovimientosAuditoria(array $movimientos): string
+    {
+        $parts = [];
+        foreach ($movimientos as $mov) {
+            $parts[] = sprintf(
+                '%d:%d:%.4f',
+                (int) ($mov['cuentacontable_id'] ?? 0),
+                (int) ($mov['centrocosto_id'] ?? 0),
+                round((float) ($mov['monto'] ?? 0), 4),
             );
+        }
+        sort($parts);
+
+        return implode('|', $parts);
+    }
+
+    /**
+     * @param  array<string, mixed>  $erp
+     * @param  array<string, mixed>  $plan
+     * @return list<string>
+     */
+    private function motivosDiferenciaAuditoria(array $erp, array $plan, float $tolerancia): array
+    {
+        $motivos = [];
+        if ((string) $erp['fecha'] !== (string) $plan['fecha']) {
+            $motivos[] = sprintf('fecha ERP=%s Anita=%s', $erp['fecha'], $plan['fecha']);
+        }
+
+        $firmaErp = (string) ($erp['firma'] ?? '');
+        $firmaAnita = $this->firmaMovimientosAuditoria($plan['movimientos'] ?? []);
+        if ($firmaErp === $firmaAnita) {
+            return $motivos;
+        }
+
+        $bagErp = $this->bolsaMovimientosAuditoria($erp['movimientos'] ?? []);
+        $bagAnita = $this->bolsaMovimientosAuditoria($plan['movimientos'] ?? []);
+        $claves = array_unique(array_merge(array_keys($bagErp), array_keys($bagAnita)));
+        sort($claves);
+
+        $soloErp = 0;
+        $soloAnita = 0;
+        $montoDiff = 0;
+        $ccDiff = 0;
+        $cuentaDiff = 0;
+        foreach ($claves as $clave) {
+            $a = $bagErp[$clave] ?? null;
+            $b = $bagAnita[$clave] ?? null;
+            if ($a === null) {
+                $soloAnita += (int) ($b['cant'] ?? 1);
+
+                continue;
+            }
+            if ($b === null) {
+                $soloErp += (int) ($a['cant'] ?? 1);
+
+                continue;
+            }
+            if ((int) $a['cant'] !== (int) $b['cant']) {
+                $delta = abs((int) $a['cant'] - (int) $b['cant']);
+                if ((int) $a['cuenta'] !== (int) $b['cuenta']) {
+                    $cuentaDiff += $delta;
+                } elseif ((int) $a['cc'] !== (int) $b['cc']) {
+                    $ccDiff += $delta;
+                } else {
+                    $montoDiff += $delta;
+                }
+            }
+        }
+
+        // Si las firmas difieren pero las bolsas de claves no capturan bien (montos redondeados),
+        // comparar sumas y conteos.
+        if (abs((float) $erp['suma_monto'] - $this->sumaMontos($plan['movimientos'] ?? [])) > $tolerancia) {
+            $motivos[] = sprintf(
+                'suma montos ERP=%.4f Anita=%.4f',
+                (float) $erp['suma_monto'],
+                $this->sumaMontos($plan['movimientos'] ?? []),
+            );
+        }
+        if ((int) $erp['lineas'] !== count($plan['movimientos'] ?? [])) {
+            $motivos[] = sprintf(
+                'cant. líneas ERP=%d Anita=%d',
+                (int) $erp['lineas'],
+                count($plan['movimientos'] ?? []),
+            );
+        }
+        if ($soloErp > 0 || $soloAnita > 0 || $ccDiff > 0 || $cuentaDiff > 0 || $montoDiff > 0) {
+            $partes = [];
+            if ($cuentaDiff > 0 || $soloErp > 0 || $soloAnita > 0) {
+                $partes[] = 'cuentas/líneas distintas';
+            }
+            if ($ccDiff > 0) {
+                $partes[] = 'centro de costo distinto';
+            }
+            if ($montoDiff > 0) {
+                $partes[] = 'montos distintos';
+            }
+            if ($soloErp > 0) {
+                $partes[] = "solo ERP={$soloErp} líneas";
+            }
+            if ($soloAnita > 0) {
+                $partes[] = "solo Anita={$soloAnita} líneas";
+            }
+            $motivos[] = 'movimientos: '.implode('; ', $partes);
+        } elseif ($motivos === []) {
+            $motivos[] = 'movimientos distintos (firma cuenta:cc:monto)';
+        }
+
+        return $motivos;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $movimientos
+     * @return array<string, array{cant: int, cuenta: int, cc: int, monto: float}>
+     */
+    private function bolsaMovimientosAuditoria(array $movimientos): array
+    {
+        $bag = [];
+        foreach ($movimientos as $mov) {
+            $clave = sprintf(
+                '%d:%d:%.4f',
+                (int) ($mov['cuentacontable_id'] ?? 0),
+                (int) ($mov['centrocosto_id'] ?? 0),
+                round((float) ($mov['monto'] ?? 0), 4),
+            );
+            if (! isset($bag[$clave])) {
+                $bag[$clave] = [
+                    'cant' => 0,
+                    'cuenta' => (int) ($mov['cuentacontable_id'] ?? 0),
+                    'cc' => (int) ($mov['centrocosto_id'] ?? 0),
+                    'monto' => round((float) ($mov['monto'] ?? 0), 4),
+                ];
+            }
+            $bag[$clave]['cant']++;
+        }
+
+        return $bag;
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $plan
+     * @param  array<string, mixed>|null  $erp
+     * @param  list<string>  $motivos
+     * @return array<string, mixed>
+     */
+    private function filaDiferenciaAuditoria(
+        string $tipo,
+        int $empresaErpId,
+        int $empresaAnita,
+        string $origen,
+        ?array $plan,
+        ?array $erp,
+        array $motivos,
+    ): array {
+        $movsPlan = $plan['movimientos'] ?? [];
+        $movsErp = $erp['movimientos'] ?? [];
+
+        return [
+            'tipo' => $tipo,
+            'empresa_id' => $empresaErpId,
+            'empresa_anita' => $empresaAnita,
+            'origen_anita' => $origen,
+            'numeroasiento' => (int) ($plan['numeroasiento'] ?? $erp['numeroasiento'] ?? 0),
+            'erp_id' => $erp['id'] ?? null,
+            'erp_fecha' => $erp['fecha'] ?? null,
+            'anita_fecha' => $plan['fecha'] ?? null,
+            'erp_lineas' => $erp['lineas'] ?? 0,
+            'anita_lineas' => count($movsPlan),
+            'erp_suma' => $erp['suma_monto'] ?? null,
+            'anita_suma' => $movsPlan !== [] ? $this->sumaMontos($movsPlan) : null,
+            'erp_firma' => $erp['firma'] ?? null,
+            'anita_firma' => $movsPlan !== [] ? $this->firmaMovimientosAuditoria($movsPlan) : null,
+            'motivos' => $motivos,
+            'motivo' => implode(' | ', $motivos),
+            'erp_movimientos' => $this->resumenMovimientosAuditoria($movsErp),
+            'anita_movimientos' => $this->resumenMovimientosAuditoria($movsPlan),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $movimientos
+     * @return list<string>
+     */
+    private function resumenMovimientosAuditoria(array $movimientos): array
+    {
+        static $cacheCuenta = [];
+        static $cacheCc = [];
+
+        $out = [];
+        foreach ($movimientos as $mov) {
+            $cuenta = (string) ($mov['cuenta_codigo'] ?? '');
+            if ($cuenta === '') {
+                $cuentaId = (int) ($mov['cuentacontable_id'] ?? 0);
+                if ($cuentaId > 0 && ! array_key_exists($cuentaId, $cacheCuenta)) {
+                    $cacheCuenta[$cuentaId] = (string) (DB::table('cuentacontable')->where('id', $cuentaId)->value('codigo') ?? $cuentaId);
+                }
+                $cuenta = $cacheCuenta[$cuentaId] ?? (string) $cuentaId;
+            }
+
+            $cc = (string) ($mov['centrocosto_codigo'] ?? '');
+            if ($cc === '') {
+                $ccId = (int) ($mov['centrocosto_id'] ?? 0);
+                if ($ccId > 0 && ! array_key_exists($ccId, $cacheCc)) {
+                    $cacheCc[$ccId] = (string) (DB::table('centrocosto')->where('id', $ccId)->value('codigo') ?? $ccId);
+                }
+                $cc = $ccId > 0 ? ($cacheCc[$ccId] ?? (string) $ccId) : '0';
+            }
+
+            $out[] = sprintf('%s|cc=%s|%.4f', $cuenta, $cc !== '' ? $cc : '0', (float) ($mov['monto'] ?? 0));
         }
 
         return $out;

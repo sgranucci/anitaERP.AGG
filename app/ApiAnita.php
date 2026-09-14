@@ -162,8 +162,15 @@ class ApiAnita
         }
 
         // Quita warnings HTML del bridge y devuelve JSON limpio en consultas.
+        // Si el parse detecta error (p. ej. Parse error PHP 5.3), no devolver []:
+        // eso hacía que el sync de maestros creyera que Anita no tenía filas.
         if (in_array($acc, ['list', 'customSql'], true)) {
-            return json_encode(self::decodificarListaFilas($trimResponse));
+            $parsed = self::parsearRespuestaLista($trimResponse);
+            if ($parsed['error_lectura'] !== null && $parsed['filas'] === []) {
+                return json_encode(['Error' => $parsed['error_lectura']]);
+            }
+
+            return json_encode($parsed['filas']);
         }
 
         return $response;
@@ -291,11 +298,13 @@ class ApiAnita
             return 'Error en ejecución SQL Informix (revise el archivo .ret en el servidor Anita)';
         }
 
-        if (stripos($trim, '<b>warning</b>') !== false || stripos($trim, '<b>fatal error</b>') !== false) {
+        if (stripos($trim, '<b>warning</b>') !== false
+            || stripos($trim, '<b>fatal error</b>') !== false
+            || stripos($trim, '<b>parse error</b>') !== false) {
             return strip_tags(html_entity_decode($trim));
         }
 
-        if ($limpia === '' && preg_match('/\b(?:Warning|Notice|Fatal error)\b/i', $trim)) {
+        if ($limpia === '' && preg_match('/\b(?:Warning|Notice|Fatal error|Parse error)\b/i', $trim)) {
             return 'Advertencia PHP en bridge Anita (actualice apiERP.php en el servidor)';
         }
 

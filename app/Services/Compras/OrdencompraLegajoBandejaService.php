@@ -1349,7 +1349,7 @@ class OrdencompraLegajoBandejaService
      *
      * @param  list<array<string, mixed>>  $comprobantes
      * @param  list<array<string, mixed>>  $facturas
-     * @return list<array{numero: string, origen: string, tipo: string, tipo_label: string, estado: string, capa: string}>
+     * @return list<array{numero: string, origen: string, tipo: string, tipo_label: string, estado: string, capa: string, url_pdf: string}>
      */
     private function resumenFacturasLegajo(array $comprobantes, array $facturas): array
     {
@@ -1372,6 +1372,7 @@ class OrdencompraLegajoBandejaService
                 'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
                 'estado' => 'cargada',
                 'capa' => 'comprobante',
+                'url_pdf' => '',
             ];
         }
         $preConCp = [];
@@ -1410,6 +1411,7 @@ class OrdencompraLegajoBandejaService
                 'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
                 'estado' => $cargadaAnita ? 'en_anita' : 'pendiente',
                 'capa' => $capaOrigen === 'anita' ? 'anita' : 'precarga',
+                'url_pdf' => (string) ($fac['url_pdf'] ?? ''),
             ];
         }
 

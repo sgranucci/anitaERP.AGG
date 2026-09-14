@@ -347,6 +347,7 @@ class MovimientoStockController extends Controller
             'articulos_movimiento.articulos.unidadesdemedidas',
             'articulos_movimiento.articulos.unidadesdemedidasalternativas',
             'articulos_movimiento.combinaciones',
+            'articulos_movimiento.modulos',
         ]);
         $asientoPreview = $this->asientoService->previewParaVista($movimientostock);
         $mostrarSolapaAsiento = ! empty($asientoPreview['activo'])

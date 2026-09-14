@@ -15,6 +15,10 @@ use App\Models\Caja\Cuentacaja;
  * En mañana la planilla de depósitos usa Neto = TotalCoin − impuesto QR.
  * Si el tesorero tipea el TotalCoin de la planilla, el drop QR tiene que
  * seguir ese neto; si no, la transferencia se mueve.
+ *
+ * Completo (fecha F): el QR del día es el mismo dato que carga la Mañana de F+1
+ * (desfase jornada). Si esa Mañana ya tiene TotalCoin (con ajustes), prevalece
+ * sobre drop+impuesto del Completo para no perder el ajuste.
  */
 final class RendicionMaquinaValorQrPrecargaSupport
 {
@@ -155,13 +159,28 @@ final class RendicionMaquinaValorQrPrecargaSupport
     }
 
     /**
+     * Monto a precargar en Completo: TotalCoin de la Mañana del día siguiente
+     * (mismo QR de jornada, con ajustes) o, si no hay, drop QR + impuesto QR.
+     */
+    public static function montoPrecargaCompleto(array $inputs, ?float $totalCoinManianaDiaSiguiente): float
+    {
+        if ($totalCoinManianaDiaSiguiente !== null && abs($totalCoinManianaDiaSiguiente) >= 0.005) {
+            return round($totalCoinManianaDiaSiguiente, 2);
+        }
+
+        return self::montoDesdeInputs($inputs);
+    }
+
+    /**
      * @param  array<string, float|int|string>  $inputs
      * @param  list<array<string, mixed>>  $valores
      * @return list<array{cuentacaja_id: int, monto: float}>
      */
-    public static function lineasPrecarga(array $inputs, array $valores): array
+    public static function lineasPrecarga(array $inputs, array $valores, ?float $montoOverride = null): array
     {
-        $monto = self::montoDesdeInputs($inputs);
+        $monto = $montoOverride !== null
+            ? round($montoOverride, 2)
+            : self::montoDesdeInputs($inputs);
         $out = [];
         foreach ($valores as $linea) {
             if (! self::esTotalCoinQrMaquinas($linea)) {

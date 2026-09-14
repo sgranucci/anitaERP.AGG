@@ -10,6 +10,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\ImpuestoRepositoryInterface;
 use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
+use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
 use App\Support\Compras\ConceptoIvacompraListadoFiltros;
 use Auth;
 use DB;
@@ -241,6 +242,9 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
     		                        concc_concepto",
 						'tabla' => $this->tableAnita );
         $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (! is_array($dataAnita)) {
+            return;
+        }
 
         $datosLocal = Concepto_Ivacompra::all();
         $datosLocalArray = [];
@@ -260,40 +264,33 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita, 
             'sistema' => 'compras',
-            'campos' => '
-                concc_concepto,
-                concc_desc,
-                concc_formula,
-                concc_columna_sub,
-                concc_contenido,
-                concc_cta_debe,
-                concc_cta_haber,
-                concc_ctapte_debe,
-                concc_ctapte_haber,
-                concc_tipo_conc,
-                concc_alicuota_iva,
-                concc_retiene_ibr
-            ',
+            'campos' => ConceptoIvaAnitaEsquemaSupport::sqlCamposCabecera(),
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
 		$usuario_id = Auth::user()->id;
 
-        if (count($dataAnita) > 0) {
+        if (is_array($dataAnita) && count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
-        	$datamov = array( 
-            	'acc' => 'list', 
-				'sistema' => 'compras',
-				'tabla' => 'concciva', 
-            	'campos' => '
-                	conci_concepto,
-					conci_cond_iva
-            	' , 
-            	'whereArmado' => " WHERE conci_concepto = '".$key."' " 
-        	);
-        	$dataAnitamov = json_decode($apiAnita->apiCall($datamov));
+            $dataAnitamov = [];
+            if (ConceptoIvaAnitaEsquemaSupport::leeConcciva()) {
+                $datamov = array(
+                    'acc' => 'list',
+                    'sistema' => 'compras',
+                    'tabla' => 'concciva',
+                    'campos' => '
+                        conci_concepto,
+                        conci_cond_iva
+                    ',
+                    'whereArmado' => " WHERE conci_concepto = '".$key."' ",
+                );
+                $dataAnitamov = json_decode($apiAnita->apiCall($datamov));
+                if (! is_array($dataAnitamov)) {
+                    $dataAnitamov = [];
+                }
+            }
 
             // Busca columna de subdiario
             $columna_ivacompra = $this->columna_ivacompraRepository->findPorNumeroColumna($data->concc_columna_sub);
@@ -315,20 +312,26 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
                 break;
             }
 
+            $tipoConc = (string) ($data->concc_tipo_conc ?? 'N');
+            $alicuota = $data->concc_alicuota_iva ?? null;
+            $retieneIibb = (string) ($data->concc_retiene_ibr ?? 'N');
+
             // Si es ingresos brutos busca la jurisdiccion
             $provincia_id = null;
-            if ($data->concc_tipo_conc == 'B' || $data->concc_tipo_conc == 'S' || $data->concc_tipo_conc == 'A')
+            if (ConceptoIvaAnitaEsquemaSupport::incluyeTipoAlicuotaRetiene()
+                && ($tipoConc == 'B' || $tipoConc == 'S' || $tipoConc == 'A'))
             {
-                $provincia = $this->provinciaRepository->findPorJurisdiccion($data->concc_alicuota_iva);
+                $provincia = $this->provinciaRepository->findPorJurisdiccion($alicuota);
                 if ($provincia)
                     $provincia_id = $provincia->id;
             }
 
             // Si es alicuota busca id de impuesto
             $impuesto_id = null;
-            if ($data->concc_tipo_conc == 'G' || $data->concc_tipo_conc == 'P' || $data->concc_tipo_conc == 'I')
+            if (ConceptoIvaAnitaEsquemaSupport::incluyeTipoAlicuotaRetiene()
+                && ($tipoConc == 'G' || $tipoConc == 'P' || $tipoConc == 'I'))
             {
-                $impuesto = $this->impuestoRepository->findPorValor($data->concc_alicuota_iva);
+                $impuesto = $this->impuestoRepository->findPorValor($alicuota);
                 if ($impuesto)
                     $impuesto_id = $impuesto->id;
             }
@@ -355,9 +358,9 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
                 'empresa_id' => null, 
                 'cuentacontabledebe_id' => $cuentacontabledebe_id, 
                 'cuentacontablehaber_id' => $cuentacontablehaber_id, 
-                'tipoconcepto' => $data->concc_tipo_conc, 
+                'tipoconcepto' => $tipoConc,
                 'retieneganancia' => $retieneGanancia, 
-                'retieneIIBB' => $data->concc_retiene_ibr, 
+                'retieneIIBB' => $retieneIibb, 
                 'provincia_id' => $provincia_id, 
                 'impuesto_id' => $impuesto_id
             ];

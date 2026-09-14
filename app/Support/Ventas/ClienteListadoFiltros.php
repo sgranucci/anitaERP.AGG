@@ -290,7 +290,7 @@ class ClienteListadoFiltros
                         $col,
                         $valor,
                         true,
-                        CoincidenciaFlexibleTexto::LONGITUD_MINIMA_CORTA
+                        CoincidenciaFlexibleTexto::LONGITUD_MINIMA_DEFAULT
                     );
                 }
             }
@@ -377,7 +377,7 @@ class ClienteListadoFiltros
                             $column,
                             $valor,
                             true,
-                            CoincidenciaFlexibleTexto::LONGITUD_MINIMA_CORTA
+                            CoincidenciaFlexibleTexto::LONGITUD_MINIMA_DEFAULT
                         );
                     }
                     if ($column === 'cliente.numerodocumento') {

@@ -1,11 +1,21 @@
         <td class="align-middle">
-            <select name="combinaciones_id[]" data-placeholder="Combinaciones" class="form-control form-control-sm combinacion" data-fouc></select>
-            <input type="hidden" class="combinacion_id_previa" name="combinacion_id_previa[]" value="{{ $combinacionIdPrev ?? '' }}">
+            <select name="combinaciones_id[]" data-placeholder="Combinaciones" class="form-control form-control-sm combinacion" data-fouc>
+                @php $combPrev = trim((string) ($combinacionIdPrev ?? '')); @endphp
+                @if ($combPrev !== '')
+                    <option value="{{ $combPrev }}" selected>{{ $descCombinacion !== '' ? $descCombinacion : $combPrev }}</option>
+                @endif
+            </select>
+            <input type="hidden" class="combinacion_id_previa" name="combinacion_id_previa[]" value="{{ $combPrev }}">
             <input type="hidden" class="desc_combinacion" name="desc_combinacion[]" value="{{ $descCombinacion ?? '' }}">
         </td>
         <td class="align-middle">
-            <select name="modulos_id[]" data-placeholder="Modulos" class="form-control form-control-sm modulo" data-fouc></select>
-            <input type="hidden" class="modulo_id_previa" name="modulo_id_previa[]" value="{{ $moduloIdPrev ?? '' }}">
+            <select name="modulos_id[]" data-placeholder="Modulos" class="form-control form-control-sm modulo" data-fouc>
+                @php $modPrev = trim((string) ($moduloIdPrev ?? '')); @endphp
+                @if ($modPrev !== '')
+                    <option value="{{ $modPrev }}" selected>{{ ($descModulo ?? '') !== '' ? $descModulo : $modPrev }}</option>
+                @endif
+            </select>
+            <input type="hidden" class="modulo_id_previa" name="modulo_id_previa[]" value="{{ $modPrev }}">
             <input type="hidden" class="desc_modulo" name="desc_modulo[]" value="{{ $descModulo ?? '' }}">
         </td>
         <td class="align-middle">

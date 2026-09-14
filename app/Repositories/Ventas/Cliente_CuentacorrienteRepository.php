@@ -123,7 +123,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ])
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
             ->whereNotNull('cliente_cuentacorriente.venta_id')
-            ->whereNull('cliente_cuentacorriente.cobranza_id')
+            ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc())
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
 
         $this->aplicarFiltroMoneda($query, $monedaId);
@@ -322,7 +322,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ->leftJoin('moneda', 'moneda.id', '=', 'cliente_cuentacorriente.moneda_id')
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
             ->whereNotNull('cliente_cuentacorriente.venta_id')
-            ->whereNull('cliente_cuentacorriente.cobranza_id')
+            ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc())
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
 
         $this->aplicarFiltroMoneda($query, $monedaId);

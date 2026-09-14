@@ -75,6 +75,18 @@ final class SuscripcionSupport
         return trim((string) ($oc->suscripcion_proveedor_nombre ?? ''));
     }
 
+    /**
+     * Suscripción con proveedor solo textual (sin FK al padrón): no sincroniza ni audita Anita.
+     */
+    public static function esProveedorExternoSinPadron(?Ordencompra $oc): bool
+    {
+        if (! $oc || ! (bool) ($oc->es_suscripcion ?? false)) {
+            return false;
+        }
+
+        return empty($oc->proveedor_id);
+    }
+
     /** @return list<string> */
     public static function periodicidades(): array
     {

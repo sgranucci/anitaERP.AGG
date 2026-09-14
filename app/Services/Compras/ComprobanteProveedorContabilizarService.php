@@ -9,9 +9,11 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
+use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
+use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
@@ -58,6 +60,16 @@ class ComprobanteProveedorContabilizarService
         if ($comprobante->comprobante_proveedor_conceptos()->count() === 0) {
             throw new RuntimeException('Agregue al menos un concepto IVA antes de contabilizar.');
         }
+
+        $comprobante->loadMissing('comprobante_proveedor_cuotas');
+        ComprobanteProveedorCuotasTotalSupport::assertCuadraConTotal(
+            (float) ($comprobante->total ?? 0),
+            $comprobante->comprobante_proveedor_cuotas,
+        );
+        ComprobanteProveedorPrecargaTotalSupport::assertCuadraConPrecarga(
+            (int) ($comprobante->precarga_comprobante_proveedor_id ?? 0) ?: null,
+            (float) ($comprobante->total ?? 0),
+        );
 
         ComprobanteProveedorFechaContableSupport::assertPeriodoContablePermitido(
             (int) ($comprobante->empresa_id ?? 0),

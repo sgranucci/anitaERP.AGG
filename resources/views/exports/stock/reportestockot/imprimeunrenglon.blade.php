@@ -1,13 +1,7 @@
 <tr>
 	@if ($imprimefoto == 'CON_FOTO')
-		<td>
-			@if (is_file('/var/www/html/anitaERP/public/storage/imagenes/fotos_articulos/'.$lote['foto']))
-				<img src="{{ '/var/www/html/anitaERP/public/storage/imagenes/fotos_articulos/'.$lote['foto'] }}" width="100" height="100" />
-			@endif		
-			@if (is_file('/var/www/html/anitaERP/public/storage/imagenes/fotos_articulos/'.$lote['sku'].'-'.$lote['codigo'].'.jpg'))	
-				<img src="{{ '/var/www/html/anitaERP/public/storage/imagenes/fotos_articulos/'.$lote['sku'].'-'.$lote['codigo'].'.jpg' }}" width="100" height="100" />
-			@endif
-		</td>
+		{{-- Celda reservada: la foto se embebe como Drawing en StockOtExport@AfterSheet --}}
+		<td></td>
 	@endif
 	<td class="align-middle">{{$lote['nombrelinea']}}</td>
 	<td>{{$lote['sku']}}</td>

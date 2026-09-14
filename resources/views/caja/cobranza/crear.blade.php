@@ -13,6 +13,15 @@
 <script src="{{asset("assets/pages/scripts/caja/banco/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/cobranza/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/cobranza/descuento_comprobante.js")}}" type="text/javascript"></script>
+@if ($puede_nd_cheque ?? false)
+<script>
+window.chequeRechazoNdUrls = {
+    datos: @json(url('caja/cheque/:id/rechazo-nd')),
+    emitir: @json(url('caja/cheque/:id/rechazar-nd'))
+};
+</script>
+<script src="{{asset("assets/pages/scripts/caja/cheque/rechazo_nd.js")}}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')

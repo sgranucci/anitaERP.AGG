@@ -96,13 +96,12 @@ class MenuController extends Controller
 
     public function guardarOrden(Request $request)
     {
-        if ($request->ajax()) {
-            $menu = new Menu;
-            $menu->guardarOrden($request->menu);
-            return response()->json(['respuesta' => 'ok']);
-        } else {
-            abort(404);
-        }
+        // No exigir $request->ajax(): si falla el header, nestable ya movió el ítem en UI
+        // y el abort(404) dejaba el cambio sin persistir (sin aviso).
+        $menu = new Menu;
+        $menu->guardarOrden($request->input('menu'));
+
+        return response()->json(['respuesta' => 'ok']);
     }
 
     public function eliminarVarios(Request $request)

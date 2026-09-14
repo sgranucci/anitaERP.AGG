@@ -82,10 +82,10 @@
                     @if ($esNas)
                         <div class="sesion-nas-badge mb-1">NAS · no va al PDF</div>
                     @elseif ($mostrarChecksPapel)
-                        <label class="sesion-copia-check mb-1">
-                            <input type="checkbox" name="pack_idx[]" value="{{ $item['i'] }}" form="form-ejecutar-sesion" class="sesion-copia-idx" checked>
-                            Incluir
-                        </label>
+						<label class="sesion-copia-check mb-1">
+							<input type="checkbox" name="pack_idx[]" value="{{ $item['i'] }}" form="form-ejecutar-sesion" class="sesion-copia-idx" checked="checked">
+							Incluir
+						</label>
                     @endif
                     <div>
                         <strong>{{ $linea['leyenda'] }}</strong>

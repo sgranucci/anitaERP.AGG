@@ -377,6 +377,7 @@ $(function () {
             if ($('#subtotal').length) {
                 $('#subtotal').val(fmtVacio(0));
             }
+            sincronizarCuotasDesdeTotal(0);
             return;
         }
         var fmt = function (n) {
@@ -388,12 +389,118 @@ $(function () {
                 maximumFractionDigits: 2
             });
         };
+        total = Math.round(total * 100) / 100;
+        subtotal = Math.round(subtotal * 100) / 100;
         if ($('#total').length) {
             $('#total').val(fmt(total));
         }
         if ($('#subtotal').length && subtotal > 0) {
             $('#subtotal').val(fmt(subtotal));
         }
+        sincronizarCuotasDesdeTotal(total);
+        avisarDesvioVsPrecarga(total);
+    }
+
+    /**
+     * Si cambian conceptos/total, las cuotas tienen que ir de la mano (misma proporción).
+     */
+    function sincronizarCuotasDesdeTotal(total) {
+        var $rows = $('#tbody-cuotas-table tr.item-cuota');
+        if (!$rows.length) {
+            return;
+        }
+        total = Math.round((parseFloat(total) || 0) * 100) / 100;
+        var fmt = function (n) {
+            if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.fmt === 'function') {
+                return window.AsientoMontosFormato.fmt(n);
+            }
+            return (Math.round(n * 100) / 100).toLocaleString('es-AR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        };
+        if (!(total > 0)) {
+            $rows.each(function () {
+                var $input = $(this).find('[name="cuota_monto[]"]');
+                if ($input.length && !$input.prop('readonly')) {
+                    $input.val(fmt(0));
+                }
+            });
+            return;
+        }
+
+        var montos = [];
+        var suma = 0;
+        $rows.each(function () {
+            var m = Math.abs(parseMonto($(this).find('[name="cuota_monto[]"]').val() || '0'));
+            montos.push(m);
+            suma += m;
+        });
+        suma = Math.round(suma * 100) / 100;
+        if (Math.abs(suma - total) <= 0.05) {
+            return;
+        }
+
+        var n = $rows.length;
+        if (n === 1) {
+            var $unico = $rows.first().find('[name="cuota_monto[]"]');
+            if ($unico.length && !$unico.prop('readonly')) {
+                $unico.val(fmt(total));
+            }
+            return;
+        }
+
+        var asignado = 0;
+        $rows.each(function (i) {
+            var $input = $(this).find('[name="cuota_monto[]"]');
+            if (!$input.length || $input.prop('readonly')) {
+                return;
+            }
+            var nuevo;
+            if (suma < 0.0001) {
+                nuevo = i === 0 ? total : 0;
+            } else if (i === n - 1) {
+                nuevo = Math.round((total - asignado) * 100) / 100;
+            } else {
+                nuevo = Math.round(total * (montos[i] / suma) * 100) / 100;
+                asignado += nuevo;
+            }
+            $input.val(fmt(nuevo));
+        });
+    }
+
+    function avisarDesvioVsPrecarga(total) {
+        var $form = $('#form-comprobante-proveedor');
+        if (!$form.length) {
+            $form = $('form[data-precarga-id]').first();
+        }
+        var precargaId = parseInt($form.attr('data-precarga-id') || '0', 10) || 0;
+        var precargaTotal = parseFloat($form.attr('data-precarga-total') || '0') || 0;
+        var $banner = $('#cp-banner-desvio-precarga');
+        if (!precargaId || !(precargaTotal > 0)) {
+            if ($banner.length) {
+                $banner.hide().empty();
+            }
+            return;
+        }
+        total = Math.round((parseFloat(total) || 0) * 100) / 100;
+        var diff = Math.round(Math.abs(total - precargaTotal) * 100) / 100;
+        if (diff <= 0.05) {
+            if ($banner.length) {
+                $banner.hide().empty();
+            }
+            return;
+        }
+        if (!$banner.length) {
+            $banner = $('<div id="cp-banner-desvio-precarga" class="alert alert-danger mx-3 mt-2"></div>');
+            $form.prepend($banner);
+        }
+        $banner.html(
+            '<strong>Total distinto a la precarga #' + precargaId + '.</strong> '
+            + 'Factura: ' + formatearMonto(total) + ' · Precarga: ' + formatearMonto(precargaTotal)
+            + ' · Diferencia: ' + formatearMonto(diff)
+            + '. Si el PDF está mal, corregí la precarga; el grabado será rechazado.'
+        ).show();
     }
 
     function serializarFormularioPreview() {

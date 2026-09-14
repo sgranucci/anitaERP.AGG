@@ -1,9 +1,13 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\SuitecrmPermiso;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Ferli: menú/permiso del reporte Artículos vendidos.
+ */
 return new class extends Migration
 {
     private const URL = 'ventas/reparticulovendido';
@@ -12,6 +16,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return;
+        }
+
         $ref = DB::table('menu')->where('url', 'ventas/reppedido')->first();
         $parentId = $ref ? (int) $ref->menu_id : 0;
         if ($parentId === 0) {
@@ -67,6 +75,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return;
+        }
+
         $permisoId = (int) (DB::table('permiso')->where('slug', self::SLUG)->value('id') ?? 0);
         if ($permisoId > 0) {
             DB::table('permiso_rol')->where('permiso_id', $permisoId)->delete();

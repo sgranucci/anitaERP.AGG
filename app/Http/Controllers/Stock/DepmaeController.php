@@ -75,7 +75,11 @@ class DepmaeController extends Controller
             || can('listar-transportes', false)
             || can('crear-transportes', false)
             || can('editar-transportes', false)
-            || can('actualizar-transportes', false);
+            || can('actualizar-transportes', false)
+            || can('listar-local-venta', false)
+            || can('crear-local-venta', false)
+            || can('editar-local-venta', false)
+            || can('actualizar-local-venta', false);
     }
 
     /**

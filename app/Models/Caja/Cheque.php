@@ -12,6 +12,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Banco;
 use App\Models\Compras\Proveedor;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\Venta;
 use App\Traits\Caja\ChequeTrait;
 
 class Cheque extends Model implements Auditable
@@ -23,9 +24,13 @@ class Cheque extends Model implements Auditable
             'origen', 'chequera_id', 'caracter', 'para_dep', 'negociable', 'estado', 'fechaemision', 'fechapago', 'fecha_entrega', 'cuentacaja_id',
             'empresa_id', 'caja_id', 'caja_movimiento_id', 
             'cobranza_id', 'pagoproveedor_id', 'cheque_reemplaza_id',
-            'numerocheque', 'nro_echeq', 'moneda_id', 'monto', 'cotizacion', 'proveedor_id', 'cliente_id',
+            'numerocheque', 'nro_interno_anita', 'nro_echeq', 'moneda_id', 'monto', 'cotizacion', 'proveedor_id', 'cliente_id',
+            'venta_nd_id', 'fecha_rechazo', 'motivo_rechazo',
+            'fecha_deposito', 'cuentacaja_deposito_id', 'nro_boleta_deposito', 'fecha_acreditacion', 'asiento_acreditacion_id',
+            'nro_caucion', 'fecha_caucion',
             'tipodocumento_id', 'numerodocumento', 'entregado', 'anombrede', 'estadocheque_banco_id', 
-            'sucursalpago', 'tipodistribucion', 'banco_id', 'cuentalibradora'
+            'sucursalpago', 'tipodistribucion', 'banco_id', 'cuentalibradora',
+            'echeq_estado', 'echeq_sync_at', 'echeq_provider',
                             ];
     protected $table = 'cheque';
 
@@ -79,6 +84,11 @@ class Cheque extends Model implements Auditable
         return $this->belongsTo(Cuentacaja::class, 'cuentacaja_id');
     }
 
+    public function cuentacajaDeposito()
+    {
+        return $this->belongsTo(Cuentacaja::class, 'cuentacaja_deposito_id');
+    }
+
     public function cajas()
     {
         return $this->belongsTo(Caja::class, 'caja_id');
@@ -92,6 +102,16 @@ class Cheque extends Model implements Auditable
     public function clientes()
     {
         return $this->belongsTo(Cliente::class, 'cliente_id');
+    }
+
+    public function ventaNd()
+    {
+        return $this->belongsTo(Venta::class, 'venta_nd_id');
+    }
+
+    public function asientoAcreditacion()
+    {
+        return $this->belongsTo(\App\Models\Contable\Asiento::class, 'asiento_acreditacion_id');
     }
 
     public function tipodocumentos()

@@ -24,6 +24,7 @@ use App\Models\Stock\Tipoliquido;
 use App\Models\Stock\Tipoproducto;
 use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Usoarticulo;
+use App\Models\Ventas\Canal;
 use App\Repositories\Compras\CondicionentregaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
@@ -50,9 +51,11 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
+use App\Support\Stock\ArticuloEstadoCanalSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuSupport;
 use App\Support\Stock\ArticuloEtiquetaZplSupport;
+use App\Support\Stock\ArticuloKardexCombinacionSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Stock\ArticuloProveedorLineasSupport;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
@@ -62,6 +65,8 @@ use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\PrecioListaVigenteSupport;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport;
+use App\Models\Configuracion\Modeloetiqueta;
+use App\Models\Stock\Talle;
 use Auth;
 use Carbon\Carbon;
 use Exception;
@@ -221,6 +226,9 @@ class ArticuloController extends Controller
             'filtrosQuery' => ArticuloListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => $camposFiltro,
             'empresa_query' => $empresa_query,
+            'canalesFiltro' => ArticuloListadoFiltros::filtroCanalActivo()
+                ? Canal::query()->where('activo', true)->orderBy('nombre')->get(['id', 'codigo', 'nombre'])
+                : collect(),
             'saldosStkdep' => $saldosStkdep,
         ]);
     }
@@ -612,18 +620,38 @@ class ArticuloController extends Controller
             }
         }
 
+        $combinacionId = (int) $request->query('combinacion_id', 0);
+        $talleId = (int) $request->query('talle_id', 0);
+        $modeloEtiquetaId = (int) $request->query('modeloetiqueta_id', 0);
+        $datosCombinacion = null;
+        if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli() && ($combinacionId > 0 || $talleId > 0)) {
+            $datosCombinacion = $this->resolverDatosEtiquetaCombinacion($articulo, $combinacionId, $talleId);
+            if (isset($datosCombinacion['error'])) {
+                return $this->responderImpresionEtiquetaArticulo($request, false, '', [$datosCombinacion['error']]);
+            }
+        }
+
         // Arma nombre de archivo
         $nombreEtiqueta = 'tmp/eti-'.Str::random(10).'.txt';
 
         $usuario_id = Auth()->id();
-        $modeloetiqueta = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta(
-            $usuario_id,
-            SeteoSalidaProgramaSupport::STOCK_ARTICULO
-        );
+        $modeloetiqueta = null;
+        if ($modeloEtiquetaId > 0 && \App\Support\Configuracion\EntornoEmpresaSupport::esFerli()) {
+            $modeloDirecto = Modeloetiqueta::query()->find($modeloEtiquetaId);
+            if ($modeloDirecto && (string) $modeloDirecto->estado === 'A') {
+                $modeloetiqueta = (object) ['modeloetiquetas' => $modeloDirecto];
+            }
+        }
+        if (! $modeloetiqueta) {
+            $modeloetiqueta = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta(
+                $usuario_id,
+                SeteoSalidaProgramaSupport::STOCK_ARTICULO
+            );
+        }
 
         if (! $modeloetiqueta || ! $modeloetiqueta->modeloetiquetas) {
             return $this->responderImpresionEtiquetaArticulo($request, false, '', [
-                'No hay modelo de etiqueta configurado. Use «Configura etiqueta» en el listado.',
+                'No hay modelo de etiqueta configurado. Use «Configura etiqueta» o el diseñador de etiquetas.',
             ]);
         }
 
@@ -632,7 +660,7 @@ class ArticuloController extends Controller
 
         if ($npusEtiqueta === []) {
             for ($i = 0; $i < $cantidadEtiquetas; $i++) {
-                $etiqueta .= $this->armarCodigoEtiquetaArticulo($plantillaEtiqueta, $articulo, null);
+                $etiqueta .= $this->armarCodigoEtiquetaArticulo($plantillaEtiqueta, $articulo, null, $datosCombinacion);
             }
         } else {
             foreach ($npusEtiqueta as $numeroparte) {
@@ -642,7 +670,7 @@ class ArticuloController extends Controller
                     return $this->responderImpresionEtiquetaArticulo($request, false, '', [$e->getMessage()]);
                 }
 
-                $etiqueta .= $this->armarCodigoEtiquetaArticulo($plantillaEtiqueta, $articulo, $datosNpu);
+                $etiqueta .= $this->armarCodigoEtiquetaArticulo($plantillaEtiqueta, $articulo, $datosNpu, $datosCombinacion);
             }
         }
 
@@ -756,12 +784,18 @@ class ArticuloController extends Controller
 
     /**
      * @param  array<string, mixed>|null  $datosNpu
+     * @param  array<string, mixed>|null  $datosCombinacion
      */
-    private function armarCodigoEtiquetaArticulo(string $plantilla, Articulo $articulo, ?array $datosNpu): string
-    {
+    private function armarCodigoEtiquetaArticulo(
+        string $plantilla,
+        Articulo $articulo,
+        ?array $datosNpu,
+        ?array $datosCombinacion = null
+    ): string {
         $plantilla = ArticuloEtiquetaZplSupport::normalizarPlantilla($plantilla);
 
         $etiqueta = Str::replace('@sku@', $articulo->sku, $plantilla, caseSensitive: false);
+        $etiqueta = Str::replace('@descripcion@', (string) ($articulo->descripcion ?? ''), $etiqueta, caseSensitive: false);
 
         if ($datosNpu !== null) {
             $etiqueta = Str::replace('@npu@', (string) $datosNpu['numeroparte'], $etiqueta, caseSensitive: false);
@@ -773,7 +807,48 @@ class ArticuloController extends Controller
             $etiqueta = Str::replace('@numerorecepcion@', ' ', $etiqueta, caseSensitive: false);
         }
 
+        $combCodigo = (string) ($datosCombinacion['combinacion_codigo'] ?? ' ');
+        $combNombre = (string) ($datosCombinacion['combinacion_nombre'] ?? ' ');
+        $talleNombre = (string) ($datosCombinacion['talle_nombre'] ?? ' ');
+        $etiqueta = Str::replace('@combinacion@', $combCodigo !== '' ? $combCodigo : ' ', $etiqueta, caseSensitive: false);
+        $etiqueta = Str::replace('@combinacion_nombre@', $combNombre !== '' ? $combNombre : ' ', $etiqueta, caseSensitive: false);
+        $etiqueta = Str::replace('@talle@', $talleNombre !== '' ? $talleNombre : ' ', $etiqueta, caseSensitive: false);
+
         return ArticuloEtiquetaZplSupport::normalizarCodigoFinal($etiqueta);
+    }
+
+    /**
+     * @return array{combinacion_codigo:string,combinacion_nombre:string,talle_nombre:string}|array{error:string}
+     */
+    private function resolverDatosEtiquetaCombinacion(Articulo $articulo, int $combinacionId, int $talleId): array
+    {
+        $out = [
+            'combinacion_codigo' => '',
+            'combinacion_nombre' => '',
+            'talle_nombre' => '',
+        ];
+
+        if ($combinacionId > 0) {
+            $comb = Combinacion::query()
+                ->whereKey($combinacionId)
+                ->where('articulo_id', $articulo->id)
+                ->first(['id', 'codigo', 'nombre', 'estado']);
+            if (! $comb) {
+                return ['error' => 'La combinación indicada no pertenece al artículo.'];
+            }
+            $out['combinacion_codigo'] = (string) ($comb->codigo ?? '');
+            $out['combinacion_nombre'] = (string) ($comb->nombre ?? '');
+        }
+
+        if ($talleId > 0) {
+            $talle = Talle::query()->find($talleId, ['id', 'nombre', 'codigo']);
+            if (! $talle) {
+                return ['error' => 'Talle inválido.'];
+            }
+            $out['talle_nombre'] = (string) ($talle->nombre ?: $talle->codigo ?: $talleId);
+        }
+
+        return $out;
     }
 
     public function crear(Request $request)
@@ -849,6 +924,8 @@ class ArticuloController extends Controller
         $circuitoAlta = \App\Support\Stock\ArticuloAprobacionAltaSupport::habilitado();
         if ($circuitoAlta) {
             $data['estado'] = \App\Support\Stock\ArticuloAprobacionAltaSupport::ESTADO_PENDIENTE;
+        } else {
+            $data = ArticuloEstadoCanalSupport::normalizarDataFormularioFerli($data);
         }
 
         DB::beginTransaction();
@@ -860,6 +937,13 @@ class ArticuloController extends Controller
 
             // Guarda tablas asociadas
             if ($articulo) {
+                if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
+                    ArticuloEstadoCanalSupport::sincronizarCanales(
+                        (int) $articulo->id,
+                        $request->input('canal_ids', [])
+                    );
+                }
+
                 // Crea estado
                 $data['estadofechas'][] = Carbon::now();
                 $data['estados'][] = $circuitoAlta
@@ -939,6 +1023,9 @@ class ArticuloController extends Controller
         $producto = $this->articuloRepository->find($id);
         if ($producto) {
             $producto->loadMissing('codigosenasas');
+            if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
+                $producto->loadMissing('canales:id,codigo,nombre');
+            }
         }
         $puedeActualizarArticulo = can('actualizar-articulos', false);
 
@@ -1011,6 +1098,7 @@ class ArticuloController extends Controller
 
         $data = ArticuloListadoFiltros::normalizarEmpresaIdEnData($request->all());
         $data['fl_precio_promedio_transferencia'] = $request->boolean('fl_precio_promedio_transferencia');
+        $data = ArticuloEstadoCanalSupport::normalizarDataFormularioFerli($data);
 
         $articuloPrevio = Articulo::query()
             ->whereKey((int) ($data['articulo_id'] ?? $id))
@@ -1038,10 +1126,17 @@ class ArticuloController extends Controller
             if (\App\Support\Stock\ArticuloAprobacionAltaSupport::habilitado()
                 && $articuloPrevio
                 && \App\Support\Stock\ArticuloAprobacionAltaSupport::requiereCircuito((string) $articuloPrevio->estado)) {
-                unset($data['estado']);
+                unset($data['estado'], $data['estado_fabrica'], $data['estado_local']);
             }
 
             $articulo = Articulo::findOrFail($data['articulo_id'])->update($data);
+
+            if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
+                ArticuloEstadoCanalSupport::sincronizarCanales(
+                    (int) $id,
+                    $request->input('canal_ids', [])
+                );
+            }
 
             $articulo_estado = $this->articulo_estadoRepository->update($data, $id);
             $articulo_cuentacontable = $this->articulo_cuentacontableRepository->update($data, $id);
@@ -1602,28 +1697,27 @@ class ArticuloController extends Controller
     {
         DB::beginTransaction();
         try {
-            $data = [];
-            $data['estado'] = $estadoarticulo;
+            $data = ArticuloEstadoCanalSupport::aplicarEstadoUnicoEnData([], (string) $estadoarticulo);
 
-            $articulo = Articulo::findOrFail($articulo_id)->update($data);
+            Articulo::findOrFail($articulo_id)->update($data);
 
             // Crea estado
             if (isset($estadoarticulo)) {
-                $data = [];
-                $data['estadofechas'][] = Carbon::now();
-                $data['usuario_ids'][] = Auth::user()->id;
+                $dataHist = [];
+                $dataHist['estadofechas'][] = Carbon::now();
+                $dataHist['usuario_ids'][] = Auth::user()->id;
 
                 if ($estadoarticulo == 'INACTIVO') {
-                    $data['estadoobservaciones'][] = 'Inactivación de Artículo';
-                    $data['estados'][] = Articulo_Estado::$enumEstado[array_search('I', array_column(Articulo_Estado::$enumEstado, 'valor'))]['nombre'];
+                    $dataHist['estadoobservaciones'][] = 'Inactivación de Artículo';
+                    $dataHist['estados'][] = Articulo_Estado::$enumEstado[array_search('I', array_column(Articulo_Estado::$enumEstado, 'valor'))]['nombre'];
                 } else {
-                    $data['estadoobservaciones'][] = 'Activación de Artículo';
-                    $data['estados'][] = Articulo_Estado::$enumEstado[array_search('A', array_column(Articulo_Estado::$enumEstado, 'valor'))]['nombre'];
+                    $dataHist['estadoobservaciones'][] = 'Activación de Artículo';
+                    $dataHist['estados'][] = Articulo_Estado::$enumEstado[array_search('A', array_column(Articulo_Estado::$enumEstado, 'valor'))]['nombre'];
                 }
 
-                $data['estadousuarios'][] = Auth::user()->id;
+                $dataHist['estadousuarios'][] = Auth::user()->id;
 
-                $articulo_estado = $this->articulo_estadoRepository->create($data, $articulo_id);
+                $this->articulo_estadoRepository->create($dataHist, $articulo_id);
             }
 
             DB::commit();
@@ -1632,6 +1726,76 @@ class ArticuloController extends Controller
 
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
+    }
+
+    public function apiKardexCombinacion(Request $request): \Illuminate\Http\JsonResponse
+    {
+        if (! ArticuloKardexCombinacionSupport::puedeConsultar()) {
+            abort(403, 'No tiene permisos para consultar el kardex.');
+        }
+
+        $articuloId = (int) $request->query('articulo_id', 0);
+        if ($articuloId <= 0) {
+            return response()->json(['error' => 'Artículo inválido.'], 422);
+        }
+
+        $empresaId = (int) $request->query('empresa_id', 0);
+        $empresaId = $empresaId > 0 ? $empresaId : null;
+        if ($empresaId !== null && ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403, 'Empresa no autorizada.');
+        }
+
+        try {
+            return response()->json(ArticuloKardexCombinacionSupport::explorador($articuloId, $empresaId));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiDatosEtiquetaFerli(Request $request, $id): \Illuminate\Http\JsonResponse
+    {
+        if (! \App\Support\Configuracion\EntornoEmpresaSupport::esFerli() || ! can('imprimir-articulos-qr', false)) {
+            abort(403);
+        }
+
+        $articuloId = (int) $id;
+        $articulo = Articulo::query()->select('id', 'sku', 'descripcion')->findOrFail($articuloId);
+
+        $combinaciones = Combinacion::query()
+            ->select('id', 'codigo', 'nombre')
+            ->where('articulo_id', $articuloId)
+            ->where('estado', 'A')
+            ->orderBy('codigo')
+            ->get();
+
+        $talles = Talle::query()->select('id', 'codigo', 'nombre')->orderBy('id')->get();
+
+        $modelos = Modeloetiqueta::query()
+            ->select('id', 'nombre', 'estado')
+            ->where('estado', 'A')
+            ->orderBy('nombre')
+            ->get();
+
+        $seteado = $this->seteoModeloetiquetaRepository->buscaSeteoModeloetiqueta(
+            Auth()->id(),
+            SeteoSalidaProgramaSupport::STOCK_ARTICULO
+        );
+        $modeloDefaultId = $seteado && $seteado->modeloetiquetas
+            ? (int) $seteado->modeloetiquetas->id
+            : 0;
+
+        return response()->json([
+            'articulo' => [
+                'id' => (int) $articulo->id,
+                'sku' => (string) $articulo->sku,
+                'descripcion' => (string) $articulo->descripcion,
+            ],
+            'combinaciones' => $combinaciones,
+            'talles' => $talles,
+            'modelos' => $modelos,
+            'modelo_default_id' => $modeloDefaultId,
+            'max_cantidad' => ArticuloEtiquetaNpuRangoSupport::MAX_ETIQUETAS,
+        ]);
     }
 
     // En base a una cuenta ingresada, verificar el resto de las empresas asignadas y las genera

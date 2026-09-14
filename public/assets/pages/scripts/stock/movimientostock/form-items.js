@@ -338,14 +338,16 @@
             $(document).on('change.msCheckSinFiltro', '.checkSinFiltro', function () {
                 var $tr = $(this).closest('tr');
                 if (msFilaArticuloId($tr) && typeof completarCombinaciones === 'function') {
-                    completarCombinaciones($tr, $tr.find('.combinacion').val() || 0, false);
+                    var idPrev = $tr.find('.combinacion').val() || $tr.find('.combinacion_id_previa').val() || 0;
+                    completarCombinaciones($tr, idPrev, false);
                 }
             });
 
             $(document).on('change.msCheckComb', '.checkCombinacion', function () {
                 var $tr = $(this).closest('tr');
                 if (msFilaArticuloId($tr) && typeof completarCombinaciones === 'function') {
-                    completarCombinaciones($tr, $tr.find('.combinacion').val() || 0, false);
+                    var idPrev = $tr.find('.combinacion').val() || $tr.find('.combinacion_id_previa').val() || 0;
+                    completarCombinaciones($tr, idPrev, false);
                 }
             });
         } else {

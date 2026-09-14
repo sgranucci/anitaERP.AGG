@@ -33,6 +33,7 @@ use App\Models\Stock\Subcategoria;
 use App\Models\Stock\Tipocorte;
 use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Usoarticulo;
+use App\Exports\Stock\ArticuloFerliListadoExport;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
 use App\Services\Stock\PrecioServiceFerli;
@@ -42,6 +43,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
 use Mail;
 
@@ -114,17 +116,7 @@ class ArticuloFerliController extends Controller
             $filtrosQuery['page'] = $page;
         }
 
-        $art_query = Articulo::select('articulo.id as id', 'sku as stkm_articulo', 'descripcion as stkm_desc',
-            'unidadmedida.nombre as stkm_unidad_medida', 'categoria.nombre as stkm_agrupacion', 'mventa.nombre as stkm_marca', 'linea.nombre as stkm_linea',
-            'usoarticulo_id', 'nofactura')
-            ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
-            ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
-            ->leftJoin('mventa', 'articulo.mventa_id', '=', 'mventa.id')
-            ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id');
-
-        ArticuloFerliListadoFiltros::aplicar($art_query, $filtros);
-
-        $articulos = $art_query->orderBy('articulo.sku')->paginate(50)->withQueryString();
+        $articulos = $this->leeArticulosListado($filtros, true);
         $estadoComb = $filtros['estado_comb'] ?? ArticuloFerliListadoFiltros::ESTADO_COMB_ACTIVAS;
         $retornoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery);
 
@@ -142,6 +134,75 @@ class ArticuloFerliController extends Controller
     public function list(Request $request)
     {
         return $this->index($request);
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-articulos');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = ArticuloFerliListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = ArticuloFerliListadoExport::leeArticulos($filtros);
+                $view = View::make('stock.product.listado', compact('datas'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'listado_producto_ferli';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+                return (new ArticuloFerliListadoExport)
+                    ->parametros($filtros)
+                    ->download('articulos.xlsx');
+
+            case 'CSV':
+                return (new ArticuloFerliListadoExport)
+                    ->parametros($filtros)
+                    ->download('articulos.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('products.index', ArticuloFerliListadoFiltros::paraQueryString($filtros));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection
+     */
+    private function leeArticulosListado(array $filtros, bool $paginar)
+    {
+        $query = Articulo::query()
+            ->select(
+                'articulo.id as id',
+                'articulo.sku as stkm_articulo',
+                'articulo.descripcion as stkm_desc',
+                'unidadmedida.nombre as stkm_unidad_medida',
+                'categoria.nombre as stkm_agrupacion',
+                'mventa.nombre as stkm_marca',
+                'linea.nombre as stkm_linea',
+                'articulo.usoarticulo_id',
+                'articulo.nofactura'
+            )
+            ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
+            ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
+            ->leftJoin('mventa', 'articulo.mventa_id', '=', 'mventa.id')
+            ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id')
+            ->orderBy('articulo.sku');
+
+        ArticuloFerliListadoFiltros::aplicar($query, $filtros);
+
+        return $paginar
+            ? $query->paginate(10)->withQueryString()
+            : $query->get();
     }
 
     public function limpiafiltro(Request $request)

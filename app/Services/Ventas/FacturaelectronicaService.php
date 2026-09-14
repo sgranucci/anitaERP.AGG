@@ -15,6 +15,7 @@ use App\Services\Arca\ArcaCaeaLocalService;
 use App\Services\Arca\ArcaMtxcaFacturaElectronicaService;
 use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
+use App\Services\Arca\ArcaWsfexFacturaElectronicaService;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use App\Support\Configuracion\ParametroSistemaSupport;
@@ -30,6 +31,8 @@ class FacturaElectronicaService
 
 	protected ArcaMtxcaFacturaElectronicaService $arcaMtxcaFacturaElectronicaService;
 
+	protected ArcaWsfexFacturaElectronicaService $arcaWsfexFacturaElectronicaService;
+
 	protected ArcaCaeaLocalService $arcaCaeaLocalService;
 
 	public function __construct(
@@ -37,12 +40,14 @@ class FacturaElectronicaService
 		ArcaWsfeFacturaElectronicaService $arcaWsfeFacturaElectronicaService,
 		ArcaWsfeCaeaService $arcaWsfeCaeaService,
 		ArcaMtxcaFacturaElectronicaService $arcaMtxcaFacturaElectronicaService,
+		ArcaWsfexFacturaElectronicaService $arcaWsfexFacturaElectronicaService,
 		ArcaCaeaLocalService $arcaCaeaLocalService,
 	) {
     	$this->condicionivaRepository = $condicionivarepository;
 		$this->arcaWsfeFacturaElectronicaService = $arcaWsfeFacturaElectronicaService;
 		$this->arcaWsfeCaeaService = $arcaWsfeCaeaService;
 		$this->arcaMtxcaFacturaElectronicaService = $arcaMtxcaFacturaElectronicaService;
+		$this->arcaWsfexFacturaElectronicaService = $arcaWsfexFacturaElectronicaService;
 		$this->arcaCaeaLocalService = $arcaCaeaLocalService;
     }
 
@@ -58,6 +63,13 @@ class FacturaElectronicaService
 	{
 		return ArcaPuntoventaWebserviceSupport::esMtxca((string) ($puntoventa->webservice ?? ''))
 			&& (string) config('arca_mtxca.transporte', 'afip_php') === 'soap';
+	}
+
+	/** Exportación wsfex_v1 vía SOAP (config arca_wsfex.transporte = soap). */
+	private function debeUsarSoapWsfex(object $puntoventa): bool
+	{
+		return ArcaPuntoventaWebserviceSupport::esWsfex((string) ($puntoventa->webservice ?? ''))
+			&& (string) config('arca_wsfex.transporte', 'afip_php') === 'soap';
 	}
 
 	public function traeUltimoNumeroComprobante($nroinscripcion, $tipotransaccion, $puntoventa, array $opciones = [])
@@ -78,7 +90,7 @@ class FacturaElectronicaService
 		}
 		else
 		{
-			if ($this->debeUsarSoapWsfe($puntoventa) || $this->debeUsarSoapMtxca($puntoventa)) {
+			if ($this->debeUsarSoapWsfe($puntoventa) || $this->debeUsarSoapMtxca($puntoventa) || $this->debeUsarSoapWsfex($puntoventa)) {
 				$empresaId = (int) ($puntoventa->empresa_id ?? 0);
 				if ($empresaId < 1) {
 					return -1;
@@ -88,6 +100,13 @@ class FacturaElectronicaService
 				try {
 					if ($this->debeUsarSoapMtxca($puntoventa)) {
 						$n = $this->arcaMtxcaFacturaElectronicaService->consultarUltimoComprobanteAutorizado(
+							$empresaId,
+							(int) $puntoventa->codigo,
+							(int) $tipotransaccion,
+							$soapTimeoutPos,
+						);
+					} elseif ($this->debeUsarSoapWsfex($puntoventa)) {
+						$n = $this->arcaWsfexFacturaElectronicaService->fexGetLastCmp(
 							$empresaId,
 							(int) $puntoventa->codigo,
 							(int) $tipotransaccion,
@@ -259,7 +278,30 @@ class FacturaElectronicaService
 			try {
 				$out = $this->arcaWsfeFacturaElectronicaService->solicitaCaeDomestico(
 					$empresaId,
-					$puntoventa,
+					ArcaPuntoventaWebserviceSupport::puntoventaParaSoap($puntoventa),
+					(int) $tipotransaccion,
+					$datos,
+					$soapTimeoutPos,
+				);
+
+				return [
+					'cae' => $out['cae'],
+					'fechavencimientocae' => $out['fechavencimientocae'],
+				];
+			} catch (\Throwable $e) {
+				return ['Error' => $e->getMessage()];
+			}
+		}
+
+		if ($this->debeUsarSoapWsfex($puntoventa)) {
+			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
+			if ($empresaId < 1) {
+				return ['Error' => 'Punto de venta sin empresa asociada; no se puede emitir con WSFEX SOAP.'];
+			}
+			try {
+				$out = $this->arcaWsfexFacturaElectronicaService->solicitaCaeExportacion(
+					$empresaId,
+					ArcaPuntoventaWebserviceSupport::puntoventaParaSoap($puntoventa),
 					(int) $tipotransaccion,
 					$datos,
 					$soapTimeoutPos,
@@ -275,7 +317,7 @@ class FacturaElectronicaService
 		}
 
 		// Si es exportacion tiene que pedir request
-		if ($puntoventa->webservice == 'wsfex_v1')
+		if (ArcaPuntoventaWebserviceSupport::esWsfex((string) ($puntoventa->webservice ?? '')))
 		{
 			$nroId = -1;
 			
@@ -646,7 +688,7 @@ class FacturaElectronicaService
 
 	public function consultaCompEnviado($nroinscripcion, $tipotransaccion, $puntoventa, $numero)
 	{
-		if ($this->debeUsarSoapWsfe($puntoventa) || $this->debeUsarSoapMtxca($puntoventa)) {
+		if ($this->debeUsarSoapWsfe($puntoventa) || $this->debeUsarSoapMtxca($puntoventa) || $this->debeUsarSoapWsfex($puntoventa)) {
 			$empresaId = (int) ($puntoventa->empresa_id ?? 0);
 			if ($empresaId < 1) {
 				return -1;
@@ -654,6 +696,15 @@ class FacturaElectronicaService
 
 			if ($this->debeUsarSoapMtxca($puntoventa)) {
 				return $this->arcaMtxcaFacturaElectronicaService->consultaComprobanteEmitido(
+					$empresaId,
+					(int) $puntoventa->codigo,
+					(int) $tipotransaccion,
+					(int) $numero
+				);
+			}
+
+			if ($this->debeUsarSoapWsfex($puntoventa)) {
+				return $this->arcaWsfexFacturaElectronicaService->consultaComprobanteEmitido(
 					$empresaId,
 					(int) $puntoventa->codigo,
 					(int) $tipotransaccion,
@@ -710,7 +761,7 @@ class FacturaElectronicaService
 	{
 		if ($letra == 'B') {
 			$tipotransaccion += 5;
-		} elseif ($letra == 'E' || ($puntoventa->webservice ?? '') == 'wsfex_v1') {
+		} elseif ($letra == 'E' || ArcaPuntoventaWebserviceSupport::esWsfex((string) ($puntoventa->webservice ?? ''))) {
 			$tipotransaccion += 18;
 		} elseif ($letra == 'M') {
 			$tipotransaccion += 50;

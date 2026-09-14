@@ -26,6 +26,7 @@ final class MovimientoStockFormLineasSupport
                 'articulos_movimiento.articulo_movimiento_talles.talles',
                 'articulos_movimiento.color',
                 'articulos_movimiento.talle',
+                'articulos_movimiento.modulos',
             ]);
         }
 

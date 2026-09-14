@@ -70,7 +70,10 @@
                 <div class="form-group row totales-por-moneda-cheque-emitido mt-2"></div>
             </div>
             <div class="tab-pane fade" id="panel-cheques-recibidos" role="tabpanel">
-                <h3>Cheques recibidos</h3>
+                <p class="text-muted small mb-2">
+                    Alta de cheques de terceros a cartera (ingreso) o selecci&oacute;n desde cartera (egreso / entrega).
+                    Carpeta verde / F1: consulta cartera.
+                </p>
                 <table class="table table-sm table-bordered" id="cheque-recibido-table">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
@@ -87,16 +90,20 @@
                     </thead>
                     <tbody id="tbody-cheque-recibido-table">
                         @foreach ($chequesRecibidos as $cheque)
-                            <tr class="item-cheque-recibido">
+                            <tr class="item-cheque-recibido {{ $cheque->nro_interno_anita ? 'cheque-desde-cartera' : '' }}">
                                 <td><input type="date" name="fechapago_recibidos[]" class="form-control fechapago_recibido" value="{{ $cheque->fechapago }}"></td>
                                 <td>
                                     <input type="hidden" name="cheque_recibido_ids[]" class="cheque_recibido_id" value="{{ $cheque->id }}">
+                                    <input type="hidden" name="nro_interno_anita_recibidos[]" class="nro_interno_anita_recibido" value="{{ $cheque->nro_interno_anita }}">
                                     <input type="hidden" name="banco_recibido_ids[]" class="banco_recibido_id" value="{{ $cheque->banco_id }}">
+                                    <button type="button" class="btn-accion-tabla consultachequecartera_recibido tooltipsC" title="Cartera (F1)">
+                                        <i class="fa fa-folder-open text-success"></i>
+                                    </button>
                                     <button type="button" class="btn-accion-tabla consultabanco_recibido tooltipsC" title="Consulta banco">
                                         <i class="fa fa-search text-primary"></i>
                                     </button>
                                     <input type="text" class="codigobanco_recibido form-control d-inline-block" style="width:70px" name="codigobanco_recibido[]" value="{{ $cheque->bancos->codigo ?? '' }}">
-                                    <input type="text" class="nombrebanco_recibido form-control d-inline-block" style="width:140px" readonly value="{{ $cheque->bancos->nombre ?? '' }}">
+                                    <input type="text" class="nombrebanco_recibido form-control d-inline-block" style="width:120px" readonly value="{{ $cheque->bancos->nombre ?? '' }}">
                                 </td>
                                 <td><input type="text" name="numerocheque_recibidos[]" class="form-control numerocheque_recibido" value="{{ $cheque->numerocheque }}"></td>
                                 <td><input type="text" name="sucursalpago_recibidos[]" class="form-control sucursalpago_recibido" value="{{ $cheque->sucursalpago }}"></td>
@@ -120,7 +127,8 @@
                     </tbody>
                 </table>
                 @include('caja.ingresoegreso.template_cheque_recibido')
-                <button type="button" id="agrega_renglon_cheque_recibido" class="btn btn-danger btn-sm">+ Cheque recibido</button>
+                <button type="button" id="agrega_renglon_cheque_recibido" class="btn btn-outline-secondary btn-sm">+ Rengl&oacute;n manual</button>
+                <button type="button" id="agrega_renglon_cheque_cartera" class="btn btn-outline-success btn-sm">+ Desde cartera</button>
                 <div class="form-group row totales-por-moneda-cheque-recibido mt-2"></div>
             </div>
             <div class="tab-pane fade" id="panel-cheques-reemplazo" role="tabpanel">
@@ -187,3 +195,4 @@
 </div>
 @include('includes.caja.modalconsultabanco')
 @include('includes.caja.modalconsultachequera')
+@include('includes.caja.modalconsultachequecartera')

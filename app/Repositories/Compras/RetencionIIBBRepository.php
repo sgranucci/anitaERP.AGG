@@ -8,6 +8,7 @@ use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Provincia;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
 
 class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 {
@@ -107,6 +108,9 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 						'orderBy' => $this->keyField,
 						'tabla' => $this->tableAnita[0] );
         $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (! is_array($dataAnita)) {
+            return;
+        }
         $datosLocal = $this->model->get();
         $datosLocalArray = [];
 
@@ -124,6 +128,7 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
     public function traerRegistroDeAnita($key){
 
         $apiAnita = new ApiAnita();
+        $campoPorcNoInscripto = AnitaRetencionEsquemaSupport::iibbCampoPorcNoInscripto();
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita[0], 
 			'sistema' => 'compras',
@@ -134,16 +139,19 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 					proib_minimo_local,
 					proib_porc_local,
 					proib_minimo_noins,
-					proib_porc_noinsc,
+					'.$campoPorcNoInscripto.',
 					proib_cta_contable,
 					proib_desc_prov 
             ' , 
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
-		if (count($dataAnita) > 0) 
-		{
+		if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return;
+        }
+
             $data = $dataAnita[0];
+            $porcNoInscripto = (float) ($data->{$campoPorcNoInscripto} ?? 0);
 
 			$cuenta = Cuentacontable::select('id', 'codigo')->where('codigo' , $data->proib_cta_contable)->first();
 			if ($cuenta)
@@ -188,10 +196,9 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 													'condicionIIBB_id' => 3,
 													'minimoimponible' => $data->proib_minimo_noins,
 													'minimoretencion' => 0,
-													'porcentajeretencion' => $data->proib_porc_noinsc,
+													'porcentajeretencion' => $porcNoInscripto,
 													]);																										
 			}
-        }
     }
 
 	public function guardarAnita($data) {
@@ -240,8 +247,10 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 		}
 
         $apiAnita = new ApiAnita();
+        $campoPorcNoInscripto = AnitaRetencionEsquemaSupport::iibbCampoPorcNoInscripto();
+        $nombre = is_array($data) ? ($data['nombre'] ?? '') : ($data->nombre ?? '');
 
-        $data = array( 'tabla' => $this->tableAnita[0], 
+        $payload = array( 'tabla' => $this->tableAnita[0], 
 			'acc' => 'insert',
 			'sistema' => 'compras',
             'campos' => '
@@ -251,7 +260,7 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 					proib_minimo_local,
 					proib_porc_local,
 					proib_minimo_noins,
-					proib_porc_noins,
+					'.$campoPorcNoInscripto.',
 					proib_cta_contable,
 					proib_desc_prov 
 					',
@@ -264,9 +273,9 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 						'".$minimoExento."',
 						'".$porcentajeExento."',
 						'".$cuentaContable."',
-						'".$request['nombre']."' "
+						'".$nombre."' "
         );
-        $apiAnita->apiCallEscritura($data);
+        $apiAnita->apiCallEscritura($payload);
 	}
 
 	public function actualizarAnita($request, $id) {
@@ -315,6 +324,7 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 		}
 
         $apiAnita = new ApiAnita();
+        $campoPorcNoInscripto = AnitaRetencionEsquemaSupport::iibbCampoPorcNoInscripto();
 
 		$data = array( 'acc' => 'update', 
 				'tabla' => $this->tableAnita[0],
@@ -326,7 +336,7 @@ class RetencionIIBBRepository implements RetencionIIBBRepositoryInterface
 							proib_minimo_local = '".$minimoLocal."',
 							proib_porc_local = '".$porcentajeLocal."',
 							proib_minimo_noins = '".$minimoExento."',
-							proib_porc_noins = '".$porcentajeExento."',
+							".$campoPorcNoInscripto." = '".$porcentajeExento."',
 							proib_cta_contable = '".$cuentaContable."',
 							proib_desc_prov = '".$request['nombre']."'
 							", 

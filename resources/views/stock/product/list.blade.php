@@ -60,7 +60,7 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                     ])
                     <span id="container-button-state" class="ml-1">
                         @if (can('cambiar-estado-combinaciones', false))
-                            <button class="btn btn-outline-secondary btn-sm" style="color:white" onclick="checkState(0)">Inactivar combinaciones</button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" style="color:white" onclick="checkState(0)">Inactivar combinaciones</button>
                         @endif
                     </span>
                 </div>
@@ -70,11 +70,19 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                     'limpiarUrl' => route('products.index', ['filtro_limpiar' => 1]),
                 ])
             </form>
-            <div class="card-body py-2 border-bottom bg-white">
-                @include('stock.product.partials.filtros_externos')
+            <div class="card-body py-2 border-bottom bg-white d-flex flex-wrap align-items-center justify-content-between">
+                <div class="mb-1 mb-md-0">
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'lista_producto_ferli',
+                        'queryparams' => $filtrosQuery ?? [],
+                    ])
+                </div>
+                <div class="mb-1 mb-md-0 ml-auto">
+                    @include('stock.product.partials.filtros_externos')
+                </div>
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                <table class="table table-striped table-bordered table-hover table-sm mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>C&oacute;digo</th>
@@ -83,47 +91,43 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                             <th>Marca</th>
                             <th>L&iacute;nea</th>
                             <th>Facturable</th>
-                            <th data-orderable="false"></th>
+                            <th class="width80 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
 						@foreach($articulos as $articulo)
     						<tr>
-        						<td>
-            						{{ $articulo->stkm_articulo ?? '' }}
-        						</td>
-        						<td>
-            						{{ $articulo->stkm_desc ?? '' }}
-        						</td>
-        						<td>
-            						{{ $articulo->stkm_agrupacion ?? '' }}
-        						</td>
-        						<td>
-            						{{ $articulo->stkm_marca ?? '' }}
-        						</td>
-        						<td>
-            						{{ $articulo->stkm_linea ?? '' }}
-        						</td>
-                                <td>
-                                    {{ $articulo->nofactura == '0' ? 'Facturable' : 'No facturable'}}
-                                </td>
-                            <td>
+        						<td>{{ $articulo->stkm_articulo ?? '' }}</td>
+        						<td>{{ $articulo->stkm_desc ?? '' }}</td>
+        						<td>{{ $articulo->stkm_agrupacion ?? '' }}</td>
+        						<td>{{ $articulo->stkm_marca ?? '' }}</td>
+        						<td>{{ $articulo->stkm_linea ?? '' }}</td>
+                                <td>{{ $articulo->nofactura == '0' ? 'Facturable' : 'No facturable'}}</td>
+                            <td class="text-nowrap">
 								@if ($articulo->usoarticulo_id == 1)
                        				@if (can('editar-articulos-combinaciones', false))
-          								<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="combinacion/index/{{$articulo->id}}">Combinaciones</a>
+          								<a class="btn-accion-tabla tooltipsC" href="{{ route('combinacion.index', ['id' => $articulo->id]) }}" title="Combinaciones">
+                                            <i class="fa fa-layer-group text-primary"></i>
+                                        </a>
 									@endif
 								@endif
                        			@if (can('editar-articulos-disenio', false))
-          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'disenio'] + $retornoListadoQuery) }}">Diseño</a>
+          							<a class="btn-accion-tabla tooltipsC" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'disenio'] + $retornoListadoQuery) }}" title="Diseño">
+                                        <i class="fa fa-paint-brush text-info"></i>
+                                    </a>
 								@endif
                        			@if (can('editar-articulos-tecnica', false))
-          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'tecnica'] + $retornoListadoQuery) }}">T&eacute;cnica</a>
+          							<a class="btn-accion-tabla tooltipsC" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'tecnica'] + $retornoListadoQuery) }}" title="Técnica">
+                                        <i class="fa fa-cogs text-secondary"></i>
+                                    </a>
 								@endif
                        			@if (can('editar-articulos-contaduria', false))
-          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'contaduria'] + $retornoListadoQuery) }}">Contable</a>
+          							<a class="btn-accion-tabla tooltipsC" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'contaduria'] + $retornoListadoQuery) }}" title="Contable">
+                                        <i class="fa fa-calculator text-warning"></i>
+                                    </a>
 								@endif
                        			@if (can('imprimir-articulos-qr', false))
-          							<a href="product/{{$articulo->stkm_articulo}}/TODO" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
+          							<a href="{{ route('product.download', ['sku' => $articulo->stkm_articulo, 'codigo' => 'TODO']) }}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
                                    		<i class="fa fa-qrcode"></i>
 									</a>
 								@endif
@@ -142,8 +146,15 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                 </table>
             </div>
             @if (method_exists($articulos, 'links'))
-                <div class="card-footer clearfix">
-                    {{ $articulos->appends($filtrosQuery ?? [])->links() }}
+                <div class="card-footer clearfix py-2">
+                    <div class="float-left text-muted small pt-1">
+                        @if ($articulos->total() > 0)
+                            {{ $articulos->firstItem() }}–{{ $articulos->lastItem() }} de {{ $articulos->total() }}
+                        @endif
+                    </div>
+                    <div class="float-right">
+                        {{ $articulos->appends($filtrosQuery ?? [])->links() }}
+                    </div>
                 </div>
             @endif
         </div>

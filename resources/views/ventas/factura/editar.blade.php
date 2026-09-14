@@ -116,6 +116,14 @@
                         <a href="{{route('lista_una_factura_copias', ['id' => $data->id])}}" class="btn btn-outline-light btn-sm" title="Imprimir eligiendo copias">
                             <i class="fa fa-copy"></i> Copias
                         </a>
+                        @can('enviar-factura-mail')
+                        <form action="{{ route('enviar_factura_mail', $data->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar la factura por mail al cliente?');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-light btn-sm" title="Enviar factura por mail">
+                                <i class="fa fa-envelope"></i> Mail
+                            </button>
+                        </form>
+                        @endcan
                     @endif
                     <a href="{{ isset($urlOrigen) ? 'javascript:history.back()' : route('factura') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> {{ isset($urlOrigen) ? 'Volver atrás' : 'Volver al listado' }}

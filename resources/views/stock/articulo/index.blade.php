@@ -15,12 +15,19 @@ Art&iacute;culos
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
 @if (can('imprimir-articulos-qr', false))
 <script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-imprimiendo.js') }}" type="text/javascript"></script>
+@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+<script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-ferli.js') }}" type="text/javascript"></script>
+@else
 <script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-cantidad.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-npu.js') }}" type="text/javascript"></script>
+@endif
 @endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.kardex_deposito_scripts')
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
+@if (\App\Support\Stock\ArticuloKardexCombinacionSupport::uiActiva())
+<script src="{{ asset('assets/pages/scripts/stock/articulo/kardex-combinacion-ferli.js') }}" type="text/javascript"></script>
+@endif
 @endif
 @if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-recepciones.js') }}" type="text/javascript"></script>
@@ -105,6 +112,9 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                             <th>Categoría</th>
                             <th>Tipo de Artículo</th>
                             <th>Uso</th>
+                            @if (\App\Support\Stock\ArticuloListadoFiltros::filtroCanalActivo())
+                                <th>Canal</th>
+                            @endif
                             @if ($filtroEmpresaActivo)
                                 <th>Empresa</th>
                             @endif
@@ -143,6 +153,20 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 <td>
                                     {{ $articulo->nombreusoarticulo ?? '' }}
                                 </td>
+                                @if (\App\Support\Stock\ArticuloListadoFiltros::filtroCanalActivo())
+                                    <td>
+                                        @php
+                                            $nombresCanal = $articulo->relationLoaded('canales')
+                                                ? $articulo->canales->pluck('nombre')->filter()->implode(', ')
+                                                : '';
+                                        @endphp
+                                        @if ($nombresCanal !== '')
+                                            <span class="badge badge-warning">{{ $nombresCanal }}</span>
+                                        @else
+                                            <span class="text-muted small">—</span>
+                                        @endif
+                                    </td>
+                                @endif
                                 @if ($filtroEmpresaActivo)
                                     <td><small>{{ $articulo->nombreempresa ?: 'Todas' }}</small></td>
                                 @endif
@@ -156,7 +180,22 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 <td>
                                     {{ ($articulo->nofactura == '0' ? 'Facturable' : ($articulo->nofactura == '1' ? 'No facturable' : '' )) }}
                                 </td>
-                                <td>{{ $articulo->estado }}</td>
+                                <td>
+                                    @if (\App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva())
+                                        @php
+                                            $ef = strtoupper((string) ($articulo->estado_fabrica ?? $articulo->estado ?? ''));
+                                            $el = strtoupper((string) ($articulo->estado_local ?? $articulo->estado ?? ''));
+                                        @endphp
+                                        <span class="badge {{ $ef === 'ACTIVO' ? 'badge-success' : 'badge-secondary' }}" title="Estado fábrica">
+                                            Fab {{ $ef === 'ACTIVO' ? 'A' : 'I' }}
+                                        </span>
+                                        <span class="badge {{ $el === 'ACTIVO' ? 'badge-info' : 'badge-secondary' }}" title="Estado local">
+                                            Loc {{ $el === 'ACTIVO' ? 'A' : 'I' }}
+                                        </span>
+                                    @else
+                                        {{ $articulo->estado }}
+                                    @endif
+                                </td>
                             <td>
                        			@if (can('editar-articulos', false))
                                 	<a href="{{route('editar_articulo', ['id' => $articulo->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
@@ -164,7 +203,16 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 	</a>
 								@endif
                        			@if (can('imprimir-articulos-qr', false))
-          							@if((string)($articulo->numeroparte ?? '0') === '1')
+          							@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-imprimir-etiqueta-ferli tooltipsC"
+                                	    title="Emitir etiquetas (combinación / talle)"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
+                                        <i class="fa fa-qrcode"></i>
+                                	</button>
+          							@elseif((string)($articulo->numeroparte ?? '0') === '1')
                                 	<button type="button"
                                 	    class="btn-accion-tabla btn-imprimir-etiqueta-npu tooltipsC"
                                 	    title="Imprimir etiqueta NPU"
@@ -204,6 +252,16 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
                                         <i class="fa fa-warehouse text-secondary"></i>
                                 	</button>
+                                    @if (\App\Support\Stock\ArticuloKardexCombinacionSupport::uiActiva())
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-kardex-combinacion-ferli tooltipsC"
+                                	    title="Kardex por combinación y depósito"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->codigoarticulo ?? $articulo->sku ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->descripcion ?? '' }}">
+                                        <i class="fa fa-list-alt text-info"></i>
+                                	</button>
+                                    @else
                                 	<button type="button"
                                 	    class="btn-accion-tabla btn-movimientos-stock-articulo tooltipsC"
                                 	    title="Kardex de stock"
@@ -213,6 +271,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
                                 	    data-deposito-id="{{ $articulo->depositoentrega_id ?? '' }}">
                                         <i class="fa fa-list-alt text-info"></i>
                                 	</button>
+                                    @endif
 								@endif
                        			@if (\App\Support\Stock\RecepcionProveedorArticuloConsultaSupport::puedeConsultar())
                                 	<button type="button"
@@ -253,8 +312,12 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 @include('includes.stock.modalconsultaprecioarticulo')
 @include('includes.stock.modalconsultalistaprecio')
 @if (can('imprimir-articulos-qr', false))
+@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+@include('includes.stock.modal_etiqueta_ferli')
+@else
 @include('includes.stock.modaletiquetanpuarticulo')
 @include('includes.stock.modaletiquetacantidadarticulo')
+@endif
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'articulo-etiqueta-imprimiendo-overlay',
     'tituloId' => 'articulo-etiqueta-imprimiendo-titulo',
@@ -266,6 +329,9 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.modal_kardex_deposito')
 @include('includes.stock.modal_saldos_articulo')
+@if (\App\Support\Stock\ArticuloKardexCombinacionSupport::uiActiva())
+@include('includes.stock.modal_kardex_combinacion')
+@endif
 <input type="hidden" id="recuento-movimientos-articulo-url" value="{{ route('recuento_movimientos_articulo') }}">
 <input type="hidden" id="articulo-saldos-deposito-url" value="{{ route('articulo_saldos_deposito') }}">
 @endif

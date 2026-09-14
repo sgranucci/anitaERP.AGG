@@ -83,8 +83,10 @@ function limpiaFiltros(){
 								@if (isset($data->ordentrabajo_combinacion_talles))
 									@foreach ($data->ordentrabajo_combinacion_talles as $item)
 										@php
-                                            if (!in_array($item->clientes->nombre, $clientes))
-                                                $clientes[] = $item->clientes->nombre;
+											$nombreCliente = $item->clientes->nombre ?? null;
+											if ($nombreCliente !== null && !in_array($nombreCliente, $clientes)) {
+												$clientes[] = $nombreCliente;
+											}
 										@endphp
             						@endforeach
             					@endif
@@ -99,7 +101,7 @@ function limpiaFiltros(){
 								@if (isset($data->ordentrabajo_combinacion_talles))
 									@foreach ($data->ordentrabajo_combinacion_talles as $item)
 										@php
-											$pares += $item->pedido_combinacion_talles->cantidad;
+											$pares += $item->pedido_combinacion_talles->cantidad ?? 0;
 										@endphp
             						@endforeach
             					@endif
@@ -109,7 +111,7 @@ function limpiaFiltros(){
                                 @php $ultimaTarea = ""; @endphp
                                 @foreach ($data->ordentrabajo_tareas as $tarea)
 									@php
-										$ultimaTarea = $tarea->tareas->nombre;
+										$ultimaTarea = $tarea->tareas->nombre ?? $ultimaTarea;
 									@endphp
             					@endforeach
                                 {{$ultimaTarea}}

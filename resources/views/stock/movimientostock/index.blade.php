@@ -126,7 +126,7 @@ $nuevoCan = can('crear-movimientos-de-stock', false)
                             <th title="Transferencia: dep&oacute;sito o bien destino. Movimiento: dep&oacute;sito (c&oacute;digo &mdash; nombre).">Dep. destino</th>
                             <th>Empresa</th>
                             <th class="text-right">Cantidad</th>
-                            <th class="text-right" title="Producto de venta (SKU V…): lista 5000+mes. Resto: precio de última compra.">Costo</th>
+                            <th class="text-right" title="En pantalla: precio/costo grabado en el movimiento. En export PDF/Excel: venta (SKU V…) lista 5000+mes; resto última compra (ERP/Anita).">Costo</th>
                             <th class="text-center">&Iacute;tems</th>
                             <th>Estado</th>
                             <th class="width120" data-orderable="false"></th>
