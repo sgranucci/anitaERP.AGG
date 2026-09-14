@@ -981,9 +981,8 @@ class OrdencompraController extends Controller
         if ($request->boolean('preflight')) {
             $gate = OrdencompraEnvioCuentasAPagarGateSupport::preflightCuentasAPagar($oc);
         } else {
+            // evaluarCuentasAPagar ya separa paquete_ok (FC/COM) de ok (incluye auth Gastronomía → CxP).
             $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluarCuentasAPagar($oc);
-            $gate['paquete_ok'] = $gate['ok'];
-            $gate['paquete_errores'] = $gate['errores'];
         }
 
         $gate['sector_cuentas_a_pagar_id'] = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(

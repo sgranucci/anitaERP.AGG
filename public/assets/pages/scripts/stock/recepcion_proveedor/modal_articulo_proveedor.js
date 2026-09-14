@@ -212,6 +212,18 @@
         el.submit();
     }
 
+    /**
+     * En edición el form lleva @method('PUT'). Si se serializa tal cual, Laravel
+     * interpreta el AJAX como PUT y falla en rutas que solo aceptan POST.
+     */
+    function datosFormularioParaPreviewPost($form) {
+        var pares = $form.serializeArray().filter(function (par) {
+            return String(par.name || '').toLowerCase() !== '_method';
+        });
+
+        return $.param(pares);
+    }
+
     function solicitarPreviewYDecidir($form) {
         var url = window.recepcionProveedorPreviewCatalogoUrl;
         if (!url) {
@@ -225,7 +237,7 @@
         $.ajax({
             url: url,
             method: 'POST',
-            data: $form.serialize(),
+            data: datosFormularioParaPreviewPost($form),
             dataType: 'json'
         }).done(function (res) {
             if (!res || !res.requiere_modal || !res.lineas || !res.lineas.length) {

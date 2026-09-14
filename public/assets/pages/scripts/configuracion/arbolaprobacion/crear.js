@@ -134,6 +134,7 @@
 
     	$("#tbody-arbolaprobacion-nivel-table").append(renglon);
     	actualizaRenglonesArbolaprobacion_Nivel();
+		actualizarPanelReCircuitoCuentas();
 		actualizarVisibilidadDobleAprobacion();
 		actualizarEstadoDocumentoPorTipo();
 

@@ -137,6 +137,10 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
     public static function evaluarCuentasAPagar(Ordencompra $oc): array
     {
         $gate = self::evaluar($oc);
+        // Paquete FC/COM sin exigir autorización de Gastronomía (eso solo aplica a CxP).
+        // El modal "Enviar a Gastronomía" usa paquete_ok; si se mezclaran, habría un catch-22.
+        $gate['paquete_ok'] = $gate['ok'];
+        $gate['paquete_errores'] = $gate['errores'];
         $erroresGastro = OrdencompraLegajoGastronomiaSupport::erroresEnvioCuentasAPagar($oc);
         foreach ($erroresGastro as $errorGastro) {
             $gate['errores'][] = $errorGastro;
@@ -431,7 +435,7 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
      *     pendientes_carga: int,
      *     siguiente_pendiente: null,
      *     requiere_gastronomia: bool,
-     *     paquete_ok: bool,
+     *     paquete_ok: bool,  // solo FC/COM/contrato; no incluye auth Gastronomía
      *     paquete_errores: list<string>
      * }
      */
@@ -466,6 +470,9 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             $errores[] = $errorContrato;
         }
 
+        $paqueteErrores = $errores;
+        $paqueteOk = $paqueteErrores === [];
+
         $erroresGastro = OrdencompraLegajoGastronomiaSupport::erroresEnvioCuentasAPagar($oc);
         foreach ($erroresGastro as $errorGastro) {
             $errores[] = $errorGastro;
@@ -487,8 +494,8 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             'pendientes_carga' => 0,
             'siguiente_pendiente' => null,
             'requiere_gastronomia' => OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc),
-            'paquete_ok' => $ok,
-            'paquete_errores' => $errores,
+            'paquete_ok' => $paqueteOk,
+            'paquete_errores' => $paqueteErrores,
         ];
     }
 

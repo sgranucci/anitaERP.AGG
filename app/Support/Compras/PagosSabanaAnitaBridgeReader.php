@@ -101,7 +101,7 @@ final class PagosSabanaAnitaBridgeReader
 
         $tiposSql = [];
         foreach (array_keys($tipos) as $tipo) {
-            $tiposSql[] = "'".addslashes($tipo)."'";
+            $tiposSql[] = "'".addslashes((string) $tipo)."'";
         }
 
         $where = ' WHERE aplp_nro IN ('.implode(',', array_keys($nros)).')'
@@ -141,7 +141,7 @@ final class PagosSabanaAnitaBridgeReader
 
         $lista = [];
         foreach (array_keys($unicas) as $cuenta) {
-            $lista[] = "'".addslashes($cuenta)."'";
+            $lista[] = "'".addslashes((string) $cuenta)."'";
         }
 
         $where = ' WHERE tesm_cuenta IN ('.implode(',', $lista).')';
