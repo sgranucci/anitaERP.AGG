@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
 use App\Support\Configuracion\PercepcionIibbAlicuotaSupport;
 use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
+use App\Support\Configuracion\PercepcionIibbPrioridadAlicuotaSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 
@@ -312,17 +313,15 @@ class IIBBService
 						$registroPadron = $this->leeTasaPercepcion($numeroDocumento, $jurisdiccionesPercepcion[$i], $fechaFactura);
 						$tasaPadron = $this->tasaPercepcionDesdePadron($registroPadron, $jurisdiccionesPercepcion[$i]);
 
-						// La alicuota del padron manda, incluso cuando es 0.
-						$tasa = 0.;
-						if ($tasaPadron !== null)
-							$tasa = $tasaPadron;
-						elseif ($esNoRetiene)
+						$tasa = PercepcionIibbPrioridadAlicuotaSupport::resolver(
+							$provincia->prioridad_alicuota_percepcion ?? null,
+							$tasaPadron,
+							(float) $tasasDescarte[$i],
+							(string) $jurisdiccionesPercepcion[$i] === (string) $jurisdiccionCliente,
+							$esNoRetiene
+						);
+						if ($tasa === null) {
 							continue;
-						else
-						{
-							// Si el cliente esta en la jurisdiccion y no leyo padron asume tasa de descarte
-							if ($jurisdiccionesPercepcion[$i] == $jurisdiccionCliente)
-								$tasa = $tasasDescarte[$i];
 						}
 
 						// Solapa del cliente: reemplaza padron/descarte; si no hay padron, igual aplica.

@@ -23,14 +23,55 @@
             ];
         }
     } else {
-        $tasasForm = ($data->provincia_tasaiibbs ?? collect())->all();
+        $tasasForm = (($data ?? null)?->provincia_tasaiibbs ?? collect())->all();
     }
+    $prioridadAlicuota = \App\Support\Configuracion\PercepcionIibbPrioridadAlicuotaSupport::normalizar(
+        old(
+            'prioridad_alicuota_percepcion',
+            ($data ?? null)?->prioridad_alicuota_percepcion
+                ?? \App\Support\Configuracion\PercepcionIibbPrioridadAlicuotaSupport::defaultParaJurisdiccion(
+                    isset($data) && $data->jurisdiccion !== null && $data->jurisdiccion !== ''
+                        ? (int) $data->jurisdiccion
+                        : null
+                )
+        )
+    );
+    $prioridadPadronDescarte = \App\Support\Configuracion\PercepcionIibbPrioridadAlicuotaSupport::PADRON_DESCARTE;
+    $prioridadDescartePadron = \App\Support\Configuracion\PercepcionIibbPrioridadAlicuotaSupport::DESCARTE_PADRON;
 @endphp
 <div class="card card-outline card-info mb-0">
     <div class="card-header py-2">
         <strong>Tasas por condición IIBB</strong>
     </div>
     <div class="card-body p-2">
+        <div class="form-group row mb-3">
+            <label class="col-lg-3 control-label text-right pr-2">Prioridad alícuota percepción</label>
+            <div class="col-lg-9">
+                <div class="custom-control custom-radio">
+                    <input type="radio" id="prioridad_padron_descarte" name="prioridad_alicuota_percepcion"
+                        class="custom-control-input"
+                        value="{{ $prioridadPadronDescarte }}"
+                        {{ $prioridadAlicuota === $prioridadPadronDescarte ? 'checked' : '' }}>
+                    <label class="custom-control-label" for="prioridad_padron_descarte">
+                        Padrón → tasa de descarte
+                    </label>
+                </div>
+                <div class="custom-control custom-radio">
+                    <input type="radio" id="prioridad_descarte_padron" name="prioridad_alicuota_percepcion"
+                        class="custom-control-input"
+                        value="{{ $prioridadDescartePadron }}"
+                        {{ $prioridadAlicuota === $prioridadDescartePadron ? 'checked' : '' }}>
+                    <label class="custom-control-label" for="prioridad_descarte_padron">
+                        Tasa de descarte → padrón
+                    </label>
+                </div>
+                <div class="text-muted small mt-1">
+                    Define qué alícuota manda cuando hay padrón y tasa de descarte.
+                    Con padrón (CABA, ARBA, Córdoba, etc.) el default es padrón primero.
+                    Misiones / provincias sin padrón en Anita: descarte primero (estas tasas).
+                </div>
+            </div>
+        </div>
         <div class="table-responsive">
             <table class="table table-sm table-bordered mb-2" id="tasaiibb-table">
                 <thead style="background:#85C1E9;color:#17202A;">

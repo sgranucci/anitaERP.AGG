@@ -9,7 +9,17 @@ use App\ApiAnita;
 
 class Provincia extends Model
 {
-    protected $fillable = ['nombre', 'abreviatura', 'jurisdiccion', 'codigo', 'pais_id', 'codigoexterno', 'minimocoeficientecm05', 'tope_alicuota_percepcion'];
+    protected $fillable = [
+        'nombre',
+        'abreviatura',
+        'jurisdiccion',
+        'codigo',
+        'pais_id',
+        'codigoexterno',
+        'minimocoeficientecm05',
+        'tope_alicuota_percepcion',
+        'prioridad_alicuota_percepcion',
+    ];
     protected $table = 'provincia';
 
     protected $casts = [

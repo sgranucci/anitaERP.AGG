@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Configuracion\PercepcionIibbPrioridadAlicuotaSupport;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ValidacionProvincia extends FormRequest
 {
@@ -27,6 +29,13 @@ class ValidacionProvincia extends FormRequest
         if ($tope === '' || $tope === null) {
             $this->merge(['tope_alicuota_percepcion' => null]);
         }
+
+        $prioridad = $this->input('prioridad_alicuota_percepcion');
+        if ($prioridad === null || $prioridad === '') {
+            $this->merge([
+                'prioridad_alicuota_percepcion' => PercepcionIibbPrioridadAlicuotaSupport::PADRON_DESCARTE,
+            ]);
+        }
     }
 
     public function rules()
@@ -38,6 +47,10 @@ class ValidacionProvincia extends FormRequest
             'codigo' => 'sometimes|max:50' ,
             'pais_id' => 'required|integer',
             'tope_alicuota_percepcion' => 'nullable|numeric|min:0|max:100',
+            'prioridad_alicuota_percepcion' => [
+                'required',
+                Rule::in(PercepcionIibbPrioridadAlicuotaSupport::valores()),
+            ],
         ];
     }
 }

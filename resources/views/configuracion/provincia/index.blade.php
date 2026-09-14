@@ -63,6 +63,7 @@
                             <th>Código</th>
                             <th>País</th>
                             <th>Mínimo Coef. CM05</th>
+                            <th>Prioridad alíc.</th>
                             <th>Tasas por Condición IIBB</th>
                             <th>Cuentas Contables</th>
                             <th class="width80" data-orderable="false"></th>
@@ -78,6 +79,9 @@
                             <td>{{ $data->codigo }}</td>
                             <td>{{ $data->paises->nombre ?? '' }}</td>
                             <td>{{ $data->minimocoeficientecm05 }}</td>
+                            <td class="text-nowrap">
+                                {{ \App\Support\Configuracion\PercepcionIibbPrioridadAlicuotaSupport::etiqueta($data->prioridad_alicuota_percepcion ?? null) }}
+                            </td>
                             <td>
                                 @if (($data->provincia_tasaiibbs ?? collect())->isNotEmpty())
                                     <ul class="mb-0 pl-3">

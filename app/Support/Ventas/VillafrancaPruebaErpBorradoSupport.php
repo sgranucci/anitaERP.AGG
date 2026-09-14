@@ -2,12 +2,6 @@
 
 namespace App\Support\Ventas;
 
-use App\Models\Contable\Asiento;
-use App\Models\Stock\Articulo_Movimiento;
-use App\Models\Ventas\Venta;
-use App\Models\Ventas\VentaAnitaReplica;
-use App\Services\Ventas\FacturacionService;
-use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -67,24 +61,6 @@ final class VillafrancaPruebaErpBorradoSupport
 
     public static function eliminarUna(int $ventaId, bool $tambienAnita = false): void
     {
-        $venta = Venta::query()->find($ventaId);
-        if ($venta === null) {
-            return;
-        }
-
-        if ($tambienAnita) {
-            app(FacturacionService::class)->borraAnitaDesdeVenta($venta, false);
-        }
-
-        EloquentAuditDeleteSupport::each(
-            VentaAnitaReplica::query()->where('venta_id', $ventaId)
-        );
-        EloquentAuditDeleteSupport::each(
-            Articulo_Movimiento::query()->where('venta_id', $ventaId)
-        );
-        EloquentAuditDeleteSupport::each(
-            Asiento::query()->where('venta_id', $ventaId)
-        );
-        $venta->delete();
+        VentaPruebaBorradoSupport::eliminarUna($ventaId, $tambienAnita, false);
     }
 }

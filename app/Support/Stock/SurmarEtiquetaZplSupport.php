@@ -123,6 +123,9 @@ final class SurmarEtiquetaZplSupport
         );
 
         $lines[] = '^FO575,0^BQN,2,3^FDMA,'.self::zplSafe($qr).'^FS';
+        // Sin ^PQ la Zebra reusa la cantidad en memoria (a menudo >1) y saca varias copias.
+        // Las N copias del modal se resuelven repitiendo este formato (^PQ1 cada uno).
+        $lines[] = '^PQ1,0,1,Y';
         $lines[] = '^XZ';
 
         return implode("\n", $lines)."\n";
@@ -237,7 +240,8 @@ final class SurmarEtiquetaZplSupport
             $payload['peso_promedio'] = $pesoPromedio;
         }
 
-        return (string) json_encode($payload, JSON_UNESCAPED_UNICODE);
+        // UNESCAPED_SLASHES: si no, json_encode escribe \/ y zplSafe del QR convierte \→/ → "//".
+        return (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     public static function qrPngBase64(string $qrJson, int $size = 140): string

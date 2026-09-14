@@ -1098,12 +1098,14 @@
                 $msg.text(res.mensaje || 'Grabado').removeClass('text-muted text-danger').addClass('text-success');
                 if (imprimir) {
                     var etiqId = res.etiqueta_id || (res.linea && res.linea.stock_etiqueta_id);
-                    var printOpts = { etiquetaId: etiqId, sinOverlay: true };
+                    // Un ZPL por etiqueta; copias solo acá → apiImprimir (no pre-expandir en el save).
+                    var printOpts = {
+                        etiquetaId: etiqId,
+                        sinOverlay: true,
+                        copias: $('#etiq_copias').val() || 1
+                    };
                     if (destinoEtiqueta() === 'pdf') {
                         if (etiqId) imprimirEtiquetas(printOpts);
-                    } else if (res.zpls && res.zpls.length) {
-                        printOpts.zpls = res.zpls;
-                        imprimirEtiquetas(printOpts);
                     } else if (res.zpl) {
                         printOpts.zpl = res.zpl;
                         imprimirEtiquetas(printOpts);
@@ -1154,14 +1156,17 @@
             $msg.text(res.mensaje || 'Actualizado').removeClass('text-muted text-danger').addClass('text-success');
             if (imprimir) {
                 var etiqIdEd = res.etiqueta_id || (res.linea && res.linea.stock_etiqueta_id) || $('#etiq_linea_id').data('etiquetaId');
+                var printOptsEd = {
+                    etiquetaId: etiqIdEd,
+                    copias: $('#etiq_copias').val() || 1
+                };
                 if (destinoEtiqueta() === 'pdf') {
-                    if (etiqIdEd) imprimirEtiquetas({ etiquetaId: etiqIdEd });
-                } else if (res.zpls && res.zpls.length) {
-                    imprimirEtiquetas({ zpls: res.zpls, etiquetaId: etiqIdEd });
+                    if (etiqIdEd) imprimirEtiquetas(printOptsEd);
                 } else if (res.zpl) {
-                    imprimirEtiquetas({ zpl: res.zpl, etiquetaId: etiqIdEd });
+                    printOptsEd.zpl = res.zpl;
+                    imprimirEtiquetas(printOptsEd);
                 } else if (etiqIdEd) {
-                    imprimirEtiquetas({ etiquetaId: etiqIdEd });
+                    imprimirEtiquetas(printOptsEd);
                 }
             } else {
                 $('#modalEtiquetaProveedorSurmar').modal('hide');

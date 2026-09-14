@@ -123,8 +123,12 @@ $(function () {
                                 <input class="form-check-input" type="checkbox" name="fallback_anita" value="1" id="fallback_anita"
                                     @checked(old('fallback_anita', $filtros['fallback_anita'] ?? true))>
                                 <label class="form-check-label" for="fallback_anita">
-                                    Si el pedido no est&aacute; en ERP, leerlo de Anita
+                                    Si el pedido a&uacute;n no est&aacute; en el ERP, leerlo de Anita
                                 </label>
+                                <small class="form-text text-muted">
+                                    El fallback no cambia el reparto de un pedido que ya existe: eso se hace en
+                                    <strong>Ventas &rarr; Pedido</strong>.
+                                </small>
                             </div>
                         </div>
                     </div>
@@ -143,10 +147,14 @@ $(function () {
             $previewTotales = $previewTotales ?? ['kilos' => 0.0, 'cajas' => 0.0, 'piezas' => 0.0, 'lineas' => 0, 'pedidos' => 0];
             $previewFilas = $previewFilas ?? collect();
             $omitidosSinSenasa = $omitidosSinSenasa ?? collect();
+            $desfasajesReparto = $desfasajesReparto ?? collect();
             $bloquearGeneracion = $omitidosSinSenasa->isNotEmpty();
         @endphp
         @include('ventas.certificado_sanitario.partials.aviso_sin_senasa', [
             'omitidosSinSenasa' => $omitidosSinSenasa,
+        ])
+        @include('ventas.certificado_sanitario.partials.aviso_desfasaje_reparto', [
+            'desfasajesReparto' => $desfasajesReparto,
         ])
         <div class="card card-outline card-info mt-3">
             <div class="card-header">

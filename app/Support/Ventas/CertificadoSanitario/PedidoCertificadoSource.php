@@ -20,9 +20,13 @@ final class PedidoCertificadoSource
     /** @var Collection<int, CertificadoSanitarioArticuloSinSenasa> */
     private Collection $omitidosSinSenasa;
 
+    /** @var Collection<int, CertificadoSanitarioDesfasajeReparto> */
+    private Collection $desfasajesReparto;
+
     public function __construct()
     {
         $this->omitidosSinSenasa = collect();
+        $this->desfasajesReparto = collect();
     }
 
     /**
@@ -48,33 +52,72 @@ final class PedidoCertificadoSource
     public function listar(array $filtros): PedidoCertificadoListado
     {
         $this->omitidosSinSenasa = collect();
+        $this->desfasajesReparto = collect();
         $fecha = Carbon::parse($filtros['fecha'])->startOfDay();
+        $erpPorCodigo = $this->mapaPedidosErpEnFecha($fecha);
         $lineasErp = $this->lineasDesdeErp($fecha, $filtros);
-        $codigosErp = $lineasErp->pluck('codigoPedido')->unique()->all();
 
         $fallback = array_key_exists('fallback_anita', $filtros)
             ? (bool) $filtros['fallback_anita']
             : (bool) config('senasa.fallback_anita_pedido', true);
 
-        if (! $fallback) {
-            return new PedidoCertificadoListado(
-                CertificadoSanitarioDestinoAnitaSupport::enriquecerLineas(
-                    CertificadoSanitarioOrigenSupport::enriquecerLineas($lineasErp->values())
-                ),
-                $this->omitidosSinSenasa->values()
-            );
-        }
-
-        $lineasAnita = $this->lineasDesdeAnita($fecha, $filtros, $codigosErp);
+        $lineasAnita = $this->lineasDesdeAnita($fecha, $filtros, $erpPorCodigo, $fallback);
+        $lineas = $fallback
+            ? $lineasErp->concat($lineasAnita)->values()
+            : $lineasErp->values();
 
         return new PedidoCertificadoListado(
             CertificadoSanitarioDestinoAnitaSupport::enriquecerLineas(
-                CertificadoSanitarioOrigenSupport::enriquecerLineas(
-                    $lineasErp->concat($lineasAnita)->values()
-                )
+                CertificadoSanitarioOrigenSupport::enriquecerLineas($lineas)
             ),
-            $this->omitidosSinSenasa->values()
+            $this->omitidosSinSenasa->values(),
+            $this->desfasajesReparto->values()
         );
+    }
+
+    /**
+     * Pedidos ERP de la fecha (cualquier reparto). Si el código ya está en ERP, Anita no lo suma:
+     * el reparto que manda es el del pedido en el ERP.
+     *
+     * @return array<string, array{pedido_id: int, codigo_transporte: string|null, transporte_id: int, cliente_id: int}>
+     */
+    private function mapaPedidosErpEnFecha(Carbon $fecha): array
+    {
+        $rows = Pedido::query()
+            ->leftJoin('transporte', 'transporte.id', '=', 'pedido.transporte_id')
+            ->whereDate('pedido.fechaentrega', $fecha->toDateString())
+            ->where(function ($q) {
+                $q->whereNull('pedido.estadopedido')
+                    ->orWhereNotIn('pedido.estadopedido', ['Suspendido', 'Anulado']);
+            })
+            ->where(function ($q) {
+                $q->whereNull('pedido.estado')->orWhere('pedido.estado', '!=', 'A');
+            })
+            ->get([
+                'pedido.id',
+                'pedido.codigo',
+                'pedido.transporte_id',
+                'pedido.cliente_id',
+                'transporte.codigo as codigo_transporte',
+            ]);
+
+        $map = [];
+        foreach ($rows as $row) {
+            $cod = strtoupper(trim((string) $row->codigo));
+            if ($cod === '') {
+                continue;
+            }
+            $map[$cod] = [
+                'pedido_id' => (int) $row->id,
+                'codigo_transporte' => $row->codigo_transporte !== null && $row->codigo_transporte !== ''
+                    ? (string) (int) $row->codigo_transporte
+                    : null,
+                'transporte_id' => (int) ($row->transporte_id ?? 0),
+                'cliente_id' => (int) ($row->cliente_id ?? 0),
+            ];
+        }
+
+        return $map;
     }
 
     /**
@@ -206,11 +249,11 @@ final class PedidoCertificadoSource
     }
 
     /**
-     * @param  list<string>  $codigosYaEnErp
+     * @param  array<string, array{pedido_id: int, codigo_transporte: string|null, transporte_id: int, cliente_id: int}>  $erpPorCodigo
      * @param  array<string, mixed>  $filtros
      * @return Collection<int, PedidoCertificadoLinea>
      */
-    private function lineasDesdeAnita(Carbon $fecha, array $filtros, array $codigosYaEnErp): Collection
+    private function lineasDesdeAnita(Carbon $fecha, array $filtros, array $erpPorCodigo, bool $incluirLineas = true): Collection
     {
         $fechaAnita = (int) $fecha->format('Ymd');
         $api = new ApiAnita();
@@ -231,7 +274,6 @@ final class PedidoCertificadoSource
             return collect();
         }
 
-        $codigosErpNorm = array_map(static fn ($c) => strtoupper(trim((string) $c)), $codigosYaEnErp);
         $out = collect();
 
         foreach ($cabeceras as $cab) {
@@ -241,7 +283,12 @@ final class PedidoCertificadoSource
                 str_pad((string) (int) $cab->penm_sucursal, 5, '0', STR_PAD_LEFT),
                 str_pad((string) (int) $cab->penm_nro, 8, '0', STR_PAD_LEFT)
             );
-            if (in_array(strtoupper($codigo), $codigosErpNorm, true)) {
+            $erp = $erpPorCodigo[strtoupper($codigo)] ?? null;
+            if ($erp !== null) {
+                $this->registrarDesfasajeReparto($cab, $erp, $filtros, $codigo);
+                continue;
+            }
+            if (! $incluirLineas) {
                 continue;
             }
 
@@ -464,6 +511,74 @@ final class PedidoCertificadoSource
             codigoCliente: $codigoCliente,
             clienteNombre: $clienteNombre,
         ));
+    }
+
+    /**
+     * Anita no mueve el certificado si el pedido ya está en ERP. Avisa para que lo cambien en Ventas → Pedido.
+     *
+     * @param  array{pedido_id: int, codigo_transporte: string|null, transporte_id: int, cliente_id: int}  $erp
+     * @param  array<string, mixed>  $filtros
+     */
+    private function registrarDesfasajeReparto(object $cab, array $erp, array $filtros, string $codigo): void
+    {
+        $anitaExpreso = (string) (int) ($cab->penm_expreso ?? 0);
+        $erpExpreso = trim((string) ($erp['codigo_transporte'] ?? ''));
+        if ($anitaExpreso === $erpExpreso || ($anitaExpreso === '0' && $erpExpreso === '')) {
+            return;
+        }
+
+        if (! empty($filtros['cliente_id']) && (int) $erp['cliente_id'] !== (int) $filtros['cliente_id']) {
+            return;
+        }
+
+        $filtroTransporteId = ! empty($filtros['transporte_id']) ? (int) $filtros['transporte_id'] : 0;
+        if ($filtroTransporteId > 0) {
+            $anitaTransporte = Transporte::query()->where('codigo', $anitaExpreso)->first();
+            $anitaMatch = $anitaTransporte && (int) $anitaTransporte->id === $filtroTransporteId;
+            $erpMatch = (int) $erp['transporte_id'] === $filtroTransporteId;
+            if (! $anitaMatch && ! $erpMatch) {
+                return;
+            }
+        }
+
+        $desde = isset($filtros['transporte_desde']) ? (int) $filtros['transporte_desde'] : null;
+        $hasta = isset($filtros['transporte_hasta']) ? (int) $filtros['transporte_hasta'] : null;
+        if ($desde !== null || $hasta !== null) {
+            $anitaEnRango = $this->pasaRangoTransporte($anitaExpreso !== '0' ? $anitaExpreso : null, $desde, $hasta);
+            $erpEnRango = $this->pasaRangoTransporte($erpExpreso !== '' ? $erpExpreso : null, $desde, $hasta);
+            if (! $anitaEnRango && ! $erpEnRango) {
+                return;
+            }
+        }
+
+        if ($this->desfasajesReparto->contains(static fn ($d) => $d->codigoPedido === $codigo)) {
+            return;
+        }
+
+        $cliente = Cliente::query()->find((int) $erp['cliente_id']);
+
+        $this->desfasajesReparto->push(new CertificadoSanitarioDesfasajeReparto(
+            codigoPedido: $codigo,
+            pedidoId: (int) ($erp['pedido_id'] ?? 0) ?: null,
+            codigoCliente: trim((string) ($cliente->codigo ?? '')),
+            clienteNombre: trim((string) ($cliente->nombre ?? '')),
+            repartoErp: $this->etiquetaTransporte($erpExpreso !== '' ? $erpExpreso : null),
+            repartoAnita: $this->etiquetaTransporte($anitaExpreso !== '0' ? $anitaExpreso : null),
+        ));
+    }
+
+    private function etiquetaTransporte(?string $codigo): string
+    {
+        $cod = trim((string) $codigo);
+        if ($cod === '' || $cod === '0') {
+            return '—';
+        }
+        $transporte = Transporte::query()->where('codigo', $cod)->first();
+        if ($transporte) {
+            return trim((string) $transporte->codigo.' '.(string) $transporte->nombre);
+        }
+
+        return $cod;
     }
 
     private function cajasDesdePiezas(float $piezas, float $unidadesPorEnvase): float

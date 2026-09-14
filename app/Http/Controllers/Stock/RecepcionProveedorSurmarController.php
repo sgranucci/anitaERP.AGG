@@ -296,16 +296,11 @@ class RecepcionProveedorSurmarController extends Controller
             fn ($l) => $this->service->lineaPayload($l),
             $result['lineas'] ?? [$result['linea']]
         );
-        $copias = max(1, min(10, (int) ($data['copias'] ?? 1)));
-        $zplsOut = null;
-        if (! empty($data['imprimir'])) {
-            $zplsOut = [];
-            foreach ($result['zpls'] ?? [$result['zpl']] as $zpl) {
-                for ($c = 0; $c < $copias; $c++) {
-                    $zplsOut[] = $zpl;
-                }
-            }
-        }
+        // Un solo ZPL por etiqueta: las copias las aplica apiImprimirEtiquetaSalida
+        // (si acá ya se expandían, el cliente × copias de nuevo sacaba N² etiquetas).
+        $zplOut = ! empty($data['imprimir'])
+            ? ($result['zpl'] ?? ($result['zpls'][0] ?? null))
+            : null;
 
         $nro = (int) ($result['nro_apertura'] ?? $result['linea']->nro_apertura ?? 1);
         $cantUnid = (int) ($result['cant_unid_separa'] ?? $data['cant_unid_separa'] ?? 1);
@@ -319,8 +314,8 @@ class RecepcionProveedorSurmarController extends Controller
             'nro_apertura' => $nro,
             'cant_unid_separa' => $cantUnid,
             'proxima_apertura' => (int) ($result['proxima_apertura'] ?? ($nro + 1)),
-            'zpl' => $zplsOut[0] ?? null,
-            'zpls' => $zplsOut,
+            'zpl' => $zplOut,
+            'zpls' => $zplOut !== null ? [$zplOut] : null,
             'preview' => $this->service->previewDesdeEtiqueta($result['etiqueta'], $recepcion),
             'mensaje' => 'Unidad '.$nro.' de '.$cantUnid.' grabada — etiqueta #'.($result['etiqueta']->id ?? ''),
         ]);
@@ -352,18 +347,14 @@ class RecepcionProveedorSurmarController extends Controller
             return response()->json(['ok' => false, 'errors' => $e->errors()], 422);
         }
 
-        $copias = max(1, min(10, (int) ($data['copias'] ?? 1)));
-        $zplsOut = null;
-        if (! empty($data['imprimir'])) {
-            $zplsOut = array_fill(0, $copias, $result['zpl']);
-        }
+        $zplOut = ! empty($data['imprimir']) ? ($result['zpl'] ?? null) : null;
 
         return response()->json([
             'ok' => true,
             'linea' => $this->service->lineaPayload($result['linea']),
             'etiqueta_id' => $result['etiqueta']->id,
-            'zpl' => $zplsOut[0] ?? null,
-            'zpls' => $zplsOut,
+            'zpl' => $zplOut,
+            'zpls' => $zplOut !== null ? [$zplOut] : null,
             'preview' => $result['preview'],
             'mensaje' => 'Etiqueta #'.$result['etiqueta']->id.' actualizada',
         ]);

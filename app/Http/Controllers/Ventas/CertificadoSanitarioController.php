@@ -102,6 +102,7 @@ class CertificadoSanitarioController extends Controller
         $previewFilas = collect();
         $previewTotales = ['kilos' => 0.0, 'cajas' => 0.0, 'piezas' => 0.0, 'lineas' => 0, 'pedidos' => 0];
         $omitidosSinSenasa = collect();
+        $desfasajesReparto = collect();
         $filtros = [
             'fecha' => $request->get('fecha', now()->toDateString()),
             'transporte_id' => $transporteSeleccionado?->id,
@@ -116,6 +117,7 @@ class CertificadoSanitarioController extends Controller
             $listado = $this->service->previewConsulta($filtros);
             $preview = $listado->lineas;
             $omitidosSinSenasa = $listado->omitidosSinSenasa;
+            $desfasajesReparto = $listado->desfasajesReparto;
             $previewFilas = CertificadoSanitarioPreviewAplanado::aplanar($preview);
             $previewTotales = CertificadoSanitarioPreviewAplanado::totales($preview);
         }
@@ -130,6 +132,7 @@ class CertificadoSanitarioController extends Controller
             'previewFilas',
             'previewTotales',
             'omitidosSinSenasa',
+            'desfasajesReparto',
             'filtros'
         ));
     }
