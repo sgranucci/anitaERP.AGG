@@ -44,7 +44,7 @@
                 			</td>
                 			<td>
                 				<input type="text" name="fechasvencimiento[]" class="form-control fechavencimiento"
-                					value="{{ (old(('fechasvencimiento.' . $loop->index), \Carbon\Carbon::parse(strtotime($condicionventacuota->fechavencimiento ?? date('d-m-Y')))->formatLocalized('%d-%m-%Y') ?? date('d-m-Y'))) }}" readonly/>
+                					value="{{ old('fechasvencimiento.' . $loop->index, optional($condicionventacuota)->fechavencimiento ? \Illuminate\Support\Carbon::parse($condicionventacuota->fechavencimiento)->format('d-m-Y') : date('d-m-Y')) }}" readonly/>
                 			</td>
                 			<td>
                 				<input type="number" name="porcentajes[]" class="form-control"
