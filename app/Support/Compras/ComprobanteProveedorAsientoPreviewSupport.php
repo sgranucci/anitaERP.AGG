@@ -343,14 +343,18 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
-            $cuentaId = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaId));
+            $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
+            if ($cuentaId <= 0) {
+                $cuentaId = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaId));
+            }
             if ($cuentaId <= 0) {
                 $avisos[] = [
                     'tipo' => 'concepto_sin_cuenta_debe',
                     'concepto_ivacompra_id' => (int) $concepto->id,
                     'nombre' => (string) $concepto->nombre,
                     'mensaje' => 'Falta cuenta contable DEBE en concepto IVA «'.$concepto->nombre.'»'
-                        .($empresaId > 0 ? ' para la empresa del comprobante.' : '.'),
+                        .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
+                        .' Asignela en el renglón de Conceptos.',
                 ];
             }
         }
@@ -360,11 +364,20 @@ final class ComprobanteProveedorAsientoPreviewSupport
 
     /**
      * @param  Collection<int, Concepto_Ivacompra>  $conceptosQuery
-     * @return array<int, array{cuenta_debe_id: int, tipoconcepto: string, nombre: string, impuesto_tasa: float, cuentas_por_empresa: array<int, int>}>
+     * @return array<int, array{
+     *     cuenta_debe_id: int,
+     *     cuenta_debe_codigo: string,
+     *     cuenta_debe_nombre: string,
+     *     tipoconcepto: string,
+     *     nombre: string,
+     *     impuesto_tasa: float,
+     *     cuentas_por_empresa: array<int, int>
+     * }>
      */
     public function metaConceptosParaCliente(Collection $conceptosQuery, ?int $empresaId = null): array
     {
         $meta = [];
+        $cuentaIds = [];
         foreach ($conceptosQuery as $concepto) {
             if (! $concepto->relationLoaded('concepto_ivacompra_empresas')) {
                 $concepto->load('concepto_ivacompra_empresas');
@@ -374,14 +387,35 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $cuentaDefault = $empresaId !== null
                 ? $concepto->cuentacontableDebeIdParaEmpresa($empresaId)
                 : (int) ($concepto->cuentacontabledebe_id ?? ($primeraClave !== null ? ($mapa[$primeraClave] ?? 0) : 0));
+            if ($cuentaDefault > 0) {
+                $cuentaIds[$cuentaDefault] = $cuentaDefault;
+            }
 
             $meta[(int) $concepto->id] = [
                 'cuenta_debe_id' => $cuentaDefault,
+                'cuenta_debe_codigo' => '',
+                'cuenta_debe_nombre' => '',
                 'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
                 'nombre' => (string) ($concepto->nombre ?? ''),
                 'impuesto_tasa' => round((float) ($concepto->impuestos->valor ?? 0), 3),
                 'cuentas_por_empresa' => $mapa,
             ];
+        }
+
+        if ($cuentaIds !== []) {
+            $cuentas = \App\Models\Contable\Cuentacontable::query()
+                ->whereIn('id', array_values($cuentaIds))
+                ->get(['id', 'codigo', 'nombre'])
+                ->keyBy('id');
+            foreach ($meta as $conceptoId => $fila) {
+                $ctaId = (int) ($fila['cuenta_debe_id'] ?? 0);
+                if ($ctaId <= 0 || ! $cuentas->has($ctaId)) {
+                    continue;
+                }
+                $cta = $cuentas->get($ctaId);
+                $meta[$conceptoId]['cuenta_debe_codigo'] = (string) ($cta->codigo ?? '');
+                $meta[$conceptoId]['cuenta_debe_nombre'] = (string) ($cta->nombre ?? '');
+            }
         }
 
         return $meta;

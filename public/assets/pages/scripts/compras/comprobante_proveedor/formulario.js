@@ -207,26 +207,67 @@ $(function () {
         };
     }
 
+    function cuentaDebeDesdeMeta(conceptoId) {
+        var meta = conceptosMeta[conceptoId] || {};
+        var empresaIdForm = parseInt($('#empresa_id').val() || '0', 10) || 0;
+        var cuentaDebe = parseInt(meta.cuenta_debe_id || '0', 10) || 0;
+        if (meta.cuentas_por_empresa && empresaIdForm > 0 && meta.cuentas_por_empresa[empresaIdForm]) {
+            cuentaDebe = parseInt(meta.cuentas_por_empresa[empresaIdForm], 10) || 0;
+        }
+        return {
+            id: cuentaDebe,
+            codigo: String(meta.cuenta_debe_codigo || ''),
+            nombre: String(meta.cuenta_debe_nombre || '')
+        };
+    }
+
+    function setCuentaDebeEnFila($row, datos) {
+        var $campo = $row.find('.cp-celda-cuenta-debe');
+        if (!$campo.length) {
+            return;
+        }
+        $campo.removeClass('d-none');
+        var id = parseInt((datos && datos.id) || '0', 10) || 0;
+        $campo.find('.cuentacontable_id').val(id > 0 ? String(id) : '');
+        $campo.find('.codigocuentacontable').val(id > 0 ? String((datos && datos.codigo) || '') : '');
+        $campo.find('.nombrecuentacontable').val(id > 0 ? String((datos && datos.nombre) || '') : '');
+        if (typeof actualizarLinkEditarCuentaContable === 'function') {
+            actualizarLinkEditarCuentaContable($campo, id);
+        }
+    }
+
     function aplicarCuentaContratoEnFila($row, forzar) {
         if (!contratoImputacionManual()) {
             return;
         }
-        var $campo = $row.find('.cp-celda-cuenta-debe');
-        $campo.removeClass('d-none');
         var datos = contratoCuentaManualDatos();
         if (datos.id <= 0) {
+            $row.find('.cp-celda-cuenta-debe').removeClass('d-none');
             return;
         }
-        var actual = parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0;
+        var actual = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
         if (!forzar && actual > 0) {
             return;
         }
-        $campo.find('.cuentacontable_id').val(String(datos.id));
-        $campo.find('.codigocuentacontable').val(datos.codigo);
-        $campo.find('.nombrecuentacontable').val(datos.nombre);
-        if (typeof actualizarLinkEditarCuentaContable === 'function') {
-            actualizarLinkEditarCuentaContable($campo, datos.id);
+        setCuentaDebeEnFila($row, datos);
+    }
+
+    function aplicarCuentaConceptoEnFila($row, forzar) {
+        if (contratoImputacionManual()) {
+            aplicarCuentaContratoEnFila($row, forzar);
+            return;
         }
+        var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+        var actual = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+        if (!forzar && actual > 0) {
+            $row.find('.cp-celda-cuenta-debe').removeClass('d-none');
+            return;
+        }
+        if (conceptoId <= 0) {
+            setCuentaDebeEnFila($row, { id: 0, codigo: '', nombre: '' });
+            return;
+        }
+        setCuentaDebeEnFila($row, cuentaDebeDesdeMeta(conceptoId));
     }
 
     function conceptoRequiereCuentaDebe(tipoConcepto) {
@@ -355,27 +396,17 @@ $(function () {
                 return;
             }
 
-            var empresaIdForm = parseInt($('#empresa_id').val() || '0', 10) || 0;
-            var cuentaDebe = parseInt(meta.cuenta_debe_id || '0', 10) || 0;
-            if (meta.cuentas_por_empresa && empresaIdForm > 0 && meta.cuentas_por_empresa[empresaIdForm]) {
-                cuentaDebe = parseInt(meta.cuentas_por_empresa[empresaIdForm], 10) || 0;
+            var cuentaDebe = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+            if (cuentaDebe <= 0) {
+                cuentaDebe = cuentaDebeDesdeMeta(conceptoId).id;
             }
 
             if (!cuentaDebe || cuentaDebe <= 0) {
                 $row.addClass('table-warning');
-                if (puedeEditarConceptoIva && urlEditarConceptoIvaTpl && conceptoId > 0) {
-                    var urlEditar = urlEditarConceptoIvaTpl.replace('__ID__', String(conceptoId));
-                    $aviso.html(
-                        '<a href="' + urlEditar + '" class="text-danger" target="_blank" rel="noopener noreferrer" ' +
-                        'title="Falta cuenta DEBE en concepto IVA «' + (meta.nombre || '') + '»">' +
-                        '<i class="fa fa-exclamation-triangle"></i></a>'
-                    );
-                } else {
-                    $aviso.addClass('text-danger fa fa-exclamation-triangle')
-                        .attr('title', 'Falta cuenta DEBE en concepto IVA «' + (meta.nombre || '') + '»');
-                }
+                $aviso.addClass('text-danger fa fa-exclamation-triangle')
+                    .attr('title', 'Falta cuenta DEBE: asígnela en este renglón o en el maestro del concepto «' + (meta.nombre || '') + '»');
             } else {
-                $aviso.addClass('text-success fa fa-check').attr('title', 'Cuenta DEBE configurada');
+                $aviso.addClass('text-success fa fa-check').attr('title', 'Cuenta DEBE asignada');
             }
         });
     }
@@ -749,8 +780,7 @@ $(function () {
         if (contratoImputacionManual()) {
             aplicarCuentaContratoEnFila($nuevo, true);
         } else {
-            $nuevo.find('.cp-celda-cuenta-debe').addClass('d-none');
-            $nuevo.find('.cp-celda-cuenta-debe .cuentacontable_id').val('');
+            $nuevo.find('.cp-celda-cuenta-debe').removeClass('d-none');
         }
         $('#tbody-concepto-table').append($nuevo);
         formatearInputMontoEn($nuevo);
@@ -1020,8 +1050,32 @@ $(function () {
         programarPreviewAsiento();
     });
 
-    $(document).on('cp:concepto-ivacompra-elegido', function () {
+    $(document).on('cp:concepto-ivacompra-elegido', function (e, data) {
+        var $row = (typeof ptrConceptoIvacompraId !== 'undefined' && ptrConceptoIvacompraId && ptrConceptoIvacompraId.length)
+            ? ptrConceptoIvacompraId.closest('tr.item-concepto')
+            : $();
+        if ($row.length && data && data.id) {
+            var id = parseInt(data.id, 10) || 0;
+            if (id > 0) {
+                conceptosMeta[id] = $.extend({}, conceptosMeta[id] || {}, {
+                    tipoconcepto: String(data.tipoconcepto || (conceptosMeta[id] && conceptosMeta[id].tipoconcepto) || ''),
+                    nombre: String(data.nombre || (conceptosMeta[id] && conceptosMeta[id].nombre) || ''),
+                    cuenta_debe_id: parseInt(data.cuenta_debe_id || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_id) || '0', 10) || 0,
+                    cuenta_debe_codigo: String(data.cuenta_debe_codigo || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_codigo) || ''),
+                    cuenta_debe_nombre: String(data.cuenta_debe_nombre || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_nombre) || ''),
+                    cuentas_por_empresa: data.cuentas_por_empresa || (conceptosMeta[id] && conceptosMeta[id].cuentas_por_empresa) || {}
+                });
+            }
+            aplicarCuentaConceptoEnFila($row, true);
+            marcarAvisosConceptosLocales();
+        }
         programarPreviewAsiento();
+    });
+
+    $(document).on('click', '.js-cp-ir-conceptos-desde-asiento', function (e) {
+        e.preventDefault();
+        mostrarSolapa('#cp-solapa-conceptos');
+        marcarTabActivo('cp-boton-conceptos');
     });
 
     function actualizarAbreviaturaTipoComprobante() {
@@ -1061,17 +1115,23 @@ $(function () {
             montoTxt = formatearMontoConcepto(parseFloat(monto) || 0);
         }
         $row.find('.monto').val(montoTxt);
+        if (id > 0 && concepto) {
+            conceptosMeta[id] = $.extend({}, conceptosMeta[id] || {}, {
+                tipoconcepto: String(concepto.tipoconcepto || ''),
+                nombre: String(concepto.nombre || ''),
+                cuenta_debe_id: parseInt(concepto.cuenta_debe_id || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_id) || concepto.cuentacontable_id || '0', 10) || 0,
+                cuenta_debe_codigo: String(concepto.cuenta_debe_codigo || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_codigo) || ''),
+                cuenta_debe_nombre: String(concepto.cuenta_debe_nombre || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_nombre) || ''),
+                cuentacontable_id: concepto.cuentacontable_id || null,
+                cuentas_por_empresa: concepto.cuentas_por_empresa || (conceptosMeta[id] && conceptosMeta[id].cuentas_por_empresa) || {}
+            });
+        }
         if (contratoImputacionManual()) {
             aplicarCuentaContratoEnFila($row, true);
+        } else if (id > 0) {
+            aplicarCuentaConceptoEnFila($row, true);
         } else {
-            $row.find('.cp-celda-cuenta-debe').addClass('d-none');
-            $row.find('.cp-celda-cuenta-debe .cuentacontable_id').val('');
-        }
-        if (id > 0 && concepto) {
-            conceptosMeta[id] = {
-                tipoconcepto: String(concepto.tipoconcepto || ''),
-                cuentacontable_id: concepto.cuentacontable_id || null,
-            };
+            $row.find('.cp-celda-cuenta-debe').removeClass('d-none');
         }
         $('#tbody-concepto-table').append($row);
     }

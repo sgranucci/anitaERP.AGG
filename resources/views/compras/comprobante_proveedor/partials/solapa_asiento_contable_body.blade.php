@@ -24,10 +24,14 @@
         Verifique en Contable &rarr; Tipos de asiento que exista la abreviatura <strong>COM</strong> (Compras).
     </div>
     @endif
-    @if(str_contains($errorTexto, 'concepto IVA') && can('editar-concepto-iva-compra', false))
+    @if(str_contains($errorTexto, 'concepto IVA'))
     <div class="mt-2 small">
-        Revise las cuentas contables en
+        Asigne la cuenta en la columna <strong>Cuenta DEBE</strong> de la solapa
+        <a href="#cp-solapa-conceptos" class="text-primary js-cp-ir-conceptos-desde-asiento">Conceptos IVA</a>
+        @if(can('editar-concepto-iva-compra', false))
+        o configúrela en el maestro
         <a href="{{ route('concepto_ivacompra') }}" class="text-primary" target="_blank" rel="noopener">Conceptos IVA compra</a>
+        @endif
         y vuelva a recalcular la vista previa.
     </div>
     @endif

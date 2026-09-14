@@ -294,11 +294,16 @@ class ComprobanteProveedorAsientoService
             }
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
-            $cuentaId = (int) ($concepto?->cuentacontableDebeIdParaEmpresa($empresaId) ?? 0);
+            // Override del renglón (p. ej. ND/NC sin COM o maestro incompleto) antes que el concepto IVA.
+            $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
+            if ($cuentaId <= 0) {
+                $cuentaId = (int) ($concepto?->cuentacontableDebeIdParaEmpresa($empresaId) ?? 0);
+            }
             if ($cuentaId <= 0) {
                 throw new RuntimeException(
                     'Falta cuenta contable DEBE en concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'»'
                     .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
+                    .' Asignela en el renglón de Conceptos o en el maestro Conceptos IVA compra.'
                 );
             }
 

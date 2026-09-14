@@ -107,6 +107,7 @@ function resolverConceptoIvacompraPorCodigo($input) {
         data: {
             valor: codigo,
             tipotransaccion_compra_id: tipoId,
+            empresa_id: parseInt(String($('#empresa_id').val() || '0'), 10) || 0,
             _token: $('meta[name="csrf-token"]').attr('content')
         }
     })

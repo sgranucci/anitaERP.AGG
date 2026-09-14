@@ -56,7 +56,7 @@ function actualizarLinkEditarCuentaContable($ctx, cuentaId) {
 
 function aplicarCuentaContableEnContexto($ctx, data) {
     if ($ctx && $ctx.length) {
-        $ctx.find('.cuentacontable_id').first().val(data.id);
+        $ctx.find('.cuentacontable_id').first().val(data.id).trigger('change');
         $ctx.find('.codigocuentacontable').first().val(data.codigo);
         $ctx.find('.nombrecuentacontable').first().val(data.nombre);
         $ctx.find('.cuentacontable_id_previa').val(data.id);
@@ -66,7 +66,7 @@ function aplicarCuentaContableEnContexto($ctx, data) {
         return;
     }
 
-    $('#cuentacontable_id').val(data.id);
+    $('#cuentacontable_id').val(data.id).trigger('change');
     $('#codigocuentacontable').val(data.codigo);
     $('#nombrecuentacontable').val(data.nombre);
     actualizarLinkEditarCuentaContable($('.tm-cuentacontable-campo').first(), data.id);

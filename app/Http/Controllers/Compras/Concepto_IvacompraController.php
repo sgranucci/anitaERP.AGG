@@ -335,6 +335,7 @@ class Concepto_IvacompraController extends Controller
 
         $tipoId = (int) $request->input('tipotransaccion_compra_id', 0);
         $valor = (string) $request->input('valor', $request->input('codigo', ''));
+        $empresaId = (int) $request->input('empresa_id', 0);
 
         $concepto = ConceptoIvacompraConsultaSupport::resolverPorCodigoOId($tipoId, $valor);
         if (! $concepto) {
@@ -346,12 +347,29 @@ class Concepto_IvacompraController extends Controller
             ], 404);
         }
 
+        if (! $concepto->relationLoaded('concepto_ivacompra_empresas')) {
+            $concepto->load('concepto_ivacompra_empresas');
+        }
+
+        $cuentaDebeId = $concepto->cuentacontableDebeIdParaEmpresa($empresaId > 0 ? $empresaId : null);
+        $cuentaCodigo = '';
+        $cuentaNombre = '';
+        if ($cuentaDebeId > 0) {
+            $cta = \App\Models\Contable\Cuentacontable::query()->find($cuentaDebeId);
+            $cuentaCodigo = (string) ($cta->codigo ?? '');
+            $cuentaNombre = (string) ($cta->nombre ?? '');
+        }
+
         return response()->json([
             'ok' => true,
             'id' => (int) $concepto->id,
             'codigo' => (string) $concepto->codigo,
             'nombre' => (string) $concepto->nombre,
             'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
+            'cuenta_debe_id' => $cuentaDebeId,
+            'cuenta_debe_codigo' => $cuentaCodigo,
+            'cuenta_debe_nombre' => $cuentaNombre,
+            'cuentas_por_empresa' => $concepto->mapaCuentaDebePorEmpresa(),
         ]);
     }
 }
