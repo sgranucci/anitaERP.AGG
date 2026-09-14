@@ -31,6 +31,7 @@ use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
+use App\Support\Caja\IngresoEgresoEdicionCandadoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
@@ -218,6 +219,15 @@ class IngresoEgresoService
     public function actualizaIngresoEgreso($request, $id, $origen = null)
     {
         session(['empresa_id' => $request->empresa_id]);
+
+		$movCandado = $this->caja_movimientoRepository->find($id);
+		if ($movCandado) {
+			try {
+				IngresoEgresoEdicionCandadoSupport::assertEditable($movCandado);
+			} catch (InvalidArgumentException $e) {
+				return ['errores' => $e->getMessage()];
+			}
+		}
 
 		PeriodoContableCierreSupport::assertOperacionPermitida(
 			(int) $request->input('empresa_id'),

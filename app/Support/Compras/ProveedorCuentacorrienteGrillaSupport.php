@@ -88,6 +88,28 @@ final class ProveedorCuentacorrienteGrillaSupport
         return $raw;
     }
 
+    /**
+     * Columnas Debe/Haber de la ficha de proveedores (espejo de clientes).
+     *
+     * Convención Anita: deuda (FC/ND, total > 0) → Haber; crédito (OPP/NC/OPA, total < 0) → Debe.
+     * El signo en `proveedor_cuentacorriente.total` no se altera: solo el mapeo a columnas.
+     *
+     * @return array{debe: ?float, haber: ?float}
+     */
+    public static function debeHaberDesdeTotal(float $total, ?float $importeAbsoluto = null): array
+    {
+        $monto = abs($importeAbsoluto ?? $total);
+        if ($monto < 0.0001) {
+            return ['debe' => null, 'haber' => null];
+        }
+
+        if ($total < 0) {
+            return ['debe' => $monto, 'haber' => null];
+        }
+
+        return ['debe' => null, 'haber' => $monto];
+    }
+
     public static function saldoPendiente(float $total, ?float $aplicado): float
     {
         $aplicadoSum = (float) ($aplicado ?? 0);

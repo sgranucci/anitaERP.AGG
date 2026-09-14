@@ -303,6 +303,10 @@ class PagoproveedorAnularRevertirService
             ]);
         }
 
+        Caja_Movimiento::query()->where('id', (int) $cajaOriginal->id)->update([
+            'caja_movimiento_revertido_por_id' => (int) $movimiento->id,
+        ]);
+
         $this->pagoproveedorRepository->update([
             'caja_movimiento_id' => (int) $movimiento->id,
         ], (int) $reverso->id);

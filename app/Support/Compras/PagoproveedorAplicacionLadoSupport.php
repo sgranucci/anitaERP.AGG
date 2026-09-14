@@ -40,9 +40,9 @@ final class PagoproveedorAplicacionLadoSupport
     /**
      * Importes firmados al aplicar un monto de OP sobre esta CC.
      *
-     * Factura / ND (CC > 0): la OP abre Haber y consume la deuda con aplicación negativa.
-     * NC / OPA (CC < 0): la OP abre Debe y consume el crédito con aplicación positiva.
-     * Si la OP también abriera Haber sobre una NC, el listado duplicaría el crédito.
+     * Factura / ND (CC > 0): la OP abre Debe (total < 0) y consume la deuda con aplicación negativa.
+     * NC / OPA (CC < 0): la OP abre Haber (total > 0) y consume el crédito con aplicación positiva.
+     * Si la OP también abriera Debe sobre una NC, el listado duplicaría el crédito.
      *
      * @return array{total_fila_pago: float, apl_documento: float, apl_fila_pago: float}
      */

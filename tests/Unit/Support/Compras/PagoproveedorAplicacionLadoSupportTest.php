@@ -39,7 +39,7 @@ class PagoproveedorAplicacionLadoSupportTest extends TestCase
         $this->assertFalse(PagoproveedorAplicacionLadoSupport::afectaRetenciones($cc));
     }
 
-    public function test_factura_op_abre_haber_y_cancela_deuda(): void
+    public function test_factura_op_abre_debe_y_cancela_deuda(): void
     {
         $cc = $this->cc(40301509.68, null, 100);
         $monto = 40301509.68;
@@ -60,7 +60,7 @@ class PagoproveedorAplicacionLadoSupportTest extends TestCase
         );
     }
 
-    public function test_nc_op_abre_debe_y_cancela_credito(): void
+    public function test_nc_op_abre_haber_y_cancela_credito(): void
     {
         $cc = $this->cc(-79958.25, null, 200);
         $monto = 79958.25;

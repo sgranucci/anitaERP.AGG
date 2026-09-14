@@ -32,11 +32,21 @@
         ? route('consulta_movimiento_caja')
         : route('ingresoegreso');
     $tituloIe = trim(($data->tipotransaccioncajas->nombre ?? '').' · N° '.($data->numerotransaccion ?? ''));
+    $ieSoloLectura = ! \App\Support\Caja\IngresoEgresoEdicionCandadoSupport::esEditable($data);
 @endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @if ($ieSoloLectura)
+            <div class="alert alert-warning">
+                @if (! empty($data->caja_movimiento_origen_id))
+                    <strong>Solo lectura:</strong> este movimiento es una anulación compensatoria y no se puede editar.
+                @else
+                    <strong>Solo lectura:</strong> este movimiento ya fue revertido y no se puede editar.
+                @endif
+            </div>
+        @endif
         @if (! empty($solicitudpagoOrigen))
             <div class="alert alert-info">
                 <strong>Vinculado a solicitud de pago #{{ $solicitudpagoOrigen->codigo }}</strong>
@@ -52,7 +62,7 @@
         <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">
-                    Editar movimiento de caja
+                    {{ $ieSoloLectura ? 'Consultar movimiento de caja' : 'Editar movimiento de caja' }}
                     @if ($tituloIe !== '· N°')
                         <span class="ml-2 font-weight-normal small">{{ $tituloIe }}</span>
                     @endif
@@ -110,6 +120,7 @@
                     @include('includes.contable.formasientoexterno')
                     @include('caja.ingresoegreso.form6')
                 </div>
+                @if (! $ieSoloLectura)
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-3"></div>
@@ -120,6 +131,7 @@
                         </div>
                     </div>
                 </div>
+                @endif
             </form>
         </div>
     </div>

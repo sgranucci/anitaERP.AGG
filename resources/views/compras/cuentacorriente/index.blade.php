@@ -207,14 +207,17 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                         <input type="hidden" name="moneda" class="form-control moneda" value="{{ $data->monedas->id ?? '' }}">
                                     </td>
                                     @if ($modoCuentaCorriente)
+                                        @php
+                                            $dh = ProveedorCuentacorrienteGrillaSupport::debeHaberDesdeTotal((float) $totalMostrar);
+                                        @endphp
                                         <td class="debe" style="text-align: right;">
-                                            @if ($totalMostrar >= 0)
-                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto($totalMostrar, $abreviaturaFila) }}
+                                            @if ($dh['debe'] !== null)
+                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto($dh['debe'], $abreviaturaFila) }}
                                             @endif
                                         </td>
                                         <td class="haber" style="text-align: right;">
-                                            @if ($totalMostrar < 0)
-                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto(abs($totalMostrar), $abreviaturaFila) }}
+                                            @if ($dh['haber'] !== null)
+                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto($dh['haber'], $abreviaturaFila) }}
                                             @endif
                                         </td>
                                         <td style="text-align: right;">

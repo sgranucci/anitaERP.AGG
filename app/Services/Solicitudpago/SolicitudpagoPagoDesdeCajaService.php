@@ -25,6 +25,26 @@ class SolicitudpagoPagoDesdeCajaService
             return;
         }
 
+        if ((int) ($movimiento->caja_movimiento_origen_id ?? 0) > 0) {
+            Log::info('solicitudpago.pago_caja_omitido', [
+                'solicitudpago_id' => $spId,
+                'caja_movimiento_id' => $movimiento->id,
+                'motivo' => 'compensatorio',
+            ]);
+
+            return;
+        }
+
+        if ((int) ($movimiento->caja_movimiento_revertido_por_id ?? 0) > 0) {
+            Log::info('solicitudpago.pago_caja_omitido', [
+                'solicitudpago_id' => $spId,
+                'caja_movimiento_id' => $movimiento->id,
+                'motivo' => 'revertido',
+            ]);
+
+            return;
+        }
+
         try {
             $sp = $this->repository->findOrFail($spId);
             if ($sp->estado === SolicitudpagoEstados::PAGADA) {

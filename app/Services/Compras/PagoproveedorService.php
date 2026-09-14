@@ -24,6 +24,7 @@ use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupp
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
+use App\Support\Compras\PagoproveedorEdicionCandadoSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
 use App\Support\Contable\AsientoBalanceSupport;
@@ -198,14 +199,18 @@ class PagoproveedorService
         );
 
         try {
+            $pagoCandado = $this->pagoproveedorRepository->findOrFail($id);
+            PagoproveedorEdicionCandadoSupport::assertEditable($pagoCandado);
+
             $estado = (string) ($data['estado'] ?? 'CONFIRMADA');
             if (! in_array($estado, ['PRE CARGA', 'CONFIRMADA'], true)) {
-                $estado = (string) ($this->pagoproveedorRepository->findOrFail($id)->estado ?? 'CONFIRMADA');
+                $estado = (string) ($pagoCandado->estado ?? 'CONFIRMADA');
             }
             $this->assertAsientoBalanceadoAntesDeGrabar($data, $estado);
 
             DB::transaction(function () use ($data, $request, $id) {
                 $pago = $this->pagoproveedorRepository->findOrFail($id);
+                PagoproveedorEdicionCandadoSupport::assertEditable($pago);
                 if (in_array($pago->estado, Pagoproveedor::estadosFinalesBloqueados(), true)) {
                     throw new Exception('No se puede modificar una OP en estado '.$pago->estado.'.');
                 }
@@ -891,6 +896,7 @@ class PagoproveedorService
     {
         try {
             $pago = $this->pagoproveedorRepository->findOrFail($id);
+            PagoproveedorEdicionCandadoSupport::assertEditable($pago);
             if ((string) $pago->estado !== 'CONFIRMADA') {
                 throw new Exception('Solo se puede marcar PAGADA una OP CONFIRMADA.');
             }
@@ -910,6 +916,7 @@ class PagoproveedorService
     {
         try {
             $pago = $this->pagoproveedorRepository->findOrFail($id);
+            PagoproveedorEdicionCandadoSupport::assertEditable($pago);
             if (! in_array((string) $pago->estado, ['CONFIRMADA', 'PAGADA'], true)) {
                 throw new Exception('Solo se puede marcar CONCILIADA una OP CONFIRMADA o PAGADA.');
             }

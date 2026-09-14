@@ -152,13 +152,17 @@ class ProveedorCuentacorrienteReporteService
                     $importeFirmadoPesos = $this->convertirMovimiento($mov, true, $forzarDia)['importe_firmado_pesos'];
                 }
 
+                $dhMov = ProveedorCuentacorrienteGrillaSupport::debeHaberDesdeTotal($totalOrigen, abs($importeMostrar));
+                $dhMovPesos = ProveedorCuentacorrienteGrillaSupport::debeHaberDesdeTotal($totalOrigen, abs($importeFirmadoPesos));
+
                 if ($modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
-                    if ($totalOrigen >= 0) {
-                        $subDebe += abs($importeMostrar);
-                        $totalDebe += abs($importeFirmadoPesos);
-                    } else {
-                        $subHaber += abs($importeMostrar);
-                        $totalHaber += abs($importeFirmadoPesos);
+                    if ($dhMov['debe'] !== null) {
+                        $subDebe += $dhMov['debe'];
+                        $totalDebe += (float) ($dhMovPesos['debe'] ?? 0);
+                    }
+                    if ($dhMov['haber'] !== null) {
+                        $subHaber += $dhMov['haber'];
+                        $totalHaber += (float) ($dhMovPesos['haber'] ?? 0);
                     }
                     $saldoCorrido += $totalOrigen;
                     $saldoCorridoPesos += $importeFirmadoPesos;
@@ -189,8 +193,8 @@ class ProveedorCuentacorrienteReporteService
                     'etiqueta_moneda' => $conv['etiqueta_moneda'],
                     'cotizacion' => $conv['cotizacion_usada'],
                     'cotizacion_origen' => $conv['cotizacion_origen'],
-                    'debe' => $totalOrigen >= 0 ? abs($importeMostrar) : null,
-                    'haber' => $totalOrigen < 0 ? abs($importeMostrar) : null,
+                    'debe' => $dhMov['debe'],
+                    'haber' => $dhMov['haber'],
                     'importe' => abs($importeMostrar),
                     'aplicado' => abs($aplicadoMostrar) > 0.0001 ? abs($aplicadoMostrar) : null,
                     'saldo_pendiente' => $pendienteMostrar,
@@ -202,6 +206,7 @@ class ProveedorCuentacorrienteReporteService
                 foreach ($aplicacionesPorCc[(int) $mov->id] ?? [] as $apl) {
                     $aplicacionesCount++;
                     $convApl = $this->convertirAplicacion($apl, $enPesos, $forzarDia);
+                    // Espejo de clientes (aplicación en Haber): en proveedores cancela la deuda del Haber → Debe.
                     $filas[] = [
                         'tipo' => 'aplicacion',
                         'id' => (int) $apl->id,
@@ -220,8 +225,8 @@ class ProveedorCuentacorrienteReporteService
                         'etiqueta_moneda' => $convApl['etiqueta_moneda'],
                         'cotizacion' => $convApl['cotizacion_usada'],
                         'cotizacion_origen' => $convApl['cotizacion_origen'],
-                        'debe' => null,
-                        'haber' => abs($convApl['importe']),
+                        'debe' => abs($convApl['importe']),
+                        'haber' => null,
                         'importe' => abs($convApl['importe']),
                         'aplicado' => abs($convApl['importe']),
                         'saldo_pendiente' => null,

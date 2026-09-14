@@ -130,12 +130,16 @@
                                 <td class="text-right">{{ number_format((float)$fila->monto, 2, ',', '.') }} {{ $fila->monedas->abreviatura ?? '' }}</td>
                                 <td>{{ $fila->estado }}</td>
                                 <td class="text-nowrap">
+                                    @php
+                                        $opSoloLectura = strtoupper(trim((string) ($fila->estado ?? ''))) === 'REVERTIDA';
+                                    @endphp
                                     @if ($esIeOpp)
                                         @if (can('editar-ingresos-egresos-caja', false) || can('listar-ingresos-egresos-caja', false))
                                             <a href="{{ route('editar_ingresoegreso', ['id' => $fila->id, 'origen' => 'pagoproveedor']) }}"
-                                               class="btn-accion-tabla tooltipsC" title="Consultar OP (IE)"
+                                               class="btn-accion-tabla tooltipsC"
+                                               title="{{ $opSoloLectura ? 'Consultar OP (IE, solo lectura)' : 'Consultar OP (IE)' }}"
                                                target="_blank" rel="noopener">
-                                                <i class="fa fa-edit"></i>
+                                                <i class="fa {{ $opSoloLectura ? 'fa-eye' : 'fa-edit' }}"></i>
                                             </a>
                                         @endif
                                         @if (can('listar-ingresos-egresos-caja', false))
@@ -146,8 +150,10 @@
                                         @endif
                                     @else
                                         @if (can('editar-pagoproveedor', false))
-                                            <a href="{{ route('editar_pagoproveedor', ['id' => $fila->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
-                                                <i class="fa fa-edit"></i>
+                                            <a href="{{ route('editar_pagoproveedor', ['id' => $fila->id] + $retornoListadoQuery) }}"
+                                               class="btn-accion-tabla tooltipsC"
+                                               title="{{ $opSoloLectura ? 'Consultar (solo lectura)' : 'Editar' }}">
+                                                <i class="fa {{ $opSoloLectura ? 'fa-eye' : 'fa-edit' }}"></i>
                                             </a>
                                         @endif
                                         <a class="btn-accion-tabla tooltipsC" target="_blank" rel="noopener" href="{{ route('imprimir_pagoproveedor', $fila->id) }}" title="Imprimir">

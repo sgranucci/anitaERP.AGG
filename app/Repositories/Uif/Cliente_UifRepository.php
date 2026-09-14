@@ -157,6 +157,10 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         try {
             ClienteUifArchivoStorage::withOrigen($origen, function () use ($clienteId, $inro, $cliente) {
                 $this->cliente_archivo_uifRepository->traerArchivosDeAnita($clienteId, $inro);
+                // Tras «Borrar foto» no re-asociar el DNI en el mismo request de vuelta.
+                if ((int) session('uif_omitir_relink_fotodocumento') === $clienteId) {
+                    return;
+                }
                 $this->relinkFotodocumentoDesdeDisco($cliente);
             });
         } catch (Throwable $e) {

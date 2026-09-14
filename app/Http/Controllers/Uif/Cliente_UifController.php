@@ -419,6 +419,10 @@ class Cliente_UifController extends Controller
 
         $cliente_uif->update(['fotodocumento' => null]);
 
+        // Evita que sincronizarArchivosAnitaSiCorresponde → relink vuelva a asociar
+        // la misma foto al reabrir la edición justo después del borrado.
+        $request->session()->flash('uif_omitir_relink_fotodocumento', (int) $id);
+
         return redirect()->back()->with('mensaje', 'Foto del documento eliminada');
     }
 

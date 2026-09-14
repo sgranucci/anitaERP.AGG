@@ -141,9 +141,14 @@
                                     </a>
                                 @endif
                                 @if (can('editar-ingresos-egresos-caja', false))
+                                    @php
+                                        $ieSoloLectura = ! empty($data->caja_movimiento_origen_id)
+                                            || ! empty($data->caja_movimiento_revertido_por_id);
+                                    @endphp
                                     <a href="{{ route('editar_ingresoegreso', ['id' => $data->id, 'origen' => 'ingresoegreso'] + $retornoListadoQuery) }}"
-                                       class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                        <i class="fa fa-edit"></i>
+                                       class="btn-accion-tabla tooltipsC"
+                                       title="{{ $ieSoloLectura ? 'Consultar (solo lectura)' : 'Editar este registro' }}">
+                                        <i class="fa {{ $ieSoloLectura ? 'fa-eye' : 'fa-edit' }}"></i>
                                     </a>
                                 @endif
                                 @if (

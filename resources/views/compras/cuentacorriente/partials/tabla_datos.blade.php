@@ -95,14 +95,17 @@
                 <td class="text-right" style="text-align: right;">{{ $formatearMonto($saldoPendiente, $data->monedas->abreviatura ?? $abreviaturaFila) }}</td>
                 <td class="text-right" style="text-align: right;">{{ $formatearMonto($saldoPendientePesos, CuentacorrienteSaldosPorMoneda::abreviaturaLocal()) }}</td>
             @else
+                @php
+                    $dh = ProveedorCuentacorrienteGrillaSupport::debeHaberDesdeTotal((float) $totalMostrar);
+                @endphp
                 <td class="text-right" style="text-align: right;">
-                    @if ($totalMostrar >= 0)
-                        {{ $formatearMonto($totalMostrar, $abreviaturaFila) }}
+                    @if ($dh['debe'] !== null)
+                        {{ $formatearMonto($dh['debe'], $abreviaturaFila) }}
                     @endif
                 </td>
                 <td class="text-right" style="text-align: right;">
-                    @if ($totalMostrar < 0)
-                        {{ $formatearMonto(abs($totalMostrar), $abreviaturaFila) }}
+                    @if ($dh['haber'] !== null)
+                        {{ $formatearMonto($dh['haber'], $abreviaturaFila) }}
                     @endif
                 </td>
                 <td class="text-right" style="text-align: right;">{{ $formatearMonto($saldoFila, $data->monedas->abreviatura ?? $abreviaturaFila) }}</td>

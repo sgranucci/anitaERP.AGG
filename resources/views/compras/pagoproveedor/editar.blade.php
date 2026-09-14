@@ -43,21 +43,39 @@
 @section('contenido')
 @php
     $estado = (string) ($data->estado ?? '');
-    $puedeActualizar = can('actualizar-pagoproveedor', false) && ! in_array($estado, \App\Models\Compras\Pagoproveedor::estadosFinalesBloqueados(), true);
-    $puedeConfirmar = can('confirmar-pagoproveedor', false) && $estado === 'PRE CARGA';
-    $puedeEliminar = can('borrar-pagoproveedor', false) && $estado === 'PRE CARGA';
-    $puedeAnular = can('anular-pagoproveedor', false) && ! in_array($estado, ['BAJA', 'REVERTIDA'], true);
-    $puedeRevertir = can('revertir-pagoproveedor', false) && in_array($estado, ['CONFIRMADA', 'PAGADA', 'CONCILIADA'], true);
-    $puedePagada = can('marcar-pagada-pagoproveedor', false) && $estado === 'CONFIRMADA';
-    $puedeConciliada = can('marcar-conciliada-pagoproveedor', false) && in_array($estado, ['CONFIRMADA', 'PAGADA'], true);
+    $opSoloLectura = ! \App\Support\Compras\PagoproveedorEdicionCandadoSupport::esEditable($data);
+    $puedeActualizar = can('actualizar-pagoproveedor', false)
+        && ! $opSoloLectura
+        && ! in_array($estado, \App\Models\Compras\Pagoproveedor::estadosFinalesBloqueados(), true);
+    $puedeConfirmar = can('confirmar-pagoproveedor', false) && ! $opSoloLectura && $estado === 'PRE CARGA';
+    $puedeEliminar = can('borrar-pagoproveedor', false) && ! $opSoloLectura && $estado === 'PRE CARGA';
+    $puedeAnular = can('anular-pagoproveedor', false)
+        && ! $opSoloLectura
+        && ! in_array($estado, ['BAJA', 'REVERTIDA'], true);
+    $puedeRevertir = can('revertir-pagoproveedor', false)
+        && ! $opSoloLectura
+        && in_array($estado, ['CONFIRMADA', 'PAGADA', 'CONCILIADA'], true);
+    $puedePagada = can('marcar-pagada-pagoproveedor', false) && ! $opSoloLectura && $estado === 'CONFIRMADA';
+    $puedeConciliada = can('marcar-conciliada-pagoproveedor', false)
+        && ! $opSoloLectura
+        && in_array($estado, ['CONFIRMADA', 'PAGADA'], true);
 @endphp
 <div class="row" id="editar">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @if ($opSoloLectura)
+            <div class="alert alert-warning">
+                @if (! empty($data->pagoproveedor_origen_id))
+                    <strong>Solo lectura:</strong> esta OP es una anulación compensatoria (AOP) y no se puede modificar.
+                @else
+                    <strong>Solo lectura:</strong> esta OP ya fue revertida y no se puede modificar.
+                @endif
+            </div>
+        @endif
         <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Editar orden de pago — {{ $estado }}</h3>
+                <h3 class="card-title">{{ $opSoloLectura ? 'Consultar' : 'Editar' }} orden de pago — {{ $estado }}</h3>
                 <div class="card-tools">
                     <a href="{{ route('pagoproveedor') }}" class="btn btn-outline-info btn-sm"><i class="fa fa-reply-all"></i> Volver</a>
                 </div>

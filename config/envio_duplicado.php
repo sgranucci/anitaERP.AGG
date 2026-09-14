@@ -39,6 +39,11 @@ return [
 
     'rutas_nombre_excluidas' => [
         'ejecutar_impresion_sesion',
+        // Borrar foto DNI: acción idempotente; un reintento no duplica registros.
+        // Tras el DELETE, editar() puede re-sincronizar Anita y el operador vuelve a
+        // apretar Borrar dentro de la ventana → el mensaje de «doble click en Guardar»
+        // confundía (cliente_uif/3889, 14/sep/2026).
+        'elimina_fotodocumento_cliente_uif',
     ],
 
 ];

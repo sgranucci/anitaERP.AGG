@@ -1368,6 +1368,8 @@
         var f = document.createElement('form');
         f.method = 'POST';
         f.action = url;
+        // No es un Guardar: no mostrar banner «Grabando…» ni bloquear otros forms.
+        f.setAttribute('data-sin-bloqueo-grabacion', '1');
         var iToken = document.createElement('input');
         iToken.type = 'hidden';
         iToken.name = '_token';
