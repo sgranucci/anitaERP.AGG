@@ -124,30 +124,48 @@
 	</div>
 </div>
 
-<div class="card">
-    <div class="card-body">
-    	<table class="table table-hover" id="itemspedido-table">
+<div class="card card-outline card-info">
+    <div class="card-header py-2">
+        <h3 class="card-title mb-0"><i class="fa fa-list"></i> &Iacute;tems del pedido</h3>
+        <div class="card-tools">
+            @if (\App\Support\Ventas\PedidoPickingFerliSupport::habilitado())
+                <a href="{{ route('picking_pedido') }}" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener">
+                    <i class="fa fa-dolly"></i> Workbench picking
+                </a>
+            @endif
+        </div>
+    </div>
+    <div class="card-body p-2">
+    	@include('ventas.pedido_ferli.partials.picking_estilos')
+    	<div class="table-responsive">
+    	<table class="table table-sm table-bordered table-hover mb-2" id="itemspedido-table">
     		<thead>
     			<tr>
-    				<th style="width: 5%;">Item</th>
-    				<th style="width: 20%;">Art&iacute;culo</th>
+    				<th style="width: 4%;">Item</th>
+    				<th style="width: 18%;">Art&iacute;culo</th>
     				<th>Combinaci&oacute;n</th>
-    				<th style="width: 12%;">M&oacute;dulo</th>
-    				<th style="width: 5%;">Cantidad</th>
-    				<th style="width: 9%; text-align: right;">Precio</th>
-    				<th style="width: 8%; margin-right: 0;">O.T.</th>
-    				<th style="width: 14%; margin-right: 0;">Picking</th>
-    				<th style="width: 12%; margin-right: 0;">Observaci&oacute;n</th>
-    				<th style="width: 1%; margin-right: 0;">A</th>
-    				<th style="width: 1%; margin-right: 0;">C</th>
+    				<th style="width: 10%;">M&oacute;dulo</th>
+    				<th style="width: 5%;">Cant.</th>
+    				<th style="width: 8%; text-align: right;">Precio</th>
+    				<th style="width: 7%;">O.T.</th>
+    				<th style="width: 13%;">Picking</th>
+    				<th style="width: 10%;">Observaci&oacute;n</th>
+    				<th style="width: 2%;">A</th>
+    				<th style="width: 2%;">C</th>
+    				<th style="width: 8%;">Acciones</th>
     			</tr>
     		</thead>
     		<tbody id="tbody-tabla">
 		 		@if ($pedido->pedido_combinaciones ?? '') 
 					@foreach (old('items', $pedido->pedido_combinaciones->count() ? $pedido->pedido_combinaciones : ['']) as $pedidoitem)
-            			<tr class="item-pedido">
+						@php
+							$pickingMarcadoRow = (old('picking.'.$loop->index, optional($pedidoitem)->picking ?? 'N') === 'S');
+							$pickingFacturadoRow = ((optional($pedidoitem)->picking_facturado ?? 'N') === 'S');
+							$rowPickingClass = $pickingFacturadoRow ? 'picking-row-facturado' : ($pickingMarcadoRow ? 'picking-row-preparado' : '');
+						@endphp
+            			<tr class="item-pedido {{ $rowPickingClass }}">
                 			<td>
-								@if ($pedidoitem->estado ?? '' == 'A')
+								@if (($pedidoitem->estado ?? '') == 'A')
                 					<input type="text" style="background-color:red;font-weight:900;" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
 								@else
                 					<input type="text" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
@@ -210,37 +228,13 @@
                 					value="{{ (old('ot_ids.' . $loop->index) ?? optional($pedidoitem)->ordenestrabajo)->id ?? '-1' }}"> 
                 			</td>
                 			<td class="picking-cell">
-								@php
-									$pickingMarcado = (old('picking.'.$loop->index, optional($pedidoitem)->picking ?? 'N') === 'S');
-									$pickingFacturado = (optional($pedidoitem)->picking_facturado ?? 'N') === 'S';
-									$pickingLote = old('picking_lote.'.$loop->index, optional($pedidoitem)->picking_lote_codigo ?? '');
-									$pickingDep = (int) old('picking_deposito.'.$loop->index, optional($pedidoitem)->picking_deposito_id ?? 0);
-									$depositosPicking = $depositos_picking_query ?? \App\Models\Stock\Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get(['id','codigo','nombre']);
-								@endphp
-								<div class="d-flex flex-wrap align-items-center">
-									<input type="checkbox" class="check-picking mr-1" title="Marcar picking"
-										@if ($pickingMarcado) checked @endif
-										@if ($pickingFacturado) disabled @endif>
-									<input type="text" class="form-control form-control-sm picking-lote mb-1" style="width:72px;"
-										placeholder="OT/lote" value="{{ $pickingLote }}"
-										@if ($pickingFacturado) readonly @endif>
-									<select class="form-control form-control-sm picking-deposito mb-1" style="width:110px;"
-										@if ($pickingFacturado) disabled @endif>
-										<option value="0">Dep&oacute;sito</option>
-										@foreach ($depositosPicking as $dep)
-											<option value="{{ $dep->id }}" @if ($pickingDep === (int) $dep->id) selected @endif>
-												{{ trim(($dep->codigo ?? '').'-'.($dep->nombre ?? ''), '-') }}
-											</option>
-										@endforeach
-									</select>
-									@if (! $pickingFacturado)
-										<button type="button" title="Guardar marca picking" class="btn-accion-tabla guarda-picking tooltipsC">
-											<i class="fa fa-save text-primary"></i>
-										</button>
-									@else
-										<span class="badge badge-success">Facturado</span>
-									@endif
-								</div>
+								@include('ventas.pedido_ferli.partials.celda_picking', [
+									'pickingMarcado' => (old('picking.'.$loop->index, optional($pedidoitem)->picking ?? 'N') === 'S'),
+									'pickingFacturado' => ((optional($pedidoitem)->picking_facturado ?? 'N') === 'S'),
+									'pickingLote' => old('picking_lote.'.$loop->index, optional($pedidoitem)->picking_lote_codigo ?? ''),
+									'pickingDep' => (int) old('picking_deposito.'.$loop->index, optional($pedidoitem)->picking_deposito_id ?? 0),
+									'depositosPicking' => $depositos_picking_query ?? collect(),
+								])
                 			</td>
                 			<td>
                 				<input type="text" id="iobservacion" name="observaciones[]" class="form-control observacion" value="{{old('observaciones.'.$loop->index, optional($pedidoitem)->observacion)}}" />
@@ -284,21 +278,23 @@
 				@endif
        		</tbody>
        	</table>
+		</div>
 		@include('ventas.pedido_ferli.template')
-        <div class="row col-md-12">
-        	<div class="col-md-3">
-        		<button id="agrega_renglon" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
+        <div class="row align-items-start mx-0">
+        	<div class="col-md-3 mb-2">
+        		<button type="button" id="agrega_renglon" class="btn btn-sm btn-outline-primary">
+					<i class="fa fa-plus"></i> Agregar rengl&oacute;n
+				</button>
         	</div>
-			<div class="col-md-6">
-               	<!-- textarea -->
-               	<div class="form-group">
-               		<label>Leyendas</label>
-               		<textarea name="leyenda" class="form-control" rows="3" placeholder="Leyendas ...">{{old('leyenda', $pedido->leyenda ?? '')}}</textarea>
+			<div class="col-md-6 mb-2">
+               	<div class="form-group mb-0">
+               		<label class="mb-1">Leyendas</label>
+               		<textarea name="leyenda" class="form-control" rows="2" placeholder="Leyendas…">{{old('leyenda', $pedido->leyenda ?? '')}}</textarea>
                	</div>
             </div>
-        	<div class="col-md-3 row">
-                <label style="margin-top: 6px;">Total pares:&nbsp</label>
-                <input type="text" id="totalparespedido" name="totalparespedido" class="form-control col-sm-3" readonly value="" />
+        	<div class="col-md-3 mb-2 d-flex align-items-center">
+                <label class="mb-0 mr-2">Total pares</label>
+                <input type="text" id="totalparespedido" name="totalparespedido" class="form-control form-control-sm" style="max-width:6rem;" readonly value="" />
             </div>
         </div>
     </div>

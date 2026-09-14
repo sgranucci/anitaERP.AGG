@@ -7,6 +7,7 @@ use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Ventas\ArcaCaeaCbteFchHsGenSupport;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
+use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -988,8 +989,16 @@ class ArcaWsfeFacturaElectronicaService
             if (! is_array($i) || (float) ($i['importe'] ?? 0) == 0.0) {
                 continue;
             }
+            $id = (int) ($i['id'] ?? 0);
+            if ($id <= 0 || ! ArcaMtxcaComprobanteTotalesSupport::esCondicionGravada($id)) {
+                $id = ArcaMtxcaComprobanteTotalesSupport::resolverIdAlicIva(
+                    $i['id'] ?? null,
+                    $i['codigo'] ?? null,
+                    (float) ($i['alicuota'] ?? $i['tasa'] ?? 0),
+                );
+            }
             $items[] = [
-                'Id' => (int) ($i['id'] ?? 0),
+                'Id' => $id,
                 'BaseImp' => $this->money($i['base_imp'] ?? 0),
                 'Importe' => $this->money($i['importe'] ?? 0),
             ];

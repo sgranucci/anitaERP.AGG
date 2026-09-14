@@ -24,6 +24,20 @@ class ArcaMtxcaComprobanteTotalesSupportTest extends TestCase
         self::assertSame(Totales::CONDICION_NO_GRAVADO, Totales::resolverCodigoCondicion(1, 0.0));
     }
 
+    public function test_resolver_id_alic_iva_tolera_codigoarca_vacio(): void
+    {
+        self::assertSame(5, Totales::resolverIdAlicIva(null, null, 21.0));
+        self::assertSame(4, Totales::resolverIdAlicIva('', '4', 10.5));
+        self::assertSame(5, Totales::resolverIdAlicIva('0', '5', 21.0));
+        self::assertSame(6, Totales::resolverIdAlicIva(null, null, 27.0));
+    }
+
+    public function test_resolver_id_alic_iva_rechaza_sin_mapeo_valido(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        Totales::resolverIdAlicIva(1, 1, 99.0);
+    }
+
     public function test_agrega_una_fila_por_lo_que_la_cabecera_grava_y_el_detalle_no(): void
     {
         $filas = Totales::conciliar(

@@ -3,6 +3,7 @@
 namespace App\Support\Ventas;
 
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
+use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use Illuminate\Support\Facades\Auth;
 
@@ -84,11 +85,16 @@ final class ComprobanteImpresionSalidaUsuarioSupport
         $repo = app(SeteosalidaRepositoryInterface::class);
         foreach (self::programasBusqueda($formulario) as $programa) {
             $seteo = $repo->buscaSeteo($usuarioId, $programa);
-            if ($seteo?->salidas) {
+            if ($seteo?->salidas && SalidaImpresionFallbackSupport::comandoPdfCompatible($seteo->salidas)) {
                 return $seteo;
             }
         }
 
-        return $repo->buscaSeteo($usuarioId, self::programaUnificado());
+        $fallback = $repo->buscaSeteo($usuarioId, self::programaUnificado());
+        if ($fallback?->salidas && SalidaImpresionFallbackSupport::comandoPdfCompatible($fallback->salidas)) {
+            return $fallback;
+        }
+
+        return null;
     }
 }

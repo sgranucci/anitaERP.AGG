@@ -42,6 +42,9 @@
     }
 
     $itemsFactura = array_values(is_array($tblItem) ? $tblItem : []);
+    if ($facturaPdfEsFerli) {
+        $itemsFactura = RemitoPdfAgrupacionFerliSupport::agruparItemsFacturaPorSkuPrecio($itemsFactura);
+    }
     $totalesDocumento = [
         'cantidad' => 0.0,
         'kilodescuento' => 0.0,

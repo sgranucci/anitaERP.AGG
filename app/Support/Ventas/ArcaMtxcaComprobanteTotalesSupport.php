@@ -59,6 +59,41 @@ final class ArcaMtxcaComprobanteTotalesSupport
     }
 
     /**
+     * Id de AlicIVA para WSFE (FEParamGetTiposIva): 3=0%, 4=10.5%, 5=21%, 6=27%, 8=5%, 9=2.5%.
+     * Si `impuesto.codigoarca` está vacío (caso Ferli / installs viejos), cae a `codigo` válido o a la tasa.
+     * Un Id 0 dispara AFIP [10019].
+     */
+    public static function resolverIdAlicIva(
+        int|string|null $codigoarca,
+        int|string|null $codigo = null,
+        float $tasa = 0.0,
+    ): int {
+        foreach ([$codigoarca, $codigo] as $candidato) {
+            if ($candidato === null || $candidato === '') {
+                continue;
+            }
+            if (! is_numeric($candidato)) {
+                continue;
+            }
+            $id = (int) $candidato;
+            if (self::esCondicionGravada($id)) {
+                return $id;
+            }
+        }
+
+        $porTasa = self::codigoPorTasa($tasa);
+        if ($porTasa !== null) {
+            return $porTasa;
+        }
+
+        throw new \RuntimeException(
+            'No se pudo resolver Id AlicIVA ARCA (FEParamGetTiposIva). '
+            .'Configure impuesto.codigoarca o una tasa reconocida. '
+            ."codigoarca={$codigoarca} codigo={$codigo} tasa={$tasa}"
+        );
+    }
+
+    /**
      * La alícuota real de la línea manda sobre `impuesto.codigoarca`: un ítem marcado 21 %
      * con tasa 0 hace fallar las validaciones 110 y 515.
      */

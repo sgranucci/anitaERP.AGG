@@ -15,7 +15,18 @@ final class ClienteEntregaPedidoSupport
 {
     public static function nombreEsUsable(?string $nombre): bool
     {
-        return trim((string) $nombre) !== '';
+        $t = trim((string) $nombre);
+        if ($t === '') {
+            return false;
+        }
+
+        // Placeholders frecuentes de imports Anita / Informix.
+        $upper = strtoupper($t);
+        if (in_array($upper, ['NULL', 'NIL', 'N/A', '-', '.'], true)) {
+            return false;
+        }
+
+        return true;
     }
 
     public static function etiquetaDesdePartes(?string $nombre, ?string $domicilio = null, ?string $localidad = null): string

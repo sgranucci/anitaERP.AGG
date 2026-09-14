@@ -64,13 +64,37 @@ class SalidaImpresionFallbackSupport
 
     public static function comandoImpresionValido(?Salida $salida): bool
     {
+        return self::comandoPdfCompatible($salida);
+    }
+
+    /**
+     * Comandos de PDF / ticket a cola: un solo %s (ruta del archivo).
+     * Excluye emisión OT (imp_otr %s %s COLA) y plantillas con más marcadores.
+     */
+    public static function comandoPdfCompatible(?Salida $salida): bool
+    {
         if (! $salida instanceof Salida) {
             return false;
         }
 
         $comando = trim((string) $salida->comando);
+        if ($comando === '') {
+            return false;
+        }
 
-        return $comando !== '' && str_contains($comando, '%s');
+        return self::cantidadMarcadoresSprintf($comando) === 1;
+    }
+
+    /**
+     * Cantidad de %s / %d / etc. de sprintf (ignora %%).
+     */
+    public static function cantidadMarcadoresSprintf(string $plantilla): int
+    {
+        if (preg_match_all('/%(?!%)/', $plantilla, $m) === false) {
+            return 0;
+        }
+
+        return count($m[0]);
     }
 
     private static function usoAplicaAPrograma(UsoSalidaImpresora $uso, string $programa): bool

@@ -2457,6 +2457,7 @@ class OrdentrabajoService
 
 		$numeroFactura = '-1';
 		$flTareaTerminada = false;
+		$flExisteSecuencia = false;
 		if ($ordentrabajo)
 		{
 			foreach ($ordentrabajo->ordentrabajo_tareas as $tareaOt)
@@ -2478,28 +2479,25 @@ class OrdentrabajoService
 								$numeroFactura = $venta->codigo;
 						}
 					}
-					if ($numeroFactura == -1)
+
+					// Predecesoras de FACTURADA (34/32/39): alcanza con que exista alguna con hastafecha
+					foreach ($secuenciaTareas[config("consprod.TAREA_FACTURADA")] as $secuencia)
 					{
-						$flExiste = false;
-						foreach($secuenciaTareas[config("consprod.TAREA_FACTURADA")] as $secuencia)
-						{
-							if ($secuencia == $tareaOt->tarea_id)
-							{
-								// Si no termino la tarea es error igual
-								if ($tareaOt->hastafecha != null)
-									$flExiste = true;
-							}
-						}
-						if (!$flExiste)
-							$numeroFactura = -2;
+						if ($secuencia == $tareaOt->tarea_id && $tareaOt->hastafecha != null)
+							$flExisteSecuencia = true;
 					}
 				}
 			}
+			if ($numeroFactura == -1 && !$flExisteSecuencia)
+				$numeroFactura = -2;
 		}
 		if (!$flTareaTerminada)
-			return ['numerofactura' => -3];
+			return ['numerofactura' => -3, 'terminada' => 'no'];
 
-		return ['numerofactura' => $numeroFactura];
+		return [
+			'numerofactura' => $numeroFactura,
+			'terminada' => 'si',
+		];
 	}
 
 	// Trae articulo de la ot por codigo se usa cuando hay boletas juntas en la OT

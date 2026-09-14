@@ -34,6 +34,8 @@ use App\Exports\Ventas\PedidoExportFerli;
 use App\Exports\Ventas\TotalPedidoExport;
 use App\Exports\Ventas\GeneralPedidoExportFerli;
 use App\Exports\Ventas\ConsumoMaterialExport;
+use App\Models\Stock\Depmae;
+use App\Support\Ventas\PedidoPickingFerliSupport;
 use Illuminate\Pagination\Paginator;
 use DB;
 use Carbon\Carbon;
@@ -501,13 +503,17 @@ class PedidoFerliController extends Controller
 		$tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
 		$formapago_query = $this->formapagoRepository->all();
 		$incoterm_query = $this->incotermRepository->all();
+		$depositos_picking_query = PedidoPickingFerliSupport::habilitado()
+			? Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get(['id', 'codigo', 'nombre'])
+			: collect();
 			
         return view('ventas.pedido_ferli.crear', compact('cliente_query', 'condicionventa_query', 'vendedor_query',
 			'transporte_query', 'mventa_query', 'articulo_query', 'modulo_query', 'listaprecio_query', 'moneda_query', 
 			'articuloall_query', 'articuloxsku_query', 'tiposuspensioncliente_query',
 			'motivocierrepedido_query', 'lote_query',
 			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 
-			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query'));
+			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
+			'depositos_picking_query'));
     }
 
     /**
@@ -563,6 +569,9 @@ class PedidoFerliController extends Controller
 		$puntoventadefault_id = cache()->get(generaKey('puntoventa'));
 		$puntoventaremitodefault_id = cache()->get(generaKey('puntoventaremito'));
 		$tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
+		$depositos_picking_query = PedidoPickingFerliSupport::habilitado()
+			? Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get(['id', 'codigo', 'nombre'])
+			: collect();
 
 		// Actualiza los precios antes de enviar al form
 		//foreach($pedido->pedido_combinaciones as $item_pedido)
@@ -580,7 +589,8 @@ class PedidoFerliController extends Controller
 			'listaprecio_query', 'moneda_query', 'articuloall_query', 'articuloxsku_query', 
 			'tiposuspensioncliente_query', 'motivocierrepedido_query', 'lote_query',
 			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 
-			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query'));
+			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
+			'depositos_picking_query'));
     }
 
     /**

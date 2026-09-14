@@ -82,4 +82,44 @@ final class RemitoPdfAgrupacionFerliSupport
 
         return $out;
     }
+
+    /**
+     * Factura PDF Ferli: una fila por SKU + precio (los talles no se listan).
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    public static function agruparItemsFacturaPorSkuPrecio(array $items): array
+    {
+        $grupos = [];
+        foreach ($items as $item) {
+            $sku = (string) ($item['sku'] ?? '');
+            $precio = round((float) ($item['precio'] ?? 0), 2);
+            $precioSin = array_key_exists('preciosindescuento', $item)
+                ? round((float) $item['preciosindescuento'], 2)
+                : $precio;
+            $key = $sku.'|'.number_format($precio, 2, '.', '').'|'.number_format($precioSin, 2, '.', '');
+
+            if (! isset($grupos[$key])) {
+                $grupos[$key] = $item;
+                $grupos[$key]['sku'] = $sku;
+                $grupos[$key]['precio'] = $precio;
+                $grupos[$key]['preciosindescuento'] = $precioSin;
+                $grupos[$key]['cantidad'] = 0.0;
+                $grupos[$key]['pieza'] = 0.0;
+                $grupos[$key]['caja'] = 0.0;
+                $grupos[$key]['kilodescuento'] = 0.0;
+                $grupos[$key]['agrupado_factura_ferli'] = true;
+                unset($grupos[$key]['talle_id'], $grupos[$key]['medida'], $grupos[$key]['talle_nombre'], $grupos[$key]['talle_codigo'], $grupos[$key]['medidas']);
+            }
+
+            $cant = (float) ($item['cantidad'] ?? 0);
+            $grupos[$key]['cantidad'] += $cant;
+            $grupos[$key]['pieza'] += (float) ($item['pieza'] ?? $cant);
+            $grupos[$key]['caja'] += (float) ($item['caja'] ?? 0);
+            $grupos[$key]['kilodescuento'] += (float) ($item['kilodescuento'] ?? 0);
+        }
+
+        return array_values($grupos);
+    }
 }

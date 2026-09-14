@@ -38,6 +38,35 @@
 	var idAnulacionOt;
 	var motivoAnulacionOt
 	var nombreClienteAnulacionOt;
+
+	function mostrarOverlayFacturarPedidoFerli(titulo) {
+		var overlay = document.getElementById('pedido-ferli-facturar-overlay');
+		if (!overlay) {
+			console.warn('pedido-ferli-facturar-overlay no encontrado en el DOM');
+			return;
+		}
+		if (titulo) {
+			var t = document.getElementById('pedido-ferli-facturar-overlay-titulo');
+			if (t) t.textContent = titulo;
+		}
+		overlay.classList.remove('d-none');
+		overlay.style.display = 'flex';
+		overlay.style.zIndex = '10050';
+		overlay.setAttribute('aria-hidden', 'false');
+	}
+
+	function ocultarOverlayFacturarPedidoFerli() {
+		var overlay = document.getElementById('pedido-ferli-facturar-overlay');
+		if (!overlay) return;
+		overlay.classList.add('d-none');
+		overlay.style.display = '';
+		overlay.setAttribute('aria-hidden', 'true');
+	}
+
+	window.addEventListener('pageshow', ocultarOverlayFacturarPedidoFerli);
+	document.addEventListener('keydown', function (ev) {
+		if (ev.key === 'Escape') ocultarOverlayFacturarPedidoFerli();
+	});
 	var itemAnulacionOt;
 	var flFactura;
 	var pedido_combinacion_ids=[];
@@ -1546,7 +1575,9 @@
 			alert("No permite facturar sin cargar bultos");
 			return false;
 		}
-		
+
+		// Overlay antes de cerrar el modal (evita quedar tapado / JS cacheado viejo)
+		mostrarOverlayFacturarPedidoFerli('Generando factura…');
 		$('#facturarOrdenTrabajoModal').modal('hide');
 
 		$.post(carpetaBase+'/ventas/facturarItemOt',
@@ -1567,12 +1598,16 @@
 					mercaderia: mercaderia,
 					leyendaexportacion: leyendaexportacion,
 					_token: token
-				},
-				function(data, status){
-					if (data.error != '')
-                 	   alert(data.error);
-                	else
-                	{
+				})
+				.done(function(data, status){
+					if (data.error != '') {
+						alert(data.error);
+						// ERP ya emitió CAE: marcar ítem facturado para no reintentar AFIP
+						if (data.anita_ok === false && data.factura) {
+							$("#facturarOrdenTrabajoModal").modal('hide');
+							marcaItemFacturado();
+						}
+					} else {
 						alert("Factura Número: " + data.factura + "\nEstado: " + status);
 
 						$("#facturarOrdenTrabajoModal").modal('hide');
@@ -1580,6 +1615,15 @@
 						// Marca como facturados los items
 						marcaItemFacturado();
 					}
+				})
+				.fail(function(xhr){
+					var msg = (xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.error))
+						? (xhr.responseJSON.message || xhr.responseJSON.error)
+						: (xhr.responseText || 'Error al generar la factura');
+					alert(msg);
+				})
+				.always(function(){
+					ocultarOverlayFacturarPedidoFerli();
 				});
 	});
 
@@ -1697,23 +1741,99 @@
 
 	}
 
+	function pickingAviso(msg, tipo) {
+		tipo = tipo || 'success';
+		if (window.toastr && typeof toastr[tipo] === 'function') {
+			toastr[tipo](msg, '', { timeOut: tipo === 'error' ? 8000 : 2500, closeButton: true });
+			return;
+		}
+		if (window.Biblioteca && typeof Biblioteca.notificaciones === 'function') {
+			Biblioteca.notificaciones(msg, 'Picking', tipo === 'error' ? 'danger' : tipo);
+			return;
+		}
+		if (tipo === 'error') {
+			alert(msg);
+		}
+	}
+
+	function actualizarUiPicking($tr, estado) {
+		var $box = $tr.find('.picking-box');
+		if (!$box.length) {
+			return;
+		}
+		$box.attr('data-estado', estado);
+		$box.attr('data-picking-marcado', (estado === 'preparado' || estado === 'facturado') ? 'S' : 'N');
+		$box.attr('data-picking-facturado', estado === 'facturado' ? 'S' : 'N');
+
+		var badgeClass = 'badge-secondary';
+		var badgeText = 'Pendiente';
+		if (estado === 'preparado') {
+			badgeClass = 'badge-warning';
+			badgeText = 'Preparado';
+		} else if (estado === 'facturado') {
+			badgeClass = 'badge-success';
+			badgeText = 'Facturado';
+		}
+		$box.find('.picking-estado').html('<span class="badge ' + badgeClass + ' picking-estado-badge">' + badgeText + '</span>');
+
+		var $lote = $box.find('.picking-lote');
+		var $dep = $box.find('.picking-deposito');
+		$box.find('small.text-muted').remove();
+		$box.find('.guarda-picking').remove();
+
+		if (estado === 'facturado') {
+			$lote.prop('readonly', true);
+			$dep.prop('disabled', true);
+			$box.append('<small class="text-muted d-block">Ya facturado</small>');
+		} else if (estado === 'preparado') {
+			$lote.prop('readonly', true);
+			$dep.prop('disabled', true);
+			$box.append(
+				'<button type="button" title="Quitar picking" class="btn btn-sm btn-outline-secondary btn-block guarda-picking tooltipsC">' +
+				'<i class="fa fa-undo"></i> Quitar</button>'
+			);
+		} else {
+			$lote.prop('readonly', false);
+			$dep.prop('disabled', false);
+			$box.append(
+				'<button type="button" title="Marcar como preparado" class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">' +
+				'<i class="fa fa-check"></i> Preparar</button>'
+			);
+		}
+
+		$tr.removeClass('picking-row-preparado picking-row-facturado');
+		if (estado === 'preparado') {
+			$tr.addClass('picking-row-preparado');
+		} else if (estado === 'facturado') {
+			$tr.addClass('picking-row-facturado');
+		}
+	}
+
 	// Marca / desmarca picking en línea de pedido (AJAX)
 	$(document).on('click', '.guarda-picking', function () {
-		var $tr = $(this).closest('tr');
+		var $btn = $(this);
+		var $tr = $btn.closest('tr');
+		var $box = $tr.find('.picking-box');
 		var pedidoCombinacionId = parseInt($tr.find('.ids').val(), 10) || 0;
 		if (pedidoCombinacionId <= 0) {
-			alert('Guarde el pedido antes de marcar picking');
+			pickingAviso('Guarde el pedido antes de marcar picking', 'error');
 			return;
 		}
 
-		var marcado = $tr.find('.check-picking').is(':checked');
+		var estado = ($box.attr('data-estado') || 'pendiente');
+		if (estado === 'facturado') {
+			return;
+		}
+
 		var lote = ($tr.find('.picking-lote').val() || '').trim();
 		var depositoId = parseInt($tr.find('.picking-deposito').val(), 10) || 0;
 		var token = $('#csrf_token').val();
+		$btn.prop('disabled', true);
 
-		if (marcado) {
+		if (estado === 'pendiente') {
 			if (!lote || lote === '0') {
-				alert('Indique el número de OT stock / lote a preparar');
+				$btn.prop('disabled', false);
+				pickingAviso('Indique el número de OT stock / lote a preparar', 'error');
 				return;
 			}
 			$.post(carpetaBase + '/stock/picking-pedido/marcar', {
@@ -1724,13 +1844,16 @@
 			})
 				.done(function (data) {
 					if (data.error) {
-						alert(data.error);
+						pickingAviso(data.error, 'error');
+						$btn.prop('disabled', false);
 						return;
 					}
-					alert('Picking marcado');
+					actualizarUiPicking($tr, 'preparado');
+					pickingAviso('Línea preparada para picking');
 				})
 				.fail(function (xhr) {
-					alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al marcar picking');
+					pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al marcar picking', 'error');
+					$btn.prop('disabled', false);
 				});
 		} else {
 			$.post(carpetaBase + '/stock/picking-pedido/desmarcar', {
@@ -1739,15 +1862,18 @@
 			})
 				.done(function (data) {
 					if (data.error) {
-						alert(data.error);
+						pickingAviso(data.error, 'error');
+						$btn.prop('disabled', false);
 						return;
 					}
 					$tr.find('.picking-lote').val('');
 					$tr.find('.picking-deposito').val('0');
-					alert('Picking desmarcado');
+					actualizarUiPicking($tr, 'pendiente');
+					pickingAviso('Picking quitado');
 				})
 				.fail(function (xhr) {
-					alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al desmarcar picking');
+					pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al desmarcar picking', 'error');
+					$btn.prop('disabled', false);
 				});
 		}
 	});

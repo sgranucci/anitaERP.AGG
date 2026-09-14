@@ -55,16 +55,19 @@ class FacturacionServiceFerli extends FacturacionService
 
             if ($cliente_entrega) {
                 $pedido->lugarentrega = $cliente_entrega[0]->nombre;
+                $pedido->cliente_entrega_id = $cliente_entrega[0]->id ?? $pedido->cliente_entrega_id;
             }
 
             $this->descuentoPie = $cliente->descuento;
         }
 
-        return null;
+        // Siempre resolver desde cliente_entrega del documento/cliente (no dejar "NULL" de Anita).
+        return $this->resolverLugarEntregaPedido($cliente, $pedido, [], true);
     }
 
     protected function sincronizarLugarEntregaFacturaOt($pedido): void
     {
+        $this->sincronizarLugarEntregaPedido($pedido);
     }
 
     protected function transporteIdFacturaOt(array $data, $pedido)
@@ -272,6 +275,7 @@ class FacturacionServiceFerli extends FacturacionService
                     'cantidad' => $talleLinea->cantidad,
                     'precio' => $precioUnitario,
                     'pedido' => $codigoPedido,
+                    'descuento' => $this->descuentoLinea,
                 ];
 
                 if (! $flEncontro) {

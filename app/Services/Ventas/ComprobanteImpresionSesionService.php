@@ -10,6 +10,7 @@ use App\Models\Ventas\Remito;
 use App\Models\Ventas\Venta;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Services\Ventas\CotElectronico\CotConstanciaPdfService;
+use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\ComprobanteImpresionDespachoSupport;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
@@ -1147,15 +1148,24 @@ class ComprobanteImpresionSesionService
 
         foreach (ComprobanteImpresionSalidaUsuarioSupport::programasBusqueda($formulario) as $programa) {
             $seteo = $this->seteosalidaRepository->buscaSeteo($usuarioId, $programa);
-            if ($seteo?->salidas) {
+            if ($seteo?->salidas
+                && SalidaImpresionFallbackSupport::comandoPdfCompatible($seteo->salidas)
+            ) {
                 return $seteo;
             }
         }
 
-        return $this->seteosalidaRepository->buscaSeteo(
+        $fallback = $this->seteosalidaRepository->buscaSeteo(
             $usuarioId,
             ComprobanteImpresionSalidaUsuarioSupport::programaUnificado()
         );
+        if ($fallback?->salidas
+            && SalidaImpresionFallbackSupport::comandoPdfCompatible($fallback->salidas)
+        ) {
+            return $fallback;
+        }
+
+        return null;
     }
 
     private function usuarioDisparaAlGrabar(?int $usuarioId): bool

@@ -18,6 +18,7 @@ use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 use App\Services\Arca\ArcaWsfexFacturaElectronicaService;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
+use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
 use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 
@@ -903,9 +904,14 @@ class FacturaElectronicaService
 
 			if ($pos >= 0 && $pos !== false)
 			{
+				$idAlicIva = ArcaMtxcaComprobanteTotalesSupport::resolverIdAlicIva(
+					$concepto['codigoarca'] ?? null,
+					$concepto['codigo'] ?? null,
+					(float) ($concepto['tasa'] ?? 0),
+				);
 				$impuestos[] = [
-					'id' => $concepto['codigoarca'],
-					'codigo' => $concepto['codigo'],
+					'id' => $idAlicIva,
+					'codigo' => $concepto['codigo'] ?? null,
 					'base_imp' => $concepto['baseimponible'] ?? 0,
 					'alicuota' => $concepto['tasa'],
 					'desc' => $concepto['concepto'],

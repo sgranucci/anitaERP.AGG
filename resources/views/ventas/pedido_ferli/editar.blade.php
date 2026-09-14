@@ -5,7 +5,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/pedido/crearferli.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/crearferli.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crearferli.js')) ?: time() }}" type="text/javascript"></script>
 
 <script>
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
@@ -83,7 +83,7 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Editar Pedidos de clientes</h3>
 				&nbsp;- ID: {{ $pedido->id }} - Pedido: {{$pedido->codigo}}
@@ -128,4 +128,11 @@
         </div>
     </div>
 </div>
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'pedido-ferli-facturar-overlay',
+    'tituloId' => 'pedido-ferli-facturar-overlay-titulo',
+    'subtituloId' => 'pedido-ferli-facturar-overlay-subtitulo',
+    'titulo' => 'Generando factura…',
+    'subtitulo' => 'Puede demorar según AFIP/Anita. No cierre la página.',
+])
 @endsection

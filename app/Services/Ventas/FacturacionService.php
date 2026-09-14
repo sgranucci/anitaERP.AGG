@@ -370,7 +370,7 @@ class FacturacionService
 		return $this->cliente_entregaRepository->leeClienteEntrega($clienteId)->count() > 0;
 	}
 
-	private function sincronizarLugarEntregaPedido($pedido): void
+	protected function sincronizarLugarEntregaPedido($pedido): void
 	{
 		if ((int) ($pedido->cliente_entrega_id ?? 0) <= 0) {
 			return;
@@ -382,8 +382,12 @@ class FacturacionService
 		}
 
 		$etiqueta = ClienteEntregaPedidoSupport::etiquetaEntrega($cliente_entrega);
-		if (! ClienteEntregaPedidoSupport::nombreEsUsable($pedido->lugarentrega ?? null)
-			&& $etiqueta !== '') {
+		if ($etiqueta === '') {
+			return;
+		}
+
+		// Literal "NULL" u otros placeholders de Anita: reemplazar por la entrega del cliente.
+		if (! ClienteEntregaPedidoSupport::nombreEsUsable($pedido->lugarentrega ?? null)) {
 			$pedido->lugarentrega = $etiqueta;
 		}
 	}
@@ -402,7 +406,7 @@ class FacturacionService
 		return ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente, $entrega);
 	}
 
-	private function resolverLugarEntregaPedido($cliente, $documento, array $data, bool $persistir): ?array
+	protected function resolverLugarEntregaPedido($cliente, $documento, array $data, bool $persistir): ?array
 	{
 		$error = ClienteEntregaPedidoSupport::resolverParaDocumento(
 			$documento,
@@ -1132,6 +1136,9 @@ class FacturacionService
 				}
 
 				PedidoFacturacionProfiler::etapa('numeracion_remito_anita_fin');
+
+				// Ferli: remito con el mismo número que la factura (política L8).
+				$numeroremito = $this->aplicarPoliticaNumeroRemitoFerli($emiteRemito, (int) $numero, $numeroremito);
 
 				if ($numeroremito === 'error') {
 					return [
@@ -3447,7 +3454,8 @@ class FacturacionService
 										'medida' => $talle->nombre,
 										'cantidad' => $item->pedido_combinacion_talles->cantidad,
 										'precio' => $precioUnitario,
-										'pedido' => $pedido['codigo']
+										'pedido' => $pedido['codigo'],
+										'descuento' => $this->descuentoLinea,
 								];
 							}
 						}
@@ -3461,8 +3469,9 @@ class FacturacionService
 											'medida' => $talle->nombre,
 											'cantidad' => $item->pedido_combinacion_talles->cantidad,
 											'precio' => $precioUnitario,
-											'pedido' => $pedido['codigo']
-											];
+											'pedido' => $pedido['codigo'],
+											'descuento' => $this->descuentoLinea,
+									];
 						}
 						
 						$totPares += $item->pedido_combinacion_talles->cantidad;
@@ -3597,6 +3606,9 @@ class FacturacionService
 				else	
 					$numeroremito = 0;
 
+				// Ferli: remito con el mismo número que la factura (política L8).
+				$numeroremito = $this->aplicarPoliticaNumeroRemitoFerli($emiteRemito, $numero, $numeroremito);
+
 				//$numeroremito = 74406;
 
 				// Procesa Factura electronica
@@ -3672,9 +3684,22 @@ class FacturacionService
 				}
 				else {
 					$cotizacion = 1.;
+					$impuestos = [];
+					$dataCAE = [];
 				}
+
+				// Marca / mventa para clicomi Anita (Ferli) antes de CAE/TX.
+				$this->asegurarMventaIdParaAnitaOt($dataFactura, $pedido);
+
+				// AlicIVA debe resolverse antes de pedir CAE (AFIP [10019]).
+				if ($puntoventa->modofacturacion != 'M') {
+					$this->assertImpuestosAlicIvaParaArca($impuestos);
+				}
+
 				// Graba la factura
 				DB::beginTransaction();
+				$vta = null;
+				$venta = [];
 				try 
 				{
 					$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
@@ -3797,8 +3822,8 @@ class FacturacionService
 							'costo' => 0,
 							'despacho' => $item['despacho'],
 							'loteimportacion_id' => $item['loteimportacion_id'],
-							'descuento' => $item['descuento'],
-							'descuentointegrado' => $item['descuentointegrado'],
+							'descuento' => $item['descuento'] ?? 0,
+							'descuentointegrado' => $item['descuentointegrado'] ?? '',
 							'moneda_id' => $item['moneda_id'],
 							'incluyeimpuesto' => $item['incluyeimpuesto'],
 							'listaprecio_id' => $item['listaprecio_id'],
@@ -3842,8 +3867,8 @@ class FacturacionService
 								'impuesto_id' => $itemEmision['impuesto_id'],
 								'incluyeimpuesto' => $itemEmision['incluyeimpuesto'], 
 								'moneda_id' => $item['moneda_id'], 
-								'descuento' => $item['descuento'], 
-								'descuentointegrado' => $item['descuentointegrado'], 
+								'descuento' => $item['descuento'] ?? 0, 
+								'descuentointegrado' => $item['descuentointegrado'] ?? '', 
 								'deposito_id' => $deposito, 
 								'loteimportacion_id' => ($item['loteimportacion_id'] == 0 ? null : $item['loteimportacion_id'])
 							];
@@ -3882,27 +3907,13 @@ class FacturacionService
 						$despuesGrabarVenta($vta, $dataFactura);
 					}
 
+					// ARCA dentro de la TX (necesita venta_id). Diferir vencae Anita: la venta Informix
+					// se graba post-commit; si vencae va antes queda huérfano / falla el CAE.
 					if ($puntoventa->modofacturacion != 'M')
 					{
-						// Graba anita
-						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $emiteRemito ? $puntoventaremito->codigo : 0, $emiteRemito ? $numeroremito : 0,
-									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
-									$codigoTipoTransaccion, null,
-									true, 0, 0, '', $empresa->codigo,
-									null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
-
-						if (isset($anita['error']))
-						{
-							if ($anita['error'] == 'Error')
-								throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
-
-							if ($anita['error'] == 'Errvend')
-								throw new Exception('No tiene vendedor asignado.');
-						}
-
-						// Solicita generacion comprobante ARCA
-						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3), 
-							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id);
+						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
+							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
+							true);
 					}
 
 					// Remito físico ERP (Ferli OT / Bierzo FAC): misma regla que facturación por pedido.
@@ -3926,18 +3937,146 @@ class FacturacionService
 					}
 
 					DB::commit();
-
-					return ['factura' => $numero, 'error' => '', 'venta_id' => (int) $vta->id, 'remito_id' => (int) ($vta->fresh()->remito_id ?? 0)];
 				} catch (\Exception $e) {
 					DB::rollback();
 
-					// Borra factura de anita
-					if ($venta['codigo'] ?? '')
-						self::borraAnita(substr($venta['codigo'], 0, 3), $letra, 
-											$puntoventa->codigo, $venta['numerocomprobante'], 1);
+					Log::error('facturacion.ot.emision_fallo', [
+						'msg' => $e->getMessage(),
+						'factura' => $venta['codigo'] ?? null,
+						'numero' => $venta['numerocomprobante'] ?? null,
+						'puntoventa' => $puntoventa->codigo ?? null,
+					]);
+
+					// Si quedó algo en Anita de un intento previo (p.ej. reintento del mismo número), limpiar.
+					if ($venta['codigo'] ?? '') {
+						try {
+							self::borraAnita(
+								substr($venta['codigo'], 0, 3),
+								$letra,
+								$puntoventa->codigo,
+								$venta['numerocomprobante'],
+								$empresa->codigo ?? 1,
+								false,
+								$puntoventa->modofacturacion ?? null
+							);
+						} catch (\Throwable $cleanup) {
+							Log::warning('facturacion.borra_anita_cleanup.fallo', [
+								'msg_original' => $e->getMessage(),
+								'msg_cleanup' => $cleanup->getMessage(),
+							]);
+						}
+					}
 
 					return ['error' => $e->getMessage()];
 				}
+
+				// Post-commit: ERP ya tiene CAE/venta. Fallos Anita no deben parecer "no hay factura"
+				// ni disparar rollback/borraAnita como si la emisión hubiera fallado.
+				if ($puntoventa->modofacturacion != 'M' && $vta) {
+					try {
+						$this->asegurarMventaIdParaAnitaOt($dataFactura, $pedido);
+
+						$anita = $this->grabaAnitaConReintentoPorDuplicado(
+							$puntoventa->codigo,
+							$letra,
+							$emiteRemito ? $puntoventaremito->codigo : 0,
+							$emiteRemito ? $numeroremito : 0,
+							$venta,
+							$dataCAE,
+							$conceptosTotales,
+							$cuentacorriente,
+							$dataFactura,
+							$signo,
+							$codigoTipoTransaccion,
+							$pedido->id ?? null,
+							true,
+							0,
+							0,
+							'',
+							$empresa->codigo,
+							null,
+							null,
+							false,
+							false,
+							false,
+							false,
+							$puntoventa->modofacturacion ?? null
+						);
+						$anita = $this->normalizarResultadoGrabaAnita($anita);
+
+						if (isset($anita['error'])) {
+							$msgAnita = $anita['mensaje'] ?? $anita['error'];
+							if ($anita['error'] == 'Errvend') {
+								$msgAnita = 'No tiene vendedor asignado.';
+							}
+
+							Log::error('facturacion.ot.anita_post_commit.fallo', [
+								'venta_id' => $vta->id,
+								'factura' => $numero,
+								'msg' => $msgAnita,
+							]);
+
+							return [
+								'error' => 'Factura '.$numero.' grabada en ERP (CAE OK), pero falló la réplica Anita: '.$msgAnita
+									.'. No reintente facturar el mismo ítem: use re-réplica Anita.',
+								'factura' => $numero,
+								'venta_id' => (int) $vta->id,
+								'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
+								'anita_ok' => false,
+							];
+						}
+
+						$vtaCae = $vta->fresh();
+						if ($vtaCae && ! empty($vtaCae->cae) && ! empty($vtaCae->fechavencimientocae)) {
+							$vencae = Self::grabaVenCae(
+								substr($venta['codigo'], 0, 3),
+								$letra,
+								$puntoventa->codigo,
+								$venta['numerocomprobante'],
+								$vtaCae->cae,
+								date('Ymd', strtotime((string) $vtaCae->fechavencimientocae))
+							);
+							if ($vencae === 'Error') {
+								Log::error('facturacion.ot.vencae_post_commit.fallo', [
+									'venta_id' => $vta->id,
+									'factura' => $numero,
+								]);
+
+								return [
+									'error' => 'Factura '.$numero.' grabada en ERP/Anita, pero falló vencae (CAE) en Anita.',
+									'factura' => $numero,
+									'venta_id' => (int) $vta->id,
+									'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
+									'anita_ok' => true,
+									'vencae_ok' => false,
+								];
+							}
+						}
+					} catch (\Throwable $e) {
+						Log::error('facturacion.ot.anita_post_commit.excepcion', [
+							'venta_id' => $vta->id,
+							'factura' => $numero,
+							'msg' => $e->getMessage(),
+						]);
+
+						return [
+							'error' => 'Factura '.$numero.' grabada en ERP (CAE OK), pero falló la réplica Anita: '.$e->getMessage()
+								.'. No reintente facturar el mismo ítem: use re-réplica Anita.',
+							'factura' => $numero,
+							'venta_id' => (int) $vta->id,
+							'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
+							'anita_ok' => false,
+						];
+					}
+				}
+
+				return [
+					'factura' => $numero,
+					'error' => '',
+					'venta_id' => (int) $vta->id,
+					'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
+					'anita_ok' => true,
+				];
 			}
 		}
 		else
@@ -5003,10 +5142,22 @@ class FacturacionService
 		{
 			if ($codigoCliente != '')
 			{
-				$vendedor = Self::leeVendedor(str_pad($codigoCliente, 6, "0", STR_PAD_LEFT), $this->mventa_id);
+				$vendedorClicomi = Self::leeVendedor(str_pad($codigoCliente, 6, "0", STR_PAD_LEFT), $this->mventa_id);
 
-				if ($vendedor == 0)
-					return 'Errvend';
+				if ($vendedorClicomi == 0) {
+					$vendedorClicomi = $this->codigoVendedorAnitaParaGraba($venta, $cliente);
+					Log::warning('facturacion.ferli.vendedor_clicomi_fallback', [
+						'cliente' => $codigoCliente,
+						'mventa_id' => $this->mventa_id,
+						'vendedor_fallback' => $vendedorClicomi,
+					]);
+				}
+
+				if ($vendedorClicomi == 0) {
+					return ['error' => 'Errvend', 'mensaje' => 'No tiene vendedor asignado (clicomi/marca) en Anita.'];
+				}
+
+				$vendedor = $vendedorClicomi;
 			}
 		}
 
@@ -5387,7 +5538,7 @@ class FacturacionService
 							comp_transporte, comp_o_compra, comp_leyenda, comp_total, comp_iva,
 							comp_no_insc, comp_exento, comp_gravado, comp_dto_integrado'.
 							(config('app.empresa') == 'Calzados Ferli' ? ', comp_cond_vta_exp, comp_fpago_exp, 
-							comp_merc_exp, comp_moneda_exp, comp_sucursal_rem, ' : '').' '.
+							comp_merc_exp, comp_moneda_exp, comp_sucursal_rem' : '').
 							(config('app.empresa') == 'AGG' ? ', comp_empresa' : '').
 							(config('app.empresa') == 'EL BIERZO' ? 
 							', comp_estado, comp_cod_remito, comp_cod_aut_cre, comp_fecha_vto' : ''),
@@ -5397,7 +5548,7 @@ class FacturacionService
 							'".$letra."',
 							'".$puntoventa."',
 							'".$venta['numerocomprobante']."',
-							'".(isset($pedido_id) ? $pedido_id : $numeroOrdenventa)."',
+							'".$this->compPedidoAnitaParaGraba($venta, $pedido_id, $numeroOrdenventa)."',
 							'".$numeroremito."',
 							'".date('Ymd', strtotime($venta['fecha']))."',
 							'".(config('app.empresa') == 'EL BIERZO' ? $codigoTransporte : '0')."',
@@ -5412,13 +5563,13 @@ class FacturacionService
 							'".'0'."',
 							'".$exento."',
 							'".$dataCAE['gravado']."',
-							'".$venta['descuentointegrado']."' ".
+							'".$venta['descuentointegrado']."'".
 							(config('app.empresa') == 'Calzados Ferli' ? 
 							",'".$this->condicionVentaExportacion."',
 							'".$this->formaPagoExportacion."',
 							'".$this->mercaderiaExportacion."',
 							'".$this->monedaExportacion."',
-							'".$puntoventaremito."', " : "")." ".
+							'".$puntoventaremito."'" : "").
 							(config('app.empresa') == 'AGG' ? ", '".$empresa."'" : "").
 							(config('app.empresa') == 'EL BIERZO' ? 
 							", '".' '."',
@@ -5487,7 +5638,7 @@ class FacturacionService
 								'partida' => $partida,
 								'cantidad' => $medida['cantidad'],
 								'precio' => $medida['precio'],
-								'descuento' => $medida['descuento'],
+								'descuento' => $medida['descuento'] ?? $item['descuento'] ?? 0,
 								'impuesto_id' => $item['impuesto_id'],
 								'incluyeimpuesto' => $item['incluyeimpuesto'],
 								'pedido' => $medida['pedido'],
@@ -5512,7 +5663,7 @@ class FacturacionService
 							'pieza' => $item['pieza'] ?? 0,
 							'caja' => $item['caja'] ?? 0,
 							'precio' => $precio,
-							'descuento' => $item['descuento'],
+							'descuento' => $item['descuento'] ?? 0,
 							'impuesto_id' => $item['impuesto_id'],
 							'incluyeimpuesto' => $item['incluyeimpuesto'],
 							// Sin pedido (gastronomía u otros flujos sin OV): se manda 0 para que stkv_pedido no quede null.
@@ -5533,7 +5684,7 @@ class FacturacionService
 							'pieza' => 0,
 							'caja' => 0,
 							'precio' => $precio,
-							'descuento' => $item['descuento'],
+							'descuento' => $item['descuento'] ?? 0,
 							'impuesto_id' => $item['impuesto_id'],
 							'incluyeimpuesto' => $item['incluyeimpuesto'],
 							'pedido' => 0,
@@ -5628,7 +5779,7 @@ class FacturacionService
 								'".$medida['cantidad']."', 
 								'".$medida['precio']."', 
 								'".$medida['descripcion']."', 
-								'".$medida['descuento']."',
+								'".($medida['descuento'] ?? 0)."',
 								'".'1'."',
 								'".$medida['impuesto_id']."', 
 								'".'0'."',
@@ -5711,7 +5862,7 @@ class FacturacionService
 								'".$precio."',
 								'".$venta['moneda_id']."',
 								'".$medida['impuesto_id']."', 
-								'".$medida['descuento']."',
+								'".($medida['descuento'] ?? 0)."',
 								'".($this->descuentoPie == null ? 0 : $this->descuentoPie)."',
 								'".'0'."',
 								'".$orden."',
@@ -5887,7 +6038,8 @@ class FacturacionService
 
 		// Numera el remito. En réplica diferida (omitirNumeraAnitaFin) no se corta la
 		// grabación: el número ya está en el ERP; un fallo acá dejaba venta sin vencae.
-		if (isset($puntoventaremito) && ! $this->flGrabaComprobanteDividido)
+		// Ferli no avanza numerador REM: el remito usa el mismo nro que la factura.
+		if (isset($puntoventaremito) && ! $this->flGrabaComprobanteDividido && ! EntornoEmpresaSupport::esFerli())
 		{
 			$resultadoNumeradorRemito = $this->ventaRepository->numeraAnita('REM', 'R', $puntoventaremito);
 			$falloRemito = (EntornoEmpresaSupport::esElBierzo()
@@ -6203,11 +6355,61 @@ class FacturacionService
 			return true;
 		}
 
-		return (int) self::buscaVentaAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo, $modoFacturacionPuntoventa) === (int) $numero;
+		if ((int) self::buscaVentaAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo, $modoFacturacionPuntoventa) === (int) $numero) {
+			return true;
+		}
+
+		// climov puede quedar sin cabecera venta legible (UNLOAD/permisos) tras fallo a mitad
+		return $this->existeClimovAnita($tipo, $letra, $puntoventa, $numero);
+	}
+
+	/**
+	 * ¿Hay movimiento de CC Anita (climov) para el comprobante?
+	 */
+	private function existeClimovAnita($tipo, $letra, $puntoventa, $numero): bool
+	{
+		try {
+			$apiAnita = new ApiAnita();
+			$data = [
+				'acc' => 'list',
+				'tabla' => 'climov',
+				'sistema' => 'ventas',
+				'campos' => 'cliv_nro',
+				'whereArmado' => " WHERE cliv_tipo = '".$tipo."' AND
+					cliv_letra = '".$letra."' AND
+					cliv_sucursal = '".$puntoventa."' AND
+					cliv_nro = '".$numero."' ",
+			];
+			$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
+			$rows = json_decode($apiAnita->apiCall($data));
+			if (! is_array($rows) && ! is_object($rows)) {
+				return false;
+			}
+			foreach ((array) $rows as $row) {
+				if (is_object($row) && isset($row->Error)) {
+					continue;
+				}
+				$nro = is_object($row) ? ($row->cliv_nro ?? null) : ($row['cliv_nro'] ?? null);
+				if ((int) $nro === (int) $numero) {
+					return true;
+				}
+			}
+		} catch (\Throwable $e) {
+			Log::warning('facturacion.anita_bridge.existe_climov.fallo', [
+				'tipo' => $tipo,
+				'letra' => $letra,
+				'sucursal' => $puntoventa,
+				'nro' => $numero,
+				'msg' => $e->getMessage(),
+			]);
+		}
+
+		return false;
 	}
 
 	/**
 	 * Graba en Anita; si el número ya existe (huérfano tras rollback), lo borra y reintenta una vez.
+	 * Si el reintento también falla dejando parciales, vuelve a borrar para no dejar climov/venta huérfanos.
 	 * No consulta Anita antes de grabar (evita latencia en cada factura).
 	 *
 	 * @return array{error: string, mensaje?: string}|string
@@ -6265,7 +6467,7 @@ class FacturacionService
 		);
 
 		if (! $this->debeLiberarComprobanteHuerfanoEnAnita($anita, $venta, $letra, $puntoventa, $empresaCodigo, $modoFacturacionPuntoventa)) {
-			return $anita;
+			return $this->normalizarResultadoGrabaAnita($anita);
 		}
 
 		$tipo = substr((string) ($venta['codigo'] ?? ''), 0, 3);
@@ -6273,7 +6475,7 @@ class FacturacionService
 
 		self::borraAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo, $modoMinimoAnita, $modoFacturacionPuntoventa);
 
-		return self::grabaAnita(
+		$anitaRetry = self::grabaAnita(
 			$puntoventa,
 			$letra,
 			$puntoventaremito,
@@ -6298,6 +6500,129 @@ class FacturacionService
 			$omitirNumeraAnitaFin,
 			$modoFacturacionPuntoventa,
 		);
+
+		// Si el reintento también dejó parciales, limpiar para integridad ERP↔Anita
+		if ($this->debeLiberarComprobanteHuerfanoEnAnita($anitaRetry, $venta, $letra, $puntoventa, $empresaCodigo, $modoFacturacionPuntoventa)) {
+			self::borraAnita($tipo, $letra, $puntoventa, $numero, $empresaCodigo, $modoMinimoAnita, $modoFacturacionPuntoventa);
+			Log::warning('facturacion.anita_bridge.reintento_fallo_limpieza', [
+				'tipo' => $tipo,
+				'letra' => $letra,
+				'sucursal' => $puntoventa,
+				'nro' => $numero,
+				'msg' => is_array($anitaRetry) ? ($anitaRetry['mensaje'] ?? $anitaRetry['error'] ?? '') : '',
+			]);
+		}
+
+		return $this->normalizarResultadoGrabaAnita($anitaRetry);
+	}
+
+	/**
+	 * Ferli: el remito lleva el mismo número que la factura (política L8).
+	 * Si el remito viene fijo desde un remito preexistente, no lo pisa.
+	 *
+	 * @param  int|string  $numeroremitoActual
+	 * @return int|string
+	 */
+	protected function aplicarPoliticaNumeroRemitoFerli(bool $emiteRemito, int $numeroFactura, $numeroremitoActual)
+	{
+		if (! $emiteRemito || ! EntornoEmpresaSupport::esFerli()) {
+			return $numeroremitoActual;
+		}
+
+		if ($this->numeroremitoFijoDesdeRemito !== null && (int) $this->numeroremitoFijoDesdeRemito > 0) {
+			return (int) $this->numeroremitoFijoDesdeRemito;
+		}
+
+		return $numeroFactura > 0 ? $numeroFactura : $numeroremitoActual;
+	}
+
+	/**
+	 * Valor de comprob.comp_pedido en Anita.
+	 * Ferli (L8): ese campo es la cantidad de bultos del remito, no el nro de pedido.
+	 * Otros: pedido ERP / orden de venta.
+	 */
+	private function compPedidoAnitaParaGraba(array $venta, $pedido_id, $numeroOrdenventa): int
+	{
+		if (EntornoEmpresaSupport::esFerli()) {
+			return $this->cantidadBultoParaAnita($venta);
+		}
+
+		if (isset($pedido_id) && (int) $pedido_id > 0) {
+			return (int) $pedido_id;
+		}
+
+		return (int) $numeroOrdenventa;
+	}
+
+	/**
+	 * Convierte retornos legacy de grabaAnita (ej. string Errvend) a array con error.
+	 */
+	private function normalizarResultadoGrabaAnita($anita): array
+	{
+		if ($anita === 'Errvend') {
+			return [
+				'error' => 'Errvend',
+				'mensaje' => 'No tiene vendedor asignado (clicomi/marca) en Anita.',
+			];
+		}
+
+		if (! is_array($anita)) {
+			if ($anita === 'Success' || $anita === true || $anita === null) {
+				return [0 => 'Success'];
+			}
+
+			return [
+				'error' => (string) $anita,
+				'mensaje' => (string) $anita,
+			];
+		}
+
+		return $anita;
+	}
+
+	/**
+	 * mventa_id para leeVendedor/clicomi en Ferli (marca del artículo o del pedido).
+	 */
+	protected function asegurarMventaIdParaAnitaOt(array $dataFactura, $pedido): void
+	{
+		if (! empty($this->mventa_id)) {
+			return;
+		}
+
+		$articuloId = (int) ($dataFactura[0]['articulo_id'] ?? 0);
+		if ($articuloId > 0) {
+			$marca = Articulo::query()->whereKey($articuloId)->value('mventa_id');
+			if (! empty($marca)) {
+				$this->mventa_id = $marca;
+
+				return;
+			}
+		}
+
+		if ($pedido && ! empty($pedido->mventa_id)) {
+			$this->mventa_id = $pedido->mventa_id;
+		}
+	}
+
+	/**
+	 * Falla antes de CAE si algún IVA no tiene Id AlicIVA válido (AFIP [10019]).
+	 *
+	 * @param  list<array<string, mixed>>  $impuestos
+	 */
+	protected function assertImpuestosAlicIvaParaArca(array $impuestos): void
+	{
+		foreach ($impuestos as $imp) {
+			$id = (int) ($imp['id'] ?? 0);
+			if ($id <= 0 || ! \App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport::esCondicionGravada($id)) {
+				throw new Exception(
+					'Impuesto sin Id AlicIVA ARCA válido (AFIP [10019]). '
+					.'Revise impuesto.codigoarca / tasa. '
+					.'id='.$id
+					.' codigo='.($imp['codigo'] ?? '')
+					.' alicuota='.($imp['alicuota'] ?? '')
+				);
+			}
+		}
 	}
 
 	// Busca si existe la factura
@@ -6774,7 +7099,7 @@ class FacturacionService
 					stkvm_letra = '".$letra."' AND
 					stkvm_sucursal = '".$puntoventa."' AND
 					stkvm_nro = '".$numero."'
-			");
+			", $puntoventa);
 		}
 
 		$this->borraAnitaDeleteSeguro('stkmov', 'stkmov delete', 'ventas', "
@@ -6782,7 +7107,7 @@ class FacturacionService
 				stkv_letra = '".$letra."' AND
 				stkv_sucursal = '".$puntoventa."' AND
 				stkv_nro = '".$numero."'
-		");
+		", $puntoventa);
 
 		if (config('app.empresa') == 'Calzados Ferli') {
 			$this->borraAnitaDeleteSeguro('compley', 'compley delete', 'ventas', "
@@ -6790,7 +7115,7 @@ class FacturacionService
 					compl_letra = '".$letra."' AND
 					compl_sucursal = '".$puntoventa."' AND
 					compl_nro = '".$numero."'
-			");
+			", $puntoventa);
 		}
 
 		$this->borraAnitaDeleteSeguro('compaux', 'compaux delete', 'ventas', "
@@ -6798,42 +7123,42 @@ class FacturacionService
 				compa_letra = '".$letra."' AND
 				compa_sucursal = '".$puntoventa."' AND
 				compa_nro_fact = '".$numero."'
-		");
+		", $puntoventa);
 
 		$this->borraAnitaDeleteSeguro('comprob', 'comprob delete', 'ventas', "
 			WHERE comp_tipo = '".$tipo."' AND
 				comp_letra = '".$letra."' AND
 				comp_sucursal = '".$puntoventa."' AND
 				comp_nro_fact = '".$numero."'
-		");
+		", $puntoventa);
 
 		$this->borraAnitaDeleteSeguro('climov', 'climov delete', 'ventas', "
 			WHERE cliv_tipo = '".$tipo."' AND
 				cliv_letra = '".$letra."' AND
 				cliv_sucursal = '".$puntoventa."' AND
 				cliv_nro = '".$numero."'
-		");
+		", $puntoventa);
 
 		$this->borraAnitaDeleteSeguro('venibr', 'venibr delete', 'ventas', "
 			WHERE veni_tipo = '".$tipo."' AND
 				veni_letra = '".$letra."' AND
 				veni_sucursal = '".$puntoventa."' AND
 				veni_nro = '".$numero."'
-		");
+		", $puntoventa);
 
 		$this->borraAnitaDeleteSeguro('vengrav', 'vengrav delete', 'ventas', "
 			WHERE veng_tipo = '".$tipo."' AND
 				veng_letra = '".$letra."' AND
 				veng_sucursal = '".$puntoventa."' AND
 				veng_nro = '".$numero."'
-		");
+		", $puntoventa);
 
 		$this->borraAnitaDeleteSeguro('vencae', 'vencae delete', 'ventas', "
 			WHERE venc_tipo = '".$tipo."' AND
 				venc_letra = '".$letra."' AND
 				venc_sucursal = '".$puntoventa."' AND
 				venc_nro = '".$numero."'
-		");
+		", $puntoventa);
 
 		$tipoVentaAnita = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge($tipo, $puntoventa, $empresa, $modoFacturacionPuntoventa);
 
@@ -6842,7 +7167,7 @@ class FacturacionService
 				ven_letra = '".$letra."' AND
 				ven_sucursal = '".$puntoventa."' AND
 				ven_nro = '".$numero."'
-		");
+		", $puntoventa);
 
 		if (! $omitirContabilidadAnita) {
 			$this->borraAnitaDeleteSeguro('subdiario', 'subdiario delete', 'contab', "
@@ -6850,14 +7175,14 @@ class FacturacionService
 					subd_letra = '".$letra."' AND
 					subd_sucursal = '".$puntoventa."' AND
 					subd_nro = '".$numero."'
-			");
+			", $puntoventa);
 
 			$this->borraAnitaDeleteSeguro('ctamov', 'ctamov delete', 'contab', "
 				WHERE ctav_empresa='".$empresa."' AND ctav_tipo = '".$tipo."' AND
 					ctav_letra = '".$letra."' AND
 					ctav_sucursal = '".$puntoventa."' AND
 					ctav_nro = '".$numero."'
-			");
+			", $puntoventa);
 		}
 	}
 
@@ -6869,6 +7194,7 @@ class FacturacionService
 		string $contexto,
 		string $sistema,
 		string $whereArmado,
+		string $sucursal = '',
 	): void {
 		$apiAnita = new ApiAnita();
 		$data = [
@@ -6878,7 +7204,7 @@ class FacturacionService
 			'whereArmado' => $whereArmado,
 		];
 
-		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
+		$this->aplicarPathSistemaAnitaComprobante($data, $sucursal);
 
 		try {
 			$apiAnita->apiCallEscritura($data, $contexto, 'facturacion.anita_bridge.fallo');
@@ -8273,6 +8599,13 @@ class FacturacionService
 
 				if (isset($cae['Error'])) {
 					$msgError = (string) $cae['Error'];
+					Log::error('facturacion.arca.cae_rechazado', [
+						'numero' => $numeroComprobante,
+						'puntoventa' => $puntoventa->codigo ?? null,
+						'tipo' => $tipoAnita,
+						'letra' => $letra,
+						'msg' => $msgError,
+					]);
 					$wsPv = (string) ($puntoventa->webservice ?? '');
 					if (\App\Support\Ventas\ArcaWsfeEmisionResiliencia::esFallaComunicacionSinRespuestaClara($msgError, $wsPv)) {
 						$caeRecuperado = $this->recuperarCaeTrasFallaComunicacion(
@@ -8295,6 +8628,11 @@ class FacturacionService
 				}
 
 				if (($cae['fechavencimientocae'] ?? 0) == 0) {
+					Log::error('facturacion.arca.cae_sin_vencimiento', [
+						'numero' => $numeroComprobante,
+						'puntoventa' => $puntoventa->codigo ?? null,
+						'cae' => $cae,
+					]);
 					throw new Exception('No pudo asignar CAE');
 				}
 				break;

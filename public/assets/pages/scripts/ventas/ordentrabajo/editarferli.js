@@ -403,10 +403,14 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
                 _token: token
             },
             function(data, status){
-                if (data.error != '')
+                if (data.error != '') {
                     alert(data.error);
-                else
-                {
+                    if (data.anita_ok === false && data.factura) {
+                        $("#facturarOrdenTrabajoModal").modal('hide');
+                        $(itemFacturar).parents("tr").find(".facturar").css( "color", "red");
+                        completarTareas(ordentrabajo_id);
+                    }
+                } else {
                     alert("Factura Número: " + data.factura + "\nEstado: " + status);
                     $("#facturarOrdenTrabajoModal").modal('hide');
                     $(itemFacturar).parents("tr").find(".facturar").css( "color", "red");
