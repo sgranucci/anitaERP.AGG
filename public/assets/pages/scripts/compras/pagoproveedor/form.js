@@ -442,7 +442,7 @@
     }
 
     function sincronizarCamposAplicacion() {
-        $form.find('input[name="idcuentacorrientes[]"],input[name="montoaplicadocomprobantes[]"],input[name="monedacomprobante_ids[]"],input[name="cotizacioncomprobantes[]"],input[name="cotizacion_aplicada_dia[]"],input[name="diferencias_cambio[]"]').remove();
+        $form.find('input[name="idcuentacorrientes[]"],input[name="montoaplicadocomprobantes[]"],input[name="monedacomprobante_ids[]"],input[name="cotizacioncomprobantes[]"],input[name="cotizacion_aplicada_dia[]"],input[name="diferencias_cambio[]"],input[name="anticipo"],input[name="totalanticipo"]').remove();
         var totalPago = 0;
         $('#tabla-deuda-proveedor tbody tr').each(function () {
             var $tr = $(this);
@@ -465,9 +465,30 @@
             $form.append($('<input type="hidden" name="diferencias_cambio[]">').val(liq.dc));
             totalPago += signoFila($tr) * liq.equivalente;
         });
-        $('#monto').val(totalPago.toFixed(2));
+
+        // Residuo de medios sin aplicar a deuda = anticipo / OPA (evita TOTAL OP = 0).
+        // Si el asiento fue editado a mano (p.ej. debe a cuenta del proveedor), no crear OPA.
+        var medios = typeof window.totalMediosPagoproveedor === 'function'
+            ? window.totalMediosPagoproveedor()
+            : Number(window.ppTotalMedios || 0);
+        var retenciones = Number(window.ppTotalRetenciones || 0);
+        var desembolsar = Math.round((totalPago - retenciones) * 100) / 100;
+        if (desembolsar < 0) {
+            desembolsar = 0;
+        }
+        var residual = Math.round((medios - desembolsar) * 100) / 100;
+        var asientoManual = (typeof window.asientoTieneEdicionManual === 'function' && window.asientoTieneEdicionManual())
+            || window.flAsientoEditadoManual === true;
+        if (residual > 0.01 && !asientoManual) {
+            $form.append($('<input type="hidden" name="anticipo">').val(residual.toFixed(2)));
+            $form.append($('<input type="hidden" name="totalanticipo">').val(residual.toFixed(2)));
+        }
+        // TOTAL OP: aplicaciones + residual de medios (aunque el asiento sea manual).
+        var montoOp = totalPago + (residual > 0.01 ? residual : 0);
+        $('#monto').val(montoOp.toFixed(2));
         pintarResumenDesembolso();
     }
+    window.sincronizarCamposAplicacion = sincronizarCamposAplicacion;
 
     $(document).on('change', '#pp-sel-deuda-todas', function () {
         var checked = this.checked;

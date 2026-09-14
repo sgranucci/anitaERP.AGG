@@ -27,6 +27,7 @@ use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
 use App\Support\Contable\AsientoBalanceSupport;
+use App\Support\Contable\AsientoCargaManualSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Exception;
@@ -316,13 +317,9 @@ class PagoproveedorService
      */
     private function asientoFueEditadoManual(array $data): bool
     {
-        foreach ($data['carga_cuentacontable_manuales'] ?? [] as $flag) {
-            if (strtoupper(trim((string) $flag)) === 'S') {
-                return true;
-            }
-        }
-
-        return false;
+        return AsientoCargaManualSupport::fueEditadoManual(
+            $data['carga_cuentacontable_manuales'] ?? []
+        );
     }
 
     /**

@@ -44,7 +44,8 @@ class OrdencompraLegajoFacturaPdfService
         $this->assertPdfValido($pdf);
 
         $letra = OrdencompraLegajoFacturaArcaSupport::normalizarLetra($letra);
-        $codigoAfip = OrdencompraLegajoFacturaArcaSupport::codigoArcaPad($tipoArca, $letra);
+        // ARCA efectivo (011 Factura C) es solo informativo; el maestro guarda clase A (01).
+        $codigoAfipMaestro = OrdencompraLegajoFacturaArcaSupport::codigoBasePad($tipoArca, $letra);
         if (OrdencompraLegajoFacturaArcaSupport::codigoArcaEfectivo($tipoArca, $letra) <= 0 || $letra === '') {
             throw new RuntimeException('Indique tipo ARCA y letra de la factura.');
         }
@@ -64,10 +65,10 @@ class OrdencompraLegajoFacturaPdfService
             throw new RuntimeException('Proveedor de la orden de compra inexistente.');
         }
 
-        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdPorCodigoAfip($codigoAfip);
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdPorCodigoAfip($codigoAfipMaestro);
         if ($tipoId <= 0) {
             throw new RuntimeException(
-                'No hay tipo de transacción de compra con código ARCA '.$codigoAfip.'. Cárguelo en tipos de transacción de compra.'
+                'No hay tipo de transacción de compra con código ARCA '.$codigoAfipMaestro.'. Cárguelo en tipos de transacción de compra.'
             );
         }
 

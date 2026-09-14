@@ -64,6 +64,44 @@ final class OrdencompraLegajoFacturaArcaSupport
         return str_pad((string) self::codigoArcaEfectivo($tipo, $letra), 3, '0', STR_PAD_LEFT);
     }
 
+    /**
+     * Código de clase A para maestros (tipotransaccion_compra.codigoafip).
+     * En compras el ABM guarda 01/02/03; la letra vive en el comprobante/precarga.
+     * No hay un tipo distinto por letra (FAC A/B/C comparten el mismo maestro).
+     */
+    public static function codigoBaseClaseA(string|int $tipo, string $letra): int
+    {
+        $tipoN = self::normalizarTipo($tipo);
+        if ($tipoN <= 0) {
+            return 0;
+        }
+
+        if ($tipoN >= 1 && $tipoN <= 5) {
+            return $tipoN;
+        }
+
+        $letraN = self::normalizarLetra($letra);
+        $offset = self::OFFSET_LETRA[$letraN] ?? 0;
+        if ($offset > 0 && $tipoN > $offset) {
+            $base = $tipoN - $offset;
+            if ($base >= 1 && $base <= 5) {
+                return $base;
+            }
+        }
+
+        $mod = $tipoN % 5;
+        if ($mod >= 1 && $mod <= 3) {
+            return $mod;
+        }
+
+        return $tipoN;
+    }
+
+    public static function codigoBasePad(string|int $tipo, string $letra): string
+    {
+        return str_pad((string) self::codigoBaseClaseA($tipo, $letra), 3, '0', STR_PAD_LEFT);
+    }
+
     public static function etiquetaTipoBase(string|int $tipo): string
     {
         $n = self::normalizarTipo($tipo);

@@ -303,7 +303,8 @@ class ComprobanteProveedorAsientoService
                 throw new RuntimeException(
                     'Falta cuenta contable DEBE en concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'»'
                     .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
-                    .' Asignela en el renglón de Conceptos o en el maestro Conceptos IVA compra.'
+                    .' Configúrela en el maestro Conceptos IVA compra'
+                    .' o en el renglón si no hay COM ni otra regla que la asigne.'
                 );
             }
 

@@ -546,7 +546,10 @@ var flModificaAsiento = false;
         });
 
         var datosCuentasContables = [];
-        if (!flModificaAsiento) {
+        var preservarAsientoManual = (typeof window.asientoTieneEdicionManual === 'function' && window.asientoTieneEdicionManual())
+            || window.flAsientoEditadoManual === true;
+        // Si el asiento fue editado a mano, siempre reenviar esas líneas (no regenerar desde deuda/medios).
+        if (!flModificaAsiento || preservarAsientoManual) {
             $('#cuenta-asiento-table .item-cuenta-asiento').each(function () {
                 datosCuentasContables.push({
                     cuentacontable_ids: $(this).find('.cuentacontable_id').val(),
@@ -632,6 +635,10 @@ var flModificaAsiento = false;
                 totalDebeAsiento = parseFloat($('#totaldebeasiento').val()) || 0;
                 totalHaberAsiento = parseFloat($('#totalhaberasiento').val()) || 0;
                 flModificaAsiento = false;
+                // Solo limpia marca manual si el API rearma (no vino preservado).
+                if (!preservarAsientoManual) {
+                    window.flAsientoEditadoManual = false;
+                }
                 if (typeof onDone === 'function') {
                     onDone(true);
                 }
@@ -790,23 +797,46 @@ var flModificaAsiento = false;
                 return;
             }
             completarProveedorEmitidos();
-            // Regenera asiento con deuda/medios actuales (evita Haber incompleto / asiento viejo).
-            flModificaAsiento = true;
-            generaAsientoContable(function (ok) {
-                if (!ok) {
-                    return;
-                }
+            if (typeof window.sincronizarCamposAplicacion === 'function') {
+                window.sincronizarCamposAplicacion();
+            }
+
+            function validarAsientoYEnviar() {
                 if (typeof sumaMontoAsiento === 'function') {
                     sumaMontoAsiento();
                 }
                 var td = parseFloat($('#totaldebeasiento').val()) || 0;
                 var th = parseFloat($('#totalhaberasiento').val()) || 0;
+                if ($('#cuenta-asiento-table .item-cuenta-asiento').length === 0 || (td === 0 && th === 0)) {
+                    alert('Falta el asiento contable. Abra la pestaña Asiento Contable antes de grabar.');
+                    muestraVentanaAsiento();
+                    return;
+                }
                 if (Math.abs(td - th) > 0.02) {
                     alert('El asiento no balancea (Debe ' + td.toFixed(2) + ' vs Haber ' + th.toFixed(2) + '). Revise la pestaña Asiento Contable.');
                     muestraVentanaAsiento();
                     return;
                 }
                 $('#form-pagoproveedor').trigger('submit');
+            }
+
+            var asientoManual = (typeof window.asientoTieneEdicionManual === 'function' && window.asientoTieneEdicionManual())
+                || window.flAsientoEditadoManual === true;
+            var tieneAsiento = $('#cuenta-asiento-table .item-cuenta-asiento').length > 0;
+
+            // No regenerar si el usuario editó cuentas a mano, ni si el asiento ya está al día.
+            if (asientoManual || (tieneAsiento && !flModificaAsiento)) {
+                validarAsientoYEnviar();
+                return;
+            }
+
+            // Deuda/medios cambiaron: rearma asiento automático y graba.
+            flModificaAsiento = true;
+            generaAsientoContable(function (ok) {
+                if (!ok) {
+                    return;
+                }
+                validarAsientoYEnviar();
             });
         });
 

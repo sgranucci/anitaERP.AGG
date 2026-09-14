@@ -26,12 +26,14 @@
     @endif
     @if(str_contains($errorTexto, 'concepto IVA'))
     <div class="mt-2 small">
-        Asigne la cuenta en la columna <strong>Cuenta DEBE</strong> de la solapa
-        <a href="#cp-solapa-conceptos" class="text-primary js-cp-ir-conceptos-desde-asiento">Conceptos IVA</a>
+        Asigne la cuenta en el maestro
         @if(can('editar-concepto-iva-compra', false))
-        o configúrela en el maestro
         <a href="{{ route('concepto_ivacompra') }}" class="text-primary" target="_blank" rel="noopener">Conceptos IVA compra</a>
+        @else
+        Conceptos IVA compra
         @endif
+        o, si el renglón no tiene COM ni otra regla, en la columna <strong>Cuenta DEBE</strong> de
+        <a href="#cp-solapa-conceptos" class="text-primary js-cp-ir-conceptos-desde-asiento">Conceptos IVA</a>
         y vuelva a recalcular la vista previa.
     </div>
     @endif

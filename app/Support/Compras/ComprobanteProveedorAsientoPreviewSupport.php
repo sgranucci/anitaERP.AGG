@@ -348,14 +348,15 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 $cuentaId = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaId));
             }
             if ($cuentaId <= 0) {
-                $avisos[] = [
-                    'tipo' => 'concepto_sin_cuenta_debe',
-                    'concepto_ivacompra_id' => (int) $concepto->id,
-                    'nombre' => (string) $concepto->nombre,
-                    'mensaje' => 'Falta cuenta contable DEBE en concepto IVA «'.$concepto->nombre.'»'
-                        .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
-                        .' Asignela en el renglón de Conceptos.',
-                ];
+                    $avisos[] = [
+                        'tipo' => 'concepto_sin_cuenta_debe',
+                        'concepto_ivacompra_id' => (int) $concepto->id,
+                        'nombre' => (string) $concepto->nombre,
+                        'mensaje' => 'Falta cuenta contable DEBE en concepto IVA «'.$concepto->nombre.'»'
+                            .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
+                            .' Configúrela en el maestro Conceptos IVA compra'
+                            .' o en el renglón si no hay COM ni otra regla que la asigne.',
+                    ];
             }
         }
 

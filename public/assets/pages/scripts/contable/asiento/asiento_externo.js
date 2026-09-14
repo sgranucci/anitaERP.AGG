@@ -4,6 +4,31 @@ var codigocontablexcodigo;
 var totalDebeAsiento = 0;
 var totalHaberAsiento = 0;
 
+	/** Marca la línea (y el asiento) como edición manual para no regenerarlo al grabar. */
+	function marcaAsientoLineaManual($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		$tr.find('.carga_cuentacontable_manual').val('S');
+		window.flAsientoEditadoManual = true;
+	}
+
+	window.marcaAsientoLineaManual = marcaAsientoLineaManual;
+	window.asientoTieneEdicionManual = function () {
+		if (window.flAsientoEditadoManual === true) {
+			return true;
+		}
+		var manual = false;
+		$('#cuenta-asiento-table .carga_cuentacontable_manual, #tbody-cuenta-asiento-table .carga_cuentacontable_manual').each(function () {
+			var v = String($(this).val() || '').toUpperCase().trim();
+			if (v !== '' && v !== 'N' && v !== '0') {
+				manual = true;
+				return false;
+			}
+		});
+		return manual;
+	};
+
     $(function () {
         $('#agrega_renglon_asiento').on('click', agregaRenglonCuentaAsiento);
         $(document).on('click', '.eliminar_cuenta_asiento', borraRenglonCuentaAsiento);
@@ -48,7 +73,8 @@ var totalHaberAsiento = 0;
 		$('.codigoasiento').on('change', function (event) {
 			event.preventDefault();
 			var codigo = $(this);
-			var codigo_ant = $(this).parents("tr").find(".codigo_previo_cuentacontable").val();
+			var $tr = $(this).parents("tr");
+			var codigo_ant = $tr.find(".codigo_previo_cuentacontable").val();
 			var codigo_nuevo = codigo.val();
 			let empresa_id = $('#empresa_id').val();
 
@@ -57,16 +83,18 @@ var totalHaberAsiento = 0;
 			$.get(url_cta, function(data){
 				if (data.id > 0)
 				{
-					$(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
-					$(codigo).parents("tr").find(".cuentacontable_id_previa").val(data.id);
-					$(codigo).parents("tr").find(".nombrecuentacontable").val(data.nombre);
+					$tr.find('.cuentacontable_id').val(data.id);
+					$tr.find(".cuentacontable_id_previa").val(data.id);
+					$tr.find(".nombrecuentacontable").val(data.nombre);
+					marcaAsientoLineaManual($tr);
 				}
 				else
 				{
 					alert("No existe la cuenta");
 
 					// Borra el renglon
-					$(codigo).parents('tr').remove();
+					$tr.remove();
+					window.flAsientoEditadoManual = true;
 					return;
 				}
 			});
@@ -107,7 +135,9 @@ var totalHaberAsiento = 0;
 			$(codigocontablexcodigo).val(codigo);
 
 			//* Asigna nueva cuentacontable
-			$(cuentacontablexcodigo).parents("tr").find(".cuentacontable_id_previa").val($(cuentacontablexcodigo).val());
+			var $trAsiento = $(cuentacontablexcodigo).parents("tr");
+			$trAsiento.find(".cuentacontable_id_previa").val($(cuentacontablexcodigo).val());
+			marcaAsientoLineaManual($trAsiento);
 		
 			$('#consultacuentaModal').modal('hide');
 
@@ -116,11 +146,17 @@ var totalHaberAsiento = 0;
 
 		$('.debeasiento').on('change input', function (event) {
 			event.preventDefault();
+			if (event.type === 'change') {
+				marcaAsientoLineaManual($(this).parents('tr'));
+			}
 			sumaMontoAsiento();
 		});
 
 		$('.haberasiento').on('change input', function (event) {
 			event.preventDefault();
+			if (event.type === 'change') {
+				marcaAsientoLineaManual($(this).parents('tr'));
+			}
 			sumaMontoAsiento();
 		});
 
@@ -149,6 +185,7 @@ var totalHaberAsiento = 0;
 			$nuevo.find('.monedaasiento').val(monedaDefault);
 			leeCotizacionAsiento($nuevo.find('.monedaasiento'));
 		}
+		marcaAsientoLineaManual($nuevo);
 
 		activa_eventosAsiento(false);
 
@@ -160,6 +197,7 @@ var totalHaberAsiento = 0;
     function borraRenglonCuentaAsiento(event) {
     	event.preventDefault();
     	$(this).parents('tr').remove();
+		window.flAsientoEditadoManual = true;
     	actualizaRenglonesCuentaAsiento();
 		sumaMontoAsiento();
     }

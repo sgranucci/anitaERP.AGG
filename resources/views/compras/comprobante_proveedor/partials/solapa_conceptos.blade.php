@@ -18,10 +18,11 @@
             Agregue uno o más renglones. Código + Enter o <kbd>F1</kbd>/lupa para consultar.
             El modal lista solo conceptos configurados para el <strong>tipo de comprobante</strong> seleccionado.
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
-            Indique la <strong>cuenta DEBE</strong> en cada renglón (se precarga del maestro si existe; en ND/NC o sin COM es obligatoria).
+            La columna <strong>Cuenta DEBE</strong> solo aparece si el renglón no tiene cuenta por COM
+            ni por otra regla (maestro del concepto, contrato, artículos de la OC, etc.).
             @if ($cpImputacionManual)
                 El contrato exige <strong>cuenta DEBE</strong> del neto: se toma de la cuenta cargada en el contrato
-            (puede cambiarse en el renglón).
+            (si falta, se pide en el renglón).
             @endif
         </p>
 
@@ -35,7 +36,7 @@
                     <tr>
                         <th style="width:36%;">Concepto</th>
                         <th style="width:16%;" class="text-right">Monto</th>
-                        <th style="width:30%;">Cuenta DEBE</th>
+                        <th style="width:30%;" class="cp-th-cuenta-debe">Cuenta DEBE</th>
                         <th style="width:8%;" class="text-center" title="Estado de la cuenta contable DEBE">Cta.</th>
                         <th style="width:8%;"></th>
                     </tr>
@@ -176,8 +177,8 @@
             <div class="card-body p-2" style="max-height:70vh;overflow:auto;">
                 <p class="small text-muted mb-2">
                     Vista previa: se actualiza al cambiar conceptos, montos o cuentas DEBE.
-                    Para corregir una cuenta faltante, edítela en la columna <em>Cuenta DEBE</em> de esta solapa
-                    (al contabilizar se graba el asiento definitivo).
+                    Si falta una cuenta, configúrela en el maestro del concepto o en la columna
+                    <em>Cuenta DEBE</em> cuando esté visible (al contabilizar se graba el asiento definitivo).
                 </p>
                 <div id="cp-asiento-preview-conceptos" class="cp-asiento-preview-target">
                     @include('compras.comprobante_proveedor.partials.solapa_asiento_contable_body', [

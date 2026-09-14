@@ -30,4 +30,15 @@ class OrdencompraLegajoFacturaArcaSupportTest extends TestCase
         $this->assertSame(6, OrdencompraLegajoFacturaArcaSupport::codigoArcaEfectivo('006', 'B'));
         $this->assertSame(11, OrdencompraLegajoFacturaArcaSupport::codigoArcaEfectivo('011', 'C'));
     }
+
+    public function test_maestro_usa_codigo_clase_a_sin_importar_letra(): void
+    {
+        $this->assertSame(1, OrdencompraLegajoFacturaArcaSupport::codigoBaseClaseA('001', 'A'));
+        $this->assertSame(1, OrdencompraLegajoFacturaArcaSupport::codigoBaseClaseA('001', 'B'));
+        $this->assertSame(1, OrdencompraLegajoFacturaArcaSupport::codigoBaseClaseA('001', 'C'));
+        $this->assertSame('001', OrdencompraLegajoFacturaArcaSupport::codigoBasePad('001', 'C'));
+        $this->assertSame(1, OrdencompraLegajoFacturaArcaSupport::codigoBaseClaseA('011', 'C'));
+        $this->assertSame(2, OrdencompraLegajoFacturaArcaSupport::codigoBaseClaseA('002', 'C'));
+        $this->assertSame(3, OrdencompraLegajoFacturaArcaSupport::codigoBaseClaseA('013', 'C'));
+    }
 }
