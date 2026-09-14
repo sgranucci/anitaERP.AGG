@@ -63,4 +63,21 @@ class TurnoLocal extends Model implements Auditable
 
         return $desde.' – '.$hasta.$sufijo;
     }
+
+    public function cubreHora(?string $horaHms = null): bool
+    {
+        if ($this->hora_desde === null || $this->hora_hasta === null) {
+            return false;
+        }
+
+        $ahora = substr($horaHms ?? now()->format('H:i:s'), 0, 8);
+        $desde = substr((string) $this->hora_desde, 0, 8);
+        $hasta = substr((string) $this->hora_hasta, 0, 8);
+
+        if ($this->cruzaMedianoche()) {
+            return $ahora >= $desde || $ahora < $hasta;
+        }
+
+        return $ahora >= $desde && $ahora < $hasta;
+    }
 }

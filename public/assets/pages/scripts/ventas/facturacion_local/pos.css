@@ -1,0 +1,323 @@
+.fl-pos {
+    --fl-bg: #eef4f8;
+    --fl-panel: #ffffff;
+    --fl-ink: #17202a;
+    --fl-muted: #5d6d7e;
+    --fl-line: #c5d6e4;
+    --fl-accent: #2471a3;
+    --fl-head: #85c1e9;
+    --fl-ok: #1e8449;
+    --fl-warn: #b9770e;
+    --fl-danger: #c0392b;
+    --fl-soft: #d6eaf8;
+    color: var(--fl-ink);
+    background: var(--fl-bg);
+    margin: -15px -15px 0;
+    padding: 16px 16px 24px;
+    min-height: calc(100vh - 120px);
+    font-family: "Source Sans Pro", "Segoe UI", sans-serif;
+}
+.fl-pos * { box-sizing: border-box; }
+.fl-pos h4 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--fl-muted);
+    font-weight: 700;
+}
+
+.fl-top {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding: 12px 16px;
+    background: var(--fl-head);
+    color: var(--fl-ink);
+    border: 1px solid #6fb3d8;
+}
+.fl-top strong { font-size: 18px; font-weight: 700; }
+.fl-top select,
+.fl-top input[type="number"] {
+    background: #fff;
+    border: 1px solid #5dade2;
+    color: var(--fl-ink);
+    border-radius: 4px;
+    padding: 8px 10px;
+    min-height: 40px;
+    min-width: 180px;
+}
+
+.fl-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: #fff;
+    border: 1px solid #5dade2;
+    font-size: 13px;
+}
+.fl-status.ok { border-color: var(--fl-ok); color: var(--fl-ok); }
+.fl-status.off { border-color: var(--fl-warn); color: var(--fl-warn); }
+
+.fl-grid {
+    display: grid;
+    grid-template-columns: 1.45fr 0.9fr;
+    gap: 14px;
+    align-items: start;
+}
+@media (max-width: 992px) { .fl-grid { grid-template-columns: 1fr; } }
+
+.fl-panel {
+    background: var(--fl-panel);
+    border: 1px solid var(--fl-line);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 420px;
+}
+
+.fl-gate {
+    background: #fef9e7;
+    border: 1px solid #f7dc6f;
+    padding: 14px 16px;
+    margin-bottom: 4px;
+}
+.fl-gate p { margin: 0 0 10px; color: var(--fl-ink); }
+.fl-gate .fl-gate-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.fl-search { display: flex; gap: 8px; }
+.fl-search input {
+    flex: 1;
+    font-size: 18px;
+    padding: 12px 14px;
+    background: #fff;
+    border: 2px solid var(--fl-line);
+    border-radius: 4px;
+    color: var(--fl-ink);
+}
+.fl-search input:focus { border-color: var(--fl-accent); outline: none; }
+
+.fl-results {
+    max-height: 200px;
+    overflow: auto;
+    border: 1px solid var(--fl-line);
+    background: #fbfcfe;
+}
+.fl-results:empty { display: none; }
+.fl-results button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid #eaf0f5;
+    color: var(--fl-ink);
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 14px;
+}
+.fl-results button:hover,
+.fl-results button:focus { background: var(--fl-soft); outline: none; }
+.fl-results .fl-empty,
+.fl-results .fl-err { padding: 10px 12px; color: var(--fl-muted); font-size: 13px; }
+.fl-results .fl-err { color: var(--fl-danger); }
+
+.fl-cart { flex: 1; overflow: auto; min-height: 220px; }
+.fl-cart table { width: 100%; border-collapse: collapse; }
+.fl-cart th {
+    background: var(--fl-head);
+    color: var(--fl-ink);
+    padding: 8px;
+    font-size: 12px;
+    text-align: left;
+    border-bottom: 1px solid #6fb3d8;
+}
+.fl-cart td {
+    padding: 8px;
+    border-bottom: 1px solid #eaf0f5;
+    font-size: 14px;
+    vertical-align: middle;
+}
+.fl-cart input {
+    width: 88px;
+    background: #fff;
+    border: 1px solid var(--fl-line);
+    color: var(--fl-ink);
+    border-radius: 4px;
+    padding: 6px;
+    text-align: right;
+}
+
+.fl-totales {
+    font-size: 28px;
+    font-weight: 700;
+    text-align: right;
+    color: var(--fl-ok);
+    padding-top: 6px;
+    border-top: 2px solid var(--fl-head);
+}
+.fl-totales small { display: block; font-size: 13px; color: var(--fl-muted); font-weight: 400; }
+
+.fl-btn {
+    border: 0;
+    border-radius: 4px;
+    padding: 10px 16px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none !important;
+}
+.fl-btn-primary { background: var(--fl-accent); color: #fff; }
+.fl-btn-ok { background: var(--fl-ok); color: #fff; }
+.fl-btn-warn { background: #f0b429; color: #1a1200; }
+.fl-btn-ghost { background: #fff; color: var(--fl-accent); border: 1px solid var(--fl-accent); }
+.fl-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.fl-medios .row-medio { display: flex; gap: 8px; margin-bottom: 6px; }
+.fl-medios select,
+.fl-medios input,
+.fl-pos .form-control {
+    background: #fff;
+    border: 1px solid var(--fl-line);
+    color: var(--fl-ink);
+    border-radius: 4px;
+    padding: 8px;
+    min-height: 40px;
+}
+
+.fl-keys { font-size: 12px; color: var(--fl-muted); margin: 0; }
+.fl-keys kbd {
+    background: #fff;
+    border: 1px solid var(--fl-line);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: var(--fl-ink);
+}
+
+#fl-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(23, 32, 42, .35);
+    z-index: 2050;
+    align-items: center;
+    justify-content: center;
+}
+#fl-overlay.show { display: flex; }
+#fl-overlay .box {
+    background: #fff;
+    color: var(--fl-ink);
+    border: 2px solid var(--fl-head);
+    padding: 18px 24px;
+    font-weight: 600;
+    min-width: 220px;
+    text-align: center;
+}
+
+.fl-msg.ok { color: var(--fl-ok); }
+.fl-msg.err { color: var(--fl-danger); }
+
+#fl-modal-var .modal-content {
+    background: #fff;
+    color: var(--fl-ink);
+}
+#fl-modal-var .close { color: var(--fl-ink); }
+
+.fl-search .fl-sku-input { flex: 1; }
+.fl-cliente-campo.gastro-campo-consulta,
+.fl-pos .gastro-campo-consulta {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+}
+.fl-pos .gastro-campo-consulta #cliente_id {
+    width: 4.5rem;
+    flex-shrink: 0;
+}
+.fl-pos .gastro-campo-consulta .codigocliente {
+    width: 6rem;
+    flex-shrink: 0;
+}
+.fl-pos .gastro-campo-consulta #nombrecliente {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+.fl-letra-row { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.fl-letra-row .badge { font-size: 12px; padding: 4px 8px; }
+.fl-letra-row .badge-danger { background: #c0392b; }
+.fl-letra-row .badge-info { background: #2471a3; }
+.fl-letra-row .badge-secondary { background: #7f8c8d; }
+
+.fl-cobranza-scroll { max-height: 220px; overflow: auto; }
+.fl-cc-cuenta-wrap {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+}
+.fl-cc-cuenta-wrap .fl-cc-codigo { width: 5rem; flex-shrink: 0; }
+.fl-cc-cuenta-wrap .fl-cc-nombre { flex: 1 1 auto; min-width: 0; }
+.fl-cobranza-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: flex-start;
+}
+#fl-medios-rapidos {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: flex-start;
+}
+#fl-medios-rapidos.d-none { display: none !important; }
+#fl-medios-rapidos .fl-medio-rapido {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 72px;
+    max-width: 110px;
+    padding: 0.35rem 0.4rem 0.25rem;
+    font-size: 0.68rem;
+    line-height: 1.15;
+    text-align: center;
+    white-space: normal;
+    word-break: break-word;
+}
+#fl-medios-rapidos .fl-medio-rapido i,
+#fl-medios-rapidos .fl-medio-rapido .gastro-icon-mercadopago {
+    font-size: 1.15rem;
+    margin-bottom: 0.1rem;
+}
+#fl-medios-rapidos .fl-medio-cod {
+    font-weight: 700;
+    font-size: 0.72rem;
+    color: #17202a;
+}
+.gastro-icon-mercadopago {
+    display: inline-block;
+    width: 1.15rem;
+    height: 1.15rem;
+    background: url('/assets/pages/img/ventas/gastronomia/mercadopago.svg') center/contain no-repeat;
+}
+
+#consultatalleModal,
+#consultacolorModal,
+#consultacombinacionModal,
+#consultacuentacajaModal,
+#consultaclienteModal {
+    z-index: 2060;
+}

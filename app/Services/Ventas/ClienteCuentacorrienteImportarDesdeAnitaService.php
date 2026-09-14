@@ -2,16 +2,20 @@
 
 namespace App\Services\Ventas;
 
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Models\Ventas\Tipotransaccion;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportAplmovSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportBridgeReader;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportClaveSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportFormatoSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportVentaMatchSupport;
+use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /**
  * Importa deuda de clientes desde Anita (climov + aplmov) → ERP.
@@ -41,6 +45,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
         ?int $limite = null,
         int $usuarioId = 1,
         bool $importarVentasFaltantes = true,
+        bool $cerrarSinDeudaAnita = false,
     ): array {
         $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
         $desdeYmd = $desdeIso ? ClienteCuentacorrienteAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso) : null;
@@ -181,6 +186,33 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             $paresPorDeuda[$par['deuda']['clave']][] = $par;
         }
 
+        $extras = [];
+        if ($cerrarSinDeudaAnita) {
+            $cierre = $this->planearCierreSinDeudaAnita(
+                $clienteCodigo,
+                $perfil,
+                $desdeYmd ?: null,
+                $hastaYmd ?: null,
+                $empresaCodigo
+            );
+            $extras = $cierre['items'];
+            $stats['anita_climov_abiertos'] = $cierre['anita_abiertos'];
+            $stats['extras_clientes'] = (int) ($cierre['clientes'] ?? 0);
+            $stats['extras_a_cerrar'] = count($extras);
+            $stats['extras_importe'] = round(array_sum(array_column($extras, 'faltante')), 4);
+            $stats['muestra_extras'] = array_map(
+                static fn (array $e) => [
+                    'etiqueta' => $e['etiqueta'],
+                    'cc_id' => $e['cc_id'],
+                    'fecha' => $e['fecha'],
+                    'total' => $e['total'],
+                    'faltante' => $e['faltante'],
+                    'clave' => $e['clave'],
+                ],
+                array_slice($extras, 0, 25)
+            );
+        }
+
         if ($dryRun) {
             foreach ($plan as $item) {
                 $paresItem = $paresPorDeuda[$item['clave']] ?? [];
@@ -195,7 +227,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             return $stats;
         }
 
-        return DB::transaction(function () use ($plan, $paresPorDeuda, $stats, $perfil, $forzarAplicaciones) {
+        return DB::transaction(function () use ($plan, $paresPorDeuda, $stats, $perfil, $forzarAplicaciones, $extras) {
             foreach ($plan as $item) {
                 $resultado = $this->persistirItem(
                     $item,
@@ -212,6 +244,10 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
                 foreach ($resultado['errores'] as $err) {
                     $stats['errores'][] = $err;
                 }
+            }
+            foreach ($extras as $extra) {
+                $stats['aplicaciones_creadas'] += $this->persistirCierreExtra($extra, $perfil);
+                $stats['extras_cerrados']++;
             }
             $stats['modo'] = 'ejecutar';
 
@@ -293,7 +329,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             'nro_cuota' => $cuota,
             'venta_id' => (int) $venta->id,
             'cliente_id' => (int) $venta->cliente_id,
-            'empresa_id' => (int) ($venta->empresa_id ?? 0) ?: null,
+            'empresa_id' => $this->empresaIdDesdeVenta($venta),
             'cc_id' => $cc?->id,
             'accion_cc' => $accionCc,
             'accion_aplicaciones' => $accionApl,
@@ -376,6 +412,14 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             $out['cc_creada'] = true;
         } else {
             $out['cc_existente'] = true;
+            // Imports viejos dejaron empresa_id NULL; venta no tiene empresa (está en puntoventa).
+            if ($ccId && ! empty($item['empresa_id'])) {
+                $ccActual = Cliente_Cuentacorriente::query()->find($ccId);
+                if ($ccActual && (int) ($ccActual->empresa_id ?? 0) <= 0) {
+                    $ccActual->empresa_id = (int) $item['empresa_id'];
+                    $ccActual->save();
+                }
+            }
         }
 
         if ($ccId === null || $item['accion_aplicaciones'] === 'omitir') {
@@ -490,6 +534,166 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
     }
 
     /**
+     * ERP pendiente cuya clave no está en climov abierto de Anita → se salda.
+     * Sin --cliente: todos los clientes con CC pendiente en ERP.
+     *
+     * @param  array<string, mixed>  $perfil
+     * @return array{anita_abiertos:int, items: list<array<string, mixed>>, clientes:int}
+     */
+    private function planearCierreSinDeudaAnita(
+        ?string $clienteCodigo,
+        array $perfil,
+        ?int $desdeYmd,
+        ?int $hastaYmd,
+        ?int $empresaCodigo,
+    ): array {
+        $codigoFiltro = trim((string) $clienteCodigo);
+        $clienteIds = null;
+        if ($codigoFiltro !== '') {
+            $codigoErp = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoErp($codigoFiltro);
+            $cliente = Cliente::query()
+                ->where(function ($q) use ($codigoErp, $codigoFiltro) {
+                    $q->where('codigo', $codigoErp)->orWhere('codigo', $codigoFiltro);
+                })
+                ->orderBy('id')
+                ->first();
+            if ($cliente === null) {
+                throw new RuntimeException('No se encontró el cliente '.$codigoFiltro.' en el ERP.');
+            }
+            $clienteIds = [(int) $cliente->id];
+        }
+
+        $climovsAbiertos = $this->reader->listarClimovPendiente(
+            $codigoFiltro !== '' ? $codigoFiltro : null,
+            $desdeYmd,
+            $hastaYmd,
+            $empresaCodigo,
+            true,
+        );
+        // clienteAnita|tipo|letra|suc|nro → evita colisiones entre clientes
+        $clavesAbiertas = [];
+        foreach ($climovsAbiertos as $climov) {
+            $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) ($climov['cliv_tipo'] ?? ''));
+            if ($tipo === '' || ClienteCuentacorrienteAnitaImportFormatoSupport::esTipoNoDeuda($tipo, $perfil)) {
+                continue;
+            }
+            $cliAnita = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoAnita(
+                (string) ($climov['cliv_cliente'] ?? '')
+            );
+            $doc = ClienteCuentacorrienteAnitaImportClaveSupport::claveDesdeClimov($climov);
+            $clavesAbiertas[$cliAnita.'|'.$doc] = true;
+        }
+
+        $query = Cliente_Cuentacorriente::query()
+            ->with(['ventas', 'clientes:id,codigo'])
+            ->select('cliente_cuentacorriente.*')
+            ->addSelect([
+                'aplicado' => Cliente_Cuentacorriente_Aplicacion::query()
+                    ->selectRaw('SUM(total)')
+                    ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
+            ])
+            ->whereNotNull('venta_id')
+            ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc())
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc())
+            ->orderBy('cliente_id')
+            ->orderBy('id');
+        if ($clienteIds !== null) {
+            $query->whereIn('cliente_id', $clienteIds);
+        }
+
+        $items = [];
+        $clientesTocados = [];
+        foreach ($query->get() as $cc) {
+            $etiqueta = (string) ($cc->ventas->codigo ?? ClienteCuentacorrienteGrillaSupport::etiquetaComprobante($cc));
+            $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDesdeCodigoVenta($etiqueta);
+            $codigoCliente = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoAnita(
+                (string) ($cc->clientes->codigo ?? '')
+            );
+            if ($clave !== null && isset($clavesAbiertas[$codigoCliente.'|'.$clave])) {
+                continue;
+            }
+
+            $total = round((float) $cc->total, 4);
+            $faltante = round(ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
+                $total,
+                (float) ($cc->aplicado ?? 0)
+            ), 4);
+            if ($faltante <= (float) $perfil['tolerancia_aplicado']) {
+                continue;
+            }
+
+            $fechaCc = $cc->fecha;
+            if ($fechaCc instanceof \DateTimeInterface) {
+                $fechaIso = $fechaCc->format('Y-m-d');
+            } else {
+                $fechaIso = substr(trim((string) $fechaCc), 0, 10);
+            }
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaIso)) {
+                $fechaIso = date('Y-m-d');
+            }
+
+            $clientesTocados[(int) $cc->cliente_id] = true;
+            $items[] = [
+                'cc_id' => (int) $cc->id,
+                'venta_id' => (int) $cc->venta_id,
+                'cliente_id' => (int) $cc->cliente_id,
+                'etiqueta' => $etiqueta !== '' ? $etiqueta : ('CC #'.$cc->id),
+                'clave' => $clave ?? '',
+                'fecha' => $fechaIso,
+                'total' => $total,
+                'faltante' => $faltante,
+                'moneda_id' => (int) ($cc->moneda_id ?? 1),
+                'cotizacion' => (float) ($cc->cotizacion ?? 1) ?: 1.0,
+            ];
+        }
+
+        return [
+            'anita_abiertos' => count($clavesAbiertas),
+            'clientes' => count($clientesTocados),
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @param  array<string, mixed>  $perfil
+     */
+    private function persistirCierreExtra(array $extra, array $perfil): int
+    {
+        $ccId = (int) $extra['cc_id'];
+        $aplicado = round((float) Cliente_Cuentacorriente_Aplicacion::query()
+            ->where('cliente_cuentacorriente_id', $ccId)
+            ->sum('total'), 4);
+        $faltante = round(ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
+            (float) $extra['total'],
+            $aplicado
+        ), 4);
+        if ($faltante <= (float) $perfil['tolerancia_aplicado']) {
+            return 0;
+        }
+
+        $signoApl = (float) $extra['total'] >= 0 ? -1.0 : 1.0;
+        $etiqueta = 'Anita sync (sin deuda Anita)';
+        if ($this->aplicacionYaExistePorEtiqueta($ccId, $etiqueta, round($faltante * $signoApl, 4))) {
+            return 0;
+        }
+
+        Cliente_Cuentacorriente_Aplicacion::query()->create([
+            'fecha' => $extra['fecha'],
+            'cliente_cuentacorriente_id' => $ccId,
+            'total' => round($faltante * $signoApl, 4),
+            'moneda_id' => $extra['moneda_id'],
+            'cotizacion' => $extra['cotizacion'],
+            'ventaaplicado_id' => null,
+            'cobranza_id' => null,
+            'comprobanteaplicado' => $etiqueta,
+            'cliente_cuentacorriente_aplicado_id' => null,
+        ]);
+
+        return 1;
+    }
+
+    /**
      * @param  array{tipo:string,letra:string,sucursal:int,numero:int,clave:string}  $lado
      * @return array{venta_id:?int,cc_id:?int}
      */
@@ -520,6 +724,22 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             ->where('comprobanteaplicado', $etiqueta)
             ->whereRaw('ABS(total - ?) < 0.02', [$total])
             ->exists();
+    }
+
+    /**
+     * empresa_id vive en puntoventa, no en venta.
+     */
+    private function empresaIdDesdeVenta(object $venta): ?int
+    {
+        $empresaId = (int) ($venta->empresa_id ?? 0);
+        if ($empresaId <= 0) {
+            $pvId = (int) ($venta->puntoventa_id ?? 0);
+            if ($pvId > 0) {
+                $empresaId = (int) DB::table('puntoventa')->where('id', $pvId)->value('empresa_id');
+            }
+        }
+
+        return $empresaId > 0 ? $empresaId : null;
     }
 
     /**
@@ -571,6 +791,12 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             'cc_ya_existentes' => 0,
             'aplicaciones_creadas' => 0,
             'aplicaciones_omitidas' => 0,
+            'anita_climov_abiertos' => 0,
+            'extras_a_cerrar' => 0,
+            'extras_cerrados' => 0,
+            'extras_importe' => 0.0,
+            'extras_clientes' => 0,
+            'muestra_extras' => [],
             'muestra' => [],
             'errores' => [],
             'modo' => '',

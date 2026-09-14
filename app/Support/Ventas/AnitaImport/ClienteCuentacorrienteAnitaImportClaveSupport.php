@@ -134,6 +134,22 @@ final class ClienteCuentacorrienteAnitaImportClaveSupport
         );
     }
 
+    /**
+     * "FAC A-00012-00082984" / "FAF E-00103-00001988" → FAC|A|12|82984
+     */
+    public static function claveDesdeCodigoVenta(string $codigo): ?string
+    {
+        $codigo = strtoupper(trim($codigo));
+        if ($codigo === '') {
+            return null;
+        }
+        if (preg_match('/^([A-Z]{2,5})\s+([A-Z])\s*-?\s*0*(\d+)\s*[-–]\s*0*(\d+)/', $codigo, $m)) {
+            return self::claveDocumento($m[1], $m[2], (int) $m[3], (int) $m[4]);
+        }
+
+        return null;
+    }
+
     public static function signoEntero(mixed $signoTipotransaccion): int
     {
         $n = (int) $signoTipotransaccion;

@@ -44,7 +44,12 @@ class FacturacionLocalTurnoController extends Controller
     public function abrir(Request $request)
     {
         $this->assertFerli();
-        can('abrir-turno-facturacion-local');
+        if (! can('abrir-turno-facturacion-local', false)) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['ok' => false, 'error' => 'Sin permiso para abrir turno.'], 403);
+            }
+            can('abrir-turno-facturacion-local');
+        }
         try {
             $local = LocalVenta::query()->findOrFail((int) $request->input('local_id'));
             $turno = $this->turnoService->abrir($local, [
@@ -53,13 +58,18 @@ class FacturacionLocalTurnoController extends Controller
                 'identificador_pc' => $request->input('identificador_pc'),
                 'turno_local_id' => (int) $request->input('turno_local_id', 0),
             ]);
+            session(['facturacion_local.local_id' => (int) $local->id]);
 
-            if ($request->expectsJson()) {
-                return response()->json(['ok' => true, 'turno' => $turno]);
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'ok' => true,
+                    'turno_id' => (int) $turno->id,
+                    'redirect' => route('facturacion_local_pos', ['local_id' => $local->id]),
+                ]);
             }
 
             return redirect()->route('facturacion_local_pos', ['local_id' => $local->id])
-                ->with('mensaje', 'Turno #'.$turno->id.' abierto');
+                ->with('mensaje', 'Turno #'.$turno->id.' abierto en '.$local->nombre);
         } catch (InvalidArgumentException $e) {
             if ($request->expectsJson()) {
                 return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);

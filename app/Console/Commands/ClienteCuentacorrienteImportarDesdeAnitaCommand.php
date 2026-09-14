@@ -19,6 +19,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--incluir-saldados : Incluye climov no cancelados aunque monto = t_cobrado}
                             {--forzar-aplicaciones : Reaplica aplicaciones sintéticas Anita sync si el aplicado no cierra}
                             {--sin-importar-ventas : No crea cabeceras venta ERP faltantes (solo CC de las que ya existen)}
+                            {--cerrar-sin-deuda-anita : Salda CC ERP pendiente que no está en climov abierto de Anita (con o sin --cliente)}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
@@ -45,11 +46,12 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
         $soloConSaldo = ! (bool) $this->option('incluir-saldados');
         $forzar = (bool) $this->option('forzar-aplicaciones');
         $importarVentas = ! (bool) $this->option('sin-importar-ventas');
+        $cerrarSinDeudaAnita = (bool) $this->option('cerrar-sin-deuda-anita');
         $usuarioId = max(1, (int) $this->option('usuario-id'));
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Entorno %s | climov_empresa=%s | %s → %s | cliente %s | %s%s',
+            'Entorno %s | climov_empresa=%s | %s → %s | cliente %s | %s%s%s',
             $perfil['entorno'],
             $perfil['climov_tiene_empresa'] ? 'sí' : 'no',
             $desde ?: 'sin desde',
@@ -57,8 +59,12 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
             $cliente !== '' ? $cliente : 'todos',
             $dryRun ? 'DRY-RUN' : 'EJECUTAR',
             $importarVentas ? ' | importa ventas faltantes' : ' | sin importar ventas',
+            $cerrarSinDeudaAnita ? ' | cierra extras sin deuda Anita' : '',
         ));
         $this->line('Filtro: Anita venta (no PRE/COB). Luego climov+aplmov → cliente_cuentacorriente.');
+        if ($cerrarSinDeudaAnita && $cliente === '') {
+            $this->warn('Cierre de extras para TODOS los clientes con deuda ERP abierta.');
+        }
 
         try {
             $stats = $service->importar(
@@ -72,6 +78,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
                 $limite,
                 $usuarioId,
                 $importarVentas,
+                $cerrarSinDeudaAnita,
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
@@ -94,6 +101,11 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
             ['CC creadas', $stats['cc_creadas']],
             ['aplmov Anita', $stats['anita_aplmov']],
             ['Aplicaciones creadas', $stats['aplicaciones_creadas']],
+            ['Anita climov abiertos', $stats['anita_climov_abiertos']],
+            ['Clientes con extras', $stats['extras_clientes']],
+            ['Extras a cerrar (sin deuda Anita)', $stats['extras_a_cerrar']],
+            ['Importe extras', number_format((float) $stats['extras_importe'], 2, ',', '.')],
+            ['Extras cerrados', $stats['extras_cerrados']],
         ]);
 
         if (($stats['muestra_ventas'] ?? []) !== []) {
@@ -107,6 +119,21 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
                     $r['cliente_id'],
                     $r['cae'],
                 ], $stats['muestra_ventas'])
+            );
+        }
+
+        if (($stats['muestra_extras'] ?? []) !== []) {
+            $this->line('Muestra extras a saldar (hasta 25):');
+            $this->table(
+                ['Comprobante', 'CC', 'Fecha', 'Total', 'A saldar', 'Clave'],
+                array_map(static fn (array $r) => [
+                    $r['etiqueta'],
+                    $r['cc_id'],
+                    $r['fecha'],
+                    number_format((float) $r['total'], 2, ',', '.'),
+                    number_format((float) $r['faltante'], 2, ',', '.'),
+                    $r['clave'],
+                ], $stats['muestra_extras'])
             );
         }
 

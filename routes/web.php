@@ -542,6 +542,8 @@ Route::delete('stock/plarmado/{id}', 'Stock\PlarmadoController@eliminar')->name(
 Route::get('stock/color', 'Stock\ColorController@index')->name('color');
 Route::get('stock/color/crear', 'Stock\ColorController@crear')->name('crear_color');
 Route::post('stock/color', 'Stock\ColorController@guardar')->name('guardar_color');
+Route::post('stock/color/consultacolor', 'Stock\ColorController@consultaColor')->name('consulta_color');
+Route::get('stock/color/resolvercolor', 'Stock\ColorController@resolverColor')->name('resolver_color');
 Route::get('stock/color/{id}/editar', 'Stock\ColorController@editar')->name('editar_color');
 Route::put('stock/color/{id}', 'Stock\ColorController@actualizar')->name('actualizar_color');
 Route::delete('stock/color/{id}', 'Stock\ColorController@eliminar')->name('eliminar_color');
@@ -652,6 +654,8 @@ Route::delete('stock/materialavio/{id}', 'Stock\MaterialavioController@eliminar'
 Route::get('stock/talle', 'Stock\TalleController@index')->name('talle');
 Route::get('stock/talle/crear', 'Stock\TalleController@crear')->name('crear_talle');
 Route::post('stock/talle', 'Stock\TalleController@guardar')->name('guardar_talle');
+Route::post('stock/talle/consultatalle', 'Stock\TalleController@consultaTalle')->name('consulta_talle');
+Route::get('stock/talle/resolvertalles', 'Stock\TalleController@resolverTalle')->name('resolver_talle');
 Route::get('stock/talle/{id}/editar', 'Stock\TalleController@editar')->name('editar_talle');
 Route::put('stock/talle/{id}', 'Stock\TalleController@actualizar')->name('actualizar_talle');
 Route::delete('stock/talle/{id}', 'Stock\TalleController@eliminar')->name('eliminar_talle');

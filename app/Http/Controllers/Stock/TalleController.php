@@ -96,4 +96,73 @@ class TalleController extends Controller
             abort(404);
         }
     }
+
+    public function consultaTalle(Request $request)
+    {
+        $consulta = trim((string) $request->input('consulta', ''));
+        $ids = $request->input('ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+
+        $q = Talle::query()->orderBy('codigo')->orderBy('nombre');
+        if ($ids !== []) {
+            $q->whereIn('id', $ids);
+        }
+        if ($consulta !== '') {
+            $q->where(function ($w) use ($consulta) {
+                $w->where('nombre', 'like', '%'.$consulta.'%')
+                    ->orWhere('codigo', 'like', '%'.$consulta.'%')
+                    ->orWhere('id', $consulta);
+            });
+        }
+        $filas = $q->limit(80)->get(['id', 'codigo', 'nombre']);
+        $html = '';
+        foreach ($filas as $f) {
+            $html .= '<tr data-id="'.$f->id.'" data-codigo="'.e((string) $f->codigo).'" data-nombre="'.e($f->nombre).'">'
+                .'<td>'.$f->id.'</td>'
+                .'<td>'.e((string) $f->codigo).'</td>'
+                .'<td>'.e($f->nombre).'</td>'
+                .'<td class="text-nowrap">'
+                .'<button type="button" class="btn btn-sm btn-primary elige-talle">Elegir</button> '
+                .'<a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener" href="'.route('editar_talle', $f->id).'?origen=modal_consulta&vista=consulta">Consultar</a>'
+                .'</td></tr>';
+        }
+
+        return response()->json(['data' => $html !== '' ? $html : '<tr><td colspan="4" class="text-muted">Sin resultados</td></tr>']);
+    }
+
+    public function resolverTalle(Request $request)
+    {
+        $valor = trim((string) $request->input('codigo', $request->input('valor', '')));
+        $ids = $request->input('ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+
+        if ($valor === '') {
+            return response()->json(['ok' => false]);
+        }
+
+        $q = Talle::query();
+        if ($ids !== []) {
+            $q->whereIn('id', $ids);
+        }
+        $talle = (clone $q)->where('codigo', $valor)->first()
+            ?? (clone $q)->where('id', (int) $valor)->first()
+            ?? (clone $q)->where('nombre', $valor)->first();
+
+        if (! $talle) {
+            return response()->json(['ok' => false, 'error' => 'Talle no encontrado']);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'id' => (int) $talle->id,
+            'codigo' => (string) $talle->codigo,
+            'nombre' => (string) $talle->nombre,
+        ]);
+    }
 }

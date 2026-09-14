@@ -17,7 +17,9 @@ use App\Services\Ventas\FacturacionLocal\FacturacionLocalValeService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalUsoCuentacajaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
+use App\Support\Ventas\GastronomiaCuentacajaIconoSupport;
 use Illuminate\Http\Request;
 
 class FacturacionLocalProcesoController extends Controller
@@ -36,40 +38,72 @@ class FacturacionLocalProcesoController extends Controller
         can('usar-facturacion-local');
 
         $locales = LocalVenta::query()->where('activo', true)->orderBy('codigo')->get();
-        $localId = (int) $request->input('local_id', $locales->first()?->id ?? 0);
+        $localId = (int) $request->input('local_id', 0);
+        if ($localId > 0) {
+            session(['facturacion_local.local_id' => $localId]);
+        } else {
+            $localId = (int) session('facturacion_local.local_id', $locales->first()?->id ?? 0);
+        }
+        if ($localId > 0 && ! $locales->contains('id', $localId)) {
+            $localId = (int) ($locales->first()?->id ?? 0);
+        }
+
         $local = $localId > 0 ? LocalVenta::query()->with('cuentacajas')->find($localId) : null;
         $turno = $local ? $this->turnoService->turnoAbierto((int) $local->id) : null;
         if ($turno) {
-            $turno->loadMissing('turnoLocal:id,codigo,nombre');
+            $turno->loadMissing(['turnoLocal:id,codigo,nombre', 'usuarioApertura:id,nombre']);
         }
 
         $cuentasPos = ($local?->cuentacajas ?? collect())->map(static function ($c) {
+            $presentacion = GastronomiaCuentacajaIconoSupport::presentacion(
+                (string) $c->nombre,
+                (string) $c->codigo
+            );
+
             return [
                 'id' => (int) $c->id,
                 'codigo' => (string) $c->codigo,
                 'nombre' => (string) $c->nombre,
+                'icono' => $presentacion['icono'],
+                'icono_color' => $presentacion['color'],
+                'etiqueta_boton' => $presentacion['etiqueta_boton'],
             ];
         })->values()->all();
 
-        $turnosMaestro = $this->turnoLocalRepository
-            ->listarParaSelect($local?->empresa_id ? (int) $local->empresa_id : null)
-            ->map(static function ($t) {
-                return [
-                    'id' => (int) $t->id,
-                    'codigo' => (string) ($t->codigo ?? ''),
-                    'nombre' => (string) $t->nombre,
-                    'etiqueta' => trim(($t->codigo ? $t->codigo.' — ' : '').$t->nombre.' ('.$t->etiquetaHorario().')'),
-                ];
-            })
-            ->values()
-            ->all();
+        $usocuentacajaLocalId = FacturacionLocalUsoCuentacajaSupport::resolverId() ?? 0;
+        $empresaIdPos = (int) ($local?->empresa_id ?? 0);
+
+        $turnosQuery = $this->turnoLocalRepository
+            ->listarParaSelect($local?->empresa_id ? (int) $local->empresa_id : null);
+        $turnoSugeridoId = 0;
+        foreach ($turnosQuery as $t) {
+            if ($t->cubreHora()) {
+                $turnoSugeridoId = (int) $t->id;
+                break;
+            }
+        }
+        if ($turnoSugeridoId === 0 && $turnosQuery->isNotEmpty()) {
+            $turnoSugeridoId = (int) $turnosQuery->first()->id;
+        }
+
+        $turnosMaestro = $turnosQuery->map(static function ($t) {
+            return [
+                'id' => (int) $t->id,
+                'codigo' => (string) ($t->codigo ?? ''),
+                'nombre' => (string) $t->nombre,
+                'etiqueta' => trim($t->nombre.' · '.$t->etiquetaHorario()),
+            ];
+        })->values()->all();
 
         return view('ventas.facturacion_local.proceso.index', compact(
             'locales',
             'local',
             'turno',
             'cuentasPos',
-            'turnosMaestro'
+            'turnosMaestro',
+            'turnoSugeridoId',
+            'usocuentacajaLocalId',
+            'empresaIdPos'
         ));
     }
 
@@ -219,17 +253,45 @@ class FacturacionLocalProcesoController extends Controller
     {
         $this->assertFerli();
         can('usar-facturacion-local', false);
+
+        $id = (int) $request->input('id', 0);
         $codigo = trim((string) $request->input('codigo', ''));
-        if ($codigo === '') {
+        if ($id <= 0 && $codigo === '') {
             return response()->json(['cliente' => null]);
         }
-        $cliente = Cliente::query()
-            ->where('codigo', $codigo)
-            ->orWhere('numerodocumento', $codigo)
-            ->orWhere('nroiibb', $codigo)
-            ->first();
 
-        return response()->json(['cliente' => $cliente]);
+        $q = Cliente::query()->with(['condicionivas:id,nombre,letra', 'tipodocumentos:id,nombre,abreviatura']);
+        if ($id > 0) {
+            $cliente = $q->find($id);
+        } else {
+            $cliente = $q->where(function ($w) use ($codigo) {
+                $w->where('codigo', $codigo)
+                    ->orWhere('numerodocumento', $codigo)
+                    ->orWhere('nroiibb', $codigo);
+            })->first();
+        }
+
+        if (! $cliente) {
+            return response()->json(['cliente' => null]);
+        }
+
+        $letra = (string) ($cliente->condicionivas?->letra ?? 'B');
+        $tipoDoc = $cliente->tipodocumentos;
+
+        return response()->json([
+            'cliente' => [
+                'id' => (int) $cliente->id,
+                'codigo' => (string) $cliente->codigo,
+                'nombre' => (string) $cliente->nombre,
+                'numerodocumento' => (string) ($cliente->numerodocumento ?? ''),
+                'tipodocumento_id' => (int) ($cliente->tipodocumento_id ?? 0),
+                'tipodocumento' => (string) ($tipoDoc?->abreviatura ?? $tipoDoc?->nombre ?? ''),
+                'condicioniva_id' => (int) ($cliente->condicioniva_id ?? 0),
+                'condicioniva' => (string) ($cliente->condicionivas?->nombre ?? ''),
+                'letra' => $letra !== '' ? $letra : 'B',
+                'domicilio' => (string) ($cliente->domicilio ?? ''),
+            ],
+        ]);
     }
 
     private function assertFerli(): void
