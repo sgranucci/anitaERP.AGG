@@ -10,6 +10,7 @@ use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -96,7 +97,12 @@ class ComprobanteProveedorRecepcionesSupport
      */
     public function enriquecerConImporteProvision(Collection $recepciones): Collection
     {
-        $recepciones->loadMissing(['monedas']);
+        if ($recepciones->isEmpty()) {
+            return $recepciones;
+        }
+
+        // Alta sin OC / merge+unique+values devuelven Support\Collection; loadMissing solo existe en Eloquent.
+        $this->comoEloquentCollection($recepciones)->loadMissing(['monedas']);
 
         $totalesPorAsiento = $this->totalesDebePorAsientoId($recepciones);
 
@@ -161,12 +167,29 @@ class ComprobanteProveedorRecepcionesSupport
      */
     public function enriquecerConArticulos(Collection $recepciones): Collection
     {
-        $recepciones->loadMissing([
+        if ($recepciones->isEmpty()) {
+            return $recepciones;
+        }
+
+        $this->comoEloquentCollection($recepciones)->loadMissing([
             'recepcion_proveedor_articulos.articulos',
             'recepcion_proveedor_articulos.unidadesmedida',
         ]);
 
         return $recepciones;
+    }
+
+    /**
+     * @param  Collection<int, Recepcion_Proveedor>  $recepciones
+     * @return EloquentCollection<int, Recepcion_Proveedor>
+     */
+    private function comoEloquentCollection(Collection $recepciones): EloquentCollection
+    {
+        if ($recepciones instanceof EloquentCollection) {
+            return $recepciones;
+        }
+
+        return new EloquentCollection($recepciones->all());
     }
 
     /**
