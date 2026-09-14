@@ -300,6 +300,10 @@ class CuentacajaController extends Controller
         if ($empresaId > 0) {
             $query->paraEmpresa($empresaId);
         }
+        $usoCuentacajaId = (int) $request->query('usocuentacaja_id');
+        if ($usoCuentacajaId > 0) {
+            $query->whereHas('usocuentacajas', fn ($r) => $r->whereKey($usoCuentacajaId));
+        }
 
         $cuenta = $query->first();
         if ($cuenta === null) {

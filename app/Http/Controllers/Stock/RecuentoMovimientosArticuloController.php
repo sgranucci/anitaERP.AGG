@@ -20,6 +20,7 @@ class RecuentoMovimientosArticuloController extends Controller
             $request->query('deposito_id')
         );
         $empresaId = $this->resolverEmpresaIdFiltrada($request);
+        $combinacionId = max(0, (int) $request->query('combinacion_id', 0));
 
         try {
             $contexto = RecuentoMovimientosArticuloSupport::validarContexto($articuloId, $depositoId, $empresaId);
@@ -27,10 +28,21 @@ class RecuentoMovimientosArticuloController extends Controller
             return redirect($this->resolverUrlVolver($request))->with('mensaje', $e->getMessage());
         }
 
-        $queryParams = $this->queryParamsDesdeRequest($request, $articuloId, $depositoId, $empresaId);
+        if ($combinacionId > 0) {
+            $contexto['combinacion_id'] = $combinacionId;
+            $comb = \App\Models\Stock\Combinacion::query()
+                ->whereKey($combinacionId)
+                ->where('articulo_id', $articuloId)
+                ->first(['codigo', 'nombre']);
+            $contexto['combinacion_etiqueta'] = $comb
+                ? trim(($comb->codigo ?? '').' '.($comb->nombre ?? ''))
+                : ('#'.$combinacionId);
+        }
+
+        $queryParams = $this->queryParamsDesdeRequest($request, $articuloId, $depositoId, $empresaId, $combinacionId);
         $modoTodosDepositos = (bool) ($contexto['modo_todos_depositos'] ?? false);
 
-        $movimientos = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId)
+        $movimientos = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId, $combinacionId)
             ->paginate(50)
             ->appends($queryParams);
 
@@ -61,6 +73,7 @@ class RecuentoMovimientosArticuloController extends Controller
             $request->query('deposito_id')
         );
         $empresaId = $this->resolverEmpresaIdFiltrada($request);
+        $combinacionId = max(0, (int) $request->query('combinacion_id', 0));
 
         try {
             $contexto = RecuentoMovimientosArticuloSupport::validarContexto($articuloId, $depositoId, $empresaId);
@@ -70,7 +83,7 @@ class RecuentoMovimientosArticuloController extends Controller
 
         $modoTodosDepositos = (bool) ($contexto['modo_todos_depositos'] ?? false);
 
-        $rows = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId)
+        $rows = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId, $combinacionId)
             ->get()
             ->map(fn ($row) => RecuentoMovimientosArticuloSupport::enriquecerFila($row, $modoTodosDepositos));
 
@@ -105,7 +118,7 @@ class RecuentoMovimientosArticuloController extends Controller
                     ->download($baseNombre.'.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        return redirect()->route('recuento_movimientos_articulo', $this->queryParamsDesdeRequest($request, $articuloId, $depositoId, $empresaId));
+        return redirect()->route('recuento_movimientos_articulo', $this->queryParamsDesdeRequest($request, $articuloId, $depositoId, $empresaId, $combinacionId));
     }
 
     private function resolverEmpresaIdFiltrada(Request $request): ?int
@@ -147,8 +160,13 @@ class RecuentoMovimientosArticuloController extends Controller
     /**
      * @return array<string, int|string>
      */
-    private function queryParamsDesdeRequest(Request $request, int $articuloId, int $depositoId, ?int $empresaId = null): array
-    {
+    private function queryParamsDesdeRequest(
+        Request $request,
+        int $articuloId,
+        int $depositoId,
+        ?int $empresaId = null,
+        int $combinacionId = 0
+    ): array {
         $params = [
             'articulo_id' => $articuloId,
             'deposito_id' => $depositoId,
@@ -156,6 +174,10 @@ class RecuentoMovimientosArticuloController extends Controller
 
         if ($empresaId !== null && $empresaId > 0) {
             $params['empresa_id'] = $empresaId;
+        }
+
+        if ($combinacionId > 0) {
+            $params['combinacion_id'] = $combinacionId;
         }
 
         if ($request->filled('volver')) {

@@ -362,11 +362,12 @@ class MayorPlanoCuentaAnitaBridgeReader
     }
 
     /**
-     * En El Bierzo el UNLOAD de subd_empresa (y el WHERE equivalente) no devuelve filas.
+     * En El Bierzo y Calzados Ferli el UNLOAD de subd_empresa (y el WHERE equivalente) no es usable.
      */
     private function subdiarioUsaColumnaEmpresa(): bool
     {
-        return ! EntornoEmpresaSupport::esElBierzo();
+        return ! EntornoEmpresaSupport::esElBierzo()
+            && ! EntornoEmpresaSupport::esFerli();
     }
 
     /**

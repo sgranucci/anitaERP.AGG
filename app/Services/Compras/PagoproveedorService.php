@@ -36,6 +36,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
+use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 
@@ -727,6 +728,36 @@ class PagoproveedorService
         IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($movimiento->fresh());
         $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $pago->id);
         PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
+        $this->endosarChequesTercerosAnita($pago->fresh());
+    }
+
+    /**
+     * Marca en Anita (ctermae) los CHT entregados con esta OP.
+     */
+    private function endosarChequesTercerosAnita(Pagoproveedor $pago): void
+    {
+        $cheques = Cheque::query()
+            ->where('pagoproveedor_id', $pago->id)
+            ->where('origen', 'R')
+            ->whereNotNull('nro_interno_anita')
+            ->get();
+        if ($cheques->isEmpty()) {
+            return;
+        }
+
+        $proveedor = $pago->proveedor_id
+            ? Proveedor::query()->find($pago->proveedor_id)
+            : null;
+        $codigoProv = $proveedor ? (string) ($proveedor->codigo ?? '0') : '0';
+        $nombreProv = $proveedor ? (string) ($proveedor->nombre ?? '') : '';
+
+        ChequeTerceroEndosoAnitaSupport::marcarEndosoColeccion($cheques, [
+            'fecha_acreed' => $pago->fecha ? (string) $pago->fecha : date('Y-m-d'),
+            'nro_op' => (string) ($pago->numerotransaccion ?? ''),
+            'proveedor_codigo' => $codigoProv,
+            'cedio_a' => $codigoProv,
+            'entregado_a' => $nombreProv,
+        ]);
     }
 
     /**

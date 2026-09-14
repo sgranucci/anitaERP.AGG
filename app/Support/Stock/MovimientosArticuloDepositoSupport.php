@@ -67,6 +67,23 @@ final class MovimientosArticuloDepositoSupport
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public static function parametrosUrlKardexConCombinacion(
+        int $articuloId,
+        int $depositoId = 0,
+        ?int $combinacionId = null,
+        ?string $volver = null
+    ): array {
+        $params = self::parametrosUrlKardex($articuloId, $depositoId, $volver);
+        if ($combinacionId !== null && $combinacionId > 0) {
+            $params['combinacion_id'] = $combinacionId;
+        }
+
+        return $params;
+    }
+
+    /**
      * @return array{
      *     id: int,
      *     sku: string,

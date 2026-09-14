@@ -159,7 +159,7 @@ class ComprobanteImpresionSesionService
      */
     public function armarDesdeVenta(Venta $venta, string $modo = 'OPERATIVO', ?string $soloFormulario = null): array
     {
-        $venta->loadMissing(['puntoventas', 'pedidos', 'remitos']);
+        $venta->loadMissing(['puntoventas', 'puntoventaremito', 'pedidos', 'remitos']);
         $contexto = ComprobanteImpresionResolverSupport::contextoDesdeVenta($venta);
         $docs = $this->documentosDesdeVenta($venta);
         $pack = $this->packDesdeContexto($contexto, $docs, $modo, $soloFormulario);
@@ -534,6 +534,7 @@ class ComprobanteImpresionSesionService
 
         $pdfsLote = $this->generarPdfsLoteFactura($sesion, $idxsPapel);
         $rutas = [];
+        $errores = [];
         foreach ($idxsPapel as $idx) {
             $linea = $pack[$idx] ?? [];
             $path = $pdfsLote[$idx] ?? null;
@@ -546,13 +547,23 @@ class ComprobanteImpresionSesionService
                         $linea
                     );
                 } catch (\Throwable $e) {
-                    report($e);
+                    try {
+                        report($e);
+                    } catch (\Throwable) {
+                        // Evitar que un fallo de logging tape el error real del PDF.
+                    }
+                    $etiqueta = trim((string) ($linea['leyenda'] ?? '').' '.($linea['copia_codigo'] ?? ''));
+                    $errores[] = ($etiqueta !== '' ? $etiqueta : 'copia '.$idx).': '.$e->getMessage();
                     continue;
                 }
             }
             if (is_string($path) && is_file($path) && ComprobanteImpresionPackSupport::vaAlPdfSesion($linea + ['incluir_en_pdf_sesion' => $linea['incluir_en_pdf_sesion'] ?? true])) {
                 $rutas[] = $path;
             }
+        }
+
+        if ($rutas === [] && $errores !== []) {
+            throw new \RuntimeException(implode(' | ', $errores));
         }
 
         return $this->fusionar($rutas, $sesion, $idxsPapel);
@@ -723,6 +734,17 @@ class ComprobanteImpresionSesionService
                     'fecha' => $this->fechaYmd($remito->fecha),
                 ];
             }
+        } elseif ((int) ($venta->numeroremito ?? 0) > 0) {
+            // Ferli / Anita: remito numerado en la venta sin fila en remito.
+            $docs[ComprobanteImpresionFormulario::REMITO] = [
+                'id' => (int) $venta->id,
+                'codigo' => trim((string) (
+                    $venta->puntoventaremito?->codigo
+                    ?? ''
+                )).'-'.str_pad((string) (int) $venta->numeroremito, 8, '0', STR_PAD_LEFT),
+                'fecha' => $this->fechaYmd($venta->fecha),
+                'venta_id_directa' => (int) $venta->id,
+            ];
         }
         if ($venta->pedido_id) {
             $pedido = $venta->relationLoaded('pedidos') ? $venta->pedidos : Pedido::query()->find($venta->pedido_id);
@@ -733,6 +755,16 @@ class ComprobanteImpresionSesionService
                     'fecha' => $this->fechaYmd($pedido->fecha),
                 ];
             }
+        }
+
+        // ENVÍO: solo si el programa lo pide y hay remito (Ferli); Bierzo sin línea ENVIO no lo usa.
+        if (isset($docs[ComprobanteImpresionFormulario::REMITO])) {
+            $docs[ComprobanteImpresionFormulario::ENVIO] = [
+                'id' => (int) $venta->id,
+                'codigo' => 'ENV-'.(string) $venta->codigo,
+                'fecha' => $this->fechaYmd($venta->fecha),
+                'venta_id_directa' => (int) $venta->id,
+            ];
         }
 
         return $docs;
@@ -914,7 +946,10 @@ class ComprobanteImpresionSesionService
                     'solo_remito' => false,
                 ];
             } elseif ($formulario === ComprobanteImpresionFormulario::REMITO) {
-                $ventaId = $this->ventaIdDeRemito((int) ($linea['documento_id'] ?? 0));
+                $ventaId = (int) ($linea['venta_id_directa'] ?? 0);
+                if ($ventaId <= 0) {
+                    $ventaId = $this->ventaIdDeRemito((int) ($linea['documento_id'] ?? 0));
+                }
                 if ($ventaId > 0) {
                     $trabajos[$idx] = [
                         'leyenda' => (string) ($linea['leyenda'] ?? 'ORIGINAL'),
@@ -954,7 +989,10 @@ class ComprobanteImpresionSesionService
         if ($ventaId <= 0) {
             foreach ($sesion['pack'] ?? [] as $linea) {
                 if (($linea['formulario'] ?? '') === ComprobanteImpresionFormulario::REMITO) {
-                    $ventaId = $this->ventaIdDeRemito((int) ($linea['documento_id'] ?? 0));
+                    $ventaId = (int) ($linea['venta_id_directa'] ?? 0);
+                    if ($ventaId <= 0) {
+                        $ventaId = $this->ventaIdDeRemito((int) ($linea['documento_id'] ?? 0));
+                    }
                     if ($ventaId > 0) {
                         break;
                     }
@@ -1011,7 +1049,10 @@ class ComprobanteImpresionSesionService
                     }
                 }
             ),
-            ComprobanteImpresionFormulario::REMITO => $this->generarPdfRemito($documentoId, $leyenda),
+            ComprobanteImpresionFormulario::REMITO => $this->generarPdfRemito($documentoId, $leyenda, $linea),
+            ComprobanteImpresionFormulario::ENVIO => app(EnvioComprobantePdfService::class)->generarPdfDesdeVenta(
+                (int) ($linea['venta_id_directa'] ?? $documentoId)
+            ),
             ComprobanteImpresionFormulario::COT => $this->cotConstanciaPdfService->generarPdf(
                 $documentoId,
                 isset($linea['remito_envio_id']) ? ((int) $linea['remito_envio_id'] ?: null) : null
@@ -1211,9 +1252,12 @@ class ComprobanteImpresionSesionService
         return is_file($destino) ? $destino : $rutas[0];
     }
 
-    private function generarPdfRemito(int $documentoId, string $leyenda): string
+    private function generarPdfRemito(int $documentoId, string $leyenda, array $linea = []): string
     {
-        $ventaId = $this->ventaIdDeRemito($documentoId);
+        $ventaId = (int) ($linea['venta_id_directa'] ?? 0);
+        if ($ventaId <= 0) {
+            $ventaId = $this->ventaIdDeRemito($documentoId);
+        }
         if ($ventaId > 0) {
             return $this->facturacionService->generarPdfFacturaArchivo($ventaId, $leyenda, false, true);
         }

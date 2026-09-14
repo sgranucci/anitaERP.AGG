@@ -74,7 +74,9 @@ class ArticuloConsultaDesdeModal
             || can('actualizar-comprobante-proveedor', false)
             || can('listar-comprobante-proveedor', false)
             || can('crear-certificado-sanitario', false)
-            || can('listar-certificado-sanitario', false);
+            || can('listar-certificado-sanitario', false)
+            || can('consultar-stock-local', false)
+            || can('consultar-precios-local', false);
     }
 
     public static function urlEditar(int $id): string

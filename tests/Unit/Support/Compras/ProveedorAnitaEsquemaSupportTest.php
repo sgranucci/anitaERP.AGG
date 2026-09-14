@@ -44,4 +44,24 @@ class ProveedorAnitaEsquemaSupportTest extends TestCase
         $this->assertStringContainsString('prom_cta_cont_me', $campos);
         $this->assertStringContainsString('prom_ag_perc_iva', $campos);
     }
+
+    public function test_ferli_usa_promae_hasta_concepto_sin_hijas_agg(): void
+    {
+        config(['app.empresa' => EntornoEmpresaSupport::FERLI]);
+        config(['proveedor.filtro_empresa' => false]);
+
+        $this->assertSame(ProveedorAnitaEsquemaSupport::VARIANTE_FERLI, ProveedorAnitaEsquemaSupport::variante());
+        $this->assertTrue(ProveedorAnitaEsquemaSupport::esFerli());
+        $this->assertFalse(ProveedorAnitaEsquemaSupport::esEsquemaAgg());
+        $this->assertFalse(ProveedorAnitaEsquemaSupport::leeTablasHijasAgg());
+
+        $campos = ProveedorAnitaEsquemaSupport::camposPromaeLectura();
+        $this->assertStringContainsString('prom_cta_cont_me', $campos);
+        $this->assertStringContainsString('prom_concepto', $campos);
+        $this->assertStringContainsString('prom_cod_ret_suss', $campos);
+        $this->assertStringNotContainsString('prom_ag_perc_iva', $campos);
+        $this->assertStringNotContainsString('prom_descuento', $campos);
+        $this->assertStringNotContainsString('prom_ret_ibr_bsas', $campos);
+        $this->assertStringNotContainsString('prom_fe_ini_excl', $campos);
+    }
 }

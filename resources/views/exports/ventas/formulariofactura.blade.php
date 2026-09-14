@@ -11,10 +11,12 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
     use App\Support\Ventas\FacturaPdfPaginacionSupport;
+    use App\Support\Ventas\RemitoPdfAgrupacionFerliSupport;
 
     $facturaPdfEsElBierzo = config('app.empresa') === 'EL BIERZO';
+    $facturaPdfEsFerli = \App\Support\Configuracion\EntornoEmpresaSupport::esFerli();
     $facturaPdfCeldaTotales = 'background-color: #e9ecef; border: 1px solid #dee2e6;';
-    $facturaPdfPieCentroTieneTexto = ($letra === 'B') || $facturaPdfEsElBierzo;
+    $facturaPdfPieCentroTieneTexto = ($letra === 'B') || $facturaPdfEsElBierzo || $facturaPdfEsFerli;
     if (empty($logoEmpresaDataUri)) {
         $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($venta->puntoventas->empresas->nombre ?? null);
         $logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;
@@ -32,8 +34,8 @@
     if ($facturaEsGastronomia) {
         $lineaClienteFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreClientePie($venta);
     } else {
-        $codigoClienteFactura = trim((string) ($venta->clientes->codigo ?? ''));
-        $nombreClienteFactura = trim((string) ($venta->clientes->nombre ?? ''));
+        $codigoClienteFactura = trim((string) ($venta->clientes?->codigo ?? ''));
+        $nombreClienteFactura = trim((string) ($venta->clientes?->nombre ?? $venta->nombre ?? ''));
         $lineaClienteFactura = $codigoClienteFactura !== '' && $nombreClienteFactura !== ''
             ? $codigoClienteFactura.' - '.$nombreClienteFactura
             : ($nombreClienteFactura !== '' ? $nombreClienteFactura : $codigoClienteFactura);
@@ -60,9 +62,22 @@
     }
     $tipoPaginacion = $facturaPdfRemitoDebajoCliente ? 'admin' : 'pos';
     $paginasFactura = FacturaPdfPaginacionSupport::paginas($itemsFactura, $tipoPaginacion);
-    $paginasRemito = FacturaPdfPaginacionSupport::paginas($itemsFactura, 'remito');
+    $itemsRemito = $facturaPdfEsFerli
+        ? RemitoPdfAgrupacionFerliSupport::agruparItems($itemsFactura)
+        : $itemsFactura;
+    $totalesRemito = [
+        'cantidad' => 0.0,
+        'kilodescuento' => 0.0,
+    ];
+    foreach ($itemsRemito as $itRem) {
+        $totalesRemito['cantidad'] += (float) ($itRem['cantidad'] ?? 0);
+    }
+    $paginasRemito = FacturaPdfPaginacionSupport::paginas(
+        $itemsRemito,
+        $facturaPdfEsFerli ? 'remito_ferli' : 'remito'
+    );
     $mostrarHojaFactura = ! ($facturaPdfSoloHojaRemito ?? false);
-    $mostrarHojaRemito = ($facturaPdfEsElBierzo && ! ($facturaPdfOmitirHojaRemito ?? false))
+    $mostrarHojaRemito = (($facturaPdfEsElBierzo || $facturaPdfEsFerli) && ! ($facturaPdfOmitirHojaRemito ?? false))
         || ($facturaPdfSoloHojaRemito ?? false);
     $valorAsegurado = \App\Support\Ventas\RemitoValorAseguradoSupport::desdeRemitoOItemsFactura(
         $venta->remitos?->remito_articulos,
@@ -77,6 +92,10 @@
         if ((float) ($venta->cantidadbulto ?? 0) <= 0.00001) {
             $totalBultosRemito += (float) ($itRemitoTot['caja'] ?? 0);
         }
+    }
+    if ($facturaPdfEsFerli) {
+        $totalPiezasRemito = (float) ($totalesRemito['cantidad'] ?? 0);
+        $totalKilosRemito = $totalPiezasRemito;
     }
 @endphp
 <div id="area-pdf">
@@ -118,9 +137,10 @@
                     'mostrarPrecios' => false,
                     'mostrarBonificacion' => false,
                     'mostrarTotalesFila' => $esUltima,
-                    'totalesDocumento' => $totalesDocumento,
+                    'totalesDocumento' => $facturaPdfEsFerli ? $totalesRemito : $totalesDocumento,
                     'esRemitoHoja' => true,
                     'totalPiezasRemito' => $totalPiezasRemito,
+                    'remitoAgrupadoFerli' => $facturaPdfEsFerli,
                 ])
                 @if ($esUltima)
                     @include('exports.ventas.partials.formulariofactura_pie_remito')

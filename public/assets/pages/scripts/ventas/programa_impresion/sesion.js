@@ -18,6 +18,11 @@
             return;
         }
 
+        // Al abrir la sesión, todas las copias de papel vienen marcadas.
+        checks().forEach(function (c) {
+            c.checked = true;
+        });
+
         function sincronizarEnviarImpresora() {
             var tilde = document.getElementById('sesion_enviar_impresora');
             var oculto = document.getElementById('input-enviar-impresora');

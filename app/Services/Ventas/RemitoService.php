@@ -18,6 +18,7 @@ use App\Repositories\Ventas\Remito_ArticuloRepositoryInterface;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Stock\MovimientoStockService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
@@ -134,6 +135,18 @@ class RemitoService
         if (! $remito) {
             throw new \RuntimeException('Remito no encontrado');
         }
+
+        // Ferli: mismo layout FAC/REM Anita (formulariofactura hoja remito).
+        $ventaId = (int) ($remito->venta_id ?? 0);
+        if (EntornoEmpresaSupport::esFerli() && $ventaId > 0) {
+            return app(FacturacionService::class)->generarPdfFacturaArchivo(
+                $ventaId,
+                'ORIGINAL',
+                false,
+                true
+            );
+        }
+
         $nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($remito->clientes)->nombre);
         $nombre_pdf = 'remito-'.$id.'-'.$nombreCliente;
 
@@ -417,19 +430,33 @@ class RemitoService
 
             $remito = $this->remitoRepository->create($header);
             $nItem = 0;
-            foreach ($items as $item) {
+            foreach ($this->expandirItemsRemitoDesdeFactura($items) as $item) {
                 $kilo = (float) ($item['cantidad'] ?? $item['kilo'] ?? 0);
-                if ($kilo == 0.0) {
+                $pieza = (float) ($item['pieza'] ?? 0);
+                $caja = (float) ($item['caja'] ?? 0);
+                if ($kilo == 0.0 && $pieza == 0.0 && $caja == 0.0) {
+                    continue;
+                }
+                // Ferli: pares/talles viven en pieza; si solo vino cantidad, espejar a kilo/pieza.
+                // Bierzo: manda kilo; no forzar pieza.
+                if (EntornoEmpresaSupport::esFerli()) {
+                    if ($kilo == 0.0 && $pieza > 0) {
+                        $kilo = $pieza;
+                    }
+                    if ($pieza == 0.0 && $kilo > 0) {
+                        $pieza = $kilo;
+                    }
+                } elseif ($kilo == 0.0) {
                     continue;
                 }
                 $nItem++;
-                $this->remito_articuloRepository->create([
+                $attrs = [
                     'remito_id' => $remito->id,
                     'articulo_id' => $item['articulo_id'],
                     'unidadmedida_id' => $item['unidadmedida_id'] ?? null,
                     'numeroitem' => $item['numeroitem'] ?? $nItem,
-                    'caja' => $item['caja'] ?? 0,
-                    'pieza' => $item['pieza'] ?? 0,
+                    'caja' => $caja,
+                    'pieza' => $pieza,
                     'kilo' => $kilo,
                     'precio' => $item['preciosindescuento'] ?? $item['precio'] ?? 0,
                     'listaprecio_id' => $item['listaprecio_id'] ?? 1,
@@ -442,11 +469,16 @@ class RemitoService
                     'observacion' => $item['observacion'] ?? null,
                     'estado' => $header['estado'] === 'F' ? 'F' : 'P',
                     'pedido_articulo_id' => $item['pedido_articulo_id'] ?? null,
-                ]);
+                ];
+                if (\Illuminate\Support\Facades\Schema::hasColumn('remito_articulo', 'combinacion_id')) {
+                    $attrs['combinacion_id'] = $item['combinacion_id'] ?? null;
+                    $attrs['talle_id'] = $item['talle_id'] ?? null;
+                }
+                $this->remito_articuloRepository->create($attrs);
             }
 
             if ($nItem === 0) {
-                throw new \RuntimeException('Remito sin kilos en ítems');
+                throw new \RuntimeException('Remito sin cantidades en ítems');
             }
 
             if (! empty($venta->id)) {
@@ -465,6 +497,46 @@ class RemitoService
 
             return ['error' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Ferli: una fila por talle (medidas[]); Bierzo/otros: el ítem tal cual.
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    private function expandirItemsRemitoDesdeFactura(array $items): array
+    {
+        $out = [];
+        foreach ($items as $item) {
+            $medidas = $item['medidas'] ?? null;
+            if (is_array($medidas) && $medidas !== []) {
+                foreach ($medidas as $medida) {
+                    $cant = (float) ($medida['cantidad'] ?? 0);
+                    if ($cant == 0.0) {
+                        continue;
+                    }
+                    $talleNombre = trim((string) ($medida['medida'] ?? ''));
+                    $obs = trim((string) ($item['observacion'] ?? ''));
+                    if ($talleNombre !== '') {
+                        $obs = trim($obs.' Talle '.$talleNombre);
+                    }
+                    $out[] = array_merge($item, [
+                        'cantidad' => $cant,
+                        'pieza' => $cant,
+                        'kilo' => $cant,
+                        'talle_id' => $medida['talle'] ?? $medida['talle_id'] ?? null,
+                        'combinacion_id' => $item['combinacion_id'] ?? null,
+                        'observacion' => $obs !== '' ? $obs : null,
+                        'precio' => $medida['precio'] ?? $item['precio'] ?? 0,
+                    ]);
+                }
+                continue;
+            }
+            $out[] = $item;
+        }
+
+        return $out;
     }
 
     /**

@@ -5,11 +5,17 @@ declare(strict_types=1);
 namespace App\Support\Contable\Anita;
 
 use App\ApiAnita;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Lectura masiva ctamov + subdiario + subhist para importación de asientos Anita → ERP.
  * Una consulta por tabla/empresa/bloque (no por asiento).
+ *
+ * Calzados Ferli (verificado 14/sep/2026 contra bridge /usr2/ferli):
+ * - ctamov sin ctav_o_compra ni ctav_usuario_umod
+ * - subdiario/subhist sin columna empresa usable (igual El Bierzo) ni *_usuario
+ * AGG conserva las listas completas.
  */
 final class AnitaAsientoImportBridgeReader
 {
@@ -24,16 +30,34 @@ final class AnitaAsientoImportBridgeReader
         .'ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_balancea,ctav_o_compra,ctav_asi_mon_ref,'
         .'ctav_usuario_umod,ctav_desc_mov';
 
+    /** Ferli: sin ctav_o_compra / ctav_usuario_umod (no existen en Informix). */
+    private const CTAMOV_CAMPOS_FERLI = 'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,'
+        .'ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_cotizacion,ctav_cod_mon,'
+        .'ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_balancea,ctav_asi_mon_ref,ctav_desc_mov';
+
     private const SUBDIARIO_CAMPOS = 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,'
         .'subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,'
         .'subd_ref_sucursal,subd_ref_nro,subd_ref_sistema,subd_importe,subd_cod_mon,subd_cotizacion,'
         .'subd_nro_asiento,subd_procesado,subd_ccosto_cta,subd_ccosto_con,subd_nro_interno,subd_usuario,'
         .'subd_desc_mov';
 
+    /**
+     * Ferli / El Bierzo: sin subd_empresa ni subd_usuario (UNLOAD falla si se piden o se filtran).
+     */
+    private const SUBDIARIO_CAMPOS_SIN_EMPRESA = 'subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,'
+        .'subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,'
+        .'subd_ref_sucursal,subd_ref_nro,subd_ref_sistema,subd_importe,subd_cod_mon,subd_cotizacion,'
+        .'subd_nro_asiento,subd_procesado,subd_ccosto_cta,subd_ccosto_con,subd_nro_interno,subd_desc_mov';
+
     private const SUBHIST_CAMPOS = 'subh_empresa,subh_sistema,subh_fecha,subh_tipo,subh_letra,subh_sucursal,subh_nro,'
         .'subh_emisor,subh_tipo_mov,subh_cuenta,subh_contrapartida,subh_nro_operacion,subh_importe,subh_cod_mon,'
         .'subh_cotizacion,subh_nro_asiento,subh_ccosto_cta,subh_ccosto_con,subh_nro_interno,'
         .'subh_usuario,subh_desc_mov';
+
+    /** Ferli: sin subh_empresa ni subh_usuario. */
+    private const SUBHIST_CAMPOS_SIN_EMPRESA = 'subh_sistema,subh_fecha,subh_tipo,subh_letra,subh_sucursal,subh_nro,'
+        .'subh_emisor,subh_tipo_mov,subh_cuenta,subh_contrapartida,subh_nro_operacion,subh_importe,subh_cod_mon,'
+        .'subh_cotizacion,subh_nro_asiento,subh_ccosto_cta,subh_ccosto_con,subh_nro_interno,subh_desc_mov';
 
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita(),
@@ -54,11 +78,12 @@ final class AnitaAsientoImportBridgeReader
         $errores = [];
         $timings = [];
         $t0 = microtime(true);
+        $usaEmpresaSub = $this->subdiarioUsaColumnaEmpresa();
 
         $t = microtime(true);
         $ctamov = $this->listar(
             'ctamov',
-            self::CTAMOV_CAMPOS,
+            $this->ctamovCampos(),
             ' WHERE ctav_empresa='.$empresaAnita
             .' AND ctav_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd,
             'ctav_fecha, ctav_nro_asiento, ctav_nro_linea',
@@ -69,29 +94,40 @@ final class AnitaAsientoImportBridgeReader
         $timings['ctamov_filas'] = count($ctamov);
 
         $t = microtime(true);
+        $whereSub = $usaEmpresaSub
+            ? ' WHERE subd_empresa='.$empresaAnita
+                .' AND subd_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
+            : ' WHERE subd_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd;
         $subdiario = $this->listar(
             'subdiario',
-            self::SUBDIARIO_CAMPOS,
-            ' WHERE subd_empresa='.$empresaAnita
-            .' AND subd_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd,
+            $usaEmpresaSub ? self::SUBDIARIO_CAMPOS : self::SUBDIARIO_CAMPOS_SIN_EMPRESA,
+            $whereSub,
             'subd_fecha, subd_nro_operacion',
             $errores,
             'subdiario-emp'.$empresaAnita.'-'.$fechaDesdeYmd.'-'.$fechaHastaYmd,
         );
+        if (! $usaEmpresaSub) {
+            foreach ($subdiario as $fila) {
+                $fila->subd_empresa = $empresaAnita;
+            }
+        }
         $timings['subdiario_ms'] = round((microtime(true) - $t) * 1000, 1);
         $timings['subdiario_filas'] = count($subdiario);
 
         $t = microtime(true);
+        $whereSubh = $usaEmpresaSub
+            ? ' WHERE subh_empresa='.$empresaAnita
+                .' AND subh_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd
+            : ' WHERE subh_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd;
         $subhistRaw = $this->listar(
             'subhist',
-            self::SUBHIST_CAMPOS,
-            ' WHERE subh_empresa='.$empresaAnita
-            .' AND subh_fecha BETWEEN '.$fechaDesdeYmd.' AND '.$fechaHastaYmd,
+            $usaEmpresaSub ? self::SUBHIST_CAMPOS : self::SUBHIST_CAMPOS_SIN_EMPRESA,
+            $whereSubh,
             'subh_fecha, subh_nro_operacion',
             $errores,
             'subhist-emp'.$empresaAnita.'-'.$fechaDesdeYmd.'-'.$fechaHastaYmd,
         );
-        $subhist = array_map(fn (object $fila) => $this->remapearSubhistComoSubdiario($fila), $subhistRaw);
+        $subhist = array_map(fn (object $fila) => $this->remapearSubhistComoSubdiario($fila, $empresaAnita, $usaEmpresaSub), $subhistRaw);
         $timings['subhist_ms'] = round((microtime(true) - $t) * 1000, 1);
         $timings['subhist_filas'] = count($subhist);
         $timings['total_ms'] = round((microtime(true) - $t0) * 1000, 1);
@@ -103,6 +139,22 @@ final class AnitaAsientoImportBridgeReader
             'errores' => $errores,
             'timings' => $timings,
         ];
+    }
+
+    private function ctamovCampos(): string
+    {
+        return EntornoEmpresaSupport::esFerli()
+            ? self::CTAMOV_CAMPOS_FERLI
+            : self::CTAMOV_CAMPOS;
+    }
+
+    /**
+     * Ferli / El Bierzo: UNLOAD/WHERE sobre subd_empresa (y subh_empresa) no es usable.
+     */
+    private function subdiarioUsaColumnaEmpresa(): bool
+    {
+        return ! EntornoEmpresaSupport::esElBierzo()
+            && ! EntornoEmpresaSupport::esFerli();
     }
 
     /**
@@ -168,7 +220,7 @@ final class AnitaAsientoImportBridgeReader
         return [];
     }
 
-    private function remapearSubhistComoSubdiario(object $fila): object
+    private function remapearSubhistComoSubdiario(object $fila, int $empresaAnita, bool $usaEmpresaSub): object
     {
         $out = [];
         foreach ((array) $fila as $clave => $valor) {
@@ -186,6 +238,9 @@ final class AnitaAsientoImportBridgeReader
         $out['subd_ref_sistema'] = $out['subd_ref_sistema'] ?? '';
         $out['subd_procesado'] = $out['subd_procesado'] ?? 'S';
         $out['subd_origen_subhist'] = true;
+        if (! $usaEmpresaSub) {
+            $out['subd_empresa'] = $empresaAnita;
+        }
 
         return (object) $out;
     }

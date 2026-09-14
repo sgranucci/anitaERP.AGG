@@ -52,6 +52,7 @@ class ValidacionCliente extends FormRequest
                 'retieneiva' => ['required', new RuleCliente('retieneiva')],
                 'condicioniibb_id' => 'required',
                 'vaweb' => ['required', new RuleCliente('vaweb')],
+                'enviar_factura_mail' => 'nullable|boolean',
             ];
         else {
             $reglas = [
@@ -73,6 +74,7 @@ class ValidacionCliente extends FormRequest
                 'numerodocumento' => ['required', new RuleCliente('numerodocumento'), $reglaDocumentoUnico],
                 'retieneiva' => ['required', new RuleCliente('retieneiva')],
                 'condicioniibb_id' => 'required',
+                'enviar_factura_mail' => 'nullable|boolean',
             ];
 
             if (EntornoEmpresaSupport::esElBierzo()) {

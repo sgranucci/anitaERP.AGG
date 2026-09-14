@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
@@ -27,6 +28,9 @@ class CentrocostoController extends Controller
     public function index()
     {
         can('listar-centro-costo');
+        if (! Centrocosto::query()->exists() && AnitaSyncIndexSupport::autoImportHabilitado()) {
+            $this->repository->sincronizarConAnita();
+        }
 		$datas = $this->repository->all();
 
         return view('contable.centrocosto.index', compact('datas'));

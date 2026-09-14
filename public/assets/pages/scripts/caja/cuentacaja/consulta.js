@@ -44,6 +44,9 @@ function buscar_datos_cuentacaja(consulta) {
     if (typeof window.ESTACIONAMIENTO !== 'undefined' && parseInt(window.ESTACIONAMIENTO.usocuentacajaEstacionamientoId, 10) > 0) {
         usocuentacaja_id = parseInt(window.ESTACIONAMIENTO.usocuentacajaEstacionamientoId, 10);
     }
+    if (typeof window.FACTURACION_LOCAL !== 'undefined' && parseInt(window.FACTURACION_LOCAL.usocuentacajaLocalId, 10) > 0) {
+        usocuentacaja_id = parseInt(window.FACTURACION_LOCAL.usocuentacajaLocalId, 10);
+    }
 
     $('#datoscuentacaja').html('<tr><td colspan="10" class="text-muted">Buscando…</td></tr>');
     $.ajax({
@@ -80,7 +83,18 @@ $('input').keydown(function (e) {
     if (keyCode == 13) {
         if ($(this).closest('#cuenta-table').length
             || $(this).closest('#cheque-emitido-table').length
-            || $(this).is('#consultacuentacaja')) {
+            || $(this).is('#consultacuentacaja')
+            || $(this).is('#consultapuntoventa')
+            || $(this).is('#consultadeposito')
+            || $(this).is('#consultatipotransaccionventa')
+            || $(this).is('#consultalistaprecio')
+            || $(this).is('#consultacuentacontable')
+            || $(this).hasClass('codigopuntoventa')
+            || $(this).hasClass('codigodeposito')
+            || $(this).hasClass('codigocuentacaja')
+            || $(this).hasClass('codigolistaprecio')
+            || $(this).hasClass('abreviaturatipotransaccionventa')
+            || $(this).hasClass('codigocuentacontable')) {
             return;
         }
         e.preventDefault();

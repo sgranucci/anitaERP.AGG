@@ -434,11 +434,18 @@
                             ])
                             @include('stock.movimientostock.partials.fila_saldo_origen')
                             @if($movimientoStockModoFerli)
+                            @php
+                                $combModel = $pedidoitem->combinaciones ?? null;
+                                $descCombLinea = $combModel
+                                    ? trim((string) ($combModel->codigo ?? '').'-'.(string) ($combModel->nombre ?? ''), '-')
+                                    : '';
+                                $descModLinea = (string) (optional($pedidoitem->modulos)->nombre ?? ($pedidoitem->desc_modulo ?? ''));
+                            @endphp
                 			@include('stock.movimientostock.partials.fila_item_ferli', [
                 			    'combinacionIdPrev' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'combinaciones_id', $pedidoitem->combinacion_id ?? ''),
-                			    'descCombinacion' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'desc_combinacion', optional($pedidoitem->combinaciones)->nombre ?? ''),
+                			    'descCombinacion' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'desc_combinacion', $descCombLinea),
                 			    'moduloIdPrev' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'modulos_id', $pedidoitem->modulo_id ?? ''),
-                			    'descModulo' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'desc_modulo', $pedidoitem->desc_modulo ?? ''),
+                			    'descModulo' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'desc_modulo', $descModLinea),
                 			    'cantidad' => number_format(abs($pedidoitem->cantidad), 0, '.', ''),
                 			    'precio' => number_format((float) old('precios.'.$loop->index, optional($pedidoitem)->precio ?? 0), 2),
                 			])

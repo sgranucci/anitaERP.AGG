@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ventas;
 
 use App\Http\Controllers\Controller;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Arca\ArcaCertificadoCsrService;
 use Exception;
 use Illuminate\Http\RedirectResponse;
@@ -13,13 +14,14 @@ class CertificadoArcaController extends Controller
 {
     public function __construct(
         private ArcaCertificadoCsrService $csrService,
+        private EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
     public function index()
     {
         can('listar-certificados-arca');
 
-        $filas = $this->csrService->inventariar();
+        $filas = $this->inventarioPermitido();
         $puedeGenerar = can('generar-csr-certificados-arca', false);
         $puedeInstalar = can('instalar-certificados-arca', false);
         $filasJs = collect($filas)->map(static function (array $f) {
@@ -49,7 +51,7 @@ class CertificadoArcaController extends Controller
         }
 
         try {
-            $entrada = $this->csrService->buscarPorId($id);
+            $entrada = $this->buscarCertificadoPermitido($id);
             $r = $this->csrService->generar($entrada);
         } catch (Exception $e) {
             return $this->volverError($e->getMessage());
@@ -74,7 +76,7 @@ class CertificadoArcaController extends Controller
         }
 
         try {
-            $entrada = $this->csrService->buscarPorId($id);
+            $entrada = $this->buscarCertificadoPermitido($id);
         } catch (Exception $e) {
             return $this->volverError($e->getMessage());
         }
@@ -102,7 +104,7 @@ class CertificadoArcaController extends Controller
         }
 
         try {
-            $entrada = $this->csrService->buscarPorId($id);
+            $entrada = $this->buscarCertificadoPermitido($id);
             $r = $this->csrService->exportarPar($entrada);
         } catch (Exception $e) {
             return $this->volverError($e->getMessage());
@@ -138,7 +140,7 @@ class CertificadoArcaController extends Controller
         }
 
         try {
-            $entrada = $this->csrService->buscarPorId($id);
+            $entrada = $this->buscarCertificadoPermitido($id);
             $replicarIds = $this->replicarIdsDesdeRequest($request, $id);
             $r = $this->csrService->instalarDesdeUpload($entrada, $raw, false, $replicarIds);
         } catch (Exception $e) {
@@ -174,7 +176,7 @@ class CertificadoArcaController extends Controller
         }
 
         try {
-            $entrada = $this->csrService->buscarPorId($id);
+            $entrada = $this->buscarCertificadoPermitido($id);
             $r = $this->csrService->probarConexion($entrada);
         } catch (Exception $e) {
             return $this->volverError($e->getMessage());
@@ -186,6 +188,43 @@ class CertificadoArcaController extends Controller
     }
 
     /**
+     * @return list<array<string, mixed>>
+     */
+    private function inventarioPermitido(): array
+    {
+        return $this->csrService->filtrarPorEmpresasAsignadas(
+            $this->csrService->inventariar(),
+            $this->empresaRepository->traeEmpresasAsignadas()
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buscarCertificadoPermitido(string $id): array
+    {
+        $entrada = $this->csrService->buscarPorId($id);
+        $this->assertAccesoCertificado($entrada);
+
+        return $entrada;
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     */
+    private function assertAccesoCertificado(array $entrada): void
+    {
+        $empresaId = (int) ($entrada['empresa_id'] ?? 0);
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            throw new Exception('No tiene acceso a certificados de esa empresa.');
+        }
+    }
+
+    /**
      * @return list<string>
      */
     private function replicarIdsDesdeRequest(Request $request, string $origenId): array
@@ -194,10 +233,14 @@ class CertificadoArcaController extends Controller
         if (! is_array($raw)) {
             $raw = [$raw];
         }
+        $permitidos = collect($this->inventarioPermitido())->pluck('id')->all();
         $ids = [];
         foreach ($raw as $id) {
             $id = trim((string) $id);
             if ($id === '' || $id === $origenId) {
+                continue;
+            }
+            if (! in_array($id, $permitidos, true)) {
                 continue;
             }
             $ids[] = $id;

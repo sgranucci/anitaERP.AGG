@@ -1696,3 +1696,58 @@
 		});
 
 	}
+
+	// Marca / desmarca picking en línea de pedido (AJAX)
+	$(document).on('click', '.guarda-picking', function () {
+		var $tr = $(this).closest('tr');
+		var pedidoCombinacionId = parseInt($tr.find('.ids').val(), 10) || 0;
+		if (pedidoCombinacionId <= 0) {
+			alert('Guarde el pedido antes de marcar picking');
+			return;
+		}
+
+		var marcado = $tr.find('.check-picking').is(':checked');
+		var lote = ($tr.find('.picking-lote').val() || '').trim();
+		var depositoId = parseInt($tr.find('.picking-deposito').val(), 10) || 0;
+		var token = $('#csrf_token').val();
+
+		if (marcado) {
+			if (!lote || lote === '0') {
+				alert('Indique el número de OT stock / lote a preparar');
+				return;
+			}
+			$.post(carpetaBase + '/stock/picking-pedido/marcar', {
+				pedido_combinacion_id: pedidoCombinacionId,
+				picking_lote_codigo: lote,
+				picking_deposito_id: depositoId,
+				_token: token
+			})
+				.done(function (data) {
+					if (data.error) {
+						alert(data.error);
+						return;
+					}
+					alert('Picking marcado');
+				})
+				.fail(function (xhr) {
+					alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al marcar picking');
+				});
+		} else {
+			$.post(carpetaBase + '/stock/picking-pedido/desmarcar', {
+				pedido_combinacion_id: pedidoCombinacionId,
+				_token: token
+			})
+				.done(function (data) {
+					if (data.error) {
+						alert(data.error);
+						return;
+					}
+					$tr.find('.picking-lote').val('');
+					$tr.find('.picking-deposito').val('0');
+					alert('Picking desmarcado');
+				})
+				.fail(function (xhr) {
+					alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al desmarcar picking');
+				});
+		}
+	});

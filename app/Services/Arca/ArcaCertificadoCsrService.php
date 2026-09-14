@@ -16,6 +16,8 @@ class ArcaCertificadoCsrService
 {
     public const SERVICIO_WSFE = 'wsfe';
 
+    public const SERVICIO_WSFEX = 'wsfex';
+
     public const SERVICIO_MTXCA = 'mtxca';
 
     public const SERVICIO_WSREMCARNE = 'wsremcarne';
@@ -29,6 +31,7 @@ class ArcaCertificadoCsrService
     /** @var list<string> */
     public const SERVICIOS = [
         self::SERVICIO_WSFE,
+        self::SERVICIO_WSFEX,
         self::SERVICIO_MTXCA,
         self::SERVICIO_WSREMCARNE,
         self::SERVICIO_PADRON,
@@ -39,6 +42,7 @@ class ArcaCertificadoCsrService
     /** Factura electrónica + remito (pedido típico de renovación). */
     public const SERVICIOS_FACTURA_Y_REMITO = [
         self::SERVICIO_WSFE,
+        self::SERVICIO_WSFEX,
         self::SERVICIO_MTXCA,
         self::SERVICIO_WSREMCARNE,
     ];
@@ -56,6 +60,14 @@ class ArcaCertificadoCsrService
             (array) config('arca_wsfe.empresas', []),
             (string) config('arca_wsfe.wsaa_service_id', 'wsfe'),
             (string) (config('arca_wsfe.base_storage') ? rtrim((string) config('arca_wsfe.base_storage'), '/').'/ta' : '')
+        ));
+        $filas = array_merge($filas, $this->inventarioPorEmpresa(
+            self::SERVICIO_WSFEX,
+            'Factura electrónica exportación WSFEX',
+            (string) config('arca_wsfex.base_storage', ''),
+            (array) config('arca_wsfex.empresas', []),
+            (string) config('arca_wsfex.wsaa_service_id', 'wsfex'),
+            (string) (config('arca_wsfex.base_storage') ? rtrim((string) config('arca_wsfex.base_storage'), '/').'/ta' : '')
         ));
         $filas = array_merge($filas, $this->inventarioPorEmpresa(
             self::SERVICIO_MTXCA,
@@ -125,6 +137,37 @@ class ArcaCertificadoCsrService
             }
 
             return true;
+        }));
+    }
+
+    /**
+     * Restringe filas a empresas asignadas al usuario.
+     * Sin asignaciones (acceso total): no filtra.
+     * Certificados sin empresa_id (padrón / WSCDC / WSAPOC): se conservan.
+     *
+     * @param  list<array<string, mixed>>  $inventario
+     * @param  list<int|string>  $empresasAsignadas
+     * @return list<array<string, mixed>>
+     */
+    public function filtrarPorEmpresasAsignadas(array $inventario, array $empresasAsignadas): array
+    {
+        $ids = array_values(array_unique(array_map(
+            static fn ($id) => (int) $id,
+            $empresasAsignadas
+        )));
+        $ids = array_values(array_filter($ids, static fn (int $id) => $id > 0));
+
+        if ($ids === []) {
+            return $inventario;
+        }
+
+        return array_values(array_filter($inventario, static function (array $f) use ($ids) {
+            $empresaId = (int) ($f['empresa_id'] ?? 0);
+            if ($empresaId <= 0) {
+                return true;
+            }
+
+            return in_array($empresaId, $ids, true);
         }));
     }
 
@@ -277,6 +320,7 @@ class ArcaCertificadoCsrService
             }
             if ($p === 'factura' || $p === 'fe') {
                 $out[] = self::SERVICIO_WSFE;
+                $out[] = self::SERVICIO_WSFEX;
                 $out[] = self::SERVICIO_MTXCA;
                 continue;
             }
@@ -425,6 +469,10 @@ class ArcaCertificadoCsrService
             self::SERVICIO_WSFE => $this->formatearDummy(
                 'WSAA + WSFE FEDummy',
                 app(ArcaWsfeFacturaElectronicaService::class)->feDummy($empresaId)
+            ),
+            self::SERVICIO_WSFEX => $this->formatearDummy(
+                'WSAA + WSFEX FEXDummy',
+                app(ArcaWsfexFacturaElectronicaService::class)->fexDummy($empresaId)
             ),
             self::SERVICIO_WSREMCARNE => $this->formatearDummy(
                 'WSAA + wsremcarne dummy',

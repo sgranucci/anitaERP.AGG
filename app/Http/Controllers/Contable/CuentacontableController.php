@@ -295,7 +295,7 @@ class CuentacontableController extends Controller
             'cuentacontable.tipocuenta'
         )
             ->leftJoin('empresa', 'cuentacontable.empresa_id', '=', 'empresa.id')
-            ->where('cuentacontable.tipocuenta', '1');
+            ->where('cuentacontable.tipocuenta', CuentacontableArbolSupport::TIPO_IMPUTABLE);
 
         if ($empresaId > 0) {
             $query->where('cuentacontable.empresa_id', $empresaId);

@@ -5,6 +5,7 @@ namespace App\Repositories\Contable;
 use App\Models\Contable\Centrocosto;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 class CentrocostoRepository implements CentrocostoRepositoryInterface
 {
@@ -25,11 +26,6 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
 
     public function all()
     {
-        $hay_centrocosto = Centrocosto::first();
-
-		if (!$hay_centrocosto)
-			self::sincronizarConAnita();
-
         return $this->model->orderBy('nombre','ASC')->get();
     }
 
@@ -107,75 +103,111 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
 		ini_set('max_execution_time', '300');
 
         $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-                        'sistema' => 'contab',
-						'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita", 
-						'tabla' => $this->tableAnita );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        $datosLocal = Centrocosto::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
+        $sinAbreviatura = $this->esquemaCcostoSinAbreviatura();
+        $campos = $sinAbreviatura
+            ? 'ccos_codigo, ccos_desc, ccos_grupo'
+            : 'ccos_codigo, ccos_desc, ccos_grupo, ccos_abreviatura';
+        $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall([
+            'acc' => 'list',
+            'sistema' => 'contab',
+            'tabla' => $this->tableAnita,
+            'campos' => $campos,
+        ]));
+        if ($parsed['error_lectura'] !== null) {
+            // Ferli y otros Informix sin ccos_abreviatura: reintentar sin ese campo.
+            if (! $sinAbreviatura) {
+                $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall([
+                    'acc' => 'list',
+                    'sistema' => 'contab',
+                    'tabla' => $this->tableAnita,
+                    'campos' => 'ccos_codigo, ccos_desc, ccos_grupo',
+                ]));
+                $sinAbreviatura = true;
+            }
+        }
+        if ($parsed['error_lectura'] !== null) {
+            return;
         }
 
-        foreach ($dataAnita as $value) {
-            if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+        $datosLocalArray = Centrocosto::query()->pluck($this->keyField)->map(
+            fn ($c) => ltrim((string) $c, '0')
+        )->all();
+
+        foreach ($parsed['filas'] as $value) {
+            $codigo = ltrim((string) ($value->ccos_codigo ?? ''), '0');
+            if ($codigo === '' || in_array($codigo, $datosLocalArray, true)) {
+                continue;
             }
+            $desc = (string) ($value->ccos_desc ?? '');
+            $abreviatura = $sinAbreviatura
+                ? substr($desc, 0, 5)
+                : (string) ($value->ccos_abreviatura ?? substr($desc, 0, 5));
+
+            $this->model->create([
+                'nombre' => $desc,
+                'codigo' => (string) ($value->ccos_codigo ?? $codigo),
+                'abreviatura' => $abreviatura,
+            ]);
+            $datosLocalArray[] = $codigo;
         }
     }
 
     public function traerRegistroDeAnita($key){
-        $apiAnita = new ApiAnita();
-
-        if (config('app.empresa') == "EL BIERZO" || config('app.empresa') == "INTERFORMING")
-            $data = array( 
-                'acc' => 'list', 'tabla' => $this->tableAnita, 
-                'sistema' => 'contab',
-                'campos' => '
-                ccos_codigo,
-                ccos_desc,
-                ccos_grupo
-                ',
-                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-            );
-        else
-             $data = array( 
-                'acc' => 'list', 'tabla' => $this->tableAnita, 
-                'sistema' => 'contab',
-                'campos' => '
-                ccos_codigo,
-                ccos_desc,
-                ccos_grupo,
-                ccos_abreviatura
-                ',
-                'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
-            );           
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-            if (config('app.empresa') == "EL BIERZO" || config('app.empresa') == "INTERFORMING")
-                $abreviatura = substr($data->ccos_desc,0,5);
-            else
-                $abreviatura = $data->ccos_abreviatura;
-
-			$arr_campos = [
-				"nombre" => $data->ccos_desc,
-				"codigo" => $data->ccos_codigo,
-                "abreviatura" => $abreviatura
-            	];
-	
-        	$centrocosto = $this->model->create($arr_campos);
+        if ($key === null || $key === '') {
+            return;
         }
+
+        $apiAnita = new ApiAnita();
+        $sinAbreviatura = $this->esquemaCcostoSinAbreviatura();
+        $campos = $sinAbreviatura
+            ? 'ccos_codigo, ccos_desc, ccos_grupo'
+            : 'ccos_codigo, ccos_desc, ccos_grupo, ccos_abreviatura';
+
+        $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall([
+            'acc' => 'list',
+            'tabla' => $this->tableAnita,
+            'sistema' => 'contab',
+            'campos' => $campos,
+            'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
+        ]));
+        if ($parsed['error_lectura'] !== null && ! $sinAbreviatura) {
+            $sinAbreviatura = true;
+            $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall([
+                'acc' => 'list',
+                'tabla' => $this->tableAnita,
+                'sistema' => 'contab',
+                'campos' => 'ccos_codigo, ccos_desc, ccos_grupo',
+                'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$key."' ",
+            ]));
+        }
+        if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
+            return;
+        }
+
+        $data = $parsed['filas'][0];
+        $desc = (string) ($data->ccos_desc ?? '');
+        $abreviatura = $sinAbreviatura
+            ? substr($desc, 0, 5)
+            : (string) ($data->ccos_abreviatura ?? substr($desc, 0, 5));
+
+        $this->model->create([
+            'nombre' => $desc,
+            'codigo' => $data->ccos_codigo,
+            'abreviatura' => $abreviatura,
+        ]);
+    }
+
+    private function esquemaCcostoSinAbreviatura(): bool
+    {
+        return EntornoEmpresaSupport::esElBierzo()
+            || EntornoEmpresaSupport::esInterforming()
+            || EntornoEmpresaSupport::esFerli();
     }
 
 	public function guardarAnita($request) {
         $apiAnita = new ApiAnita();
 
-        if (config('app.empresa') == "EL BIERZO"  || config('app.empresa') == "INTERFORMING")
+        if ($this->esquemaCcostoSinAbreviatura())
             $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
                 'sistema' => 'contab',
                 'campos' => ' 
@@ -209,7 +241,7 @@ class CentrocostoRepository implements CentrocostoRepositoryInterface
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        if (config('app.empresa') == "EL BIERZO" || config('app.empresa') == "INTERFORMING")
+        if ($this->esquemaCcostoSinAbreviatura())
             $data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
                     'sistema' => 'contab',
                     'valores' => " 

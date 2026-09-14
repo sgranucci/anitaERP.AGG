@@ -14,6 +14,7 @@ use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
+use App\Support\Ventas\VentaImpuestoResolucionSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Auth;
@@ -298,7 +299,7 @@ class VentaRepository implements VentaRepositoryInterface
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
-        return $venta;
+        return VentaImpuestoResolucionSupport::adjuntarAVenta($venta);
     }
 
     public function findOrFail($id)
@@ -320,7 +321,7 @@ class VentaRepository implements VentaRepositoryInterface
             throw new ModelNotFoundException("Registro no encontrado");
         }
 
-        return $venta;
+        return VentaImpuestoResolucionSupport::adjuntarAVenta($venta);
     }
 
     public function traeUltimoNumeroRemito($tipo, $letra, $sucursal)

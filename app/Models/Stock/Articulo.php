@@ -63,7 +63,7 @@ class Articulo extends Model implements Auditable
                 'tipocarne', 'pesocaja', 'alertastock', 'origenproducto', 'inicialproduccion',
                 'diasproceso', 'vencimientoendia', 'diaenfriado', 'codigosenasa_id', 'salaproduccion_id', 'tipoproduccion_id',
                 'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'maneja_stock_color_talle', 'ubicacionparte',
-                'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado',
+                'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado', 'estado_fabrica', 'estado_local',
                 'nivelstock', 'fechaalta', 'etiqueta_id', 'unidadenvasado', 'leyendanofacturar', 'skuproveedor',
                 'skuproveedor2', 'posicionaracelaria', 'vigenteenlista', 'cuentacontablevariacionprecio_id',
                 'centrocostovariacionprecio_id', 'centrocostocompra_id', 'abc', 'punto', 'lote',
@@ -81,7 +81,7 @@ class Articulo extends Model implements Auditable
                 'tipocarne', 'pesocaja', 'alertastock', 'origenproducto', 'inicialproduccion', 'divide',
                 'diasproceso', 'vencimientoendia', 'diaenfriado', 'codigosenasa_id', 'salaproduccion_id', 'tipoproduccion_id',
                 'sectorsellado_id', 'tipoarticulo_id', 'coeficienteconversion', 'depositoentrega_id', 'numeroparte', 'maneja_stock_color_talle', 'ubicacionparte',
-                'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado',
+                'oficinacompra_id', 'periodicidadcompra_id', 'condicionentrega_id', 'estado', 'estado_fabrica', 'estado_local',
                 'subrubro', 'lineamaterial', 'grupoproducto',
                 'codigo_interno_sifab', 'rubro_sifab', 'clasematerial', 'gestioncompra',
             ];
@@ -232,6 +232,12 @@ class Articulo extends Model implements Auditable
     public function usoarticulos()
     {
         return $this->belongsTo(Usoarticulo::class, 'usoarticulo_id');
+    }
+
+    public function canales()
+    {
+        return $this->belongsToMany(\App\Models\Ventas\Canal::class, 'articulo_canal', 'articulo_id', 'canal_id')
+            ->withTimestamps();
     }
 
     public function materiales()

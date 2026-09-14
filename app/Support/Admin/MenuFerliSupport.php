@@ -25,9 +25,7 @@ final class MenuFerliSupport
         'ventas/configuracion-puntoventa-gastronomia',
         'ventas/contrato',
         'ventas/gastronomia',
-        'ventas/remito',
         'ventas/totem-waitry',
-        'ventas/tipoempresa-cliente',
     ];
 
     public static function filtrar(array $menus): array

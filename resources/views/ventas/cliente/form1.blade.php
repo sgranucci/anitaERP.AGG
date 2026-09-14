@@ -52,6 +52,18 @@
 				</div>
 			</div>
 			<div class="form-group row">
+				<label for="enviar_factura_mail" class="col-lg-4 control-label text-right pr-2">Enviar factura por mail</label>
+				<div class="col-lg-8">
+					<div class="form-check pt-2">
+						<input type="hidden" name="enviar_factura_mail" value="0">
+						<input type="checkbox" class="form-check-input" name="enviar_factura_mail" id="enviar_factura_mail" value="1"
+							@checked((string) old('enviar_factura_mail', $data->enviar_factura_mail ?? 0) === '1' || old('enviar_factura_mail', $data->enviar_factura_mail ?? false) === true)>
+						<label class="form-check-label" for="enviar_factura_mail">Opt-in: recibir comprobantes electrónicos por correo</label>
+					</div>
+					<small class="form-text text-muted">Requiere que la empresa tenga habilitado el mail de facturas.</small>
+				</div>
+			</div>
+			<div class="form-group row">
 				<label for="urlweb" class="col-lg-4 control-label text-right pr-2">URL Web</label>
 				<div class="col-lg-8">
 					<div class="input-group">

@@ -5,14 +5,19 @@ namespace App\Support\Configuracion;
 /**
  * Logos en public/storage/imagenes/logos/
  *
- * Reportes de listado (requisiciones, etc.):
- * - Más de una empresa distinta → solo logo default config('app.empresa').png (ej. AGG.png).
- * - Una sola empresa → mismo criterio que facturas de venta: {nombre comercial}.png
+ * Acepta PNG y JPG/JPEG (prioridad: .png → .jpg → .jpeg).
  *
- * Documento único (una cabecera): resolución con fallback a default si no existe PNG de empresa.
+ * Reportes de listado (requisiciones, etc.):
+ * - Más de una empresa distinta → solo logo default config('app.empresa').
+ * - Una sola empresa → mismo criterio que facturas de venta: {nombre comercial}.
+ *
+ * Documento único (una cabecera): resolución con fallback a default si no existe logo de empresa.
  */
 final class EmpresaLogoArchivo
 {
+    /** @var list<string> */
+    private const EXTENSIONES = ['png', 'jpg', 'jpeg'];
+
     private static function directorioLogos(): ?string
     {
         $dir = public_path('storage/imagenes/logos');
@@ -21,9 +26,15 @@ final class EmpresaLogoArchivo
     }
 
     /**
-     * PNG por nombre de empresa (solo .png), igual que facturación: logos/{nombre}.png
+     * Logo por nombre de empresa: logos/{nombre}.png|.jpg|.jpeg
+     * (nombre histórico rutaPngEmpresa; también resuelve JPG).
      */
     public static function rutaPngEmpresa(?string $nombreEmpresa): ?string
+    {
+        return self::rutaLogoEmpresa($nombreEmpresa);
+    }
+
+    public static function rutaLogoEmpresa(?string $nombreEmpresa): ?string
     {
         $nombre = trim((string) $nombreEmpresa);
         if ($nombre === '') {
@@ -35,17 +46,33 @@ final class EmpresaLogoArchivo
             return null;
         }
 
-        $base = basename(str_replace(['..', '\\', '/'], '', $nombre));
-        $ruta = $dir.DIRECTORY_SEPARATOR.$base.'.png';
+        $base = self::baseArchivoSeguro($nombre);
+        $ruta = self::primeraConExtension($dir, $base);
+        if ($ruta !== null) {
+            return $ruta;
+        }
 
-        return is_file($ruta) ? $ruta : null;
+        foreach (self::aliasLogoEmpresa($nombre) as $archivo) {
+            $rutaAlias = $dir.DIRECTORY_SEPARATOR.$archivo;
+            if (is_file($rutaAlias)) {
+                return $rutaAlias;
+            }
+        }
+
+        return null;
     }
 
     /**
-     * PNG por defecto: config('app.empresa').png (ej. AGG.png).
-     * Si no existe, prueba alias conocidos (ej. EL BIERZO → logo-bierzo.png).
+     * Logo por defecto: config('app.empresa').png|.jpg|.jpeg
+     * Si no existe, prueba alias conocidos (ej. EL BIERZO, Ferli).
+     * (nombre histórico rutaPngDefault; también resuelve JPG).
      */
     public static function rutaPngDefault(): ?string
+    {
+        return self::rutaLogoDefault();
+    }
+
+    public static function rutaLogoDefault(): ?string
     {
         $slug = trim((string) config('app.empresa'));
         if ($slug === '') {
@@ -57,13 +84,13 @@ final class EmpresaLogoArchivo
             return null;
         }
 
-        $base = basename(str_replace(['..', '\\', '/'], '', $slug));
-        $ruta = $dir.DIRECTORY_SEPARATOR.$base.'.png';
-        if (is_file($ruta)) {
+        $base = self::baseArchivoSeguro($slug);
+        $ruta = self::primeraConExtension($dir, $base);
+        if ($ruta !== null) {
             return $ruta;
         }
 
-        foreach (self::aliasPngDefault($base) as $archivo) {
+        foreach (self::aliasLogoDefault($base) as $archivo) {
             $rutaAlias = $dir.DIRECTORY_SEPARATOR.$archivo;
             if (is_file($rutaAlias)) {
                 return $rutaAlias;
@@ -74,30 +101,77 @@ final class EmpresaLogoArchivo
     }
 
     /**
-     * Archivos PNG alternativos cuando config('app.empresa').png no existe.
+     * Archivos alternativos cuando config('app.empresa').{png,jpg} no existe.
      *
      * @return list<string>
      */
-    private static function aliasPngDefault(string $slugEmpresa): array
+    private static function aliasLogoDefault(string $slugEmpresa): array
     {
-        return match ($slugEmpresa) {
-            'EL BIERZO' => ['logo-bierzo.png', 'Frig.El Bierzo SA.png'],
-            'INTERFORMING' => ['INTERFORMING S.A.png', 'INTERFORMING S.A..png'],
+        $slug = strtoupper(trim($slugEmpresa));
+
+        return match (true) {
+            $slug === 'EL BIERZO' => ['logo-bierzo.png', 'Frig.El Bierzo SA.png'],
+            $slug === 'INTERFORMING' => ['INTERFORMING S.A.png', 'INTERFORMING S.A..png'],
+            self::esSlugFerli($slug) => self::archivosLogoFerli(),
             default => [],
         };
     }
 
     /**
-     * Una cabecera: PNG empresa o, si no existe, default app (comportamiento PDF requisición individual).
+     * Alias cuando el nombre comercial de la tabla empresa no coincide con el archivo.
+     *
+     * @return list<string>
+     */
+    private static function aliasLogoEmpresa(string $nombreEmpresa): array
+    {
+        $nombre = strtoupper(trim($nombreEmpresa));
+        if (self::esSlugFerli($nombre) || str_contains($nombre, 'FERLI')) {
+            return self::archivosLogoFerli();
+        }
+
+        return [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function archivosLogoFerli(): array
+    {
+        return [
+            'logoFerli.jpg',
+            'logoFerli.jpeg',
+            'logoFerli.png',
+            'CALZADOS FERLI S.A.png',
+            'CALZADOS FERLI S.A.jpg',
+            'Calzados Ferli.png',
+            'Calzados Ferli.jpg',
+        ];
+    }
+
+    private static function esSlugFerli(string $slugUpper): bool
+    {
+        $n = strtoupper(trim($slugUpper));
+
+        return $n === 'CALZADOS FERLI'
+            || $n === 'CALZADOS FERLI S.A.'
+            || $n === 'CALZADOS FERLI S.A'
+            || $n === 'C.FERLI SA'
+            || $n === 'C.FERLI S.A.'
+            || $n === EntornoEmpresaSupport::FERLI
+            || str_contains($n, 'FERLI');
+    }
+
+    /**
+     * Una cabecera: logo empresa o, si no existe, default app.
      */
     public static function rutaResuelta(?string $nombreEmpresa): ?string
     {
-        $especifica = self::rutaPngEmpresa($nombreEmpresa);
+        $especifica = self::rutaLogoEmpresa($nombreEmpresa);
         if ($especifica !== null) {
             return $especifica;
         }
 
-        return self::rutaPngDefault();
+        return self::rutaLogoDefault();
     }
 
     /**
@@ -110,17 +184,15 @@ final class EmpresaLogoArchivo
             return null;
         }
 
-        $data = @file_get_contents($ruta);
-        if ($data === false || $data === '') {
+        $dat = self::buildDataUriFromPath($ruta);
+        if ($dat === null) {
             return null;
         }
 
-        $mime = 'image/png';
-
         return [
             'path' => $ruta,
-            'mime' => $mime,
-            'uri' => 'data:'.$mime.';base64,'.base64_encode($data),
+            'mime' => $dat['mime'],
+            'uri' => $dat['uri'],
         ];
     }
 
@@ -155,27 +227,18 @@ final class EmpresaLogoArchivo
         $distintos = self::nombresEmpresaDistintos($registros);
         $n = count($distintos);
 
-        if ($n === 0) {
-            $def = self::buildDataUriFromPath(self::rutaPngDefault());
+        if ($n === 0 || $n > 1) {
+            $def = self::buildDataUriFromPath(self::rutaLogoDefault());
 
             return $def !== null
                 ? [['nombre' => (string) config('app.empresa'), 'uri' => $def['uri'], 'mime' => $def['mime']]]
                 : [];
         }
 
-        if ($n > 1) {
-            $def = self::buildDataUriFromPath(self::rutaPngDefault());
-
-            return $def !== null
-                ? [['nombre' => (string) config('app.empresa'), 'uri' => $def['uri'], 'mime' => $def['mime']]]
-                : [];
-        }
-
-        // Una sola empresa: mismo archivo que facturas — {nombre}.png
         $nombreUnico = $distintos[0];
-        $ruta = self::rutaPngEmpresa($nombreUnico);
+        $ruta = self::rutaLogoEmpresa($nombreUnico);
         if ($ruta === null) {
-            $def = self::buildDataUriFromPath(self::rutaPngDefault());
+            $def = self::buildDataUriFromPath(self::rutaLogoDefault());
 
             return $def !== null
                 ? [['nombre' => (string) config('app.empresa'), 'uri' => $def['uri'], 'mime' => $def['mime']]]
@@ -197,7 +260,7 @@ final class EmpresaLogoArchivo
     }
 
     /**
-     * Rutas físicas PNG para Excel (Drawing); misma regla que logosCabeceraDesdeColeccion.
+     * Rutas físicas para Excel (Drawing); misma regla que logosCabeceraDesdeColeccion.
      *
      * @param  \Illuminate\Support\Collection|\Traversable|array<int, object>  $registros
      * @return list<string>
@@ -207,24 +270,18 @@ final class EmpresaLogoArchivo
         $distintos = self::nombresEmpresaDistintos($registros);
         $n = count($distintos);
 
-        if ($n === 0) {
-            $def = self::rutaPngDefault();
+        if ($n === 0 || $n > 1) {
+            $def = self::rutaLogoDefault();
 
             return ($def !== null && is_file($def)) ? [$def] : [];
         }
 
-        if ($n > 1) {
-            $def = self::rutaPngDefault();
-
-            return ($def !== null && is_file($def)) ? [$def] : [];
-        }
-
-        $ruta = self::rutaPngEmpresa($distintos[0]);
+        $ruta = self::rutaLogoEmpresa($distintos[0]);
         if ($ruta !== null && is_file($ruta)) {
             return [$ruta];
         }
 
-        $def = self::rutaPngDefault();
+        $def = self::rutaLogoDefault();
 
         return ($def !== null && is_file($def)) ? [$def] : [];
     }
@@ -243,11 +300,40 @@ final class EmpresaLogoArchivo
             return null;
         }
 
-        $mime = 'image/png';
+        $mime = self::mimeDesdeRuta($ruta);
 
         return [
             'mime' => $mime,
             'uri' => 'data:'.$mime.';base64,'.base64_encode($data),
         ];
+    }
+
+    private static function mimeDesdeRuta(string $ruta): string
+    {
+        $ext = strtolower((string) pathinfo($ruta, PATHINFO_EXTENSION));
+
+        return match ($ext) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif',
+            'webp' => 'image/webp',
+            default => 'image/png',
+        };
+    }
+
+    private static function baseArchivoSeguro(string $nombre): string
+    {
+        return basename(str_replace(['..', '\\', '/'], '', $nombre));
+    }
+
+    private static function primeraConExtension(string $dir, string $baseSinExt): ?string
+    {
+        foreach (self::EXTENSIONES as $ext) {
+            $ruta = $dir.DIRECTORY_SEPARATOR.$baseSinExt.'.'.$ext;
+            if (is_file($ruta)) {
+                return $ruta;
+            }
+        }
+
+        return null;
     }
 }

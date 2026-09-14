@@ -57,6 +57,10 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             — {{ $art['descripcion'] }}
                         @endif
                     </dd>
+                    @if (! empty($contexto['combinacion_etiqueta']))
+                    <dt class="col-sm-2">Combinación</dt>
+                    <dd class="col-sm-10">{{ $contexto['combinacion_etiqueta'] }}</dd>
+                    @endif
                     <dt class="col-sm-2">Unidad de medida</dt>
                     <dd class="col-sm-10">{{ ! empty($art['unidad_medida']) ? $art['unidad_medida'] : '—' }}</dd>
                     <dt class="col-sm-2">

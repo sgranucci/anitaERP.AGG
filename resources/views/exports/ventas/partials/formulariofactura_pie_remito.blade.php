@@ -12,11 +12,19 @@
         }
     }
     $decCantPie = (int) config('facturacion.DECIMAL_CANTIDAD');
+    $facturaPdfEsFerli = (bool) ($facturaPdfEsFerli ?? \App\Support\Configuracion\EntornoEmpresaSupport::esFerli());
 @endphp
 <div class="factura-pie-bloque factura-pie-remito">
     <table class="table borderless factura-remito-pie-grid">
         <tr>
             <td class="factura-remito-pie-izq">
+                @if ($facturaPdfEsFerli)
+                    <p class="factura-leyenda">
+                        1. La mercaderia viaja por cuenta y riesgo del comprador.<br>
+                        2. No se aceptan reclamos una vez firmado el remito y retirada la mercaderia.
+                    </p>
+                    <p class="factura-leyenda"><strong>RECIBI CONFORME</strong> · OBSERVACIONES</p>
+                @endif
                 @if ($notasRemito !== [])
                     <p class="factura-leyenda">
                         <strong>Observaciones</strong>
@@ -28,23 +36,43 @@
                 <div class="factura-totales-wrap">
                     <table cellpadding="0" cellspacing="0" class="table table-sm table-bordered table-striped tabla-totales-importes">
                         <tbody>
-                            <tr>
-                                <td>Total kilos</td>
-                                <td></td>
-                                <td class="text-right">{{ number_format($totalKilosRemito ?? 0, $decCantPie) }}</td>
-                            </tr>
-                            <tr>
-                                <td>Total bultos</td>
-                                <td></td>
-                                <td class="text-right">{{ number_format($totalBultosRemito ?? 0, 0) }}</td>
-                            </tr>
-                            <tr class="fila-total-final">
-                                <td style="{{ $facturaPdfCeldaTotales }}"><strong>Total asegurado</strong></td>
-                                <td style="{{ $facturaPdfCeldaTotales }}"></td>
-                                <td class="text-right" style="{{ $facturaPdfCeldaTotales }}">
-                                    <strong>{{ number_format($valorAsegurado ?? 0, 2) }}</strong>
-                                </td>
-                            </tr>
+                            @if ($facturaPdfEsFerli)
+                                <tr>
+                                    <td>TOTAL DE PARES</td>
+                                    <td></td>
+                                    <td class="text-right">{{ number_format($totalesDocumento['cantidad'] ?? $totalKilosRemito ?? 0, $decCantPie) }}</td>
+                                </tr>
+                                <tr>
+                                    <td>TOTAL DE BULTOS</td>
+                                    <td></td>
+                                    <td class="text-right">{{ number_format($totalBultosRemito ?? 0, 0) }}</td>
+                                </tr>
+                                <tr class="fila-total-final">
+                                    <td style="{{ $facturaPdfCeldaTotales }}"><strong>TOTAL ASEGURADO</strong></td>
+                                    <td style="{{ $facturaPdfCeldaTotales }}"></td>
+                                    <td class="text-right" style="{{ $facturaPdfCeldaTotales }}">
+                                        <strong>{{ number_format($valorAsegurado ?? 0, 2) }}</strong>
+                                    </td>
+                                </tr>
+                            @else
+                                <tr>
+                                    <td>Total kilos</td>
+                                    <td></td>
+                                    <td class="text-right">{{ number_format($totalKilosRemito ?? 0, $decCantPie) }}</td>
+                                </tr>
+                                <tr>
+                                    <td>Total bultos</td>
+                                    <td></td>
+                                    <td class="text-right">{{ number_format($totalBultosRemito ?? 0, 0) }}</td>
+                                </tr>
+                                <tr class="fila-total-final">
+                                    <td style="{{ $facturaPdfCeldaTotales }}"><strong>Total asegurado</strong></td>
+                                    <td style="{{ $facturaPdfCeldaTotales }}"></td>
+                                    <td class="text-right" style="{{ $facturaPdfCeldaTotales }}">
+                                        <strong>{{ number_format($valorAsegurado ?? 0, 2) }}</strong>
+                                    </td>
+                                </tr>
+                            @endif
                         </tbody>
                     </table>
                 </div>

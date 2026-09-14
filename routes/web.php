@@ -761,6 +761,65 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('ventas/generarfacturastiendanube', 'Ventas\FacturanteControllerFerli@generarFacturasTiendaNube')->name('generar_facturas_tiendanube');
     Route::post('ventas/recuperarstockfacturante', 'Ventas\FacturanteControllerFerli@recuperarStockLocal')->name('recuperar_stock_facturante');
     Route::post('ventas/verificarimportacionfacturante', 'Ventas\FacturanteControllerFerli@verificarImportacionFacturante')->name('verificar_importacion_facturante');
+
+    /*
+     * Facturación Local (mostrador multi-local) — aislado de gastronomía POS / mostrador Bierzo
+     */
+    Route::get('ventas/facturacion-local', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@index')->name('facturacion_local_pos');
+    Route::get('ventas/facturacion-local/api/buscar-articulo', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiBuscarArticulo')->name('facturacion_local_api_buscar');
+    Route::get('ventas/facturacion-local/api/variantes/{articuloId}', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiVariantesArticulo')->name('facturacion_local_api_variantes');
+    Route::get('ventas/facturacion-local/api/precio', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiPrecio')->name('facturacion_local_api_precio');
+    Route::post('ventas/facturacion-local/api/emitir', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiEmitir')->name('facturacion_local_api_emitir');
+    Route::post('ventas/facturacion-local/api/preview-totales', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiPreviewTotales')->name('facturacion_local_api_preview');
+    Route::get('ventas/facturacion-local/api/cliente', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiCliente')->name('facturacion_local_api_cliente');
+    Route::get('ventas/facturacion-local/api/vales', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiVales')->name('facturacion_local_api_vales');
+
+    Route::get('ventas/facturacion-local/locales', 'Ventas\FacturacionLocal\LocalVentaController@index')->name('facturacion_local_locales');
+    Route::get('ventas/facturacion-local/locales/lista/{formato?}/{busqueda?}', 'Ventas\FacturacionLocal\LocalVentaController@listar')->name('lista_local_venta');
+    Route::get('ventas/facturacion-local/locales/crear', 'Ventas\FacturacionLocal\LocalVentaController@crear')->name('crear_local_venta');
+    Route::post('ventas/facturacion-local/locales', 'Ventas\FacturacionLocal\LocalVentaController@guardar')->name('guardar_local_venta');
+    Route::post('ventas/facturacion-local/locales/sync-depositos-anita', 'Ventas\FacturacionLocal\LocalVentaController@syncDepositosAnita')->name('sync_depositos_anita_local_venta');
+    Route::post('ventas/facturacion-local/locales/{id}/sync-depositos-anita', 'Ventas\FacturacionLocal\LocalVentaController@syncDepositosAnita')->name('sync_depositos_anita_local_venta_id');
+    Route::get('ventas/facturacion-local/locales/{id}/editar', 'Ventas\FacturacionLocal\LocalVentaController@editar')->name('editar_local_venta');
+    Route::put('ventas/facturacion-local/locales/{id}', 'Ventas\FacturacionLocal\LocalVentaController@actualizar')->name('actualizar_local_venta');
+    Route::delete('ventas/facturacion-local/locales/{id}', 'Ventas\FacturacionLocal\LocalVentaController@eliminar')->name('eliminar_local_venta');
+
+    Route::get('ventas/facturacion-local/turnos', 'Ventas\FacturacionLocal\TurnoLocalController@index')->name('facturacion_local_turno');
+    Route::get('ventas/facturacion-local/turnos/lista/{formato?}/{busqueda?}', 'Ventas\FacturacionLocal\TurnoLocalController@listar')->name('lista_turno_local');
+    Route::get('ventas/facturacion-local/turnos/crear', 'Ventas\FacturacionLocal\TurnoLocalController@crear')->name('crear_turno_local');
+    Route::post('ventas/facturacion-local/turnos', 'Ventas\FacturacionLocal\TurnoLocalController@guardar')->name('guardar_turno_local');
+    Route::get('ventas/facturacion-local/turnos/{id}/editar', 'Ventas\FacturacionLocal\TurnoLocalController@editar')->name('editar_turno_local');
+    Route::put('ventas/facturacion-local/turnos/{id}', 'Ventas\FacturacionLocal\TurnoLocalController@actualizar')->name('actualizar_turno_local');
+    Route::delete('ventas/facturacion-local/turnos/{id}', 'Ventas\FacturacionLocal\TurnoLocalController@eliminar')->name('eliminar_turno_local');
+
+    Route::get('ventas/facturacion-local/turno', function () {
+        return redirect()->route('facturacion_local_turno', request()->query());
+    });
+    Route::get('ventas/facturacion-local/turno/crear', function () {
+        return redirect()->route('crear_turno_local');
+    });
+    Route::get('ventas/facturacion-local/turno/{id}/editar', function ($id) {
+        return redirect()->route('editar_turno_local', $id);
+    });
+
+    Route::get('ventas/facturacion-local/cierres-turno', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@index')->name('facturacion_local_turnos');
+    Route::post('ventas/facturacion-local/turnos/abrir', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@abrir')->name('facturacion_local_turno_abrir');
+    Route::post('ventas/facturacion-local/turnos/{id}/cerrar', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@cerrar')->name('facturacion_local_turno_cerrar');
+    Route::get('ventas/facturacion-local/turnos/{id}/pdf', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@pdf')->name('facturacion_local_turno_pdf');
+
+    Route::get('ventas/facturacion-local/reportes', 'Ventas\FacturacionLocal\FacturacionLocalReporteController@index')->name('facturacion_local_reportes');
+    Route::get('ventas/facturacion-local/listar-reportes/{formato}', 'Ventas\FacturacionLocal\FacturacionLocalReporteController@exportar')->name('listar_facturacion_local');
+
+    // Consultas c-stocklocal / c-articulo
+    Route::get('ventas/facturacion-local/stock', 'Ventas\FacturacionLocal\FacturacionLocalStockController@stockIndex')->name('facturacion_local_stock');
+    Route::get('ventas/facturacion-local/stock/api', 'Ventas\FacturacionLocal\FacturacionLocalStockController@apiStock')->name('facturacion_local_api_stock');
+    Route::get('ventas/facturacion-local/consulta-precios', 'Ventas\FacturacionLocal\FacturacionLocalStockController@preciosIndex')->name('facturacion_local_consulta_precios');
+    Route::get('ventas/facturacion-local/consulta-precios/api', 'Ventas\FacturacionLocal\FacturacionLocalStockController@apiPrecios')->name('facturacion_local_api_precios');
+    Route::get('ventas/facturacion-local/consulta/api/buscar-articulo', 'Ventas\FacturacionLocal\FacturacionLocalStockController@apiBuscarArticulo')->name('facturacion_local_api_stock_buscar');
+
+    // Informe l-stocklocal.c
+    Route::get('ventas/facturacion-local/informe-stock', 'Ventas\FacturacionLocal\StockLocalInformeController@index')->name('facturacion_local_informe_stock');
+    Route::get('ventas/facturacion-local/listar-informe-stock-local/{formato}', 'Ventas\FacturacionLocal\StockLocalInformeController@exportar')->name('listar_informe_stock_local');
 } else {
     Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeController@crearImportacion')->name('crear_importacion_tiendanube');
     Route::post('stock/importartiendanube', 'Stock\TiendaNubeController@importar')->name('importar_tiendanube');
@@ -1340,6 +1399,7 @@ Route::get('stock/producto/{id}', 'Stock\ArticuloFerliController@consultaProduct
 
 Route::get('stock/products', 'Stock\ArticuloFerliController@index')->name('products.index');
 Route::get('stock/products/list', 'Stock\ArticuloFerliController@list')->name('products.list');
+Route::get('stock/lista-producto-ferli/{formato?}/{busqueda?}', 'Stock\ArticuloFerliController@listar')->name('lista_producto_ferli');
 Route::get('stock/product/{sku}/{codigo}', 'Stock\ArticuloFerliController@download')->name('product.download');
 Route::get('stock/products/create', 'Stock\ArticuloFerliController@create')->name('product.create');
 Route::put('stock/product/save', 'Stock\ArticuloFerliController@save')->name('product.save');
@@ -1375,6 +1435,8 @@ Route::get('stock/leerunarticuloporsku/{sku}', 'Stock\ArticuloController@leeUnAr
 Route::post('stock/articulo/consultaarticulo', 'Stock\ArticuloController@consultaArticulo')->name('consulta_articulo');
 Route::post('stock/articulo/buscar-similares-descripcion', 'Stock\ArticuloController@buscarSimilaresDescripcion')->name('buscar_similares_descripcion_articulo');
 Route::get('stock/articulo/api/saldos-deposito', 'Stock\ArticuloController@apiSaldosDeposito')->name('articulo_saldos_deposito');
+Route::get('stock/articulo/api/kardex-combinacion', 'Stock\ArticuloController@apiKardexCombinacion')->name('articulo_kardex_combinacion');
+Route::get('stock/articulo/{id}/api/datos-etiqueta-ferli', 'Stock\ArticuloController@apiDatosEtiquetaFerli')->name('articulo_datos_etiqueta_ferli');
 Route::get('stock/articulo/{id}/api/preview-recalcular-transferencias-formula', 'Stock\ArticuloController@apiPreviewRecalcularTransferenciasFormula')->name('articulo_preview_recalcular_transferencias_formula');
 Route::post('stock/articulo/{id}/api/aplicar-recalcular-transferencias-formula', 'Stock\ArticuloController@apiAplicarRecalcularTransferenciasFormula')->name('articulo_aplicar_recalcular_transferencias_formula');
 Route::get('stock/listaarticulo/{formato?}/{busqueda?}', 'Stock\ArticuloController@listar')->name('lista_articulo');
@@ -1495,6 +1557,14 @@ Route::get('stock/informes-de-stock/existencias-por-deposito', 'Stock\Existencia
 Route::get('stock/listar-reporte-existencias-deposito/{formato?}', 'Stock\ExistenciasDepositoReporteController@exportar')->name('listar_reporte_existencias_deposito');
 Route::get('stock/reporte-recepcion-proveedor', 'Stock\RecepcionProveedorReporteController@index')->name('reporte_recepcion_proveedor');
 Route::get('stock/listar-reporte-recepcion-proveedor/{formato?}', 'Stock\RecepcionProveedorReporteController@exportar')->name('listar_reporte_recepcion_proveedor');
+
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::get('stock/picking-pedido', 'Stock\PickingPedidoFerliController@index')->name('picking_pedido');
+    Route::get('stock/picking-pedido/exportar', 'Stock\PickingPedidoFerliController@exportarExcel')->name('exportar_picking_pedido');
+    Route::post('stock/picking-pedido/payload-factura', 'Stock\PickingPedidoFerliController@payloadFactura')->name('payload_factura_picking_pedido');
+    Route::post('stock/picking-pedido/marcar', 'Stock\PickingPedidoFerliController@marcar')->name('marcar_picking_pedido');
+    Route::post('stock/picking-pedido/desmarcar', 'Stock\PickingPedidoFerliController@desmarcar')->name('desmarcar_picking_pedido');
+}
 
 /*
  * Salida de bienes (evolución de préstamos)
@@ -1677,6 +1747,8 @@ Route::get('ventas/repkilocategoria', 'Ventas\PedidoController@indexReporteKiloC
 Route::get('ventas/listar-repkilocategoria/{formato}', 'Ventas\PedidoController@listarReporteKiloCategoria')->name('listar_rep_kilocategoria');
 Route::get('ventas/iva-ventas', 'Ventas\IvaVentasReporteController@index')->name('iva_ventas');
 Route::get('ventas/listar-iva-ventas/{formato}', 'Ventas\IvaVentasReporteController@exportar')->name('listar_iva_ventas');
+Route::get('ventas/cliente-cuentacorriente-reporte', 'Ventas\ClienteCuentacorrienteReporteController@index')->name('cliente_cuentacorriente_reporte');
+Route::get('ventas/listar-cliente-cuentacorriente-reporte/{formato}', 'Ventas\ClienteCuentacorrienteReporteController@exportar')->name('listar_cliente_cuentacorriente_reporte');
 Route::get('ventas/ventas-por-concepto', 'Ventas\VentasPorConceptoReporteController@index')->name('ventas_por_concepto');
 Route::get('ventas/listar-ventas-por-concepto/{formato}', 'Ventas\VentasPorConceptoReporteController@exportar')->name('listar_ventas_por_concepto');
 Route::get('ventas/cot-electronico', 'Ventas\CotElectronicoController@index')->name('cot_electronico');
@@ -1849,6 +1921,9 @@ Route::delete('ventas/formapago/{id}', 'Ventas\FormapagoController@eliminar')->n
 
 Route::get('ventas/tipotransaccion', 'Ventas\TipotransaccionController@index')->name('tipotransaccion');
 Route::get('ventas/tipotransaccion/arca-tipos-cbte', 'Ventas\TipotransaccionController@tiposCbteArca')->name('tipotransaccion_arca_tipos_cbte');
+Route::post('ventas/tipotransaccion/consultatipotransaccion', 'Ventas\TipotransaccionController@consultaTipotransaccion')->name('consulta_tipotransaccion');
+Route::get('ventas/tipotransaccion/resolvertipotransaccion', 'Ventas\TipotransaccionController@resolverTipotransaccion')->name('resolver_tipotransaccion');
+Route::get('ventas/leertipotransaccion/{abreviatura}', 'Ventas\TipotransaccionController@leerUnTipotransaccion')->name('leer_tipotransaccion');
 Route::get('ventas/tipotransaccion/crear', 'Ventas\TipotransaccionController@crear')->name('crear_tipotransaccion');
 Route::post('ventas/tipotransaccion', 'Ventas\TipotransaccionController@guardar')->name('guardar_tipotransaccion');
 Route::get('ventas/tipotransaccion/{id}/editar', 'Ventas\TipotransaccionController@editar')->name('editar_tipotransaccion')->middleware('modo.consulta');
@@ -2207,6 +2282,13 @@ Route::get('ventas/certificados-arca/exportar-par', 'Ventas\CertificadoArcaContr
 Route::post('ventas/certificados-arca/instalar', 'Ventas\CertificadoArcaController@instalar')->name('instalar_certificado_arca');
 Route::post('ventas/certificados-arca/probar', 'Ventas\CertificadoArcaController@probar')->name('probar_certificado_arca');
 
+Route::get('ventas/factura-pdf-parametro', 'Ventas\FacturaPdfParametroController@index')->name('factura_pdf_parametro');
+Route::put('ventas/factura-pdf-parametro', 'Ventas\FacturaPdfParametroController@actualizar')->name('actualizar_factura_pdf_parametro');
+
+Route::get('ventas/factura-mail-configuracion', 'Ventas\FacturaMailConfiguracionController@index')->name('factura_mail_configuracion');
+Route::put('ventas/factura-mail-configuracion', 'Ventas\FacturaMailConfiguracionController@actualizar')->name('actualizar_factura_mail_configuracion');
+Route::post('ventas/factura/{id}/enviar-mail', 'Ventas\FacturaMailConfiguracionController@enviar')->name('enviar_factura_mail');
+
 Route::get('ventas/arca-caea', 'Ventas\ArcaCaeaController@index')->name('arca_caea');
 Route::get('ventas/arca-caea/{id}/estado-informe', 'Ventas\ArcaCaeaController@estadoInforme')->name('arca_caea_estado_informe');
 Route::get('ventas/arca-caea/{id}/proximos-manual', 'Ventas\ArcaCaeaController@proximosManual')->name('arca_caea_proximos_manual');
@@ -2226,6 +2308,9 @@ Route::post('ventas/numerador-fiscal/sembrar', 'Ventas\VentaSerieNumeradorContro
 Route::get('ventas/puntoventa', 'Ventas\PuntoventaController@index')->name('puntoventa');
 Route::get('ventas/puntoventa/arca-puntos-venta', 'Ventas\PuntoventaController@puntosVentaArca')->name('puntoventa_arca_puntos_venta');
 Route::post('ventas/puntoventa/sincronizar-anita', 'Ventas\PuntoventaController@sincronizarDesdeAnita')->name('sincronizar_puntoventa_anita');
+Route::post('ventas/puntoventa/consultapuntoventa', 'Ventas\PuntoventaController@consultaPuntoventa')->name('consulta_puntoventa');
+Route::get('ventas/puntoventa/resolverpuntoventa', 'Ventas\PuntoventaController@resolverPuntoventa')->name('resolver_puntoventa');
+Route::get('ventas/leerpuntoventaporcodigo/{codigo}', 'Ventas\PuntoventaController@leerUnPuntoventaPorCodigo')->name('leer_puntoventa_por_codigo');
 Route::get('ventas/puntoventa/crear', 'Ventas\PuntoventaController@crear')->name('crear_puntoventa');
 Route::post('ventas/puntoventa', 'Ventas\PuntoventaController@guardar')->name('guardar_puntoventa');
 Route::get('ventas/puntoventa/{id}/editar', 'Ventas\PuntoventaController@editar')->name('editar_puntoventa')->middleware('modo.consulta');
@@ -2330,8 +2415,8 @@ if ((string) config('app.empresa') !== 'Calzados Ferli') {
     Route::post('ventas/pedido/ejecutacierre', 'Ventas\PedidoController@ejecutaCierre')->name('ejecuta_cierre_pedido');
 }
 
-if (strtoupper((string) config('app.empresa')) !== 'INTERFORMING'
-    && (string) config('app.empresa') !== 'Calzados Ferli') {
+// Remitos ERP: habilitado en AGG / Bierzo / Ferli. Interforming no usa este ABM.
+if (strtoupper((string) config('app.empresa')) !== 'INTERFORMING') {
     Route::get('ventas/remito', 'Ventas\RemitoController@index')->name('remito');
     Route::get('ventas/remito/crear', 'Ventas\RemitoController@crear')->name('crear_remito');
     Route::post('ventas/remito', 'Ventas\RemitoController@guardar')->name('guardar_remito');
@@ -2576,8 +2661,30 @@ Route::delete('caja/estadocheque_banco/{id}', 'Caja\Estadocheque_BancoController
  */
 
 Route::get('caja/cheque', 'Caja\ChequeController@index')->name('cheque');
+Route::get('caja/listacheque/{formato?}/{busqueda?}', 'Caja\ChequeController@listar')->name('lista_cheque');
+Route::get('caja/listaagingcheque/{formato?}', 'Caja\ChequeController@listarAging')->name('lista_aging_cheque');
+Route::get('caja/listaconciliaciondepositocheque/{formato?}', 'Caja\ChequeController@listarConciliacionDeposito')->name('lista_conciliacion_deposito_cheque');
+Route::get('caja/cheque/aging-cartera', 'Caja\ChequeController@agingCartera')->name('aging_cheque_cartera');
+Route::get('caja/cheque/conciliacion-deposito', 'Caja\ChequeController@conciliacionDeposito')->name('conciliacion_deposito_cheque');
+Route::get('caja/cheque/cashflow-semanal', 'Caja\ChequeController@cashflowSemanal')->name('cashflow_cheque');
+Route::get('caja/cheque/echeq', 'Caja\ChequeController@echeqIndex')->name('echeq_cheque');
+Route::post('caja/cheque/{id}/echeq-sync', 'Caja\ChequeController@echeqSync')->name('echeq_sync_cheque');
+Route::get('caja/cheque/importar', 'Caja\ChequeController@formImportar')->name('importar_cheque');
+Route::post('caja/cheque/importar/preview', 'Caja\ChequeController@previewImportacion')->name('preview_importar_cheque');
+Route::post('caja/cheque/importar', 'Caja\ChequeController@importar')->name('guardar_importar_cheque');
 Route::get('caja/cheque/crear', 'Caja\ChequeController@crear')->name('crear_cheque');
 Route::post('caja/cheque', 'Caja\ChequeController@guardar')->name('guardar_cheque');
+Route::post('caja/cheque/consulta-cartera', 'Caja\ChequeController@consultaCartera')->name('consulta_cheque_cartera');
+Route::post('caja/cheque/resolver-cartera', 'Caja\ChequeController@resolverCartera')->name('resolver_cheque_cartera');
+Route::post('caja/cheque/depositar-masivo', 'Caja\ChequeController@depositarMasivo')->name('depositar_masivo_cheque');
+Route::post('caja/cheque/acreditar-masivo', 'Caja\ChequeController@acreditarMasivo')->name('acreditar_masivo_cheque');
+Route::post('caja/cheque/caucionar-masivo', 'Caja\ChequeController@caucionarMasivo')->name('caucionar_masivo_cheque');
+Route::get('caja/cheque/{id}/rechazo-nd', 'Caja\ChequeController@datosRechazoNd')->name('datos_rechazo_nd_cheque');
+Route::post('caja/cheque/{id}/rechazar-nd', 'Caja\ChequeController@rechazarConNd')->name('rechazar_nd_cheque');
+Route::post('caja/cheque/{id}/depositar', 'Caja\ChequeController@depositar')->name('depositar_cheque');
+Route::post('caja/cheque/{id}/acreditar', 'Caja\ChequeController@acreditar')->name('acreditar_cheque');
+Route::post('caja/cheque/{id}/caucionar', 'Caja\ChequeController@caucionar')->name('caucionar_cheque');
+Route::post('caja/cheque/{id}/liberar-caucion', 'Caja\ChequeController@liberarCaucion')->name('liberar_caucion_cheque');
 Route::get('caja/Cheque/{id}/editar', 'Caja\ChequeController@editar')->name('editar_cheque');
 Route::put('caja/cheque/{id}', 'Caja\ChequeController@actualizar')->name('actualizar_cheque');
 Route::delete('caja/cheque/{id}', 'Caja\ChequeController@eliminar')->name('eliminar_cheque');
@@ -2640,6 +2747,11 @@ Route::post('caja/tipocuentacaja', 'Caja\TipocuentacajaController@guardar')->nam
 Route::get('caja/tipocuentacaja/{id}/editar', 'Caja\TipocuentacajaController@editar')->name('editar_tipocuentacaja');
 Route::put('caja/tipocuentacaja/{id}', 'Caja\TipocuentacajaController@actualizar')->name('actualizar_tipocuentacaja');
 Route::delete('caja/tipocuentacaja/{id}', 'Caja\TipocuentacajaController@eliminar')->name('eliminar_tipocuentacaja');
+
+/*
+ * Medio de pago (CRUD retirado): bookmarks / menú huérfano → usos de cuenta de caja
+ */
+Route::redirect('caja/mediopago', 'caja/usocuentacaja')->name('mediopago');
 
 /*
  * Uso de medio de pago
@@ -3544,6 +3656,8 @@ Route::get('compras/requisicion-reporte', 'Compras\RequisicionReporteController@
 Route::get('compras/listar-requisicion-reporte/{formato?}', 'Compras\RequisicionReporteController@exportar')->name('listar_reporte_requisicion_compras');
 Route::get('compras/proyeccion-pagos', 'Compras\ProyeccionPagosReporteController@index')->name('reporte_proyeccion_pagos');
 Route::get('compras/listar-proyeccion-pagos/{formato?}', 'Compras\ProyeccionPagosReporteController@exportar')->name('listar_reporte_proyeccion_pagos');
+Route::get('compras/proveedor-cuentacorriente-reporte', 'Compras\ProveedorCuentacorrienteReporteController@index')->name('proveedor_cuentacorriente_reporte');
+Route::get('compras/listar-proveedor-cuentacorriente-reporte/{formato}', 'Compras\ProveedorCuentacorrienteReporteController@exportar')->name('listar_proveedor_cuentacorriente_reporte');
 Route::get('compras/pagos-sabana', 'Compras\PagosSabanaReporteController@index')->name('reporte_pagos_sabana');
 Route::get('compras/listar-pagos-sabana/{formato?}', 'Compras\PagosSabanaReporteController@exportar')->name('listar_reporte_pagos_sabana');
 Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');

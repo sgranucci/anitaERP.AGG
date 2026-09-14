@@ -206,11 +206,4 @@
         </select>
     </div>
 </div>
-<div class="form-group row">
-    <label for="pathafip" class="col-lg-3 col-form-label">Path m&oacute;dulo AFIP</label>
-    <div class="col-lg-4">
-        <input type="text" name="pathafip" id="pathafip" class="form-control" value="{{old('pathafip', $data->pathafip ?? '')}}"/>
-        <small class="form-text text-muted">Requerido para WSFEX v1 (módulo AFIP en disco). WSFE y WSMTXCA usan certificados ARCA en <code>storage/app/arca/</code>.</small>
-    </div>
-</div>
 <input type="hidden" id="estado" name="estado" value="{{$data->estado ?? 'A'}}" >

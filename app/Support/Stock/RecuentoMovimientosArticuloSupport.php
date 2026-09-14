@@ -110,13 +110,18 @@ final class RecuentoMovimientosArticuloSupport
         ];
     }
 
-    public static function query(int $articuloId, int $depositoId, ?int $empresaId = null): Builder
+    public static function query(int $articuloId, int $depositoId, ?int $empresaId = null, ?int $combinacionId = null): Builder
     {
         $empresaId = (int) ($empresaId ?? 0);
         $empresaId = $empresaId > 0 ? $empresaId : null;
 
         $query = self::queryBase($articuloId)
             ->where('am.articulo_id', $articuloId);
+
+        $combinacionId = (int) ($combinacionId ?? 0);
+        if ($combinacionId > 0) {
+            $query->where('am.combinacion_id', $combinacionId);
+        }
 
         if (self::esModoTodosDepositos($depositoId)) {
             self::aplicarFiltroDepositosAutorizados($query, $empresaId);
@@ -252,6 +257,7 @@ final class RecuentoMovimientosArticuloSupport
                 'am.venta_id',
                 'am.deposito_id',
                 'am.movimientostock_id',
+                'am.combinacion_id',
                 'dep.codigo AS deposito_codigo',
                 'dep.nombre AS deposito_nombre',
                 'emp.nombre AS empresa_nombre',

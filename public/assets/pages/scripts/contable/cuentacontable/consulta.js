@@ -248,7 +248,13 @@ $(document)
             $el.hasClass('codigoconcepto_solicitudpago') || $el.is('#concepto_solicitudpago_id_codigo') ||
             $el.hasClass('codigodeposito') ||
             $el.hasClass('sku') || $el.hasClass('codigoarticulo') ||
-            $el.hasClass('codigocuentacontable') || $el.is('#codigocuentacontable')
+            $el.hasClass('codigocuentacontable') || $el.is('#codigocuentacontable') ||
+            $el.is('#consultacuentacontable') ||
+            $el.is('#consultadeposito, #consultapuntoventa, #consultatipotransaccionventa, #consultacuentacaja, #consultalistaprecio') ||
+            $el.hasClass('codigopuntoventa') ||
+            $el.hasClass('codigocuentacaja') ||
+            $el.hasClass('codigolistaprecio') ||
+            $el.hasClass('abreviaturatipotransaccionventa')
         ) {
             return;
         }
@@ -312,8 +318,41 @@ document.addEventListener('keydown', function (e) {
 }, true);
 
 $(document).off('keyup.consultactaBuscar input.consultactaBuscar', '#consultacuentacontable')
-    .on('keyup.consultactaBuscar input.consultactaBuscar', '#consultacuentacontable', function () {
+    .on('keyup.consultactaBuscar input.consultactaBuscar', '#consultacuentacontable', function (e) {
+        if (e.which === 13 || e.key === 'Enter') {
+            return;
+        }
         programarBusquedaCuentaContable($(this).val());
+    });
+
+function elegirPrimeraCuentaContableDelModal() {
+    var $btn = $('#datoscuentas .eligeconsultacuentacontable').first();
+    if ($btn.length) {
+        $btn.trigger('click');
+        return true;
+    }
+    return false;
+}
+
+$(document)
+    .off('keydown.consultaCtaEnter', '#consultacuentacontable')
+    .on('keydown.consultaCtaEnter', '#consultacuentacontable', function (e) {
+        if (e.which !== 13 && e.key !== 'Enter') {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (!elegirPrimeraCuentaContableDelModal()) {
+            programarBusquedaCuentaContable($(this).val());
+        }
+    });
+
+$(document)
+    .off('submit.consultaCtaEnter', '#consultacuentaModal form')
+    .on('submit.consultaCtaEnter', '#consultacuentaModal form', function (e) {
+        e.preventDefault();
+        elegirPrimeraCuentaContableDelModal();
+        return false;
     });
 
 function activa_eventos_consulta_cuentacontable()
@@ -369,7 +408,9 @@ function activa_eventos_consulta_cuentacontable()
     });
 
     $('#aceptaconsultacuentaModal').off('click.consultacta').on('click.consultacta', function () {
-        $('#consultacuentaModal').modal('hide');
+        if (!elegirPrimeraCuentaContableDelModal()) {
+            $('#consultacuentaModal').modal('hide');
+        }
     });
 
     $(document).off('click.eligeconsultacuentacontable').on('click.eligeconsultacuentacontable', '.eligeconsultacuentacontable', function () {

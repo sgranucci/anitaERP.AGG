@@ -34,6 +34,7 @@ use App\Support\Ventas\ClienteListadoFiltros;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
+use App\Support\Ventas\ClienteDocumentoAnitaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
@@ -923,6 +924,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				$horarioAtencion = trim((string) ($data->clim_hs_atencion ?? ''));
 
 			$codigoCliente = $this->normalizarCodigoCliente($data->clim_cliente);
+			$documentoAnita = ClienteDocumentoAnitaSupport::desdeClimCuit($data->clim_cuit ?? null);
 
 			if (config("app.empresa") == 'EL BIERZO')
 			{
@@ -945,7 +947,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"vendedor_id" => $vendedor_id,
 					"cobrador_id" => $cobrador_id,
 					"transporte_id" => $transporte_id,
-					"numerodocumento" => $data->clim_cuit,
+					"numerodocumento" => $documentoAnita['numerodocumento'],
 					"condicioniva_id" => $condicioniva_id,
 					"retieneiva" => $data->clim_retiene_iva,
 					"nroiibb" => $data->clim_nro_ing_bruto,
@@ -971,7 +973,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					'hastafecha_exclusionpercepcioniva' => $data->clim_hfexcl_piva,
 					'distribuidor_id' => $distribuidor_id,
 					'descuentoventa_id' => null,
-					'tipodocumento_id' => 1,
+					'tipodocumento_id' => $documentoAnita['tipodocumento_id'],
 					'lugarentrega' => $data->clim_lugar_entrega,
 					'horarioatencion' => $horarioAtencion
 					];
@@ -997,7 +999,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"vendedor_id" => $vendedor_id,
 					"cobrador_id" => $cobrador_id,
 					"transporte_id" => $transporte_id,
-					"numerodocumento" => $data->clim_cuit,
+					"numerodocumento" => $documentoAnita['numerodocumento'],
 					"condicioniva_id" => $condicioniva_id,
 					"retieneiva" => $data->clim_retiene_iva,
 					"nroiibb" => $data->clim_nro_ing_br,
@@ -1012,6 +1014,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"leyenda" => $leyenda,
 					"modofacturacion" => $modoFacturacion,
 					"usuario_id" => $usuario_id,
+					'tipodocumento_id' => $documentoAnita['tipodocumento_id'],
 					'horarioatencion' => $horarioAtencion
 					];
 			}

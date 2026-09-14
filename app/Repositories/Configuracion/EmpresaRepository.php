@@ -66,7 +66,7 @@ class EmpresaRepository implements EmpresaRepositoryInterface
 
     public function empresaIdPermitida(int $empresaId): bool
     {
-        $asignadas = $this->traeEmpresasAsignadas();
+        $asignadas = array_map('intval', $this->traeEmpresasAsignadas());
 
         if (count($asignadas) === 0) {
             return true;

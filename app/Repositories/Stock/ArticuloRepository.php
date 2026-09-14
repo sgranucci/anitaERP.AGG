@@ -107,23 +107,30 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             $filtros['estado'] = ArticuloListadoFiltros::ESTADO_ACTIVO;
         }
 
-        $articulo = $this->model->select(
-                                'articulo.id as id',
-                                'articulo.sku as codigoarticulo',
-                                'articulo.codigobarra as codigobarra',
-                                'articulo.descripcion as descripcion',
-                                'unidadmedida.nombre as nombreunidadmedida',
-                                'categoria.nombre as nombrecategoria',
-                                'tipoarticulo.nombre as nombretipoarticulo',
-                                'usoarticulo.nombre as nombreusoarticulo',
-                                'articulo.empresa_id as empresa_id',
-                                'empresa.nombre as nombreempresa',
-                                'articulo.numeroparte as numeroparte',
-                                'articulo.ubicacionparte as ubicacionparte',
-                                'articulo.depositoentrega_id as depositoentrega_id',
-                                'articulo.nofactura',
-                                'articulo.fl_precio_promedio_transferencia',
-                                'articulo.estado as estado')
+        $select = [
+            'articulo.id as id',
+            'articulo.sku as codigoarticulo',
+            'articulo.codigobarra as codigobarra',
+            'articulo.descripcion as descripcion',
+            'unidadmedida.nombre as nombreunidadmedida',
+            'categoria.nombre as nombrecategoria',
+            'tipoarticulo.nombre as nombretipoarticulo',
+            'usoarticulo.nombre as nombreusoarticulo',
+            'articulo.empresa_id as empresa_id',
+            'empresa.nombre as nombreempresa',
+            'articulo.numeroparte as numeroparte',
+            'articulo.ubicacionparte as ubicacionparte',
+            'articulo.depositoentrega_id as depositoentrega_id',
+            'articulo.nofactura',
+            'articulo.fl_precio_promedio_transferencia',
+            'articulo.estado as estado',
+        ];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado_fabrica')) {
+            $select[] = 'articulo.estado_fabrica as estado_fabrica';
+            $select[] = 'articulo.estado_local as estado_local';
+        }
+
+        $articulo = $this->model->select($select)
                                 ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
                                 ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
                                 ->leftJoin('tipoarticulo', 'articulo.tipoarticulo_id', '=', 'tipoarticulo.id')
@@ -132,6 +139,12 @@ class ArticuloRepository implements ArticuloRepositoryInterface
                                 ->orderby('articulo.sku', 'asc');
 
         ArticuloListadoFiltros::aplicar($articulo, $filtros);
+
+        if (ArticuloListadoFiltros::filtroCanalActivo()) {
+            $articulo->with(['canales' => function ($q) {
+                $q->select('canal.id', 'canal.codigo', 'canal.nombre');
+            }]);
+        }
 
         if (isset($flPaginando)) {
             if ($flPaginando) {

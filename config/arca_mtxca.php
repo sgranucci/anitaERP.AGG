@@ -30,11 +30,24 @@ $resolveArcaMtxcaEmpresas = static function (): array {
         'FRASLE' => [
             1 => 'frasle',
         ],
+        'Calzados Ferli' => [
+            1 => 'ferli',
+            3 => 'ferli',
+        ],
     ];
 
     $empresaInstalacion = trim((string) env('EMPRESA', 'AGG'), " \t\n\r\0\x0B'\"");
 
     $carpetas = $porEntorno[$empresaInstalacion] ?? [];
+    if ($carpetas === [] && $empresaInstalacion !== '') {
+        $upper = strtoupper($empresaInstalacion);
+        foreach ($porEntorno as $clave => $mapa) {
+            if (strtoupper((string) $clave) === $upper) {
+                $carpetas = $mapa;
+                break;
+            }
+        }
+    }
 
     $jsonOverride = env('ARCA_MTXCA_EMPRESAS_JSON');
     if (is_string($jsonOverride) && $jsonOverride !== '') {
@@ -94,7 +107,7 @@ return [
         ],
     ],
 
-    'base_storage' => storage_path('app/arca/mtxca'),
+    'base_storage' => env('ARCA_MTXCA_BASE', storage_path('app/arca/mtxca')),
 
     'empresas_por_entorno' => [
         'EL BIERZO' => [
@@ -110,6 +123,10 @@ return [
         ],
         'FRASLE' => [
             1 => 'frasle',
+        ],
+        'Calzados Ferli' => [
+            1 => 'ferli',
+            3 => 'ferli',
         ],
     ],
 

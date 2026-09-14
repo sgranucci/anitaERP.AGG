@@ -165,4 +165,39 @@ switch(strtoupper(config('app.empresa')))
             ],
         ];
         break;
+    case "CALZADOS FERLI":
+        // Códigos vivos: FAC A-00012-00082995 → 5 dígitos PV + 8 dígitos número.
+        return [
+            "DIGITOS_SUCURSAL" => "5",
+            "DIGITOS_COMPROBANTE" => "8",
+            "LIMITE_FCE" => (int) env('FACTURACION_LIMITE_FCE', 3958316),
+            "PUNTOVENTA_FACTURACION" => 1,
+            "PUNTOVENTA_REMITO" => 2,
+            "PORCENTAJE_VALOR_ASEGURADO" => (float) env('REMITO_PORCENTAJE_VALOR_ASEGURADO', 0),
+            "CUENTACONTABLE_PERCEPCION_IVA" => env('FACTURACION_CUENTA_PERCEPCION_IVA', ''),
+            "CUENTACONTABLE_PERCEPCION_NO_CATEGORIZADO" => env('FACTURACION_CUENTA_PERCEPCION_NO_CATEGORIZADO', ''),
+            "CUENTACONTABLE_VENTA" => env('FACTURACION_CUENTA_VENTA', ''),
+            "USA_DETRACCION" => 'N',
+            "DECIMAL_CANTIDAD" => 0,
+            "NETEA_DESCUENTO_LINEA" => false,
+            "IMPUESTO_INTERNO_LISTAPRECIO_POR_EMPRESA" => $impuestoInternoListasPorEmpresa,
+            "IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE" => $impuestoInternoTipoArticulo,
+            "CONCEPTO_OBLIGATORIO_SIN_ARTICULO" => filter_var(env('FACTURACION_CONCEPTO_OBLIGATORIO_SIN_ARTICULO', false), FILTER_VALIDATE_BOOLEAN),
+            "CONCEPTO_ANITA_LOGISTICA" => (int) env('FACTURACION_CONCEPTO_ANITA_LOGISTICA', 5),
+            "CONCEPTO_ANITA_BONIFICACION" => (int) env('FACTURACION_CONCEPTO_ANITA_BONIFICACION', 1),
+            "CONCEPTO_ANITA_AJUSTE" => (int) env('FACTURACION_CONCEPTO_ANITA_AJUSTE', 2),
+            // Letterhead PDF FAC/REM (muestra Anita FAC_241499 / REM_241499).
+            "PDF_IMP_INTERNOS" => env('FACTURACION_PDF_IMP_INTERNOS', 'No responsable'),
+            "PDF_SEGURIDAD_HIGIENE" => env('FACTURACION_PDF_SEGURIDAD_HIGIENE', 'Partida Municipal 55416'),
+            "PDF_HABILITACION" => env('FACTURACION_PDF_HABILITACION', '44537-92ADM'),
+            "PDF_WEB" => env('FACTURACION_PDF_WEB', 'www.ferli.com.ar - info@ferli.com.ar'),
+            "PDF_CHEQUES_A_LA_ORDEN" => env('FACTURACION_PDF_CHEQUES_A_LA_ORDEN', 'CALZADOS FERLI S.A.'),
+            'contrato_venta_aviso' => [
+                'habilitado' => filter_var(env('FACTURACION_CONTRATO_VENTA_AVISO_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
+                'dias_antes' => max(1, (int) env('FACTURACION_CONTRATO_VENTA_AVISO_DIAS', 15)),
+                'hora' => env('FACTURACION_CONTRATO_VENTA_AVISO_HORA', '09:20'),
+                'emails' => env('FACTURACION_CONTRATO_VENTA_AVISO_EMAILS', ''),
+            ],
+        ];
+        break;
 }

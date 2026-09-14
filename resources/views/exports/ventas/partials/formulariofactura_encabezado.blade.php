@@ -1,5 +1,6 @@
 @php
     $esRemitoHoja = (bool) ($esRemitoHoja ?? false);
+    $facturaPdfEsFerli = (bool) ($facturaPdfEsFerli ?? \App\Support\Configuracion\EntornoEmpresaSupport::esFerli());
     $codigoPvRemito = trim((string) (
         $venta->puntoventaremito?->codigo
         ?? $venta->remitos?->puntoventas?->codigo
@@ -10,20 +11,78 @@
         $codigoPvRemito,
         $numeroRemitoPdf
     );
+    $empresaPv = $venta->puntoventas->empresas ?? null;
+    $empresaPdfId = (int) ($empresaPv->id ?? $venta->puntoventas->empresa_id ?? 0);
+    $membretePdf = \App\Support\Ventas\FacturaPdfMembreteSupport::paraEmpresa($empresaPdfId > 0 ? $empresaPdfId : null);
+    $ferliImpInternos = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_IMP_INTERNOS] ?? '');
+    $ferliSegHigiene = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_SEGURIDAD_HIGIENE] ?? '');
+    $ferliHabilitacion = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_HABILITACION] ?? '');
+    $ferliWeb = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_WEB] ?? '');
+    $pdfLugar = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_LUGAR] ?? '');
+    $pdfLeyendaIva = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_LEYENDA_IVA] ?? 'I.V.A. RESPONSABLE INSCRIPTO');
+    $pdfInicioFallback = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_INICIO_FALLBACK] ?? '');
+    $inicioAct = $empresaPv->fechainicioactividad ?? null;
+    $inicioActFmt = ($inicioAct && (string) $inicioAct !== '0000-00-00')
+        ? date('d/m/Y', strtotime((string) $inicioAct))
+        : $pdfInicioFallback;
 @endphp
 <table class="table borderless factura-cabecera {{ $facturaPdfRemitoDebajoCliente && ! $esRemitoHoja ? 'factura-cabecera-admin' : '' }}">
     <tr>
         <td class="factura-cabecera-logo">
             @if ($logoEmpresaDataUri)
-                <img width="160" height="70" src="{{ $logoEmpresaDataUri }}" alt="">
+                @php
+                    $logoPdfAncho = 160;
+                    $logoPdfAlto = 70;
+                    if (preg_match('#^data:image/[^;]+;base64,(.+)$#', (string) $logoEmpresaDataUri, $logoM)) {
+                        $logoBin = base64_decode($logoM[1], true);
+                        if ($logoBin !== false) {
+                            $logoInfo = @getimagesizefromstring($logoBin);
+                            if (is_array($logoInfo) && ($logoInfo[0] ?? 0) > 0 && ($logoInfo[1] ?? 0) > 0) {
+                                $logoPdfAlto = (int) max(1, round($logoPdfAncho * $logoInfo[1] / $logoInfo[0]));
+                                // DomPDF: tope de alto para no empujar la cabecera
+                                if ($logoPdfAlto > 95) {
+                                    $logoPdfAlto = 95;
+                                    $logoPdfAncho = (int) max(1, round($logoPdfAlto * $logoInfo[0] / $logoInfo[1]));
+                                }
+                            }
+                        }
+                    }
+                @endphp
+                <img width="{{ $logoPdfAncho }}" height="{{ $logoPdfAlto }}" src="{{ $logoEmpresaDataUri }}" alt="">
             @endif
             <div>
-                <strong class="factura-empresa-nombre">{{ $venta->puntoventas->empresas->nombre }}</strong>
+                <strong class="factura-empresa-nombre">{{ $empresaPv->nombre ?? '' }}</strong>
                 <p class="factura-empresa-datos">
-                    {{ $venta->puntoventas->domicilio }}<br>
-                    {{ $venta->puntoventas->localidades->nombre }} ({{ $venta->puntoventas->codigopostal }})<br>
-                    {{ $venta->puntoventas->provincias->nombre }}<br>
-                    IVA RESPONSABLE INSCRIPTO
+                    @if ($facturaPdfEsFerli)
+                        {{ $venta->puntoventas->domicilio }}<br>
+                        {{ $venta->puntoventas->localidades->nombre ?? '' }}
+                        @if (! empty($venta->puntoventas->codigopostal))
+                            ({{ $venta->puntoventas->codigopostal }})
+                        @endif
+                        <br>
+                        {{ $venta->puntoventas->provincias->nombre ?? '' }}
+                        @php
+                            $telPv = trim((string) ($venta->puntoventas->telefono ?? ''));
+                            // En maestros Ferli a veces quedó ciudad/CP en telefono; no rotular como TEL.
+                            $telPvPareceTelefono = $telPv !== '' && preg_match('/\d/', $telPv) && ! preg_match('/\bCP\.?\s*\d/i', $telPv);
+                        @endphp
+                        @if ($telPvPareceTelefono)
+                            <br>TEL.: {{ $telPv }}
+                        @elseif ($telPv !== '')
+                            <br>{{ $telPv }}
+                        @endif
+                        @if ($ferliWeb !== '')
+                            <br>{{ $ferliWeb }}
+                        @endif
+                        @if ($pdfLeyendaIva !== '')
+                            <br>{{ $pdfLeyendaIva }}
+                        @endif
+                    @else
+                        {{ $venta->puntoventas->domicilio }}<br>
+                        {{ $venta->puntoventas->localidades->nombre }} ({{ $venta->puntoventas->codigopostal }})<br>
+                        {{ $venta->puntoventas->provincias->nombre }}<br>
+                        {{ $pdfLeyendaIva !== '' ? $pdfLeyendaIva : 'IVA RESPONSABLE INSCRIPTO' }}
+                    @endif
                 </p>
             </div>
         </td>
@@ -38,10 +97,28 @@
             <strong>{{ $esRemitoHoja ? 'REMITO' : ($nombreTipoComprobanteImpresion ?? $venta->tipotransacciones->nombre ?? '') }}</strong><br>
             <strong>Nro. {{ $esRemitoHoja ? $nroRemitoFormateado : $venta->codigo }}</strong>
             <p>
-                Fecha emisi&oacute;n: {{ date('d/m/Y', strtotime($venta->fecha ?? '')) }}<br>
-                C.U.I.T.: {{ $venta->puntoventas->empresas->nroinscripcion }}<br>
-                Ingresos Brutos: {{ $venta->puntoventas->empresas->numeroiibb }}<br>
-                Inicio de Actividades: {{ date('d/m/Y', strtotime($venta->puntoventas->empresas->fechainicioactividad)) }}
+                @if ($facturaPdfEsFerli)
+                    Lugar y fecha: {{ date('d/m/Y', strtotime($venta->fecha ?? '')) }}@if ($pdfLugar !== '') · {{ $pdfLugar }}@endif<br>
+                    C.U.I.T.: {{ $empresaPv->nroinscripcion ?? '' }}<br>
+                    Ingresos brutos CONV MULT.: {{ $empresaPv->numeroiibb ?? '' }}<br>
+                    @if ($ferliImpInternos !== '')
+                        Imp.internos: {{ $ferliImpInternos }}<br>
+                    @endif
+                    @if ($ferliSegHigiene !== '')
+                        Seguridad e Higiene: {{ $ferliSegHigiene }}<br>
+                    @endif
+                    @if ($ferliHabilitacion !== '')
+                        Habilitacion: {{ $ferliHabilitacion }}<br>
+                    @endif
+                    @if ($inicioActFmt !== '')
+                        Inicio de Actividades: {{ $inicioActFmt }}
+                    @endif
+                @else
+                    Fecha emisi&oacute;n: {{ date('d/m/Y', strtotime($venta->fecha ?? '')) }}@if ($pdfLugar !== '') · {{ $pdfLugar }}@endif<br>
+                    C.U.I.T.: {{ $venta->puntoventas->empresas->nroinscripcion }}<br>
+                    Ingresos Brutos: {{ $venta->puntoventas->empresas->numeroiibb }}<br>
+                    Inicio de Actividades: {{ date('d/m/Y', strtotime($venta->puntoventas->empresas->fechainicioactividad)) }}
+                @endif
             </p>
             <p>{{ $copiaLeyenda ?? 'ORIGINAL' }}</p>
         </td>
@@ -54,7 +131,7 @@
                 Reparto: {{ $venta->transportes->codigo }}
             @endif
         </td>
-        <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
+        <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes?->condicionventas?->nombre ?? 'CONTADO' }}</td>
     </tr>
     @endif
 </table>
@@ -70,14 +147,26 @@
             <p>
                 {{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::domicilioReceptorFactura($venta) }}<br>
                 @if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
-                    {{ $venta->clientes->localidades->nombre ?? '' }} ({{ $venta->clientes->codigopostal ?? '' }})<br>
-                    {{ $venta->clientes->provincias->nombre ?? '' }} {{ $venta->clientes->paises->nombre ?? '' }}<br>
+                    {{ $venta->clientes?->localidades?->nombre ?? '' }} ({{ $venta->clientes?->codigopostal ?? '' }})<br>
+                    {{ $venta->clientes?->provincias?->nombre ?? '' }} {{ $venta->clientes?->paises?->nombre ?? '' }}<br>
+                @else
+                    @php
+                        $locSnap = $venta->localidades->nombre ?? '';
+                        $provSnap = $venta->provincias->nombre ?? '';
+                    @endphp
+                    @if ($locSnap !== '' || $provSnap !== '')
+                        {{ $locSnap }}@if (! empty($venta->codigopostal)) ({{ $venta->codigopostal }})@endif
+                        @if ($provSnap !== '')
+                            <br>{{ $provSnap }}
+                        @endif
+                        <br>
+                    @endif
                 @endif
                 @if (isset($venta->transportes->nombre))
-                    Transporte: {{ $venta->transportes->nombre }}<br>
+                    {{ $facturaPdfEsFerli ? 'Expreso' : 'Transporte' }}: {{ $venta->transportes->nombre }}<br>
                 @endif
                 @if (! empty($venta->lugarentrega))
-                    Lugar de entrega: {{ $venta->lugarentrega }}<br>
+                    {{ $facturaPdfEsFerli ? 'Entrega en' : 'Lugar de entrega' }}: {{ $venta->lugarentrega }}<br>
                 @endif
                 @include('exports.ventas.partials.papelito_waitry_factura', ['venta' => $venta])
             </p>
@@ -85,22 +174,32 @@
         <td class="factura-cliente-der">
             <p>
                 @php $codCli = \App\Support\Ventas\GastronomiaVentaDisplaySupport::codigoClienteMaestro($venta); @endphp
-                @if ($codCli !== '' && ($esRemitoHoja || $facturaEsGastronomia))
+                @if ($codCli !== '' && ($esRemitoHoja || $facturaEsGastronomia || $facturaPdfEsFerli))
                     Código: {{ $codCli }}<br>
                 @endif
-                @if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
+                @if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta) && $venta->clientes)
                     Teléfono: {{ $venta->clientes->telefono }}<br>
+                @elseif (! empty($venta->telefono))
+                    Teléfono: {{ $venta->telefono }}<br>
                 @endif
-                I.V.A.: {{ $venta->clientes->condicionivas->nombre }}<br>
                 @php
+                    $nombreIva = $venta->clientes?->condicionivas?->nombre
+                        ?? $venta->condicionivas?->nombre
+                        ?? '';
                     $docReceptorFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::documentoReceptorFactura($venta);
+                    if ($docReceptorFactura === '') {
+                        $docReceptorFactura = trim((string) ($venta->nroinscripcion ?? ''));
+                    }
                     $etiqDocReceptorFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::abreviaturaDocumentoReceptorFactura($venta);
                 @endphp
-                @if ($docReceptorFactura !== '')
-                    {{ $etiqDocReceptorFactura }}: {{ $docReceptorFactura }}<br>
+                @if ($nombreIva !== '')
+                    I.V.A.: {{ $nombreIva }}<br>
                 @endif
-                @if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
-                    Ingresos Brutos: {{ $venta->clientes->condicioniibbs->nombre }} {{ $venta->clientes->nroiibb }}
+                @if ($docReceptorFactura !== '')
+                    {{ $facturaPdfEsFerli ? 'C.U.I.T.' : $etiqDocReceptorFactura }}: {{ $docReceptorFactura }}<br>
+                @endif
+                @if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta) && ! $facturaPdfEsFerli && $venta->clientes)
+                    Ingresos Brutos: {{ $venta->clientes->condicioniibbs?->nombre }} {{ $venta->clientes->nroiibb }}
                 @endif
             </p>
         </td>
@@ -109,7 +208,7 @@
 @if ($esRemitoHoja)
 <table class="table borderless factura-remito-caja-admin">
     <tr>
-        <td>Condición de venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
+        <td>Condición de venta: {{ $venta->condicionventas?->nombre ?? $venta->clientes?->condicionventas?->nombre ?? 'CONTADO' }}</td>
         <td class="text-center">
             @if (isset($venta->transportes->codigo))
                 Reparto: {{ $venta->transportes->codigo }}
@@ -127,7 +226,7 @@
                 Reparto: {{ $venta->transportes->codigo }}
             @endif
         </td>
-        <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
+        <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes?->condicionventas?->nombre ?? 'CONTADO' }}</td>
     </tr>
 </table>
 @else

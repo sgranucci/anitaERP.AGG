@@ -24,6 +24,11 @@ final class FacturaPdfPaginacionSupport
 
     public const ITEMS_ANTERIOR_REMITO_HORIZONTAL = 18;
 
+    /** Ferli: filas agrupadas con cuadro de medidas (ocupan más alto). */
+    public const ITEMS_ULTIMA_REMITO_FERLI = 8;
+
+    public const ITEMS_ANTERIOR_REMITO_FERLI = 10;
+
     /**
      * Parte renglones por capacidad de hoja “llena”. El pie puede bajar a la
      * siguiente página si no entra; no se reserva una primera hoja casi vacía.
@@ -36,6 +41,7 @@ final class FacturaPdfPaginacionSupport
         [, $anterior] = match ($tipo) {
             'pos' => [self::ITEMS_ULTIMA_POS, self::ITEMS_ANTERIOR_POS],
             'remito' => [self::ITEMS_ULTIMA_REMITO, self::ITEMS_ANTERIOR_REMITO],
+            'remito_ferli' => [self::ITEMS_ULTIMA_REMITO_FERLI, self::ITEMS_ANTERIOR_REMITO_FERLI],
             'pedido' => [self::ITEMS_ULTIMA_PEDIDO, self::ITEMS_ANTERIOR_PEDIDO],
             'remito_horizontal' => [self::ITEMS_ULTIMA_REMITO_HORIZONTAL, self::ITEMS_ANTERIOR_REMITO_HORIZONTAL],
             default => [self::ITEMS_ULTIMA_ADMIN, self::ITEMS_ANTERIOR_ADMIN],

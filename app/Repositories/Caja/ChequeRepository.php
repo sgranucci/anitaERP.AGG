@@ -7,12 +7,17 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
+use App\Support\Caja\ChequeAnitaSyncSupport;
+use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
 use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
 use App\Support\Caja\ChequePropioImputacionSupport;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
+use App\Support\Caja\ChequeTerceroCtermaeAnitaMapper;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Log;
 use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Estadocheque_BancoRepositoryInterface;
@@ -20,8 +25,8 @@ use App\Repositories\Caja\ChequeraRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
+use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\ApiAnita;
-use Auth;
 use DB;
 use Carbon\Carbon;
 use Exception;
@@ -40,6 +45,7 @@ class ChequeRepository implements ChequeRepositoryInterface
     private $tipodocumentoRepository;
     private $estadocheque_bancoRepository;
     private $chequeraRepository;
+    private $clienteRepository;
 
     /**
      * PostRepository constructor.
@@ -53,7 +59,8 @@ class ChequeRepository implements ChequeRepositoryInterface
                                 ChequeraRepositoryInterface $chequerarepository,
                                 TipodocumentoRepositoryInterface $tipodocumentorepository,
                                 BancoRepositoryInterface $bancorepository,
-                                Estadocheque_BancoRepositoryInterface $estadocheque_bancorepository)
+                                Estadocheque_BancoRepositoryInterface $estadocheque_bancorepository,
+                                ClienteRepositoryInterface $clienterepository)
     {
         $this->model = $cheque;
         $this->cuentacajaRepository = $cuentacajarepository;
@@ -63,14 +70,12 @@ class ChequeRepository implements ChequeRepositoryInterface
         $this->tipodocumentoRepository = $tipodocumentorepository;
         $this->bancoRepository = $bancorepository;
         $this->estadocheque_bancoRepository = $estadocheque_bancorepository;
+        $this->clienteRepository = $clienterepository;
     }
 
     public function all()
     {
-        $hay_cheque = Cheque::first();
-
-        if (!$hay_cheque)
-            self::sincronizarConAnita();
+        $this->asegurarSyncInicialDesdeAnita();
 
         $query = $this->model->with('empresas')
             ->with('cuentacajas')
@@ -80,11 +85,74 @@ class ChequeRepository implements ChequeRepositoryInterface
             ->with('clientes')
             ->with('monedas')
             ->with('cajas')
-            ->with('chequeras');
+            ->with('chequeras')
+            ->orderByDesc('fechapago')
+            ->orderByDesc('id');
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         return $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Database\Eloquent\Collection<int, Cheque>
+     */
+    public function leeCheque($filtros, bool $flPaginando = true)
+    {
+        $this->asegurarSyncInicialDesdeAnita();
+
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = array_merge(ChequeListadoFiltros::filtrosVacios(), [
+                'modo' => ChequeListadoFiltros::MODO_TODOS,
+                'campo' => 'numerocheque',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+                'empresa_scope' => 'todas',
+            ]);
+        } elseif (! is_array($filtros)) {
+            $filtros = ChequeListadoFiltros::filtrosVacios();
+        }
+
+        $query = $this->model->select('cheque.*')
+            ->leftJoin('banco', 'banco.id', '=', 'cheque.banco_id')
+            ->leftJoin('empresa', 'empresa.id', '=', 'cheque.empresa_id')
+            ->leftJoin('cliente', 'cliente.id', '=', 'cheque.cliente_id')
+            ->leftJoin('moneda', 'moneda.id', '=', 'cheque.moneda_id')
+            ->with(['empresas', 'bancos', 'clientes', 'monedas', 'cuentacajas']);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cheque.empresa_id');
+
+        ChequeListadoFiltros::aplicar($query, $filtros);
+
+        $query->orderByDesc('cheque.fechapago')
+            ->orderByDesc('cheque.id');
+
+        if ($flPaginando) {
+            return $query->paginate(15);
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * Primera carga: CHP (cpromae) y CHT (ctermae) por separado si falta cada origen.
+     */
+    private function asegurarSyncInicialDesdeAnita(): void
+    {
+        try {
+            if (! $this->model->newQuery()->where('origen', 'E')->exists()) {
+                $this->sincronizarCpromaeConAnita();
+            }
+            if (! $this->model->newQuery()->where('origen', 'R')->exists()) {
+                $this->sincronizarCtermaeConAnita();
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     public function create(array $data)
@@ -292,12 +360,25 @@ class ChequeRepository implements ChequeRepositoryInterface
         );
 
         if ($funcion === 'update') {
-            EloquentAuditDeleteSupport::exceptIds(
-                $this->model->query()
-                    ->where('caja_movimiento_id', $cajaMovimientoId)
-                    ->whereNull('cobranza_id'),
-                $idsPersistidos
-            );
+            $aDesvincular = $this->model->query()
+                ->where('caja_movimiento_id', $cajaMovimientoId)
+                ->whereNull('cobranza_id')
+                ->when(count($idsPersistidos) > 0, fn ($q) => $q->whereNotIn('id', $idsPersistidos))
+                ->when(count($idsPersistidos) === 0, fn ($q) => $q)
+                ->get();
+
+            foreach ($aDesvincular as $chequeQuitar) {
+                if (! empty($chequeQuitar->nro_interno_anita)) {
+                    // Vuelve a cartera; no borrar el valor de terceros.
+                    $chequeQuitar->update([
+                        'caja_movimiento_id' => null,
+                        'pagoproveedor_id' => null,
+                        'caja_id' => null,
+                    ]);
+                } else {
+                    $chequeQuitar->delete();
+                }
+            }
         }
 
         return true;
@@ -420,6 +501,7 @@ class ChequeRepository implements ChequeRepositoryInterface
         }
 
         $chequeIds = $data['cheque_recibido_ids'] ?? [];
+        $nrosInternos = $data['nro_interno_anita_recibidos'] ?? [];
         $fechasPago = $data['fechapago_recibidos'] ?? [];
         $bancoIds = $data['banco_recibido_ids'] ?? [];
         $numeros = $data['numerocheque_recibidos'];
@@ -435,6 +517,18 @@ class ChequeRepository implements ChequeRepositoryInterface
                 continue;
             }
 
+            $nroInterno = (int) ($nrosInternos[$i] ?? 0);
+            $chequeId = (int) ($chequeIds[$i] ?? 0);
+            if ($chequeId <= 0 && $nroInterno > 0) {
+                $porInterno = $this->model->newQuery()
+                    ->where('origen', 'R')
+                    ->where('nro_interno_anita', $nroInterno)
+                    ->first();
+                if ($porInterno) {
+                    $chequeId = (int) $porInterno->id;
+                }
+            }
+
             $payload = [
                 'origen' => 'R',
                 'caracter' => 'R',
@@ -445,6 +539,7 @@ class ChequeRepository implements ChequeRepositoryInterface
                 'caja_id' => $cajaId,
                 'caja_movimiento_id' => $cajaMovimientoId,
                 'numerocheque' => $numero,
+                'nro_interno_anita' => $nroInterno > 0 ? $nroInterno : null,
                 'moneda_id' => (int) ($monedaIds[$i] ?? 1),
                 'monto' => (float) ($montos[$i] ?? 0),
                 'cotizacion' => (float) ($cotizaciones[$i] ?? 1),
@@ -456,12 +551,24 @@ class ChequeRepository implements ChequeRepositoryInterface
             ];
 
             if ($payload['banco_id'] <= 0) {
-                throw new Exception('Debe indicar banco en cheque recibido.');
+                throw new Exception('Debe indicar banco en cheque recibido / de cartera.');
             }
 
-            $chequeId = (int) ($chequeIds[$i] ?? 0);
-            if ($funcion === 'update' && $chequeId > 0) {
-                $this->model->findOrFail($chequeId)->update($payload);
+            if ($chequeId > 0) {
+                $existente = $this->model->findOrFail($chequeId);
+                if (empty($payload['nro_interno_anita']) && ! empty($existente->nro_interno_anita)) {
+                    $payload['nro_interno_anita'] = (int) $existente->nro_interno_anita;
+                }
+                if (empty($payload['cliente_id']) && ! empty($existente->cliente_id)) {
+                    $payload['cliente_id'] = (int) $existente->cliente_id;
+                }
+                // Conservar fecha emisión original de cartera (ingreso).
+                if (! empty($existente->fechaemision)) {
+                    $payload['fechaemision'] = $existente->fechaemision instanceof \DateTimeInterface
+                        ? $existente->fechaemision->format('Y-m-d')
+                        : (string) $existente->fechaemision;
+                }
+                $existente->update($payload);
                 $ids[] = $chequeId;
             } else {
                 $cheque = $this->model->create($payload);
@@ -587,27 +694,71 @@ class ChequeRepository implements ChequeRepositoryInterface
         return $ids;
     }
 
-    public function sincronizarConAnita(){
-		ini_set('max_execution_time', '300');
+    public function sincronizarConAnita()
+    {
+        $this->sincronizarCpromaeConAnita();
+        $this->sincronizarCtermaeConAnita();
+    }
 
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-						'sistema' => 'che_ban',
-						'campos' => $this->keyFieldAnita[0].','.$this->keyFieldAnita[1].','.$this->keyFieldAnita[2], 
-						'tabla' => $this->tableAnita );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        foreach ($dataAnita as $value) {
-            $this->traerRegistroDeAnita($value->{$this->keyFieldAnita[0]}, $value->{$this->keyFieldAnita[1]}, $value->{$this->keyFieldAnita[2]});
+    public function sincronizarCpromaeConAnita(): void
+    {
+        ini_set('max_execution_time', '300');
+        $fechaDesde = ChequeAnitaSyncSupport::fechaDesdeSyncAnios(2);
+        foreach (ChequeAnitaSyncSupport::listarCpromaeAbiertos($fechaDesde) as $fila) {
+            try {
+                $this->importarFilaCpromae($fila);
+            } catch (\Throwable $e) {
+                $this->logSyncOmitida('Cheque sync cpromae: fila omitida', [
+                    'cuenta' => $fila->cpro_cuenta ?? null,
+                    'nro' => $fila->cpro_nro_cheque ?? null,
+                    'fecha' => $fila->cpro_fecha_cheque ?? null,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
     }
 
-    public function traerRegistroDeAnita($key1, $key2, $key3){
+    public function sincronizarCtermaeConAnita(bool $soloCartera = false): void
+    {
+        ini_set('max_execution_time', '600');
+        $anios = (int) config('cheque.sync_anios', 5);
+        $fechaDesde = ChequeAnitaSyncSupport::fechaDesdeSyncAnios($anios);
+        $filas = $soloCartera
+            ? ChequeAnitaSyncSupport::listarCtermaeEnCartera($fechaDesde)
+            : ChequeAnitaSyncSupport::listarCtermaeTodos($fechaDesde);
+
+        foreach ($filas as $fila) {
+            try {
+                $this->importarFilaCtermae($fila);
+            } catch (\Throwable $e) {
+                $this->logSyncOmitida('Cheque sync ctermae: fila omitida', [
+                    'nro_interno' => $fila->cter_nro_interno ?? null,
+                    'nro' => $fila->cter_nro_cheque ?? null,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $ctx
+     */
+    private function logSyncOmitida(string $mensaje, array $ctx): void
+    {
+        try {
+            Log::warning($mensaje, $ctx);
+        } catch (\Throwable) {
+            // storage/logs no escribible por el usuario CLI: no abortar el sync.
+        }
+    }
+
+    public function traerRegistroDeAnita($key1, $key2, $key3)
+    {
         $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => $this->tableAnita, 
-			'sistema' => 'che_ban',
-            'campos' => '
+        $where = ' WHERE '.$this->keyFieldAnita[0]." = '".$key1."' AND ".
+                    $this->keyFieldAnita[1]." = '".$key2."' AND ".
+                    $this->keyFieldAnita[2]." = '".$key3."' ";
+        $camposBase = '
                     cpro_cuenta,
                     cpro_nro_cheque,
                     cpro_fecha_cheque,
@@ -624,60 +775,212 @@ class ChequeRepository implements ChequeRepositoryInterface
                     cpro_fl_imprimio,
                     cpro_a_nombre_de,
                     cpro_modelo,
-                    cpro_para_dep',
-                    //,
-                    //cpro_fecha_entrega,
-                    //cpro_empresa,
-                    //cpro_negociable,
-                    //cpro_estado_banco,
-                    //cpro_sucursal_pago,
-                    //cpro_tipo_distrib,
-                    //cpro_nro_e_cheq
-			//',
-            'whereArmado' => " WHERE ".$this->keyFieldAnita[0]." = '".$key1."' AND ".
-                    $this->keyFieldAnita[1]." = '".$key2."' AND ".
-                    $this->keyFieldAnita[2]." = '".$key3."' "
-        );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-		$usuario_id = Auth::user()->id;
+                    cpro_para_dep';
+        $camposExtendidos = $camposBase.',
+                    cpro_fecha_entrega,
+                    cpro_empresa,
+                    cpro_negociable,
+                    cpro_estado_banco,
+                    cpro_sucursal_pago,
+                    cpro_tipo_distrib,
+                    cpro_nro_e_cheq';
 
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-            Self::convierteDatosDeAnita($data, $estado, $fechaEmision, $fechaCheque, $cuentacaja_id, $empresa_id, $proveedor_id, 
-                                        $estadoChequeBanco_id, $chequera_id);
-
-            $arr_campos = [
-                'origen' => 'E',
-                'chequera_id' => $chequera_id,
-                'caracter' => 'O',
-                'estado' => $estado,
-                'fechaemision' => $fechaEmision,
-                'fechapago' => $fechaCheque,
-                'cuentacaja_id' => $cuentacaja_id,
-                'empresa_id' => $empresa_id,
-                'caja_id' => null,
-                'caja_movimiento_id' => null,
-                'numerocheque' => $data->cpro_nro_cheque,
-                'moneda_id' => $data->cpro_cod_mon,
-                'monto' => $data->cpro_importe, 
-                'cotizacion' => $data->cpro_cotizacion, 
-                'proveedor_id' => $proveedor_id, 
-                'cliente_id' => null,
-                'tipodocumento_id' => null, 
-                'numerodocumento' => null, 
-                'entregado' => $data->cpro_entregado_a, 
-                'anombrede' => $data->cpro_a_nombre_de, 
-                'estadocheque_banco_id' => $estadoChequeBanco_id,
-                'sucursalpago' => $data->cpro_sucursal_pago, 
-                'tipodistribucion' => $data->cpro_tipo_distrib, 
-                'banco_id' => null, 
-                'codigopostalbanco' => null,
-                'cuentalibradora' => null
-                ];
-
-            $this->model->create($arr_campos);
+        $dataAnita = null;
+        $intentos = EntornoEmpresaSupport::esFerli()
+            ? [$camposBase]
+            : [$camposExtendidos, $camposBase];
+        foreach ($intentos as $campos) {
+            $dataAnita = json_decode($apiAnita->apiCall([
+                'acc' => 'list',
+                'tabla' => $this->tableAnita,
+                'sistema' => 'che_ban',
+                'campos' => $campos,
+                'whereArmado' => $where,
+            ]));
+            if (is_array($dataAnita) && count($dataAnita) > 0) {
+                break;
+            }
         }
+
+        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+            return;
+        }
+
+        $this->importarFilaCpromae($dataAnita[0]);
+    }
+
+    /**
+     * @param  object  $data
+     */
+    private function importarFilaCpromae($data): void
+    {
+        $estado = null;
+        $fechaEmision = null;
+        $fechaCheque = null;
+        $cuentacaja_id = null;
+        $empresa_id = null;
+        $proveedor_id = null;
+        $estadoChequeBanco_id = null;
+        $chequera_id = null;
+        $para_dep = null;
+        $banco_id = null;
+        $negociable = 'N';
+
+        $this->convierteDatosDeAnita(
+            $data,
+            $estado,
+            $fechaEmision,
+            $fechaCheque,
+            $cuentacaja_id,
+            $empresa_id,
+            $proveedor_id,
+            $estadoChequeBanco_id,
+            $chequera_id,
+            $para_dep,
+            $banco_id,
+            $negociable
+        );
+
+        if ($empresa_id === null || (int) $empresa_id <= 0) {
+            throw new Exception(
+                'No se pudo resolver empresa_id para cheque Anita '
+                .($data->cpro_nro_cheque ?? '').' cuenta '.($data->cpro_cuenta ?? '')
+                .' cpro_empresa='.($data->cpro_empresa ?? '')
+            );
+        }
+
+        $yaExiste = $this->model->newQuery()
+            ->where('origen', 'E')
+            ->where('numerocheque', $data->cpro_nro_cheque ?? null)
+            ->where('cuentacaja_id', $cuentacaja_id)
+            ->when($fechaCheque, fn ($q) => $q->whereDate('fechapago', $fechaCheque))
+            ->exists();
+        if ($yaExiste) {
+            return;
+        }
+
+        $fechaEntregaYmd = ChequePropioCpromaeAnitaMapper::ymd((string) ($data->cpro_fecha_entrega ?? ''));
+        $fechaEntrega = ($fechaEntregaYmd !== '0' && strlen($fechaEntregaYmd) === 8)
+            ? substr($fechaEntregaYmd, 0, 4).'-'.substr($fechaEntregaYmd, 4, 2).'-'.substr($fechaEntregaYmd, 6, 2)
+            : null;
+
+        $this->model->create([
+            'origen' => 'E',
+            'chequera_id' => $chequera_id,
+            'caracter' => 'O',
+            'para_dep' => $para_dep,
+            'negociable' => $negociable,
+            'estado' => $estado,
+            'fechaemision' => $fechaEmision,
+            'fechapago' => $fechaCheque,
+            'fecha_entrega' => $fechaEntrega,
+            'cuentacaja_id' => $cuentacaja_id,
+            'empresa_id' => $empresa_id,
+            'caja_id' => null,
+            'caja_movimiento_id' => null,
+            'numerocheque' => $data->cpro_nro_cheque ?? null,
+            'nro_echeq' => trim((string) ($data->cpro_nro_e_cheq ?? '')) ?: null,
+            'moneda_id' => (int) ($data->cpro_cod_mon ?? 1) ?: 1,
+            'monto' => $data->cpro_importe ?? 0,
+            'cotizacion' => ChequePropioCpromaeAnitaMapper::cotizacion((float) ($data->cpro_cotizacion ?? 0)),
+            'proveedor_id' => $proveedor_id,
+            'cliente_id' => null,
+            'tipodocumento_id' => null,
+            'numerodocumento' => null,
+            'entregado' => $data->cpro_entregado_a ?? null,
+            'anombrede' => $data->cpro_a_nombre_de ?? null,
+            'estadocheque_banco_id' => $estadoChequeBanco_id,
+            'sucursalpago' => (($data->cpro_sucursal_pago ?? '') !== '0') ? ($data->cpro_sucursal_pago ?? null) : null,
+            'tipodistribucion' => (($data->cpro_tipo_distrib ?? '') !== '0') ? ($data->cpro_tipo_distrib ?? null) : null,
+            'banco_id' => $banco_id,
+            'cuentalibradora' => null,
+        ]);
+    }
+
+    /**
+     * @param  object  $data
+     */
+    private function importarFilaCtermae($data): void
+    {
+        $nroInterno = (int) preg_replace('/\D/', '', (string) ($data->cter_nro_interno ?? '0'));
+        if ($nroInterno <= 0) {
+            throw new Exception('cter_nro_interno inválido');
+        }
+
+        $codigoCliente = ltrim((string) ($data->cter_cliente ?? ''), '0');
+        $cliente = $codigoCliente !== '' ? $this->clienteRepository->findPorCodigo($codigoCliente) : null;
+
+        $codigoProveedor = ltrim((string) ($data->cter_proveedor ?? ''), '0');
+        $proveedor = $codigoProveedor !== '' ? $this->proveedorRepository->findPorCodigo($codigoProveedor) : null;
+
+        $codigoBanco = ltrim((string) ($data->cter_cod_banco ?? ''), '0');
+        $banco = $codigoBanco !== '' ? $this->bancoRepository->findPorCodigo($codigoBanco) : null;
+
+        $empresaId = ChequeAnitaSyncSupport::resolverEmpresaId(
+            $data->cter_empresa ?? null,
+            null,
+            fn ($codigo) => $this->empresaRepository->findPorCodigo($codigo),
+            fn ($id) => $this->empresaRepository->find($id)
+        );
+
+        if ($empresaId === null || $empresaId <= 0) {
+            throw new Exception(
+                'No se pudo resolver empresa_id para CHT nro_interno='.$nroInterno
+                .' cter_empresa='.($data->cter_empresa ?? '')
+            );
+        }
+
+        $attrs = ChequeTerceroCtermaeAnitaMapper::aAtributosErp($data, [
+            'empresa_id' => $empresaId,
+            'cliente_id' => $cliente?->id,
+            'proveedor_id' => $proveedor?->id,
+            'banco_id' => $banco?->id,
+        ]);
+
+        // Depósito Anita → columnas ERP si existen.
+        $fechaDep = ChequeTerceroCtermaeAnitaMapper::fechaAYMD($data->cter_fecha_dep ?? null);
+        if ($fechaDep) {
+            $attrs['fecha_deposito'] = $fechaDep;
+        }
+        $nroBoleta = trim((string) ($data->cter_nro_boleta ?? ''));
+        if ($nroBoleta !== '' && $nroBoleta !== '0') {
+            $attrs['nro_boleta_deposito'] = mb_substr($nroBoleta, 0, 40);
+        }
+
+        $existente = $this->model->newQuery()->where('nro_interno_anita', $nroInterno)->first();
+        if ($existente) {
+            // No pisar vínculos operativos ni ND ya emitida.
+            unset($attrs['cobranza_id'], $attrs['pagoproveedor_id'], $attrs['venta_nd_id'], $attrs['fecha_rechazo'], $attrs['motivo_rechazo']);
+            if ((int) ($existente->venta_nd_id ?? 0) > 0) {
+                unset($attrs['estado']);
+            }
+            $existente->fill($attrs);
+            $existente->save();
+
+            return;
+        }
+
+        $this->model->create($attrs);
+    }
+
+    public function findPorNroInternoAnita(int $nroInterno): ?Cheque
+    {
+        if ($nroInterno <= 0) {
+            return null;
+        }
+
+        return $this->model->newQuery()->where('nro_interno_anita', $nroInterno)->first();
+    }
+
+    public function vincularNroInternoAnita(int $chequeId, int $nroInterno): void
+    {
+        if ($chequeId <= 0 || $nroInterno <= 0) {
+            return;
+        }
+
+        $this->model->newQuery()->whereKey($chequeId)->update([
+            'nro_interno_anita' => $nroInterno,
+        ]);
     }
 
 	public function guardarAnita($request) {
@@ -820,47 +1123,87 @@ class ChequeRepository implements ChequeRepositoryInterface
         return $anita;
 	}
 
-    private function convierteDatosDeAnita($data, &$fechaEmision, &$fechaCheque, &$cuentacaja_id, &$empresa_id, 
-                                            &$proveedor_id, &$estadoChequeBanco_id, &$chequera_id)
+    private function convierteDatosDeAnita(
+        $data,
+        &$estado,
+        &$fechaEmision,
+        &$fechaCheque,
+        &$cuentacaja_id,
+        &$empresa_id,
+        &$proveedor_id,
+        &$estadoChequeBanco_id,
+        &$chequera_id,
+        &$para_dep = null,
+        &$banco_id = null,
+        &$negociable = null
+    ) {
+        $fechaEmision = $this->fechaAnitaAYMD($data->cpro_fecha_emision ?? null);
+        $fechaCheque = $this->fechaAnitaAYMD($data->cpro_fecha_cheque ?? null);
+
+        $estadoAnita = (string) ($data->cpro_estado ?? ' ');
+        $estado = $estadoAnita !== '' ? $estadoAnita : ' ';
+
+        $para_dep = ChequePropioInstrumentoSupport::paraDep(
+            (string) ($data->cpro_para_dep ?? ''),
+            ChequePropioInstrumentoSupport::paraDepDefault()
+        );
+
+        $negociableIn = strtoupper(trim((string) ($data->cpro_negociable ?? '')));
+        $negociable = in_array($negociableIn, ['E', 'N'], true) ? $negociableIn : 'N';
+
+        $codigoModelo = ltrim((string) ($data->cpro_modelo ?? ''), '0');
+        $chequera = $codigoModelo !== ''
+            ? $this->chequeraRepository->findPorCodigo($codigoModelo)
+            : null;
+        $chequera_id = $chequera ? $chequera->id : null;
+
+        $codigoCuenta = ltrim((string) ($data->cpro_cuenta ?? ''), '0');
+        $cuentacaja = $codigoCuenta !== ''
+            ? $this->cuentacajaRepository->findPorCodigo($codigoCuenta)
+            : null;
+        $cuentacaja_id = $cuentacaja ? $cuentacaja->id : null;
+        $banco_id = $cuentacaja && ! empty($cuentacaja->banco_id) ? (int) $cuentacaja->banco_id : null;
+
+        $empresa_id = $this->resolverEmpresaIdDesdeAnita(
+            $data->cpro_empresa ?? null,
+            $cuentacaja
+        );
+
+        $codigoProveedor = ltrim((string) ($data->cpro_proveedor ?? ''), '0');
+        $proveedor = $codigoProveedor !== ''
+            ? $this->proveedorRepository->findPorCodigo($codigoProveedor)
+            : null;
+        $proveedor_id = $proveedor ? $proveedor->id : null;
+
+        $codigoEstadoBanco = trim((string) ($data->cpro_estado_banco ?? ''));
+        $estadocheque_banco = ($codigoEstadoBanco !== '' && $codigoEstadoBanco !== '0')
+            ? Estadocheque_Banco::query()->where('codigoexterno', $codigoEstadoBanco)->first()
+            : null;
+        $estadoChequeBanco_id = $estadocheque_banco ? $estadocheque_banco->id : null;
+    }
+
+    /**
+     * @param  mixed  $codigoEmpresaAnita
+     * @param  mixed  $cuentacaja
+     */
+    private function resolverEmpresaIdDesdeAnita($codigoEmpresaAnita, $cuentacaja): ?int
     {
-        $fechaEmision = date('d-m-Y', strtotime($data->cpro_fecha_emision));
-        $fechaCheque = date('d-m-Y', strtotime($data->cpro_fecha_cheque));
+        return ChequeAnitaSyncSupport::resolverEmpresaId(
+            $codigoEmpresaAnita,
+            $cuentacaja,
+            fn ($codigo) => $this->empresaRepository->findPorCodigo($codigo),
+            fn ($id) => $this->empresaRepository->find($id)
+        );
+    }
 
-        $chequera = $this->chequeraRepository->findPorCodigo($data->cpro_modelo ?? '');
-        if ($chequera) {
-            $chequera_id = $chequera->id;
-        } else {
-            $chequera_id = null;
+    private function fechaAnitaAYMD($valor): ?string
+    {
+        $ymd = ChequePropioCpromaeAnitaMapper::ymd((string) ($valor ?? ''));
+        if ($ymd === '0' || strlen($ymd) !== 8) {
+            return null;
         }
 
-        $cuentacaja = $this->cuentacajaRepository->findPorCodigo(ltrim((string) ($data->cpro_cuenta ?? ''), '0'));
-        if ($cuentacaja) {
-            $cuentacaja_id = $cuentacaja->id;
-        } else {
-            $cuentacaja_id = null;
-        }
-
-        $empresa = $this->empresaRepository->findPorCodigo($data->cpro_empresa ?? '');
-        if ($empresa) {
-            $empresa_id = $empresa->id;
-        } else {
-            $empresa_id = null;
-        }
-
-        $proveedor = $this->proveedorRepository->findPorCodigo(ltrim((string) ($data->cpro_proveedor ?? ''), '0'));
-        if ($proveedor) {
-            $proveedor_id = $proveedor->id;
-        } else {
-            $proveedor_id = null;
-        }
-
-        $estadocheque_banco = Estadocheque_Banco::query()
-            ->where('codigoexterno', $data->cpro_estado_banco ?? '')
-            ->first();
-        if ($estadocheque_banco)
-            $estadoChequeBanco_id = $estadocheque_banco->id;
-        else
-            $estadoChequeBanco_id = null;
+        return substr($ymd, 0, 4).'-'.substr($ymd, 4, 2).'-'.substr($ymd, 6, 2);
     }
 
     private function convierteDatosParaAnita($data, &$codigo, &$fechaCheque, &$fechaEmision, &$proveedor, &$modelo, 

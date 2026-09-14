@@ -7,8 +7,6 @@ use App\Models\Presupuesto\Capex;
 interface CapexRepositoryInterface extends RepositoryInterface
 {
 
-    public function createDesdeAnita(array $data);
-
     /**
      * Proyectos CAPEX del último presupuesto para empresa (modal requisición u otros).
      * Si se indica centrocostodestino_id, solo registros con ese centro de costo.

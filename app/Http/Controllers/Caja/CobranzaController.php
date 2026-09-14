@@ -185,13 +185,15 @@ class CobranzaController extends Controller
         $empresa_id = session('empresa_id');
         $puede_descuento_cobranza = can('generar-nota-de-credito', false)
             && (bool) config('cobranza.descuento_nc_habilitado', true);
+        $puede_nd_cheque = can('generar-nota-de-debito-cheque', false)
+            && (bool) config('cheque.nd_habilitado', true);
 
         return view('caja.cobranza.crear', compact('tipotransaccion_caja_query', 'moneda_query', 
                                                 'tipotransaccion_caja_id', 'empresa_id',
                                                 'empresa_query',  'retencion_cobranza_query', 
                                                 'venta_id', 'referer', 'ordenventa_id',
                                                 'centrocosto_query', 'caja_id', 'nombreCaja', 'origen',
-                                                'puede_descuento_cobranza'));
+                                                'puede_descuento_cobranza', 'puede_nd_cheque'));
     }
 
     /**
@@ -252,6 +254,8 @@ class CobranzaController extends Controller
         $empresa_id = session('empresa_id');
         $puede_descuento_cobranza = can('generar-nota-de-credito', false)
             && (bool) config('cobranza.descuento_nc_habilitado', true);
+        $puede_nd_cheque = can('generar-nota-de-debito-cheque', false)
+            && (bool) config('cheque.nd_habilitado', true);
         $cobranza_descuentos_json = ($data->cobranza_descuentos ?? collect())
             ->where('estado', '!=', 'emitida')
             ->values()
@@ -269,7 +273,8 @@ class CobranzaController extends Controller
                                                     'tipotransaccion_caja_id', 'empresa_id',
                                                     'empresa_query',  'retencion_cobranza_query',
                                                     'centrocosto_query', 'caja_id', 'nombreCaja', 'origen',
-                                                    'puede_descuento_cobranza', 'cobranza_descuentos_json'));
+                                                    'puede_descuento_cobranza', 'puede_nd_cheque',
+                                                    'cobranza_descuentos_json'));
     }
 
     /**

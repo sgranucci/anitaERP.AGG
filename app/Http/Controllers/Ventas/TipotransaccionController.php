@@ -292,4 +292,112 @@ class TipotransaccionController extends Controller
 
         return (int) $empresa_query->first()->id;
     }
+
+    public function consultaTipotransaccion(Request $request)
+    {
+        if (! $this->puedeConsultarTipotransaccion()) {
+            abort(403);
+        }
+
+        $consulta = strtoupper(trim((string) ($request->get('consulta') ?? '')));
+        $query = Tipotransaccion::query()
+            ->select('id', 'abreviatura', 'nombre', 'operacion', 'codigo')
+            ->whereIn('operacion', ['V', 'U', 'C']);
+
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('abreviatura', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('codigo', 'LIKE', '%'.$consulta.'%');
+            });
+        }
+
+        $data = $query->orderBy('abreviatura')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-tipos-transacciones', false) || can('listar-tipos-transacciones', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="5">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="abreviatura">'.e($row->abreviatura).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="operacion">'.e($row->operacion).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultatipotransaccionventa">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_tipotransaccion', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return response()->json($output);
+    }
+
+    public function resolverTipotransaccion(Request $request)
+    {
+        if (! $this->puedeConsultarTipotransaccion()) {
+            abort(403);
+        }
+
+        $abrev = trim((string) $request->input('abreviatura', $request->input('codigo', '')));
+        if ($abrev === '') {
+            return response()->json(['error' => 'Abreviatura vacía'], 404);
+        }
+
+        $tipo = Tipotransaccion::query()
+            ->whereIn('operacion', ['V', 'U', 'C'])
+            ->where(function ($q) use ($abrev) {
+                $q->where('abreviatura', $abrev)
+                    ->orWhere('codigo', $abrev);
+            })
+            ->first();
+
+        if (! $tipo && ctype_digit($abrev)) {
+            $tipo = Tipotransaccion::query()->whereKey((int) $abrev)->first();
+        }
+
+        if (! $tipo) {
+            return response()->json(['error' => 'Tipo de transacción no encontrado'], 404);
+        }
+
+        return response()->json([
+            'id' => $tipo->id,
+            'abreviatura' => $tipo->abreviatura,
+            'nombre' => $tipo->nombre,
+            'operacion' => $tipo->operacion,
+        ]);
+    }
+
+    public function leerUnTipotransaccion(string $abreviatura)
+    {
+        if (! $this->puedeConsultarTipotransaccion()) {
+            abort(403);
+        }
+
+        $request = request();
+        $request->merge(['abreviatura' => $abreviatura]);
+
+        return $this->resolverTipotransaccion($request);
+    }
+
+    private function puedeConsultarTipotransaccion(): bool
+    {
+        return can('listar-tipos-transacciones', false)
+            || can('editar-tipos-transacciones', false)
+            || can('crear-tipos-transacciones', false)
+            || can('listar-local-venta', false)
+            || can('crear-local-venta', false)
+            || can('editar-local-venta', false)
+            || can('actualizar-local-venta', false)
+            || can('usar-facturacion-local', false);
+    }
 }

@@ -3,12 +3,10 @@
 namespace App\Repositories\Presupuesto;
 
 use App\Models\Presupuesto\Presupuesto;
-use App\Support\Configuracion\AnitaSyncIndexSupport;
+use App\Models\Presupuesto\Presupuesto_Escenario;
 use App\Support\Presupuesto\PresupuestoListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Presupuesto\Presupuesto_EscenarioRepositoryInterface;
-use App\ApiAnita;
-use Auth;
 use DB;
 
 class PresupuestoRepository implements PresupuestoRepositoryInterface
@@ -16,11 +14,6 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
     protected $model;
     private $presupuesto_escenarioRepository;
 
-    /**
-     * PostRepository constructor.
-     *
-     * @param Post $post
-     */
     public function __construct(Presupuesto $presupuesto,
                                 Presupuesto_EscenarioRepositoryInterface $presupuesto_escenariorepository)
     {
@@ -49,11 +42,6 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
             $filtros = PresupuestoListadoFiltros::filtrosVacios();
         }
 
-        $hayPresupuesto = $this->model->first();
-        if (! $hayPresupuesto && AnitaSyncIndexSupport::autoImportHabilitado()) {
-            self::sincronizarConAnita();
-        }
-
         $query = $this->model->with('creousuarios')
             ->with('presupuesto_escenarios')
             ->orderBy('id', 'desc');
@@ -75,66 +63,48 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
 
     public function create(array $data)
     {
-		$codigo = '';
-		Self::ultimoCodigoPresupuesto($codigo);
-		$data['codigo'] = $codigo;
+        $data['codigo'] = $this->siguienteCodigoPresupuesto();
 
-        try
-        {
+        try {
             DB::beginTransaction();
 
             $presupuesto = $this->model->create($data);
-            
+
             $nombres = $data['nombres'];
             $tipos = $data['tipos'];
             $codigosEscenarios = [];
-            for ($i=0; $i < count($nombres); $i++) {
-                if ($nombres[$i] != '') 
-                {
-                    $codigosEscenarios[$i] = '';
-                    Self::ultimoCodigoEscenario($codigosEscenarios[$i]);
+            for ($i = 0; $i < count($nombres); $i++) {
+                if ($nombres[$i] != '') {
+                    $codigosEscenarios[$i] = $this->siguienteCodigoEscenario();
 
                     $this->presupuesto_escenarioRepository->create([
-                                                        'presupuesto_id' => $presupuesto->id,
-                                                        'nombre' => $nombres[$i],
-                                                        'tipo' => $tipos[$i],
-                                                        'codigo' => $codigosEscenarios[$i],
-                                                        'creousuario_id' => auth()->id()
-                                                        ]);
+                        'presupuesto_id' => $presupuesto->id,
+                        'nombre' => $nombres[$i],
+                        'tipo' => $tipos[$i],
+                        'codigo' => $codigosEscenarios[$i],
+                        'creousuario_id' => auth()->id(),
+                    ]);
                 }
             }
             $data['codigos'] = $codigosEscenarios;
 
-            // Graba anita
-            $anita = Self::guardarAnita($data);
-
-            if (isset($anita['error']))
-            {
-                if ($anita['error'] == 'Error')
-                    throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
-            }
-
             DB::commit();
-        
-            return redirect('presupuesto/presupuesto')->with('mensaje', 'Presupuesto creado con éxito');
 
+            return redirect('presupuesto/presupuesto')->with('mensaje', 'Presupuesto creado con éxito');
         } catch (\Exception $exception) {
             DB::rollBack();
-            
+
             return back()
                 ->with('mensaje', $exception->getMessage());
-        }        
-
-        return $presupuesto;
+        }
     }
 
     public function update(array $data, $id)
     {
-        try
-        {
+        try {
             DB::beginTransaction();
 
-            $presupuesto = $this->model->findOrFail($id)->update($data);
+            $this->model->findOrFail($id)->update($data);
 
             $this->presupuesto_escenarioRepository->deletePorPresupuesto($id);
 
@@ -142,61 +112,42 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
             $tipos = $data['tipos'];
             $codigos = $data['codigos'];
             $creousuario_escenario_ids = $data['creousuario_escenario_ids'];
-            for ($i=0; $i < count($nombres); $i++) {
-                if ($nombres[$i] != '') 
-                {
-                    if ($codigos[$i] == '')
-                    {
-                        Self::ultimoCodigoEscenario($codigos[$i]);
-                    
+            for ($i = 0; $i < count($nombres); $i++) {
+                if ($nombres[$i] != '') {
+                    if ($codigos[$i] == '') {
+                        $codigos[$i] = $this->siguienteCodigoEscenario();
                         $data['codigos'] = $codigos;
                     }
 
                     $this->presupuesto_escenarioRepository->create([
-                                                        'presupuesto_id' => $id,
-                                                        'nombre' => $nombres[$i],
-                                                        'tipo' => $tipos[$i],
-                                                        'codigo' => $codigos[$i],
-                                                        'creousuario_id' => $creousuario_escenario_ids[$i]
-                                                        ]);
+                        'presupuesto_id' => $id,
+                        'nombre' => $nombres[$i],
+                        'tipo' => $tipos[$i],
+                        'codigo' => $codigos[$i],
+                        'creousuario_id' => $creousuario_escenario_ids[$i],
+                    ]);
                 }
             }
 
-            // Actualiza anita
-            $anita = Self::actualizarAnita($data);
-
-            if (isset($anita['error']))
-            {
-                if ($anita['error'] == 'Error')
-                    throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
-            }
-
             DB::commit();
-        
-            return redirect('presupuesto/presupuesto')->with('mensaje', 'Presupuesto actualizado con éxito');
 
+            return redirect('presupuesto/presupuesto')->with('mensaje', 'Presupuesto actualizado con éxito');
         } catch (\Exception $exception) {
             DB::rollBack();
-            
+
             return back()
                 ->with('mensaje', $exception->getMessage());
-        }            
-
-		return $presupuesto;
+        }
     }
 
     public function delete($id)
     {
-    	$presupuesto = $this->model->find($id);
+        $presupuesto = $this->model->find($id);
+        if (! $presupuesto) {
+            return false;
+        }
 
-        $codigo = $presupuesto->codigo;
-
-        $presupuesto = $this->model->destroy($id);
-
-        // Elimina anita
-		self::eliminarAnita($codigo);
-
-		return $presupuesto;
+        return $this->model->destroy($id);
     }
 
     public function find($id)
@@ -225,269 +176,23 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
         return $presupuesto;
     }
 
-    public function sincronizarConAnita(){
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-                        'sistema' => 'base_admin',
-                        'campos' => 'ipresupuestoid', 
-                        'tabla' => 'presupuestos' );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+    private function siguienteCodigoPresupuesto(): string
+    {
+        $ultimo = $this->model->orderByDesc('id')->value('codigo');
+        if ($ultimo === null || $ultimo === '') {
+            return '1';
+        }
 
-		if ($dataAnita)
-		{
-        	foreach ($dataAnita as $value) 
-            {
-               	$this->traerRegistroDeAnita($value->ipresupuestoid);
-        	}
-		}
+        return (string) (((int) filter_var((string) $ultimo, FILTER_SANITIZE_NUMBER_INT)) + 1);
     }
 
-    public function traerRegistroDeAnita($key){
-        $apiAnita = new ApiAnita();
-        $data = array( 
-            'acc' => 'list', 'tabla' => 'presupuestos',
-            'sistema' => 'base_admin',
-            'campos' => '
-                ipresupuestoid,
-				iestadoid,
-				cnombre,
-				cdescripcion,
-				ianio
-            ' , 
-            'whereArmado' => " WHERE ipresupuestoid = '".$key."' " 
-        );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-            switch($data->iestadoid)
-            {
-            case '1':
-                $estado = 'Abierto';
-                break;
-            default:
-                $estado = 'Cerrado';
-            }
-
-            $presupuesto = $this->model->create([
-                "codigo" => $data->ipresupuestoid,
-                "nombre" => $data->cnombre,
-                "detalle" => $data->cdescripcion,
-                "estado" => $estado,
-				"anio" => $data->ianio,
-                "creousuario_id" => Auth()->id()
-            ]);
-
-            // Trae los escenarios
-            $apiAnita = new ApiAnita();
-            $data = array( 
-                'acc' => 'list', 'tabla' => 'escenariospresup',
-                'sistema' => 'base_admin',
-                'campos' => '
-                    ipresupuestoid,
-                    iescenarioid,
-                    cdescripcion,
-                    itipoescenarioid
-                ' , 
-                'whereArmado' => " WHERE ipresupuestoid = '".$key."' " 
-            );
-            $dataAnita = json_decode($apiAnita->apiCall($data));
-
-            if (count($dataAnita) > 0) {
-                foreach($dataAnita as $escenario)
-                {
-                    if ($escenario->itipoescenarioid == 1)
-                        $tipo = 'Original';
-                    else    
-                        $tipo = 'Análisis';
-
-                    $this->presupuesto_escenarioRepository->create([
-                        "presupuesto_id" => $presupuesto->id,
-                        "codigo" => $escenario->iescenarioid,
-                        "nombre" => $escenario->cdescripcion,
-                        "tipo" => $tipo,
-                        "creousuario_id" => Auth()->id()
-                    ]);
-                }
-            }
+    private function siguienteCodigoEscenario(): string
+    {
+        $ultimo = Presupuesto_Escenario::query()->orderByDesc('id')->value('codigo');
+        if ($ultimo === null || $ultimo === '') {
+            return '1';
         }
+
+        return (string) (((int) filter_var((string) $ultimo, FILTER_SANITIZE_NUMBER_INT)) + 1);
     }
-
-	public function guardarAnita($request) {
-        $apiAnita = new ApiAnita();
-
-        if ($request['estado'] == 'Abierto')
-            $estado = '1';
-        else
-            $estado = '2';
-
-        $data = array( 'tabla' => 'presupuestos',
-						'acc' => 'insert',
-                        'sistema' => 'base_admin',
-            			'campos' => ' 
-                            ipresupuestoid,
-                            iestadoid,
-                            cnombre,
-                            cdescripcion,
-                            ianio',
-            			'valores' => " 
-                                '".$request['codigo']."', 
-                                '".$estado."', 
-                                '".$request['nombre']."', 
-                                '".$request['detalle']."', 
-                                '".$request['anio']."' "
-        );
-        $apiAnita->apiCallEscritura($data);
-
-        // Graba escenarios
-        $nombres = $request['nombres'];
-        $tipos = $request['tipos'];
-        $codigos = $request['codigos'];
-        for ($i=0; $i < count($nombres); $i++) 
-        {
-            if ($nombres[$i] != '') 
-            {
-                if ($tipos[$i] == 'Original')
-                    $tipo = 1;
-                else
-                    $tipo = 2;
-                $data = array( 'tabla' => 'escenariospresup',
-                                'acc' => 'insert',
-                                'sistema' => 'base_admin',
-                                'campos' => ' 
-                                    ipresupuestoid,
-                                    iescenarioid,
-                                    cdescripcion,
-                                    cversion,
-                                    itipoescenarioid',
-                                'valores' => " 
-                                        '".$request['codigo']."', 
-                                        '".$codigos[$i]."', 
-                                        '".$nombres[$i]."', 
-                                        '".'1.0'."',
-                                        '".$tipo."' "
-                );
-                $apiAnita->apiCallEscritura($data);
-            }
-        }
-	}
-
-	public function actualizarAnita($request) {
-        $apiAnita = new ApiAnita();
-
-        if ($request['estado'] == 'Abierto')
-            $estado = '1';
-        else
-            $estado = '2';
-
-		$data = array( 'acc' => 'update', 
-						'tabla' => 'presupuestos', 
-                        'sistema' => 'base_admin',
-						'valores' => " 
-                            iestadoid = '".$estado."', 
-                            cnombre = '".$request['nombre']."', 
-                            cdescripcion = '".$request['detalle']."', 
-                            ianio = '".$request['anio']."' ", 
-						'whereArmado' => " WHERE ipresupuestoid='".$request['codigo']."' " );
-        $apiAnita->apiCallEscritura($data);
-
-        // Graba escenarios
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 'tabla' => 'escenariospresup',
-                    'sistema' => 'base_admin',
-					'whereArmado' => " WHERE ipresupuestoid='".$request['codigo']."' " );
-        $apiAnita->apiCallEscritura($data);
-
-        $nombres = $request['nombres'];
-        $tipos = $request['tipos'];
-        $codigos = $request['codigos'];
-        for ($i=0; $i < count($nombres); $i++) 
-        {
-            if ($nombres[$i] != '') 
-            {
-                if ($tipos[$i] == 'Original')
-                    $tipo = 1;
-                else
-                    $tipo = 2;
-                $data = array( 'tabla' => 'escenariospresup',
-                                'acc' => 'insert',
-                                'sistema' => 'base_admin',
-                                'campos' => ' 
-                                    ipresupuestoid,
-                                    iescenarioid,
-                                    cdescripcion,
-                                    cversion,
-                                    itipoescenarioid',
-                                'valores' => " 
-                                        '".$request['codigo']."', 
-                                        '".$codigos[$i]."', 
-                                        '".$nombres[$i]."', 
-                                        '".'1.0'."',
-                                        '".$tipo."' "
-                );
-                $apiAnita->apiCallEscritura($data);
-            }
-        }        
-	}
-
-	public function eliminarAnita($id) {
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 'tabla' => 'presupuestos',
-                    'sistema' => 'base_admin',
-					'whereArmado' => " WHERE ipresupuestoid='".$id."' " );
-        $apiAnita->apiCallEscritura($data);
-
-        // Borra escenarios
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'delete', 'tabla' => 'escenariospresup',
-                    'sistema' => 'base_admin',
-					'whereArmado' => " WHERE ipresupuestoid='".$id."' " );
-        $apiAnita->apiCallEscritura($data);
-	}
-
-   	// Devuelve ultimo codigo de presupuesto + 1 para agregar nuevos en Anita
-
-	private function ultimoCodigoPresupuesto(&$codigo) {
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-            'tabla' => 'presupuestos', 
-            'sistema' => 'base_admin',
-            'campos' => " max(ipresupuestoid) as numeropresupuesto "
-            );
-				
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-		if ($dataAnita[0]->numeropresupuesto != '')
-		{
-			$codigo = filter_var($dataAnita[0]->numeropresupuesto, FILTER_SANITIZE_NUMBER_INT);
-			$codigo = $codigo + 1;
-		}
-		else
-			$codigo = "1";
-	}
-
-   	// Devuelve ultimo codigo de presupuesto + 1 para agregar nuevos en Anita
-
-	private function ultimoCodigoEscenario(&$codigo) {
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-            'tabla' => 'escenariospresup', 
-            'sistema' => 'base_admin',
-            'campos' => " max(iescenarioid) as numeroescenario "
-            );
-				
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-		if ($dataAnita[0]->numeroescenario != '')
-		{
-			$codigo = filter_var($dataAnita[0]->numeroescenario, FILTER_SANITIZE_NUMBER_INT);
-			$codigo = $codigo + 1;
-		}
-		else
-		{
-			$codigo = "1";
-		}
-	}    
 }
-

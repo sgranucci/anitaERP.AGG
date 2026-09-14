@@ -184,6 +184,7 @@ final class ComprobanteImpresionResolverSupport
             'documento_id' => $documento['id'],
             'documento_codigo' => $documento['codigo'],
             'documento_fecha' => $documento['fecha'],
+            'venta_id_directa' => (int) ($documento['venta_id_directa'] ?? 0) ?: null,
         ];
     }
 

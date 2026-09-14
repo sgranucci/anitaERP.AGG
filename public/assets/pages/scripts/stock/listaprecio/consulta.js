@@ -282,13 +282,39 @@ function registrarAtajosTecladoListaprecio() {
     }, true);
 }
 
-$(document).on('keyup', '#consultalistaprecio', function () {
+$(document).on('keyup', '#consultalistaprecio', function (e) {
+    if (e.which === 13 || e.key === 'Enter') {
+        return;
+    }
     buscar_datos_listaprecio($(this).val());
 });
 
-// Evita que Enter en el buscador del modal recargue la página
+function elegirPrimeraListaprecioDelModal() {
+    var $btn = $('#datoslistaprecio .eligeconsultalistaprecio').first();
+    if ($btn.length) {
+        $btn.trigger('click');
+        return true;
+    }
+    return false;
+}
+
+$(document)
+    .off('keydown.consultaListaprecioEnter', '#consultalistaprecio')
+    .on('keydown.consultaListaprecioEnter', '#consultalistaprecio', function (e) {
+        if (e.which !== 13 && e.key !== 'Enter') {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (!elegirPrimeraListaprecioDelModal()) {
+            buscar_datos_listaprecio($(this).val());
+        }
+    });
+
+// Evita que Enter en el buscador del modal recargue la página; Enter = primera fila.
 $(document).on('submit', '#consultalistaprecioModal form', function (e) {
     e.preventDefault();
+    elegirPrimeraListaprecioDelModal();
     return false;
 });
 
@@ -346,7 +372,9 @@ function activa_eventos_consultalistaprecio() {
     });
 
     $('#aceptaconsultalistaprecioModal').off('click.listaprecio').on('click.listaprecio', function () {
-        $('#consultalistaprecioModal').modal('hide');
+        if (!elegirPrimeraListaprecioDelModal()) {
+            $('#consultalistaprecioModal').modal('hide');
+        }
     });
 
     $(document).off('click.eligeconsultalistaprecio').on('click.eligeconsultalistaprecio', '.eligeconsultalistaprecio', function (e) {

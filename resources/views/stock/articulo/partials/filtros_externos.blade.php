@@ -2,10 +2,12 @@
     use App\Support\Stock\ArticuloListadoFiltros;
 
     $estadoActual = $filtros['estado'] ?? ArticuloListadoFiltros::ESTADO_ACTIVO;
+    $canalActual = $filtros['canal'] ?? ArticuloListadoFiltros::CANAL_TODOS;
     $baseQ = $filtrosQuery ?? [];
     $rutaIndex = 'articulo';
     $empresaScope = $filtros['empresa_scope'] ?? 'una';
     $empresaActual = (int) ($filtros['empresa_id'] ?? 0);
+    $canalesFiltro = $canalesFiltro ?? collect();
 
     $urlEstado = function ($cod) use ($baseQ, $rutaIndex) {
         $q = $baseQ;
@@ -30,8 +32,20 @@
 
         return route($rutaIndex, $q);
     };
+
+    $urlCanal = function ($cod) use ($baseQ, $rutaIndex) {
+        $q = $baseQ;
+        unset($q['filtro_canal']);
+        if ($cod === ArticuloListadoFiltros::CANAL_TODOS) {
+            // default: sin param
+        } else {
+            $q['filtro_canal'] = $cod;
+        }
+
+        return route($rutaIndex, $q);
+    };
 @endphp
-<div class="d-flex flex-wrap align-items-center justify-content-end">
+<div class="d-flex flex-wrap align-items-center justify-content-end" data-listado-filtros-externos>
     @if (ArticuloListadoFiltros::filtroEmpresaActivo() && ($empresa_query ?? collect())->count() > 1)
         <div class="mb-1 mr-3">
             <span class="text-muted small mr-2"><i class="fa fa-building"></i> Empresa:</span>
@@ -49,7 +63,37 @@
             </div>
         </div>
     @endif
-    <span class="text-muted small mr-2 mb-0"><i class="fa fa-filter"></i> Estado:</span>
+    @if (ArticuloListadoFiltros::filtroCanalActivo())
+        <div class="mb-1 mr-3">
+            <span class="text-muted small mr-2"><i class="fa fa-store"></i> Canal:</span>
+            <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtro de canal">
+                @foreach ($canalesFiltro as $canal)
+                    <a href="{{ $urlCanal($canal->codigo) }}"
+                       class="btn {{ $canalActual === strtoupper((string) $canal->codigo) ? 'btn-warning' : 'btn-outline-warning' }}"
+                       title="Art&iacute;culos con canal {{ $canal->nombre }} (el filtro Estado aplica a ese &aacute;mbito)">
+                        {{ $canal->nombre }}
+                    </a>
+                @endforeach
+                <a href="{{ $urlCanal(ArticuloListadoFiltros::CANAL_SIN) }}"
+                   class="btn {{ $canalActual === ArticuloListadoFiltros::CANAL_SIN ? 'btn-secondary' : 'btn-outline-secondary' }}"
+                   title="Art&iacute;culos sin canal asignado">
+                    Sin canal
+                </a>
+                <a href="{{ $urlCanal(ArticuloListadoFiltros::CANAL_TODOS) }}"
+                   class="btn {{ $canalActual === ArticuloListadoFiltros::CANAL_TODOS ? 'btn-primary' : 'btn-outline-primary' }}">
+                    Todos
+                </a>
+            </div>
+        </div>
+    @endif
+    <span class="text-muted small mr-2 mb-0"><i class="fa fa-filter"></i> Estado
+        @if (ArticuloListadoFiltros::filtroCanalActivo() && $canalActual === 'LOCAL')
+            local
+        @elseif (ArticuloListadoFiltros::filtroCanalActivo() && $canalActual === 'FABRICA')
+            fábrica
+        @endif
+        :
+    </span>
     <div class="btn-group btn-group-sm" role="group" aria-label="Filtro de estado">
         <a href="{{ $urlEstado(ArticuloListadoFiltros::ESTADO_ACTIVO) }}"
            class="btn {{ $estadoActual === ArticuloListadoFiltros::ESTADO_ACTIVO ? 'btn-success' : 'btn-outline-success' }}">

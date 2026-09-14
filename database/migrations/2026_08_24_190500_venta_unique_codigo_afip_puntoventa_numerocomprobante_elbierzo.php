@@ -1,6 +1,5 @@
 <?php
 
-use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\MigrationDialectSupport;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
@@ -10,17 +9,17 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * EL BIERZO: unique fiscal para PV que numera el ERP (manual y CAEA).
- * Clave: tipo ARCA efectivo + sucursal + número.
+ * Unique fiscal para todos los entornos: tipo ARCA efectivo + sucursal + número.
+ * Clave: (codigo_afip, puntoventa_id, numerocomprobante).
  * 001 FAC / 002 ND / 003 NC / 201 FCE / 202 NDE / 203 NCE, con offset de letra
  * (FAC A=1, FAC B=6). FAC A y FAG A no pueden repetir sucursal+número; FAC A 10-1 y FAC B 10-1 sí.
- * AGG no corre: conserva unique CAEA gastro (puntoventa + número). PV CAE no se toca (numera ARCA).
+ * numerocomprobante guarda solo el número; el tipo/letra van en codigo_afip (y en venta.codigo).
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        if (! EntornoEmpresaSupport::esElBierzo() || ! Schema::hasTable('venta')) {
+        if (! Schema::hasTable('venta')) {
             return;
         }
 
@@ -52,7 +51,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! EntornoEmpresaSupport::esElBierzo() || ! Schema::hasTable('venta')) {
+        if (! Schema::hasTable('venta')) {
             return;
         }
 

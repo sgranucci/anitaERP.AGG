@@ -4,7 +4,9 @@
     var CODIGO_DEPOSITO_REGEX = /^[A-Za-z0-9._ -]+$/;
 
     function esFormularioDepmaeAbm() {
-        return $('#form-general').length && $('#codigo[name="codigo"]').length;
+        return $('#form-general').length
+            && $('#codigo[name="codigo"]').length
+            && $('#tipodeposito[name="tipodeposito"]').length;
     }
 
     /**

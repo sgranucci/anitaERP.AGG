@@ -13,6 +13,7 @@
     $tieneCriteriosPanel = ArticuloListadoFiltros::tieneCriteriosTexto($f);
     $limpiarUrlPanel = $limpiarUrl ?? route('articulo');
     $fEstado = $f['estado'] ?? ArticuloListadoFiltros::ESTADO_ACTIVO;
+    $fCanal = $f['canal'] ?? ArticuloListadoFiltros::CANAL_TODOS;
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-articulo" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
@@ -21,6 +22,16 @@
         <input type="hidden" name="filtro_estado" value="TODOS">
     @elseif ($fEstado !== ArticuloListadoFiltros::ESTADO_ACTIVO)
         <input type="hidden" name="filtro_estado" value="{{ $fEstado }}">
+    @endif
+    @if (ArticuloListadoFiltros::filtroCanalActivo() && $fCanal !== ArticuloListadoFiltros::CANAL_TODOS)
+        <input type="hidden" name="filtro_canal" value="{{ $fCanal }}">
+    @endif
+    @if (ArticuloListadoFiltros::filtroEmpresaActivo())
+        @if (($f['empresa_scope'] ?? 'una') === 'todas')
+            <input type="hidden" name="empresa_todas" value="1">
+        @elseif (! empty($f['empresa_id']))
+            <input type="hidden" name="empresa_id" value="{{ (int) $f['empresa_id'] }}">
+        @endif
     @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
