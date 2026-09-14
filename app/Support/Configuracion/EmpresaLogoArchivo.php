@@ -3,7 +3,11 @@
 namespace App\Support\Configuracion;
 
 /**
- * Logos en public/storage/imagenes/logos/
+ * Logos de empresa para facturas, remitos y listados.
+ *
+ * Directorios (en orden de prioridad):
+ * 1. public/assets/img/empresa/ — override local (p. ej. Ferli desplegable sin tocar CIFS)
+ * 2. public/storage/imagenes/logos/ — storage compartido histórico
  *
  * Acepta PNG y JPG/JPEG (prioridad: .png → .jpg → .jpeg).
  *
@@ -18,11 +22,22 @@ final class EmpresaLogoArchivo
     /** @var list<string> */
     private const EXTENSIONES = ['png', 'jpg', 'jpeg'];
 
-    private static function directorioLogos(): ?string
+    /**
+     * @return list<string>
+     */
+    private static function directoriosLogos(): array
     {
-        $dir = public_path('storage/imagenes/logos');
+        $dirs = [];
+        foreach ([
+            public_path('assets/img/empresa'),
+            public_path('storage/imagenes/logos'),
+        ] as $dir) {
+            if (is_dir($dir)) {
+                $dirs[] = $dir;
+            }
+        }
 
-        return is_dir($dir) ? $dir : null;
+        return $dirs;
     }
 
     /**
@@ -41,20 +56,22 @@ final class EmpresaLogoArchivo
             return null;
         }
 
-        $dir = self::directorioLogos();
-        if (! $dir) {
+        $dirs = self::directoriosLogos();
+        if ($dirs === []) {
             return null;
         }
 
         $base = self::baseArchivoSeguro($nombre);
-        $ruta = self::primeraConExtension($dir, $base);
-        if ($ruta !== null) {
-            return $ruta;
+        foreach ($dirs as $dir) {
+            $ruta = self::primeraConExtension($dir, $base);
+            if ($ruta !== null) {
+                return $ruta;
+            }
         }
 
         foreach (self::aliasLogoEmpresa($nombre) as $archivo) {
-            $rutaAlias = $dir.DIRECTORY_SEPARATOR.$archivo;
-            if (is_file($rutaAlias)) {
+            $rutaAlias = self::primeraRutaArchivoEnDirectorios($dirs, $archivo);
+            if ($rutaAlias !== null) {
                 return $rutaAlias;
             }
         }
@@ -79,20 +96,22 @@ final class EmpresaLogoArchivo
             return null;
         }
 
-        $dir = self::directorioLogos();
-        if (! $dir) {
+        $dirs = self::directoriosLogos();
+        if ($dirs === []) {
             return null;
         }
 
         $base = self::baseArchivoSeguro($slug);
-        $ruta = self::primeraConExtension($dir, $base);
-        if ($ruta !== null) {
-            return $ruta;
+        foreach ($dirs as $dir) {
+            $ruta = self::primeraConExtension($dir, $base);
+            if ($ruta !== null) {
+                return $ruta;
+            }
         }
 
         foreach (self::aliasLogoDefault($base) as $archivo) {
-            $rutaAlias = $dir.DIRECTORY_SEPARATOR.$archivo;
-            if (is_file($rutaAlias)) {
+            $rutaAlias = self::primeraRutaArchivoEnDirectorios($dirs, $archivo);
+            if ($rutaAlias !== null) {
                 return $rutaAlias;
             }
         }
@@ -139,6 +158,7 @@ final class EmpresaLogoArchivo
     {
         return [
             'logoFerli.jpg',
+            'logo_ferli.jpg',
             'logoFerli.jpeg',
             'logoFerli.png',
             'CALZADOS FERLI S.A.png',
@@ -329,6 +349,26 @@ final class EmpresaLogoArchivo
     {
         foreach (self::EXTENSIONES as $ext) {
             $ruta = $dir.DIRECTORY_SEPARATOR.$baseSinExt.'.'.$ext;
+            if (is_file($ruta)) {
+                return $ruta;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<string>  $dirs
+     */
+    private static function primeraRutaArchivoEnDirectorios(array $dirs, string $archivo): ?string
+    {
+        $archivoSeguro = basename(str_replace(['..', '\\', '/'], '', $archivo));
+        if ($archivoSeguro === '') {
+            return null;
+        }
+
+        foreach ($dirs as $dir) {
+            $ruta = $dir.DIRECTORY_SEPARATOR.$archivoSeguro;
             if (is_file($ruta)) {
                 return $ruta;
             }

@@ -157,17 +157,26 @@ class ArticuloVendidoExport implements FromView, WithColumnFormatting, WithMappi
             $nombreMarca = preg_replace('/[^A-Za-z0-9]/', '', $this->nombremventa);
         }
 
-        $rutaMarca = public_path('storage/imagenes/logos/logo'.$nombreMarca.'.jpg');
-        if (file_exists($rutaMarca)) {
-            return $rutaMarca;
+        foreach ([
+            public_path('assets/img/empresa/logo'.$nombreMarca.'.jpg'),
+            public_path('storage/imagenes/logos/logo'.$nombreMarca.'.jpg'),
+        ] as $rutaMarca) {
+            if (is_file($rutaMarca)) {
+                return $rutaMarca;
+            }
         }
 
-        $rutaFerli = public_path('storage/imagenes/logos/logoFerli.jpg');
-        if (file_exists($rutaFerli)) {
-            return $rutaFerli;
+        foreach ([
+            public_path('assets/img/empresa/logoFerli.jpg'),
+            public_path('storage/imagenes/logos/logoFerli.jpg'),
+        ] as $rutaFerli) {
+            if (is_file($rutaFerli)) {
+                return $rutaFerli;
+            }
         }
 
-        $logos = glob(public_path('storage/imagenes/logos/logo*.jpg'));
+        $logos = glob(public_path('assets/img/empresa/logo*.jpg'))
+            ?: glob(public_path('storage/imagenes/logos/logo*.jpg'));
 
         return $logos ? $logos[0] : '';
     }

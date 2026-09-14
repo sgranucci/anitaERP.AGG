@@ -65,7 +65,13 @@
 </head>
 <body>
 @php
+	use App\Support\Configuracion\EmpresaLogoArchivo;
 	use App\Support\Ventas\FacturaPdfPaginacionSupport;
+
+	$logoRemitoDat = EmpresaLogoArchivo::dataUriDesdeNombre(
+		$remito->puntoventas->empresas->nombre ?? config('app.empresa')
+	);
+	$logoRemitoUri = $logoRemitoDat['uri'] ?? null;
 
 	$mostrarTotalesDivision = config('app.empresa') === 'EL BIERZO'
 		&& optional($remito->transportes)->tipoexpreso === '4';
@@ -112,7 +118,9 @@
 		<table class="remito-header">
 			<tr>
 				<td class="remito-logo">
-					<img style="margin: 4px 0;" width="160" height="70" src="data:image/png;base64,{{ base64_encode(file_get_contents('/var/www/html/anitaERP/public/storage/imagenes/logos/logo-bierzo.png')) }}">
+					@if ($logoRemitoUri)
+						<img style="margin: 4px 0; max-height: 70px; max-width: 180px;" src="{{ $logoRemitoUri }}" alt="">
+					@endif
 					<div class="remito-cliente">
 						<strong>Cliente: {{ $clienteRemitoDisplay }}</strong><br>
 						<strong>Zona de Vta.: {{ $remito->zonavtas->nombre ?? '' }}</strong>
