@@ -138,6 +138,31 @@ class PickingPedidoFerliController extends Controller
         return response()->json($result);
     }
 
+    public function consultaLotesStock(Request $request)
+    {
+        $this->assertFerli();
+        can('listar-reporte-picking-pedido');
+
+        $articuloId = (int) $request->input('articulo_id', 0);
+        $combinacionId = (int) $request->input('combinacion_id', 0);
+        $moduloId = (int) $request->input('modulo_id', 0);
+        $texto = trim((string) $request->input('texto', $request->input('consulta', '')));
+        $soloModuloLinea = $request->boolean('solo_modulo_linea');
+
+        $result = PedidoPickingFerliSupport::consultaLotesStockPendientes(
+            $articuloId,
+            $combinacionId,
+            $soloModuloLinea && $moduloId > 0 ? $moduloId : null,
+            $texto !== '' ? $texto : null,
+        );
+
+        if (! empty($result['error'])) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json($result);
+    }
+
     public function desmarcar(Request $request)
     {
         $this->assertFerli();

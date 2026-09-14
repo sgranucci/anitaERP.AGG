@@ -12,8 +12,8 @@
         vertical-align: middle;
     }
     .picking-cell {
-        min-width: 148px;
-        max-width: 180px;
+        min-width: 168px;
+        max-width: 200px;
         background: #f8fafc;
     }
     .picking-box {
@@ -25,6 +25,15 @@
     .picking-box .picking-deposito {
         width: 100%;
         font-size: 0.8rem;
+    }
+    .picking-box .picking-lote-grupo {
+        width: 100%;
+    }
+    .picking-box .picking-lote-grupo .picking-lote {
+        width: auto;
+    }
+    .picking-box .consulta-lotes-stock-picking {
+        padding: 0.15rem 0.4rem;
     }
     .picking-box .guarda-picking {
         font-size: 0.75rem;

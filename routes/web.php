@@ -1566,6 +1566,7 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('stock/picking-pedido', 'Stock\PickingPedidoFerliController@index')->name('picking_pedido');
     Route::get('stock/picking-pedido/exportar', 'Stock\PickingPedidoFerliController@exportarExcel')->name('exportar_picking_pedido');
     Route::post('stock/picking-pedido/payload-factura', 'Stock\PickingPedidoFerliController@payloadFactura')->name('payload_factura_picking_pedido');
+    Route::post('stock/picking-pedido/consulta-lotes-stock', 'Stock\PickingPedidoFerliController@consultaLotesStock')->name('consulta_lotes_stock_picking_pedido');
     Route::post('stock/picking-pedido/marcar', 'Stock\PickingPedidoFerliController@marcar')->name('marcar_picking_pedido');
     Route::post('stock/picking-pedido/desmarcar', 'Stock\PickingPedidoFerliController@desmarcar')->name('desmarcar_picking_pedido');
 }
@@ -1757,8 +1758,15 @@ Route::get('ventas/ventas-por-concepto', 'Ventas\VentasPorConceptoReporteControl
 Route::get('ventas/listar-ventas-por-concepto/{formato}', 'Ventas\VentasPorConceptoReporteController@exportar')->name('listar_ventas_por_concepto');
 Route::get('ventas/cot-electronico', 'Ventas\CotElectronicoController@index')->name('cot_electronico');
 Route::post('ventas/cot-electronico/probar-conexion', 'Ventas\CotElectronicoController@probarConexion')->name('cot_electronico_probar_conexion');
+Route::post('ventas/cot-electronico/guia/guardar', 'Ventas\CotElectronicoController@guardarGuia')->name('cot_electronico_guia_guardar');
+Route::post('ventas/cot-electronico/guia/enviar', 'Ventas\CotElectronicoController@enviarGuia')->name('cot_electronico_guia_enviar');
+Route::post('ventas/cot-electronico/guia/resolver-factura', 'Ventas\CotElectronicoController@resolverFacturaGuia')->name('cot_electronico_guia_resolver_factura');
+Route::post('ventas/cot-electronico/guia/pendientes', 'Ventas\CotElectronicoController@pendientesGuia')->name('cot_electronico_guia_pendientes');
+Route::post('ventas/cot-electronico/guia/consultar', 'Ventas\CotElectronicoController@consultarGuias')->name('cot_electronico_guia_consultar');
 Route::get('ventas/listar-cot-electronico/{formato?}', 'Ventas\CotElectronicoController@exportar')->name('listar_cot_electronico');
 Route::get('ventas/listar-cot-electronico-sesion/{id}/{formato?}', 'Ventas\CotElectronicoController@exportarSesion')->name('listar_cot_electronico_sesion')->where('id', '[0-9]+');
+Route::get('ventas/cot-configuracion', 'Ventas\CotConfiguracionController@index')->name('cot_configuracion');
+Route::put('ventas/cot-configuracion', 'Ventas\CotConfiguracionController@actualizar')->name('actualizar_cot_configuracion');
 
 // Totales de Pedidos
 if ((string) config('app.empresa') === 'Calzados Ferli') {

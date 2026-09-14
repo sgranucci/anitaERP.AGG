@@ -267,6 +267,38 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * Lotes/OT con saldo > 0 para el artículo+combinación de la línea (modal picking).
+     *
+     * @return array{filas: list<array<string,mixed>>, error?: string, articulo_id?: int, combinacion_id?: int}
+     */
+    public static function consultaLotesStockPendientes(
+        int $articuloId,
+        int $combinacionId,
+        ?int $moduloId = null,
+        ?string $texto = null
+    ): array {
+        if ($articuloId <= 0 || $combinacionId <= 0) {
+            return ['error' => 'Seleccione artículo y combinación de la línea', 'filas' => []];
+        }
+
+        /** @var Articulo_MovimientoService $movService */
+        $movService = app(Articulo_MovimientoService::class);
+        $filas = $movService->leeLotesStockPendientes(
+            $articuloId,
+            $combinacionId,
+            $moduloId && $moduloId > 0 ? $moduloId : null,
+            $texto
+        );
+
+        return [
+            'filas' => $filas,
+            'articulo_id' => $articuloId,
+            'combinacion_id' => $combinacionId,
+            'modulo_id' => $moduloId && $moduloId > 0 ? $moduloId : null,
+        ];
+    }
+
+    /**
      * Payload para el modal de facturación OT (mismos campos que creaferli.js).
      *
      * @param  list<int>  $ids

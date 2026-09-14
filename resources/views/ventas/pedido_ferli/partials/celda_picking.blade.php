@@ -25,12 +25,22 @@
             <span class="badge badge-secondary picking-estado-badge">Pendiente</span>
         @endif
     </div>
-    <input type="text"
-           class="form-control form-control-sm picking-lote mb-1"
-           placeholder="Lote / OT stock"
-           title="C&oacute;digo de OT stock o lote a preparar"
-           value="{{ $pickingLote }}"
-           @if ($pickingFacturado || $pickingMarcado) readonly @endif>
+    <div class="input-group input-group-sm picking-lote-grupo mb-1">
+        <input type="text"
+               class="form-control form-control-sm picking-lote"
+               placeholder="Lote / OT stock"
+               title="C&oacute;digo de OT stock o lote a preparar (F1 consulta stock)"
+               value="{{ $pickingLote }}"
+               @if ($pickingFacturado || $pickingMarcado) readonly @endif>
+        <div class="input-group-append">
+            <button type="button"
+                    class="btn btn-outline-secondary consulta-lotes-stock-picking tooltipsC"
+                    title="Consultar m&oacute;dulos/lotes de stock pendientes (F1)"
+                    @if ($pickingFacturado || $pickingMarcado) disabled @endif>
+                <i class="fa fa-search"></i>
+            </button>
+        </div>
+    </div>
     <select class="form-control form-control-sm picking-deposito mb-1"
             title="Dep&oacute;sito de salida"
             @if ($pickingFacturado || $pickingMarcado) disabled @endif>

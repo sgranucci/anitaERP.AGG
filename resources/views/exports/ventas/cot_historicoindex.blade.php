@@ -1,17 +1,24 @@
 <table>
+    @if (! empty($reservarFilaLogoExcel))
+        <tr>
+            <td colspan="11" style="height: 52px;"></td>
+        </tr>
+    @endif
     <tr>
-        <td colspan="11"><strong>{{ $titulo ?? 'Histórico COT ARBA' }}</strong></td>
+        <td colspan="11"><strong style="font-size: 16px;">{{ $titulo ?? 'Histórico COT ARBA' }}</strong></td>
     </tr>
-    @if (!empty($subtitulo))
+    <tr>
+        <td colspan="11">Generado {{ now()->format('d/m/Y H:i') }}</td>
+    </tr>
+    @if (! empty($subtitulo))
         <tr>
             <td colspan="11">{{ $subtitulo }}</td>
         </tr>
     @endif
     <tr>
-        <td colspan="11">Generado {{ now()->format('d/m/Y H:i') }}</td>
+        <td colspan="11">{{ is_countable($filas ?? null) ? count($filas) : 0 }} registro(s)</td>
     </tr>
-    <tr></tr>
-    <tr style="background-color:#85C1E9;font-weight:bold;">
+    <tr style="background-color:#85C1E9;font-weight:bold;color:#17202A;">
         <td>Tipo</td>
         <td>Letra</td>
         <td>Suc.</td>

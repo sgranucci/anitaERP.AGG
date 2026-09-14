@@ -315,5 +315,6 @@
 @include('ventas.pedido_ferli.modal2')
 @include('ventas.pedido_ferli.modal3')
 @include('includes.stock.modalarticuloxsku')
+@include('includes.stock.modalconsultalotesstockpicking')
 @include('ventas.ordentrabajo.modalcrearordentrabajo')
 @include('ventas.ordentrabajo_ferli.modalfacturaordentrabajo')

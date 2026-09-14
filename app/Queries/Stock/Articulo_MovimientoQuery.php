@@ -122,6 +122,50 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
         return $articulo_query;
     }
 
+    public function leeMovimientosLotesArticuloCombinacion(int $articuloId, int $combinacionId, ?int $moduloId = null, ?string $texto = null)
+    {
+        $q = $this->model->select(
+            'articulo_movimiento.lote as lote',
+            'articulo_movimiento.modulo_id as modulo_id',
+            'articulo_movimiento.tipotransaccion_id as tipotransaccion_id',
+            'articulo_movimiento.deposito_id as deposito_id',
+            'articulo_movimiento_talle.cantidad as cantidad',
+            'modulo.codigo as modulo_codigo',
+            'modulo.nombre as modulo_nombre',
+            'depmae.codigo as deposito_codigo',
+            'depmae.nombre as deposito_nombre'
+        )
+            ->join('articulo_movimiento_talle', 'articulo_movimiento_talle.articulo_movimiento_id', 'articulo_movimiento.id')
+            ->leftJoin('modulo', 'modulo.id', 'articulo_movimiento.modulo_id')
+            ->leftJoin('depmae', 'depmae.id', 'articulo_movimiento.deposito_id')
+            ->where('articulo_movimiento.articulo_id', $articuloId)
+            ->where('articulo_movimiento.combinacion_id', $combinacionId)
+            ->whereNotNull('articulo_movimiento.lote')
+            ->where('articulo_movimiento.lote', '<>', '')
+            ->where('articulo_movimiento.lote', '<>', '0')
+            ->orderBy('articulo_movimiento.lote')
+            ->orderBy('articulo_movimiento.modulo_id');
+
+        if ($moduloId && $moduloId > 0) {
+            $q->where('articulo_movimiento.modulo_id', $moduloId);
+        }
+
+        $texto = trim((string) $texto);
+        if ($texto !== '') {
+            $like = '%'.$texto.'%';
+            $q->where(function ($w) use ($like, $texto) {
+                $w->where('articulo_movimiento.lote', 'like', $like)
+                    ->orWhere('modulo.codigo', 'like', $like)
+                    ->orWhere('modulo.nombre', 'like', $like);
+                if (ctype_digit($texto)) {
+                    $w->orWhere('articulo_movimiento.lote', $texto);
+                }
+            });
+        }
+
+        return $q->get();
+    }
+
     public function buscaLoteImportacion($lotestock_id)
     {
         $articulo_movimiento = $this->model->select('articulo_movimiento.loteimportacion_id as loteimportacion_id')

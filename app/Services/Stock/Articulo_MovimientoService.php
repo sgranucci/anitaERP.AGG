@@ -439,6 +439,70 @@ class Articulo_MovimientoService
 		return $this->articulo_movimientoQuery->leeStockPorLote($codigoOt, $articulo_id, $combinacion_id);
 	}
 
+	/**
+	 * Lotes/OT con saldo pendiente (> 0) para artículo+combinación (modal picking Ferli).
+	 *
+	 * @return list<array{lote: string, modulo_id: int, modulo: string, saldo: float, deposito_id: int, deposito: string}>
+	 */
+	public function leeLotesStockPendientes(int $articuloId, int $combinacionId, ?int $moduloId = null, ?string $texto = null): array
+	{
+		$movimientos = $this->articulo_movimientoQuery->leeMovimientosLotesArticuloCombinacion(
+			$articuloId,
+			$combinacionId,
+			$moduloId,
+			$texto
+		);
+
+		$tipoAlta = (int) config('consprod.TIPOTRANSACCION_ALTA_PRODUCCION', 3);
+		$agrupados = [];
+
+		foreach ($movimientos as $mov) {
+			$lote = trim((string) ($mov->lote ?? ''));
+			if ($lote === '' || $lote === '0') {
+				continue;
+			}
+			$moduloMovId = (int) ($mov->modulo_id ?? 0);
+			$key = $lote.'|'.$moduloMovId;
+			if (! isset($agrupados[$key])) {
+				$agrupados[$key] = [
+					'lote' => $lote,
+					'modulo_id' => $moduloMovId,
+					'modulo' => trim((string) (($mov->modulo_codigo ?? '').' '.($mov->modulo_nombre ?? ''))),
+					'saldo' => 0.0,
+					'deposito_id' => 0,
+					'deposito' => '',
+					'deposito_codigo' => '',
+					'deposito_nombre' => '',
+				];
+			}
+			$agrupados[$key]['saldo'] += (float) ($mov->cantidad ?? 0);
+			if ((int) ($mov->tipotransaccion_id ?? 0) === $tipoAlta && (int) ($mov->deposito_id ?? 0) > 0) {
+				$agrupados[$key]['deposito_id'] = (int) $mov->deposito_id;
+				$agrupados[$key]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
+				$agrupados[$key]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
+				$agrupados[$key]['deposito'] = trim(
+					($mov->deposito_codigo ?? '').'-'.($mov->deposito_nombre ?? ''),
+					'-'
+				);
+			} elseif ($agrupados[$key]['deposito_id'] <= 0 && (int) ($mov->deposito_id ?? 0) > 0) {
+				$agrupados[$key]['deposito_id'] = (int) $mov->deposito_id;
+				$agrupados[$key]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
+				$agrupados[$key]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
+				$agrupados[$key]['deposito'] = trim(
+					($mov->deposito_codigo ?? '').'-'.($mov->deposito_nombre ?? ''),
+					'-'
+				);
+			}
+		}
+
+		$filas = array_values(array_filter($agrupados, static fn (array $f) => $f['saldo'] > 0));
+		usort($filas, static function (array $a, array $b) {
+			return [$a['lote'], $a['modulo_id']] <=> [$b['lote'], $b['modulo_id']];
+		});
+
+		return $filas;
+	}
+
 	// Borra un registro por ID de movimiento de stock
 	public function deletePorMovimientoStockId($movimientostock_id)
     {

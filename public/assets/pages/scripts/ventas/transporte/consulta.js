@@ -65,6 +65,11 @@ function opcionesFocusTrasEnterTransporte($ctx) {
     if ($ctx && $ctx.length && $ctx.closest('#tab-lugares-entrega, #cuotas-table').length) {
         return opts;
     }
+    // COT guía Ferli: después del expreso va el CUIT del chofer.
+    if ($('#card-cot-guia').length && $('#cuit_chofer').length) {
+        opts.focusSiguiente = '#cuit_chofer';
+        return opts;
+    }
     if ($('#codigozonavta').length) {
         opts.focusSiguiente = '#codigozonavta';
     } else if (window.FL_FACTURA_LAYOUT_PEDIDO) {
@@ -238,8 +243,22 @@ $('input').keydown(function (e) {
     if (e.which !== 13 && e.key !== 'Enter') {
         return;
     }
-    // Dejar pasar Enter en códigos que validan por su propio handler (reparto / zona).
-    if ($(this).is('.codigotransporte, .codigozonavta')) {
+    // Dejar pasar Enter en códigos / campos que validan por su propio handler.
+    // Sin esto, return false corta el bubbling y los handlers en document no corren
+    // (ej. CUIT chofer / dominio / grilla en COT guía).
+    if ($(this).is([
+        '.codigotransporte',
+        '.codigozonavta',
+        '#cuit_chofer',
+        '.input-cuit-chofer-guia',
+        '#dominio',
+        '#numero_guia',
+        '#fecha',
+        '.linea-factura-codigo',
+        '.linea-bultos',
+        '.linea-cantidad',
+        '.linea-valor',
+    ].join(', '))) {
         return;
     }
     e.preventDefault();

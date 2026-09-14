@@ -1778,16 +1778,19 @@
 
 		var $lote = $box.find('.picking-lote');
 		var $dep = $box.find('.picking-deposito');
+		var $lupa = $box.find('.consulta-lotes-stock-picking');
 		$box.find('small.text-muted').remove();
 		$box.find('.guarda-picking').remove();
 
 		if (estado === 'facturado') {
 			$lote.prop('readonly', true);
 			$dep.prop('disabled', true);
+			$lupa.prop('disabled', true);
 			$box.append('<small class="text-muted d-block">Ya facturado</small>');
 		} else if (estado === 'preparado') {
 			$lote.prop('readonly', true);
 			$dep.prop('disabled', true);
+			$lupa.prop('disabled', true);
 			$box.append(
 				'<button type="button" title="Quitar picking" class="btn btn-sm btn-outline-secondary btn-block guarda-picking tooltipsC">' +
 				'<i class="fa fa-undo"></i> Quitar</button>'
@@ -1795,6 +1798,7 @@
 		} else {
 			$lote.prop('readonly', false);
 			$dep.prop('disabled', false);
+			$lupa.prop('disabled', false);
 			$box.append(
 				'<button type="button" title="Marcar como preparado" class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">' +
 				'<i class="fa fa-check"></i> Preparar</button>'

@@ -86,9 +86,16 @@
                                 @endif
                             </td>
                             <td class="text-nowrap">
-                                <a href="{{ route('cot_electronico', array_merge($filtrosHistoricoQuery ?? [], ['sesion_id' => $sesion->id])) }}#sesion-detalle"
-                                    class="btn btn-info btn-sm" title="Ver detalle">
-                                    <i class="fa fa-eye"></i>
+                                <a href="{{ route('cot_electronico', array_merge(
+                                        $filtrosHistoricoQuery ?? [],
+                                        array_filter([
+                                            'sesion_id' => $sesion->id,
+                                            'guia_id' => request()->integer('guia_id') ?: null,
+                                        ])
+                                    )) }}#sesion-detalle"
+                                    class="btn btn-info btn-sm btn-ver-detalle-cot"
+                                    title="Ver detalle de la sesi&oacute;n">
+                                    <i class="fa fa-eye"></i> Detalle
                                 </a>
                                 @if ($sesion->cantidad_ok > 0)
                                     <a href="{{ route('sesion_impresion_cot', ['id' => $sesion->id]) }}"

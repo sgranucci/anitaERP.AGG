@@ -638,6 +638,16 @@ class CotRemitoConsultaService
     /**
      * @return array<string, mixed>
      */
+    /**
+     * Destinatario ARBA desde cliente ERP (uso guía Ferli / APIs externas al service).
+     *
+     * @return array<string, mixed>
+     */
+    public function destinatarioPublicoDesdeCliente(?Cliente $cliente, string $fallbackNombre = ''): array
+    {
+        return $this->destinatarioDesdeCliente($cliente, $fallbackNombre);
+    }
+
     private function destinatarioDesdeCliente(?Cliente $cliente, string $fallbackNombre = ''): array
     {
         if (! $cliente) {
@@ -1085,6 +1095,49 @@ class CotRemitoConsultaService
             || $sku === '0000000000903';
     }
 
+    /**
+     * Pares (cantidad) de una factura Anita: suma compaux.compa_cantidad
+     * (misma lógica que a-controlrem / p-cot, excluye texto y 903).
+     */
+    public function paresDesdeCompa(string $tipo, string $letra, int $sucursal, int $nroFact): float
+    {
+        $tipo = strtoupper(trim($tipo));
+        $letra = strtoupper(trim($letra));
+        if ($tipo === '' || $letra === '' || $nroFact <= 0) {
+            return 0.0;
+        }
+
+        $api = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'sistema' => 'ventas',
+            'tabla' => 'compaux',
+            'campos' => 'compa_articulo, compa_cantidad',
+            'whereArmado' => " WHERE compa_tipo = '".$this->esc($tipo)
+                ."' AND compa_letra = '".$this->esc($letra)
+                ."' AND compa_sucursal = ".$sucursal
+                .' AND compa_nro_fact = '.$nroFact.' ',
+        ];
+        $parseado = ApiAnita::parsearRespuestaLista($api->apiCall($data));
+        if ($parseado['error_lectura'] !== null) {
+            return 0.0;
+        }
+
+        $total = 0.0;
+        foreach ($parseado['filas'] as $linea) {
+            $sku = trim((string) ($linea->compa_articulo ?? ''));
+            if ($this->esLineaExcluida($sku)) {
+                continue;
+            }
+            $cantidad = (float) ($linea->compa_cantidad ?? 0);
+            if ($cantidad > 0) {
+                $total += $cantidad;
+            }
+        }
+
+        return round($total, 2);
+    }
+
     private function esc(string $valor): string
     {
         return str_replace("'", "''", $valor);
@@ -1114,7 +1167,7 @@ class CotRemitoConsultaService
             return [];
         }
 
-        if (($anita['fuente'] ?? '') === 'comprob') {
+        if (($anita['fuente'] ?? '') === 'comprob' || ($anita['fuente'] ?? '') === 'guia') {
             return $this->productosDesdeCompa(
                 (string) ($anita['tipo'] ?? ''),
                 (string) ($anita['letra'] ?? ''),

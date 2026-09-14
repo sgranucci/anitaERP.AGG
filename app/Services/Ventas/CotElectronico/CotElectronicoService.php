@@ -47,6 +47,36 @@ class CotElectronicoService
             ->values()
             ->all();
 
+        return $this->procesarRemitosPreparados($fecha, $repartos, $remitos, $clavesSeleccionadas);
+    }
+
+    /**
+     * Envía remitos ya armados (modo por_guia o por_reparto).
+     *
+     * @param  list<array<string, mixed>>  $repartos
+     * @param  list<array<string, mixed>>  $remitos
+     * @param  list<string>  $clavesSeleccionadas
+     * @return array<string, mixed>
+     */
+    public function procesarRemitosPreparados(
+        Carbon $fecha,
+        array $repartos,
+        array $remitos,
+        array $clavesSeleccionadas = [],
+    ): array {
+        if ($clavesSeleccionadas !== []) {
+            $remitos = collect($remitos)
+                ->filter(fn ($fila) => in_array((string) ($fila['clave'] ?? ''), $clavesSeleccionadas, true))
+                ->filter(fn ($fila) => empty($fila['ya_enviado']))
+                ->values()
+                ->all();
+        } else {
+            $remitos = collect($remitos)
+                ->filter(fn ($fila) => empty($fila['ya_enviado']))
+                ->values()
+                ->all();
+        }
+
         if ($remitos === []) {
             return [
                 'ok' => false,

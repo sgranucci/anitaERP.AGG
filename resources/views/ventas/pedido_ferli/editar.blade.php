@@ -6,6 +6,7 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/crearferli.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crearferli.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/picking_pedido/consulta_lotes.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/picking_pedido/consulta_lotes.js')) ?: time() }}" type="text/javascript"></script>
 
 <script>
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";

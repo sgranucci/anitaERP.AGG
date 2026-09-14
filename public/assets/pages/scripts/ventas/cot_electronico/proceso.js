@@ -439,13 +439,35 @@
         consultarTitularCuit($(this).closest('tr'));
     });
 
-    $(document).on('keydown', '.input-cuit-reparto', function (e) {
+    $(document).on('keydown keypress', '.input-cuit-reparto', function (e) {
         if (!esTeclaEnter(e)) {
             return;
         }
 
         e.preventDefault();
-        consultarTitularCuit($(this).closest('tr'));
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+            e.stopImmediatePropagation();
+        }
+
+        var $fila = $(this).closest('tr');
+        formatearInputCuit(this);
+        consultarTitularCuit($fila).always(function () {
+            var cuit = soloDigitosCuit($fila.find('.input-cuit-reparto').val());
+            if (cuit !== '' && !esCuitValido(cuit)) {
+                focoCuitChofer($fila);
+                return;
+            }
+
+            var $siguiente = $fila.nextAll('tr.fila-reparto').first();
+            if ($siguiente.length) {
+                focoCodigoReparto($siguiente);
+                return;
+            }
+
+            enfocarInput($('#btn-consultar-remitos'));
+        });
+        return false;
     });
 
     $(document).on('change', '.input-codigo-reparto', function () {
@@ -723,14 +745,36 @@
         $('#input-procesar').val('1');
     });
 
+    $(document).on('keydown', '#fecha', function (e) {
+        if (!esTeclaEnter(e)) {
+            return;
+        }
+        e.preventDefault();
+        if (!($(this).val() || '').trim()) {
+            enfocarInput($(this));
+            return;
+        }
+        focoCodigoReparto($tablaRepartos.find('tr.fila-reparto:first'));
+    });
+
     actualizarTotalesCot();
 
     $tablaRepartos.find('tr.fila-reparto').each(function () {
         inicializarCuitEnFila($(this));
     });
 
-    var $primerCodigoReparto = $tablaRepartos.find('.input-codigo-reparto').first();
-    if ($primerCodigoReparto.length) {
-        focoCodigoReparto($tablaRepartos.find('tr.fila-reparto:first'));
+    var $detalleSesion = $('#sesion-detalle');
+    if ($detalleSesion.length) {
+        setTimeout(function () {
+            var el = $detalleSesion[0];
+            if (el && typeof el.scrollIntoView === 'function') {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 80);
+    } else {
+        var $primerCodigoReparto = $tablaRepartos.find('.input-codigo-reparto').first();
+        if ($primerCodigoReparto.length) {
+            focoCodigoReparto($tablaRepartos.find('tr.fila-reparto:first'));
+        }
     }
 })();

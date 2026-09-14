@@ -116,6 +116,11 @@
                     <span class="badge badge-{{ $ambiente === 'prod' ? 'danger' : 'warning' }}">
                         Ambiente {{ strtoupper($ambiente) }}
                     </span>
+                    @if (!empty($modoCot))
+                        <span class="badge badge-secondary ml-1">
+                            {{ $modoCot === 'por_guia' ? 'Modo guía' : 'Modo reparto' }}
+                        </span>
+                    @endif
                 </div>
             </div>
 
@@ -453,8 +458,8 @@
             </form>
         </div>
 
-        @include('ventas.cot_electronico.partials.sesiones_envio')
         @include('ventas.cot_electronico.partials.sesion_detalle')
+        @include('ventas.cot_electronico.partials.sesiones_envio')
     </div>
 </div>
 
