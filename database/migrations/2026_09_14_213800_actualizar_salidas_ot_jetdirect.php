@@ -6,8 +6,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Emisión OT: salidas a JetDirect (IP:9100) sin colas CUPS en el L12.
- * IPs tomadas del host Ferli 160.132.0.254 (lpstat -v).
- * Solo Calzados Ferli.
+ * Solo Calzados Ferli. IPs del host Ferli 160.132.0.254 (lpstat -v).
+ * Los IDs 4/5/6/8 son OT Laser en Ferli; en AGG son gastronomía — no correr sin gate.
  */
 return new class extends Migration
 {

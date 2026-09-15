@@ -6,8 +6,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Emisión OT: pasar salidas IFPU (imp_otr / imp_otrS) a PDF → cola CUPS local.
- * No modifica salidas JetDirect (imprimir-pdf-laser.sh) usadas por otros programas.
- * Solo Calzados Ferli.
+ * Solo Calzados Ferli. No modifica salidas JetDirect (imprimir-pdf-laser.sh).
  */
 return new class extends Migration
 {
