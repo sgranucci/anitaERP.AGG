@@ -267,6 +267,19 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/caja-cheque-aging-aviso-schedule.log'))
             ->when(fn () => (bool) config('cheque.aging_aviso.habilitado', true));
 
+        // Interforming: PDF semanal auditoría notas CRM (todos los vendedores, últimos 7 días).
+        $schedule->command('suitecrm:auditoria-notas-semanal')
+            ->weeklyOn(
+                (int) config('suitecrm.auditoria_semanal.dia', 5),
+                (string) config('suitecrm.auditoria_semanal.hora', '08:00'),
+            )
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/suitecrm-auditoria-notas-semanal.log'))
+            ->when(fn () => EntornoEmpresaSupport::esInterforming()
+                && (bool) config('suitecrm.habilitado', false)
+                && (bool) config('suitecrm.auditoria_semanal.habilitada', true));
+
         $schedule->command('seguridad:recordatorio-tickets-ingreso')
             ->dailyAt((string) config('ingreso_proveedor.recordatorio_hora', '08:45'))
             ->runInBackground()

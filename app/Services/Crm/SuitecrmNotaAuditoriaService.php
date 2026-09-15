@@ -53,9 +53,10 @@ class SuitecrmNotaAuditoriaService
      *     texto:string,
      *     solo_vinculo_erp:bool
      * }  $filtros
+     * @param  bool|null  $incluirNotasSupervisor  null = respeta permiso del usuario; true/false fuerza (CLI / mail gerencial)
      * @return array{filas: list<array<string, mixed>>, total: int, agrupadas_por_fecha: array<string, list<array<string, mixed>>>}
      */
-    public function generar(array $filtros): array
+    public function generar(array $filtros, ?bool $incluirNotasSupervisor = null): array
     {
         if (! $this->isHabilitado()) {
             return [
@@ -65,7 +66,8 @@ class SuitecrmNotaAuditoriaService
             ];
         }
 
-        $excluirSupervisor = $this->visibilidad->puedeVerNotasSupervisor()
+        $verSupervisor = $incluirNotasSupervisor ?? $this->visibilidad->puedeVerNotasSupervisor();
+        $excluirSupervisor = $verSupervisor
             ? []
             : $this->visibilidad->userIdsSupervisorSuitecrm();
 

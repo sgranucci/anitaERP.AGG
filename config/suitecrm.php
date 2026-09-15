@@ -38,4 +38,22 @@ return [
      * Ej.: usuario mgomez con rol "Supervisor".
      */
     'supervisor_rol_nombre' => env('SUITECRM_SUPERVISOR_ROL_NOMBRE', 'Supervisor'),
+
+    /**
+     * Envío semanal PDF «Auditoría de notas CRM» (Interforming: viernes 08:00).
+     * Destinatarios gerenciales; incluye notas de supervisor.
+     */
+    'auditoria_semanal' => [
+        'habilitada' => filter_var(env('SUITECRM_AUDITORIA_SEMANAL_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        /** 0=domingo … 5=viernes (Laravel Schedule::weeklyOn) */
+        'dia' => max(0, min(6, (int) env('SUITECRM_AUDITORIA_SEMANAL_DIA', 5))),
+        'hora' => (string) env('SUITECRM_AUDITORIA_SEMANAL_HORA', '08:00'),
+        /** Días inclusive hasta hoy (7 = últimos siete días). */
+        'ventana_dias' => max(1, (int) env('SUITECRM_AUDITORIA_SEMANAL_VENTANA_DIAS', 7)),
+        'emails' => (string) env(
+            'SUITECRM_AUDITORIA_SEMANAL_EMAILS',
+            'rmaceri@interforming.com.ar,fimaceri@interforming.com.ar,famaceri@pcomahue.com.ar,lmaceri@pcomahue.com.ar,mviviani@interforming.com.ar'
+        ),
+        'enviar_si_vacio' => filter_var(env('SUITECRM_AUDITORIA_SEMANAL_ENVIAR_SI_VACIO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
 ];
