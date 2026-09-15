@@ -132,6 +132,9 @@ final class PedidoCertificadoSource
                 'clientes.coeficientes',
                 'transportes',
                 'zonavtas',
+                'cliente_entregas.localidades.provincias',
+                'cliente_entregas.provincias',
+                'cliente_entregas.zonavtas',
                 'pedido_articulos.articulos.codigosenasas.envasesenasas',
                 'pedido_articulos.articulos.lineas',
                 'pedido_articulos.articulos.mventas',
@@ -149,7 +152,27 @@ final class PedidoCertificadoSource
             $query->where('transporte_id', (int) $filtros['transporte_id']);
         }
         if (! empty($filtros['zonavta_id'])) {
-            $query->where('zonavta_id', (int) $filtros['zonavta_id']);
+            $zid = (int) $filtros['zonavta_id'];
+            // Zona efectiva: cliente_entrega.zonavta_id si hay lugar de archivo; si no, pedido.zonavta_id.
+            $query->where(function ($q) use ($zid) {
+                $q->where(function ($qEntrega) use ($zid) {
+                    $qEntrega->whereNotNull('cliente_entrega_id')
+                        ->where('cliente_entrega_id', '>', 0)
+                        ->whereHas('cliente_entregas', function ($e) use ($zid) {
+                            $e->where('zonavta_id', $zid);
+                        });
+                })->orWhere(function ($qPedido) use ($zid) {
+                    $qPedido->where(function ($qSin) {
+                        $qSin->whereNull('cliente_entrega_id')
+                            ->orWhere('cliente_entrega_id', 0)
+                            ->orWhereHas('cliente_entregas', function ($e) {
+                                $e->where(function ($ez) {
+                                    $ez->whereNull('zonavta_id')->orWhere('zonavta_id', 0);
+                                });
+                            });
+                    })->where('zonavta_id', $zid);
+                });
+            });
         }
         if (! empty($filtros['cliente_id'])) {
             $query->where('cliente_id', (int) $filtros['cliente_id']);
@@ -159,9 +182,10 @@ final class PedidoCertificadoSource
         foreach ($query->get() as $pedido) {
             $cliente = $pedido->clientes;
             $transporte = $pedido->transportes;
-            $zona = $pedido->zonavtas;
-            $loc = $cliente?->localidades;
-            $prov = $loc?->provincias;
+            $ubicacion = CertificadoSanitarioUbicacionPedidoSupport::resolver($pedido, $cliente);
+            $zona = $ubicacion['zona'];
+            $loc = $ubicacion['localidad'];
+            $prov = $ubicacion['provincia'];
 
             foreach ($pedido->pedido_articulos as $item) {
                 if (($item->estado ?? '') === 'A') {
@@ -313,12 +337,27 @@ final class PedidoCertificadoSource
             }
 
             $zonaCodigo = (string) (int) $cab->penm_zonavta;
-            $zona = Zonavta::query()
+            $zonaAnita = Zonavta::query()
                 ->where(function ($q) use ($zonaCodigo, $cab) {
                     $q->where('codigo', $zonaCodigo)
                         ->orWhere('id', (int) $cab->penm_zonavta);
                 })
                 ->first();
+
+            $pedidoErp = Pedido::query()
+                ->with([
+                    'zonavtas',
+                    'cliente_entregas.localidades.provincias',
+                    'cliente_entregas.provincias',
+                    'cliente_entregas.zonavtas',
+                ])
+                ->where('codigo', $codigo)
+                ->first();
+            $ubicacion = CertificadoSanitarioUbicacionPedidoSupport::resolver($pedidoErp, $cliente);
+            $zona = $ubicacion['zona'] ?? $zonaAnita;
+            $loc = $ubicacion['localidad'] ?? $cliente?->localidades;
+            $prov = $ubicacion['provincia'] ?? $loc?->provincias;
+
             if (! empty($filtros['zonavta_id']) && (! $zona || (int) $zona->id !== (int) $filtros['zonavta_id'])) {
                 continue;
             }
@@ -330,9 +369,6 @@ final class PedidoCertificadoSource
                 (int) $cab->penm_nro,
                 $fechaAnita
             );
-
-            $loc = $cliente?->localidades;
-            $prov = $loc?->provincias;
 
             foreach ($movs as $mov) {
                 $sku = trim((string) ($mov->penv_articulo ?? ''));
@@ -385,7 +421,12 @@ final class PedidoCertificadoSource
                     transporteId: $transporte?->id,
                     codigoTransporte: (string) (int) $cab->penm_expreso,
                     zonavtaId: $zona?->id,
-                    codigoZona: (int) $cab->penm_zonavta,
+                    codigoZona: CertificadoSanitarioDestinoAnitaSupport::codigoAnitaZona(
+                        $zona?->codigo !== null && $zona->codigo !== ''
+                            ? (int) $zona->codigo
+                            : (int) $cab->penm_zonavta,
+                        $zona?->id
+                    ) ?: null,
                     sku: $sku,
                     articuloNombre: trim((string) ($art->descripcion ?? $art->nombre ?? '')),
                     articuloId: $art?->id,

@@ -177,9 +177,10 @@ final class CertificadoSanitarioWebXmlBuilder
     }
 
     /**
-     * certsan.fc Bierzo: se:localidad = loc_cod_senasa de la localidad del cliente
-     * si no hay establecimientoDestino. Fallback: dest_cod_localidad cargado.
-     * Si no queda ninguno, busca por nombre de destino en localidad.codigosenasa.
+     * certsan.fc Bierzo: se:localidad = loc_cod_senasa de la localidad del lugar
+     * de entrega (si hay cliente_entrega_id) o del cliente, si no hay establecimientoDestino.
+     * Fallback: dest_cod_localidad cargado. Si no queda ninguno, busca por nombre
+     * de destino en localidad.codigosenasa.
      *
      * @param  Collection<int, PedidoCertificadoLinea>  $lineas
      * @return list<int>

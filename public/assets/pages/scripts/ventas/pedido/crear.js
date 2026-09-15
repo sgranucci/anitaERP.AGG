@@ -719,8 +719,32 @@
 		$('#lugarentrega').toggleClass('is-invalid', obligatorio && !seleccionado);
 	}
 
-	function completarCliente_Entrega(cliente_id){
+	function buscarEntregaClientePorTexto(entregas, texto) {
+		var buscado = String(texto || '').trim().toUpperCase();
+		if (!buscado) {
+			return null;
+		}
+
+		var encontrada = null;
+		$.each(entregas || [], function (index, value) {
+			var etiqueta = String(etiquetaLugarEntrega(value) || '').trim().toUpperCase();
+			var nombre = String(value.nombre || '').trim().toUpperCase();
+			if (etiqueta === buscado || nombre === buscado) {
+				encontrada = value;
+				return false;
+			}
+		});
+
+		return encontrada;
+	}
+
+	function completarCliente_Entrega(cliente_id, flCambioCliente){
 		window._entregasClienteActual = [];
+		flCambioCliente = !!flCambioCliente;
+
+		if (!cliente_id || !$.isNumeric(cliente_id) || parseInt(cliente_id, 10) <= 0) {
+			return;
+		}
 
 		$.get(carpetaBase+'/ventas/leercliente_entrega/'+cliente_id, function(data){
 			var entr = $.map(data, function(value){
@@ -733,20 +757,18 @@
 			$('#fl_cliente_tiene_entrega').val(fl_tiene_entrega ? '1' : '0');
 
 			if (!fl_tiene_entrega) {
+				// Sin lugares del ABM: no conservar ID de otro cliente (ej. INC → Bark).
+				$('#cliente_entrega_id').val('');
+				$('#cliente_entrega_id_previa').val('');
+				$('#entrega_nombre').val('');
 				$('#div-cambiar-lugarentrega').hide();
 				$('#lugarentrega').prop('readonly', false).attr('placeholder', 'Puede cargarlo aquí si el cliente no tiene lugares en el ABM');
 
-				if (entr.length === 1) {
-					aplicarLugarEntregaCliente(entr[0]);
-					actualizarEstadoRequeridoLugarEntrega();
-					return;
-				}
-
-				if (!$('#lugarentrega').val()) {
+				if (flCambioCliente || !String($('#lugarentrega').val() || '').trim()) {
 					$.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(clienteData){
-						if (!$('#lugarentrega').val()) {
-							$('#lugarentrega').val(clienteData.lugarentrega || '');
-						}
+						var texto = String(clienteData.lugarentrega || '').trim();
+						$('#lugarentrega').val(texto);
+						actualizarEstadoRequeridoLugarEntrega();
 					});
 				}
 				actualizarEstadoRequeridoLugarEntrega();
@@ -755,8 +777,8 @@
 
 			$('#lugarentrega').prop('readonly', true).attr('placeholder', 'Seleccione un lugar de entrega del cliente');
 
-			if (entr.length === 1) {
-				aplicarLugarEntregaCliente(entr[0]);
+			if (nombradas.length === 1) {
+				aplicarLugarEntregaCliente(nombradas[0]);
 				$('#div-cambiar-lugarentrega').hide();
 				actualizarEstadoRequeridoLugarEntrega();
 				return;
@@ -780,14 +802,29 @@
 				}
 			}
 
-			limpiarLugarEntregaCliente();
+			var porTexto = buscarEntregaClientePorTexto(entr, $('#lugarentrega').val());
+			if (porTexto) {
+				aplicarLugarEntregaCliente(porTexto);
+				actualizarEstadoRequeridoLugarEntrega();
+				return;
+			}
+
+			// ID ajeno o sin match: limpiar selección. No abrir modal al cargar;
+			// el modal se abre al hacer foco en el campo o con el botón Cambiar.
+			if (flCambioCliente) {
+				limpiarLugarEntregaCliente();
+			} else {
+				$('#cliente_entrega_id').val('');
+				$('#cliente_entrega_id_previa').val('');
+				$('#entrega_nombre').val('');
+			}
 			actualizarEstadoRequeridoLugarEntrega();
-			mostrarModalSeleccionEntrega(entr);
 		});
 	}
 
 	function limpiarLugarEntregaCliente() {
 		$('#cliente_entrega_id').val('');
+		$('#cliente_entrega_id_previa').val('');
 		$('#entrega_nombre').val('');
 		$('#lugarentrega').val('');
 		actualizarEstadoRequeridoLugarEntrega();
@@ -847,6 +884,37 @@
 
 		return true;
 	}
+
+	var _suppressEntregaModalFocus = false;
+
+	$(document).on('hidden.bs.modal', '#seleccionclienteentregaModal', function () {
+		_suppressEntregaModalFocus = true;
+		setTimeout(function () {
+			_suppressEntregaModalFocus = false;
+		}, 400);
+	});
+
+	$(document).on('focus', '#lugarentrega', function () {
+		if (_suppressEntregaModalFocus) {
+			return;
+		}
+		if ($('#fl_cliente_tiene_entrega').val() !== '1') {
+			return;
+		}
+		if (!$('#lugarentrega').prop('readonly')) {
+			return;
+		}
+		if ($('#seleccionclienteentregaModal').hasClass('show')) {
+			return;
+		}
+
+		var entregas = window._entregasClienteActual || [];
+		if (entregasNombradasCliente(entregas).length <= 1) {
+			return;
+		}
+
+		mostrarModalSeleccionEntrega(entregas);
+	});
 
 	$(document).on('click', '#btn-cambiar-lugarentrega', function(){
 		mostrarModalSeleccionEntrega(window._entregasClienteActual || []);
@@ -1109,7 +1177,7 @@
 
 		var clienteIdInicial = $('#cliente_id').val();
 		if (clienteIdInicial && $.isNumeric(clienteIdInicial) && parseInt(clienteIdInicial, 10) > 0) {
-			completarCliente_Entrega(clienteIdInicial);
+			completarCliente_Entrega(clienteIdInicial, false);
 		}
 
 		if (window.abrirFacturaPedidoAlCargar && typeof generaFactura === 'function') {
@@ -2938,7 +3006,7 @@
 			return;
 		}
 
-		completarCliente_Entrega(cliente_id);
+		completarCliente_Entrega(cliente_id, true);
 		asignaDatosCliente(cliente_id, true);
 		setTimeout(() => {
 			muestraTipoSuspension();			

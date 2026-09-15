@@ -15,8 +15,9 @@ use Illuminate\Support\Facades\Log;
  *
  * p-certsan.c / certsan.fc El Bierzo:
  *   se:lugarDestino = dest_localidad (+ dest_provincia)
- *   se:localidad = loc_cod_senasa de la localidad del cliente
- *   Si el cliente no tiene código: fallback ERP = dest_cod_localidad cargado.
+ *   se:localidad = loc_cod_senasa de la localidad del lugar de entrega (cliente_entrega)
+ *     si el pedido tiene cliente_entrega_id; si no, de la localidad del cliente.
+ *   Si no hay código: fallback ERP = dest_cod_localidad cargado.
  *   Si aún no hay ninguno: buscar loc_cod_senasa por nombre de destino.
  */
 final class CertificadoSanitarioDestinoAnitaSupport
@@ -190,7 +191,8 @@ final class CertificadoSanitarioDestinoAnitaSupport
     }
 
     /**
-     * se:localidad (certsan.fc Bierzo): manda el código SENASA de la localidad del cliente.
+     * se:localidad (certsan.fc Bierzo): manda el código SENASA de la localidad
+     * del lugar de entrega / cliente (ya resuelto en la línea).
      * Fallback ERP: dest_cod_localidad del maestro destino si está cargado.
      */
     public static function senasaLocalidadXml(?int $senasaCliente, ?int $senasaDestino): ?int

@@ -102,7 +102,7 @@ class Pedido extends Model implements Auditable
 
     public function cliente_entregas()
     {
-        return $this->hasOne(Cliente_Entrega::class, 'cliente_entrega_id');
+        return $this->belongsTo(Cliente_Entrega::class, 'cliente_entrega_id');
     }
 
     public function ventas()

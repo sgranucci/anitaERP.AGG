@@ -468,7 +468,7 @@ function invocarDatosClienteTrasSeleccion(clienteId, dataInmediato) {
     }
 
     if (typeof completarCliente_Entrega === 'function') {
-        completarCliente_Entrega(clienteId);
+        completarCliente_Entrega(clienteId, true);
     }
     asignaDatosCliente(clienteId, true);
     if (typeof muestraTipoSuspension === 'function') {

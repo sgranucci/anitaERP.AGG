@@ -69,7 +69,7 @@
     $(function () {
         $("#cliente_id").change(function(){
             var cliente_id = $(this).val();
-            completarCliente_Entrega(cliente_id);
+            completarCliente_Entrega(cliente_id, true);
 
             asignaDatosCliente(cliente_id, true);
 
@@ -82,7 +82,7 @@
 
         var cliente_id = $("#cliente_id").val();
         if (cliente_id > 0) {
-            completarCliente_Entrega(cliente_id);
+            completarCliente_Entrega(cliente_id, false);
             asignaDatosCliente(cliente_id, false);
         }
 
