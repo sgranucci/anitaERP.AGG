@@ -108,7 +108,18 @@ class PedidoQueryFerli
 
     public function leePedidoporId($id)
     {
-        return $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')->with('transportes:id,nombre')->with('pedido_combinaciones')->where('estado','0')->where('id',$id)->get();
+        return $this->model
+            ->with([
+                'clientes:id,codigo,nombre',
+                'mventas:id,nombre',
+                'transportes:id,nombre',
+                'pedido_combinaciones.articulos:id,sku,descripcion,impuesto_id',
+                'pedido_combinaciones.combinaciones:id,codigo,nombre',
+                'pedido_combinaciones.modulos:id,nombre',
+            ])
+            ->where('estado', '0')
+            ->where('id', $id)
+            ->get();
     }
 
     public function first()

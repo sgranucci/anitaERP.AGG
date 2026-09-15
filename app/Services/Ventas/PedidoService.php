@@ -524,6 +524,7 @@ class PedidoService
 		}
 
         $pdf = App::make('dompdf.wrapper');
+        $pdf->setPaper('a4', 'portrait');
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
         $pdf->download($nombre_pdf.'.pdf');
 
