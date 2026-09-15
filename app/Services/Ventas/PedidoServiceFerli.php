@@ -596,11 +596,15 @@ class PedidoServiceFerli
 
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0];
-		$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
+		$nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($pedido->clientes)->nombre);
+		$nombre_pdf = 'pedido-'.$id.'-'.$nombreCliente;
 
 		$view =  \View::make('exports.ventas.pedido_ferli', compact('pedido'))
 			    ->render();
 		$path = storage_path('pdf/pedido');
+		if (! is_dir($path)) {
+			mkdir($path, 0775, true);
+		}
 
         $pdf = App::make('dompdf.wrapper');
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
@@ -615,7 +619,8 @@ class PedidoServiceFerli
 
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0];
-		$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
+		$nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($pedido->clientes)->nombre);
+		$nombre_pdf = 'pedido-'.$id.'-'.$nombreCliente;
 
 		$itemsId = explode(",", $items_id);
 
@@ -702,6 +707,9 @@ class PedidoServiceFerli
 		$view =  \View::make('exports.ventas.prefactura', compact('pedido', 'itemsId', 'conceptosTotales', 'tblImpuesto'))
 			    ->render();
 		$path = storage_path('pdf/pedido');
+		if (! is_dir($path)) {
+			mkdir($path, 0775, true);
+		}
 
         $pdf = App::make('dompdf.wrapper');
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');

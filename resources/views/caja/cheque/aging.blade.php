@@ -42,15 +42,7 @@ window.chequeDepositoUrls = {
             <div class="card-header">
                 <h3 class="card-title">Aging — cheques de terceros en cartera</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center">
-                    @if ($puedeDepositar)
-                    <button type="button" id="btn-deposito-masivo" class="btn btn-outline-info btn-sm mr-2 disabled"
-                            aria-disabled="true"
-                            title="Seleccioná cheques con el checkbox y luego depositá"
-                            style="opacity:.55;">
-                        <i class="fa fa-university"></i> Depositar sel.
-                    </button>
-                    @endif
-                    <a href="{{ route('cheque', ['cartera' => 1]) }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('cheque', ['cartera' => 1]) }}" class="btn btn-light btn-sm">
                         <i class="fa fa-reply-all"></i> Volver a cheques
                     </a>
                 </div>
@@ -133,11 +125,21 @@ window.chequeDepositoUrls = {
                             <span class="text-muted small">· cartera: {{ $resumen['total_cantidad_cartera'] }}</span>
                         @endif
                     </p>
-                    @include('includes.exportar-tabla-queryparams', [
-                        'ruta' => 'lista_aging_cheque',
-                        'queryparams' => $filtrosQuery,
-                        'variant' => 'compact',
-                    ])
+                    <div class="d-flex flex-wrap align-items-center">
+                        @if ($puedeDepositar)
+                        <button type="button" id="btn-deposito-masivo" class="btn btn-success btn-sm mr-2 disabled"
+                                aria-disabled="true"
+                                title="Seleccioná cheques con el checkbox y luego depositá"
+                                style="opacity:.55;">
+                            <i class="fa fa-university"></i> Depositar sel.
+                        </button>
+                        @endif
+                        @include('includes.exportar-tabla-queryparams', [
+                            'ruta' => 'lista_aging_cheque',
+                            'queryparams' => $filtrosQuery,
+                            'variant' => 'compact',
+                        ])
+                    </div>
                 </div>
 
                 <div class="table-responsive">

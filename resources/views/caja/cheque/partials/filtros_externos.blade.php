@@ -59,7 +59,7 @@
         </div>
     </div>
     @endif
-    <div class="d-flex flex-wrap align-items-center">
+    <div class="d-flex flex-wrap align-items-center justify-content-between">
         <div class="mb-1">
             <span class="text-muted small mr-2"><i class="fa fa-filter"></i> Vista rápida:</span>
             <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Filtros rápidos de cheques">
@@ -90,6 +90,25 @@
                 </a>
             </div>
         </div>
+        @if (($puede_depositar_cheque ?? false) || ($puede_caucionar_cheque ?? false))
+        <div class="mb-1 ml-md-2">
+            <span class="text-muted small mr-2"><i class="fa fa-check-square-o"></i> Selección:</span>
+            @if ($puede_depositar_cheque ?? false)
+            <button type="button" id="btn-deposito-masivo" class="btn btn-success btn-sm mr-1 disabled"
+                    aria-disabled="true"
+                    title="Seleccioná cheques con el checkbox y luego depositá"
+                    style="opacity:.55;">
+                <i class="fa fa-university"></i> Depositar sel.
+            </button>
+            @endif
+            @if ($puede_caucionar_cheque ?? false)
+            <button type="button" id="btn-caucion-masivo" class="btn btn-warning btn-sm" disabled
+                    title="Caucionar seleccionados">
+                <i class="fa fa-lock"></i> Caucionar sel.
+            </button>
+            @endif
+        </div>
+        @endif
     </div>
     @if ($paraDepositarActiva)
     <form method="get" action="{{ route('cheque') }}" class="form-inline mt-2 mb-0">

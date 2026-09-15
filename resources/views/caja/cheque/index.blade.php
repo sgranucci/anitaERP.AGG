@@ -69,19 +69,6 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                     <a href="{{ route('echeq_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="eCheq">
                         <i class="fa fa-mobile"></i> eCheq
                     </a>
-                    @if ($puede_depositar_cheque ?? false)
-                    <button type="button" id="btn-deposito-masivo" class="btn btn-outline-info btn-sm mr-2 disabled"
-                            aria-disabled="true"
-                            title="Seleccioná cheques con el checkbox y luego depositá"
-                            style="opacity:.55;">
-                        <i class="fa fa-university"></i> Depositar sel.
-                    </button>
-                    @endif
-                    @if ($puede_caucionar_cheque ?? false)
-                    <button type="button" id="btn-caucion-masivo" class="btn btn-outline-warning btn-sm mr-2" disabled title="Caucionar seleccionados">
-                        <i class="fa fa-lock"></i> Caucionar sel.
-                    </button>
-                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cheque',
                         'filtroValor' => $filtros['valor'] ?? '',
