@@ -696,7 +696,8 @@ class PedidoServiceFerli
 						  "empresa_id" => PuntoventaEmpresaSupport::empresaIdDesdePreferenciaFacturacion(),
 						];
 		// Calcula impuestos
-		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($tblImpuesto, $datosCliente);
+		$fechaFactura = Carbon::now()->format('Y-m-d');
+		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($tblImpuesto, $datosCliente, $fechaFactura);
 
 		$view =  \View::make('exports.ventas.prefactura', compact('pedido', 'itemsId', 'conceptosTotales', 'tblImpuesto'))
 			    ->render();

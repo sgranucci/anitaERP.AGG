@@ -63,9 +63,13 @@ class ImpuestoService extends FacturacionService
 		$this->abastoRepository = $abastorepository;
     }
 
-	public function calculaImpuestoVenta(&$dataItem, $dataCliente, $fechaFactura, $flGrabaComprobanteDividido = null)
+	public function calculaImpuestoVenta(&$dataItem, $dataCliente, $fechaFactura = null, $flGrabaComprobanteDividido = null)
 	{
 		$dataItem = $this->normalizaItemsCalculoImpuesto($dataItem);
+
+		if ($fechaFactura === null || $fechaFactura === '') {
+			$fechaFactura = Carbon::now()->format('Y-m-d');
+		}
 
 		// Inicializa variables
 		$totalFinal = 0.;
