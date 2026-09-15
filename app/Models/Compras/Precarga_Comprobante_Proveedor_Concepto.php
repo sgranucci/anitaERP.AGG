@@ -18,11 +18,11 @@ class Precarga_Comprobante_Proveedor_Concepto extends Model implements Auditable
 
 	public function precarga_comprobante_proveedor()
 	{
-    	return $this->belongsToy(Precarga_Comprobante_Proveedor::class, 'precarga_comprobante_proveedor_id');
+    	return $this->belongsTo(Precarga_Comprobante_Proveedor::class, 'precarga_comprobante_proveedor_id');
 	}
 
     public function concepto_ivacompras()
     {
-        return $this->belongsTo(Concepto_Ivacompra::class, 'tipotransaccion_compra_id');
+        return $this->belongsTo(Concepto_Ivacompra::class, 'concepto_ivacompra_id');
     }    
 }

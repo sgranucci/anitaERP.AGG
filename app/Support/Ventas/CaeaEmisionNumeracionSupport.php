@@ -69,6 +69,18 @@ final class CaeaEmisionNumeracionSupport
             $totalComprobante,
         );
 
+        // AGG: ventas con codigo_afip NULL no entran al max por serie, pero cobranza sí
+        // choca por B-000XX-N. Incluir max del PV evita reemitir un número ya usado.
+        if (EntornoEmpresaSupport::esAgg()) {
+            $ultimoErp = max(
+                $ultimoErp,
+                VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpPorPuntoventa(
+                    $puntoventaId,
+                    $empresaId,
+                ),
+            );
+        }
+
         if (EntornoEmpresaSupport::esElBierzo()) {
             $puntoventa = Puntoventa::query()->find($puntoventaId);
             $sucursal = trim((string) ($puntoventa->codigo ?? ''));

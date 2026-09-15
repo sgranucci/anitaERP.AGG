@@ -5,12 +5,12 @@ namespace App\Support\Compras\PrecargaProveedor;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\ComprobanteService;
 use App\Services\Compras\OrdencompraService;
-use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoItemSupport;
 use RuntimeException;
 
 /**
  * Lista de conceptos IVA compra para precarga (misma lógica que API listaConcepto).
  * Tipo de ítem: si el proveedor tiene medidores en proveedor_servicio → fuerza S (FIS/FNS/…).
+ * OC multi-fino → tipo P (FPB/…) con conceptos unidos desde cada CC.
  */
 final class PrecargaProveedorConceptosListaSupport
 {
@@ -18,6 +18,7 @@ final class PrecargaProveedorConceptosListaSupport
         private OrdencompraService $ordencompraService,
         private CentrocostoRepositoryInterface $centrocostoRepository,
         private ComprobanteService $comprobanteService,
+        private PrecargaProveedorProrrateoMultiCcSupport $prorrateoMultiCcSupport,
     ) {}
 
     /**
@@ -25,7 +26,13 @@ final class PrecargaProveedorConceptosListaSupport
      *   tipocomprobante: string,
      *   letra: string,
      *   centro_costo_codigo: string,
-     *   conceptos: list<array{id_concepto: int|string, nombre: string, descripcion_ai: string, concepto_ivacompra_id?: int}>
+     *   centros_costo?: list<string>,
+     *   tipos_origen?: list<string>,
+     *   pesos_por_fino?: array<string, float>,
+     *   prorrateo_multi_cc?: bool,
+     *   conceptos: list<array{id_concepto: int|string, nombre: string, descripcion_ai: string, concepto_ivacompra_id?: int}>,
+     *   es_proveedor_servicios?: bool,
+     *   tipo_item?: string
      * }
      */
     public function resolver(string $cuitProveedor, string $numeroOc, string $tipoComprobante = 'FC'): array
@@ -45,6 +52,45 @@ final class PrecargaProveedorConceptosListaSupport
             throw new RuntimeException('OC no corresponde con el CUIT del proveedor indicado');
         }
 
+        $tipoItem = PrecargaProveedorTipoItemSupport::resolver($itemsOrdenCompra, $cuitProveedor);
+        $centrosConPeso = PrecargaProveedorProrrateoMultiCcSupport::centrosConPesoParaOc(
+            (string) $numeroOc,
+            $itemsOrdenCompra,
+        );
+        // Si hay OC ERP, el tipo de ítem también puede resolverse desde ella (más fiable).
+        try {
+            $ocErp = \App\Models\Compras\Ordencompra::query()
+                ->where('numeroordencompra', $numeroOc)
+                ->orWhere('numeroordencompra', ltrim((string) $numeroOc, '0'))
+                ->first();
+            if ($ocErp) {
+                $tipoItem = PrecargaProveedorAbreviaturaTipoSupport::tipoItemDesdeOrdencompra($ocErp);
+            }
+        } catch (\Throwable) {
+        }
+        $prorrateo = $this->prorrateoMultiCcSupport->resolverDesdeCentros(
+            $tipoComprobante,
+            $tipoItem,
+            $centrosConPeso,
+        );
+
+        if ($prorrateo['activo']) {
+            PrecargaProveedorProrrateoMultiCcSupport::assertTipoProrrateadoExiste($prorrateo['tipocomprobante']);
+
+            return [
+                'tipocomprobante' => $prorrateo['tipocomprobante'],
+                'letra' => (string) ($datosOrdenCompra->prom_letra ?? 'A'),
+                'centro_costo_codigo' => (string) ($prorrateo['centros'][0] ?? ''),
+                'centros_costo' => $prorrateo['centros'],
+                'tipos_origen' => $prorrateo['tipos_origen'],
+                'pesos_por_fino' => $prorrateo['pesos_por_fino'],
+                'prorrateo_multi_cc' => true,
+                'es_proveedor_servicios' => PrecargaProveedorTipoItemSupport::proveedorTieneServicios($cuitProveedor),
+                'tipo_item' => $tipoItem,
+                'conceptos' => $prorrateo['conceptos'],
+            ];
+        }
+
         $centroCostoDestino = PrecargaProveedorCentrocostoDestinoSupport::codigoDesdeOcAnita(
             $datosOrdenCompra,
             $itemsOrdenCompra
@@ -58,8 +104,6 @@ final class PrecargaProveedorConceptosListaSupport
         if (! in_array(substr($tipoIva, 0, 1), ['I', 'D', 'N'], true)) {
             throw new RuntimeException('Centro de costo de la OC sin tipo IVA válido');
         }
-
-        $tipoItem = PrecargaProveedorTipoItemSupport::resolver($itemsOrdenCompra, $cuitProveedor);
 
         $abreviatura = PrecargaProveedorAbreviaturaTipoSupport::abreviatura(
             $tipoComprobante,
@@ -97,6 +141,7 @@ final class PrecargaProveedorConceptosListaSupport
             'tipocomprobante' => $abreviatura,
             'letra' => (string) ($datosOrdenCompra->prom_letra ?? 'A'),
             'centro_costo_codigo' => $centroCostoDestino,
+            'prorrateo_multi_cc' => false,
             'es_proveedor_servicios' => PrecargaProveedorTipoItemSupport::proveedorTieneServicios($cuitProveedor),
             'tipo_item' => $tipoItem,
             'conceptos' => $conceptos,

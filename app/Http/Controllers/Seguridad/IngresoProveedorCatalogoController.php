@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Seguridad;
 
+use App\Exports\Seguridad\IngresoProveedorCatalogoListadoExport;
 use App\Http\Controllers\Controller;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Seguridad\IngresoProveedorCatalogoListadoFiltros;
 use App\Support\Seguridad\IngresoProveedorCatalogoSupport;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Maatwebsite\Excel\Facades\Excel;
 
 class IngresoProveedorCatalogoController extends Controller
 {
@@ -22,7 +24,7 @@ class IngresoProveedorCatalogoController extends Controller
         if (IngresoProveedorCatalogoListadoFiltros::tieneCriteriosAplicados($filtros)) {
             IngresoProveedorCatalogoListadoFiltros::aplicar($query, $filtros);
         }
-        $datas = $query->orderBy('nombre')->paginate(10);
+        $datas = $query->orderBy('nombre')->paginate(25);
 
         return view('seguridad.ingreso_proveedor_catalogo.index', [
             'tipo' => $tipo,
@@ -32,6 +34,51 @@ class IngresoProveedorCatalogoController extends Controller
             'filtrosQuery' => IngresoProveedorCatalogoListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => IngresoProveedorCatalogoListadoFiltros::CAMPOS,
         ]);
+    }
+
+    public function listar(Request $request, $formato = null)
+    {
+        can('listar-ingreso-proveedor-catalogo');
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $tipo = IngresoProveedorCatalogoSupport::tipoDesdeRequest($request);
+        $def = IngresoProveedorCatalogoSupport::def($tipo);
+        $filtros = IngresoProveedorCatalogoListadoFiltros::resolverDesdeRequest($request);
+        $filtrosQuery = IngresoProveedorCatalogoListadoFiltros::paraQueryString($filtros);
+        $slugArchivo = str_replace('-', '_', $def['ruta']);
+
+        switch ($formato) {
+            case 'PDF':
+                $query = IngresoProveedorCatalogoSupport::modelo($tipo)::query();
+                if (IngresoProveedorCatalogoListadoFiltros::tieneCriteriosAplicados($filtros)) {
+                    IngresoProveedorCatalogoListadoFiltros::aplicar($query, $filtros);
+                }
+                $datas = $query->orderBy('nombre')->get();
+                $titulo = $def['titulo'];
+                $view = \View::make('seguridad.ingreso_proveedor_catalogo.listado', compact('datas', 'titulo'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $pdf = \PDF::loadHTML($view)->setPaper('a4', 'portrait');
+                $pdf->save($path.'/listado_'.$slugArchivo.'.pdf');
+
+                return $pdf->download('listado_'.$slugArchivo.'.pdf');
+            case 'EXCEL':
+                return Excel::download(
+                    (new IngresoProveedorCatalogoListadoExport)->parametros($tipo, $filtros),
+                    'listado_'.$slugArchivo.'.xlsx'
+                );
+            case 'CSV':
+                return Excel::download(
+                    (new IngresoProveedorCatalogoListadoExport)->parametros($tipo, $filtros),
+                    'listado_'.$slugArchivo.'.csv',
+                    \Maatwebsite\Excel\Excel::CSV
+                );
+            default:
+                return redirect()->route($def['ruta'], $filtrosQuery);
+        }
     }
 
     public function crear(Request $request)

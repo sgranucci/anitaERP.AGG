@@ -36,6 +36,7 @@ return [
         'compras.suscripcion_comprobante_escalamiento' => App\Services\Configuracion\Handlers\ComprasSuscripcionComprobanteFaltanteAvisoHandler::class,
         'compras.aplicacion_cc_reclasificacion' => App\Services\Configuracion\Handlers\ComprasAplicacionCcReclasificacionAvisoHandler::class,
         'compras.precarga_cotizacion_invalida' => App\Services\Configuracion\Handlers\ComprasPrecargaCotizacionInvalidaAvisoHandler::class,
+        'compras.precarga_prorrateo_multi_cc' => App\Services\Configuracion\Handlers\ComprasPrecargaProrrateoMultiCcAvisoHandler::class,
         'compras.comprobante_proveedor_borrador_pendiente' => App\Services\Configuracion\Handlers\ComprasComprobanteProveedorBorradorPendienteAvisoHandler::class,
         'stock.transferencia_pendiente_aprobacion' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,
         'stock.transferencia_confirmada' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,

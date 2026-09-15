@@ -711,6 +711,8 @@ class PagoproveedorService
                 'pagoproveedor_id' => $pago->id,
                 'numero' => $pago->numerotransaccion,
             ]);
+            // Sin tesorería local igual hay que espejar CC (promov/aplmovp) y retenciones.
+            $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $pago->id);
             PagoproveedorAnitaRetencionEscrituraSupport::sincronizarDesdePago($pago->fresh(), $reemplazar);
 
             return;

@@ -40,12 +40,13 @@
                         @endif        
                         @php
                             $estadosReenvioArbol = ['SOLICITADA', 'RECHAZADA'];
+                            $esRechazada = ($data->estado ?? '') === 'RECHAZADA';
                         @endphp
                         @if (in_array($data->estado ?? '', $estadosReenvioArbol, true))
                             <form action="{{ route('reenviar_arbol_aprobacion_ordenventa', ['id' => $data->id]) }}" method="POST" style="display:inline"
                                 onsubmit="return confirm('¿Realmente desea volver a enviar la orden de venta al árbol de aprobación?');">
                                 @csrf
-                                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Elimina los movimientos previos del árbol y vuelve a disparar el flujo desde el primer nivel">
+                                <button type="submit" class="btn {{ $esRechazada ? 'btn-primary' : 'btn-outline-secondary' }} btn-sm" title="Elimina los movimientos previos del árbol y vuelve a disparar el flujo desde el primer nivel">
                                     <i class="fa fa-fw fa-sitemap"></i>
                                     Reenviar al árbol de aprobación
                                 </button>
@@ -67,6 +68,14 @@
                     <h3 class="card-title">Visualizar Orden de Venta - Número {{$data->numeroordenventa ?? ''}}</h3>
                 @endif
             </div>
+            @if (!isset($visualizar) && ($data->estado ?? '') === 'RECHAZADA')
+                <div class="alert alert-warning mb-0 mx-3 mt-3 py-2 small">
+                    <i class="fa fa-info-circle"></i>
+                    Esta OV está <strong>RECHAZADA</strong>.
+                    <strong>Actualizar</strong> solo guarda los cambios y <strong>no</strong> vuelve a enviarla al circuito.
+                    Después de corregirla, use <strong>Reenviar al árbol de aprobación</strong> para que pase a <strong>SOLICITADA</strong> y se notifique de nuevo a los aprobadores.
+                </div>
+            @endif
             <form action="{{route('actualiza_ordenventa', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
                 <div align="center" style="margin: 5px;">

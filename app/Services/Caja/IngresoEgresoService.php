@@ -29,6 +29,7 @@ use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
+use App\Support\Caja\IngresoEgresoGrabacionTimingSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Caja\IngresoEgresoEdicionCandadoSupport;
@@ -127,46 +128,89 @@ class IngresoEgresoService
 	   	$data['estados'][] = Caja_Movimiento_Estado::$enumEstado[0]['valor'];
 	   	$data['observacionestados'][] = "Alta de Movimiento de Caja";
 
-		if ($origen)
-		{
-			IngresoEgresoSolicitudpagoSupport::assertSolicitudDisponibleParaPagar($data, true);
-			$caja_movimiento = $this->caja_movimientoRepository->create($request->all());
+		IngresoEgresoGrabacionTimingSupport::comenzar([
+			'accion' => 'guarda',
+			'solicitudpago_id' => (int) ($data['solicitudpago_id'] ?? $request->input('solicitudpago_id') ?? 0),
+			'empresa_id' => (int) $request->input('empresa_id'),
+			'origen' => $origen ? (string) $origen : null,
+		]);
 
-			if (!$caja_movimiento)
-				throw new Exception('Error en grabacion');
-
-			Self::agrega($data, $caja_movimiento, $request);
-		}
-		else
-		{
-			DB::beginTransaction();
-			try
+		try {
+			if ($origen)
 			{
+				$tCreate = IngresoEgresoGrabacionTimingSupport::ahora();
 				IngresoEgresoSolicitudpagoSupport::assertSolicitudDisponibleParaPagar($data, true);
 				$caja_movimiento = $this->caja_movimientoRepository->create($request->all());
+				IngresoEgresoGrabacionTimingSupport::marcarEtapa('create_ms', $tCreate);
 
-				if ($caja_movimiento == 'Error')
+				if (!$caja_movimiento)
 					throw new Exception('Error en grabacion');
 
-				// Guarda tablas asociadas
-				if ($caja_movimiento)
-					Self::agrega($data, $caja_movimiento, $request);
+				Self::agrega($data, $caja_movimiento, $request);
 
-				$this->sincronizarComprobantesIva($request, (int) $caja_movimiento->id, (int) $request->input('empresa_id'));
-
-				DB::commit();
-
-				if ($caja_movimiento) {
-					app(\App\Services\Solicitudpago\SolicitudpagoPagoDesdeCajaService::class)
-						->sincronizarDesdeMovimiento($caja_movimiento->fresh());
-				}
-			} catch (\Exception $e) {
-				DB::rollback();
-
-				// Borra el asiento creado
-
-				return ['errores' => $e->getMessage()];
+				IngresoEgresoGrabacionTimingSupport::finalizar([
+					'ok' => true,
+					'caja_movimiento_id' => (int) $caja_movimiento->id,
+					'numerotransaccion' => (string) ($caja_movimiento->numerotransaccion ?? ''),
+				]);
 			}
+			else
+			{
+				DB::beginTransaction();
+				try
+				{
+					$tCreate = IngresoEgresoGrabacionTimingSupport::ahora();
+					IngresoEgresoSolicitudpagoSupport::assertSolicitudDisponibleParaPagar($data, true);
+					$caja_movimiento = $this->caja_movimientoRepository->create($request->all());
+					IngresoEgresoGrabacionTimingSupport::marcarEtapa('create_ms', $tCreate);
+
+					if ($caja_movimiento == 'Error')
+						throw new Exception('Error en grabacion');
+
+					// Guarda tablas asociadas
+					if ($caja_movimiento)
+						Self::agrega($data, $caja_movimiento, $request);
+
+					$tIva = IngresoEgresoGrabacionTimingSupport::ahora();
+					$this->sincronizarComprobantesIva($request, (int) $caja_movimiento->id, (int) $request->input('empresa_id'));
+					IngresoEgresoGrabacionTimingSupport::marcarEtapa('iva_ms', $tIva);
+
+					DB::commit();
+
+					if ($caja_movimiento) {
+						$tSync = IngresoEgresoGrabacionTimingSupport::ahora();
+						app(\App\Services\Solicitudpago\SolicitudpagoPagoDesdeCajaService::class)
+							->sincronizarDesdeMovimiento($caja_movimiento->fresh());
+						IngresoEgresoGrabacionTimingSupport::marcarEtapa('sync_sp_ms', $tSync);
+					}
+
+					IngresoEgresoGrabacionTimingSupport::finalizar([
+						'ok' => true,
+						'caja_movimiento_id' => (int) ($caja_movimiento->id ?? 0),
+						'numerotransaccion' => (string) ($caja_movimiento->numerotransaccion ?? ''),
+					]);
+				} catch (\Exception $e) {
+					DB::rollback();
+
+					// Borra el asiento creado
+
+					IngresoEgresoGrabacionTimingSupport::finalizar([
+						'ok' => false,
+						'error' => $e->getMessage(),
+						'caja_movimiento_id' => isset($caja_movimiento) && is_object($caja_movimiento)
+							? (int) $caja_movimiento->id
+							: null,
+					]);
+
+					return ['errores' => $e->getMessage()];
+				}
+			}
+		} catch (\Throwable $e) {
+			IngresoEgresoGrabacionTimingSupport::finalizar([
+				'ok' => false,
+				'error' => $e->getMessage(),
+			]);
+			throw $e;
 		}
 
 		return $this->respuestaExitoGrabacion($caja_movimiento ?? null, $request);
@@ -174,13 +218,16 @@ class IngresoEgresoService
 
 	private function agrega($data, $caja_movimiento, $request)
 	{
+		$tLocales = IngresoEgresoGrabacionTimingSupport::ahora();
 		$caja_movimiento_cuentacaja = $this->caja_movimiento_cuentacajaRepository->create($data, $caja_movimiento->id);
 		$caja_movimiento_estado = $this->caja_movimiento_estadoRepository->create($data, $caja_movimiento->id);
 		$caja_movimiento_archivo = $this->caja_movimiento_archivoRepository->create($request, $caja_movimiento->id);
 
 		$this->chequeRepository->guardarChequeIngresoEgreso($data, 'create', (int) $caja_movimiento->id);
+		IngresoEgresoGrabacionTimingSupport::marcarEtapa('locales_ms', $tLocales);
 
 		// Graba asiento contable
+		$tAsiento = IngresoEgresoGrabacionTimingSupport::ahora();
 		if (isset($data['cuentacontable_ids']))
 		{
 			// Busca tipo de asiento de tesoreria
@@ -211,9 +258,15 @@ class IngresoEgresoService
 			if ($asiento)
 				$asiento_movimiento = $this->asiento_movimientoRepository->create($data, $asiento->id);
 		}
+		IngresoEgresoGrabacionTimingSupport::marcarEtapa('asiento_ms', $tAsiento);
 
+		$tTesmov = IngresoEgresoGrabacionTimingSupport::ahora();
 		IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($caja_movimiento->fresh());
+		IngresoEgresoGrabacionTimingSupport::marcarEtapa('tesmov_ms', $tTesmov);
+
+		$tOpa = IngresoEgresoGrabacionTimingSupport::ahora();
 		IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::persistirDesdeMovimiento($caja_movimiento->fresh());
+		IngresoEgresoGrabacionTimingSupport::marcarEtapa('opa_cc_ms', $tOpa);
 	}
 
     public function actualizaIngresoEgreso($request, $id, $origen = null)

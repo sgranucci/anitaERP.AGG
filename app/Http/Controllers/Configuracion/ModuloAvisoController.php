@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionModuloAvisoTipo;
 use App\Models\Configuracion\ModuloAvisoDestinatario;
 use App\Models\Configuracion\ModuloAvisoTipo;
-use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +15,6 @@ class ModuloAvisoController extends Controller
     public function __construct(
         private EmpresaRepositoryInterface $empresaRepository,
         private CentrocostoRepositoryInterface $centrocostoRepository,
-        private UsuarioRepositoryInterface $usuarioRepository,
     ) {
     }
 
@@ -47,12 +45,6 @@ class ModuloAvisoController extends Controller
             'tipo' => $tipo,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'centrocosto_query' => $this->centrocostoRepository->all(),
-            'usuario_query' => $this->usuarioRepository->listadoOperativoParaSelector(
-                null,
-                null,
-                ['id', 'nombre', 'email', 'usuario'],
-                true
-            ),
             'placeholders_ayuda' => $this->placeholdersAyuda($tipo->modulo, $tipo->codigo),
         ]);
     }

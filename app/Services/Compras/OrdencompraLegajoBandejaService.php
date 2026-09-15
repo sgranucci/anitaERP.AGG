@@ -264,7 +264,9 @@ class OrdencompraLegajoBandejaService
             $grillaFacturas = $this->facturasParaGrilla($facturasLegajo);
             // Derivar de datos ya hidratados (evitar N+1 Anita/SQL por fila).
             $pendientes = $this->documentosPendientesDesdeHidratacion($facs, $cps);
-            $siguiente = $pendientes[0] ?? null;
+            // El "+" toma la primera pendiente en el mismo orden que la columna Facturas.
+            $siguiente = $this->siguientePendienteEnOrdenListado($grillaFacturas['visibles'], $pendientes)
+                ?? ($pendientes[0] ?? null);
             $enCxp = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0));
             $urlCargar = null;
             if ($enCxp && $siguiente !== null) {
@@ -380,6 +382,41 @@ class OrdencompraLegajoBandejaService
         }
 
         return route('crear_comprobante_proveedor', $params);
+    }
+
+    /**
+     * Primera pendiente en el orden visual del index (columna Facturas).
+     *
+     * @param  list<array<string, mixed>>  $visibles
+     * @param  list<array<string, mixed>>  $pendientes
+     * @return array<string, mixed>|null
+     */
+    private function siguientePendienteEnOrdenListado(array $visibles, array $pendientes): ?array
+    {
+        if ($visibles === [] || $pendientes === []) {
+            return null;
+        }
+
+        $porClave = [];
+        foreach ($pendientes as $pendiente) {
+            $clave = $this->claveFacturaEtiqueta((string) ($pendiente['etiqueta'] ?? ''));
+            if ($clave === '') {
+                continue;
+            }
+            $porClave[$clave] = $pendiente;
+        }
+
+        foreach ($visibles as $visible) {
+            if (($visible['estado'] ?? '') === 'cargada') {
+                continue;
+            }
+            $clave = $this->claveFacturaEtiqueta((string) ($visible['numero'] ?? ''));
+            if ($clave !== '' && isset($porClave[$clave])) {
+                return $porClave[$clave];
+            }
+        }
+
+        return null;
     }
 
     /**

@@ -152,7 +152,8 @@
                 })
                 .fail(function (xhr) {
                     pintarTicket(null);
-                    alerta((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se encontró el DNI.');
+                    alerta((xhr.responseJSON && xhr.responseJSON.mensaje)
+                        || 'No se encontró una visita abierta para ese DNI.');
                     $('#porteria-dni').trigger('focus');
                 });
         });

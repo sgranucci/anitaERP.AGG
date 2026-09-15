@@ -3,6 +3,7 @@
 namespace App\Services\Compras;
 
 use App\ApiAnita;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
@@ -10,6 +11,7 @@ use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplicacionCuentacorr
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplmovpAnitaMapper;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagadoAnitaMapper;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagoAnitaMapper;
+use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -61,6 +63,108 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
 
         $this->syncPorIdsAplicacion($ids);
         $this->sincronizarPromovCabeceraPago($pagoproveedorId);
+    }
+
+    /**
+     * Anulación física: deshace aplmovp / t_pagado de facturas y borra la cabecera
+     * promov de la OP (y AOP del mismo nro si hubiera). Debe llamarse antes de
+     * borrar las aplicaciones ERP.
+     */
+    public function revertirYEliminarPagoAnita(Pagoproveedor $pago): void
+    {
+        $pagoId = (int) $pago->id;
+        if ($pagoId <= 0) {
+            return;
+        }
+
+        $aplicaciones = Proveedor_Cuentacorriente_Aplicacion::query()
+            ->where('pagoproveedor_id', $pagoId)
+            ->where('total', '<', 0)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($aplicaciones as $apl) {
+            try {
+                $this->revertir($this->snapshotDesdeAplicacion($apl));
+            } catch (\Throwable $e) {
+                Log::warning('anita_bridge.fallo', [
+                    'contexto' => 'aplmovp revertir anulación física OP '.$pagoId.' apl '.$apl->id,
+                    'mensaje' => $e->getMessage(),
+                ]);
+                throw new RuntimeException(
+                    'No se pudo revertir en Anita la aplicación CC #'.$apl->id.' de la OP: '.$e->getMessage(),
+                    0,
+                    $e
+                );
+            }
+        }
+
+        $this->eliminarPromovCabeceraPorPago($pago);
+    }
+
+    /**
+     * Borra promov de la OP y de un eventual AOP con el mismo número.
+     */
+    public function eliminarPromovCabeceraPorPago(Pagoproveedor $pago): void
+    {
+        $pago->loadMissing(['proveedores', 'empresas']);
+
+        $proveedor = ComprobanteProveedorAnitaImportClaveSupport::proveedorCodigoAnita(
+            (string) ($pago->proveedores?->codigo ?? '')
+        );
+        $nro = (int) ($pago->numerotransaccion ?? 0);
+        if ($proveedor === '' || $nro <= 0) {
+            return;
+        }
+
+        $tipoOrig = ComprobanteProveedorAnitaImportClaveSupport::tipo(
+            (string) ($pago->tipocomprobante ?: 'OPP')
+        );
+        if ($tipoOrig === '') {
+            $tipoOrig = 'OPP';
+        }
+
+        $empresa = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) $pago->empresa_id);
+        if ($empresa <= 0) {
+            $empresa = (int) ($pago->empresas?->codigo ?? $pago->empresa_id ?? 0);
+        }
+
+        $letra = (string) ($pago->letra ?? 'A');
+        if ($letra === '') {
+            $letra = 'A';
+        }
+
+        $tipos = array_values(array_unique(array_filter([$tipoOrig, 'AOP'])));
+        $api = new ApiAnita;
+        $sistema = (string) config('comprobante_proveedor.anita_sistema_compras', 'compras');
+
+        foreach ($tipos as $tipo) {
+            $lado = AplicacionCuentacorrienteAnitaLadoSupport::armar(
+                $proveedor,
+                $tipo,
+                $letra,
+                (int) ($pago->sucursal ?? 1),
+                $nro,
+                0,
+                0,
+                $empresa,
+            );
+
+            try {
+                $api->apiCallEscritura([
+                    'acc' => 'delete',
+                    'tabla' => 'promov',
+                    'sistema' => $sistema,
+                    'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
+                ], 'promov delete OP '.$lado['etiqueta']);
+            } catch (RuntimeException $e) {
+                Log::warning('anita_bridge.fallo', [
+                    'contexto' => 'promov delete OP '.$lado['etiqueta'],
+                    'mensaje' => $e->getMessage(),
+                ]);
+                throw $e;
+            }
+        }
     }
 
     public function syncAplicar(Proveedor_Cuentacorriente_Aplicacion $apl): void

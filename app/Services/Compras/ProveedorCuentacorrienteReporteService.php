@@ -139,14 +139,14 @@ class ProveedorCuentacorrienteReporteService
 
                 $totalOrigen = (float) $mov->total;
                 $aplicadoOrigen = (float) ($mov->aplicado ?? 0);
-                $pendienteOrigen = ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto($totalOrigen, $aplicadoOrigen);
+                $pendienteOrigen = ProveedorCuentacorrienteGrillaSupport::saldoPendiente($totalOrigen, $aplicadoOrigen);
 
                 $importeMostrar = $conv['importe'];
                 $aplicadoMostrar = $conv['aplicado'];
                 $pendienteMostrar = $conv['pendiente'];
                 $pendientePesos = $enPesos
                     ? $pendienteMostrar
-                    : abs($this->convertirMovimiento($mov, true, $forzarDia)['pendiente']);
+                    : $this->convertirMovimiento($mov, true, $forzarDia)['pendiente'];
                 $importeFirmadoPesos = $conv['importe_firmado_pesos'];
                 if (! $enPesos) {
                     $importeFirmadoPesos = $this->convertirMovimiento($mov, true, $forzarDia)['importe_firmado_pesos'];
@@ -469,7 +469,7 @@ class ProveedorCuentacorrienteReporteService
             return [
                 'importe' => $total,
                 'aplicado' => $aplicado,
-                'pendiente' => abs($pendiente),
+                'pendiente' => $pendiente,
                 'importe_firmado_pesos' => $total,
                 'moneda_id' => $monedaId,
                 'abreviatura' => $abrev,
@@ -489,7 +489,7 @@ class ProveedorCuentacorrienteReporteService
         return [
             'importe' => round($total * $coef, 2),
             'aplicado' => round($aplicado * $coef, 2),
-            'pendiente' => round(abs($pendiente) * $coef, 2),
+            'pendiente' => round($pendiente * $coef, 2),
             'importe_firmado_pesos' => round($total * $coef, 2),
             'moneda_id' => $monedaId,
             'abreviatura' => $local,

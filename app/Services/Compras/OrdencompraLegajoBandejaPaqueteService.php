@@ -92,8 +92,37 @@ class OrdencompraLegajoBandejaPaqueteService
         $facturas = $this->fusionarComprobantesEnFacturas($facturas, $comprobantes);
         $pagos = $this->pagosDeComprobantes(array_map(static fn (array $c) => (int) $c['id'], $comprobantes));
         $pendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc);
-        $siguiente = $pendientes[0] ?? null;
         $enCxp = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0));
+        // Misma secuencia que la lista de facturas del paquete / index (pendientes primero).
+        $siguiente = null;
+        $urlCargar = null;
+        foreach ($facturas as $fac) {
+            if (! empty($fac['cargado_cxp']) || ($fac['origen'] ?? '') === 'comprobante') {
+                continue;
+            }
+            $siguiente = $this->pendienteDesdeFacturaPaquete($fac, $pendientes);
+            if ($siguiente === null) {
+                continue;
+            }
+            if ($enCxp) {
+                $urlCargar = route('crear_comprobante_proveedor', array_filter([
+                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+                    'ordencompra_id' => (int) $oc->id,
+                    'precarga_id' => ($siguiente['precarga_id'] ?? null) ?: null,
+                ]));
+            }
+            break;
+        }
+        if ($siguiente === null) {
+            $siguiente = $pendientes[0] ?? null;
+            if ($enCxp && $siguiente !== null) {
+                $urlCargar = route('crear_comprobante_proveedor', array_filter([
+                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+                    'ordencompra_id' => (int) $oc->id,
+                    'precarga_id' => ($siguiente['precarga_id'] ?? null) ?: null,
+                ]));
+            }
+        }
 
         return [
             'ordencompra_id' => (int) $oc->id,
@@ -109,17 +138,49 @@ class OrdencompraLegajoBandejaPaqueteService
             'pagos' => $pagos,
             'pendientes_carga' => count($pendientes),
             'siguiente_pendiente' => $siguiente,
-            'url_cargar_cxp' => ($enCxp && $siguiente !== null)
-                ? route('crear_comprobante_proveedor', array_filter([
-                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
-                    'ordencompra_id' => (int) $oc->id,
-                    'precarga_id' => ($siguiente['precarga_id'] ?? null) ?: null,
-                ]))
-                : null,
+            'url_cargar_cxp' => $urlCargar,
             'url_oc' => can('editar-ordencompra', false)
                 ? route('editar_ordencompra', ['id' => (int) $oc->id])
                 : route('solo_consulta_ordencompra', ['id' => (int) $oc->id]),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $fac
+     * @param  list<array<string, mixed>>  $pendientes
+     * @return array<string, mixed>|null
+     */
+    private function pendienteDesdeFacturaPaquete(array $fac, array $pendientes): ?array
+    {
+        $origen = (string) ($fac['origen'] ?? 'precarga');
+        $id = $fac['id'] ?? null;
+        foreach ($pendientes as $pendiente) {
+            if ($origen === 'precarga' && (int) ($pendiente['precarga_id'] ?? 0) === (int) $id) {
+                return $pendiente;
+            }
+            if ($origen === 'anita' && (string) ($pendiente['anita_id'] ?? '') === (string) $id) {
+                return $pendiente;
+            }
+        }
+
+        if ($origen === 'precarga' && (int) $id > 0) {
+            return [
+                'precarga_id' => (int) $id,
+                'anita_id' => null,
+                'tipo' => (string) ($fac['tipo'] ?? 'FC'),
+                'etiqueta' => (string) ($fac['etiqueta'] ?? $fac['numero'] ?? ''),
+            ];
+        }
+        if ($origen === 'anita' && (string) $id !== '') {
+            return [
+                'precarga_id' => null,
+                'anita_id' => (string) $id,
+                'tipo' => (string) ($fac['tipo'] ?? 'FC'),
+                'etiqueta' => (string) ($fac['etiqueta'] ?? $fac['numero'] ?? ''),
+            ];
+        }
+
+        return null;
     }
 
     /**

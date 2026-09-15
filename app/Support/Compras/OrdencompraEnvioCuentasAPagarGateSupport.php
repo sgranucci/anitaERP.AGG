@@ -243,6 +243,8 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
     {
         $cargadas = self::clavesComprobantesCargados($oc);
         $docs = [];
+        // Todas las precargas con PDF (incl. CARGADA_ANITA) para no listar el scan Anita duplicado.
+        $clavesPrecarga = [];
 
         foreach (self::queryPrecargaDelLegajo($oc)
             ->with('tipotransaccion_compras:id,abreviatura,codigoafip')
@@ -251,14 +253,17 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             ->orderBy('fechafactura')
             ->orderBy('id')
             ->get() as $pre) {
-            if (! PrecargaComprobanteEstados::pendienteCargaEnCxp($pre->estado ?? null)) {
-                continue;
-            }
             $clave = self::claveNumeroFactura(
                 (string) ($pre->letra ?? ''),
                 (int) ($pre->sucursal ?? 0),
                 (int) ($pre->numerocomprobante ?? 0)
             );
+            if ($clave !== '') {
+                $clavesPrecarga[$clave] = true;
+            }
+            if (! PrecargaComprobanteEstados::pendienteCargaEnCxp($pre->estado ?? null)) {
+                continue;
+            }
             if ($clave !== '' && isset($cargadas[$clave])) {
                 continue;
             }
@@ -281,19 +286,12 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             ];
         }
 
-        $clavesPrecarga = [];
-        foreach ($docs as $d) {
-            $c = self::claveDesdeEtiqueta((string) ($d['etiqueta'] ?? ''));
-            if ($c !== '') {
-                $clavesPrecarga[$c] = true;
-            }
-        }
         foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) as $scan) {
             $clave = self::claveDesdeEtiqueta((string) ($scan['numero'] ?? $scan['etiqueta'] ?? ''));
             if ($clave !== '' && (isset($cargadas[$clave]) || isset($clavesPrecarga[$clave]))) {
                 continue;
             }
-            $tipo = 'FC';
+            $tipo = (string) ($scan['tipo'] ?? 'FC');
             $numero = trim((string) ($scan['numero'] ?? $scan['etiqueta'] ?? ''));
             $docs[] = [
                 'precarga_id' => null,
@@ -365,15 +363,13 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             return self::documentosQueExigenCom($oc);
         }
         $out = [];
+        // Incluye CARGADA_ANITA / no pendientes: el scan Anita gemelo no debe exigir COM de nuevo.
         $clavesPre = [];
         foreach (self::queryPrecargaDelLegajo($oc)
             ->with('tipotransaccion_compras:id,abreviatura,codigoafip')
             ->whereNotNull('rutaalmacenamiento')
             ->where('rutaalmacenamiento', '!=', '')
             ->get() as $pre) {
-            if (! PrecargaComprobanteEstados::pendienteCargaEnCxp($pre->estado ?? null)) {
-                continue;
-            }
             $clave = self::claveNumeroFactura(
                 (string) ($pre->letra ?? ''),
                 (int) ($pre->sucursal ?? 0),
@@ -381,6 +377,9 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             );
             if ($clave !== '') {
                 $clavesPre[$clave] = true;
+            }
+            if (! PrecargaComprobanteEstados::pendienteCargaEnCxp($pre->estado ?? null)) {
+                continue;
             }
             // Ya cargada en CxP: no bloquea el envío aunque no tenga COM en la precarga.
             if ($clave !== '' && isset($cargadas[$clave])) {
@@ -402,14 +401,21 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             return $out;
         }
 
-        // Scan Anita sin precarga materializada: solo si aún no está cargada en CxP.
+        // Scan Anita sin precarga materializada: solo FC (u otros que exigen COM) aún no en CxP.
         foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) as $scan) {
             $clave = self::claveDesdeEtiqueta((string) ($scan['numero'] ?? $scan['etiqueta'] ?? ''));
             if ($clave !== '' && (isset($clavesPre[$clave]) || isset($cargadas[$clave]))) {
                 continue;
             }
+            $tipo = (string) ($scan['tipo'] ?? 'FC');
+            $exige = array_key_exists('exige_com', $scan)
+                ? (bool) $scan['exige_com']
+                : OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo);
+            if (! $exige) {
+                continue;
+            }
             $out[] = OrdencompraLegajoDocumentoTipoSupport::numeroConTipo(
-                'FC',
+                $tipo,
                 trim((string) ($scan['numero'] ?? $scan['etiqueta'] ?? 'scan Anita'))
             );
         }

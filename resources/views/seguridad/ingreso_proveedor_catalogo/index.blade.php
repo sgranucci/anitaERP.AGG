@@ -42,6 +42,10 @@
                 ])
             </form>
             <div class="card-body table-responsive p-0">
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_'.$def['ruta'],
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>

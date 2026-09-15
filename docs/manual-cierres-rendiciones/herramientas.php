@@ -48,10 +48,42 @@ return [
             'permiso' => 'listar-cierre-rendicion-maquina-contable',
         ],
         [
+            'herramienta' => 'Asientos del mes',
+            'ubicacion' => 'Cabecera / enlace toolbar',
+            'accion' => 'Lista todos los asientos MAQ emitidos por cierres de máquinas en un mes (fecha de asiento), con movimientos y exportación.',
+            'permiso' => 'listar-cierre-rendicion-maquina-contable',
+        ],
+        [
             'herramienta' => 'Manual',
             'ubicacion' => 'Cabecera / Centro de ayuda',
             'accion' => 'Abre este manual en una pestaña nueva.',
             'permiso' => 'Usuario autenticado',
+        ],
+    ],
+    'maquina_asientos_mes' => [
+        [
+            'herramienta' => 'Empresa, mes y año',
+            'ubicacion' => 'Pantalla Asientos del mes',
+            'accion' => 'Selecciona la empresa y el período calendario a consultar.',
+            'permiso' => 'listar-cierre-rendicion-maquina-contable',
+        ],
+        [
+            'herramienta' => 'Consultar',
+            'ubicacion' => 'Pantalla Asientos del mes',
+            'accion' => 'Muestra asientos de cierres (venta, pago diferido, canones) con fecha de asiento en el mes, y sus movimientos.',
+            'permiso' => 'listar-cierre-rendicion-maquina-contable',
+        ],
+        [
+            'herramienta' => 'Ver asiento',
+            'ubicacion' => 'Columna de enlace en la grilla',
+            'accion' => 'Abre el asiento contable en consulta (otra pestaña).',
+            'permiso' => 'listar-asiento',
+        ],
+        [
+            'herramienta' => 'Exportar asientos',
+            'ubicacion' => 'Toolbar',
+            'accion' => 'PDF / Excel / CSV del listado del mes con filtros activos.',
+            'permiso' => 'exportar-cierre-rendicion-maquina-contable',
         ],
     ],
     'maquina_grupo_acciones' => [

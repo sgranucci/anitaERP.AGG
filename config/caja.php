@@ -198,6 +198,15 @@ return [
             : (int) $sucIeAnita,
 
     /*
+     * Diagnóstico demora grabación IE: Log::info('caja.ie.grabacion.timing').
+     * Default false. Activar CAJA_IE_GRABACION_TIMING=true y config:clear / config:cache.
+     */
+    'ingresoegreso_grabacion_timing' => filter_var(
+        env('CAJA_IE_GRABACION_TIMING', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    /*
      * Árbol de aprobación opcional para IE por umbral de monto.
      * 0 = desactivado (default). Si monto IE >= umbral al guardar: log/warning stub (sin árbol IE completo).
      */

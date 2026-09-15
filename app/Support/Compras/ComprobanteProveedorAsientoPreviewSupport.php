@@ -216,14 +216,16 @@ final class ComprobanteProveedorAsientoPreviewSupport
         } elseif (filled($comprobante->fechacomprobante ?? null)) {
             $fechaFacturaYmd = substr((string) $comprobante->fechacomprobante, 0, 10);
         }
-        $contratoImputacionArticulos = OrdencompraContratoRutaFacturaSupport::imputacionArticulos(
-            $comprobante->ordencompras,
-            $fechaFacturaYmd
-        ) && ! $modoAsignaRecepcion;
         $contratoImputacionManual = OrdencompraContratoRutaFacturaSupport::imputacionManual(
             $comprobante->ordencompras,
             $fechaFacturaYmd
         ) && ! $modoAsignaRecepcion;
+        $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
+        $netoDesdeArticulosOc = ! $usaProvisionCom
+            && ! $facturaAnticipada
+            && ! $contratoImputacionManual
+            && (int) ($comprobante->ordencompra_id ?? 0) > 0
+            && $comprobante->ordencompras !== null;
 
         // MN/ME: OC si hay; sin OC → moneda del comprobante.
         $resMoneda = ProveedorCuentaContableMonedaSupport::resolverMonedaParaCuentaProveedor($comprobante);
@@ -275,7 +277,6 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
         }
 
-        $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
         if ($facturaAnticipada) {
             $tieneCapex = ComprobanteProveedorFacturaAnticipadaSupport::ocTieneCapex($comprobante->ordencompras);
             $claveAnticipo = ComprobanteProveedorFacturaAnticipadaSupport::claveCuentaAnticipo($tieneCapex);
@@ -320,7 +321,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 continue;
             }
 
-            if ($contratoImputacionArticulos && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 continue;
             }
 
@@ -335,7 +336,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
                         'tipo' => 'contrato_neto_sin_cuenta_manual',
                         'concepto_ivacompra_id' => (int) $concepto->id,
                         'nombre' => (string) $concepto->nombre,
-                        'mensaje' => 'El contrato imputa el neto con una cuenta del contrato. Indique la cuenta en el contrato o en el concepto «'.$concepto->nombre.'».',
+                        'mensaje' => 'El contrato imputa el neto con una cuenta del contrato. Indique la cuenta en el contrato o en la solapa Asiento contable para «'.$concepto->nombre.'».',
                     ];
                 }
 
@@ -343,19 +344,21 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
+            $esNeto = ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto);
             $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
             if ($cuentaId <= 0) {
                 $cuentaId = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaId));
             }
             if ($cuentaId <= 0) {
                     $avisos[] = [
-                        'tipo' => 'concepto_sin_cuenta_debe',
+                        'tipo' => $esNeto ? 'neto_sin_cuenta_asiento' : 'concepto_sin_cuenta_debe',
                         'concepto_ivacompra_id' => (int) $concepto->id,
                         'nombre' => (string) $concepto->nombre,
-                        'mensaje' => 'Falta cuenta contable DEBE en concepto IVA «'.$concepto->nombre.'»'
-                            .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
-                            .' Configúrela en el maestro Conceptos IVA compra'
-                            .' o en el renglón si no hay COM ni otra regla que la asigne.',
+                        'mensaje' => $esNeto
+                            ? 'Falta la cuenta del neto «'.$concepto->nombre.'». Indíquela en la solapa Asiento contable (sin OC ni COM de referencia).'
+                            : ('Falta cuenta contable DEBE en concepto IVA «'.$concepto->nombre.'»'
+                                .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
+                                .' Configúrela en el maestro Conceptos IVA compra.'),
                     ];
             }
         }

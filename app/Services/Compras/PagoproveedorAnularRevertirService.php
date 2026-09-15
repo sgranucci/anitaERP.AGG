@@ -20,6 +20,7 @@ use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscri
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Auth;
 use DB;
@@ -63,6 +64,9 @@ class PagoproveedorAnularRevertirService
         );
 
         return DB::transaction(function () use ($pago) {
+            // Anita CC primero: necesita las aplicaciones ERP aún presentes.
+            $this->cuentacorrienteAnitaSyncService->revertirYEliminarPagoAnita($pago);
+
             PagoproveedorAplicacionCuentacorrienteSupport::revertirAplicacionesExistentes($pago);
 
             $asientos = Asiento::query()->where('pagoproveedor_id', (int) $pago->id)->get();
@@ -84,11 +88,19 @@ class PagoproveedorAnularRevertirService
             if ((int) ($pago->caja_movimiento_id ?? 0) > 0) {
                 $cajaIds[] = (int) $pago->caja_movimiento_id;
             }
+
+            $tesoreriaBorrada = false;
             foreach (array_unique($cajaIds) as $cajaId) {
                 $mov = Caja_Movimiento::query()->find($cajaId);
                 if ($mov) {
                     IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($mov);
+                    $tesoreriaBorrada = true;
                 }
+            }
+
+            // Sin caja local (imports / OP huérfana): igual hay que limpiar pago/auxpag/tesmov.
+            if (! $tesoreriaBorrada) {
+                $this->eliminarTesoreriaAnitaPorPago($pago);
             }
 
             PagoproveedorAnitaRetencionEscrituraSupport::eliminarDesdePago($pago);
@@ -336,6 +348,33 @@ class PagoproveedorAnularRevertirService
         }
 
         $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $reverso->id);
+    }
+
+    private function eliminarTesoreriaAnitaPorPago(Pagoproveedor $pago): void
+    {
+        $nro = (int) ($pago->numerotransaccion ?? 0);
+        if ($nro <= 0) {
+            return;
+        }
+
+        $empresa = SicoreEmpresaAnitaSupport::codigoEmpresaAnita(
+            (int) $pago->empresa_id
+        );
+        if ($empresa <= 0) {
+            $empresa = (int) $pago->empresa_id;
+        }
+
+        $tipo = strtoupper(substr(trim((string) ($pago->tipocomprobante ?: 'OPP')), 0, 3));
+        if ($tipo === '') {
+            $tipo = 'OPP';
+        }
+
+        IngresoEgresoAnitaTesmovSupport::eliminarTesoreriaPorClave(
+            $tipo,
+            $nro,
+            $empresa,
+            'pagoproveedor anulación física '.$pago->id
+        );
     }
 
     private function assertNoEsCompensatorio(Pagoproveedor $pago): void

@@ -26,6 +26,7 @@ use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCuitCoincidenciaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorResolucionSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorWscdcConstatacionSupport;
@@ -201,6 +202,36 @@ final class ComprobanteProveedorPdfIaService
             ? ComprobanteProveedorConceptosIvaCoherenciaSupport::idsPermitidosDesdeTipoTransaccion($tipoParaCoherencia)
             : [];
 
+        $metaProrrateo = $resuelto['prorrateo_meta'] ?? null;
+        if (is_array($metaProrrateo)
+            && ! empty($metaProrrateo['activo'])
+            && PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($tipoAbreviatura)
+        ) {
+            if (! empty($metaProrrateo['concepto_ids'])) {
+                $conceptosPermitidos = array_map('intval', $metaProrrateo['concepto_ids']);
+            }
+            $prorrateoSvc = app(PrecargaProveedorProrrateoMultiCcSupport::class);
+            $reparo = $prorrateoSvc->repararAperturaSiFaltaGi(
+                $lineasConcepto,
+                $metaProrrateo['tipos_origen'] ?? [],
+                (float) ($resuelto['subtotal'] ?? 0),
+                (float) ($resuelto['total'] ?? 0),
+            );
+            $lineasConcepto = $reparo['lineas'];
+            if ($reparo['reparo']) {
+                $resuelto['pararevisar'] = true;
+                $resuelto['advertencias'] = array_values(array_unique(array_merge(
+                    $resuelto['advertencias'] ?? [],
+                    $reparo['avisos']
+                )));
+            }
+            $lineasConcepto = $prorrateoSvc->prorratearLineasIva(
+                $lineasConcepto,
+                $metaProrrateo['pesos_por_fino'] ?? [],
+                $metaProrrateo['tipos_origen'] ?? [],
+            );
+        }
+
         $lineasConcepto = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
             ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar(
                 $lineasConcepto,
@@ -333,6 +364,15 @@ final class ComprobanteProveedorPdfIaService
             DB::commit();
 
             $cotizacionIngreso->notificarSiMarca($precarga->fresh());
+
+            if (is_array($metaProrrateo) && ! empty($metaProrrateo['activo'])) {
+                try {
+                    app(PrecargaComprobanteProrrateoMultiCcAvisoService::class)
+                        ->notificar($precarga->fresh(), $metaProrrateo);
+                } catch (\Throwable) {
+                    // El aviso no debe impedir la precarga.
+                }
+            }
 
             $this->resolverDecisionConfirmada($payloadConfirmacion, (int) $precarga->id, $resuelto);
 
@@ -499,6 +539,13 @@ final class ComprobanteProveedorPdfIaService
             $advertencias[] = 'La suma de conceptos ('.$totalAsignado.') difiere del total del comprobante ('.$totalFactura.').';
         }
 
+        if (! empty($listaConceptos['prorrateo_multi_cc'])) {
+            $advertencias[] = 'Tipo prorrateado multi-CC '
+                .$listaConceptos['tipocomprobante']
+                .' (CC '.implode('/', $listaConceptos['centros_costo'] ?? [])
+                .' · orígenes '.implode('+', $listaConceptos['tipos_origen'] ?? []).').';
+        }
+
         [$letraRes, $sucursalRes, $numeroFacturaRes] = $this->resolverLetraSucursalNumero($extraido);
         if ($letraRes === '' || $letraRes === '0') {
             $letraRes = (string) ($listaConceptos['letra'] ?? 'A');
@@ -533,6 +580,17 @@ final class ComprobanteProveedorPdfIaService
             'cotizacion_recibida' => $this->parsearImporte($extraido['cotizacion'] ?? null) ?? 1.0,
             'conceptos_candidatos' => $listaConceptos['conceptos'],
             'conceptos_asignados' => $conceptosAsignados,
+            'prorrateo_meta' => ! empty($listaConceptos['prorrateo_multi_cc']) ? [
+                'activo' => true,
+                'tipocomprobante' => $listaConceptos['tipocomprobante'],
+                'tipos_origen' => $listaConceptos['tipos_origen'] ?? [],
+                'centros' => $listaConceptos['centros_costo'] ?? [],
+                'pesos_por_fino' => $listaConceptos['pesos_por_fino'] ?? [],
+                'concepto_ids' => array_values(array_filter(array_map(
+                    static fn (array $c): int => (int) ($c['concepto_ivacompra_id'] ?? 0),
+                    $listaConceptos['conceptos']
+                ))),
+            ] : null,
             'articulos' => $this->normalizarArticulosExtraidos(
                 $extraido['articulos'] ?? [],
                 (int) ($proveedor['proveedor_id'] ?? 0)

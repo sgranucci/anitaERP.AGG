@@ -1359,6 +1359,9 @@ var montoPendienteSp = 0;
 			processData: false, //importante enviar este parametro en false
 			success: function (data) {
 				if (data.mensaje == 'ok') {
+					// Overlay fuera ya: si el redirect tarda o el PDF abre otra pestaña,
+					// el banner no debe quedar girando. ie-ajax-enviado sigue true.
+					liberarBannerGrabacionIe({ mantenerBloqueoEnvio: true });
 					alert("Se grabó transacción de caja con éxito");
 					if (data.url_comprobante_pdf) {
 						window.open(data.url_comprobante_pdf, '_blank');
@@ -1434,10 +1437,18 @@ var montoPendienteSp = 0;
 		return true;
 	}
 
-	function liberarBannerGrabacionIe()
+	/**
+	 * @param {{mantenerBloqueoEnvio?: boolean}} [opciones]
+	 *   mantenerBloqueoEnvio: oculta el banner pero deja botón/flag bloqueados (éxito → redirect).
+	 */
+	function liberarBannerGrabacionIe(opciones)
 	{
-		window.ieGrabacionEnCurso = false;
-		$('#botonform0').prop('disabled', false).removeClass('disabled');
+		opciones = opciones || {};
+		var mantenerBloqueo = !!opciones.mantenerBloqueoEnvio;
+		if (!mantenerBloqueo) {
+			window.ieGrabacionEnCurso = false;
+			$('#botonform0').prop('disabled', false).removeClass('disabled');
+		}
 		if (window.AnitaGrabacion && typeof AnitaGrabacion.liberar === 'function') {
 			AnitaGrabacion.liberar();
 		} else {

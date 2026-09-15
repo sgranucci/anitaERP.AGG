@@ -18,13 +18,17 @@ use App\Support\Compras\ComprobanteProveedorConceptosIibbPadronCotejoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCentrocostoDestinoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCuitCoincidenciaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorOcCuitMensajeSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorResolucionSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoItemSupport;
+use App\Services\Compras\PrecargaComprobanteProrrateoMultiCcAvisoService;
 use DB;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class ApiController extends Controller
 {
@@ -83,189 +87,63 @@ class ApiController extends Controller
             'tipo_comprobante' => $tipoComprobante,
         ]);
 
-        $respuesta = [];
-        $conceptos = [];
-        $flError = false;
-        $status = 500;
-        $message = 'Error interno';
-
-        // Busca la orden de compra 
-        $ordencompra = $this->ordencompraService->leeOrdenCompra($numeroOc);
-
-        if ($ordencompra == 'OC inexistente')
-        {
-            $status = 404;
-            $message = $ordencompra;
-            $flError = true;
-            $log->warning('lista_concepto.oc_inexistente', [
-                'numero_oc' => $numeroOc,
+        try {
+            $lista = app(PrecargaProveedorConceptosListaSupport::class)
+                ->resolver((string) $cuitProveedor, (string) $numeroOc, (string) $tipoComprobante);
+        } catch (RuntimeException $e) {
+            $message = $e->getMessage();
+            $status = str_contains(mb_strtolower($message), 'inexistente')
+                || str_contains(mb_strtolower($message), 'no existe')
+                || str_contains(mb_strtolower($message), 'no corresponde')
+                ? 404
+                : 422;
+            $log->warning('lista_concepto.error', [
+                'message' => $message,
                 'status' => $status,
             ]);
+
+            return response()->json(['message' => $message], $status);
         }
 
-        if (!$flError)
-        {
-            $log->info('lista_concepto.oc_encontrada', ['numero_oc' => $numeroOc]);
-
-            $datosOrdenCompra = $ordencompra['ordencompra'];
-            $itemsOrdenCompra = $ordencompra['item'];
-
-            $cuitOrdenCompra = str_replace("-", "", $datosOrdenCompra->prom_cuit);
-            $cuitProveedor = str_replace("-", "", $cuitProveedor);
-            $letraProveedor = $datosOrdenCompra->prom_letra;
-
-            if (! PrecargaProveedorCuitCoincidenciaSupport::coinciden($cuitOrdenCompra, $cuitProveedor))
-            {
-                $status = 404;
-                $message = app(PrecargaProveedorOcCuitMensajeSupport::class)
-                    ->mensaje($numeroOc, $cuitOrdenCompra, $cuitProveedor);
-                $flError = true;
-                $log->warning('lista_concepto.cuit_no_coincide', [
-                    'cuit_proveedor' => $cuitProveedor,
-                    'cuit_orden_compra' => $cuitOrdenCompra,
-                    'numero_oc' => $numeroOc,
-                    'status' => $status,
-                ]);
-            }
-
-            if (!$flError)
-            {
-                $centroCostoDestino = PrecargaProveedorCentrocostoDestinoSupport::codigoDesdeOcAnita(
-                    $datosOrdenCompra,
-                    $itemsOrdenCompra
-                );
-
-                $centrocosto = $this->centrocostoRepository->findPorCodigo($centroCostoDestino);
-
-                if ($centrocosto)
-                {
-                    $tipoIva = $centrocosto->tipoiva;
-
-                    if (substr($tipoIva,0,1) != 'I' &&
-                        substr($tipoIva,0,1) != 'D' &&
-                        substr($tipoIva,0,1) != 'N')
-                    {
-                        $status = 404;
-                        $message = "No existe centro de costo de la OC";
-                        $flError = true;
-                        $log->warning('lista_concepto.tipo_iva_centro_costo_invalido', [
-                            'centro_costo_destino' => $centroCostoDestino,
-                            'tipo_iva' => $tipoIva,
-                            'status' => $status,
-                        ]);
-                    }
-
-                    if (!$flError)
-                    {
-                        // Verifica el tipo de item (fuerza S si el proveedor tiene medidores/servicios)
-                        $tipoItem = PrecargaProveedorTipoItemSupport::resolver($itemsOrdenCompra, $cuitProveedor);
-                        $esProveedorServicios = PrecargaProveedorTipoItemSupport::proveedorTieneServicios($cuitProveedor);
-
-                        switch($tipoComprobante)
-                        {
-                            case 'FC':
-                                $inicial = 'F';
-                                break;
-                            case 'ND':
-                                $inicial = 'D';
-                                break;                                
-                            case 'NC':
-                                $inicial = 'C';
-                                break;
-                            case 'REC':
-                                $inicial = '';
-                                break;
-                            case 'REM':
-                                $inicial = '';
-                        }
-
-                        if ($tipoComprobante != 'REC' && $tipoComprobante != 'REM')
-                        {
-                            switch($centroCostoDestino)
-                            {
-                                case 85:
-                                    $abreviatura = $inicial.'GA';
-                                    break;
-                                case 104:
-                                    $abreviatura = $inicial.'EG';
-                                    break;
-                                default:
-                                    $abreviatura = $inicial.substr($tipoIva,0,1).$tipoItem;
-                                    break;
-                            }
-                        }
-                        else
-                            $abreviatura = $tipoComprobante;
-
-                        $log->info('lista_concepto.tipo_resuelto', [
-                            'abreviatura' => $abreviatura,
-                            'tipo_item' => $tipoItem,
-                            'es_proveedor_servicios' => $esProveedorServicios,
-                            'centro_costo_destino' => $centroCostoDestino,
-                            'letra_proveedor' => $letraProveedor,
-                        ]);
-
-                        // Busca los conceptos en base al tipo de comprobante
-                        $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($abreviatura); 
-
-                        if (count($comprobante->tipotransaccion_compra_concepto_ivacompras) > 0)
-                        {
-                            foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras as $concepto)
-                            {
-                                $conceptos[] = [
-                                    'id_concepto' => $concepto->concepto_ivacompras->codigo,
-                                    'nombre' => $concepto->concepto_ivacompras->nombre,
-                                    'descripcion_ai' => $concepto->concepto_ivacompras->nombre_ia ?? $concepto->concepto_ivacompras->nombre,
-                                    // Código canónico de Concepto_Ivacompra::$enumTipoConcepto.
-                                    // Permite al conector distinguir P (Perc. IVA), B (Perc. IIBB) y S (SIRCREB).
-                                    'tipoconcepto' => (string) ($concepto->concepto_ivacompras->tipoconcepto ?? ''),
-                                ];
-                            }
-                        }
-
-                        $respuesta[] = [
-                            'tipocomprobante' => $abreviatura,
-                            'letra' => $letraProveedor,
-                            'es_proveedor_servicios' => $esProveedorServicios,
-                            'tipo_item' => $tipoItem,
-                            'concepto' => $conceptos
-                        ];
-
-                        $status = 200;
-                        $message = "devuelve lista de conceptos";
-                        $log->info('lista_concepto.ok', [
-                            'status' => $status,
-                            'cantidad_conceptos' => count($conceptos),
-                            'tipocomprobante' => $abreviatura,
-                        ]);
-                    }
-                }
-                else
-                {
-                    $status = 404;
-                    $message = "No existe centro de costo de la OC";
-                    $flError = true;
-                    $log->warning('lista_concepto.centro_costo_inexistente', [
-                        'centro_costo_destino' => $centroCostoDestino,
-                        'status' => $status,
-                    ]);
-                }
-            }
+        $conceptos = [];
+        foreach ($lista['conceptos'] as $concepto) {
+            $conceptos[] = [
+                'id_concepto' => $concepto['id_concepto'],
+                'nombre' => $concepto['nombre'],
+                'descripcion_ai' => $concepto['descripcion_ai'],
+                'tipoconcepto' => (string) ($concepto['tipoconcepto'] ?? ''),
+                'alicuota_iva' => $concepto['alicuota_iva'] ?? null,
+                'fino_origen' => $concepto['fino_origen'] ?? null,
+                'peso' => $concepto['peso'] ?? null,
+            ];
         }
 
-        if ($status == 200) {
-            return response()->json([
-                "respuesta" => $respuesta], $status);
+        $item = [
+            'tipocomprobante' => $lista['tipocomprobante'],
+            'letra' => $lista['letra'],
+            'es_proveedor_servicios' => (bool) ($lista['es_proveedor_servicios'] ?? false),
+            'tipo_item' => $lista['tipo_item'] ?? null,
+            'prorrateo_multi_cc' => (bool) ($lista['prorrateo_multi_cc'] ?? false),
+            'concepto' => $conceptos,
+        ];
+        if (! empty($lista['centros_costo'])) {
+            $item['centros_costo'] = $lista['centros_costo'];
+        }
+        if (! empty($lista['tipos_origen'])) {
+            $item['tipos_origen'] = $lista['tipos_origen'];
+        }
+        if (! empty($lista['pesos_por_fino'])) {
+            $item['pesos_por_fino'] = $lista['pesos_por_fino'];
         }
 
-        $log->warning('lista_concepto.respuesta_error', [
-            'status' => $status,
-            'message' => $message,
+        $log->info('lista_concepto.ok', [
+            'status' => 200,
+            'cantidad_conceptos' => count($conceptos),
+            'tipocomprobante' => $lista['tipocomprobante'],
+            'prorrateo_multi_cc' => $item['prorrateo_multi_cc'],
         ]);
 
-        return response()->json([
-            "message" => $message,
-            ], $status);
+        return response()->json(['respuesta' => [$item]], 200);
     }
 
     public function recibeComprobante(Request $request)
@@ -517,15 +395,76 @@ class ApiController extends Controller
 
         $avisosConceptos = [];
         $revisarPorIibb = false;
+        $revisarPorProrrateo = false;
         $netoGravado = 0.0;
         $cuadre = ComprobanteProveedorConceptosIvaCoherenciaSupport::cuadreConTotal([], 0.0);
         $totalRequest = round(abs((float) ($request->total ?? 0)), 2);
         $subtotalRequest = round(abs((float) ($request->subtotal ?? 0)), 2);
+        $metaProrrateo = null;
 
         try {
             $conceptosPermitidos = ComprobanteProveedorConceptosIvaCoherenciaSupport::idsPermitidosDesdeTipoTransaccion(
                 $comprobante
             );
+
+            if (PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado((string) $tipoAbreviatura)
+                && $numeroOc !== null
+                && $numeroOc !== ''
+            ) {
+                $ordencompra = $this->ordencompraService->leeOrdenCompra($numeroOc);
+                if ($ordencompra !== 'OC inexistente') {
+                    $itemsOc = $ordencompra['item'] ?? [];
+                    $tipoItem = PrecargaProveedorTipoItemSupport::resolver(
+                        $itemsOc,
+                        (string) ($request->cuit_proveedor ?? '')
+                    );
+                    $centrosConPeso = PrecargaProveedorProrrateoMultiCcSupport::centrosConPesoParaOc(
+                        (string) $numeroOc,
+                        $itemsOc,
+                    );
+                    $familia = PrecargaProveedorProrrateoMultiCcSupport::familiaDesdeAbreviatura((string) $tipoAbreviatura);
+                    $prorrateo = app(PrecargaProveedorProrrateoMultiCcSupport::class)
+                        ->resolverDesdeCentros($familia, $tipoItem, $centrosConPeso);
+                    if ($prorrateo['activo'] && $prorrateo['concepto_ids'] !== []) {
+                        $conceptosPermitidos = $prorrateo['concepto_ids'];
+                        $metaProrrateo = $prorrateo;
+
+                        $reparo = app(PrecargaProveedorProrrateoMultiCcSupport::class)
+                            ->repararAperturaSiFaltaGi(
+                                $lineasConcepto,
+                                $prorrateo['tipos_origen'],
+                                $subtotalRequest,
+                                $totalRequest,
+                            );
+                        $lineasConcepto = $reparo['lineas'];
+                        $avisosConceptos = array_merge($avisosConceptos, $reparo['avisos']);
+                        if ($reparo['reparo']) {
+                            $revisarPorProrrateo = true;
+                            $log->info('recibe_comprobante.prorrateo_reparo_gi', [
+                                'avisos' => $reparo['avisos'],
+                                'lineas' => $lineasConcepto,
+                            ]);
+                        }
+
+                        $lineasConcepto = app(PrecargaProveedorProrrateoMultiCcSupport::class)
+                            ->prorratearLineasIva(
+                                $lineasConcepto,
+                                $prorrateo['pesos_por_fino'],
+                                $prorrateo['tipos_origen'],
+                            );
+                        $avisosConceptos[] = 'Precarga prorrateada multi-CC ('
+                            .implode('/', $prorrateo['centros']).') → '.$tipoAbreviatura
+                            .' desde '.implode('+', $prorrateo['tipos_origen']).'.';
+                        $log->info('recibe_comprobante.prorrateo_multi_cc', [
+                            'tipo' => $tipoAbreviatura,
+                            'centros' => $prorrateo['centros'],
+                            'tipos_origen' => $prorrateo['tipos_origen'],
+                            'pesos_por_fino' => $prorrateo['pesos_por_fino'],
+                        ]);
+                    }
+                }
+            }
+
             $lineasConcepto = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
                 ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar(
                     $lineasConcepto,
@@ -591,7 +530,7 @@ class ApiController extends Controller
 
         // Total que no cuadra o imputación IIBB dudosa: la precarga entra igual, marcada
         // para revisión manual.
-        $pararevisar = (bool) $request->para_revisar || $revisarPorIibb;
+        $pararevisar = (bool) $request->para_revisar || $revisarPorIibb || $revisarPorProrrateo;
         if ($cuadre['aplica'] && ! $cuadre['cuadra']) {
             $pararevisar = true;
             $avisosConceptos[] = $cuadre['mensaje'];
@@ -712,11 +651,23 @@ class ApiController extends Controller
 
             $cotizacionIngreso->notificarSiMarca($precarga_comprobante_proveedor->fresh());
 
+            if ($metaProrrateo !== null) {
+                try {
+                    app(PrecargaComprobanteProrrateoMultiCcAvisoService::class)
+                        ->notificar($precarga_comprobante_proveedor->fresh(), $metaProrrateo);
+                } catch (\Throwable $e) {
+                    $log->warning('recibe_comprobante.aviso_prorrateo_fallo', [
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+            }
+
             return response()->json([
                 'id' => $precarga_comprobante_proveedor->id,
                 'message' => 'Precarga registrada en ERP y sincronizada con Anita (compras).',
                 'pararevisar' => $pararevisar,
                 'avisos' => $avisosConceptos,
+                'prorrateo_multi_cc' => $metaProrrateo !== null,
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();

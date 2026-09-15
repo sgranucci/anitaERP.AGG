@@ -18,8 +18,9 @@
             Agregue uno o más renglones. Código + Enter o <kbd>F1</kbd>/lupa para consultar.
             El modal lista solo conceptos configurados para el <strong>tipo de comprobante</strong> seleccionado.
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
-            La columna <strong>Cuenta DEBE</strong> solo aparece si el renglón no tiene cuenta por COM
-            ni por otra regla (maestro del concepto, contrato, artículos de la OC, etc.).
+            La columna <strong>Cuenta DEBE</strong> solo aparece para casos puntuales (p. ej. contrato manual
+            o impuestos sin cuenta en el maestro). El neto con OC toma las cuentas de los artículos;
+            sin OC ni COM se indica en la solapa <strong>Asiento contable</strong>.
             @if ($cpImputacionManual)
                 El contrato exige <strong>cuenta DEBE</strong> del neto: se toma de la cuenta cargada en el contrato
             (si falta, se pide en el renglón).
@@ -176,9 +177,9 @@
             </div>
             <div class="card-body p-2" style="max-height:70vh;overflow:auto;">
                 <p class="small text-muted mb-2">
-                    Vista previa: se actualiza al cambiar conceptos, montos o cuentas DEBE.
-                    Si falta una cuenta, configúrela en el maestro del concepto o en la columna
-                    <em>Cuenta DEBE</em> cuando esté visible (al contabilizar se graba el asiento definitivo).
+                    Vista previa: se actualiza al cambiar conceptos o montos.
+                    Con OC el neto usa las cuentas de los artículos; sin OC/COM puede completar la cuenta
+                    del neto en las líneas editables (al contabilizar se graba el asiento definitivo).
                 </p>
                 <div id="cp-asiento-preview-conceptos" class="cp-asiento-preview-target">
                     @include('compras.comprobante_proveedor.partials.solapa_asiento_contable_body', [

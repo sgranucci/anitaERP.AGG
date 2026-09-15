@@ -49,11 +49,11 @@ Avisos por módulo
                             <td class="text-center">{{ (int) $tipo->destinatarios_activos_count }}</td>
                             <td class="text-center">{{ $tipo->adjuntar_pdf ? 'Sí' : 'No' }}</td>
                             <td class="text-right">
-                                @can('editar-modulo-aviso')
+                                @if (can('editar-modulo-aviso', false))
                                 <a href="{{ url('configuracion/modulo-aviso/'.$tipo->id.'/editar') }}" class="btn btn-sm btn-primary">
                                     <i class="fa fa-edit"></i> Configurar
                                 </a>
-                                @endcan
+                                @endif
                             </td>
                         </tr>
                         @endforeach

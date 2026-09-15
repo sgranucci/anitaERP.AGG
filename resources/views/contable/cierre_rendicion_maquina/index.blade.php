@@ -70,6 +70,10 @@
                            class="btn btn-sm btn-outline-primary mr-2 mb-1" title="Listado Venta de máquinas (Anita)">
                             <i class="fa fa-table"></i> Venta de m&aacute;quinas
                         </a>
+                        <a href="{{ route('cierre_rendicion_maquina_asientos_mes', $retornoListadoQuery) }}"
+                           class="btn btn-sm btn-outline-dark mr-2 mb-1" title="Asientos emitidos por cierres de máquinas en el mes">
+                            <i class="fa fa-book"></i> Asientos del mes
+                        </a>
                         @if (can('editar-cuentas-automaticas-contables', false))
                             <a href="{{ route('cuentas_automaticas_contables') }}"
                                class="btn btn-sm btn-outline-secondary mr-2 mb-1" title="Cuentas autom&aacute;ticas contables">

@@ -436,6 +436,7 @@
 @include('compras.comprobante_proveedor.partials.proveedor_arca_support')
 @include('compras.comprobante_proveedor.partials.proveedor_arca_apoc_support')
 @include('compras.comprobante_proveedor.partials.modal_ver_legajo')
+@include('compras.comprobante_proveedor.partials.modal_devolver_compras')
 @include('compras.comprobante_proveedor.template_concepto')
 @if ($mostrarSolapaArticulos ?? false)
 @include('compras.comprobante_proveedor.template_articulo')

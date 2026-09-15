@@ -8,6 +8,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\RecepcionProveedorCambioCotizacionService;
 use App\Services\Stock\TransferenciaMercaderiaTitoRecalculoService;
 use Illuminate\Support\Facades\Log;
+use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
@@ -17,8 +18,11 @@ use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport;
+use App\Support\Compras\ComprobanteProveedorReservaComLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
+use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Controles de negocio al cargar factura de proveedor vinculada a legajo (OC + COM).
@@ -67,6 +71,7 @@ class ComprobanteProveedorControlesLegajoService
         bool $estricto = true,
         ?iterable $lineasFactura = null,
         ?string $tipoDocumento = null,
+        ?int $precargaIdActual = null,
     ): array {
         $resultado = [
             'ok' => true,
@@ -210,14 +215,37 @@ class ComprobanteProveedorControlesLegajoService
             $cotizacionFactura,
             $fechaComprobanteYmd,
         );
+
+        $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($ordencompra);
+        $yaPorComSeleccion = ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
+            $ids->all(),
+            $excluirComprobanteId,
+            $monedaId,
+            $cotizacionFactura,
+            $fechaComprobanteYmd,
+        );
+        $this->validarReservaComOtrasFacturas(
+            $resultado,
+            $ordencompra,
+            $ids->all(),
+            $recepciones,
+            $importeFactura,
+            $toleranciaPct,
+            $yaPorComSeleccion,
+            $excluirComprobanteId,
+            $precargaIdActual,
+            $estricto,
+        );
+        if (! $resultado['ok']) {
+            return $resultado;
+        }
+
         $importeComFactura = round((float) $recepciones->sum(
             fn ($r) => (float) ($r->importe_provision_com_factura ?? $r->importe_provision_com ?? 0)
         ), 2);
         $importeComMe = round((float) $recepciones->sum(
             fn ($r) => (float) ($r->importe_provision_com ?? 0)
         ), 2);
-
-        $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($ordencompra);
 
         // Provisión de las COM asignadas − facturas ya imputadas a esas COM
         // (en moneda de esta factura). No restar el resto del legajo.
@@ -496,6 +524,118 @@ class ComprobanteProveedorControlesLegajoService
                 $resultado['errores'][] = 'Falta la cuenta DEBE del neto en el concepto «'.($concepto->nombre ?? 'neto').'».';
 
                 return;
+            }
+        }
+    }
+
+    /**
+     * @param  array{ok: bool, avisos: list<string>, errores: list<string>}  $resultado
+     * @param  list<int>  $recepcionIds
+     * @param  \Illuminate\Support\Collection<int, Recepcion_Proveedor>  $recepciones
+     * @param  array<int, float>  $yaPorComSeleccion
+     */
+    private function validarReservaComOtrasFacturas(
+        array &$resultado,
+        Ordencompra $ordencompra,
+        array $recepcionIds,
+        $recepciones,
+        float $importeFactura,
+        float $toleranciaPct,
+        array $yaPorComSeleccion,
+        ?int $excluirComprobanteId,
+        ?int $precargaIdActual,
+        bool $estricto,
+    ): void {
+        $comsParaMensaje = [];
+        foreach ($recepciones as $rec) {
+            $bruta = (float) (
+                $rec->importe_provision_com_factura
+                ?? $rec->importe_provision_com
+                ?? 0
+            );
+            $comsParaMensaje[] = [
+                'id' => (int) $rec->id,
+                'numerorecepcion' => $rec->numerorecepcion ?? $rec->id,
+                'provision' => ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
+                    $bruta,
+                    (float) ($yaPorComSeleccion[(int) $rec->id] ?? 0),
+                ),
+            ];
+        }
+
+        $mensajes = array_values(array_filter([
+            ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoComQueCubrenSolas(
+                $importeFactura,
+                $comsParaMensaje,
+                $toleranciaPct,
+            ),
+        ]));
+
+        $disponibles = $this->recepcionesSupport
+            ->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId, false)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        if ($disponibles === []) {
+            $disponibles = $this->recepcionesSupport
+                ->listarSinFacturarEnLegajo(
+                    (int) $ordencompra->proveedor_id,
+                    (int) $ordencompra->empresa_id,
+                    $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
+                    $excluirComprobanteId,
+                )
+                ->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->all();
+        }
+
+        $pendientes = array_values(array_filter(
+            OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($ordencompra),
+            static fn (array $doc) => OrdencompraLegajoDocumentoTipoSupport::exigeCom((string) ($doc['tipo'] ?? 'FC'))
+        ));
+        $pendientesCount = count($pendientes);
+        $actualEntrePendientes = $excluirComprobanteId === null || $excluirComprobanteId <= 0;
+        if ($precargaIdActual && $precargaIdActual > 0) {
+            $actualEntrePendientes = collect($pendientes)->contains(
+                static fn (array $doc) => (int) ($doc['precarga_id'] ?? 0) === (int) $precargaIdActual
+            );
+        }
+
+        $mensajes[] = ComprobanteProveedorReservaComLegajoSupport::mensajeInsuficienteParaOtrasPendientes(
+            $pendientesCount,
+            $actualEntrePendientes,
+            $disponibles,
+            $recepcionIds,
+        );
+
+        if (Schema::hasTable('precarga_comprobante_proveedor_recepcion')) {
+            $reservas = [];
+            foreach ($pendientes as $doc) {
+                $preId = (int) ($doc['precarga_id'] ?? 0);
+                if ($preId <= 0) {
+                    continue;
+                }
+                $reservas[$preId] = Precarga_Comprobante_Proveedor_Recepcion::query()
+                    ->where('precarga_comprobante_proveedor_id', $preId)
+                    ->pluck('recepcion_proveedor_id')
+                    ->map(static fn ($id) => (int) $id)
+                    ->filter(static fn (int $id) => $id > 0)
+                    ->values()
+                    ->all();
+            }
+            $mensajes[] = ComprobanteProveedorReservaComLegajoSupport::mensajeConflictoReservaBandeja(
+                $recepcionIds,
+                $reservas,
+                $precargaIdActual,
+            );
+        }
+
+        foreach (array_filter($mensajes) as $mensaje) {
+            if ($estricto) {
+                $resultado['ok'] = false;
+                $resultado['errores'][] = $mensaje;
+            } else {
+                $resultado['avisos'][] = $mensaje;
             }
         }
     }

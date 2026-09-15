@@ -17,7 +17,7 @@ class FlashReporteAggPerfilVistaSupportTest extends TestCase
         $this->assertFalse(FlashReporteAggPerfilVistaSupport::esFinanzas('completa'));
     }
 
-    public function test_fila_finanzas_suma_slots_y_ruletas(): void
+    public function test_fila_finanzas_separa_drop_slots_y_ruleta(): void
     {
         $fila = FlashReporteAggPerfilVistaSupport::filaFinanzasDesdeDatos([
             'B' => '1/09/26',
@@ -34,13 +34,23 @@ class FlashReporteAggPerfilVistaSupportTest extends TestCase
 
         $this->assertSame('1/09/26', $fila['fecha']);
         $this->assertSame(1250.5, $fila['coin_in']);
-        $this->assertSame(900.0, $fila['drop']);
+        $this->assertSame(800.0, $fila['drop_slots']);
+        $this->assertSame(100.0, $fila['drop_ruleta']);
         $this->assertSame(50.0, $fila['win_online']);
         $this->assertSame(45.0, $fila['win_financiero']);
         $this->assertSame(120.0, $fila['ventas_bingo']);
         $this->assertSame(30.0, $fila['ventas_parking']);
         $this->assertSame(200.0, $fila['ventas_gastronomia']);
         $this->assertSame(0.0, $fila['ventas_vending']);
+    }
+
+    public function test_columnas_finanzas_incluye_drop_separado(): void
+    {
+        $columnas = FlashReporteAggPerfilVistaSupport::columnasFinanzas();
+
+        $this->assertSame('Drop de Slots', $columnas['drop_slots']);
+        $this->assertSame('ELECTRONIC ROULETTE - ON LINE', $columnas['drop_ruleta']);
+        $this->assertArrayNotHasKey('drop', $columnas);
     }
 
     public function test_fila_finanzas_incluye_vending_desde_metricas(): void
@@ -67,7 +77,8 @@ class FlashReporteAggPerfilVistaSupportTest extends TestCase
         $totales = FlashReporteAggPerfilVistaSupport::totalesFinanzas([
             [
                 'coin_in' => 10,
-                'drop' => 5,
+                'drop_slots' => 5,
+                'drop_ruleta' => 2,
                 'win_online' => 1,
                 'win_financiero' => 2,
                 'ventas_bingo' => 3,
@@ -77,7 +88,8 @@ class FlashReporteAggPerfilVistaSupportTest extends TestCase
             ],
             [
                 'coin_in' => 20,
-                'drop' => 15,
+                'drop_slots' => 15,
+                'drop_ruleta' => 3,
                 'win_online' => 1,
                 'win_financiero' => 2,
                 'ventas_bingo' => 3,
@@ -88,7 +100,8 @@ class FlashReporteAggPerfilVistaSupportTest extends TestCase
         ]);
 
         $this->assertSame(30.0, $totales['coin_in']);
-        $this->assertSame(20.0, $totales['drop']);
+        $this->assertSame(20.0, $totales['drop_slots']);
+        $this->assertSame(5.0, $totales['drop_ruleta']);
         $this->assertSame(10.0, $totales['ventas_gastronomia']);
         $this->assertSame(10.0, $totales['ventas_vending']);
     }

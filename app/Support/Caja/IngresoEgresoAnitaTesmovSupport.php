@@ -228,7 +228,10 @@ final class IngresoEgresoAnitaTesmovSupport
             if ($esTra) {
                 $lado = self::ladoTedTehDesdeImporte($signed);
                 $nroTedTeh = self::reservarNumeroTedTeh($lado);
-                $importe = $importeAbs;
+                // Alta: |importe| (signo → TED/TEH). Anulación: importe negativo
+                // (factor -1). Si forzamos abs, el doble flip (líneas ya invertidas
+                // + factor) deja el mismo TED/TEH positivo y no compensa.
+                $importe = round($importeAbs * (float) $ctx['factor'], 2);
                 $descTesmov = self::descripcionTesmovTedTeh($ctx);
                 self::insertAuxpagCuentaCaja(
                     $ctx,
@@ -327,20 +330,72 @@ final class IngresoEgresoAnitaTesmovSupport
             self::eliminarTesmovTedTehDeTransferencia($ctx, $movimiento->id);
         }
 
-        self::deleteWhere('auxpag', ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
-            .' AND axp_rec = '.(int) $ctx['nro']
-            .' AND axp_empresa = '.(int) $ctx['empresa'],
-            'caja IE auxpag delete '.$movimiento->id);
+        self::eliminarTesoreriaPorClave(
+            (string) $ctx['tipo'],
+            (int) $ctx['nro'],
+            (int) $ctx['empresa'],
+            'caja IE delete '.$movimiento->id
+        );
+    }
 
-        self::deleteWhere('tesmov', ' WHERE tesv_tipo = '.self::escSql($ctx['tipo'])
-            .' AND tesv_nro = '.(int) $ctx['nro']
-            .' AND tesv_empresa = '.(int) $ctx['empresa'],
-            'caja IE tesmov delete '.$movimiento->id);
+    /**
+     * Baja física de tesorería Anita por clave (sin exigir caja_movimiento local).
+     * Incluye el tipo original y su AOP compensatorio del mismo número.
+     *
+     * @param  list<string>|null  $tiposExtra
+     */
+    public static function eliminarTesoreriaPorClave(
+        string $tipo,
+        int $nro,
+        int $empresa,
+        string $contexto = 'caja IE delete por clave',
+        ?array $tiposExtra = null
+    ): void {
+        if (! self::estaHabilitada() || $nro <= 0 || $empresa <= 0) {
+            return;
+        }
 
-        self::deleteWhere('pago', ' WHERE pag_tipo = '.self::escSql($ctx['tipo'])
-            .' AND pag_rec = '.(int) $ctx['nro']
-            .' AND pag_empresa = '.(int) $ctx['empresa'],
-            'caja IE pago delete '.$movimiento->id);
+        $tipos = [];
+        $tipo = strtoupper(substr(trim($tipo), 0, 3));
+        if ($tipo !== '') {
+            $tipos[$tipo] = true;
+        }
+        if (isset(self::TIPOS_ANULACION[$tipo])) {
+            $tipos[self::TIPOS_ANULACION[$tipo]] = true;
+        }
+        foreach ($tiposExtra ?? [] as $extra) {
+            $t = strtoupper(substr(trim((string) $extra), 0, 3));
+            if ($t !== '') {
+                $tipos[$t] = true;
+            }
+        }
+        if ($tipos === []) {
+            return;
+        }
+
+        foreach (array_keys($tipos) as $tipoBorrar) {
+            self::deleteWhere(
+                'auxpag',
+                ' WHERE axp_tipo = '.self::escSql($tipoBorrar)
+                    .' AND axp_rec = '.$nro
+                    .' AND axp_empresa = '.$empresa,
+                $contexto.' auxpag '.$tipoBorrar
+            );
+            self::deleteWhere(
+                'tesmov',
+                ' WHERE tesv_tipo = '.self::escSql($tipoBorrar)
+                    .' AND tesv_nro = '.$nro
+                    .' AND tesv_empresa = '.$empresa,
+                $contexto.' tesmov '.$tipoBorrar
+            );
+            self::deleteWhere(
+                'pago',
+                ' WHERE pag_tipo = '.self::escSql($tipoBorrar)
+                    .' AND pag_rec = '.$nro
+                    .' AND pag_empresa = '.$empresa,
+                $contexto.' pago '.$tipoBorrar
+            );
+        }
     }
 
     /**

@@ -64,6 +64,16 @@ final class PrecargaProveedorAbreviaturaTipoSupport
             'ordencompra_articulos.articulos.categorias:id,nombre,codigo',
         ]);
 
+        $tipoItem = self::tipoItemDesdeOrdencompra($oc);
+        $centros = PrecargaProveedorProrrateoMultiCcSupport::centrosConPesoDesdeOrdencompraErp($oc);
+        if (count($centros) >= 2) {
+            $prorrateo = app(PrecargaProveedorProrrateoMultiCcSupport::class)
+                ->resolverDesdeCentros($tipoComprobante, $tipoItem, $centros);
+            if ($prorrateo['activo'] && $prorrateo['tipocomprobante'] !== '') {
+                return $prorrateo['tipocomprobante'];
+            }
+        }
+
         $centrocosto = self::centrocostoDestinoDesdeOrdencompra($oc);
         if (! $centrocosto) {
             return null;
@@ -74,7 +84,6 @@ final class PrecargaProveedorAbreviaturaTipoSupport
             return null;
         }
 
-        $tipoItem = self::tipoItemDesdeOrdencompra($oc);
         $abrev = self::abreviatura(
             $tipoComprobante,
             (string) ($centrocosto->codigo ?? ''),

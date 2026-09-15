@@ -62,24 +62,6 @@
                     @endif
                 </div>
                 @endif
-                @if (! empty($legajo_otras_facturas))
-                <div class="cp-oc-meta mt-2">
-                    <span class="text-muted">Otras facturas del legajo:</span>
-                    @foreach ($legajo_otras_facturas as $otraFac)
-                        <a href="{{ route('editar_comprobante_proveedor', ['id' => $otraFac['id']]) }}"
-                           class="badge badge-success cp-oc-badge"
-                           target="_blank" rel="noopener"
-                           title="Importe comparable: {{ number_format((float) $otraFac['importe'], 2, ',', '.') }}">
-                            {{ $otraFac['etiqueta'] }}
-                        </a>
-                    @endforeach
-                    @if ((float) ($legajo_ya_facturado_importe ?? 0) > 0)
-                        <span class="text-muted ml-1">
-                            (ya facturado {{ number_format((float) $legajo_ya_facturado_importe, 2, ',', '.') }})
-                        </span>
-                    @endif
-                </div>
-                @endif
                 @if ($cpPol['contrato_vigente'] ?? false)
                 <div class="cp-oc-meta mt-2">
                     <span class="badge badge-info cp-oc-badge">Contrato vigente</span>
@@ -105,17 +87,6 @@
                 @endif
             </div>
             <div class="d-flex flex-wrap" style="gap:6px;">
-                @if ($mostrarSolapaOc ?? false)
-                <button type="button" class="btn btn-outline-primary btn-sm cp-abrir-solapa-oc">
-                    <i class="fa fa-file-text-o"></i> Ver OC
-                </button>
-                @endif
-                @if (can('editar-ordencompra', false) || can('listar-ordencompra', false))
-                <a href="{{ route('editar_ordencompra', ['id' => $data->ordencompra_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                   class="btn btn-primary btn-sm" target="_blank" rel="noopener">
-                    <i class="fa fa-external-link"></i> Abrir OC
-                </a>
-                @endif
                 @if (! empty($url_paquete_legajo))
                 <button type="button"
                         class="btn btn-outline-dark btn-sm js-cp-ver-legajo"
@@ -129,10 +100,49 @@
                     <i class="fa fa-folder-open-o"></i> Ver legajo
                 </button>
                 @endif
-                @if ($mostrarSolapaCom ?? false)
-                <button type="button" class="btn btn-outline-info btn-sm" id="cp-abrir-solapa-com-desde-oc">
-                    <i class="fa fa-truck"></i> Ver COM
+                @if (! empty($cp_puede_devolver_compras) && ! empty($url_devolver_compras))
+                <button type="button" class="btn btn-warning btn-sm" data-toggle="modal" data-target="#modalCpDevolverCompras"
+                        title="Vuelve el legajo de Cuentas a pagar a Compras">
+                    <i class="fa fa-reply"></i> Volver legajo a Compras
                 </button>
+                @endif
+                @php
+                    $idsComVer = array_values(array_filter(array_map('intval', (array) old(
+                        'recepcion_proveedor_ids',
+                        $recepciones_seleccionadas ?? []
+                    ))));
+                    if ($idsComVer === [] && ($recepciones_disponibles ?? collect())->isNotEmpty()) {
+                        $primeraCom = ($recepciones_disponibles ?? collect())->first();
+                        $idPrimeraCom = (int) ($primeraCom->id ?? 0);
+                        if ($idPrimeraCom > 0) {
+                            $idsComVer = [$idPrimeraCom];
+                        }
+                    }
+                    $urlVerCom = null;
+                    if (
+                        ($idsComVer[0] ?? 0) > 0
+                        && (can('editar-recepcion-proveedor', false) || can('listar-recepcion-proveedor', false))
+                    ) {
+                        $urlVerCom = route('editar_recepcion_proveedor', [
+                            'id' => (int) $idsComVer[0],
+                            'origen' => 'modal_consulta',
+                            'vista' => 'consulta',
+                        ]);
+                    }
+                @endphp
+                @if ($data->ordencompra_id ?? null)
+                <a href="{{ route('editar_ordencompra', ['id' => $data->ordencompra_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                   class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener"
+                   title="Abre la OC en otra pestaña (consulta)">
+                    <i class="fa fa-file-text-o"></i> Ver OC
+                </a>
+                @endif
+                @if ($urlVerCom)
+                <a href="{{ $urlVerCom }}"
+                   class="btn btn-outline-info btn-sm" target="_blank" rel="noopener"
+                   title="Abre la COM en otra pestaña (consulta)">
+                    <i class="fa fa-truck"></i> Ver COM
+                </a>
                 @endif
             </div>
         </div>
@@ -508,53 +518,3 @@
         </div>
     </div>
 </div>
-
-@php
-    $idsComBanner = array_values(array_filter(array_map('intval', (array) old(
-        'recepcion_proveedor_ids',
-        $recepciones_seleccionadas ?? []
-    ))));
-    $etiquetasComBanner = [];
-    foreach ($idsComBanner as $idComBanner) {
-        $recepcionBanner = ($recepciones_disponibles ?? collect())->firstWhere('id', $idComBanner);
-        if (! $recepcionBanner) {
-            $vinculoBanner = optional($data->comprobante_proveedor_recepciones ?? collect())
-                ->firstWhere('recepcion_proveedor_id', $idComBanner);
-            $recepcionBanner = $vinculoBanner?->recepcion_proveedores;
-        }
-        $numeroBanner = $recepcionBanner->numerorecepcion ?? null;
-        $etiquetasComBanner[] = filled($numeroBanner)
-            ? (string) $numeroBanner.' (ID '.$idComBanner.')'
-            : '#'.$idComBanner;
-    }
-    $mostrarBannerCom = ($mostrarSolapaCom ?? false)
-        && (
-            ($com_obligatoria ?? false)
-            || count($idsComBanner) > 0
-            || old('modo_carga', $data->modo_carga ?? '') === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
-        );
-@endphp
-@if ($mostrarBannerCom)
-<div class="alert alert-info mt-3 mb-0" id="cp-banner-com-datos"
-     data-com-obligatoria="{{ ($com_obligatoria ?? false) ? '1' : '0' }}">
-    <i class="fa fa-truck"></i>
-    <span id="cp-banner-com-texto">
-        @if (count($etiquetasComBanner) > 0)
-            COM asignada(s):
-            <strong>{{ implode(', ', $etiquetasComBanner) }}</strong>.
-        @elseif ($com_obligatoria ?? false)
-            Debe asignar recepción(es) COM obligatoria(s).
-        @else
-            Este comprobante usa modo asignación de recepción COM.
-        @endif
-    </span>
-    @if ($mostrarSolapaOc ?? false)
-    <button type="button" class="btn btn-sm btn-outline-primary ml-2 cp-abrir-solapa-oc">
-        Ver OC
-    </button>
-    @endif
-    <button type="button" class="btn btn-sm btn-outline-primary ml-2" id="cp-abrir-solapa-com-desde-datos">
-        Ir a Recepciones COM
-    </button>
-</div>
-@endif

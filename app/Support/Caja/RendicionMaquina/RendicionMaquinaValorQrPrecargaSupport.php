@@ -7,7 +7,7 @@ namespace App\Support\Caja\RendicionMaquina;
 use App\Models\Caja\Cuentacaja;
 
 /**
- * Precarga del valor TotalCoin QR Máquinas en mañana y Completo:
+ * Precarga del valor TotalCoin QR Máquinas en turno mañana:
  * drop QR rodillo (neto WIGOS) + impuesto QR.
  *
  * Distingue TOTAL COIN MAQUINAS de TOTAL COIN CAJA y de M0QR (QR Máquinas).
@@ -16,9 +16,10 @@ use App\Models\Caja\Cuentacaja;
  * Si el tesorero tipea el TotalCoin de la planilla, el drop QR tiene que
  * seguir ese neto; si no, la transferencia se mueve.
  *
- * Completo (fecha F): el QR del día es el mismo dato que carga la Mañana de F+1
- * (desfase jornada). Si esa Mañana ya tiene TotalCoin (con ajustes), prevalece
- * sobre drop+impuesto del Completo para no perder el ajuste.
+ * Completo: no usa esta precarga. El TotalCoin sale del consolidado M/T/N
+ * (depósito de la Mañana del mismo día). El drop QR amarillo del Completo
+ * viene de WIGOS del día (otra jornada); sumarlo al impuesto consolidado
+ * mezcla jornadas y da un TotalCoin incorrecto.
  */
 final class RendicionMaquinaValorQrPrecargaSupport
 {
@@ -156,19 +157,6 @@ final class RendicionMaquinaValorQrPrecargaSupport
         $esMaquina = str_contains($texto, 'maquin');
 
         return $esTotalCoin && $esMaquina;
-    }
-
-    /**
-     * Monto a precargar en Completo: TotalCoin de la Mañana del día siguiente
-     * (mismo QR de jornada, con ajustes) o, si no hay, drop QR + impuesto QR.
-     */
-    public static function montoPrecargaCompleto(array $inputs, ?float $totalCoinManianaDiaSiguiente): float
-    {
-        if ($totalCoinManianaDiaSiguiente !== null && abs($totalCoinManianaDiaSiguiente) >= 0.005) {
-            return round($totalCoinManianaDiaSiguiente, 2);
-        }
-
-        return self::montoDesdeInputs($inputs);
     }
 
     /**

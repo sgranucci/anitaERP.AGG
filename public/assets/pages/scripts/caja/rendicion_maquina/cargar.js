@@ -127,7 +127,7 @@
         badge.classList.add(claseBadgeTurno(turno));
         var avisoQr = document.getElementById('aviso-precarga-qr-maquinas');
         if (avisoQr) {
-            avisoQr.style.display = (turno === 'M' || turno === 'C') ? '' : 'none';
+            avisoQr.style.display = turno === 'M' ? '' : 'none';
         }
     }
 
@@ -902,12 +902,12 @@
     }
 
     /**
-     * TotalCoin QR Máquinas = drop QR rodillo + impuesto QR (WIGOS del día).
-     * En Completo el consolidado M+T+N no trae ese QR; hay que precargarlo para el depósito.
+     * TotalCoin QR Máquinas = drop QR rodillo + impuesto QR (WIGOS).
+     * Solo mañana: en Completo el consolidado M/T/N ya trae el depósito correcto;
+     * no pisar con drop+impuesto (mezcla jornadas).
      */
     function aplicarTotalCoinDesdeWigos() {
-        var turno = getTurno();
-        if (turno !== 'M' && turno !== 'C') {
+        if (getTurno() !== 'M') {
             return;
         }
         var inputs = recolectarInputs();
@@ -916,7 +916,6 @@
 
     /**
      * Mañana: al ajustar drop/impuesto QR, TotalCoin sigue a drop + impuesto.
-     * Completo: el TotalCoin se fija al Traer WIGOS (no pisar un arreglo a mano).
      */
     function sincronizarValorQrDesdeWigos() {
         if (getTurno() !== 'M') {

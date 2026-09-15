@@ -21,7 +21,8 @@ final class IngresoProveedorControlSupport
     }
 
     /**
-     * Ticket vigente para el DNI: primero quien está en planta, luego el de hoy, luego el abierto más reciente.
+     * Ticket vigente para el DNI: en planta → abierto de hoy → abierto reciente →
+     * visita de hoy ya cerrada → rechazado de hoy → rechazado reciente.
      */
     public static function buscarPorDni(string $documento, ?int $empresaId = null): ?IngresoProveedorPersona
     {
@@ -63,6 +64,23 @@ final class IngresoProveedorControlSupport
             return $abiertoReciente;
         }
 
+        // Ya entró y salió hoy: devolver la visita para mostrar datos + mensaje claro.
+        $cerradaHoy = (clone $abierto)
+            ->whereNotNull('fecha_ingreso')
+            ->whereNotNull('fecha_egreso')
+            ->where(function ($q) {
+                $hoy = now()->toDateString();
+                $q->whereDate('fecha_ingreso', $hoy)
+                    ->orWhereDate('fecha_egreso', $hoy)
+                    ->orWhereHas('ingreso', fn ($iq) => $iq->whereDate('fecha', $hoy));
+            })
+            ->orderByDesc('fecha_egreso')
+            ->orderByDesc('id')
+            ->first();
+        if ($cerradaHoy) {
+            return $cerradaHoy;
+        }
+
         $rechazadoHoy = (clone $base)
             ->whereHas('ingreso', static function ($q) {
                 $q->where('estado', IngresoProveedorEstados::RECHAZADO)
@@ -78,6 +96,59 @@ final class IngresoProveedorControlSupport
             ->whereHas('ingreso', static fn ($q) => $q->where('estado', IngresoProveedorEstados::RECHAZADO))
             ->orderByDesc('id')
             ->first();
+    }
+
+    /**
+     * Mensaje accionable cuando no hay persona para el DNI en el alcance actual.
+     */
+    public static function mensajeDniNoEncontrado(string $documento, ?int $empresaId = null): string
+    {
+        $dni = self::normalizarDni($documento);
+        if ($dni === '' || strlen($dni) < 6) {
+            return 'Ingrese un DNI / CUIL válido (al menos 6 números).';
+        }
+
+        // Sin filtrar empresa del combo: solo empresas asignadas al usuario.
+        $enOtraEmpresa = self::queryBasePorDni($dni, null)
+            ->when($empresaId && $empresaId > 0, function ($q) use ($empresaId) {
+                $q->whereHas('ingreso', fn ($iq) => $iq->where('empresa_id', '!=', $empresaId));
+            })
+            ->with(['ingreso.empresas:id,nombre'])
+            ->orderByDesc('id')
+            ->first();
+
+        if ($empresaId && $empresaId > 0 && $enOtraEmpresa?->ingreso) {
+            $emp = (string) (optional($enOtraEmpresa->ingreso->empresas)->nombre ?? 'otra empresa');
+            $ticketId = (int) $enOtraEmpresa->ingreso_proveedor_id;
+
+            return 'El DNI '.$dni.' está en el ticket #'.$ticketId.' de '.$emp
+                .'. Cambiá el filtro de empresa (o elegí «Todas») e intentá de nuevo.';
+        }
+
+        $historico = IngresoProveedorPersona::query()
+            ->where('documento_norm', $dni)
+            ->whereHas('ingreso', function ($q) {
+                app(EmpresaRepository::class)->aplicarFiltroEmpresasAsignadas($q, 'empresa_id');
+            })
+            ->with(['ingreso:id,fecha,estado,empresa_id', 'ingreso.empresas:id,nombre'])
+            ->orderByDesc('id')
+            ->first();
+
+        if ($historico?->ingreso) {
+            $fecha = optional($historico->ingreso->fecha)->format('d/m/Y') ?: '—';
+            $estado = IngresoProveedorEstados::etiqueta((string) $historico->ingreso->estado);
+            $ticketId = (int) $historico->ingreso_proveedor_id;
+            $salida = $historico->fecha_egreso
+                ? ' Ya registró salida'.($historico->hora_egreso ? ' a las '.substr((string) $historico->hora_egreso, 0, 5) : '').'.'
+                : '';
+
+            return 'El DNI '.$dni.' no tiene visita abierta. Último ticket #'.$ticketId
+                .' del '.$fecha.' ('.$estado.').'.$salida
+                .' Si debe volver a entrar, hay que cargar un ticket nuevo.';
+        }
+
+        return 'No hay ninguna persona cargada con el DNI '.$dni
+            .' en tickets de ingreso (revisá el número o que figure en el ticket).';
     }
 
     /**
@@ -116,9 +187,15 @@ final class IngresoProveedorControlSupport
             throw new RuntimeException('El ticket está rechazado.');
         }
         if (! IngresoProveedorEstados::permiteEntro((string) $ticket->estado)) {
+            $estado = IngresoProveedorEstados::etiqueta((string) $ticket->estado);
+            if ((string) $ticket->estado === IngresoProveedorEstados::PENDIENTE) {
+                throw new RuntimeException(
+                    'Sin permiso de ingreso: el ticket #'.$ticket->id
+                    .' está Pendiente de autorización de Seguridad. Estado: '.$estado.'.'
+                );
+            }
             throw new RuntimeException(
-                'El ticket todavía no está autorizado por Seguridad. Estado: '
-                .IngresoProveedorEstados::etiqueta((string) $ticket->estado).'.'
+                'El ticket todavía no está autorizado por Seguridad. Estado: '.$estado.'.'
             );
         }
         if ($persona->fecha_ingreso && ! $persona->fecha_egreso) {
@@ -258,8 +335,18 @@ final class IngresoProveedorControlSupport
         $estadoCodigo = (string) ($ticket?->estado ?? '');
         $puedeEntro = ! $enPlanta && ! $finalizada && IngresoProveedorEstados::permiteEntro($estadoCodigo);
         $mensajeBloqueo = null;
-        if (! $puedeEntro && ! $enPlanta && ! $finalizada && $estadoCodigo === IngresoProveedorEstados::PENDIENTE) {
-            $mensajeBloqueo = 'Ticket pendiente de autorización de Seguridad. No puede ingresar.';
+        if ($finalizada) {
+            $horaSalida = $persona->hora_egreso ? substr((string) $persona->hora_egreso, 0, 5) : null;
+            $mensajeBloqueo = 'Esta persona ya registró ingreso y salida'
+                .($horaSalida ? ' (salió a las '.$horaSalida.')' : '')
+                .'. Si debe volver a entrar, hay que cargar un ticket nuevo.';
+        } elseif (! $puedeEntro && ! $enPlanta && $estadoCodigo === IngresoProveedorEstados::PENDIENTE) {
+            $ticketId = (int) $persona->ingreso_proveedor_id;
+            $generado = trim((string) (optional($ticket?->usuarios)->nombre ?? ''));
+            $mensajeBloqueo = 'Sin permiso de ingreso: el ticket #'.$ticketId
+                .' está Pendiente de autorización de Seguridad'
+                .($generado !== '' ? ' (solicitó: '.$generado.')' : '')
+                .'. No puede entrar hasta que Seguridad lo autorice.';
         } elseif ($estadoCodigo === IngresoProveedorEstados::RECHAZADO) {
             $mensajeBloqueo = self::mensajeRechazo($ticket);
         }

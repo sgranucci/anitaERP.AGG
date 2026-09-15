@@ -8,7 +8,7 @@ use Carbon\Carbon;
  * Perfiles de contenido del Flash Report AGG por suscripción.
  *
  * - completa: plantilla oficial (todas las hojas/columnas).
- * - finanzas: Excel acotado (drop, coin in, wins, bingo, parking, gastronomía, vending).
+ * - finanzas: Excel acotado (drop slots / ER, coin in, wins, bingo, parking, gastronomía, vending).
  */
 final class FlashReporteAggPerfilVistaSupport
 {
@@ -36,7 +36,7 @@ final class FlashReporteAggPerfilVistaSupport
     {
         return [
             self::COMPLETA => 'Plantilla oficial AGG: todas las hojas (Datos, presentación, Resumen, Tabla) y columnas del Flash.',
-            self::FINANZAS => 'Excel acotado: coin in, drop, win online, win financiero, ventas bingo, parking, gastronomía y vending (por empresa + consolidado).',
+            self::FINANZAS => 'Excel acotado: coin in, drop de slots, drop electronic roulette, win online, win financiero, ventas bingo, parking, gastronomía y vending (por empresa + consolidado).',
         ];
     }
 
@@ -65,7 +65,8 @@ final class FlashReporteAggPerfilVistaSupport
         return [
             'fecha' => 'Fecha',
             'coin_in' => 'Coin in',
-            'drop' => 'Drop',
+            'drop_slots' => 'Drop de Slots',
+            'drop_ruleta' => 'ELECTRONIC ROULETTE - ON LINE',
             'win_online' => 'Win online',
             'win_financiero' => 'Win financiero',
             'ventas_bingo' => 'Ventas bingo',
@@ -77,7 +78,8 @@ final class FlashReporteAggPerfilVistaSupport
 
     /**
      * Extrae métricas de finanzas desde una fila de hoja Datos (mapeo A–BM).
-     * Coin in / Drop = slots + electronic roulette (E+M / F+N).
+     * Coin in = slots + electronic roulette (E+M).
+     * Drop se muestra separado: Drop de Slots (F) y ELECTRONIC ROULETTE - ON LINE (N).
      * Vending no está en la plantilla AGG (Anita lo suma a AyB): usar filaFinanzasDesdeMetricas.
      *
      * @param  array<string, float|int|string>  $filaDatos
@@ -88,7 +90,8 @@ final class FlashReporteAggPerfilVistaSupport
         return [
             'fecha' => (string) ($filaDatos['B'] ?? ''),
             'coin_in' => round((float) ($filaDatos['E'] ?? 0) + (float) ($filaDatos['M'] ?? 0), 2),
-            'drop' => round((float) ($filaDatos['F'] ?? 0) + (float) ($filaDatos['N'] ?? 0), 2),
+            'drop_slots' => round((float) ($filaDatos['F'] ?? 0), 2),
+            'drop_ruleta' => round((float) ($filaDatos['N'] ?? 0), 2),
             'win_online' => round((float) ($filaDatos['AD'] ?? 0), 2),
             'win_financiero' => round((float) ($filaDatos['AE'] ?? 0), 2),
             'ventas_bingo' => round((float) ($filaDatos['AH'] ?? 0), 2),
@@ -119,7 +122,8 @@ final class FlashReporteAggPerfilVistaSupport
     {
         $totales = [
             'coin_in' => 0.0,
-            'drop' => 0.0,
+            'drop_slots' => 0.0,
+            'drop_ruleta' => 0.0,
             'win_online' => 0.0,
             'win_financiero' => 0.0,
             'ventas_bingo' => 0.0,

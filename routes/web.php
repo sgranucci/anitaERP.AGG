@@ -1319,8 +1319,10 @@ Route::post('contable/cierre-rendiciones-bingo/api/anular-cierre-rango', 'Contab
 Route::get('contable/cierre-rendiciones-maquina', 'Contable\CierreRendicionMaquinaController@index')->name('cierre_rendicion_maquina_contable');
 Route::get('contable/cierre-rendiciones-maquina/conciliacion-flash', 'Contable\CierreRendicionMaquinaController@conciliacionFlash')->name('cierre_rendicion_maquina_conciliacion_flash');
 Route::get('contable/cierre-rendiciones-maquina/venta-listado', 'Contable\CierreRendicionMaquinaController@ventaListado')->name('cierre_rendicion_maquina_venta_listado');
+Route::get('contable/cierre-rendiciones-maquina/asientos-mes', 'Contable\CierreRendicionMaquinaController@asientosMes')->name('cierre_rendicion_maquina_asientos_mes');
 Route::get('contable/listar-cierre-rendiciones-maquina-conciliacion-flash/{formato?}', 'Contable\CierreRendicionMaquinaController@listarConciliacionFlash')->name('listar_cierre_rendicion_maquina_conciliacion_flash');
 Route::get('contable/listar-cierre-rendiciones-maquina-venta-listado/{formato?}', 'Contable\CierreRendicionMaquinaController@listarVentaListado')->name('listar_cierre_rendicion_maquina_venta_listado');
+Route::get('contable/listar-cierre-rendiciones-maquina-asientos-mes/{formato?}', 'Contable\CierreRendicionMaquinaController@listarAsientosMes')->name('listar_cierre_rendicion_maquina_asientos_mes');
 Route::get('contable/listar-cierre-rendiciones-maquina/{formato?}/{busqueda?}', 'Contable\CierreRendicionMaquinaController@listar')->name('listar_cierre_rendicion_maquina_contable');
 Route::get('contable/cierre-rendiciones-maquina/api/pendientes-cierre', 'Contable\CierreRendicionMaquinaController@apiPendientesCierre')->name('api_cierre_rendicion_maquina_pendientes');
 Route::post('contable/cierre-rendiciones-maquina/api/preview-asiento', 'Contable\CierreRendicionMaquinaController@apiPreviewAsiento')->name('api_cierre_rendicion_maquina_preview');
@@ -5511,6 +5513,7 @@ Route::get('produccion/listaordenproduccion/{formato?}/{busqueda?}', 'Produccion
  * Seguridad — ingreso de proveedores
  */
 Route::get('seguridad/control-ingreso', 'Seguridad\IngresoProveedorControlController@index')->name('control_ingreso_proveedor');
+Route::get('seguridad/lista-control-ingreso/{formato?}', 'Seguridad\IngresoProveedorControlController@listar')->name('lista_control_ingreso_proveedor');
 Route::post('seguridad/control-ingreso/buscar-dni', 'Seguridad\IngresoProveedorControlController@buscarDni')->name('control_ingreso_buscar_dni');
 Route::post('seguridad/control-ingreso/entro', 'Seguridad\IngresoProveedorControlController@marcarEntro')->name('control_ingreso_entro');
 Route::post('seguridad/control-ingreso/salio', 'Seguridad\IngresoProveedorControlController@marcarSalio')->name('control_ingreso_salio');
@@ -5546,6 +5549,9 @@ foreach (['punto', 'area', 'motivo', 'sector'] as $tipoCatalogo) {
     Route::get("seguridad/ingreso-proveedor-{$tipoCatalogo}", 'Seguridad\IngresoProveedorCatalogoController@index')
         ->defaults('tipo', $tipoCatalogo)
         ->name("ingreso_proveedor_{$tipoCatalogo}");
+    Route::get("seguridad/lista-ingreso-proveedor-{$tipoCatalogo}/{formato?}", 'Seguridad\IngresoProveedorCatalogoController@listar')
+        ->defaults('tipo', $tipoCatalogo)
+        ->name("lista_ingreso_proveedor_{$tipoCatalogo}");
     Route::get("seguridad/ingreso-proveedor-{$tipoCatalogo}/crear", 'Seguridad\IngresoProveedorCatalogoController@crear')
         ->defaults('tipo', $tipoCatalogo)
         ->name("crear_ingreso_proveedor_{$tipoCatalogo}");

@@ -19,7 +19,6 @@ use App\Support\Caja\RendicionMaquina\RendicionMaquinaValoresCuentacajaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaVariables;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaWigosLeeOnlineSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -787,10 +786,12 @@ final class RendicionMaquinaService
     }
 
     /**
-     * Turno mañana y Completo: precarga TotalCoin QR Máquinas.
-     * Mañana: drop QR + impuesto QR (WIGOS); si tipan TotalCoin, el drop se alinea al neto.
-     * Completo: el QR del día es el de la Mañana de F+1; si esa Mañana ya tiene
-     * TotalCoin (ajustes incluidos), se usa ese monto; si no, drop+impuesto del Completo.
+     * Solo turno mañana: precarga TotalCoin QR Máquinas = drop QR + impuesto QR (WIGOS).
+     * Si después tipan el TotalCoin de la planilla, el drop QR se alinea al neto.
+     *
+     * Completo: no precargar. El consolidado M/T/N ya trae el TotalCoin depositado
+     * (Mañana del mismo día). Pisar con drop+impuesto mezcla jornadas (drop WIGOS del
+     * día + impuesto del consolidado) y obliga a corregir a mano.
      *
      * @param  array<string, float|int|string>  $inputs
      * @return list<array{cuentacaja_id: int, monto: float}>|null
@@ -803,68 +804,17 @@ final class RendicionMaquinaService
         bool $esStub,
         bool $esCompleto
     ): ?array {
-        if ($esStub) {
+        if ($esStub || $esCompleto) {
             return null;
         }
-        if (! RendicionMaquinaTurno::esManiana($turno) && ! $esCompleto) {
+        if (! RendicionMaquinaTurno::esManiana($turno)) {
             return null;
         }
 
         $catalogo = $this->listarCuentasValor($empresaId, null, $fechaYmd);
-        $montoOverride = null;
-        if ($esCompleto) {
-            $montoOverride = $this->totalCoinManianaDiaSiguiente($empresaId, $fechaYmd);
-            if ($montoOverride !== null) {
-                $montoOverride = RendicionMaquinaValorQrPrecargaSupport::montoPrecargaCompleto(
-                    $inputs,
-                    $montoOverride
-                );
-            }
-        }
-        $lineas = RendicionMaquinaValorQrPrecargaSupport::lineasPrecarga(
-            $inputs,
-            $catalogo,
-            $montoOverride
-        );
+        $lineas = RendicionMaquinaValorQrPrecargaSupport::lineasPrecarga($inputs, $catalogo);
 
         return $lineas === [] ? null : $lineas;
-    }
-
-    /**
-     * TotalCoin QR Máquinas de la Mañana del día siguiente (mismo QR de jornada del Completo).
-     */
-    private function totalCoinManianaDiaSiguiente(int $empresaId, string $fechaYmd): ?float
-    {
-        if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaYmd)) {
-            return null;
-        }
-
-        $fechaSig = Carbon::parse($fechaYmd)->addDay()->format('Y-m-d');
-        $maniana = RendicionMaquina::query()
-            ->where('empresa_id', $empresaId)
-            ->whereDate('fecha', $fechaSig)
-            ->where('turno', RendicionMaquinaTurno::MANIANA)
-            ->where('estado', '!=', RendicionMaquina::ESTADO_ANULADA)
-            ->with(['valores.cuentacaja:id,nombre,descripcion_operaciones'])
-            ->first();
-
-        if ($maniana === null) {
-            return null;
-        }
-
-        $lineas = [];
-        foreach ($maniana->valores as $valor) {
-            $cc = $valor->cuentacaja;
-            $lineas[] = [
-                'cuentacaja_id' => (int) $valor->cuentacaja_id,
-                'monto' => (float) $valor->monto,
-                'nombre' => $cc ? (string) $cc->etiquetaOperaciones() : '',
-                'descripcion_operaciones' => (string) ($cc->descripcion_operaciones ?? ''),
-                'nombre_maestro' => (string) ($cc->nombre ?? ''),
-            ];
-        }
-
-        return RendicionMaquinaValorQrPrecargaSupport::montoTotalCoinEnValores($lineas);
     }
 
     /**

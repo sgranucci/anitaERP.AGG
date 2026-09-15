@@ -101,25 +101,19 @@ class RendicionMaquinaValorQrPrecargaSupportTest extends TestCase
         $this->assertSame(113322382.29, $inputs['dropqr_rodillo']);
     }
 
-    public function test_completo_usa_totalcoin_de_maniana_dia_siguiente(): void
+    public function test_completo_no_precarga_totalcoin_desde_drop_mas_impuesto(): void
     {
+        // Completo no debe usar drop+impuesto: mezcla drop WIGOS del día con
+        // impuesto del consolidado (otra jornada). El TotalCoin viene de M/T/N.
         $desdeInputs = RendicionMaquinaValorQrPrecargaSupport::montoDesdeInputs([
-            'dropqr_rodillo' => 149189289.71,
-            'impuesto_qr' => 1077042.65,
+            'dropqr_rodillo' => 91307433.32,
+            'impuesto_qr' => 1197710.57,
         ]);
-        $this->assertSame(150266332.36, $desdeInputs);
+        $this->assertSame(92505143.89, $desdeInputs);
 
-        $conManiana = RendicionMaquinaValorQrPrecargaSupport::montoPrecargaCompleto(
-            ['dropqr_rodillo' => 149189289.71, 'impuesto_qr' => 1077042.65],
-            150606588.07
-        );
-        $this->assertSame(150606588.07, $conManiana);
-
-        $sinManiana = RendicionMaquinaValorQrPrecargaSupport::montoPrecargaCompleto(
-            ['dropqr_rodillo' => 149189289.71, 'impuesto_qr' => 1077042.65],
-            null
-        );
-        $this->assertSame(150266332.36, $sinManiana);
+        // Ese monto (mezcla) NO es el depósito correcto del Completo:
+        // el de la Mañana del mismo día es 127272498.31.
+        $this->assertNotEquals(127272498.31, $desdeInputs);
     }
 
     public function test_lineas_precarga_acepta_monto_override(): void

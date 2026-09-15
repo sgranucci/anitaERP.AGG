@@ -69,6 +69,11 @@ class ComprobanteProveedorAsientoService
     {
         $preview = $this->armarPreview($comprobante);
         $payload = array_merge($preview['payload_asiento'], ['omitir_anita' => true]);
+        unset(
+            $payload['editable_cuentas'],
+            $payload['concepto_ivacompra_ids'],
+            $payload['origenes'],
+        );
 
         $asiento = $this->asientoRepository->create($payload);
         if ($asiento === 'Error' || ! $asiento) {
@@ -94,6 +99,11 @@ class ComprobanteProveedorAsientoService
             'tipoasiento_id' => (int) $preview['payload_asiento']['tipoasiento_id'],
             'fecha' => $fechaAsiento,
         ]);
+        unset(
+            $payloadAnita['editable_cuentas'],
+            $payloadAnita['concepto_ivacompra_ids'],
+            $payloadAnita['origenes'],
+        );
 
         return [
             'asiento_id' => $asientoId,
@@ -157,10 +167,11 @@ class ComprobanteProveedorAsientoService
      * @return array{
      *     total_debe: float,
      *     total_haber: float,
-     *     payload_asiento: array<string, mixed>
+     *     payload_asiento: array<string, mixed>,
+     *     cuentas_pendientes?: bool
      * }
      */
-    public function armarPreview(Comprobante_Proveedor $comprobante): array
+    public function armarPreview(Comprobante_Proveedor $comprobante, bool $permitirCuentasPendientes = false): array
     {
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
@@ -195,15 +206,17 @@ class ComprobanteProveedorAsientoService
         $usaProvisionCom = $modoAsignaRecepcion
             && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
         $fechaFacturaYmd = $this->fechaDocumento($comprobante->fechacomprobante ?? null);
-        $contratoImputacionArticulos = OrdencompraContratoRutaFacturaSupport::imputacionArticulos(
-            $comprobante->ordencompras,
-            $fechaFacturaYmd
-        ) && ! $modoAsignaRecepcion;
         $contratoImputacionManual = OrdencompraContratoRutaFacturaSupport::imputacionManual(
             $comprobante->ordencompras,
             $fechaFacturaYmd
         ) && ! $modoAsignaRecepcion;
         $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
+        // Sin FAR/anticipo/contrato manual: el neto se prorratea a cuentas COMPRAS/GASTOS de la OC.
+        $netoDesdeArticulosOc = ! $usaProvisionCom
+            && ! $facturaAnticipada
+            && ! $contratoImputacionManual
+            && (int) ($comprobante->ordencompra_id ?? 0) > 0
+            && $comprobante->ordencompras !== null;
         $tieneCapexAnticipo = $facturaAnticipada
             ? ComprobanteProveedorFacturaAnticipadaSupport::ocTieneCapex($comprobante->ordencompras)
             : false;
@@ -251,8 +264,8 @@ class ComprobanteProveedorAsientoService
                 );
             }
 
-            // Contrato sin recepción: neto → cuentas de artículos de la OC (prorrateo al final).
-            if ($contratoImputacionArticulos && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            // Con OC asociada (NC/ND/FAC sin COM valuada): neto → cuentas de artículos de la OC.
+            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 $totalNetoConceptos += $monto;
 
                 continue;
@@ -268,7 +281,8 @@ class ComprobanteProveedorAsientoService
                 if ($cuentaManualId <= 0) {
                     throw new RuntimeException(
                         'El contrato imputa el neto con una cuenta del contrato. '
-                        .'Indique la cuenta en el contrato o en el concepto «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'».'
+                        .'Indique la cuenta en el contrato o en la solapa Asiento contable para el concepto «'
+                        .($concepto?->nombre ?? $linea->concepto_ivacompra_id).'».'
                     );
                 }
                 $lineasDebe[] = [
@@ -276,6 +290,9 @@ class ComprobanteProveedorAsientoService
                     'importe' => $monto,
                     'centrocosto_id' => $centrocostoId,
                     'observacion' => $descLineaErp,
+                    'origen' => 'contrato_manual',
+                    'editable_cuenta' => false,
+                    'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
                 ];
 
                 continue;
@@ -288,23 +305,28 @@ class ComprobanteProveedorAsientoService
                     'importe' => $monto,
                     'centrocosto_id' => $centrocostoId,
                     'observacion' => $descLineaErp,
+                    'origen' => 'anticipo',
+                    'editable_cuenta' => false,
+                    'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
                 ];
 
                 continue;
             }
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
-            // Override del renglón (p. ej. ND/NC sin COM o maestro incompleto) antes que el concepto IVA.
+            $esNetoSinReferencia = ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto);
+            // Sin OC/COM: cuenta del renglón o maestro; el neto se puede completar en la solapa asiento.
             $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
             if ($cuentaId <= 0) {
                 $cuentaId = (int) ($concepto?->cuentacontableDebeIdParaEmpresa($empresaId) ?? 0);
             }
-            if ($cuentaId <= 0) {
+            if ($cuentaId <= 0 && ! ($permitirCuentasPendientes && $esNetoSinReferencia)) {
                 throw new RuntimeException(
                     'Falta cuenta contable DEBE en concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'»'
                     .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
-                    .' Configúrela en el maestro Conceptos IVA compra'
-                    .' o en el renglón si no hay COM ni otra regla que la asigne.'
+                    .($esNetoSinReferencia
+                        ? ' Indíquela en la solapa Asiento contable (no hay OC ni COM de referencia).'
+                        : ' Configúrela en el maestro Conceptos IVA compra.')
                 );
             }
 
@@ -313,23 +335,32 @@ class ComprobanteProveedorAsientoService
                 'importe' => $monto,
                 'centrocosto_id' => $centrocostoId,
                 'observacion' => $descLineaErp,
+                'origen' => $esNetoSinReferencia ? 'neto_manual' : 'impuesto',
+                'editable_cuenta' => $esNetoSinReferencia,
+                'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
             ];
         }
 
-        if ($contratoImputacionArticulos && $totalNetoConceptos > 0) {
+        if ($netoDesdeArticulosOc && $totalNetoConceptos > 0) {
             $oc = $comprobante->ordencompras;
             if (! $oc) {
                 throw new RuntimeException(
-                    'El contrato imputa el neto con las cuentas de los artículos de la OC, pero el comprobante no tiene orden de compra.'
+                    'El comprobante tiene orden de compra pero no se pudo cargar para imputar el neto.'
                 );
             }
-            $lineasDebe = array_merge($lineasDebe, OrdencompraContratoRutaFacturaSupport::lineasDebeNetoDesdeArticulosOc(
+            $lineasOc = OrdencompraContratoRutaFacturaSupport::lineasDebeNetoDesdeArticulosOc(
                 $oc,
                 $totalNetoConceptos,
                 (int) ($comprobante->empresa_id ?? 0),
                 $centrocostoId,
                 $descLineaErp
-            ));
+            );
+            foreach ($lineasOc as $lineaOc) {
+                $lineaOc['origen'] = 'oc_articulo';
+                $lineaOc['editable_cuenta'] = false;
+                $lineaOc['concepto_ivacompra_id'] = 0;
+                $lineasDebe[] = $lineaOc;
+            }
         }
 
         if ($usaProvisionCom) {
@@ -375,6 +406,9 @@ class ComprobanteProveedorAsientoService
                     'importe' => $totalProvision,
                     'centrocosto_id' => $centrocostoId,
                     'observacion' => $descLineaErp,
+                    'origen' => 'far',
+                    'editable_cuenta' => false,
+                    'concepto_ivacompra_id' => 0,
                 ];
             }
 
@@ -410,6 +444,9 @@ class ComprobanteProveedorAsientoService
                 );
                 foreach ($lineasDiff as &$lineaDiff) {
                     $lineaDiff['observacion'] = $descDiferenciaErp;
+                    $lineaDiff['origen'] = 'far_diferencia';
+                    $lineaDiff['editable_cuenta'] = false;
+                    $lineaDiff['concepto_ivacompra_id'] = 0;
                 }
                 unset($lineaDiff);
                 if ($diferenciaNeto > 0) {
@@ -458,6 +495,9 @@ class ComprobanteProveedorAsientoService
             'importe' => $totalComprobante,
             'centrocosto_id' => $centrocostoId,
             'observacion' => $descLineaErp,
+            'origen' => 'proveedor',
+            'editable_cuenta' => false,
+            'concepto_ivacompra_id' => 0,
         ]], $lineasHaberExtra);
 
         $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
@@ -479,6 +519,20 @@ class ComprobanteProveedorAsientoService
 
         if ($esNotaCredito) {
             [$lineasDebe, $lineasHaber] = [$lineasHaber, $lineasDebe];
+        }
+
+        $cuentasPendientes = false;
+        foreach (array_merge($lineasDebe, $lineasHaber) as $lineaChk) {
+            if ((int) ($lineaChk['cuentacontable_id'] ?? 0) <= 0) {
+                $cuentasPendientes = true;
+                break;
+            }
+        }
+        if ($cuentasPendientes && ! $permitirCuentasPendientes) {
+            throw new RuntimeException(
+                'Falta indicar la cuenta contable del neto. '
+                .'Complétela en la solapa Asiento contable (comprobante sin OC ni COM de referencia).'
+            );
         }
 
         $tipoAsiento = $this->resolverTipoAsiento();
@@ -506,6 +560,9 @@ class ComprobanteProveedorAsientoService
             'haberes' => [],
             'cotizaciones' => [],
             'observaciones' => [],
+            'editable_cuentas' => [],
+            'concepto_ivacompra_ids' => [],
+            'origenes' => [],
         ];
 
         foreach ($lineasDebe as $linea) {
@@ -516,6 +573,9 @@ class ComprobanteProveedorAsientoService
             $payloadAsiento['haberes'][] = 0;
             $payloadAsiento['cotizaciones'][] = $monedaFactura['cotizacion'];
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
+            $payloadAsiento['editable_cuentas'][] = ! empty($linea['editable_cuenta']);
+            $payloadAsiento['concepto_ivacompra_ids'][] = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            $payloadAsiento['origenes'][] = (string) ($linea['origen'] ?? '');
         }
 
         foreach ($lineasHaber as $linea) {
@@ -526,6 +586,9 @@ class ComprobanteProveedorAsientoService
             $payloadAsiento['haberes'][] = $linea['importe'];
             $payloadAsiento['cotizaciones'][] = $monedaFactura['cotizacion'];
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
+            $payloadAsiento['editable_cuentas'][] = ! empty($linea['editable_cuenta']);
+            $payloadAsiento['concepto_ivacompra_ids'][] = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            $payloadAsiento['origenes'][] = (string) ($linea['origen'] ?? '');
         }
 
         $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
@@ -534,6 +597,7 @@ class ComprobanteProveedorAsientoService
             'total_debe' => $totalDebe,
             'total_haber' => $totalHaber,
             'payload_asiento' => $payloadAsiento,
+            'cuentas_pendientes' => $cuentasPendientes,
         ];
     }
 
@@ -678,16 +742,22 @@ class ComprobanteProveedorAsientoService
     private function previewBorrador(Comprobante_Proveedor $comprobante): array
     {
         try {
-            $preview = $this->armarPreview($comprobante);
+            $preview = $this->armarPreview($comprobante, true);
+            $error = null;
+            if (! empty($preview['cuentas_pendientes'])) {
+                $error = 'Falta indicar la cuenta contable del neto. '
+                    .'Complétela en las líneas editables de esta solapa (comprobante sin OC ni COM de referencia).';
+            }
 
             return [
                 'activo' => true,
-                'error' => null,
+                'error' => $error,
                 'es_preview' => true,
                 'total_comprobante' => round(abs((float) $comprobante->total), 2),
                 'total_debe' => $preview['total_debe'],
                 'total_haber' => $preview['total_haber'],
                 'lineas' => $this->formatearLineasPayload($preview['payload_asiento']),
+                'permite_editar_cuentas' => true,
             ];
         } catch (\Throwable $e) {
             return [
@@ -696,6 +766,7 @@ class ComprobanteProveedorAsientoService
                 'es_preview' => true,
                 'total_comprobante' => round(abs((float) $comprobante->total), 2),
                 'lineas' => [],
+                'permite_editar_cuentas' => false,
             ];
         }
     }
@@ -712,9 +783,20 @@ class ComprobanteProveedorAsientoService
         $haberes = $payload['haberes'] ?? [];
         $centros = $payload['centrocosto_ids'] ?? [];
         $observaciones = $payload['observaciones'] ?? [];
+        $editables = $payload['editable_cuentas'] ?? [];
+        $conceptoIds = $payload['concepto_ivacompra_ids'] ?? [];
+        $origenes = $payload['origenes'] ?? [];
 
         foreach ($cuentas as $i => $cuentaId) {
-            $cuenta = $this->cuentacontableRepository->find((int) $cuentaId);
+            $cuentaId = (int) $cuentaId;
+            $cuentaCodigo = '—';
+            $cuentaNombre = '';
+            if ($cuentaId > 0) {
+                $cuenta = $this->cuentacontableRepository->find($cuentaId);
+                $cuentaCodigo = (string) ($cuenta->codigo ?? '—');
+                $cuentaNombre = (string) ($cuenta->nombre ?? '');
+            }
+
             $ccId = (int) ($centros[$i] ?? 0);
             $ccCodigo = '';
             if ($ccId > 0) {
@@ -724,14 +806,19 @@ class ComprobanteProveedorAsientoService
 
             $debe = (float) ($debes[$i] ?? 0);
             $haber = (float) ($haberes[$i] ?? 0);
+            $editable = ! empty($editables[$i]);
 
             $lineas[] = [
-                'cuenta_codigo' => $cuenta->codigo ?? '—',
-                'cuenta_nombre' => $cuenta->nombre ?? '',
+                'cuentacontable_id' => $cuentaId,
+                'cuenta_codigo' => $cuentaCodigo,
+                'cuenta_nombre' => $cuentaNombre,
                 'centrocosto_codigo' => $ccCodigo,
                 'debe' => $debe > 0 ? $debe : null,
                 'haber' => $haber > 0 ? $haber : null,
                 'observacion' => (string) ($observaciones[$i] ?? ''),
+                'editable_cuenta' => $editable,
+                'concepto_ivacompra_id' => (int) ($conceptoIds[$i] ?? 0),
+                'origen' => (string) ($origenes[$i] ?? ''),
             ];
         }
 

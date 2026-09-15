@@ -185,7 +185,8 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
     {
         $total = 0.0;
         foreach ($this->filasDeudaCliente($cliente_id) as $fila) {
-            $total += abs((float) $fila->total + (float) ($fila->aplicado ?? 0));
+            // Firmado: NC/OR pendientes restan (no abs).
+            $total += (float) $fila->total + (float) ($fila->aplicado ?? 0);
         }
 
         return $total;

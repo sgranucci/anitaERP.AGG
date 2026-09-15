@@ -24,17 +24,20 @@
         Verifique en Contable &rarr; Tipos de asiento que exista la abreviatura <strong>COM</strong> (Compras).
     </div>
     @endif
-    @if(str_contains($errorTexto, 'concepto IVA'))
+    @if(str_contains($errorTexto, 'concepto IVA') || str_contains($errorTexto, 'cuenta contable del neto') || str_contains($errorTexto, 'solapa Asiento'))
     <div class="mt-2 small">
+        @if(str_contains($errorTexto, 'neto') || str_contains($errorTexto, 'Asiento'))
+        Indique la cuenta en las líneas editables de esta solapa
+        (o asocie una OC para tomar las cuentas de sus artículos).
+        @else
         Asigne la cuenta en el maestro
         @if(can('editar-concepto-iva-compra', false))
         <a href="{{ route('concepto_ivacompra') }}" class="text-primary" target="_blank" rel="noopener">Conceptos IVA compra</a>
         @else
         Conceptos IVA compra
         @endif
-        o, si el renglón no tiene COM ni otra regla, en la columna <strong>Cuenta DEBE</strong> de
-        <a href="#cp-solapa-conceptos" class="text-primary js-cp-ir-conceptos-desde-asiento">Conceptos IVA</a>
         y vuelva a recalcular la vista previa.
+        @endif
     </div>
     @endif
     @if(str_contains($errorTexto, 'proveedor no tiene cuenta') && $proveedorId > 0 && can('editar-proveedor', false))
@@ -58,6 +61,9 @@
 @if(! empty($preview['es_preview']))
 <div class="alert alert-info py-2 mb-2">
     Vista previa en tiempo real: el asiento se grabará al <strong>Contabilizar</strong> el comprobante.
+    @if(collect($preview['lineas'] ?? [])->contains(fn ($l) => ! empty($l['editable_cuenta'])))
+    <span class="d-block small mt-1">Sin OC/COM: puede indicar la cuenta del neto en las líneas editables de esta tabla.</span>
+    @endif
 </div>
 @else
 <div class="d-flex flex-wrap align-items-center mb-3" style="gap: 8px;">
@@ -97,11 +103,32 @@
         </thead>
         <tbody>
             @forelse(($preview['lineas'] ?? []) as $linea)
-            <tr>
+            @php
+                $editableCuenta = ! empty($preview['es_preview']) && ! empty($linea['editable_cuenta']);
+                $cuentaLineaId = (int) ($linea['cuentacontable_id'] ?? 0);
+                $conceptoLineaId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            @endphp
+            <tr class="{{ $editableCuenta ? 'cp-asiento-linea-editable' : '' }}"
+                @if($editableCuenta) data-concepto-ivacompra-id="{{ $conceptoLineaId }}" @endif>
                 <td>
+                    @if($editableCuenta)
+                    <div class="tm-cuentacontable-campo cp-asiento-cuenta-editable d-flex flex-nowrap align-items-center" style="gap:4px;"
+                         data-concepto-ivacompra-id="{{ $conceptoLineaId }}">
+                        <input type="hidden" class="cuentacontable_id" value="{{ $cuentaLineaId > 0 ? $cuentaLineaId : '' }}">
+                        <button type="button" title="Elegir cuenta del neto" class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
+                            <i class="fa fa-search text-primary"></i>
+                        </button>
+                        <input type="text" class="codigocuentacontable form-control form-control-sm" style="width:5rem;flex-shrink:0;"
+                               value="{{ $linea['cuenta_codigo'] !== '—' ? ($linea['cuenta_codigo'] ?? '') : '' }}"
+                               placeholder="Cód." autocomplete="off">
+                        <input type="text" class="nombrecuentacontable form-control form-control-sm text-truncate" readonly
+                               value="{{ $linea['cuenta_nombre'] ?? '' }}" placeholder="Cuenta del neto" style="min-width:0;flex:1 1 auto;">
+                    </div>
+                    @else
                     <span class="font-weight-bold">{{ $linea['cuenta_codigo'] ?? '—' }}</span>
                     @if(! empty($linea['cuenta_nombre']))
                     <span class="d-block small text-muted">{{ $linea['cuenta_nombre'] }}</span>
+                    @endif
                     @endif
                 </td>
                 <td>{{ $linea['centrocosto_codigo'] ?: '—' }}</td>

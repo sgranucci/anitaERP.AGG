@@ -247,10 +247,16 @@ class OrdenventaController extends Controller
     {
         can('actualizar-orden-de-venta');
 
+        $estadoAntes = optional($this->ordenventaRepository->find($id))->estado;
         $ordenventa = $this->ordenventaService->actualizaOrdenventa($request, $id);
 
         if ($ordenventa['mensaje'] == 'ok') {
-            return redirect('ordenventa/ordenventa')->with('mensaje', 'Orden de venta actualizada con éxito');
+            $mensaje = 'Orden de venta actualizada con éxito';
+            if ($estadoAntes === 'RECHAZADA') {
+                $mensaje .= '. El estado sigue en RECHAZADA: para volver a enviar al circuito use «Reenviar al árbol de aprobación» en la edición de la OV.';
+            }
+
+            return redirect('ordenventa/ordenventa')->with('mensaje', $mensaje);
         }
 
         return redirect()->back()

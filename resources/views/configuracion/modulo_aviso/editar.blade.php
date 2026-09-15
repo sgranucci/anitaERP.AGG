@@ -65,18 +65,20 @@ Configurar aviso — {{ $tipo->nombre }}
                     <hr>
                     <h5>Destinatarios</h5>
                     <p class="text-muted small">
-                        Podés indicar email directo y/o usuario del sistema. Los filtros de empresa y centro de costo
+                        Podés indicar email directo y/o usuario del sistema (lupa / F1 / código + Enter).
+                        Al elegir un usuario se completa también su mail. Los filtros de empresa y centro de costo
                         limitan el aviso solo a documentos de ese ámbito (vacío = todos).
                         @if($tipo->codigo === 'asignacion_tecnico')
                             En este aviso el mail principal siempre va al usuario del técnico asignado;
                             las filas de esta tabla se envían como copia adicional.
                         @endif
                     </p>
+                    <div class="table-responsive">
                     <table class="table table-sm" id="tabla-destinatarios-aviso">
                         <thead>
                             <tr>
-                                <th>Email</th>
-                                <th>Usuario</th>
+                                <th style="min-width:12rem;">Email</th>
+                                <th style="min-width:18rem;">Usuario</th>
                                 <th>Empresa filtro</th>
                                 <th>CC filtro</th>
                                 <th class="text-center">Activo</th>
@@ -87,35 +89,64 @@ Configurar aviso — {{ $tipo->nombre }}
                             @php
                                 $filasDest = old('destinatarios');
                                 if ($filasDest === null) {
-                                    $filasDest = $tipo->destinatarios->map(fn ($d) => [
-                                        'id' => $d->id,
-                                        'email' => $d->email,
-                                        'usuario_id' => $d->usuario_id,
-                                        'empresa_id' => $d->empresa_id,
-                                        'centrocosto_id' => $d->centrocosto_id,
-                                        'activo' => $d->activo,
-                                    ])->all();
+                                    $filasDest = $tipo->destinatarios->map(function ($d) {
+                                        $u = $d->usuarios;
+
+                                        return [
+                                            'id' => $d->id,
+                                            'email' => $d->email ?: ($u->email ?? ''),
+                                            'usuario_id' => $d->usuario_id,
+                                            'usuario_codigo' => $u->usuario ?? '',
+                                            'usuario_nombre' => $u->nombre ?? '',
+                                            'empresa_id' => $d->empresa_id,
+                                            'centrocosto_id' => $d->centrocosto_id,
+                                            'activo' => $d->activo,
+                                        ];
+                                    })->all();
                                 }
                                 if ($filasDest === [] || $filasDest === null) {
-                                    $filasDest = [['id' => '', 'email' => '', 'usuario_id' => '', 'empresa_id' => '', 'centrocosto_id' => '', 'activo' => true]];
+                                    $filasDest = [[
+                                        'id' => '',
+                                        'email' => '',
+                                        'usuario_id' => '',
+                                        'usuario_codigo' => '',
+                                        'usuario_nombre' => '',
+                                        'empresa_id' => '',
+                                        'centrocosto_id' => '',
+                                        'activo' => true,
+                                    ]];
                                 }
                             @endphp
                             @foreach ($filasDest as $idx => $fila)
                             <tr class="fila-destinatario-aviso">
                                 <td>
                                     <input type="hidden" name="destinatarios[{{ $idx }}][id]" value="{{ $fila['id'] ?? '' }}">
-                                    <input type="email" class="form-control form-control-sm" name="destinatarios[{{ $idx }}][email]"
+                                    <input type="email" class="form-control form-control-sm emailusuario"
+                                        name="destinatarios[{{ $idx }}][email]"
                                         value="{{ $fila['email'] ?? '' }}" placeholder="correo@empresa.com">
                                 </td>
                                 <td>
-                                    <select class="form-control form-control-sm" name="destinatarios[{{ $idx }}][usuario_id]">
-                                        <option value="">—</option>
-                                        @foreach ($usuario_query as $u)
-                                        <option value="{{ $u->id }}" @if((string)($fila['usuario_id'] ?? '') === (string)$u->id) selected @endif>
-                                            {{ $u->nombre }} ({{ $u->email }})
-                                        </option>
-                                        @endforeach
-                                    </select>
+                                    <div class="tm-usuario-campo d-flex flex-nowrap align-items-center" style="gap:4px;">
+                                        <input type="hidden" class="usuario_id_arbol"
+                                            name="destinatarios[{{ $idx }}][usuario_id]"
+                                            value="{{ $fila['usuario_id'] ?? '' }}">
+                                        <input type="text"
+                                            class="usuario_codigo_arbol form-control form-control-sm"
+                                            value="{{ $fila['usuario_codigo'] ?? '' }}"
+                                            placeholder="Cód." autocomplete="off"
+                                            style="width:5.5rem;flex-shrink:0;"
+                                            title="Login o ID; Enter valida; F1 consulta">
+                                        <button type="button" title="Consulta usuarios (F1)"
+                                            class="btn-accion-tabla consultausuario tooltipsC flex-shrink-0"
+                                            data-omitir_filtro_empresa="1">
+                                            <i class="fa fa-search text-primary"></i>
+                                        </button>
+                                        <input type="text"
+                                            class="nombreusuario form-control form-control-sm"
+                                            value="{{ $fila['usuario_nombre'] ?? '' }}"
+                                            placeholder="Nombre" readonly
+                                            style="min-width:0;flex:1 1 auto;">
+                                    </div>
                                 </td>
                                 <td>
                                     <select class="form-control form-control-sm" name="destinatarios[{{ $idx }}][empresa_id]">
@@ -147,6 +178,7 @@ Configurar aviso — {{ $tipo->nombre }}
                             @endforeach
                         </tbody>
                     </table>
+                    </div>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-agregar-destinatario">
                         <i class="fa fa-plus"></i> Agregar destinatario
                     </button>
@@ -158,17 +190,32 @@ Configurar aviso — {{ $tipo->nombre }}
         </div>
     </div>
 </div>
+@include('includes.admin.modalconsultausuario')
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}" type="text/javascript"></script>
 <script>
 (function () {
+    window._consultaUsuarioOmitirFiltroEmpresaFijo = true;
+    window._consultaUsuarioOmitirFiltroEmpresa = true;
+
     var contador = {{ count($filasDest) }};
+
+    function reiniciarEventosUsuario() {
+        if (typeof activa_eventos_consultausuario === 'function') {
+            activa_eventos_consultausuario();
+        }
+    }
+
     $('#btn-agregar-destinatario').on('click', function () {
         var $tbody = $('#tabla-destinatarios-aviso tbody');
         var $primera = $tbody.find('tr.fila-destinatario-aviso').first().clone();
-        $primera.find('input[type=email]').val('');
+        $primera.find('input[type=email], .emailusuario').val('');
         $primera.find('input[type=hidden][name*="[id]"]').val('');
+        $primera.find('.usuario_id_arbol').val('');
+        $primera.find('.usuario_codigo_arbol').val('');
+        $primera.find('.nombreusuario').val('');
         $primera.find('select').prop('selectedIndex', 0);
         $primera.find('input[type=checkbox]').prop('checked', true);
         $primera.find('[name]').each(function () {
@@ -179,15 +226,25 @@ Configurar aviso — {{ $tipo->nombre }}
         });
         $tbody.append($primera);
         contador++;
+        reiniciarEventosUsuario();
     });
+
     $(document).on('click', '.btn-quitar-destinatario', function () {
         var $rows = $('#tabla-destinatarios-aviso tbody tr');
         if ($rows.length <= 1) {
-            $(this).closest('tr').find('input[type=email]').val('');
-            $(this).closest('tr').find('select').prop('selectedIndex', 0);
+            var $tr = $(this).closest('tr');
+            $tr.find('input[type=email], .emailusuario').val('');
+            $tr.find('.usuario_id_arbol').val('');
+            $tr.find('.usuario_codigo_arbol').val('');
+            $tr.find('.nombreusuario').val('');
+            $tr.find('select').prop('selectedIndex', 0);
             return;
         }
         $(this).closest('tr').remove();
+    });
+
+    $(function () {
+        reiniciarEventosUsuario();
     });
 })();
 </script>

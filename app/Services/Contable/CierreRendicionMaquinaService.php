@@ -10,6 +10,7 @@ use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CierreRendicionMaquinaAsientoSupport;
+use App\Support\Contable\CierreRendicionMaquinaAsientosMesSupport;
 use App\Support\Contable\CierreRendicionMaquinaCierreLock;
 use App\Support\Contable\CierreRendicionMaquinaConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
@@ -681,6 +682,17 @@ class CierreRendicionMaquinaService
     {
         return app(CierreRendicionMaquinaVentaListadoSupport::class)
             ->generar($empresaId, $fechaDesde, $fechaHasta);
+    }
+
+    /**
+     * Asientos emitidos por cierres de máquinas en un mes calendario.
+     *
+     * @return array<string, mixed>
+     */
+    public function reporteAsientosMes(int $empresaId, int $mes, int $anio): array
+    {
+        return app(CierreRendicionMaquinaAsientosMesSupport::class)
+            ->generar($empresaId, $mes, $anio);
     }
 
     /**

@@ -183,7 +183,6 @@ $(function () {
         }
         setModoCargaSinRecepcion(mensajeSinComPorTipo(tipo));
         $('#cp-boton-recepciones-com').closest('.nav-item').hide();
-        $('#cp-banner-com-datos').hide();
         $('#cp-bloque-recepciones-com').hide();
     }
 
@@ -236,6 +235,14 @@ $(function () {
         actualizarVisibilidadEditorCuentaDebe($row);
     }
 
+    function tieneOrdenCompra() {
+        var fromData = parseInt($form.attr('data-ordencompra-id') || '0', 10) || 0;
+        if (fromData > 0) {
+            return true;
+        }
+        return (parseInt($('#ordencompra_id').val() || $('input[name="ordencompra_id"]').val() || '0', 10) || 0) > 0;
+    }
+
     /**
      * La columna Cuenta DEBE solo se muestra si el renglón no está cubierto por COM
      * ni por otra regla con cuenta ya resuelta (maestro, contrato, artículos OC).
@@ -245,7 +252,8 @@ $(function () {
         if (esModoAsignaRecepcion() && esNeto) {
             return true;
         }
-        if (contratoImputacionArticulos() && esNeto) {
+        // OC asociada: neto → cuentas de artículos (igual FAC diferencia / contrato).
+        if (tieneOrdenCompra() && esNeto && !contratoImputacionManual()) {
             return true;
         }
         return false;
@@ -290,6 +298,11 @@ $(function () {
         if (reglaCubreCuentaDebeSinEditor(tipo)) {
             return false;
         }
+        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0;
+        // Neto sin OC/COM: la cuenta se elige en la solapa Asiento contable.
+        if (esNeto && !contratoImputacionManual()) {
+            return false;
+        }
         var pre = cuentaPreasignadaPorRegla($row);
         if (pre && pre.id > 0) {
             return false;
@@ -297,7 +310,7 @@ $(function () {
         if (pre && pre.id === -1) {
             return false;
         }
-        // Sin COM ni cuenta preasignada: mostrar para carga manual / aviso.
+        // Impuestos u otros sin cuenta preasignada: editor en conceptos.
         return true;
     }
 
@@ -371,10 +384,14 @@ $(function () {
         if (esModoAsignaRecepcion() && esNeto) {
             return false;
         }
-        if (contratoImputacionArticulos() && esNeto) {
+        if (tieneOrdenCompra() && esNeto && !contratoImputacionManual()) {
             return false;
         }
         if (contratoImputacionManual() && esNeto) {
+            return false;
+        }
+        // Neto sin referencia: se completa en solapa asiento, no exige cuenta en conceptos.
+        if (esNeto) {
             return false;
         }
         return true;
@@ -471,7 +488,7 @@ $(function () {
 
             var meta = conceptosMeta[conceptoId] || {};
             var esNeto = TIPOS_NETO.indexOf(String(meta.tipoconcepto || '')) >= 0;
-            if (contratoImputacionArticulos() && esNeto) {
+            if ((tieneOrdenCompra() || contratoImputacionArticulos()) && esNeto && !contratoImputacionManual()) {
                 $aviso.addClass('text-muted').text('OC').attr('title', 'Neto: cuenta de los artículos de la OC');
                 return;
             }
@@ -487,6 +504,11 @@ $(function () {
                 } else {
                     $aviso.addClass('text-success fa fa-check').attr('title', 'Cuenta DEBE del contrato / renglón');
                 }
+                return;
+            }
+            if (esNeto) {
+                $aviso.addClass('text-muted').text('Asiento')
+                    .attr('title', 'Neto sin OC/COM: indique la cuenta en la solapa Asiento contable');
                 return;
             }
             if (!conceptoRequiereCuentaDebe(meta.tipoconcepto)) {
@@ -746,7 +768,31 @@ $(function () {
         ).show();
     }
 
+    function sincronizarCuentasAsientoAConceptos() {
+        $('.cp-asiento-cuenta-editable').each(function () {
+            var $campo = $(this);
+            var conceptoId = parseInt($campo.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+            if (conceptoId <= 0) {
+                return;
+            }
+            var cuentaId = parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0;
+            var datos = {
+                id: cuentaId,
+                codigo: String($campo.find('.codigocuentacontable').val() || ''),
+                nombre: String($campo.find('.nombrecuentacontable').val() || '')
+            };
+            $('#tbody-concepto-table tr.item-concepto').each(function () {
+                var $row = $(this);
+                if (parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) !== conceptoId) {
+                    return;
+                }
+                setCuentaDebeEnFila($row, datos);
+            });
+        });
+    }
+
     function serializarFormularioPreview() {
+        sincronizarCuentasAsientoAConceptos();
         sincronizarTotalesDesdeConceptos();
 
         // Armar payload explícito: montos en decimal (evita es-AR y desfase de #total).
@@ -1027,16 +1073,6 @@ $(function () {
         $(this).trigger('blur');
     });
 
-    $(document).on('click', '#cp-abrir-solapa-com-desde-datos, #cp-abrir-solapa-com-desde-oc', function (e) {
-        e.preventDefault();
-        abrirSolapaCom();
-    });
-
-    $(document).on('click', '.cp-abrir-solapa-oc', function (e) {
-        e.preventDefault();
-        abrirSolapaOc();
-    });
-
     $(document).on('click', '#cp-refrescar-preview-conceptos', function (e) {
         e.preventDefault();
         window.refrescarPreviewAsiento(true);
@@ -1076,31 +1112,17 @@ $(function () {
 
         var sumaCom = 0;
         var checks = 0;
-        var etiquetasCom = [];
         $('.cp-com-check:checked').each(function () {
             checks++;
             var $fila = $(this).closest('.cp-com-fila');
             sumaCom += parseFloat($fila.attr('data-importe-com')) || 0;
             var id = String($fila.attr('data-recepcion-id'));
-            var numero = String($fila.attr('data-numerorecepcion') || '').trim();
-            etiquetasCom.push(numero ? (numero + ' (ID ' + id + ')') : ('#' + id));
             $('.cp-com-articulos-bloque[data-recepcion-id="' + id + '"]').show();
         });
         $('.cp-com-check:not(:checked)').each(function () {
             var id = String($(this).closest('.cp-com-fila').attr('data-recepcion-id'));
             $('.cp-com-articulos-bloque[data-recepcion-id="' + id + '"]').hide();
         });
-
-        var $bannerTexto = $('#cp-banner-com-texto');
-        if ($bannerTexto.length) {
-            if (etiquetasCom.length > 0) {
-                $bannerTexto.html('COM asignada(s): <strong>' + etiquetasCom.join(', ') + '</strong>.');
-            } else if (String($('#cp-banner-com-datos').attr('data-com-obligatoria') || '') === '1') {
-                $bannerTexto.text('Debe asignar recepción(es) COM obligatoria(s).');
-            } else {
-                $bannerTexto.text('Este comprobante usa modo asignación de recepción COM.');
-            }
-        }
 
         if (checks > 0) {
             $('#cp-com-articulos-vacio').hide();
@@ -1166,6 +1188,16 @@ $(function () {
     $(document).on('change', '#tbody-concepto-table .concepto_ivacompra_id, #tbody-concepto-table .monto, #tbody-concepto-table .cp-celda-cuenta-debe .cuentacontable_id', function () {
         marcarAvisosConceptosLocales();
         programarPreviewAsiento();
+    });
+
+    $(document).on('change', '.cp-asiento-cuenta-editable .cuentacontable_id', function () {
+        sincronizarCuentasAsientoAConceptos();
+        marcarAvisosConceptosLocales();
+        window.refrescarPreviewAsiento(true);
+    });
+
+    $form.on('submit', function () {
+        sincronizarCuentasAsientoAConceptos();
     });
 
     $(document).on('cp:concepto-ivacompra-elegido', function (e, data) {

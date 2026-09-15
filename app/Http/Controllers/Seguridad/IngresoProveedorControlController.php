@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Seguridad;
 
+use App\Exports\Seguridad\IngresoProveedorControlListadoExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Seguridad\IngresoProveedorControlSupport;
 use App\Support\Seguridad\IngresoProveedorListadoFiltros;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
 
 class IngresoProveedorControlController extends Controller
@@ -34,6 +36,48 @@ class IngresoProveedorControlController extends Controller
         ]);
     }
 
+    public function listar(Request $request, $formato = null)
+    {
+        if (! can('autorizar-ingreso-proveedor', false) && ! can('listar-ingreso-proveedor', false)) {
+            can('listar-ingreso-proveedor');
+        }
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = $this->resolverFiltros($request);
+        $filtrosQuery = IngresoProveedorListadoFiltros::paraQueryString($filtros);
+
+        switch ($formato) {
+            case 'PDF':
+                $filas = IngresoProveedorControlSupport::grillaDelDia($filtros)
+                    ->map(fn ($p) => IngresoProveedorControlSupport::payloadPersona($p))
+                    ->values()
+                    ->all();
+                $view = \View::make('seguridad.ingreso_proveedor.control_listado', compact('filas'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $pdf = \PDF::loadHTML($view)->setPaper('legal', 'landscape');
+                $pdf->save($path.'/listado_control_ingreso.pdf');
+
+                return $pdf->download('listado_control_ingreso.pdf');
+            case 'EXCEL':
+                return Excel::download(
+                    (new IngresoProveedorControlListadoExport)->parametros($filtros),
+                    'listado_control_ingreso.xlsx'
+                );
+            case 'CSV':
+                return Excel::download(
+                    (new IngresoProveedorControlListadoExport)->parametros($filtros),
+                    'listado_control_ingreso.csv',
+                    \Maatwebsite\Excel\Excel::CSV
+                );
+            default:
+                return redirect()->route('control_ingreso_proveedor', $filtrosQuery);
+        }
+    }
+
     public function buscarDni(Request $request): JsonResponse
     {
         can('autorizar-ingreso-proveedor');
@@ -54,8 +98,7 @@ class IngresoProveedorControlController extends Controller
         if (! $persona) {
             return response()->json([
                 'ok' => false,
-                'mensaje' => 'No hay un ticket abierto para el DNI '.$dni
-                    .($empresaId ? ' en la empresa seleccionada.' : '.'),
+                'mensaje' => IngresoProveedorControlSupport::mensajeDniNoEncontrado($dni, $empresaId ?: null),
             ], 404);
         }
 

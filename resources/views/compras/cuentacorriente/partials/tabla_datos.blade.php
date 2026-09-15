@@ -53,7 +53,9 @@
             $importes = CuentacorrienteSaldosPorMoneda::importesParaGrilla(
                 $data,
                 $enPesos,
-                static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                $modoDeuda
+                    ? static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendiente((float) $total, $aplicado)
+                    : static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
             );
             $totalMostrar = $importes['total'];
             $aplicadoMostrar = $importes['aplicado'];
@@ -86,10 +88,10 @@
             <td>{{ $etiquetaComprobante }}</td>
             <td>{{ $importes['etiqueta_moneda'] }}</td>
             @if ($modoDeuda)
-                <td class="text-right" style="text-align: right;">{{ $formatearMonto(abs($totalMostrar), $abreviaturaFila) }}</td>
+                <td class="text-right" style="text-align: right;">{{ $formatearMonto($totalMostrar, $abreviaturaFila) }}</td>
                 <td class="text-right" style="text-align: right;">
                     @if ($aplicadoMostrar != 0)
-                        {{ $formatearMonto(abs($aplicadoMostrar), $abreviaturaFila) }}
+                        {{ $formatearMonto($aplicadoMostrar, $abreviaturaFila) }}
                     @endif
                 </td>
                 <td class="text-right" style="text-align: right;">{{ $formatearMonto($saldoPendiente, $data->monedas->abreviatura ?? $abreviaturaFila) }}</td>

@@ -44,6 +44,44 @@ final class PrecargaProveedorCentrocostoDestinoSupport
         return $cabecera;
     }
 
+    /**
+     * Todos los CC destino de líneas Anita (orden de aparición), sin repetir.
+     *
+     * @param  iterable<int, object>  $itemsOrdenCompra
+     * @return list<string>
+     */
+    public static function codigosTodosDesdeOcAnita(object $cabecera, iterable $itemsOrdenCompra): array
+    {
+        $out = [];
+        $seen = [];
+        foreach ($itemsOrdenCompra as $item) {
+            $linea = self::normalizarCodigo($item->penvp_ccosto_dest ?? null)
+                ?: self::normalizarCodigo($item->penvp_ccosto ?? null);
+            if ($linea === '' || isset($seen[$linea])) {
+                continue;
+            }
+            $seen[$linea] = true;
+            $out[] = $linea;
+        }
+
+        foreach ([
+            self::normalizarCodigo($cabecera->penmp_ccosto_dest ?? null),
+            self::normalizarCodigo($cabecera->penmp_ccosto ?? null),
+        ] as $cab) {
+            if ($cab !== '' && ! isset($seen[$cab])) {
+                $seen[$cab] = true;
+                $out[] = $cab;
+            }
+        }
+
+        return $out;
+    }
+
+    public static function normalizarCodigoPublico(mixed $valor): string
+    {
+        return self::normalizarCodigo($valor);
+    }
+
     private static function normalizarCodigo(mixed $valor): string
     {
         $codigo = trim((string) $valor);

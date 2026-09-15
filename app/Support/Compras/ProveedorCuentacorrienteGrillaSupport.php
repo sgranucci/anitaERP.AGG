@@ -15,12 +15,16 @@ final class ProveedorCuentacorrienteGrillaSupport
             return $fila->pagoproveedores->etiquetaComprobante();
         }
 
-        // Imports Anita: el crédito del pago queda linkeado a la factura (FDT) y total < 0.
-        // No tocar créditos reales (CDT/NC/etc.): ahí la etiqueta es el propio comprobante.
-        if ((float) ($fila->total ?? 0) < 0 && self::comprobanteEsDeudaFactura($fila)) {
-            $etiquetaOp = self::etiquetaCreditoDesdeAplicacion($fila);
-            if ($etiquetaOp !== null) {
-                return $etiquetaOp;
+        // Imports Anita: CC sintética de OPP/OPA (sin cuota ni pago) o crédito linkeado a factura.
+        // La etiqueta debe ser la OP de la aplicación, nunca el comprobante de deuda/NC ajeno.
+        if ((float) ($fila->total ?? 0) < 0) {
+            $esSinteticoPago = (int) ($fila->comprobante_proveedor_cuota_id ?? 0) <= 0
+                && (int) ($fila->pagoproveedor_id ?? 0) <= 0;
+            if ($esSinteticoPago || self::comprobanteEsDeudaFactura($fila)) {
+                $etiquetaOp = self::etiquetaCreditoDesdeAplicacion($fila);
+                if ($etiquetaOp !== null) {
+                    return $etiquetaOp;
+                }
             }
         }
 
@@ -29,6 +33,11 @@ final class ProveedorCuentacorrienteGrillaSupport
             $tipo = $comprobante->tipotransaccion_compras->nombre ?? 'Comprobante';
 
             return trim($tipo.' '.$comprobante->letra.$comprobante->sucursal.'-'.$comprobante->numerocomprobante);
+        }
+
+        $etiquetaOp = self::etiquetaCreditoDesdeAplicacion($fila);
+        if ($etiquetaOp !== null) {
+            return $etiquetaOp;
         }
 
         return 'Movimiento #'.(int) $fila->id;

@@ -77,23 +77,40 @@ class ComprobanteProveedorCuentacorrienteService
 
     private function autogenerarCuotasSiFaltan(Comprobante_Proveedor $comprobante): void
     {
-        if (! $comprobante->ordencompra_id || ! $comprobante->ordencompras) {
-            return;
-        }
-
         $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
         $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
+        $fechaBase = $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $cuotas = [];
 
-        $meta = $this->condicionPagoDesdeOc->resolverDesdeOrdencompra(
-            $comprobante->ordencompras,
-            $comprobante->ordencompra_comprobante_id,
-            (float) $comprobante->total,
-            $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d'),
-            $monedaFacturaId,
-            $cotizacionFactura,
-        );
+        if ($comprobante->ordencompra_id && $comprobante->ordencompras) {
+            $meta = $this->condicionPagoDesdeOc->resolverDesdeOrdencompra(
+                $comprobante->ordencompras,
+                $comprobante->ordencompra_comprobante_id,
+                (float) $comprobante->total,
+                $fechaBase,
+                $monedaFacturaId,
+                $cotizacionFactura,
+            );
+            $cuotas = $meta['cuotas'];
 
-        foreach ($meta['cuotas'] as $cuota) {
+            if (! $comprobante->condicionpago_id && ! empty($meta['condicionpago_id'])) {
+                $comprobante->forceFill(['condicionpago_id' => $meta['condicionpago_id']])->save();
+            }
+        }
+
+        // Sin OC o sin plan usable: una cuota al total (permite contabilizar / CC / promov).
+        if ($cuotas === [] && abs((float) ($comprobante->total ?? 0)) >= 0.0001) {
+            $cuotas[] = [
+                'numero_cuota' => 1,
+                'fechavencimiento' => $fechaBase,
+                'monto' => round((float) $comprobante->total, 4),
+                'formapago_id' => 1,
+                'detalle' => null,
+                'ordencompra_comprobante_cuota_id' => null,
+            ];
+        }
+
+        foreach ($cuotas as $cuota) {
             Comprobante_Proveedor_Cuota::query()->create([
                 'comprobante_proveedor_id' => $comprobante->id,
                 'numero_cuota' => (int) ($cuota['numero_cuota'] ?? 1),

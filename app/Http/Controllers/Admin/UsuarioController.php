@@ -288,6 +288,7 @@ class UsuarioController extends Controller
             'id' => $usuario->id,
             'nombre' => $usuario->nombre,
             'usuario' => $usuario->usuario,
+            'email' => (string) ($usuario->email ?? ''),
             'empresa_ok' => $empresa_ok,
         ]);
     }

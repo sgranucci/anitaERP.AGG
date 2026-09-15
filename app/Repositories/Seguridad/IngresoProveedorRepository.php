@@ -63,7 +63,7 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
 
         $query->orderByDesc('ingreso_proveedor.fecha')->orderByDesc('ingreso_proveedor.id');
 
-        return $flPaginando ? $query->paginate(10) : $query->get();
+        return $flPaginando ? $query->paginate(25) : $query->get();
     }
 
     public function create(array $data): IngresoProveedor

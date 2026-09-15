@@ -225,6 +225,13 @@ function aplicarUsuarioResuelto($row, data, opciones) {
     if ($nom.length) {
         $nom.val(data.nombre);
     }
+    var $mail = $row.find('.emailusuario');
+    if (! $mail.length) {
+        $mail = $row.closest('tr').find('.emailusuario');
+    }
+    if ($mail.length && data.email) {
+        $mail.val(data.email);
+    }
 
     return true;
 }
@@ -270,6 +277,11 @@ function limpiarCamposUsuarioConsulta($cont) {
     $cont.find('.usuario_id_arbol').val('');
     $cont.find('.usuario_id').not('.usuario_id_arbol').val('');
     $cont.find('.nombreusuario').val('');
+    var $mail = $cont.find('.emailusuario');
+    if (! $mail.length) {
+        $mail = $cont.closest('tr').find('.emailusuario');
+    }
+    $mail.val('');
 }
 
 $(document).on('input', '.usuario_codigo_arbol', function () {
@@ -277,6 +289,11 @@ $(document).on('input', '.usuario_codigo_arbol', function () {
     var $cont = contenedorUsuarioConsulta($(this));
     $cont.find('.usuario_id_arbol').val('');
     $cont.find('.nombreusuario').val('');
+    var $mail = $cont.find('.emailusuario');
+    if (! $mail.length) {
+        $mail = $cont.closest('tr').find('.emailusuario');
+    }
+    $mail.val('');
 });
 
 $(document).on('blur', '.usuario_codigo_arbol', function () {
@@ -331,6 +348,7 @@ $(document).on('click', '.eligeconsultausuario', function () {
     var seleccion = $trModal.find('.id').first().text().trim();
     var nombre = $trModal.find('.nombre').first().text().trim();
     var codigo = $trModal.find('.usuariologin').first().text().trim();
+    var email = $trModal.find('.email').first().text().trim();
 
     if (ptrusuario_id && $(ptrusuario_id).length) {
         $(ptrusuario_id).val(seleccion);
@@ -339,6 +357,20 @@ $(document).on('click', '.eligeconsultausuario', function () {
     if (ptrusuario_codigo && $(ptrusuario_codigo).length) {
         $(ptrusuario_codigo).val(codigo);
         $(ptrusuario_codigo).removeData('usuarioCodigoInvalido');
+    }
+
+    var $contSel = null;
+    if (ptrusuario_id && $(ptrusuario_id).length) {
+        $contSel = contenedorUsuarioConsulta($(ptrusuario_id));
+    } else if (ptrnombreusuario && $(ptrnombreusuario).length) {
+        $contSel = contenedorUsuarioConsulta($(ptrnombreusuario));
+    }
+    if ($contSel && $contSel.length && email) {
+        var $mailSel = $contSel.find('.emailusuario');
+        if (! $mailSel.length) {
+            $mailSel = $contSel.closest('tr').find('.emailusuario');
+        }
+        $mailSel.val(email);
     }
 
     if ($("#usuario_id").length) {

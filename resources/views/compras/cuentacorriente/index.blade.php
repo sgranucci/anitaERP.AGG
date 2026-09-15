@@ -167,7 +167,9 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                     $importes = CuentacorrienteSaldosPorMoneda::importesParaGrilla(
                                         $data,
                                         $enPesos,
-                                        static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                                        $modoCuentaCorriente
+                                            ? static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                                            : static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendiente((float) $total, $aplicado)
                                     );
                                     $totalMostrar = $importes['total'];
                                     $aplicadoMostrar = $importes['aplicado'];
@@ -228,11 +230,11 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                         </td>
                                     @else
                                         <td style="text-align: right;">
-                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto(abs($totalMostrar), $abreviaturaFila) }}
+                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto($totalMostrar, $abreviaturaFila) }}
                                         </td>
                                         <td style="text-align: right;">
                                             @if ($aplicadoMostrar != 0)
-                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto(abs($aplicadoMostrar), $abreviaturaFila) }}
+                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto($aplicadoMostrar, $abreviaturaFila) }}
                                             @endif
                                         </td>
                                         <td style="text-align: right;">
@@ -264,11 +266,11 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                             </tfoot>
                         @else
                             @php
-                                $pendienteAbsoluto = static fn ($fila) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $fila->total, $fila->aplicado ?? null);
-                                $deudaPantalla = CuentacorrienteSaldosPorMoneda::totalesEnPantalla($cuentacorriente, $pendienteAbsoluto);
+                                $pendienteFirmado = static fn ($fila) => ProveedorCuentacorrienteGrillaSupport::saldoPendiente((float) $fila->total, $fila->aplicado ?? null);
+                                $deudaPantalla = CuentacorrienteSaldosPorMoneda::totalesEnPantalla($cuentacorriente, $pendienteFirmado);
                                 $deudaPantallaPesos = CuentacorrienteSaldosPorMoneda::deudaPantallaEnPesos(
                                     $cuentacorriente,
-                                    static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                                    static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendiente((float) $total, $aplicado)
                                 );
                             @endphp
                             <tfoot>

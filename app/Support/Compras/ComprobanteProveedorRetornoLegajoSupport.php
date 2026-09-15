@@ -73,6 +73,14 @@ final class ComprobanteProveedorRetornoLegajoSupport
             return route('editar_ordencompra', ['id' => $ocId]);
         }
 
+        // CxP: al volver siempre la selección default (todas las empresas + Listo para cargar).
+        if (OrdencompraSectorVisibilidadSupport::esUsuarioSectorCuentasAPagar()) {
+            $params = OrdencompraLegajoBandejaFiltros::defaultsCuentasAPagarQuery();
+            OrdencompraLegajoBandejaFiltros::persistir($params);
+
+            return route('consultar_legajo_compra', $params);
+        }
+
         return route('consultar_legajo_compra', [
             'vista' => OrdencompraLegajoBandejaFiltros::VISTA_CXP,
         ]);

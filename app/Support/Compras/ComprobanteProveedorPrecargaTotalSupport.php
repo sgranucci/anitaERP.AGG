@@ -6,8 +6,8 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use RuntimeException;
 
 /**
- * Candado: si la factura nace de una precarga, el total no puede desviarse del PDF/precarga.
- * Sin precarga no hay referencia externa confiable → no se aplica.
+ * Candado: si la factura nace de una precarga con total usable, no puede desviarse.
+ * Sin precarga, o precarga sin total (Scan Anita manual / PDF sin OCR), no se aplica.
  */
 final class ComprobanteProveedorPrecargaTotalSupport
 {
@@ -22,10 +22,15 @@ final class ComprobanteProveedorPrecargaTotalSupport
 
         $precarga = Precarga_Comprobante_Proveedor::query()
             ->whereKey($precargaId)
-            ->first(['id', 'total', 'subtotal']);
+            ->first(['id', 'total', 'subtotal', 'origen_entrada']);
 
         if (! $precarga) {
             throw new RuntimeException('La precarga #'.$precargaId.' vinculada a la factura no existe.');
+        }
+
+        // Scan Anita / legajo sin OCR: total queda en 0 — no hay referencia externa confiable.
+        if (! self::precargaTieneTotalUsable($precarga)) {
+            return;
         }
 
         $totalFacturaAbs = round(abs($totalFactura), 2);
@@ -43,5 +48,15 @@ final class ComprobanteProveedorPrecargaTotalSupport
             .'). Diferencia: '.number_format($diferencia, 2, ',', '.')
             .'. Si el PDF/precarga está mal, corregí la precarga; no se puede grabar un total distinto.'
         );
+    }
+
+    public static function precargaTieneTotalUsable(?Precarga_Comprobante_Proveedor $precarga): bool
+    {
+        if (! $precarga) {
+            return false;
+        }
+
+        return abs((float) ($precarga->total ?? 0)) > self::TOLERANCIA
+            || abs((float) ($precarga->subtotal ?? 0)) > self::TOLERANCIA;
     }
 }

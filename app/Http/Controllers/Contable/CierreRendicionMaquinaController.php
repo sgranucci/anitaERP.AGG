@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exports\Contable\CierreRendicionMaquinaAsientosMesExport;
 use App\Exports\Contable\CierreRendicionMaquinaConciliacionFlashExport;
 use App\Exports\Contable\CierreRendicionMaquinaListadoExport;
 use App\Exports\Contable\CierreRendicionMaquinaVentaListadoExport;
@@ -337,6 +338,132 @@ class CierreRendicionMaquinaController extends Controller
         }
 
         return redirect()->route('cierre_rendicion_maquina_venta_listado', $redirectQuery);
+    }
+
+    public function asientosMes(Request $request)
+    {
+        can('listar-cierre-rendicion-maquina-contable');
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+        $empresaId = (int) $request->input('empresa_id', 0);
+
+        if ($empresaId <= 0 && count($asignadas) === 1) {
+            $primera = $empresaQuery->first();
+            if ($primera !== null) {
+                $empresaId = (int) $primera->id;
+            }
+        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
+            $primera = $empresaQuery->first();
+            $empresaId = $primera !== null ? (int) $primera->id : 0;
+        }
+
+        $mes = (int) $request->input('mes', 0);
+        $anio = (int) $request->input('anio', 0);
+        $consultar = $request->boolean('consultar');
+
+        if (! $consultar || $mes <= 0 || $anio <= 0) {
+            $mes = $mes > 0 ? $mes : (int) now()->month;
+            $anio = $anio > 0 ? $anio : (int) now()->year;
+        }
+
+        $resultado = null;
+        $errorReporte = null;
+
+        if ($consultar && $empresaId > 0 && $mes >= 1 && $mes <= 12 && $anio >= 2000) {
+            try {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+                $resultado = $this->service->reporteAsientosMes($empresaId, $mes, $anio);
+            } catch (\Throwable $e) {
+                $errorReporte = $e->getMessage();
+            }
+        }
+
+        $filtrosQuery = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'mes' => $mes > 0 ? $mes : null,
+            'anio' => $anio > 0 ? $anio : null,
+            'consultar' => $consultar ? 1 : null,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        return view('contable.cierre_rendicion_maquina.asientos_mes', [
+            'empresa_query' => $empresaQuery,
+            'empresa_id' => $empresaId,
+            'mes' => $mes,
+            'anio' => $anio,
+            'consultar' => $consultar,
+            'resultado' => $resultado,
+            'error_reporte' => $errorReporte,
+            'filtrosQuery' => $filtrosQuery,
+            'retornoListadoQuery' => $this->resolverRetornoListadoQuery($request),
+        ]);
+    }
+
+    public function listarAsientosMes(Request $request, ?string $formato = null)
+    {
+        can('exportar-cierre-rendicion-maquina-contable');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $mes = (int) $request->input('mes', 0);
+        $anio = (int) $request->input('anio', 0);
+
+        $redirectQuery = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'mes' => $mes > 0 ? $mes : null,
+            'anio' => $anio > 0 ? $anio : null,
+            'consultar' => 1,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        if ($empresaId <= 0 || $mes < 1 || $mes > 12 || $anio < 2000) {
+            return redirect()
+                ->route('cierre_rendicion_maquina_asientos_mes', $redirectQuery)
+                ->with('mensaje_error', 'Indique empresa, mes y año para exportar.');
+        }
+
+        try {
+            $resultado = $this->service->reporteAsientosMes($empresaId, $mes, $anio);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('cierre_rendicion_maquina_asientos_mes', $redirectQuery)
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('contable.cierre_rendicion_maquina.asientos_mes_listado', [
+                    'resultado' => $resultado,
+                    'esExcel' => false,
+                    'filas' => CierreRendicionMaquinaAsientosMesExport::aplanarFilas($resultado),
+                ])->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'listado_asientos_cierre_maquina';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+            case 'CSV':
+                $mime = $formato === 'CSV' ? Excel::CSV : Excel::XLSX;
+                $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
+
+                return \Maatwebsite\Excel\Facades\Excel::download(
+                    new CierreRendicionMaquinaAsientosMesExport($resultado, $formato === 'CSV'),
+                    'asientos_cierre_maquina.'.$ext,
+                    $mime,
+                );
+        }
+
+        return redirect()->route('cierre_rendicion_maquina_asientos_mes', $redirectQuery);
     }
 
     public function apiPendientesCierre(Request $request): JsonResponse

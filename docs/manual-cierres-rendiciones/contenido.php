@@ -57,11 +57,13 @@ return [
             'herramientas_grupos' => [
                 ['titulo' => 'Filtros y listado', 'clave' => 'maquina_listado'],
                 ['titulo' => 'Acciones por grupo (día)', 'clave' => 'maquina_grupo_acciones'],
+                ['titulo' => 'Asientos del mes', 'clave' => 'maquina_asientos_mes'],
             ],
             'parrafos' => [
                 'Ruta: contable/cierre-rendiciones-maquina. Menú: Contable → Cierres de rendiciones → Máquinas.',
                 'El listado no muestra rendición por rendición suelta: agrupa por empresa y fecha del día, incluyendo solo rendiciones con turno C (cierre diario). Los turnos parciales A/B no entran al cierre contable.',
                 'Cada fila indica cuántas rendiciones componen el grupo, si ya tienen asiento, el PV FSL configurado y el estado: pendiente (ninguna cerrada), parcial (algunas cerradas — revisar) o cerrada (todas con cierre contable).',
+                'La herramienta Asientos del mes lista todos los asientos generados por cierres (venta, pago diferido y canones) cuya fecha de asiento cae en el mes elegido.',
             ],
             'tabla' => [
                 'caption' => 'Estados del grupo diario',

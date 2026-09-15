@@ -182,7 +182,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
     {
         $total = 0.0;
         foreach ($this->filasDeudaProveedor($proveedor_id, $filtros) as $fila) {
-            $total += abs((float) $fila->total + (float) ($fila->aplicado ?? 0));
+            // Firmado: NC/OPP pendientes restan (no abs).
+            $total += (float) $fila->total + (float) ($fila->aplicado ?? 0);
         }
 
         return $total;

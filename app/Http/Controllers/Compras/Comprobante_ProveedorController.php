@@ -1069,9 +1069,10 @@ class Comprobante_ProveedorController extends Controller
         }
 
         $toleranciaPct = 0.0;
-        $legajoOtrasFacturas = [];
         $legajoYaFacturado = ['importe' => 0.0, 'cantidad' => 0, 'items' => []];
         $urlPaqueteLegajo = null;
+        $cpPuedeDevolverCompras = false;
+        $urlDevolverCompras = null;
         if ($data) {
             $data->loadMissing('ordencompras');
             $oc = $data->ordencompras;
@@ -1082,10 +1083,15 @@ class Comprobante_ProveedorController extends Controller
                     (int) $oc->id,
                     $excluirId,
                 );
-                $legajoOtrasFacturas = $legajoYaFacturado['items'];
                 if ((int) $oc->id > 0
                     && (can('listar-legajo-compra', false) || can('listar-ordencompra', false))) {
                     $urlPaqueteLegajo = route('ordencompra_legajo_bandeja_paquete', ['id' => (int) $oc->id]);
+                }
+                $cpPuedeDevolverCompras = (int) $oc->id > 0
+                    && (can('actualizar-ordencompra', false) || can('crear-comprobante-proveedor', false))
+                    && OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($oc);
+                if ($cpPuedeDevolverCompras) {
+                    $urlDevolverCompras = route('ordencompra_devolver_compras', ['id' => (int) $oc->id]);
                 }
             }
         }
@@ -1157,9 +1163,10 @@ class Comprobante_ProveedorController extends Controller
             'com_obligatoria' => $comObligatoria,
             'com_politica' => $comPolitica,
             'com_tolerancia_pct' => $toleranciaPct,
-            'legajo_otras_facturas' => $legajoOtrasFacturas,
             'legajo_ya_facturado_importe' => (float) ($legajoYaFacturado['importe'] ?? 0),
             'url_paquete_legajo' => $urlPaqueteLegajo,
+            'cp_puede_devolver_compras' => $cpPuedeDevolverCompras,
+            'url_devolver_compras' => $urlDevolverCompras,
             'com_resolucion' => $prefill['com_resolucion'] ?? $this->resolverComResolucionFormulario($data, $recepcionesSeleccionadas),
             'asientoPreview' => $asientoPreview,
             'mostrarSolapaAsiento' => ! $bloqueadoEdicion,

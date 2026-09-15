@@ -203,8 +203,8 @@ final class OrdencompraContratoRutaFacturaSupport
         $lineasOc = $oc->ordencompra_articulos;
         if ($lineasOc->isEmpty()) {
             throw new RuntimeException(
-                'El contrato imputa el neto con las cuentas de los artículos de la OC, pero la orden no tiene renglones. '
-                .'Cargue artículos en la OC o indique una cuenta a imputar en el contrato.'
+                'La orden de compra no tiene renglones de artículos para imputar el neto. '
+                .'Cargue artículos en la OC o asocie otra referencia contable.'
             );
         }
 
@@ -237,7 +237,7 @@ final class OrdencompraContratoRutaFacturaSupport
                 $etiqueta = trim((string) ($articulo->sku ?? '').' '.(string) ($articulo->descripcion ?? ''));
                 throw new RuntimeException(
                     'El artículo '.($etiqueta !== '' ? '«'.$etiqueta.'»' : 'id '.$linea->articulo_id)
-                    .' de la OC no tiene cuenta contable de compras/gastos para imputar la factura del contrato.'
+                    .' de la OC no tiene cuenta contable de compras/gastos para imputar el neto del comprobante.'
                 );
             }
 
@@ -256,14 +256,14 @@ final class OrdencompraContratoRutaFacturaSupport
         if ($agrupado === []) {
             throw new RuntimeException(
                 'No se pudo armar la imputación del neto desde los artículos de la OC (sin importes). '
-                .'Revise los renglones o indique una cuenta a imputar en el contrato.'
+                .'Revise los renglones de la orden de compra.'
             );
         }
 
         $totalBase = round(array_sum(array_column($agrupado, 'importe')), 2);
         if ($totalBase <= 0) {
             throw new RuntimeException(
-                'Los artículos de la OC no tienen importe para prorratear el neto de la factura del contrato.'
+                'Los artículos de la OC no tienen importe para prorratear el neto del comprobante.'
             );
         }
 

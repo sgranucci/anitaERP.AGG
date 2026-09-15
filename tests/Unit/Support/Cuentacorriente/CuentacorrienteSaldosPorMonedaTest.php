@@ -49,6 +49,19 @@ class CuentacorrienteSaldosPorMonedaTest extends TestCase
         $this->assertSame('USD', $deudas[1]['abreviatura']);
     }
 
+    public function test_deuda_desde_filas_nota_credito_resta_y_no_suma_absoluto(): void
+    {
+        $filas = [
+            (object) ['moneda_id' => 1, 'abreviatura' => 'ARS', 'total' => 100000.0, 'aplicado' => 0.0],
+            (object) ['moneda_id' => 1, 'abreviatura' => 'ARS', 'total' => -25000.0, 'aplicado' => 0.0],
+        ];
+
+        $deudas = CuentacorrienteSaldosPorMoneda::deudaDesdeFilas($filas);
+
+        $this->assertCount(1, $deudas);
+        $this->assertSame(75000.0, $deudas[0]['deuda']);
+    }
+
     public function test_saldo_anterior_con_filtro_usd_no_incluye_ars(): void
     {
         $movimientos = [

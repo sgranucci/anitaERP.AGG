@@ -63,7 +63,8 @@ final class CuentacorrienteSaldosPorMoneda
                     'deuda' => 0.0,
                 ];
             }
-            $porMoneda[$id]['deuda'] += abs((float) ($fila->total ?? 0) + (float) ($fila->aplicado ?? 0));
+            // Firmado: FC/ND restan positivo; NC/OPP restan negativo (no abs).
+            $porMoneda[$id]['deuda'] += (float) ($fila->total ?? 0) + (float) ($fila->aplicado ?? 0);
         }
 
         ksort($porMoneda);
@@ -217,7 +218,8 @@ final class CuentacorrienteSaldosPorMoneda
         $deuda = 0.0;
         foreach ($deudas as $fila) {
             $residual = (float) ($fila->total ?? 0) + (float) ($fila->aplicado ?? 0);
-            $deuda += abs(self::importeEnPesos($fila, $residual));
+            // Firmado: créditos pendientes restan de la deuda neta.
+            $deuda += self::importeEnPesos($fila, $residual);
         }
 
         return [
@@ -263,12 +265,16 @@ final class CuentacorrienteSaldosPorMoneda
     /**
      * @return array{total: float, aplicado: float, saldo_pendiente: float, saldo_pendiente_origen: float, saldo_pendiente_pesos: float, abreviatura: string, etiqueta_moneda: string, moneda_id: int}
      */
-    public static function importesParaGrilla(object $fila, bool $enPesos, callable $saldoPendienteAbsoluto): array
+    /**
+     * @param  callable(float, ?float): float  $saldoPendiente  Absoluto o firmado según el modo de pantalla.
+     * @return array{total: float, aplicado: float, saldo_pendiente: float, saldo_pendiente_origen: float, saldo_pendiente_pesos: float, abreviatura: string, etiqueta_moneda: string, moneda_id: int}
+     */
+    public static function importesParaGrilla(object $fila, bool $enPesos, callable $saldoPendiente): array
     {
         $totalOrigen = (float) ($fila->total ?? 0);
         $aplicadoOrigen = (float) ($fila->aplicado ?? 0);
-        $pendienteOrigen = (float) $saldoPendienteAbsoluto($totalOrigen, $aplicadoOrigen);
-        $pendientePesos = abs(self::importeEnPesos($fila, $pendienteOrigen));
+        $pendienteOrigen = (float) $saldoPendiente($totalOrigen, $aplicadoOrigen);
+        $pendientePesos = self::importeEnPesos($fila, $pendienteOrigen);
 
         return [
             'total' => $enPesos ? self::importeEnPesos($fila, $totalOrigen) : $totalOrigen,
@@ -284,13 +290,14 @@ final class CuentacorrienteSaldosPorMoneda
 
     /**
      * @param  iterable<int, object>  $filas
+     * @param  callable(float, ?float): float  $saldoPendiente
      */
-    public static function deudaPantallaEnPesos(iterable $filas, callable $saldoPendienteAbsoluto): float
+    public static function deudaPantallaEnPesos(iterable $filas, callable $saldoPendiente): float
     {
         $total = 0.0;
         foreach ($filas as $fila) {
-            $pendiente = (float) $saldoPendienteAbsoluto((float) ($fila->total ?? 0), $fila->aplicado ?? null);
-            $total += abs(self::importeEnPesos($fila, $pendiente));
+            $pendiente = (float) $saldoPendiente((float) ($fila->total ?? 0), $fila->aplicado ?? null);
+            $total += self::importeEnPesos($fila, $pendiente);
         }
 
         return $total;

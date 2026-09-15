@@ -232,26 +232,23 @@ class VentaRepository implements VentaRepositoryInterface
     }
 
     /**
-     * El Bierzo PV manual/CAEA: tipo ARCA efectivo (001+letra, 003 NC, 201 FCE…) para unique y max()+1.
-     * AGG no tiene la columna ni el unique.
+     * Tipo ARCA efectivo (001+letra → 1/6, 003 NC, 201 FCE…) para unique y max()+1.
+     * Desde 2026-09-13 la columna/unique existen en todos los entornos (no solo El Bierzo).
+     * Si el payload ya trae codigo_afip (FacturacionService post-armaTipoTransaccion), se respeta:
+     * no se recalcula ni se altera el camino del POS.
      *
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
     private function aplicarCodigoAfipElBierzo(array $data, ?int $ventaId = null): array
     {
-        if (! EntornoEmpresaSupport::esElBierzo()) {
-            unset($data['codigo_afip']);
-
-            return $data;
-        }
-
         if (! Schema::hasColumn('venta', 'codigo_afip')) {
             unset($data['codigo_afip']);
 
             return $data;
         }
 
+        // POS / FacturacionService ya dejan el tipo AFIP correcto (ej. FAC B → 6). No tocar.
         if ((int) ($data['codigo_afip'] ?? 0) > 0) {
             return $data;
         }

@@ -85,4 +85,33 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
         $this->assertSame(OrdencompraListadoFiltros::MODO_CAMPO, $q['filtro_modo']);
         $this->assertSame('Kandiko', $q['filtro_valor']);
     }
+
+    public function test_defaults_cuentas_a_pagar(): void
+    {
+        $q = OrdencompraLegajoBandejaFiltros::defaultsCuentasAPagarQuery();
+
+        $this->assertSame(OrdencompraLegajoBandejaFiltros::VISTA_CXP, $q['vista']);
+        $this->assertSame(OrdencompraLegajoBandejaFiltros::TAB_TODOS, $q['tab']);
+        $this->assertSame(1, $q['empresa_todas']);
+        $this->assertSame(OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR, $q['atajo']);
+    }
+
+    public function test_contexto_incluye_atajo_y_nros(): void
+    {
+        $this->assertFalse(
+            OrdencompraLegajoBandejaFiltros::requestTraeContexto(
+                Request::create('/compras/legajos', 'GET')
+            )
+        );
+        $this->assertTrue(
+            OrdencompraLegajoBandejaFiltros::requestTraeContexto(
+                Request::create('/compras/legajos', 'GET', ['atajo' => 'listo_cargar'])
+            )
+        );
+        $this->assertTrue(
+            OrdencompraLegajoBandejaFiltros::requestTraeContexto(
+                Request::create('/compras/legajos', 'GET', ['nro_oc' => '12'])
+            )
+        );
+    }
 }

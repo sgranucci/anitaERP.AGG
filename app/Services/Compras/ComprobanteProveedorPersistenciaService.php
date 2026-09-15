@@ -430,6 +430,9 @@ class ComprobanteProveedorPersistenciaService
                 false, // borrador desde precarga: no bloquear por diferencia COM
                 $prefill['articulos'] ?? collect(),
                 $tipoDoc,
+                isset($payload['precarga_comprobante_proveedor_id'])
+                    ? ((int) $payload['precarga_comprobante_proveedor_id'] ?: null)
+                    : null,
             );
             $this->aplicarResultadoControles($resultadoControles);
             $idsEfectivos = $resultadoControles['recepcion_ids_efectivos'] ?? [];
@@ -925,6 +928,7 @@ class ComprobanteProveedorPersistenciaService
             OrdencompraLegajoDocumentoTipoSupport::desdeTipotransaccionId(
                 (int) ($payload['tipotransaccion_compra_id'] ?? 0)
             ),
+            (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: ($payload['precarga_comprobante_proveedor_id'] ?? 0)) ?: null,
         );
         $this->aplicarResultadoControles($resultadoControles);
 

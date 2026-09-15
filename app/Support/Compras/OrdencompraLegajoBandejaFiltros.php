@@ -2,10 +2,13 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 
 final class OrdencompraLegajoBandejaFiltros
 {
+    private const SESSION_FILTROS = 'filtros_legajo_bandeja';
+
     public const VISTA_PENDIENTES = 'pendientes';
 
     public const VISTA_ESTADOS = 'estados';
@@ -55,6 +58,65 @@ final class OrdencompraLegajoBandejaFiltros
         self::ATAJO_FC_CARGADA,
         self::ATAJO_CON_PAGO,
     ];
+
+    /**
+     * Default de bandeja para usuarios con sector Cuentas a pagar.
+     *
+     * @return array<string, scalar>
+     */
+    public static function defaultsCuentasAPagarQuery(): array
+    {
+        return [
+            'vista' => self::VISTA_CXP,
+            'tab' => self::TAB_TODOS,
+            'empresa_todas' => 1,
+            'atajo' => self::ATAJO_LISTO_CARGAR,
+        ];
+    }
+
+    public static function requestTraeContexto(Request $request): bool
+    {
+        if (QueryRetornoListado::requestTraeContextoIndex($request)) {
+            return true;
+        }
+
+        foreach (['atajo', 'nro_oc', 'nro_factura', 'nro_com', 'nro_op', 'tab'] as $key) {
+            if ($request->query->has($key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, string|int|bool>  $filtrosQuery
+     */
+    public static function persistir(array $filtrosQuery): void
+    {
+        if ($filtrosQuery === []) {
+            session()->forget(self::SESSION_FILTROS);
+
+            return;
+        }
+
+        session([self::SESSION_FILTROS => $filtrosQuery]);
+    }
+
+    /**
+     * @return array<string, string|int|bool>
+     */
+    public static function guardados(): array
+    {
+        $guardados = session(self::SESSION_FILTROS, []);
+
+        return is_array($guardados) ? $guardados : [];
+    }
+
+    public static function olvidar(): void
+    {
+        session()->forget(self::SESSION_FILTROS);
+    }
 
     /**
      * @return array<string, mixed>

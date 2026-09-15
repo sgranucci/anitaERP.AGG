@@ -193,7 +193,7 @@
             'transferencia' => (float) ($calcOrq['transferencia'] ?? $totales['transferencia'] ?? 0),
         ];
     }
-    $mostrarAvisoPrecargaQr = $turnoActual === 'M' || $turnoActual === 'C';
+    $mostrarAvisoPrecargaQr = $turnoActual === 'M';
     $badgeTurno = match ($turnoActual) {
         'C' => 'badge-warning',
         'N' => 'badge-dark',

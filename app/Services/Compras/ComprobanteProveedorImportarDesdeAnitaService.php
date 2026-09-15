@@ -442,16 +442,20 @@ class ComprobanteProveedorImportarDesdeAnitaService
         if ($cuotasAnita === []) {
             $cuotas[] = [
                 'numero_cuota' => 1,
+                'fecha' => $fecha,
                 'fechavencimiento' => $vtoCab,
                 'monto' => abs($total),
                 'moneda_id' => $monedaId,
                 'cotizacion' => $cotizacion,
             ];
         } else {
-            foreach ($cuotasAnita as $cuota) {
-                $vto = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($cuota['prov_fecha_vto'] ?? '') ?: $fecha;
+                foreach ($cuotasAnita as $cuota) {
+                $fechaCc = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($cuota['prov_fecha'] ?? '') ?: $fecha;
+                $vto = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($cuota['prov_fecha_vto'] ?? '') ?: $fechaCc;
                 $cuotas[] = [
                     'numero_cuota' => (int) ($cuota['prov_nro_cuota'] ?? 1) ?: 1,
+                    // CC usa prov_fecha (ficha Anita); com_fecha queda en el comprobante.
+                    'fecha' => $fechaCc,
                     'fechavencimiento' => $vto,
                     'monto' => abs((float) ($cuota['prov_monto'] ?? 0)),
                     'moneda_id' => RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($cuota['prov_cod_mon'] ?? $compra['com_cod_mon'] ?? 1),
@@ -575,7 +579,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
             }
 
             $cc = Proveedor_Cuentacorriente::query()->create([
-                'fecha' => $item['fecha'],
+                'fecha' => $cuotaData['fecha'] ?? $item['fecha'],
                 'fechavencimiento' => $cuotaData['fechavencimiento'],
                 'proveedor_id' => $proveedor->id,
                 'total' => $montoCc,
@@ -801,6 +805,21 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $omitidas = 0;
         $errores = [];
 
+        $montoPorCreditoPago = [];
+        foreach ($pares as $par) {
+            if (! ($par['credito_es_pago'] ?? false)) {
+                continue;
+            }
+            $claveCredito = (string) ($par['credito']['clave'] ?? '');
+            if ($claveCredito === '') {
+                continue;
+            }
+            $montoPorCreditoPago[$claveCredito] = round(
+                ($montoPorCreditoPago[$claveCredito] ?? 0) + (float) $par['monto'],
+                4
+            );
+        }
+
         foreach ($pares as $par) {
             $monto = round((float) $par['monto'], 4);
             $idsDeuda = array_map(
@@ -822,8 +841,10 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
             $credito = $this->peekCc($ccPorClave, $par['credito']['clave'], $monto);
             if ($credito === null && $par['credito_es_pago']) {
-                $credito = $this->crearCcPagoSintetico($par, $deuda, $proveedorId);
-                $ccPorClave[$par['credito']['clave']][] = $credito;
+                $claveCredito = (string) $par['credito']['clave'];
+                $montoCc = $montoPorCreditoPago[$claveCredito] ?? $monto;
+                $credito = $this->crearCcPagoSintetico($par, $deuda, $proveedorId, $montoCc);
+                $ccPorClave[$claveCredito][] = $credito;
                 $pagos++;
             }
             if ($credito === null) {
@@ -927,31 +948,82 @@ class ComprobanteProveedorImportarDesdeAnitaService
     }
 
     /**
+     * CC de OPP/OPA cuando el pago existe como documento sin movimiento de cuenta corriente.
+     * Nunca linkea comprobante_proveedor_id (evita etiquetar la OP como la factura/NC aplicada).
+     *
      * @param  array<string, mixed>  $par
      * @param  array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}  $deuda
      * @return array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}
      */
-    private function crearCcPagoSintetico(array $par, array $deuda, int $proveedorId): array
+    private function crearCcPagoSintetico(array $par, array $deuda, int $proveedorId, float $montoTotalCredito): array
     {
-        $monto = round((float) $par['monto'], 4);
+        $credito = $par['credito'] ?? [];
+        $pago = $this->buscarPagoproveedorParaCredito($proveedorId, $credito);
+
+        if ($pago !== null) {
+            $existente = Proveedor_Cuentacorriente::query()
+                ->where('pagoproveedor_id', (int) $pago->id)
+                ->orderBy('id')
+                ->first();
+            if ($existente !== null) {
+                $saldo = abs((float) $existente->total);
+                $aplicado = abs((float) Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->where('proveedor_cuentacorriente_id', (int) $existente->id)
+                    ->sum('total'));
+                $saldoLibre = max(0, round($saldo - $aplicado, 4));
+
+                return [
+                    'id' => (int) $existente->id,
+                    'saldo' => $saldoLibre > 0.0001 ? $saldoLibre : $saldo,
+                    'moneda_id' => (int) $existente->moneda_id,
+                    'empresa_id' => (int) $existente->empresa_id,
+                    'comprobante_id' => null,
+                ];
+            }
+        }
+
+        $montoPago = $pago !== null ? abs((float) $pago->monto) : 0.0;
+        $monto = round(max($montoPago, abs($montoTotalCredito), abs((float) $par['monto'])), 4);
         $cc = Proveedor_Cuentacorriente::query()->create([
             'fecha' => $par['fecha'],
             'fechavencimiento' => $par['fecha'],
             'proveedor_id' => $proveedorId,
             'total' => -$monto,
             'moneda_id' => $deuda['moneda_id'],
-            'cotizacion' => 1,
-            'empresa_id' => $deuda['empresa_id'],
-            'comprobante_proveedor_id' => $deuda['comprobante_id'],
+            'cotizacion' => $pago !== null ? ((float) $pago->cotizacion ?: 1) : 1,
+            'empresa_id' => $pago !== null ? (int) $pago->empresa_id : $deuda['empresa_id'],
+            'pagoproveedor_id' => $pago !== null ? (int) $pago->id : null,
+            // Sin comprobante_proveedor_id: la OP no es la factura/NC aplicada.
         ]);
 
         return [
             'id' => (int) $cc->id,
             'saldo' => $monto,
-            'moneda_id' => (int) $deuda['moneda_id'],
-            'empresa_id' => (int) $deuda['empresa_id'],
+            'moneda_id' => (int) $cc->moneda_id,
+            'empresa_id' => (int) $cc->empresa_id,
             'comprobante_id' => null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $credito
+     */
+    private function buscarPagoproveedorParaCredito(int $proveedorId, array $credito): ?Pagoproveedor
+    {
+        $tipo = trim((string) ($credito['tipo'] ?? ''));
+        $numero = (int) ($credito['numero'] ?? 0);
+        if ($tipo === '' || $numero <= 0) {
+            return null;
+        }
+
+        return Pagoproveedor::query()
+            ->where('proveedor_id', $proveedorId)
+            ->where('tipocomprobante', $tipo)
+            ->where('letra', (string) ($credito['letra'] ?? 'A'))
+            ->where('sucursal', (int) ($credito['sucursal'] ?? 0))
+            ->where('numerotransaccion', (string) $numero)
+            ->orderBy('id')
+            ->first();
     }
 
     private function aplicacionYaExiste(int $deudaId, int $creditoId, float $monto): bool
@@ -998,7 +1070,12 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $out = [];
         foreach ($filas as $cc) {
             $comp = $cc->comprobante_proveedores;
-            if ($comp !== null) {
+            $pago = $cc->pagoproveedores;
+            $tieneCuota = (int) ($cc->comprobante_proveedor_cuota_id ?? 0) > 0;
+            // CC sintética de OP (sin cuota, total < 0): no indexar bajo el CP ajeno.
+            $esSinteticoPago = ! $tieneCuota && (float) $cc->total < 0 && $pago === null;
+
+            if ($comp !== null && ! $esSinteticoPago && $tieneCuota) {
                 $tipo = (string) ($comp->tipotransaccion_compras?->abreviatura ?? '');
                 if ($tipo !== '') {
                     $clave = ComprobanteProveedorAnitaImportClaveSupport::clave(
@@ -1018,7 +1095,6 @@ class ComprobanteProveedorImportarDesdeAnitaService
                 }
             }
 
-            $pago = $cc->pagoproveedores;
             if ($pago !== null) {
                 $clavePago = ComprobanteProveedorAnitaImportClaveSupport::clave(
                     $proveedorCodigo,

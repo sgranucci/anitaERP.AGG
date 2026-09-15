@@ -109,6 +109,12 @@ final class OrdencompraSectorVisibilidadSupport
         return $id > 0 ? $id : null;
     }
 
+    /** true si el usuario tiene asignado el sector CUENTAS A PAGAR (aunque pueda ver todos). */
+    public static function esUsuarioSectorCuentasAPagar(): bool
+    {
+        return self::nombreSectorUsuario() === OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR;
+    }
+
     /**
      * null = sin recorte (ve todos).
      * 0 = no ve nada.

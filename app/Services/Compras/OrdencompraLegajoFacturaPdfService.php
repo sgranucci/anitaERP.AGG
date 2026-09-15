@@ -19,7 +19,9 @@ use Illuminate\Http\UploadedFile;
 use RuntimeException;
 
 /**
- * Adjunta PDF de factura al legajo (OC) creando o actualizando una precarga mínima.
+ * Adjunta PDF de factura al legajo (OC).
+ * Crea una precarga nueva por cada comprobante distinto; solo actualiza si es el mismo
+ * comprobante (re-subida) o una precarga del legajo todavía sin PDF.
  */
 class OrdencompraLegajoFacturaPdfService
 {
@@ -81,8 +83,9 @@ class OrdencompraLegajoFacturaPdfService
             $numerocomprobante,
             $cuit,
         );
-        $existenteLegajo = OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajoSinPdf($oc)
-            ?? OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
+        // Solo reutilizar: (1) la misma factura ya precargada, o (2) una precarga del legajo
+        // sin PDF. Nunca pisar otra factura del legajo que ya tenga archivo.
+        $existenteSinPdf = OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajoSinPdf($oc);
 
         if ($dup) {
             $ocDup = trim((string) ($dup->numeroordencompra ?? ''));
@@ -116,7 +119,7 @@ class OrdencompraLegajoFacturaPdfService
             'cotizacion' => 1,
         ];
 
-        $destino = $dup ?: $existenteLegajo;
+        $destino = $dup ?: $existenteSinPdf;
         if ($destino) {
             $payload['estado'] = $destino->estado ?: 'PENDIENTE';
             $payload = PrecargaProveedorMonedaFacturaSupport::payloadSinPisarMoneda($payload, $destino);
@@ -153,8 +156,8 @@ class OrdencompraLegajoFacturaPdfService
 
         $ruta = $this->guardarPdfLegajo($pdf, $oc, $proveedor);
 
-        $existente = OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajoSinPdf($oc)
-            ?? OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
+        // Solo rellenar precarga sin PDF; si ya hay facturas con archivo, crear otra.
+        $existente = OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajoSinPdf($oc);
 
         if ($existente) {
             $this->precargaRepository->update([

@@ -25,19 +25,20 @@ use stdClass;
  */
 class FlashReporteAggFinanzasExcelService
 {
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA = 'J';
 
     /** @var array<string, float> */
     private const ANCHOS = [
         'A' => 12,
         'B' => 18,
         'C' => 18,
-        'D' => 16,
+        'D' => 28,
         'E' => 16,
         'F' => 16,
         'G' => 16,
-        'H' => 20,
-        'I' => 16,
+        'H' => 16,
+        'I' => 20,
+        'J' => 16,
     ];
 
     public function __construct(
@@ -214,7 +215,8 @@ class FlashReporteAggFinanzasExcelService
     private function filaFinanzasConActividad(array $f): bool
     {
         return (float) ($f['coin_in'] ?? 0) != 0.0
-            || (float) ($f['drop'] ?? 0) != 0.0
+            || (float) ($f['drop_slots'] ?? 0) != 0.0
+            || (float) ($f['drop_ruleta'] ?? 0) != 0.0
             || (float) ($f['win_online'] ?? 0) != 0.0
             || (float) ($f['win_financiero'] ?? 0) != 0.0
             || (float) ($f['ventas_bingo'] ?? 0) != 0.0
@@ -302,7 +304,7 @@ class FlashReporteAggFinanzasExcelService
         $sheet->setCellValue(
             'A'.$fila,
             sprintf(
-                'Período %s al %s · Coin in, drop, win online/financiero, ventas bingo, parking, gastronomía y vending',
+                'Período %s al %s · Coin in, drop de slots, drop electronic roulette, win online/financiero, ventas bingo, parking, gastronomía y vending',
                 $desde->format('d/m/Y'),
                 $hasta->format('d/m/Y')
             )

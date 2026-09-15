@@ -66,9 +66,11 @@ Bandeja de legajos
 @php
     use App\Support\Compras\OrdencompraLegajoBandejaFiltros;
     use App\Support\Compras\OrdencompraListadoFiltros;
+    use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
     $vista = $filtros['vista'] ?? OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES;
     $tab = $filtros['tab'] ?? OrdencompraLegajoBandejaFiltros::TAB_TODOS;
     $atajo = $filtros['atajo'] ?? '';
+    $esSectorCxp = OrdencompraSectorVisibilidadSupport::esUsuarioSectorCuentasAPagar();
     $limpiarUrl = route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryStringEmpresaYVista($filtros));
     $qs = function (array $extra = []) use ($filtros) {
         return route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString(array_merge($filtros, $extra)));
@@ -685,9 +687,11 @@ Bandeja de legajos
                                     </td>
                                 @endif
                                 <td class="text-nowrap">
+                                    @if (! $esSectorCxp)
                                     <a href="{{ $row['url_oc'] }}" class="btn btn-xs btn-info" title="Ver orden de compra" target="_blank" rel="noopener">
                                         <i class="fa fa-file-text-o"></i>
                                     </a>
+                                    @endif
                                     @if (!empty($puede_actualizar) && !empty($row['url_asignar_factura']))
                                         <button type="button" class="btn btn-xs btn-outline-danger js-oc-asignar-factura"
                                                 data-url="{{ $row['url_asignar_factura'] }}"
@@ -711,6 +715,7 @@ Bandeja de legajos
                                             <i class="fa fa-file-pdf-o"></i>
                                         </button>
                                     @endif
+                                    @if (! $esSectorCxp)
                                     @if (!empty($row['tiene_com']))
                                         <button type="button" class="btn btn-xs btn-outline-dark js-bandeja-ver-legajo"
                                                 data-url-pdf="{{ $row['url_com'] }}"
@@ -724,6 +729,7 @@ Bandeja de legajos
                                         <button type="button" class="btn btn-xs btn-outline-secondary" disabled title="Sin COM">
                                             <i class="fa fa-cubes"></i>
                                         </button>
+                                    @endif
                                     @endif
                                     <button type="button" class="btn btn-xs btn-outline-info js-bandeja-historia"
                                             data-url="{{ $row['url_historia'] }}"
@@ -739,7 +745,7 @@ Bandeja de legajos
                                             title="{{ !empty($row['tiene_nota']) ? ('Nota: '.$row['nota_legajo']) : 'Agregar nota al legajo' }}">
                                         <i class="fa fa-sticky-note{{ !empty($row['tiene_nota']) ? '' : '-o' }}"></i>
                                     </button>
-                                    @if (!empty($puede_asignar_com) && !empty($row['tiene_factura']) && !empty($row['tiene_com']))
+                                    @if (! $esSectorCxp && !empty($puede_asignar_com) && !empty($row['tiene_factura']) && !empty($row['tiene_com']))
                                         <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-asignar-com"
                                                 data-url-asignar="{{ $row['url_asignar_com'] }}"
                                                 data-url-paquete="{{ $row['url_paquete'] }}"
@@ -754,7 +760,7 @@ Bandeja de legajos
                                             <i class="fa fa-plus"></i>
                                         </a>
                                     @endif
-                                    @if (!empty($puede_ver_comprobante) && !empty($row['url_comprobante']))
+                                    @if (! $esSectorCxp && !empty($puede_ver_comprobante) && !empty($row['url_comprobante']))
                                         <a href="{{ $row['url_comprobante'] }}" class="btn btn-xs btn-outline-info" title="Ver comprobante cargado" target="_blank" rel="noopener">
                                             <i class="fa fa-check-square-o"></i>
                                         </a>

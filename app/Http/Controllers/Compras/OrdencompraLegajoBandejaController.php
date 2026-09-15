@@ -33,9 +33,29 @@ class OrdencompraLegajoBandejaController extends Controller
     {
         $this->autorizar();
 
-        $filtros = $this->filtrosDesdeRequest($request);
+        if (OrdencompraSectorVisibilidadSupport::esUsuarioSectorCuentasAPagar()) {
+            if (! OrdencompraLegajoBandejaFiltros::requestTraeContexto($request)) {
+                $guardados = OrdencompraLegajoBandejaFiltros::guardados();
+                if ($guardados === []) {
+                    $guardados = OrdencompraLegajoBandejaFiltros::defaultsCuentasAPagarQuery();
+                }
+
+                return redirect()->route('consultar_legajo_compra', $guardados);
+            }
+
+            $filtros = $this->filtrosDesdeRequest($request);
+            $filtrosQuery = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
+            $page = (int) $request->query('page', 0);
+            if ($page > 1) {
+                $filtrosQuery['page'] = $page;
+            }
+            OrdencompraLegajoBandejaFiltros::persistir($filtrosQuery);
+        } else {
+            $filtros = $this->filtrosDesdeRequest($request);
+            $filtrosQuery = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
+        }
+
         $filas = $this->service->paginar($filtros);
-        $filtrosQuery = OrdencompraLegajoBandejaFiltros::paraQueryString($filtros);
 
         return view('compras.legajo_bandeja.index', [
             'filas' => $filas,
@@ -273,10 +293,21 @@ class OrdencompraLegajoBandejaController extends Controller
 
     private function filtrosDesdeRequest(Request $request): array
     {
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $esCxp = OrdencompraSectorVisibilidadSupport::esUsuarioSectorCuentasAPagar();
+        $traeEmpresa = $request->filled('empresa_id')
+            || $request->boolean('empresa_todas')
+            || $request->input('empresa_scope') === 'todas';
+
+        // CxP sin empresa en la URL → Todas mis empresas. Resto: primera asignada.
+        $empresaDefault = null;
+        if (! $esCxp || $traeEmpresa) {
+            $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+            $empresaDefault = $empresaDefault ? (int) $empresaDefault : null;
+        }
+
         $filtros = OrdencompraLegajoBandejaFiltros::resolverDesdeRequest(
             $request,
-            $empresaDefault ? (int) $empresaDefault : null
+            $empresaDefault
         );
 
         $vistaForzada = OrdencompraSectorVisibilidadSupport::vistaBandejaForzada();

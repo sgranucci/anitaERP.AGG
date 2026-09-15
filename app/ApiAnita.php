@@ -2,6 +2,7 @@
 
 namespace App;
 
+use App\Support\Caja\IngresoEgresoGrabacionTimingSupport;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
@@ -444,70 +445,82 @@ class ApiAnita
         // dd('anita.bridge'.env('ANITA_BRIDGE_TYPE'));
         // dd(env('DB_CONNECTION'));
 
-        if ($this->usaBridgeHttp()) {
-            return $this->apiCallHttp($data);
-        }
-        $puertoSsh = config('anita.puerto_ssh');
-        $portSSH = ($puertoSsh == null ? '' : '-p '.$puertoSsh);
-        $portSCP = ($puertoSsh == null ? '' : '-P '.$puertoSsh);
-        $sql = $this->armarSql($data);
-        $nomArch = $this->fecha.'.sql';
-        $logsDir = storage_path('logs');
-        if (! is_dir($logsDir)) {
-            File::ensureDirectoryExists($logsDir);
-        }
-        $pathArch = $logsDir.'/'.$nomArch;
-        File::put($logsDir.'/'.$this->fecha.'.sql', $sql);
+        $timingActivo = IngresoEgresoGrabacionTimingSupport::activa();
+        $t0 = $timingActivo ? microtime(true) : null;
 
-        shell_exec('scp '.$portSCP.' '.$pathArch.' sergio@'.$this->servidorAnita.':/home/sergio/tmp/'.$nomArch.' > /dev/null');
-        shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "cd /usr2/www/htdocs; ./apiERP.php '.config('anita.bdd').' /home/sergio/tmp/'.$nomArch.' '.$this->fecha.' > /dev/null"');
-        shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "rm /home/sergio/tmp/'.$nomArch.' > /dev/null"');
+        try {
+            if ($this->usaBridgeHttp()) {
+                return $this->apiCallHttp($data);
+            }
+            $puertoSsh = config('anita.puerto_ssh');
+            $portSSH = ($puertoSsh == null ? '' : '-p '.$puertoSsh);
+            $portSCP = ($puertoSsh == null ? '' : '-P '.$puertoSsh);
+            $sql = $this->armarSql($data);
+            $nomArch = $this->fecha.'.sql';
+            $logsDir = storage_path('logs');
+            if (! is_dir($logsDir)) {
+                File::ensureDirectoryExists($logsDir);
+            }
+            $pathArch = $logsDir.'/'.$nomArch;
+            File::put($logsDir.'/'.$this->fecha.'.sql', $sql);
 
-        if ($data['acc'] == 'list' || $data['acc'] == 'customSql') {
-            $csvPath = $logsDir.'/'.$this->fecha.'.csv';
-            $bddPathSsh = rtrim((string) config('anita.bdd_path', ''), '/');
-            $bddSsh = (string) config('anita.bdd', 'ventas');
-            shell_exec('scp '.$portSCP.' sergio@'.$this->servidorAnita.':'.$bddPathSsh.'/'.$bddSsh.'/'.$this->fecha.'.csv '.$csvPath.' > /dev/null 2>&1');
-            shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "cd '.$bddPathSsh.'/'.$bddSsh.'; rm '.$this->fecha.'.csv > /dev/null"');
+            shell_exec('scp '.$portSCP.' '.$pathArch.' sergio@'.$this->servidorAnita.':/home/sergio/tmp/'.$nomArch.' > /dev/null');
+            shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "cd /usr2/www/htdocs; ./apiERP.php '.config('anita.bdd').' /home/sergio/tmp/'.$nomArch.' '.$this->fecha.' > /dev/null"');
+            shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "rm /home/sergio/tmp/'.$nomArch.' > /dev/null"');
 
-            if (! is_readable($csvPath)) {
-                if (is_file($logsDir.'/'.$this->fecha.'.sql')) {
-                    @unlink($logsDir.'/'.$this->fecha.'.sql');
+            if ($data['acc'] == 'list' || $data['acc'] == 'customSql') {
+                $csvPath = $logsDir.'/'.$this->fecha.'.csv';
+                $bddPathSsh = rtrim((string) config('anita.bdd_path', ''), '/');
+                $bddSsh = (string) config('anita.bdd', 'ventas');
+                shell_exec('scp '.$portSCP.' sergio@'.$this->servidorAnita.':'.$bddPathSsh.'/'.$bddSsh.'/'.$this->fecha.'.csv '.$csvPath.' > /dev/null 2>&1');
+                shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "cd '.$bddPathSsh.'/'.$bddSsh.'; rm '.$this->fecha.'.csv > /dev/null"');
+
+                if (! is_readable($csvPath)) {
+                    if (is_file($logsDir.'/'.$this->fecha.'.sql')) {
+                        @unlink($logsDir.'/'.$this->fecha.'.sql');
+                    }
+
+                    return json_encode([]);
                 }
 
-                return json_encode([]);
-            }
-
-            $dataArr = [];
-            $archivo = fopen($csvPath, 'r');
-            $camposArr = explode(',', $data['campos']);
-            while ($linea = fgets($archivo)) {
-                $registroAssoc = [];
-                $lineaArr = (explode('|', $linea));
-                foreach ($camposArr as $key => $value) {
-                    $nombreAux = explode(' as ', $value);
-                    if (count($nombreAux) == 2) {
-                        $value = $nombreAux[1];
-                    } else {
-                        $nombreAux = explode(' AS ', $value);
+                $dataArr = [];
+                $archivo = fopen($csvPath, 'r');
+                $camposArr = explode(',', $data['campos']);
+                while ($linea = fgets($archivo)) {
+                    $registroAssoc = [];
+                    $lineaArr = (explode('|', $linea));
+                    foreach ($camposArr as $key => $value) {
+                        $nombreAux = explode(' as ', $value);
                         if (count($nombreAux) == 2) {
                             $value = $nombreAux[1];
+                        } else {
+                            $nombreAux = explode(' AS ', $value);
+                            if (count($nombreAux) == 2) {
+                                $value = $nombreAux[1];
+                            }
                         }
+                        $registroAssoc[trim($value)] = $lineaArr[$key];
                     }
-                    $registroAssoc[trim($value)] = $lineaArr[$key];
+                    $dataArr[] = $registroAssoc;
                 }
-                $dataArr[] = $registroAssoc;
+                fclose($archivo);
+
+                @unlink($csvPath);
+                @unlink($logsDir.'/'.$this->fecha.'.sql');
+
+                // dd($dataArr);
+                return json_encode($dataArr);
             }
-            fclose($archivo);
 
-            @unlink($csvPath);
-            @unlink($logsDir.'/'.$this->fecha.'.sql');
-
-            // dd($dataArr);
-            return json_encode($dataArr);
+            return json_encode([]);
+        } finally {
+            if ($t0 !== null) {
+                IngresoEgresoGrabacionTimingSupport::registrarAnitaCall(
+                    is_array($data) ? $data : [],
+                    (microtime(true) - $t0) * 1000
+                );
+            }
         }
-
-        return json_encode([]);
     }
 
     public function armarSql($data)
