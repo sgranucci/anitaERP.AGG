@@ -1,16 +1,22 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Emisión OT: salidas a JetDirect (IP:9100) sin colas CUPS en el L12.
  * IPs tomadas del host Ferli 160.132.0.254 (lpstat -v).
+ * Solo Calzados Ferli.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return;
+        }
+
         $script = base_path('bin/imprimir-pdf-laser.sh');
 
         $map = [
@@ -32,6 +38,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return;
+        }
+
         $scriptCups = base_path('bin/imprimir-pedido.sh');
 
         $map = [

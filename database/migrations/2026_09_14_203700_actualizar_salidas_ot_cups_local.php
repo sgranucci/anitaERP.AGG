@@ -1,16 +1,22 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Emisión OT: pasar salidas IFPU (imp_otr / imp_otrS) a PDF → cola CUPS local.
  * No modifica salidas JetDirect (imprimir-pdf-laser.sh) usadas por otros programas.
+ * Solo Calzados Ferli.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return;
+        }
+
         $script = base_path('bin/imprimir-pedido.sh');
 
         foreach (DB::table('salida')->get(['id', 'comando']) as $salida) {
@@ -28,6 +34,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return;
+        }
+
         $script = base_path('bin/imprimir-pedido.sh');
 
         $reversa = [
