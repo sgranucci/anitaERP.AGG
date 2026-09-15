@@ -8,8 +8,9 @@ use Illuminate\Support\Facades\DB;
 /**
  * Canal de venta de artículos (LOCAL, FABRICA, etc.). No confundir con usoarticulo (tipo calzado).
  *
- * Programas de Facturación Local / stock local: siempre usar scopeArticulosCanalLocal()
- * (canal LOCAL + estado_local ACTIVO). El ámbito lo define el programa, no el usuario.
+ * Programas de Facturación Local / stock local: scopeArticulosCanalLocal()
+ * (canal LOCAL + estado_local ACTIVO + estado ACTIVO).
+ * POS búsqueda: scopeArticulosPosLocal() (+ combinación activa o color/talle).
  */
 final class ArticuloCanalSupport
 {
@@ -45,7 +46,7 @@ final class ArticuloCanalSupport
     }
 
     /**
-     * Elegible en procesos de locales: canal LOCAL + estado_local ACTIVO.
+     * Elegible en procesos de locales: canal LOCAL + estado_local ACTIVO (+ estado ACTIVO si existe).
      */
     public static function articuloOperativoLocal(int $articuloId): bool
     {
@@ -53,11 +54,24 @@ final class ArticuloCanalSupport
             return false;
         }
 
-        if (! \Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado_local')) {
-            return (string) DB::table('articulo')->where('id', $articuloId)->value('estado') === 'ACTIVO';
+        $row = DB::table('articulo')->where('id', $articuloId)->first();
+        if (! $row) {
+            return false;
         }
 
-        return (string) DB::table('articulo')->where('id', $articuloId)->value('estado_local') === 'ACTIVO';
+        if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado_local')) {
+            if ((string) ($row->estado_local ?? '') !== 'ACTIVO') {
+                return false;
+            }
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado')) {
+            if ((string) ($row->estado ?? '') !== 'ACTIVO') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -101,7 +115,7 @@ final class ArticuloCanalSupport
 
     /**
      * Scope obligatorio para listados/búsquedas de programas de locales.
-     * Canal LOCAL + estado_local ACTIVO (si existe la columna).
+     * Canal LOCAL + estado_local ACTIVO + estado ACTIVO (maestro).
      *
      * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
      * @return \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder
@@ -122,9 +136,26 @@ final class ArticuloCanalSupport
 
         if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado_local')) {
             $query->where('articulo.estado_local', 'ACTIVO');
-        } else {
+        }
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado')) {
             $query->where('articulo.estado', 'ACTIVO');
         }
+
+        return $query;
+    }
+
+    /**
+     * POS / búsqueda operativa: canal Local + artículo activo + variante vendible
+     * (combinación activa o color/talle).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder
+     */
+    public static function scopeArticulosPosLocal($query)
+    {
+        self::scopeArticulosCanalLocal($query);
+        FacturacionLocalVarianteArticuloSupport::scopeArticulosConVarianteVendible($query);
 
         return $query;
     }

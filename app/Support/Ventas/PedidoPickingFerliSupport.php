@@ -5,6 +5,7 @@ namespace App\Support\Ventas;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Lote;
 use App\Models\Ventas\Pedido_Combinacion;
+use App\Models\Ventas\Pedido_Picking;
 use App\Repositories\Ventas\Pedido_Combinacion_TalleRepositoryInterface;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -12,6 +13,8 @@ use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Session;
 use RuntimeException;
 
 /**
@@ -26,14 +29,156 @@ final class PedidoPickingFerliSupport
 
     public const FACTURADO = 'S';
 
+    private const SESSION_PICKING_ACTIVO = 'picking_pedido_activo_id';
+
     public static function habilitado(): bool
     {
         return EntornoEmpresaSupport::esFerli()
             || MovimientoStockFerliSupport::esCalzadosFerli();
     }
 
-    public static function marcar(int $pedidoCombinacionId, string $loteCodigo, ?int $depositoId = null): array
+    public static function crearPicking(?string $fechaYmd = null, ?string $observacion = null): Pedido_Picking
     {
+        return DB::transaction(function () use ($fechaYmd, $observacion) {
+            $codigo = (int) Pedido_Picking::query()->lockForUpdate()->max('codigo') + 1;
+            $picking = Pedido_Picking::query()->create([
+                'codigo' => $codigo,
+                'fecha' => $fechaYmd ?: now()->toDateString(),
+                'usuario_id' => Auth::id(),
+                'observacion' => $observacion ? trim($observacion) : null,
+            ]);
+            self::setPickingActivoId((int) $picking->id);
+
+            return $picking;
+        });
+    }
+
+    public static function setPickingActivoId(?int $pickingId): void
+    {
+        if ($pickingId && $pickingId > 0) {
+            Session::put(self::SESSION_PICKING_ACTIVO, $pickingId);
+        } else {
+            Session::forget(self::SESSION_PICKING_ACTIVO);
+        }
+    }
+
+    public static function pickingActivoId(): ?int
+    {
+        $id = (int) Session::get(self::SESSION_PICKING_ACTIVO, 0);
+
+        return $id > 0 ? $id : null;
+    }
+
+    public static function findPicking(?int $pickingId = null, ?int $codigo = null): ?Pedido_Picking
+    {
+        if ($pickingId && $pickingId > 0) {
+            return Pedido_Picking::query()->find($pickingId);
+        }
+        if ($codigo && $codigo > 0) {
+            return Pedido_Picking::query()->where('codigo', $codigo)->first();
+        }
+
+        return null;
+    }
+
+    /**
+     * Resuelve cabecera: id/código pedido → sesión → crea nuevo del día.
+     */
+    public static function resolverPickingParaMarcar(?int $pickingId = null, ?int $codigo = null): Pedido_Picking
+    {
+        $picking = self::findPicking($pickingId, $codigo);
+        if ($picking) {
+            self::setPickingActivoId((int) $picking->id);
+
+            return $picking;
+        }
+
+        $activoId = self::pickingActivoId();
+        if ($activoId) {
+            $activo = Pedido_Picking::query()->find($activoId);
+            if ($activo) {
+                return $activo;
+            }
+        }
+
+        return self::crearPicking();
+    }
+
+    /**
+     * Pickings del día con líneas aún pendientes de facturar.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function listarPendientesDia(?string $fechaYmd = null, ?string $texto = null): array
+    {
+        $fecha = $fechaYmd ?: now()->toDateString();
+        $texto = trim((string) $texto);
+
+        $q = Pedido_Picking::query()
+            ->with(['usuario:id,nombre'])
+            ->whereDate('fecha', $fecha)
+            ->whereHas('lineas', function ($w) {
+                $w->where('picking', self::MARCADO)
+                    ->where(function ($f) {
+                        $f->whereNull('picking_facturado')
+                            ->orWhere('picking_facturado', '<>', self::FACTURADO);
+                    })
+                    ->where(function ($e) {
+                        $e->whereNull('estado')->orWhere('estado', '<>', 'A');
+                    });
+            })
+            ->orderByDesc('codigo');
+
+        if ($texto !== '') {
+            if (ctype_digit($texto)) {
+                $q->where('codigo', (int) $texto);
+            } else {
+                $q->where('observacion', 'like', '%'.$texto.'%');
+            }
+        }
+
+        $filas = [];
+        foreach ($q->get() as $picking) {
+            $lineas = Pedido_Combinacion::query()
+                ->with(['pedidos.clientes'])
+                ->where('picking_id', $picking->id)
+                ->where('picking', self::MARCADO)
+                ->where(function ($f) {
+                    $f->whereNull('picking_facturado')
+                        ->orWhere('picking_facturado', '<>', self::FACTURADO);
+                })
+                ->where(function ($e) {
+                    $e->whereNull('estado')->orWhere('estado', '<>', 'A');
+                })
+                ->get();
+
+            $clientes = $lineas->map(fn ($l) => (string) ($l->pedidos->clientes->nombre ?? ''))
+                ->filter()
+                ->unique()
+                ->values();
+
+            $filas[] = [
+                'id' => (int) $picking->id,
+                'codigo' => (int) $picking->codigo,
+                'fecha' => $picking->fecha?->format('Y-m-d'),
+                'usuario' => $picking->usuario->nombre ?? '',
+                'observacion' => (string) ($picking->observacion ?? ''),
+                'lineas_pendientes' => $lineas->count(),
+                'clientes' => $clientes->count(),
+                'clientes_nombres' => $clientes->take(4)->implode(', '),
+            ];
+        }
+
+        return $filas;
+    }
+
+    public static function marcar(
+        int $pedidoCombinacionId,
+        string $loteCodigo,
+        ?int $depositoId = null,
+        ?int $pickingId = null,
+        ?int $pickingCodigo = null
+    ): array {
         $linea = Pedido_Combinacion::query()->with(['pedidos', 'pedido_combinacion_talles'])->find($pedidoCombinacionId);
         if (! $linea) {
             return ['error' => 'Línea de pedido inexistente'];
@@ -50,7 +195,10 @@ final class PedidoPickingFerliSupport
             return ['error' => 'Indique el número de OT stock / lote a preparar'];
         }
 
+        $picking = self::resolverPickingParaMarcar($pickingId, $pickingCodigo);
+
         $linea->picking = self::MARCADO;
+        $linea->picking_id = $picking->id;
         $linea->picking_lote_codigo = $loteCodigo;
         $linea->picking_deposito_id = $depositoId && $depositoId > 0 ? $depositoId : null;
         $linea->picking_at = now();
@@ -61,6 +209,8 @@ final class PedidoPickingFerliSupport
             'ok' => true,
             'pedido_combinacion_id' => $linea->id,
             'picking' => $linea->picking,
+            'picking_id' => (int) $picking->id,
+            'picking_codigo' => (int) $picking->codigo,
             'picking_lote_codigo' => $linea->picking_lote_codigo,
             'picking_deposito_id' => $linea->picking_deposito_id,
         ];
@@ -77,6 +227,7 @@ final class PedidoPickingFerliSupport
         }
 
         $linea->picking = self::NO_MARCADO;
+        $linea->picking_id = null;
         $linea->picking_lote_codigo = null;
         $linea->picking_deposito_id = null;
         $linea->picking_at = null;
@@ -156,8 +307,14 @@ final class PedidoPickingFerliSupport
      *
      * @return Collection<int, Pedido_Combinacion>
      */
-    public static function lineasPendientes(?int $clienteId = null, ?int $depositoId = null, ?string $loteDesde = null, ?string $loteHasta = null): Collection
-    {
+    public static function lineasPendientes(
+        ?int $clienteId = null,
+        ?int $depositoId = null,
+        ?string $loteDesde = null,
+        ?string $loteHasta = null,
+        ?int $pickingId = null,
+        ?int $pickingCodigo = null
+    ): Collection {
         $q = Pedido_Combinacion::query()
             ->with([
                 'pedidos.clientes',
@@ -166,6 +323,7 @@ final class PedidoPickingFerliSupport
                 'modulos',
                 'pedido_combinacion_talles.talles',
                 'lotes',
+                'pickingCabecera',
             ])
             ->where('picking', self::MARCADO)
             ->where(function ($w) {
@@ -175,6 +333,12 @@ final class PedidoPickingFerliSupport
             ->where(function ($w) {
                 $w->whereNull('estado')->orWhere('estado', '<>', 'A');
             });
+
+        if ($pickingId && $pickingId > 0) {
+            $q->where('picking_id', $pickingId);
+        } elseif ($pickingCodigo && $pickingCodigo > 0) {
+            $q->whereHas('pickingCabecera', fn ($p) => $p->where('codigo', $pickingCodigo));
+        }
 
         if ($clienteId && $clienteId > 0) {
             $q->whereHas('pedidos', fn ($p) => $p->where('cliente_id', $clienteId));
@@ -189,7 +353,7 @@ final class PedidoPickingFerliSupport
             $q->where('picking_lote_codigo', '<=', $loteHasta);
         }
 
-        return $q->orderBy('picking_at')->orderBy('id')->get();
+        return $q->orderBy('picking_id')->orderBy('picking_at')->orderBy('id')->get();
     }
 
     /**

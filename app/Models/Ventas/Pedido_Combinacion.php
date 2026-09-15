@@ -14,6 +14,7 @@ use App\Models\Stock\Lote;
 use App\Models\Stock\Subcategoria;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Condicionventa;
+use App\Models\Ventas\Pedido_Picking;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Transporte;
 use App\Models\Seguridad\Usuario;
@@ -26,7 +27,7 @@ class Pedido_Combinacion extends Model
     protected $fillable = ['pedido_id', 'combinacion_id', 'articulo_id', 'numeroitem', 'modulo_id', 'cantidad', 
 		'precio', 'incluyeimpuesto', 'listaprecio_id', 'moneda_id', 'descuento', 'descuentointegrado', 
 		'categoria_id', 'subcategoria_id', 'linea_id', 'ot_id', 'lote_id', 'observacion', 'estado',
-		'picking', 'picking_lote_codigo', 'picking_deposito_id', 'picking_at', 'picking_usuario_id',
+		'picking', 'picking_id', 'picking_lote_codigo', 'picking_deposito_id', 'picking_at', 'picking_usuario_id',
 		'picking_facturado', 'picking_venta_id'];
     protected $table = 'pedido_combinacion';
     protected $tableAnita = 'pendmov';
@@ -102,6 +103,11 @@ class Pedido_Combinacion extends Model
     public function usuarios()
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
+    }
+
+    public function pickingCabecera()
+    {
+        return $this->belongsTo(Pedido_Picking::class, 'picking_id');
     }
 
 	public function getModuloIdAttribute($value)

@@ -154,7 +154,6 @@
                     det.textContent = 'FAC ' + money(b.neto_fac || 0) + ' · NC ' + money(b.neto_nc || 0);
                 }
             }
-            syncMedioDefault(netoActual);
         }).catch(function () {});
     }
 
@@ -204,16 +203,6 @@
             t += parseFloat(inp.value) || 0;
         });
         return t;
-    }
-
-    function syncMedioDefault(neto) {
-        var tbody = $('tbody-fl-cuenta-table');
-        if (!tbody || !CFG.turnoId) return;
-        if (tbody.children.length) return;
-        var tr = agregarRenglonCobranza(Math.max(0, neto), false);
-        var efectivo = (CFG.cuentas || []).find(function (c) { return +c.id === +CFG.efectivoId; })
-            || (CFG.cuentas || [])[0];
-        if (tr && efectivo) asignarCuentaEnFila(tr, efectivo);
     }
 
     function renderMediosRapidos() {
@@ -275,7 +264,6 @@
 
     function initCobranza() {
         renderMediosRapidos();
-        if (CFG.turnoId) syncMedioDefault(0);
 
         var addBtn = $('fl-add-medio');
         if (addBtn) {
@@ -449,22 +437,205 @@
             limpiarCampoVariante('color');
             limpiarCampoVariante('comb');
             pendingArticulo.modo = v.modo;
+            var aviso = $('fl-var-aviso');
+            if (aviso) {
+                aviso.classList.add('d-none');
+                aviso.textContent = '';
+            }
             if (v.modo === 'color_talle') {
                 $('fl-var-color-wrap').style.display = '';
                 $('fl-var-comb-wrap').style.display = 'none';
             } else {
                 $('fl-var-color-wrap').style.display = 'none';
                 $('fl-var-comb-wrap').style.display = '';
+                var combs = v.combinaciones || [];
+                if (!combs.length && aviso) {
+                    aviso.textContent = 'El artículo no tiene combinaciones activas. No se puede vender hasta activar una en el maestro.';
+                    aviso.classList.remove('d-none');
+                }
             }
             $('fl-var-cant').value = '1';
             window.jQuery('#fl-modal-var').modal('show');
-            setTimeout(function () {
-                var t = $('fl-var-talle-codigo');
-                if (t) t.focus();
-            }, 200);
         }).catch(function (e) {
             msg(e.message || 'Error al cargar variantes', false);
         });
+    }
+
+    function focoTalleVariante() {
+        var t = $('fl-var-talle-codigo');
+        if (!t) return;
+        t.focus();
+        if (typeof t.select === 'function') t.select();
+    }
+
+    function focoSiguienteTrasTalle() {
+        if (!pendingArticulo) return;
+        if (pendingArticulo.modo === 'color_talle') {
+            var c = $('fl-var-color-codigo');
+            if (c) { c.focus(); if (c.select) c.select(); }
+            return;
+        }
+        var comb = $('fl-var-comb-codigo');
+        if (comb) { comb.focus(); if (comb.select) comb.select(); }
+    }
+
+    function focoCantidadVariante() {
+        var cant = $('fl-var-cant');
+        if (!cant) return;
+        cant.focus();
+        if (typeof cant.select === 'function') cant.select();
+    }
+
+    function modalVarianteVisible() {
+        var m = $('fl-modal-var');
+        return !!(m && m.classList.contains('show'));
+    }
+
+    function buscarEnLista(lista, codigo) {
+        var q = String(codigo || '').trim().toLowerCase();
+        if (!q || !Array.isArray(lista)) return null;
+        var exacto = lista.find(function (r) {
+            return String(r.codigo || '').toLowerCase() === q
+                || String(r.nombre || '').toLowerCase() === q
+                || String(r.id) === q;
+        });
+        if (exacto) return exacto;
+        var parcial = lista.filter(function (r) {
+            return String(r.codigo || '').toLowerCase().indexOf(q) >= 0
+                || String(r.nombre || '').toLowerCase().indexOf(q) >= 0;
+        });
+        return parcial.length === 1 ? parcial[0] : null;
+    }
+
+    function aplicarTalleLocal(row) {
+        if (!row) return false;
+        var codigo = String(row.codigo || '').trim() || String(row.nombre || '');
+        if ($('fl-var-talle-id')) $('fl-var-talle-id').value = row.id;
+        if ($('fl-var-talle-codigo')) $('fl-var-talle-codigo').value = codigo;
+        if ($('fl-var-talle-nombre')) $('fl-var-talle-nombre').value = row.nombre || '';
+        return true;
+    }
+
+    function aplicarColorLocal(row) {
+        if (!row) return false;
+        var codigo = String(row.codigo || '').trim() || String(row.nombre || '');
+        if ($('fl-var-color-id')) $('fl-var-color-id').value = row.id;
+        if ($('fl-var-color-codigo')) $('fl-var-color-codigo').value = codigo;
+        if ($('fl-var-color-nombre')) $('fl-var-color-nombre').value = row.nombre || '';
+        return true;
+    }
+
+    function aplicarCombLocal(row) {
+        if (!row) return false;
+        if ($('fl-var-comb-id')) $('fl-var-comb-id').value = row.id;
+        if ($('fl-var-comb-codigo')) $('fl-var-comb-codigo').value = row.codigo || '';
+        if ($('fl-var-comb-nombre')) $('fl-var-comb-nombre').value = row.nombre || '';
+        return true;
+    }
+
+    function enterEnCampoVariante(e) {
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
+        if (!modalVarianteVisible()) return;
+        // Si hay un modal de consulta hijo abierto, no interferir
+        if (document.querySelector('#consultatalleModal.show, #consultacolorModal.show, #consultacombinacionModal.show')) {
+            return;
+        }
+        var t = e.target;
+        if (!t || !t.closest || !t.closest('#fl-modal-var')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+
+        if (t.id === 'fl-var-talle-codigo' || t.classList.contains('codigotalle')) {
+            var talle = buscarEnLista((pendingVariantes && pendingVariantes.talles) || [], t.value);
+            if (!talle) {
+                if ($('fl-var-talle-id')) $('fl-var-talle-id').value = '';
+                if ($('fl-var-talle-nombre')) $('fl-var-talle-nombre').value = '';
+                msg('Talle no encontrado. Usá F1 o el número (ej. 31).', false);
+                t.focus();
+                return;
+            }
+            aplicarTalleLocal(talle);
+            focoSiguienteTrasTalle();
+            return;
+        }
+
+        if (t.id === 'fl-var-color-codigo' || t.classList.contains('codigocolor')) {
+            var color = buscarEnLista((pendingVariantes && pendingVariantes.colores) || [], t.value);
+            if (!color) {
+                if ($('fl-var-color-id')) $('fl-var-color-id').value = '';
+                if ($('fl-var-color-nombre')) $('fl-var-color-nombre').value = '';
+                msg('Color no encontrado. Usá F1.', false);
+                t.focus();
+                return;
+            }
+            aplicarColorLocal(color);
+            focoCantidadVariante();
+            return;
+        }
+
+        if (t.id === 'fl-var-comb-codigo' || t.classList.contains('codigocombinacion')) {
+            var comb = buscarEnLista((pendingVariantes && pendingVariantes.combinaciones) || [], t.value);
+            if (!comb) {
+                if ($('fl-var-comb-id')) $('fl-var-comb-id').value = '';
+                if ($('fl-var-comb-nombre')) $('fl-var-comb-nombre').value = '';
+                msg('Combinación no encontrada. Usá F1.', false);
+                t.focus();
+                return;
+            }
+            aplicarCombLocal(comb);
+            focoCantidadVariante();
+            return;
+        }
+
+        if (t.id === 'fl-var-cant') {
+            confirmarVariante();
+            return;
+        }
+
+        if (t.id === 'fl-var-ok') {
+            confirmarVariante();
+        }
+    }
+
+    function initVarianteTeclado() {
+        var modal = $('fl-modal-var');
+        if (!modal) return;
+
+        // Capture: gana al $('input').keydown de cuentacaja/consulta.js que hace return false
+        modal.removeEventListener('keydown', enterEnCampoVariante, true);
+        modal.addEventListener('keydown', enterEnCampoVariante, true);
+
+        if (window.jQuery) {
+            var $jq = window.jQuery;
+            $jq('#fl-modal-var')
+                .off('shown.bs.modal.flVarFoco')
+                .on('shown.bs.modal.flVarFoco', function () {
+                    setTimeout(focoTalleVariante, 30);
+                });
+
+            // Al elegir desde modal F1, avanzar al siguiente
+            $jq('#fl-var-talle-wrap')
+                .off('talle:seleccionado.flVarNav')
+                .on('talle:seleccionado.flVarNav', function () {
+                    if (!modalVarianteVisible()) return;
+                    setTimeout(function () {
+                        if ($jq('#consultatalleModal').hasClass('show')) return;
+                        focoSiguienteTrasTalle();
+                    }, 120);
+                });
+
+            $jq('#fl-var-color-wrap')
+                .off('color:seleccionado.flVarNav')
+                .on('color:seleccionado.flVarNav', function () {
+                    if (!modalVarianteVisible()) return;
+                    setTimeout(function () {
+                        if ($jq('#consultacolorModal').hasClass('show')) return;
+                        focoCantidadVariante();
+                    }, 120);
+                });
+        }
     }
 
     window.payloadExtraConsultaTalle = function () {
@@ -533,36 +704,20 @@
             $('#fl-var-comb-codigo').val($tr.data('codigo'));
             $('#fl-var-comb-nombre').val($tr.data('nombre'));
             $('#consultacombinacionModal').modal('hide');
+            setTimeout(focoCantidadVariante, 50);
         });
         $(document).on('click', '#aceptaconsultacombinacionModal', function () {
             var $btn = $('#datoscombinacion .elige-combinacion').first();
             if ($btn.length) $btn.trigger('click');
             else $('#consultacombinacionModal').modal('hide');
         });
-        $(document).on('keydown', '.codigocombinacion', function (e) {
+        $(document).on('keydown', '#fl-var-comb-codigo', function (e) {
             if (esTeclaF1(e)) {
                 e.preventDefault();
                 e.stopPropagation();
                 $(this).closest('.tm-combinacion-campo').find('.consultacombinacion').trigger('click');
-                return;
             }
-            if (e.key !== 'Enter') return;
-            e.preventDefault();
-            var codigo = String($(this).val() || '').trim();
-            var hit = listarCombinacionesFiltradas(codigo).find(function (c) {
-                return String(c.codigo).toLowerCase() === codigo.toLowerCase()
-                    || String(c.id) === codigo
-                    || String(c.nombre || '').toLowerCase() === codigo.toLowerCase();
-            }) || (listarCombinacionesFiltradas(codigo)[0] || null);
-            if (hit) {
-                $('#fl-var-comb-id').val(hit.id);
-                $('#fl-var-comb-codigo').val(hit.codigo || '');
-                $('#fl-var-comb-nombre').val(hit.nombre || '');
-            } else {
-                $('#fl-var-comb-id').val('');
-                $('#fl-var-comb-nombre').val('');
-                setTimeout(function () { alert('Combinación no encontrada'); }, 0);
-            }
+            // Enter lo maneja initVarianteTeclado (navegación)
         });
     }
 
@@ -741,7 +896,7 @@
             renderCart();
             var tbody = $('tbody-fl-cuenta-table');
             if (tbody) tbody.innerHTML = '';
-            syncMedioDefault(0);
+            refrescarContextoPos();
         }).catch(function (e) {
             overlay(false);
             msg(e.message || 'Error de red', false);
@@ -788,6 +943,350 @@
             overlay(false);
             msg(e.message || 'Error al abrir turno', false);
         });
+    }
+
+    function pintarContextoPos(ctx) {
+        ctx = ctx || {};
+        var pv = $('fl-ctx-pv');
+        var dep = $('fl-ctx-dep');
+        var prox = $('fl-ctx-prox-val');
+        var lista = $('fl-ctx-lista');
+        if (pv) {
+            pv.textContent = ctx.puntoventa_codigo
+                ? (ctx.puntoventa_codigo + ' — ' + (ctx.puntoventa_nombre || ''))
+                : '—';
+        }
+        if (dep) {
+            dep.textContent = ctx.deposito_codigo
+                ? (ctx.deposito_codigo + ' — ' + (ctx.deposito_nombre || ''))
+                : '—';
+        }
+        if (prox) {
+            prox.textContent = ctx.proxima_etiqueta || '—';
+        }
+        if (lista && ctx.listaprecio_codigo) {
+            lista.textContent = ctx.listaprecio_codigo + ' — ' + (ctx.listaprecio_nombre || '');
+        }
+        var bar = $('fl-ctx-bar');
+        if (bar && ctx.aviso) {
+            bar.title = ctx.aviso;
+        }
+    }
+
+    function refrescarContextoPos() {
+        if (!CFG.localId || !CFG.urls.contextoPos) return;
+        get(CFG.urls.contextoPos + '?local_id=' + CFG.localId).then(function (res) {
+            if (res.body && res.body.ok && res.body.contexto) {
+                CFG.contexto = res.body.contexto;
+                pintarContextoPos(res.body.contexto);
+            }
+        }).catch(function () {});
+    }
+
+    function enfocarSkuStock() {
+        var stockQ = $('fl-stock-q');
+        if (!stockQ) return;
+        stockQ.focus();
+        if (typeof stockQ.select === 'function') {
+            stockQ.select();
+        }
+    }
+
+    function abrirConsultaStockPrecios() {
+        if (!CFG.localId) {
+            msg('Elegí un local', false);
+            return;
+        }
+        var q = ($('fl-q') && $('fl-q').value) || '';
+        var stockQ = $('fl-stock-q');
+        if (stockQ && q && !stockQ.value) {
+            stockQ.value = q.trim();
+        }
+        if (window.jQuery) {
+            window.jQuery('#fl-modal-stock').modal('show');
+        }
+    }
+
+    function fmtNumPos(n, dec) {
+        return (Number(n) || 0).toLocaleString('es-AR', {
+            minimumFractionDigits: dec,
+            maximumFractionDigits: dec
+        });
+    }
+
+    function limpiarResultadoStock() {
+        var matches = $('fl-stock-matches');
+        var resumen = $('fl-stock-resumen');
+        var combos = $('fl-stock-combos');
+        var body = $('fl-stock-body');
+        if (matches) {
+            matches.classList.add('d-none');
+            matches.innerHTML = '';
+        }
+        if (resumen) {
+            resumen.classList.add('d-none');
+            resumen.innerHTML = '';
+        }
+        if (combos) {
+            combos.classList.add('d-none');
+            combos.innerHTML = '';
+        }
+        if (body) {
+            body.innerHTML = '<tr><td colspan="12" class="text-muted text-center">Consultando…</td></tr>';
+        }
+    }
+
+    function renderMatchesStock(rows) {
+        var wrap = $('fl-stock-matches');
+        if (!wrap) return;
+        if (!rows || !rows.length) {
+            wrap.classList.add('d-none');
+            wrap.innerHTML = '';
+            return;
+        }
+        wrap.classList.remove('d-none');
+        wrap.innerHTML = '<div class="small text-muted mb-1">Elegí el artículo:</div>'
+            + rows.map(function (a) {
+                return '<button type="button" class="btn btn-sm btn-outline-secondary mr-1 mb-1 fl-stock-match"'
+                    + ' data-id="' + a.id + '" data-sku="' + escapeHtml(a.sku || '') + '">'
+                    + escapeHtml(a.sku || '') + ' — ' + escapeHtml(a.descripcion || '')
+                    + '</button>';
+            }).join('');
+        wrap.querySelectorAll('.fl-stock-match').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var sku = btn.getAttribute('data-sku') || '';
+                var id = btn.getAttribute('data-id') || '';
+                if ($('fl-stock-q')) $('fl-stock-q').value = sku;
+                fetchStockPreciosPorArticulo(id || sku);
+                enfocarSkuStock();
+            });
+        });
+    }
+
+    function etiquetaMedidaPos(m) {
+        if (String(m) === '48' || Number(m) === 48) {
+            return 'UN';
+        }
+        return String(m);
+    }
+
+    function claseCantidadPos(c) {
+        var n = Number(c) || 0;
+        if (n > 0) return 'fl-qty-pos';
+        if (n < 0) return 'fl-qty-neg';
+        return 'fl-qty-zero';
+    }
+
+    function filasPlanasAMatriz(filas) {
+        var medidasMap = {};
+        var grupos = {};
+        (filas || []).forEach(function (f) {
+            var med = f.medida != null ? String(f.medida) : '';
+            if (med !== '') {
+                medidasMap[med] = true;
+            }
+            var key = String(f.deposito != null ? f.deposito : '')
+                + '|' + String(f.color != null ? f.color : '')
+                + '|' + String(f.color_desc || '');
+            if (!grupos[key]) {
+                grupos[key] = {
+                    deposito: f.deposito,
+                    color: f.color,
+                    color_desc: f.color_desc || '',
+                    cantidades: {},
+                    total: 0
+                };
+            }
+            var c = Number(f.cantidad || 0);
+            if (med !== '') {
+                grupos[key].cantidades[med] = (Number(grupos[key].cantidades[med]) || 0) + c;
+            }
+            grupos[key].total += c;
+        });
+        var medidas = Object.keys(medidasMap).sort(function (a, b) {
+            var na = Number(a);
+            var nb = Number(b);
+            if (!isNaN(na) && !isNaN(nb)) {
+                return na - nb;
+            }
+            return String(a).localeCompare(String(b));
+        });
+        return {
+            medidas: medidas,
+            filas: Object.keys(grupos).map(function (k) { return grupos[k]; })
+        };
+    }
+
+    function pintarStockPrecios(b) {
+        var msgEl = $('fl-stock-msg');
+        var thead = $('fl-stock-thead');
+        var body = $('fl-stock-body');
+        var resumen = $('fl-stock-resumen');
+        var combos = $('fl-stock-combos');
+        var art = b.articulo || {};
+        var precio = b.precio || {};
+        if (msgEl) {
+            msgEl.textContent = (art.sku || '') + ' — ' + (art.descripcion || '')
+                + (b.origen_stock ? ' · origen ' + b.origen_stock : '');
+        }
+        if (resumen) {
+            resumen.classList.remove('d-none');
+            resumen.innerHTML =
+                '<div><strong>Precio lista local</strong>: ' + money(precio.valor || 0)
+                + (precio.lista ? ' <span class="text-muted">(' + escapeHtml(precio.lista) + ')</span>' : '')
+                + '</div>'
+                + '<div><strong>Saldo total</strong>: ' + fmtNumPos(b.saldo_total || 0, 0) + '</div>'
+                + '<div><strong>Variante</strong>: '
+                + escapeHtml(b.modo_variante === 'color_talle' ? 'color + talle' : 'combinación + talle')
+                + '</div>';
+        }
+        var listaCombos = b.combinaciones || [];
+        if (combos) {
+            if (listaCombos.length) {
+                combos.classList.remove('d-none');
+                combos.innerHTML = '<div class="small font-weight-bold mb-1">Combinaciones activas (POS)</div>'
+                    + '<div class="fl-stock-combo-chips">'
+                    + listaCombos.map(function (c) {
+                        return '<span class="badge badge-info mr-1 mb-1">'
+                            + escapeHtml(String(c.codigo || '')) + ' '
+                            + escapeHtml(c.nombre || '')
+                            + '</span>';
+                    }).join('')
+                    + '</div>';
+            } else if (b.modo_variante === 'combinacion') {
+                combos.classList.remove('d-none');
+                combos.innerHTML = '<div class="small text-warning">Sin combinaciones activas (estado A) para vender en POS.</div>';
+            } else {
+                combos.classList.add('d-none');
+                combos.innerHTML = '';
+            }
+        }
+
+        var matriz;
+        if (b.medidas && b.medidas.length && b.filas && b.filas[0] && b.filas[0].cantidades) {
+            matriz = { medidas: b.medidas, filas: b.filas };
+        } else {
+            matriz = filasPlanasAMatriz(b.filas || []);
+        }
+        var medidas = matriz.medidas || [];
+        var filas = matriz.filas || [];
+        var colCount = medidas.length + 3;
+
+        if (thead) {
+            var headHtml = '<tr><th>Dp</th><th>Combinación</th>';
+            medidas.forEach(function (m) {
+                headHtml += '<th class="text-right fl-stock-med">' + escapeHtml(etiquetaMedidaPos(m)) + '</th>';
+            });
+            headHtml += '<th class="text-right">Tot</th></tr>';
+            thead.innerHTML = headHtml;
+        }
+
+        if (!filas.length) {
+            if (body) {
+                body.innerHTML = '<tr><td colspan="' + colCount + '" class="text-muted text-center">Sin stock en el depósito del local.</td></tr>';
+            }
+            return;
+        }
+
+        if (body) {
+            body.innerHTML = filas.map(function (f) {
+                var combTxt = '';
+                if (f.color != null && String(f.color) !== '') {
+                    combTxt = String(f.color);
+                }
+                if (f.color_desc) {
+                    combTxt = (combTxt ? combTxt + ' — ' : '') + f.color_desc;
+                }
+                var row = '<tr>'
+                    + '<td>' + escapeHtml(String(f.deposito != null ? f.deposito : '')) + '</td>'
+                    + '<td class="fl-stock-comb-cell">' + escapeHtml(combTxt) + '</td>';
+                medidas.forEach(function (m) {
+                    var c = Number((f.cantidades && f.cantidades[String(m)]) || 0);
+                    row += '<td class="text-right ' + claseCantidadPos(c) + '">'
+                        + (c === 0 ? '' : fmtNumPos(c, 0))
+                        + '</td>';
+                });
+                row += '<td class="text-right font-weight-bold">' + fmtNumPos(f.total, 0) + '</td></tr>';
+                return row;
+            }).join('');
+        }
+    }
+
+    function fetchStockPreciosPorArticulo(clave) {
+        var msgEl = $('fl-stock-msg');
+        var body = $('fl-stock-body');
+        if (!clave) {
+            if (msgEl) msgEl.textContent = 'Ingresá un SKU o nombre.';
+            return;
+        }
+        if (msgEl) msgEl.textContent = 'Consultando…';
+        var origenErp = $('fl-stock-origen-erp') && $('fl-stock-origen-erp').checked;
+        // ID interno ERP (~hasta 6 dígitos) vs SKU Ferli (8+).
+        var param = /^\d{1,6}$/.test(String(clave))
+            ? 'articulo_id=' + encodeURIComponent(clave)
+            : 'codigo=' + encodeURIComponent(clave);
+        var url = CFG.urls.consultaStockPrecios
+            + '?local_id=' + CFG.localId
+            + '&' + param
+            + '&origen=' + (origenErp ? 'erp' : 'anita');
+        get(url).then(function (res) {
+            var b = res.body || {};
+            if (res.status >= 400 || !b.ok) {
+                if (msgEl) msgEl.textContent = b.error || 'Sin resultados';
+                if (body) {
+                    body.innerHTML = '<tr><td colspan="20" class="text-muted text-center">'
+                        + escapeHtml(b.error || 'Sin resultados') + '</td></tr>';
+                }
+                return;
+            }
+            pintarStockPrecios(b);
+        }).catch(function (e) {
+            if (msgEl) msgEl.textContent = e.message || 'Error de red';
+            if (body) {
+                body.innerHTML = '<tr><td colspan="20" class="text-danger text-center">Error de red</td></tr>';
+            }
+        });
+    }
+
+    function consultarStockPrecios() {
+        var q = ($('fl-stock-q') && $('fl-stock-q').value || '').trim();
+        var msgEl = $('fl-stock-msg');
+        if (!q) {
+            if (msgEl) msgEl.textContent = 'Ingresá un SKU o nombre.';
+            return;
+        }
+        limpiarResultadoStock();
+        if (msgEl) msgEl.textContent = 'Buscando…';
+
+        // Si parece SKU numérico exacto, consultar directo; si no, listar candidatos.
+        if (/^\d{6,}$/.test(q)) {
+            fetchStockPreciosPorArticulo(q);
+            return;
+        }
+
+        get(CFG.urls.buscar + '?q=' + encodeURIComponent(q) + '&local_id=' + (CFG.localId || ''))
+            .then(function (res) {
+                var rows = (res.body && res.body.data) || [];
+                if (!rows.length) {
+                    // Igual intentar resolución backend (descripción / canal).
+                    fetchStockPreciosPorArticulo(q);
+                    return;
+                }
+                if (rows.length === 1) {
+                    if ($('fl-stock-q')) $('fl-stock-q').value = rows[0].sku || q;
+                    fetchStockPreciosPorArticulo(String(rows[0].id));
+                    return;
+                }
+                if (msgEl) msgEl.textContent = rows.length + ' artículos. Elegí uno.';
+                var body = $('fl-stock-body');
+                if (body) {
+                    body.innerHTML = '<tr><td colspan="20" class="text-muted text-center">Elegí un artículo de la lista.</td></tr>';
+                }
+                renderMatchesStock(rows);
+            })
+            .catch(function () {
+                fetchStockPreciosPorArticulo(q);
+            });
     }
 
     function bind() {
@@ -876,12 +1375,44 @@
                 }
             }
             if (e.key === 'F2') { e.preventDefault(); emitir(false); }
+            if (e.key === 'F3') {
+                e.preventDefault();
+                abrirConsultaStockPrecios();
+            }
             if (e.key === 'F8') { e.preventDefault(); emitir(true); }
         }, true);
 
+        if ($('fl-tool-stock')) {
+            $('fl-tool-stock').addEventListener('click', abrirConsultaStockPrecios);
+        }
+        if ($('fl-stock-buscar')) {
+            $('fl-stock-buscar').addEventListener('click', consultarStockPrecios);
+        }
+        if ($('fl-stock-q')) {
+            $('fl-stock-q').addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    consultarStockPrecios();
+                }
+            });
+        }
+        if (window.jQuery) {
+            window.jQuery('#fl-modal-stock').on('shown.bs.modal', function () {
+                enfocarSkuStock();
+                var stockQ = $('fl-stock-q');
+                if (stockQ && stockQ.value.trim()) {
+                    consultarStockPrecios();
+                    // Tras consultar, dejar el foco en el SKU para seguir tipeando.
+                    setTimeout(enfocarSkuStock, 0);
+                }
+            });
+        }
+
         initCobranza();
         initCombinacionModal();
+        initVarianteTeclado();
         actualizarLetraBadge(null);
+        pintarContextoPos(CFG.contexto || {});
     }
 
     if (document.readyState === 'loading') {

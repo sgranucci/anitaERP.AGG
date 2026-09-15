@@ -129,7 +129,21 @@
         <h3 class="card-title mb-0"><i class="fa fa-list"></i> &Iacute;tems del pedido</h3>
         <div class="card-tools">
             @if (\App\Support\Ventas\PedidoPickingFerliSupport::habilitado())
-                <a href="{{ route('picking_pedido') }}" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener">
+                @php
+                    $pickingActivoForm = \App\Support\Ventas\PedidoPickingFerliSupport::findPicking(
+                        \App\Support\Ventas\PedidoPickingFerliSupport::pickingActivoId()
+                    );
+                @endphp
+                <input type="hidden" id="picking_activo_id" value="{{ $pickingActivoForm->id ?? 0 }}">
+                <input type="hidden" id="picking_activo_codigo" value="{{ $pickingActivoForm->codigo ?? 0 }}">
+                <span class="badge badge-warning mr-2" id="picking_activo_etiqueta">
+                    @if ($pickingActivoForm)
+                        Picking #{{ $pickingActivoForm->codigo }}
+                    @else
+                        Sin picking activo
+                    @endif
+                </span>
+                <a href="{{ route('picking_pedido', ['consultar' => 1]) }}" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener">
                     <i class="fa fa-dolly"></i> Workbench picking
                 </a>
             @endif

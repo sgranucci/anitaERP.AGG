@@ -158,11 +158,17 @@
                 if (e.key !== 'Enter') {
                     return;
                 }
+                if ($(this).closest('#fl-modal-var').length) {
+                    return;
+                }
                 e.preventDefault();
                 resolverColorCodigo($(this).closest('.tm-color-campo'), true);
             })
             .off('blur.colorCodigo', '.codigocolor')
             .on('blur.colorCodigo', '.codigocolor', function () {
+                if ($(this).closest('#fl-modal-var').length) {
+                    return;
+                }
                 if (modalAbriendo || $('#consultacolorModal').hasClass('show')) {
                     return;
                 }

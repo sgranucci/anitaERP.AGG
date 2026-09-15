@@ -143,8 +143,68 @@ class PrecioServiceFerli
         ];
     }
 
+    /**
+     * Precio unitario vigente para una lista (opcionalmente por combinación).
+     */
+    public function precioVigente(
+        int $articuloId,
+        int $listaprecioId,
+        $combinacionId = null,
+        $fechavigencia = null,
+    ): float {
+        if ($articuloId <= 0 || $listaprecioId <= 0) {
+            return 0.0;
+        }
+
+        $fecha = $this->normalizaFechaVigencia($fechavigencia ?? date('Y-m-d'));
+        $row = $this->resuelvePrecio($articuloId, $listaprecioId, $combinacionId, $fecha);
+
+        return (float) ($row->precio ?? 0);
+    }
+
+    /**
+     * Primer precio de asignaPrecio() (array de talles) como float.
+     *
+     * @param  list<array{precio:mixed}>|mixed  $resultado
+     */
+    public static function primerPrecioNumerico($resultado): float
+    {
+        if (is_numeric($resultado)) {
+            return (float) $resultado;
+        }
+        if (! is_array($resultado) || $resultado === []) {
+            return 0.0;
+        }
+        $primero = $resultado[0] ?? null;
+        if (is_array($primero) && array_key_exists('precio', $primero)) {
+            return (float) $primero['precio'];
+        }
+        if (is_numeric($primero)) {
+            return (float) $primero;
+        }
+
+        return 0.0;
+    }
+
     public static function asignaPrecioPorLista($articulo_id, $listaprecio_id, $fechavigencia)
     {
+        // Preferir genérico (sin combinación / combinacion_id 0|null); no mezclar filas de combos.
+        $fecha = is_string($fechavigencia) ? $fechavigencia : date('Y-m-d', strtotime((string) $fechavigencia));
+        $row = Precio::query()
+            ->where('articulo_id', (int) $articulo_id)
+            ->where('listaprecio_id', (int) $listaprecio_id)
+            ->where(function ($q) {
+                $q->whereNull('combinacion_id')->orWhere('combinacion_id', 0);
+            })
+            ->where('fechavigencia', '<=', $fecha)
+            ->orderByDesc('fechavigencia')
+            ->first();
+
+        if ($row) {
+            return (float) $row->precio;
+        }
+
+        // Fallback: cualquier fila de la lista (histórico previo al genérico explícito)
         $precios = Precio::select('articulo_id', 'listaprecio_id', 'fechavigencia', 'precio')
             ->where('articulo_id', '=', $articulo_id)
             ->where('listaprecio_id', '=', $listaprecio_id)

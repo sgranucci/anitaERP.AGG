@@ -24,8 +24,9 @@
     <div class="col-lg-8">
     <input type="text" name="comando" id="comando" class="form-control" value="{{old('comando', $data->comando ?? '')}}" required/>
         <small class="form-text text-muted">
-            Pedidos PDF (CUPS): <code>{{ config('pedido.imprimir_script', base_path('bin/imprimir-pedido.sh')) }} "%s" NOMBRE_COLA</code>.
-            Láser PDF Ferli (Monica/Laura): <code>{{ base_path('bin/imprimir-pdf-laser.sh') }} "%s" IP_O_COLA</code>.
+            Pedidos PDF (CUPS local): <code>{{ config('pedido.imprimir_script', base_path('bin/imprimir-pedido.sh')) }} "%s" NOMBRE_COLA</code>.
+            Emisión OT / láser PDF (JetDirect, sin CUPS): <code>{{ base_path('bin/imprimir-pdf-laser.sh') }} "%s" IP</code>
+            — OT Diego <code>160.132.0.203</code>, Gaby <code>160.132.0.183</code>, Monica/P1 <code>160.132.0.201</code>, Laura <code>160.132.0.200</code>.
             Etiquetas Zebra ZPL (CUPS o IP de red): <code>{{ base_path('bin/imprimir-etiqueta-zebra.sh') }} "%s" HOST_O_COLA</code>
             (artículos y recepción Surmar).
             Tickets térmicos: <code>{{ base_path('bin/gastronomia-print-ticket.sh') }} "%s" IP_IMPRESORA 9100</code>.

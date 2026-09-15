@@ -83,18 +83,27 @@ $('input').keydown(function (e) {
     if (keyCode == 13) {
         if ($(this).closest('#cuenta-table').length
             || $(this).closest('#cheque-emitido-table').length
+            || $(this).closest('#fl-modal-var').length
+            || $(this).closest('#tbody-fl-cuenta-table').length
             || $(this).is('#consultacuentacaja')
             || $(this).is('#consultapuntoventa')
             || $(this).is('#consultadeposito')
             || $(this).is('#consultatipotransaccionventa')
             || $(this).is('#consultalistaprecio')
             || $(this).is('#consultacuentacontable')
+            || $(this).is('#consultatalle')
+            || $(this).is('#consultacolor')
+            || $(this).is('#consultacombinacion')
             || $(this).hasClass('codigopuntoventa')
             || $(this).hasClass('codigodeposito')
             || $(this).hasClass('codigocuentacaja')
             || $(this).hasClass('codigolistaprecio')
             || $(this).hasClass('abreviaturatipotransaccionventa')
-            || $(this).hasClass('codigocuentacontable')) {
+            || $(this).hasClass('codigocuentacontable')
+            || $(this).hasClass('codigotalle')
+            || $(this).hasClass('codigocolor')
+            || $(this).hasClass('codigocombinacion')
+            || $(this).hasClass('codigocliente')) {
             return;
         }
         e.preventDefault();

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Ventas\FacturacionLocal;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Color;
-use App\Models\Stock\Combinacion;
 use App\Models\Stock\Talle;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Cliente;
@@ -14,11 +13,14 @@ use App\Services\Stock\PrecioServiceFerli;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalEmisionService;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalTurnoService;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalValeService;
+use App\Services\Ventas\FacturacionLocal\StockLocalConsultaService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalUsoCuentacajaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
+use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
 use App\Support\Ventas\GastronomiaCuentacajaIconoSupport;
 use Illuminate\Http\Request;
 
@@ -29,6 +31,7 @@ class FacturacionLocalProcesoController extends Controller
         private readonly FacturacionLocalEmisionService $emisionService,
         private readonly FacturacionLocalValeService $valeService,
         private readonly TurnoLocalRepositoryInterface $turnoLocalRepository,
+        private readonly StockLocalConsultaService $stockConsultaService,
     ) {
     }
 
@@ -48,7 +51,15 @@ class FacturacionLocalProcesoController extends Controller
             $localId = (int) ($locales->first()?->id ?? 0);
         }
 
-        $local = $localId > 0 ? LocalVenta::query()->with('cuentacajas')->find($localId) : null;
+        $local = $localId > 0
+            ? LocalVenta::query()->with([
+                'cuentacajas',
+                'puntoventa:id,codigo,nombre',
+                'deposito:id,codigo,nombre',
+                'listaprecio:id,codigo,nombre',
+                'tipotransaccionFac:id,abreviatura,codigo,nombre',
+            ])->find($localId)
+            : null;
         $turno = $local ? $this->turnoService->turnoAbierto((int) $local->id) : null;
         if ($turno) {
             $turno->loadMissing(['turnoLocal:id,codigo,nombre', 'usuarioApertura:id,nombre']);
@@ -72,6 +83,7 @@ class FacturacionLocalProcesoController extends Controller
 
         $usocuentacajaLocalId = FacturacionLocalUsoCuentacajaSupport::resolverId() ?? 0;
         $empresaIdPos = (int) ($local?->empresa_id ?? 0);
+        $contextoPos = FacturacionLocalPosContextoSupport::paraLocal($local);
 
         $turnosQuery = $this->turnoLocalRepository
             ->listarParaSelect($local?->empresa_id ? (int) $local->empresa_id : null);
@@ -103,8 +115,59 @@ class FacturacionLocalProcesoController extends Controller
             'turnosMaestro',
             'turnoSugeridoId',
             'usocuentacajaLocalId',
-            'empresaIdPos'
+            'empresaIdPos',
+            'contextoPos'
         ));
+    }
+
+    public function apiContextoPos(Request $request)
+    {
+        $this->assertFerli();
+        can('usar-facturacion-local', false);
+
+        $local = LocalVenta::query()->find((int) $request->input('local_id', 0));
+        if (! $local) {
+            return response()->json(['ok' => false, 'error' => 'Local inválido'], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'contexto' => FacturacionLocalPosContextoSupport::paraLocal($local),
+        ]);
+    }
+
+    /**
+     * Consulta stock + precios del local desde el POS (misma lógica que pantallas dedicadas).
+     */
+    public function apiConsultaStockPrecios(Request $request)
+    {
+        $this->assertFerli();
+        can('usar-facturacion-local', false);
+
+        $local = LocalVenta::query()->find((int) $request->input('local_id', 0));
+        if (! $local) {
+            return response()->json(['ok' => false, 'error' => 'Local inválido'], 422);
+        }
+
+        $busqueda = trim((string) (
+            $request->input('articulo_id')
+            ?: $request->input('codigo')
+            ?: $request->input('q')
+            ?: ''
+        ));
+        if ($busqueda === '') {
+            return response()->json(['ok' => false, 'error' => 'Ingrese un artículo (SKU o ID).'], 422);
+        }
+
+        $origen = strtolower(trim((string) $request->input('origen', StockLocalInformeListadoFiltros::ORIGEN_ANITA)));
+        if ($origen !== StockLocalInformeListadoFiltros::ORIGEN_ERP) {
+            $origen = StockLocalInformeListadoFiltros::ORIGEN_ANITA;
+        }
+
+        $resultado = $this->stockConsultaService->consultarPreciosYStock($local, $busqueda, $origen);
+        $status = ($resultado['ok'] ?? false) ? 200 : 422;
+
+        return response()->json($resultado, $status);
     }
 
     public function apiBuscarArticulo(Request $request)
@@ -123,7 +186,10 @@ class FacturacionLocalProcesoController extends Controller
                 $w->where('sku', 'like', '%'.$q.'%')
                     ->orWhere('descripcion', 'like', '%'.$q.'%');
             });
-        ArticuloCanalSupport::scopeArticulosCanalLocal($query);
+        ArticuloCanalSupport::scopeArticulosPosLocal($query);
+        $query->where(function ($w) {
+            $w->where('nofactura', false)->orWhereNull('nofactura');
+        });
         $rows = $query->orderBy('sku')->limit(30)->get()->map(function (Articulo $a) {
             return [
                 'id' => (int) $a->id,
@@ -145,7 +211,7 @@ class FacturacionLocalProcesoController extends Controller
         $articulo = Articulo::query()->findOrFail($articuloId);
         if (! ArticuloCanalSupport::articuloOperativoLocal($articuloId)) {
             return response()->json([
-                'error' => 'El artículo no está operativo en canal Local.',
+                'error' => 'El artículo no está operativo en canal Local (sin canal o inactivo).',
             ], 422);
         }
         $modo = FacturacionLocalVarianteArticuloSupport::modo($articulo);
@@ -159,13 +225,8 @@ class FacturacionLocalProcesoController extends Controller
         if ($modo === FacturacionLocalVarianteArticuloSupport::MODO_COLOR_TALLE) {
             $payload['colores'] = Color::query()->orderBy('nombre')->limit(500)->get(['id', 'nombre', 'codigo']);
         } else {
-            $payload['combinaciones'] = Combinacion::query()
-                ->where('articulo_id', $articuloId)
-                ->where(function ($q) {
-                    $q->whereNull('estado')->orWhere('estado', '!=', 'I');
-                })
-                ->orderBy('codigo')
-                ->get(['id', 'codigo', 'nombre', 'observacion']);
+            $payload['combinaciones'] = FacturacionLocalVarianteArticuloSupport::queryCombinacionesActivas($articuloId)
+                ->get(['id', 'codigo', 'nombre', 'observacion', 'estado']);
         }
 
         return response()->json($payload);
@@ -181,15 +242,26 @@ class FacturacionLocalProcesoController extends Controller
         $talleId = (int) $request->input('talle_id', 0);
         $localId = (int) $request->input('local_id', 0);
         $local = LocalVenta::query()->find($localId);
+        $listaId = (int) ($local?->listaprecio_id ?? 0);
         $precio = 0.;
+        $listaUsada = $listaId;
         try {
-            if (class_exists(PrecioServiceFerli::class) && $articuloId > 0 && $talleId > 0) {
-                $precio = (float) app(PrecioServiceFerli::class)->asignaPrecio(
-                    $articuloId,
-                    $combinacionId > 0 ? $combinacionId : null,
-                    $talleId,
-                    now()->format('Y-m-d')
-                );
+            $svc = app(PrecioServiceFerli::class);
+            $fecha = now()->format('Y-m-d');
+            $comb = $combinacionId > 0 ? $combinacionId : null;
+
+            // Lista del local (Lugano/Web/etc.) manda en POS Local.
+            if ($articuloId > 0 && $listaId > 0) {
+                $precio = $svc->precioVigente($articuloId, $listaId, $comb, $fecha);
+            }
+
+            // Fallback: lista por rango de talle (ABM Ferli clásico).
+            if ($precio <= 0 && $articuloId > 0 && $talleId > 0) {
+                $filas = $svc->asignaPrecio($articuloId, $comb, $talleId, $fecha);
+                $precio = PrecioServiceFerli::primerPrecioNumerico($filas);
+                if (is_array($filas[0] ?? null) && (int) ($filas[0]['listaprecio_id'] ?? 0) > 0) {
+                    $listaUsada = (int) $filas[0]['listaprecio_id'];
+                }
             }
         } catch (\Throwable $e) {
             $precio = 0.;
@@ -197,7 +269,7 @@ class FacturacionLocalProcesoController extends Controller
 
         return response()->json([
             'precio' => $precio,
-            'listaprecio_id' => $local?->listaprecio_id,
+            'listaprecio_id' => $listaUsada > 0 ? $listaUsada : ($local?->listaprecio_id),
         ]);
     }
 

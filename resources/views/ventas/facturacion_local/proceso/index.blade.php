@@ -17,6 +17,7 @@ window.FL_POS = {
     cuentas: @json($cuentasPos ?? []),
     efectivoId: {{ (int) ($local->cuentacaja_efectivo_id ?? 0) }},
     empresaId: {{ (int) ($empresaIdPos ?? 0) }},
+    contexto: @json($contextoPos ?? []),
     urls: {
         pos: @json(route('facturacion_local_pos')),
         buscar: @json(url('ventas/facturacion-local/api/buscar-articulo')),
@@ -26,6 +27,8 @@ window.FL_POS = {
         preview: @json(url('ventas/facturacion-local/api/preview-totales')),
         cliente: @json(url('ventas/facturacion-local/api/cliente')),
         vales: @json(url('ventas/facturacion-local/api/vales')),
+        contextoPos: @json(route('facturacion_local_api_contexto_pos')),
+        consultaStockPrecios: @json(route('facturacion_local_api_consulta_stock_precios')),
         abrirTurno: @json(route('facturacion_local_turno_abrir')),
         cerrarTurno: @json($turno ? route('facturacion_local_turno_cerrar', $turno->id) : ''),
     },
@@ -73,6 +76,11 @@ window.FACTURACION_LOCAL = {
             <span class="fl-status off">Caja cerrada — hay que abrir el turno para cobrar</span>
         @endif
         <div class="ml-auto d-flex align-items-center" style="gap:8px;">
+            @if ($local)
+                <button type="button" class="fl-btn fl-btn-ghost" id="fl-tool-stock" title="Consultar stock y precios (F3)">
+                    <i class="fa fa-cubes"></i> Stock / precios
+                </button>
+            @endif
             @if ($turno && can('cerrar-turno-facturacion-local', false))
                 <button type="button" class="fl-btn fl-btn-ghost" id="fl-cerrar-turno">Cerrar turno</button>
             @endif
@@ -80,6 +88,42 @@ window.FACTURACION_LOCAL = {
             <a href="{{ route('facturacion_local_locales') }}" class="fl-btn fl-btn-ghost">Locales</a>
         </div>
     </div>
+
+    @if ($local)
+        @php $ctx = $contextoPos ?? []; @endphp
+        <div class="fl-ctx-bar" id="fl-ctx-bar" title="{{ $ctx['aviso'] ?? 'Contexto de emisión del local (informativo)' }}">
+            <div class="fl-ctx-item">
+                <span class="fl-ctx-lbl">Punto de venta</span>
+                <span class="fl-ctx-val" id="fl-ctx-pv">
+                    @if (!empty($ctx['puntoventa_codigo']))
+                        {{ $ctx['puntoventa_codigo'] }} — {{ $ctx['puntoventa_nombre'] }}
+                    @else
+                        —
+                    @endif
+                </span>
+            </div>
+            <div class="fl-ctx-item">
+                <span class="fl-ctx-lbl">Depósito</span>
+                <span class="fl-ctx-val" id="fl-ctx-dep">
+                    @if (!empty($ctx['deposito_codigo']))
+                        {{ $ctx['deposito_codigo'] }} — {{ $ctx['deposito_nombre'] }}
+                    @else
+                        —
+                    @endif
+                </span>
+            </div>
+            <div class="fl-ctx-item fl-ctx-prox" id="fl-proximo-comprobante" title="Próximo número sugerido (letra B / CF; informativo — al emitir se confirma)">
+                <span class="fl-ctx-lbl">Próxima factura</span>
+                <span class="fl-ctx-val" id="fl-ctx-prox-val">{{ $ctx['proxima_etiqueta'] ?? '—' }}</span>
+            </div>
+            @if (!empty($ctx['listaprecio_codigo']))
+                <div class="fl-ctx-item">
+                    <span class="fl-ctx-lbl">Lista</span>
+                    <span class="fl-ctx-val" id="fl-ctx-lista">{{ $ctx['listaprecio_codigo'] }} — {{ $ctx['listaprecio_nombre'] }}</span>
+                </div>
+            @endif
+        </div>
+    @endif
 
     @if (! $local)
         <div class="fl-panel"><p>Elegí un local arriba para operar.</p></div>
@@ -140,7 +184,7 @@ window.FACTURACION_LOCAL = {
             </div>
             <p class="fl-keys">
                 Cantidad negativa = devolución (NC).
-                <kbd>F1</kbd> consulta art. · <kbd>F2</kbd> cobrar · <kbd>F8</kbd> ticket regalo · <kbd>Esc</kbd> limpia
+                <kbd>F1</kbd> consulta art. · <kbd>F2</kbd> cobrar · <kbd>F3</kbd> stock/precios · <kbd>F8</kbd> ticket regalo · <kbd>Esc</kbd> limpia
             </p>
         </div>
         <div class="fl-panel">
@@ -228,6 +272,8 @@ window.FACTURACION_LOCAL = {
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
+                <p class="fl-var-ayuda">Foco en talle · <kbd>Enter</kbd> avanza al siguiente campo · <kbd>Enter</kbd> en cantidad agrega · <kbd>F1</kbd> consulta</p>
+                <div id="fl-var-aviso" class="fl-var-aviso d-none" role="status"></div>
                 <div class="form-group tm-talle-campo" id="fl-var-talle-wrap">
                     <label class="d-block">Talle (obligatorio)</label>
                     <div class="d-flex flex-nowrap align-items-center" style="gap:4px;">
@@ -261,13 +307,59 @@ window.FACTURACION_LOCAL = {
                         <input type="text" class="form-control form-control-sm descripcioncombinacion" id="fl-var-comb-nombre" placeholder="Descripción" readonly>
                     </div>
                 </div>
-                <div class="form-group">
+                <div class="form-group mb-0">
                     <label>Cantidad (negativa = devolución)</label>
                     <input type="number" step="1" id="fl-var-cant" class="form-control" value="1">
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="fl-btn fl-btn-primary" id="fl-var-ok">Agregar</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="fl-var-ok">Agregar al carrito</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="fl-modal-stock" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Consulta stock / precios</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex flex-wrap align-items-end" style="gap:8px;">
+                    <div class="flex-grow-1" style="min-width:12rem;">
+                        <label class="small mb-1 d-block" for="fl-stock-q">SKU o descripción</label>
+                        <input type="text" id="fl-stock-q" class="form-control form-control-sm" placeholder="Ej. MELISA o 41079206" autocomplete="off">
+                    </div>
+                    <div class="form-check mb-1">
+                        <input type="checkbox" class="form-check-input" id="fl-stock-origen-erp" value="1">
+                        <label class="form-check-label small" for="fl-stock-origen-erp">Stock ERP</label>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-primary" id="fl-stock-buscar">Consultar</button>
+                </div>
+                <div id="fl-stock-matches" class="fl-stock-matches d-none mt-2"></div>
+                <div id="fl-stock-msg" class="small text-muted mt-2"></div>
+                <div id="fl-stock-resumen" class="fl-stock-resumen d-none mt-2"></div>
+                <div id="fl-stock-combos" class="fl-stock-combos d-none mt-2"></div>
+                <div class="table-responsive mt-2 fl-stock-matriz-wrap">
+                    <table class="table table-sm table-bordered mb-0 fl-stock-matriz" id="fl-stock-tabla">
+                        <thead id="fl-stock-thead" style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th>Dp</th>
+                                <th>Combinación</th>
+                                <th class="text-right">Tot</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fl-stock-body">
+                            <tr><td colspan="3" class="text-muted text-center">Ingresá un SKU o nombre y consultá.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>

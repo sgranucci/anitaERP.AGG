@@ -777,6 +777,8 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('ventas/facturacion-local/api/preview-totales', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiPreviewTotales')->name('facturacion_local_api_preview');
     Route::get('ventas/facturacion-local/api/cliente', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiCliente')->name('facturacion_local_api_cliente');
     Route::get('ventas/facturacion-local/api/vales', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiVales')->name('facturacion_local_api_vales');
+    Route::get('ventas/facturacion-local/api/contexto-pos', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiContextoPos')->name('facturacion_local_api_contexto_pos');
+    Route::get('ventas/facturacion-local/api/consulta-stock-precios', 'Ventas\FacturacionLocal\FacturacionLocalProcesoController@apiConsultaStockPrecios')->name('facturacion_local_api_consulta_stock_precios');
 
     Route::get('ventas/facturacion-local/locales', 'Ventas\FacturacionLocal\LocalVentaController@index')->name('facturacion_local_locales');
     Route::get('ventas/facturacion-local/locales/lista/{formato?}/{busqueda?}', 'Ventas\FacturacionLocal\LocalVentaController@listar')->name('lista_local_venta');
@@ -1567,6 +1569,8 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('stock/picking-pedido/exportar', 'Stock\PickingPedidoFerliController@exportarExcel')->name('exportar_picking_pedido');
     Route::post('stock/picking-pedido/payload-factura', 'Stock\PickingPedidoFerliController@payloadFactura')->name('payload_factura_picking_pedido');
     Route::post('stock/picking-pedido/consulta-lotes-stock', 'Stock\PickingPedidoFerliController@consultaLotesStock')->name('consulta_lotes_stock_picking_pedido');
+    Route::post('stock/picking-pedido/consulta-pickings-dia', 'Stock\PickingPedidoFerliController@consultaPickingsDia')->name('consulta_pickings_dia_picking_pedido');
+    Route::post('stock/picking-pedido/crear', 'Stock\PickingPedidoFerliController@crearPicking')->name('crear_picking_pedido');
     Route::post('stock/picking-pedido/marcar', 'Stock\PickingPedidoFerliController@marcar')->name('marcar_picking_pedido');
     Route::post('stock/picking-pedido/desmarcar', 'Stock\PickingPedidoFerliController@desmarcar')->name('desmarcar_picking_pedido');
 }
@@ -1795,6 +1799,9 @@ Route::post('ventas/crearetiquetapruebaot', 'Ventas\OrdentrabajoController@crear
 // Emision de OT
 Route::get('ventas/repemisionot', 'Ventas\OrdentrabajoController@indexEmisionOT')->name('repemisionot');
 Route::post('ventas/crearemisionot', 'Ventas\OrdentrabajoController@crearEmisionOt')->name('crearemisionot');
+Route::post('ventas/crearemisionotpdf', 'Ventas\OrdentrabajoController@crearEmisionOtPdf')->name('crearemisionot_pdf');
+Route::get('ventas/emisionot-impresora/{codigo}', 'Ventas\OrdentrabajoController@emisionOtImpresoraCodigo')->name('emisionot_impresora');
+Route::get('ventas/emisionot-pdf/{codigo}', 'Ventas\OrdentrabajoController@emisionOtPdfCodigo')->name('emisionot_pdf');
 
 // Clientes
 Route::get('ventas/repcliente', 'Ventas\ClienteController@indexReporteCliente')->name('rep_cliente');

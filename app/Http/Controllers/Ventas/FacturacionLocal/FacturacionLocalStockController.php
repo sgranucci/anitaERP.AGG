@@ -120,7 +120,7 @@ class FacturacionLocalStockController extends Controller
                 $w->where('sku', 'like', '%'.$q.'%')
                     ->orWhere('descripcion', 'like', '%'.$q.'%');
             });
-        ArticuloCanalSupport::scopeArticulosCanalLocal($query);
+        ArticuloCanalSupport::scopeArticulosPosLocal($query);
         $rows = $query->orderBy('sku')->limit(30)->get()->map(static function (Articulo $a) {
             return [
                 'id' => (int) $a->id,

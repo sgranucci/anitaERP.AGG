@@ -120,9 +120,13 @@ class TalleController extends Controller
         $filas = $q->limit(80)->get(['id', 'codigo', 'nombre']);
         $html = '';
         foreach ($filas as $f) {
-            $html .= '<tr data-id="'.$f->id.'" data-codigo="'.e((string) $f->codigo).'" data-nombre="'.e($f->nombre).'">'
+            $codigoMostrar = trim((string) $f->codigo);
+            if ($codigoMostrar === '') {
+                $codigoMostrar = (string) $f->nombre;
+            }
+            $html .= '<tr data-id="'.$f->id.'" data-codigo="'.e($codigoMostrar).'" data-nombre="'.e($f->nombre).'">'
                 .'<td>'.$f->id.'</td>'
-                .'<td>'.e((string) $f->codigo).'</td>'
+                .'<td>'.e($codigoMostrar).'</td>'
                 .'<td>'.e($f->nombre).'</td>'
                 .'<td class="text-nowrap">'
                 .'<button type="button" class="btn btn-sm btn-primary elige-talle">Elegir</button> '
@@ -151,17 +155,23 @@ class TalleController extends Controller
             $q->whereIn('id', $ids);
         }
         $talle = (clone $q)->where('codigo', $valor)->first()
-            ?? (clone $q)->where('id', (int) $valor)->first()
-            ?? (clone $q)->where('nombre', $valor)->first();
+            ?? (clone $q)->where('nombre', $valor)->first()
+            ?? (is_numeric($valor) ? (clone $q)->where('id', (int) $valor)->first() : null)
+            ?? (clone $q)->where('nombre', 'like', $valor.'%')->first();
 
         if (! $talle) {
             return response()->json(['ok' => false, 'error' => 'Talle no encontrado']);
         }
 
+        $codigo = trim((string) $talle->codigo);
+        if ($codigo === '') {
+            $codigo = (string) $talle->nombre;
+        }
+
         return response()->json([
             'ok' => true,
             'id' => (int) $talle->id,
-            'codigo' => (string) $talle->codigo,
+            'codigo' => $codigo,
             'nombre' => (string) $talle->nombre,
         ]);
     }

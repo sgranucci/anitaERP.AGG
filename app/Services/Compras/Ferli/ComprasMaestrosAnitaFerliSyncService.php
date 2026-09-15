@@ -15,6 +15,7 @@ use App\Models\Compras\Retencionsuss;
 use App\Models\Compras\Tipoempresa;
 use App\Models\Compras\Tiposervicio_Proveedor;
 use App\Models\Contable\Cuentacontable;
+use App\Services\Compras\ComprasIvaMaestrosAnitaImportService;
 use App\Support\Compras\ConceptoIvaAnitaEsquemaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use RuntimeException;
@@ -55,10 +56,13 @@ final class ComprasMaestrosAnitaFerliSyncService
             'tipoempresa se lee de ventas.tipoemp; se agrega stub codigo 0 referenciado en promae.',
             'condicioncompra / condicionentrega: stubs desde códigos de promae (condcmae/condemae vacíos).',
             'concepto IVA: conccomp sin concc_tipo_conc/alicuota/retiene_ibr y sin concciva.',
-            't_comp, colivacomp y provibr están vacíos: no se importan.',
+            'colivacomp / t_comp / cont_comp: via ComprasIvaMaestrosAnitaImportService.',
             'retsmae UNLOAD devuelve filas corruptas (códigos 808464439, valores científicos): SUSS se stubbea desde promae.',
             'tiposervicio_proveedor es maestro ERP (no Anita): se siembra Bienes/Servicios/Eventual si falta.',
         ];
+
+        $iva = app(ComprasIvaMaestrosAnitaImportService::class)
+            ->{$dryRun ? 'analizar' : 'ejecutar'}($path);
 
         $maestros = [
             'tiposervicio_proveedor' => $this->syncTiposervicioProveedor($dryRun),
@@ -76,16 +80,40 @@ final class ComprasMaestrosAnitaFerliSyncService
             'retencioniva' => $this->syncRetencioniva($api, $path, $dryRun),
             'retencionganancia' => $this->syncYaPresente('retencion', Retencionganancia::class, $api, $path, 'ret_codigo'),
             'retencionsuss' => $this->syncRetencionsussDesdePromae($api, $path, $dryRun),
-            'concepto_ivacompra' => $this->syncConceptoIvacompra($api, $path, $dryRun),
-            'columna_ivacompra' => $this->syncVacio('colivacomp', Columna_Ivacompra::class, $api, $path, 'coli_columna'),
-            'tipotransaccion_compra' => $this->tablaAnitaVacia($api, $path, 't_comp', 'tcomp_clave'),
+            'columna_ivacompra' => $this->adaptarStatsIva($iva['columna_ivacompra']),
+            'concepto_ivacompra' => $this->adaptarStatsIva($iva['concepto_ivacompra']),
+            'tipotransaccion_compra' => $this->adaptarStatsIva($iva['tipotransaccion_compra']),
         ];
+
+        foreach ($iva['errores'] as $err) {
+            $diagnostico[] = $err;
+        }
 
         return [
             'dry_run' => $dryRun,
             'path' => $path,
             'maestros' => $maestros,
             'diagnostico' => $diagnostico,
+        ];
+    }
+
+    /**
+     * Adapta stats del import IVA al formato de tabla del comando Ferli.
+     *
+     * @param  array<string, mixed>  $stats
+     * @return array<string, mixed>
+     */
+    private function adaptarStatsIva(array $stats): array
+    {
+        $crear = (int) ($stats['crear'] ?? 0);
+        $actualizar = (int) ($stats['actualizar'] ?? 0);
+
+        return [
+            'fuente' => (string) ($stats['fuente'] ?? ''),
+            'en_anita' => (int) ($stats['en_anita'] ?? 0),
+            'insertados' => $crear + $actualizar,
+            'omitidos' => (int) ($stats['omitidos'] ?? 0),
+            'muestra' => $stats['muestra'] ?? [],
         ];
     }
 

@@ -158,11 +158,18 @@
                 if (e.key !== 'Enter') {
                     return;
                 }
+                // POS Facturación Local: Enter lo maneja pos.js (capture) con navegación entre campos
+                if ($(this).closest('#fl-modal-var').length) {
+                    return;
+                }
                 e.preventDefault();
                 resolverTalleCodigo($(this).closest('.tm-talle-campo'), true);
             })
             .off('blur.talleCodigo', '.codigotalle')
             .on('blur.talleCodigo', '.codigotalle', function () {
+                if ($(this).closest('#fl-modal-var').length) {
+                    return;
+                }
                 if (modalAbriendo || $('#consultatalleModal').hasClass('show')) {
                     return;
                 }

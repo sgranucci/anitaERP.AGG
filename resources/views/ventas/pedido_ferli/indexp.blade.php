@@ -45,6 +45,11 @@ function eliminarPedido(event) {
             <div class="card-header">
                 <h3 class="card-title">Pedidos de clientes</h3>
                 <div class="card-tools">
+                    @if (\App\Support\Ventas\PedidoPickingFerliSupport::habilitado() && can('listar-reporte-picking-pedido', false))
+                        <a href="{{ route('picking_pedido', ['consultar' => 1]) }}" class="btn btn-outline-warning btn-sm" title="Workbench picking pendientes de facturar">
+                            <i class="fa fa-dolly"></i> Picking / facturar
+                        </a>
+                    @endif
                     <a href="{{route('cerrar_pedido')}}" class="btn btn-danger btn-sm">
                        	@if (can('cierre-de-pedidos', false))
                         	<i class="fa fa-fw fa-times-circle"></i> Cierre de pedidos

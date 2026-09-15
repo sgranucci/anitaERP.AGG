@@ -231,6 +231,145 @@
             leePuntoVenta($(this).val());
         });
 
+        function tokenCsrf() {
+            return $('#csrf_token').val() || $('input[name="_token"]').val() || '';
+        }
+
+        function renderPickingsDia(filas) {
+            var $tbody = $('#datospickingsdia');
+            $tbody.empty();
+            if (!filas || !filas.length) {
+                $tbody.append('<tr><td colspan="7" class="text-center text-muted">Sin pickings pendientes en la fecha</td></tr>');
+                return;
+            }
+            $.each(filas, function (_i, fila) {
+                var $tr = $('<tr/>');
+                $tr.append($('<td/>').text(fila.codigo));
+                $tr.append($('<td/>').text(fila.fecha || ''));
+                $tr.append($('<td/>').text(fila.usuario || ''));
+                $tr.append($('<td class="text-right"/>').text(fila.lineas_pendientes || 0));
+                $tr.append($('<td class="text-right"/>').text(fila.clientes || 0));
+                $tr.append($('<td/>').text(fila.clientes_nombres || ''));
+                var $btn = $('<button type="button" class="btn btn-warning btn-sm eligeconsultapickingdia">Elegir</button>');
+                $btn.attr('data-id', fila.id || 0);
+                $btn.attr('data-codigo', fila.codigo || 0);
+                $tr.append($('<td class="text-nowrap"/>').append($btn));
+                $tbody.append($tr);
+            });
+        }
+
+        function buscarPickingsDia() {
+            var fecha = $('#consultapickingsdia_fecha').val() || '';
+            var texto = $('#consultapickingsdia').val() || '';
+            $('#datospickingsdia').html('<tr><td colspan="7" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Buscando…</td></tr>');
+            $.post(carpetaBase + '/stock/picking-pedido/consulta-pickings-dia', {
+                fecha: fecha,
+                texto: texto,
+                _token: tokenCsrf()
+            })
+                .done(function (data) {
+                    renderPickingsDia(data.filas || []);
+                })
+                .fail(function () {
+                    renderPickingsDia([]);
+                });
+        }
+
+        function abrirModalPickingsDia() {
+            if (!$('#consultapickingsdia_fecha').val()) {
+                $('#consultapickingsdia_fecha').val(new Date().toISOString().substring(0, 10));
+            }
+            $('#consultapickingsdia').val('');
+            $('#consultapickingsdiaModal').modal('show');
+            buscarPickingsDia();
+        }
+
+        function aplicarPickingElegido(id, codigo) {
+            $('#picking_id').val(id || 0);
+            $('#picking_codigo').val(codigo || '');
+            $('#consultapickingsdiaModal').modal('hide');
+            $('#form-picking-pedido').trigger('submit');
+        }
+
+        function crearNuevoPicking() {
+            $.post(carpetaBase + '/stock/picking-pedido/crear', {
+                fecha: $('#consultapickingsdia_fecha').val() || '',
+                _token: tokenCsrf()
+            })
+                .done(function (data) {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    aplicarPickingElegido(data.id, data.codigo);
+                })
+                .fail(function (xhr) {
+                    alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'No se pudo crear el picking');
+                });
+        }
+
+        $('#btn-consulta-pickings-dia').on('click', function (e) {
+            e.preventDefault();
+            abrirModalPickingsDia();
+        });
+
+        $('#btn-buscar-pickings-dia').on('click', function () {
+            buscarPickingsDia();
+        });
+
+        $('#consultapickingsdia').on('keydown', function (e) {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                e.preventDefault();
+                var $btn = $('#datospickingsdia .eligeconsultapickingdia').first();
+                if ($btn.length) {
+                    $btn.trigger('click');
+                } else {
+                    buscarPickingsDia();
+                }
+            }
+        }).on('keyup', function (e) {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                return;
+            }
+            clearTimeout(window.__debouncePickingsDia);
+            window.__debouncePickingsDia = setTimeout(buscarPickingsDia, 300);
+        });
+
+        $('#consultapickingsdia_fecha').on('change', buscarPickingsDia);
+
+        $(document).on('click', '.eligeconsultapickingdia', function () {
+            aplicarPickingElegido(
+                parseInt($(this).attr('data-id'), 10) || 0,
+                parseInt($(this).attr('data-codigo'), 10) || 0
+            );
+        });
+
+        $('#btn-nuevo-picking, #btn-nuevo-picking-modal').on('click', function (e) {
+            e.preventDefault();
+            crearNuevoPicking();
+        });
+
+        $('#picking_codigo').on('keydown', function (e) {
+            if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
+                e.preventDefault();
+                abrirModalPickingsDia();
+            }
+        });
+
+        if (!window.__pickingDiaF1Capture) {
+            document.addEventListener('keydown', function (e) {
+                if (!(e.key === 'F1' || e.code === 'F1' || e.keyCode === 112)) {
+                    return;
+                }
+                if (!e.target || e.target.id !== 'picking_codigo') {
+                    return;
+                }
+                e.preventDefault();
+                abrirModalPickingsDia();
+            }, true);
+            window.__pickingDiaF1Capture = true;
+        }
+
         window.addEventListener('pageshow', ocultarOverlay);
     });
 })(jQuery);

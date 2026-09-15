@@ -31,30 +31,42 @@ class Tipotransaccion_Compra extends Model
 
     public function setSignoAttribute($signo)
     {
-        switch(Tipotransaccion_CompraTrait::$enumSigno[$signo])
-        {
-        case 'Suma':
-            $this->attributes['signo'] = 1;
-            break;
-        case 'Resta':
-            $this->attributes['signo'] = -1;
-            break;
+        // Acepta letra Anita (S/R/N) o ya numérico (1/-1/0).
+        if (is_numeric($signo)) {
+            $n = (int) $signo;
+            $this->attributes['signo'] = $n === 0 ? 0 : ($n < 0 ? -1 : 1);
+
+            return;
+        }
+
+        $letra = strtoupper(trim((string) $signo));
+        $etiqueta = Tipotransaccion_CompraTrait::$enumSigno[$letra] ?? null;
+        switch ($etiqueta) {
+            case 'Suma':
+                $this->attributes['signo'] = 1;
+                break;
+            case 'Resta':
+                $this->attributes['signo'] = -1;
+                break;
+            case 'Nulo':
+                $this->attributes['signo'] = 0;
+                break;
+            default:
+                $this->attributes['signo'] = 1;
+                break;
         }
     }
 
     public function getSignoAttribute($signo)
     {
-        $retSigno = 'S';
-        switch($signo)
-        {
-        case 1:
-            $retSigno = 'S';
-            break;
-        case -1:
-            $retSigno = 'R';
-            break;
+        switch ((int) $signo) {
+            case -1:
+                return 'R';
+            case 0:
+                return 'N';
+            default:
+                return 'S';
         }
-        return $retSigno;
     }
 
     public function getDescOperacionAttribute()

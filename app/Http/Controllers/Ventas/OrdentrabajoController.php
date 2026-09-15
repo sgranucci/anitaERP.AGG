@@ -274,7 +274,51 @@ class OrdentrabajoController extends Controller
 
     public function crearEmisionOt(Request $request)
     {
-		return $this->ordentrabajoService->EmisionOt($request->all());
+		$resultado = $this->ordentrabajoService->imprimirEmisionOt($request->all());
+
+		if ($request->ajax() || $request->wantsJson()) {
+			return response()->json($resultado, $resultado['ok'] ? 200 : 422);
+		}
+
+		if ($resultado['ok']) {
+			return redirect()->back()->with('mensaje', $resultado['mensaje']);
+		}
+
+		return redirect()->back()->with('errores', [$resultado['mensaje']]);
+    }
+
+    public function crearEmisionOtPdf(Request $request)
+    {
+		return $this->ordentrabajoService->descargarPdfEmisionOt($request->all());
+    }
+
+    public function emisionOtImpresoraCodigo(Request $request, $codigo)
+    {
+		$data = [
+			'ordenestrabajo' => $codigo,
+			'tipoemision' => strtoupper((string) $request->query('tipoemision', 'COMPLETA')),
+		];
+		$resultado = $this->ordentrabajoService->imprimirEmisionOt($data);
+
+		if ($request->ajax() || $request->wantsJson()) {
+			return response()->json($resultado, $resultado['ok'] ? 200 : 422);
+		}
+
+		if ($resultado['ok']) {
+			return redirect()->back()->with('mensaje', $resultado['mensaje']);
+		}
+
+		return redirect()->back()->with('errores', [$resultado['mensaje']]);
+    }
+
+    public function emisionOtPdfCodigo(Request $request, $codigo)
+    {
+		$data = [
+			'ordenestrabajo' => $codigo,
+			'tipoemision' => strtoupper((string) $request->query('tipoemision', 'COMPLETA')),
+		];
+
+		return $this->ordentrabajoService->descargarPdfEmisionOt($data);
     }
 
     /**

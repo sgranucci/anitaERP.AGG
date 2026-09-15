@@ -11,6 +11,7 @@ use App\Models\Stock\Precio;
 use App\Models\Ventas\LocalVenta;
 use App\Services\Stock\PrecioServiceFerli;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\PrecioListaLocalMapeoSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
 use Illuminate\Support\Facades\DB;
@@ -149,6 +150,17 @@ final class StockLocalConsultaService
         $skuAnita = $this->codigoAnitaDesdeSku((string) $articulo->sku);
         $precio = $this->resolverPrecio($local, $articulo);
         $preciosListas = $this->preciosPorListasErp($articulo);
+        $modo = FacturacionLocalVarianteArticuloSupport::modo($articulo);
+        $combinaciones = FacturacionLocalVarianteArticuloSupport::queryCombinacionesActivas((int) $articulo->id)
+            ->get(['id', 'codigo', 'nombre', 'estado'])
+            ->map(static fn ($c) => [
+                'id' => (int) $c->id,
+                'codigo' => (string) $c->codigo,
+                'nombre' => (string) $c->nombre,
+                'estado' => (string) $c->estado,
+            ])
+            ->values()
+            ->all();
 
         if ($origen === StockLocalInformeListadoFiltros::ORIGEN_ERP) {
             $agg = $this->agregarDesdeErp($local, $articulo, [], matriz: false);
@@ -159,6 +171,8 @@ final class StockLocalConsultaService
                     'articulo' => $this->payloadArticulo($articulo, $skuAnita),
                     'precio' => $precio,
                     'precios_listas' => $preciosListas,
+                    'modo_variante' => $modo,
+                    'combinaciones' => $combinaciones,
                     'origen' => $origen,
                 ];
             }
@@ -182,6 +196,8 @@ final class StockLocalConsultaService
                 'saldo_total' => (float) ($agg['saldo_total'] ?? 0),
                 'origen_stock' => 'erp_articulo_movimiento',
                 'origen' => $origen,
+                'modo_variante' => $modo,
+                'combinaciones' => $combinaciones,
             ];
         }
 
@@ -195,6 +211,8 @@ final class StockLocalConsultaService
                     'articulo' => $this->payloadArticulo($articulo, $skuAnita),
                     'precio' => $precio,
                     'precios_listas' => $preciosListas,
+                    'modo_variante' => $modo,
+                    'combinaciones' => $combinaciones,
                     'origen' => $origen,
                 ];
             }
@@ -230,6 +248,8 @@ final class StockLocalConsultaService
             'saldo_total' => (float) ($agg['saldo_total'] ?? 0),
             'origen_stock' => (string) ($agg['origen_stock'] ?? 'stkdep'),
             'origen' => $origen,
+            'modo_variante' => $modo,
+            'combinaciones' => $combinaciones,
         ];
     }
 
@@ -423,7 +443,7 @@ final class StockLocalConsultaService
         $skuAnita = $this->codigoAnitaDesdeSku($q);
         $skuLimpio = ltrim($q, '0');
 
-        return (clone $query)
+        $porSku = (clone $query)
             ->where(function ($w) use ($q, $skuAnita, $skuLimpio) {
                 $w->where('sku', $q)
                     ->orWhere('sku', $skuAnita)
@@ -432,6 +452,22 @@ final class StockLocalConsultaService
             })
             ->orderByRaw('CASE WHEN sku = ? THEN 0 WHEN sku = ? THEN 1 ELSE 2 END', [$q, $skuAnita])
             ->first();
+        if ($porSku) {
+            return $porSku;
+        }
+
+        // Nombre / descripción (ej. MELISA): preferir facturables (nofactura=0).
+        $porDesc = (clone $query)
+            ->where('descripcion', 'like', '%'.$q.'%')
+            ->orderByRaw('CASE WHEN nofactura = 0 OR nofactura IS NULL THEN 0 ELSE 1 END')
+            ->orderByRaw('CASE WHEN UPPER(descripcion) = ? THEN 0 WHEN descripcion LIKE ? THEN 1 ELSE 2 END', [
+                mb_strtoupper($q),
+                $q.'%',
+            ])
+            ->orderBy('sku')
+            ->first();
+
+        return $porDesc;
     }
 
     /**

@@ -166,8 +166,11 @@ function borraOt(){
                                 	</a>
 								@endif
                        			@if (can('listar-ordenes-de-trabajo', false))
-                                	<a href="#" onclick="imprimeOt('{{$data->codigo}}')" class="btn-accion-tabla tooltipsC" title="Listar la OT">
+                                	<a href="#" onclick="return imprimeOt('{{$data->codigo}}')" class="btn-accion-tabla tooltipsC" title="Imprimir la OT">
                                    	<i class="fa fa-print"></i>
+                                	</a>
+                                	<a href="#" onclick="return pdfOt('{{$data->codigo}}')" class="btn-accion-tabla tooltipsC" title="PDF de la OT">
+                                   	<i class="fas fa-file-pdf text-danger"></i>
                                 	</a>
 								@endif
                                 @if (can('borrar-ordenes-de-trabajo', false))

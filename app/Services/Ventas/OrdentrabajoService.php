@@ -18,6 +18,10 @@ use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Repositories\Produccion\TareaRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
+use App\Support\Configuracion\SalidaImpresionFallbackSupport;
+use App\Support\Ventas\QrCodePngSupport;
+use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
+use App\Models\Configuracion\Salida;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
@@ -45,6 +49,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Localidad;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use QrCode;
@@ -52,6 +57,7 @@ use App;
 use Auth;
 use DB;
 use Exception;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class OrdentrabajoService 
 {
@@ -1048,6 +1054,512 @@ class OrdentrabajoService
         return redirect()->back()->with('status','El articulo seleccionado no existen');
     }
 
+	/**
+	 * Emisión OT vía DomPDF (impresora o descarga), sin IFPU/servidores externos.
+	 *
+	 * @return array{ok: bool, mensaje: string}
+	 */
+	public function imprimirEmisionOt(array $data): array
+	{
+		ini_set('memory_limit', '512M');
+
+		$usuarioId = Auth::user()->id;
+		$programa = SeteoSalidaProgramaSupport::VENTAS_REPEMISIONOT;
+		$seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuarioId, $programa);
+
+		if (! $seteosalida || ! $seteosalida->salidas) {
+			return [
+				'ok' => false,
+				'mensaje' => 'No hay impresora configurada para emisión de OT. Use «Configura salida».',
+			];
+		}
+
+		$salidaPrincipal = $seteosalida->salidas;
+		$plantillaComando = $this->plantillaComandoEmisionOtPdf($salidaPrincipal);
+		if ($plantillaComando === null) {
+			return [
+				'ok' => false,
+				'mensaje' => 'La salida de OT debe imprimir un PDF por JetDirect (un %s = ruta). '
+					.'Ej.: '.config('ordentrabajo.imprimir_script', base_path('bin/imprimir-pdf-laser.sh')).' "%s" IP. '
+					.'Diego 160.132.0.203 · Gaby 160.132.0.183 · P1 160.132.0.201.',
+			];
+		}
+
+		$rutaPdf = null;
+
+		try {
+			$rutaPdf = $this->generarPdfEmisionOtArchivo($data);
+			if ($rutaPdf === '') {
+				return [
+					'ok' => false,
+					'mensaje' => 'No se encontraron las órdenes de trabajo indicadas.',
+				];
+			}
+
+			$salidasIntentar = collect([$salidaPrincipal]);
+			if (config('pedido.imprimir_fallback_habilitado', true)) {
+				$salidasIntentar = $salidasIntentar->merge(
+					SalidaImpresionFallbackSupport::alternativasPorMismoUso($salidaPrincipal, $programa)
+				)->unique('id')->values();
+			}
+
+			$errores = [];
+			$nombrePrincipal = (string) $salidaPrincipal->nombre;
+
+			foreach ($salidasIntentar as $salida) {
+				$plantilla = $this->plantillaComandoEmisionOtPdf($salida);
+				if ($plantilla === null) {
+					continue;
+				}
+				$errorImpresion = $this->ejecutarImpresionEmisionOtEnSalida($plantilla, $rutaPdf);
+				if ($errorImpresion === null) {
+					$mensaje = 'Impresión exitosa.';
+					if ((int) $salida->id !== (int) $salidaPrincipal->id) {
+						$mensaje = sprintf(
+							'Impresión exitosa en %s (impresora alternativa; falló %s).',
+							$salida->nombre,
+							$nombrePrincipal
+						);
+					}
+
+					return [
+						'ok' => true,
+						'mensaje' => $mensaje,
+					];
+				}
+				$errores[] = $salida->nombre.': '.$errorImpresion;
+			}
+
+			return [
+				'ok' => false,
+				'mensaje' => 'No se pudo imprimir la OT. '.implode(' · ', $errores),
+			];
+		} catch (Exception $e) {
+			return [
+				'ok' => false,
+				'mensaje' => 'No se pudo imprimir la OT: '.$e->getMessage(),
+			];
+		} finally {
+			if ($rutaPdf !== null && is_file($rutaPdf)) {
+				@unlink($rutaPdf);
+			}
+		}
+	}
+
+	public function descargarPdfEmisionOt(array $data): BinaryFileResponse|\Illuminate\Http\RedirectResponse
+	{
+		ini_set('memory_limit', '512M');
+
+		try {
+			$ruta = $this->generarPdfEmisionOtArchivo($data);
+			if ($ruta === '') {
+				return redirect()->back()->with('errores', ['No se encontraron las órdenes de trabajo indicadas.']);
+			}
+
+			$nombre = 'emision-ot-'.date('Ymd-His').'.pdf';
+
+			return response()->download($ruta, $nombre)->deleteFileAfterSend(true);
+		} catch (Exception $e) {
+			return redirect()->back()->with('errores', ['No se pudo generar el PDF: '.$e->getMessage()]);
+		}
+	}
+
+	public function generarPdfEmisionOtArchivo(array $data): string
+	{
+		$documentos = $this->armarDocumentosEmisionOt($data);
+		if ($documentos === []) {
+			return '';
+		}
+
+		$view = View::make('ventas.ordentrabajo.emision.pdf', compact('documentos'))->render();
+		$path = storage_path('pdf/ordentrabajo');
+		if (! is_dir($path) && ! mkdir($path, 0775, true) && ! is_dir($path)) {
+			throw new Exception('No se pudo crear el directorio de PDF de OT.');
+		}
+
+		$codigos = implode('-', array_map(static fn (array $d) => $d['codigo'], $documentos));
+		$codigos = preg_replace('/[^\w\-]+/', '_', (string) $codigos);
+		$nombrePdf = 'emision-ot-'.$codigos.'-'.Str::random(6).'.pdf';
+
+		$pdf = App::make('dompdf.wrapper');
+		$pdf->setPaper('a4', 'landscape');
+		$pdf->loadHTML($view)->save($path.'/'.$nombrePdf);
+
+		return $path.'/'.$nombrePdf;
+	}
+
+	/**
+	 * @return list<array<string, mixed>>
+	 */
+	public function armarDocumentosEmisionOt(array $data): array
+	{
+		$ordenes = array_values(array_filter(array_map('trim', explode(',', (string) ($data['ordenestrabajo'] ?? '')))));
+		$tipoemision = strtoupper(trim((string) ($data['tipoemision'] ?? 'COMPLETA')));
+		if ($tipoemision === '') {
+			$tipoemision = 'COMPLETA';
+		}
+
+		$documentos = [];
+		foreach ($ordenes as $codigo) {
+			$doc = $this->armarDatosEmisionOtUna($codigo, $tipoemision);
+			if ($doc !== null) {
+				$documentos[] = $doc;
+			}
+		}
+
+		return $documentos;
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private function armarDatosEmisionOtUna(string $codigo, string $tipoemision): ?array
+	{
+		$ot = $this->ordentrabajoQuery->leeOrdenTrabajoPorCodigo($codigo);
+		if (! $ot || empty($ot->ordentrabajo_combinacion_talles[0])) {
+			return null;
+		}
+
+		$mventa = 0;
+		$observacion = '';
+		$leyendaPedido = '';
+		$articulo = $this->articuloQuery->traeArticuloPorId(
+			$ot->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedido_combinaciones->articulo_id
+		);
+		if ($articulo) {
+			$mventa = (int) $articulo->mventa_id;
+		}
+
+		$this->tot_pares1 = $this->tot_pares2 = $this->tot_pares3 = $this->tot_pares4 = 0;
+		$totPares = 0;
+		$medidas = [];
+		$pedidos = [];
+
+		foreach ($ot->ordentrabajo_combinacion_talles as $item) {
+			$talle = Talle::find($item->pedido_combinacion_talles->talle_id);
+			if ($talle) {
+				$medidas[] = ['medida' => $talle->nombre, 'cantidad' => $item->pedido_combinacion_talles->cantidad];
+
+				if ($talle->nombre >= config('consprod.DESDE_INTERVALO1') && $talle->nombre <= config('consprod.HASTA_INTERVALO1')) {
+					$this->tot_pares1 += $item->pedido_combinacion_talles->cantidad;
+				}
+				if ($talle->nombre >= config('consprod.DESDE_INTERVALO2') && $talle->nombre <= config('consprod.HASTA_INTERVALO2')) {
+					$this->tot_pares2 += $item->pedido_combinacion_talles->cantidad;
+				}
+				if ($talle->nombre >= config('consprod.DESDE_INTERVALO3') && $talle->nombre <= config('consprod.HASTA_INTERVALO3')) {
+					$this->tot_pares3 += $item->pedido_combinacion_talles->cantidad;
+				}
+				if ($talle->nombre >= config('consprod.DESDE_INTERVALO4') && $talle->nombre <= config('consprod.HASTA_INTERVALO4')) {
+					$this->tot_pares4 += $item->pedido_combinacion_talles->cantidad;
+				}
+			}
+			$totPares += $item->pedido_combinacion_talles->cantidad;
+
+			if (! in_array($item->pedido_combinacion_talles->pedidos_combinacion->pedido_id, $pedidos, true)) {
+				$pedidos[] = $item->pedido_combinacion_talles->pedidos_combinacion->pedido_id;
+			}
+			$observacion = $item->pedido_combinacion_talles->pedidos_combinacion->observacion;
+			$leyendaPedido = $item->pedido_combinacion_talles->pedidos_combinacion->pedidos->leyenda;
+		}
+
+		$combinacion = Combinacion::find(
+			$ot->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedido_combinaciones->combinacion_id
+		);
+
+		$nombreFondo = '';
+		$colorFondo = '';
+		$nombreForro = '';
+		$colorForro = '';
+		$nombreSerigrafia = '';
+		$codigoCombinacion = '';
+		$descripcionCombinacion = '';
+		$nombrePlvista = '';
+		$plvistaConConsumo = '';
+		$nombrePlarmado = ' ';
+		$materialCapellada = '';
+		$materialCapelladaConConsumo = '';
+		$forradoFondoConConsumo = '';
+		$forradoBaseConConsumo = '';
+		$aplique = '';
+		$empaque = '';
+
+		if ($combinacion) {
+			$codigoCombinacion = $combinacion->codigo;
+			$descripcionCombinacion = $combinacion->nombre;
+
+			$fondo = Fondo::find($combinacion->fondo_id);
+			if ($fondo) {
+				$nombreFondo = $fondo->nombre;
+			}
+			$color = Color::find($combinacion->colorfondo_id);
+			if ($color) {
+				$colorFondo = $color->nombre;
+			}
+			$plvista = Plvista::find($combinacion->plvista_id);
+			if ($plvista) {
+				$nombrePlvista = $plvista->nombre;
+			}
+			$plvistaConConsumo = $this->calculaPlvista(
+				$nombrePlvista,
+				$combinacion->plvista_16_26,
+				$combinacion->plvista_17_33,
+				$combinacion->plvista_34_40,
+				$combinacion->plvista_41_45
+			);
+			$forro = Forro::find($combinacion->forro_id);
+			if ($forro) {
+				$nombreForro = $forro->nombre;
+			}
+			$color = Color::find($combinacion->colorforro_id);
+			if ($color) {
+				$colorForro = $color->nombre;
+			}
+			$serigrafia = Serigrafia::find($combinacion->serigrafia_id);
+			if ($serigrafia) {
+				$nombreSerigrafia = $serigrafia->nombre;
+			}
+			$plarmado = Plarmado::find($combinacion->plarmado_id);
+			if ($plarmado) {
+				$nombrePlarmado = $plarmado->nombre;
+			}
+
+			$materialCapellada = $this->armaCapellada($combinacion->id, $combinacion->articulo_id, 'C', false);
+			$materialCapelladaConConsumo = $this->armaCapellada($combinacion->id, $combinacion->articulo_id, 'C', true);
+			$forradoFondoConConsumo = $this->armaCapellada($combinacion->id, $combinacion->articulo_id, 'F', true);
+			$forradoBaseConConsumo = $this->armaCapellada($combinacion->id, $combinacion->articulo_id, 'B', true);
+			$aplique = $this->armaAvio($combinacion->id, $combinacion->articulo_id, 'A');
+			$empaque = $this->armaAvio($combinacion->id, $combinacion->articulo_id, 'E');
+		}
+
+		$medidasAcumuladas = [];
+		$med = [];
+		foreach ($medidas as $parte) {
+			$med[] = $parte['medida'];
+		}
+		foreach (array_unique($med) as $un) {
+			$suma = 0;
+			foreach ($medidas as $original) {
+				if ($un == $original['medida']) {
+					$suma += $original['cantidad'];
+				}
+			}
+			$medidasAcumuladas[] = ['medida' => $un, 'cantidad' => $suma];
+		}
+		$medidas = $medidasAcumuladas;
+
+		$numeroPedidos = '';
+		foreach ($pedidos as $pedido) {
+			$numeroPedidos .= $pedido.' ';
+		}
+
+		$nombreTipoCorte = '';
+		$abreviaturaTipoCorte = '';
+		$nombreTipoCorteForro = '';
+		$nombrePuntera = '';
+		$nombreContrafuerte = '';
+		$numeracion = '';
+		$codigoArticulo = '';
+		$codigoArticuloReducido = '';
+		$cajas = [];
+
+		if ($articulo) {
+			$tipocorte = Tipocorte::find($articulo->tipocorte_id);
+			if ($tipocorte) {
+				$nombreTipoCorte = $tipocorte->nombre;
+				$abreviaturaTipoCorte = $tipocorte->abreviatura;
+			}
+			$tipocorte = Tipocorte::find($articulo->tipocorteforro_id);
+			if ($tipocorte) {
+				$nombreTipoCorteForro = $tipocorte->nombre;
+			}
+			$puntera = Puntera::find($articulo->puntera_id);
+			if ($puntera) {
+				$nombrePuntera = $puntera->nombre;
+			}
+			$contrafuerte = Contrafuerte::find($articulo->contrafuerte_id);
+			if ($contrafuerte) {
+				$nombreContrafuerte = $contrafuerte->nombre;
+			}
+			$cajas = $this->armaCaja($articulo->id, $ot);
+
+			$sku = str_pad((string) $articulo->sku, 13, '0', STR_PAD_LEFT);
+			$codigoArticulo = substr($sku, 7, 4).'-'.substr($sku, 11, 2);
+			$codigoArticuloReducido = substr($sku, 5, 2);
+
+			$linea = Linea::select('nombre', 'codigo', 'tiponumeracion_id')
+				->with('tiponumeraciones')
+				->where('id', $articulo->linea_id)
+				->first();
+			if ($linea) {
+				$numeracion = $linea->tiponumeraciones->nombre;
+			}
+		}
+
+		$clientes = [];
+		$localidadId = 0;
+		$nombreVendedor = '';
+		foreach ($ot->ordentrabajo_combinacion_talles as $item) {
+			if (($item->clientes->tipossuspensioncliente->id ?? 0) > 0) {
+				$tiposuspension = $item->clientes->tipossuspensioncliente->nombre;
+				$descCliente = substr($item->clientes->nombre, 0, 20).' '.substr($tiposuspension, 0, 8);
+			} else {
+				$descCliente = $item->clientes->nombre;
+			}
+
+			if (! in_array($descCliente, $clientes, true)) {
+				$clientes[] = $descCliente;
+				$localidadId = $item->clientes->localidad_id;
+				$clicomi = $this->cliente_comisionQuery->traeVendedor($item->clientes->codigo, $mventa);
+				if ($clicomi) {
+					$nombreVendedor = $clicomi[0]->vend_nombre;
+				}
+			}
+		}
+
+		$nombreLocalidad = '';
+		$localidad = Localidad::find($localidadId);
+		if ($localidad) {
+			$nombreLocalidad = $localidad->nombre;
+		}
+
+		$leyenda = trim((string) ($ot->leyenda.' '.$observacion.' '.$leyendaPedido));
+
+		$copias = OrdentrabajoEmisionCopiaSupport::cantidadCopias($tipoemision);
+		$titulosCopia = OrdentrabajoEmisionCopiaSupport::titulos($tipoemision);
+
+		return [
+			'codigo' => (string) $ot->codigo,
+			'fecha_fmt' => date('d-m-Y', strtotime((string) $ot->fecha)),
+			'tipoemision' => $tipoemision,
+			'mventa' => $mventa,
+			'clientes' => $clientes,
+			'localidad' => $nombreLocalidad,
+			'tot_pares' => $totPares,
+			'tot_pares1' => $this->tot_pares1,
+			'tot_pares2' => $this->tot_pares2,
+			'tot_pares3' => $this->tot_pares3,
+			'tot_pares4' => $this->tot_pares4,
+			'tipo_corte' => $nombreTipoCorte,
+			'abrev_tipo_corte' => $abreviaturaTipoCorte,
+			'tipo_corte_forro' => $nombreTipoCorteForro,
+			'vendedor' => is_array($nombreVendedor) ? '' : (string) $nombreVendedor,
+			'leyenda' => $leyenda,
+			'codigo_articulo' => $codigoArticulo,
+			'codigo_articulo_reducido' => $codigoArticuloReducido,
+			'color_fondo' => $colorFondo,
+			'combinacion' => trim($codigoCombinacion.' '.$descripcionCombinacion),
+			'fondo' => $nombreFondo,
+			'material_capellada' => $materialCapellada,
+			'material_capellada_consumo' => $materialCapelladaConConsumo,
+			'forrado_fondo_consumo' => $forradoFondoConConsumo,
+			'forrado_base_consumo' => $forradoBaseConConsumo,
+			'aplique' => $aplique,
+			'empaque' => $empaque,
+			'plvista' => $plvistaConConsumo,
+			'serigrafia' => $nombreSerigrafia,
+			'plarmado' => $nombrePlarmado,
+			'puntera' => $nombrePuntera,
+			'contrafuerte' => $nombreContrafuerte,
+			'forro' => trim($nombreForro.'/'.$colorForro, '/'),
+			'pedidos' => trim($numeroPedidos),
+			'medidas' => $medidas,
+			'cajas' => $cajas,
+			'numeracion' => $numeracion,
+			'copias' => $copias,
+			'titulos_copia' => $titulosCopia,
+			'qr_data_uri' => QrCodePngSupport::dataUri((string) $ot->codigo, 220, 1),
+		];
+	}
+
+	/**
+	 * @return list<string>
+	 */
+	private function titulosCopiaEmisionOt(string $tipoemision): array
+	{
+		return OrdentrabajoEmisionCopiaSupport::titulos($tipoemision);
+	}
+
+	/**
+	 * Plantilla de impresión OT: PDF vía JetDirect (imprimir-pdf-laser.sh "%s" IP).
+	 * No requiere colas CUPS en el L12.
+	 */
+	private function plantillaComandoEmisionOtPdf(?Salida $salida): ?string
+	{
+		if (! $salida instanceof Salida) {
+			return null;
+		}
+
+		$comando = trim((string) $salida->comando);
+		if ($comando === '') {
+			return null;
+		}
+
+		$scriptLaser = config('ordentrabajo.imprimir_script', base_path('bin/imprimir-pdf-laser.sh'));
+
+		if (SalidaImpresionFallbackSupport::comandoPdfCompatible($salida)) {
+			// Si apunta a cola CUPS local por nombre histórico, convertir a IP JetDirect.
+			$scriptCups = base_path('bin/imprimir-pedido.sh');
+			if (str_starts_with($comando, $scriptCups) && preg_match('/"?%s"?\s+(\S+)/', $comando, $m) === 1) {
+				$ip = $this->resolverIpJetDirectOt($m[1]);
+
+				return $scriptLaser.' "%s" '.$ip;
+			}
+
+			return $comando;
+		}
+
+		if (preg_match('/imp_otrS?\s+%s\s+%s\s+(\S+)/i', $comando, $m) === 1) {
+			$ip = $this->resolverIpJetDirectOt($m[1]);
+
+			return $scriptLaser.' "%s" '.$ip;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Colas históricas Ferli → IP JetDirect (puerto 9100), según printers del host 160.132.0.254.
+	 */
+	private function resolverIpJetDirectOt(string $destino): string
+	{
+		$destino = trim($destino);
+
+		return match (strtolower($destino)) {
+			'hp-diego', 'diego' => '160.132.0.203',
+			'hp4250gaby', 'gaby', 'gabriela' => '160.132.0.183',
+			'p1', 'pserver', 'monica' => '160.132.0.201',
+			'hp1300', 'laura' => '160.132.0.200',
+			'laserjet4050' => '160.132.0.202',
+			default => $destino,
+		};
+	}
+
+	private function ejecutarImpresionEmisionOtEnSalida(string $plantillaComando, string $rutaPdf): ?string
+	{
+		$comando = sprintf(trim($plantillaComando), $rutaPdf);
+		if (trim($comando) === '') {
+			return 'comando de impresora vacío';
+		}
+
+		$process = Process::fromShellCommandline($comando);
+		$process->setTimeout((int) config('pedido.imprimir_timeout_segundos', 90));
+		$process->run();
+
+		if ($process->isSuccessful()) {
+			return null;
+		}
+
+		$detalle = trim($process->getErrorOutput());
+		if ($detalle === '') {
+			$detalle = trim($process->getOutput());
+		}
+
+		return $detalle !== '' ? $detalle : 'el comando de impresión falló';
+	}
+
+	/**
+	 * Legacy IFPU + PostScript en host Ferli. Preferir imprimirEmisionOt / descargarPdfEmisionOt.
+	 */
 	public function EmisionOt(array $data)
 	{
 		// Arma nombre de archivo

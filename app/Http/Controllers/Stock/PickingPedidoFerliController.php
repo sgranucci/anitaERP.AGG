@@ -6,10 +6,10 @@ use App\Exports\Stock\PickingPedidoFerliExport;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Depmae;
 use App\Queries\Ventas\ClienteQueryInterface;
-use App\Repositories\Ventas\PuntoventaRepositoryInterface;
-use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Repositories\Ventas\IncotermRepositoryInterface;
+use App\Repositories\Ventas\PuntoventaRepositoryInterface;
+use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
@@ -35,7 +35,23 @@ class PickingPedidoFerliController extends Controller
         $depositoId = (int) $request->input('deposito_id', 0);
         $loteDesde = trim((string) $request->input('lote_desde', ''));
         $loteHasta = trim((string) $request->input('lote_hasta', ''));
+        $pickingId = (int) $request->input('picking_id', 0);
+        $pickingCodigo = (int) $request->input('picking_codigo', 0);
         $consultar = $request->boolean('consultar');
+
+        if ($pickingId > 0) {
+            PedidoPickingFerliSupport::setPickingActivoId($pickingId);
+        } elseif ($pickingCodigo > 0) {
+            $cab = PedidoPickingFerliSupport::findPicking(null, $pickingCodigo);
+            if ($cab) {
+                $pickingId = (int) $cab->id;
+                PedidoPickingFerliSupport::setPickingActivoId($pickingId);
+            }
+        }
+
+        $pickingActivo = PedidoPickingFerliSupport::findPicking(
+            $pickingId > 0 ? $pickingId : PedidoPickingFerliSupport::pickingActivoId()
+        );
 
         $lineas = collect();
         if ($consultar) {
@@ -44,6 +60,8 @@ class PickingPedidoFerliController extends Controller
                 $depositoId > 0 ? $depositoId : null,
                 $loteDesde !== '' ? $loteDesde : null,
                 $loteHasta !== '' ? $loteHasta : null,
+                $pickingId > 0 ? $pickingId : null,
+                $pickingId <= 0 && $pickingCodigo > 0 ? $pickingCodigo : null,
             );
         }
 
@@ -62,6 +80,8 @@ class PickingPedidoFerliController extends Controller
             'deposito_id' => $depositoId,
             'lote_desde' => $loteDesde,
             'lote_hasta' => $loteHasta,
+            'picking_id' => $pickingActivo?->id ?? $pickingId,
+            'picking_codigo' => $pickingActivo?->codigo ?? ($pickingCodigo > 0 ? $pickingCodigo : ''),
             'cliente_query' => $cliente_query,
             'deposito_query' => $deposito_query,
             'puntoventa_query' => $puntoventa_query,
@@ -85,12 +105,16 @@ class PickingPedidoFerliController extends Controller
         $depositoId = (int) $request->input('deposito_id', 0);
         $loteDesde = trim((string) $request->input('lote_desde', ''));
         $loteHasta = trim((string) $request->input('lote_hasta', ''));
+        $pickingId = (int) $request->input('picking_id', 0);
+        $pickingCodigo = (int) $request->input('picking_codigo', 0);
 
         $lineas = PedidoPickingFerliSupport::lineasPendientes(
             $clienteId > 0 ? $clienteId : null,
             $depositoId > 0 ? $depositoId : null,
             $loteDesde !== '' ? $loteDesde : null,
             $loteHasta !== '' ? $loteHasta : null,
+            $pickingId > 0 ? $pickingId : null,
+            $pickingId <= 0 && $pickingCodigo > 0 ? $pickingCodigo : null,
         );
 
         $tituloFiltros = $this->subtituloFiltros($request);
@@ -124,11 +148,15 @@ class PickingPedidoFerliController extends Controller
         $id = (int) $request->input('pedido_combinacion_id', 0);
         $lote = (string) $request->input('picking_lote_codigo', '');
         $depositoId = (int) $request->input('picking_deposito_id', 0);
+        $pickingId = (int) $request->input('picking_id', 0);
+        $pickingCodigo = (int) $request->input('picking_codigo', 0);
 
         $result = PedidoPickingFerliSupport::marcar(
             $id,
             $lote,
             $depositoId > 0 ? $depositoId : null,
+            $pickingId > 0 ? $pickingId : null,
+            $pickingCodigo > 0 ? $pickingCodigo : null,
         );
 
         if (! empty($result['error'])) {
@@ -136,6 +164,43 @@ class PickingPedidoFerliController extends Controller
         }
 
         return response()->json($result);
+    }
+
+    public function crearPicking(Request $request)
+    {
+        $this->assertFerli();
+        can('listar-reporte-picking-pedido');
+
+        $fecha = trim((string) $request->input('fecha', ''));
+        $obs = trim((string) $request->input('observacion', ''));
+        $picking = PedidoPickingFerliSupport::crearPicking(
+            $fecha !== '' ? $fecha : null,
+            $obs !== '' ? $obs : null,
+        );
+
+        return response()->json([
+            'ok' => true,
+            'id' => (int) $picking->id,
+            'codigo' => (int) $picking->codigo,
+            'fecha' => $picking->fecha?->format('Y-m-d'),
+        ]);
+    }
+
+    public function consultaPickingsDia(Request $request)
+    {
+        $this->assertFerli();
+        can('listar-reporte-picking-pedido');
+
+        $fecha = trim((string) $request->input('fecha', now()->toDateString()));
+        $texto = trim((string) $request->input('texto', ''));
+
+        return response()->json([
+            'filas' => PedidoPickingFerliSupport::listarPendientesDia(
+                $fecha !== '' ? $fecha : null,
+                $texto !== '' ? $texto : null,
+            ),
+            'fecha' => $fecha !== '' ? $fecha : now()->toDateString(),
+        ]);
     }
 
     public function consultaLotesStock(Request $request)
@@ -188,6 +253,10 @@ class PickingPedidoFerliController extends Controller
     private function subtituloFiltros(Request $request): string
     {
         $partes = [];
+        $pickingCodigo = (int) $request->input('picking_codigo', 0);
+        if ($pickingCodigo > 0) {
+            $partes[] = 'Picking #'.$pickingCodigo;
+        }
         if ((int) $request->input('cliente_id') > 0) {
             $partes[] = 'Cliente #'.(int) $request->input('cliente_id');
         }

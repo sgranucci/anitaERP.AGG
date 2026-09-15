@@ -1020,14 +1020,34 @@
 
     function imprimeOt() {
 		var ot = $(this).parents("tr").find(".ot").val();
-        var listarUri = carpetaBase+'/ventas/crearemisionot';
-		
-		if (ot == 0 || ot == -1)
+
+		if (ot == 0 || ot == -1) {
 			alert("No puede listar OT");
-		else
-			$.post(listarUri, {_token: $('input[name=_token]').val(), ordenestrabajo: ot, tipoemision: "COMPLETA"}, function(data)
-			{ 
-				alert("OT EMITIDA CORRECTAMENTE"); 
+			return;
+		}
+
+		$.ajax({
+			url: carpetaBase + '/ventas/emisionot-impresora/' + encodeURIComponent(ot),
+			method: 'GET',
+			dataType: 'json',
+			headers: {
+				'X-Requested-With': 'XMLHttpRequest',
+				Accept: 'application/json',
+			},
+		})
+			.done(function (data) {
+				if (data && data.ok) {
+					alert(data.mensaje || 'OT EMITIDA CORRECTAMENTE');
+					return;
+				}
+				alert((data && data.mensaje) || 'No se pudo imprimir la OT.');
+			})
+			.fail(function (xhr) {
+				var msg = 'No se pudo imprimir la OT.';
+				if (xhr.responseJSON && xhr.responseJSON.mensaje) {
+					msg = xhr.responseJSON.mensaje;
+				}
+				alert(msg);
 			});
 	}
 
@@ -1844,6 +1864,8 @@
 				pedido_combinacion_id: pedidoCombinacionId,
 				picking_lote_codigo: lote,
 				picking_deposito_id: depositoId,
+				picking_id: parseInt($('#picking_activo_id').val(), 10) || 0,
+				picking_codigo: parseInt($('#picking_activo_codigo').val(), 10) || 0,
 				_token: token
 			})
 				.done(function (data) {
@@ -1852,8 +1874,15 @@
 						$btn.prop('disabled', false);
 						return;
 					}
+					if (data.picking_id) {
+						$('#picking_activo_id').val(data.picking_id);
+					}
+					if (data.picking_codigo) {
+						$('#picking_activo_codigo').val(data.picking_codigo);
+						$('#picking_activo_etiqueta').text('Picking #' + data.picking_codigo);
+					}
 					actualizarUiPicking($tr, 'preparado');
-					pickingAviso('Línea preparada para picking');
+					pickingAviso('Línea preparada' + (data.picking_codigo ? (' en picking #' + data.picking_codigo) : ''));
 				})
 				.fail(function (xhr) {
 					pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al marcar picking', 'error');
