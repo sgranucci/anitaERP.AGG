@@ -17,6 +17,9 @@ namespace App\Support\Ventas;
  *
  * En venta_impuesto el Gravado sigue siendo solo mercadería y la logística
  * va aparte (así ven_gravado Anita = Gravado + Logistica sin doblar).
+ *
+ * FAC Villafranca (división): misma fórmula sobre el gravado ya prorrateado
+ * por coef_porc_div (a-comprob procesa_division → calcula).
  */
 final class LogisticaBierzoSupport
 {

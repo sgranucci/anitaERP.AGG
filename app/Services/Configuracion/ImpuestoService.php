@@ -326,7 +326,10 @@ class ImpuestoService extends FacturacionService
 		// El ítem MTXCA "Logistica" se agrega al armar el CAE (no acá: dataItem
 		// alimenta stock / venta_emision).
 		// AGG y resto: no entra (porcentajelogistica queda 0 fuera de El Bierzo).
-		if (EntornoEmpresaSupport::esElBierzo() && $porcentajeLogistica && ! $flGrabaComprobanteDividido) {
+		// División Villafranca (flGrabaComprobanteDividido): también aplica.
+		// a-comprob procesa_division() → calcula() sobre el gravado ya prorrateado;
+		// IIBB/percepciones se omiten en división, la logística no.
+		if (EntornoEmpresaSupport::esElBierzo() && $porcentajeLogistica) {
 			$baseGravadoLogistica = LogisticaBierzoSupport::gravadoDesdeNetos($netos);
 			$totalLogistica = LogisticaBierzoSupport::importe(
 				$baseGravadoLogistica,
