@@ -1386,8 +1386,14 @@
 		pedido_combinacion_ids = [];
 		ordentrabajo_ids = [];
 
+		var $checks = $("#tbody-tabla .checkImpresion:checked");
+		if (!$checks.length) {
+			alert('Marque al menos una línea del pedido para facturar (casilla a la derecha de la fila).');
+			return;
+		}
+
 		cliente_id = $("#cliente_id").val();
-		$("input[type=checkbox]:checked").each(function(){
+		$checks.each(function(){
 
 			ordentrabajo = $(this).parents('tr').find('.otcodigo').val();
 			itemId = $(this).parents('tr').find('.ids').val();
@@ -1428,9 +1434,13 @@
 				}
 				completarTalles(modulo_id, check, medidas, cantidades, precios);
 				cantItem = cantItem + 1;
-				alert('item ' + cantItem);
 			}
 		});
+
+		if (!pedido_combinacion_ids.length) {
+			alert('No hay líneas válidas para facturar entre las marcadas.');
+			return;
+		}
 		
 		setTimeout(() => {
 			$("#facturarOrdenTrabajoModal").modal('show');

@@ -92,11 +92,11 @@
                     <a href="{{route('pedido')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
-					<button type="submit" onclick="preparaPreFactura()" class="btn btn-primary">
+					<button type="button" onclick="preparaPreFactura()" class="btn btn-primary">
                     	<i class="fa fa-fw fa-print"></i>
 						Pre-Factura
 					</button>
-                    <button type="submit" onclick="preparaFactura()" class="btn btn-primary">
+                    <button type="button" onclick="preparaFactura()" class="btn btn-primary">
                     	<i class="fa fa-fw fa-print"></i>
 						Factura
 					</button>
@@ -114,11 +114,11 @@
                     <div class="row">
                         <div class="col-lg-6">
 							<button type="submit" onclick="sub()" class="btn btn-success">Actualizar</button>
-							<button type="submit" onclick="imprimePreFactura()" style="display:none;" id="imprimePreFactura" class="btn btn-success">
+							<button type="button" onclick="imprimePreFactura()" style="display:none;" id="imprimePreFactura" class="btn btn-success">
                             	<i class="fa fa-print"></i>
 								Imprime pre-factura
 							</button>
-                            <button type="submit" onclick="generaFactura()" style="display:none;" id="generaFactura" class="btn btn-success">
+                            <button type="button" onclick="generaFactura()" style="display:none;" id="generaFactura" class="btn btn-success">
                             	<i class="fa fa-print"></i>
 								Genera factura
 							</button>

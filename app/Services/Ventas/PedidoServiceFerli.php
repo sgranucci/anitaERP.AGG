@@ -23,7 +23,6 @@ use App\Models\Stock\Mventa;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Talle;
-use LynX39\LaraPdfMerger\Facades\PdfMerger;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App;
@@ -595,8 +594,6 @@ class PedidoServiceFerli
 	{
 	  	ini_set('memory_limit', '512M');
 
-		$pdfMerger = PDFMerger::init();
-
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0];
 		$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
@@ -610,21 +607,11 @@ class PedidoServiceFerli
         $pdf->download($nombre_pdf.'.pdf');
 
 		return response()->download($path.'/'.$nombre_pdf.'.pdf');
-
-		// Por ahora queda sin hacer el merge
-		//$pdfMerger->addPDF($path.'/'.$nombre_pdf.'.pdf', 'all');
-
-		//$pdfMerger->merge();
-		//$pdfMerger->save($path.'/pedido.pdf', "file");
-
-		//return response()->download($path.'/pedido.pdf');
 	}
 
 	public function listarPreFactura($id, $items_id, $descuentoLinea = null)
 	{
 	  	ini_set('memory_limit', '512M');
-
-		$pdfMerger = PDFMerger::init();
 
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0];

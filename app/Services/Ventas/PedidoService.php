@@ -35,7 +35,6 @@ use App\Models\Stock\Categoria;
 use App\Models\Stock\Talle;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Storage;
-use LynX39\LaraPdfMerger\Facades\PdfMerger;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\App;
@@ -432,8 +431,6 @@ class PedidoService
 	public function listarPreFactura($id, $items_id, $descuentoLinea = null)
 	{
 	  	ini_set('memory_limit', '512M');
-
-		$pdfMerger = PDFMerger::init();
 
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0];
