@@ -88,11 +88,26 @@
         @endif
 
         <hr>
-        <h5>Comprobantes a pagar</h5>
+        <div class="d-flex flex-wrap align-items-center justify-content-between mb-1">
+            <h5 class="mb-0">Comprobantes a pagar</h5>
+            @if (\App\Support\Configuracion\EntornoEmpresaSupport::esAgg())
+                <button type="button"
+                        class="btn btn-outline-primary btn-sm"
+                        id="btn-importar-deuda-anita"
+                        title="Trae al ERP la deuda impaga de Anita del proveedor elegido y actualiza esta grilla">
+                    <i class="fa fa-download"></i> Completar desde Anita
+                </button>
+            @endif
+        </div>
         <p class="text-muted small mb-2">
             El monto a aplicar va en moneda de la factura (alineado a la derecha, como el saldo). Si la OP está en otra moneda se convierte con la cotización de liquidación
             (factura o del día según el modo). La DC se asienta; no abre un ítem extra en pesos.
             Las notas de crédito y las OPA restan del total a desembolsar. Las NC también restan de Ganancias e IIBB; las OPA no, porque ya se retuvo al generarlas.
+            @if (\App\Support\Configuracion\EntornoEmpresaSupport::esAgg())
+                <span class="d-block mt-1">
+                    <strong>Completar desde Anita</strong> importa al ERP la deuda impaga del proveedor (con <code>prov_empresa</code>) y refresca la grilla.
+                </span>
+            @endif
         </p>
         <div class="row no-gutters mb-2 pp-resumen-deuda-cards">
             <div class="col-6 col-md-3 pr-1 mb-1">

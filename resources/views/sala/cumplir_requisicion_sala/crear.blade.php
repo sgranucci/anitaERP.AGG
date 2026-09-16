@@ -280,7 +280,7 @@
                                                     <input type="hidden" name="lineas[{{ $idx }}][fecha_entrega]" class="input-fecha-entrega" value="{{ $fechaEntregaOld }}">
                                                     <input type="hidden" name="lineas[{{ $idx }}][numeroremito]" class="input-numeroremito" value="{{ $remitoOld }}">
                                                     <input type="hidden" name="lineas[{{ $idx }}][nombreresponsable]" class="input-nombreresponsable" value="{{ $responsableOld }}">
-                                                    <input type="number" step="0.01" min="0" name="lineas[{{ $idx }}][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="{{ number_format($pendiente, 4, '.', '') }}" value="{{ $cantidadOld }}">
+                                                    <input type="number" step="1" min="0" name="lineas[{{ $idx }}][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="{{ number_format($pendiente, 4, '.', '') }}" value="{{ $cantidadOld }}">
                                                 </td>
                                                 <td class="celda-autorizacion-cumple align-middle">
                                                     <div class="d-flex align-items-center">

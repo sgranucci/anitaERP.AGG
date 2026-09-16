@@ -9,7 +9,10 @@
         $operadoresJson[$key] = RequisicionSalaListadoFiltros::operadoresParaCampo($key);
     }
     $tieneCriteriosPanel = RequisicionSalaListadoFiltros::tieneCriteriosTexto($f);
-    $limpiarUrlPanel = $limpiarUrl ?? route('consultar_requisicion_sala', RequisicionSalaListadoFiltros::paraQueryStringEmpresa($f));
+    $limpiarUrlPanel = $limpiarUrl ?? route('consultar_requisicion_sala', array_merge(
+        RequisicionSalaListadoFiltros::paraQueryStringEmpresa($f),
+        ['limpiar_filtros' => 1]
+    ));
     $fScope = $f['empresa_scope'] ?? 'una';
     $fEmp = $f['empresa_id'] ?? null;
 @endphp
@@ -20,6 +23,9 @@
         <input type="hidden" name="empresa_todas" value="1">
     @elseif (! empty($fEmp))
         <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
+    @if (\App\Support\Sala\RequisicionSalaListadoFiltros::tieneEstadoLineaExterno($f))
+        <input type="hidden" name="estado_linea" value="{{ $f['estado_linea'] }}">
     @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)

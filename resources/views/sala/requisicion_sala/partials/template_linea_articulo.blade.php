@@ -19,7 +19,7 @@
             <i class="fa fa-comment-o" aria-hidden="true"></i> <span class="rs-leyenda-resumen-texto"></span>
         </small>
     </td>
-    <td class="align-middle"><input type="number" step="0.0001" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="1"></td>
+    <td class="align-middle"><input type="number" step="1" min="1" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="1"></td>
     <td class="align-middle">
         <select name="fueradeservicios[]" class="form-control form-control-sm fueradeservicio-linea">
             <option value="N" selected>N</option>

@@ -9,6 +9,11 @@
     $cpCuentaContratoId = (int) ($com_politica['contrato_cuentacontable_id'] ?? 0);
     $puedeAbrirAbmCuenta = can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false);
     $empresaIdForm = (int) ($data->empresa_id ?? 0);
+    $cpTieneOc = (int) old('ordencompra_id', $data->ordencompra_id ?? 0) > 0;
+    $cpModoAsignaRecepcion = (string) old(
+        'modo_carga',
+        $data->modo_carga ?? ''
+    ) === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
 @endphp
 
 <div class="row">
@@ -19,8 +24,9 @@
             El modal lista solo conceptos configurados para el <strong>tipo de comprobante</strong> seleccionado.
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
             La columna <strong>Cuenta DEBE</strong> solo aparece para casos puntuales (p. ej. contrato manual
-            o impuestos sin cuenta en el maestro). El neto con OC toma las cuentas de los artículos;
-            sin OC ni COM se indica en la solapa <strong>Asiento contable</strong>.
+            o impuestos sin cuenta en el maestro). El neto con OC toma por defecto las cuentas de los artículos;
+            en ND/NC (sin COM) puede cambiarla en la solapa <strong>Asiento contable</strong> si lo necesita.
+            Sin OC ni COM se indica también en esa solapa.
             @if ($cpImputacionManual)
                 El contrato exige <strong>cuenta DEBE</strong> del neto: se toma de la cuenta cargada en el contrato
             (si falta, se pide en el renglón).
@@ -52,10 +58,17 @@
                                 $nombre = $concepto->nombre ?? '';
                                 $montoVal = $montosOld[$idx] ?? '';
                                 $cuentaDebeOldId = (int) ($cuentasDebeOld[$idx] ?? 0);
-                                if ($cuentaDebeOldId <= 0 && $cpImputacionManual) {
+                                $tipoConceptoOld = (string) ($concepto->tipoconcepto ?? '');
+                                $esNetoOld = \App\Support\Compras\ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConceptoOld);
+                                $netoCubiertoPorReglaOld = $esNetoOld && (
+                                    $cpModoAsignaRecepcion
+                                    || ($cpTieneOc && ! $cpImputacionManual)
+                                );
+                                if ($cuentaDebeOldId <= 0 && $cpImputacionManual && $esNetoOld) {
                                     $cuentaDebeOldId = $cpCuentaContratoId;
                                 }
-                                if ($cuentaDebeOldId <= 0 && $concepto) {
+                                // Neto con OC/COM: no precargar maestro (default = artículos OC; override solo si vino en old).
+                                if ($cuentaDebeOldId <= 0 && $concepto && ! $netoCubiertoPorReglaOld) {
                                     $cuentaDebeOldId = method_exists($concepto, 'cuentacontableDebeIdParaEmpresa')
                                         ? $concepto->cuentacontableDebeIdParaEmpresa($empresaIdForm ?: null)
                                         : (int) ($concepto->cuentacontabledebe_id ?? 0);
@@ -103,10 +116,17 @@
                                 $concepto = $renglon->concepto_ivacompras
                                     ?? ($concepto_ivacompra_query ?? collect())->firstWhere('id', $renglon->concepto_ivacompra_id ?? 0);
                                 $cuentaDebeId = (int) ($renglon->cuentacontabledebe_id ?? 0);
-                                if ($cuentaDebeId <= 0 && $cpImputacionManual) {
+                                $tipoConceptoRenglon = (string) ($concepto->tipoconcepto ?? '');
+                                $esNetoRenglon = \App\Support\Compras\ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConceptoRenglon);
+                                $netoCubiertoPorRegla = $esNetoRenglon && (
+                                    $cpModoAsignaRecepcion
+                                    || ($cpTieneOc && ! $cpImputacionManual)
+                                );
+                                if ($cuentaDebeId <= 0 && $cpImputacionManual && $esNetoRenglon) {
                                     $cuentaDebeId = $cpCuentaContratoId;
                                 }
-                                if ($cuentaDebeId <= 0 && $concepto) {
+                                // Neto con OC/COM: solo conservar override guardado en el renglón (no maestro).
+                                if ($cuentaDebeId <= 0 && $concepto && ! $netoCubiertoPorRegla) {
                                     $cuentaDebeId = method_exists($concepto, 'cuentacontableDebeIdParaEmpresa')
                                         ? $concepto->cuentacontableDebeIdParaEmpresa($empresaIdForm ?: null)
                                         : (int) ($concepto->cuentacontabledebe_id ?? 0);

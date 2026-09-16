@@ -10,21 +10,24 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Importe ya facturado contra COM, para restar de la provisión disponible.
  *
- * La comparación de factura vs COM usa las recepciones **asignadas** (no todo el
- * legajo): una OC anual tipo Telefónica tiene una COM + una FC por mes; restar
- * el resto de facturas de la OC deja la provisión en 0.
+ * Dos mundos que no se pueden mezclar a ciegas:
+ * - Telefónica (OC no anticipada / FC mensuales): restar solo FC con pivot a las
+ *   COM asignadas. Restar todo el legajo deja la provisión mensual en 0.
+ * - Anticipo 50/50 (OC anticipada): la 1ª mitad suele ir sin COM (sin pivot) y la
+ *   2ª contra la COM completa. Hay que restar también esas anticipadas sin COM
+ *   del mismo legajo; si no, la 2ª dispara falso “fuera de tolerancia”.
+ *
+ * Usar {@see sumarComparableParaProvisionCom()} en controles/asiento. No volver a
+ * usar solo {@see sumarComparableEnLegajo()} ni solo {@see sumarComparableEnRecepciones()}.
  *
  * Cada factura previa se convierte a la moneda de la factura actual (motor de
  * moneda: manda la factura; cada documento usa su propia cotización).
- *
- * Anticipo 50/50: el descuento aplica cuando la 1ª mitad está vinculada a la
- * misma COM (pivot). Si era anticipada sin COM, no resta acá.
  */
 final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
 {
     /**
-     * Facturas contabilizadas del legajo (informativo en pantalla). No usar para
-     * comparar provisión COM: eso va por {@see sumarComparableEnRecepciones()}.
+     * Facturas contabilizadas del legajo (informativo en pantalla).
+     * No usar solo esto para comparar provisión COM (rompe Telefónica).
      *
      * @return array{
      *     importe: float,
@@ -49,6 +52,55 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
         }
 
         return self::acumular($query->orderBy('id')->get());
+    }
+
+    /**
+     * Ya facturado a descontar de la provisión de las COM seleccionadas.
+     *
+     * Siempre: FC imputadas a esas COM (pivot).
+     * Si $incluirAnticipadasSinCom (OC anticipada): + FC contabilizadas del mismo
+     * legajo sin ninguna COM (1ª mitad anticipada del 50/50).
+     *
+     * No incluye FC del legajo vinculadas a otras COM (meses Telefónica).
+     *
+     * @param  list<int|string>  $recepcionIds
+     * @return array{
+     *     importe: float,
+     *     cantidad: int,
+     *     items: list<array{id: int, etiqueta: string, importe: float, signo: string}>
+     * }
+     */
+    public static function sumarComparableParaProvisionCom(
+        array $recepcionIds,
+        int $ordencompraId,
+        bool $incluirAnticipadasSinCom,
+        ?int $excluirComprobanteId = null,
+        int $monedaDestinoId = 1,
+        mixed $cotizacionDestino = 1.0,
+        mixed $fechaDestino = null,
+    ): array {
+        $enCom = self::sumarComparableEnRecepciones(
+            $recepcionIds,
+            $excluirComprobanteId,
+            $monedaDestinoId,
+            $cotizacionDestino,
+            $fechaDestino,
+        );
+
+        if (! $incluirAnticipadasSinCom || $ordencompraId <= 0) {
+            return $enCom;
+        }
+
+        return self::fusionarAcumulados(
+            $enCom,
+            self::sumarComparableAnticipadasSinCom(
+                $ordencompraId,
+                $excluirComprobanteId,
+                $monedaDestinoId,
+                $cotizacionDestino,
+                $fechaDestino,
+            ),
+        );
     }
 
     /**
@@ -100,6 +152,123 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
             $fechaDestino,
             true,
         );
+    }
+
+    /**
+     * Contabilizadas del legajo sin fila en pivot COM (factura anticipada / sin recepción).
+     *
+     * @return array{
+     *     importe: float,
+     *     cantidad: int,
+     *     items: list<array{id: int, etiqueta: string, importe: float, signo: string}>
+     * }
+     */
+    public static function sumarComparableAnticipadasSinCom(
+        int $ordencompraId,
+        ?int $excluirComprobanteId = null,
+        int $monedaDestinoId = 1,
+        mixed $cotizacionDestino = 1.0,
+        mixed $fechaDestino = null,
+    ): array {
+        $vacio = ['importe' => 0.0, 'cantidad' => 0, 'items' => []];
+        if ($ordencompraId <= 0) {
+            return $vacio;
+        }
+
+        $query = self::queryContabilizados()
+            ->where('ordencompra_id', $ordencompraId);
+
+        if ($excluirComprobanteId !== null && $excluirComprobanteId > 0) {
+            $query->where('id', '!=', $excluirComprobanteId);
+        }
+
+        if (self::hayTablaPivot()) {
+            $query->whereNotExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('comprobante_proveedor_recepcion')
+                    ->whereColumn(
+                        'comprobante_proveedor_recepcion.comprobante_proveedor_id',
+                        'comprobante_proveedor.id'
+                    );
+            });
+        }
+
+        return self::acumular(
+            $query->orderBy('id')->get(),
+            $monedaDestinoId,
+            $cotizacionDestino,
+            $fechaDestino,
+            true,
+        );
+    }
+
+    /**
+     * Une dos acumulados sin duplicar el mismo comprobante.
+     *
+     * @param  array{importe: float, cantidad: int, items: list<array{id: int, etiqueta: string, importe: float, signo: string}>}  $a
+     * @param  array{importe: float, cantidad: int, items: list<array{id: int, etiqueta: string, importe: float, signo: string}>}  $b
+     * @return array{importe: float, cantidad: int, items: list<array{id: int, etiqueta: string, importe: float, signo: string}>}
+     */
+    public static function fusionarAcumulados(array $a, array $b): array
+    {
+        $porId = [];
+        foreach (array_merge($a['items'] ?? [], $b['items'] ?? []) as $item) {
+            $id = (int) ($item['id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $porId[$id] = $item;
+        }
+
+        $items = array_values($porId);
+        $importe = 0.0;
+        foreach ($items as $item) {
+            $importe += (float) ($item['importe'] ?? 0);
+        }
+
+        return [
+            'importe' => round($importe, 2),
+            'cantidad' => count($items),
+            'items' => $items,
+        ];
+    }
+
+    /**
+     * Suma anticipadas sin COM al ya-facturado de cada COM (solo OC anticipada).
+     * Sirve para remanente por COM en reserva/autoasignación del 50/50.
+     *
+     * @param  array<int, float>  $yaPorRecepcion
+     * @return array<int, float>
+     */
+    public static function sumarAnticipadasSinComAPorRecepcion(
+        array $yaPorRecepcion,
+        int $ordencompraId,
+        bool $incluirAnticipadasSinCom,
+        ?int $excluirComprobanteId = null,
+        int $monedaDestinoId = 1,
+        mixed $cotizacionDestino = 1.0,
+        mixed $fechaDestino = null,
+    ): array {
+        if (! $incluirAnticipadasSinCom || $ordencompraId <= 0 || $yaPorRecepcion === []) {
+            return $yaPorRecepcion;
+        }
+
+        $extra = (float) self::sumarComparableAnticipadasSinCom(
+            $ordencompraId,
+            $excluirComprobanteId,
+            $monedaDestinoId,
+            $cotizacionDestino,
+            $fechaDestino,
+        )['importe'];
+        if (abs($extra) < 0.005) {
+            return $yaPorRecepcion;
+        }
+
+        foreach ($yaPorRecepcion as $id => $ya) {
+            $yaPorRecepcion[$id] = round((float) $ya + $extra, 2);
+        }
+
+        return $yaPorRecepcion;
     }
 
     /**

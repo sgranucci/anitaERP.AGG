@@ -165,7 +165,7 @@
                 <span class="legajo-cc-pill">{{ $cab['centrocosto'] ?? '—' }}</span>
             </div>
             <div class="col-6 col-md-3">
-                <span class="meta-label">IMPORTE TOTAL (CON IVA)</span>
+                <span class="meta-label">{{ $cab['importe_total_label'] ?? 'IMPORTE TOTAL (CON IVA)' }}</span>
                 <span class="meta-value">{{ $fmt($cab['importe_total_con_iva'] ?? null) }}</span>
             </div>
         </div>
@@ -183,10 +183,15 @@
                             <div class="font-weight-bold mb-2" style="color:#1e3a5f;">{{ $factura['numero'] }}</div>
                             <div class="doc-row"><span class="doc-k">Fecha emisión</span><span class="doc-v">{{ $factura['fecha'] ?? '—' }}</span></div>
                             <div class="doc-row"><span class="doc-k">CUIT proveedor</span><span class="doc-v">{{ $factura['cuit'] ?? '—' }}</span></div>
+                            @if (!empty($factura['importes_desde_recepcion']))
+                                <p class="mb-2" style="font-size:.78rem;color:#856404;background:#fff3cd;border:1px solid #ffeeba;border-radius:.25rem;padding:.35rem .5rem;">
+                                    Importes tomados de la recepción (factura aún no cargada).
+                                </p>
+                            @endif
                             <div class="doc-row"><span class="doc-k">Neto gravado</span><span class="doc-v">{{ $fmt($factura['neto'] ?? null) }}</span></div>
                             <div class="doc-row"><span class="doc-k">{{ $factura['iva_label'] ?? 'IVA' }}</span><span class="doc-v">{{ $fmt($factura['iva'] ?? null) }}</span></div>
                             <div class="doc-total">
-                                <span>Total factura</span>
+                                <span>{{ !empty($factura['importes_desde_recepcion']) ? 'Total (provisión COM)' : 'Total factura' }}</span>
                                 <span>{{ $fmt($factura['total'] ?? null) }}</span>
                             </div>
                         @else
@@ -257,6 +262,10 @@
                                     /
                                     {{ number_format((float) ($com['cantidad_recibida'] ?? 0), 2, ',', '.') }}
                                 </span>
+                            </div>
+                            <div class="doc-row">
+                                <span class="doc-k">Importe provisión</span>
+                                <span class="doc-v">{{ $fmt($com['importe_provision'] ?? null) }}</span>
                             </div>
                             <div class="doc-row">
                                 <span class="doc-k">Diferencias</span>

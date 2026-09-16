@@ -8,6 +8,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Configuracion\Arbolaprobacion_OcTrigger;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Services\Compras\ComprobanteProveedorRecepcionesSupport;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Configuracion\OcArbolTriggerCatalog;
@@ -431,9 +432,25 @@ final class OrdencompraLegajoGastronomiaSupport
             ]).'?inline=1';
         }
 
+        $recepciones = self::resumenRecepciones($ocId, $hash !== '' ? $hash : null);
+        $importeCom = self::sumaImporteRecepciones($recepciones);
+        $facturaConTotalUsable = $factura && ComprobanteProveedorPrecargaTotalSupport::precargaTieneTotalUsable($factura);
+
         $resumenFactura = $factura ? self::resumenFactura($factura, $urlPdf) : null;
+        if ($resumenFactura && ! $facturaConTotalUsable && $importeCom > 0) {
+            $resumenFactura = self::aplicarImportesDesdeRecepcion($resumenFactura, $importeCom);
+        }
+
         $subtotalOc = self::subtotalItemsOc($oc);
-        $importeTotal = $resumenFactura['total'] ?? $subtotalOc;
+        $importesDesdeRecepcion = is_array($resumenFactura)
+            && ! empty($resumenFactura['importes_desde_recepcion']);
+        if ($facturaConTotalUsable) {
+            $importeTotal = (float) ($resumenFactura['total'] ?? 0);
+        } elseif ($importeCom > 0) {
+            $importeTotal = $importeCom;
+        } else {
+            $importeTotal = $subtotalOc;
+        }
 
         return [
             'cabecera' => [
@@ -446,10 +463,14 @@ final class OrdencompraLegajoGastronomiaSupport
                 ) ?: '—',
                 'estado_badge' => 'GASTRONOMÍA — PENDIENTE DE AUTORIZAR',
                 'importe_total_con_iva' => $importeTotal,
+                'importe_total_label' => $importesDesdeRecepcion
+                    ? 'IMPORTE TOTAL (DESDE RECEPCIÓN, SIN IVA)'
+                    : 'IMPORTE TOTAL (CON IVA)',
+                'importes_desde_recepcion' => $importesDesdeRecepcion,
             ],
             'factura' => $resumenFactura,
             'ordencompra' => self::resumenOrdencompra($oc, $subtotalOc, $urlPdfOc),
-            'recepciones' => self::resumenRecepciones($ocId, $hash !== '' ? $hash : null),
+            'recepciones' => $recepciones,
             'url_pdf_oc' => $urlPdfOc,
             'importe_total_con_iva' => $importeTotal,
         ];
@@ -468,7 +489,16 @@ final class OrdencompraLegajoGastronomiaSupport
 
         $oc->loadMissing(['proveedores:id,nombre', 'centrocostos:id,codigo,nombre']);
         $factura = OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
-        $totalFactura = $factura && $factura->total !== null ? (float) $factura->total : null;
+        $totalFactura = ($factura && ComprobanteProveedorPrecargaTotalSupport::precargaTieneTotalUsable($factura))
+            ? (float) $factura->total
+            : null;
+        $importeCom = self::sumaImporteRecepciones(
+            self::resumenRecepciones((int) $oc->id)
+        );
+        $alertaDesdeRecepcion = $totalFactura === null && $importeCom > 0;
+        $alertaImporte = $totalFactura !== null
+            ? $totalFactura
+            : ($alertaDesdeRecepcion ? $importeCom : $montoItems);
 
         return [
             'es_legajo_gastronomia' => true,
@@ -480,14 +510,14 @@ final class OrdencompraLegajoGastronomiaSupport
             'total_factura_fmt' => $totalFactura !== null
                 ? number_format($totalFactura, 2, ',', '.')
                 : null,
-            'alerta_importe' => $totalFactura !== null ? $totalFactura : $montoItems,
-            'alerta_importe_fmt' => number_format(
-                $totalFactura !== null ? $totalFactura : $montoItems,
-                2,
-                ',',
-                '.'
-            ),
+            'total_recepcion' => $alertaDesdeRecepcion ? $importeCom : null,
+            'total_recepcion_fmt' => $alertaDesdeRecepcion
+                ? number_format($importeCom, 2, ',', '.')
+                : null,
+            'alerta_importe' => $alertaImporte,
+            'alerta_importe_fmt' => number_format($alertaImporte, 2, ',', '.'),
             'alerta_con_iva' => $totalFactura !== null,
+            'alerta_desde_recepcion' => $alertaDesdeRecepcion,
         ];
     }
 
@@ -558,8 +588,9 @@ final class OrdencompraLegajoGastronomiaSupport
         $numeroCorto = trim($suc.'-'.$nro, '-');
         $numero = $numeroCorto !== '' ? 'FAC '.$numeroCorto : ('Precarga #'.$factura->id);
 
-        $neto = $factura->subtotal !== null ? (float) $factura->subtotal : null;
-        $total = $factura->total !== null ? (float) $factura->total : null;
+        $tieneTotalUsable = ComprobanteProveedorPrecargaTotalSupport::precargaTieneTotalUsable($factura);
+        $neto = $tieneTotalUsable && $factura->subtotal !== null ? (float) $factura->subtotal : null;
+        $total = $tieneTotalUsable && $factura->total !== null ? (float) $factura->total : null;
         $iva = null;
         $ivaLabel = 'IVA';
         if ($neto !== null && $total !== null && $total >= $neto) {
@@ -584,7 +615,26 @@ final class OrdencompraLegajoGastronomiaSupport
             'iva_label' => $ivaLabel,
             'total' => $total,
             'url_pdf' => $urlPdf,
+            'importes_desde_recepcion' => false,
         ];
+    }
+
+    /**
+     * Precarga de legajo suele venir en $0 hasta CxP: mostrar provisión COM (neto sin IVA).
+     *
+     * @param  array<string, mixed>  $resumen
+     * @return array<string, mixed>
+     */
+    private static function aplicarImportesDesdeRecepcion(array $resumen, float $importeCom): array
+    {
+        $importeCom = round($importeCom, 2);
+        $resumen['neto'] = $importeCom;
+        $resumen['iva'] = null;
+        $resumen['iva_label'] = 'IVA (pendiente de carga)';
+        $resumen['total'] = $importeCom;
+        $resumen['importes_desde_recepcion'] = true;
+
+        return $resumen;
     }
 
     /**
@@ -648,7 +698,8 @@ final class OrdencompraLegajoGastronomiaSupport
         $recepciones = Recepcion_Proveedor::query()
             ->with([
                 'creousuarios:id,nombre',
-                'recepcion_proveedor_articulos:id,recepcion_proveedor_id,cantidad,cantidad_oc',
+                'monedas:id,abreviatura',
+                'recepcion_proveedor_articulos:id,recepcion_proveedor_id,cantidad,cantidad_oc,precio,descuento,moneda_id,cotizacion',
             ])
             ->where('ordencompra_id', $ordencompraId)
             ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
@@ -656,6 +707,11 @@ final class OrdencompraLegajoGastronomiaSupport
             ->orderBy('fecha')
             ->orderBy('id')
             ->get();
+
+        if ($recepciones->isNotEmpty()) {
+            $recepciones = app(ComprobanteProveedorRecepcionesSupport::class)
+                ->enriquecerConImporteProvision($recepciones);
+        }
 
         $hash = trim((string) $hash);
         $filas = [];
@@ -699,6 +755,7 @@ final class OrdencompraLegajoGastronomiaSupport
                 'usuario' => (string) (optional($rec->creousuarios)->nombre ?? '—'),
                 'cantidad_oc' => $cantOc,
                 'cantidad_recibida' => $cantRec,
+                'importe_provision' => round((float) ($rec->importe_provision_com ?? 0), 2),
                 'diferencias' => $diferencias,
                 'resumen_diferencias' => $resumen !== '' ? $resumen : null,
                 'sin_diferencias' => $diferencias === [] && $resumen === '',
@@ -707,6 +764,19 @@ final class OrdencompraLegajoGastronomiaSupport
         }
 
         return $filas;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $recepciones
+     */
+    private static function sumaImporteRecepciones(array $recepciones): float
+    {
+        $suma = 0.0;
+        foreach ($recepciones as $rec) {
+            $suma += (float) ($rec['importe_provision'] ?? 0);
+        }
+
+        return round($suma, 2);
     }
 
     private static function etiquetaCom(Recepcion_Proveedor $rec): string

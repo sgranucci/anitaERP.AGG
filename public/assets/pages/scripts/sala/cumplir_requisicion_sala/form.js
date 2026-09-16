@@ -124,7 +124,7 @@
         html += '<input type="hidden" name="lineas[' + idx + '][fecha_entrega]" class="input-fecha-entrega" value="">';
         html += '<input type="hidden" name="lineas[' + idx + '][numeroremito]" class="input-numeroremito" value="">';
         html += '<input type="hidden" name="lineas[' + idx + '][nombreresponsable]" class="input-nombreresponsable" value="">';
-        html += '<input type="number" step="0.01" min="0" name="lineas[' + idx + '][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="' + linea.pendiente + '">';
+        html += '<input type="number" step="1" min="0" name="lineas[' + idx + '][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="' + linea.pendiente + '">';
         html += '</td>';
         html += '<td class="motivo-parcial-label small text-muted"></td>';
         html += '</tr>';
@@ -318,6 +318,15 @@
             limpiarEstadoLinea($fila);
             if (typeof alListo === 'function') {
                 alListo(true);
+            }
+            return;
+        }
+
+        if (!Number.isInteger(entrega)) {
+            alert('La cantidad debe ser un n\u00famero entero (sin decimales).');
+            $fila.find('.input-cantidad-entrega').val('');
+            if (typeof alListo === 'function') {
+                alListo(false);
             }
             return;
         }

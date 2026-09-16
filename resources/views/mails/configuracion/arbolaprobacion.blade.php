@@ -116,6 +116,8 @@
                 por <strong>$ {{ $mx['alerta_importe_fmt'] ?? number_format($mx['monto_items'] ?? 0, 2, ',', '.') }}</strong>
                 @if (!empty($mx['alerta_con_iva']))
                     (IVA incluido)
+                @elseif (!empty($mx['alerta_desde_recepcion']))
+                    (provisión recepción, sin IVA)
                 @endif
                 — {{ $mx['centrocosto_corto'] ?? 'Gastronomía' }},
                 OC {{ $datosComprobante->numeroordencompra }}.
@@ -137,6 +139,9 @@
                     @if (!empty($mx['total_factura_fmt']))
                         — <strong>Total factura:</strong> {{ $mx['moneda_abrev_items'] ?? 'PES' }}
                         {{ $mx['total_factura_fmt'] }} (con IVA)
+                    @elseif (!empty($mx['total_recepcion_fmt']))
+                        — <strong>Provisión recepción:</strong> {{ $mx['moneda_abrev_items'] ?? 'PES' }}
+                        {{ $mx['total_recepcion_fmt'] }} (sin IVA)
                     @endif
                 </li>
                 <li>Proveedor: {{ $datosComprobante->proveedores->nombre ?? '—' }}</li>

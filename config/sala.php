@@ -13,4 +13,12 @@ return [
     /** tipotransaccion_stock.id para TM tras aprobación del árbol (default TRA). */
     'requisicion_transferencia_tipotransaccion_id' => (int) env('SALA_REQUISICION_TRANSFERENCIA_TIPOTRANSACCION_ID', 1),
 
+    /**
+     * Códigos depmae asignados automáticamente a usuarios con rol Tecnico-sala
+     * (por empresa del usuario). Restringe depósitos y artículos en requisición de sala.
+     *
+     * @var list<string>
+     */
+    'tecnico_sala_depositos_codigos' => ['403', '404', '405', '406'],
+
 ];

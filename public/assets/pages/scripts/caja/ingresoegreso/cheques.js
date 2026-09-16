@@ -58,6 +58,8 @@ function pintarChequeraEmitido($tr, ch) {
     $tr.find('.chequera_emitido_lbl').attr('title', etiqueta || 'F1 consulta chequera de la cuenta');
     if (ch && ch.tipochequera) {
         $tr.find('.negociable_emitido').val(String(ch.tipochequera).toUpperCase() === 'E' ? 'E' : 'N');
+    } else {
+        $tr.find('.negociable_emitido').val('E');
     }
     sincronizarNroEcheqEmitido($tr);
 }
@@ -66,7 +68,7 @@ function sincronizarNroEcheqEmitido($tr) {
     if (!$tr || !$tr.length) {
         return;
     }
-    var neg = String($tr.find('.negociable_emitido').val() || 'N').toUpperCase();
+    var neg = String($tr.find('.negociable_emitido').val() || 'E').toUpperCase();
     var nro = String($tr.find('.numerocheque_emitido').val() || '').trim();
     $tr.find('.nro_echeq_emitido').val(neg === 'E' ? nro : '');
 }

@@ -41,6 +41,26 @@ class ChequeraController extends Controller
                                                 'estado_enum'));
     }
 
+    public function sincronizarDesdeAnita()
+    {
+        can('listar-chequera');
+        try {
+            $ret = $this->repository->sincronizarConAnita();
+        } catch (\Throwable $e) {
+            return redirect('caja/chequera')->with('mensaje_error', 'No se pudo sincronizar chequeras desde Anita: '.$e->getMessage());
+        }
+
+        $msg = sprintf(
+            'Chequeras sincronizadas desde Anita: %d en Anita, %d creadas, %d actualizadas, %d omitidas.',
+            (int) ($ret['en_anita'] ?? 0),
+            (int) ($ret['creadas'] ?? 0),
+            (int) ($ret['actualizadas'] ?? 0),
+            (int) ($ret['omitidas'] ?? 0)
+        );
+
+        return redirect('caja/chequera')->with('mensaje', $msg);
+    }
+
     /**
      * Show the form for creating a new resource.
      *

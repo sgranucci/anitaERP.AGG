@@ -18,11 +18,12 @@ class SincronizarClienteUifAnitaBulk extends Command
                             {--solo-descargar : Solo baja JSON a storage; no persiste}
                             {--solo-persistir : Usa cache existente; no vuelve a bajar}
                             {--forzar-descarga : Re-descarga aunque exista cache}
+                            {--force : Confirma persistencia masiva (sin esto se aborta al persistir)}
                             {--desde= : Filtrar persistencia por inroclienteid mínimo}
                             {--hasta= : Filtrar persistencia por inroclienteid máximo}
                             {--usuario= : ID usuario para creousuario_id / usuario_id}';
 
-    protected $description = 'Sync masivo UIF: 2–3 lecturas Anita → cache JSON → persistencia (archivos en /scan, sin copy a /var).';
+    protected $description = 'Sync masivo UIF desde Anita. Persistencia requiere --force. En update no pisa geo ERP cargada.';
 
     public function handle(
         ClienteUifAnitaBulkCacheSupport $cache,
@@ -36,6 +37,7 @@ class SincronizarClienteUifAnitaBulk extends Command
 
             return self::FAILURE;
         }
+
         $servidor = $this->option('servidor');
         $servidor = is_string($servidor) && $servidor !== ''
             ? $servidor
@@ -55,6 +57,13 @@ class SincronizarClienteUifAnitaBulk extends Command
         $soloDescargar = (bool) $this->option('solo-descargar');
         $soloPersistir = (bool) $this->option('solo-persistir');
         $forzar = (bool) $this->option('forzar-descarga');
+
+        if (! $soloDescargar && ! (bool) $this->option('force')) {
+            $this->error('Persistencia masiva bloqueada: use --force (o --solo-descargar para solo bajar cache).');
+            $this->line('El ERP es fuente de verdad en geo; en update Anita solo completa vacíos.');
+
+            return self::FAILURE;
+        }
 
         try {
             if (! $soloPersistir) {
@@ -78,7 +87,7 @@ class SincronizarClienteUifAnitaBulk extends Command
             $desdeInro = ($desde !== null && $desde !== '') ? (int) $desde : null;
             $hastaInro = ($hasta !== null && $hasta !== '') ? (int) $hasta : null;
 
-            $this->info('Persistiendo desde cache (archivos vía /scan, sin copiar a /var)…');
+            $this->warn('Persistiendo desde cache con --force. Geo ERP cargada no se pisa.');
             $resultado = $sync->sincronizarDesdeCache(
                 $origen,
                 $desdeInro,

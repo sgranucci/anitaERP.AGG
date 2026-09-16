@@ -484,7 +484,11 @@ class ApiController extends Controller
             $lineasConcepto = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
                 $cotejoIibb['lineas']
             );
-            $avisosConceptos = array_merge($cotejoIibb['correcciones'], $cotejoIibb['avisos']);
+            $avisosConceptos = array_merge(
+                $avisosConceptos,
+                $cotejoIibb['correcciones'],
+                $cotejoIibb['avisos']
+            );
             $revisarPorIibb = $cotejoIibb['revisar'];
 
             // Descuento/importe negativo espurio del agente: si sin él el total ya cierra, se descarta.

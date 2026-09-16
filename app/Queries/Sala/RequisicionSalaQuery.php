@@ -75,19 +75,40 @@ class RequisicionSalaQuery implements RequisicionSalaQueryInterface
         RequisicionSalaListadoFiltros::aplicar($q, $filtros);
 
         if ($withArticulos) {
+            $eager = self::eagerLoadArticulos($filtros);
             if ($flPaginando) {
                 $pag = $q->paginate(10);
-                $pag->getCollection()->load(['requisicion_sala_articulos.articulos']);
+                $pag->getCollection()->load($eager);
 
                 return $pag;
             }
             $coleccion = $q->get();
-            $coleccion->load(['requisicion_sala_articulos.articulos']);
+            $coleccion->load($eager);
 
             return $coleccion;
         }
 
         return $flPaginando ? $q->paginate(10) : $q->get();
+    }
+
+    /**
+     * Con filtro de estado ítem, solo carga las líneas que coinciden (oculta cumplidas si pedís pendientes, etc.).
+     *
+     * @return array<int|string, mixed>
+     */
+    private static function eagerLoadArticulos(array $filtros): array
+    {
+        $valores = RequisicionSalaListadoFiltros::valoresEstadoLineaExterno($filtros);
+        if ($valores === []) {
+            return ['requisicion_sala_articulos.articulos'];
+        }
+
+        return [
+            'requisicion_sala_articulos' => function ($q) use ($valores) {
+                $q->whereIn('requisicion_sala_articulo.estado', $valores)
+                    ->with('articulos');
+            },
+        ];
     }
 
     private static function nombreEstadoRechazada(): string

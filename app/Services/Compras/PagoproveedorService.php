@@ -1161,9 +1161,12 @@ class PagoproveedorService
                             'fechapago_emitidos' => [$fecha],
                             'moneda_emitido_ids' => [$monedaId],
                             'cotizacioncheque_emitidos' => [1],
-                            'caracter_emitidos' => ['O'],
+                            'caracter_emitidos' => [ChequePropioInstrumentoSupport::caracterDefault()],
                             'para_dep_emitidos' => [ChequePropioInstrumentoSupport::paraDepDefault()],
-                            'negociable_emitidos' => [ChequePropioInstrumentoSupport::negociableDesdeChequera((string) ($chequera->tipochequera ?? 'F'))],
+                            'negociable_emitidos' => [ChequePropioInstrumentoSupport::negociableDesdeChequera(
+                                (string) ($chequera->tipochequera
+                                    ?: ChequePropioInstrumentoSupport::negociableDefault())
+                            )],
                             'anombrede_emitidos' => [$nombreProveedorCheque ?: ('Proveedor #'.$proveedorId)],
                             'proveedor_emitido_ids' => [$proveedorId],
                             'empresa_id' => $empresaId,

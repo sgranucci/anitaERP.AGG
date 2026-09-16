@@ -10,6 +10,9 @@ Requisiciones de sala
 @endsection
 
 @section('contenido')
+@php
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -21,12 +24,15 @@ Requisiciones de sala
                         'formId' => 'form-filtros-requisicion-sala',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => \App\Support\Sala\RequisicionSalaListadoFiltros::tieneCriteriosTexto($filtros ?? []),
-                        'limpiarUrl' => route('consultar_requisicion_sala', \App\Support\Sala\RequisicionSalaListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
-                        'placeholder' => 'Búsqueda rápida…',
+                        'limpiarUrl' => route('consultar_requisicion_sala', array_merge(
+                            \App\Support\Sala\RequisicionSalaListadoFiltros::paraQueryStringEmpresa($filtros ?? []),
+                            ['limpiar_filtros' => 1]
+                        )),
+                        'placeholder' => 'SKU, descripción… (combiná con Estado ítem abajo)',
                         'toggleTarget' => '#panel-filtros-requisicion-sala',
                         'toggleId' => 'btn-toggle-filtros-requisicion-sala',
                         'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_requisicion_sala'),
+                        'nuevoRegistroUrl' => route('crear_requisicion_sala', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-requisicion-sala',
                         'nuevoRegistroLabel' => 'Nuevo registro',
                     ])
@@ -82,7 +88,10 @@ Requisiciones de sala
                             </td>
                             <td>
                                 @foreach ($data->requisicion_sala_articulos as $item)
-                                    <small>{{ $item->articulos->sku ?? '' }}-{{ $item->articulos->descripcion ?? '' }}-Cant.:{{ $item->cantidad }}</small><br>
+                                    <div class="mb-1">
+                                        @include('sala.requisicion_sala.partials.estado_linea_badge', ['estado' => $item->estado ?? ' '])
+                                        <small>{{ $item->articulos->sku ?? '' }}-{{ $item->articulos->descripcion ?? '' }}-Cant.:{{ $item->cantidad }}</small>
+                                    </div>
                                 @endforeach
                             </td>
                             <td class="text-nowrap">
@@ -92,12 +101,20 @@ Requisiciones de sala
                                 </a>
                                 @endif
                                 @if (can('cumplir-requisicion-sala', false))
-                                <a href="{{ route('cumplir_requisicion_sala', ['requisicion_sala_id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Cumplimientos de sala">
-                                    <i class="fa fa-clipboard-check text-success"></i>
-                                </a>
+                                    @php
+                                        $puedeCumplirListado = in_array((string) ($data->estado ?? ''), $estados_cumplibles ?? ['APROBADA', 'PARCIAL'], true);
+                                    @endphp
+                                    @if ($puedeCumplirListado)
+                                    <a href="{{ route('crear_cumplir_requisicion_sala', ['requisicion_sala_id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC text-info" title="Cumplir requisición de sala">
+                                        <i class="fa fa-truck-loading"></i>
+                                    </a>
+                                    @endif
+                                    <a href="{{ route('cumplir_requisicion_sala', ['requisicion_sala_id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Ver cumplimientos de sala">
+                                        <i class="fa fa-clipboard-check text-success"></i>
+                                    </a>
                                 @endif
                                 @if (can('editar-requisicion-sala', false) || can('actualizar-requisicion-sala', false))
-                                <a href="{{ route('editar_requisicion_sala', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                <a href="{{ route('editar_requisicion_sala', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                     <i class="fa fa-edit"></i>
                                 </a>
                                 @endif

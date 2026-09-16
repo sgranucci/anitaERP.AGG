@@ -217,8 +217,17 @@ class ComprobanteProveedorControlesLegajoService
         );
 
         $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($ordencompra);
-        $yaPorComSeleccion = ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
-            $ids->all(),
+        $ocAnticipada = ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($ordencompra);
+        $yaPorComSeleccion = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarAnticipadasSinComAPorRecepcion(
+            ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
+                $ids->all(),
+                $excluirComprobanteId,
+                $monedaId,
+                $cotizacionFactura,
+                $fechaComprobanteYmd,
+            ),
+            (int) $ordencompra->id,
+            $ocAnticipada,
             $excluirComprobanteId,
             $monedaId,
             $cotizacionFactura,
@@ -247,10 +256,12 @@ class ComprobanteProveedorControlesLegajoService
             fn ($r) => (float) ($r->importe_provision_com ?? 0)
         ), 2);
 
-        // Provisión de las COM asignadas − facturas ya imputadas a esas COM
-        // (en moneda de esta factura). No restar el resto del legajo.
-        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnRecepciones(
+        // Provisión COM − FC en esas COM; si OC anticipada, también − anticipadas sin COM.
+        // No restar FC del legajo vinculadas a otras COM (Telefónica).
+        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableParaProvisionCom(
             $ids->all(),
+            (int) $ordencompra->id,
+            $ocAnticipada,
             $excluirComprobanteId,
             $monedaId,
             $cotizacionFactura,
@@ -268,7 +279,7 @@ class ComprobanteProveedorControlesLegajoService
         )) {
             $detalleYa = ((int) $yaFacturado['cantidad'] > 0)
                 ? sprintf(
-                    ' (COM %s − ya facturado en estas COM %s)',
+                    ' (COM %s − ya facturado %s)',
                     number_format($importeComFactura, 2, ',', '.'),
                     number_format((float) $yaFacturado['importe'], 2, ',', '.')
                 )

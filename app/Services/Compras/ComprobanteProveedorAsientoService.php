@@ -238,6 +238,8 @@ class ComprobanteProveedorAsientoService
         $lineasHaberExtra = [];
         $cuentaProvisionId = 0;
         $totalNetoConceptos = 0.0;
+        /** @var list<array{concepto_ivacompra_id:int, monto:float, cuentacontabledebe_id:int}> */
+        $netoConceptosDetalle = [];
         // Con recepción vinculada: "COM: nro codigo nombre"; si no, "codigo nombre".
         $varianteLinea = $modoAsignaRecepcion ? 'com' : 'normal';
         $descLineaErp = ComprobanteProveedorAsientoDescripcionSupport::descripcionLineaErp(
@@ -272,9 +274,15 @@ class ComprobanteProveedorAsientoService
                 );
             }
 
-            // Con OC asociada (NC/ND/FAC sin COM valuada): neto → cuentas de artículos de la OC.
+            // Con OC asociada (NC/ND/FAC sin COM valuada): neto → cuentas de artículos de la OC
+            // (o override del renglón si el usuario cambió la cuenta en la solapa Asiento).
             if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 $totalNetoConceptos += $monto;
+                $netoConceptosDetalle[] = [
+                    'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
+                    'monto' => $monto,
+                    'cuentacontabledebe_id' => (int) ($linea->cuentacontabledebe_id ?? 0),
+                ];
 
                 continue;
             }
@@ -356,24 +364,49 @@ class ComprobanteProveedorAsientoService
                     'El comprobante tiene orden de compra pero no se pudo cargar para imputar el neto.'
                 );
             }
-            $lineasOc = OrdencompraContratoRutaFacturaSupport::lineasDebeNetoDesdeArticulosOc(
-                $oc,
-                $totalNetoConceptos,
-                (int) ($comprobante->empresa_id ?? 0),
-                $centrocostoId,
-                $descLineaErp
-            );
-            foreach ($lineasOc as $lineaOc) {
-                $lineaOc['origen'] = 'oc_articulo';
-                $lineaOc['editable_cuenta'] = false;
-                $lineaOc['concepto_ivacompra_id'] = 0;
-                $lineasDebe[] = $lineaOc;
+
+            $conceptoSyncId = (int) ($netoConceptosDetalle[0]['concepto_ivacompra_id'] ?? 0);
+            $overrideCuentaId = 0;
+            foreach ($netoConceptosDetalle as $detNeto) {
+                if ((int) ($detNeto['cuentacontabledebe_id'] ?? 0) > 0) {
+                    $overrideCuentaId = (int) $detNeto['cuentacontabledebe_id'];
+                    $conceptoSyncId = (int) ($detNeto['concepto_ivacompra_id'] ?? $conceptoSyncId);
+                    break;
+                }
+            }
+
+            // Override explícito (p. ej. ND/NC de diferencia de cambio): una sola cuenta editable.
+            if ($overrideCuentaId > 0) {
+                $lineasDebe[] = [
+                    'cuentacontable_id' => $overrideCuentaId,
+                    'importe' => $totalNetoConceptos,
+                    'centrocosto_id' => $centrocostoId,
+                    'observacion' => $descLineaErp,
+                    'origen' => 'oc_articulo_override',
+                    'editable_cuenta' => true,
+                    'concepto_ivacompra_id' => $conceptoSyncId,
+                ];
+            } else {
+                $lineasOc = OrdencompraContratoRutaFacturaSupport::lineasDebeNetoDesdeArticulosOc(
+                    $oc,
+                    $totalNetoConceptos,
+                    (int) ($comprobante->empresa_id ?? 0),
+                    $centrocostoId,
+                    $descLineaErp
+                );
+                foreach ($lineasOc as $lineaOc) {
+                    $lineaOc['origen'] = 'oc_articulo';
+                    // NC/ND (y FAC sin COM): default OC, editable si el usuario necesita otra cuenta.
+                    $lineaOc['editable_cuenta'] = true;
+                    $lineaOc['concepto_ivacompra_id'] = $conceptoSyncId;
+                    $lineasDebe[] = $lineaOc;
+                }
             }
         }
 
         if ($usaProvisionCom) {
             $totalProvisionBruta = $this->totalProvisionRecepcionesVinculadas($comprobante);
-            // Disponible = COM asignadas − facturas ya imputadas a esas COM (moneda factura).
+            // Disponible = COM − FC en esas COM; OC anticipada también resta anticipadas sin COM.
             $recepcionIdsVinculadas = $comprobante->comprobante_proveedor_recepciones
                 ->pluck('recepcion_proveedor_id')
                 ->map(static fn ($id) => (int) $id)
@@ -381,8 +414,10 @@ class ComprobanteProveedorAsientoService
                 ->unique()
                 ->values()
                 ->all();
-            $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnRecepciones(
+            $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableParaProvisionCom(
                 $recepcionIdsVinculadas,
+                (int) ($comprobante->ordencompra_id ?? 0),
+                ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($comprobante->ordencompras),
                 (int) ($comprobante->id ?? 0) > 0 ? (int) $comprobante->id : null,
                 $monedaFactura['moneda_id'],
                 $monedaFactura['cotizacion'],

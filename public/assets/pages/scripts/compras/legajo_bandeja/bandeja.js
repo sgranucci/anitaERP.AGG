@@ -80,13 +80,46 @@
         }
     }
 
+    function fmtMonto(n, moneda) {
+        if (n == null || n === '') {
+            return '—';
+        }
+        var num = Number(n);
+        if (isNaN(num)) {
+            return '—';
+        }
+        var parts = num.toFixed(2).split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        var s = parts[0] + ',' + parts[1];
+        return moneda ? (s + ' ' + moneda) : s;
+    }
+
+    function claseEstadoPago(estado) {
+        var e = String(estado || '').toLowerCase().replace(/\s+/g, '-');
+        if (!e) {
+            return 'bandeja-pagos-estado';
+        }
+        return 'bandeja-pagos-estado bandeja-pagos-estado-' + e;
+    }
+
+    function chipPagoFactura(f) {
+        if (f && f.tiene_pagos) {
+            var n = ((f.pagos) || []).length;
+            return '<span class="bandeja-pagos-chip bandeja-pagos-chip-ok">' + n + ' OP</span>';
+        }
+        if (f && f.cargado_cxp) {
+            return '<span class="bandeja-pagos-chip bandeja-pagos-chip-warn">sin pago</span>';
+        }
+        return '<span class="bandeja-pagos-chip bandeja-pagos-chip-mute">—</span>';
+    }
+
     function renderFacturas(paquete) {
         var $tb = $('#tablaBandejaFacturas tbody').empty();
         var $pdf = $('#bandejaFacturaPdf');
         var facs = (paquete && paquete.facturas) || [];
         mostrarPdf($pdf, '');
         if (!facs.length) {
-            $tb.append('<tr><td colspan="4" class="text-center text-muted">No hay facturas ni comprobantes en este legajo.</td></tr>');
+            $tb.append('<tr><td colspan="5" class="text-center text-muted">No hay facturas ni comprobantes en este legajo.</td></tr>');
             return;
         }
         facs.forEach(function (f, i) {
@@ -101,13 +134,19 @@
             var etiquetaHtml = f.url_pdf
                 ? '<a href="' + esc(f.url_pdf) + '" class="text-primary" target="_blank" rel="noopener" title="Abrir PDF en pantalla completa">' + etiqueta + '</a>'
                 : etiqueta;
+            var pagoHtml = chipPagoFactura(f);
+            if (f.tiene_pagos) {
+                pagoHtml += ' <button type="button" class="bandeja-fac-ver-pagos js-bandeja-ir-pagos" data-fac-key="' + esc(String(f.id)) + '">ver</button>';
+            }
             var $tr = $('<tr class="js-bandeja-pdf-row" style="cursor:pointer;"></tr>');
             $tr.attr('data-url-pdf', f.url_pdf || '');
             $tr.attr('data-url-cxp', f.url_comprobante || '');
+            $tr.attr('data-fac-key', String(f.id));
             $tr.append('<td>' + etiquetaHtml + '</td>');
             $tr.append('<td>' + esc(f.fecha || '') + '</td>');
             $tr.append('<td>' + esc(origen) + '</td>');
             $tr.append('<td>' + estadoHtml + '</td>');
+            $tr.append('<td>' + pagoHtml + '</td>');
             if (i === 0) {
                 $tr.addClass('table-info');
             }
@@ -121,26 +160,185 @@
         }
     }
 
+    var pagosToolEstado = {
+        paquete: null,
+        activo: null
+    };
+
+    function facturasConContextoPago(paquete) {
+        var facs = (paquete && paquete.facturas) || [];
+        return facs.filter(function (f) {
+            return !!(f.cargado_cxp || f.tiene_pagos || f.comprobante_proveedor_id);
+        });
+    }
+
+    function renderPagosDetalle(fac) {
+        var $panel = $('#bandejaPagosPanelBody');
+        if (!$panel.length) {
+            return;
+        }
+        if (!fac) {
+            $panel.html(
+                '<div class="bandeja-pagos-empty">' +
+                '<div class="empty-ico"><i class="fa fa-hand-pointer-o"></i></div>' +
+                '<p class="mb-0">Seleccioná una factura para ver sus órdenes de pago.</p></div>'
+            );
+            return;
+        }
+        var pagos = fac.pagos || [];
+        var head =
+            '<div class="mb-3">' +
+            '<div class="font-weight-bold" style="font-size:1rem;">' + esc(fac.etiqueta || ('#' + fac.id)) + '</div>' +
+            '<div class="text-muted small mt-1">' +
+            (fac.fecha ? esc(fac.fecha) + ' · ' : '') +
+            'Total ' + fmtMonto(fac.total) +
+            (fac.total_pagado != null ? ' · Pagado ' + fmtMonto(fac.total_pagado) : '') +
+            (fac.saldo != null ? ' · Saldo ' + fmtMonto(fac.saldo) : '') +
+            '</div></div>';
+
+        if (!pagos.length) {
+            $panel.html(
+                head +
+                '<div class="bandeja-pagos-empty" style="padding-top:1.25rem;">' +
+                '<div class="empty-ico"><i class="fa fa-inbox"></i></div>' +
+                '<p class="mb-1 font-weight-bold" style="color:#1a2332;">Sin órdenes de pago</p>' +
+                '<p class="mb-0 small">Esta factura todavía no tiene aplicaciones de pago registradas.</p></div>'
+            );
+            return;
+        }
+
+        var html = head;
+        pagos.forEach(function (op) {
+            var estado = esc(op.estado || '');
+            html +=
+                '<div class="bandeja-pagos-op">' +
+                '<div class="bandeja-pagos-op-top">' +
+                '<div>' +
+                '<a class="bandeja-pagos-op-etiqueta" href="' + esc(op.url || '#') + '" target="_blank" rel="noopener">' +
+                esc(op.etiqueta || ('OP #' + op.id)) + '</a>' +
+                (estado ? ' <span class="' + claseEstadoPago(op.estado) + '">' + estado + '</span>' : '') +
+                '<div class="bandeja-pagos-op-meta">' +
+                (op.fecha ? '<span><i class="fa fa-calendar-o"></i> ' + esc(op.fecha) + '</span>' : '') +
+                (op.monto_aplicado != null
+                    ? '<span><i class="fa fa-check-circle-o"></i> Aplicado ' + fmtMonto(op.monto_aplicado, op.moneda) + '</span>'
+                    : (op.monto != null ? '<span><i class="fa fa-money"></i> OP ' + fmtMonto(op.monto, op.moneda) + '</span>' : '')) +
+                '</div></div>' +
+                '<div class="bandeja-pagos-op-actions">' +
+                (op.url_pdf
+                    ? '<a class="btn btn-sm btn-outline-danger" href="' + esc(op.url_pdf) + '" target="_blank" rel="noopener" title="PDF de la OP"><i class="fa fa-file-pdf-o"></i></a>'
+                    : '') +
+                (op.url
+                    ? '<a class="btn btn-sm btn-outline-success" href="' + esc(op.url) + '" target="_blank" rel="noopener" title="Abrir orden de pago"><i class="fa fa-external-link"></i> Abrir</a>'
+                    : '') +
+                '</div></div></div>';
+        });
+        $panel.html(html);
+    }
+
+    function renderPagosLista(facs, activoKey) {
+        var $lista = $('#bandejaPagosListaBody');
+        if (!$lista.length) {
+            return;
+        }
+        $lista.empty();
+        if (!facs.length) {
+            $lista.append(
+                '<div class="bandeja-pagos-empty">' +
+                '<div class="empty-ico"><i class="fa fa-folder-open-o"></i></div>' +
+                '<p class="mb-0">No hay facturas cargadas en CxP en este legajo.</p></div>'
+            );
+            return;
+        }
+        facs.forEach(function (f) {
+            var key = String(f.id);
+            var $btn = $('<button type="button" class="bandeja-pagos-fac js-bandeja-pago-fac"></button>');
+            $btn.attr('data-fac-key', key);
+            if (key === String(activoKey)) {
+                $btn.addClass('is-active');
+            }
+            $btn.append(
+                '<div class="bandeja-pagos-fac-top">' +
+                '<div class="bandeja-pagos-fac-titulo">' + esc(f.etiqueta || ('#' + f.id)) + '</div>' +
+                chipPagoFactura(f) +
+                '</div>' +
+                '<div class="bandeja-pagos-fac-meta">' +
+                esc(f.fecha || 'Sin fecha') +
+                (f.total != null ? ' · ' + fmtMonto(f.total) : '') +
+                (f.total_pagado != null ? ' · pagado ' + fmtMonto(f.total_pagado) : '') +
+                '</div>'
+            );
+            $lista.append($btn);
+        });
+    }
+
+    function seleccionarFacturaPago(facKey) {
+        var paquete = pagosToolEstado.paquete;
+        var facs = facturasConContextoPago(paquete);
+        var activo = facs.find(function (f) { return String(f.id) === String(facKey); }) || facs[0] || null;
+        pagosToolEstado.activo = activo ? String(activo.id) : null;
+        renderPagosLista(facs, pagosToolEstado.activo);
+        renderPagosDetalle(activo);
+    }
+
     function renderPagos(paquete) {
         var $box = $('#bandejaLegajoPagos').empty();
         var pagos = (paquete && paquete.pagos) || [];
-        var n = pagos.length;
-        $('#bandejaLegajoNPago').text(n);
-        if (n) {
-            $('#bandeja-tab-pagos-item').show();
-        } else {
-            $('#bandeja-tab-pagos-item').hide();
-        }
-        if (!pagos.length) {
-            $box.append('<p class="text-muted mb-0">No hay órdenes de pago en este legajo.</p>');
+        var facs = facturasConContextoPago(paquete);
+        var nOp = pagos.length;
+        var nFacConPago = facs.filter(function (f) { return f.tiene_pagos; }).length;
+        var totalAplicado = 0;
+        var tieneAplicado = false;
+        pagos.forEach(function (op) {
+            if (op.monto_aplicado_legajo != null) {
+                totalAplicado += Number(op.monto_aplicado_legajo) || 0;
+                tieneAplicado = true;
+            }
+        });
+        $('#bandejaLegajoNPago').text(nOp);
+        $('#bandeja-tab-pagos-item').show();
+
+        pagosToolEstado.paquete = paquete;
+
+        if (!facs.length && !nOp) {
+            $box.append(
+                '<div class="bandeja-pagos-empty">' +
+                '<div class="empty-ico"><i class="fa fa-money"></i></div>' +
+                '<p class="mb-1 font-weight-bold" style="color:#1a2332;">Todavía no hay pagos</p>' +
+                '<p class="mb-0">Cuando las facturas del legajo se paguen, las órdenes de pago aparecerán acá con monto aplicado y PDF.</p></div>'
+            );
             return;
         }
-        pagos.forEach(function (op) {
-            $box.append(
-                '<a href="' + esc(op.url || '#') + '" class="btn btn-outline-success btn-sm mr-1 mb-1" target="_blank" rel="noopener">' +
-                esc(op.etiqueta || ('OP #' + op.id)) + '</a>'
-            );
-        });
+
+        var html =
+            '<div class="bandeja-pagos-kpis">' +
+            '<div class="bandeja-pagos-kpi"><span class="kpi-label">Órdenes de pago</span>' +
+            '<div class="kpi-valor">' + nOp + '</div>' +
+            '<div class="kpi-hint">' + nFacConPago + ' factura' + (nFacConPago === 1 ? '' : 's') + ' con pago</div></div>' +
+            '<div class="bandeja-pagos-kpi"><span class="kpi-label">Aplicado en el legajo</span>' +
+            '<div class="kpi-valor">' + (tieneAplicado ? fmtMonto(totalAplicado) : '—') + '</div>' +
+            '<div class="kpi-hint">Suma de aplicaciones a facturas</div></div>' +
+            '<div class="bandeja-pagos-kpi"><span class="kpi-label">Facturas en CxP</span>' +
+            '<div class="kpi-valor">' + facs.length + '</div>' +
+            '<div class="kpi-hint">Con seguimiento de pago</div></div>' +
+            '</div>' +
+            '<div class="bandeja-pagos-layout">' +
+            '<div class="bandeja-pagos-lista">' +
+            '<div class="bandeja-pagos-lista-head"><i class="fa fa-files-o"></i> Facturas del legajo</div>' +
+            '<div class="bandeja-pagos-lista-body" id="bandejaPagosListaBody"></div></div>' +
+            '<div class="bandeja-pagos-panel">' +
+            '<div class="bandeja-pagos-panel-head"><i class="fa fa-credit-card"></i> Detalle de pagos</div>' +
+            '<div class="bandeja-pagos-panel-body" id="bandejaPagosPanelBody"></div></div>' +
+            '</div>';
+        $box.html(html);
+
+        var preferida = facs.find(function (f) { return f.tiene_pagos; }) || facs[0] || null;
+        if (pagosToolEstado.activo) {
+            var keep = facs.find(function (f) { return String(f.id) === String(pagosToolEstado.activo); });
+            if (keep) {
+                preferida = keep;
+            }
+        }
+        seleccionarFacturaPago(preferida ? preferida.id : null);
     }
 
     function activarTabLegajo(tab) {
@@ -157,6 +355,7 @@
         } else {
             $oc.hide();
         }
+        pagosToolEstado.activo = null;
         renderFacturas(paquete);
         renderComs(paquete);
         renderPagos(paquete);
@@ -546,14 +745,30 @@
             var numero = $(this).data('numero') || '';
             var tab = $(this).data('tab') || ($(this).hasClass('js-bandeja-ver-com') ? 'coms' : 'facturas');
             $('#bandejaLegajoTitulo').text('Legajo OC ' + numero);
-            $('#tablaBandejaFacturas tbody').html('<tr><td colspan="4" class="text-center text-muted">Cargando…</td></tr>');
+            $('#tablaBandejaFacturas tbody').html('<tr><td colspan="5" class="text-center text-muted">Cargando…</td></tr>');
             $('#tablaBandejaComs tbody').html('<tr><td colspan="3" class="text-center text-muted">Cargando…</td></tr>');
             mostrarPdf($('#bandejaFacturaPdf'), '');
             mostrarPdf($('#bandejaComPdf'), '');
+            $('#bandejaLegajoPagos').html('<div class="bandeja-pagos-empty"><p class="text-muted mb-0">Cargando pagos…</p></div>');
             $('#modalBandejaLegajo').modal('show');
             cargarPaquete(urlPaquete, function (paquete) {
                 renderLegajo(paquete, tab);
             });
+        });
+
+        $(document).on('click', '.js-bandeja-pago-fac', function () {
+            seleccionarFacturaPago($(this).data('fac-key'));
+        });
+
+        $(document).on('click', '.js-bandeja-ir-pagos', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var key = $(this).data('fac-key');
+            pagosToolEstado.activo = key != null ? String(key) : null;
+            activarTabLegajo('pagos');
+            if (pagosToolEstado.paquete) {
+                seleccionarFacturaPago(pagosToolEstado.activo);
+            }
         });
 
         $('.js-bandeja-asignar-com').on('click', function () {

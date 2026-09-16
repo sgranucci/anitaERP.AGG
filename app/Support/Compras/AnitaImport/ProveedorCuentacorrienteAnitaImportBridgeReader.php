@@ -21,10 +21,17 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
         ?int $fechaDesdeYmd = null,
         ?int $fechaHastaYmd = null,
         ?string $proveedorCodigo = null,
+        ?int $empresaCodigoAnita = null,
     ): array {
         $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
         if ($fechaDesdeYmd && $fechaHastaYmd && $fechaDesdeYmd <= $fechaHastaYmd) {
-            return $this->listarPromovPendienteRango($fechaDesdeYmd, $fechaHastaYmd, $proveedorCodigo, $perfil);
+            return $this->listarPromovPendienteRango(
+                $fechaDesdeYmd,
+                $fechaHastaYmd,
+                $proveedorCodigo,
+                $perfil,
+                $empresaCodigoAnita,
+            );
         }
 
         // Sin rango: por año para no tumbar el UNLOAD.
@@ -39,7 +46,13 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
             if ($d > $h) {
                 continue;
             }
-            foreach ($this->listarPromovPendienteRango($d, $h, $proveedorCodigo, $perfil) as $fila) {
+            foreach ($this->listarPromovPendienteRango(
+                $d,
+                $h,
+                $proveedorCodigo,
+                $perfil,
+                $empresaCodigoAnita,
+            ) as $fila) {
                 $out[] = $fila;
             }
         }
@@ -51,7 +64,7 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
      * @param  list<string>  $claves  proveedor|tipo|letra|suc|nro
      * @return array<string, array<string, mixed>>
      */
-    public function indexarCompraPorClaves(array $claves): array
+    public function indexarCompraPorClaves(array $claves, ?int $empresaCodigoAnita = null): array
     {
         $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
         $out = [];
@@ -66,8 +79,13 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
             $claves,
             $perfil,
             true,
+            $perfil['tiene_empresa'] ? $empresaCodigoAnita : null,
+            'com_empresa',
         ) as $fila) {
             $clave = ComprobanteProveedorAnitaImportClaveSupport::claveDesdeCompra($fila);
+            if (isset($out[$clave])) {
+                continue;
+            }
             $out[$clave] = $fila;
         }
 
@@ -105,6 +123,7 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
         int $hastaYmd,
         ?string $proveedorCodigo,
         array $perfil,
+        ?int $empresaCodigoAnita = null,
     ): array {
         $where = ' WHERE prov_fecha >= '.(int) $desdeYmd
             .' AND prov_fecha <= '.(int) $hastaYmd
@@ -112,6 +131,9 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
         if ($proveedorCodigo !== null && trim($proveedorCodigo) !== '') {
             $prov = ComprobanteProveedorAnitaImportClaveSupport::proveedorCodigoAnita($proveedorCodigo);
             $where .= " AND prov_proveedor = '".$this->esc($prov)."'";
+        }
+        if ($perfil['tiene_empresa'] && $empresaCodigoAnita !== null && $empresaCodigoAnita > 0) {
+            $where .= ' AND prov_empresa = '.(int) $empresaCodigoAnita;
         }
 
         return $this->listar(
@@ -139,6 +161,8 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
         array $claves,
         array $perfil,
         bool $incluyeProveedor,
+        ?int $empresaCodigoAnita = null,
+        ?string $colEmpresa = null,
     ): array {
         $claves = array_values(array_unique(array_filter($claves)));
         if ($claves === []) {
@@ -174,10 +198,20 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
             if ($ors === []) {
                 continue;
             }
+            $where = ' WHERE ('.implode(' OR ', $ors).')';
+            if (
+                $perfil['tiene_empresa']
+                && $empresaCodigoAnita !== null
+                && $empresaCodigoAnita > 0
+                && $colEmpresa !== null
+                && $colEmpresa !== ''
+            ) {
+                $where .= ' AND '.$colEmpresa.' = '.(int) $empresaCodigoAnita;
+            }
             foreach ($this->listar(
                 $tabla,
                 $campos,
-                ' WHERE ('.implode(' OR ', $ors).')',
+                $where,
                 $colTipo.', '.$colSuc.', '.$colNro,
                 $perfil
             ) as $fila) {

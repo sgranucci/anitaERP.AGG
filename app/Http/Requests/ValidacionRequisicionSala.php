@@ -2,6 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Stock\Articulo;
+use App\Models\Stock\Depmae;
+use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionRequisicionSala extends FormRequest
@@ -26,7 +29,7 @@ class ValidacionRequisicionSala extends FormRequest
             'articulo_ids' => 'required|array|min:1',
             'articulo_ids.*' => 'required|integer|exists:articulo,id',
             'cantidades' => 'required|array|min:1',
-            'cantidades.*' => 'required|numeric|min:0.0001',
+            'cantidades.*' => 'required|integer|min:1',
             'destinos' => 'nullable|array',
             'destinos.*' => 'nullable|string|max:1',
             'fueradeservicios' => 'nullable|array',
@@ -52,6 +55,40 @@ class ValidacionRequisicionSala extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($validator): void {
+            $empresaId = (int) $this->input('empresa_id', 0);
+            $depositoId = (int) $this->input('deposito_id', 0);
+
+            if ($depositoId > 0 && $empresaId > 0 && ! Depmae::autorizadoParaUsuarioYEmpresa($depositoId, $empresaId)) {
+                $validator->errors()->add(
+                    'deposito_id',
+                    'El depósito no pertenece a la empresa seleccionada o no está autorizado para su usuario.'
+                );
+            }
+
+            if (UsuarioDepositoAutorizado::tieneRestriccion()) {
+                $articuloIds = array_values(array_unique(array_filter(array_map(
+                    'intval',
+                    is_array($this->input('articulo_ids')) ? $this->input('articulo_ids') : []
+                ))));
+
+                if ($articuloIds !== []) {
+                    $depositosPorArticulo = Articulo::query()
+                        ->whereIn('id', $articuloIds)
+                        ->pluck('depositoentrega_id', 'id');
+
+                    foreach ($articuloIds as $articuloId) {
+                        $depositoEntregaId = (int) ($depositosPorArticulo[$articuloId] ?? 0);
+                        if (! UsuarioDepositoAutorizado::articuloAutorizadoPorDepositoEntrega($depositoEntregaId)) {
+                            $validator->errors()->add(
+                                'articulo_ids',
+                                'Hay artículos cuyo depósito de entrega no está autorizado para su usuario.'
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+
             $fueraDeServicio = $this->input('fueradeservicios', []);
             $uids = $this->input('uids', []);
             if (! is_array($fueraDeServicio)) {

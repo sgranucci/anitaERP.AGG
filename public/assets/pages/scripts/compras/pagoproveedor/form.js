@@ -7,6 +7,7 @@
     }
 
     var urlDeuda = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/compras/pagoproveedor/api/deuda-proveedor';
+    var urlImportarDeudaAnita = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/compras/pagoproveedor/api/importar-deuda-anita';
     var urlRet = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/compras/pagoproveedor/api/calcular-retenciones';
     var urlCot = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/compras/comprobante-proveedor/api/cotizacion-moneda-fecha';
     var monedaLocalId = 1;
@@ -14,6 +15,148 @@
     var cotDiaPorMoneda = {};
     var deudaXhr = null;
     var deudaReqSeq = 0;
+    var importarDeudaAnitaXhr = null;
+
+    function csrfTokenPp() {
+        return $('meta[name="csrf-token"]').attr('content') || $form.find('input[name="_token"]').val() || '';
+    }
+
+    /** Lee empresa/proveedor del form de OP (no de otros widgets del layout). */
+    function leerContextoDeudaOp() {
+        var proveedorId = parseInt(String($form.find('input[name="proveedor_id"]').val() || '0'), 10) || 0;
+        var empresaId = parseInt(String($form.find('select[name="empresa_id"]').val() || '0'), 10) || 0;
+        if (!empresaId) {
+            empresaId = parseInt(String($form.find('input[name="empresa_id"]').val() || '0'), 10) || 0;
+        }
+        var codigo = String($form.find('#codigoproveedor').val() || '').trim();
+        return {
+            proveedorId: proveedorId,
+            empresaId: empresaId,
+            codigo: codigo
+        };
+    }
+
+    function actualizarBotonImportarDeudaAnita() {
+        var $btn = $('#btn-importar-deuda-anita');
+        if (!$btn.length) {
+            return;
+        }
+        var ctx = leerContextoDeudaOp();
+        var ocupado = !!($btn.data('ocupado'));
+        var listo = ctx.proveedorId > 0 && ctx.empresaId > 0;
+        $btn.prop('disabled', ocupado || !listo);
+        $btn.data('ppProveedorId', ctx.proveedorId);
+        $btn.data('ppEmpresaId', ctx.empresaId);
+        $btn.data('ppProveedorCodigo', ctx.codigo);
+        if (listo) {
+            var $box = $('#pp-aviso-importar-deuda-anita');
+            if ($box.length && $box.hasClass('alert-warning')) {
+                var txt = String($box.text() || '');
+                if (txt.indexOf('Seleccione empresa y proveedor') >= 0) {
+                    $box.addClass('d-none').hide().text('');
+                }
+            }
+        }
+    }
+
+    function setImportarDeudaAnitaOcupado(ocupado, texto) {
+        var $btn = $('#btn-importar-deuda-anita');
+        if (!$btn.length) {
+            return;
+        }
+        $btn.data('ocupado', ocupado ? 1 : 0);
+        if (ocupado) {
+            $btn.prop('disabled', true);
+            $btn.html('<i class="fa fa-spinner fa-spin"></i> ' + (texto || 'Importando…'));
+        } else {
+            $btn.html('<i class="fa fa-download"></i> Completar desde Anita');
+            actualizarBotonImportarDeudaAnita();
+        }
+    }
+
+    function mostrarAvisoImportarDeudaAnita(tipo, texto) {
+        var $box = $('#pp-aviso-importar-deuda-anita');
+        if (!$box.length) {
+            $box = $('<div id="pp-aviso-importar-deuda-anita" class="alert py-2 mb-2" role="alert"></div>');
+            $('#btn-importar-deuda-anita').closest('.d-flex').after($box);
+        }
+        $box
+            .removeClass('alert-success alert-warning alert-danger alert-info d-none')
+            .addClass(tipo === 'ok' ? 'alert-success' : (tipo === 'warn' ? 'alert-warning' : 'alert-danger'))
+            .text(texto)
+            .show();
+    }
+
+    function importarDeudaAnitaYRefrescar() {
+        var ctx = leerContextoDeudaOp();
+        var $btn = $('#btn-importar-deuda-anita');
+        if (ctx.proveedorId <= 0) {
+            ctx.proveedorId = parseInt(String($btn.data('ppProveedorId') || '0'), 10) || 0;
+        }
+        if (ctx.empresaId <= 0) {
+            ctx.empresaId = parseInt(String($btn.data('ppEmpresaId') || '0'), 10) || 0;
+        }
+        if (!ctx.codigo) {
+            ctx.codigo = String($btn.data('ppProveedorCodigo') || '').trim();
+        }
+        if (ctx.proveedorId <= 0 || ctx.empresaId <= 0) {
+            var falta = [];
+            if (ctx.empresaId <= 0) {
+                falta.push('empresa');
+            }
+            if (ctx.proveedorId <= 0) {
+                falta.push('proveedor');
+            }
+            mostrarAvisoImportarDeudaAnita(
+                'warn',
+                'Falta seleccionar ' + falta.join(' y ') + ' antes de completar desde Anita.'
+            );
+            return;
+        }
+        if (importarDeudaAnitaXhr && importarDeudaAnitaXhr.readyState !== 4) {
+            return;
+        }
+
+        setImportarDeudaAnitaOcupado(true, 'Importando deuda Anita…');
+        mostrarAvisoImportarDeudaAnita('ok', 'Consultando Anita Bridge e importando deuda impaga al ERP…');
+
+        importarDeudaAnitaXhr = $.ajax({
+            url: urlImportarDeudaAnita,
+            method: 'POST',
+            dataType: 'json',
+            headers: { 'X-CSRF-TOKEN': csrfTokenPp() },
+            data: {
+                _token: csrfTokenPp(),
+                proveedor_id: ctx.proveedorId,
+                empresa_id: ctx.empresaId,
+                proveedor: ctx.codigo
+            }
+        })
+            .done(function (res) {
+                if (!res || !res.ok) {
+                    mostrarAvisoImportarDeudaAnita('err', (res && res.error) ? res.error : 'No se pudo importar la deuda.');
+                    return;
+                }
+                var msg = res.mensaje || 'Deuda Anita importada.';
+                var errores = (res.stats && res.stats.errores) ? res.stats.errores : [];
+                if (errores.length) {
+                    mostrarAvisoImportarDeudaAnita('warn', msg + ' Avisos: ' + errores.slice(0, 3).join(' | '));
+                } else {
+                    mostrarAvisoImportarDeudaAnita('ok', msg + ' Actualizando grilla…');
+                }
+                cargarDeuda();
+            })
+            .fail(function (xhr) {
+                var msg = 'Error al importar deuda Anita.';
+                if (xhr && xhr.responseJSON) {
+                    msg = xhr.responseJSON.error || xhr.responseJSON.message || msg;
+                }
+                mostrarAvisoImportarDeudaAnita('err', msg);
+            })
+            .always(function () {
+                setImportarDeudaAnitaOcupado(false);
+            });
+    }
 
     function fmt(n) {
         return (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -290,10 +433,12 @@
     }
 
     function cargarDeuda() {
-        var proveedorId = parseInt($('#proveedor_id').val() || '0', 10);
-        var empresaId = parseInt($('#empresa_id').val() || '0', 10);
+        var ctx = leerContextoDeudaOp();
+        var proveedorId = ctx.proveedorId;
+        var empresaId = ctx.empresaId;
         var pagoId = parseInt($('#pagoproveedor_id').val() || '0', 10);
         var $tb = $('#tabla-deuda-proveedor tbody');
+        actualizarBotonImportarDeudaAnita();
         if (!empresaId) {
             mensajeDeuda(proveedorId ? 'Seleccione empresa para ver la deuda' : 'Seleccione empresa y proveedor');
             return;
@@ -527,18 +672,35 @@
 
     $('#proveedor_id')
         .off('change.ppDeudaProv')
-        .on('change.ppDeudaProv', cargarDeuda);
+        .on('change.ppDeudaProv', function () {
+            actualizarBotonImportarDeudaAnita();
+            cargarDeuda();
+        });
     $(document)
         .off('change.cpProveedorCargado.ppDeuda', '#proveedor_id')
-        .on('change.cpProveedorCargado.ppDeuda', '#proveedor_id', cargarDeuda);
+        .on('change.cpProveedorCargado.ppDeuda', '#proveedor_id', function () {
+            actualizarBotonImportarDeudaAnita();
+            cargarDeuda();
+        });
     $(document)
         .off('change.ppEmpresaDeuda', '#empresa_id')
         .on('change.ppEmpresaDeuda', '#empresa_id', function () {
+            actualizarBotonImportarDeudaAnita();
             cargarDeuda();
             if (typeof window.calcularRetencionesPagoproveedor === 'function') {
                 window.calcularRetencionesPagoproveedor();
             }
         });
+
+    $(document)
+        .off('click.ppImportarDeudaAnita', '#btn-importar-deuda-anita')
+        .on('click.ppImportarDeudaAnita', '#btn-importar-deuda-anita', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            importarDeudaAnitaYRefrescar();
+        });
+
+    actualizarBotonImportarDeudaAnita();
     $('#moneda_id, #cotizacion, #modo_cotizacion, #fecha').on('change', function () {
         if (this.id === 'fecha' || this.id === 'moneda_id') {
             refrescarCotizacionHeader(true);

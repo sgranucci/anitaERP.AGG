@@ -17,6 +17,7 @@ use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use Illuminate\Support\Facades\DB;
 
@@ -68,18 +69,34 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         ?string $hastaIso = null,
         int $usuarioId = 1,
         ?int $limite = null,
+        ?int $empresaId = null,
+        int $muestraLimite = 25,
     ): array {
         $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
         $desdeYmd = $desdeIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso) : null;
         $hastaYmd = $hastaIso ? ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso($hastaIso) : null;
+        $empresaAnita = null;
+        if ($perfil['tiene_empresa'] && $empresaId !== null && $empresaId > 0) {
+            $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
+            if ($empresaAnita <= 0) {
+                $empresaAnita = null;
+            }
+        }
 
         if (! $dryRun) {
             $this->asegurarTiposBasicos();
         }
 
-        $promovs = $this->reader->listarPromovPendiente($desdeYmd ?: null, $hastaYmd ?: null, $proveedorCodigo);
+        $promovs = $this->reader->listarPromovPendiente(
+            $desdeYmd ?: null,
+            $hastaYmd ?: null,
+            $proveedorCodigo,
+            $empresaAnita,
+        );
         $stats = $this->statsVacios($perfil);
         $stats['anita_promov'] = count($promovs);
+        $stats['empresa_id'] = $empresaId;
+        $stats['empresa_anita'] = $empresaAnita;
 
         $deuda = [];
         $clavesCompra = [];
@@ -104,7 +121,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             $clavesCompra[$clave] = $clave;
         }
 
-        $compras = $this->reader->indexarCompraPorClaves(array_values($clavesCompra));
+        $compras = $this->reader->indexarCompraPorClaves(array_values($clavesCompra), $empresaAnita);
         $stats['anita_compra'] = count($compras);
 
         $plan = [];
@@ -154,7 +171,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         $stats['a_crear_cp'] = count(array_filter($plan, static fn (array $p) => $p['accion_cp'] === 'crear'));
         $stats['a_crear_cc'] = count(array_filter($plan, static fn (array $p) => $p['accion_cc'] === 'crear'));
         $stats['a_actualizar_aplicaciones'] = count(array_filter($plan, static fn (array $p) => $p['accion_apl'] !== 'omitir'));
-        $stats['muestra'] = array_map(static fn (array $p) => $p['resumen'], array_slice($plan, 0, 25));
+        $muestraLimite = max(1, $muestraLimite);
+        $stats['muestra'] = array_map(static fn (array $p) => $p['resumen'], array_slice($plan, 0, $muestraLimite));
 
         $aplmovps = $this->reader->listarAplmovpPorDeudas(array_values(array_unique($clavesApl)));
         $stats['anita_aplmovp'] = count($aplmovps);
@@ -314,6 +332,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'resumen' => [
                 'etiqueta' => $etiqueta,
                 'proveedor' => (string) $proveedor->codigo,
+                'empresa_id' => $empresaId,
+                'empresa_anita' => (int) ($compra['com_empresa'] ?? $promov['prov_empresa'] ?? 0),
                 'fecha' => $fecha,
                 'total' => $totalFirmado,
                 'pagado_anita' => $pagado,
@@ -619,6 +639,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'muestra' => [],
             'errores' => [],
             'modo' => '',
+            'empresa_id' => null,
+            'empresa_anita' => null,
         ];
     }
 }

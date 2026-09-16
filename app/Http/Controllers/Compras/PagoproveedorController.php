@@ -20,12 +20,14 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\PagoproveedorAnularRevertirService;
 use App\Services\Compras\PagoproveedorComprobantePdfService;
 use App\Services\Compras\PagoproveedorService;
+use App\Services\Compras\ProveedorCuentacorrienteImportarDesdeAnitaService;
 use App\Services\Compras\RetencionesPagoCalculator;
 use App\Services\Compras\RetencionesPagoContextoBuilder;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 use App\Support\Compras\PagoproveedorListadoFiltros;
 use App\Support\Compras\PropuestaPagoModoSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Facades\Excel;
@@ -45,6 +47,7 @@ class PagoproveedorController extends Controller
         private RetencionesPagoCalculator $retencionesPagoCalculator,
         private RetencionesPagoContextoBuilder $retencionesPagoContextoBuilder,
         private PagoproveedorComprobantePdfService $pagoproveedorComprobantePdfService,
+        private ProveedorCuentacorrienteImportarDesdeAnitaService $proveedorCuentacorrienteImportarDesdeAnitaService,
     ) {
     }
 
@@ -425,6 +428,102 @@ class PagoproveedorController extends Controller
         }
 
         return response()->json(['filas' => $out, 'aviso' => $aviso]);
+    }
+
+    /**
+     * AGG: importa deuda Anita impaga del proveedor elegido y deja lista la grilla ERP.
+     */
+    public function apiImportarDeudaAnita(Request $request)
+    {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return response()->json(['error' => 'Solo disponible en AGG'], 404);
+        }
+        if (! can('crear-pagoproveedor', false) && ! can('editar-pagoproveedor', false)) {
+            return response()->json(['error' => 'Sin permiso'], 403);
+        }
+
+        $proveedorId = (int) $request->input('proveedor_id', 0);
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $codigoRequest = trim((string) $request->input('proveedor', ''));
+
+        $proveedor = null;
+        if ($proveedorId > 0) {
+            $proveedor = Proveedor::query()->find($proveedorId);
+        }
+        if ($proveedor === null && $codigoRequest !== '') {
+            $norm = ltrim($codigoRequest, '0');
+            if ($norm === '') {
+                $norm = '0';
+            }
+            $proveedor = Proveedor::query()
+                ->where(function ($q) use ($norm, $codigoRequest) {
+                    $q->where('codigo', $norm)
+                        ->orWhere('codigo', str_pad($norm, 6, '0', STR_PAD_LEFT))
+                        ->orWhere('codigo', $codigoRequest);
+                })
+                ->first();
+            if ($proveedor !== null) {
+                $proveedorId = (int) $proveedor->id;
+            }
+        }
+
+        if ($proveedorId <= 0 || $empresaId <= 0 || $proveedor === null) {
+            return response()->json([
+                'ok' => false,
+                'error' => $empresaId <= 0
+                    ? 'Seleccione empresa.'
+                    : 'Seleccione proveedor.',
+            ], 422);
+        }
+
+        $codigo = trim((string) ($proveedor->codigo ?? ''));
+        if ($codigo === '') {
+            return response()->json(['ok' => false, 'error' => 'El proveedor no tiene código Anita'], 422);
+        }
+
+        ini_set('max_execution_time', '300');
+        ini_set('memory_limit', '512M');
+
+        try {
+            $stats = $this->proveedorCuentacorrienteImportarDesdeAnitaService->importar(
+                false,
+                $codigo,
+                null,
+                null,
+                max(1, (int) (auth()->id() ?: 1)),
+                null,
+                $empresaId,
+                25,
+            );
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+
+        $mensaje = sprintf(
+            'Anita → ERP: %d CP, %d CC, %d aplicaciones (a procesar %d; ya al día %d).',
+            (int) ($stats['cp_creados'] ?? 0),
+            (int) ($stats['cc_creadas'] ?? 0),
+            (int) ($stats['aplicaciones_creadas'] ?? 0),
+            (int) ($stats['a_procesar'] ?? 0),
+            (int) ($stats['omitidas_al_dia'] ?? 0),
+        );
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => $mensaje,
+            'stats' => [
+                'cp_creados' => (int) ($stats['cp_creados'] ?? 0),
+                'cc_creadas' => (int) ($stats['cc_creadas'] ?? 0),
+                'aplicaciones_creadas' => (int) ($stats['aplicaciones_creadas'] ?? 0),
+                'a_procesar' => (int) ($stats['a_procesar'] ?? 0),
+                'omitidas_al_dia' => (int) ($stats['omitidas_al_dia'] ?? 0),
+                'omitidas_sin_compra' => (int) ($stats['omitidas_sin_compra'] ?? 0),
+                'errores' => array_slice((array) ($stats['errores'] ?? []), 0, 10),
+            ],
+        ]);
     }
 
     public function apiCalcularRetenciones(Request $request)

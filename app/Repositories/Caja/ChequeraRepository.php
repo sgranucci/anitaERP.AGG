@@ -6,10 +6,9 @@ use App\Models\Caja\Chequera;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
-use Auth;
 use DB;
 use Carbon\Carbon;
-use Exception;
+use Illuminate\Support\Facades\Log;
 
 class ChequeraRepository implements ChequeraRepositoryInterface
 {
@@ -20,9 +19,7 @@ class ChequeraRepository implements ChequeraRepositoryInterface
     private $cuentacajaRepository;
 
     /**
-     * PostRepository constructor.
-     *
-     * @param Post $post
+     * @param Chequera $chequera
      */
     public function __construct(Chequera $chequera,
                                 CuentacajaRepositoryInterface $cuentacajarepository)
@@ -137,36 +134,145 @@ class ChequeraRepository implements ChequeraRepositoryInterface
 
     public function findPorCodigo($codigo)
     {
-        return $this->model->where('codigo', $codigo)->with('cuentacajas')->first();
-    }
-
-    public function sincronizarConAnita(){
-		ini_set('max_execution_time', '300');
-
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-						'sistema' => 'che_ban',
-						'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita", 
-						'tabla' => $this->tableAnita );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-
-        $datosLocal = Chequera::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = ltrim((string) $value->{$this->keyField}, '0');
+        $codigo = trim((string) $codigo);
+        if ($codigo === '') {
+            return null;
         }
 
-        foreach ($dataAnita as $value) {
-            $codigoAnita = ltrim((string) $value->{$this->keyField}, '0');
-            if ($codigoAnita === '' || in_array($codigoAnita, $datosLocalArray, true)) {
-                continue;
-            }
+        $local = $this->model->where('codigo', $codigo)->with('cuentacajas')->first();
+        if ($local) {
+            return $local;
+        }
 
+        $norm = ltrim($codigo, '0');
+        if ($norm === '' || $norm === $codigo) {
+            return null;
+        }
+
+        return $this->model->where('codigo', $norm)->with('cuentacajas')->first();
+    }
+
+    /**
+     * @return array{en_anita:int,creadas:int,actualizadas:int,omitidas:int,errores:list<string>}
+     */
+    public function sincronizarConAnita(): array
+    {
+		ini_set('max_execution_time', '300');
+
+        $stats = [
+            'en_anita' => 0,
+            'creadas' => 0,
+            'actualizadas' => 0,
+            'omitidas' => 0,
+            'errores' => [],
+        ];
+
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'sistema' => 'che_ban',
+            'tabla' => $this->tableAnita,
+            'campos' => '
+                cproc_cuenta,
+                cproc_nro_chequera,
+                cproc_fecha_alta,
+                cproc_fecha_uso,
+                cproc_desde_cheque,
+                cproc_hasta_cheque,
+                cproc_estado,
+                cproc_tipo_cheque
+            ',
+        ];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (! is_array($dataAnita) && ! ($dataAnita instanceof \Traversable)) {
+            $stats['errores'][] = 'Anita no devolvió un listado válido de cprocheq.';
+
+            return $stats;
+        }
+
+        $stats['en_anita'] = is_countable($dataAnita) ? count($dataAnita) : 0;
+
+        foreach ($dataAnita as $row) {
+            $codigo = trim((string) ($row->cproc_nro_chequera ?? ''));
             try {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
-                $datosLocalArray[] = $codigoAnita;
+                $resultado = $this->upsertDesdeFilaAnita($row);
+                if ($resultado === 'created') {
+                    $stats['creadas']++;
+                } elseif ($resultado === 'updated') {
+                    $stats['actualizadas']++;
+                } else {
+                    $stats['omitidas']++;
+                }
             } catch (\Throwable $e) {
-                // Continuar con la siguiente chequera.
+                $msg = ($codigo !== '' ? "chequera {$codigo}: " : '').$e->getMessage();
+                $stats['errores'][] = $msg;
+                Log::warning('caja.chequera.sync_anita', [
+                    'codigo' => $codigo,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Trae/actualiza desde Anita las chequeras de una cuenta de tesorería.
+     */
+    public function sincronizarCuentaDesdeAnita(int $cuentacajaId): void
+    {
+        if ($cuentacajaId <= 0) {
+            return;
+        }
+
+        try {
+            $cuenta = $this->cuentacajaRepository->find($cuentacajaId);
+        } catch (\Throwable $e) {
+            return;
+        }
+        if (! $cuenta) {
+            return;
+        }
+
+        $codigoCuenta = preg_replace('/\D+/', '', (string) ($cuenta->codigo ?? '')) ?? '';
+        $codigoCuenta = ltrim($codigoCuenta, '0');
+        if ($codigoCuenta === '') {
+            return;
+        }
+        $cuentaPad = str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT);
+
+        ini_set('max_execution_time', '120');
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'sistema' => 'che_ban',
+            'tabla' => $this->tableAnita,
+            'campos' => '
+                cproc_cuenta,
+                cproc_nro_chequera,
+                cproc_fecha_alta,
+                cproc_fecha_uso,
+                cproc_desde_cheque,
+                cproc_hasta_cheque,
+                cproc_estado,
+                cproc_tipo_cheque
+            ',
+            'whereArmado' => " WHERE cproc_cuenta = '".$cuentaPad."' ",
+        ];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (! is_array($dataAnita) && ! ($dataAnita instanceof \Traversable)) {
+            return;
+        }
+
+        foreach ($dataAnita as $row) {
+            try {
+                $this->upsertDesdeFilaAnita($row, $cuentacajaId);
+            } catch (\Throwable $e) {
+                Log::warning('caja.chequera.sync_cuenta_anita', [
+                    'cuentacaja_id' => $cuentacajaId,
+                    'codigo' => (string) ($row->cproc_nro_chequera ?? ''),
+                    'error' => $e->getMessage(),
+                ]);
             }
         }
     }
@@ -195,7 +301,8 @@ class ChequeraRepository implements ChequeraRepositoryInterface
         return $cuentacaja ? (int) $cuentacaja->id : null;
     }
 
-    public function traerRegistroDeAnita($key){
+    public function traerRegistroDeAnita($key)
+    {
         $apiAnita = new ApiAnita();
         $data = array( 
             'acc' => 'list', 'tabla' => $this->tableAnita, 
@@ -213,31 +320,79 @@ class ChequeraRepository implements ChequeraRepositoryInterface
             'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' " 
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
-		$usuario_id = Auth::user()->id;
 
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-            $cuentacaja_id = $this->resolverCuentacajaIdDesdeAnita($data->cproc_cuenta ?? '');
-            if ($cuentacaja_id === null) {
-                return;
-            }
-            
-            $fechaUso = date('d-m-Y', strtotime($data->cproc_fecha_uso));
-
-            $arr_campos = [
-                "tipochequera" => 'F',
-                "tipocheque" => ($data->cproc_tipo_cheque == 'C' ? 'N' : $data->cproc_tipo_cheque),
-                "codigo" => $data->cproc_nro_chequera,
-                "cuentacaja_id" => $cuentacaja_id,
-                "estado" => $data->cproc_estado,
-                "fechauso" => $fechaUso,
-                "desdenumerocheque" => $data->cproc_desde_cheque,
-                "hastanumerocheque" => $data->cproc_hasta_cheque
-                ];
-
-            $this->model->create($arr_campos);
+        if (! is_array($dataAnita) && ! ($dataAnita instanceof \Traversable)) {
+            return;
         }
+        if (count($dataAnita) === 0) {
+            return;
+        }
+
+        $this->upsertDesdeFilaAnita($dataAnita[0]);
+    }
+
+    /**
+     * Alta o actualización de chequera local a partir de una fila Anita (cprocheq).
+     *
+     * @return 'created'|'updated'|'skipped'
+     */
+    private function upsertDesdeFilaAnita(object $data, ?int $cuentacajaIdForzado = null): string
+    {
+        $codigo = trim((string) ($data->cproc_nro_chequera ?? ''));
+        if ($codigo === '') {
+            return 'skipped';
+        }
+
+        $cuentacaja_id = $cuentacajaIdForzado
+            ?? $this->resolverCuentacajaIdDesdeAnita($data->cproc_cuenta ?? '');
+        if ($cuentacaja_id === null) {
+            return 'skipped';
+        }
+
+        $fechaUsoRaw = trim((string) ($data->cproc_fecha_uso ?? ''));
+        $fechaUso = '';
+        if ($fechaUsoRaw !== '' && $fechaUsoRaw !== '0') {
+            $ts = strtotime($fechaUsoRaw);
+            if ($ts !== false) {
+                $fechaUso = date('d-m-Y', $ts);
+            }
+        }
+
+        $tipoCheque = (string) ($data->cproc_tipo_cheque ?? 'N');
+        if ($tipoCheque === 'C') {
+            $tipoCheque = 'N';
+        }
+        if (! in_array($tipoCheque, ['N', 'D'], true)) {
+            $tipoCheque = 'N';
+        }
+
+        $estado = strtoupper(trim((string) ($data->cproc_estado ?? 'A')));
+        if (! in_array($estado, ['A', 'T'], true)) {
+            $estado = 'A';
+        }
+
+        $arr_campos = [
+            'tipochequera' => 'E',
+            'tipocheque' => $tipoCheque,
+            'codigo' => $codigo,
+            'cuentacaja_id' => $cuentacaja_id,
+            'estado' => $estado,
+            'fechauso' => $fechaUso !== '' ? $fechaUso : null,
+            'desdenumerocheque' => $data->cproc_desde_cheque ?? null,
+            'hastanumerocheque' => $data->cproc_hasta_cheque ?? null,
+        ];
+
+        $existente = $this->findPorCodigo($codigo);
+        if ($existente) {
+            $existente->fill($arr_campos);
+            $existente->save();
+
+            return 'updated';
+        }
+
+        $this->model->create($arr_campos);
+
+        return 'created';
     }
 
 	public function guardarAnita($request) {

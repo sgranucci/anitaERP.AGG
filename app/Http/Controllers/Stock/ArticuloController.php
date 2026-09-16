@@ -1291,6 +1291,14 @@ class ArticuloController extends Controller
             }
         }
 
+        if (filter_var($request->input('filtrar_depositos_usuario'), FILTER_VALIDATE_BOOLEAN)) {
+            $depositoIdConsulta = $request->filled('deposito_id') ? (int) $request->input('deposito_id') : null;
+            \App\Support\Stock\UsuarioDepositoAutorizado::aplicarFiltroArticuloPorDepositoEntrega(
+                $query,
+                $depositoIdConsulta
+            );
+        }
+
         \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivos($query);
 
         $cont = count($columns);
@@ -1501,6 +1509,17 @@ class ArticuloController extends Controller
         if ($articulo && filter_var($request->query('solo_facturable'), FILTER_VALIDATE_BOOLEAN)
             && (string) $articulo->nofactura === '1') {
             return response()->json(null);
+        }
+
+        if ($articulo && filter_var($request->input('filtrar_depositos_usuario'), FILTER_VALIDATE_BOOLEAN)) {
+            $depositoIdConsulta = $request->filled('deposito_id') ? (int) $request->input('deposito_id') : null;
+            $idsPermitidos = \App\Support\Stock\UsuarioDepositoAutorizado::idsParaFiltroArticulo($depositoIdConsulta);
+            if ($idsPermitidos !== null) {
+                $depositoEntregaId = (int) ($articulo->depositoentrega_id ?? 0);
+                if ($idsPermitidos === [] || ! in_array($depositoEntregaId, $idsPermitidos, true)) {
+                    return response()->json(null);
+                }
+            }
         }
 
         $this->aplicarUnidadMedidaDefaultSeleccion($articulo);

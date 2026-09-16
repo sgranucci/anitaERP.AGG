@@ -163,4 +163,86 @@ class OrdencompraLegajoBandejaPaqueteServiceTest extends TestCase
         $this->assertTrue($svc->esReferenciaAsignable('490'));
         $this->assertFalse($svc->esReferenciaAsignable('cp-21671'));
     }
+
+    public function test_adjunta_pagos_y_saldo_a_facturas_del_paquete(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+        $facturas = [
+            [
+                'id' => 10,
+                'origen' => 'precarga',
+                'etiqueta' => 'FC A 0001-00000001',
+                'comprobante_proveedor_id' => 99,
+                'total' => 1000.0,
+                'cargado_cxp' => true,
+            ],
+            [
+                'id' => 'cp-88',
+                'origen' => 'comprobante',
+                'etiqueta' => 'FC B 0001-00000002',
+                'total' => 500.0,
+                'cargado_cxp' => true,
+            ],
+            [
+                'id' => 11,
+                'origen' => 'precarga',
+                'etiqueta' => 'FC C 0001-00000003',
+                'cargado_cxp' => false,
+            ],
+        ];
+        $porCp = [
+            99 => [[
+                'id' => 7,
+                'etiqueta' => 'OPP 1-100',
+                'monto_aplicado' => 400.0,
+                'estado' => 'CONFIRMADA',
+            ]],
+        ];
+
+        $out = $svc->adjuntarPagosAFacturas($facturas, $porCp);
+
+        $this->assertTrue($out[0]['tiene_pagos']);
+        $this->assertSame(400.0, $out[0]['total_pagado']);
+        $this->assertSame(600.0, $out[0]['saldo']);
+        $this->assertCount(1, $out[0]['pagos']);
+        $this->assertSame(88, $out[1]['comprobante_proveedor_id']);
+        $this->assertFalse($out[1]['tiene_pagos']);
+        $this->assertNull($out[1]['total_pagado']);
+        $this->assertFalse($out[2]['tiene_pagos']);
+    }
+
+    public function test_fusion_guarda_comprobante_proveedor_id(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+        $out = $svc->fusionarComprobantesEnFacturas(
+            [
+                [
+                    'id' => 645,
+                    'origen' => 'precarga',
+                    'etiqueta' => 'ND A 0005-00004601',
+                    'cargado_cxp' => true,
+                    'url_pdf' => '/pdf/645',
+                ],
+            ],
+            [
+                [
+                    'id' => 27647,
+                    'precarga_id' => 645,
+                    'letra' => 'A',
+                    'sucursal' => 5,
+                    'numerocomprobante' => 4601,
+                    'etiqueta' => 'ND A 0005-00004601',
+                    'tipo' => 'ND',
+                    'tipo_label' => 'ND',
+                    'fecha' => '01/04/2026',
+                    'total' => 1234.5,
+                    'origen_label' => 'Importado desde Anita',
+                    'url' => '/cxp/27647',
+                ],
+            ]
+        );
+
+        $this->assertSame(27647, $out[0]['comprobante_proveedor_id']);
+        $this->assertSame(1234.5, $out[0]['total']);
+    }
 }

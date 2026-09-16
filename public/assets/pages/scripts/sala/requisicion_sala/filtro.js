@@ -69,6 +69,8 @@
             setPlaceholderValor('dd/mm/aaaa');
         } else if (tipo === 'entero') {
             setPlaceholderValor('Número entero');
+        } else if (tipo === 'estado_linea') {
+            setPlaceholderValor('Cumplida, Parcial o Pendiente');
         } else {
             setPlaceholderValor('Texto (tolera errores de tipeo desde 6 caracteres)');
         }

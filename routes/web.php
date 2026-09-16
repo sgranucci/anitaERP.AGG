@@ -2658,6 +2658,7 @@ Route::get('caja/chequera', 'Caja\ChequeraController@index')->name('chequera');
 Route::get('caja/chequera/crear', 'Caja\ChequeraController@crear')->name('crear_chequera');
 Route::post('caja/chequera', 'Caja\ChequeraController@guardar')->name('guardar_chequera');
 Route::post('caja/chequera/consulta', 'Caja\ChequeraController@consultaChequera')->name('consulta_chequera');
+Route::post('caja/chequera/sincronizar-anita', 'Caja\ChequeraController@sincronizarDesdeAnita')->name('sincronizar_chequera_anita');
 Route::get('caja/chequera/{id}/editar', 'Caja\ChequeraController@editar')->name('editar_chequera');
 Route::put('caja/chequera/{id}', 'Caja\ChequeraController@actualizar')->name('actualizar_chequera');
 Route::delete('caja/chequera/{id}', 'Caja\ChequeraController@eliminar')->name('eliminar_chequera');
@@ -3326,6 +3327,10 @@ Route::get('caja/interbanking/saldos-historicos', 'Caja\InterbankingSaldoHistori
 Route::get('caja/interbanking/archivo-pago', 'Caja\InterbankingArchivoPagoController@index')->name('interbanking_archivo_pago');
 Route::get('caja/interbanking/archivo-pago/descargar', 'Caja\InterbankingArchivoPagoController@descargar')->name('descargar_interbanking_archivo_pago');
 
+// Banco Macro — exportación pagos por archivo (diskette); WS premium vía config macro.canal
+Route::get('caja/macro/archivo-pago', 'Caja\MacroArchivoPagoController@index')->name('macro_archivo_pago');
+Route::get('caja/macro/archivo-pago/descargar', 'Caja\MacroArchivoPagoController@descargar')->name('descargar_macro_archivo_pago');
+
 // Modulo de compras
 
 /*
@@ -3622,6 +3627,7 @@ Route::post('compras/pagoproveedor/{id}/revertir', 'Compras\PagoproveedorControl
 Route::post('compras/pagoproveedor/{id}/marcar-pagada', 'Compras\PagoproveedorController@marcarPagada')->name('marcar_pagada_pagoproveedor');
 Route::post('compras/pagoproveedor/{id}/marcar-conciliada', 'Compras\PagoproveedorController@marcarConciliada')->name('marcar_conciliada_pagoproveedor');
 Route::get('compras/pagoproveedor/api/deuda-proveedor', 'Compras\PagoproveedorController@apiDeudaProveedor')->name('api_deuda_pagoproveedor');
+Route::post('compras/pagoproveedor/api/importar-deuda-anita', 'Compras\PagoproveedorController@apiImportarDeudaAnita')->name('api_importar_deuda_anita_pagoproveedor');
 Route::post('compras/pagoproveedor/api/calcular-retenciones', 'Compras\PagoproveedorController@apiCalcularRetenciones')->name('api_calcular_retenciones_pagoproveedor');
 Route::post('compras/pagoproveedor/api/genera-asiento', 'Compras\PagoproveedorController@generaAsientoContable')->name('api_genera_asiento_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/imprimir', 'Compras\PagoproveedorController@imprimir')->name('imprimir_pagoproveedor');

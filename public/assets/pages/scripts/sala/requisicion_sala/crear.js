@@ -301,7 +301,7 @@
             filasConArticulo++;
             var cantInp = $tr.find('.cantidad-linea')[0];
             var cant = parseFloat(String($tr.find('.cantidad-linea').val() || '').replace(',', '.'));
-            if (Number.isNaN(cant) || cant <= 0) {
+            if (Number.isNaN(cant) || cant <= 0 || !Number.isInteger(cant)) {
                 resultado.valido = false;
                 resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
                 marcarCampoInvalido(cantInp, true);

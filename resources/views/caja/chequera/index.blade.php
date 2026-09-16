@@ -17,6 +17,14 @@
             <div class="card-header">
                 <h3 class="card-title">Chequeras</h3>
                 <div class="card-tools">
+                    @if (can('listar-chequera', false))
+                        <form action="{{ route('sincronizar_chequera_anita') }}" method="POST" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-primary btn-sm" title="Trae altas y actualiza rangos/estado desde Anita">
+                                <i class="fa fa-sync"></i> Sincronizar Anita
+                            </button>
+                        </form>
+                    @endif
                     <a href="{{route('crear_chequera')}}" class="btn btn-outline-secondary btn-sm">
                        	@if (can('crear-chequera', false))
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro

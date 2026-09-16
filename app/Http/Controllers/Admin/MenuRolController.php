@@ -10,6 +10,7 @@ use App\Models\Admin\Rol;
 use App\Models\Contable\Centrocosto;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Support\Stock\RecepcionProveedorMenuRolSupport;
 use Illuminate\Support\Collection;
 
 class MenuRolController extends Controller
@@ -96,8 +97,23 @@ class MenuRolController extends Controller
         $rolIds = array_keys($rols);
 
         $menuIds = $this->collectMenuIdsConDescendientes((int) $menu->id);
-        $nombresMenu = Menu::whereIn('id', $menuIds)->pluck('nombre', 'id');
-        $slugsExtra = OrdencompraSectorVisibilidadSupport::slugsExtraParaMenuIds($menuIds);
+        $slugsExtra = array_values(array_unique(array_merge(
+            OrdencompraSectorVisibilidadSupport::slugsExtraParaMenuIds($menuIds),
+            RecepcionProveedorMenuRolSupport::slugsExtraParaMenuIds($menuIds),
+        )));
+
+        // Incluir nombres de menús de permisos "extra" (ej. config recepción bajo Configuración).
+        $menuIdsParaNombre = $menuIds;
+        if ($slugsExtra !== []) {
+            $menuIdsExtra = Permiso::query()
+                ->whereIn('slug', $slugsExtra)
+                ->pluck('menu_id')
+                ->map(static fn ($id) => (int) $id)
+                ->filter(static fn (int $id) => $id > 0)
+                ->all();
+            $menuIdsParaNombre = array_values(array_unique(array_merge($menuIds, $menuIdsExtra)));
+        }
+        $nombresMenu = Menu::whereIn('id', $menuIdsParaNombre)->pluck('nombre', 'id');
 
         $permisos = Permiso::query()
             ->where(function ($q) use ($menuIds, $slugsExtra) {

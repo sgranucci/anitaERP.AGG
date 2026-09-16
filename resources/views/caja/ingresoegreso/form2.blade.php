@@ -45,16 +45,16 @@
                 <table class="table table-sm table-bordered" id="cheque-emitido-table">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
-                            <th style="width:12%;">C&oacute;digo</th>
-                            <th style="width:16%;">Descripci&oacute;n</th>
-                            <th style="width:16%;">Chequera</th>
+                            <th style="width:10%;">C&oacute;digo</th>
+                            <th style="width:12%;">Descripci&oacute;n</th>
+                            <th style="width:14%;">Chequera</th>
                             <th style="width:8%;">Nro.</th>
-                            <th style="width:10%;">F. pago</th>
-                            <th style="width:12%;">Car&aacute;cter / Anita</th>
-                            <th>A nombre de</th>
-                            <th style="width:6%;">Mon.</th>
+                            <th style="width:9%;">F. pago</th>
+                            <th style="width:11%;">Car&aacute;cter / Anita</th>
+                            <th style="width:14%;">A nombre de</th>
+                            <th style="width:5%;">Mon.</th>
                             <th style="width:9%;">Monto</th>
-                            <th style="width:7%;">Cotiz.</th>
+                            <th style="width:6%;">Cotiz.</th>
                             <th style="width:2%;"></th>
                         </tr>
                     </thead>

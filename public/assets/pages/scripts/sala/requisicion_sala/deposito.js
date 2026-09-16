@@ -53,8 +53,8 @@
         }
 
         var cant = parseFloat(raw.replace(',', '.'));
-        if (Number.isNaN(cant) || cant <= 0) {
-            alert('La cantidad debe ser mayor a cero.');
+        if (Number.isNaN(cant) || cant <= 0 || !Number.isInteger(cant)) {
+            alert('La cantidad debe ser un número entero mayor a cero.');
             enfocarInput($input);
             return false;
         }

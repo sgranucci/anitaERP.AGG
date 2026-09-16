@@ -25,6 +25,14 @@
         return String(value).replace(/[^a-zA-Z0-9_-]/g, '\\$&');
     }
 
+    /** Comparación sin acentos (ej. "recepcion" encuentra "Recepción"). */
+    function normalizarTexto(value) {
+        return String(value || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+    }
+
     function ajaxMenuRol(url, data) {
         $.ajax({
             url: url,
@@ -61,7 +69,7 @@
     }
 
     function aplicarFiltroFilas() {
-        var qMenu = String($('#filtro-nombre-menu').val() || '').toLowerCase().trim();
+        var qMenu = normalizarTexto($('#filtro-nombre-menu').val() || '').trim();
         var moduloId = String($('#filtro-modulo-menu').val() || '').trim();
         var $filas = $tabla.find('tbody tr');
         var idsVisibles = {};
@@ -69,7 +77,7 @@
 
         $filas.each(function () {
             var $tr = $(this);
-            var nombre = String($tr.data('menuNombre') || '').toLowerCase();
+            var nombre = normalizarTexto($tr.data('menuNombre') || '');
             var menuId = String($tr.data('menuId') || '');
             var parentId = String($tr.data('parentId') || '0');
             var filaModuloId = String($tr.data('moduloId') || '');
@@ -112,14 +120,14 @@
     }
 
     function aplicarFiltroColumnas() {
-        var qRol = String($('#filtro-nombre-rol').val() || '').toLowerCase().trim();
+        var qRol = normalizarTexto($('#filtro-nombre-rol').val() || '').trim();
         var ocultas = [];
         var visibles = 0;
 
         $tabla.find('thead th.menu-rol-col-rol').each(function () {
             var $th = $(this);
             var rolId = String($th.data('rolId') || '');
-            var nombre = String($th.data('rolNombre') || '').toLowerCase();
+            var nombre = normalizarTexto($th.data('rolNombre') || '');
             var match = qRol === '' || nombre.indexOf(qRol) !== -1;
             if (match) {
                 visibles += 1;
@@ -181,7 +189,7 @@
     });
 
     function filtroNombreRolActual() {
-        return String($('#filtro-nombre-rol').val() || '').toLowerCase().trim();
+        return normalizarTexto($('#filtro-nombre-rol').val() || '').trim();
     }
 
     /**
@@ -192,7 +200,7 @@
         var qRol = filtroNombreRolActual();
         var filtrados = {};
         Object.keys(roles || {}).forEach(function (rolId) {
-            var nombre = String(roles[rolId] || '').toLowerCase();
+            var nombre = normalizarTexto(roles[rolId] || '');
             if (qRol === '' || nombre.indexOf(qRol) !== -1) {
                 filtrados[rolId] = roles[rolId];
             }
@@ -218,7 +226,8 @@
             html += '<tr><td class="font-weight-bold menu-rol-col-menu">' + escapeHtml(p.nombre) + '</td>';
             roleKeys.forEach(function (rolId) {
                 var rid = parseInt(rolId, 10);
-                var checked = p.roles_ids.indexOf(rid) !== -1 ? ' checked' : '';
+                var rolesIds = (p.roles_ids || []).map(function (id) { return parseInt(id, 10); });
+                var checked = rolesIds.indexOf(rid) !== -1 ? ' checked' : '';
                 html += '<td class="text-center menu-rol-col-rol"><input type="checkbox" class="permiso_rol_modal" name="permiso_rol_modal[]" data-permisoid="' + p.id + '" value="' + rolId + '"' + checked + '></td>';
             });
             html += '</tr>';

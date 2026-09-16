@@ -183,8 +183,10 @@ final class ChequeConsultaChequeraSupport
             'tipocheque' => $tipo,
             'tipo_nombre' => self::tipoChequeNombre($tipo),
             'tipo_corto' => self::tipoChequeCorto($tipo),
-            'tipochequera' => (string) ($ch->tipochequera ?? 'F'),
-            'tipochequera_nombre' => self::tipoChequeraNombre((string) ($ch->tipochequera ?? 'F')),
+            'tipochequera' => (string) ($ch->tipochequera
+                ?: \App\Support\Caja\ChequePropioInstrumentoSupport::negociableDefault()),
+            'tipochequera_nombre' => self::tipoChequeraNombre((string) ($ch->tipochequera
+                ?: \App\Support\Caja\ChequePropioInstrumentoSupport::negociableDefault())),
             'estado' => (string) ($ch->estado ?? 'A'),
             'estado_nombre' => self::estadoNombre((string) ($ch->estado ?? 'A')),
             'desde' => $desde,

@@ -18,6 +18,7 @@ use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
 use App\Repositories\Sala\ZonaSalaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Services\Sala\CumplirRequisicionSalaService;
 use App\Services\Sala\RequisicionSalaArbolIntegracionService;
 use App\Services\Sala\RequisicionSalaPdfService;
 use App\Services\Sala\RequisicionSalaService;
@@ -26,6 +27,7 @@ use App\Support\Sala\RecpunicaAnitaSupport;
 use App\Support\Sala\RequisicionSalaEdicionSupport;
 use App\Support\Sala\RequisicionSalaListadoFiltros;
 use App\Support\Navegacion\ModoConsultaUrlSupport;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Sala\RequisicionSalaTransferenciaAsociadaSupport;
 use Illuminate\Http\Request;
 
@@ -51,23 +53,48 @@ class RequisicionSalaController extends Controller
     {
         can('listar-requisicion-sala');
         $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
-        $filtros = RequisicionSalaListadoFiltros::resolverDesdeRequest(
-            $request,
-            null,
-            $empresaDefault ? (int) $empresaDefault : null
-        );
+        $empresaDefault = $empresaDefault ? (int) $empresaDefault : null;
+
+        if ($request->boolean('limpiar_filtros')) {
+            RequisicionSalaListadoFiltros::olvidar();
+            $filtrosEmpresa = RequisicionSalaListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+
+            return redirect()->route(
+                'consultar_requisicion_sala',
+                RequisicionSalaListadoFiltros::paraQueryStringEmpresa($filtrosEmpresa)
+            );
+        }
+
+        if (QueryRetornoListado::requestTraeContextoIndex($request)) {
+            $filtros = RequisicionSalaListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+            $filtrosQuery = RequisicionSalaListadoFiltros::paraQueryString($filtros);
+            $page = (int) $request->query('page', 0);
+            if ($page > 1) {
+                $filtrosQuery['page'] = $page;
+            }
+            RequisicionSalaListadoFiltros::persistir($filtrosQuery);
+        } else {
+            $guardados = RequisicionSalaListadoFiltros::guardados();
+            if ($guardados !== []) {
+                return redirect()->route('consultar_requisicion_sala', $guardados);
+            }
+            $filtros = RequisicionSalaListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);
+            $filtrosQuery = RequisicionSalaListadoFiltros::paraQueryString($filtros);
+        }
+
         $coleccion = $this->query->leeRequisicionSala($filtros, true, true);
 
         return view('sala.requisicion_sala.index', [
             'requisicion_sala' => $coleccion,
             'filtros' => $filtros,
-            'filtrosQuery' => RequisicionSalaListadoFiltros::paraQueryString($filtros),
+            'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => RequisicionSalaListadoFiltros::CAMPOS,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'estado_enum' => RequisicionSalaEstado::$enumEstado,
             'estado_en_laboratorio' => RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
             'estado_pendiente' => RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
             'estado_rechazada' => RequisicionSalaEstado::$enumEstado[array_search('Z', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
+            'estados_cumplibles' => CumplirRequisicionSalaService::estadosPermitidosParaCumplir(),
         ]);
     }
 
@@ -107,12 +134,13 @@ class RequisicionSalaController extends Controller
         return redirect()->route('consultar_requisicion_sala', RequisicionSalaListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-requisicion-sala');
 
         return view('sala.requisicion_sala.crear', array_merge($this->datosFormulario(null), [
             'data' => null,
+            'filtrosQuery' => $this->filtrosRetornoListado($request),
         ]));
     }
 
@@ -124,14 +152,16 @@ class RequisicionSalaController extends Controller
             return redirect()->back()->withInput()->with('mensaje_error', $resultado['errores'] ?? 'Error al guardar.');
         }
 
-        return redirect('sala/requisicion-sala')->with('mensaje', 'Requisición de sala creada con éxito');
+        return redirect()
+            ->route('consultar_requisicion_sala', $this->filtrosRetornoListado($request))
+            ->with('mensaje', 'Requisición de sala creada con éxito');
     }
 
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-requisicion-sala');
         $data = $this->repository->find($id);
-        $modoConsulta = request()->input('vista') === 'consulta';
+        $modoConsulta = $request->input('vista') === 'consulta';
         $flagsEdicion = $this->flagsEdicion($data);
 
         return view('sala.requisicion_sala.editar', array_merge($this->datosFormulario($data), $this->datosVistaTransferencia($data), $flagsEdicion, [
@@ -142,6 +172,7 @@ class RequisicionSalaController extends Controller
             'ocultarVolver' => $modoConsulta,
             'puedeActualizarRequisicionSala' => can('actualizar-requisicion-sala', false),
             'puedeReabrirRequisicionSala' => can('reabrir-requisicion-sala', false),
+            'filtrosQuery' => $this->filtrosRetornoListado($request),
         ]));
     }
 
@@ -153,7 +184,9 @@ class RequisicionSalaController extends Controller
             return redirect()->back()->withInput()->with('mensaje_error', $resultado['errores'] ?? 'Error al actualizar.');
         }
 
-        return redirect('sala/requisicion-sala')->with('mensaje', 'Requisición de sala actualizada con éxito');
+        return redirect()
+            ->route('consultar_requisicion_sala', $this->filtrosRetornoListado($request))
+            ->with('mensaje', 'Requisición de sala actualizada con éxito');
     }
 
     public function actualizarDatosMenores(ValidacionRequisicionSalaEdicionMenor $request, $id)
@@ -348,5 +381,18 @@ class RequisicionSalaController extends Controller
             'estado_en_laboratorio' => RequisicionSalaEstado::$enumEstado[array_search('5', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
             'estado_pendiente' => RequisicionSalaEstado::$enumEstado[array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))]['nombre'],
         ];
+    }
+
+    /**
+     * @return array<string, string|int|bool>
+     */
+    private function filtrosRetornoListado(Request $request): array
+    {
+        $desdeRequest = QueryRetornoListado::desdeRequestSiIndex($request, RequisicionSalaListadoFiltros::class);
+        if ($desdeRequest !== []) {
+            return $desdeRequest;
+        }
+
+        return RequisicionSalaListadoFiltros::guardados();
     }
 }

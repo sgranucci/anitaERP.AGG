@@ -2,6 +2,7 @@
 
 namespace App\Support\Contable\MayorPlanoCuenta;
 
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use Carbon\Carbon;
 
@@ -12,6 +13,7 @@ final class MayorPlanoCuentaConsultaAsyncSupport
 {
     /**
      * Cola + mail solo si:
+     * - fuente Anita (ERP nativo sale en pantalla: es rápido),
      * - período largo (rango de fechas > umbral; modo mes nunca), y
      * - selección de cuentas amplia (todas las cuentas, lista grande o rango de códigos grande).
      *
@@ -22,6 +24,14 @@ final class MayorPlanoCuentaConsultaAsyncSupport
     public static function debeEncolar(array $filtros): bool
     {
         if (! (bool) config('contable.mayor_plano_cuenta.async_habilitado', true)) {
+            return false;
+        }
+
+        // Fuente ERP: asientos locales; no encolar (respuesta inmediata en pantalla).
+        $fuente = MayorFuenteConsultaSupport::normalizarModo(
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
+        );
+        if ($fuente === MayorFuenteConsultaSupport::MODO_ERP) {
             return false;
         }
 

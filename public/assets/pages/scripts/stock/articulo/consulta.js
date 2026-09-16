@@ -21,6 +21,25 @@ function empresaIdConsultaArticulo() {
     return v > 0 ? String(v) : '';
 }
 
+function depositoIdConsultaArticulo() {
+    var $dep = $('#deposito_id');
+    if (!$dep.length) {
+        return '';
+    }
+    var v = parseInt(String($dep.val() || '0'), 10);
+    return v > 0 ? String(v) : '';
+}
+
+function consultaArticuloFiltrarDepositosUsuario() {
+    if ($('#consultaarticuloModal').data('articuloFiltrarDepositosUsuario')) {
+        return true;
+    }
+    if ($('#form-general').data('articuloFiltrarDepositosUsuario')) {
+        return true;
+    }
+    return false;
+}
+
 function urlLeerArticuloPorSku(sku, queryExtra) {
     var url = carpetaBase + '/stock/leerunarticuloporsku/' + encodeURIComponent(sku || '');
     var parts = [];
@@ -30,6 +49,13 @@ function urlLeerArticuloPorSku(sku, queryExtra) {
     var empresaId = empresaIdConsultaArticulo();
     if (empresaId !== '') {
         parts.push('empresa_id=' + encodeURIComponent(empresaId));
+    }
+    if (consultaArticuloFiltrarDepositosUsuario()) {
+        parts.push('filtrar_depositos_usuario=1');
+        var depositoId = depositoIdConsultaArticulo();
+        if (depositoId !== '') {
+            parts.push('deposito_id=' + encodeURIComponent(depositoId));
+        }
     }
     if (parts.length) {
         url += '?' + parts.join('&');
@@ -403,6 +429,13 @@ function buscar_datos_articulo(consulta) {
     }
     if ($('#consultaarticuloModal').data('articuloSoloInsumoGastronomia')) {
         postData.solo_insumo_gastronomia = 1;
+    }
+    if (consultaArticuloFiltrarDepositosUsuario()) {
+        postData.filtrar_depositos_usuario = 1;
+        var depositoIdConsulta = depositoIdConsultaArticulo();
+        if (depositoIdConsulta !== '') {
+            postData.deposito_id = depositoIdConsulta;
+        }
     }
     var empresaIdConsulta = empresaIdConsultaArticulo();
     if (empresaIdConsulta !== '') {

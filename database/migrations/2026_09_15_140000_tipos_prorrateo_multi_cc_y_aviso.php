@@ -195,8 +195,12 @@ return new class extends Migration
                     ."Tipo: {tipo}\n"
                     ."Fecha: {fecha}\n"
                     ."OC: {oc}\n"
+                    ."CC destino: {centros}\n"
+                    ."Tipos origen: {tipos_origen}\n"
+                    ."Pesos por fino: {pesos}\n"
                     ."Subtotal: {subtotal}\n"
-                    ."Total: {total}\n\n"
+                    ."Total: {total}\n"
+                    ."Alerta: {alerta}\n\n"
                     ."Conceptos:\n{conceptos}\n\n"
                     ."Revisar la precarga: {link_consulta}\n",
                 'mail_remitente' => null,

@@ -34,6 +34,7 @@ class QueryRetornoListado
             'empresa_todas',
             'estado',
             'estado_todas',
+            'estado_linea',
             'vista',
             'mostrar_totalizadoras',
             'filtro_tipocuenta',

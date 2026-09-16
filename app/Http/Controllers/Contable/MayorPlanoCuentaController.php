@@ -71,7 +71,7 @@ class MayorPlanoCuentaController extends Controller
         $cuadreCobroVentas = null;
 
         if ($request->boolean('consultar') && MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            // Período largo + cuentas amplias: cola + mail. Mes / pocas cuentas: pantalla.
+            // Anita + período largo + cuentas amplias: cola + mail. ERP / mes / pocas cuentas: pantalla.
             if (MayorPlanoCuentaConsultaAsyncSupport::debeEncolar($filtros)) {
                 return $this->encolarConsultaLarga($filtros);
             }
@@ -386,9 +386,9 @@ class MayorPlanoCuentaController extends Controller
             ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
             ->with(
                 'mensaje-aviso',
-                'Período largo ('.$dias.' días'.($periodo !== '' ? ', '.$periodo : '').') con todas las cuentas o un rango/lista grande: '
+                'Fuente Anita, período largo ('.$dias.' días'.($periodo !== '' ? ', '.$periodo : '').') con todas las cuentas o un rango/lista grande: '
                 .'el mayor se genera en segundo plano. Cuando termine te llega un mail a '.$email.' con el Excel plano (CSV). '
-                .'Con pocas cuentas (aunque el período sea largo) sigue saliendo en pantalla para analizar y exportar. Este aviso no se cierra solo.'
+                .'Con fuente ERP, o con pocas cuentas (aunque el período sea largo), sigue saliendo en pantalla para analizar y exportar. Este aviso no se cierra solo.'
             )
             ->with('mayor_plano_async_pendiente', 1);
     }

@@ -62,19 +62,22 @@
             $caracterEnum = $caracter_enum ?? \App\Models\Caja\Cheque::$enumCaracter;
             $paraDepEnum = $para_dep_enum ?? \App\Models\Caja\Cheque::$enumParaDep;
             $negociableEnum = $negociable_enum ?? \App\Models\Caja\Cheque::$enumNegociable;
+            $caracterVal = (string) ($cheque?->caracter
+                ?: \App\Support\Caja\ChequePropioInstrumentoSupport::caracterDefault());
             $paraDepVal = \App\Support\Caja\ChequePropioInstrumentoSupport::paraDep(
                 (string) ($cheque?->para_dep ?? ''),
                 \App\Support\Caja\ChequePropioInstrumentoSupport::paraDepDefault()
             );
             $negociableVal = \App\Support\Caja\ChequePropioInstrumentoSupport::negociable(
                 (string) ($cheque?->negociable ?? ''),
-                (string) ($chequeraFila?->tipochequera ?? 'F')
+                (string) ($chequeraFila?->tipochequera
+                    ?: \App\Support\Caja\ChequePropioInstrumentoSupport::negociableDefault())
             );
         @endphp
         <select name="caracter_emitidos[]" class="form-control form-control-sm caracter_emitido" title="Carácter legal (impreso)">
             @foreach ($caracterEnum as $car)
                 @if ($car['valor'] !== 'R')
-                    <option value="{{ $car['valor'] }}" @selected($cheque && $car['valor'] === ($cheque->caracter ?? 'O'))>{{ $car['nombre'] }}</option>
+                    <option value="{{ $car['valor'] }}" @selected($car['valor'] === $caracterVal)>{{ $car['nombre'] }}</option>
                 @endif
             @endforeach
         </select>
@@ -93,7 +96,9 @@
     </td>
     <td>
         <input type="text" name="anombrede_emitidos[]" class="form-control form-control-sm anombrede_emitido"
-            value="{{ $cheque?->anombrede ?? '' }}">
+            value="{{ $cheque?->anombrede ?? '' }}"
+            style="min-width:9rem;" title="A nombre de (proveedor / beneficiario)"
+            maxlength="40" autocomplete="off">
     </td>
     <td>
         <select name="moneda_emitido_ids[]" class="form-control form-control-sm moneda_emitido_id">

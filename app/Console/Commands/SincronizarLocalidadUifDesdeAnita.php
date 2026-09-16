@@ -11,7 +11,8 @@ class SincronizarLocalidadUifDesdeAnita extends Command
 {
     protected $signature = 'localidad-uif:sincronizar-anita
                             {--solo-provincias : Solo reasigna provincia_uif_id desde loc_provincia de Anita}
-                            {--clientes=200 : Tras la resincronización, actualizar N clientes UIF (0 = omitir)}';
+                            {--clientes=0 : Tras la resincronización, actualizar N clientes UIF (0 = omitir; requiere --force-clientes)}
+                            {--force-clientes : Permite re-sync de clientes tras localidades}';
 
     protected $description = 'Resincroniza localidad_uif desde Anita (base_admin): upsert por código y elimina obsoletas sin clientes.';
 
@@ -51,14 +52,22 @@ class SincronizarLocalidadUifDesdeAnita extends Command
 
             $limiteClientes = (int) $this->option('clientes');
             if ($limiteClientes <= 0) {
-                $this->info('Resincronización de localidades finalizada.');
+                $this->info('Resincronización de localidades finalizada (sin tocar clientes).');
 
                 return self::SUCCESS;
             }
 
-            $this->info("Resincronizando {$limiteClientes} clientes UIF para actualizar localidad_uif_id…");
+            if (! (bool) $this->option('force-clientes')) {
+                $this->error("Omitido sync de {$limiteClientes} clientes: use --force-clientes además de --clientes=N.");
+                $this->line('El ERP es fuente de verdad en geo; no re-sync masivo de clientes por defecto.');
+
+                return self::FAILURE;
+            }
+
+            $this->warn("Resincronizando {$limiteClientes} clientes UIF con --force…");
             $this->call('cliente-uif:sincronizar-anita', [
                 '--limite' => $limiteClientes,
+                '--force' => true,
             ]);
 
             return self::SUCCESS;

@@ -29,6 +29,14 @@ final class ClienteUifLocalidadSupportTest extends TestCase
         $this->assertNull(ClienteUifLocalidadSupport::idConFallback(0, 0));
     }
 
+    public function test_preferir_erp_si_cargado_no_pisa_valor_existente(): void
+    {
+        $this->assertSame(5, ClienteUifLocalidadSupport::preferirErpSiCargado(5, 123));
+        $this->assertSame(123, ClienteUifLocalidadSupport::preferirErpSiCargado(null, 123));
+        $this->assertSame(21, ClienteUifLocalidadSupport::preferirErpSiCargado('', 21));
+        $this->assertNull(ClienteUifLocalidadSupport::preferirErpSiCargado(null, null));
+    }
+
     public function test_aplicar_no_borra_localidades_si_el_post_viene_vacio_con_previa(): void
     {
         $data = ClienteUifLocalidadSupport::aplicar([
@@ -38,7 +46,9 @@ final class ClienteUifLocalidadSupportTest extends TestCase
             'localidadnacimiento_id' => '',
             'localidadnacimiento_id_previa' => '112',
             'provincianacimiento_id' => '2',
-        ], fn () => $this->fail('no debe consultar provincia si ya está informada'));
+        ], function (int $localidadId): ?int {
+            return $localidadId === 112 ? 2 : 1;
+        });
 
         $this->assertSame(274, $data['localidad_uif_id']);
         $this->assertSame(1, $data['provincia_uif_id']);
@@ -61,18 +71,48 @@ final class ClienteUifLocalidadSupportTest extends TestCase
         $this->assertSame(1, $data['provincia_uif_id']);
     }
 
-    public function test_no_pisa_provincia_especial_si_ya_viene_cargada(): void
+    public function test_alinea_provincia_si_esta_desfasada_respecto_de_la_localidad(): void
     {
-        $data = ClienteUifLocalidadSupport::completarProvinciaSiVacia(
+        $data = ClienteUifLocalidadSupport::alinearProvinciaConLocalidad(
             [
                 'localidad_uif_id' => 274,
-                'provincia_uif_id' => 26,
+                'provincia_uif_id' => 2,
             ],
             'localidad_uif_id',
             'provincia_uif_id',
-            fn () => $this->fail('no debe alinear si la provincia ya está')
+            fn (int $localidadId): ?int => $localidadId === 274 ? 1 : null
         );
 
-        $this->assertSame(26, $data['provincia_uif_id']);
+        $this->assertSame(1, $data['provincia_uif_id']);
+    }
+
+    public function test_conserva_provincia_si_la_localidad_no_tiene_provincia_en_maestro(): void
+    {
+        $data = ClienteUifLocalidadSupport::alinearProvinciaConLocalidad(
+            [
+                'localidadnacimiento_id' => 28,
+                'provincianacimiento_id' => 26,
+            ],
+            'localidadnacimiento_id',
+            'provincianacimiento_id',
+            fn (): ?int => null
+        );
+
+        $this->assertSame(26, $data['provincianacimiento_id']);
+    }
+
+    public function test_no_pisa_provincia_real_con_no_residente_de_localidad(): void
+    {
+        $data = ClienteUifLocalidadSupport::alinearProvinciaConLocalidad(
+            [
+                'localidad_uif_id' => 337,
+                'provincia_uif_id' => 2,
+            ],
+            'localidad_uif_id',
+            'provincia_uif_id',
+            fn (): ?int => 26
+        );
+
+        $this->assertSame(2, $data['provincia_uif_id']);
     }
 }

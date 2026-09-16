@@ -849,6 +849,25 @@ var flModificaAsiento = false;
             }, 50);
         });
 
+        function sincronizarAnombredeChequesEmitidos(forzar) {
+            var nombre = String($('#descripcionproveedor').val() || '').trim();
+            if (!nombre) {
+                return;
+            }
+            $('#tbody-cheque-emitido-table tr.item-cheque-emitido').each(function () {
+                var $inp = $(this).find('.anombrede_emitido');
+                if (forzar || !String($inp.val() || '').trim()) {
+                    $inp.val(nombre);
+                }
+            });
+        }
+
+        $(document).on('change', '#proveedor_id', function () {
+            setTimeout(function () {
+                sincronizarAnombredeChequesEmitidos(false);
+            }, 80);
+        });
+
         // Al abrir editar/crear: pintar medios ya cargados (cuentas/cheques) en la barra superior.
         setTimeout(function () {
             $('#tbody-cheque-emitido-table tr.item-cheque-emitido').each(function () {
@@ -858,6 +877,7 @@ var flModificaAsiento = false;
                     filtrarChequerasChequeEmitido($tr, cid, false);
                 }
             });
+            sincronizarAnombredeChequesEmitidos(false);
             sumaMonto();
         }, 0);
     });

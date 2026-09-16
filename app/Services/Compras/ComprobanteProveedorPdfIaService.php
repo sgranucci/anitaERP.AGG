@@ -218,12 +218,14 @@ final class ComprobanteProveedorPdfIaService
                 (float) ($resuelto['total'] ?? 0),
             );
             $lineasConcepto = $reparo['lineas'];
-            if ($reparo['reparo']) {
-                $resuelto['pararevisar'] = true;
+            if ($reparo['avisos'] !== []) {
                 $resuelto['advertencias'] = array_values(array_unique(array_merge(
                     $resuelto['advertencias'] ?? [],
                     $reparo['avisos']
                 )));
+            }
+            if ($reparo['reparo']) {
+                $resuelto['pararevisar'] = true;
             }
             $lineasConcepto = $prorrateoSvc->prorratearLineasIva(
                 $lineasConcepto,

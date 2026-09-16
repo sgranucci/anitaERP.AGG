@@ -435,13 +435,16 @@ class ChequeRepository implements ChequeRepositoryInterface
             $chequera = $chequeraId ? $this->chequeraRepository->find($chequeraId) : null;
             $negociable = ChequePropioInstrumentoSupport::negociable(
                 (string) ($negociables[$i] ?? ''),
-                (string) ($chequera->tipochequera ?? 'F')
+                (string) ($chequera->tipochequera
+                    ?? ChequePropioInstrumentoSupport::negociableDefault())
             );
             $nroCheque = $numero;
             $payload = [
                 'origen' => 'E',
                 'chequera_id' => $chequeraId,
-                'caracter' => ($caracteres[$i] ?? '') !== '' ? (string) $caracteres[$i] : 'O',
+                'caracter' => ($caracteres[$i] ?? '') !== ''
+                    ? (string) $caracteres[$i]
+                    : ChequePropioInstrumentoSupport::caracterDefault(),
                 'para_dep' => ChequePropioInstrumentoSupport::paraDep(
                     (string) ($paraDeps[$i] ?? ''),
                     ChequePropioInstrumentoSupport::paraDepDefault()
@@ -637,12 +640,14 @@ class ChequeRepository implements ChequeRepositoryInterface
                 $chequera = $chequeraId ? $this->chequeraRepository->find($chequeraId) : null;
                 $negociable = ChequePropioInstrumentoSupport::negociable(
                     (string) ($anulado->negociable ?? ''),
-                    (string) ($chequera->tipochequera ?? 'F')
+                    (string) ($chequera->tipochequera
+                        ?? ChequePropioInstrumentoSupport::negociableDefault())
                 );
                 $payload = [
                     'origen' => 'E',
                     'chequera_id' => $chequeraId,
-                    'caracter' => $anulado->caracter ?: 'O',
+                    'caracter' => $anulado->caracter
+                        ?: ChequePropioInstrumentoSupport::caracterDefault(),
                     'para_dep' => ChequePropioInstrumentoSupport::paraDep(
                         (string) ($anulado->para_dep ?? ''),
                         ChequePropioInstrumentoSupport::paraDepDefault()

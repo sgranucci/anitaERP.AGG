@@ -364,6 +364,19 @@ $(function () {
             return;
         }
         var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+        var meta = conceptosMeta[conceptoId] || {};
+        var tipo = String(meta.tipoconcepto || '');
+        // Neto cubierto por OC/COM: no precargar la cuenta del maestro (sale de artículos OC;
+        // el override solo se setea desde la solapa Asiento contable).
+        if (conceptoId > 0 && reglaCubreCuentaDebeSinEditor(tipo)) {
+            if (forzar) {
+                setCuentaDebeEnFila($row, { id: 0, codigo: '', nombre: '' });
+            } else {
+                actualizarVisibilidadEditorCuentaDebe($row);
+            }
+            actualizarColumnaCuentaDebe();
+            return;
+        }
         var actual = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
         if (!forzar && actual > 0) {
             actualizarVisibilidadEditorCuentaDebe($row);

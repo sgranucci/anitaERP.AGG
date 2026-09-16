@@ -21,13 +21,14 @@ Requisición de sala
             <div class="card-header">
                 <h3 class="card-title">Nueva requisición de sala</h3>
                 <div class="card-tools">
-                    <a href="{{ route('consultar_requisicion_sala') }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('consultar_requisicion_sala', $filtrosQuery ?? []) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
             <form action="{{ route('guardar_requisicion_sala') }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
-                data-url-npu="{{ route('requisicion_sala_consulta_npu') }}">
+                data-url-npu="{{ route('requisicion_sala_consulta_npu') }}"
+                data-articulo-filtrar-depositos-usuario="1">
                 @csrf
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">

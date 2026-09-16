@@ -18,9 +18,10 @@ class SincronizarClienteUifDesdeAnita extends Command
                             {--hasta= : ID final del rango (inclusive)}
                             {--por-id-local : Interpretar --desde/--hasta como cliente_uif.id del ERP}
                             {--limite=200 : Máximo de clientes en lista remota (0 = todos, sincronización total)}
+                            {--force : Confirma sync masivo o por rango (sin esto se aborta)}
                             {--usuario= : ID usuario para creousuario_id (default: primer usuario)}';
 
-    protected $description = 'Importa o actualiza clientes UIF desde Anita (clientes_uif), incluyendo premios y archivos.';
+    protected $description = 'Importa o actualiza clientes UIF desde Anita. En update no pisa geo ya cargada en el ERP. Sync masivo requiere --force.';
 
     public function handle(Cliente_UifRepositoryInterface $clienteUifRepository): int
     {
@@ -56,12 +57,26 @@ class SincronizarClienteUifDesdeAnita extends Command
             return self::FAILURE;
         }
 
+        $esUno = $codigo !== '';
+        $esRangoOMasivo = ! $esUno;
+        if ($esRangoOMasivo && ! (bool) $this->option('force')) {
+            $this->error('Sync masivo/rango bloqueado: el ERP es fuente de verdad en geo.');
+            $this->line('Use --codigo=N para un cliente, o --force si realmente necesita un lote.');
+            $this->line('Nota: en update Anita solo completa geo vacía; no pisa país/provincia/localidad ya cargados.');
+
+            return self::FAILURE;
+        }
+
         try {
-            if ($codigo !== '') {
+            if ($esUno) {
+                $this->comment('Geo ERP ya cargada no se pisa; Anita solo completa vacíos.');
+
                 return $this->sincronizarUno($clienteUifRepository, (int) $codigo);
             }
 
             if ($tieneDesde && $tieneHasta) {
+                $this->warn('Sync por rango con --force. Geo ERP cargada no se pisa.');
+
                 return $this->sincronizarRango(
                     $clienteUifRepository,
                     (int) $desde,
@@ -70,6 +85,7 @@ class SincronizarClienteUifDesdeAnita extends Command
                 );
             }
 
+            $this->warn('Sync masivo con --force. Geo ERP cargada no se pisa.');
             $limite = $this->limiteSincronizacion();
             $mensaje = $limite > 0
                 ? "Sincronizando clientes UIF desde Anita (primeros {$limite} de la lista remota)…"

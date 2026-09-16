@@ -11,6 +11,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
 {
     protected $signature = 'proveedor-cuentacorriente:importar-desde-anita
                             {--proveedor= : Código proveedor Anita/ERP (opcional)}
+                            {--empresa= : ID empresa ERP (AGG: filtra prov_empresa/com_empresa)}
                             {--desde= : Fecha ISO desde (prov_fecha)}
                             {--hasta= : Fecha ISO hasta}
                             {--limite= : Máximo de cuotas/deuda a procesar}
@@ -31,6 +32,8 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
         $dryRun = ! $ejecutar;
         $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
         $proveedor = trim((string) $this->option('proveedor'));
+        $empresaOpt = $this->option('empresa');
+        $empresaId = ($empresaOpt !== null && $empresaOpt !== '') ? (int) $empresaOpt : null;
         $desde = $this->option('desde') ? (string) $this->option('desde') : null;
         $hasta = $this->option('hasta') ? (string) $this->option('hasta') : null;
         $limiteOpt = $this->option('limite');
@@ -39,9 +42,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Entorno %s | empresa_col=%s | %s → %s | proveedor %s | %s',
+            'Entorno %s | empresa_col=%s | empresa_id=%s | %s → %s | proveedor %s | %s',
             $perfil['entorno'],
             $perfil['tiene_empresa'] ? 'sí' : 'no',
+            $empresaId !== null && $empresaId > 0 ? (string) $empresaId : 'todas',
             $desde ?: 'sin desde',
             $hasta ?: 'sin hasta',
             $proveedor !== '' ? $proveedor : 'todos',
@@ -57,6 +61,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
                 $hasta,
                 $usuarioId,
                 $limite,
+                $empresaId,
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
@@ -85,10 +90,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
         if ($stats['muestra'] !== []) {
             $this->line('Muestra (hasta 25):');
             $this->table(
-                ['Comprobante', 'Prov', 'Fecha', 'Total', 'Pag.Anita', 'Apl.ERP', 'CP', 'CC', 'Apl'],
+                ['Comprobante', 'Prov', 'Emp', 'Fecha', 'Total', 'Pag.Anita', 'Apl.ERP', 'CP', 'CC', 'Apl'],
                 array_map(static fn (array $r) => [
                     $r['etiqueta'],
                     $r['proveedor'],
+                    $r['empresa_anita'] ?? '',
                     $r['fecha'],
                     number_format((float) $r['total'], 2, ',', '.'),
                     number_format((float) $r['pagado_anita'], 2, ',', '.'),

@@ -134,7 +134,7 @@ final class PrecargaProveedorProrrateoMultiCcSupport
                     if (! in_array($fino, $seenCodigo[$codigo]['finos_origen'], true)) {
                         $seenCodigo[$codigo]['finos_origen'][] = $fino;
                     }
-                    if (in_array($tipoConc, ['G', 'I'], true)) {
+                    if ($tipoConc === 'I') {
                         $seenCodigo[$codigo]['peso'] = round(
                             (float) ($seenCodigo[$codigo]['peso'] ?? 0) + $pesoRel,
                             6
@@ -152,7 +152,8 @@ final class PrecargaProveedorProrrateoMultiCcSupport
                     'alicuota_iva' => $this->inferirAlicuota($concepto),
                     'fino_origen' => $fino,
                     'finos_origen' => [$fino],
-                    'peso' => in_array($tipoConc, ['G', 'I'], true) ? $pesoRel : null,
+                    // Sólo el IVA se reparte entre finos; los gravados comparten código.
+                    'peso' => $tipoConc === 'I' ? $pesoRel : null,
                 ];
             }
         }
@@ -252,8 +253,9 @@ final class PrecargaProveedorProrrateoMultiCcSupport
 
         $ivaPorTasa = [];
         $otras = [];
-        $gravadoTotal = 0.0;
-        $gravadoSeed = null;
+        // Los gravados no se reparten entre finos (comparten códigos), pero sí se consolidan
+        // por concepto: mezclar 21% con 10,5% en una sola línea falsearía la apertura.
+        $gravadoPorConcepto = [];
 
         foreach ($lineas as $linea) {
             $id = (int) ($linea['concepto_ivacompra_id'] ?? 0);
@@ -267,10 +269,11 @@ final class PrecargaProveedorProrrateoMultiCcSupport
                 continue;
             }
             if ($tipoConc === 'G') {
-                $gravadoTotal = round($gravadoTotal + $monto, 2);
-                if ($gravadoSeed === null) {
-                    $gravadoSeed = $linea;
+                if (! isset($gravadoPorConcepto[$id])) {
+                    $gravadoPorConcepto[$id] = $linea;
+                    $gravadoPorConcepto[$id]['monto'] = 0.0;
                 }
+                $gravadoPorConcepto[$id]['monto'] = round($gravadoPorConcepto[$id]['monto'] + $monto, 2);
                 continue;
             }
             $otras[] = $linea;
@@ -301,9 +304,11 @@ final class PrecargaProveedorProrrateoMultiCcSupport
         }
 
         $out = [];
-        if ($gravadoSeed !== null && abs($gravadoTotal) >= 0.0001) {
-            $gravadoSeed['monto'] = $gravadoTotal;
-            $out[] = $gravadoSeed;
+        foreach ($gravadoPorConcepto as $lineaGravado) {
+            if (abs((float) $lineaGravado['monto']) < 0.0001) {
+                continue;
+            }
+            $out[] = $lineaGravado;
         }
 
         foreach ($ivaPorTasa as $claveTasa => $importeIva) {
@@ -368,8 +373,9 @@ final class PrecargaProveedorProrrateoMultiCcSupport
     }
 
     /**
-     * Si el agente/IA mandó solo «No gravado» (o sin IVA) en un tipo P, reconstruye G/I
-     * desde cabecera (subtotal/total) y conceptos de los finos origen, para poder prorratear.
+     * Completa G/I faltantes en un tipo P sólo cuando los conceptos del agente no explican
+     * el total. Nunca descarta líneas ni reclasifica exentos que ya cuadran: una compra
+     * exenta o no gravada es un caso legítimo y se graba tal como vino.
      *
      * @param  list<array<string, mixed>>  $lineas
      * @param  list<string>  $tiposOrigen
@@ -381,12 +387,14 @@ final class PrecargaProveedorProrrateoMultiCcSupport
         float $subtotal,
         float $total,
     ): array {
-        $avisos = [];
+        $sinReparo = ['lineas' => $lineas, 'avisos' => [], 'reparo' => false];
         $subtotal = round(abs($subtotal), 2);
         $total = round(abs($total), 2);
-        if ($tiposOrigen === []) {
-            return ['lineas' => $lineas, 'avisos' => [], 'reparo' => false];
+        if ($tiposOrigen === [] || $lineas === []) {
+            return $sinReparo;
         }
+
+        $tolerancia = ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA;
 
         $conceptos = Concepto_Ivacompra::query()
             ->with('impuestos')
@@ -399,103 +407,138 @@ final class PrecargaProveedorProrrateoMultiCcSupport
 
         $sumaI = 0.0;
         $sumaG = 0.0;
-        $sumaE = 0.0;
-        $sumaOtras = 0.0;
-        $otras = [];
-        $soloExento = true;
+        $sumaExenta = 0.0;
+        $sumaLineas = 0.0;
+        $indicesExentos = [];
 
-        foreach ($lineas as $linea) {
+        foreach ($lineas as $indice => $linea) {
             $id = (int) ($linea['concepto_ivacompra_id'] ?? 0);
             $monto = round((float) ($linea['monto'] ?? 0), 2);
+            $sumaLineas = round($sumaLineas + $monto, 2);
             $tipo = strtoupper(trim((string) ($conceptos->get($id)?->tipoconcepto ?? '')));
             if ($tipo === 'I') {
                 $sumaI = round($sumaI + $monto, 2);
-                $soloExento = false;
-                $otras[] = $linea;
             } elseif ($tipo === 'G') {
                 $sumaG = round($sumaG + $monto, 2);
-                $soloExento = false;
-                $otras[] = $linea;
             } elseif (in_array($tipo, ['E', 'N'], true)) {
-                $sumaE = round($sumaE + $monto, 2);
-            } else {
-                $sumaOtras = round($sumaOtras + $monto, 2);
-                $soloExento = false;
-                $otras[] = $linea;
+                $sumaExenta = round($sumaExenta + $monto, 2);
+                $indicesExentos[] = $indice;
             }
         }
 
-        // Ya hay IVA: no tocar (el prorrateo de I se ocupa).
-        if ($sumaI > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA) {
-            return ['lineas' => $lineas, 'avisos' => [], 'reparo' => false];
+        // Los conceptos del agente ya explican el total (típico de facturas exentas o sin
+        // IVA discriminado): se graban tal cual, no hay nada que reconstruir.
+        if ($total > 0 && abs(abs($sumaLineas) - $total) <= $tolerancia) {
+            return $sinReparo;
         }
 
-        $ivaCabecera = 0.0;
-        if ($total > 0 && $subtotal > 0
-            && ($total - $subtotal) > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA
-        ) {
-            // Si la diferencia de cabecera ya está cubierta por percepciones, no inventar IVA.
-            $diff = round($total - $subtotal, 2);
-            if (abs($diff - $sumaOtras) > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA) {
-                $ivaCabecera = round(max(0, $diff - $sumaOtras), 2);
-            }
+        // Ya hay IVA: el prorrateo de I se ocupa del reparto entre finos.
+        if ($sumaI > $tolerancia) {
+            return $sinReparo;
+        }
+
+        $faltante = round($total - $sumaLineas, 2);
+        if ($total <= 0 || $faltante <= $tolerancia) {
+            return $sinReparo;
         }
 
         $semillaG = $this->conceptoSemillaDesdeOrigenes($tiposOrigen, 'G', 21.0);
         $semillaI = $this->conceptoSemillaDesdeOrigenes($tiposOrigen, 'I', 21.0);
         if ($semillaG === null) {
-            return ['lineas' => $lineas, 'avisos' => [], 'reparo' => false];
+            return $sinReparo;
         }
 
+        $avisos = [];
         $reparo = false;
-        $nuevas = $otras;
+        $nuevas = $lineas;
+        $netoParaIva = $sumaG;
 
-        // Caso IA: todo el importe en No gravado / monotributo.
-        if ($soloExento && $sumaE > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA) {
-            $neto = $subtotal > 0 ? $subtotal : $sumaE;
-            $nuevas[] = [
-                'concepto_ivacompra_id' => $semillaG['concepto_ivacompra_id'],
-                'codigo_concepto_anita' => $semillaG['codigo_concepto_anita'],
-                'monto' => $neto,
-            ];
-            $sumaG = $neto;
-            $reparo = true;
-            $avisos[] = 'FPB: el agente envió solo concepto no gravado/exento; se reclasificó a gravado '
-                .'('.$semillaG['codigo_concepto_anita'].') para abrir la precarga prorrateada.';
-        } elseif ($sumaG <= ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA
-            && $subtotal > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA
+        if ($sumaG <= $tolerancia
+            && $sumaExenta > $tolerancia
+            && $indicesExentos !== []
+            && ($tasaExenta = $this->tasaQueExplica($sumaExenta, $faltante, $tolerancia)) !== null
         ) {
+            // La IA imputó el neto como exento/no gravado, pero la diferencia de cabecera es
+            // exactamente el IVA de ese neto: era gravado.
+            foreach ($indicesExentos as $indice) {
+                $nuevas[$indice]['concepto_ivacompra_id'] = $semillaG['concepto_ivacompra_id'];
+                $nuevas[$indice]['codigo_concepto_anita'] = $semillaG['codigo_concepto_anita'];
+            }
+            $netoParaIva = $sumaExenta;
+            $reparo = true;
+            $avisos[] = 'Prorrateado: el neto vino como exento/no gravado pero la diferencia de cabecera '
+                .'equivale al IVA '.$this->claveTasa($tasaExenta).'%; se reclasificó a gravado '
+                .$semillaG['codigo_concepto_anita'].'.';
+        } elseif ($sumaG <= $tolerancia
+            && $sumaExenta <= $tolerancia
+            && $subtotal > $tolerancia
+            && abs($faltante - $subtotal) <= $tolerancia
+        ) {
+            // El agente sólo mandó percepciones: falta exactamente el neto de cabecera.
             $nuevas[] = [
                 'concepto_ivacompra_id' => $semillaG['concepto_ivacompra_id'],
                 'codigo_concepto_anita' => $semillaG['codigo_concepto_anita'],
                 'monto' => $subtotal,
             ];
-            $sumaG = $subtotal;
+            $netoParaIva = $subtotal;
             $reparo = true;
-            $avisos[] = 'FPB: sin gravado en conceptos; se tomó el subtotal de cabecera como gravado.';
+            $avisos[] = 'Prorrateado: sin gravado en conceptos; se tomó el subtotal de cabecera como gravado '
+                .$semillaG['codigo_concepto_anita'].'.';
         }
 
-        if ($ivaCabecera > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA
-            && $semillaI !== null
-        ) {
-            $nuevas[] = [
-                'concepto_ivacompra_id' => $semillaI['concepto_ivacompra_id'],
-                'codigo_concepto_anita' => $semillaI['codigo_concepto_anita'],
-                'monto' => $ivaCabecera,
-            ];
-            $reparo = true;
-            $avisos[] = 'FPB: sin IVA en conceptos; se tomó IVA de cabecera (total − subtotal − percepciones) = '
-                .number_format($ivaCabecera, 2, ',', '.');
-        } elseif ($sumaG > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA
-            && $semillaI !== null
-            && $ivaCabecera <= ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA
-        ) {
-            // Hay gravado sin IVA ni diferencia de cabecera: marcar revisión (no inventar alícuota).
-            $avisos[] = 'FPB: hay gravado pero el agente no envió IVA y la cabecera no permite deducirlo '
-                .'(subtotal≈total). Revisar apertura manual.';
+        $faltanteIva = round($total - $this->sumaLineas($nuevas), 2);
+        if ($faltanteIva > $tolerancia) {
+            $tasaIva = $netoParaIva > $tolerancia
+                ? $this->tasaQueExplica($netoParaIva, $faltanteIva, $tolerancia)
+                : null;
+            if ($tasaIva !== null && $semillaI !== null) {
+                $nuevas[] = [
+                    'concepto_ivacompra_id' => $semillaI['concepto_ivacompra_id'],
+                    'codigo_concepto_anita' => $semillaI['codigo_concepto_anita'],
+                    'monto' => $faltanteIva,
+                ];
+                $reparo = true;
+                $avisos[] = 'Prorrateado: sin IVA en conceptos; se dedujo IVA '.$this->claveTasa($tasaIva)
+                    .'% de cabecera = '.number_format($faltanteIva, 2, ',', '.').'.';
+            } else {
+                $avisos[] = 'Prorrateado: faltan '.number_format($faltanteIva, 2, ',', '.')
+                    .' para llegar al total y no se corresponden con una alícuota de IVA del neto. '
+                    .'Revisar apertura manual.';
+            }
         }
 
-        return ['lineas' => $reparo ? $nuevas : $lineas, 'avisos' => $avisos, 'reparo' => $reparo];
+        return ['lineas' => $nuevas, 'avisos' => $avisos, 'reparo' => $reparo];
+    }
+
+    /**
+     * Alícuota (21/10,5/27/5) cuyo IVA sobre $neto explica $importe, o null.
+     */
+    private function tasaQueExplica(float $neto, float $importe, float $tolerancia): ?float
+    {
+        if ($neto <= 0 || $importe <= 0) {
+            return null;
+        }
+
+        foreach ([21.0, 10.5, 27.0, 5.0, 2.5] as $tasa) {
+            if (abs(round($neto * $tasa / 100, 2) - $importe) <= $tolerancia) {
+                return $tasa;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function sumaLineas(array $lineas): float
+    {
+        $suma = 0.0;
+        foreach ($lineas as $linea) {
+            $suma = round($suma + (float) ($linea['monto'] ?? 0), 2);
+        }
+
+        return $suma;
     }
 
     /**

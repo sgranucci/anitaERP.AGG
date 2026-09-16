@@ -7,13 +7,30 @@ namespace App\Support\Caja;
  */
 final class ChequePropioInstrumentoSupport
 {
+    /** Default legal impreso: No a la orden. */
+    public static function caracterDefault(): string
+    {
+        return 'N';
+    }
+
+    /** Default Anita cpro_negociable: electrónica (e-cheq). */
+    public static function negociableDefault(): string
+    {
+        return 'E';
+    }
+
     public static function negociableDesdeChequera(?string $tipochequera): string
     {
-        return strtoupper(trim((string) $tipochequera)) === 'E' ? 'E' : 'N';
+        $t = strtoupper(trim((string) $tipochequera));
+        if ($t === '') {
+            return self::negociableDefault();
+        }
+
+        return $t === 'E' ? 'E' : 'N';
     }
 
     /** Anita cpro_negociable: N física / E electrónica. */
-    public static function negociable(string $valor, ?string $tipochequera = 'F'): string
+    public static function negociable(string $valor, ?string $tipochequera = null): string
     {
         $v = strtoupper(trim($valor));
         if ($v === 'E' || $v === 'N') {

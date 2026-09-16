@@ -11,6 +11,7 @@ use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Services\Uif\JuegoUifDesdeAnitaResolver;
 use App\Support\Uif\ClienteUifArchivoStorage;
 use App\Support\Uif\ClienteUifListadoFiltros;
+use App\Support\Uif\ClienteUifLocalidadSupport;
 use App\Support\Uif\ClienteUifOrigenPcSupport;
 use Auth;
 use Exception;
@@ -457,66 +458,59 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 $tipodocumento_id = $tipodocumento->id;
             }
 
-            // Lee la localidad de nacimiento (y la provincia, que Anita no manda aparte)
+            // Geo Anita: si el código no matchea, no pisar valores ya cargados en el ERP al actualizar.
+            $localidadNacimientoResuelta = false;
             $localidadNacimiento_id = null;
             $provinciaNacimiento_id = null;
             try {
                 $localidad = $this->localidad_uifRepository->findPorCodigo($data->ilocalidadnac);
-
-                if ($localidad) {
-                    $localidadNacimiento_id = $localidad->id;
-                    $provinciaNacimiento_id = $localidad->provincia_uif_id ? (int) $localidad->provincia_uif_id : null;
-                }
+                $localidadNacimiento_id = (int) $localidad->id;
+                $localidadNacimientoResuelta = true;
+                $provinciaNacimiento_id = $localidad->provincia_uif_id
+                    ? (int) $localidad->provincia_uif_id
+                    : null;
             } catch (Exception $e) {
-                $localidadNacimiento_id = null;
-                $provinciaNacimiento_id = null;
+                // sin match
             }
 
-            // Lee pais de nacimiento
+            $paisNacimientoResuelto = false;
+            $paisNacimiento_id = null;
             try {
                 $pais = $this->pais_uifRepository->findPorCodigo($data->ipaisnac);
-
-                $paisNacimiento_id = null;
-                if ($pais) {
-                    $paisNacimiento_id = $pais->id;
-                }
+                $paisNacimiento_id = (int) $pais->id;
+                $paisNacimientoResuelto = true;
             } catch (Exception $e) {
-                $paisNacimiento_id = null;
+                // sin match
             }
 
-            // Lee la localidad
+            $localidadResuelta = false;
+            $localidad_id = null;
             try {
                 $localidad = $this->localidad_uifRepository->findPorCodigo($data->ilocalidad);
-
-                $localidad_id = null;
-                if ($localidad) {
-                    $localidad_id = $localidad->id;
-                }
+                $localidad_id = (int) $localidad->id;
+                $localidadResuelta = true;
             } catch (Exception $e) {
-                $localidad_id = 337;
+                // sin match
             }
 
-            // Lee la provincia
+            $provinciaResuelta = false;
+            $provincia_id = null;
             try {
                 $provincia = $this->provincia_uifRepository->findPorCodigo($data->iprovincia);
-
-                $provincia_id = null;
-                if ($provincia) {
-                    $provincia_id = $provincia->id;
-                }
+                $provincia_id = (int) $provincia->id;
+                $provinciaResuelta = true;
             } catch (Exception $e) {
-                $provincia_id = 26;
+                // sin match
             }
-            // Lee pais
+
+            $paisResuelto = false;
+            $pais_id = null;
             try {
                 $pais = $this->pais_uifRepository->findPorCodigo($data->ipais);
-
-                $pais_id = null;
-                if ($pais) {
-                    $pais_id = $pais->id;
-                }
+                $pais_id = (int) $pais->id;
+                $paisResuelto = true;
             } catch (Exception $e) {
-                $pais_id = 257;
+                // sin match
             }
 
             // Lee actividad
@@ -664,6 +658,51 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 ? $inroclienteidValidado
                 : null;
 
+            $existente = $this->buscarClienteUifParaUpsertDesdeAnita(
+                $inroclienteid,
+                $tipodocumento_id,
+                $nroDocumento,
+                $anitaOrigen
+            );
+
+            // En update el ERP manda la geo ya cargada; Anita solo completa vacíos.
+            if ($existente !== null) {
+                $localidad_id = ClienteUifLocalidadSupport::preferirErpSiCargado(
+                    $existente->localidad_uif_id,
+                    $localidadResuelta ? $localidad_id : null
+                );
+                $provincia_id = ClienteUifLocalidadSupport::preferirErpSiCargado(
+                    $existente->provincia_uif_id,
+                    $provinciaResuelta ? $provincia_id : null
+                );
+                $pais_id = ClienteUifLocalidadSupport::preferirErpSiCargado(
+                    $existente->pais_uif_id,
+                    $paisResuelto ? $pais_id : null
+                );
+                $localidadNacimiento_id = ClienteUifLocalidadSupport::preferirErpSiCargado(
+                    $existente->localidadnacimiento_id,
+                    $localidadNacimientoResuelta ? $localidadNacimiento_id : null
+                );
+                $provinciaNacimiento_id = ClienteUifLocalidadSupport::preferirErpSiCargado(
+                    $existente->provincianacimiento_id,
+                    $localidadNacimientoResuelta ? $provinciaNacimiento_id : null
+                );
+                $paisNacimiento_id = ClienteUifLocalidadSupport::preferirErpSiCargado(
+                    $existente->paisnacimiento_id,
+                    $paisNacimientoResuelto ? $paisNacimiento_id : null
+                );
+            } else {
+                if (! $localidadResuelta) {
+                    $localidad_id = 337;
+                }
+                if (! $provinciaResuelta) {
+                    $provincia_id = 26;
+                }
+                if (! $paisResuelto) {
+                    $pais_id = 257;
+                }
+            }
+
             $payload = [
                 'inroclienteid' => $inroclienteidParaGuardar,
                 'anita_origen' => $anitaOrigen,
@@ -704,13 +743,6 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 'nivelsocioeconomico_uif_id' => $nivelsocioeconomico_id,
                 'usuario_id' => Auth::user()->id,
             ];
-
-            $existente = $this->buscarClienteUifParaUpsertDesdeAnita(
-                $inroclienteid,
-                $tipodocumento_id,
-                $nroDocumento,
-                $anitaOrigen
-            );
 
             if ($existente !== null) {
                 $existente->update($payload);

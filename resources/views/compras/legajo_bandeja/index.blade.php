@@ -49,6 +49,231 @@ Bandeja de legajos
         padding: 0.28rem 0.4rem;
         vertical-align: middle;
     }
+
+    /* Herramienta de pagos del legajo */
+    .bandeja-pagos-tool {
+        --bp-ink: #1a2332;
+        --bp-muted: #5b6b7c;
+        --bp-line: #e2e8f0;
+        --bp-soft: #f4f7fa;
+        --bp-accent: #0d7a6f;
+        --bp-accent-soft: #e6f5f3;
+        --bp-warn: #b45309;
+        --bp-warn-soft: #fff7ed;
+        --bp-ok: #047857;
+        --bp-ok-soft: #ecfdf5;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        color: var(--bp-ink);
+    }
+    .bandeja-pagos-kpis {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    @media (max-width: 767px) {
+        .bandeja-pagos-kpis { grid-template-columns: 1fr; }
+    }
+    .bandeja-pagos-kpi {
+        background: linear-gradient(145deg, #ffffff 0%, var(--bp-soft) 100%);
+        border: 1px solid var(--bp-line);
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
+        min-height: 4.5rem;
+    }
+    .bandeja-pagos-kpi .kpi-label {
+        display: block;
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--bp-muted);
+        margin-bottom: 0.25rem;
+    }
+    .bandeja-pagos-kpi .kpi-valor {
+        font-size: 1.35rem;
+        font-weight: 650;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+    }
+    .bandeja-pagos-kpi .kpi-hint {
+        font-size: 0.75rem;
+        color: var(--bp-muted);
+        margin-top: 0.15rem;
+    }
+    .bandeja-pagos-layout {
+        display: grid;
+        grid-template-columns: minmax(240px, 34%) 1fr;
+        gap: 0.85rem;
+        min-height: 52vh;
+    }
+    @media (max-width: 991px) {
+        .bandeja-pagos-layout { grid-template-columns: 1fr; min-height: 0; }
+    }
+    .bandeja-pagos-lista,
+    .bandeja-pagos-panel {
+        border: 1px solid var(--bp-line);
+        border-radius: 14px;
+        background: #fff;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .bandeja-pagos-lista-head,
+    .bandeja-pagos-panel-head {
+        padding: 0.7rem 0.9rem;
+        border-bottom: 1px solid var(--bp-line);
+        background: var(--bp-soft);
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--bp-muted);
+        letter-spacing: 0.02em;
+    }
+    .bandeja-pagos-lista-body {
+        overflow: auto;
+        max-height: 56vh;
+        flex: 1;
+    }
+    .bandeja-pagos-fac {
+        width: 100%;
+        text-align: left;
+        border: 0;
+        border-bottom: 1px solid var(--bp-line);
+        background: #fff;
+        padding: 0.75rem 0.9rem;
+        cursor: pointer;
+        transition: background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .bandeja-pagos-fac:hover { background: #f8fafc; }
+    .bandeja-pagos-fac.is-active {
+        background: var(--bp-accent-soft);
+        box-shadow: inset 3px 0 0 var(--bp-accent);
+    }
+    .bandeja-pagos-fac-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .bandeja-pagos-fac-titulo {
+        font-weight: 600;
+        font-size: 0.86rem;
+        line-height: 1.25;
+    }
+    .bandeja-pagos-fac-meta {
+        margin-top: 0.35rem;
+        font-size: 0.75rem;
+        color: var(--bp-muted);
+    }
+    .bandeja-pagos-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        border-radius: 999px;
+        padding: 0.15rem 0.55rem;
+        font-size: 0.68rem;
+        font-weight: 650;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+    }
+    .bandeja-pagos-chip-ok { background: var(--bp-ok-soft); color: var(--bp-ok); }
+    .bandeja-pagos-chip-warn { background: var(--bp-warn-soft); color: var(--bp-warn); }
+    .bandeja-pagos-chip-mute { background: #eef2f6; color: var(--bp-muted); }
+    .bandeja-pagos-panel-body {
+        padding: 0.9rem;
+        overflow: auto;
+        max-height: 56vh;
+        flex: 1;
+    }
+    .bandeja-pagos-empty {
+        text-align: center;
+        padding: 2.5rem 1.25rem;
+        color: var(--bp-muted);
+    }
+    .bandeja-pagos-empty .empty-ico {
+        width: 3.25rem;
+        height: 3.25rem;
+        margin: 0 auto 0.85rem;
+        border-radius: 50%;
+        background: var(--bp-soft);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        color: var(--bp-accent);
+    }
+    .bandeja-pagos-op {
+        border: 1px solid var(--bp-line);
+        border-radius: 12px;
+        padding: 0.85rem 0.95rem;
+        margin-bottom: 0.65rem;
+        background: linear-gradient(180deg, #fff 0%, #fafbfc 100%);
+        transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+    .bandeja-pagos-op:hover {
+        border-color: #b8c9d6;
+        transform: translateY(-1px);
+    }
+    .bandeja-pagos-op-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+    .bandeja-pagos-op-etiqueta {
+        font-weight: 700;
+        font-size: 0.95rem;
+        color: var(--bp-accent);
+        text-decoration: none;
+    }
+    .bandeja-pagos-op-etiqueta:hover { text-decoration: underline; color: #0a5f56; }
+    .bandeja-pagos-op-meta {
+        margin-top: 0.35rem;
+        font-size: 0.78rem;
+        color: var(--bp-muted);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem 0.85rem;
+    }
+    .bandeja-pagos-op-actions {
+        display: flex;
+        gap: 0.35rem;
+        flex-shrink: 0;
+    }
+    .bandeja-pagos-op-actions .btn {
+        border-radius: 8px;
+        font-size: 0.75rem;
+    }
+    .bandeja-pagos-estado {
+        display: inline-block;
+        border-radius: 6px;
+        padding: 0.12rem 0.45rem;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+    .bandeja-pagos-estado-confirmada,
+    .bandeja-pagos-estado-pagada,
+    .bandeja-pagos-estado-conciliada { background: var(--bp-ok-soft); color: var(--bp-ok); }
+    .bandeja-pagos-estado-pre-carga { background: #eff6ff; color: #1d4ed8; }
+    .bandeja-pagos-estado-revertida,
+    .bandeja-pagos-estado-baja { background: #fef2f2; color: #b91c1c; }
+    .bandeja-fac-pago-badge {
+        display: inline-block;
+        margin-left: 0.25rem;
+        font-size: 0.68rem;
+        vertical-align: middle;
+    }
+    .bandeja-fac-ver-pagos {
+        cursor: pointer;
+        border: 0;
+        background: transparent;
+        color: var(--bp-accent, #0d7a6f);
+        padding: 0;
+        font-size: 0.72rem;
+        text-decoration: underline;
+    }
 </style>
 @endsection
 
@@ -334,7 +559,7 @@ Bandeja de legajos
                                 <span class="badge badge-secondary" id="bandejaLegajoNCom">0</span>
                             </a>
                         </li>
-                        <li class="nav-item" id="bandeja-tab-pagos-item" style="display:none;">
+                        <li class="nav-item" id="bandeja-tab-pagos-item">
                             <a class="nav-link" id="bandeja-tab-pagos" data-toggle="tab" href="#tab-bandeja-pagos" role="tab">
                                 <i class="fa fa-money"></i> Pagos
                                 <span class="badge badge-secondary" id="bandejaLegajoNPago">0</span>
@@ -348,7 +573,7 @@ Bandeja de legajos
                             <div class="col-lg-4 mb-2">
                                 <div class="table-responsive" style="max-height: 70vh; overflow:auto;">
                                     <table class="table table-sm table-striped table-hover mb-0" id="tablaBandejaFacturas">
-                                        <thead><tr><th>Comprobante</th><th>Fecha</th><th>Origen</th><th>Estado</th></tr></thead>
+                                        <thead><tr><th>Comprobante</th><th>Fecha</th><th>Origen</th><th>Estado</th><th>Pago</th></tr></thead>
                                         <tbody></tbody>
                                     </table>
                                 </div>
@@ -374,7 +599,7 @@ Bandeja de legajos
                         </div>
                     </div>
                     <div class="tab-pane fade" id="tab-bandeja-pagos" role="tabpanel">
-                        <div id="bandejaLegajoPagos" class="p-2"></div>
+                        <div id="bandejaLegajoPagos" class="bandeja-pagos-tool p-1"></div>
                     </div>
                 </div>
             </div>
@@ -766,9 +991,19 @@ Bandeja de legajos
                                         </a>
                                     @endif
                                     @if (!empty($puede_ver_pago) && !empty($row['url_pago']))
-                                        <a href="{{ $row['url_pago'] }}" class="btn btn-xs btn-outline-success" title="Orden de pago {{ $row['etiqueta_pago'] ?? '' }}" target="_blank" rel="noopener">
-                                            <i class="fa fa-money"></i>
-                                        </a>
+                                        @if (!empty($row['url_paquete']))
+                                            <button type="button" class="btn btn-xs btn-outline-success js-bandeja-ver-legajo"
+                                                    data-url-paquete="{{ $row['url_paquete'] }}"
+                                                    data-numero="{{ $row['numero'] }}"
+                                                    data-tab="pagos"
+                                                    title="Ver pagos del legajo ({{ $row['etiqueta_pago'] ?? 'OP' }})">
+                                                <i class="fa fa-money"></i>
+                                            </button>
+                                        @else
+                                            <a href="{{ $row['url_pago'] }}" class="btn btn-xs btn-outline-success" title="Orden de pago {{ $row['etiqueta_pago'] ?? '' }}" target="_blank" rel="noopener">
+                                                <i class="fa fa-money"></i>
+                                            </a>
+                                        @endif
                                     @endif
                                     @if (!empty($puede_actualizar) && !empty($row['puede_enviar']))
                                         <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-enviar-gastro"

@@ -170,4 +170,79 @@ final class UsuarioDepositoAutorizado
             ->map(fn ($id) => (int) $id)
             ->all();
     }
+
+    /**
+     * IDs de depmae autorizados para filtrar artículos por depositoentrega_id.
+     * Expande por código (multiempresa). null = sin restricción de usuario.
+     *
+     * @return list<int>|null
+     */
+    public static function idsParaFiltroArticulo(?int $depositoIdFijo = null): ?array
+    {
+        $ids = self::idsRestringidos();
+        if ($ids === null) {
+            return null;
+        }
+
+        $codigos = self::codigosAutorizados() ?? [];
+        if ($codigos === []) {
+            return [];
+        }
+
+        if ($depositoIdFijo !== null && $depositoIdFijo > 0) {
+            if (! self::depositoAutorizado($depositoIdFijo)) {
+                return [];
+            }
+
+            $codigoFijo = trim((string) (Depmae::query()->whereKey($depositoIdFijo)->value('codigo') ?? ''));
+            if ($codigoFijo === '' || ! in_array($codigoFijo, $codigos, true)) {
+                return [];
+            }
+
+            $codigos = [$codigoFijo];
+        }
+
+        return Depmae::query()
+            ->whereIn('codigo', $codigos)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Acota artículos al depósito de entrega de los depósitos autorizados del usuario.
+     * Sin filas en usuario_deposito = no restringe.
+     *
+     * @param  Builder<\Illuminate\Database\Eloquent\Model>  $query
+     * @return Builder<\Illuminate\Database\Eloquent\Model>
+     */
+    public static function aplicarFiltroArticuloPorDepositoEntrega(Builder $query, ?int $depositoIdFijo = null): Builder
+    {
+        $ids = self::idsParaFiltroArticulo($depositoIdFijo);
+        if ($ids === null) {
+            return $query;
+        }
+
+        if ($ids === []) {
+            return $query->whereRaw('0 = 1');
+        }
+
+        return $query->whereIn('articulo.depositoentrega_id', $ids);
+    }
+
+    public static function articuloAutorizadoPorDepositoEntrega(?int $depositoEntregaId): bool
+    {
+        $ids = self::idsParaFiltroArticulo();
+        if ($ids === null) {
+            return true;
+        }
+
+        if ($depositoEntregaId === null || $depositoEntregaId <= 0) {
+            return false;
+        }
+
+        return in_array($depositoEntregaId, $ids, true);
+    }
 }

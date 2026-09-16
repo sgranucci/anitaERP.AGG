@@ -199,7 +199,7 @@
                         <i class="fa fa-comment-o" aria-hidden="true"></i> <span class="rs-leyenda-resumen-texto">{{ $leyendaLinea }}</span>
                     </small>
                 </td>
-                <td class="align-middle"><input type="number" step="0.0001" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $campoBloqueado ? 'readonly' : '' }}></td>
+                <td class="align-middle"><input type="number" step="1" min="1" name="cantidades[]" class="form-control form-control-sm cantidad-linea" value="{{ old('cantidades.'.$idx, $linea->cantidad ?? '1') }}" {{ $campoBloqueado ? 'readonly' : '' }}></td>
                 <td class="align-middle">
                     <select name="fueradeservicios[]" class="form-control form-control-sm fueradeservicio-linea" {{ $campoBloqueado ? 'disabled' : '' }}>
                         <option value="N" {{ old('fueradeservicios.'.$idx, $linea->fueradeservicio ?? 'N') === 'N' ? 'selected' : '' }}>N</option>

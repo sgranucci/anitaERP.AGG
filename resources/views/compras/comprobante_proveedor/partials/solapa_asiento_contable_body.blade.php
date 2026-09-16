@@ -62,7 +62,7 @@
 <div class="alert alert-info py-2 mb-2">
     Vista previa en tiempo real: el asiento se grabará al <strong>Contabilizar</strong> el comprobante.
     @if(collect($preview['lineas'] ?? [])->contains(fn ($l) => ! empty($l['editable_cuenta'])))
-    <span class="d-block small mt-1">Sin OC/COM: puede indicar la cuenta del neto en las líneas editables de esta tabla.</span>
+    <span class="d-block small mt-1">Puede cambiar la cuenta del neto en las líneas editables de esta tabla (por defecto viene de la OC o del concepto; solo si necesita otra).</span>
     @endif
 </div>
 @else

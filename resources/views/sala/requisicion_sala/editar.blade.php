@@ -81,7 +81,7 @@ Requisición de sala
                     </button>
                     @endif
                     @if(empty($ocultarVolver))
-                    <a href="{{ route('consultar_requisicion_sala') }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('consultar_requisicion_sala', $filtrosQuery ?? []) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @endif
@@ -89,6 +89,7 @@ Requisición de sala
             </div>
             <form action="{{ $formAction }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
                 data-url-npu="{{ route('requisicion_sala_consulta_npu') }}"
+                data-articulo-filtrar-depositos-usuario="1"
                 data-tiene-transferencia-laboratorio="{{ !empty($tiene_transferencia_laboratorio) ? '1' : '0' }}"
                 data-edicion-menor="{{ $modoEdicionMenor ? '1' : '0' }}"
                 @if($soloLectura) onsubmit="return false;" @endif>

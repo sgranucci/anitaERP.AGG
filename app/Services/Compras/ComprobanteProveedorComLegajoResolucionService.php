@@ -8,6 +8,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
@@ -79,8 +80,16 @@ class ComprobanteProveedorComLegajoResolucionService
             return $forzada;
         }
 
-        $yaPorCom = ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
-            $recepciones->pluck('id')->all(),
+        $yaPorCom = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarAnticipadasSinComAPorRecepcion(
+            ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
+                $recepciones->pluck('id')->all(),
+                null,
+                (int) ($precarga->moneda_id ?? 1),
+                (float) ($precarga->cotizacion ?? 0),
+                $precarga->fechafactura ?? null,
+            ),
+            (int) ($ordencompra->id ?? 0),
+            ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($ordencompra),
             null,
             (int) ($precarga->moneda_id ?? 1),
             (float) ($precarga->cotizacion ?? 0),
@@ -218,8 +227,16 @@ class ComprobanteProveedorComLegajoResolucionService
         // Manda la moneda de la factura.
         $importe = (float) $importeMeta['importe'];
 
-        $yaPorCom = ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
-            $recepciones->pluck('id')->all(),
+        $yaPorCom = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarAnticipadasSinComAPorRecepcion(
+            ComprobanteProveedorImporteYaFacturadoLegajoSupport::importePorRecepcion(
+                $recepciones->pluck('id')->all(),
+                $excluirComprobanteId,
+                $monedaId,
+                $cotizacion,
+                $fechaFacturaYmd,
+            ),
+            (int) $ordencompra->id,
+            ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($ordencompra),
             $excluirComprobanteId,
             $monedaId,
             $cotizacion,
