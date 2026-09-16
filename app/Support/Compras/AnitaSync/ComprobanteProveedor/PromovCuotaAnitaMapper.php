@@ -3,8 +3,10 @@
 namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\Ferli\PromovCuotaAnitaFerliMapper;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Carbon\Carbon;
 
 /**
@@ -15,11 +17,17 @@ use Carbon\Carbon;
  * lo que corresponde. Dejar NULL rompe lecturas CISAM (ldlong/lddbl) y pagos.
  * El total pagado (prov_t_pagado) y aplmovp los actualiza
  * ProveedorCuentacorrienteAplicacionAnitaSyncService al aplicar CC.
+ *
+ * Ferli: PromovCuotaAnitaFerliMapper (sin empresa ni *_marca).
  */
 final class PromovCuotaAnitaMapper
 {
     public static function camposInsert(): string
     {
+        if (EntornoEmpresaSupport::esFerli()) {
+            return PromovCuotaAnitaFerliMapper::camposInsert();
+        }
+
         return '
             prov_proveedor,
             prov_tipo,
@@ -50,6 +58,10 @@ final class PromovCuotaAnitaMapper
         ComprobanteProveedorAnitaContext $ctx,
         Comprobante_Proveedor_Cuota $cuota,
     ): string {
+        if (EntornoEmpresaSupport::esFerli()) {
+            return PromovCuotaAnitaFerliMapper::valoresInsert($ctx, $cuota);
+        }
+
         $vto = $cuota->fechavencimiento
             ? Carbon::parse($cuota->fechavencimiento)->format('Ymd')
             : $ctx->fechaYmd();

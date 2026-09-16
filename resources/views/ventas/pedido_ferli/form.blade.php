@@ -184,7 +184,21 @@
 								@else
                 					<input type="text" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
 								@endif
-                				<input type="hidden" name="medidas[]" class="form-control medidas" readonly value="{{old('medidas', $pedidoitem->pedido_combinacion_talles??'')}}" />
+								@php
+									$medidasParaForm = collect($pedidoitem->pedido_combinacion_talles ?? [])
+										->unique('talle_id')
+										->values()
+										->map(static function ($t) {
+											return [
+												'medida' => optional($t->talles)->nombre,
+												'cantidad' => (float) $t->cantidad,
+												'precio' => (float) $t->precio,
+												'talle_id' => (int) $t->talle_id,
+											];
+										})
+										->all();
+								@endphp
+                				<input type="hidden" name="medidas[]" class="form-control medidas" readonly value="{{ json_encode($medidasParaForm) }}" />
                 				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{old('listaprecios_id', $pedidoitem->listaprecio_id??'')}}" />
                 				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{old('monedas_id', $pedidoitem->moneda_id??'')}}" />
                 				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{old('incluyeimpuestos', $pedidoitem->incluyeimpuesto??'')}}" />

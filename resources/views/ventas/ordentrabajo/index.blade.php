@@ -17,7 +17,7 @@ function limpiaFiltros(){
 
     $.ajax({
         type: "POST",
-        url: '/anitaERP/public/ventas/ordenestrabajo/limpiafiltro',
+        url: '{{ url('ventas/ordenestrabajo/limpiafiltro') }}',
 		data: data,
         success: function(response){
 			window.location.replace(window.location.pathname);
@@ -92,8 +92,9 @@ function limpiaFiltros(){
             					@endif
             					{{ count($clientes) > 1 ? "BOLETAS JUNTAS" : $clientes[0] ?? '' }}
                             </td>
-                            <td>{{$data->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedidos_combinacion->articulos->descripcion ?? ''}}</td>
-                            <td>{{$data->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedidos_combinacion->combinaciones->nombre ?? ''}}</td>
+                            @php $pedidoCombinacionOt = $data->pedidoCombinacionVigente(); @endphp
+                            <td>{{$pedidoCombinacionOt?->articulos->descripcion ?? ''}}</td>
+                            <td>{{$pedidoCombinacionOt?->combinaciones->nombre ?? ''}}</td>
         					<td>
 								@php
 									$pares = 0.;

@@ -1,39 +1,83 @@
-<div class="card">
-    <div class="card-body">
-        <div class="row">
-            <div class="col-sm-6">
-				<div class="form-group row" id="marca" data-articulo="{{$articulo_query}}">
-   					<label for="mventa" class="col-lg-3 col-form-label requerido">Marca</label>
-        			<select name="mventa_id" id="mventa_id" data-placeholder="Marca de Venta" class="col-lg-8 form-control required" data-fouc>
-        				<option value="">-- Seleccionar marca --</option>
-        				@foreach($mventa_query as $key => $value)
-        					@if( (int) $value->id == (int) old('mventa_id', $pedido->mventa_id ?? ''))
-        						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-        					@else
-        						<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-        					@endif
-        				@endforeach
-        			</select>
-				</div>
-                <div class="form-group row">
-    				<label for="articulo_id" class="col-lg-3 col-form-label requerido">Art&iacute;culo</label>
-					<select name="articulo_id" class="col-lg-8 form-control articulo required">
-                		<option value="">-- Elija art&iacute;culo --</option>
-                		@foreach ($articulo_query as $articulo)
-                			<option value="{{ $articulo['id'] }}">{{ $articulo['descripcion'] }}-{{$articulo['sku']}}</option>
-                		@endforeach
-            		</select>
+<div class="card-body">
+    <div class="row">
+        <div class="col-lg-10 col-xl-8">
+            <div class="form-group row">
+                <label for="mventa_id" class="col-lg-3 control-label text-right pr-2 requerido">Marca</label>
+                <div class="col-lg-8">
+                    <select name="mventa_id" id="mventa_id" class="form-control" required>
+                        <option value="">-- Seleccionar marca --</option>
+                        @foreach ($mventa_query as $value)
+                            <option value="{{ $value->id }}" {{ (int) old('mventa_id') === (int) $value->id ? 'selected' : '' }}>
+                                {{ $value->nombre }}
+                            </option>
+                        @endforeach
+                    </select>
                 </div>
-                <div class="form-group row">
-    				<label for="combinacion" class="col-lg-3 col-form-label requerido">Combinaci&oacute;n</label>
-        			<select id="combinacion_id" name="combinacion_id" data-placeholder="Combinaciones" class="col-lg-8 form-control combinacion" data-fouc></select>
+            </div>
+
+            <div class="form-group row tm-articulo-campo" id="ot-articulo-campo">
+                <label for="ot-codigoarticulo" class="col-lg-3 control-label text-right pr-2 requerido">Artículo</label>
+                <div class="col-lg-8">
+                    <input type="hidden" name="articulo_id" id="ot-articulo-id" class="articulo_id" value="{{ old('articulo_id') }}">
+                    <div class="d-flex align-items-center flex-nowrap">
+                        <button type="button" title="Consulta artículos (F1)" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0 mr-1">
+                            <i class="fa fa-search text-primary"></i>
+                        </button>
+                        <input type="text"
+                               id="ot-codigoarticulo"
+                               name="codigoarticulo"
+                               class="codigoarticulo form-control flex-shrink-0 mr-1"
+                               style="width: 140px; max-width: 30%;"
+                               value="{{ old('codigoarticulo') }}"
+                               autocomplete="off"
+                               required
+                               title="Código / SKU. F1 abre el modal.">
+                        <input type="text"
+                               id="ot-descripcionarticulo"
+                               name="descripcionarticulo"
+                               class="descripcionarticulo form-control"
+                               value="{{ old('descripcionarticulo') }}"
+                               readonly
+                               tabindex="-1"
+                               placeholder="Descripción">
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group row tm-combinacion-campo" id="ot-combinacion-campo">
+                <label for="ot-codigocombinacion" class="col-lg-3 control-label text-right pr-2 requerido">Combinación</label>
+                <div class="col-lg-8">
+                    <input type="hidden" name="combinacion_id" id="ot-combinacion-id" class="combinacion_id" value="{{ old('combinacion_id') }}">
+                    <input type="hidden" name="combinacion_todas" id="ot-combinacion-todas" class="ot-combinacion-todas" value="{{ old('combinacion_todas', '0') }}">
+                    <div class="d-flex align-items-center flex-nowrap">
+                        <button type="button" title="Consulta combinaciones (F1)" class="btn-accion-tabla consultacombinacion tooltipsC flex-shrink-0 mr-1">
+                            <i class="fa fa-search text-primary"></i>
+                        </button>
+                        <input type="text"
+                               id="ot-codigocombinacion"
+                               name="codigocombinacion"
+                               class="codigocombinacion form-control flex-shrink-0 mr-1"
+                               style="width: 140px; max-width: 30%;"
+                               value="{{ old('codigocombinacion') }}"
+                               autocomplete="off"
+                               title="Código de combinación. F1 abre el modal. Use «Seleccionar todas» para todas.">
+                        <input type="text"
+                               id="ot-descripcioncombinacion"
+                               name="descripcioncombinacion"
+                               class="descripcioncombinacion form-control"
+                               value="{{ old('descripcioncombinacion') }}"
+                               readonly
+                               tabindex="-1"
+                               placeholder="Descripción / TODAS">
+                    </div>
+                    <small class="form-text text-muted">F1 o lupa: buscar. En el modal puede elegir una o «Seleccionar todas».</small>
                 </div>
             </div>
         </div>
-		<div class="card-footer">
-        	<div class="row">
-				<input type="submit" name="extension" id="extension" class="btn-sm btn-info" value="Consulta Pedidos"></input>
-        	</div>
-        </div>
     </div>
+</div>
+<div class="card-footer">
+    <button type="submit" name="extension" id="extension" class="btn btn-info">
+        <i class="fa fa-search"></i> Consulta Pedidos
+    </button>
 </div>

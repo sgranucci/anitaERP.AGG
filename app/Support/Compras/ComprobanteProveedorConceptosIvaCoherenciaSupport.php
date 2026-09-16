@@ -312,11 +312,15 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
             return collect();
         }
 
-        return Concepto_Ivacompra::query()
+        $conceptos = Concepto_Ivacompra::query()
             ->with('impuestos')
             ->whereIn('id', array_values($ids))
             ->get()
             ->keyBy('id');
+
+        ConceptoIvacompraFormulaSupport::inferirTiposYTasasEnColeccion($conceptos);
+
+        return $conceptos;
     }
 
     /**
@@ -874,7 +878,7 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
 
     private static function tasaConcepto(Concepto_Ivacompra $concepto): float
     {
-        return round((float) ($concepto->impuestos->valor ?? 0), 3);
+        return ConceptoIvacompraFormulaSupport::tasaEfectiva($concepto);
     }
 
     /**

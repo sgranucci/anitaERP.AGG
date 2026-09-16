@@ -36,7 +36,7 @@
 
 			if (checkotstock == 'on')
 			{
-				var listarUri = "/anitaERP/public/ventas/controlaordentrabajostock/"+ordentrabajo_stock_codigo+"/"+articulo_id+"/"+combinacion_id;
+				var listarUri = "{{ url('ventas/controlaordentrabajostock') }}/"+ordentrabajo_stock_codigo+"/"+articulo_id+"/"+combinacion_id;
 
 				$.get(listarUri, function(data){
 					if (data.estado != -1)
@@ -49,10 +49,10 @@
 						leyenda = leyenda.replace(pattern, '');
 
 						if (checkotstock == 'on')
-							var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/ordentrabajo/"
+							var listarUri = "{{ url('ventas/guardaordenestrabajo/ordentrabajo') }}/"
 											+ids+"/on/"+ordentrabajo_stock_codigo+'/'+data.deposito_id+'/'+leyenda;
 						else
-							var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/ordentrabajo/"
+							var listarUri = "{{ url('ventas/guardaordenestrabajo/ordentrabajo') }}/"
 											+ids+"/off/"+ordentrabajo_stock_codigo+'/'+data.deposito_id+'/'+leyenda;
 				
 						window.location.href = listarUri;
@@ -71,7 +71,7 @@
 				var pattern = /[\^*@!"#$%&/,()=?¡!¿'\\]/gi;
 				leyenda = leyenda.replace(pattern, '');
 						
-				var listarUri = "/anitaERP/public/ventas/guardaordenestrabajo/ordentrabajo/"
+				var listarUri = "{{ url('ventas/guardaordenestrabajo/ordentrabajo') }}/"
 								+ids+"/off/"+ordentrabajo_stock_codigo+'/1/'+leyenda;
 
 				window.location.href = listarUri;

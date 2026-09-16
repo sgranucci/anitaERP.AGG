@@ -5,6 +5,8 @@ namespace App\Repositories\Ventas;
 use App\Queries\Ventas\PedidoQueryInterface;
 use App\Queries\Ventas\Pedido_CombinacionQueryInterface;
 use App\Models\Ventas\Pedido_Combinacion_Talle;
+use App\Models\Ventas\Ordentrabajo_Combinacion_Talle;
+use App\Models\Stock\Articulo_Movimiento_Talle;
 use App\Models\Stock\Talle;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
@@ -61,10 +63,149 @@ class Pedido_Combinacion_TalleRepository implements Pedido_Combinacion_TalleRepo
 
     public function deleteporpedido_combinacion($pedido_combinacion_id)
     {
-    	$pedido_combinacion_talle = $this->model->where('pedido_combinacion_id', $pedido_combinacion_id)->delete();
+		$pedido_combinacion_id = (int) $pedido_combinacion_id;
+		if ($pedido_combinacion_id <= 0) {
+			return 0;
+		}
 
-		return $pedido_combinacion_talle;
+		$talleIds = $this->model
+			->where('pedido_combinacion_id', $pedido_combinacion_id)
+			->pluck('id')
+			->filter()
+			->values()
+			->all();
+
+		// Con foreign_key_checks=0 el ON DELETE CASCADE no limpia hijas: borrar a mano.
+		if ($talleIds !== []) {
+			Ordentrabajo_Combinacion_Talle::query()
+				->whereIn('pedido_combinacion_talle_id', $talleIds)
+				->delete();
+			Articulo_Movimiento_Talle::query()
+				->whereIn('pedido_combinacion_talle_id', $talleIds)
+				->delete();
+		}
+
+    	return $this->model->where('pedido_combinacion_id', $pedido_combinacion_id)->delete();
     }
+
+	/**
+	 * Sync por talle_id: actualiza cantidades, inserta nuevos, borra quitados.
+	 * Si hay OT, mantiene OCT existentes (mismo pedido_combinacion_talle_id) y solo crea faltantes.
+	 *
+	 * @param  array<int, object|array>  $medidas
+	 * @param  array<string, mixed>|null  $contextoOt  ordentrabajo_id, cliente_id, usuario_id, estado, ordentrabajo_stock_id
+	 * @return array{total_pares: float, grabo: bool, talles: \Illuminate\Support\Collection}
+	 */
+	public function sincronizarMedidas(int $pedidoCombinacionId, array $medidas, ?array $contextoOt = null): array
+	{
+		$deseados = [];
+		foreach ($medidas as $medida) {
+			$talleId = (int) (is_array($medida) ? ($medida['talle_id'] ?? 0) : ($medida->talle_id ?? 0));
+			$cantidad = (float) (is_array($medida) ? ($medida['cantidad'] ?? 0) : ($medida->cantidad ?? 0));
+			$precio = (float) (is_array($medida) ? ($medida['precio'] ?? 0) : ($medida->precio ?? 0));
+			if ($talleId <= 0 || $cantidad <= 0 || isset($deseados[$talleId])) {
+				continue;
+			}
+			$deseados[$talleId] = [
+				'talle_id' => $talleId,
+				'cantidad' => $cantidad,
+				'precio' => $precio,
+			];
+		}
+
+		$existentes = $this->model
+			->where('pedido_combinacion_id', $pedidoCombinacionId)
+			->get()
+			->keyBy(static fn ($row) => (int) $row->talle_id);
+
+		$tallesFinales = collect();
+		$totalPares = 0.0;
+
+		foreach ($deseados as $talleId => $dato) {
+			$totalPares += $dato['cantidad'];
+			if ($existentes->has($talleId)) {
+				$row = $existentes->get($talleId);
+				if (
+					(float) $row->cantidad !== $dato['cantidad']
+					|| (float) $row->precio !== $dato['precio']
+				) {
+					$row->update([
+						'cantidad' => $dato['cantidad'],
+						'precio' => $dato['precio'],
+					]);
+					$row->cantidad = $dato['cantidad'];
+					$row->precio = $dato['precio'];
+				}
+				$tallesFinales->put($talleId, $row);
+			} else {
+				$tallesFinales->put(
+					$talleId,
+					$this->create($pedidoCombinacionId, $talleId, $dato['cantidad'], $dato['precio'])
+				);
+			}
+		}
+
+		$aBorrar = $existentes->filter(
+			static fn ($row) => ! isset($deseados[(int) $row->talle_id])
+		);
+		if ($aBorrar->isNotEmpty()) {
+			$idsBorrar = $aBorrar->pluck('id')->all();
+			Ordentrabajo_Combinacion_Talle::query()
+				->whereIn('pedido_combinacion_talle_id', $idsBorrar)
+				->delete();
+			Articulo_Movimiento_Talle::query()
+				->whereIn('pedido_combinacion_talle_id', $idsBorrar)
+				->delete();
+			$this->model->whereIn('id', $idsBorrar)->delete();
+		}
+
+		$ordentrabajoId = (int) ($contextoOt['ordentrabajo_id'] ?? 0);
+		if ($ordentrabajoId > 0 && $tallesFinales->isNotEmpty()) {
+			$pctIds = $tallesFinales->pluck('id')->all();
+			$octPorPct = Ordentrabajo_Combinacion_Talle::query()
+				->whereIn('pedido_combinacion_talle_id', $pctIds)
+				->get()
+				->keyBy('pedido_combinacion_talle_id');
+
+			$clienteId = (int) ($contextoOt['cliente_id'] ?? 0);
+			$usuarioId = $contextoOt['usuario_id'] ?? null;
+			$estado = (string) ($contextoOt['estado'] ?? '');
+			$otStockId = $contextoOt['ordentrabajo_stock_id'] ?? null;
+
+			foreach ($tallesFinales as $pct) {
+				$oct = $octPorPct->get($pct->id);
+				if ($oct) {
+					$upd = [];
+					if ($clienteId > 0 && (int) $oct->cliente_id !== $clienteId) {
+						$upd['cliente_id'] = $clienteId;
+					}
+					if (array_key_exists('ordentrabajo_stock_id', $contextoOt ?? [])
+						&& $oct->ordentrabajo_stock_id != $otStockId) {
+						$upd['ordentrabajo_stock_id'] = $otStockId;
+					}
+					if ($upd !== []) {
+						$oct->update($upd);
+					}
+					continue;
+				}
+
+				Ordentrabajo_Combinacion_Talle::query()->create([
+					'ordentrabajo_id' => $ordentrabajoId,
+					'pedido_combinacion_talle_id' => $pct->id,
+					'cliente_id' => $clienteId,
+					'estado' => $estado,
+					'ordentrabajo_stock_id' => $otStockId,
+					'usuario_id' => $usuarioId,
+				]);
+			}
+		}
+
+		return [
+			'total_pares' => $totalPares,
+			'grabo' => $tallesFinales->isNotEmpty(),
+			'talles' => $tallesFinales->values(),
+		];
+	}
 
     public function find($id)
     {

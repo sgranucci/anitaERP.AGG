@@ -826,6 +826,16 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     // Informe l-stocklocal.c
     Route::get('ventas/facturacion-local/informe-stock', 'Ventas\FacturacionLocal\StockLocalInformeController@index')->name('facturacion_local_informe_stock');
     Route::get('ventas/facturacion-local/listar-informe-stock-local/{formato}', 'Ventas\FacturacionLocal\StockLocalInformeController@exportar')->name('listar_informe_stock_local');
+
+    /*
+     * Facturación pedidos Tiendanube (reemplazo gradual de Facturante)
+     */
+    Route::get('ventas/tiendanube-pedidos', 'Ventas\Tiendanube\TiendanubePedidoController@index')->name('tiendanube_pedidos');
+    Route::post('ventas/tiendanube-pedidos/sincronizar', 'Ventas\Tiendanube\TiendanubePedidoController@sincronizar')->name('tiendanube_pedidos_sincronizar');
+    Route::post('ventas/tiendanube-pedidos/facturar-masivo', 'Ventas\Tiendanube\TiendanubePedidoController@facturarMasivo')->name('tiendanube_pedidos_facturar_masivo');
+    Route::get('ventas/tiendanube-pedidos/{id}', 'Ventas\Tiendanube\TiendanubePedidoController@show')->name('tiendanube_pedido_show');
+    Route::post('ventas/tiendanube-pedidos/{id}/refrescar', 'Ventas\Tiendanube\TiendanubePedidoController@refrescar')->name('tiendanube_pedido_refrescar');
+    Route::post('ventas/tiendanube-pedidos/{id}/facturar', 'Ventas\Tiendanube\TiendanubePedidoController@facturar')->name('tiendanube_pedido_facturar');
 } else {
     Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeController@crearImportacion')->name('crear_importacion_tiendanube');
     Route::post('stock/importartiendanube', 'Stock\TiendaNubeController@importar')->name('importar_tiendanube');

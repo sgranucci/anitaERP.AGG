@@ -19,11 +19,11 @@ $(function () {
     var previewSeq = 0;
     var conceptosMeta = {};
 
-    try {
-        conceptosMeta = JSON.parse($('#cp-conceptos-cuenta-meta').text() || '{}');
-    } catch (e) {
-        conceptosMeta = {};
-    }
+        try {
+            conceptosMeta = JSON.parse($('#cp-conceptos-cuenta-meta').text() || '{}');
+        } catch (e) {
+            conceptosMeta = {};
+        }
 
     var TIPOS_NETO = ['N', 'G', 'E'];
 
@@ -437,6 +437,7 @@ $(function () {
         if (typeof window.ConceptosIvacompraCoherencia === 'undefined') {
             return { valido: true, errores: [], advertencias: [] };
         }
+        enriquecerMetaGravadosDesdeFormulas();
         return window.ConceptosIvacompraCoherencia.validar(lineasConceptosDesdeFormulario(), conceptosMeta);
     }
 
@@ -768,7 +769,13 @@ $(function () {
         ).show();
     }
 
+    /**
+     * Hay dos previews del asiento (solapa Conceptos + solapa Asiento) con el mismo HTML.
+     * Si se itera en orden DOM, el editor vacío del otro panel pisa la cuenta recién elegida.
+     * Agregar por concepto y preferir la que tenga cuenta cargada.
+     */
     function sincronizarCuentasAsientoAConceptos() {
+        var porConcepto = {};
         $('.cp-asiento-cuenta-editable').each(function () {
             var $campo = $(this);
             var conceptoId = parseInt($campo.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
@@ -781,6 +788,20 @@ $(function () {
                 codigo: String($campo.find('.codigocuentacontable').val() || ''),
                 nombre: String($campo.find('.nombrecuentacontable').val() || '')
             };
+            var prev = porConcepto[conceptoId];
+            if (!prev || (cuentaId > 0 && prev.id <= 0)) {
+                porConcepto[conceptoId] = datos;
+            }
+        });
+        $.each(porConcepto, function (conceptoIdStr, datos) {
+            var conceptoId = parseInt(conceptoIdStr, 10) || 0;
+            if (conceptoId <= 0) {
+                return;
+            }
+            // Solo volcar si hay cuenta: un panel vacío no debe borrar la del renglón.
+            if (datos.id <= 0) {
+                return;
+            }
             $('#tbody-concepto-table tr.item-concepto').each(function () {
                 var $row = $(this);
                 if (parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) !== conceptoId) {
@@ -1053,6 +1074,7 @@ $(function () {
         e.preventDefault();
         e.stopPropagation();
         var $row = $(this).closest('tr');
+        aplicarAlicuotasDesdeGravado($row);
         if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.formatearInput === 'function') {
             window.AsientoMontosFormato.formatearInput(this);
         }
@@ -1071,6 +1093,10 @@ $(function () {
             return;
         }
         $(this).trigger('blur');
+    });
+
+    $(document).on('change', '#tbody-concepto-table .monto', function () {
+        aplicarAlicuotasDesdeGravado($(this).closest('tr.item-concepto'));
     });
 
     $(document).on('click', '#cp-refrescar-preview-conceptos', function (e) {
@@ -1210,6 +1236,11 @@ $(function () {
                 conceptosMeta[id] = $.extend({}, conceptosMeta[id] || {}, {
                     tipoconcepto: String(data.tipoconcepto || (conceptosMeta[id] && conceptosMeta[id].tipoconcepto) || ''),
                     nombre: String(data.nombre || (conceptosMeta[id] && conceptosMeta[id].nombre) || ''),
+                    codigo: String(data.codigo || (conceptosMeta[id] && conceptosMeta[id].codigo) || ''),
+                    impuesto_tasa: parseFloat(data.impuesto_tasa || (conceptosMeta[id] && conceptosMeta[id].impuesto_tasa) || 0) || 0,
+                    formula: String(data.formula || (conceptosMeta[id] && conceptosMeta[id].formula) || ''),
+                    formula_codigo_base: String(data.formula_codigo_base || (conceptosMeta[id] && conceptosMeta[id].formula_codigo_base) || ''),
+                    formula_coeficiente: parseFloat(data.formula_coeficiente || (conceptosMeta[id] && conceptosMeta[id].formula_coeficiente) || 0) || 0,
                     cuenta_debe_id: parseInt(data.cuenta_debe_id || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_id) || '0', 10) || 0,
                     cuenta_debe_codigo: String(data.cuenta_debe_codigo || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_codigo) || ''),
                     cuenta_debe_nombre: String(data.cuenta_debe_nombre || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_nombre) || ''),
@@ -1246,8 +1277,101 @@ $(function () {
         });
     }
 
+    function esAltaSinPrecarga() {
+        return !(parseInt(String($form.attr('data-precarga-id') || '0'), 10) > 0);
+    }
+
+    /**
+     * Sin precarga: al cargar el gravado (ej. COMPRAS 21% código 2), completa la alícuota
+     * cuya fórmula Anita es con(2)*0.21 (IVA 21%).
+     */
+    function aplicarAlicuotasDesdeGravado($rowOrigen) {
+        if (!esAltaSinPrecarga() || !$rowOrigen || !$rowOrigen.length) {
+            return;
+        }
+        var codigoBase = String($rowOrigen.find('.codigo_concepto_ivacompra').val() || '').trim();
+        if (codigoBase === '') {
+            return;
+        }
+        var montoGravado = parseMonto($rowOrigen.find('.monto').val() || '0');
+        var huboCambio = false;
+
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $row = $(this);
+            if ($row.is($rowOrigen)) {
+                return;
+            }
+            var id = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+            if (id <= 0) {
+                return;
+            }
+            var meta = conceptosMeta[id] || {};
+            var codigoFormula = String(meta.formula_codigo_base || '').trim();
+            var coef = parseFloat(meta.formula_coeficiente || 0) || 0;
+            if (codigoFormula === '' || coef <= 0) {
+                return;
+            }
+            if (codigoFormula !== codigoBase) {
+                return;
+            }
+            var $monto = $row.find('.monto');
+            if ($monto.prop('readonly') || $monto.prop('disabled')) {
+                return;
+            }
+            var iva = Math.round(montoGravado * coef * 100) / 100;
+            var nuevoTxt = iva > 0 || montoGravado === 0 ? formatearMontoConcepto(iva) : '';
+            if (String($monto.val() || '') !== nuevoTxt) {
+                $monto.val(nuevoTxt);
+                huboCambio = true;
+            }
+        });
+
+        return huboCambio;
+    }
+
     function limpiarFilasConceptos() {
         $('#tbody-concepto-table').empty();
+    }
+
+    function enriquecerMetaGravadosDesdeFormulas() {
+        var porCodigo = {};
+        Object.keys(conceptosMeta || {}).forEach(function (id) {
+            var meta = conceptosMeta[id] || {};
+            var cod = String(meta.codigo || '').trim();
+            if (cod) {
+                porCodigo[cod] = id;
+            }
+        });
+        Object.keys(conceptosMeta || {}).forEach(function (id) {
+            var meta = conceptosMeta[id] || {};
+            var base = String(meta.formula_codigo_base || '').trim();
+            var coef = parseFloat(meta.formula_coeficiente || 0) || 0;
+            if (!base || !(coef > 0)) {
+                return;
+            }
+            var tipoI = String(meta.tipoconcepto || '').toUpperCase();
+            if (tipoI !== 'I' && tipoI !== 'G' && tipoI !== 'E') {
+                meta.tipoconcepto = 'I';
+            }
+            if (!(parseFloat(meta.impuesto_tasa || 0) > 0)) {
+                meta.impuesto_tasa = Math.round(coef * 100000) / 1000;
+            }
+            conceptosMeta[id] = meta;
+
+            var gravadoId = porCodigo[base];
+            if (!gravadoId || !conceptosMeta[gravadoId]) {
+                return;
+            }
+            var gMeta = conceptosMeta[gravadoId];
+            var tipoG = String(gMeta.tipoconcepto || '').toUpperCase();
+            if (tipoG !== 'G' && tipoG !== 'E') {
+                gMeta.tipoconcepto = 'G';
+            }
+            if (!(parseFloat(gMeta.impuesto_tasa || 0) > 0)) {
+                gMeta.impuesto_tasa = Math.round(coef * 100000) / 1000;
+            }
+            conceptosMeta[gravadoId] = gMeta;
+        });
     }
 
     function agregarFilaConcepto(concepto, monto) {
@@ -1265,10 +1389,15 @@ $(function () {
             montoTxt = formatearMontoConcepto(parseFloat(monto) || 0);
         }
         $row.find('.monto').val(montoTxt);
-        if (id > 0 && concepto) {
+                if (id > 0 && concepto) {
             conceptosMeta[id] = $.extend({}, conceptosMeta[id] || {}, {
                 tipoconcepto: String(concepto.tipoconcepto || ''),
                 nombre: String(concepto.nombre || ''),
+                codigo: String(concepto.codigo || ''),
+                impuesto_tasa: parseFloat(concepto.impuesto_tasa || 0) || 0,
+                formula: String(concepto.formula || ''),
+                formula_codigo_base: String(concepto.formula_codigo_base || ''),
+                formula_coeficiente: parseFloat(concepto.formula_coeficiente || 0) || 0,
                 cuenta_debe_id: parseInt(concepto.cuenta_debe_id || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_id) || concepto.cuentacontable_id || '0', 10) || 0,
                 cuenta_debe_codigo: String(concepto.cuenta_debe_codigo || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_codigo) || ''),
                 cuenta_debe_nombre: String(concepto.cuenta_debe_nombre || (conceptosMeta[id] && conceptosMeta[id].cuenta_debe_nombre) || ''),
@@ -1322,6 +1451,7 @@ $(function () {
                     lista.forEach(function (c) {
                         agregarFilaConcepto(c, '');
                     });
+                    enriquecerMetaGravadosDesdeFormulas();
                     if ($aviso.length) {
                         $aviso.removeClass('d-none').html(
                             '<i class="fa fa-check-circle"></i> Conceptos precargados según el tipo de comprobante. Complete los montos.'
@@ -1574,6 +1704,245 @@ $(function () {
         mostrarSolapa('#cp-solapa-principal');
         marcarTabActivo('cp-boton-principal');
     }
+
+    (function initCabeceraFocoEnterYLetra() {
+        function focusablesCabeceraCp() {
+            return $('#cp-solapa-principal').find('input, select, textarea').filter(function () {
+                var $el = $(this);
+                if (!$el.is(':visible')) {
+                    return false;
+                }
+                if ($el.is(':disabled') || $el.prop('readonly')) {
+                    return false;
+                }
+                var type = String($el.attr('type') || '').toLowerCase();
+                if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'reset' || type === 'file') {
+                    return false;
+                }
+                if (String($el.attr('tabindex') || '') === '-1') {
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        function focusSiguienteCampoCp(desde) {
+            var $desde = $(desde);
+            if (!$desde.length) {
+                return;
+            }
+            var $focusables = focusablesCabeceraCp();
+            var idx = $focusables.index($desde);
+            if (idx < 0 || idx >= $focusables.length - 1) {
+                return;
+            }
+            setTimeout(function () {
+                var $next = $focusables.eq(idx + 1);
+                $next.trigger('focus');
+                if ($next.is('input:not([type=checkbox]):not([type=radio]), textarea')) {
+                    $next.trigger('select');
+                }
+            }, 0);
+        }
+
+        window.focusSiguienteCampoCp = focusSiguienteCampoCp;
+
+        function letraDesdeProveedorJson(data) {
+            if (!data) {
+                return '';
+            }
+            var letra = '';
+            if (data.condicionivas && data.condicionivas.letra != null) {
+                letra = data.condicionivas.letra;
+            } else if (data.letra != null) {
+                letra = data.letra;
+            }
+            return String(letra || '').toUpperCase().trim().charAt(0);
+        }
+
+        function aplicarLetraDesdeProveedor(data) {
+            var $letra = $('#letra');
+            if (!$letra.length || $letra.prop('readonly') || $letra.prop('disabled')) {
+                return;
+            }
+            var letra = letraDesdeProveedorJson(data);
+            if (letra) {
+                $letra.val(letra);
+            }
+        }
+
+        function forzarLetraMayuscula() {
+            var $letra = $('#letra');
+            if (!$letra.length) {
+                return;
+            }
+            var v = String($letra.val() || '').toUpperCase().trim().charAt(0);
+            if (String($letra.val() || '') !== v) {
+                $letra.val(v);
+            }
+        }
+
+        $('#letra')
+            .off('input.cpLetraMayuscula blur.cpLetraMayuscula')
+            .on('input.cpLetraMayuscula blur.cpLetraMayuscula', function () {
+                var v = String($(this).val() || '').toUpperCase().replace(/[^A-Z]/g, '').charAt(0);
+                $(this).val(v);
+            });
+
+        window.afterProveedorConsultaOk = function (data, $input) {
+            aplicarLetraDesdeProveedor(data);
+            var $codigo = $input && $input.length ? $input : $('#codigoproveedor');
+            if (!$codigo.data('cp-avanzar-tras-ok')) {
+                return;
+            }
+            $codigo.removeData('cp-avanzar-tras-ok');
+
+            var avanzar = function () {
+                focusSiguienteCampoCp($codigo);
+            };
+            var $modal = $('#consultaproveedorModal');
+            // Tras Elegir en el modal, esperar el cierre para no perder el foco en el backdrop.
+            if ($modal.length && $modal.hasClass('show')) {
+                $modal.one('hidden.bs.modal.cpFocoProveedor', function () {
+                    setTimeout(avanzar, 0);
+                });
+                return;
+            }
+            setTimeout(avanzar, 0);
+        };
+
+        window.afterProveedorConsultaFail = function ($input) {
+            var $codigo = $input && $input.length ? $input : $('#codigoproveedor');
+            $codigo.removeData('cp-avanzar-tras-ok');
+        };
+
+        window.afterTipotransaccionCompraEnterOk = function (data, target) {
+            if (!data || !data.id || !target) {
+                return;
+            }
+            focusSiguienteCampoCp(target);
+        };
+
+        function esCampoConsultaEspecial(el) {
+            if (!el) {
+                return false;
+            }
+            if (el.classList && el.classList.contains('codigoproveedor')) {
+                return true;
+            }
+            if (el.id === 'codigoproveedor') {
+                return true;
+            }
+            if (el.classList && el.classList.contains('abreviaturatipotransaccioncompra')) {
+                return true;
+            }
+            if (el.classList && el.classList.contains('codigoprovincia')) {
+                return true;
+            }
+            if (el.id === 'codigoprovincia' || el.id === 'provincia_destino_codigo') {
+                return true;
+            }
+            return false;
+        }
+
+        function validarCampoCabeceraAntesDeAvanzar(target) {
+            if (!target) {
+                return true;
+            }
+            var id = target.id || '';
+            if (id === 'letra') {
+                forzarLetraMayuscula();
+                if (!String(target.value || '').trim()) {
+                    alert('Indique la letra del comprobante.');
+                    target.focus();
+                    return false;
+                }
+            }
+            if (id === 'sucursal' && String(target.value || '').trim() === '') {
+                alert('Indique el punto de venta / sucursal.');
+                target.focus();
+                return false;
+            }
+            if (id === 'numerocomprobante') {
+                var nro = parseInt(target.value || '0', 10);
+                if (!(nro > 0)) {
+                    alert('Indique el número de comprobante.');
+                    target.focus();
+                    return false;
+                }
+            }
+            if (id === 'empresa_id' && target.tagName === 'SELECT' && !String(target.value || '').trim()) {
+                alert('Seleccione la empresa.');
+                target.focus();
+                return false;
+            }
+            if (id === 'fechacomprobante' && !String(target.value || '').trim()) {
+                alert('Indique la fecha del comprobante.');
+                target.focus();
+                return false;
+            }
+            if (target.required && !String(target.value || '').trim() && target.tagName === 'SELECT') {
+                alert('Complete el campo antes de continuar.');
+                target.focus();
+                return false;
+            }
+            return true;
+        }
+
+        var formEl = document.getElementById('form-comprobante-proveedor');
+        if (formEl && !formEl.dataset.cpEnterNav) {
+            formEl.dataset.cpEnterNav = '1';
+            formEl.addEventListener('keydown', function (e) {
+                if (!(e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13)) {
+                    return;
+                }
+                var target = e.target;
+                if (!target || !$(target).closest('#cp-solapa-principal').length) {
+                    return;
+                }
+                if (target.tagName === 'TEXTAREA') {
+                    return;
+                }
+                if (target.tagName === 'BUTTON' || target.type === 'submit' || target.type === 'button') {
+                    return;
+                }
+                if (esCampoConsultaEspecial(target)) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (!validarCampoCabeceraAntesDeAvanzar(target)) {
+                    return;
+                }
+                focusSiguienteCampoCp(target);
+            }, true);
+        }
+
+        function programarFocoInicialCabeceraCp() {
+            setTimeout(function () {
+                var $empresa = $('#empresa_id');
+                var multiEmpresa = $empresa.is('select') && $empresa.is(':visible') && !$empresa.prop('disabled');
+                var $destino = multiEmpresa ? $empresa : $('#codigoproveedor');
+                if (!$destino.length || $destino.prop('disabled') || $destino.prop('readonly') || !$destino.is(':visible')) {
+                    $destino = focusablesCabeceraCp().first();
+                }
+                if (!$destino.length) {
+                    return;
+                }
+                try {
+                    $destino.trigger('focus');
+                    if ($destino.is('input:not([type=checkbox]):not([type=radio])')) {
+                        $destino.trigger('select');
+                    }
+                } catch (errFocus) {
+                    // ignore
+                }
+            }, 150);
+        }
+
+        programarFocoInicialCabeceraCp();
+        enriquecerMetaGravadosDesdeFormulas();
+    })();
 
     formatearInputMontoEn($form);
 

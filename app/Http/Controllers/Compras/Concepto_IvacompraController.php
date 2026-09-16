@@ -14,6 +14,7 @@ use App\Repositories\Configuracion\ImpuestoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Compras\ConceptoIvacompraListadoFiltros;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
+use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
@@ -350,6 +351,9 @@ class Concepto_IvacompraController extends Controller
         if (! $concepto->relationLoaded('concepto_ivacompra_empresas')) {
             $concepto->load('concepto_ivacompra_empresas');
         }
+        if (! $concepto->relationLoaded('impuestos')) {
+            $concepto->load('impuestos');
+        }
 
         $cuentaDebeId = $concepto->cuentacontableDebeIdParaEmpresa($empresaId > 0 ? $empresaId : null);
         $cuentaCodigo = '';
@@ -360,16 +364,29 @@ class Concepto_IvacompraController extends Controller
             $cuentaNombre = (string) ($cta->nombre ?? '');
         }
 
+        $formula = trim((string) ($concepto->formula ?? ''));
+        $parsedFormula = ConceptoIvacompraFormulaSupport::parse($formula);
+        $tipoConcepto = (string) ($concepto->tipoconcepto ?? '');
+        if ($parsedFormula !== null && ! in_array(strtoupper($tipoConcepto), ['I', 'G', 'E'], true)) {
+            $tipoConcepto = 'I';
+        }
+
         return response()->json([
             'ok' => true,
             'id' => (int) $concepto->id,
             'codigo' => (string) $concepto->codigo,
             'nombre' => (string) $concepto->nombre,
-            'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
+            'tipoconcepto' => $tipoConcepto,
             'cuenta_debe_id' => $cuentaDebeId,
             'cuenta_debe_codigo' => $cuentaCodigo,
             'cuenta_debe_nombre' => $cuentaNombre,
             'cuentas_por_empresa' => $concepto->mapaCuentaDebePorEmpresa(),
+            'formula' => $formula,
+            'formula_codigo_base' => $parsedFormula['codigo_base'] ?? '',
+            'formula_coeficiente' => $parsedFormula['coeficiente'] ?? 0.0,
+            'impuesto_tasa' => $parsedFormula !== null
+                ? ConceptoIvacompraFormulaSupport::tasaPorcentajeDesdeFormula($formula)
+                : round((float) ($concepto->impuestos->valor ?? 0), 3),
         ]);
     }
 }

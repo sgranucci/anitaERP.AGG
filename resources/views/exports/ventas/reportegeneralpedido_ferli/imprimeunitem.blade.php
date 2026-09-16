@@ -22,6 +22,7 @@
 					$totalPares += $medida['cantidad']; 
 					$flEncontro = true; 
 				@endphp
+				@break
 			@endif
 		@endforeach
 		@if (!$flEncontro)

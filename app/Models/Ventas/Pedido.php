@@ -123,15 +123,22 @@ class Pedido extends Model implements Auditable
 
 	public function scopeWithWhereHasOtArticuloCombinacion($query, $articulo_id, $combinacion_id)
 	{
-		return $query->with(['pedido_combinaciones' => function ($q) use($articulo_id, $combinacion_id) {
-				$q->whereIn('ot_id',[-1,0])->where('articulo_id',$articulo_id)
-                ->where('combinacion_id',$combinacion_id);
-				}, 'pedido_combinaciones.combinaciones'])
-                ->whereHas('pedido_combinaciones', function ($q) use ($articulo_id, $combinacion_id) {
-					$q->whereIn('ot_id',[-1,0])
-                    ->where('articulo_id',$articulo_id)
-                    ->where('combinacion_id',$combinacion_id);
-				});
+		$articuloId = (int) $articulo_id;
+		$combinacionId = (int) $combinacion_id;
+
+		return $query->with(['pedido_combinaciones' => function ($q) use ($articuloId, $combinacionId) {
+				$q->whereIn('ot_id', [-1, 0])->where('articulo_id', $articuloId);
+				if ($combinacionId > 0) {
+					$q->where('combinacion_id', $combinacionId);
+				}
+			}, 'pedido_combinaciones.combinaciones'])
+			->whereHas('pedido_combinaciones', function ($q) use ($articuloId, $combinacionId) {
+				$q->whereIn('ot_id', [-1, 0])
+					->where('articulo_id', $articuloId);
+				if ($combinacionId > 0) {
+					$q->where('combinacion_id', $combinacionId);
+				}
+			});
 	}
 }
 

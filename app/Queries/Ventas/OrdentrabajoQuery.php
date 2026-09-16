@@ -30,38 +30,49 @@ class OrdentrabajoQuery implements OrdentrabajoQueryInterface
 		return $this->model->with('ordentrabajo_combinacion_talles')->with('ordentrabajo_tareas')->get();
     }
 
-	public function allPaginando($busqueda, $flPaginar)
+	public function allPaginando($filtros, $flPaginar)
     {
 		$ordenes = $this->model->with(['ordentrabajo_combinacion_talles', 'ordentrabajo_tareas']);
-		
-		$boletasJuntas = "BOLETAS JUNTAS";
-		if (substr_compare (strtoupper($busqueda) , $boletasJuntas , 0, strlen($busqueda), true) == 0)
-			$ordenes = $ordenes->whereRaw(
-				'(select count(distinct(ordentrabajo_combinacion_talle.cliente_id)) from ordentrabajo_combinacion_talle 
-				where ordentrabajo.id=ordentrabajo_combinacion_talle.ordentrabajo_id) >= 2');
-		else
-			$ordenes = $ordenes->WhereHas('ordentrabajo_combinacion_talles.clientes', function ($query) use ($busqueda) {
-								$query->where('nombre', 'like', '%'.$busqueda.'%');
-							});
-							
-		$ordenes = $ordenes->orWhereHas('ordentrabajo_combinacion_talles.pedido_combinacion_talles.pedidos_combinacion.articulos', function ($query) use ($busqueda) {
+
+		if (is_string($filtros)) {
+			$busqueda = trim($filtros);
+			if ($busqueda !== '') {
+				$boletasJuntas = 'BOLETAS JUNTAS';
+				if (strncasecmp($busqueda, $boletasJuntas, strlen($busqueda)) === 0) {
+					$ordenes = $ordenes->whereRaw(
+						'(select count(distinct(ordentrabajo_combinacion_talle.cliente_id)) from ordentrabajo_combinacion_talle
+						where ordentrabajo.id=ordentrabajo_combinacion_talle.ordentrabajo_id) >= 2'
+					);
+				} else {
+					$ordenes = $ordenes->where(function ($q) use ($busqueda) {
+						$q->whereHas('ordentrabajo_combinacion_talles.clientes', function ($query) use ($busqueda) {
+							$query->where('nombre', 'like', '%'.$busqueda.'%');
+						})
+							->orWhereHas('ordentrabajo_combinacion_talles.pedido_combinacion_talles.pedidos_combinacion.articulos', function ($query) use ($busqueda) {
 								$query->where('descripcion', 'like', '%'.$busqueda.'%');
 							})
 							->orWhereHas('ordentrabajo_combinacion_talles.pedido_combinacion_talles.pedidos_combinacion.combinaciones', function ($query) use ($busqueda) {
 								$query->where('nombre', 'like', '%'.$busqueda.'%');
-							})					
+							})
 							->orWhereHas('ordentrabajo_tareas.tareas', function ($query) use ($busqueda) {
-								$query->latest()->where('nombre', 'like', '%'.$busqueda.'%');
-							})						
+								$query->where('nombre', 'like', '%'.$busqueda.'%');
+							})
 							->orWhere('ordentrabajo.id', '=', $busqueda)
-							->orderByDesc('id');
-							
-		if ($flPaginar)
-			$ordenes = $ordenes->paginate(10);
-		else
-			$ordenes = $ordenes->get();
+							->orWhere('ordentrabajo.codigo', '=', $busqueda);
+					});
+				}
+			}
+		} elseif (is_array($filtros)) {
+			\App\Support\Ventas\OrdentrabajoListadoFiltros::aplicar($ordenes, $filtros);
+		}
 
-		return $ordenes;
+		$ordenes = $ordenes->orderByDesc('id');
+
+		if ($flPaginar) {
+			return $ordenes->paginate(10);
+		}
+
+		return $ordenes->get();
     }
 
     public function allQuery(array $campos)

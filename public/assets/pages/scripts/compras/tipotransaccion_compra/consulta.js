@@ -145,7 +145,11 @@ function manejarEnterAbreviaturaTipotransaccionCompra(e) {
     ptrAbreviaturaTipotransaccionCompra = $ctx.find('.abreviaturatipotransaccioncompra');
     ptrNombreTipotransaccionCompra = $ctx.find('.nombretipotransaccioncompra');
 
-    leerTipotransaccionCompraPorAbreviatura(target.value, target);
+    leerTipotransaccionCompraPorAbreviatura(target.value, target, function (data) {
+        if (data && typeof window.afterTipotransaccionCompraEnterOk === 'function') {
+            window.afterTipotransaccionCompraEnterOk(data, target);
+        }
+    });
 }
 
 function activarCapturaEnterAbreviaturaTipotransaccionCompra() {

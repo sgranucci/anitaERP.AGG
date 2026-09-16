@@ -4,6 +4,7 @@ namespace App\Support\Compras;
 
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Tipotransaccion_Compra_Concepto_Ivacompra;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Collection;
 
 /**
@@ -32,7 +33,9 @@ final class ConceptoIvacompraConsultaSupport
             return collect();
         }
 
-        $query = Concepto_Ivacompra::query()->whereIn('id', $conceptoIds);
+        $query = Concepto_Ivacompra::query()
+            ->with(['impuestos', 'concepto_ivacompra_empresas'])
+            ->whereIn('id', $conceptoIds);
 
         $texto = trim((string) $consulta);
         if ($texto !== '') {
@@ -43,7 +46,10 @@ final class ConceptoIvacompraConsultaSupport
             });
         }
 
-        return $query->orderBy('nombre')->get();
+        return $query
+            ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
+            ->orderBy('nombre')
+            ->get();
     }
 
     public static function resolverPorCodigoOId(int $tipotransaccionCompraId, string $valor): ?Concepto_Ivacompra

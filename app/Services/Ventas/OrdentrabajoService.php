@@ -21,6 +21,7 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Ventas\QrCodePngSupport;
 use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
+use App\Support\Ventas\OrdentrabajoEmisionPreimpresoLayout;
 use App\Models\Configuracion\Salida;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
@@ -129,9 +130,9 @@ class OrdentrabajoService
 		return $this->ordentrabajoQuery->all();
 	}
 
-	public function leeOrdenestrabajoPaginando($busqueda, $flPaginar)
+	public function leeOrdenestrabajoPaginando($filtros, $flPaginar)
 	{
-		return $this->ordentrabajoQuery->allPaginando($busqueda, $flPaginar);
+		return $this->ordentrabajoQuery->allPaginando($filtros, $flPaginar);
 	}
 
 	public function guardaOrdenTrabajo($id_items, $checkOtStock, $ordentrabajo_stock_codigo, $deposito_id,
@@ -1182,7 +1183,7 @@ class OrdentrabajoService
 		$nombrePdf = 'emision-ot-'.$codigos.'-'.Str::random(6).'.pdf';
 
 		$pdf = App::make('dompdf.wrapper');
-		$pdf->setPaper('a4', 'landscape');
+		$pdf->setPaper('a4', 'portrait');
 		$pdf->loadHTML($view)->save($path.'/'.$nombrePdf);
 
 		return $path.'/'.$nombrePdf;
@@ -1426,8 +1427,9 @@ class OrdentrabajoService
 
 		$copias = OrdentrabajoEmisionCopiaSupport::cantidadCopias($tipoemision);
 		$titulosCopia = OrdentrabajoEmisionCopiaSupport::titulos($tipoemision);
+		$qrDataUri = QrCodePngSupport::dataUri((string) $ot->codigo, 220, 1);
 
-		return [
+		$doc = [
 			'codigo' => (string) $ot->codigo,
 			'fecha_fmt' => date('d-m-Y', strtotime((string) $ot->fecha)),
 			'tipoemision' => $tipoemision,
@@ -1467,8 +1469,207 @@ class OrdentrabajoService
 			'numeracion' => $numeracion,
 			'copias' => $copias,
 			'titulos_copia' => $titulosCopia,
-			'qr_data_uri' => QrCodePngSupport::dataUri((string) $ot->codigo, 220, 1),
+			'qr_data_uri' => $qrDataUri,
 		];
+		$doc['paginas_preimpreso'] = $this->armarPaginasPreimpresoOt($doc);
+
+		return $doc;
+	}
+
+	/**
+	 * Páginas A4 portrait con campos en coordenadas del PostScript Ferli (preimpreso).
+	 *
+	 * @param  array<string, mixed>  $doc
+	 * @return list<array{campos: list<array{y:float,x:float,k:string,v:string,max_w:float}>, qrs: list<array{x:float,y:float,s:float,uri:string}>}>
+	 */
+	private function armarPaginasPreimpresoOt(array $doc): array
+	{
+		$valores = $this->valoresCamposPreimpresoOt($doc);
+		$tipoemision = strtoupper((string) ($doc['tipoemision'] ?? 'COMPLETA'));
+		$titulos = $doc['titulos_copia'] ?? OrdentrabajoEmisionCopiaSupport::titulos($tipoemision);
+		$qrUri = (string) ($doc['qr_data_uri'] ?? '');
+
+		$cantidadPaginas = ($tipoemision === 'COMPLETA') ? 2 : 1;
+		$paginas = [];
+
+		for ($pagina = 1; $pagina <= $cantidadPaginas; $pagina++) {
+			$layout = OrdentrabajoEmisionPreimpresoLayout::paginaFragola($pagina);
+			if ($layout === []) {
+				$layout = OrdentrabajoEmisionPreimpresoLayout::paginaFragola(1);
+			}
+
+			$offsetTitulo = ($pagina - 1) * 4;
+			$valoresPagina = $valores;
+			for ($i = 0; $i < 4; $i++) {
+				$titulo = trim((string) ($titulos[$offsetTitulo + $i] ?? ''));
+				if ($tipoemision !== 'COMPLETA' && $i > 0) {
+					$titulo = '';
+				}
+				$valoresPagina['titulo_'.$i] = $titulo;
+			}
+
+			$campos = [];
+			foreach ($layout as $pos) {
+				$k = (string) ($pos['k'] ?? '');
+				$v = (string) ($valoresPagina[$k] ?? '');
+				if ($v === '') {
+					continue;
+				}
+				$campos[] = [
+					'y' => (float) $pos['y'],
+					'x' => (float) $pos['x'],
+					'k' => $k,
+					'v' => $v,
+					'max_w' => $this->anchoMaxCampoPreimpresoOt($k),
+				];
+			}
+
+			$qrs = [];
+			foreach (OrdentrabajoEmisionPreimpresoLayout::QR_PANELES as $idx => $qrPos) {
+				if ($tipoemision !== 'COMPLETA' && $idx > 0) {
+					break;
+				}
+				if ($qrUri === '') {
+					continue;
+				}
+				$qrs[] = [
+					'x' => (float) $qrPos['x'],
+					'y' => (float) $qrPos['y'],
+					's' => (float) $qrPos['s'],
+					'uri' => $qrUri,
+				];
+			}
+
+			$paginas[] = [
+				'campos' => $campos,
+				'qrs' => $qrs,
+			];
+		}
+
+		return $paginas;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $doc
+	 * @return array<string, string>
+	 */
+	private function valoresCamposPreimpresoOt(array $doc): array
+	{
+		$clientes = array_values(array_map('strval', $doc['clientes'] ?? []));
+		$lineasCortas = $this->partirLineasClientesOt($clientes, 60, 3);
+		$lineasLargas = $this->partirLineasClientesOt($clientes, 80, 5);
+
+		$leyenda = (string) ($doc['leyenda'] ?? '');
+		$mat = (string) ($doc['material_capellada_consumo'] ?? '');
+		$aplique = (string) ($doc['aplique'] ?? '');
+		$forradoFondo = (string) ($doc['forrado_fondo_consumo'] ?? '');
+		$forradoBase = (string) ($doc['forrado_base_consumo'] ?? '');
+		$codArtRed = (string) ($doc['codigo_articulo_reducido'] ?? '');
+		$pedidos = trim((string) ($doc['pedidos'] ?? ''));
+		$localidad = (string) ($doc['localidad'] ?? '');
+
+		$valores = [
+			'codigo' => (string) ($doc['codigo'] ?? ''),
+			'fecha_fmt' => (string) ($doc['fecha_fmt'] ?? ''),
+			'tot_pares' => (string) (int) ($doc['tot_pares'] ?? 0),
+			'tipo_corte' => (string) ($doc['tipo_corte'] ?? ''),
+			'tipo_corte_forro' => (string) ($doc['tipo_corte_forro'] ?? ''),
+			'vendedor' => (string) ($doc['vendedor'] ?? ''),
+			'codigo_articulo' => (string) ($doc['codigo_articulo'] ?? ''),
+			'codigo_articulo_reducido' => $codArtRed,
+			'cod_art_fmt' => $codArtRed !== '' ? 'Cod.Art.:'.$codArtRed : '',
+			'combinacion' => (string) ($doc['combinacion'] ?? ''),
+			'fondo' => (string) ($doc['fondo'] ?? ''),
+			'fondo_color' => trim((string) ($doc['fondo'] ?? '').'/'.(string) ($doc['color_fondo'] ?? ''), '/'),
+			'localidad_fmt' => $localidad !== '' ? ' Loc.:'.$localidad : '',
+			'pedidos_fmt' => $pedidos !== '' ? 'PEDIDOS: '.$pedidos : '',
+			'plvista' => $this->prefijoCampoOt('PLANTILLA: ', substr((string) ($doc['plvista'] ?? ''), 0, 30)),
+			'serigrafia' => $this->prefijoCampoOt('SERIGRAFIA: ', substr((string) ($doc['serigrafia'] ?? ''), 0, 30)),
+			'plarmado' => $this->prefijoCampoOt('PL.ARMADO: ', substr((string) ($doc['plarmado'] ?? ''), 0, 30)),
+			'puntera' => $this->prefijoCampoOt('PUNTERA: ', substr((string) ($doc['puntera'] ?? ''), 0, 30)),
+			'contrafuerte' => $this->prefijoCampoOt('CONTRAFUERTE: ', substr((string) ($doc['contrafuerte'] ?? ''), 0, 30)),
+			'empaque' => substr((string) ($doc['empaque'] ?? ''), 0, 60),
+			'empaque_fmt' => $this->prefijoCampoOt('AVIOS DE EMPAQUE: ', substr((string) ($doc['empaque'] ?? ''), 0, 60)),
+			'forrado_base_fmt' => $this->prefijoCampoOt('FORRADO BASE: ', substr($forradoBase, 0, 60)),
+			'forrado_fondo1' => $this->prefijoCampoOt('FORRO: ', substr($forradoFondo, 0, 80)),
+			'forrado_fondo2' => substr($forradoFondo, 80, 80),
+			'material2' => substr($mat, 0, 90),
+			'material3' => substr($mat, 90, 90),
+			'material4' => substr($mat, 180, 90),
+			'aplique0' => $this->prefijoCampoOt('APLIQUES: ', substr($aplique, 0, 55)),
+			'aplique1' => substr($aplique, 55, 55),
+			'aplique2' => substr($aplique, 110, 55),
+			'obs1' => substr($leyenda, 0, 30),
+			'obs2' => substr($leyenda, 30, 30),
+			'obs3' => substr($leyenda, 60, 30),
+			'obs4' => substr($leyenda, 90, 30),
+			'cliente0' => $lineasCortas[0] ?? '',
+			'cliente1' => $lineasCortas[1] ?? '',
+			'cliente2' => $this->prefijoCampoOt('CLIENTES: ', $lineasLargas[0] ?? ($lineasCortas[2] ?? '')),
+			'cliente3' => $lineasLargas[1] ?? '',
+			'cliente4' => $lineasLargas[2] ?? '',
+			'cliente5' => $lineasLargas[3] ?? '',
+			'cliente6' => $lineasLargas[4] ?? '',
+		];
+
+		foreach ($doc['medidas'] ?? [] as $medida) {
+			$talle = (int) ($medida['medida'] ?? 0);
+			$cant = (int) ($medida['cantidad'] ?? 0);
+			if ($talle > 0 && $cant !== 0) {
+				$valores['medida_'.$talle] = (string) $cant;
+			}
+		}
+
+		return $valores;
+	}
+
+	private function prefijoCampoOt(string $prefijo, string $valor): string
+	{
+		$valor = trim($valor);
+		if ($valor === '') {
+			return '';
+		}
+
+		return $prefijo.$valor;
+	}
+
+	/**
+	 * @param  list<string>  $clientes
+	 * @return list<string>
+	 */
+	private function partirLineasClientesOt(array $clientes, int $maxLen, int $maxLineas): array
+	{
+		$lineas = [];
+		$actual = '';
+		foreach ($clientes as $i => $cli) {
+			$pieza = count($clientes) > 1 ? substr($cli, 0, 15) : $cli;
+			$candidato = $actual === '' ? $pieza : $actual.'/'.$pieza;
+			if (strlen($candidato) > $maxLen && $actual !== '' && count($lineas) < $maxLineas) {
+				$lineas[] = $actual;
+				$actual = $pieza;
+			} else {
+				$actual = $candidato;
+			}
+		}
+		if ($actual !== '' && count($lineas) < $maxLineas) {
+			$lineas[] = $actual;
+		}
+		while (count($lineas) < $maxLineas) {
+			$lineas[] = '';
+		}
+
+		return $lineas;
+	}
+
+	private function anchoMaxCampoPreimpresoOt(string $k): float
+	{
+		return match (true) {
+			str_starts_with($k, 'medida_') => 10.0,
+			$k === 'codigo', $k === 'tot_pares' => 25.0,
+			str_starts_with($k, 'titulo_') => 55.0,
+			str_starts_with($k, 'cliente'), str_starts_with($k, 'material'), str_starts_with($k, 'aplique') => 160.0,
+			default => 120.0,
+		};
 	}
 
 	/**
@@ -3048,16 +3249,27 @@ class OrdentrabajoService
 		$estado = '-1';
 		$saldo = 0;
 		$deposito_id = 0;
-		foreach($stock as $movimiento)
-		{
-			if ($movimiento->ordentrabajo_id > 0)
+		$tipoAlta = (int) config('consprod.TIPOTRANSACCION_ALTA_PRODUCCION', 3);
+		foreach ($stock as $movimiento) {
+			if ($movimiento->ordentrabajo_id > 0) {
 				$estado = 0;
-			else	
+			} else {
 				$estado = 1;
+			}
 			$saldo += $movimiento->cantidad;
-			if ($movimiento->tipotransaccion_id == 3)
-				$deposito_id = $movimiento->deposito_id;
+			$depMov = (int) ($movimiento->deposito_id ?? 0);
+			if ($depMov <= 0) {
+				continue;
+			}
+			// Preferir depósito de la alta de producción (tipo legacy en articulo_movimiento).
+			if ((int) ($movimiento->tipotransaccion_id ?? 0) === $tipoAlta) {
+				$deposito_id = $depMov;
+			} elseif ($deposito_id <= 0) {
+				// Ferli / mov. stock: el tipo quedó en tipotransaccion_stock_id y tipotransaccion_id en null.
+				$deposito_id = $depMov;
+			}
 		}
+
 		return ['estado' => $estado, 'saldo' => $saldo, 'deposito_id' => $deposito_id];
 	}
 }

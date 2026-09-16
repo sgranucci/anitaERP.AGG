@@ -190,6 +190,19 @@ final class ComprobanteProveedorAsientoPreviewSupport
      */
     public function avisosFaltantes(Comprobante_Proveedor $comprobante): array
     {
+        $comprobante->loadMissing([
+            'comprobante_proveedor_conceptos.concepto_ivacompras.impuestos',
+            'proveedores',
+            'ordencompras',
+            'tipotransaccion_compras',
+            'comprobante_proveedor_recepciones',
+        ]);
+        $conceptosParaInferir = $comprobante->comprobante_proveedor_conceptos
+            ->map(static fn ($l) => $l->concepto_ivacompras)
+            ->filter()
+            ->keyBy('id');
+        ConceptoIvacompraFormulaSupport::inferirTiposYTasasEnColeccion($conceptosParaInferir);
+
         $avisos = [];
         $politica = $this->politicaFlujo($comprobante);
         $bloqueaSinCom = (bool) ($politica['bloquea_sin_com'] ?? false);
@@ -395,13 +408,25 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 $cuentaIds[$cuentaDefault] = $cuentaDefault;
             }
 
+            $formula = (string) ($concepto->formula ?? '');
+            $parsedFormula = ConceptoIvacompraFormulaSupport::parse($formula);
+            $tasaImpuesto = round((float) ($concepto->impuestos->valor ?? 0), 3);
+            if ($tasaImpuesto <= 0 && $parsedFormula !== null) {
+                $tasaImpuesto = ConceptoIvacompraFormulaSupport::tasaPorcentajeDesdeFormula($formula);
+            }
+            $tipoConcepto = (string) ($concepto->tipoconcepto ?? '');
+
             $meta[(int) $concepto->id] = [
                 'cuenta_debe_id' => $cuentaDefault,
                 'cuenta_debe_codigo' => '',
                 'cuenta_debe_nombre' => '',
-                'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
+                'tipoconcepto' => $tipoConcepto,
                 'nombre' => (string) ($concepto->nombre ?? ''),
-                'impuesto_tasa' => round((float) ($concepto->impuestos->valor ?? 0), 3),
+                'codigo' => (string) ($concepto->codigo ?? ''),
+                'impuesto_tasa' => $tasaImpuesto,
+                'formula' => trim($formula),
+                'formula_codigo_base' => $parsedFormula['codigo_base'] ?? '',
+                'formula_coeficiente' => $parsedFormula['coeficiente'] ?? 0.0,
                 'cuentas_por_empresa' => $mapa,
             ];
         }
@@ -422,7 +447,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
         }
 
-        return $meta;
+        return ConceptoIvacompraFormulaSupport::enriquecerMetaCliente($meta);
     }
 
     /** @return Collection<int, Comprobante_Proveedor_Concepto> */
@@ -446,9 +471,11 @@ final class ComprobanteProveedorAsientoPreviewSupport
         }
 
         $conceptosPorId = Concepto_Ivacompra::query()
+            ->with('impuestos')
             ->whereIn('id', array_column($lineas, 'concepto_ivacompra_id'))
             ->get()
             ->keyBy('id');
+        ConceptoIvacompraFormulaSupport::inferirTiposYTasasEnColeccion($conceptosPorId);
 
         foreach ($lineas as $i => $linea) {
             $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
