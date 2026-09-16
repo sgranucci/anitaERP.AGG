@@ -13,6 +13,7 @@ use App\Repositories\Compras\Tipotransaccion_Compra_Concepto_IvacompraRepository
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
+use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use DB;
 
 class Tipotransaccion_CompraController extends Controller
@@ -250,13 +251,32 @@ class Tipotransaccion_CompraController extends Controller
 
         return response()->json([
             'ok' => true,
-            'conceptos' => $lista->map(fn ($c) => [
-                'id' => (int) $c->id,
-                'codigo' => (string) ($c->codigo ?? ''),
-                'nombre' => (string) ($c->nombre ?? ''),
-                'tipoconcepto' => (string) ($c->tipoconcepto ?? ''),
-                'cuentacontable_id' => $c->cuentacontable_id ? (int) $c->cuentacontable_id : null,
-            ])->values()->all(),
+            'conceptos' => $lista->map(function ($c) {
+                $formula = (string) ($c->formula ?? '');
+                $parsed = ConceptoIvacompraFormulaSupport::parse($formula);
+                $tipo = (string) ($c->tipoconcepto ?? '');
+                if ($parsed !== null && ! in_array(strtoupper($tipo), ['I', 'G', 'E'], true)) {
+                    $tipo = 'I';
+                }
+
+                return [
+                    'id' => (int) $c->id,
+                    'codigo' => (string) ($c->codigo ?? ''),
+                    'nombre' => (string) ($c->nombre ?? ''),
+                    'tipoconcepto' => $tipo,
+                    'cuentacontable_id' => $c->cuentacontable_id ? (int) $c->cuentacontable_id : null,
+                    'formula' => trim($formula),
+                    'formula_codigo_base' => $parsed['codigo_base'] ?? '',
+                    'formula_coeficiente' => $parsed['coeficiente'] ?? 0.0,
+                    'impuesto_tasa' => $parsed !== null
+                        ? ConceptoIvacompraFormulaSupport::tasaPorcentajeDesdeFormula($formula)
+                        : round((float) ($c->impuestos->valor ?? 0), 3),
+                    'cuenta_debe_id' => (int) ($c->cuentacontabledebe_id ?? 0),
+                    'cuentas_por_empresa' => method_exists($c, 'mapaCuentaDebePorEmpresa')
+                        ? $c->mapaCuentaDebePorEmpresa()
+                        : [],
+                ];
+            })->values()->all(),
         ]);
     }
 

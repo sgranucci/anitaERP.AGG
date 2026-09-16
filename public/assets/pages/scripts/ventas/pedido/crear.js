@@ -1277,7 +1277,12 @@
 					tiposuspensioncliente_id == NO_FACTURAR
 					))
 				{
-					alert("No puede facturar cliente en estado "+nombretiposuspensioncliente);
+					var etiquetaEstado = (nombretiposuspensioncliente || '').trim();
+					if (!etiquetaEstado) {
+						var e = String(estadocliente || '').toUpperCase();
+						etiquetaEstado = e === '1' ? 'Suspendido' : (e === 'R' ? 'Regularizado' : (e || '(sin detalle)'));
+					}
+					alert("No puede facturar cliente en estado "+etiquetaEstado);
 					$(tilde).prop("checked",false);
 					return;
 				}
@@ -1462,6 +1467,12 @@
 			
 								$("#ordentrabajo_stock_codigo").val('');
 							}
+							else
+							{
+								alert(data.error || 'No se pudo generar la OT de stock');
+							}
+						}).fail(function(xhr){
+							alert('Error al generar la OT: '+(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : (xhr.statusText || 'fallo de red')));
 						});
 					}
 					else	
@@ -1493,6 +1504,12 @@
 	
 						$("#ordentrabajo_stock_codigo").val('');
 					}
+					else
+					{
+						alert(data.error || 'No se pudo generar la OT');
+					}
+				}).fail(function(xhr){
+					alert('Error al generar la OT: '+(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : (xhr.statusText || 'fallo de red')));
 				});
 			}
 		});

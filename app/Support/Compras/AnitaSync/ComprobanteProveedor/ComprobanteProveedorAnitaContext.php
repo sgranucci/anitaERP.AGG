@@ -69,14 +69,23 @@ final class ComprobanteProveedorAnitaContext
         return $this->fechaYmd();
     }
 
+    /**
+     * Código de moneda en Anita compras (com_cod_mon / prov_cod_mon): numérico 1, 2, …
+     * No usar moneda.codigo ERP (PES/DOL): en Ferli la columna es CHAR(1) y queda "P".
+     * Mismo criterio que OrdencompraAnitaErpContext::codigoMonedaAnita.
+     */
     public function monedaCodigoAnita(): string
     {
+        $monedaId = (int) ($this->comprobante->moneda_id ?: 1);
         $moneda = $this->comprobante->monedas;
         if ($moneda && filled($moneda->codigo)) {
-            return (string) $moneda->codigo;
+            $digits = preg_replace('/\D/', '', trim((string) $moneda->codigo)) ?? '';
+            if ($digits !== '') {
+                return (string) (int) $digits;
+            }
         }
 
-        return (string) ($this->comprobante->moneda_id ?? 1);
+        return (string) max(1, $monedaId);
     }
 
     /**

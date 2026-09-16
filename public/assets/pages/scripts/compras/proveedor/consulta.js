@@ -257,6 +257,7 @@ function aceptarCodigoProveedorDesdeInput($input) {
     var codigo = String($input.val() || '').trim();
     if (codigo === '') {
         limpiarProveedorEnPantalla();
+        $input.removeData('cp-avanzar-tras-ok');
         return;
     }
     // Mismo código ya fallido y sin id cargado: no repetir GET ni alert (sale del loop blur/alert).
@@ -265,6 +266,7 @@ function aceptarCodigoProveedorDesdeInput($input) {
         ultimoCodigoProveedorIntentado === codigo &&
         !(parseInt(String($('#proveedor_id').val() || '0'), 10) > 0)
     ) {
+        $input.removeData('cp-avanzar-tras-ok');
         return;
     }
     leeUnProveedor(0, codigo);
@@ -316,7 +318,11 @@ function aplicarProveedorEnPantalla(data, ctx) {
         window.cpValidarProveedorArcaApoc(data.id);
     }
 
-    $('#proveedor_id').trigger('change.cpProveedorCargado');
+    $('#proveedor_id').trigger('change.cpProveedorCargado', [data]);
+
+    if (typeof window.afterProveedorConsultaOk === 'function') {
+        window.afterProveedorConsultaOk(data, dest.$codigo && dest.$codigo.length ? dest.$codigo : $('#codigoproveedor'));
+    }
 
     if (typeof window.ieComprobanteIvaAplicarProveedor === 'function' && $('#modal-ie-comprobante-iva').hasClass('show')) {
         window.ieComprobanteIvaAplicarProveedor(data.id, data.nombre || '');
@@ -349,10 +355,18 @@ function leeUnProveedor(proveedorId, codigoproveedor) {
         }
         marcarProveedorConsultaFallo(codigoPedido || String($('#codigoproveedor').val() || '').trim());
         limpiarProveedorEnPantallaManteniendoCodigo();
+        $('#codigoproveedor').removeData('cp-avanzar-tras-ok');
+        if (typeof window.afterProveedorConsultaFail === 'function') {
+            window.afterProveedorConsultaFail($('#codigoproveedor'));
+        }
         avisarProveedorNoCargado('No se encontró el proveedor indicado.');
     }).fail(function () {
         marcarProveedorConsultaFallo(codigoPedido || String($('#codigoproveedor').val() || '').trim());
         limpiarProveedorEnPantallaManteniendoCodigo();
+        $('#codigoproveedor').removeData('cp-avanzar-tras-ok');
+        if (typeof window.afterProveedorConsultaFail === 'function') {
+            window.afterProveedorConsultaFail($('#codigoproveedor'));
+        }
         avisarProveedorNoCargado('No se pudo cargar el proveedor.');
     });
 }
@@ -392,6 +406,7 @@ document.addEventListener('keydown', function (e) {
     e.preventDefault();
     e.stopPropagation();
     $(target).data('cp-enter-procesado', 1);
+    $(target).data('cp-avanzar-tras-ok', 1);
     aceptarCodigoProveedorDesdeInput($(target));
 }, true);
 
@@ -408,6 +423,7 @@ $(document)
             return;
         }
         $(this).data('cp-enter-procesado', 1);
+        $(this).data('cp-avanzar-tras-ok', 1);
         e.preventDefault();
         e.stopPropagation();
         aceptarCodigoProveedorDesdeInput($(this));
@@ -481,6 +497,12 @@ function activa_eventos_consultaproveedor() {
             if (typeof window.onProveedorElegidoEnConsulta === 'function'
                 && window.onProveedorElegidoEnConsulta(fila) === true) {
                 return;
+            }
+            var $codigoElegir = (ptrcodigoproveedor && ptrcodigoproveedor.length)
+                ? ptrcodigoproveedor
+                : $('#codigoproveedor');
+            if ($codigoElegir.length) {
+                $codigoElegir.data('cp-avanzar-tras-ok', 1);
             }
             $('#consultaproveedorModal').modal('hide');
             leeUnProveedor(fila.id, 0);

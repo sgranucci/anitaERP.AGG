@@ -98,7 +98,7 @@ class ComprobanteProveedorPrefillService
         $precarga = Precarga_Comprobante_Proveedor::query()
             ->with([
                 'empresas',
-                'proveedores',
+                'proveedores.condicionivas',
                 'tipotransaccion_compras',
                 'monedas',
                 'precarga_comprobante_proveedor_conceptos',
@@ -109,7 +109,7 @@ class ComprobanteProveedorPrefillService
 
         $ordencompra = $this->resolverOrdencompraDesdePrecarga($precarga);
         if ($ordencompra) {
-            $ordencompra->loadMissing(['empresas', 'proveedores', 'ordencompra_articulos']);
+            $ordencompra->loadMissing(['empresas', 'proveedores.condicionivas', 'ordencompra_articulos']);
         }
 
         $fechacomprobante = $precarga->fechafactura
@@ -312,7 +312,7 @@ class ComprobanteProveedorPrefillService
     public function desdeOrdencompraConFacturaDelLegajo(int $ordencompraId): array
     {
         $ordencompra = Ordencompra::query()
-            ->with(['empresas', 'proveedores', 'ordencompra_articulos'])
+            ->with(['empresas', 'proveedores.condicionivas', 'ordencompra_articulos'])
             ->findOrFail($ordencompraId);
         $precarga = OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajo($ordencompra);
         if ($precarga) {
@@ -356,7 +356,7 @@ class ComprobanteProveedorPrefillService
     public function desdeOrdencompra(int $ordencompraId): array
     {
         $ordencompra = Ordencompra::query()
-            ->with(['empresas', 'proveedores', 'ordencompra_articulos'])
+            ->with(['empresas', 'proveedores.condicionivas', 'ordencompra_articulos'])
             ->findOrFail($ordencompraId);
 
         // Día de carga de la factura (no la fecha de la OC).

@@ -1,62 +1,61 @@
-<h2> Ordenes de Trabajo </h2>
-<table> 
-	<thead>
-	<tr>
-		<th class="width20">ID</th>
-		<th>Fecha</th>
-		<th>Cliente</th>
-		<th>Artículo</th>
-		<th>Combinacion</th>
-		<th>Pares</th>
-		<th>Estado</th>
-	</tr>
-  	</thead>
-    <tbody>
-	@foreach ($ordentrabajo as $data)
+<table>
+@if (!empty($reservarFilaLogoExcel))
+	<tbody>
 		<tr>
-			<td>{{str_pad($data->codigo, 4, "0", STR_PAD_LEFT)}}</td>
-			<td>{{date("d/m/Y", strtotime($data->fecha ?? ''))}}</td>
-			<td>
-				@php
-					$clientes = [];
-				@endphp
-				@if (isset($data->ordentrabajo_combinacion_talles))
-					@foreach ($data->ordentrabajo_combinacion_talles as $item)
-						@php
-							$nombreCliente = $item->clientes->nombre ?? null;
-							if ($nombreCliente !== null && !in_array($nombreCliente, $clientes)) {
-								$clientes[] = $nombreCliente;
-							}
-						@endphp
-					@endforeach
+			<td colspan="7" style="height: 52px;">&#160;</td>
+		</tr>
+	</tbody>
+@endif
+	<tbody>
+		<tr>
+			<td colspan="7">
+				<strong style="font-size: 16pt;">Listado de órdenes de trabajo</strong>
+				@if (!empty($totalRegistros))
+					<br><span style="font-size: 10pt;">Generado {{ date('d/m/Y H:i') }} — Registros: {{ $totalRegistros }}</span>
 				@endif
-				{{ count($clientes) > 1 ? "BOLETAS JUNTAS" : $clientes[0] ?? '' }}
-			</td>
-			<td>{{$data->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedidos_combinacion->articulos->descripcion ?? ''}}</td>
-			<td>{{$data->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedidos_combinacion->combinaciones->nombre ?? ''}}</td>
-			<td>
-				@php
-					$pares = 0.;
-				@endphp
-				@if (isset($data->ordentrabajo_combinacion_talles))
-					@foreach ($data->ordentrabajo_combinacion_talles as $item)
-						@php
-							$pares += $item->pedido_combinacion_talles->cantidad ?? 0;
-						@endphp
-					@endforeach
-				@endif
-				{{ $pares ?? '' }}
-			</td>
-			<td>
-				@php $ultimaTarea = ""; @endphp
-				@foreach ($data->ordentrabajo_tareas as $tarea)
-					@php
-						$ultimaTarea = $tarea->tareas->nombre ?? $ultimaTarea;
-					@endphp
-				@endforeach
-				{{$ultimaTarea}}
 			</td>
 		</tr>
-		@endforeach		
+	</tbody>
+	<thead>
+		<tr>
+			<th>Nro.OT</th>
+			<th>Fecha</th>
+			<th>Cliente</th>
+			<th>Artículo</th>
+			<th>Combinación</th>
+			<th>Pares</th>
+			<th>Estado</th>
+		</tr>
+	</thead>
+	<tbody>
+	@foreach ($ordentrabajo as $data)
+		@php
+			$clientes = [];
+			$pares = 0.;
+			if (isset($data->ordentrabajo_combinacion_talles)) {
+				foreach ($data->ordentrabajo_combinacion_talles as $item) {
+					$nombreCliente = $item->clientes->nombre ?? null;
+					if ($nombreCliente !== null && ! in_array($nombreCliente, $clientes, true)) {
+						$clientes[] = $nombreCliente;
+					}
+					$pares += $item->pedido_combinacion_talles->cantidad ?? 0;
+				}
+			}
+			$pedidoCombinacionOt = $data->pedidoCombinacionVigente();
+			$ultimaTarea = '';
+			foreach ($data->ordentrabajo_tareas as $tarea) {
+				$ultimaTarea = $tarea->tareas->nombre ?? $ultimaTarea;
+			}
+		@endphp
+		<tr>
+			<td>{{ str_pad($data->codigo, 4, '0', STR_PAD_LEFT) }}</td>
+			<td>{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '' }}</td>
+			<td>{{ count($clientes) > 1 ? 'BOLETAS JUNTAS' : ($clientes[0] ?? '') }}</td>
+			<td>{{ $pedidoCombinacionOt?->articulos->descripcion ?? '' }}</td>
+			<td>{{ $pedidoCombinacionOt?->combinaciones->nombre ?? '' }}</td>
+			<td>{{ $pares }}</td>
+			<td>{{ $ultimaTarea }}</td>
+		</tr>
+	@endforeach
 	</tbody>
 </table>

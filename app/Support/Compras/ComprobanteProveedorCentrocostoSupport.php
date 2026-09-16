@@ -26,10 +26,10 @@ final class ComprobanteProveedorCentrocostoSupport
             return $ccOc;
         }
 
-        // Solo sin OC (comprobante suelto).
-        $ccProveedor = (int) ($comprobante->proveedores->centrocostocompra_id ?? 0);
+        // Solo sin OC (comprobante suelto). Sin CC del proveedor → 0 (no inventar id 1).
+        $ccProveedor = (int) ($comprobante->proveedores?->centrocostocompra_id ?? 0);
 
-        return $ccProveedor > 0 ? $ccProveedor : 1;
+        return $ccProveedor > 0 ? $ccProveedor : 0;
     }
 
     public static function resolverDesdeOc(?object $oc): int

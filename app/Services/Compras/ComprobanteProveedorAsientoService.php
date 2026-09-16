@@ -15,6 +15,7 @@ use App\Support\Compras\ComprobanteProveedorAsientoDescripcionSupport;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
+use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
@@ -174,12 +175,18 @@ class ComprobanteProveedorAsientoService
     public function armarPreview(Comprobante_Proveedor $comprobante, bool $permitirCuentasPendientes = false): array
     {
         $comprobante->loadMissing([
-            'comprobante_proveedor_conceptos.concepto_ivacompras',
+            'comprobante_proveedor_conceptos.concepto_ivacompras.impuestos',
             'proveedores',
             'tipotransaccion_compras',
             'ordencompras.ordencompra_articulos.articulos.articulo_cuentacontables',
             'comprobante_proveedor_recepciones.recepcion_proveedores',
         ]);
+
+        $conceptosParaInferir = $comprobante->comprobante_proveedor_conceptos
+            ->map(static fn ($l) => $l->concepto_ivacompras)
+            ->filter()
+            ->keyBy('id');
+        ConceptoIvacompraFormulaSupport::inferirTiposYTasasEnColeccion($conceptosParaInferir);
 
         $politicaFlujo = $this->previewSupport->politicaFlujo($comprobante);
         if ($politicaFlujo['bloquea_sin_com'] ?? false) {
@@ -250,6 +257,7 @@ class ComprobanteProveedorAsientoService
             }
 
             $tipoConcepto = (string) ($concepto?->tipoconcepto ?? '');
+            // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
 
             if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 $totalNetoConceptos += $monto;
@@ -744,15 +752,14 @@ class ComprobanteProveedorAsientoService
         try {
             $preview = $this->armarPreview($comprobante, true);
             $error = null;
-            if (! empty($preview['cuentas_pendientes'])) {
-                $error = 'Falta indicar la cuenta contable del neto. '
-                    .'Complétela en las líneas editables de esta solapa (comprobante sin OC ni COM de referencia).';
-            }
+            // Sin OC/COM: la cuenta del neto se completa en la solapa; no bloquear el preview.
+            // Los avisos ya indican qué renglón falta.
 
             return [
                 'activo' => true,
                 'error' => $error,
                 'es_preview' => true,
+                'cuentas_pendientes' => ! empty($preview['cuentas_pendientes']),
                 'total_comprobante' => round(abs((float) $comprobante->total), 2),
                 'total_debe' => $preview['total_debe'],
                 'total_haber' => $preview['total_haber'],
@@ -792,16 +799,25 @@ class ComprobanteProveedorAsientoService
             $cuentaCodigo = '—';
             $cuentaNombre = '';
             if ($cuentaId > 0) {
-                $cuenta = $this->cuentacontableRepository->find($cuentaId);
-                $cuentaCodigo = (string) ($cuenta->codigo ?? '—');
-                $cuentaNombre = (string) ($cuenta->nombre ?? '');
+                try {
+                    $cuenta = $this->cuentacontableRepository->find($cuentaId);
+                    $cuentaCodigo = (string) ($cuenta->codigo ?? '—');
+                    $cuentaNombre = (string) ($cuenta->nombre ?? '');
+                } catch (\Throwable) {
+                    $cuentaCodigo = '#'.$cuentaId;
+                    $cuentaNombre = '(cuenta no encontrada)';
+                }
             }
 
             $ccId = (int) ($centros[$i] ?? 0);
             $ccCodigo = '';
             if ($ccId > 0) {
-                $cc = $this->centrocostoRepository->find($ccId);
-                $ccCodigo = (string) ($cc->codigo ?? '');
+                try {
+                    $cc = $this->centrocostoRepository->find($ccId);
+                    $ccCodigo = (string) ($cc->codigo ?? '');
+                } catch (\Throwable) {
+                    $ccCodigo = '#'.$ccId;
+                }
             }
 
             $debe = (float) ($debes[$i] ?? 0);

@@ -1233,7 +1233,12 @@
 					tiposuspensioncliente_id == NO_FACTURAR
 					))
 				{
-					alert("No puede facturar cliente en estado "+nombretiposuspensioncliente);
+					var etiquetaEstado = (nombretiposuspensioncliente || '').trim();
+					if (!etiquetaEstado) {
+						var e = String(estadocliente || '').toUpperCase();
+						etiquetaEstado = e === '1' ? 'Suspendido' : (e === 'R' ? 'Regularizado' : (e || '(sin detalle)'));
+					}
+					alert("No puede facturar cliente en estado "+etiquetaEstado);
 					$(tilde).prop("checked",false);
 					return;
 				}

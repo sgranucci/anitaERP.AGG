@@ -1,5 +1,31 @@
 // Scripts para carga de pedidos
 
+	if (typeof window.clienteEstaHabilitadoParaFacturacion !== 'function') {
+		window.clienteEstaHabilitadoParaFacturacion = function (estado) {
+			var e = String(estado || '').toUpperCase();
+			// 0 = Activo, R = Regularizado (facturable pese a ARCA)
+			return e === '0' || e === 'R';
+		};
+	}
+
+	function etiquetaEstadoClienteParaFactura(estadocliente, nombretiposuspensioncliente) {
+		var nombre = String(nombretiposuspensioncliente || '').trim();
+		if (nombre) {
+			return nombre;
+		}
+		var e = String(estadocliente || '').toUpperCase();
+		if (e === '1') {
+			return 'Suspendido';
+		}
+		if (e === 'R') {
+			return 'Regularizado';
+		}
+		if (e === '0' || e === '') {
+			return 'Activo';
+		}
+		return e || '(sin detalle)';
+	}
+
 	var talles_txt;
 	var medidas_txt;
 	var precios_txt;
@@ -199,8 +225,8 @@
 		tallesid2_txt = "";
 		nombre_modulo = "";
 
-		// Lee talles del modulo
-        $.get(''+carpetaBase+'/stock/leertalles/'+modulo_id, function(data){
+		// Lee talles del modulo (devuelve jqXHR para poder esperar N ítems al facturar)
+		return $.get(''+carpetaBase+'/stock/leertalles/'+modulo_id, function(data){
 			var flEncontro, flHayMedidas;
 
            	var tall = $.map(data, function(value, index){
@@ -475,14 +501,14 @@
 					$(tilde).prop("checked",false);
 					return;
 				}
-				// Debe chequear estado del cliente
-				if (estadocliente > '0' && 
+				// Debe chequear estado del cliente (Activo y Regularizado pueden facturar)
+				if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
 					(tiposuspensioncliente_id == PROFORMA ||
 					tiposuspensioncliente_id == MOROSO ||
 					tiposuspensioncliente_id == NO_FACTURAR
 					))
 				{
-					alert("No puede facturar cliente en estado "+nombretiposuspensioncliente);
+					alert("No puede facturar cliente en estado "+etiquetaEstadoClienteParaFactura(estadocliente, nombretiposuspensioncliente));
 					$(tilde).prop("checked",false);
 					return;
 				}
@@ -809,6 +835,12 @@
 			
 								$("#ordentrabajo_stock_codigo").val('');
 							}
+							else
+							{
+								alert(data.error || 'No se pudo generar la OT de stock');
+							}
+						}).fail(function(xhr){
+							alert('Error al generar la OT: '+(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : (xhr.statusText || 'fallo de red')));
 						});
 					}
 					else	
@@ -840,6 +872,12 @@
 	
 						$("#ordentrabajo_stock_codigo").val('');
 					}
+					else
+					{
+						alert(data.error || 'No se pudo generar la OT');
+					}
+				}).fail(function(xhr){
+					alert('Error al generar la OT: '+(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : (xhr.statusText || 'fallo de red')));
 				});
 			}
 		});
@@ -1393,46 +1431,45 @@
 		}
 
 		cliente_id = $("#cliente_id").val();
-		$checks.each(function(){
+		nombrecliente = $("#cliente_id option:selected").text();
+		descuentoCliente = $('#descuento').val();
 
-			ordentrabajo = $(this).parents('tr').find('.otcodigo').val();
-			itemId = $(this).parents('tr').find('.ids').val();
+		// Acumula filas válidas; completarTalles es async (leertalles) y no puede
+		// dispararse en paralelo ni abrir el modal a los 300ms (solo cargaba 1 ítem).
+		var pendientes = [];
+		$checks.each(function(){
+			var $tr = $(this).parents('tr');
+			ordentrabajo = $tr.find('.otcodigo').val();
+			itemId = $tr.find('.ids').val();
 			if (!otFacturada(ordentrabajo, itemId))
 			{
 				pedido_combinacion_ids.push(itemId);
 
-				otId = $(this).parents('tr').find('.ot').val();
+				otId = $tr.find('.ot').val();
 				ordentrabajo_ids.push(otId);
-			
-				descripcion_articulo = $(this).parents("tr").find(".articulo option:selected").text();
-				nombre_combinacion = $(this).parents("tr").find(".desc_combinacion").val();
-				cantidad = $(this).parents("tr").find(".cantidad").val();
 
-				articulo_id = $(this).parents("tr").find(".articulo").val();
-				modulo_id = $(this).parents("tr").find(".modulo").val();
-				combinacion_id = $(this).parents("tr").find(".combinacion").val();
-				nombrecliente = $("#cliente_id option:selected").text();
-				descuentoCliente = $('#descuento').val();
+				var val_medida = $tr.find(".medidas").val();
+				var medidasFila = [];
+				var cantidadesFila = [];
+				var preciosFila = [];
 
-				// Lee tabla de medidas
-				var val_medida = $(this).parents("tr").find(".medidas").val();
-				let check = this;
-
-				medidas=[];
-				cantidades=[];
-				precios=[];
-			
 				if (val_medida != '')
 				{
 					var tbl_medidas = JSON.parse(val_medida);
-				
 					$.each(tbl_medidas, function(index,value){
-						medidas.push(value.talle_id);
-						cantidades.push(value.cantidad);
-						precios.push(value.precio);
+						medidasFila.push(value.talle_id);
+						cantidadesFila.push(value.cantidad);
+						preciosFila.push(value.precio);
 					});
 				}
-				completarTalles(modulo_id, check, medidas, cantidades, precios);
+
+				pendientes.push({
+					check: this,
+					modulo_id: $tr.find(".modulo").val(),
+					medidas: medidasFila,
+					cantidades: cantidadesFila,
+					precios: preciosFila
+				});
 				cantItem = cantItem + 1;
 			}
 		});
@@ -1441,10 +1478,26 @@
 			alert('No hay líneas válidas para facturar entre las marcadas.');
 			return;
 		}
-		
-		setTimeout(() => {
-			$("#facturarOrdenTrabajoModal").modal('show');
-		}, 300);
+
+		mostrarOverlayFacturarPedidoFerli('Preparando ' + pendientes.length + ' ítem(s)…');
+
+		var cadena = $.Deferred().resolve().promise();
+		$.each(pendientes, function(_, fila) {
+			cadena = cadena.then(function() {
+				return completarTalles(fila.modulo_id, fila.check, fila.medidas, fila.cantidades, fila.precios);
+			});
+		});
+
+		cadena.then(
+			function() {
+				ocultarOverlayFacturarPedidoFerli();
+				$("#facturarOrdenTrabajoModal").modal('show');
+			},
+			function() {
+				ocultarOverlayFacturarPedidoFerli();
+				alert('No se pudieron cargar las medidas de todos los ítems a facturar. Reintente.');
+			}
+		);
 	}
 
 	// Carga modal de facturacion
@@ -1487,7 +1540,7 @@
     	// Lee punto de venta si es de exportacion
     	leePuntoVenta(puntoVentaDefault);
 
-		alert('Va a facturar '+offFactura+' items');
+		alert('Va a facturar ' + offFactura + ' ítem' + (offFactura === 1 ? '' : 's'));
 		
 		for (i = 0; i < offFactura; i++)
 		{

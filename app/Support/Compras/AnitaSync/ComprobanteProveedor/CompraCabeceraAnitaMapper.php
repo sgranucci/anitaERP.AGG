@@ -5,14 +5,21 @@ namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\Ferli\CompraCabeceraAnitaFerliMapper;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
  * Cabecera tabla Informix compra (esquema real: 26 columnas, sin com_subtotal/com_total).
+ * Ferli: CompraCabeceraAnitaFerliMapper (columnas reducidas).
  */
 final class CompraCabeceraAnitaMapper
 {
     public static function camposInsert(): string
     {
+        if (EntornoEmpresaSupport::esFerli()) {
+            return CompraCabeceraAnitaFerliMapper::camposInsert();
+        }
+
         return '
             com_proveedor,
             com_tipo,
@@ -45,6 +52,10 @@ final class CompraCabeceraAnitaMapper
 
     public static function valoresInsert(ComprobanteProveedorAnitaContext $ctx): string
     {
+        if (EntornoEmpresaSupport::esFerli()) {
+            return CompraCabeceraAnitaFerliMapper::valoresInsert($ctx);
+        }
+
         return "
             '".$ctx->proveedorCodigo()."',
             '".$ctx->tipoComprobante()."',
@@ -77,6 +88,10 @@ final class CompraCabeceraAnitaMapper
 
     public static function valoresUpdate(ComprobanteProveedorAnitaContext $ctx): string
     {
+        if (EntornoEmpresaSupport::esFerli()) {
+            return CompraCabeceraAnitaFerliMapper::valoresUpdate($ctx);
+        }
+
         return "
             com_fecha = '".$ctx->fechaComprobanteYmd()."',
             com_fecha_iva = '".$ctx->fechaIvaYmd()."',

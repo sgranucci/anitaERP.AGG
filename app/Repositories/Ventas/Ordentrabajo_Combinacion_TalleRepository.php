@@ -101,6 +101,31 @@ class Ordentrabajo_Combinacion_TalleRepository implements Ordentrabajo_Combinaci
 		return $ordentrabajo_combinacion_talle;
     }
 
+	/**
+	 * Quita vínculos OT↔talle del ítem de pedido antes de recrear las medidas.
+	 * Necesario porque con foreign_key_checks=0 el ON DELETE CASCADE no limpia OCT.
+	 */
+	public function deletePorPedidoCombinacionId($pedidoCombinacionId)
+	{
+		$pedidoCombinacionId = (int) $pedidoCombinacionId;
+		if ($pedidoCombinacionId <= 0) {
+			return 0;
+		}
+
+		$talleIds = $this->pedido_combinacion_talleRepository
+			->findporpedido_combinacion($pedidoCombinacionId)
+			->pluck('id')
+			->filter()
+			->values()
+			->all();
+
+		if ($talleIds === []) {
+			return 0;
+		}
+
+		return $this->model->whereIn('pedido_combinacion_talle_id', $talleIds)->delete();
+	}
+
     public function find($id)
     {
         if (null == $ordentrabajo_combinacion_talle = $this->model->find($id)) {

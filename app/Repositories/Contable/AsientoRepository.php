@@ -13,6 +13,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\AsientoAlcanceCierreSupport;
 use App\Support\Ventas\PedidoFacturacionProfiler;
+use App\Support\Contable\Anita\AsientoAnitaFerliSupport;
 use App\Support\Contable\AsientoAnitaNumeracionLock;
 use App\Support\Contable\AsientoAnitaNumeracionSupport;
 use App\Support\Contable\AsientoBalanceSupport;
@@ -789,6 +790,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 				else
 					$codigoMoneda = '1';
 
+				$esquemaCtamovReducido = strtoupper(config('app.empresa')) == 'EL BIERZO'
+					|| AsientoAnitaFerliSupport::usaEsquemaCtamovReducido();
+
 				$data = array( 'tabla' => $this->tableAnita[0], 
 						'acc' => 'insert',
 						'sistema' => 'contab',
@@ -811,7 +815,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 							ctav_balancea,
 							ctav_tipo_asiento,
 							ctav_asi_mon_ref,
-							ctav_ccosto'.(strtoupper(config('app.empresa')) == 'EL BIERZO' ? '' : ',
+							ctav_ccosto'.($esquemaCtamovReducido ? '' : ',
 							ctav_usuario_umod,
 							ctav_fecha_umod,
 							ctav_hora_umod,
@@ -836,7 +840,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 						'".'S'."',
 						'".$codigoTipoAsiento."',
 						'".'-1'."',
-						'".$codigoCentroCosto."'".(strtoupper(config('app.empresa')) == 'EL BIERZO' ? "":
+						'".$codigoCentroCosto."'".($esquemaCtamovReducido ? "":
 						",
 						'".' '."',
 						'".'0'."',
@@ -1320,6 +1324,12 @@ class AsientoRepository implements AsientoRepositoryInterface
 	{
 		$apiAnita = new ApiAnita();
 
+		if (AsientoAnitaFerliSupport::aplica()) {
+			return AsientoAnitaFerliSupport::leerSiguienteCandidato(
+				isset($this->path_sistema) ? (string) $this->path_sistema : null
+			);
+		}
+
 		if (strtoupper(config('app.empresa')) == 'EL BIERZO') {
 			$data = [
 				'acc' => 'list',
@@ -1367,6 +1377,15 @@ class AsientoRepository implements AsientoRepositoryInterface
 	private function persistirNumeradorAnita(int|string $codigoEmpresa, int $numeroAsignado): void
 	{
 		$apiAnita = new ApiAnita();
+
+		if (AsientoAnitaFerliSupport::aplica()) {
+			AsientoAnitaFerliSupport::persistirNumerador(
+				$numeroAsignado,
+				isset($this->path_sistema) ? (string) $this->path_sistema : null
+			);
+
+			return;
+		}
 
 		if (strtoupper(config('app.empresa')) == 'EL BIERZO') {
 			$data = [

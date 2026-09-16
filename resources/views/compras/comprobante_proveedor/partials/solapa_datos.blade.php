@@ -176,6 +176,15 @@
             'col_label' => $cpColLabel,
             'col_input' => $cpColInput,
         ])
+        @include('includes.compras.campo_proveedor_consulta', [
+            'proveedor_id' => ($data ?? null)?->proveedor_id,
+            'codigo_proveedor' => ($data ?? null)?->proveedores?->codigo,
+            'nombre_proveedor' => ($data ?? null)?->proveedores?->nombre,
+            'requerido' => true,
+            'mostrar_aviso_cuenta' => true,
+            'col_label' => $cpColLabel,
+            'col_input' => $cpColInput,
+        ])
         @include('compras.partials.campo_consulta_tipotransaccion_compra', [
             'prefix' => 'comprobante_proveedor',
             'tipoId' => $tipoSelId,
@@ -189,12 +198,22 @@
             'col_input' => $cpColInput,
             'centrocosto_id' => $centrocostoOcId,
         ])
+        @php
+            $letraCp = old('letra', $data->letra ?? '');
+            if ($letraCp === null || $letraCp === '') {
+                $letraProvCp = optional(optional($data->proveedores ?? null)->condicionivas)->letra ?? '';
+                $letraCp = strtoupper(substr(trim((string) $letraProvCp), 0, 1));
+            } else {
+                $letraCp = strtoupper(substr(trim((string) $letraCp), 0, 1));
+            }
+        @endphp
         <div class="form-group row">
             <label class="{{ $cpColLabel }} requerido">Número</label>
             <div class="{{ $cpColInput }}">
                 <div class="d-flex align-items-center flex-wrap" style="gap:6px;">
-                    <input type="text" name="letra" id="letra" class="form-control text-center" maxlength="1"
-                        value="{{ old('letra', $data->letra ?? '') }}" required style="width:3rem; flex:0 0 3rem;">
+                    <input type="text" name="letra" id="letra" class="form-control text-center text-uppercase" maxlength="1"
+                        value="{{ $letraCp }}" required autocomplete="off"
+                        style="width:3rem; flex:0 0 3rem; text-transform:uppercase;">
                     <span class="text-muted">#</span>
                     <input type="number" name="sucursal" id="sucursal" class="form-control text-right"
                         value="{{ old('sucursal', $data->sucursal ?? '') }}" required style="width:5.5rem; flex:0 0 5.5rem;">
@@ -204,15 +223,6 @@
                 </div>
             </div>
         </div>
-        @include('includes.compras.campo_proveedor_consulta', [
-            'proveedor_id' => ($data ?? null)?->proveedor_id,
-            'codigo_proveedor' => ($data ?? null)?->proveedores?->codigo,
-            'nombre_proveedor' => ($data ?? null)?->proveedores?->nombre,
-            'requerido' => true,
-            'mostrar_aviso_cuenta' => true,
-            'col_label' => $cpColLabel,
-            'col_input' => $cpColInput,
-        ])
         <div class="form-group row">
             <label for="modo_carga" class="{{ $cpColLabel }}">Modo de carga</label>
             <div class="{{ $cpColInput }}">

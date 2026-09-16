@@ -1,5 +1,30 @@
 //script para editar ordenes de trabajo
 
+if (typeof window.clienteEstaHabilitadoParaFacturacion !== 'function') {
+    window.clienteEstaHabilitadoParaFacturacion = function (estado) {
+        var e = String(estado || '').toUpperCase();
+        return e === '0' || e === 'R';
+    };
+}
+
+function etiquetaEstadoClienteParaFactura(estadocliente, nombretiposuspensioncliente) {
+    var nombre = String(nombretiposuspensioncliente || '').trim();
+    if (nombre) {
+        return nombre;
+    }
+    var e = String(estadocliente || '').toUpperCase();
+    if (e === '1') {
+        return 'Suspendido';
+    }
+    if (e === 'R') {
+        return 'Regularizado';
+    }
+    if (e === '0' || e === '') {
+        return 'Activo';
+    }
+    return e || '(sin detalle)';
+}
+
 var tbl_medidas;
 var medidas=[];
 var cantidades=[];
@@ -117,14 +142,14 @@ function facturarPedido(item)
         alert("No puede facturar cliente STOCK");
         return;
     }
-    // Debe chequear estado del cliente
-    if (estadocliente > '0' && 
+    // Debe chequear estado del cliente (Activo y Regularizado pueden facturar)
+    if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
         (tiposuspensioncliente_id == PROFORMA ||
         tiposuspensioncliente_id == MOROSO ||
         tiposuspensioncliente_id == NO_FACTURAR
         ))
     {
-        alert("No puede facturar cliente en estado "+nombretiposuspensioncliente);
+        alert("No puede facturar cliente en estado "+etiquetaEstadoClienteParaFactura(estadocliente, nombretiposuspensioncliente));
         return;
     }
 

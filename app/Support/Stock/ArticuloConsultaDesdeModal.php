@@ -76,7 +76,10 @@ class ArticuloConsultaDesdeModal
             || can('crear-certificado-sanitario', false)
             || can('listar-certificado-sanitario', false)
             || can('consultar-stock-local', false)
-            || can('consultar-precios-local', false);
+            || can('consultar-precios-local', false)
+            || can('crear-ordenes-de-trabajo', false)
+            || can('editar-ordenes-de-trabajo', false)
+            || can('listar-ordenes-de-trabajo', false);
     }
 
     public static function urlEditar(int $id): string

@@ -23,6 +23,7 @@ use App\Models\Stock\Mventa;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Talle;
+use App\Models\Stock\Articulo_Movimiento_Talle;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App;
@@ -236,7 +237,7 @@ class PedidoServiceFerli
 			case 'VENDEDOR':
 			case 'FONDO':
 				$datas = [];
-				$medidas = [];
+				$medidasPorTalle = [];
 				$anterId = 0;
 				foreach($data as $pedido)
 				{
@@ -265,12 +266,12 @@ class PedidoServiceFerli
 								'nombrecolorfondo' => $nombrecolorfondo,
 								'observacion' => $observacion,
 								'articulo_id' => $articulo_id,
-								'medidas' => $medidas
+								'medidas' => array_values($medidasPorTalle)
 							];
 						}
 
 						$anterId = $pedido['pedido_combinacion_id'];
-						$medidas = [];
+						$medidasPorTalle = [];
 
 						$numeropedido = $pedido['pedido_id'];
 						if ($pedido['estado'] == 'A')
@@ -308,8 +309,16 @@ class PedidoServiceFerli
 						$colorfondo_id = $pedido['colorfondo_id'];
 						$nombrecolorfondo = $pedido['nombrecolorfondo'];
 					}
-					
-					$medidas[] = ['medida' => $pedido['nombretalle'], 'cantidad' => $pedido['cantidadportalle']];
+
+					// Una sola cantidad por talle: hay pedidos con filas duplicadas en
+					// pedido_combinacion_talle; sumarlas o repetirlas corre columnas en Excel.
+					$claveTalle = (string) $pedido['nombretalle'];
+					if ($claveTalle !== '' && ! isset($medidasPorTalle[$claveTalle])) {
+						$medidasPorTalle[$claveTalle] = [
+							'medida' => $pedido['nombretalle'],
+							'cantidad' => $pedido['cantidadportalle'],
+						];
+					}
 				}
 				if ($anterId != 0)
 				{
@@ -334,7 +343,7 @@ class PedidoServiceFerli
 								'observacion' => $observacion,
 								'nombrecolorfondo' => $nombrecolorfondo,
 								'articulo_id' => $articulo_id,
-								'medidas' => $medidas
+								'medidas' => array_values($medidasPorTalle)
 							];		
 				}
 				break;
@@ -1050,13 +1059,12 @@ class PedidoServiceFerli
 							}
 						}
 						$clienteot_id = $data['cliente_id'];
-						if ($funcion == 'update' && $ot_ids[$i_comb] > 0)
+						if ($funcion == 'update' && ($ot_ids[$i_comb] ?? 0) > 0)
 						{
-							// Busca el pedido
+							// Cliente OT (puede diferir por reasignación a stock)
 							$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository
 															->findporpedido_combinacion($ids[$i_comb]);
 															
-							// Antes de borrar debe traer si tiene otro cliente la OT por reasignacion
 							if (count($pedido_combinacion_talle) > 0)
 							{
 								$ordentrabajo_combinacion_talle = $this->ordentrabajo_combinacion_talleRepository
@@ -1066,72 +1074,57 @@ class PedidoServiceFerli
 									$clienteot_id = $ordentrabajo_combinacion_talle[0]->cliente_id;
 							}
 						}
-						// Lee la OT
-						$ordentrabajo = $this->ordentrabajoQuery->leeOrdenTrabajo($ot_ids[$i_comb]);
 
-						// Lee la combinacion
+						// OT ya leída en update; en create solo si hace falta
+						if (($ot_ids[$i_comb] ?? 0) > 0 && ! is_object($ordentrabajo)) {
+							$ordentrabajo = $this->ordentrabajoQuery->leeOrdenTrabajo($ot_ids[$i_comb]);
+						}
+
 						$combinacion = Combinacion::find($combinaciones[$i_comb]);
-						// Si actualiza borra los items
-						if ($funcion == 'update' )
-							$this->pedido_combinacion_talleRepository->
-									deleteporpedido_combinacion($ids[$i_comb]);
-						// Abre medidas de cada item
-						$jtalles = json_decode($medidas[$i_comb]);
-						$flGraboMedidas = false;
-						if ($jtalles != null)
-						{
-							foreach ($jtalles as $value)
-							{
-								// Guarda apertura de talles
-								if ($value->cantidad > 0)
-								{
-									$precio = $this->precioService->
-										asignaPrecio($articulos[$i_comb], $combinaciones[$i_comb], $value->talle_id, Carbon::now());
 
-									$flGraboMedidas = true;
-									$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository
-																	->create(
-																				$ids[$i_comb], 
-																				$value->talle_id, 
-																				$value->cantidad, 
-																				$precio[0]['precio']
-																				);
-									// Guarda ot
-									if ($ot_ids[$i_comb] > 0 && $funcion == 'update') 
-									{
-										$talle = Talle::find($value->talle_id);
-										if ($talle)
-											$medida = $talle->nombre;
-										else
-											$medida = '';
-										$dataErp = array(
-													'ordentrabajo_id' => $ordentrabajo->id,
-													'pedido_combinacion_talle_id' => $pedido_combinacion_talle->id,
-													'cliente_id' => $clienteot_id,
-													'estado' => $data['estado'],
-													'usuario_id' => $data['usuario_id'],
-													'nro_orden' => $ordentrabajo->codigo ?? -1,
-													'articulo' => str_pad($articulo->sku, 13, "0", STR_PAD_LEFT),
-													'nro_renglon' => $numeroitems[$i_comb],
-													'color' => $combinacion->codigo,
-													'medida' => $medida,
-													'cantidad' => $value->cantidad,
-													'forro' => ' ',
-													'cliente' => str_pad($cliente->codigo, 6, "0", STR_PAD_LEFT),
-													'fecha' => $ordentrabajo->fecha ?? 0,
-													'agrupacion' => str_pad($categoria_codigo, 4, "0", STR_PAD_LEFT),
-													'estado' => $ordentrabajo->estado ?? '',
-													'cantfact' => 0,
-													'aplique' => 0,
-													'ordentrabajo_stock_id' => $ot_stock_ids[$i_comb],
-													'deposito_id' => $deposito_ids[$i_comb]
-													);
-										$this->ordentrabajo_combinacion_talleRepository->create($dataErp);
-									}
+						// Sync talles por talle_id (no borrar/recrear): preserva IDs y OCT
+						$jtalles = json_decode($medidas[$i_comb]);
+						$medidasSync = [];
+						if ($jtalles != null) {
+							foreach ($jtalles as $value) {
+								$talleId = (int) ($value->talle_id ?? 0);
+								if ($talleId <= 0 || isset($medidasSync[$talleId]) || ! ($value->cantidad > 0)) {
+									continue;
 								}
+								$precio = $this->precioService->asignaPrecio(
+									$articulos[$i_comb],
+									$combinaciones[$i_comb],
+									$talleId,
+									Carbon::now()
+								);
+								$medidasSync[$talleId] = [
+									'talle_id' => $talleId,
+									'cantidad' => $value->cantidad,
+									'precio' => $precio[0]['precio'],
+								];
 							}
 						}
-						if (!$flGraboMedidas)
+
+						$contextoOt = null;
+						if ($funcion == 'update' && ($ot_ids[$i_comb] ?? 0) > 0 && is_object($ordentrabajo)) {
+							if (! isset($ot_stock_ids[$i_comb])) {
+								$ot_stock_ids[$i_comb] = 0;
+							}
+							$contextoOt = [
+								'ordentrabajo_id' => $ordentrabajo->id,
+								'cliente_id' => $clienteot_id,
+								'usuario_id' => $data['usuario_id'],
+								'estado' => $data['estado'],
+								'ordentrabajo_stock_id' => $ot_stock_ids[$i_comb],
+							];
+						}
+
+						$syncTalles = $this->pedido_combinacion_talleRepository->sincronizarMedidas(
+							(int) $ids[$i_comb],
+							array_values($medidasSync),
+							$contextoOt
+						);
+						if (! $syncTalles['grabo'])
 						{
 							$item = $i_comb + 1;
 							throw new Exception('El item '.$item.' no tiene talles');
@@ -1141,7 +1134,7 @@ class PedidoServiceFerli
 						if (!isset($ot_stock_ids[$i_comb]))
 							$ot_stock_ids[$i_comb] = 0;
 						if (($ot_stock_ids[$i_comb] > 0 || $clienteot_id == config("consprod.CLIENTE_STOCK")) &&
-							$ordentrabajo != null)
+							is_object($ordentrabajo))
 						{
 							if ($ot_stock_ids[$i_comb] > 0)
 								$this->generaMovimientoStock($data['fecha'], $pedido_combinacion, 
@@ -1177,79 +1170,78 @@ class PedidoServiceFerli
 		try 
 		{
 			$ordentrabajo_stock_id = 0;
+			$pedidoCombinacionId = (int) ($data['pedido_combinacion_id'] ?? 0);
+			$ordentrabajoId = (int) ($data['ordentrabajo_id'] ?? 0);
 
-			// Borra las medidas
-			if ($funcion == 'update' && $data['pedido_combinacion_id'] > 0)
+			if ($funcion == 'update' && $pedidoCombinacionId > 0 && $ordentrabajoId > 0)
 			{
-				// Lee Ot para sacar datos de stock
 				$ordentrabajo_combinacion_talle = $this->ordentrabajo_combinacion_talleRepository
-													   ->findPorOrdenTrabajoId($data['ordentrabajo_id']);
+													   ->findPorOrdenTrabajoId($ordentrabajoId);
 
 				if ($ordentrabajo_combinacion_talle)
 					$ordentrabajo_stock_id = $ordentrabajo_combinacion_talle[0]->ordentrabajo_stock_id;
-			
-				$this->pedido_combinacion_talleRepository->deleteporpedido_combinacion($data['pedido_combinacion_id']);
 			}
 
-			// Abre medidas de cada item
 			$jtalles = json_decode($data['data']);
-			$totPares = 0;
-			foreach ($jtalles as $value)
-			{
-				// Guarda apertura de talles
-				if ($value->cantidad ?? '' > 0)
-				{
-					$totPares += $value->cantidad;
-
-					// Guarda pedido
-					$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository->create(
-																$data['pedido_combinacion_id'], 
-																$value->talle_id, 
-																$value->cantidad, 
-																$value->precio
-																);
-
-					// Guarda ot
-					if ($data['ordentrabajo_id'] > 0 && $funcion == 'update') 
-					{
-						$talle = Talle::find($value->talle_id);
-						if ($talle)
-							$medida = $talle->nombre;
-						else
-							$medida = '';
-
-						$dataErp = array(
-									'ordentrabajo_id' => $data['ordentrabajo_id'],
-									'pedido_combinacion_talle_id' => $pedido_combinacion_talle->id,
-									'cliente_id' => $data['cliente_id'],
-									'usuario_id' => $data['usuario_id'],
-									'ordentrabajo_stock_id' => $ordentrabajo_stock_id,
-									'estado' => ''
-								);
-
-						$this->ordentrabajo_combinacion_talleRepository->create($dataErp);
-
-						// Guarda cada talle en articulo_movimiento_talle
-						if ($ordentrabajo_stock_id != 0 || $data['cliente_id'] == config("consprod.CLIENTE_STOCK"))
-						{
-							$dataStk = [];
-							$dataStk['pedido_combinacion_talle_id'] = $pedido_combinacion_talle->id;
-							$dataStk['talle_id'] = $value->talle_id;
-							$dataStk['cantidad'] = $value->cantidad;
-							$dataStk['precio'] = $value->precio;
-		
-							$this->articulo_movimientoService->guardaArticuloMovimientoTalle($data['pedido_combinacion_id'], $dataStk);
-						}
+			$medidasSync = [];
+			if (is_array($jtalles) || is_object($jtalles)) {
+				foreach ($jtalles as $value) {
+					$talleId = (int) ($value->talle_id ?? 0);
+					$cantidadTalle = (float) ($value->cantidad ?? 0);
+					if ($talleId <= 0 || $cantidadTalle <= 0 || isset($medidasSync[$talleId])) {
+						continue;
 					}
+					$medidasSync[$talleId] = [
+						'talle_id' => $talleId,
+						'cantidad' => $cantidadTalle,
+						'precio' => $value->precio ?? 0,
+					];
+				}
+			}
+
+			$contextoOt = null;
+			if ($funcion == 'update' && $ordentrabajoId > 0) {
+				$contextoOt = [
+					'ordentrabajo_id' => $ordentrabajoId,
+					'cliente_id' => $data['cliente_id'],
+					'usuario_id' => $data['usuario_id'],
+					'estado' => '',
+					'ordentrabajo_stock_id' => $ordentrabajo_stock_id,
+				];
+			}
+
+			$syncTalles = $this->pedido_combinacion_talleRepository->sincronizarMedidas(
+				$pedidoCombinacionId,
+				array_values($medidasSync),
+				$contextoOt
+			);
+			$totPares = $syncTalles['total_pares'];
+
+			// Stock: rearmar AMT de talles vigentes (los quitados ya se borraron en el sync)
+			$esStock = $ordentrabajo_stock_id != 0 || $data['cliente_id'] == config("consprod.CLIENTE_STOCK");
+			if ($funcion == 'update' && $ordentrabajoId > 0 && $esStock) {
+				$pctIds = $syncTalles['talles']->pluck('id')->all();
+				if ($pctIds !== []) {
+					Articulo_Movimiento_Talle::query()
+						->whereIn('pedido_combinacion_talle_id', $pctIds)
+						->delete();
+				}
+				foreach ($syncTalles['talles'] as $pct) {
+					$this->articulo_movimientoService->guardaArticuloMovimientoTalle($pedidoCombinacionId, [
+						'pedido_combinacion_talle_id' => $pct->id,
+						'talle_id' => $pct->talle_id,
+						'cantidad' => $pct->cantidad,
+						'precio' => $pct->precio,
+					]);
 				}
 			}
 
 			// Actualiza cantidad de pares en pedido_combinacion
-			$this->pedido_combinacionRepository->update(['cantidad' => $totPares], $data['pedido_combinacion_id']);
+			$this->pedido_combinacionRepository->update(['cantidad' => $totPares], $pedidoCombinacionId);
 			
 			// Actualiza cantidad de pares en articulo_movimiento
-			if ($ordentrabajo_stock_id != 0 || $data['cliente_id'] == config("consprod.CLIENTE_STOCK"))
-				$this->articulo_movimientoService->guardaArticuloMovimientoPorPedidoCombinacionId($data['pedido_combinacion_id'], ['cantidad' => $totPares]);
+			if ($esStock)
+				$this->articulo_movimientoService->guardaArticuloMovimientoPorPedidoCombinacionId($pedidoCombinacionId, ['cantidad' => $totPares]);
 			
 			DB::commit();
 		} catch (\Exception $e) 

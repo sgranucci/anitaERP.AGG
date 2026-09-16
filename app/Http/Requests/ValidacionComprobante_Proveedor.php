@@ -16,6 +16,16 @@ class ValidacionComprobante_Proveedor extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $letra = $this->input('letra');
+        if (is_string($letra) || is_numeric($letra)) {
+            $this->merge([
+                'letra' => strtoupper(substr(trim((string) $letra), 0, 1)),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [

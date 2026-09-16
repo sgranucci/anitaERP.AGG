@@ -20,6 +20,7 @@ use App\Models\Stock\Talle;
 use App\Models\Stock\Combinacion;
 use App\Models\Produccion\Tarea;
 use App\Exports\Ventas\OrdentrabajoExport;
+use App\Support\Ventas\OrdentrabajoListadoFiltros;
 
 class OrdentrabajoController extends Controller
 {
@@ -161,13 +162,17 @@ class OrdentrabajoController extends Controller
 		ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $busqueda = $request->busqueda;
-        
-		$ordentrabajo = $this->ordentrabajoService->leeOrdenestrabajoPaginando($busqueda, true);
+        $filtros = OrdentrabajoListadoFiltros::resolverDesdeRequest($request);
+        $filtrosQuery = OrdentrabajoListadoFiltros::paraQueryString($filtros);
+		$ordentrabajo = $this->ordentrabajoService->leeOrdenestrabajoPaginando($filtros, true);
 
-		$datas = ['ordentrabajo' => $ordentrabajo, 'busqueda' => $busqueda];
-
-		return view('ventas.ordentrabajo.indexp', $datas); 
+		return view('ventas.ordentrabajo.indexp', [
+            'ordentrabajo' => $ordentrabajo,
+            'filtros' => $filtros,
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => OrdentrabajoListadoFiltros::CAMPOS,
+            'busqueda' => $filtros['valor'] ?? '',
+        ]);
     }
 
     public function lista(Request $request, $formato = null, $busqueda = null)
@@ -177,38 +182,42 @@ class OrdentrabajoController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        switch($formato)
-        {
+        $filtros = OrdentrabajoListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $filtrosQuery = OrdentrabajoListadoFiltros::paraQueryString($filtros);
+
+        if ($formato === null || $formato === '') {
+            return redirect()->route('ordentrabajo', $filtrosQuery);
+        }
+
+        switch ($formato) {
         case 'PDF':
-			$ordentrabajo = $this->ordentrabajoService->leeOrdenestrabajoPaginando($busqueda, false);
-            $view =  \View::make('ventas.ordentrabajo.listado', compact('ordentrabajo'))
+			$ordentrabajo = $this->ordentrabajoService->leeOrdenestrabajoPaginando($filtros, false);
+            $view = \View::make('ventas.ordentrabajo.listado', compact('ordentrabajo', 'filtros'))
                         ->render();
             $path = storage_path('pdf/listados');
+            if (! is_dir($path)) {
+                @mkdir($path, 0755, true);
+            }
             $nombre_pdf = 'listado_ordentrabajo';
 
             $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','portrait');
+            $pdf->setPaper('legal', 'landscape');
             $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
             return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
 
         case 'EXCEL':
             return (new OrdentrabajoExport($this->ordentrabajoService))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('ordentrabajo.xlsx');
-            break;
 
         case 'CSV':
             return (new OrdentrabajoExport($this->ordentrabajoService))
-                        ->parametros($busqueda)
+                        ->parametros($filtros)
                         ->download('ordentrabajo.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
-        }   
+        }
 
-        $datas = ['ordentrabajo' => $pedidos, 'busqueda' => $busqueda];
-
-		return view('ventas.ordentrabajo.indexp', $datas);       
+		return redirect()->route('ordentrabajo', $filtrosQuery);
     }
 
 	public function limpiafiltro(Request $request) 
@@ -330,10 +339,9 @@ class OrdentrabajoController extends Controller
     {
         can('crear-ordenes-de-trabajo');
 
-		$articulo_query = $this->articuloQuery->allQueryConCombinacion(['id', 'sku', 'descripcion', 'mventa_id'], 'descripcion');
-		$mventa_query = Mventa::all();
+		$mventa_query = Mventa::query()->orderBy('nombre')->get(['id', 'nombre']);
 
-        return view('ventas.ordentrabajo.crear', compact('articulo_query', 'mventa_query'));
+        return view('ventas.ordentrabajo.crear', compact('mventa_query'));
     }
 
     /**
@@ -357,7 +365,15 @@ class OrdentrabajoController extends Controller
 
 		if ($origen == 'pedido')
 		{
-        	return ['id'=>$data['id'],'nro_orden'=>$data['nro_orden']];
+			$respuesta = [
+				'id' => $data['id'] ?? 0,
+				'nro_orden' => $data['nro_orden'] ?? 0,
+			];
+			if (! empty($data['error'])) {
+				$respuesta['error'] = $data['error'];
+			}
+
+			return $respuesta;
 		}
 		else
 		{
@@ -420,7 +436,7 @@ class OrdentrabajoController extends Controller
 						'cliente'=>$ot->clientes->nombre, 
 						'cliente_id'=>$ot->clientes->id,
 						'estadocliente'=>$ot->clientes->estado,
-						'tiposuspensioncliente_id'=>$ot->clientes->tiposupension_id,
+						'tiposuspensioncliente_id'=>$ot->clientes->tiposuspension_id,
 						'nombretiposuspensioncliente'=>$ot->clientes->tipossuspensioncliente->nombre??'',
 						'articulo'=>$item->articulos->descripcion,
 						'sku'=>$item->articulos->sku,

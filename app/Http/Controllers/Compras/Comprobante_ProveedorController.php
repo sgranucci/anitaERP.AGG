@@ -1031,6 +1031,7 @@ class Comprobante_ProveedorController extends Controller
         ];
         if ($data) {
             $data->loadMissing([
+                'proveedores.condicionivas',
                 'tipotransaccion_compras',
                 'ordencompras.sector_legajocompras',
                 'ordencompras.contrato_cuentacontables',

@@ -3,18 +3,15 @@
 namespace App\Observers\Ventas;
 
 use App\Models\Ventas\Pedido_Combinacion_Estado;
-use App\Services\Ventas\PedidoService;
 use App\Repositories\Ventas\Pedido_CombinacionRepositoryInterface;
+use App\Support\Ventas\PedidoEstadoCabeceraSupport;
 
 class Pedido_Combinacion_EstadoObserver
 {
-    private $pedidoService;
     private $pedido_combinacionRepository;
 
-    public function __construct(PedidoService $pedidoservice,
-                                Pedido_CombinacionRepositoryInterface $pedidocombinacionrepository)
+    public function __construct(Pedido_CombinacionRepositoryInterface $pedidocombinacionrepository)
     {
-        $this->pedidoService = $pedidoservice;
         $this->pedido_combinacionRepository = $pedidocombinacionrepository;
     }
 
@@ -26,11 +23,7 @@ class Pedido_Combinacion_EstadoObserver
      */
     public function created(Pedido_Combinacion_Estado $pedidoCombinacionEstado)
     {
-        // Lee item del pedido por id
-        $pedido_combinacion = $this->pedido_combinacionRepository->find($pedidoCombinacionEstado->pedido_combinacion_id);
-
-        // Ejecuta cambio de estado del pedido
-        $this->pedidoService->estadoPedido($pedido_combinacion->pedido_id, "update");
+        $this->refrescarDesdeEstado($pedidoCombinacionEstado);
     }
 
     /**
@@ -41,11 +34,7 @@ class Pedido_Combinacion_EstadoObserver
      */
     public function updated(Pedido_Combinacion_Estado $pedidoCombinacionEstado)
     {
-        // Lee item del pedido por id
-        $pedido_combinacion = $this->pedido_combinacionRepository->find($pedidoCombinacionEstado->pedido_combinacion_id);
-
-        // Ejecuta cambio de estado del pedido
-        $this->pedidoService->estadoPedido($pedido_combinacion->pedido_id, "update");
+        $this->refrescarDesdeEstado($pedidoCombinacionEstado);
     }
 
     /**
@@ -56,11 +45,7 @@ class Pedido_Combinacion_EstadoObserver
      */
     public function deleted(Pedido_Combinacion_Estado $pedidoCombinacionEstado)
     {
-         // Lee item del pedido por id
-         $pedido_combinacion = $this->pedido_combinacionRepository->find($pedidoCombinacionEstado->pedido_combinacion_id);
-
-         // Ejecuta cambio de estado del pedido
-         $this->pedidoService->estadoPedido($pedido_combinacion->pedido_id, "update");
+        $this->refrescarDesdeEstado($pedidoCombinacionEstado);
     }
 
     /**
@@ -71,11 +56,7 @@ class Pedido_Combinacion_EstadoObserver
      */
     public function restored(Pedido_Combinacion_Estado $pedidoCombinacionEstado)
     {
-        // Lee item del pedido por id
-        $pedido_combinacion = $this->pedido_combinacionRepository->find($pedidoCombinacionEstado->pedido_combinacion_id);
-
-        // Ejecuta cambio de estado del pedido
-        $this->pedidoService->estadoPedido($pedido_combinacion->pedido_id, "update");
+        $this->refrescarDesdeEstado($pedidoCombinacionEstado);
     }
 
     /**
@@ -86,10 +67,16 @@ class Pedido_Combinacion_EstadoObserver
      */
     public function forceDeleted(Pedido_Combinacion_Estado $pedidoCombinacionEstado)
     {
-        // Lee item del pedido por id
-        $pedido_combinacion = $this->pedido_combinacionRepository->find($pedidoCombinacionEstado->pedido_combinacion_id);
+        $this->refrescarDesdeEstado($pedidoCombinacionEstado);
+    }
 
-        // Ejecuta cambio de estado del pedido
-        $this->pedidoService->estadoPedido($pedido_combinacion->pedido_id, "update");
+    private function refrescarDesdeEstado(Pedido_Combinacion_Estado $pedidoCombinacionEstado): void
+    {
+        $pedido_combinacion = $this->pedido_combinacionRepository->find($pedidoCombinacionEstado->pedido_combinacion_id);
+        if (! $pedido_combinacion) {
+            return;
+        }
+
+        PedidoEstadoCabeceraSupport::refrescar((int) $pedido_combinacion->pedido_id);
     }
 }

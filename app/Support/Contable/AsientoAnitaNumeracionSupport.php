@@ -7,7 +7,7 @@ namespace App\Support\Contable;
 use RuntimeException;
 
 /**
- * Reserva de número de asiento Anita (numabm a-ctamov.c / numerador El Bierzo).
+ * Reserva de número de asiento Anita (numabm a-ctamov.c / numerador El Bierzo y Ferli).
  *
  * Si Anita nativo (u otro proceso) ya grabó ctamov con el candidato del numerador,
  * saltar al siguiente libre para evitar Informix 239 UNIQUE al insertar.
