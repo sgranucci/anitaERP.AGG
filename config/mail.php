@@ -43,6 +43,13 @@ return [
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
+            /**
+             * Symfony Mailer DSN options (relay interno Interforming: STARTTLS con cert no confiable).
+             * MAIL_AUTO_TLS=false → no fuerza STARTTLS en puerto 25.
+             * MAIL_VERIFY_PEER=false → acepta certificado autofirmado / hostname distinto.
+             */
+            'auto_tls' => filter_var(env('MAIL_AUTO_TLS', true), FILTER_VALIDATE_BOOLEAN),
+            'verify_peer' => filter_var(env('MAIL_VERIFY_PEER', true), FILTER_VALIDATE_BOOLEAN),
         ],
 
         'ses' => [
