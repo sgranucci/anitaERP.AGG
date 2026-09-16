@@ -332,7 +332,7 @@
 
 <input type="hidden" id="estadocliente" value="{{ $pedido->clientes->estado ?? '' }}">
 <input type="hidden" id="nombretiposuspensioncliente" value="{{ $pedido->clientes->tipossuspensioncliente->nombre ?? ''}}">
-<input type="hidden" id="tiposuspensioncliente_id" value="{{ $pedido->clientes->tiposupension_id ?? ''}}">
+<input type="hidden" id="tiposuspensioncliente_id" value="{{ $pedido->clientes->tiposuspension_id ?? ''}}">
 <input type="hidden" id="tipoalta" value="{{ $pedido->clientes->tipoalta ?? ''}}">
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 <input type="hidden" id="puntoventadefault_id" class="form-control" value="{{$puntoventadefault_id}}" />

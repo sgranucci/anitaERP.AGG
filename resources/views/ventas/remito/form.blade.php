@@ -276,7 +276,7 @@
 <input type="hidden" id="estado" name="estado" value="{{ $remito->estado ?? '' }}">
 <input type="hidden" id="origen_remito" name="origen" value="{{ old('origen', $remito->origen ?? 'manual') }}">
 <input type="hidden" id="nombretiposuspensioncliente" value="{{ $remito->clientes->tipossuspensioncliente->nombre ?? ''}}">
-<input type="hidden" id="tiposuspensioncliente_id" value="{{ $remito->clientes->tiposupension_id ?? ''}}">
+<input type="hidden" id="tiposuspensioncliente_id" value="{{ $remito->clientes->tiposuspension_id ?? ''}}">
 <input type="hidden" id="tipoalta" value="{{ $remito->clientes->tipoalta ?? ''}}">
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 <input type="hidden" id="puntoventadefault_id" class="form-control" value="{{$puntoventadefault_id}}" />

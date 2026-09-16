@@ -436,7 +436,7 @@ class OrdentrabajoController extends Controller
 						'cliente'=>$ot->clientes->nombre, 
 						'cliente_id'=>$ot->clientes->id,
 						'estadocliente'=>$ot->clientes->estado,
-						'tiposuspensioncliente_id'=>$ot->clientes->tiposupension_id,
+						'tiposuspensioncliente_id'=>$ot->clientes->tiposuspension_id,
 						'nombretiposuspensioncliente'=>$ot->clientes->tipossuspensioncliente->nombre??'',
 						'articulo'=>$item->articulos->descripcion,
 						'sku'=>$item->articulos->sku,
