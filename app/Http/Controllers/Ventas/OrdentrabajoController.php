@@ -365,7 +365,15 @@ class OrdentrabajoController extends Controller
 
 		if ($origen == 'pedido')
 		{
-        	return ['id'=>$data['id'],'nro_orden'=>$data['nro_orden']];
+			$respuesta = [
+				'id' => $data['id'] ?? 0,
+				'nro_orden' => $data['nro_orden'] ?? 0,
+			];
+			if (! empty($data['error'])) {
+				$respuesta['error'] = $data['error'];
+			}
+
+			return $respuesta;
 		}
 		else
 		{

@@ -22,6 +22,9 @@
       </div>
       <div class="modal-footer">
         <button type="button" id="cierrasuspensionModal" class="btn btn-secondary" data-dismiss="modal">Cierra</button>
+        <button type="button" id="btn-activar-suspension" class="btn btn-success" style="display: none;">
+            Volver a Activo
+        </button>
         @if (\App\Support\Ventas\ClienteRegularizacionAbmSupport::usuarioPuedeRegularizar())
         <button type="button" id="btn-regularizar-suspension" class="btn btn-warning js-btn-regularizar-cliente">Regularizar (R)</button>
         @endif

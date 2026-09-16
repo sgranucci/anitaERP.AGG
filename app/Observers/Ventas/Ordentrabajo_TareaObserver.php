@@ -3,18 +3,15 @@
 namespace App\Observers\Ventas;
 
 use App\Models\Ventas\Ordentrabajo_Tarea;
-use App\Services\Ventas\PedidoService;
 use App\Repositories\Ventas\Pedido_CombinacionRepositoryInterface;
+use App\Support\Ventas\PedidoEstadoCabeceraSupport;
 
 class Ordentrabajo_TareaObserver
 {
-    private $pedidoService;
     private $pedido_combinacionRepository;
 
-    public function __construct(PedidoService $pedidoservice,
-                                Pedido_CombinacionRepositoryInterface $pedidocombinacionrepository)
+    public function __construct(Pedido_CombinacionRepositoryInterface $pedidocombinacionrepository)
     {
-        $this->pedidoService = $pedidoservice;
         $this->pedido_combinacionRepository = $pedidocombinacionrepository;
     }
 
@@ -26,7 +23,7 @@ class Ordentrabajo_TareaObserver
      */
     public function created(Ordentrabajo_Tarea $ordentrabajoTarea)
     {
-        Self::procesaActualizacion($ordentrabajoTarea);
+        $this->procesaActualizacion($ordentrabajoTarea);
     }
 
     /**
@@ -37,7 +34,7 @@ class Ordentrabajo_TareaObserver
      */
     public function updated(Ordentrabajo_Tarea $ordentrabajoTarea)
     {
-        Self::procesaActualizacion($ordentrabajoTarea);
+        $this->procesaActualizacion($ordentrabajoTarea);
     }
 
     /**
@@ -48,7 +45,7 @@ class Ordentrabajo_TareaObserver
      */
     public function deleted(Ordentrabajo_Tarea $ordentrabajoTarea)
     {
-        Self::procesaActualizacion($ordentrabajoTarea);
+        $this->procesaActualizacion($ordentrabajoTarea);
     }
 
     /**
@@ -59,7 +56,7 @@ class Ordentrabajo_TareaObserver
      */
     public function restored(Ordentrabajo_Tarea $ordentrabajoTarea)
     {
-        Self::procesaActualizacion($ordentrabajoTarea);
+        $this->procesaActualizacion($ordentrabajoTarea);
     }
 
     /**
@@ -70,18 +67,20 @@ class Ordentrabajo_TareaObserver
      */
     public function forceDeleted(Ordentrabajo_Tarea $ordentrabajoTarea)
     {
-        Self::procesaActualizacion($ordentrabajoTarea);
+        $this->procesaActualizacion($ordentrabajoTarea);
     }
 
-    private function procesaActualizacion(Ordentrabajo_tarea $ordentrabajoTarea)
+    private function procesaActualizacion(Ordentrabajo_Tarea $ordentrabajoTarea): void
     {
-        if ($ordentrabajoTarea->tarea_id == config("consprod.TAREA_FACTURADA"))
-        {
-            // Lee item del pedido por id
-            $pedido_combinacion = $this->pedido_combinacionRepository->find($ordentrabajoTarea->pedido_combinacion_id);
-
-            // Ejecuta cambio de estado del pedido
-            $this->pedidoService->estadoPedido($pedido_combinacion->pedido_id, "update");
+        if ($ordentrabajoTarea->tarea_id != config('consprod.TAREA_FACTURADA')) {
+            return;
         }
+
+        $pedido_combinacion = $this->pedido_combinacionRepository->find($ordentrabajoTarea->pedido_combinacion_id);
+        if (! $pedido_combinacion) {
+            return;
+        }
+
+        PedidoEstadoCabeceraSupport::refrescar((int) $pedido_combinacion->pedido_id);
     }
 }

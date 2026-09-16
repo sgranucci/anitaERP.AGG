@@ -87,15 +87,9 @@
         $("#botonestado").click(function(){
             var estado = String($("#estado").val() || '0');
 
-            if (estado === '0') {
+            // Activo o Regularizado: abre el modal para suspender (o volver a Activo si está R).
+            if (estado === '0' || estado === 'R') {
                 $("#suspensionModal").modal('show');
-                return;
-            }
-
-            if (estado === 'R') {
-                if (confirm('¿Reactivar el cliente como Activo?')) {
-                    aplicarEstadoClienteEnFormulario('0');
-                }
                 return;
             }
 
@@ -300,19 +294,32 @@
             filtraCaracteresEspeciales(this);
         });
 
-        // Controla apertura modal de anulacion
-        $('#suspensionModal').on('show.bs.modal', function (event) {
+        // Controla apertura modal de suspensión / cambio de estado
+        $('#suspensionModal').on('show.bs.modal', function () {
             var modal = $(this);
             var nombre = $("#nombre").val();
-            var tiposuspension_id = $('#modaltiposuspension_id').val();
+            var estado = String($("#estado").val() || '0');
+            var tiposuspension_id = $('#tiposuspension_id').val() || '';
 
-            var tituloModal = "Suspension del cliente "+nombre;
+            var tituloModal = estado === 'R'
+                ? ('Estado del cliente ' + nombre + ' (Regularizado)')
+                : ('Suspensión del cliente ' + nombre);
             modal.find('.modal-title').text(tituloModal);
             $('#modaltiposuspension_id').val(tiposuspension_id);
+
+            var $btnActivar = $('#btn-activar-suspension');
+            if ($btnActivar.length) {
+                if (estado === 'R') {
+                    $btnActivar.show();
+                } else {
+                    $btnActivar.hide();
+                }
+            }
         });
 
-        $('#cierrasuspensionModal').on('click', function () {
-            
+        $('#btn-activar-suspension').on('click', function () {
+            aplicarEstadoClienteEnFormulario('0');
+            $('#suspensionModal').modal('hide');
         });
 
         // Acepta modal de suspension de cliente
@@ -326,10 +333,6 @@
             muestraTipoSuspension();
 
             $('#suspensionModal').modal('hide');
-        });
-
-        $('#suspensionModal').on('hidden.bs.modal', function () {
-        
         });
 
 		var condicioniva_id = $("#condicioniva_id").val();

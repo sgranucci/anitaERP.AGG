@@ -1462,6 +1462,12 @@
 			
 								$("#ordentrabajo_stock_codigo").val('');
 							}
+							else
+							{
+								alert(data.error || 'No se pudo generar la OT de stock');
+							}
+						}).fail(function(xhr){
+							alert('Error al generar la OT: '+(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : (xhr.statusText || 'fallo de red')));
 						});
 					}
 					else	
@@ -1493,6 +1499,12 @@
 	
 						$("#ordentrabajo_stock_codigo").val('');
 					}
+					else
+					{
+						alert(data.error || 'No se pudo generar la OT');
+					}
+				}).fail(function(xhr){
+					alert('Error al generar la OT: '+(xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : (xhr.statusText || 'fallo de red')));
 				});
 			}
 		});

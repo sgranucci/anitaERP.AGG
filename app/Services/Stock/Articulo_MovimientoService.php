@@ -13,6 +13,8 @@ use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Queries\Stock\Articulo_MovimientoQueryInterface;
 use App\Models\Stock\Modulo;
 use App\Models\Stock\Talle;
+use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Cache;
@@ -53,9 +55,12 @@ class Articulo_MovimientoService
 			unset($dataMovimiento['cantidad_ya_firmada']);
 
 			if (! $cantidadYaFirmada) {
-				$signoCantidad = $dataMovimiento['signo_cantidad'] ?? $tipotransaccion->signo;
+				$dataMovimiento['cantidad'] = $this->firmarCantidadMovimiento(
+					(float) $dataMovimiento['cantidad'],
+					$tipotransaccion,
+					$dataMovimiento['signo_cantidad'] ?? null
+				);
 				unset($dataMovimiento['signo_cantidad']);
-				$dataMovimiento['cantidad'] = $dataMovimiento['cantidad'] * ($signoCantidad == 'S' ? 1 : -1);
 			} else {
 				unset($dataMovimiento['signo_cantidad']);
 			}
@@ -224,10 +229,41 @@ class Articulo_MovimientoService
 		}
 
 		if (! empty($dataMovimiento['tipotransaccion_id'])) {
-			return $this->tipotransaccionRepository->find((int) $dataMovimiento['tipotransaccion_id']);
+			$legacyId = (int) $dataMovimiento['tipotransaccion_id'];
+			// Ferli / post-migración: CONOT/ALTAP viven en tipotransaccion_stock (mapa).
+			$stockId = $this->tipotransaccionStockRepository->resolveIdFromLegacy($legacyId);
+			try {
+				return $this->tipotransaccionStockRepository->find($stockId);
+			} catch (ModelNotFoundException $e) {
+				// Entornos sin tipo stock equivalente: seguir con tipo ventas.
+			}
+
+			return $this->tipotransaccionRepository->find($legacyId);
 		}
 
 		throw new \Exception('No encontro tipo de transaccion.');
+	}
+
+	/**
+	 * Firma cantidad: tipo stock expone S/R (accessor); formularios también envían S/R;
+	 * valor crudo ±1 se normaliza con ArticuloMovimientoCantidadSignoSupport.
+	 */
+	private function firmarCantidadMovimiento(
+		float $cantidad,
+		Tipotransaccion|Tipotransaccion_Stock $tipotransaccion,
+		mixed $signoCantidad = null
+	): float {
+		$signo = $signoCantidad ?? $tipotransaccion->signo;
+
+		if ($signo === 'S' || $signo === 'R') {
+			return $cantidad * ($signo === 'S' ? 1 : -1);
+		}
+
+		if (is_numeric($signo)) {
+			return ArticuloMovimientoCantidadSignoSupport::cantidadFirmadaSignoStock($cantidad, (int) $signo);
+		}
+
+		return $cantidad * ($signo == 'S' ? 1 : -1);
 	}
 
 	private function resolveTipoTransaccionDesdeMovimiento($articulo_movimiento): Tipotransaccion|Tipotransaccion_Stock

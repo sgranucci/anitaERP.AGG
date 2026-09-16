@@ -490,8 +490,11 @@ class OrdentrabajoService
 			DB::commit();
 		} catch (\Exception $e) {
 			DB::rollback();
-			dd($e->getMessage());
-			return $e->getMessage();
+			Log::error('guardaOrdenTrabajo: '.$e->getMessage(), [
+				'exception' => $e,
+			]);
+
+			return ['id' => 0, 'nro_orden' => 0, 'error' => $e->getMessage()];
 		}
 		
 		return ['id'=>$ordentrabajo_id, 'nro_orden'=>$ordentrabajo_id];
