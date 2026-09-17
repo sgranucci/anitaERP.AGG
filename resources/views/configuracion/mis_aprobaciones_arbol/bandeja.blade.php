@@ -339,7 +339,10 @@
                                 Actuás por {{ $p['reemplazo_de'] }}
                             </p>
                         @endif
-                        <div class="anita-inbox-doc-row">
+                        @php
+                            $tieneResumenSp = !empty($p['proveedor']) || !empty($p['concepto']) || !empty($p['detalle']);
+                        @endphp
+                        <div class="anita-inbox-doc-row{{ $tieneResumenSp ? ' anita-inbox-doc-row--with-summary' : '' }}">
                             <div class="anita-inbox-doc">
                                 <strong>
                                     @if (!empty($p['url_detalle']))
@@ -359,6 +362,28 @@
                                     @endif
                                 </span>
                             </div>
+                            @if ($tieneResumenSp)
+                                <div class="anita-inbox-sp-summary" title="Resumen de la solicitud de pago">
+                                    @if (!empty($p['proveedor']))
+                                        <div class="anita-inbox-sp-line">
+                                            <span class="anita-inbox-sp-label">Proveedor</span>
+                                            <span class="anita-inbox-sp-value">{{ $p['proveedor'] }}</span>
+                                        </div>
+                                    @endif
+                                    @if (!empty($p['concepto']))
+                                        <div class="anita-inbox-sp-line">
+                                            <span class="anita-inbox-sp-label">Concepto</span>
+                                            <span class="anita-inbox-sp-value">{{ $p['concepto'] }}</span>
+                                        </div>
+                                    @endif
+                                    @if (!empty($p['detalle']))
+                                        <div class="anita-inbox-sp-line">
+                                            <span class="anita-inbox-sp-label">Detalle</span>
+                                            <span class="anita-inbox-sp-value anita-inbox-sp-value--detalle">{{ $p['detalle'] }}</span>
+                                        </div>
+                                    @endif
+                                </div>
+                            @endif
                             @if (($p['monto'] ?? 0) > 0)
                                 <div class="anita-inbox-amount">
                                     <span class="anita-inbox-amount-value">

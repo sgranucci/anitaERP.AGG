@@ -485,6 +485,8 @@ class MisAprobacionesArbolService
 
         $sla = $this->calcularSlaArbol($mov, $fechaEnvio, $diasPendiente, $urgencia);
 
+        $resumenSp = $this->resumenSolicitudpagoBandeja($ref['tipo'], $documento);
+
         return [
             'movimiento_id' => (int) $mov->id,
             'tipo' => $this->tipoBandejaDesdeReferencia($ref, $documento),
@@ -514,6 +516,41 @@ class MisAprobacionesArbolService
             'sla_fecha_limite' => $sla['fecha_limite'],
             'dias_para_vencer' => $sla['dias_para_vencer'],
             'observacion' => $obs !== '' ? $obs : null,
+            'proveedor' => $resumenSp['proveedor'],
+            'concepto' => $resumenSp['concepto'],
+            'detalle' => $resumenSp['detalle'],
+        ];
+    }
+
+    /**
+     * Resumen de SP para la bandeja (proveedor / concepto / detalle).
+     *
+     * @return array{proveedor: ?string, concepto: ?string, detalle: ?string}
+     */
+    private function resumenSolicitudpagoBandeja(string $tipo, mixed $documento): array
+    {
+        $vacio = ['proveedor' => null, 'concepto' => null, 'detalle' => null];
+
+        if ($tipo !== 'SP' || ! $documento instanceof \App\Models\Solicitudpago\Solicitudpago) {
+            return $vacio;
+        }
+
+        $proveedor = trim((string) (optional($documento->proveedores)->nombre ?? ''));
+
+        $conceptoRel = $documento->conceptos;
+        $concepto = '';
+        if ($conceptoRel) {
+            $nombre = trim((string) ($conceptoRel->nombre ?? ''));
+            $codigo = trim((string) ($conceptoRel->codigo ?? ''));
+            $concepto = $nombre !== '' ? $nombre : $codigo;
+        }
+
+        $detalle = trim((string) ($documento->detalle ?? ''));
+
+        return [
+            'proveedor' => $proveedor !== '' ? $proveedor : null,
+            'concepto' => $concepto !== '' ? $concepto : null,
+            'detalle' => $detalle !== '' ? $detalle : null,
         ];
     }
 

@@ -183,6 +183,15 @@ class UserTaskBandejaService
         if (! empty($item['subtitulo'])) {
             $campos[] = ['label' => 'Detalle', 'valor' => (string) $item['subtitulo']];
         }
+        if (! empty($item['proveedor'])) {
+            $campos[] = ['label' => 'Proveedor', 'valor' => (string) $item['proveedor']];
+        }
+        if (! empty($item['concepto'])) {
+            $campos[] = ['label' => 'Concepto', 'valor' => (string) $item['concepto']];
+        }
+        if (! empty($item['detalle'])) {
+            $campos[] = ['label' => 'Detalle', 'valor' => (string) $item['detalle']];
+        }
         if (($item['monto'] ?? 0) > 0) {
             $campos[] = [
                 'label' => 'Monto',
@@ -542,6 +551,9 @@ class UserTaskBandejaService
                     $row['tipo'] ?? '',
                     $row['etiqueta_tipo'] ?? '',
                     $row['subtitulo'] ?? '',
+                    $row['proveedor'] ?? '',
+                    $row['concepto'] ?? '',
+                    $row['detalle'] ?? '',
                     $row['fuente_label'] ?? '',
                     $row['reemplazo_de'] ?? '',
                     (string) ($row['comprobante_id'] ?? ''),

@@ -658,6 +658,55 @@
     gap: 0.65rem 1.25rem;
 }
 
+.anita-inbox-doc-row--with-summary {
+    display: grid;
+    grid-template-columns: minmax(7.5rem, auto) minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.55rem 1.35rem;
+}
+
+.anita-inbox-sp-summary {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    padding: 0.15rem 0;
+}
+
+.anita-inbox-sp-line {
+    display: grid;
+    grid-template-columns: 4.6rem minmax(0, 1fr);
+    gap: 0.4rem;
+    align-items: baseline;
+    line-height: 1.35;
+}
+
+.anita-inbox-sp-label {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ai-muted);
+}
+
+.anita-inbox-sp-value {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: var(--ai-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.anita-inbox-sp-value--detalle {
+    font-weight: 500;
+    color: var(--ai-muted);
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
 .anita-inbox-doc strong {
     display: block;
     font-family: var(--ai-display);
@@ -949,6 +998,16 @@
         justify-content: flex-start;
         padding-top: 0.15rem;
         border-top: 1px solid var(--ai-line);
+    }
+
+    .anita-inbox-doc-row--with-summary {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .anita-inbox-doc-row--with-summary .anita-inbox-sp-summary {
+        grid-column: 1 / -1;
+        order: 3;
+        padding-top: 0.15rem;
     }
 }
 
