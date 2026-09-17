@@ -2931,16 +2931,37 @@
 			},
 		})
 			.done(function (data) {
-				mostrarResultadoFacturaPedido(data, function (exito) {
-					if (!exito) {
+				var resumen = analizarResultadoFacturaPedido(data);
+				if (!resumen.exito) {
+					mostrarResultadoFacturaPedidoEnOverlay(resumen, function () {
 						liberarEmisionComprobantePedido();
-						return;
-					}
+					});
+					return;
+				}
 
-					$('#facturarPedidoModal').modal('hide');
-					$('#estadopedido').val('Facturado');
-					TotalPedido();
+				$('#facturarPedidoModal').modal('hide');
+				$('#estadopedido').val('Facturado');
+				TotalPedido();
+
+				// Con URL de sesión: salta directo a imprimir (sin esperar "Continuar").
+				if (extraerUrlImpresionSesion(data)) {
+					if (window.PedidoProcesoOverlay && typeof PedidoProcesoOverlay.mostrarResultado === 'function') {
+						PedidoProcesoOverlay.mostrarResultado({
+							tipo: 'ok',
+							titulo: resumen.titulo || 'Facturación exitosa',
+							subtitulo: 'Abriendo programa de impresión…',
+							facturas: resumen.facturas,
+							errores: [],
+							boton: 'Imprimiendo…',
+						});
+					}
 					irASesionImpresionORecargar(data);
+					return;
+				}
+
+				mostrarResultadoFacturaPedidoEnOverlay(resumen, function () {
+					liberarEmisionComprobantePedido();
+					window.history.go(0);
 				});
 			})
 			.fail(function (xhr) {

@@ -176,7 +176,8 @@ switch(strtoupper(config('app.empresa')))
             "PORCENTAJE_VALOR_ASEGURADO" => (float) env('REMITO_PORCENTAJE_VALOR_ASEGURADO', 0),
             "CUENTACONTABLE_PERCEPCION_IVA" => env('FACTURACION_CUENTA_PERCEPCION_IVA', ''),
             "CUENTACONTABLE_PERCEPCION_NO_CATEGORIZADO" => env('FACTURACION_CUENTA_PERCEPCION_NO_CATEGORIZADO', ''),
-            "CUENTACONTABLE_VENTA" => env('FACTURACION_CUENTA_VENTA', ''),
+            "CUENTACONTABLE_IVA" => env('FACTURACION_CUENTA_IVA', '213100001'),
+            "CUENTACONTABLE_VENTA" => env('FACTURACION_CUENTA_VENTA', '411000001'),
             "USA_DETRACCION" => 'N',
             "DECIMAL_CANTIDAD" => 0,
             "NETEA_DESCUENTO_LINEA" => false,
@@ -192,6 +193,8 @@ switch(strtoupper(config('app.empresa')))
             "PDF_HABILITACION" => env('FACTURACION_PDF_HABILITACION', '44537-92ADM'),
             "PDF_WEB" => env('FACTURACION_PDF_WEB', 'www.ferli.com.ar - info@ferli.com.ar'),
             "PDF_CHEQUES_A_LA_ORDEN" => env('FACTURACION_PDF_CHEQUES_A_LA_ORDEN', 'CALZADOS FERLI S.A.'),
+            // Etiqueta ENVÍO (T.E. en rótulo). Fallback si ningún PV trae teléfono usable.
+            "PDF_TELEFONO_ENVIO" => env('FACTURACION_PDF_TELEFONO_ENVIO', '4442-1587'),
             'contrato_venta_aviso' => [
                 'habilitado' => filter_var(env('FACTURACION_CONTRATO_VENTA_AVISO_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
                 'dias_antes' => max(1, (int) env('FACTURACION_CONTRATO_VENTA_AVISO_DIAS', 15)),

@@ -14,13 +14,29 @@ final class ComprobanteImpresionSesionUrlSupport
         $remitoId = (int) $remitoId;
         $pedidoId = (int) $pedidoId;
 
+        // auto + enviar_impresora: misma ruta que "Imprimir" del listado de facturas
+        // (sesión se abre y despacha a impresora sin paso manual).
         $url = null;
         if ($ventaId > 0 && PedidoFacturaAnitaArchivosSupport::esVentaIdVisible($ventaId)) {
-            $url = route('sesion_impresion_factura', ['id' => $ventaId, 'auto' => 1]);
+            $url = route('sesion_impresion_factura', [
+                'id' => $ventaId,
+                'auto' => 1,
+                'enviar_impresora' => 1,
+            ]);
         } elseif ($remitoId > 0) {
-            $url = route('sesion_impresion_remito', ['id' => $remitoId, 'auto' => 1, 'pack' => 1]);
+            $url = route('sesion_impresion_remito', [
+                'id' => $remitoId,
+                'auto' => 1,
+                'pack' => 1,
+                'enviar_impresora' => 1,
+            ]);
         } elseif ($pedidoId > 0) {
-            $url = route('sesion_impresion_pedido', ['id' => $pedidoId, 'auto' => 1, 'pack' => 1]);
+            $url = route('sesion_impresion_pedido', [
+                'id' => $pedidoId,
+                'auto' => 1,
+                'pack' => 1,
+                'enviar_impresora' => 1,
+            ]);
         }
 
         if ($url === null) {

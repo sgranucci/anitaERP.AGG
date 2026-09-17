@@ -129,7 +129,9 @@ $queryFiltrosCliente = [
                                     $importes = CuentacorrienteSaldosPorMoneda::importesParaGrilla(
                                         $data,
                                         $enPesos,
-                                        static fn ($total, $aplicado) => ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                                        $modoCuentaCorriente
+                                            ? static fn ($total, $aplicado) => ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                                            : static fn ($total, $aplicado) => ClienteCuentacorrienteGrillaSupport::saldoPendiente((float) $total, $aplicado)
                                     );
                                     $totalMostrar = $importes['total'];
                                     $aplicadoMostrar = $importes['aplicado'];
@@ -186,11 +188,11 @@ $queryFiltrosCliente = [
                                         </td>
                                     @else
                                         <td style="text-align: right;">
-                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto(abs($totalMostrar), $abreviaturaFila) }}
+                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto($totalMostrar, $abreviaturaFila) }}
                                         </td>
                                         <td style="text-align: right;">
                                             @if ($aplicadoMostrar != 0)
-                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto(abs($aplicadoMostrar), $abreviaturaFila) }}
+                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto($aplicadoMostrar, $abreviaturaFila) }}
                                             @endif
                                         </td>
                                         <td style="text-align: right;">
@@ -219,15 +221,13 @@ $queryFiltrosCliente = [
                             </tfoot>
                         @else
                             @php
+                                $pendienteFirmado = static fn ($fila) => ClienteCuentacorrienteGrillaSupport::saldoPendiente((float) $fila->total, $fila->aplicado ?? null);
                                 $deudaPantalla = $enPesos
                                     ? CuentacorrienteSaldosPorMoneda::deudaPantallaEnPesos(
                                         $cuentacorriente,
-                                        static fn ($total, $aplicado) => ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                                        static fn ($total, $aplicado) => ClienteCuentacorrienteGrillaSupport::saldoPendiente((float) $total, $aplicado)
                                     )
-                                    : CuentacorrienteSaldosPorMoneda::totalesEnPantalla(
-                                        $cuentacorriente,
-                                        static fn ($fila) => ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $fila->total, $fila->aplicado ?? null)
-                                    );
+                                    : CuentacorrienteSaldosPorMoneda::totalesEnPantalla($cuentacorriente, $pendienteFirmado);
                             @endphp
                             <tfoot>
                                 <tr class="font-weight-bold bg-light">

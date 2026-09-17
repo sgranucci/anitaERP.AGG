@@ -156,6 +156,8 @@ class LiquidacionTareaExport implements FromView, WithColumnFormatting, WithMapp
 		$this->hastatarea_id = $hastatarea_id;
 		$this->desdeempleado_id = $desdeempleado_id;
 		$this->hastaempleado_id = $hastaempleado_id;
+		$this->desdearticulo_id = $desdearticulo_id;
+		$this->hastaarticulo_id = $hastaarticulo_id;
 
 		return $this;
 	}

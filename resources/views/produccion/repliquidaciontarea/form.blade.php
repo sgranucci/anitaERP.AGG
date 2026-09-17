@@ -1,129 +1,142 @@
+@php
+    $colLabel = 'col-lg-2 control-label text-right pr-2';
+    $colInput = 'col-lg-4';
+    $valores = $valores ?? [];
+@endphp
+
 <div class="form-group row">
-	<label for="desdefecha" class="col-lg-3 col-form-label requerido">Desde fecha</label>
-	<div class="col-lg-4">
-		<input type="date" name="desdefecha" id="desdefecha" class="form-control" value="{{date('Y-m-01')}}" required/>
-	</div>
+    <label for="desdefecha" class="{{ $colLabel }} requerido">Desde fecha</label>
+    <div class="{{ $colInput }}">
+        <input type="date" name="desdefecha" id="desdefecha" class="form-control"
+            style="max-width: 11.5rem;"
+            value="{{ $valores['desdefecha'] ?? date('Y-m-01') }}" required>
+    </div>
+    <label for="hastafecha" class="{{ $colLabel }} requerido">Hasta fecha</label>
+    <div class="{{ $colInput }}">
+        <input type="date" name="hastafecha" id="hastafecha" class="form-control"
+            style="max-width: 11.5rem;"
+            value="{{ $valores['hastafecha'] ?? date('Y-m-d') }}" required>
+    </div>
 </div>
-<div class="form-group row">
-	<label for="hastafecha" class="col-lg-3 col-form-label requerido">Hasta fecha</label>
-	<div class="col-lg-4">
-		<input type="date" name="hastafecha" id="hastafecha" class="form-control" value="{{date('Y-m-d')}}" required/>
-	</div>
-</div>
-<div class="form-group row">
-	<label for="desdecliente" class="col-lg-3 col-form-label ">Desde Cliente</label>
-   	<select name="desdecliente_id" id="desdecliente_id" data-placeholder="cliente" class="col-lg-4 form-control " data-fouc>
-   		<option value="">-- Seleccionar cliente --</option>
-       	@foreach($cliente_query as $key => $value)
-       		@if( (int) $value->id == '0')
-       			<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-       		@else
-			   <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-			@endif
-       	@endforeach
-    </select>
-</div>
-<div class="form-group row">
-	<label for="hastacliente" class="col-lg-3 col-form-label ">Hasta Cliente</label>
-   	<select name="hastacliente_id" id="hastacliente_id" data-placeholder="cliente" class="col-lg-4 form-control " data-fouc>
-   		<option value="">-- Seleccionar cliente --</option>
-       	@foreach($cliente_query as $key => $value)
-		   @if( (int) $value->id == '99999999')
-       			<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-       		@else
-       			<option value="{{ $value->id }}">{{ $value->nombre }}</option>   
-			@endif 
-       	@endforeach
-    </select>
-</div>
-<div class="form-group row">
-	<label for="desdetarea" class="col-lg-3 col-form-label ">Desde Tarea</label>
-   	<select name="desdetarea_id" id="desdetarea_id" data-placeholder="Tarea" class="col-lg-4 form-control " data-fouc>
-   		<option value="">-- Seleccionar tarea --</option>
-       	@foreach($tarea_query as $key => $value)
-       		@if( (int) $value->id == '0')
-       			<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-       		@else
-			   <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-			@endif
-       	@endforeach
-    </select>
-</div>
-<div class="form-group row">
-	<label for="hastatarea" class="col-lg-3 col-form-label ">Hasta Tarea</label>
-   	<select name="hastatarea_id" id="hastatarea_id" data-placeholder="Tarea" class="col-lg-4 form-control " data-fouc>
-   		<option value="">-- Seleccionar tarea --</option>
-       	@foreach($tarea_query as $key => $value)
-		   @if( (int) $value->id == '99999999')
-       			<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-       		@else
-       			<option value="{{ $value->id }}">{{ $value->nombre }}</option>   
-			@endif 
-       	@endforeach
-    </select>
-</div>
-<div class="form-group row">
-	<label for="desdeempleado" class="col-lg-3 col-form-label ">Desde Empleado</label>
-   	<select name="desdeempleado_id" id="desdeempleado_id" data-placeholder="Empleado" class="col-lg-4 form-control " data-fouc>
-   		<option value="">-- Seleccionar empleado --</option>
-       	@foreach($empleado_query as $key => $value)
-       		@if( (int) $value->id == '0')
-       			<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-       		@else
-			   <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-			@endif
-       	@endforeach
-    </select>
-</div>
-<div class="form-group row">
-	<label for="hastaempleado" class="col-lg-3 col-form-label ">Hasta Empleado</label>
-   	<select name="hastaempleado_id" id="hastaempleado_id" data-placeholder="Empleado" class="col-lg-4 form-control " data-fouc>
-   		<option value="">-- Seleccionar empleado --</option>
-       	@foreach($empleado_query as $key => $value)
-		   @if( (int) $value->id == '99999999')
-       			<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-       		@else
-       			<option value="{{ $value->id }}">{{ $value->nombre }}</option>   
-			@endif 
-       	@endforeach
-    </select>
-</div>
-<div class="form-group row">
-	<label for="desdearticulo" class="col-lg-3 col-form-label ">Desde Art&iacute;culo</label>
-   	<select name="desdearticulo_id" id="desdearticulo_id" data-placeholder="articulo" class="col-lg-4 form-control " data-fouc>
-   		<option value="">-- Seleccionar art&iacute;culo --</option>
-       	@foreach($articulo_query as $key => $value)
-       		@if( (int) $value->id == '0')
-       			<option value="{{ $value->id }}" selected="select">{{ $value->descripcion }}</option>    
-       		@else
-			   <option value="{{ $value->id }}">{{ $value->descripcion }}</option>    
-			@endif
-       	@endforeach
-    </select>
-</div>
-<div class="form-group row">
-	<label for="hastaarticulo" class="col-lg-3 col-form-label ">Hasta Art&iacute;culo</label>
-   	<select name="hastaarticulo_id" id="hastaarticulo_id" data-placeholder="articulo" class="col-lg-4 form-control " data-fouc>
-   		<option value="">-- Seleccionar art&iacute;culo --</option>
-       	@foreach($articulo_query as $key => $value)
-		   @if( (int) $value->id == '99999999')
-       			<option value="{{ $value->id }}" selected="select">{{ $value->descripcion }}</option>    
-       		@else
-       			<option value="{{ $value->id }}">{{ $value->descripcion }}</option>   
-			@endif 
-       	@endforeach
-    </select>
-</div>
-<div class="form-group row">
-	<label for="estadoot" class="col-lg-3 col-form-label requerido">Estado OT</label>
-	<select name="estadoot" class="col-lg-3 form-control" required>
-		<option value="">-- Elija estado de ot --</option>
-		@foreach($estadoOt_enum as $value => $estadoot)
-			@if($value == 'CUMPLIDA')
-				<option value="{{ $value }}" selected="select">{{ $estadoot }}</option>    
-			@else
-				<option value="{{ $value }}">{{ $estadoot }}</option>    
-			@endif
-		@endforeach
-	</select>
+
+@include('produccion.partials.campo_consulta_cliente', [
+    'prefix' => 'desde',
+    'label' => 'Desde cliente',
+    'inputName' => 'desdecliente_id',
+    'inputId' => 'desdecliente_id',
+    'clienteId' => $valores['desdecliente_id'] ?? '',
+    'codigo' => $valores['desdecliente_codigo'] ?? '',
+    'descripcion' => $valores['desdecliente_nombre'] ?? '',
+    'col_label' => $colLabel,
+    'col_input' => $colInput,
+    'next_focus' => '#hastacliente_id_codigo',
+    'help' => 'Vac&iacute;o = primero. F1 / lupa; Enter avanza a Hasta.',
+])
+@include('produccion.partials.campo_consulta_cliente', [
+    'prefix' => 'hasta',
+    'label' => 'Hasta cliente',
+    'inputName' => 'hastacliente_id',
+    'inputId' => 'hastacliente_id',
+    'clienteId' => $valores['hastacliente_id'] ?? '',
+    'codigo' => $valores['hastacliente_codigo'] ?? '',
+    'descripcion' => $valores['hastacliente_nombre'] ?? '',
+    'col_label' => $colLabel,
+    'col_input' => $colInput,
+    'next_focus' => '#desdetarea_id_codigo',
+    'help' => 'Vac&iacute;o = &uacute;ltimo.',
+])
+
+@include('produccion.partials.campo_consulta_tarea', [
+    'prefix' => 'desde',
+    'label' => 'Desde tarea',
+    'inputName' => 'desdetarea_id',
+    'inputId' => 'desdetarea_id',
+    'tareaId' => $valores['desdetarea_id'] ?? '',
+    'codigo' => $valores['desdetarea_codigo'] ?? '',
+    'descripcion' => $valores['desdetarea_nombre'] ?? '',
+    'col_label' => $colLabel,
+    'col_input' => $colInput,
+    'next_focus' => '#hastatarea_id_codigo',
+    'help' => 'Vac&iacute;o = primera. F1 / lupa; Enter avanza a Hasta.',
+])
+@include('produccion.partials.campo_consulta_tarea', [
+    'prefix' => 'hasta',
+    'label' => 'Hasta tarea',
+    'inputName' => 'hastatarea_id',
+    'inputId' => 'hastatarea_id',
+    'tareaId' => $valores['hastatarea_id'] ?? '',
+    'codigo' => $valores['hastatarea_codigo'] ?? '',
+    'descripcion' => $valores['hastatarea_nombre'] ?? '',
+    'col_label' => $colLabel,
+    'col_input' => $colInput,
+    'next_focus' => '#desdeempleado_id_codigo',
+    'help' => 'Vac&iacute;o = &uacute;ltima.',
+])
+
+@include('produccion.partials.campo_consulta_empleado', [
+    'prefix' => 'desde',
+    'label' => 'Desde empleado',
+    'inputName' => 'desdeempleado_id',
+    'inputId' => 'desdeempleado_id',
+    'empleadoId' => $valores['desdeempleado_id'] ?? '',
+    'codigo' => $valores['desdeempleado_codigo'] ?? '',
+    'descripcion' => $valores['desdeempleado_nombre'] ?? '',
+    'col_label' => $colLabel,
+    'col_input' => $colInput,
+    'next_focus' => '#hastaempleado_id_codigo',
+    'help' => 'Vac&iacute;o = primero. F1 / lupa; Enter avanza a Hasta.',
+])
+@include('produccion.partials.campo_consulta_empleado', [
+    'prefix' => 'hasta',
+    'label' => 'Hasta empleado',
+    'inputName' => 'hastaempleado_id',
+    'inputId' => 'hastaempleado_id',
+    'empleadoId' => $valores['hastaempleado_id'] ?? '',
+    'codigo' => $valores['hastaempleado_codigo'] ?? '',
+    'descripcion' => $valores['hastaempleado_nombre'] ?? '',
+    'col_label' => $colLabel,
+    'col_input' => $colInput,
+    'next_focus' => '#desdearticulo_id_codigo',
+    'help' => 'Vac&iacute;o = &uacute;ltimo.',
+])
+
+@include('produccion.partials.campo_consulta_articulo', [
+    'prefix' => 'desde',
+    'label' => 'Desde art&iacute;culo',
+    'inputName' => 'desdearticulo_id',
+    'inputId' => 'desdearticulo_id',
+    'articuloId' => $valores['desdearticulo_id'] ?? '',
+    'codigo' => $valores['desdearticulo_codigo'] ?? '',
+    'descripcion' => $valores['desdearticulo_nombre'] ?? '',
+    'col_label' => $colLabel,
+    'col_input' => $colInput,
+    'next_focus' => '#hastaarticulo_id_codigo',
+    'help' => 'Vac&iacute;o = primero. F1 / lupa; Enter avanza a Hasta.',
+])
+@include('produccion.partials.campo_consulta_articulo', [
+    'prefix' => 'hasta',
+    'label' => 'Hasta art&iacute;culo',
+    'inputName' => 'hastaarticulo_id',
+    'inputId' => 'hastaarticulo_id',
+    'articuloId' => $valores['hastaarticulo_id'] ?? '',
+    'codigo' => $valores['hastaarticulo_codigo'] ?? '',
+    'descripcion' => $valores['hastaarticulo_nombre'] ?? '',
+    'col_label' => $colLabel,
+    'col_input' => $colInput,
+    'next_focus' => '#estadoot',
+    'help' => 'Vac&iacute;o = &uacute;ltimo.',
+])
+
+<div class="form-group row mb-0">
+    <label for="estadoot" class="{{ $colLabel }} requerido">Estado OT</label>
+    <div class="{{ $colInput }}">
+        <select name="estadoot" id="estadoot" class="form-control" required>
+            <option value="">-- Elija estado de OT --</option>
+            @foreach ($estadoOt_enum as $value => $etiqueta)
+                <option value="{{ $value }}" @selected(($valores['estadoot'] ?? 'CUMPLIDA') === $value)>
+                    {{ $etiqueta }}
+                </option>
+            @endforeach
+        </select>
+    </div>
 </div>

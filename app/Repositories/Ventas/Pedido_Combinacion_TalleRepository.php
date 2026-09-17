@@ -8,6 +8,7 @@ use App\Models\Ventas\Pedido_Combinacion_Talle;
 use App\Models\Ventas\Ordentrabajo_Combinacion_Talle;
 use App\Models\Stock\Articulo_Movimiento_Talle;
 use App\Models\Stock\Talle;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -163,9 +164,11 @@ class Pedido_Combinacion_TalleRepository implements Pedido_Combinacion_TalleRepo
 		if ($ordentrabajoId > 0 && $tallesFinales->isNotEmpty()) {
 			$pctIds = $tallesFinales->pluck('id')->all();
 			$octPorPct = Ordentrabajo_Combinacion_Talle::query()
+				->where('ordentrabajo_id', $ordentrabajoId)
 				->whereIn('pedido_combinacion_talle_id', $pctIds)
+				->orderBy('id')
 				->get()
-				->keyBy('pedido_combinacion_talle_id');
+				->groupBy(static fn ($row) => (int) $row->pedido_combinacion_talle_id);
 
 			$clienteId = (int) ($contextoOt['cliente_id'] ?? 0);
 			$usuarioId = $contextoOt['usuario_id'] ?? null;
@@ -173,7 +176,17 @@ class Pedido_Combinacion_TalleRepository implements Pedido_Combinacion_TalleRepo
 			$otStockId = $contextoOt['ordentrabajo_stock_id'] ?? null;
 
 			foreach ($tallesFinales as $pct) {
-				$oct = $octPorPct->get($pct->id);
+				$octs = $octPorPct->get((int) $pct->id, collect());
+				$oct = $octs->first();
+				// Si quedó más de un OCT por PCT (import L8), conserva el primero.
+				if ($octs->count() > 1) {
+					$idsExtra = $octs->slice(1)->pluck('id')->all();
+					if ($idsExtra !== []) {
+						EloquentAuditDeleteSupport::each(
+							Ordentrabajo_Combinacion_Talle::query()->whereIn('id', $idsExtra)
+						);
+					}
+				}
 				if ($oct) {
 					$upd = [];
 					if ($clienteId > 0 && (int) $oct->cliente_id !== $clienteId) {

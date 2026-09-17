@@ -21,7 +21,8 @@ use RuntimeException;
  * Importa deuda de clientes desde Anita (climov + aplmov) → ERP.
  *
  * Filtro de negocio: solo comprobantes con fila en Anita `venta`
- * (no cobranzas/PRE). Si falta la cabecera en ERP, la importa primero.
+ * (excluye COB/REC/PRE vía tipos_no_deuda; COA pendientes sí se importan).
+ * Si falta la cabecera en ERP, la importa primero.
  * No escribe Anita.
  */
 class ClienteCuentacorrienteImportarDesdeAnitaService

@@ -138,15 +138,13 @@ class ClienteCuentacorrienteReporteService
                 }
 
                 $totalOrigen = (float) $mov->total;
-                $aplicadoOrigen = (float) ($mov->aplicado ?? 0);
-                $pendienteOrigen = ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto($totalOrigen, $aplicadoOrigen);
 
                 $importeMostrar = $conv['importe'];
                 $aplicadoMostrar = $conv['aplicado'];
                 $pendienteMostrar = $conv['pendiente'];
                 $pendientePesos = $enPesos
                     ? $pendienteMostrar
-                    : abs($this->convertirMovimiento($mov, true, $forzarDia)['pendiente']);
+                    : $this->convertirMovimiento($mov, true, $forzarDia)['pendiente'];
                 $importeFirmadoPesos = $conv['importe_firmado_pesos'];
                 if (! $enPesos) {
                     $importeFirmadoPesos = $this->convertirMovimiento($mov, true, $forzarDia)['importe_firmado_pesos'];
@@ -191,8 +189,8 @@ class ClienteCuentacorrienteReporteService
                     'cotizacion_origen' => $conv['cotizacion_origen'],
                     'debe' => $totalOrigen >= 0 ? abs($importeMostrar) : null,
                     'haber' => $totalOrigen < 0 ? abs($importeMostrar) : null,
-                    'importe' => abs($importeMostrar),
-                    'aplicado' => abs($aplicadoMostrar) > 0.0001 ? abs($aplicadoMostrar) : null,
+                    'importe' => $importeMostrar,
+                    'aplicado' => abs($aplicadoMostrar) > 0.0001 ? $aplicadoMostrar : null,
                     'saldo_pendiente' => $pendienteMostrar,
                     'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
                     'saldo_pesos' => $saldoCorridoPesos,
@@ -301,7 +299,13 @@ class ClienteCuentacorrienteReporteService
     private function cargarDeuda(array $filtros, array $clienteIds): Collection
     {
         $query = Cliente_Cuentacorriente::query()
-            ->with(['clientes:id,codigo,nombre', 'ventas:id,codigo,lugarentrega', 'monedas:id,abreviatura', 'empresas:id,nombre'])
+            ->with([
+                'clientes:id,codigo,nombre',
+                'ventas:id,codigo,lugarentrega',
+                'cobranzas:id,detalle',
+                'monedas:id,abreviatura',
+                'empresas:id,nombre',
+            ])
             ->select('cliente_cuentacorriente.*')
             ->addSelect([
                 'aplicado' => Cliente_Cuentacorriente_Aplicacion::query()
@@ -459,7 +463,7 @@ class ClienteCuentacorrienteReporteService
             return [
                 'importe' => $total,
                 'aplicado' => $aplicado,
-                'pendiente' => abs($pendiente),
+                'pendiente' => $pendiente,
                 'importe_firmado_pesos' => $total,
                 'moneda_id' => $monedaId,
                 'abreviatura' => $abrev,
@@ -479,7 +483,7 @@ class ClienteCuentacorrienteReporteService
         return [
             'importe' => round($total * $coef, 2),
             'aplicado' => round($aplicado * $coef, 2),
-            'pendiente' => round(abs($pendiente) * $coef, 2),
+            'pendiente' => round($pendiente * $coef, 2),
             'importe_firmado_pesos' => round($total * $coef, 2),
             'moneda_id' => $monedaId,
             'abreviatura' => $local,

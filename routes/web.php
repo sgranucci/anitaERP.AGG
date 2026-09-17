@@ -2415,8 +2415,10 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     // Importación temporal L8 → L12 (hasta que producción use L12)
     Route::post('ventas/pedido/{id}/importar-tareas-l8', 'Ventas\PedidoImportarL8Controller@importarTareasPedido')->name('pedido_importar_tareas_l8');
     Route::post('ventas/pedido/importar-l8', 'Ventas\PedidoImportarL8Controller@importarPedidosIndex')->name('pedido_importar_l8_index');
+    Route::post('produccion/repliquidaciontarea/importar-tareas-l8', 'Ventas\PedidoImportarL8Controller@importarTareasLiquidacion')->name('repliquidaciontarea_importar_tareas_l8');
     // Bridge de solo lectura (token). Activar en L8 con FERLI_L8_EXPORT_ENABLED=true.
     Route::get('api/l8-sync/tareas-ot', 'Ventas\L8SyncExportController@tareasOt')->name('api_l8_sync_tareas_ot');
+    Route::get('api/l8-sync/tareas-faltantes-rango', 'Ventas\L8SyncExportController@tareasFaltantesRango')->name('api_l8_sync_tareas_faltantes_rango');
     Route::get('api/l8-sync/pedidos-faltantes', 'Ventas\L8SyncExportController@pedidosFaltantes')->name('api_l8_sync_pedidos_faltantes');
 } elseif (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
     Route::get('ventas/pedido', 'Ventas\PedidoInterformingController@index')->name('pedido');
@@ -2548,6 +2550,8 @@ Route::post('ventas/calcula_factura_general', 'Ventas\FacturacionController@calc
 
 Route::get('produccion/tarea', 'Produccion\TareaController@index')->name('tarea');
 Route::get('produccion/tarea/crear', 'Produccion\TareaController@crear')->name('crear_tarea');
+Route::post('produccion/tarea/consultatarea', 'Produccion\TareaController@consultaTarea')->name('consulta_tarea');
+Route::get('produccion/leertarea/{id}', 'Produccion\TareaController@leeTarea')->name('leer_tarea');
 Route::post('produccion/tarea', 'Produccion\TareaController@guardar')->name('guardar_tarea');
 Route::get('produccion/tarea/{id}/editar', 'Produccion\TareaController@editar')->name('editar_tarea');
 Route::put('produccion/tarea/{id}', 'Produccion\TareaController@actualizar')->name('actualizar_tarea');
@@ -2559,6 +2563,8 @@ Route::delete('produccion/tarea/{id}', 'Produccion\TareaController@eliminar')->n
 
 Route::get('produccion/empleado', 'Produccion\EmpleadoController@index')->name('empleado');
 Route::get('produccion/empleado/crear', 'Produccion\EmpleadoController@crear')->name('crear_empleado');
+Route::post('produccion/empleado/consultaempleado', 'Produccion\EmpleadoController@consultaEmpleado')->name('consulta_empleado_produccion');
+Route::get('produccion/leerempleado/{id}', 'Produccion\EmpleadoController@leeEmpleado')->name('leer_empleado_produccion');
 Route::post('produccion/empleado', 'Produccion\EmpleadoController@guardar')->name('guardar_empleado');
 Route::get('produccion/empleado/{id}/editar', 'Produccion\EmpleadoController@editar')->name('editar_empleado');
 Route::put('produccion/empleado/{id}', 'Produccion\EmpleadoController@actualizar')->name('actualizar_empleado');

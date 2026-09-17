@@ -5,8 +5,14 @@
 #   /var/www/html/anitaERP/bin/imprimir-pdf-laser.sh "%s" 160.132.0.200
 #
 # Destinos conocidos:
-#   160.132.0.201 | P1     → Monica (pserver)
-#   160.132.0.200 | hp1300 → Laura
+#   160.132.0.201 | P1     → Monica (acepta PDF Direct)
+#   160.132.0.200 | hp1300 → Laura (HP LaserJet 1300: solo PCL, NO PDF)
+#
+# Por defecto convierte PDF→PCL con Ghostscript antes de JetDirect
+# (impresoras viejas imprimen basura si reciben PDF crudo).
+# Excepción: IPs en IMPRESION_PDF_DIRECT_IPS (default Monica).
+# Forzar conversión siempre: IMPRESION_PDF_FORCE_PCL=1
+# Forzar PDF crudo:        IMPRESION_PDF_FORCE_DIRECT=1
 #
 # Preferencia: envío directo TCP/9100 (sin SSH; usable por www-data).
 # Respaldo SSH (opcional): IMPRESION_PDF_FORCE_SSH=1
@@ -43,19 +49,81 @@ case "$DEST" in
     ;;
 esac
 
+# IPs que aceptan PDF nativo en 9100 (HP PDF Direct Print).
+# Laura (.200 / hp1300) NO está acá: es LaserJet 1300 (PCL 5e).
+DIRECT_IPS="${IMPRESION_PDF_DIRECT_IPS:-160.132.0.201}"
+
+debe_enviar_pdf_directo() {
+  local host="$1"
+  if [[ "${IMPRESION_PDF_FORCE_PCL:-0}" == "1" ]]; then
+    return 1
+  fi
+  if [[ "${IMPRESION_PDF_FORCE_DIRECT:-0}" == "1" ]]; then
+    return 0
+  fi
+  local ip
+  IFS=',' read -r -a lista <<< "$DIRECT_IPS"
+  for ip in "${lista[@]}"; do
+    ip="${ip// /}"
+    [[ -n "$ip" && "$ip" == "$host" ]] && return 0
+  done
+  return 1
+}
+
+payload_para_jetdirect() {
+  local host="$1"
+  if debe_enviar_pdf_directo "$host"; then
+    echo "$FILE"
+    return 0
+  fi
+
+  if ! command -v gs >/dev/null 2>&1; then
+    echo "Ghostscript (gs) no está instalado: no se puede convertir el PDF a PCL" >&2
+    echo "para la impresora ${host} (no acepta PDF Direct). Instalar: sudo apt install -y ghostscript" >&2
+    return 1
+  fi
+
+  local tmp
+  tmp="$(mktemp --suffix=.pcl)"
+  # ljet4 = PCL5 compatible con HP LaserJet 1300 / 4 / 5 / 6.
+  # A4 fijo: sin FIXEDMEDIA la 1300 a veces imprime 1 sola hoja o recorta.
+  if ! gs -q -dSAFER -dNOPAUSE -dBATCH -dNOTRANSPARENCY \
+      -sDEVICE=ljet4 -r600 \
+      -sPAPERSIZE=a4 -dFIXEDMEDIA \
+      -dAutoRotatePages=/None \
+      -sOutputFile="$tmp" "$FILE" >/dev/null 2>&1; then
+    rm -f "$tmp"
+    echo "Ghostscript no pudo convertir el PDF a PCL." >&2
+    return 1
+  fi
+  if [[ ! -s "$tmp" ]]; then
+    rm -f "$tmp"
+    echo "Ghostscript generó un PCL vacío." >&2
+    return 1
+  fi
+  echo "$tmp"
+}
+
 enviar_jetdirect() {
   local host="$1"
+  local payload="$2"
+  local cleanup="${3:-0}"
+
   if ! command -v nc >/dev/null 2>&1; then
     echo "Comando nc no disponible para JetDirect." >&2
+    [[ "$cleanup" == "1" ]] && rm -f "$payload"
     return 1
   fi
-  # HP LaserJet P3010 Series acepta PDF directo en 9100.
   if ! nc -z -w 3 "$host" "$PORT" >/dev/null 2>&1; then
     echo "Impresora ${host}:${PORT} no responde." >&2
+    [[ "$cleanup" == "1" ]] && rm -f "$payload"
     return 1
   fi
-  # -N cierra el socket al terminar el PDF (si no, la impresora deja nc colgado).
-  nc -N -w 15 "$host" "$PORT" < "$FILE"
+  # -N cierra el socket al terminar (si no, la impresora deja nc colgado).
+  local ec=0
+  nc -N -w 30 "$host" "$PORT" < "$payload" || ec=$?
+  [[ "$cleanup" == "1" ]] && rm -f "$payload"
+  return "$ec"
 }
 
 enviar_ssh_cups() {
@@ -113,8 +181,17 @@ if [[ "$FORCE_SSH" == "1" ]]; then
 fi
 
 if [[ -n "$IP" ]]; then
-  if enviar_jetdirect "$IP"; then
-    echo "PDF enviado a ${IP}:${PORT} (JetDirect)."
+  PAYLOAD="$(payload_para_jetdirect "$IP")" || exit 1
+  CLEANUP=0
+  if [[ "$PAYLOAD" != "$FILE" ]]; then
+    CLEANUP=1
+  fi
+  if enviar_jetdirect "$IP" "$PAYLOAD" "$CLEANUP"; then
+    if [[ "$CLEANUP" == "1" ]]; then
+      echo "PDF→PCL enviado a ${IP}:${PORT} (JetDirect)."
+    else
+      echo "PDF enviado a ${IP}:${PORT} (JetDirect PDF Direct)."
+    fi
     exit 0
   fi
   echo "JetDirect falló; intento respaldo SSH…" >&2

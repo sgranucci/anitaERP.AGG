@@ -83,7 +83,7 @@ class PrecioServiceFerli
 
     /**
      * Resuelve precio por vigencia (lógica Ferli L8, 13/8/2026).
-     * Preferencia: precio de la combinación; si no hay, el genérico (combinacion NULL).
+     * Preferencia: precio de la combinación; si no hay, el genérico (combinacion NULL o 0).
      * Un genérico con vigencia estrictamente posterior al de la combinación sí pisa a todas.
      * Si genérico y combinación comparten la misma fecha, gana la combinación.
      */
@@ -97,10 +97,13 @@ class PrecioServiceFerli
             $combinacion_id = null;
         }
 
+        // L12 guarda genéricos como combinacion_id=0; L8 usaba NULL. Ambos son genérico.
         $precioGenerico = Precio::with('listaprecios')
             ->where('articulo_id', $articulo_id)
             ->where('listaprecio_id', $listaprecio_id)
-            ->whereNull('combinacion_id')
+            ->where(function ($q) {
+                $q->whereNull('combinacion_id')->orWhere('combinacion_id', 0);
+            })
             ->where('fechavigencia', '<=', $fecha)
             ->orderBy('fechavigencia', 'desc')
             ->first();

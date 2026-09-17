@@ -247,6 +247,25 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * NC total Ferli: deja las líneas de esa FAC listas para volver a facturar por picking.
+     */
+    public static function reabrirFacturadoPorVenta(int $ventaId): int
+    {
+        if ($ventaId <= 0 || ! self::habilitado()) {
+            return 0;
+        }
+
+        return Pedido_Combinacion::query()
+            ->where('picking_venta_id', $ventaId)
+            ->where('picking_facturado', self::FACTURADO)
+            ->update([
+                'picking_facturado' => self::NO_MARCADO,
+                'picking_venta_id' => null,
+                'updated_at' => now(),
+            ]);
+    }
+
+    /**
      * Consume de stock (tipo 4) al facturar picking — sin crear OT de consumo.
      * Patrón PedidoServiceFerli::generaMovimientoStock.
      */

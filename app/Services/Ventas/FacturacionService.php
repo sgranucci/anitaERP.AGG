@@ -2242,6 +2242,26 @@ class FacturacionService
 	}
 
 	/**
+	 * Completa combinación / despacho / talle para Anita (solo Ferli).
+	 * La NC del mostrador no los manda en el POST; se reponen desde venta_emision de la FAC.
+	 *
+	 * @param  list<array<string, mixed>>  $dataFactura
+	 * @param  array<string, mixed>  $requestData
+	 * @return list<array<string, mixed>>
+	 */
+	protected function enriquecerDataFacturaParaAnita(array $dataFactura, array $requestData): array
+	{
+		if (! EntornoEmpresaSupport::esFerli()) {
+			return $dataFactura;
+		}
+
+		return \App\Support\Ventas\Ferli\FacturaLineaCombinacionFerliSupport::enriquecerDesdeEmisionOrigen(
+			$dataFactura,
+			$requestData
+		);
+	}
+
+	/**
 	 * Convierte kilos y descuentoventa_ids (grilla estilo pedido en factura directa) al formato de calculaFacturaGeneral.
 	 */
 	protected function normalizaItemsFacturaGeneralDesdePedido(array $data): array
@@ -2834,6 +2854,7 @@ class FacturacionService
 		$actividad_arca_id = $data['actividad_arca_id'] ?? null;
 
 		$dataFactura = $calculoFactura['datosfactura'];
+		$dataFactura = $this->enriquecerDataFacturaParaAnita($dataFactura, $data);
 		$conceptosTotales = $calculoFactura['conceptostotales'];
 		$datosCliente = $calculoFactura['datoscliente'];
 		$totalComprobante = $calculoFactura['totalcomprobante'];
@@ -3081,11 +3102,12 @@ class FacturacionService
 			$centrocosto_id = null;
 			if ($numero != -1)
 			{
-				// Arma asiento
-				if ($signo == -1 && isset($factura))
+				// Arma asiento. NC: invertir el de la FAC origen (operacion=C; no solo signo R/S).
+				if ($tipotransaccion->esNotaCredito() && isset($factura))
 				{
 					$factura->loadMissing(['asientos.asiento_movimientos']);
 					$asientoFactura = $factura->asientos;
+					$asientoContable = [];
 					if ($asientoFactura) {
 						$asientoContable = $this->asientoInvertidoDesdeFactura(
 							$asientoFactura,
@@ -3096,10 +3118,8 @@ class FacturacionService
 						if ($ultimoMov) {
 							$centrocosto_id = $ultimoMov->centrocosto_id;
 						}
-						if ($asientoContable === []) {
-							$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
-						}
-					} else {
+					}
+					if ($asientoContable === []) {
 						$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
 					}
 				}
@@ -3228,6 +3248,9 @@ class FacturacionService
 				if (! is_array($opcionesEmision)) {
 					$opcionesEmision = [];
 				}
+				if ($fceAnulacionSn !== null) {
+					$opcionesEmision['fce_anulacion'] = $fceAnulacionSn;
+				}
 				// POS gastronomía / estacionamiento / canje: no resolver depósito ni reparto.
 				if (! $this->esEmisionPos($data, $opcionesEmision)) {
 					if (empty($opcionesEmision['deposito_id'])) {
@@ -3315,12 +3338,23 @@ class FacturacionService
 			// Lee ot
 			$ot = $this->ordentrabajoQuery->leeOrdenTrabajo($ordentrabajo_id);
 
+			// OCT duplicados (mismo PCT) — p.ej. import L8 con otro id — no deben sumar 2×.
+			$pctYaContados = [];
+
 			$countItem = 0;
 			foreach ($ot->ordentrabajo_combinacion_talles as $item)
 			{
 				// Selecciona items a facturar
 				if ($pedido_combinacion_id == $item->pedido_combinacion_talles->pedidos_combinacion->id)
 				{
+					$pctId = (int) ($item->pedido_combinacion_talles->id ?? 0);
+					if ($pctId > 0) {
+						if (isset($pctYaContados[$pctId])) {
+							continue;
+						}
+						$pctYaContados[$pctId] = true;
+					}
+
 					if ($countItem == 0)
 					{
 						$countItem++;
@@ -3440,7 +3474,8 @@ class FacturacionService
 								'despacho' => $this->numeroDespacho,
 								'loteimportacion_id' => $loteimportacion_id,
 								'ordentrabajo_id' => $ordentrabajo_id,
-								'pedido_combinacion_id' => $pedido_combinacion_id
+								'pedido_combinacion_id' => $pedido_combinacion_id,
+								'cuentacontable_id' => $articulo->cuentacontableventa_id,
 							];
 												
 							for ($i = 0, $flEncontro = false; $i < count($dataFactura); $i++)
@@ -3703,6 +3738,11 @@ class FacturacionService
 					$this->assertImpuestosAlicIvaParaArca($impuestos);
 				}
 
+				$centrocosto_id = null;
+				$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
+				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+				$detalleContable = $tipoAnita.' '.$letra.' '.$puntoventa->codigo.' '.$numero;
+
 				// Graba la factura
 				DB::beginTransaction();
 				$vta = null;
@@ -3885,7 +3925,27 @@ class FacturacionService
 										//guardaArticuloMovimiento('create',
 										//$dataArticuloMovimiento, $dataTalle);
 					}
-					// Graba contabilidad
+					// Graba contabilidad (ERP; ctamov Anita diferido en C/E hasta CAE post-commit)
+					$omitirAnitaAsiento = in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true);
+					Self::grabaAsientoContable(
+						$asientoContable,
+						$puntoventa->empresa_id,
+						$fechaFactura,
+						$vta->id,
+						$detalleContable,
+						$centrocosto_id,
+						$moneda_id,
+						$cotizacion,
+						$signo,
+						$cliente->cuentacontable_id,
+						substr($venta['codigo'], 0, 3),
+						$letra,
+						$puntoventa->codigo,
+						$venta['numerocomprobante'],
+						$puntoventa->modofacturacion ?? null,
+						isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null,
+						$omitirAnitaAsiento
+					);
 
 					// Marca OT como facturada (omitir ot_id=0 en picking sin OT)
 					for ($i = 0; $i < count($ordenestrabajo_id); $i++)
@@ -4444,6 +4504,18 @@ class FacturacionService
 				if (! empty($itemEmision['articulo_id'])) {
 					$dataEmision['articulo_id'] = $itemEmision['articulo_id'];
 				}
+				foreach ([
+					'combinacion_id',
+					'talle_id',
+					'pedido_combinacion_id',
+					'ordentrabajo_id',
+					'modulo_id',
+					'loteimportacion_id',
+				] as $campoOt) {
+					if (! empty($itemEmision[$campoOt])) {
+						$dataEmision[$campoOt] = $itemEmision[$campoOt];
+					}
+				}
 				$dataEmision = $this->anexarConceptoEnEmision($dataEmision, $itemEmision);
 				$venta_emision = $this->venta_emisionRepository->create($dataEmision);
 				ContratoVentaEmisionSupport::persistirTrasCrearEmision($venta_emision, $itemEmision, (int) $vta->id);
@@ -4585,6 +4657,17 @@ class FacturacionService
 				// Marca Orden de venta como facturada
 				$ordenventa = $this->ordenventaService->anulaMarcaOrdenVentaFacturada($ordenventa_id, 
 					substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'], $vta->id);
+			}
+
+			// Ferli: NC total sobre FAC de OT/picking → línea de pedido facturable otra vez
+			if (EntornoEmpresaSupport::esFerli() && $tipotransaccion->esNotaCredito() && (int) $venta_id > 0) {
+				$opcionesNc = is_array($opcionesEmision) ? $opcionesEmision : [];
+				\App\Support\Ventas\Ferli\NotaCreditoReabrePedidoOtFerliSupport::alGrabarNc(
+					(int) $venta_id,
+					abs((float) $totalComprobante),
+					$tipotransaccion,
+					$opcionesNc
+				);
 			}
 
 			if (! $transaccionExterna) {
@@ -5659,8 +5742,8 @@ class FacturacionService
 								'sku' => $item['sku'],
 								'descripcion' => $item['descripcion'],
 								'categoria' => $item['categoria'],
-								'codigocombinacion' => $item['codigocombinacion'],
-								'despacho' => $item['despacho'],
+								'codigocombinacion' => $item['codigocombinacion'] ?? '',
+								'despacho' => $item['despacho'] ?? '',
 								'medida' => $medida['medida']
 							];
 						}
@@ -5684,8 +5767,10 @@ class FacturacionService
 							'pedido' => $pedido_id ?? 0,
 							'sku' => $item['sku'],
 							'descripcion' => trim($item['descripcion'].(! empty($item['leyenda_linea']) ? ' '.$item['leyenda_linea'] : '')),
-							'categoria' => $item['categoria'],
-							'medida' => '',
+							'categoria' => $item['categoria'] ?? '',
+							'medida' => $item['medida'] ?? '',
+							'despacho' => $item['despacho'] ?? '',
+							'codigocombinacion' => $item['codigocombinacion'] ?? '',
 							// Banderín para omitir stkmov en Anita (p. ej. opcionales gastronomía $0:
 							// se muestran en compaux pero el stock se descuenta vía formula → depo de insumos).
 							'omitir_stkmov_anita' => (bool) ($item['omitir_stkmov_anita'] ?? false),
@@ -5799,8 +5884,8 @@ class FacturacionService
 								'".'0'."',
 								'".date('Ymd', strtotime($venta['fecha']))."',
 								'".($medida['incluyeimpuesto'] == '2' ? 'N' : 'S')."' ".
-								(config('app.empresa') == 'Calzados Ferli' ? ", '".$medida['despacho']."'" : "").
-								(config('app.empresa') == 'EL BIERZO' ? ", '".$medida['pieza']."'" : "")
+								(config('app.empresa') == 'Calzados Ferli' ? ", '".($medida['despacho'] ?? '')."'" : "").
+								(config('app.empresa') == 'EL BIERZO' ? ", '".($medida['pieza'] ?? 0)."'" : "")
 					);
 			$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
@@ -5897,12 +5982,12 @@ class FacturacionService
 								'".'0'."'".
 								(config('app.empresa') == 'Calzados Ferli' ? 
 								",'".'0'."',
-								'".$medida['codigocombinacion']."'" :
+								'".($medida['codigocombinacion'] ?? '')."'" :
 								""
 								).
 								(config('app.empresa') == 'EL BIERZO' ? 
 								",'".$codigoTransporte."',
-								'".$medida['pieza']."'" :
+								'".($medida['pieza'] ?? 0)."'" :
 								""
 								).
 								(config('app.empresa') == 'AGG' ? 
@@ -5959,7 +6044,7 @@ class FacturacionService
 									'".'0'."',
 									'".'0'."',
 									'".$medida['cantidad']."',
-									'".$medida['codigocombinacion']."'
+									'".($medida['codigocombinacion'] ?? '')."'
 									"
 					);
 					if ($servidor != null)
@@ -7408,8 +7493,7 @@ class FacturacionService
 				$subTotal = $conc['importe'];
 		}
 
-		if (strtoupper(config('app.empresa')) == "EL BIERZO")
-			$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
+		$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
 
 		if (strtoupper(config('app.empresa')) == 'AGG')
 		{
@@ -7571,8 +7655,16 @@ class FacturacionService
 
 					if (isset($cuentacontable[0]))
 						$cuenta = $cuentacontable[0]->cuentacontable_id;	
-					else
-						throw new Exception('Error en cuenta contable de impuesto '.$conc['impuesto_id']);			
+					else {
+						$codigoIva = trim((string) config('facturacion.CUENTACONTABLE_IVA', ''));
+						if ($codigoIva !== '') {
+							$ccIva = $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigoIva);
+							$cuenta = $ccIva ? $ccIva->id : 0;
+						}
+						if (! $cuenta) {
+							throw new Exception('Error en cuenta contable de impuesto '.$conc['impuesto_id']);
+						}
+					}
 				}
 
 				// Agrega total de logistica
@@ -7904,6 +7996,52 @@ class FacturacionService
 			$asiento_movimiento = $this->asiento_movimientoRepository->createunique($asientoContable);
 		}
 		return $asiento_movimiento;
+	}
+
+	/**
+	 * Backfill / regeneración: graba asiento ERP desde payload ya armado (sin emitir comprobante).
+	 * Por defecto no escribe ctamov Anita (omitirAnita=true).
+	 *
+	 * @param  list<array{empresa_id:int, cuentacontable_id:mixed, monto:float, centrocosto_id?:int|null}>  $asientoContable
+	 */
+	public function grabarAsientoContableDesdePayload(
+		array $asientoContable,
+		int $empresaId,
+		string $fecha,
+		int $ventaId,
+		string $observacion,
+		?int $centrocostoId,
+		int $monedaId,
+		float $cotizacion,
+		float $signo,
+		?int $contrapartidaId,
+		string $tipo,
+		string $letra,
+		string $sucursal,
+		int $nro,
+		?string $modoFacturacionPv = null,
+		?string $fechaJornada = null,
+		bool $omitirAnita = true,
+	): void {
+		$this->grabaAsientoContable(
+			$asientoContable,
+			$empresaId,
+			$fecha,
+			$ventaId,
+			$observacion,
+			$centrocostoId,
+			$monedaId,
+			$cotizacion,
+			$signo,
+			$contrapartidaId,
+			$tipo,
+			$letra,
+			$sucursal,
+			$nro,
+			$modoFacturacionPv,
+			$fechaJornada,
+			$omitirAnita
+		);
 	}
 
 	/**

@@ -10,8 +10,9 @@ return [
     | (/usr/local/forms/otfragola.ps y otfragola2.ps en 160.132.0.254): solo
     | datos variables para papel preimpreso (sin cajas ni fondos).
     |
-    | No requiere colas CUPS en el L12: el script envía el PDF directo a la IP
-    | de la impresora (mismo mecanismo que Laser PDF Monica/Laura).
+    | No requiere colas CUPS en el L12: el script envía por JetDirect (TCP 9100).
+    | Monica (.201) acepta PDF Direct; Laura hp1300 (.200) solo PCL → el script
+    | convierte PDF→PCL con Ghostscript (paquete ghostscript en el L12).
     |
     | IPs Ferli (host 160.132.0.254):
     |   hp-diego     → 160.132.0.203

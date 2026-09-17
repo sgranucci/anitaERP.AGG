@@ -85,7 +85,7 @@ function restaurarUltimaConsultaClienteEnModal() {
 
 /** Gastronomía y otras pantallas sin fila tr: resuelve inputs destino desde el botón lupa. */
 function resolverPtrClienteDesdeBoton($btn) {
-    var $gastro = $btn.closest('.gastro-campo-consulta');
+    var $gastro = $btn.closest('.gastro-campo-consulta, .tm-cliente-campo');
     if ($gastro.length) {
         return {
             $id: $gastro.find('#cliente_id, .cliente_id').first(),
@@ -253,16 +253,19 @@ if (!window.__clienteF1CaptureActivo) {
 
 function buscar_datos_cliente(consulta) {
     var termino = (consulta != null && consulta !== undefined) ? String(consulta).trim() : '';
+    var token = $('meta[name="csrf-token"]').attr('content')
+        || ($('input[name="_token"]').first().val() || '');
 
     $.ajax({
         url: carpetaBase+'/ventas/consultacliente',
         type: 'POST',
         dataType: 'HTML',
 	    headers: {
-        	'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+        	'X-CSRF-TOKEN': token
     	},
         data: {
             consulta: termino,
+            _token: token,
             omitir_cliente_despacho: window.CLIENTE_DESPACHO_NO_FACTURAR ? 1 : 0,
         },
     })
@@ -273,8 +276,9 @@ function buscar_datos_cliente(consulta) {
             guardarUltimaConsultaCliente(termino, html);
         }
     })
-    .fail (function() {
-        console.log("error");
+    .fail (function(jqXHR) {
+        console.log('error consulta cliente', jqXHR && jqXHR.status);
+        $("#datoscliente").html('<tr><td colspan="7" class="text-danger">No se pudo consultar clientes. Recargue la pantalla e intente de nuevo.</td></tr>');
     });
 }
 

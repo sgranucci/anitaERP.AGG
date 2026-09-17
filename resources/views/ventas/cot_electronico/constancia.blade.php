@@ -5,15 +5,24 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Constancia COT #{{ $sesion->id ?? '' }}</title>
     <style type="text/css">
-        @page { margin: 12mm; }
+        /*
+         * DomPDF a veces ignora @page margin con tablas/imagen al tope.
+         * Márgenes vía padding del body (área imprimible láser ~6–8 mm).
+         */
+        @page { margin: 0; }
         html, body { margin: 0; padding: 0; }
         body {
             font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
             font-size: 11px;
             color: #17202A;
         }
-        .cot-pagina { page-break-inside: avoid; }
-        .salto-pagina { page-break-before: always; }
+        .cot-pagina {
+            page-break-inside: avoid;
+            page-break-after: always;
+            padding: 18mm 14mm 14mm 14mm;
+            box-sizing: border-box;
+        }
+        .cot-pagina:last-child { page-break-after: auto; }
         table.cot-header { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
         table.cot-header td { border: none; vertical-align: top; padding: 0; }
         .cot-logo { width: 38%; }
@@ -53,11 +62,17 @@
             color: #444;
             line-height: 1.4;
         }
+        .cot-pagina-nro {
+            margin-top: 10px;
+            font-size: 9px;
+            color: #666;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
 @foreach ($paginas as $pagina)
-    <div class="cot-pagina {{ $loop->first ? '' : 'salto-pagina' }}">
+    <div class="cot-pagina">
         <table class="cot-header">
             <tr>
                 <td class="cot-logo">
@@ -143,6 +158,10 @@
         <p class="cot-pie">
             Constancia operativa del COT emitido ante ARBA. Debe acompa&ntilde;ar el remito
             durante el traslado. Conservar junto al comprobante de presentaci&oacute;n.
+        </p>
+        <p class="cot-pagina-nro">
+            Hoja {{ $loop->iteration }} de {{ $loop->count }}
+            — remito {{ $pagina['remito'] }}
         </p>
     </div>
 @endforeach

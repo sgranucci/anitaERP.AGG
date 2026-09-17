@@ -11,6 +11,7 @@ use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\ComprobanteImpresionReglaClave;
 use App\Support\Ventas\ProgramaImpresionListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 
 class ComprobanteImpresionProgramaRepository implements ComprobanteImpresionProgramaRepositoryInterface
 {
@@ -51,19 +52,23 @@ class ComprobanteImpresionProgramaRepository implements ComprobanteImpresionProg
 
     public function create(array $data)
     {
-        $programa = $this->model->create($this->datosCabecera($data));
-        $this->sincronizarHijas($programa, $data);
+        return DB::transaction(function () use ($data) {
+            $programa = $this->model->create($this->datosCabecera($data));
+            $this->sincronizarHijas($programa, $data);
 
-        return $programa->fresh(['formularios.copias', 'reglas']);
+            return $programa->fresh(['formularios.copias', 'reglas']);
+        });
     }
 
     public function update(array $data, $id)
     {
-        $programa = $this->findOrFail($id);
-        $programa->update($this->datosCabecera($data));
-        $this->sincronizarHijas($programa, $data);
+        return DB::transaction(function () use ($data, $id) {
+            $programa = $this->findOrFail($id);
+            $programa->update($this->datosCabecera($data));
+            $this->sincronizarHijas($programa, $data);
 
-        return $programa->fresh(['formularios.copias', 'reglas']);
+            return $programa->fresh(['formularios.copias', 'reglas']);
+        });
     }
 
     public function delete($id)
@@ -124,19 +129,32 @@ class ComprobanteImpresionProgramaRepository implements ComprobanteImpresionProg
     {
         $formularios = $data['formularios'] ?? [];
         $idsForm = [];
+        $tiposVistos = [];
         foreach ($formularios as $orden => $fila) {
             if (! is_array($fila) || empty($fila['formulario'])) {
                 continue;
             }
+            $tipoFormulario = strtoupper(trim((string) $fila['formulario']));
+            // Unique (programa_id, formulario): un solo bloque por tipo; re-agregar sin id no inserta duplicado.
+            if ($tipoFormulario === '' || isset($tiposVistos[$tipoFormulario])) {
+                continue;
+            }
+            $tiposVistos[$tipoFormulario] = true;
             $formId = (int) ($fila['id'] ?? 0);
             $attrs = [
                 'programa_id' => $programa->id,
                 'orden' => (int) ($fila['orden'] ?? (($orden + 1) * 10)),
-                'formulario' => (string) $fila['formulario'],
+                'formulario' => $tipoFormulario,
             ];
             $form = $formId > 0
                 ? ComprobanteImpresionFormularioLinea::query()->where('programa_id', $programa->id)->find($formId)
                 : null;
+            if (! $form) {
+                $form = ComprobanteImpresionFormularioLinea::query()
+                    ->where('programa_id', $programa->id)
+                    ->where('formulario', $tipoFormulario)
+                    ->first();
+            }
             if ($form) {
                 $form->update($attrs);
             } else {

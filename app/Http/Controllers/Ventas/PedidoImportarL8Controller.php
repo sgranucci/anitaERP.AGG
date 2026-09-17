@@ -44,6 +44,49 @@ class PedidoImportarL8Controller extends Controller
             ->with('mensaje', $mensaje);
     }
 
+    /**
+     * Desde liquidación de tareas: trae de L8 las tareas del rango que faltan en L12 (sin duplicar).
+     */
+    public function importarTareasLiquidacion(Request $request)
+    {
+        can('importar-pedido-l8');
+        $this->assertFerli();
+
+        $fechaDesde = trim((string) $request->input('desdefecha', $request->input('fecha_desde', '')));
+        $fechaHasta = trim((string) $request->input('hastafecha', $request->input('fecha_hasta', '')));
+        if ($fechaDesde === '') {
+            $fechaDesde = date('Y-m-01');
+        }
+        if ($fechaHasta === '') {
+            $fechaHasta = date('Y-m-d');
+        }
+
+        try {
+            $resumen = $this->tareasService->importarFaltantesPorRangoFechas($fechaDesde, $fechaHasta);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('rep_liquidaciontarea')
+                ->withInput()
+                ->with('mensaje_error', 'No se pudo importar tareas desde L8: '.$e->getMessage());
+        }
+
+        $mensaje = sprintf(
+            'Tareas L8 → L12 (fuente %s, %s a %s): OT %d — tareas nuevas +%d, fechas actualizadas %d, movimientos +%d.',
+            $resumen['fuente'] ?: '?',
+            $fechaDesde,
+            $fechaHasta,
+            $resumen['ots'],
+            $resumen['insert_tarea'],
+            $resumen['update_tarea'],
+            $resumen['insert_movimiento']
+        );
+
+        return redirect()
+            ->route('rep_liquidaciontarea')
+            ->withInput()
+            ->with('mensaje', $mensaje);
+    }
+
     public function importarPedidosIndex(Request $request)
     {
         can('importar-pedido-l8');

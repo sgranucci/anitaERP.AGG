@@ -302,6 +302,7 @@ class FacturacionServiceFerli extends FacturacionService
                         'loteimportacion_id' => $loteimportacion_id,
                         'ordentrabajo_id' => $ordenestrabajo_id[$off],
                         'pedido_combinacion_id' => $pedido_combinacion_id,
+                        'cuentacontable_id' => $articulo->cuentacontableventa_id,
                         'medidas' => [$medidaRow],
                     ];
                 } else {
@@ -420,7 +421,7 @@ class FacturacionServiceFerli extends FacturacionService
 					'0',
 					'0',
 					'0',
-					'".$medida['codigocombinacion']."'
+					'".($medida['codigocombinacion'] ?? '')."'
 				",
                 'servidor' => $servidor,
                 'ifx_server' => $ifx_server,
@@ -463,7 +464,7 @@ class FacturacionServiceFerli extends FacturacionService
 					'0',
 					'0',
 					'".$medida['cantidad']."',
-					'".$medida['codigocombinacion']."'
+					'".($medida['codigocombinacion'] ?? '')."'
 				",
                 'servidor' => $servidor,
                 'ifx_server' => $ifx_server,
@@ -525,8 +526,8 @@ class FacturacionServiceFerli extends FacturacionService
                         'sku' => $item['sku'],
                         'descripcion' => $item['descripcion'],
                         'categoria' => $item['categoria'],
-                        'codigocombinacion' => $item['codigocombinacion'],
-                        'despacho' => $item['despacho'],
+                        'codigocombinacion' => $item['codigocombinacion'] ?? '',
+                        'despacho' => $item['despacho'] ?? '',
                         'medida' => $medida['medida'],
                     ];
                 }

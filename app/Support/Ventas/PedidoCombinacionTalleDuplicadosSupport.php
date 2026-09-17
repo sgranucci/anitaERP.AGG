@@ -7,6 +7,7 @@ namespace App\Support\Ventas;
 use App\Models\Stock\Articulo_Movimiento_Talle;
 use App\Models\Ventas\Ordentrabajo_Combinacion_Talle;
 use App\Models\Ventas\Pedido_Combinacion_Talle;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -94,6 +95,20 @@ final class PedidoCombinacionTalleDuplicadosSupport
                 $filasBorradas += Pedido_Combinacion_Talle::query()
                     ->whereIn('id', $borrarIds)
                     ->delete();
+
+                // Tras reasignar, pueden quedar 2+ OCT al mismo PCT: dejar uno solo.
+                $octIds = Ordentrabajo_Combinacion_Talle::query()
+                    ->where('pedido_combinacion_talle_id', $conservarId)
+                    ->orderBy('id')
+                    ->pluck('id')
+                    ->map(static fn ($id) => (int) $id)
+                    ->all();
+                if (count($octIds) > 1) {
+                    array_shift($octIds);
+                    EloquentAuditDeleteSupport::each(
+                        Ordentrabajo_Combinacion_Talle::query()->whereIn('id', $octIds)
+                    );
+                }
             }
         });
 

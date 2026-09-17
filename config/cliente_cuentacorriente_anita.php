@@ -35,12 +35,21 @@ return [
     ),
 
     /**
-     * Tipos Anita que no son deuda de venta (cobranzas / anticipos / recibos).
-     * Igual se excluyen si no hay fila en `venta`.
+     * Tipos Anita que no son deuda / crédito pendiente de CC
+     * (cobranzas aplicadas, recibos, PRE). COA sí se importa: resta deuda.
      */
     'tipos_no_deuda' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('CLIENTE_CC_ANITA_TIPOS_NO_DEUDA', 'COB,COA,ANT,REC,RBO,AJU,PRE'))
+        explode(',', (string) env('CLIENTE_CC_ANITA_TIPOS_NO_DEUDA', 'COB,ANT,REC,RBO,AJU,PRE'))
+    ))),
+
+    /**
+     * Créditos pendientes que viven en climov sin fila en Anita `venta` (ej. COA).
+     * Se sintetiza la cabecera ERP desde climov.
+     */
+    'tipos_credito_sin_venta' => array_values(array_filter(array_map(
+        'trim',
+        explode(',', (string) env('CLIENTE_CC_ANITA_TIPOS_CREDITO_SIN_VENTA', 'COA'))
     ))),
 
     /**

@@ -3,11 +3,12 @@
 namespace App\Services\Ventas;
 
 use App\Models\Ventas\Venta;
+use App\Support\Ventas\EnvioEtiquetaDatosSupport;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\View;
 
 /**
- * Scaffold PDF ENVÍO (pack Facturación). Formato definitivo: pendiente (lunes).
+ * PDF etiqueta de ENVÍO (pack Facturación). Layout según modelo físico Ferli.
  */
 final class EnvioComprobantePdfService
 {
@@ -16,23 +17,30 @@ final class EnvioComprobantePdfService
         ini_set('memory_limit', '256M');
 
         $venta = Venta::query()
-            ->with(['puntoventas.empresas', 'clientes', 'transportes'])
+            ->with([
+                'puntoventas.empresas',
+                'puntoventas.localidades',
+                'clientes.localidades',
+                'clientes.provincias',
+                'transportes',
+            ])
             ->find($ventaId);
         if (! $venta) {
             throw new \RuntimeException('Venta inexistente para ENVÍO');
         }
 
+        $etiqueta = EnvioEtiquetaDatosSupport::desdeVenta($venta);
+
         $nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) ($venta->nombre ?? 'cliente')) ?: 'cliente';
         $nombrePdf = 'envio-'.$ventaId.'-'.$nombreCliente;
-        // Mismo directorio que facturas (writable por www-data); prefijo envio- distingue el scaffold.
         $path = storage_path('pdf/ventas');
         if (! is_dir($path) && ! mkdir($path, 0777, true) && ! is_dir($path)) {
             throw new \RuntimeException('No se pudo crear el directorio de PDF de envío.');
         }
 
-        $view = View::make('exports.ventas.envio_scaffold', [
+        $view = View::make('exports.ventas.envio', [
             'venta' => $venta,
-            'scaffoldPendiente' => true,
+            'etiqueta' => $etiqueta,
         ])->render();
 
         $pdf = App::make('dompdf.wrapper');

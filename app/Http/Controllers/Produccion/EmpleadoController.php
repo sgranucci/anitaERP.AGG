@@ -106,4 +106,16 @@ class EmpleadoController extends Controller
             abort(404);
         }
     }
+
+    public function consultaEmpleado(Request $request)
+    {
+        return response()->json($this->repository->consultaModal($request->input('consulta')));
+    }
+
+    public function leeEmpleado($id)
+    {
+        $data = $this->repository->findParaConsulta($id);
+
+        return response()->json($data ?: new \stdClass());
+    }
 }

@@ -124,6 +124,105 @@ final class FerliL8ReaderSupport
     }
 
     /**
+     * Códigos de OT en L8 con al menos una tarea en el rango (faltantes o no).
+     * Sirve para altas y para refrescar fechas de finalización en L12.
+     *
+     * @return list<int>
+     */
+    public function otCodigosConTareasEnRango(string $fechaDesde, string $fechaHasta, int $limiteOts = 2000): array
+    {
+        $fuente = $this->resolverFuente();
+        if ($fuente['fuente'] === 'http') {
+            try {
+                $json = $this->httpGet('api/l8-sync/tareas-faltantes-rango', [
+                    'fecha_desde' => $fechaDesde,
+                    'fecha_hasta' => $fechaHasta,
+                    'limite' => $limiteOts,
+                ]);
+            } catch (\Throwable) {
+                return [];
+            }
+            $codigos = array_map('intval', (array) ($json['ot_codigos'] ?? []));
+
+            return array_values(array_unique(array_filter($codigos, static fn ($c) => $c > 0)));
+        }
+
+        /** @var ConnectionInterface $db */
+        $db = $fuente['conexion'];
+
+        $q = $db->table('ordentrabajo_tarea as ott')
+            ->join('ordentrabajo as ot', 'ot.id', '=', 'ott.ordentrabajo_id')
+            ->select('ot.codigo')
+            ->where(function ($w) use ($fechaDesde, $fechaHasta) {
+                $w->whereBetween('ott.hastafecha', [$fechaDesde, $fechaHasta])
+                    ->orWhereBetween('ott.desdefecha', [$fechaDesde, $fechaHasta]);
+            })
+            ->distinct()
+            ->orderBy('ot.codigo')
+            ->limit($limiteOts);
+
+        return $q->pluck('codigo')
+            ->map(static fn ($c) => (int) $c)
+            ->filter(static fn ($c) => $c > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Códigos de OT en L8 que tienen al menos una tarea en el rango de fechas
+     * cuyo id todavía no está en L12.
+     *
+     * @return list<int>
+     */
+    public function otCodigosConTareasFaltantesEnRango(string $fechaDesde, string $fechaHasta, int $limiteOts = 500): array
+    {
+        $todos = $this->otCodigosConTareasEnRango($fechaDesde, $fechaHasta, max($limiteOts * 3, 500));
+        if ($todos === []) {
+            return [];
+        }
+
+        $fuente = $this->resolverFuente();
+        if ($fuente['fuente'] === 'http') {
+            // Sin ids L8 a mano: el service filtra altas al importar; devolvemos el rango completo.
+            return array_slice($todos, 0, $limiteOts);
+        }
+
+        /** @var ConnectionInterface $db */
+        $db = $fuente['conexion'];
+        $idsL12Flip = array_flip(
+            DB::table('ordentrabajo_tarea')->pluck('id')->map(static fn ($c) => (int) $c)->all()
+        );
+
+        $codigos = [];
+        $q = $db->table('ordentrabajo_tarea as ott')
+            ->join('ordentrabajo as ot', 'ot.id', '=', 'ott.ordentrabajo_id')
+            ->select('ot.codigo', 'ott.id')
+            ->whereIn('ot.codigo', $todos)
+            ->where(function ($w) use ($fechaDesde, $fechaHasta) {
+                $w->whereBetween('ott.hastafecha', [$fechaDesde, $fechaHasta])
+                    ->orWhereBetween('ott.desdefecha', [$fechaDesde, $fechaHasta]);
+            })
+            ->orderBy('ot.codigo');
+
+        foreach ($q->cursor() as $row) {
+            $tareaId = (int) ($row->id ?? 0);
+            if ($tareaId > 0 && isset($idsL12Flip[$tareaId])) {
+                continue;
+            }
+            $codigo = (int) ($row->codigo ?? 0);
+            if ($codigo <= 0) {
+                continue;
+            }
+            $codigos[$codigo] = true;
+            if (count($codigos) >= $limiteOts) {
+                break;
+            }
+        }
+
+        return array_map('intval', array_keys($codigos));
+    }
+
+    /**
      * Pedidos de L8 cuyo codigo (o id) no existe en L12.
      *
      * @return array{

@@ -42,6 +42,53 @@ class L8SyncExportController extends Controller
         ]);
     }
 
+    /**
+     * Códigos de OT con tareas en el rango (para que L12 filtre las que faltan).
+     * L12 manda ids_l12[] opcionales; si no, devuelve todos los códigos del rango.
+     */
+    public function tareasFaltantesRango(Request $request)
+    {
+        $this->assertExportHabilitado($request);
+
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaDesde) || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaHasta)) {
+            return response()->json(['fuente' => 'local', 'ot_codigos' => []], 422);
+        }
+        $limite = max(1, min(2000, (int) $request->input('limite', 500)));
+        $idsL12 = array_flip(array_filter(array_map('intval', (array) $request->input('ids_l12', []))));
+
+        $q = DB::table('ordentrabajo_tarea as ott')
+            ->join('ordentrabajo as ot', 'ot.id', '=', 'ott.ordentrabajo_id')
+            ->select('ot.codigo', 'ott.id')
+            ->where(function ($w) use ($fechaDesde, $fechaHasta) {
+                $w->whereBetween('ott.hastafecha', [$fechaDesde, $fechaHasta])
+                    ->orWhereBetween('ott.desdefecha', [$fechaDesde, $fechaHasta]);
+            })
+            ->orderBy('ot.codigo');
+
+        $codigos = [];
+        foreach ($q->cursor() as $row) {
+            $tareaId = (int) ($row->id ?? 0);
+            if ($idsL12 !== [] && $tareaId > 0 && isset($idsL12[$tareaId])) {
+                continue;
+            }
+            $codigo = (int) ($row->codigo ?? 0);
+            if ($codigo <= 0) {
+                continue;
+            }
+            $codigos[$codigo] = true;
+            if (count($codigos) >= $limite) {
+                break;
+            }
+        }
+
+        return response()->json([
+            'fuente' => 'local',
+            'ot_codigos' => array_map('intval', array_keys($codigos)),
+        ]);
+    }
+
     public function pedidosFaltantes(Request $request)
     {
         $this->assertExportHabilitado($request);

@@ -167,17 +167,21 @@
         var carpetaBase = carpetaBaseConfig;
         function resolverCarpetaBaseApp() {
             var loc = window.location.pathname || '';
+            // Prefijos de módulo del ERP (alineado con routes/web.php). Incluye produccion:
+            // sin él, en dominio raíz APP_CARPETA stale (/anitaERP/public) rompe los AJAX
+            // de modales (ej. consultacliente en liquidación de tareas).
+            var mods = 'ventas|caja|stock|compras|contable|seguridad|presupuesto|ticket|admin|uif|configuracion|sueldos|produccion|sala|graficos|solicitudpago|ordenventa|arca|ayuda|receptivo|notificaciones';
             // Preferir el prefijo real de la URL (evita APP_CARPETA stale tipo /anitaERP/public en dominio raíz).
             var mPublic = loc.match(/^(.*\/public)(?:\/|$)/);
             if (mPublic && mPublic[1]) {
                 return mPublic[1];
             }
-            var mModulo = loc.match(/^(.+)\/(ventas|caja|stock|compras|contable|seguridad|presupuesto|ticket|admin|uif|configuracion|sueldos)\//);
+            var mModulo = loc.match(new RegExp('^(.+)/(' + mods + ')/'));
             if (mModulo && mModulo[1] && mModulo[1] !== '') {
                 return mModulo[1];
             }
-            // App en raíz del dominio: /ventas/... → carpeta vacía.
-            if (/^\/(ventas|caja|stock|compras|contable|seguridad|presupuesto|ticket|admin|uif|configuracion|sueldos)(\/|$)/.test(loc)) {
+            // App en raíz del dominio: /ventas/... o /produccion/... → carpeta vacía.
+            if (new RegExp('^/(' + mods + ')(/|$)').test(loc)) {
                 return '';
             }
             var configured = (carpetaBaseConfig != null) ? String(carpetaBaseConfig).replace(/\/$/, '').trim() : '';
