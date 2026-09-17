@@ -83,7 +83,8 @@ class FacturacionLocalProcesoController extends Controller
 
         $usocuentacajaLocalId = FacturacionLocalUsoCuentacajaSupport::resolverId() ?? 0;
         $empresaIdPos = (int) ($local?->empresa_id ?? 0);
-        $contextoPos = FacturacionLocalPosContextoSupport::paraLocal($local);
+        // Index: sin SOAP (rápido). El JS refresca el próximo número vía apiContextoPos.
+        $contextoPos = FacturacionLocalPosContextoSupport::paraLocal($local, false);
 
         $turnosQuery = $this->turnoLocalRepository
             ->listarParaSelect($local?->empresa_id ? (int) $local->empresa_id : null);
@@ -132,7 +133,7 @@ class FacturacionLocalProcesoController extends Controller
 
         return response()->json([
             'ok' => true,
-            'contexto' => FacturacionLocalPosContextoSupport::paraLocal($local),
+            'contexto' => FacturacionLocalPosContextoSupport::paraLocal($local, true),
         ]);
     }
 

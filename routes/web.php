@@ -3646,6 +3646,19 @@ Route::post('compras/propuesta-pago', 'Compras\PropuestaPagoController@guardar')
 Route::get('compras/propuesta-pago/{id}/editar', 'Compras\PropuestaPagoController@editar')->name('editar_propuesta_pago');
 Route::put('compras/propuesta-pago/{id}', 'Compras\PropuestaPagoController@actualizar')->name('actualizar_propuesta_pago');
 Route::delete('compras/propuesta-pago/{id}', 'Compras\PropuestaPagoController@eliminar')->name('eliminar_propuesta_pago');
+
+Route::get('compras/programa-pago', 'Compras\ProgramaPagoController@index')->name('programa_pago');
+Route::get('compras/listar-programa-pago/{formato?}', 'Compras\ProgramaPagoController@listar')->name('listar_programa_pago');
+Route::get('compras/programa-pago/crear', 'Compras\ProgramaPagoController@crear')->name('crear_programa_pago');
+Route::post('compras/programa-pago', 'Compras\ProgramaPagoController@guardar')->name('guardar_programa_pago');
+Route::get('compras/programa-pago/{id}/editar', 'Compras\ProgramaPagoController@editar')->name('editar_programa_pago');
+Route::put('compras/programa-pago/{id}', 'Compras\ProgramaPagoController@actualizar')->name('actualizar_programa_pago');
+Route::delete('compras/programa-pago/{id}', 'Compras\ProgramaPagoController@eliminar')->name('eliminar_programa_pago');
+Route::post('compras/programa-pago/{id}/refrescar-saldos', 'Compras\ProgramaPagoController@refrescarSaldos')->name('refrescar_saldos_programa_pago');
+Route::post('compras/programa-pago/{id}/agregar-proveedor', 'Compras\ProgramaPagoController@agregarProveedor')->name('agregar_proveedor_programa_pago');
+Route::post('compras/programa-pago/{id}/cerrar', 'Compras\ProgramaPagoController@cerrar')->name('cerrar_programa_pago');
+Route::post('compras/programa-pago/{id}/reabrir', 'Compras\ProgramaPagoController@reabrir')->name('reabrir_programa_pago');
+Route::get('compras/programa-pago/{id}/exportar/{formato?}', 'Compras\ProgramaPagoController@exportarMatriz')->name('exportar_matriz_programa_pago');
 Route::post('compras/propuesta-pago/{id}/enviar-aprobacion', 'Compras\PropuestaPagoController@enviarAprobacion')->name('enviar_aprobacion_propuesta_pago');
 Route::post('compras/propuesta-pago/{id}/ejecutar', 'Compras\PropuestaPagoController@ejecutar')->name('ejecutar_propuesta_pago');
 Route::post('compras/propuesta-pago/{id}/reabrir', 'Compras\PropuestaPagoController@reabrir')->name('reabrir_propuesta_pago');

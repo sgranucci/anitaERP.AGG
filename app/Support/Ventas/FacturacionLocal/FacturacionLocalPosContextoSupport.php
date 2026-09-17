@@ -4,14 +4,20 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas\FacturacionLocal;
 
+use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\LocalVenta;
+use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
+use App\Services\Ventas\FacturaelectronicaService;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use App\Support\Ventas\VentaNumeradorFiscalSupport;
+use Throwable;
 
 /**
- * Contexto informativo del POS Local: PV, depósito, próxima factura (sin reservar número).
+ * Contexto del POS Local: PV, depósito, próxima factura.
+ * Si el PV tiene webservice, el próximo número sale de ARCA (FECompUltimoAutorizado).
+ * Sin webservice: ERP / numerador fiscal.
  */
 final class FacturacionLocalPosContextoSupport
 {
@@ -30,10 +36,12 @@ final class FacturacionLocalPosContextoSupport
      *   proxima_etiqueta:string,
      *   proxima_numero:int,
      *   letra_sugerida:string,
+     *   usa_webservice:bool,
+     *   fuente_numero:string,
      *   aviso:?string
      * }
      */
-    public static function paraLocal(?LocalVenta $local): array
+    public static function paraLocal(?LocalVenta $local, bool $consultarArca = true): array
     {
         $vacio = [
             'puntoventa_id' => 0,
@@ -49,6 +57,8 @@ final class FacturacionLocalPosContextoSupport
             'proxima_etiqueta' => '—',
             'proxima_numero' => 0,
             'letra_sugerida' => 'B',
+            'usa_webservice' => false,
+            'fuente_numero' => '',
             'aviso' => null,
         ];
 
@@ -57,13 +67,17 @@ final class FacturacionLocalPosContextoSupport
         }
 
         $local->loadMissing([
-            'puntoventa:id,codigo,nombre',
+            'puntoventa:id,codigo,nombre,webservice,modofacturacion,empresa_id',
             'deposito:id,codigo,nombre',
             'listaprecio:id,codigo,nombre',
             'tipotransaccionFac:id,abreviatura,codigo,nombre',
         ]);
 
-        $pv = $local->puntoventaDefault() ?? $local->puntoventa;
+        $pvIdTmp = (int) ($local->puntoventaDefaultId() ?? $local->puntoventa_id ?? 0);
+        $pv = $pvIdTmp > 0
+            ? Puntoventa::query()->find($pvIdTmp)
+            : ($local->puntoventaDefault() ?? $local->puntoventa);
+
         $dep = $local->deposito;
         $lista = $local->listaprecio;
         $tipoFac = $local->tipotransaccionFac
@@ -74,40 +88,58 @@ final class FacturacionLocalPosContextoSupport
         $pvCodigo = str_pad(trim((string) ($pv->codigo ?? '')), 5, '0', STR_PAD_LEFT);
         $empresaId = (int) ($local->empresa_id ?? 0);
         $pvId = (int) ($pv->id ?? $local->puntoventaDefaultId() ?? 0);
+        $usaWebservice = self::pvUsaWebservice($pv);
 
         $proximo = 0;
         $aviso = null;
-        if ($pvId > 0 && $tipoFac) {
+        $fuente = '';
+
+        if ($pvId <= 0 || ! $tipoFac) {
+            $aviso = 'Configure punto de venta y tipo FAC del local.';
+        } else {
             $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipParaEmision(
                 (string) ($tipoFac->codigo ?? ''),
                 $letra
             );
-            if ($codigoAfip > 0) {
-                if (VentaNumeradorFiscalSupport::estaEnUso()) {
-                    $row = VentaNumeradorFiscalSupport::consultar($pvId, $codigoAfip);
-                    $proximo = VentaNumeradorFiscalSupport::proximoNumero(
-                        (int) ($row->ultimo_numero ?? 0),
-                        (int) ($row->piso ?? 0)
-                    );
-                } else {
-                    $ultimo = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpPorCodigoAfip(
-                        $pvId,
-                        $codigoAfip,
-                        $empresaId > 0 ? $empresaId : null,
-                        $letra
-                    );
-                    $proximo = $ultimo + 1;
-                }
-            } else {
+            if ($codigoAfip <= 0) {
                 $aviso = 'Sin código AFIP del tipo FAC; el número se confirma al emitir.';
+            } elseif ($usaWebservice) {
+                if (! $consultarArca) {
+                    $fuente = 'arca_pendiente';
+                    $proximo = 0;
+                } else {
+                    [$proximo, $aviso, $fuente] = self::proximoDesdeArca(
+                        $pv,
+                        $codigoAfip,
+                        $empresaId
+                    );
+                }
+            } elseif (VentaNumeradorFiscalSupport::estaEnUso()) {
+                $row = VentaNumeradorFiscalSupport::consultar($pvId, $codigoAfip);
+                $proximo = VentaNumeradorFiscalSupport::proximoNumero(
+                    (int) ($row->ultimo_numero ?? 0),
+                    (int) ($row->piso ?? 0)
+                );
+                $fuente = 'numerador_fiscal';
+            } else {
+                $ultimo = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpPorCodigoAfip(
+                    $pvId,
+                    $codigoAfip,
+                    $empresaId > 0 ? $empresaId : null,
+                    $letra
+                );
+                $proximo = $ultimo + 1;
+                $fuente = 'erp';
             }
-        } else {
-            $aviso = 'Configure punto de venta y tipo FAC del local.';
         }
 
-        $etiqueta = $proximo > 0
-            ? sprintf('%s %s %s-%08d', $abrev, $letra, $pvCodigo, $proximo)
-            : '—';
+        if ($usaWebservice && ! $consultarArca) {
+            $etiqueta = '…';
+        } elseif ($proximo > 0) {
+            $etiqueta = sprintf('%s %s %s-%08d', $abrev, $letra, $pvCodigo, $proximo);
+        } else {
+            $etiqueta = '—';
+        }
 
         return [
             'puntoventa_id' => $pvId,
@@ -123,7 +155,62 @@ final class FacturacionLocalPosContextoSupport
             'proxima_etiqueta' => $etiqueta,
             'proxima_numero' => $proximo,
             'letra_sugerida' => $letra,
+            'usa_webservice' => $usaWebservice,
+            'fuente_numero' => $fuente,
             'aviso' => $aviso,
         ];
+    }
+
+    public static function pvUsaWebservice(?Puntoventa $pv): bool
+    {
+        if ($pv === null) {
+            return false;
+        }
+
+        return trim((string) ($pv->webservice ?? '')) !== '';
+    }
+
+    /**
+     * @return array{0:int,1:?string,2:string} proximo, aviso, fuente
+     */
+    private static function proximoDesdeArca(Puntoventa $pv, int $codigoAfip, int $empresaId): array
+    {
+        $empresa = Empresa::query()->find((int) ($pv->empresa_id ?? $empresaId ?: 0));
+        $nroinscripcion = $empresa !== null ? (string) ($empresa->nroinscripcion ?? '') : '';
+        $timeout = max(5, (int) config('facturacion_local.preview_arca_soap_timeout', 10));
+        $opciones = [
+            'emision_pos_arca' => true,
+            'aplicar_timeout_pos_arca' => true,
+            'soap_timeout_arca_pos' => $timeout,
+            'notificar_failover_transporte_en_capa_superior' => true,
+            'origen_facturacion_local' => true,
+        ];
+
+        try {
+            $raw = app(FacturaelectronicaService::class)->traeUltimoNumeroComprobante(
+                $nroinscripcion,
+                $codigoAfip,
+                $pv,
+                $opciones,
+            );
+        } catch (Throwable $e) {
+            return [0, 'ARCA: '.$e->getMessage(), 'arca_error'];
+        }
+
+        if ($raw === -1 || $raw === '-1') {
+            // PV nuevo en ARCA (último 0) o fallo: si no hay ventas ERP, próximo = 1.
+            $tieneVentas = \App\Models\Ventas\Venta::query()
+                ->where('puntoventa_id', (int) $pv->id)
+                ->exists();
+            if (! $tieneVentas) {
+                return [1, null, 'arca'];
+            }
+
+            return [0, 'ARCA no devolvió el último número autorizado.', 'arca_error'];
+        }
+
+        $ultimo = (int) $raw;
+
+        return [$ultimo > 0 ? $ultimo + 1 : 1, null, 'arca'];
     }
 }

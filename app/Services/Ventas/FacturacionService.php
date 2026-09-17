@@ -2995,6 +2995,13 @@ class FacturacionService
 
 		// Lee punto de venta
 		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
+		// POS Local: si el PV tiene webservice, no puede numerar/solicitar CAE en modo Manual.
+		if ($puntoventa && ! empty($data['forzar_modofacturacion'])) {
+			$modoForzado = strtoupper(trim((string) $data['forzar_modofacturacion']));
+			if (in_array($modoForzado, ['C', 'E', 'A', 'M'], true)) {
+				$puntoventa->modofacturacion = $modoForzado;
+			}
+		}
 		$cuentacorriente = $this->aplicarVencimientoVillafrancaSiCorresponde($cuentacorriente, $fechaFactura, $puntoventa);
 
 		if ($puntoventa)

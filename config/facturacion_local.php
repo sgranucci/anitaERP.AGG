@@ -88,5 +88,8 @@ return [
 
     'permitir_caea' => false,
 
+    // Preview próximo número en POS (FECompUltimoAutorizado). Segundos.
+    'preview_arca_soap_timeout' => max(5, (int) env('FACTURACION_LOCAL_PREVIEW_ARCA_SOAP_TIMEOUT', 10)),
+
     'genera_contabilidad_cobranza' => (bool) env('FACTURACION_LOCAL_GENERA_CONTABILIDAD_COBRANZA', false),
 ];

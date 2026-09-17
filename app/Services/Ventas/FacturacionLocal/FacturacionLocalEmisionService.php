@@ -5,10 +5,12 @@ namespace App\Services\Ventas\FacturacionLocal;
 use App\Models\Stock\Articulo;
 use App\Models\Ventas\FacturacionLocalEmision;
 use App\Models\Ventas\LocalVenta;
+use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TurnoOperativoLocal;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturacionService;
 use App\Services\Ventas\FacturacionServiceFerli;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -258,10 +260,11 @@ final class FacturacionLocalEmisionService
 
         $fecha = Carbon::now()->format('Y-m-d');
         $empresaId = (int) ($local->empresa_id ?: 0);
+        $puntoventaId = (int) ($local->puntoventaDefaultId() ?? $local->puntoventa_id ?? 0);
 
         $payload = [
             'empresa_id' => $empresaId,
-            'puntoventa_id' => (int) $local->puntoventa_id,
+            'puntoventa_id' => $puntoventaId,
             'tipotransaccion_id' => $esNc ? $local->tipoNcId() : $local->tipoFacId(),
             'cliente_id' => $clienteId,
             'fechafactura' => $fecha,
@@ -283,6 +286,14 @@ final class FacturacionLocalEmisionService
             'vendedor_id' => Auth::id(),
             'opciones_emision' => $this->opcionesEmision(),
         ];
+
+        // Si el PV tiene webservice, numeración + CAE van por ARCA (nunca ERP/manual).
+        $pv = $puntoventaId > 0 ? Puntoventa::query()->find($puntoventaId) : null;
+        if (FacturacionLocalPosContextoSupport::pvUsaWebservice($pv)
+            && strtoupper(trim((string) ($pv->modofacturacion ?? ''))) === 'M'
+        ) {
+            $payload['forzar_modofacturacion'] = 'C';
+        }
 
         if (! empty($input['receptor']) && is_array($input['receptor'])) {
             $payload['venta_receptor'] = $input['receptor'];

@@ -963,6 +963,13 @@
         }
         if (prox) {
             prox.textContent = ctx.proxima_etiqueta || '—';
+            if (ctx.aviso) {
+                prox.title = ctx.aviso;
+            } else if (ctx.usa_webservice) {
+                prox.title = 'Próximo según ARCA (FECompUltimoAutorizado)';
+            } else {
+                prox.title = '';
+            }
         }
         if (lista && ctx.listaprecio_codigo) {
             lista.textContent = ctx.listaprecio_codigo + ' — ' + (ctx.listaprecio_nombre || '');
@@ -1413,6 +1420,7 @@
         initVarianteTeclado();
         actualizarLetraBadge(null);
         pintarContextoPos(CFG.contexto || {});
+        refrescarContextoPos();
     }
 
     if (document.readyState === 'loading') {
