@@ -177,9 +177,16 @@
 			if (selectedId && !found) {
 				var labelPrev = ($tr.find('.desc_combinacion').val() || '').trim() || selectedId;
 				$sel.append($('<option></option>').val(selectedId).text(labelPrev).prop('selected', true));
+				found = true;
 			}
 			if (selectedId) {
 				$sel.val(selectedId);
+			}
+
+			// Sin combinaciones = artículo no de venta → solo cantidad + precio (modo original).
+			var esArticuloVenta = comb.length > 0 || (selectedId !== '' && found);
+			if (typeof window.msAplicarModoLineaFerli === 'function') {
+				window.msAplicarModoLineaFerli($tr, esArticuloVenta);
 			}
         });
     }
@@ -431,7 +438,8 @@
 
 			// Con click sobre cantidad abre modal de medidas
 	        $(".cantidad").on('click keydown', function(e) {
-				if ($(this).hasClass('cantidad-stock')) {
+				if ($(this).hasClass('cantidad-stock')
+					|| $(this).closest('tr').hasClass('ms-linea-simple')) {
 					return;
 				}
 				if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') {

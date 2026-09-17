@@ -78,6 +78,29 @@ return [
             ]) : [],
         ],
 
+        /*
+         * Calzados Ferli: lectura de L8 (producción legacy) para importar pedidos/tareas a L12.
+         * Preferir réplica local anitaERP_l8; si no, host remoto o bridge HTTP (config/ferli_l8.php).
+         */
+        'mysql_l8' => [
+            'driver' => 'mysql',
+            'host' => env('DB_L8_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_L8_PORT', env('DB_PORT', '3306')),
+            'database' => env('DB_L8_DATABASE', 'anitaERP_l8'),
+            'username' => env('DB_L8_USERNAME', env('DB_USERNAME', 'forge')),
+            'password' => env('DB_L8_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('DB_L8_SOCKET', env('DB_SOCKET', '')),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_spanish_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => false,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'url' => env('DATABASE_URL'),

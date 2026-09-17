@@ -7,6 +7,7 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/pagoproveedor/filtro.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js")}}" type="text/javascript"></script>
 @if (session('imprimir_pagoproveedor_url'))
 <script>
     (function () {
@@ -159,6 +160,14 @@
                                         <a class="btn-accion-tabla tooltipsC" target="_blank" rel="noopener" href="{{ route('imprimir_pagoproveedor', $fila->id) }}" title="Imprimir">
                                             <i class="fa fa-print"></i>
                                         </a>
+                                        @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
+                                            <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-op-enviar-proveedor text-success"
+                                                title="Enviar OP por email"
+                                                data-pagoproveedor-id="{{ $fila->id }}">
+                                                <i class="fa fa-envelope"></i>
+                                            </button>
+                                        @endif
                                     @endif
                                 </td>
                             </tr>
@@ -174,4 +183,5 @@
         </div>
     </div>
 </div>
+@include('compras.pagoproveedor.partials.modal_enviar_proveedor')
 @endsection

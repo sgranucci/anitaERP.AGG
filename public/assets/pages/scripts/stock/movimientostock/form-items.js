@@ -13,6 +13,55 @@
         return !!window.movimientoStockModoFerli;
     }
 
+    function msEsLineaSimple($tr) {
+        return !!($tr && $tr.length && $tr.hasClass('ms-linea-simple'));
+    }
+
+    /**
+     * Ferli: con combinaciones = calzado (comb/módulo/medidas).
+     * Sin combinaciones = no venta → cantidad y precio editables (modo original).
+     */
+    window.msAplicarModoLineaFerli = function ($tr, esArticuloVenta) {
+        if (!$tr || !$tr.length || !msEsModoFerli()) {
+            return;
+        }
+
+        var $cant = $tr.find('input.cantidad').first();
+        var $precio = $tr.find('input.precio').first();
+        var $comb = $tr.find('select.combinacion');
+        var $mod = $tr.find('select.modulo');
+        var $flags = $tr.find('.checkSinFiltro, .checkCombinacion');
+
+        if (esArticuloVenta) {
+            $tr.removeClass('ms-linea-simple');
+            $cant.removeClass('cantidad-stock').prop('readonly', true);
+            $precio.prop('readonly', true);
+            $comb.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
+            $mod.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
+            $flags.prop('disabled', false);
+        } else {
+            $tr.addClass('ms-linea-simple');
+            $cant.addClass('cantidad-stock').prop('readonly', false);
+            $precio.prop('readonly', false);
+            // No disabled: deben viajar vacíos en el POST (índices de arrays).
+            $comb.val('').css('pointer-events', 'none').attr('tabindex', '-1');
+            $mod.val('').css('pointer-events', 'none').attr('tabindex', '-1');
+            $tr.find('.combinacion_id_previa, .modulo_id_previa, .desc_combinacion, .desc_modulo, .medidas').val('');
+            $flags.prop('checked', false);
+            var articuloId = msFilaArticuloId($tr);
+            if (articuloId) {
+                msResolverPrecioLinea($tr, articuloId);
+            }
+            if (typeof window.msEnfocarCantidadFila === 'function') {
+                window.msEnfocarCantidadFila($tr);
+            }
+        }
+
+        if (typeof TotalParesPedido === 'function') {
+            TotalParesPedido();
+        }
+    };
+
     function msFormatearCantidad(num) {
         if (!isFinite(num) || num === 0) {
             return '';
@@ -37,7 +86,11 @@
     };
 
     window.msResolverPrecioLinea = function ($tr, articuloId) {
-        if (msEsModoFerli() || !$tr || !$tr.length) {
+        if (!$tr || !$tr.length) {
+            return;
+        }
+        // En Ferli solo resuelve precio automático en líneas no venta (sin combinaciones).
+        if (msEsModoFerli() && !msEsLineaSimple($tr)) {
             return;
         }
         var url = window.movimientoStockPrecioLineaUrl || '';
@@ -106,11 +159,11 @@
     }
 
     window.msRefrescarPreciosTodasLasFilas = function () {
-        if (msEsModoFerli()) {
-            return;
-        }
         $('#tbody-tabla tr.item-pedido').each(function () {
             var $tr = $(this);
+            if (msEsModoFerli() && !msEsLineaSimple($tr)) {
+                return;
+            }
             var articuloId = msFilaArticuloId($tr);
             if (articuloId) {
                 msResolverPrecioLinea($tr, articuloId);
@@ -157,13 +210,15 @@
         }
 
         if (msEsModoFerli()) {
+            // Mientras llegan combinaciones, no forzar modo venta.
+            $tr.removeClass('ms-linea-simple');
             if (typeof completarCombinaciones === 'function') {
                 completarCombinaciones($tr, 0, false);
             }
             if (typeof completarModulos === 'function') {
                 completarModulos($tr, 0);
             }
-            msEnfocarCantidadFila($tr);
+            // El foco a cantidad lo aplica msAplicarModoLineaFerli si es no-venta.
         } else {
             if (typeof window.msAplicarExclusividadColorTalle === 'function') {
                 if (!window.msAplicarExclusividadColorTalle(dataArticulo, $tr)) {
@@ -262,11 +317,21 @@
         if (!input.closest || !input.closest('#tabla-items-movimientostock')) {
             return false;
         }
+        var $tr = $(input).closest('tr');
+        // Ferli no-venta: Enter en cantidad → precio (no hay UM alt.).
         if (msEsModoFerli()) {
-            return false;
+            if (!msEsLineaSimple($tr)) {
+                return false;
+            }
+            if (typeof TotalParesPedido === 'function') {
+                TotalParesPedido();
+            }
+            if (typeof window.movStockProgramarPreviewAsiento === 'function') {
+                window.movStockProgramarPreviewAsiento();
+            }
+            return msEnfocarCampoFila($tr.find('input.precio').first());
         }
 
-        var $tr = $(input).closest('tr');
         msRecalcularCantidadesStandard($tr, 'cantidad');
         if (typeof window.movStockProgramarPreviewAsiento === 'function') {
             window.movStockProgramarPreviewAsiento();

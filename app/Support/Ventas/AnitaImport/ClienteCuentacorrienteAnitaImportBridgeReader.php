@@ -112,6 +112,9 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
             'ven_fecha',
             'ven_fecha_vto',
             'ven_monto',
+            'ven_gravado',
+            'ven_impuesto1',
+            'ven_exento',
             'ven_cod_mon',
             'ven_cotizacion',
             'ven_nombre_cliente',
@@ -149,6 +152,51 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
         }
 
         return $out;
+    }
+
+    /**
+     * Lista cabeceras Anita `venta` por rango de ven_fecha (YYYYMMDD).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function listarVentaPorRangoFecha(int $desdeYmd, int $hastaYmd): array
+    {
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $campos = implode(',', [
+            'ven_cliente',
+            'ven_tipo',
+            'ven_letra',
+            'ven_sucursal',
+            'ven_nro',
+            'ven_fecha',
+            'ven_fecha_vto',
+            'ven_monto',
+            'ven_gravado',
+            'ven_impuesto1',
+            'ven_exento',
+            'ven_cod_mon',
+            'ven_cotizacion',
+            'ven_nombre_cliente',
+            'ven_direccion_cli',
+            'ven_localidad_cli',
+            'ven_provincia_cli',
+            'ven_cod_postal_cli',
+            'ven_cuit_cli',
+            'ven_cond_iva_cli',
+            'ven_cond_venta',
+            'ven_vendedor',
+            'ven_cta_cte',
+            'ven_porc_desc',
+            'ven_monto_desc',
+        ]);
+
+        return $this->listar(
+            'venta',
+            $campos,
+            ' WHERE ven_fecha >= '.(int) $desdeYmd.' AND ven_fecha <= '.(int) $hastaYmd,
+            'ven_fecha, ven_tipo, ven_sucursal, ven_nro',
+            $perfil
+        );
     }
 
     /**

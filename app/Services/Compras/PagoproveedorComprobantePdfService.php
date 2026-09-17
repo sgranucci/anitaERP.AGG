@@ -30,7 +30,12 @@ class PagoproveedorComprobantePdfService
     ) {
     }
 
-    public function generarRespuesta(int $id): BinaryFileResponse
+    /**
+     * Genera el PDF en disco para descarga en pantalla o adjunto de mail.
+     *
+     * @return array{ruta: string, nombre: string}
+     */
+    public function generarArchivo(int $id): array
     {
         $pago = $this->cargarPago($id);
         $pdf = $this->armarPdf($pago);
@@ -58,9 +63,19 @@ class PagoproveedorComprobantePdfService
             $pago->numerotransaccion
         );
 
-        return response()->file($path, [
+        return [
+            'ruta' => $path,
+            'nombre' => $nombre,
+        ];
+    }
+
+    public function generarRespuesta(int $id): BinaryFileResponse
+    {
+        $archivo = $this->generarArchivo($id);
+
+        return response()->file($archivo['ruta'], [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="'.$nombre.'"',
+            'Content-Disposition' => 'inline; filename="'.$archivo['nombre'].'"',
         ]);
     }
 

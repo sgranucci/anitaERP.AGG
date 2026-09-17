@@ -17,6 +17,9 @@ $(function () {
     var urlEditarConceptoIvaTpl = String($form.attr('data-url-editar-concepto-iva') || $form.data('urlEditarConceptoIva') || '');
     var previewTimer = null;
     var previewSeq = 0;
+    var previewXhr = null;
+    /** @type {Object.<string, {id:number, codigo:string, nombre:string}>} */
+    var cuentasAsientoManualPorConcepto = {};
     var conceptosMeta = {};
 
         try {
@@ -786,7 +789,52 @@ $(function () {
      * Hay dos previews del asiento (solapa Conceptos + solapa Asiento) con el mismo HTML.
      * Si se itera en orden DOM, el editor vacío del otro panel pisa la cuenta recién elegida.
      * Agregar por concepto y preferir la que tenga cuenta cargada.
+     * Además se conserva un mapa local: el AJAX del preview reemplaza el HTML y, si un
+     * request viejo llega sin la cuenta, la selección no debe perderse.
      */
+    function recordarCuentaAsientoManual(conceptoId, datos) {
+        conceptoId = parseInt(conceptoId, 10) || 0;
+        if (conceptoId <= 0) {
+            return;
+        }
+        var id = parseInt((datos && datos.id) || '0', 10) || 0;
+        if (id > 0) {
+            cuentasAsientoManualPorConcepto[String(conceptoId)] = {
+                id: id,
+                codigo: String((datos && datos.codigo) || ''),
+                nombre: String((datos && datos.nombre) || '')
+            };
+            return;
+        }
+        delete cuentasAsientoManualPorConcepto[String(conceptoId)];
+    }
+
+    function aplicarCuentasAsientoManualesEnEditores() {
+        $.each(cuentasAsientoManualPorConcepto, function (conceptoIdStr, datos) {
+            var conceptoId = parseInt(conceptoIdStr, 10) || 0;
+            var id = parseInt((datos && datos.id) || '0', 10) || 0;
+            if (conceptoId <= 0 || id <= 0) {
+                return;
+            }
+            $('.cp-asiento-cuenta-editable[data-concepto-ivacompra-id="' + conceptoId + '"]').each(function () {
+                var $campo = $(this);
+                $campo.find('.cuentacontable_id').val(String(id));
+                $campo.find('.codigocuentacontable').val(String((datos && datos.codigo) || ''));
+                $campo.find('.nombrecuentacontable').val(String((datos && datos.nombre) || ''));
+                if (typeof actualizarLinkEditarCuentaContable === 'function') {
+                    actualizarLinkEditarCuentaContable($campo, id);
+                }
+            });
+            $('#tbody-concepto-table tr.item-concepto').each(function () {
+                var $row = $(this);
+                if (parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) !== conceptoId) {
+                    return;
+                }
+                setCuentaDebeEnFila($row, datos);
+            });
+        });
+    }
+
     function sincronizarCuentasAsientoAConceptos() {
         var porConcepto = {};
         $('.cp-asiento-cuenta-editable').each(function () {
@@ -806,6 +854,21 @@ $(function () {
                 porConcepto[conceptoId] = datos;
             }
         });
+        $.each(cuentasAsientoManualPorConcepto, function (conceptoIdStr, datos) {
+            var conceptoId = parseInt(conceptoIdStr, 10) || 0;
+            var id = parseInt((datos && datos.id) || '0', 10) || 0;
+            if (conceptoId <= 0 || id <= 0) {
+                return;
+            }
+            var prev = porConcepto[conceptoId];
+            if (!prev || prev.id <= 0) {
+                porConcepto[conceptoId] = {
+                    id: id,
+                    codigo: String((datos && datos.codigo) || ''),
+                    nombre: String((datos && datos.nombre) || '')
+                };
+            }
+        });
         $.each(porConcepto, function (conceptoIdStr, datos) {
             var conceptoId = parseInt(conceptoIdStr, 10) || 0;
             if (conceptoId <= 0) {
@@ -815,6 +878,7 @@ $(function () {
             if (datos.id <= 0) {
                 return;
             }
+            recordarCuentaAsientoManual(conceptoId, datos);
             $('#tbody-concepto-table tr.item-concepto').each(function () {
                 var $row = $(this);
                 if (parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) !== conceptoId) {
@@ -891,7 +955,11 @@ $(function () {
             $targets.css('opacity', 0.55);
         }
 
-        $.ajax({
+        if (previewXhr && previewXhr.readyState !== 4) {
+            previewXhr.abort();
+        }
+
+        previewXhr = $.ajax({
             url: previewUrl,
             type: 'POST',
             dataType: 'json',
@@ -906,6 +974,9 @@ $(function () {
                 }
                 if ($targets.length && res && typeof res.html === 'string') {
                     $targets.html(res.html);
+                    // El HTML nuevo puede venir sin la cuenta si un request viejo ganó la carrera;
+                    // reaplicar la elección manual del operador.
+                    aplicarCuentasAsientoManualesEnEditores();
                 }
                 $targets.css('opacity', 1).removeData('loading');
                 var ahora = new Date();
@@ -1216,6 +1287,12 @@ $(function () {
     toggleBloqueRecepcionesCom();
 
     $form.on('input change', 'input, select, textarea', function () {
+        var $el = $(this);
+        // La cuenta del asiento tiene handler propio; no disparar otro preview acá
+        // (evita carrera que vuelve a pedir el HTML sin la cuenta recién elegida).
+        if ($el.closest('.cp-asiento-cuenta-editable').length) {
+            return;
+        }
         programarPreviewAsiento();
     });
 
@@ -1230,6 +1307,13 @@ $(function () {
     });
 
     $(document).on('change', '.cp-asiento-cuenta-editable .cuentacontable_id', function () {
+        var $campo = $(this).closest('.cp-asiento-cuenta-editable');
+        var conceptoId = parseInt($campo.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+        recordarCuentaAsientoManual(conceptoId, {
+            id: parseInt($(this).val() || '0', 10) || 0,
+            codigo: String($campo.find('.codigocuentacontable').val() || ''),
+            nombre: String($campo.find('.nombrecuentacontable').val() || '')
+        });
         sincronizarCuentasAsientoAConceptos();
         marcarAvisosConceptosLocales();
         window.refrescarPreviewAsiento(true);
@@ -2266,6 +2350,20 @@ $(function () {
     });
 
     if (!contabilizado) {
+        // Sembrar mapa con cuentas ya cargadas (edición / old) para que el preview no las limpie.
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $row = $(this);
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+            var cuentaId = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+            if (conceptoId <= 0 || cuentaId <= 0) {
+                return;
+            }
+            recordarCuentaAsientoManual(conceptoId, {
+                id: cuentaId,
+                codigo: String($row.find('.cp-celda-cuenta-debe .codigocuentacontable').val() || ''),
+                nombre: String($row.find('.cp-celda-cuenta-debe .nombrecuentacontable').val() || '')
+            });
+        });
         marcarAvisosConceptosLocales();
         programarPreviewAsiento();
     }

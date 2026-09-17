@@ -201,8 +201,9 @@
         @php
             $letraCp = old('letra', $data->letra ?? '');
             if ($letraCp === null || $letraCp === '') {
-                $letraProvCp = optional(optional($data->proveedores ?? null)->condicionivas)->letra ?? '';
-                $letraCp = strtoupper(substr(trim((string) $letraProvCp), 0, 1));
+                $letraCp = \App\Support\Configuracion\CondicionivaLetraComprasSupport::letra(
+                    optional($data->proveedores ?? null)->condicionivas
+                );
             } else {
                 $letraCp = strtoupper(substr(trim((string) $letraCp), 0, 1));
             }

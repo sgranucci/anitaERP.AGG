@@ -34,7 +34,12 @@
 
     $depositoIdMov = (int) old(
         'deposito_id',
-        $movimientostock->articulos_movimiento[0]->deposito_id ?? ($deposito_query->count() === 1 ? $deposito_query->first()->id : 0)
+        $movimientostock->articulos_movimiento[0]->deposito_id
+            ?? (
+                ($funcion ?? '') === 'crear' && ! empty($depositodefault_id ?? null)
+                    ? (int) $depositodefault_id
+                    : ($deposito_query->count() === 1 ? $deposito_query->first()->id : 0)
+            )
     );
     $depositoModelMov = $depositoIdMov > 0 ? Depmae::find($depositoIdMov) : null;
 

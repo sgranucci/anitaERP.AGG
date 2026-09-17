@@ -33,7 +33,7 @@ class MayorConceptoController extends Controller
 
     public function index(Request $request)
     {
-        can('listar-asiento');
+        can('listar-mayor-concepto');
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $monedaQuery = $this->monedaRepository->all();
@@ -144,7 +144,7 @@ class MayorConceptoController extends Controller
      */
     public function consultar(Request $request)
     {
-        can('listar-asiento');
+        can('listar-mayor-concepto');
         MayorConceptoRuntimeSupport::elevarLimites();
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
@@ -340,7 +340,7 @@ class MayorConceptoController extends Controller
 
     public function exportar(Request $request, string $formato)
     {
-        can('listar-asiento');
+        can('listar-mayor-concepto');
 
         MayorConceptoRuntimeSupport::elevarLimites();
 

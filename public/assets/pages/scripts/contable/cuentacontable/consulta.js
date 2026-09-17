@@ -5,9 +5,42 @@ var ptrCuentacontableContext;
 var consultaCuentaContableTimer = null;
 var consultaCuentaContableAjax = null;
 var CONSULTA_CUENTACONTABLE_DEBOUNCE_MS = 280;
+var abriendoModalCuentaContable = false;
 
 function esTeclaF1CuentaContable(e) {
     return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function modalCuentaContableAbierto() {
+    var $modal = $('#consultacuentaModal');
+    return abriendoModalCuentaContable
+        || ($modal.length > 0 && ($modal.hasClass('show') || $modal.hasClass('in') || $modal.is(':visible')));
+}
+
+/**
+ * Si el preview del asiento reemplazó el DOM mientras el modal estaba abierto,
+ * el ptr queda en un nodo muerto: reubicar por data-concepto-ivacompra-id.
+ */
+function contextoCuentaContableVivo($ctx) {
+    if ($ctx && $ctx.length && document.contains($ctx.get(0))) {
+        return $ctx;
+    }
+    var conceptoId = 0;
+    if ($ctx && $ctx.length) {
+        conceptoId = parseInt($ctx.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+        if (conceptoId <= 0) {
+            conceptoId = parseInt($ctx.closest('[data-concepto-ivacompra-id]').attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+        }
+    }
+    if (conceptoId > 0) {
+        var $vivo = $('.cp-asiento-cuenta-editable[data-concepto-ivacompra-id="' + conceptoId + '"]').filter(function () {
+            return document.contains(this);
+        }).first();
+        if ($vivo.length) {
+            return $vivo;
+        }
+    }
+    return ($ctx && $ctx.length) ? $ctx : null;
 }
 
 function empresaIdParaConsultaCuentaContable($ctx) {
@@ -55,20 +88,22 @@ function actualizarLinkEditarCuentaContable($ctx, cuentaId) {
 }
 
 function aplicarCuentaContableEnContexto($ctx, data) {
+    $ctx = contextoCuentaContableVivo($ctx);
     if ($ctx && $ctx.length) {
-        $ctx.find('.cuentacontable_id').first().val(data.id).trigger('change');
+        // Código/nombre antes del change: el preview del CP lee esos campos al sincronizar.
         $ctx.find('.codigocuentacontable').first().val(data.codigo);
         $ctx.find('.nombrecuentacontable').first().val(data.nombre);
         $ctx.find('.cuentacontable_id_previa').val(data.id);
         $ctx.find('.codigo_previo').val(data.codigo);
         actualizarLinkEditarCuentaContable($ctx, data.id);
+        $ctx.find('.cuentacontable_id').first().val(data.id).trigger('change');
         // Contexto de grilla/campo: no tocar otros .tm-cuentacontable-campo del form.
         return;
     }
 
-    $('#cuentacontable_id').val(data.id).trigger('change');
     $('#codigocuentacontable').val(data.codigo);
     $('#nombrecuentacontable').val(data.nombre);
+    $('#cuentacontable_id').val(data.id).trigger('change');
     actualizarLinkEditarCuentaContable($('.tm-cuentacontable-campo').first(), data.id);
 }
 
@@ -179,6 +214,12 @@ function programarBusquedaCuentaContable(consulta) {
 }
 
 function resolverPorCodigoCuentaContable(codigo, $ctx) {
+    // Abrir el modal dispara blur del código: no resolver ni limpiar mientras abre/está abierto.
+    if (modalCuentaContableAbierto()) {
+        return;
+    }
+
+    $ctx = contextoCuentaContableVivo($ctx);
     var codigoNuevo = $.trim(codigo);
     var empresaId = empresaIdParaConsultaCuentaContable($ctx);
     var codigoAnt = ($ctx && $ctx.length) ? $.trim($ctx.find('.codigo_previo').first().val() || '') : '';
@@ -217,6 +258,7 @@ function resolverPorCodigoCuentaContable(codigo, $ctx) {
 }
 
 function abrirModalConsultaCuentaContableDesdeContexto($ctx) {
+    $ctx = contextoCuentaContableVivo($ctx);
     ptrCuentacontableContext = $ctx && $ctx.length ? $ctx : null;
     cuentacontablexcodigo = $ctx && $ctx.length ? $ctx.find('.cuentacontable_id').first() : $('#cuentacontable_id');
     nombrexcodigo = $ctx && $ctx.length ? $ctx.find('.nombrecuentacontable').first() : $('#nombrecuentacontable');
@@ -225,6 +267,7 @@ function abrirModalConsultaCuentaContableDesdeContexto($ctx) {
     var empresaId = empresaIdParaConsultaCuentaContable($ctx);
 
     if (empresaId > 0) {
+        abriendoModalCuentaContable = true;
         $('#consultaempresa_id').val(empresaId);
         $('#consultacuentaModal').modal('show');
         clearTimeout(consultaCuentaContableTimer);
@@ -365,6 +408,9 @@ function activa_eventos_consulta_cuentacontable()
                 $input.removeData('cta-enter-procesado');
                 return;
             }
+            if (modalCuentaContableAbierto()) {
+                return;
+            }
 
             var $ctx = contextoDesdeInputCodigoCuentaContable($input);
             var esCampoTm = $ctx && $ctx.length && $ctx.hasClass('tm-cuentacontable-campo');
@@ -394,6 +440,7 @@ function activa_eventos_consulta_cuentacontable()
         .off('click.consultacta', '.consultacuentacontable')
         .on('click.consultacta', '.consultacuentacontable', function (event) {
             event.preventDefault();
+            abriendoModalCuentaContable = true;
 
             var $ctx = $(this).closest('.tm-cuentacontable-campo');
             if (!$ctx.length) {
@@ -403,9 +450,16 @@ function activa_eventos_consulta_cuentacontable()
             abrirModalConsultaCuentaContableDesdeContexto($ctx.length ? $ctx : null);
         });
 
-    $('#consultacuentaModal').off('shown.bs.modal.consultacta').on('shown.bs.modal.consultacta', function () {
-        $(this).find('[autofocus]').focus();
-    });
+    $('#consultacuentaModal')
+        .off('shown.bs.modal.consultacta')
+        .on('shown.bs.modal.consultacta', function () {
+            abriendoModalCuentaContable = false;
+            $(this).find('[autofocus]').focus();
+        })
+        .off('hidden.bs.modal.consultacta')
+        .on('hidden.bs.modal.consultacta', function () {
+            abriendoModalCuentaContable = false;
+        });
 
     $('#aceptaconsultacuentaModal').off('click.consultacta').on('click.consultacta', function () {
         if (!elegirPrimeraCuentaContableDelModal()) {
@@ -428,12 +482,20 @@ function activa_eventos_consulta_cuentacontable()
             return;
         }
 
-        var $ctx = ptrCuentacontableContext;
+        var $ctx = contextoCuentaContableVivo(ptrCuentacontableContext);
         if (!$ctx || !$ctx.length) {
             $ctx = null;
         }
 
-        if (cuentacontablexcodigo && cuentacontablexcodigo.length) {
+        // Un solo apply sobre el nodo vivo (evita escribir en DOM reemplazado por el preview).
+        if ($ctx && $ctx.length) {
+            aplicarCuentaContableEnContexto($ctx, data);
+            refrescarCentroCostoTrasCuenta($ctx, data);
+            ptrCuentacontableContext = $ctx;
+            cuentacontablexcodigo = $ctx.find('.cuentacontable_id').first();
+            nombrexcodigo = $ctx.find('.nombrecuentacontable').first();
+            codigoxcodigo = $ctx.find('.codigocuentacontable').first();
+        } else if (cuentacontablexcodigo && cuentacontablexcodigo.length && document.contains(cuentacontablexcodigo.get(0))) {
             cuentacontablexcodigo.val(data.id);
             if (nombrexcodigo && nombrexcodigo.length) {
                 nombrexcodigo.val(data.nombre);
@@ -444,15 +506,11 @@ function activa_eventos_consulta_cuentacontable()
             cuentacontablexcodigo.parents('tr').find('.cuentacontable_id_previa').val(data.id);
             cuentacontablexcodigo.parents('tr').find('.codigo_previo').val(data.codigo);
             actualizarLinkEditarCuentaContable(cuentacontablexcodigo.closest('tr'), data.id);
-        }
-
-        if ($ctx && $ctx.length) {
-            aplicarCuentaContableEnContexto($ctx, data);
-            refrescarCentroCostoTrasCuenta($ctx, data);
+            cuentacontablexcodigo.trigger('change');
         } else {
-            $('#cuentacontable_id').val(data.id);
-            $('#nombrecuentacontable').val(data.nombre);
             $('#codigocuentacontable').val(data.codigo);
+            $('#nombrecuentacontable').val(data.nombre);
+            $('#cuentacontable_id').val(data.id).trigger('change');
         }
 
         $('#consultacuentaModal').modal('hide');

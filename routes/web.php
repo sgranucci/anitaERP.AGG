@@ -2412,6 +2412,12 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/anularitempedido/{id}/{codigoot}/{motivocierrepedido_id}/{cliente_id?}', 'Ventas\PedidoFerliController@anularItemPedido')->name('anular_item_pedido');
     Route::get('ventas/pedido/cerrar', 'Ventas\PedidoFerliController@cerrarPedido')->name('cerrar_pedido');
     Route::post('ventas/pedido/ejecutacierre', 'Ventas\PedidoFerliController@ejecutaCierre')->name('ejecuta_cierre_pedido');
+    // Importación temporal L8 → L12 (hasta que producción use L12)
+    Route::post('ventas/pedido/{id}/importar-tareas-l8', 'Ventas\PedidoImportarL8Controller@importarTareasPedido')->name('pedido_importar_tareas_l8');
+    Route::post('ventas/pedido/importar-l8', 'Ventas\PedidoImportarL8Controller@importarPedidosIndex')->name('pedido_importar_l8_index');
+    // Bridge de solo lectura (token). Activar en L8 con FERLI_L8_EXPORT_ENABLED=true.
+    Route::get('api/l8-sync/tareas-ot', 'Ventas\L8SyncExportController@tareasOt')->name('api_l8_sync_tareas_ot');
+    Route::get('api/l8-sync/pedidos-faltantes', 'Ventas\L8SyncExportController@pedidosFaltantes')->name('api_l8_sync_pedidos_faltantes');
 } elseif (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
     Route::get('ventas/pedido', 'Ventas\PedidoInterformingController@index')->name('pedido');
     Route::get('ventas/pedido/crear', 'Ventas\PedidoInterformingController@crear')->name('crear_pedido');
@@ -3632,6 +3638,8 @@ Route::post('compras/pagoproveedor/api/calcular-retenciones', 'Compras\Pagoprove
 Route::post('compras/pagoproveedor/api/genera-asiento', 'Compras\PagoproveedorController@generaAsientoContable')->name('api_genera_asiento_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/imprimir', 'Compras\PagoproveedorController@imprimir')->name('imprimir_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/retencion/{retencionId}/imprimir', 'Compras\PagoproveedorController@imprimirRetencion')->name('imprimir_retencion_pagoproveedor');
+Route::get('compras/pagoproveedor/{id}/datos-envio-proveedor', 'Compras\PagoproveedorController@datosEnvioProveedor')->name('pagoproveedor_datos_envio_proveedor');
+Route::post('compras/pagoproveedor/{id}/enviar-proveedor', 'Compras\PagoproveedorController@enviarProveedor')->name('pagoproveedor_enviar_proveedor');
 
 /*
  * Propuesta de pagos (lote / proyección) + cash position

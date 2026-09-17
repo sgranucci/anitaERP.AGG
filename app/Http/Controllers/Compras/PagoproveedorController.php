@@ -19,6 +19,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\PagoproveedorAnularRevertirService;
 use App\Services\Compras\PagoproveedorComprobantePdfService;
+use App\Services\Compras\PagoproveedorEnvioProveedorService;
 use App\Services\Compras\PagoproveedorService;
 use App\Services\Compras\ProveedorCuentacorrienteImportarDesdeAnitaService;
 use App\Services\Compras\RetencionesPagoCalculator;
@@ -47,6 +48,7 @@ class PagoproveedorController extends Controller
         private RetencionesPagoCalculator $retencionesPagoCalculator,
         private RetencionesPagoContextoBuilder $retencionesPagoContextoBuilder,
         private PagoproveedorComprobantePdfService $pagoproveedorComprobantePdfService,
+        private PagoproveedorEnvioProveedorService $pagoproveedorEnvioProveedorService,
         private ProveedorCuentacorrienteImportarDesdeAnitaService $proveedorCuentacorrienteImportarDesdeAnitaService,
     ) {
     }
@@ -670,6 +672,37 @@ class PagoproveedorController extends Controller
         can('listar-pagoproveedor');
 
         return $this->pagoproveedorComprobantePdfService->streamRetencion($id, $retencionId);
+    }
+
+    public function datosEnvioProveedor(int $id)
+    {
+        if (! can('listar-pagoproveedor', false) && ! can('editar-pagoproveedor', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        return response()->json($this->pagoproveedorEnvioProveedorService->datosEnvio($id));
+    }
+
+    public function enviarProveedor(Request $request, int $id)
+    {
+        if (! can('listar-pagoproveedor', false) && ! can('editar-pagoproveedor', false)) {
+            return response()->json(['mensaje' => 'error', 'errores' => 'Sin permisos para enviar la OP.'], 403);
+        }
+
+        $request->validate([
+            'email' => 'required|string|max:500',
+            'mensaje' => 'nullable|string|max:4000',
+        ]);
+
+        $ret = $this->pagoproveedorEnvioProveedorService->enviar(
+            $id,
+            $request->input('email'),
+            $request->input('mensaje')
+        );
+
+        $status = ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422;
+
+        return response()->json($ret, $status);
     }
 
     /**

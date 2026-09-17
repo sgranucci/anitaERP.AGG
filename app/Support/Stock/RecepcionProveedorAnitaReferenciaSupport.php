@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Configuracion\CondicionivaLetraComprasSupport;
 
 /**
  * Código proveedor y referencia factura/remito para recepmae (Anita).
@@ -126,7 +127,7 @@ final class RecepcionProveedorAnitaReferenciaSupport
 
     private static function letraProveedorDesdeErp(Recepcion_Proveedor $recepcion): string
     {
-        $letra = strtoupper(substr(trim((string) optional($recepcion->proveedores?->condicionivas)->letra), 0, 1));
+        $letra = CondicionivaLetraComprasSupport::letra($recepcion->proveedores?->condicionivas);
 
         return $letra !== '' ? $letra : ' ';
     }

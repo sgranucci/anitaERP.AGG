@@ -6,6 +6,7 @@ Pedidos de Clientes
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/pedido/filtroferli.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/importar_l8.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/importar_l8.js')) ?: time() }}" type="text/javascript"></script>
 
 <script>
 function limpiaFiltros(){
@@ -45,6 +46,11 @@ function eliminarPedido(event) {
             <div class="card-header">
                 <h3 class="card-title">Pedidos de clientes</h3>
                 <div class="card-tools">
+                    @if (can('importar-pedido-l8', false))
+                        <button type="button" class="btn btn-outline-warning btn-sm" data-toggle="modal" data-target="#modalImportarPedidoL8" title="Importar pedidos que existen en L8 y faltan en L12">
+                            <i class="fa fa-download"></i> Importar pedidos L8
+                        </button>
+                    @endif
                     @if (\App\Support\Ventas\PedidoPickingFerliSupport::habilitado() && can('listar-reporte-picking-pedido', false))
                         <a href="{{ route('picking_pedido', ['consultar' => 1]) }}" class="btn btn-outline-warning btn-sm" title="Workbench picking pendientes de facturar">
                             <i class="fa fa-dolly"></i> Picking / facturar
@@ -144,5 +150,9 @@ function eliminarPedido(event) {
     </div>
 </div>
 {{ $pedidos->appends(['busqueda' => $busqueda])->links() }}
+
+@if (can('importar-pedido-l8', false))
+    @include('ventas.pedido_ferli.partials.modal_importar_l8')
+@endif
 
 @endsection

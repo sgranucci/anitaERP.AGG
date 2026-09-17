@@ -7,6 +7,7 @@
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/crearferli.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crearferli.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/picking_pedido/consulta_lotes.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/picking_pedido/consulta_lotes.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/importar_l8.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/importar_l8.js')) ?: time() }}" type="text/javascript"></script>
 
 <script>
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
@@ -92,6 +93,14 @@
                     <a href="{{route('pedido')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @if (can('importar-pedido-l8', false))
+                        <form id="form-importar-tareas-l8" method="post" action="{{ route('pedido_importar_tareas_l8', ['id' => $pedido->id]) }}" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-warning btn-sm" title="Importar de L8 las tareas faltantes de las OT del pedido">
+                                <i class="fa fa-download"></i> Importar tareas L8
+                            </button>
+                        </form>
+                    @endif
 					<button type="button" onclick="preparaPreFactura()" class="btn btn-primary">
                     	<i class="fa fa-fw fa-print"></i>
 						Pre-Factura
@@ -136,4 +145,13 @@
     'titulo' => 'Generando factura…',
     'subtitulo' => 'Puede demorar según AFIP/Anita. No cierre la página.',
 ])
+@if (can('importar-pedido-l8', false))
+    @include('includes.proceso_overlay_aviso', [
+        'overlayId' => 'overlay-importar-tareas-l8',
+        'tituloId' => 'overlay-importar-tareas-l8-titulo',
+        'subtituloId' => 'overlay-importar-tareas-l8-subtitulo',
+        'titulo' => 'Importando tareas desde L8…',
+        'subtitulo' => 'Puede demorar según la cantidad de OT. No cierre la página.',
+    ])
+@endif
 @endsection

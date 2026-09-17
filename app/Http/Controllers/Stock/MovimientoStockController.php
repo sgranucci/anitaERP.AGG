@@ -231,6 +231,7 @@ class MovimientoStockController extends Controller
                                 $tipotransaccion_query, $lote_query);
 
         $tipotransacciondefault_id = $this->resolverTipotransaccionStockDefaultId();
+        $depositodefault_id = MovimientoStockPreferenciasUsuario::resolverDepositoDefaultId();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresa_id = old(
             'empresa_id',
@@ -249,7 +250,7 @@ class MovimientoStockController extends Controller
         return view('stock.movimientostock.crear', compact(
             'mventa_query', 'articulo_query', 'modulo_query', 'listaprecio_query', 
             'articuloall_query', 'articuloxsku_query', 
-            'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query',
+            'tipotransaccion_query', 'tipotransacciondefault_id', 'depositodefault_id', 'deposito_query', 'lote_query',
             'empresa_query', 'empresa_id', 'centrocosto_query', 'movimientostock',
             'asientoPreview', 'mostrarSolapaAsiento', 'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
             'color_query', 'talle_query') + [
@@ -280,7 +281,10 @@ class MovimientoStockController extends Controller
                 $tipoStockId = (int) ($resultado['tipotransaccion_stock_id'] ?? $tipoStockId);
 
                 $surmarFlash = $this->procesarSurmarTrasTransferencia($request, $tipoStockId, $resultado);
-                MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
+                MovimientoStockPreferenciasUsuario::persistirDesdeDatos(array_merge(
+                    $request->all(),
+                    ['tipotransaccion_stock_id' => $tipoStockId]
+                ));
 
                 $redirect = redirect($urlIndex)
                     ->with('mensaje', ($resultado['mensaje'] ?? 'Transferencia registrada.').($surmarFlash['mensaje_extra'] ?? ''));
@@ -294,7 +298,10 @@ class MovimientoStockController extends Controller
             $data = $this->movimientoStockService->guardaMovimientoStock($request->all(), 'create');
 			if (is_array($data)) {
 				$mensaje = $data['mensaje'] ?? 'Movimiento de stock creado con éxito';
-                MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
+                MovimientoStockPreferenciasUsuario::persistirDesdeDatos(array_merge(
+                    $request->all(),
+                    ['tipotransaccion_stock_id' => $tipoStockId]
+                ));
 
                 $redirect = redirect($urlIndex)->with('mensaje', $mensaje);
                 $hijas = $data['surmar_hijas_ids'] ?? [];
@@ -333,6 +340,7 @@ class MovimientoStockController extends Controller
                             $tipotransaccion_query, $lote_query, $movimientostock);
 
 		$tipotransacciondefault_id = $this->resolverTipotransaccionStockDefaultId();
+        $depositodefault_id = MovimientoStockPreferenciasUsuario::resolverDepositoDefaultId();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $depositoActualId = (int) ($movimientostock->articulos_movimiento[0]->deposito_id ?? 0);
         $empresa_id = old(
@@ -381,7 +389,7 @@ class MovimientoStockController extends Controller
         return view('stock.movimientostock.editar', compact('movimientostock', 
 			'mventa_query', 'articulo_query', 'modulo_query', 
 			'listaprecio_query', 'articuloall_query', 'articuloxsku_query', 
-			'tipotransaccion_query', 'tipotransacciondefault_id', 'deposito_query', 'lote_query',
+			'tipotransaccion_query', 'tipotransacciondefault_id', 'depositodefault_id', 'deposito_query', 'lote_query',
             'empresa_query', 'empresa_id', 'centrocosto_query', 'asientoPreview', 'mostrarSolapaAsiento',
             'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
             'puedeModificarVentana', 'controlVentanaActivo',
@@ -406,7 +414,10 @@ class MovimientoStockController extends Controller
 		try {
 			$this->movimientoStockService->guardaMovimientoStock($request->all(), 'update', $id);
             $tipoStockId = (int) ($request->input('tipotransaccion_stock_id') ?: $request->input('tipotransaccion_id'));
-            MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
+            MovimientoStockPreferenciasUsuario::persistirDesdeDatos(array_merge(
+                $request->all(),
+                ['tipotransaccion_stock_id' => $tipoStockId]
+            ));
 		} catch (\Exception $e) {
 			return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
 		}

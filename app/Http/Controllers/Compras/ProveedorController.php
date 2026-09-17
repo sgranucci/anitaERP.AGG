@@ -11,6 +11,7 @@ use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\Moneda;
+use App\Support\Configuracion\CondicionivaLetraComprasSupport;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionProveedor;
 use App\Repositories\Compras\TiposuspensionproveedorRepositoryInterface;
@@ -513,7 +514,10 @@ class ProveedorController extends Controller
         $provincia_query = Provincia::orderBy('nombre')->get();
         $tipoempresa_query = $this->tipoempresaRepository->all();
         $tiposervicio_proveedor_query = $this->tiposervicio_proveedorRepository->all();
-        $condicioniva_query = Condicioniva::orderBy('nombre')->get();
+        // Compras: Monotributo → letra C (ventas sigue con A en el maestro condicioniva).
+        $condicioniva_query = CondicionivaLetraComprasSupport::coleccionConLetraCompras(
+            Condicioniva::orderBy('nombre')->get()
+        );
         $condicionIIBB_query = $this->condicionIIBBRepository->all();
         $retencionganancia_query = $this->retenciongananciaRepository->all();
         $retencioniva_query = $this->retencionivaRepository->all();
@@ -755,7 +759,7 @@ class ProveedorController extends Controller
     public function leeProveedor($proveedor_id)
     {
         // JSON explícito: si no existe, "null" (no body vacío) para que el front no caiga en .fail().
-        return response()->json($this->proveedorRepository->find($proveedor_id));
+        return response()->json($this->proveedorJsonCompras($this->proveedorRepository->find($proveedor_id)));
     }
 
     public function leeProveedorPorCodigo(Request $request, $codigo)
@@ -767,7 +771,30 @@ class ProveedorController extends Controller
 
         $proveedor = $this->proveedorRepository->findPorCodigo($codigo, $empresaId > 0 ? $empresaId : null);
 
-        return response()->json($proveedor);
+        return response()->json($this->proveedorJsonCompras($proveedor));
+    }
+
+    /**
+     * En compras, Monotributo expone letra C (el maestro ventas queda en A).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function proveedorJsonCompras($proveedor): ?array
+    {
+        if ($proveedor === null) {
+            return null;
+        }
+
+        $arr = $proveedor->toArray();
+        $letra = CondicionivaLetraComprasSupport::letraDesdeId(
+            isset($proveedor->condicioniva_id) ? (int) $proveedor->condicioniva_id : null
+        );
+        $arr['letra'] = $letra;
+        if (isset($arr['condicionivas']) && is_array($arr['condicionivas'])) {
+            $arr['condicionivas']['letra'] = $letra;
+        }
+
+        return $arr;
     }    
 
     public function generarEncuesta($codigoProveedor, $encuesta_id, $origen, $hash)

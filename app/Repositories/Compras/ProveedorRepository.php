@@ -27,6 +27,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ProveedorAnitaEsquemaSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
+use App\Support\Configuracion\CondicionivaLetraComprasSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Compras\ProveedorListadoFiltros;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -1132,7 +1133,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		$datos = $proveedor->getAttributes();
 		$datos['desc_localidad'] = (string) ($proveedor->desc_localidad ?? '');
 		$datos['desc_provincia'] = (string) ($proveedor->desc_provincia ?? '');
-		$datos['letra'] = (string) ($condicioniva?->letra ?? '');
+		$datos['letra'] = CondicionivaLetraComprasSupport::letra($condicioniva);
 		$datos['contacto'] = (string) ($proveedor->contacto ?? '');
 		$datos['email'] = (string) ($proveedor->email ?? '');
 		$datos['fantasia'] = (string) ($proveedor->fantasia ?? '');
