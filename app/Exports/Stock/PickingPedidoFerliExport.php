@@ -3,6 +3,7 @@
 namespace App\Exports\Stock;
 
 use Illuminate\Contracts\View\View;
+use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
@@ -16,6 +17,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnWidths, WithEvents, WithTitle
 {
+    use Exportable;
     private int $filaCabecerasExcel = 2;
 
     private int $filaPrimeraDatosExcel = 3;
@@ -68,8 +70,8 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnWi
             $widths[$col] = 5;
             $col++;
         }
-        // T, QM, TT, Precio, SITUACION, NUMERO OT, deposito
-        foreach ([6, 6, 6, 10, 18, 18, 12] as $w) {
+        // T, QM, TT, Precio, SITUACION, NUMERO OT, deposito, Bultos
+        foreach ([6, 6, 6, 10, 18, 18, 12, 10] as $w) {
             $widths[$col] = $w;
             $col++;
         }
@@ -85,8 +87,8 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnWi
         $hasta = (int) config('consprod.HASTA_MEDIDA');
         $colsMedidas = ($hasta - $desde) + 1;
         $conFoto = $this->conFoto;
-        // Foto? + Linea Art Desc + medidas + T QM TT Precio SITUACION NUMERO OT deposito
-        $totalCols = ($conFoto ? 1 : 0) + 3 + $colsMedidas + 7;
+        // Foto? + Linea Art Desc + medidas + T QM TT Precio SITUACION NUMERO OT deposito Bultos
+        $totalCols = ($conFoto ? 1 : 0) + 3 + $colsMedidas + 8;
         $colUltima = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($totalCols);
         $filas = $this->filas;
 

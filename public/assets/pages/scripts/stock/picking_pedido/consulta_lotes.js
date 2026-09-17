@@ -8,20 +8,143 @@
         return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
     }
 
+    function textoOpcionSeleccionada($select) {
+        if (!$select || !$select.length) {
+            return '';
+        }
+        var $opt = $select.find('option:selected');
+        if (!$opt.length || !$opt.val()) {
+            return '';
+        }
+        return String($opt.text() || '').replace(/\s+/g, ' ').trim();
+    }
+
     function articuloCombinacionModuloDeFila($tr) {
+        var cantRaw = String($tr.find('.cantidad').val() || '').replace(/\./g, '').replace(',', '.');
         return {
             articuloId: parseInt($tr.find('.articulo').val(), 10) || 0,
             combinacionId: parseInt($tr.find('.combinacion').val(), 10) || 0,
             moduloId: parseInt($tr.find('.modulo').val(), 10) || 0,
+            articuloTxt: textoOpcionSeleccionada($tr.find('.articulo')),
+            combinacionTxt: textoOpcionSeleccionada($tr.find('.combinacion')),
+            moduloTxt: textoOpcionSeleccionada($tr.find('.modulo')),
+            paresLinea: parseFloat(cantRaw) || 0,
         };
     }
 
-    function renderFilas(filas) {
+    function formatearPares(n) {
+        return Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+    }
+
+    function escaparHtml(texto) {
+        return String(texto == null ? '' : texto)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function badgePares(label, valor) {
+        if (!(valor > 0)) {
+            return '';
+        }
+        return '<span class="clsp-badge">' +
+            '<span class="clsp-badge-label">' + escaparHtml(label) + '</span>' +
+            '<span class="clsp-badge-num">' + escaparHtml(formatearPares(valor)) + '</span>' +
+            '</span>';
+    }
+
+    function pintarContexto(html) {
+        $('#consultalotesstockpicking-contexto').html(html || '');
+    }
+
+    function armarHtmlContexto(ctx, data) {
+        var sku = (data && data.articulo_sku) ? String(data.articulo_sku).trim() : '';
+        var desc = (data && data.articulo_descripcion) ? String(data.articulo_descripcion).trim() : '';
+        var articuloTitulo = '';
+        if (desc) {
+            articuloTitulo = desc;
+        } else if (ctx.articuloTxt) {
+            articuloTitulo = ctx.articuloTxt;
+        } else if (ctx.articuloId > 0) {
+            articuloTitulo = 'Artículo #' + ctx.articuloId;
+        }
+        if (!sku && ctx.articuloTxt && articuloTitulo === ctx.articuloTxt) {
+            // Si vino "descripcion-sku" desde el select, dejarlo como título.
+            articuloTitulo = ctx.articuloTxt;
+        }
+
+        var combTxt = (data && data.combinacion_nombre)
+            ? String(data.combinacion_nombre).trim()
+            : (ctx.combinacionTxt || (ctx.combinacionId > 0 ? ('Combinación #' + ctx.combinacionId) : ''));
+
+        var soloModulo = $('#consultalotesstockpicking_solo_modulo').is(':checked');
+        var modTxt = '';
+        var paresModulo = null;
+        if (soloModulo && ctx.moduloId > 0) {
+            modTxt = (data && data.modulo_nombre)
+                ? String(data.modulo_nombre).trim()
+                : (ctx.moduloTxt || ('Módulo #' + ctx.moduloId));
+            paresModulo = (data && data.pares_modulo != null) ? Number(data.pares_modulo) : null;
+        }
+
+        var meta = [];
+        if (combTxt) {
+            meta.push(escaparHtml(combTxt));
+        }
+        if (soloModulo && modTxt) {
+            meta.push('Módulo ' + escaparHtml(modTxt));
+        } else if (!soloModulo) {
+            meta.push('Todos los módulos');
+        }
+
+        var badges = '';
+        if (paresModulo != null && !isNaN(paresModulo) && paresModulo > 0) {
+            badges += badgePares('Pares módulo', paresModulo);
+        }
+        if (ctx.paresLinea > 0) {
+            badges += badgePares('Pares línea', ctx.paresLinea);
+        }
+
+        var articuloHtml = '';
+        if (sku && desc) {
+            articuloHtml = '<span class="clsp-sku">' + escaparHtml(sku) + '</span> — ' + escaparHtml(desc);
+        } else if (articuloTitulo) {
+            articuloHtml = escaparHtml(articuloTitulo);
+        } else {
+            articuloHtml = 'Artículo';
+        }
+
+        return '<div class="clsp-banner">' +
+            '<div class="clsp-articulo">' + articuloHtml + '</div>' +
+            (meta.length ? '<div class="clsp-meta">' + meta.join(' · ') + '</div>' : '') +
+            (badges ? '<div class="clsp-pares">' + badges + '</div>' : '') +
+            '</div>';
+    }
+
+    function esModuloAbierto(ctx) {
+        if (!ctx) {
+            return false;
+        }
+        var txt = String(ctx.moduloTxt || '').toLowerCase();
+        if (txt.indexOf('abierto') !== -1) {
+            return true;
+        }
+        // En Ferli el módulo Abierto se agrega siempre con id 30 en el select.
+        return parseInt(ctx.moduloId, 10) === 30;
+    }
+
+    function renderFilas(filas, opts) {
+        opts = opts || {};
         var $tbody = $('#datoslotesstockpicking');
         $tbody.empty();
         if (!filas || !filas.length) {
+            var hint = opts.soloModulo
+                ? 'Sin lotes/OT con saldo para el módulo de la línea. Desmarcá «Solo módulo de la línea» para ver stock de otros módulos.'
+                : 'Sin lotes/OT con saldo pendiente';
             $tbody.append(
-                '<tr><td colspan="5" class="text-center text-muted">Sin lotes/OT con saldo pendiente</td></tr>'
+                '<tr><td colspan="5" class="text-center text-muted">' + hint + '</td></tr>'
             );
             return;
         }
@@ -32,7 +155,9 @@
             $tr.append($('<td/>').text(fila.lote || ''));
             $tr.append($('<td/>').text(fila.modulo || (fila.modulo_id ? ('#' + fila.modulo_id) : '')));
             $tr.append($('<td/>').text(fila.deposito || ''));
-            $tr.append($('<td class="text-right"/>').text(saldoTxt));
+            $tr.append($('<td class="text-right"/>').html(
+                '<strong style="font-size:1.1rem;color:#6E2C00;">' + escaparHtml(saldoTxt) + '</strong>'
+            ));
             var $btn = $('<button type="button" class="btn btn-warning btn-sm eligeconsultalotesstockpicking">Elegir</button>');
             $btn.attr('data-lote', fila.lote || '');
             $btn.attr('data-deposito-id', parseInt(fila.deposito_id, 10) || 0);
@@ -48,17 +173,13 @@
         var ctx = articuloCombinacionModuloDeFila($filaPickingLoteActiva);
         if (ctx.articuloId <= 0 || ctx.combinacionId <= 0) {
             renderFilas([]);
-            $('#consultalotesstockpicking-contexto').text('Seleccione artículo y combinación en la línea.');
+            pintarContexto('<p class="clsp-error mb-0">Seleccione artículo y combinación en la línea.</p>');
             return;
         }
 
         var soloModulo = $('#consultalotesstockpicking_solo_modulo').is(':checked');
         var token = $('#csrf_token').val();
-        $('#consultalotesstockpicking-contexto').text(
-            'Artículo #' + ctx.articuloId +
-            ' · Combinación #' + ctx.combinacionId +
-            (soloModulo && ctx.moduloId > 0 ? (' · Módulo #' + ctx.moduloId) : ' · Todos los módulos')
-        );
+        pintarContexto(armarHtmlContexto(ctx, null));
         $('#datoslotesstockpicking').html(
             '<tr><td colspan="5" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Buscando…</td></tr>'
         );
@@ -73,18 +194,19 @@
         })
             .done(function (data) {
                 if (data.error) {
-                    renderFilas([]);
-                    $('#consultalotesstockpicking-contexto').text(data.error);
+                    renderFilas([], { soloModulo: soloModulo });
+                    pintarContexto('<p class="clsp-error mb-0">' + escaparHtml(data.error) + '</p>');
                     return;
                 }
-                renderFilas(data.filas || []);
+                pintarContexto(armarHtmlContexto(ctx, data));
+                renderFilas(data.filas || [], { soloModulo: soloModulo });
             })
             .fail(function (xhr) {
                 var msg = (xhr.responseJSON && xhr.responseJSON.error)
                     ? xhr.responseJSON.error
                     : 'No se pudo consultar el stock';
-                renderFilas([]);
-                $('#consultalotesstockpicking-contexto').text(msg);
+                renderFilas([], { soloModulo: soloModulo });
+                pintarContexto('<p class="clsp-error mb-0">' + escaparHtml(msg) + '</p>');
             });
     }
 
@@ -99,6 +221,9 @@
             }
             return;
         }
+        // Módulo "Abierto": el stock suele estar en módulos cerrados (ej. 12 D).
+        // No filtrar por el módulo de la línea o el modal queda vacío.
+        $('#consultalotesstockpicking_solo_modulo').prop('checked', !esModuloAbierto(ctx));
         $('#consultalotesstockpicking').val('');
         $('#consultalotesstockpickingModal').modal('show');
         buscarLotesStock('');

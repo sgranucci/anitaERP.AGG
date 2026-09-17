@@ -89,7 +89,7 @@
                     </button>
                     @if ($consultar)
                         <a href="{{ route('exportar_picking_pedido', request()->query()) }}" class="btn btn-success btn-sm mr-2" id="btn-excel-picking">
-                            <i class="fa fa-file-excel"></i> Excel FRAGOLA
+                            <i class="fa fa-file-excel"></i> Excel
                         </a>
                         @if ($puede_facturar)
                             <button type="button" class="btn btn-warning btn-sm" id="btn-facturar-picking">

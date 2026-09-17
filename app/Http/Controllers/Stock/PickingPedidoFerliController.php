@@ -122,7 +122,7 @@ class PickingPedidoFerliController extends Controller
         return (new PickingPedidoFerliExport(
             PedidoPickingFerliSupport::filasExcelFragola($lineas),
             $tituloFiltros,
-        ))->download('picking_pedido_fragola.xlsx');
+        ))->download('picking_pedido.xlsx');
     }
 
     public function payloadFactura(Request $request)

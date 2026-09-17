@@ -21,7 +21,68 @@
             </div>
           </div>
         </div>
-        <p class="text-muted small mb-2" id="consultalotesstockpicking-contexto"></p>
+        <div id="consultalotesstockpicking-contexto" class="consultalotesstockpicking-contexto mb-3" aria-live="polite"></div>
+        <style>
+          .consultalotesstockpicking-contexto .clsp-banner {
+            background: #D6EAF8;
+            border: 1px solid #85C1E9;
+            border-left: 5px solid #2471A3;
+            border-radius: 4px;
+            padding: 0.75rem 1rem;
+          }
+          .consultalotesstockpicking-contexto .clsp-articulo {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #1B4F72;
+            line-height: 1.3;
+            margin-bottom: 0.45rem;
+          }
+          .consultalotesstockpicking-contexto .clsp-sku {
+            font-weight: 600;
+            color: #2471A3;
+          }
+          .consultalotesstockpicking-contexto .clsp-meta {
+            color: #566573;
+            font-size: 0.92rem;
+            margin-bottom: 0.55rem;
+          }
+          .consultalotesstockpicking-contexto .clsp-pares {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+          }
+          .consultalotesstockpicking-contexto .clsp-badge {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 0.35rem;
+            background: #F9E79F;
+            border: 1px solid #F4D03F;
+            color: #7D6608;
+            font-weight: 700;
+            font-size: 1rem;
+            padding: 0.35rem 0.7rem;
+            border-radius: 4px;
+            line-height: 1.2;
+          }
+          .consultalotesstockpicking-contexto .clsp-badge .clsp-badge-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            opacity: 0.85;
+          }
+          .consultalotesstockpicking-contexto .clsp-badge .clsp-badge-num {
+            font-size: 1.35rem;
+            font-weight: 800;
+            color: #6E2C00;
+          }
+          .consultalotesstockpicking-contexto .clsp-vacio,
+          .consultalotesstockpicking-contexto .clsp-error {
+            color: #7B241C;
+            font-weight: 600;
+            margin: 0;
+          }
+        </style>
         <div class="table-responsive">
           <table class="table table-sm table-striped table-bordered table-hover mb-0" id="tabla-data-lotes-stock-picking">
             <thead style="background:#85C1E9;color:#17202A;">
@@ -29,7 +90,7 @@
                 <th>Lote / OT</th>
                 <th>M&oacute;dulo</th>
                 <th>Dep&oacute;sito</th>
-                <th class="text-right">Saldo</th>
+                <th class="text-right">Saldo (pares)</th>
                 <th style="width:1%;">Acciones</th>
               </tr>
             </thead>

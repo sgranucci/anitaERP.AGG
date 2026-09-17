@@ -2,8 +2,11 @@
 
 namespace App\Support\Ventas;
 
+use App\Models\Stock\Articulo;
+use App\Models\Stock\Combinacion;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Lote;
+use App\Models\Stock\Modulo;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Pedido_Picking;
 use App\Repositories\Ventas\Pedido_Combinacion_TalleRepositoryInterface;
@@ -376,7 +379,7 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * Filas para Excel estilo FRAGOLA (Linea, Art, Descripcion, talles, T, QM, TT, Precio, Situacion, OT, deposito).
+     * Filas para Excel de picking (Linea, Art, Descripcion, talles, T, QM, TT, Precio, Situacion, OT, deposito, Bultos).
      *
      * @param  Collection<int, Pedido_Combinacion>  $lineas
      * @return list<array<string, mixed>>
@@ -452,7 +455,18 @@ final class PedidoPickingFerliSupport
     /**
      * Lotes/OT con saldo > 0 para el artículo+combinación de la línea (modal picking).
      *
-     * @return array{filas: list<array<string,mixed>>, error?: string, articulo_id?: int, combinacion_id?: int}
+     * @return array{
+     *     filas: list<array<string,mixed>>,
+     *     error?: string,
+     *     articulo_id?: int,
+     *     combinacion_id?: int,
+     *     modulo_id?: int|null,
+     *     articulo_sku?: string,
+     *     articulo_descripcion?: string,
+     *     combinacion_nombre?: string,
+     *     modulo_nombre?: string,
+     *     pares_modulo?: int|null
+     * }
      */
     public static function consultaLotesStockPendientes(
         int $articuloId,
@@ -473,11 +487,30 @@ final class PedidoPickingFerliSupport
             $texto
         );
 
+        $articulo = Articulo::query()->find($articuloId, ['id', 'sku', 'descripcion']);
+        $combinacion = Combinacion::query()->find($combinacionId, ['id', 'codigo', 'nombre']);
+        $moduloNombre = '';
+        $paresModulo = null;
+        if ($moduloId && $moduloId > 0) {
+            $modulo = Modulo::query()->find($moduloId, ['id', 'codigo', 'nombre']);
+            if ($modulo) {
+                $moduloNombre = trim((string) (($modulo->codigo ?? '').' '.($modulo->nombre ?? '')));
+                $paresModulo = (int) DB::table('modulo_talle')
+                    ->where('modulo_id', $moduloId)
+                    ->sum('cantidad');
+            }
+        }
+
         return [
             'filas' => $filas,
             'articulo_id' => $articuloId,
             'combinacion_id' => $combinacionId,
             'modulo_id' => $moduloId && $moduloId > 0 ? $moduloId : null,
+            'articulo_sku' => (string) ($articulo->sku ?? ''),
+            'articulo_descripcion' => (string) ($articulo->descripcion ?? ''),
+            'combinacion_nombre' => trim((string) (($combinacion->codigo ?? '').' '.($combinacion->nombre ?? ''))),
+            'modulo_nombre' => $moduloNombre,
+            'pares_modulo' => $paresModulo,
         ];
     }
 

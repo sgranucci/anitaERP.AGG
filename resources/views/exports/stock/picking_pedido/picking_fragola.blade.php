@@ -5,7 +5,7 @@
 @endphp
 <table>
     <tr>
-        <td colspan="{{ ($conFoto ? 1 : 0) + 3 + ($hastaMedida - $desdeMedida + 1) + 7 }}">
+        <td colspan="{{ ($conFoto ? 1 : 0) + 3 + ($hastaMedida - $desdeMedida + 1) + 8 }}">
             <strong>PICKING {{ $subtitulo ?? '' }}</strong>
         </td>
     </tr>
@@ -27,6 +27,7 @@
             <th>SITUACION</th>
             <th>NUMERO OT</th>
             <th>deposito</th>
+            <th>Bultos</th>
         </tr>
     </thead>
     <tbody>
@@ -61,6 +62,7 @@
                 <td>{{ $fila['situacion'] ?? 'ENTREGA INMEDIATA' }}</td>
                 <td>{{ $fila['numero_ot'] ?? '' }}</td>
                 <td>{{ $fila['deposito'] ?? '' }}</td>
+                <td></td>
             </tr>
         @endforeach
     </tbody>
