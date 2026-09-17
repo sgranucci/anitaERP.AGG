@@ -62,6 +62,7 @@ final class ClienteCuentacorrienteAnitaImportFormatoSupport
      *   campos_aplmov: string,
      *   aplmov_fallback_ref_como_cob: bool,
      *   tipos_no_deuda: list<string>,
+     *   tipos_credito_sin_venta: list<string>,
      *   tolerancia_aplicado: float,
      *   bridge_list_reintentos: int,
      *   entorno: string
@@ -95,6 +96,10 @@ final class ClienteCuentacorrienteAnitaImportFormatoSupport
                 static fn ($t) => ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) $t),
                 (array) ($cfg['tipos_no_deuda'] ?? [])
             )),
+            'tipos_credito_sin_venta' => array_values(array_map(
+                static fn ($t) => ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) $t),
+                (array) ($cfg['tipos_credito_sin_venta'] ?? ['COA'])
+            )),
             'tolerancia_aplicado' => (float) ($cfg['tolerancia_aplicado'] ?? 0.02),
             'bridge_list_reintentos' => max(1, (int) ($cfg['bridge_list_reintentos'] ?? 6)),
             'entorno' => EntornoEmpresaSupport::codigo(),
@@ -107,6 +112,14 @@ final class ClienteCuentacorrienteAnitaImportFormatoSupport
         $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo($tipo);
 
         return $tipo !== '' && in_array($tipo, $perfil['tipos_no_deuda'], true);
+    }
+
+    public static function esTipoCreditoSinVenta(string $tipo, ?array $perfil = null): bool
+    {
+        $perfil ??= self::perfil();
+        $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo($tipo);
+
+        return $tipo !== '' && in_array($tipo, $perfil['tipos_credito_sin_venta'], true);
     }
 
     private static function resolverTieneEmpresa(mixed $envValor): bool

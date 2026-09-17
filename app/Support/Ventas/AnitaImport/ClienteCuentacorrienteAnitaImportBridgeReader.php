@@ -25,7 +25,102 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
         bool $soloConSaldo = true,
     ): array {
         $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        // Informix: NULL/'' <> 'C' = UNKNOWN → no matchea. El grueso sigue con <> 'C'.
         $where = " WHERE cliv_estado <> 'C'";
+        $where .= $this->filtrosClimovComunes($clienteCodigo, $fechaDesdeYmd, $fechaHastaYmd, $empresaCodigo, $soloConSaldo, $perfil);
+
+        $filas = $this->listar(
+            $perfil['tabla_climov'],
+            $perfil['campos_climov'],
+            $where,
+            'cliv_fecha, cliv_tipo, cliv_sucursal, cliv_nro, cliv_nro_cuota',
+            $perfil
+        );
+
+        // Complemento acotado: COA (créditos sin venta) con estado NULL/vacío.
+        $extra = $this->listarClimovCreditoEstadoVacio(
+            $clienteCodigo,
+            $fechaDesdeYmd,
+            $fechaHastaYmd,
+            $empresaCodigo,
+            $soloConSaldo,
+            $perfil
+        );
+        if ($extra === []) {
+            return $filas;
+        }
+
+        $vistos = [];
+        foreach ($filas as $fila) {
+            $vistos[ClienteCuentacorrienteAnitaImportClaveSupport::claveCuotaDesdeClimov($fila)] = true;
+        }
+        foreach ($extra as $fila) {
+            $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveCuotaDesdeClimov($fila);
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $filas[] = $fila;
+            $vistos[$clave] = true;
+        }
+
+        return $filas;
+    }
+
+    /**
+     * COA (u otros tipos_credito_sin_venta) con cliv_estado NULL/'' y saldo.
+     * Informix no las incluye en `cliv_estado <> 'C'`.
+     *
+     * @param  array<string, mixed>  $perfil
+     * @return list<array<string, mixed>>
+     */
+    private function listarClimovCreditoEstadoVacio(
+        ?string $clienteCodigo,
+        ?int $fechaDesdeYmd,
+        ?int $fechaHastaYmd,
+        ?int $empresaCodigo,
+        bool $soloConSaldo,
+        array $perfil,
+    ): array {
+        $tipos = array_values(array_filter((array) ($perfil['tipos_credito_sin_venta'] ?? ['COA'])));
+        if ($tipos === []) {
+            return [];
+        }
+        $in = [];
+        foreach ($tipos as $tipo) {
+            $t = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) $tipo);
+            if ($t !== '') {
+                $in[] = "'".$this->esc($t)."'";
+            }
+        }
+        if ($in === []) {
+            return [];
+        }
+
+        $where = ' WHERE cliv_tipo IN ('.implode(',', $in).')'
+            ." AND (cliv_estado IS NULL OR cliv_estado = '')";
+        $where .= $this->filtrosClimovComunes($clienteCodigo, $fechaDesdeYmd, $fechaHastaYmd, $empresaCodigo, $soloConSaldo, $perfil);
+
+        return $this->listar(
+            $perfil['tabla_climov'],
+            $perfil['campos_climov'],
+            $where,
+            'cliv_fecha, cliv_tipo, cliv_sucursal, cliv_nro, cliv_nro_cuota',
+            $perfil
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $perfil
+     */
+    private function filtrosClimovComunes(
+        ?string $clienteCodigo,
+        ?int $fechaDesdeYmd,
+        ?int $fechaHastaYmd,
+        ?int $empresaCodigo,
+        bool $soloConSaldo,
+        array $perfil,
+    ): string {
+        $where = '';
         if ($soloConSaldo) {
             $where .= ' AND cliv_monto <> cliv_t_cobrado';
         }
@@ -43,13 +138,7 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
             $where .= ' AND cliv_empresa = '.(int) $empresaCodigo;
         }
 
-        return $this->listar(
-            $perfil['tabla_climov'],
-            $perfil['campos_climov'],
-            $where,
-            'cliv_fecha, cliv_tipo, cliv_sucursal, cliv_nro, cliv_nro_cuota',
-            $perfil
-        );
+        return $where;
     }
 
     /**

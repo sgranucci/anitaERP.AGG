@@ -1133,7 +1133,8 @@
         }
 
         var tipoDepSalida = String($('#tm_deposito_salida').attr('data-tipodeposito') || '').trim();
-        var omitirControlSaldo = tipoDepSalida.toLowerCase() === 'centro de consumo'
+        var omitirControlSaldo = !!window.TM_PERMITE_SALDOS_NEGATIVOS
+            || tipoDepSalida.toLowerCase() === 'centro de consumo'
             || tipoDepSalida.toUpperCase() === 'M';
 
         if (!omitirControlSaldo) {

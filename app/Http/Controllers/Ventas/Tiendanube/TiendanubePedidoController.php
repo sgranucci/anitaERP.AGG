@@ -124,7 +124,11 @@ class TiendanubePedidoController extends Controller
         $puntoventas = TiendanubePedidoMaestrosSupport::puntoventasOnline();
         $depositos = Depmae::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']);
         $cuentacajas = TiendanubePedidoMaestrosSupport::cuentacajasOperativas();
-        $cuentacajaSugeridaId = TiendanubePedidoMaestrosSupport::sugerirCuentacajaId($pedido->gateway);
+        $cuentacajaSugeridaId = TiendanubePedidoMaestrosSupport::sugerirCuentacajaId(
+            $pedido->gateway,
+            $pedido->gateway_name,
+            is_array($pedido->payment_json) ? $pedido->payment_json : null
+        );
         $pvDefaultId = (int) ($pedido->puntoventa_id_sugerido
             ?: TiendanubePedidoMaestrosSupport::puntoventaDefault()?->id
             ?: 0);
@@ -135,6 +139,15 @@ class TiendanubePedidoController extends Controller
         $puedeFacturar = can('facturar-tiendanube-pedidos', false)
             && ! $pedido->estaFacturado()
             && $pedido->estaPagado();
+        $domicilioDefault = \App\Support\Ventas\Tiendanube\TiendanubePedidoReceptorSupport::domicilioDesdePedido($pedido);
+        $letraDefault = 'B';
+        $pagoDetalle = [
+            'gateway' => $pedido->gateway,
+            'gateway_name' => $pedido->gateway_name,
+            'method' => is_array($pedido->payment_json) ? ($pedido->payment_json['method'] ?? null) : null,
+            'card' => is_array($pedido->payment_json) ? ($pedido->payment_json['credit_card_company'] ?? null) : null,
+            'installments' => is_array($pedido->payment_json) ? ($pedido->payment_json['installments'] ?? null) : null,
+        ];
 
         return view('ventas.tiendanube_pedido.show', compact(
             'pedido',
@@ -145,7 +158,10 @@ class TiendanubePedidoController extends Controller
             'pvDefaultId',
             'depDefaultId',
             'listaprecioId',
-            'puedeFacturar'
+            'puedeFacturar',
+            'domicilioDefault',
+            'letraDefault',
+            'pagoDetalle'
         ));
     }
 
@@ -193,9 +209,14 @@ class TiendanubePedidoController extends Controller
 
         $receptor = [
             'nombre' => trim((string) $request->input('receptor_nombre', $pedido->customer_name)),
-            'nrodoc' => preg_replace('/\D+/', '', (string) $request->input('receptor_doc', $pedido->customer_doc)) ?: null,
+            'numerodocumento' => preg_replace('/\D+/', '', (string) $request->input('receptor_doc', $pedido->customer_doc)) ?: null,
             'email' => trim((string) $request->input('receptor_email', $pedido->customer_email)) ?: null,
+            'domicilio' => trim((string) $request->input('receptor_domicilio', '')) ?: null,
         ];
+        $letra = strtoupper(trim((string) $request->input('letra', 'B')));
+        if (! in_array($letra, ['A', 'B'], true)) {
+            $letra = 'B';
+        }
 
         $input = [
             'puntoventa_id' => (int) $request->input('puntoventa_id'),
@@ -204,6 +225,7 @@ class TiendanubePedidoController extends Controller
             'listaprecio_id' => (int) $request->input('listaprecio_id') ?: null,
             'medios_pago' => $medios,
             'receptor' => $receptor,
+            'letra' => $letra,
             'forzar_cf' => (bool) $request->boolean('forzar_cf'),
             'descuentoimportepie' => (float) $request->input('descuentoimportepie', 0),
         ];
@@ -211,11 +233,14 @@ class TiendanubePedidoController extends Controller
         // Persistir sugerencias elegidas
         $pedido->puntoventa_id_sugerido = $input['puntoventa_id'] ?: $pedido->puntoventa_id_sugerido;
         $pedido->deposito_id_sugerido = $input['deposito_id'] ?: $pedido->deposito_id_sugerido;
-        if ($receptor['nrodoc']) {
-            $pedido->customer_doc = $receptor['nrodoc'];
+        if ($receptor['numerodocumento']) {
+            $pedido->customer_doc = $receptor['numerodocumento'];
         }
         if ($receptor['nombre']) {
             $pedido->customer_name = $receptor['nombre'];
+        }
+        if ($receptor['email']) {
+            $pedido->customer_email = $receptor['email'];
         }
         $pedido->save();
 

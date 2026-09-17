@@ -5,11 +5,13 @@ namespace App\Services\Ventas\Tiendanube;
 use App\Models\Ventas\TiendanubePedido;
 use App\Models\Ventas\Venta;
 use App\Services\Caja\CobranzaService;
+use App\Services\Ventas\FacturaMailEnvioService;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
+use App\Support\Ventas\Tiendanube\TiendanubePedidoReceptorSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -89,6 +91,7 @@ final class TiendanubePedidoEmisionService
                 $pedido->save();
 
                 $this->intentarPublicarInvoice($pedido, $venta, $resultado);
+                $this->intentarEnviarMailCliente($pedido, $venta, $input);
 
                 Log::info('tiendanube.emision.ok', [
                     'tiendanube_order_id' => $pedido->tiendanube_order_id,
@@ -169,12 +172,24 @@ final class TiendanubePedidoEmisionService
         }
 
         $clienteId = (int) ($input['cliente_id'] ?? $pedido->cliente_id ?? 0);
-        $receptor = is_array($input['receptor'] ?? null) ? $input['receptor'] : [];
+        $receptorIn = is_array($input['receptor'] ?? null) ? $input['receptor'] : [];
         $forzarCf = ! empty($input['forzar_cf']);
-        $doc = trim((string) ($receptor['nrodoc'] ?? $receptor['cuit'] ?? $pedido->customer_doc ?? ''));
+        $letra = strtoupper(trim((string) ($input['letra'] ?? TiendanubePedidoReceptorSupport::LETRA_B)));
+        if ($forzarCf) {
+            $letra = TiendanubePedidoReceptorSupport::LETRA_B;
+        }
+        $doc = preg_replace('/\D+/', '', (string) ($receptorIn['numerodocumento'] ?? $receptorIn['nrodoc'] ?? $pedido->customer_doc ?? '')) ?: '';
         $limite = (float) config('facturacion_local.limite_resto', 400000);
 
-        if ($clienteId <= 1 && $doc === '' && ! $forzarCf && (float) $pedido->total > $limite) {
+        if ($letra === TiendanubePedidoReceptorSupport::LETRA_A && strlen($doc) < 11) {
+            $errores[] = 'Factura A requiere CUIT del comprador (11 dígitos).';
+        }
+
+        if ($letra === TiendanubePedidoReceptorSupport::LETRA_B
+            && $clienteId <= 1
+            && $doc === ''
+            && ! $forzarCf
+            && (float) $pedido->total > $limite) {
             $errores[] = 'Faltan datos fiscales del cliente (CUIT/DNI). Complete el receptor o asocie un cliente.';
         }
 
@@ -226,9 +241,17 @@ final class TiendanubePedidoEmisionService
             throw new InvalidArgumentException('No hay líneas facturables con artículo ERP.');
         }
 
-        $clienteId = (int) ($input['cliente_id'] ?? $pedido->cliente_id ?? 0);
-        if ($clienteId <= 0) {
-            $clienteId = (int) config('tiendanube.cliente_contado_id', 1);
+        $letra = strtoupper(trim((string) ($input['letra'] ?? TiendanubePedidoReceptorSupport::LETRA_B)));
+        if (! empty($input['forzar_cf'])) {
+            $letra = TiendanubePedidoReceptorSupport::LETRA_B;
+        }
+        $receptorIn = is_array($input['receptor'] ?? null) ? $input['receptor'] : [];
+        $fiscal = TiendanubePedidoReceptorSupport::armar($pedido, $receptorIn, $letra);
+
+        $clienteId = $fiscal['cliente_id'];
+        if ((int) ($input['cliente_id'] ?? 0) > 0 && $fiscal['letra'] === TiendanubePedidoReceptorSupport::LETRA_A) {
+            // Permite forzar un cliente RI del maestro en Factura A
+            $clienteId = (int) $input['cliente_id'];
         }
 
         $listaId = (int) ($input['listaprecio_id'] ?? 0);
@@ -236,6 +259,7 @@ final class TiendanubePedidoEmisionService
             $listaId = TiendanubePedidoMaestrosSupport::listaprecioIdDefault();
         }
 
+        $nroPedido = (string) ($pedido->order_number ?: $pedido->tiendanube_order_id);
         $fecha = Carbon::now()->format('Y-m-d');
         $payload = [
             'empresa_id' => (int) config('tiendanube.empresa_id', 1),
@@ -259,7 +283,10 @@ final class TiendanubePedidoEmisionService
             'descuentopie' => 0.,
             'descuentoimportepie' => $descuentoPieImporte,
             'vendedor_id' => Auth::id(),
-            'observacion' => 'Tiendanube pedido #'.($pedido->order_number ?: $pedido->tiendanube_order_id),
+            'leyendafactura' => 'Tiendanube pedido #'.$nroPedido,
+            'observacion' => 'Tiendanube pedido #'.$nroPedido,
+            'venta_receptor' => $fiscal['venta_receptor'],
+            'arca_receptor' => $fiscal['arca_receptor'],
             'opciones_emision' => [
                 'omitir_movimiento_stock' => false,
                 'permitir_caea' => false,
@@ -268,14 +295,10 @@ final class TiendanubePedidoEmisionService
             ],
         ];
 
-        if (! empty($input['receptor']) && is_array($input['receptor'])) {
-            $payload['venta_receptor'] = $input['receptor'];
-        } elseif ($pedido->customer_doc || $pedido->customer_name) {
-            $payload['venta_receptor'] = [
-                'nombre' => $pedido->customer_name,
-                'nrodoc' => $pedido->customer_doc,
-                'email' => $pedido->customer_email,
-            ];
+        // Factura A: FacturacionService aplica percepciones (no omitir).
+        // Factura B: se omiten IIBB/IVA perc. salvo reglas especiales.
+        if ($fiscal['letra'] === TiendanubePedidoReceptorSupport::LETRA_B) {
+            $payload['omitir_percepciones'] = true;
         }
 
         return $payload;
@@ -323,8 +346,52 @@ final class TiendanubePedidoEmisionService
             'cotizacion_cobranza' => 1.,
             'lineas' => $lineas,
             'genera_contabilidad' => (bool) config('tiendanube.genera_contabilidad_cobranza', false),
-            'detalle' => 'Cobranza Tiendanube — '.$venta->codigo,
+            'detalle' => 'Cobranza Tiendanube — '.$venta->codigo
+                .(isset($venta->leyenda) && $venta->leyenda ? ' / '.$venta->leyenda : ''),
         ]);
+    }
+
+    /**
+     * @param  array<string,mixed>  $input
+     */
+    private function intentarEnviarMailCliente(TiendanubePedido $pedido, Venta $venta, array $input): void
+    {
+        if (! config('tiendanube.enviar_factura_mail', true)) {
+            return;
+        }
+
+        $email = trim((string) (
+            $input['receptor']['email']
+            ?? $pedido->customer_email
+            ?? $venta->email
+            ?? ''
+        ));
+        if ($email === '') {
+            return;
+        }
+
+        try {
+            $resp = app(FacturaMailEnvioService::class)->enviarDesdeTiendanube((int) $venta->id, $email);
+            if (! ($resp['ok'] ?? false)) {
+                Log::warning('tiendanube.mail.fail', [
+                    'order_id' => $pedido->tiendanube_order_id,
+                    'venta_id' => $venta->id,
+                    'mensaje' => $resp['mensaje'] ?? '',
+                ]);
+
+                return;
+            }
+            Log::info('tiendanube.mail.ok', [
+                'order_id' => $pedido->tiendanube_order_id,
+                'venta_id' => $venta->id,
+                'destinatarios' => $resp['destinatarios'] ?? [],
+            ]);
+        } catch (Throwable $e) {
+            Log::warning('tiendanube.mail.exception', [
+                'order_id' => $pedido->tiendanube_order_id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -337,25 +404,32 @@ final class TiendanubePedidoEmisionService
         }
 
         try {
-            $cae = (string) ($resultadoEmision['cae'] ?? $venta->cae ?? '');
-            $url = null;
-            if (method_exists($venta, 'urlPdfPublica')) {
-                $url = $venta->urlPdfPublica();
-            }
-            // Endpoint invoices TN — si falla por permisos, solo log
-            $body = array_filter([
-                'number' => $venta->codigo ?? ($venta->letra.$venta->sucursal.'-'.$venta->numero),
-                'access_key' => $cae !== '' ? $cae : null,
-                'url' => $url,
+            $cae = trim((string) ($resultadoEmision['cae'] ?? $venta->cae ?? ''));
+            $numero = trim((string) ($venta->codigo
+                ?? (($venta->letra ?? '').($venta->sucursal ?? '').'-'.($venta->numero ?? ''))));
+            // Metafield nfe/list: key = CAE o número fiscal; link = PDF ERP
+            $key = $cae !== '' ? $cae : ($numero !== '' && $numero !== '-' ? $numero : 'venta-'.$venta->id);
+            $url = route('lista_una_factura_pdf', ['id' => $venta->id], true);
+
+            $resp = $this->api->crearInvoice((int) $pedido->tiendanube_order_id, [
+                'key' => $key,
+                'link' => $url,
             ]);
-            $resp = $this->api->crearInvoice((int) $pedido->tiendanube_order_id, $body);
-            if (! $resp['ok']) {
+            if (! ($resp['ok'] ?? false)) {
                 Log::warning('tiendanube.invoice.publish_fail', [
                     'order_id' => $pedido->tiendanube_order_id,
+                    'venta_id' => $venta->id,
                     'error' => $resp['error'] ?? '',
                     'status' => $resp['status'] ?? 0,
                 ]);
+
+                return;
             }
+            Log::info('tiendanube.invoice.publish_ok', [
+                'order_id' => $pedido->tiendanube_order_id,
+                'venta_id' => $venta->id,
+                'key' => $key,
+            ]);
         } catch (Throwable $e) {
             Log::warning('tiendanube.invoice.publish_exception', [
                 'order_id' => $pedido->tiendanube_order_id,

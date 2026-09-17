@@ -34,7 +34,7 @@ final class MovimientoStockSalidaSaldoSupport
         }
 
         $deposito = Depmae::query()->find($depositoId);
-        if (! DepmaeControlStockSupport::manejaControlStock($deposito)) {
+        if (! DepmaeControlStockSupport::debeValidarSaldoDisponible($deposito)) {
             return;
         }
 
@@ -93,7 +93,7 @@ final class MovimientoStockSalidaSaldoSupport
         }
 
         $deposito = Depmae::query()->find($depositoId);
-        if (! DepmaeControlStockSupport::manejaControlStock($deposito)) {
+        if (! DepmaeControlStockSupport::debeValidarSaldoDisponible($deposito)) {
             return;
         }
 

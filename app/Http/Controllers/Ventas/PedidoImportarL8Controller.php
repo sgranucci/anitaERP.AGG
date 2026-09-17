@@ -30,13 +30,17 @@ class PedidoImportarL8Controller extends Controller
         }
 
         $mensaje = sprintf(
-            'Importación tareas L8 (fuente %s): OT %d — cabeceras OT +%d, tareas +%d/~%d, movimientos +%d.',
+            'Importación tareas L8 (fuente %s): OT %d — cabeceras OT +%d, tareas +%d/~%d, movimientos +%d'
+            .(isset($resumen['ot_sincronizados']) ? ', ot_id sincronizados %d (reclamados %d)' : '')
+            .'.',
             $resumen['fuente'] ?: '?',
             $resumen['ots'],
             $resumen['insert_ordentrabajo'],
             $resumen['insert_tarea'],
             $resumen['update_tarea'],
-            $resumen['insert_movimiento']
+            $resumen['insert_movimiento'],
+            $resumen['ot_sincronizados'] ?? 0,
+            $resumen['ot_reclamados'] ?? 0
         );
 
         return redirect()

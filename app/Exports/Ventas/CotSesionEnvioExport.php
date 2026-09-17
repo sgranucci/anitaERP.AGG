@@ -5,6 +5,7 @@ namespace App\Exports\Ventas;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
+use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
@@ -15,6 +16,8 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 
 class CotSesionEnvioExport implements FromView, ShouldAutoSize, WithColumnWidths, WithEvents
 {
+    use Exportable;
+
     private const COL_ULTIMA = 'K';
 
     private bool $hayFilaLogos = false;

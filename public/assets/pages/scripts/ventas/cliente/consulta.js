@@ -183,6 +183,9 @@ function aplicarSeleccionClienteFactura(fila) {
     if ($('#codigocliente').length && fila.codigo) {
         $('#codigocliente').val(fila.codigo);
     }
+    if ($('#acc-workbench').length) {
+        $('#cliente_id').trigger('change.cpClienteCargado').trigger('change');
+    }
 }
 
 function esTeclaF1Cliente(e) {
@@ -584,6 +587,9 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
 
                         invocarDatosClienteTrasSeleccion(data.id, data);
                         enfocarCampoTrasClienteCargado();
+                        if ($('#acc-workbench').length) {
+                            $('#cliente_id').trigger('change.cpClienteCargado').trigger('change');
+                        }
                     }
 
                     clienteInvalidoAvisadoClave = '';

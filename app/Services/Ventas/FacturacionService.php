@@ -2974,7 +2974,7 @@ class FacturacionService
 		}
 
 		$clienteGraba = clone $cliente;
-		if (! empty($data['venta_receptor']) && is_array($data['venta_receptor'])) {
+        if (! empty($data['venta_receptor']) && is_array($data['venta_receptor'])) {
 			$vr = $data['venta_receptor'];
 			if (isset($vr['nombre'])) {
 				$clienteGraba->nombre = $vr['nombre'];
@@ -2984,6 +2984,9 @@ class FacturacionService
 			}
 			if (array_key_exists('domicilio', $vr)) {
 				$clienteGraba->domicilio = $vr['domicilio'];
+			}
+			if (! empty($vr['email'])) {
+				$clienteGraba->email = trim((string) $vr['email']);
 			}
 		}
 		
@@ -3344,6 +3347,11 @@ class FacturacionService
 			$countItem = 0;
 			foreach ($ot->ordentrabajo_combinacion_talles as $item)
 			{
+				// OCT con PCT inexistente o huérfano (p.ej. import L8 con ids colisionados).
+				if (! $item->pedido_combinacion_talles || ! $item->pedido_combinacion_talles->pedidos_combinacion) {
+					continue;
+				}
+
 				// Selecciona items a facturar
 				if ($pedido_combinacion_id == $item->pedido_combinacion_talles->pedidos_combinacion->id)
 				{
@@ -4116,6 +4124,35 @@ class FacturacionService
 									'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
 									'anita_ok' => true,
 									'vencae_ok' => false,
+								];
+							}
+						}
+
+						// Modo C/E: asiento ERP se grabó sin ctamov; sincronizar tras CAE + Anita venta.
+						if (in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)) {
+							try {
+								$this->sincronizarCtamovAnitaDeVenta(
+									(int) $vta->id,
+									substr((string) $venta['codigo'], 0, 3),
+									(string) $letra,
+									(int) $puntoventa->codigo,
+									(int) $venta['numerocomprobante'],
+								);
+							} catch (\Throwable $eCtamov) {
+								Log::error('facturacion.ot.ctamov_post_commit.fallo', [
+									'venta_id' => $vta->id,
+									'factura' => $numero,
+									'msg' => $eCtamov->getMessage(),
+								]);
+
+								return [
+									'error' => 'Factura '.$numero.' grabada en ERP/Anita, pero falló ctamov: '.$eCtamov->getMessage()
+										.'. No reintente facturar: use sincronización de asiento/ctamov.',
+									'factura' => $numero,
+									'venta_id' => (int) $vta->id,
+									'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
+									'anita_ok' => true,
+									'ctamov_ok' => false,
 								];
 							}
 						}
@@ -8078,7 +8115,7 @@ class FacturacionService
 	 * Tras CAE OK: escribe ctamov en Anita para el asiento ERP de la venta
 	 * (creado con omitir_anita mientras ARCA no había autorizado).
 	 */
-	private function sincronizarCtamovAnitaDeVenta(
+	public function sincronizarCtamovAnitaDeVenta(
 		int $ventaId,
 		string $tipo,
 		string $letra,

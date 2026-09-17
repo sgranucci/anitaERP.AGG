@@ -20,7 +20,7 @@
 <thead>
     <tr>
         <th>Código</th>
-        <th>Cliente</th>
+        <th>Cliente / Vendedor</th>
         <th>Empresa</th>
         <th>Fecha</th>
         <th>Vencimiento</th>
@@ -44,15 +44,27 @@
 @forelse ($filas as $fila)
     @php
         $tipo = $fila['tipo'] ?? 'movimiento';
+        $esHeaderVend = $tipo === 'header_vendedor';
+        $esTotalVend = $tipo === 'total_vendedor';
         $esHeader = $tipo === 'header_cliente';
         $esTotal = $tipo === 'total_cliente';
         $esApl = $tipo === 'aplicacion';
         $esSaldoAnt = $tipo === 'saldo_anterior';
-        $trClass = $esHeader ? 'cc-rep-header' : ($esTotal ? 'cc-rep-total' : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : '')));
+        $trClass = $esHeaderVend
+            ? 'cc-rep-header-vendedor'
+            : ($esTotalVend
+                ? 'cc-rep-total-vendedor'
+                : ($esHeader
+                    ? 'cc-rep-header'
+                    : ($esTotal
+                        ? 'cc-rep-total'
+                        : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : '')))));
     @endphp
     <tr class="{{ $trClass }}">
         <td>
-            @if ($esHeader || $esTotal)
+            @if ($esHeaderVend || $esTotalVend)
+                {{ $fila['vendedor_codigo'] ?? '' }}
+            @elseif ($esHeader || $esTotal)
                 @if ($mostrarLinks && ! empty($puede_ver_cliente) && ! empty($fila['cliente_id']))
                     <a class="text-primary" target="_blank" rel="noopener"
                         href="{{ route('editar_cliente', ['id' => $fila['cliente_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}">
@@ -64,7 +76,11 @@
             @endif
         </td>
         <td>
-            @if ($esHeader)
+            @if ($esHeaderVend)
+                <strong>Vendedor: {{ $fila['vendedor_nombre'] ?? '' }}</strong>
+            @elseif ($esTotalVend)
+                <strong>Total vendedor {{ $fila['vendedor_nombre'] ?? '' }}</strong>
+            @elseif ($esHeader)
                 <strong>{{ $fila['cliente_nombre'] ?? '' }}</strong>
             @elseif ($esTotal)
                 <strong>Total {{ $fila['cliente_nombre'] ?? '' }}</strong>
@@ -72,32 +88,36 @@
                 <em>{{ $fila['comprobante'] ?? 'Saldo anterior' }}</em>
             @endif
         </td>
-        <td>{{ $esHeader ? ($fila['nombreempresa'] ?? '') : '' }}</td>
+        <td>
+            @if ($esHeader)
+                {{ $fila['nombreempresa'] ?? '' }}
+            @endif
+        </td>
         <td>{{ $fila['fecha'] ?? '' }}</td>
         <td>{{ $fila['fechavencimiento'] ?? '' }}</td>
         <td>
-            @if (! $esHeader)
+            @if (! $esHeader && ! $esHeaderVend)
                 {{ $fila['comprobante'] ?? '' }}
             @endif
         </td>
         <td>{{ $fila['etiqueta_moneda'] ?? ($fila['abreviatura'] ?? '') }}</td>
         @if ($modoDeuda)
             <td class="text-right">
-                @if ($esTotal)
+                @if ($esTotal || $esTotalVend)
                     <strong>{{ $fmt($fila['importe'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['importe'] ?? null) }}
                 @endif
             </td>
             <td class="text-right">
-                @if ($esTotal)
+                @if ($esTotal || $esTotalVend)
                     <strong>{{ $fmt($fila['aplicado'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['aplicado'] ?? null) }}
                 @endif
             </td>
             <td class="text-right">
-                @if ($esTotal)
+                @if ($esTotal || $esTotalVend)
                     <strong>{{ $fmt($fila['saldo_pendiente'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['saldo_pendiente'] ?? null) }}
@@ -105,21 +125,21 @@
             </td>
         @else
             <td class="text-right">
-                @if ($esTotal)
+                @if ($esTotal || $esTotalVend)
                     <strong>{{ $fmt($fila['debe'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['debe'] ?? null) }}
                 @endif
             </td>
             <td class="text-right">
-                @if ($esTotal)
+                @if ($esTotal || $esTotalVend)
                     <strong>{{ $fmt($fila['haber'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['haber'] ?? null) }}
                 @endif
             </td>
             <td class="text-right">
-                @if ($esTotal)
+                @if ($esTotal || $esTotalVend)
                     <strong>{{ $fmt($fila['saldo'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['saldo'] ?? null) }}

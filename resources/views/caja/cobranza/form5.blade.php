@@ -1,13 +1,13 @@
 <div class="card form5" style="display: none">
-    <h3>Historia</h3>
     <div class="card-body">
-        <table class="table" id="cobranza-historia-table">
-            <thead>
+        <h5 class="mb-2">Historia</h5>
+        <table class="table table-sm table-bordered table-hover" id="cobranza-historia-table">
+            <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
                     <th style="width: 18%;">Fecha</th>
                     <th>Estado</th>
                     <th>Usuario</th>
-                    <th>Observación</th>
+                    <th>Observaci&oacute;n</th>
                 </tr>
             </thead>
             <tbody id="tbody-cobranza-historia-table" class="container-historia">
@@ -15,5 +15,3 @@
         </table>
     </div>
 </div>
-<input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
-

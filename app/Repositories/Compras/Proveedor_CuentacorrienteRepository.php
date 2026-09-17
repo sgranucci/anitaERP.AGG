@@ -124,7 +124,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
-            ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
+            ->whereRaw(SqlDialectSupport::sqlAlcanceDeudaAbiertaProveedorCc())
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         $this->aplicarJoinsListado($query);
@@ -339,7 +339,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             ])
             ->leftJoin('moneda', 'moneda.id', '=', 'proveedor_cuentacorriente.moneda_id')
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
-            ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
+            ->whereRaw(SqlDialectSupport::sqlAlcanceDeudaAbiertaProveedorCc())
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');

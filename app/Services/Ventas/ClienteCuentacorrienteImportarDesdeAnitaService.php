@@ -6,9 +6,9 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Models\Ventas\Tipotransaccion;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
-use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportAplmovSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportBridgeReader;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportClaveSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportFormatoSupport;
@@ -18,10 +18,11 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Importa deuda de clientes desde Anita (climov + aplmov) → ERP.
+ * Importa deuda de clientes desde Anita (climov) → ERP.
  *
  * Filtro de negocio: solo comprobantes con fila en Anita `venta`
  * (excluye COB/REC/PRE vía tipos_no_deuda; COA pendientes sí se importan).
+ * CC queda con el saldo pendiente (sin aplicaciones de cobros a cuenta).
  * Si falta la cabecera en ERP, la importa primero.
  * No escribe Anita.
  */
@@ -83,19 +84,28 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
 
         $climovsConAnitaVenta = [];
         $clavesConAnita = [];
+        $climovsCreditoSinVenta = [];
+        $clavesCreditoSinVenta = [];
         foreach ($climovsDeuda as $climov) {
             $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDesdeClimov($climov);
-            if (! isset($anitaVentas[$clave])) {
-                $stats['omitidas_sin_anita_venta']++;
+            $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) ($climov['cliv_tipo'] ?? ''));
+            if (isset($anitaVentas[$clave])) {
+                $climovsConAnitaVenta[] = $climov;
+                $clavesConAnita[$clave] = $clave;
 
                 continue;
             }
-            $climovsConAnitaVenta[] = $climov;
-            $clavesConAnita[$clave] = $clave;
+            if (ClienteCuentacorrienteAnitaImportFormatoSupport::esTipoCreditoSinVenta($tipo, $perfil)) {
+                $climovsCreditoSinVenta[] = $climov;
+                $clavesCreditoSinVenta[$clave] = $clave;
+
+                continue;
+            }
+            $stats['omitidas_sin_anita_venta']++;
         }
 
         $clavesMatch = [];
-        foreach ($clavesConAnita as $clave) {
+        foreach (array_merge($clavesConAnita, $clavesCreditoSinVenta) as $clave) {
             [$tipo, $letra, $suc, $nro] = explode('|', $clave);
             $clavesMatch[] = [
                 'tipo' => $tipo,
@@ -112,7 +122,14 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
                 $faltanErp[] = $clave;
             }
         }
-        $stats['ventas_faltantes_erp'] = count($faltanErp);
+        $faltanErpCredito = [];
+        foreach ($clavesCreditoSinVenta as $clave) {
+            if (! isset($indiceVentas[$clave]) || $indiceVentas[$clave] === []) {
+                $faltanErpCredito[] = $clave;
+            }
+        }
+        $stats['ventas_faltantes_erp'] = count($faltanErp) + count($faltanErpCredito);
+        $stats['credito_sin_venta_anita'] = count($climovsCreditoSinVenta);
 
         $statsVenta = [
             'a_crear' => 0,
@@ -139,9 +156,36 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             $stats['omitidas_sin_venta_erp'] = count($faltanErp);
         }
 
-        $clavesDeudaApl = [];
+        if ($importarVentasFaltantes && $faltanErpCredito !== []) {
+            $climovsACrear = [];
+            $faltanSet = array_flip($faltanErpCredito);
+            foreach ($climovsCreditoSinVenta as $climov) {
+                $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDesdeClimov($climov);
+                if (isset($faltanSet[$clave])) {
+                    $climovsACrear[] = $climov;
+                }
+            }
+            $statsCredito = $this->ventaImport->importarDesdeClimov($climovsACrear, $dryRun, $usuarioId);
+            $stats['ventas_a_crear'] += (int) ($statsCredito['a_crear'] ?? 0);
+            $stats['ventas_creadas'] += (int) ($statsCredito['creadas'] ?? 0);
+            $stats['ventas_sin_cliente'] += (int) ($statsCredito['sin_cliente'] ?? 0);
+            $stats['ventas_errores'] = array_merge($stats['ventas_errores'], $statsCredito['errores'] ?? []);
+            $stats['muestra_ventas'] = array_merge(
+                $stats['muestra_ventas'],
+                $statsCredito['muestra'] ?? []
+            );
+            if (! $dryRun && (int) ($statsCredito['creadas'] ?? 0) > 0) {
+                $indiceVentas = ClienteCuentacorrienteAnitaImportVentaMatchSupport::indexarVentasPorClaves($clavesMatch);
+            }
+        } elseif ($faltanErpCredito !== []) {
+            $stats['ventas_a_crear'] += count($faltanErpCredito);
+            $stats['omitidas_sin_venta_erp'] += count($faltanErpCredito);
+        }
+
+        $climovsParaCc = array_merge($climovsConAnitaVenta, $climovsCreditoSinVenta);
+
         $plan = [];
-        foreach ($climovsConAnitaVenta as $climov) {
+        foreach ($climovsParaCc as $climov) {
             $preparado = $this->prepararClimov($climov, $indiceVentas, $signoPorTipo, $perfil, $forzarAplicaciones);
             if ($preparado['estado'] === 'sin_venta') {
                 $stats['omitidas_sin_venta_erp']++;
@@ -160,7 +204,6 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             }
 
             $plan[] = $preparado;
-            $clavesDeudaApl[] = $preparado['clave'];
             if ($limite !== null && $limite > 0 && count($plan) >= $limite) {
                 break;
             }
@@ -168,24 +211,14 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
 
         $stats['a_procesar'] = count($plan);
         $stats['a_crear_cc'] = count(array_filter($plan, static fn (array $p) => $p['accion_cc'] === 'crear'));
-        $stats['a_actualizar_aplicaciones'] = count(array_filter(
+        $stats['a_colapsar_saldo'] = count(array_filter(
             $plan,
-            static fn (array $p) => $p['accion_aplicaciones'] !== 'omitir'
+            static fn (array $p) => ($p['accion_saldo'] ?? '') === 'colapsar'
         ));
+        $stats['a_actualizar_aplicaciones'] = 0;
         $stats['muestra'] = array_map(static fn (array $p) => $p['resumen'], array_slice($plan, 0, 25));
-
-        $aplmovs = $this->reader->listarAplmovPorDeudas(array_values(array_unique($clavesDeudaApl)));
-        $stats['anita_aplmov'] = count($aplmovs);
-        $pares = ClienteCuentacorrienteAnitaImportAplmovSupport::paresDesdeFilas(
-            $aplmovs,
-            $signoPorTipo,
-            (bool) $perfil['aplmov_fallback_ref_como_cob']
-        );
-        $stats['aplicaciones_anita'] = count($pares);
-        $paresPorDeuda = [];
-        foreach ($pares as $par) {
-            $paresPorDeuda[$par['deuda']['clave']][] = $par;
-        }
+        $stats['anita_aplmov'] = 0;
+        $stats['aplicaciones_anita'] = 0;
 
         $extras = [];
         if ($cerrarSinDeudaAnita) {
@@ -215,30 +248,18 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
         }
 
         if ($dryRun) {
-            foreach ($plan as $item) {
-                $paresItem = $paresPorDeuda[$item['clave']] ?? [];
-                $montoApl = round(array_sum(array_column($paresItem, 'monto')), 4);
-                $stats['aplicaciones_planificadas'] += count($paresItem);
-                if ($item['aplicado_objetivo'] > 0.0001 && abs($montoApl - $item['aplicado_objetivo']) > $perfil['tolerancia_aplicado']) {
-                    $stats['aplicaciones_con_ajuste']++;
-                }
-            }
             $stats['modo'] = 'dry-run';
 
             return $stats;
         }
 
-        return DB::transaction(function () use ($plan, $paresPorDeuda, $stats, $perfil, $forzarAplicaciones, $extras) {
+        return DB::transaction(function () use ($plan, $stats, $perfil, $extras) {
             foreach ($plan as $item) {
-                $resultado = $this->persistirItem(
-                    $item,
-                    $paresPorDeuda[$item['clave']] ?? [],
-                    $perfil,
-                    $forzarAplicaciones
-                );
+                $resultado = $this->persistirItem($item, [], $perfil, false);
                 if ($resultado['cc_creada']) {
                     $stats['cc_creadas']++;
                 }
+                $stats['saldos_colapsados'] += $resultado['saldo_colapsado'] ? 1 : 0;
                 $stats['aplicaciones_creadas'] += $resultado['aplicaciones_creadas'];
                 $stats['aplicaciones_omitidas'] += $resultado['aplicaciones_omitidas'];
                 $stats['cc_ya_existentes'] += $resultado['cc_existente'] ? 1 : 0;
@@ -282,8 +303,10 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
         $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDocumento($tipo, $letra, $suc, $nro);
         $monto = round(abs((float) ($climov['cliv_monto'] ?? 0)), 4);
         $cobrado = round(abs((float) ($climov['cliv_t_cobrado'] ?? 0)), 4);
+        $pendienteAbs = round(max(0, $monto - $cobrado), 4);
         $signo = $signoPorTipo[$tipo] ?? ClienteCuentacorrienteAnitaImportClaveSupport::signoEntero($venta->signo);
-        $totalFirmado = round($monto * $signo, 4);
+        // Deuda limpia: CC = saldo Anita (no total factura + aplicaciones de cobros a cuenta).
+        $totalFirmado = round($pendienteAbs * $signo, 4);
 
         $fecha = ClienteCuentacorrienteAnitaImportClaveSupport::fechaIsoDesdeAnita($climov['cliv_fecha'] ?? '')
             ?: (string) $venta->fecha;
@@ -297,26 +320,27 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             ->orderBy('id')
             ->get();
 
-        $cc = $this->elegirCuotaCc($ccs, $cuota, $monto, $totalFirmado);
-        $aplicadoErp = $cc
+        $cc = $this->elegirCuotaCc($ccs, $cuota, $pendienteAbs, $monto, $totalFirmado);
+        $aplicadoErpFirmado = $cc
             ? round((float) Cliente_Cuentacorriente_Aplicacion::query()
                 ->where('cliente_cuentacorriente_id', $cc->id)
                 ->sum('total'), 4)
             : 0.0;
-        $aplicadoErpAbs = abs($aplicadoErp);
         $tolerancia = (float) $perfil['tolerancia_aplicado'];
 
         $accionCc = $cc ? 'existente' : 'crear';
-        $accionApl = 'omitir';
-        if ($cobrado > $tolerancia) {
-            if (! $cc || $forzarAplicaciones || abs($aplicadoErpAbs - $cobrado) > $tolerancia) {
-                $accionApl = $forzarAplicaciones || $aplicadoErpAbs < $tolerancia
-                    ? 'sincronizar'
-                    : 'ajustar';
+        $accionSaldo = 'omitir';
+        if ($cc) {
+            $saldoErp = round((float) $cc->total + $aplicadoErpFirmado, 4);
+            $necesitaColapsarApps = abs($aplicadoErpFirmado) > $tolerancia;
+            $necesitaAjustarTotal = abs((float) $cc->total - $totalFirmado) > $tolerancia
+                || abs($saldoErp - $totalFirmado) > $tolerancia;
+            if ($necesitaColapsarApps || $necesitaAjustarTotal) {
+                $accionSaldo = 'colapsar';
             }
         }
 
-        if ($accionCc === 'existente' && $accionApl === 'omitir') {
+        if ($accionCc === 'existente' && $accionSaldo === 'omitir') {
             return ['estado' => 'ok_al_dia'];
         }
 
@@ -333,12 +357,13 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             'empresa_id' => $this->empresaIdDesdeVenta($venta),
             'cc_id' => $cc?->id,
             'accion_cc' => $accionCc,
-            'accion_aplicaciones' => $accionApl,
+            'accion_aplicaciones' => 'omitir',
+            'accion_saldo' => $accionSaldo,
             'fecha' => $fecha,
             'fechavencimiento' => $fechaVto,
             'total' => $totalFirmado,
-            'aplicado_objetivo' => $cobrado,
-            'aplicado_erp' => $aplicadoErpAbs,
+            'aplicado_objetivo' => 0.0,
+            'aplicado_erp' => abs($aplicadoErpFirmado),
             'moneda_id' => $monedaId,
             'cotizacion' => $cotizacion,
             'signo' => $signo,
@@ -348,9 +373,9 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
                 'fecha' => $fecha,
                 'total' => $totalFirmado,
                 'aplicado_anita' => $cobrado,
-                'aplicado_erp' => $aplicadoErpAbs,
+                'aplicado_erp' => abs($aplicadoErpFirmado),
                 'accion_cc' => $accionCc,
-                'accion_apl' => $accionApl,
+                'accion_apl' => $accionSaldo === 'colapsar' ? 'colapsar_saldo' : 'omitir',
             ],
         ];
     }
@@ -358,7 +383,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
     /**
      * @param  \Illuminate\Support\Collection<int, Cliente_Cuentacorriente>  $ccs
      */
-    private function elegirCuotaCc($ccs, int $nroCuota, float $montoAbs, float $totalFirmado): ?Cliente_Cuentacorriente
+    private function elegirCuotaCc($ccs, int $nroCuota, float $pendienteAbs, float $montoAbs, float $totalFirmado): ?Cliente_Cuentacorriente
     {
         if ($ccs->isEmpty()) {
             return null;
@@ -368,8 +393,13 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
         }
 
         $porMonto = $ccs->first(
-            static fn (Cliente_Cuentacorriente $cc) => abs(abs((float) $cc->total) - $montoAbs) < 0.02
-                || abs((float) $cc->total - $totalFirmado) < 0.02
+            static function (Cliente_Cuentacorriente $cc) use ($pendienteAbs, $montoAbs, $totalFirmado) {
+                $abs = abs((float) $cc->total);
+
+                return abs($abs - $pendienteAbs) < 0.02
+                    || abs($abs - $montoAbs) < 0.02
+                    || abs((float) $cc->total - $totalFirmado) < 0.02;
+            }
         );
         if ($porMonto) {
             return $porMonto;
@@ -384,13 +414,14 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
      * @param  array<string, mixed>  $item
      * @param  list<array<string, mixed>>  $pares
      * @param  array<string, mixed>  $perfil
-     * @return array{cc_creada:bool,cc_existente:bool,aplicaciones_creadas:int,aplicaciones_omitidas:int,errores:list<string>}
+     * @return array{cc_creada:bool,cc_existente:bool,saldo_colapsado:bool,aplicaciones_creadas:int,aplicaciones_omitidas:int,errores:list<string>}
      */
     private function persistirItem(array $item, array $pares, array $perfil, bool $forzarAplicaciones): array
     {
         $out = [
             'cc_creada' => false,
             'cc_existente' => false,
+            'saldo_colapsado' => false,
             'aplicaciones_creadas' => 0,
             'aplicaciones_omitidas' => 0,
             'errores' => [],
@@ -421,115 +452,19 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
                     $ccActual->save();
                 }
             }
-        }
-
-        if ($ccId === null || $item['accion_aplicaciones'] === 'omitir') {
-            return $out;
-        }
-
-        $aplicadoActual = round((float) Cliente_Cuentacorriente_Aplicacion::query()
-            ->where('cliente_cuentacorriente_id', $ccId)
-            ->sum('total'), 4);
-
-        if ($forzarAplicaciones && abs($aplicadoActual) > 0.0001) {
-            Cliente_Cuentacorriente_Aplicacion::query()
-                ->where('cliente_cuentacorriente_id', $ccId)
-                ->whereNull('cobranza_id')
-                ->whereNull('ventaaplicado_id')
-                ->where('comprobanteaplicado', 'like', 'Anita sync%')
-                ->get()
-                ->each(static function (Cliente_Cuentacorriente_Aplicacion $apl) {
-                    $apl->delete();
-                });
-            $aplicadoActual = round((float) Cliente_Cuentacorriente_Aplicacion::query()
-                ->where('cliente_cuentacorriente_id', $ccId)
-                ->sum('total'), 4);
-        }
-
-        $objetivo = (float) $item['aplicado_objetivo'];
-        $faltanteAbs = max(0, $objetivo - abs($aplicadoActual));
-        if ($faltanteAbs <= (float) $perfil['tolerancia_aplicado']) {
-            $out['aplicaciones_omitidas']++;
-
-            return $out;
-        }
-
-        $signoApl = $item['total'] >= 0 ? -1.0 : 1.0;
-        $creadas = 0;
-        $acum = 0.0;
-
-        foreach ($pares as $par) {
-            $monto = round(min((float) $par['monto'], $faltanteAbs - $acum), 4);
-            if ($monto < 0.0001) {
-                break;
-            }
-            if ($this->aplicacionYaExistePorEtiqueta($ccId, (string) $par['etiqueta_credito'], $monto * $signoApl)) {
-                $out['aplicaciones_omitidas']++;
-
-                continue;
-            }
-
-            $ventaCreditoId = null;
-            $ccCreditoId = null;
-            if (! $par['credito_es_pago']) {
-                $vinculo = $this->resolverCcCredito($par['credito']);
-                $ventaCreditoId = $vinculo['venta_id'];
-                $ccCreditoId = $vinculo['cc_id'];
-            }
-
-            Cliente_Cuentacorriente_Aplicacion::query()->create([
-                'fecha' => $par['fecha'],
-                'cliente_cuentacorriente_id' => $ccId,
-                'total' => round($monto * $signoApl, 4),
-                'moneda_id' => $item['moneda_id'],
-                'cotizacion' => $item['cotizacion'],
-                'ventaaplicado_id' => $ventaCreditoId,
-                'cobranza_id' => null,
-                'comprobanteaplicado' => $par['etiqueta_credito'],
-                'cliente_cuentacorriente_aplicado_id' => $ccCreditoId,
-            ]);
-
-            if ($ccCreditoId) {
-                if (! $this->aplicacionYaExistePorEtiqueta(
-                    $ccCreditoId,
-                    (string) $par['etiqueta_deuda'],
-                    round($monto * -$signoApl, 4)
-                )) {
-                    Cliente_Cuentacorriente_Aplicacion::query()->create([
-                        'fecha' => $par['fecha'],
-                        'cliente_cuentacorriente_id' => $ccCreditoId,
-                        'total' => round($monto * -$signoApl, 4),
-                        'moneda_id' => $item['moneda_id'],
-                        'cotizacion' => $item['cotizacion'],
-                        'ventaaplicado_id' => $item['venta_id'],
-                        'cobranza_id' => null,
-                        'comprobanteaplicado' => $par['etiqueta_deuda'],
-                        'cliente_cuentacorriente_aplicado_id' => $ccId,
-                    ]);
+            if ($ccId && ($item['accion_saldo'] ?? '') === 'colapsar') {
+                $ccActual = Cliente_Cuentacorriente::query()->find($ccId);
+                if ($ccActual) {
+                    $ccActual->total = $item['total'];
+                    $ccActual->save();
+                    EloquentAuditDeleteSupport::each(
+                        Cliente_Cuentacorriente_Aplicacion::query()
+                            ->where('cliente_cuentacorriente_id', $ccId)
+                    );
+                    $out['saldo_colapsado'] = true;
                 }
             }
-
-            $acum += $monto;
-            $creadas++;
         }
-
-        $restante = round($faltanteAbs - $acum, 4);
-        if ($restante > (float) $perfil['tolerancia_aplicado']) {
-            Cliente_Cuentacorriente_Aplicacion::query()->create([
-                'fecha' => $item['fecha'],
-                'cliente_cuentacorriente_id' => $ccId,
-                'total' => round($restante * $signoApl, 4),
-                'moneda_id' => $item['moneda_id'],
-                'cotizacion' => $item['cotizacion'],
-                'ventaaplicado_id' => null,
-                'cobranza_id' => null,
-                'comprobanteaplicado' => 'Anita sync aplmov (ajuste '.$restante.')',
-                'cliente_cuentacorriente_aplicado_id' => null,
-            ]);
-            $creadas++;
-        }
-
-        $out['aplicaciones_creadas'] = $creadas;
 
         return $out;
     }
@@ -777,6 +712,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             'omitidas_sin_anita_venta' => 0,
             'omitidas_sin_venta_erp' => 0,
             'omitidas_al_dia' => 0,
+            'credito_sin_venta_anita' => 0,
             'ventas_faltantes_erp' => 0,
             'ventas_a_crear' => 0,
             'ventas_creadas' => 0,
@@ -785,11 +721,13 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             'muestra_ventas' => [],
             'a_procesar' => 0,
             'a_crear_cc' => 0,
+            'a_colapsar_saldo' => 0,
             'a_actualizar_aplicaciones' => 0,
             'aplicaciones_planificadas' => 0,
             'aplicaciones_con_ajuste' => 0,
             'cc_creadas' => 0,
             'cc_ya_existentes' => 0,
+            'saldos_colapsados' => 0,
             'aplicaciones_creadas' => 0,
             'aplicaciones_omitidas' => 0,
             'anita_climov_abiertos' => 0,

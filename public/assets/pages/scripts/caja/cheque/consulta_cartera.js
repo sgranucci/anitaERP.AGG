@@ -2,9 +2,18 @@
 var __chequeCarteraCtx = null;
 var __chequeCarteraTimer = null;
 var __chequeCarteraIdx = -1;
+/** Si true, al terminar la búsqueda con exactamente 1 fila se acepta sola. */
+var __chequeCarteraAceptarSiUnico = false;
+/** Última consulta ya aplicada en la grilla (para no aceptar lista stale). */
+var __chequeCarteraConsultaAplicada = null;
+var __chequeCarteraReqSeq = 0;
 
 function esTeclaF1ChequeCartera(e) {
     return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function esTeclaEnterChequeCartera(e) {
+    return e && (e.key === 'Enter' || e.keyCode === 13 || e.which === 13);
 }
 
 function modalConsultaChequeCarteraAbierto() {
@@ -87,6 +96,7 @@ function filaChequeCarteraPorTr($tr) {
 
 function elegirChequeCarteraDelModal(fila) {
     var ctx = __chequeCarteraCtx || {};
+    __chequeCarteraAceptarSiUnico = false;
     $('#consultachequecarteraModal').modal('hide');
     if (typeof ctx.onElegir === 'function') {
         ctx.onElegir(fila || null);
@@ -101,12 +111,48 @@ function elegirChequeCarteraActivaDelModal() {
     if (!$row.length) {
         return false;
     }
-    elegirChequeCarteraDelModal(filaChequeCarteraPorTr($row));
+    var fila = filaChequeCarteraPorTr($row);
+    if (!fila) {
+        return false;
+    }
+    elegirChequeCarteraDelModal(fila);
     return true;
 }
 
+/**
+ * Enter: si la grilla ya refleja la consulta y hay filas → acepta activa/primera;
+ * si hay exactamente 1 fila → acepta aunque el debounce aún no marcó la consulta;
+ * si no → busca ya y acepta solo cuando queda una.
+ */
+function enterEnBuscadorChequeCartera() {
+    clearTimeout(__chequeCarteraTimer);
+    var consulta = String($('#consultachequecartera').val() || '').trim();
+    var n = filasChequeCarteraEnModal().length;
+
+    if (n === 1) {
+        elegirChequeCarteraActivaDelModal();
+        return;
+    }
+    if (n > 1 && __chequeCarteraConsultaAplicada === consulta) {
+        elegirChequeCarteraActivaDelModal();
+        return;
+    }
+
+    __chequeCarteraAceptarSiUnico = true;
+    buscar_datos_cheque_cartera();
+}
+
 function buscar_datos_cheque_cartera() {
-    var ctx = __chequeCarteraCtx || {};
+    var ctx = __chequeCarteraCtx;
+    if (!ctx) {
+        ctx = {};
+        __chequeCarteraCtx = ctx;
+    }
+    var aceptarSiUnico = __chequeCarteraAceptarSiUnico;
+    __chequeCarteraAceptarSiUnico = false;
+    var consulta = String($('#consultachequecartera').val() || '').trim();
+    var seq = ++__chequeCarteraReqSeq;
+
     $('#datoschequecartera').html('<tr><td colspan="9" class="text-muted">Buscando…</td></tr>');
     var empresaId = ctx.empresaId;
     if (!(parseInt(empresaId || '0', 10) > 0) && typeof $ !== 'undefined') {
@@ -121,16 +167,27 @@ function buscar_datos_cheque_cartera() {
                 || ($('input[name="_token"]').first().val() || '')
         },
         data: {
-            consulta: String($('#consultachequecartera').val() || '').trim(),
+            consulta: consulta,
             empresa_id: empresaId || '',
             limite: ctx.limite || 80
         }
     }).done(function (resp) {
+        if (seq !== __chequeCarteraReqSeq) {
+            return;
+        }
         var filas = (resp && resp.data) ? resp.data : [];
         ctx.filas = filas;
+        __chequeCarteraConsultaAplicada = consulta;
         $('#datoschequecartera').html(htmlFilasConsultaChequeCartera(filas));
         marcarFilaChequeCartera(0);
+        if (aceptarSiUnico && filas.length === 1) {
+            elegirChequeCarteraActivaDelModal();
+        }
     }).fail(function () {
+        if (seq !== __chequeCarteraReqSeq) {
+            return;
+        }
+        __chequeCarteraConsultaAplicada = null;
         $('#datoschequecartera').html('<tr><td colspan="9" class="text-danger">No se pudo consultar la cartera</td></tr>');
     });
 }
@@ -138,6 +195,8 @@ function buscar_datos_cheque_cartera() {
 function abrirModalConsultaChequeCartera(opts) {
     __chequeCarteraCtx = opts || {};
     __chequeCarteraIdx = -1;
+    __chequeCarteraAceptarSiUnico = false;
+    __chequeCarteraConsultaAplicada = null;
     $('#consultachequecartera').val(__chequeCarteraCtx.consultaInicial || '');
     var sub = 'Valores disponibles para entregar / endosar';
     if (__chequeCarteraCtx.subtitulo) {
@@ -177,35 +236,72 @@ function aplicarChequeCarteraAFila($tr, fila) {
     }
 }
 
+function manejarTecladoModalChequeCartera(e) {
+    if (!modalConsultaChequeCarteraAbierto()) {
+        return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        var tag = (e.target && e.target.tagName) ? String(e.target.tagName).toLowerCase() : '';
+        if (tag === 'textarea') {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+            e.stopImmediatePropagation();
+        }
+        var delta = e.key === 'ArrowDown' ? 1 : -1;
+        marcarFilaChequeCartera((__chequeCarteraIdx < 0 ? 0 : __chequeCarteraIdx) + delta);
+        return;
+    }
+    if (!esTeclaEnterChequeCartera(e)) {
+        return;
+    }
+    // No interceptar Enter sobre el enlace Consultar (ABM).
+    if (e.target && $(e.target).closest('a[href]').length && !$(e.target).closest('.eligeconsultachequecartera').length) {
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+    }
+    enterEnBuscadorChequeCartera();
+}
+
+if (!window.__chequeCarteraTecladoActivo) {
+    window.__chequeCarteraTecladoActivo = true;
+    document.addEventListener('keydown', manejarTecladoModalChequeCartera, true);
+}
+
 $(document).on('shown.bs.modal', '#consultachequecarteraModal', function () {
     $('#consultachequecartera').trigger('focus');
     buscar_datos_cheque_cartera();
 });
 
 $(document).on('keyup', '#consultachequecartera', function (e) {
-    if (e.which === 13 || e.key === 'Enter') {
+    if (esTeclaEnterChequeCartera(e)) {
         return;
     }
     clearTimeout(__chequeCarteraTimer);
+    __chequeCarteraAceptarSiUnico = false;
     __chequeCarteraTimer = setTimeout(buscar_datos_cheque_cartera, 180);
 });
 
-$(document).on('keydown', '#consultachequecartera', function (e) {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        var delta = e.key === 'ArrowDown' ? 1 : -1;
-        marcarFilaChequeCartera((__chequeCarteraIdx < 0 ? 0 : __chequeCarteraIdx) + delta);
-        return;
-    }
-    if (e.which === 13 || e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        elegirChequeCarteraActivaDelModal();
-    }
+$(document).on('submit', '#consultachequecarteraModal form', function (e) {
+    e.preventDefault();
+    enterEnBuscadorChequeCartera();
+    return false;
+});
+
+$(document).on('click', '#datoschequecartera tr.cheque-cartera-fila', function () {
+    marcarFilaChequeCartera(parseInt($(this).attr('data-idx') || '0', 10));
+    $('#consultachequecartera').trigger('focus');
 });
 
 $(document).on('click', '.eligeconsultachequecartera', function (e) {
     e.preventDefault();
+    e.stopPropagation();
     elegirChequeCarteraDelModal(filaChequeCarteraPorTr($(this).closest('tr')));
 });
 

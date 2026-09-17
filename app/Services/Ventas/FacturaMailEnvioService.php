@@ -141,6 +141,68 @@ class FacturaMailEnvioService
     }
 
     /**
+     * Envío forzado al email del comprador (canal Tiendanube): no exige flag del cliente contado
+     * ni que la empresa tenga habilitación global de mail automático.
+     *
+     * @return array{ok: bool, mensaje: string, destinatarios?: list<string>}
+     */
+    public function enviarDesdeTiendanube(int $ventaId, string $email): array
+    {
+        $emails = self::parseEmails($email);
+        if ($emails === []) {
+            return ['ok' => false, 'mensaje' => 'Email del comprador Tiendanube inválido'];
+        }
+
+        $venta = Venta::query()
+            ->with(['clientes', 'puntoventas.empresas'])
+            ->find($ventaId);
+        if (! $venta) {
+            return ['ok' => false, 'mensaje' => 'Venta inexistente'];
+        }
+
+        $empresaId = (int) ($venta->puntoventas?->empresa_id ?? config('tiendanube.empresa_id', 1));
+        $cfg = FacturaMailConfiguracionSupport::paraEmpresa($empresaId);
+        if (! $cfg->exists) {
+            $cfg = FacturaMailConfiguracionSupport::defaults($empresaId);
+            $cfg->habilitado = true;
+            $cfg->envio_automatico = true;
+            $cfg->exigir_flag_cliente = false;
+            $cfg->incluir_remito = true;
+        }
+
+        try {
+            $adjuntos = $this->armarAdjuntos($venta, (bool) $cfg->incluir_remito, (bool) $cfg->incluir_envio);
+            if ($adjuntos === []) {
+                return ['ok' => false, 'mensaje' => 'No se pudo generar el PDF de la factura'];
+            }
+
+            $cuerpo = $this->renderCuerpo($cfg->cuerpo ?? '', $venta, null);
+            $asunto = $this->renderPlantilla($cfg->asunto ?: 'Comprobante {codigo}', $venta);
+
+            $mailable = (new FacturaClienteMail($venta, $cuerpo, $adjuntos))->subject($asunto);
+            $pending = Mail::to($emails);
+            $bcc = self::parseEmails((string) ($cfg->bcc ?? ''));
+            if ($bcc !== []) {
+                $pending->bcc($bcc);
+            }
+            $pending->send($mailable);
+
+            return [
+                'ok' => true,
+                'mensaje' => 'Factura enviada a '.implode(', ', $emails),
+                'destinatarios' => $emails,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('factura.mail.tiendanube_fallo', [
+                'venta_id' => $ventaId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return ['ok' => false, 'mensaje' => 'Error al enviar mail: '.$e->getMessage()];
+        }
+    }
+
+    /**
      * @return list<array{path: string, name: string}>
      */
     private function armarAdjuntos(Venta $venta, bool $incluirRemito, bool $incluirEnvio): array

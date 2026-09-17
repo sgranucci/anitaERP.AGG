@@ -1,283 +1,323 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-    <link rel="stylesheet" href="{{"assets/$theme/dist/css/adminlte.min.css"}}">
-    <meta charset="UTF-8">
-    <meta name="viewport"
-	    content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-	<style type="text/css">
-	</style>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #17202A; }
+        h1 { font-size: 16px; margin: 0 0 8px; }
+        h3 { font-size: 12px; margin: 14px 0 6px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+        th { background: #85C1E9; color: #17202A; padding: 4px; border: 1px solid #ccc; text-align: left; }
+        td { padding: 4px; border: 1px solid #ccc; }
+        .meta td { border: none; padding: 2px 4px; }
+        .right { text-align: right; }
+        .logo { max-height: 48px; max-width: 160px; }
+        .total-grande {
+            margin-top: 12px;
+            padding: 4px 8px;
+            border: 1px solid #17202A;
+            font-size: 13px;
+            font-weight: bold;
+            text-align: right;
+        }
+        .importe-letras { margin-top: 8px; font-size: 11px; }
+        .firma-box { margin-top: 48px; }
+        .firma-box td { border: none; text-align: center; padding-top: 8px; vertical-align: top; }
+        .firma-linea { border-top: 1px solid #333; width: 80%; margin: 40px auto 6px auto; }
+        .muted { color: #555; font-size: 9px; }
+    </style>
 </head>
 <body>
-	<table style="width=5500px;  position:relative; left:16px;" class="table borderless">
-		<thead>
-		<tr style="height: 100px;">
-			<th style="width=150px; word-wrap: break-word;">
-				<img style="margin: 1px;" width="180" height="80" src="data:image/png;base64,{{ base64_encode(file_get_contents("/var/www/html/anitaERP/public/storage/imagenes/logos/".$cobranza->empresas->nombre.".png")) }}">
-				<div>
-					<p style="font-size: 8px;">
-						{{$datosEmpresa['domicilio']}}<br>
-					</p>
-					<p style="font-size: 8px; text-align: left;">IVA REPONSABLE INSCRIPTO</p>
-				</div>
-			</th>
-			<th style="width=100px;">
-				<div style="border: 1px solid black; height: 40px; position:relative; width: 30px; left:50px;">
-					<strong style="position:absolute; top: 50%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">{{$letra}}</strong><br>
-				</div>
-				<div style="height: 40px; position:relative; width: 100px; left:18px;">
-					<strong style="font-size: 8px; position:absolute; top: 55%; transform: translateY(-50%); left: 50%; transform: translate(-50%, -50%);">DOCUMENTO NO VALIDO COMO FACTURA</strong><br>
-				</div>				
-			</th>
-			<th style="width=300px; text-align: right;">
-				<strong>{{$cobranza->tipotransaccioncajas->nombre ?? ''}}</strong><br>
-				<strong>Nro. {{$cobranza->numerotransaccion}}</strong><br>
-				<p style="font-size: 10px">
-					Fecha emisi&oacute;n: {{date("d/m/Y", strtotime($cobranza->fecha ?? ''))}} <br>
-					C.U.I.T.: {{$datosEmpresa['numeroinscripcion']}}<br>
-					Ingresos Brutos: {{$datosEmpresa['numeroiibb']}}<br>
-				</p>
-				<p style="font-size: 8px">ORIGINAL</p>
-			</th>
-		</tr>
-		</thead>
-	</table>
-		<div class="col-sm-12">
-			<table class="table borderless" style="margin: 5px 0; position:relative; left:9px;">
-				<thead>
-					<tr>
-						<th style="width=150px; word-wrap: break-word; text-align: left;">
-							<strong>Cliente: {{ $datosCliente['nombre'] ?? ''}}</strong><br>
-							<p style="font-size: 10px"> 
-								{{ $datosCliente['domicilio'] ?? ''}}<br>
-								{{ $datosCliente['localidad'] ?? ''}} ({{$datosCliente['codigopostal'] ?? ''}})<br>
-								{{ $datosCliente['provincia'] ?? ''}} {{ $datosCliente['pais'] ?? ''}}<br>
-							</p>
-						</th>
-						<th style="width=150px; word-wrap: break-word; text-align: right;">
-							<p style="font-size: 10px">
-								Código: {{ $datosCliente['codigo'] ?? ''}}<br>
-								Teléfono: {{$datosCliente['telefono'] }}<br>
-								I.V.A.: {{$datosCliente['condicioniva'] }}<br>
-								{{$datosCliente['tipodocumento']}}: {{$datosCliente['numerodocumento']}}<br>
-								Ingresos Brutos: {{$datosCliente['condicioniibb']}} {{$datosCliente['nroiibb']}}<br>
-							</p>
-						</th>
-					</tr>
-				</thead>
-			</table>
-			<table class="table table-sm table-bordered table-striped" style="font-size: 8px; margin: 5px 0; position:relative; left:9px;">
-				<thead>
-					<tr>
-						<th style="text-align: center;">Comprobante</th>
-						<th style="text-align: center;">Fecha</th>
-						<th style="text-align: center;">Fecha de Vto.</th>
-						<th style="text-align: center;">Mon</th>
-						<th style="text-align: right;">Cotización</th>
-						<th style="text-align: right;">Monto</th>
-						<th style="text-align: right;">Aplicado</th>
-						<th style="text-align: right;">Saldo</th>
-					</tr>
-				</thead>
-				<tbody>
-					@php $totalAplicado = 0; @endphp
+@php
+    use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Sueldos\NumeroALetrasEs;
 
-					@foreach ($tblComprobante as $comprobante)
-						<tr>
-							<td align="center"><strong>{{ $comprobante['comprobante'] }}</strong></td>
-							<td align="center">{{ date("d/m/Y", strtotime($comprobante['fecha'] ?? '')) }}</td>
-							<td align="center">{{ date("d/m/Y", strtotime($comprobante['fechavencimiento'] ?? '')) }}</td>
-							<td align="center">{{ $comprobante['moneda'] }}</td>
-							<td align="right">{{ number_format($comprobante['cotizacion'], 4) }}</td>					
-							<td align="right">{{ number_format($comprobante['monto'], 2) }}</td>
-							<td align="right">{{ number_format($comprobante['aplicado'], 2) }}</td>
-							<td align="right">{{ number_format($comprobante['saldo'], 2) }}</td>
-						</tr>
+    $logo = EmpresaLogoArchivo::dataUriDesdeNombre($cobranza->empresas->nombre ?? ($datosEmpresa['nombre'] ?? null));
+    $tipoAbr = $cobranza->tipotransaccioncajas->abreviatura
+        ?? $cobranza->tipotransaccioncajas->nombre
+        ?? 'COB';
+    $tipoNombre = $cobranza->tipotransaccioncajas->nombre ?? $tipoAbr;
+    $empresa = $cobranza->empresas;
+    $usuarioLogin = optional($cobranza->usuarios)->usuario
+        ?: optional($cobranza->usuarios)->nombre
+        ?: '';
 
-						@php 
-							$totalAplicado += $comprobante['aplicado']; 
-						@endphp
-					@endforeach
+    $totalAbs = abs((float) ($totalCobranza['monto'] ?? $cobranza->monto ?? 0));
+    $monedaAbrTotal = (string) ($totalCobranza['abreviatura'] ?? optional($cobranza->monedas)->abreviatura ?? '');
+    $monedaNombre = (string) ($totalCobranza['moneda'] ?? optional($cobranza->monedas)->nombre ?? '');
+    $cotizacionMostrada = (float) ($totalCobranza['cotizacion'] ?? $cobranza->cotizacion ?? 0);
+    if ($cotizacionMostrada <= 1.0001) {
+        $cotizacionMostrada = null;
+        foreach ($tblCuenta as $cuenta) {
+            $c = (float) ($cuenta['cotizacion'] ?? 0);
+            if ($c > 1.0001) {
+                $cotizacionMostrada = $c;
+                break;
+            }
+        }
+    }
 
-					<tr>
-						<td colspan='6'><strong>TOTALES</strong></td>
-						<td align="right"><strong>{{number_format($totalAplicado, 2)}}</td>
-						<td> </td>
-					</tr>
-				</tbody>
-			</table>
-		</div>
-		<div class="col-sm-12">
-			@if (count($tblCheques) > 0)
-				<div class="col-sm-8">
-					<table style="font-size: 8px; position:relative; left:1px;" class="table table-sm table-bordered table-striped">
-						<thead>
-							<th style="width: 15%;">Fecha pago</th>
-							<th style="width: 10%;">Nro. de Cheque</th>
-							<th style="text-align: keft; width: 30%;">Banco</th>
-							<th style="width: 5%;">Mon</th>
-							<th style="text-align: right; width: 15%;">Cotización</th>
-							<th style="text-align: right; width: 20%;">Monto</th>
-						</thead>
-						<tbody>
-							@php 
-								$totalCheque = []; 
-								$moneda = [];
-							@endphp
-							@foreach ($tblCheques as $cheque)
-								@php 
-									if (!isset($totalCheque[$cheque['moneda_id']])) 
-									{
-										$totalCheque[$cheque['moneda_id']] = 0;
-										$moneda[$cheque['moneda_id']] = $cheque['moneda'];
-									}
+    $importeLetras = mb_strtoupper(NumeroALetrasEs::monto($totalAbs), 'UTF-8');
 
-									$totalCheque[$cheque['moneda_id']] += $cheque['monto']; 
-								@endphp	
-								<tr>
-									<td align="center">{{date("d/m/Y", strtotime($cheque['fechapago'] ?? ''))}}</td>
-									<td>{{$cheque['numerocheque']}}</td>
-									<td align="left">
-										<strong>{{ $cheque['banco'] }}</strong>
-									</td>
-									<td align="center">{{$cheque['moneda']}}</td>
-									<td align="right"><strong>{{ number_format($cheque['cotizacion'], 4) }}</strong></td>
-									<td align="right"><strong>{{ number_format($cheque['monto'], 2) }}</strong></td>
-								</tr>						
-							@endforeach		
-							<tr>
-								@for ($i = 1; $i <= count($totalCheque); $i++)
-									@if (isset($totalCheque[$i]))
-										<td colspan='3'><strong>TOTAL</strong></td>
-										<td>{{$moneda[$i]}}</td>
-										<td></td>
-										<td align="right"><strong>{{number_format($totalCheque[$i], 2)}}</td>
-									@endif
-								@endfor
-							</tr>										
-						</tbody>
-					</table>
-				</div>	
-			@endif
-			@if (count($tblCuenta) > 0)
-				<div class="col-sm-7">
-					<table style="font-size: 8px; position:relative; left:1px;" class="table table-sm table-bordered table-striped">
-						<thead>
-							<th style="text-align: left; width: 30%;">Cuenta</th>
-							<th style="width: 5%;">Mon</th>
-							<th style="text-align: right; width: 15%;">Cotización</th>
-							<th style="text-align: right; width: 20%;">Monto</th>
-						</thead>
-						<tbody>
-							@php 
-								$totalCuenta = []; 
-								$moneda = [];
-							@endphp
-							@foreach ($tblCuenta as $cuenta)
-								@php 
-									// Si la clave no existe, la crea en 0 antes de sumar
-									if (!isset($totalCuenta[$cuenta['moneda_id']])) 
-									{
-										$totalCuenta[$cuenta['moneda_id']] = 0;
-										$moneda[$cuenta['moneda_id']] = $cuenta['moneda'];
-									}
+    $direccionEmpresa = trim((string) ($datosEmpresa['domicilio'] ?? $empresa->domicilio ?? ''));
+    $localidadEmpresa = trim((string) (optional(optional($empresa)->localidad)->nombre ?? ''));
+    if ($direccionEmpresa !== '' && $localidadEmpresa !== '' && stripos($direccionEmpresa, $localidadEmpresa) === false) {
+        $direccionEmpresa .= ' - '.$localidadEmpresa;
+    }
 
-									$totalCuenta[$cuenta['moneda_id']] += $cuenta['monto']; 
-								@endphp
-								<tr>
-									<td>
-										<strong>{{ $cuenta['nombre'] }}</strong>
-									</td>
-									<td>{{$cuenta['moneda']}}</td>
-									<td align="right"><strong>{{ number_format($cuenta['cotizacion'], 4) }}</strong></td>
-									<td align="right"><strong>{{ number_format($cuenta['monto'], 2) }}</strong></td>
-								</tr>
-							@endforeach
-							<tr>
-								@for ($i = 1; $i <= count($totalCuenta); $i++)
-									@if (isset($totalCuenta[$i]))
-										<td><strong>TOTAL</strong></td>
-										<td>{{$moneda[$i]}}</td>
-										<td></td>
-										<td align="right"><strong>{{number_format($totalCuenta[$i], 2)}}</td>
-									@endif
-								@endfor
-							</tr>				
-						</tbody>
-					</table>
-				</div>
-			@endif
-			@if (count($tblRetenciones) > 0)
-				<div class="col-sm-7">
-					<table style="font-size: 8px; position:relative; left:1px;" class="table table-sm table-bordered table-striped">
-						<thead>
-							<th style="text-align:left; width: 30%;">Retención</th>
-							<th style="width: 10%;">Comprobante</th>
-							<th style="width: 8%;">Tasa</th>
-							<th style="width: 5%;">Mon</th>
-							<th style="text-align:right; width: 15%;">Cotización</th>
-							<th style="text-align:right; width: 20%;">Monto</th>
-						</thead>
-						<tbody>
-							@php 
-								$totalRetencion = []; 
-								$moneda = [];
-							@endphp
-							@foreach ($tblRetenciones as $retencion)
-								@php 
-									// Si la clave no existe, la crea en 0 antes de sumar
-									if (!isset($totalRetencion[$retencion['moneda_id']])) 
-									{
-										$totalRetencion[$retencion['moneda_id']] = 0;
-										$moneda[$retencion['moneda_id']] = $retencion['moneda'];
-									}
+    $asiento = $cobranza->asientos;
+    $lineasAsiento = $asiento && $asiento->asiento_movimientos ? $asiento->asiento_movimientos : collect();
+@endphp
 
-									$totalRetencion[$retencion['moneda_id']] += $retencion['monto']; 
-								@endphp
-								<tr>
-									<td>
-										<strong>{{ $retencion['retencion'] }}</strong>
-									</td>
-									<td>{{$retencion['comprobante']}}</td>
-									<td>{{$retencion['tasa']}}</td>
-									<td>{{$retencion['moneda']}}</td>
-									<td align="right"><strong>{{ number_format($retencion['cotizacion'], 4) }}</strong></td>
-									<td align="right"><strong>{{ number_format($retencion['monto'], 2) }}</strong></td>
-								</tr>
-							@endforeach
-							<tr>
-								@for ($i = 1; $i <= count($totalRetencion); $i++)
-									@if (isset($totalRetencion[$i]))
-										<td colspan='3'><strong>TOTAL</strong></td>
-										<td>{{$moneda[$i]}}</td>
-										<td></td>
-										<td align="right"><strong>{{number_format($totalRetencion[$i], 2)}}</td>
-									@endif
-								@endfor
-							</tr>				
-						</tbody>
-					</table>
-				</div>
-			@endif			
-		</div>
+<table class="meta" style="margin-bottom:10px;">
+    <tr>
+        <td style="width:30%;">
+            @if (! empty($logo['uri']))
+                <img class="logo" src="{{ $logo['uri'] }}" alt="logo">
+            @endif
+        </td>
+        <td style="width:70%; vertical-align:middle; text-align:right;">
+            <h1 style="text-align:right;">Recibo de cobranza {{ $tipoAbr }} {{ $cobranza->numerotransaccion }}</h1>
+            <div style="text-align:right;">Generado {{ now()->format('d/m/Y H:i') }}</div>
+            <div style="text-align:right;">Fecha {{ $cobranza->fecha ? date('d/m/Y', strtotime($cobranza->fecha)) : '' }}</div>
+        </td>
+    </tr>
+</table>
 
-@if ($cobranza->detalle != '')
-	<table style="font-size: 10px; position:relative; left: 5px;" class="table borderless">
-		<thead>
-			<tr>
-				<th style="text-align: left;">
-					<label>Observaciones</label>
-					<p>{{$cobranza->detalle}}</p>
-				</th>
-				<th style="width=500px; text-align: right;">
-					<p style="font-size: 10px;" >Total cobranza: <spam style="font-size: 12px;"><strong>{{$totalCobranza['abreviatura']}} {{number_format($totalCobranza['monto'], 2)}}</strong></spam></p>
-					@php $formatterES = new NumberFormatter("es", NumberFormatter::SPELLOUT); @endphp
-					<p style="font-size: 8px;">Son {{$totalCobranza['moneda']}} {{$formatterES->format($totalCobranza['monto'])}}.-</p>
-				</th>
-			</tr>
-	</thead>
-	</table>
+<table class="meta">
+    <tr>
+        <td colspan="2"><strong>Empresa:</strong> {{ $datosEmpresa['nombre'] ?? ($empresa->nombre ?? '') }}</td>
+    </tr>
+    @if ($direccionEmpresa !== '')
+        <tr>
+            <td colspan="2"><strong>Direcci&oacute;n:</strong> {{ $direccionEmpresa }}</td>
+        </tr>
+    @endif
+    @if (! empty($datosEmpresa['numeroinscripcion'] ?? $empresa->nroinscripcion ?? null))
+        <tr>
+            <td colspan="2"><strong>CUIT empresa:</strong> {{ $datosEmpresa['numeroinscripcion'] ?? $empresa->nroinscripcion }}</td>
+        </tr>
+    @endif
+    <tr>
+        <td><strong>Cliente:</strong> {{ $datosCliente['nombre'] ?? '' }}</td>
+        <td><strong>Tipo:</strong> {{ $tipoNombre }}</td>
+    </tr>
+    <tr>
+        <td colspan="2">
+            <strong>Datos del cliente:</strong>
+            C&oacute;d. {{ $datosCliente['codigo'] ?? '—' }}
+            &nbsp;|&nbsp; {{ $datosCliente['tipodocumento'] ?? 'Doc.' }} {{ $datosCliente['numerodocumento'] ?? '—' }}
+            &nbsp;|&nbsp; Cond. IVA {{ $datosCliente['condicioniva'] ?? '—' }}
+            &nbsp;|&nbsp; Tel. {{ $datosCliente['telefono'] ?: '—' }}
+        </td>
+    </tr>
+    @php
+        $domCliente = trim(implode(' ', array_filter([
+            $datosCliente['domicilio'] ?? '',
+            $datosCliente['localidad'] ?? '',
+            isset($datosCliente['codigopostal']) && $datosCliente['codigopostal'] !== '' ? '('.$datosCliente['codigopostal'].')' : '',
+            $datosCliente['provincia'] ?? '',
+        ])));
+    @endphp
+    @if ($domCliente !== '')
+        <tr>
+            <td colspan="2"><strong>Domicilio cliente:</strong> {{ $domCliente }}</td>
+        </tr>
+    @endif
+    @if ($usuarioLogin !== '')
+        <tr>
+            <td colspan="2"><strong>Usuario:</strong> {{ $usuarioLogin }}</td>
+        </tr>
+    @endif
+    @if (trim((string) ($cobranza->detalle ?? '')) !== '')
+        <tr>
+            <td colspan="2"><strong>Detalle:</strong> {{ $cobranza->detalle }}</td>
+        </tr>
+    @endif
+    @if ($cotizacionMostrada !== null)
+        <tr>
+            <td colspan="2"><strong>Cotizaci&oacute;n:</strong> {{ number_format((float) $cotizacionMostrada, 4, ',', '.') }}</td>
+        </tr>
+    @endif
+</table>
+
+<div class="importe-letras">
+    <strong>Importe en letras:</strong> {{ $importeLetras }}
+    @if ($monedaAbrTotal !== '')
+        ({{ $monedaAbrTotal }})
+    @elseif ($monedaNombre !== '')
+        ({{ $monedaNombre }})
+    @endif
+</div>
+
+@if (count($tblComprobante) > 0)
+    <h3>Comprobantes aplicados</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Comprobante</th>
+                <th>Fecha</th>
+                <th>Vto.</th>
+                <th>Mon</th>
+                <th class="right">Cotiz.</th>
+                <th class="right">Monto</th>
+                <th class="right">Aplicado</th>
+                <th class="right">Saldo</th>
+            </tr>
+        </thead>
+        <tbody>
+            @php $totalAplicado = 0; @endphp
+            @foreach ($tblComprobante as $comprobante)
+                @php $totalAplicado += (float) $comprobante['aplicado']; @endphp
+                <tr>
+                    <td>{{ $comprobante['comprobante'] }}</td>
+                    <td>{{ date('d/m/Y', strtotime($comprobante['fecha'] ?? '')) }}</td>
+                    <td>{{ date('d/m/Y', strtotime($comprobante['fechavencimiento'] ?? '')) }}</td>
+                    <td>{{ $comprobante['moneda'] }}</td>
+                    <td class="right">{{ number_format((float) $comprobante['cotizacion'], 4, ',', '.') }}</td>
+                    <td class="right">{{ number_format((float) $comprobante['monto'], 2, ',', '.') }}</td>
+                    <td class="right">{{ number_format((float) $comprobante['aplicado'], 2, ',', '.') }}</td>
+                    <td class="right">{{ number_format((float) $comprobante['saldo'], 2, ',', '.') }}</td>
+                </tr>
+            @endforeach
+            <tr>
+                <td colspan="6"><strong>TOTAL APLICADO</strong></td>
+                <td class="right"><strong>{{ number_format($totalAplicado, 2, ',', '.') }}</strong></td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
 @endif
+
+@if (count($tblCuenta) > 0)
+    <h3>Cuentas de caja</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Cuenta</th>
+                <th class="right">Monto</th>
+                <th>Moneda</th>
+                <th class="right">Cotiz.</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($tblCuenta as $cuenta)
+                <tr>
+                    <td>{{ $cuenta['nombre'] }}</td>
+                    <td class="right">{{ number_format((float) $cuenta['monto'], 2, ',', '.') }}</td>
+                    <td>{{ $cuenta['moneda'] }}</td>
+                    <td class="right">{{ number_format((float) ($cuenta['cotizacion'] ?: 1), 4, ',', '.') }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@endif
+
+@if (count($tblCheques) > 0)
+    <h3>Cheques</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha pago</th>
+                <th>Nro</th>
+                <th>Banco</th>
+                <th>Mon</th>
+                <th class="right">Cotiz.</th>
+                <th class="right">Importe</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($tblCheques as $cheque)
+                <tr>
+                    <td>{{ date('d/m/Y', strtotime($cheque['fechapago'] ?? '')) }}</td>
+                    <td>{{ $cheque['numerocheque'] }}</td>
+                    <td>{{ $cheque['banco'] }}</td>
+                    <td>{{ $cheque['moneda'] }}</td>
+                    <td class="right">{{ number_format((float) ($cheque['cotizacion'] ?: 1), 4, ',', '.') }}</td>
+                    <td class="right">{{ number_format((float) $cheque['monto'], 2, ',', '.') }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@endif
+
+@if (count($tblRetenciones) > 0)
+    <h3>Retenciones</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Retenci&oacute;n</th>
+                <th>Comprobante</th>
+                <th class="right">Tasa</th>
+                <th>Mon</th>
+                <th class="right">Cotiz.</th>
+                <th class="right">Monto</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($tblRetenciones as $retencion)
+                <tr>
+                    <td>{{ $retencion['retencion'] }}</td>
+                    <td>{{ $retencion['comprobante'] }}</td>
+                    <td class="right">{{ $retencion['tasa'] }}</td>
+                    <td>{{ $retencion['moneda'] }}</td>
+                    <td class="right">{{ number_format((float) ($retencion['cotizacion'] ?: 1), 4, ',', '.') }}</td>
+                    <td class="right">{{ number_format((float) $retencion['monto'], 2, ',', '.') }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@endif
+
+@if ($lineasAsiento->count() > 0)
+    <h3>Asiento contable{{ $asiento && $asiento->numeroasiento ? ' N&ordm; '.$asiento->numeroasiento : '' }}</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Cuenta</th>
+                <th class="right">Debe</th>
+                <th class="right">Haber</th>
+                <th>Obs.</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach ($lineasAsiento as $am)
+                @php
+                    $montoAm = (float) ($am->monto ?? 0);
+                    $debeTxt = $montoAm > 0 ? number_format($montoAm, 2, ',', '.') : '';
+                    $haberTxt = $montoAm < 0 ? number_format(abs($montoAm), 2, ',', '.') : '';
+                @endphp
+                <tr>
+                    <td>{{ $am->cuentacontables->codigo ?? $am->cuentacontable_id }} {{ $am->cuentacontables->nombre ?? '' }}</td>
+                    <td class="right">{{ $debeTxt }}</td>
+                    <td class="right">{{ $haberTxt }}</td>
+                    <td>{{ $am->observacion ?? '' }}</td>
+                </tr>
+            @endforeach
+        </tbody>
+    </table>
+@endif
+
+<div class="total-grande">
+    TOTAL GENERAL:
+    @if ($monedaAbrTotal !== '')
+        {{ $monedaAbrTotal }}
+    @endif
+    {{ number_format($totalAbs, 2, ',', '.') }}
+</div>
+
+<table class="firma-box meta">
+    <tr>
+        <td style="width:50%;">
+            <div class="firma-linea"></div>
+            Recib&iacute; conforme<br>
+            <span class="muted">(firma del cliente)</span>
+        </td>
+        <td style="width:50%;">
+            <div class="firma-linea"></div>
+            Firma / autorizaci&oacute;n
+        </td>
+    </tr>
+</table>
 </body>
 </html>

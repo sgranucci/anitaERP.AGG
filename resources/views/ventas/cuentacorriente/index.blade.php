@@ -38,14 +38,19 @@ $queryFiltrosCliente = [
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Cuenta Corriente Cliente: {{ $nombrecliente }}</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('aplicar-cuentacorriente-cliente', false))
+                        <a href="{{ route('aplicacion_cuentacorriente_cliente', ['cliente_id' => $id, 'origen' => 'modal_consulta', 'vista' => 'consulta', 'volver_cliente_id' => $id]) }}" target="_blank" rel="noopener" class="btn btn-light btn-sm mr-1">
+                            <i class="fa fa-compress-alt"></i> Aplicar comprobantes
+                        </a>
+                    @endif
                     @if (!str_contains($urlOrigen ?? '', 'editar'))
                         @if (isset($urlOrigen))
-                            <a href="{{ $urlOrigen }}" class="btn btn-light btn-sm">
+                            <a href="{{ $urlOrigen }}" class="btn btn-light btn-sm mr-1">
                                 <i class="fa fa-fw fa-reply-all"></i> Volver
                             </a>
                         @else
-                            <a href="javascript:history.back()" class="btn btn-light btn-sm">
+                            <a href="javascript:history.back()" class="btn btn-light btn-sm mr-1">
                                 <i class="fa fa-fw fa-reply-all"></i> Volver atr&aacute;s
                             </a>
                         @endif

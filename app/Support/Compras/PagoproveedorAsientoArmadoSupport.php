@@ -11,6 +11,7 @@ use App\Support\Caja\ChequePropioImputacionSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use RuntimeException;
 
 /**
  * Preview/armado de asiento TES para orden de pago.
@@ -129,16 +130,25 @@ final class PagoproveedorAsientoArmadoSupport
             if ($monto <= 0) {
                 continue;
             }
+            $cuentacajaId = (int) ($cheque->cuentacaja_ids ?? 0);
+            if ($cuentacajaId <= 0) {
+                throw new RuntimeException(
+                    'Cheque emitido sin cuenta de tesorería. Elija la cuenta/banco del cheque antes de armar el asiento.'
+                );
+            }
             $cuentaId = ChequePropioImputacionSupport::resolverCuentacontableIdEmitido(
                 $empresaId,
-                (int) ($cheque->cuentacaja_ids ?? 0),
+                $cuentacajaId,
                 $fechaOperacion,
                 (string) ($cheque->fechapagos ?? $fechaOperacion),
                 $cuentacajaRepository,
                 $cuentacontableRepository
             );
             if ($cuentaId === null || $cuentaId <= 0) {
-                continue;
+                throw new RuntimeException(
+                    'No se pudo resolver la cuenta contable del cheque emitido (cuentacaja #'.$cuentacajaId
+                    .'). Verifique que la cuenta de caja tenga cuentacontable_id o, si usa diferidos, Contable → Cuentas automáticas (caja.cheques_diferidos).'
+                );
             }
             $monedaLin = (int) ($cheque->moneda_ids ?? $monedaPagoId);
             $nroCh = (string) ($cheque->numerocheques ?? $cheque->numerocheque ?? '');
@@ -165,7 +175,10 @@ final class PagoproveedorAsientoArmadoSupport
                 $cuentacontableRepository
             );
             if ($cuentaId === null || $cuentaId <= 0) {
-                continue;
+                throw new RuntimeException(
+                    'No se pudo resolver la cuenta de valores a depositar para cheques de terceros. '
+                    .'Configure Contable → Cuentas automáticas (caja.valores_a_depositar).'
+                );
             }
             $monedaLin = (int) ($cheque->moneda_ids ?? $monedaPagoId);
             self::agregaCuenta(
@@ -189,7 +202,14 @@ final class PagoproveedorAsientoArmadoSupport
             }
             $cuentaId = self::resolverCuentaRetencion($ret, $empresaId);
             if ($cuentaId <= 0) {
-                continue;
+                $tipo = strtoupper(trim((string) ($ret->tiporetencion ?? '')));
+                throw new RuntimeException(
+                    'No hay cuenta contable para retención '.$tipo
+                    .'. Configure Contable → Cuentas automáticas (pago.retencion_ganancias / iva / suss / iibb)'
+                    .(in_array($tipo, ['B', 'IIBB', 'RTP'], true)
+                        ? ' o Compras → Retención IIBB (cuenta por provincia).'
+                        : '.')
+                );
             }
             $montoLin = self::convertirMontoRetencionAMonedaPago($montoMn, $monedaPagoId, $cotizacionPago);
             self::agregaCuenta(

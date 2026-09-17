@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Anita\AnitaTextoSanitizer;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
+use App\Support\Configuracion\MonedaAnitaCodigoSupport;
 
 /**
  * Valores comunes para sync Anita (compra, concmov, promov).
@@ -72,20 +73,13 @@ final class ComprobanteProveedorAnitaContext
     /**
      * Código de moneda en Anita compras (com_cod_mon / prov_cod_mon): numérico 1, 2, …
      * No usar moneda.codigo ERP (PES/DOL): en Ferli la columna es CHAR(1) y queda "P".
-     * Mismo criterio que OrdencompraAnitaErpContext::codigoMonedaAnita.
      */
     public function monedaCodigoAnita(): string
     {
-        $monedaId = (int) ($this->comprobante->moneda_id ?: 1);
-        $moneda = $this->comprobante->monedas;
-        if ($moneda && filled($moneda->codigo)) {
-            $digits = preg_replace('/\D/', '', trim((string) $moneda->codigo)) ?? '';
-            if ($digits !== '') {
-                return (string) (int) $digits;
-            }
-        }
-
-        return (string) max(1, $monedaId);
+        return MonedaAnitaCodigoSupport::desdeMoneda(
+            $this->comprobante->monedas,
+            (int) ($this->comprobante->moneda_id ?: 1)
+        );
     }
 
     /**

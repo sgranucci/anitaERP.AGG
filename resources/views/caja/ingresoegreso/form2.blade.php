@@ -90,11 +90,11 @@
                     </thead>
                     <tbody id="tbody-cheque-recibido-table">
                         @foreach ($chequesRecibidos as $cheque)
-                            <tr class="item-cheque-recibido {{ $cheque->nro_interno_anita ? 'cheque-desde-cartera' : '' }}">
+                            <tr class="item-cheque-recibido {{ ! empty($cheque->nro_interno_anita) ? 'cheque-desde-cartera' : '' }}">
                                 <td><input type="date" name="fechapago_recibidos[]" class="form-control fechapago_recibido" value="{{ $cheque->fechapago }}"></td>
                                 <td>
                                     <input type="hidden" name="cheque_recibido_ids[]" class="cheque_recibido_id" value="{{ $cheque->id }}">
-                                    <input type="hidden" name="nro_interno_anita_recibidos[]" class="nro_interno_anita_recibido" value="{{ $cheque->nro_interno_anita }}">
+                                    <input type="hidden" name="nro_interno_anita_recibidos[]" class="nro_interno_anita_recibido" value="{{ $cheque->nro_interno_anita ?? '' }}">
                                     <input type="hidden" name="banco_recibido_ids[]" class="banco_recibido_id" value="{{ $cheque->banco_id }}">
                                     <button type="button" class="btn-accion-tabla consultachequecartera_recibido tooltipsC" title="Cartera (F1)">
                                         <i class="fa fa-folder-open text-success"></i>

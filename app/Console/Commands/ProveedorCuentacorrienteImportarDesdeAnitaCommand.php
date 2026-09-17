@@ -19,7 +19,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
-    protected $description = 'Alinea deuda proveedores Anita (compra+promov+aplmovp) → ERP CP/CC; solo pendientes con compra Anita';
+    protected $description = 'Alinea deuda proveedores Anita (compra+promov+aplmovp) → ERP CP/CC; OPA pendientes → pagoproveedor+CC';
 
     public function handle(ProveedorCuentacorrienteImportarDesdeAnitaService $service): int
     {
@@ -51,7 +51,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             $proveedor !== '' ? $proveedor : 'todos',
             $dryRun ? 'DRY-RUN' : 'EJECUTAR',
         ));
-        $this->line('Filtro: promov con saldo + Anita compra (excluye OPP/OPA/…).');
+        $this->line('Filtro: promov con saldo + Anita compra; OPA pendientes sin compra (excluye OPP/APA/…).');
 
         try {
             $stats = $service->importar(
@@ -72,6 +72,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
         $this->table(['Métrica', 'Cantidad'], [
             ['promov pendiente Anita', $stats['anita_promov']],
             ['compra Anita (match)', $stats['anita_compra']],
+            ['OPA / crédito sin compra', $stats['credito_sin_compra_anita']],
             ['Tipo no deuda / OP', $stats['omitidas_tipo_no_deuda']],
             ['Saldadas Anita (precisión)', $stats['omitidas_saldadas_anita']],
             ['Sin compra Anita', $stats['omitidas_sin_compra']],
@@ -80,6 +81,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             ['Ya al día', $stats['omitidas_al_dia']],
             ['A procesar', $stats['a_procesar']],
             ['CP a crear / creados', $stats['a_crear_cp'].' / '.$stats['cp_creados']],
+            ['OPA a crear / creados', $stats['a_crear_opa'].' / '.$stats['opa_creados']],
             ['CC a crear / creadas', $stats['a_crear_cc'].' / '.$stats['cc_creadas']],
             ['aplmovp Anita', $stats['anita_aplmovp']],
             ['Aplicaciones Anita (pares)', $stats['aplicaciones_anita']],

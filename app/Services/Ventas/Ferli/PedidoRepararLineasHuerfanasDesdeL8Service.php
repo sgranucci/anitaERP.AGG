@@ -91,7 +91,13 @@ class PedidoRepararLineasHuerfanasDesdeL8Service
                 );
                 if ($f['ot_omitida']) {
                     $stats['ot_omitidas']++;
-                    $stats['detalle'][] = '    ot_id omitido: ya está ligado a otro pedido en L12';
+                    $stats['detalle'][] = '    ot_id omitido: ya está ligado a otro pedido en L8/L12';
+                } elseif (! empty($f['ot_reclamar_de_pc_id'])) {
+                    $stats['detalle'][] = sprintf(
+                        '    ot_id %d se reclama de pc L12 %d (asignación errónea)',
+                        $f['ot_id'],
+                        $f['ot_reclamar_de_pc_id']
+                    );
                 }
             }
         }
@@ -208,6 +214,7 @@ class PedidoRepararLineasHuerfanasDesdeL8Service
      *   ot_id: int,
      *   usar_id_libre: bool,
      *   ot_omitida: bool,
+     *   ot_reclamar_de_pc_id: int|null,
      *   row: array<string, mixed>
      * }>
      */
@@ -235,14 +242,24 @@ class PedidoRepararLineasHuerfanasDesdeL8Service
             $usarIdLibre = $existente === null;
             $otId = (int) ($row->ot_id ?? 0);
             $otOmitida = false;
+            $otReclamarDePcId = null;
             if ($otId > 0) {
                 $dueño = DB::table('pedido_combinacion')
                     ->where('ot_id', $otId)
                     ->where('pedido_id', '!=', $pedidoId)
                     ->first(['id', 'pedido_id']);
                 if ($dueño) {
-                    $otOmitida = true;
-                    $otId = 0;
+                    // Si en L8 el dueño L12 no tiene esa OT, es asignación errónea → reclamar.
+                    $dueñoTieneEnL8 = $l8->table('pedido_combinacion')
+                        ->where('pedido_id', (int) $dueño->pedido_id)
+                        ->where('ot_id', $otId)
+                        ->exists();
+                    if ($dueñoTieneEnL8) {
+                        $otOmitida = true;
+                        $otId = 0;
+                    } else {
+                        $otReclamarDePcId = (int) $dueño->id;
+                    }
                 }
             }
 
@@ -254,6 +271,7 @@ class PedidoRepararLineasHuerfanasDesdeL8Service
                 'ot_id' => $otId,
                 'usar_id_libre' => $usarIdLibre,
                 'ot_omitida' => $otOmitida,
+                'ot_reclamar_de_pc_id' => $otReclamarDePcId,
                 'row' => (array) $row,
             ];
         }
@@ -271,6 +289,7 @@ class PedidoRepararLineasHuerfanasDesdeL8Service
      *   ot_id: int,
      *   usar_id_libre: bool,
      *   ot_omitida: bool,
+     *   ot_reclamar_de_pc_id: int|null,
      *   row: array<string, mixed>
      * }  $faltante
      * @return array{combinacion: int, talle: int, estado: int, precios: int}
@@ -280,8 +299,15 @@ class PedidoRepararLineasHuerfanasDesdeL8Service
         $colsPc = Schema::getColumnListing('pedido_combinacion');
         $row = $faltante['row'];
         $row['pedido_id'] = $pedidoId;
-        // ot_id ya viene resuelto en $faltante (0 si estaba tomado por otro pedido).
+        // ot_id ya viene resuelto en $faltante (0 si L8 lo tiene en otro pedido real).
         $row['ot_id'] = $faltante['ot_id'];
+
+        if (! empty($faltante['ot_reclamar_de_pc_id'])) {
+            DB::table('pedido_combinacion')->where('id', (int) $faltante['ot_reclamar_de_pc_id'])->update([
+                'ot_id' => 0,
+                'updated_at' => now(),
+            ]);
+        }
 
         $clean = FerliL8ImportRowSupport::normalize('pedido_combinacion', $row, $colsPc);
         if (! $faltante['usar_id_libre']) {

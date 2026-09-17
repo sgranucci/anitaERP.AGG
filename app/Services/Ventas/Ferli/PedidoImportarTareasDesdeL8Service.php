@@ -42,6 +42,7 @@ class PedidoImportarTareasDesdeL8Service
             throw new RuntimeException("Pedido {$pedidoId} no existe en L12.");
         }
 
+        // 1) OT ya ligadas en L12.
         $otCodigos = DB::table('pedido_combinacion')
             ->where('pedido_id', $pedidoId)
             ->whereNotNull('ot_id')
@@ -52,17 +53,43 @@ class PedidoImportarTareasDesdeL8Service
             ->values()
             ->all();
 
-        $stats = $this->importarPorOtCodigos($otCodigos, $dryRun, actualizarTareasExistentes: true);
+        // 2) OT que L8 tiene para este pedido (aunque L12 no las haya ligado,
+        //    p.ej. reparación de líneas con ids nuevos / OT mal asignadas a otro pedido).
+        $sync = $this->sincronizarOtIdsYMapaCombinacionesDesdeL8($pedidoId, (string) $pedido->codigo, $dryRun);
+        $otCodigos = array_values(array_unique(array_merge($otCodigos, $sync['ot_codigos'])));
+
+        // Primero limpia OCT que apuntan a PCT ajenos / duplicados (evita UK al remapear).
+        $limpieza = ['remapeados' => 0, 'eliminados' => 0, 'detalle' => []];
+        if (! $dryRun && $sync['mapa_pc'] !== []) {
+            $limpieza = $this->limpiarOctHuerfanasDePedido($pedidoId, $otCodigos, $sync['mapa_pc']);
+        }
+
+        $stats = $this->importarPorOtCodigos(
+            $otCodigos,
+            $dryRun,
+            actualizarTareasExistentes: true,
+            soloActualizarFechasTarea: false,
+            mapaPcL8aL12: $sync['mapa_pc'],
+        );
+        $stats['ot_sincronizados'] = $sync['ot_sincronizados'];
+        $stats['ot_reclamados'] = $sync['ot_reclamados'];
+        $stats['oct_remapeados'] = $limpieza['remapeados'];
+        $stats['oct_eliminados'] = $limpieza['eliminados'];
+        if ($limpieza['detalle'] !== []) {
+            $stats['detalle'] = array_merge($limpieza['detalle'], $stats['detalle']);
+        }
 
         if ($otCodigos === [] && $stats['detalle'] === []) {
-            $stats['detalle'][] = 'El pedido no tiene órdenes de trabajo asociadas.';
+            $stats['detalle'][] = 'El pedido no tiene órdenes de trabajo asociadas (ni en L12 ni en L8).';
         } elseif ($stats['detalle'] !== []) {
-            // Prefijo con código de pedido en el resumen.
             $stats['detalle'][0] = sprintf(
                 'Pedido %s: %s',
                 (string) $pedido->codigo,
                 $stats['detalle'][0]
             );
+        }
+        if ($sync['detalle'] !== []) {
+            array_unshift($stats['detalle'], ...$sync['detalle']);
         }
 
         return $stats;
@@ -142,7 +169,8 @@ class PedidoImportarTareasDesdeL8Service
         array $otCodigos,
         bool $dryRun = false,
         bool $actualizarTareasExistentes = true,
-        bool $soloActualizarFechasTarea = false
+        bool $soloActualizarFechasTarea = false,
+        array $mapaPcL8aL12 = []
     ): array {
         FerliL8ReaderSupport::assertFerli();
 
@@ -175,17 +203,27 @@ class PedidoImportarTareasDesdeL8Service
         foreach (array_chunk($otCodigos, 40) as $lote) {
             $payload = $this->reader->payloadTareasPorOtCodigos($lote);
             $fuentes[(string) ($payload['fuente'] ?? '')] = true;
-            $tareasPayload = $payload['ordentrabajo_tarea'] ?? [];
+            $tareasPayload = $this->remapearPedidoCombinacionId(
+                $payload['ordentrabajo_tarea'] ?? [],
+                $mapaPcL8aL12
+            );
+            $octPayload = $this->remapearOctPedidoCombinacionTalle(
+                $payload['ordentrabajo_combinacion_talle'] ?? [],
+                $mapaPcL8aL12
+            );
             $tareasNuevas = $this->filtrarTareasFaltantesEnL12($tareasPayload);
 
             if ($dryRun) {
-                $stats['insert_tarea'] += count($tareasNuevas);
+                // Cuenta también las que chocan por id pero faltan por (OT, tarea_id).
+                $faltanClave = $this->tareasQueFaltanPorClaveNatural($tareasPayload);
+                $stats['insert_tarea'] += count($faltanClave);
                 if ($actualizarTareasExistentes) {
-                    $stats['update_tarea'] += count($tareasPayload) - count($tareasNuevas);
+                    $stats['update_tarea'] += count($tareasPayload) - count($faltanClave);
                 } else {
-                    $stats['omitidos'] += count($tareasPayload) - count($tareasNuevas);
+                    $stats['omitidos'] += count($tareasPayload) - count($faltanClave);
                 }
                 $stats['insert_ordentrabajo'] += count($payload['ordentrabajo'] ?? []);
+                $stats['insert_oct'] += count($octPayload);
                 $stats['insert_movimiento'] += count($payload['movimientoordentrabajo'] ?? []);
                 continue;
             }
@@ -193,18 +231,21 @@ class PedidoImportarTareasDesdeL8Service
             DB::beginTransaction();
             try {
                 $stats['insert_ordentrabajo'] += $this->insertMissing('ordentrabajo', $payload['ordentrabajo'] ?? []);
-                [$insOct, $updOct] = $this->upsertRowsConUpdate('ordentrabajo_combinacion_talle', $payload['ordentrabajo_combinacion_talle'] ?? []);
+                [$insOct, $updOct] = $this->upsertRowsConUpdate('ordentrabajo_combinacion_talle', $octPayload);
                 $stats['insert_oct'] += $insOct;
                 $stats['update_oct'] += $updOct;
 
                 if ($actualizarTareasExistentes && ! $soloActualizarFechasTarea) {
-                    // Pedido puntual: sincroniza todos los campos (mismo id).
-                    [$insT, $updT] = $this->upsertRowsConUpdate('ordentrabajo_tarea', $tareasPayload);
+                    // Pedido puntual: sincroniza por id o por (OT, tarea_id); si el id
+                    // L8 ya pertenece a otra OT en L12, inserta con id nuevo.
+                    [$insT, $updT] = $this->upsertTareasConColision($tareasPayload);
                     $stats['insert_tarea'] += $insT;
                     $stats['update_tarea'] += $updT;
                 } else {
                     // Liquidación: altas sin duplicar + refresco de fechas de finalización.
-                    $stats['insert_tarea'] += $this->insertMissing('ordentrabajo_tarea', $tareasNuevas);
+                    $stats['insert_tarea'] += $this->insertMissingTareasConColision(
+                        $this->tareasQueFaltanPorClaveNatural($tareasPayload)
+                    );
                     if ($actualizarTareasExistentes) {
                         $stats['update_tarea'] += $this->actualizarFechasTareasExistentes($tareasPayload);
                     } else {
@@ -212,14 +253,20 @@ class PedidoImportarTareasDesdeL8Service
                     }
                 }
 
-                $stats['insert_movimiento'] += $this->insertMissing('movimientoordentrabajo', $payload['movimientoordentrabajo'] ?? []);
+                $stats['insert_movimiento'] += $this->insertMissing(
+                    'movimientoordentrabajo',
+                    $payload['movimientoordentrabajo'] ?? []
+                );
                 DB::commit();
             } catch (\Throwable $e) {
                 DB::rollBack();
-                Log::error('ferli.l8.importar_tareas.fallo', [
-                    'ots' => $lote,
-                    'error' => $e->getMessage(),
-                ]);
+                try {
+                    Log::error('ferli.l8.importar_tareas.fallo', [
+                        'ots' => $lote,
+                        'error' => $e->getMessage(),
+                    ]);
+                } catch (\Throwable) {
+                }
                 throw $e;
             }
         }
@@ -242,7 +289,11 @@ class PedidoImportarTareasDesdeL8Service
                 $stats['update_tarea'],
                 $stats['insert_movimiento']
             );
-            Log::info('ferli.l8.importar_tareas.ok', $stats);
+            try {
+                Log::info('ferli.l8.importar_tareas.ok', $stats);
+            } catch (\Throwable) {
+                // storage/logs a veces no es escribible por CLI; no invalidar la importación.
+            }
         }
 
         return $stats;
@@ -362,6 +413,473 @@ class PedidoImportarTareasDesdeL8Service
     }
 
     /**
+     * Liga en L12 las OT que L8 tiene para el pedido y arma mapa pc L8 → pc L12
+     * (necesario cuando la reparación de líneas creó ids nuevos por colisión).
+     *
+     * @return array{
+     *   ot_codigos: list<int>,
+     *   mapa_pc: array<int, int>,
+     *   ot_sincronizados: int,
+     *   ot_reclamados: int,
+     *   detalle: list<string>
+     * }
+     */
+    private function sincronizarOtIdsYMapaCombinacionesDesdeL8(int $pedidoId, string $codigoPedido, bool $dryRun): array
+    {
+        $out = [
+            'ot_codigos' => [],
+            'mapa_pc' => [],
+            'ot_sincronizados' => 0,
+            'ot_reclamados' => 0,
+            'detalle' => [],
+        ];
+
+        try {
+            $fuente = $this->reader->resolverFuente();
+        } catch (\Throwable) {
+            return $out;
+        }
+
+        if ($fuente['fuente'] !== 'mysql_l8' || $fuente['conexion'] === null) {
+            // Bridge HTTP: sin sync de ot_id; igual se pueden pedir OT por código si el bridge lo expone.
+            return $out;
+        }
+
+        /** @var \Illuminate\Database\ConnectionInterface $l8 */
+        $l8 = $fuente['conexion'];
+
+        $pedidoL8 = $l8->table('pedido')->where('id', $pedidoId)->first()
+            ?? $l8->table('pedido')->where('codigo', $codigoPedido)->first();
+        if (! $pedidoL8) {
+            return $out;
+        }
+
+        $pcsL8 = $l8->table('pedido_combinacion')
+            ->where('pedido_id', (int) $pedidoL8->id)
+            ->orderBy('id')
+            ->get();
+        $pcsL12 = DB::table('pedido_combinacion')
+            ->where('pedido_id', $pedidoId)
+            ->orderBy('id')
+            ->get();
+
+        if ($pcsL8->isEmpty() || $pcsL12->isEmpty()) {
+            return $out;
+        }
+
+        // Índice L12 por (numeroitem|combinacion_id) y por (articulo_id|combinacion_id).
+        $porClaveItem = [];
+        $porClaveArt = [];
+        foreach ($pcsL12 as $pc) {
+            $porClaveItem[(int) $pc->numeroitem.'|'.(int) $pc->combinacion_id] = $pc;
+            $claveArt = (int) $pc->articulo_id.'|'.(int) $pc->combinacion_id;
+            if (! isset($porClaveArt[$claveArt])) {
+                $porClaveArt[$claveArt] = [];
+            }
+            $porClaveArt[$claveArt][] = $pc;
+        }
+
+        $usadosL12 = [];
+        foreach ($pcsL8 as $pc8) {
+            $pc8Id = (int) $pc8->id;
+            $otId = (int) ($pc8->ot_id ?? 0);
+            if ($otId > 0) {
+                $out['ot_codigos'][] = $otId;
+            }
+
+            $claveItem = (int) $pc8->numeroitem.'|'.(int) $pc8->combinacion_id;
+            $claveArt = (int) $pc8->articulo_id.'|'.(int) $pc8->combinacion_id;
+            $match = null;
+            if (isset($porClaveItem[$claveItem]) && ! isset($usadosL12[(int) $porClaveItem[$claveItem]->id])) {
+                $match = $porClaveItem[$claveItem];
+            } elseif (isset($porClaveArt[$claveArt])) {
+                foreach ($porClaveArt[$claveArt] as $cand) {
+                    if (! isset($usadosL12[(int) $cand->id])) {
+                        $match = $cand;
+                        break;
+                    }
+                }
+            }
+            if ($match === null) {
+                continue;
+            }
+            $usadosL12[(int) $match->id] = true;
+            $out['mapa_pc'][$pc8Id] = (int) $match->id;
+
+            if ($otId <= 0) {
+                continue;
+            }
+
+            $otActual = (int) ($match->ot_id ?? 0);
+            if ($otActual === $otId) {
+                continue;
+            }
+
+            // ¿La OT está en otro pedido L12?
+            $dueño = DB::table('pedido_combinacion')
+                ->where('ot_id', $otId)
+                ->where('pedido_id', '!=', $pedidoId)
+                ->first(['id', 'pedido_id']);
+
+            $reclamar = false;
+            if ($dueño) {
+                // Solo reclamar si en L8 ese dueño no tiene esa OT (asignación errónea en L12).
+                $dueñoTieneEnL8 = $l8->table('pedido_combinacion')
+                    ->where('pedido_id', (int) $dueño->pedido_id)
+                    ->where('ot_id', $otId)
+                    ->exists();
+                if (! $dueñoTieneEnL8) {
+                    $reclamar = true;
+                } else {
+                    $out['detalle'][] = sprintf(
+                        'OT %d omitida: L8 la liga al pedido L12 %d (pc %d).',
+                        $otId,
+                        (int) $dueño->pedido_id,
+                        (int) $dueño->id
+                    );
+                    continue;
+                }
+            }
+
+            if ($dryRun) {
+                $out['ot_sincronizados']++;
+                if ($reclamar) {
+                    $out['ot_reclamados']++;
+                }
+                $out['detalle'][] = sprintf(
+                    'Dry-run: pc L12 %d ← ot_id %d (L8 pc %d)%s',
+                    (int) $match->id,
+                    $otId,
+                    $pc8Id,
+                    $reclamar ? ' [reclama de pedido '.(int) $dueño->pedido_id.']' : ''
+                );
+                continue;
+            }
+
+            if ($reclamar) {
+                DB::table('pedido_combinacion')->where('id', (int) $dueño->id)->update([
+                    'ot_id' => 0,
+                    'updated_at' => now(),
+                ]);
+                $out['ot_reclamados']++;
+            }
+
+            DB::table('pedido_combinacion')->where('id', (int) $match->id)->update([
+                'ot_id' => $otId,
+                'updated_at' => now(),
+            ]);
+            $out['ot_sincronizados']++;
+            $match->ot_id = $otId;
+        }
+
+        $out['ot_codigos'] = array_values(array_unique(array_filter($out['ot_codigos'])));
+
+        return $out;
+    }
+
+    /**
+     * Remapea pedido_combinacion_talle_id de OCT L8 → L12 usando el mapa de pc
+     * (talle_id + pc L12). Sin mapa, deja el id L8 (casos sin colisión).
+     *
+     * @param  list<array<string, mixed>>  $octRows
+     * @param  array<int, int>  $mapaPcL8aL12
+     * @return list<array<string, mixed>>
+     */
+    private function remapearOctPedidoCombinacionTalle(array $octRows, array $mapaPcL8aL12): array
+    {
+        if ($octRows === [] || $mapaPcL8aL12 === []) {
+            return $octRows;
+        }
+
+        $mapaPct = $this->mapaPctL8aL12($mapaPcL8aL12);
+        if ($mapaPct === []) {
+            return $octRows;
+        }
+
+        foreach ($octRows as &$row) {
+            $pctL8 = (int) ($row['pedido_combinacion_talle_id'] ?? 0);
+            if ($pctL8 > 0 && isset($mapaPct[$pctL8])) {
+                $row['pedido_combinacion_talle_id'] = $mapaPct[$pctL8];
+            }
+        }
+        unset($row);
+
+        return $octRows;
+    }
+
+    /**
+     * @param  array<int, int>  $mapaPcL8aL12
+     * @return array<int, int> pct L8 id → pct L12 id
+     */
+    private function mapaPctL8aL12(array $mapaPcL8aL12): array
+    {
+        try {
+            $fuente = $this->reader->resolverFuente();
+        } catch (\Throwable) {
+            return [];
+        }
+        if ($fuente['fuente'] !== 'mysql_l8' || $fuente['conexion'] === null) {
+            return [];
+        }
+        /** @var \Illuminate\Database\ConnectionInterface $l8 */
+        $l8 = $fuente['conexion'];
+
+        $mapa = [];
+        foreach ($mapaPcL8aL12 as $pc8 => $pc12) {
+            $talles8 = $l8->table('pedido_combinacion_talle')
+                ->where('pedido_combinacion_id', $pc8)
+                ->get(['id', 'talle_id']);
+            foreach ($talles8 as $t8) {
+                $t12Id = (int) (DB::table('pedido_combinacion_talle')
+                    ->where('pedido_combinacion_id', $pc12)
+                    ->where('talle_id', (int) $t8->talle_id)
+                    ->value('id') ?? 0);
+                if ($t12Id > 0) {
+                    $mapa[(int) $t8->id] = $t12Id;
+                }
+            }
+        }
+
+        return $mapa;
+    }
+
+    /**
+     * Tras importar: remapea OCT que siguen apuntando a PCT ajenos al pedido
+     * y elimina OCT huérfanas (id inexistente en L8 / PCT inexistente / duplicadas).
+     *
+     * @param  list<int>  $otCodigos
+     * @param  array<int, int>  $mapaPcL8aL12
+     * @return array{remapeados: int, eliminados: int, detalle: list<string>}
+     */
+    private function limpiarOctHuerfanasDePedido(int $pedidoId, array $otCodigos, array $mapaPcL8aL12): array
+    {
+        $out = ['remapeados' => 0, 'eliminados' => 0, 'detalle' => []];
+        if ($otCodigos === [] || $mapaPcL8aL12 === []) {
+            return $out;
+        }
+
+        $pcsPedido = array_values($mapaPcL8aL12);
+        $mapaPct = $this->mapaPctL8aL12($mapaPcL8aL12);
+        $vistos = [];
+
+        try {
+            $fuente = $this->reader->resolverFuente();
+            $l8 = ($fuente['fuente'] === 'mysql_l8') ? $fuente['conexion'] : null;
+        } catch (\Throwable) {
+            $l8 = null;
+        }
+
+        foreach ($otCodigos as $ot) {
+            $octs = DB::table('ordentrabajo_combinacion_talle')
+                ->where('ordentrabajo_id', $ot)
+                ->orderBy('id')
+                ->get();
+            foreach ($octs as $oct) {
+                $pctId = (int) $oct->pedido_combinacion_talle_id;
+                $pct = DB::table('pedido_combinacion_talle')->where('id', $pctId)->first();
+                $pcId = $pct ? (int) $pct->pedido_combinacion_id : 0;
+                $esDelPedido = $pcId > 0 && in_array($pcId, $pcsPedido, true);
+
+                if ($esDelPedido) {
+                    $clave = $ot.'|'.$pctId;
+                    if (isset($vistos[$clave])) {
+                        DB::table('ordentrabajo_combinacion_talle')->where('id', (int) $oct->id)->delete();
+                        $out['eliminados']++;
+                        continue;
+                    }
+                    $vistos[$clave] = true;
+                    continue;
+                }
+
+                // Intentar remapear vía id L8 del mismo OCT o del pct.
+                $pctL8Cand = $pctId;
+                if ($l8) {
+                    $oct8 = $l8->table('ordentrabajo_combinacion_talle')->where('id', (int) $oct->id)->first();
+                    if ($oct8) {
+                        $pctL8Cand = (int) $oct8->pedido_combinacion_talle_id;
+                    }
+                }
+                $nuevo = $mapaPct[$pctL8Cand] ?? $mapaPct[$pctId] ?? 0;
+                if ($nuevo <= 0 && $l8) {
+                    $pct8 = $l8->table('pedido_combinacion_talle')->where('id', $pctL8Cand)->first();
+                    if ($pct8 && isset($mapaPcL8aL12[(int) $pct8->pedido_combinacion_id])) {
+                        $nuevo = (int) (DB::table('pedido_combinacion_talle')
+                            ->where('pedido_combinacion_id', $mapaPcL8aL12[(int) $pct8->pedido_combinacion_id])
+                            ->where('talle_id', (int) $pct8->talle_id)
+                            ->value('id') ?? 0);
+                    }
+                }
+
+                if ($nuevo > 0) {
+                    $clave = $ot.'|'.$nuevo;
+                    if (isset($vistos[$clave])) {
+                        DB::table('ordentrabajo_combinacion_talle')->where('id', (int) $oct->id)->delete();
+                        $out['eliminados']++;
+                        continue;
+                    }
+                    $yaExistePar = (int) (DB::table('ordentrabajo_combinacion_talle')
+                        ->where('ordentrabajo_id', $ot)
+                        ->where('pedido_combinacion_talle_id', $nuevo)
+                        ->where('id', '!=', (int) $oct->id)
+                        ->value('id') ?? 0);
+                    if ($yaExistePar > 0) {
+                        // El par correcto ya está; esta fila es duplicado mal apuntado.
+                        DB::table('ordentrabajo_combinacion_talle')->where('id', (int) $oct->id)->delete();
+                        $vistos[$clave] = true;
+                        $out['eliminados']++;
+                        continue;
+                    }
+                    DB::table('ordentrabajo_combinacion_talle')->where('id', (int) $oct->id)->update([
+                        'pedido_combinacion_talle_id' => $nuevo,
+                        'updated_at' => now(),
+                    ]);
+                    $vistos[$clave] = true;
+                    $out['remapeados']++;
+                    continue;
+                }
+
+                // Sin mapa y PCT ajeno/inexistente: basura (p.ej. import previo con ids L8).
+                DB::table('ordentrabajo_combinacion_talle')->where('id', (int) $oct->id)->delete();
+                $out['eliminados']++;
+            }
+        }
+
+        if ($out['remapeados'] > 0 || $out['eliminados'] > 0) {
+            $out['detalle'][] = sprintf(
+                'OCT: remapeados %d, eliminados huérfanos/duplicados %d (pedido %d).',
+                $out['remapeados'],
+                $out['eliminados'],
+                $pedidoId
+            );
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tareas
+     * @param  array<int, int>  $mapaPcL8aL12
+     * @return list<array<string, mixed>>
+     */
+    private function remapearPedidoCombinacionId(array $tareas, array $mapaPcL8aL12): array
+    {
+        if ($mapaPcL8aL12 === []) {
+            return $tareas;
+        }
+        foreach ($tareas as &$row) {
+            $pc = (int) ($row['pedido_combinacion_id'] ?? 0);
+            if ($pc > 0 && isset($mapaPcL8aL12[$pc])) {
+                $row['pedido_combinacion_id'] = $mapaPcL8aL12[$pc];
+            }
+        }
+        unset($row);
+
+        return $tareas;
+    }
+
+    /**
+     * Tareas L8 que aún no existen en L12 para esa OT+tarea_id (aunque el id L8 esté ocupado).
+     *
+     * @param  list<array<string, mixed>>  $tareas
+     * @return list<array<string, mixed>>
+     */
+    private function tareasQueFaltanPorClaveNatural(array $tareas): array
+    {
+        $faltan = [];
+        foreach ($tareas as $row) {
+            $otId = (int) ($row['ordentrabajo_id'] ?? 0);
+            $tareaId = (int) ($row['tarea_id'] ?? 0);
+            if ($otId <= 0 || $tareaId <= 0) {
+                continue;
+            }
+            $existe = DB::table('ordentrabajo_tarea')
+                ->where('ordentrabajo_id', $otId)
+                ->where('tarea_id', $tareaId)
+                ->exists();
+            if (! $existe) {
+                $faltan[] = $row;
+            }
+        }
+
+        return $faltan;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tareas
+     * @return array{0: int, 1: int}
+     */
+    private function upsertTareasConColision(array $tareas): array
+    {
+        if ($tareas === []) {
+            return [0, 0];
+        }
+        $cols = Schema::getColumnListing('ordentrabajo_tarea');
+        $ins = 0;
+        $upd = 0;
+        foreach ($tareas as $row) {
+            $clean = FerliL8ImportRowSupport::normalize('ordentrabajo_tarea', $row, $cols);
+            $id = (int) ($clean['id'] ?? 0);
+            $otId = (int) ($clean['ordentrabajo_id'] ?? 0);
+            $tareaId = (int) ($clean['tarea_id'] ?? 0);
+            if ($otId <= 0 || $tareaId <= 0) {
+                continue;
+            }
+
+            // Preferir la fila ya ligada a esta OT (misma clave natural).
+            $porClave = DB::table('ordentrabajo_tarea')
+                ->where('ordentrabajo_id', $otId)
+                ->where('tarea_id', $tareaId)
+                ->orderBy('id')
+                ->first();
+            if ($porClave) {
+                $data = $clean;
+                unset($data['id'], $data['created_at']);
+                DB::table('ordentrabajo_tarea')->where('id', (int) $porClave->id)->update($data);
+                $upd++;
+                continue;
+            }
+
+            if ($id > 0) {
+                $porId = DB::table('ordentrabajo_tarea')->where('id', $id)->first();
+                if ($porId) {
+                    // Id L8 ocupado por otra OT → no pisar; insertar con id nuevo.
+                    if ((int) ($porId->ordentrabajo_id ?? 0) === $otId) {
+                        $data = $clean;
+                        unset($data['id'], $data['created_at']);
+                        DB::table('ordentrabajo_tarea')->where('id', $id)->update($data);
+                        $upd++;
+                        continue;
+                    }
+                    unset($clean['id']);
+                }
+            } else {
+                unset($clean['id']);
+            }
+
+            if (! isset($clean['created_at']) && in_array('created_at', $cols, true)) {
+                $clean['created_at'] = now();
+            }
+            if (in_array('updated_at', $cols, true)) {
+                $clean['updated_at'] = now();
+            }
+            DB::table('ordentrabajo_tarea')->insert($clean);
+            $ins++;
+        }
+
+        return [$ins, $upd];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tareas
+     */
+    private function insertMissingTareasConColision(array $tareas): int
+    {
+        [$ins] = $this->upsertTareasConColision($tareas);
+
+        return $ins;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $tareas
      * @return list<array<string, mixed>>
      */
@@ -461,6 +979,27 @@ class PedidoImportarTareasDesdeL8Service
             if (DB::table($table)->where('id', $id)->exists()) {
                 $data = $clean;
                 unset($data['id'], $data['created_at']);
+
+                // OCT: al remapear PCT puede chocar UK (ot, pct) con otra fila.
+                if ($table === 'ordentrabajo_combinacion_talle') {
+                    $otId = (int) ($clean['ordentrabajo_id'] ?? 0);
+                    $pctId = (int) ($clean['pedido_combinacion_talle_id'] ?? 0);
+                    if ($otId > 0 && $pctId > 0) {
+                        $otroId = (int) (DB::table($table)
+                            ->where('ordentrabajo_id', $otId)
+                            ->where('pedido_combinacion_talle_id', $pctId)
+                            ->where('id', '!=', $id)
+                            ->orderBy('id')
+                            ->value('id') ?? 0);
+                        if ($otroId > 0) {
+                            DB::table($table)->where('id', $otroId)->update($data);
+                            DB::table($table)->where('id', $id)->delete();
+                            $upd++;
+                            continue;
+                        }
+                    }
+                }
+
                 DB::table($table)->where('id', $id)->update($data);
                 $upd++;
                 continue;

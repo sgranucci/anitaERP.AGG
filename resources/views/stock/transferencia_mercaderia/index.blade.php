@@ -301,6 +301,7 @@
         articuloConsultaUrl: @json(urlAppDesdeRoute('editar_articulo', ['id' => '__ID__']).'?origen=modal_consulta&vista=consulta'),
     };
     window.TM_CAJA_PIEZA = @json(\App\Support\Stock\UnidadesCajaPiezaSupport::mostrarEnTransferencia());
+    window.TM_PERMITE_SALDOS_NEGATIVOS = @json((bool) config('stock.permite_saldos_negativos'));
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>

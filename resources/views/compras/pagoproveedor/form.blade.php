@@ -103,12 +103,27 @@
             El monto a aplicar va en moneda de la factura (alineado a la derecha, como el saldo). Si la OP está en otra moneda se convierte con la cotización de liquidación
             (factura o del día según el modo). La DC se asienta; no abre un ítem extra en pesos.
             Las notas de crédito y las OPA restan del total a desembolsar. Las NC también restan de Ganancias e IIBB; las OPA no, porque ya se retuvo al generarlas.
+            Destildar limpia el aplicado. <strong>Aplicar por monto</strong> reparte secuencialmente sobre las deudas (no sobre NC/OPA).
             @if (\App\Support\Configuracion\EntornoEmpresaSupport::esAgg())
                 <span class="d-block mt-1">
                     <strong>Completar desde Anita</strong> importa al ERP la deuda impaga del proveedor (con <code>prov_empresa</code>) y refresca la grilla.
                 </span>
             @endif
         </p>
+        <div class="form-group row align-items-center mb-2 pp-aplicar-monto-toolbar">
+            <label for="pp-monto-aplicar-secuencial" class="col-lg-2 col-form-label text-right mb-0">Aplicar por monto</label>
+            <div class="col-lg-3">
+                <div class="input-group input-group-sm">
+                    <input type="number" step="0.01" min="0" id="pp-monto-aplicar-secuencial" class="form-control text-right" placeholder="0.00" title="Monto a repartir en orden de la grilla (deudas)">
+                    <div class="input-group-append">
+                        <button type="button" class="btn btn-outline-primary" id="pp-btn-aplicar-secuencial" title="Aplica el monto en orden a las facturas pendientes">Aplicar</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="pp-btn-limpiar-aplicaciones" title="Quita todos los montos aplicados">Limpiar aplicados</button>
+            </div>
+        </div>
         <div class="row no-gutters mb-2 pp-resumen-deuda-cards">
             <div class="col-6 col-md-3 pr-1 mb-1">
                 <div class="border rounded px-2 py-1 h-100" style="background:#d6eaf8;">

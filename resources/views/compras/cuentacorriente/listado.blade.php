@@ -17,7 +17,7 @@
     $enPesos = CuentacorrienteSaldosPorMoneda::esExpresionPesos($expresion);
     $abrevLocal = CuentacorrienteSaldosPorMoneda::abreviaturaLocal();
     $tituloReporte = $modoDeuda
-        ? 'Deuda de proveedores (facturas impagas)'
+        ? 'Deuda de proveedores (facturas, NC y adelantos)'
         : 'Cuenta corriente de proveedores';
     $subtitulo = 'Proveedor: '.trim((($codigoproveedor ?? '') !== '' ? $codigoproveedor.' — ' : '').($nombreproveedor ?? ''))
         .' · Saldo: '.CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'saldo_cc')

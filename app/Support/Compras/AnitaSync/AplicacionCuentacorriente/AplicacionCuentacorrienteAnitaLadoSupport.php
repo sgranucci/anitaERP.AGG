@@ -4,6 +4,7 @@ namespace App\Support\Compras\AnitaSync\AplicacionCuentacorriente;
 
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
+use App\Support\Configuracion\MonedaAnitaCodigoSupport;
 
 /**
  * Identidad Anita de un movimiento de CC (factura/NC en compra o OPA en pagoproveedor).
@@ -122,16 +123,13 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
 
     public static function codMonDesdeCc(Proveedor_Cuentacorriente $cc): string
     {
-        $codigo = trim((string) ($cc->monedas?->codigo ?? ''));
-        if ($codigo !== '') {
-            return $codigo;
-        }
-        $codigo = trim((string) ($cc->comprobante_proveedores?->monedas?->codigo ?? ''));
-        if ($codigo !== '') {
-            return $codigo;
-        }
+        $moneda = $cc->monedas ?? $cc->comprobante_proveedores?->monedas;
+        $monedaId = (int) ($cc->moneda_id
+            ?: ($cc->comprobante_proveedores?->moneda_id ?? 0)
+            ?: ($cc->pagoproveedores?->moneda_id ?? 0)
+            ?: 1);
 
-        return (string) ((int) ($cc->moneda_id ?? 1) ?: 1);
+        return MonedaAnitaCodigoSupport::desdeMoneda($moneda, $monedaId);
     }
 
     public static function cotizacionDesdeCc(Proveedor_Cuentacorriente $cc): float

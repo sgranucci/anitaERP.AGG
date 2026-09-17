@@ -4,8 +4,10 @@ namespace App\Repositories\Ventas;
 
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
+use App\Services\Ventas\ClienteCuentacorrienteAplicacionService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -377,7 +379,62 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
         
         $cuentacorriente = $cuentacorriente->orderBy('fecha', 'asc')->get();
 
-        return $cuentacorriente;
+        // Saldo = pendiente real (total + aplicaciones firmadas). Los pagos a cuenta
+        // reducen el saldo; no deben mostrarse en la columna "Aplicado" de la cobranza.
+        // Devolver arrays con fechas Y-m-d: el cast date del modelo serializa ISO y
+        // <input type="date"> no lo muestra.
+        return $cuentacorriente->map(static function ($fila) {
+            return [
+                'idventa' => $fila->idventa,
+                'idcuentacorriente' => $fila->idcuentacorriente,
+                'fecha' => self::fechaParaInputDate($fila->fecha),
+                'fechavencimiento' => self::fechaParaInputDate($fila->fechavencimiento),
+                'cliente_id' => $fila->cliente_id,
+                'total' => $fila->total,
+                'moneda_id' => $fila->moneda_id,
+                'cotizacion' => $fila->cotizacion,
+                'empresa_id' => $fila->empresa_id,
+                'cobranza_id' => $fila->cobranza_id,
+                'codigo' => $fila->codigo,
+                'abreviaturamoneda' => $fila->abreviaturamoneda,
+                'nombrecliente' => $fila->nombrecliente,
+                'codigocliente' => $fila->codigocliente,
+                'aplicado' => $fila->aplicado,
+                'saldo' => ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
+                    (float) $fila->total,
+                    $fila->aplicado !== null ? (float) $fila->aplicado : null
+                ),
+            ];
+        })->values();
+    }
+
+    /**
+     * Valor apto para input type=date (YYYY-MM-DD) o string vacío.
+     */
+    private static function fechaParaInputDate(mixed $valor): string
+    {
+        if ($valor === null || $valor === '') {
+            return '';
+        }
+
+        if ($valor instanceof \DateTimeInterface) {
+            return $valor->format('Y-m-d');
+        }
+
+        $texto = trim((string) $valor);
+        if ($texto === '') {
+            return '';
+        }
+
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $texto, $m)) {
+            return $m[1];
+        }
+
+        try {
+            return \Carbon\Carbon::parse($texto)->format('Y-m-d');
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     public function consultarAplicacion($cliente_cuentacorriente_id)
@@ -399,6 +456,77 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                                                 ->get();
 
         return $cuentacorriente;
+    }
+
+    public function listarPendientesAplicacion(int $cliente_id, string $lado, ?int $empresa_id = null)
+    {
+        $query = $this->model->query()
+            ->with([
+                'ventas.tipotransacciones',
+                'cobranzas.tipotransaccioncajas',
+                'monedas',
+                'empresas',
+            ])
+            ->select('cliente_cuentacorriente.*')
+            ->addSelect([
+                'aplicado' => Cliente_Cuentacorriente_Aplicacion::query()
+                    ->selectRaw('SUM(total)')
+                    ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
+            ])
+            ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
+            ->whereRaw($lado === 'credito'
+                ? ClienteCuentacorrienteAplicacionService::sqlLadoCredito()
+                : ClienteCuentacorrienteAplicacionService::sqlLadoDeuda());
+
+        if ($empresa_id !== null && $empresa_id > 0) {
+            $query->where('cliente_cuentacorriente.empresa_id', $empresa_id);
+        }
+
+        if ($lado === 'deuda') {
+            $query->orderBy('cliente_cuentacorriente.fechavencimiento', 'asc')
+                ->orderBy('cliente_cuentacorriente.fecha', 'asc')
+                ->orderBy('cliente_cuentacorriente.id', 'asc');
+        } else {
+            $query->orderBy('cliente_cuentacorriente.fecha', 'asc')
+                ->orderBy('cliente_cuentacorriente.id', 'asc');
+        }
+
+        return $query->get();
+    }
+
+    public function listarAplicacionesManualesRecientes(int $cliente_id, ?int $empresa_id = null, int $limite = 30)
+    {
+        $query = Cliente_Cuentacorriente_Aplicacion::query()
+            ->select('cliente_cuentacorriente_aplicacion.*')
+            ->join(
+                'cliente_cuentacorriente as cc',
+                'cc.id',
+                '=',
+                'cliente_cuentacorriente_aplicacion.cliente_cuentacorriente_id'
+            )
+            ->where('cc.cliente_id', $cliente_id)
+            ->where(function ($q) {
+                $q->whereNull('cliente_cuentacorriente_aplicacion.cobranza_id')
+                    ->orWhere('cliente_cuentacorriente_aplicacion.cobranza_id', 0);
+            })
+            ->where('cliente_cuentacorriente_aplicacion.total', '<', 0)
+            ->with([
+                'cliente_cuentacorrientes.ventas.tipotransacciones',
+                'cliente_cuentacorrientes.cobranzas.tipotransaccioncajas',
+                'cliente_cuentacorriente_aplicados.ventas.tipotransacciones',
+                'cliente_cuentacorriente_aplicados.cobranzas.tipotransaccioncajas',
+                'cliente_cuentacorriente_aplicados.monedas',
+                'monedas',
+            ]);
+
+        if ($empresa_id !== null && $empresa_id > 0) {
+            $query->where('cliente_cuentacorriente_aplicacion.empresa_id', $empresa_id);
+        }
+
+        return $query->orderByDesc('cliente_cuentacorriente_aplicacion.fecha')
+            ->orderByDesc('cliente_cuentacorriente_aplicacion.id')
+            ->limit($limite)
+            ->get();
     }
 }
 

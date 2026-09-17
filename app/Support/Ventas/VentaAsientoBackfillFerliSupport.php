@@ -235,6 +235,129 @@ final class VentaAsientoBackfillFerliSupport
     }
 
     /**
+     * Replica ctamov Anita para ventas ERP (OT/picking) que ya tienen asiento ERP sin ctamov.
+     *
+     * @return array{
+     *   candidatos: list<array<string, mixed>>,
+     *   ok: int,
+     *   omitidos: int,
+     *   error: int,
+     *   errores: list<string>
+     * }
+     */
+    public function sincronizarCtamovPendientes(string $desdeYmd, bool $dryRun): array
+    {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            throw new \RuntimeException('Solo aplica a EMPRESA=Calzados Ferli.');
+        }
+
+        $ventas = Venta::query()
+            ->with([
+                'asientos',
+                'puntoventas:id,codigo,empresa_id',
+                'tipotransacciones:id,abreviatura',
+            ])
+            ->where('created_at', '>=', $desdeYmd.' 00:00:00')
+            ->whereHas('asientos')
+            ->whereHas('venta_emisiones', fn ($q) => $q->whereNotNull('articulo_id')->where('articulo_id', '>', 0))
+            ->whereHas('tipotransacciones', function ($q) {
+                $q->whereIn('abreviatura', ['FAC', 'FAE', 'FAR', 'FAF', 'NCD', 'NCE', 'NCA', 'NCB', 'NCP', 'NDB', 'NDA']);
+            })
+            ->orderBy('id')
+            ->get();
+
+        $resultado = [
+            'candidatos' => [],
+            'ok' => 0,
+            'omitidos' => 0,
+            'error' => 0,
+            'errores' => [],
+        ];
+
+        foreach ($ventas as $venta) {
+            $asiento = $venta->asientos;
+            if (! $asiento) {
+                continue;
+            }
+
+            [$tipo, $letra, $sucursalPad, $nro] = $this->parsearCodigo((string) $venta->codigo, $venta);
+            $sucursal = (int) $sucursalPad;
+            $fila = [
+                'venta_id' => (int) $venta->id,
+                'codigo' => (string) $venta->codigo,
+                'numeroasiento' => (string) ($asiento->numeroasiento ?? ''),
+                'tipo' => $tipo,
+                'letra' => $letra,
+                'sucursal' => $sucursal,
+                'nro' => $nro,
+            ];
+
+            try {
+                if ($this->ctamovYaExisteParaComprobante($tipo, $letra, $sucursal, $nro)) {
+                    $fila['estado'] = 'ya_tiene_ctamov';
+                    $resultado['candidatos'][] = $fila;
+                    $resultado['omitidos']++;
+                    continue;
+                }
+
+                $fila['estado'] = $dryRun ? 'pendiente_sync' : 'sync';
+                $resultado['candidatos'][] = $fila;
+
+                if ($dryRun) {
+                    continue;
+                }
+
+                $this->facturacionService->sincronizarCtamovAnitaDeVenta(
+                    (int) $venta->id,
+                    $tipo,
+                    $letra,
+                    $sucursal,
+                    $nro,
+                );
+                $resultado['ok']++;
+            } catch (Throwable $e) {
+                $resultado['error']++;
+                $resultado['errores'][] = sprintf(
+                    'venta %d %s: %s',
+                    (int) $venta->id,
+                    (string) $venta->codigo,
+                    $e->getMessage()
+                );
+                $fila['estado'] = 'error';
+                $fila['error'] = $e->getMessage();
+                $resultado['candidatos'][] = $fila;
+            }
+        }
+
+        return $resultado;
+    }
+
+    private function ctamovYaExisteParaComprobante(string $tipo, string $letra, int $sucursal, int $nro): bool
+    {
+        if ($nro <= 0) {
+            return false;
+        }
+
+        $api = new \App\ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'ctamov',
+            'sistema' => 'contab',
+            'campos' => 'ctav_nro_asiento',
+            'whereArmado' => " WHERE ctav_tipo = '".str_replace("'", "''", $tipo)."'"
+                ." AND ctav_letra = '".str_replace("'", "''", $letra)."'"
+                ." AND ctav_sucursal = '".$sucursal."'"
+                ." AND ctav_nro = '".$nro."' ",
+        ];
+        $parsed = \App\ApiAnita::parsearRespuestaLista((string) $api->apiCall($data));
+        if ($parsed['error_lectura'] !== null) {
+            return false;
+        }
+
+        return count($parsed['filas']) > 0;
+    }
+
+    /**
      * @return array{0:string,1:string,2:string,3:int}
      */
     private function parsearCodigo(string $codigo, Venta $venta): array

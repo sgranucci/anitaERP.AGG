@@ -1,0 +1,214 @@
+@extends("theme.$theme.layout")
+
+@section('titulo')
+    Aplicar cuenta corriente
+@endsection
+
+@section('styles')
+@php
+    $accCss = public_path('assets/css/compras-aplicacion-cc.css');
+    $accJs = public_path('assets/pages/scripts/ventas/aplicacion_cuentacorriente/workbench.js');
+@endphp
+<link rel="stylesheet" href="{{ asset('assets/css/compras-aplicacion-cc.css') }}?v={{ is_file($accCss) ? filemtime($accCss) : time() }}">
+@endsection
+
+@section('scripts')
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}" type="text/javascript"></script>
+<script>
+    window.APLICACION_CC_INICIAL = @json($aplicacionCcInicial);
+</script>
+<script src="{{ asset('assets/pages/scripts/ventas/aplicacion_cuentacorriente/workbench.js') }}?v={{ is_file($accJs) ? filemtime($accJs) : time() }}" type="text/javascript"></script>
+@endsection
+
+@section('contenido')
+@php
+    $k = $kpis;
+    $nombreCliente = $cliente->nombre ?? '';
+    $codigoCliente = $cliente->codigo ?? '';
+@endphp
+<div id="acc-workbench"
+     class="acc-page"
+     data-url-pendientes="{{ route('api_pendientes_aplicacion_cuentacorriente_cliente') }}"
+     data-url-sugerir="{{ route('api_sugerir_aplicacion_cuentacorriente_cliente') }}"
+     data-url-aplicar="{{ route('aplicar_cuentacorriente_cliente') }}"
+     data-url-desaplicar="{{ url('ventas/aplicacion-cuentacorriente/__ID__/desaplicar') }}"
+     data-url-cc="{{ url('ventas/cliente/listacuentacorriente/__ID__') }}"
+     data-url-cotizacion="{{ route('api_cotizacion_aplicacion_cuentacorriente_cliente') }}"
+     data-moneda-local="{{ (int) config('cotizacion.ID_MONEDA_DEFAULT', 1) }}">
+
+    <div class="acc-hero">
+        <div class="d-flex justify-content-between align-items-start flex-wrap">
+            <div>
+                <h1>Aplicar comprobantes de cuenta corriente</h1>
+                <p class="acc-sub">El matching FIFO se arma solo. Cambiá montos, destildá o fijá un crédito (NC o cobranza a cuenta): lo que edites queda y el resto se vuelve a sugerir.</p>
+            </div>
+            <div class="acc-hero-tools">
+                @if (!empty($soloConsulta) && (int) ($volverClienteId ?? 0) > 0)
+                    <a href="{{ route('editar_cliente', ['id' => (int) $volverClienteId]) }}" class="btn btn-sm btn-light">
+                        <i class="fa fa-fw fa-reply-all"></i> Volver al cliente
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="window.close()">
+                        <i class="fa fa-fw fa-times"></i> Cerrar solapa
+                    </button>
+                @endif
+                <a href="#" id="acc-link-cc" class="btn btn-sm btn-outline-light {{ $cliente_id ? '' : 'd-none' }}">Cuenta corriente</a>
+            </div>
+        </div>
+    </div>
+
+    @include('includes.form-error')
+    @include('includes.mensaje')
+
+    <div class="acc-toolbar">
+        <div class="form-row align-items-end">
+            <div class="form-group col-md-2 mb-2">
+                <label class="small mb-1">Empresa</label>
+                <select name="empresa_id" id="empresa_id" class="form-control form-control-sm">
+                    <option value="">Todas</option>
+                    @foreach ($empresa_query as $e)
+                        <option value="{{ $e->id }}" @selected((int) $empresa_id === (int) $e->id)>{{ $e->nombre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="form-group col-md-4 mb-2">
+                <label class="small mb-1">Cliente</label>
+                <div class="input-group input-group-sm">
+                    <input type="hidden" name="cliente_id" id="cliente_id" class="cliente_id" value="{{ $cliente_id ?: '' }}">
+                    <input type="text" class="form-control codigocliente" id="codigocliente" placeholder="Código" value="{{ $codigoCliente }}">
+                    <input type="text" class="form-control nombrecliente" id="nombrecliente" readonly placeholder="Nombre" value="{{ $nombreCliente }}">
+                    <div class="input-group-append">
+                        <button type="button" class="btn btn-info consultacliente" title="Consultar"><i class="fa fa-search"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group col-md-2 mb-2">
+                <label class="small mb-1">Fecha aplicación</label>
+                <input type="date" id="acc-fecha" class="form-control form-control-sm" value="{{ $fecha }}">
+            </div>
+            <div class="form-group col-md-2 mb-2">
+                <label class="small mb-1">Cot. liquidación</label>
+                <input type="number" step="0.0001" min="0" id="acc-cot-liq" class="form-control form-control-sm" placeholder="Pesos por 1 ME">
+                <small class="text-muted" id="acc-cot-liq-hint">Para cruzar pesos ↔ dólares</small>
+            </div>
+            <div class="form-group col-md-12 mb-2 acc-toolbar-actions">
+                <label class="acc-switch mb-0 mr-2" title="Arma FIFO con el saldo que no fijaste">
+                    <input type="checkbox" id="acc-auto" checked>
+                    <span>Sugerir al instante</span>
+                </label>
+                <button type="button" id="btn-acc-fifo" class="btn btn-sm btn-outline-primary">Rehacer FIFO</button>
+                <button type="button" id="btn-acc-parear" class="btn btn-sm btn-outline-primary">Parear iguales</button>
+                <button type="button" id="btn-acc-limpiar" class="btn btn-sm btn-outline-secondary">Limpiar</button>
+                <button type="button" id="btn-acc-otras-empresas" class="btn btn-sm btn-outline-secondary acc-btn-otras acc-hidden" title="Mostrar comprobantes de otras empresas">
+                    <span class="acc-otras-label">Ver otras empresas</span>
+                    <span id="acc-otras-count" class="acc-otras-count">0</span>
+                </button>
+                <button type="button" id="btn-acc-otras-monedas" class="btn btn-sm btn-outline-secondary acc-btn-otras acc-btn-otras-mon acc-hidden" title="Mostrar facturas de otra moneda">
+                    <span class="acc-otras-mon-label">Ver otras monedas</span>
+                    <span id="acc-otras-mon-count" class="acc-otras-count">0</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="acc-kpis">
+        <div class="acc-kpi is-credito">
+            <span class="acc-kpi-label">Créditos</span>
+            <span class="acc-kpi-value" id="acc-kpi-creditos">{{ number_format((float) $k['creditos'], 2, ',', '.') }}</span>
+            <div class="acc-kpi-hint" id="acc-kpi-creditos-hint">Disponible</div>
+        </div>
+        <div class="acc-kpi is-deuda">
+            <span class="acc-kpi-label">Deuda</span>
+            <span class="acc-kpi-value" id="acc-kpi-deudas">{{ number_format((float) $k['deudas'], 2, ',', '.') }}</span>
+            <div class="acc-kpi-hint" id="acc-kpi-deudas-hint">Facturas abiertas</div>
+        </div>
+        <div class="acc-kpi is-ok">
+            <span class="acc-kpi-label">Matching ahora</span>
+            <span class="acc-kpi-value" id="acc-kpi-match">0,00</span>
+            <div class="acc-kpi-hint" id="acc-kpi-match-hint">Sugerido + fijado</div>
+        </div>
+        <div class="acc-kpi is-warn">
+            <span class="acc-kpi-label">Sin asignar</span>
+            <span class="acc-kpi-value" id="acc-kpi-libre">{{ number_format((float) $k['creditos'], 2, ',', '.') }}</span>
+            <div class="acc-kpi-hint" id="acc-kpi-libre-hint">Crédito que aún no pega</div>
+        </div>
+    </div>
+
+    <div class="acc-panes">
+        <section class="acc-pane">
+            <div class="acc-pane-head">
+                <h2>Haber · NC y cobranzas a cuenta</h2>
+                <span class="acc-count"><span id="acc-count-creditos">{{ count($creditos) }}</span></span>
+            </div>
+            <div class="acc-pane-tools">
+                <input type="search" id="acc-buscar-credito" class="form-control form-control-sm" placeholder="Buscar crédito…">
+            </div>
+            <div class="acc-pane-body" id="acc-creditos-body"></div>
+        </section>
+        <section class="acc-pane">
+            <div class="acc-pane-head">
+                <h2>Debe · facturas adeudadas</h2>
+                <span class="acc-count"><span id="acc-count-deudas">{{ count($deudas) }}</span></span>
+            </div>
+            <div class="acc-pane-tools acc-pane-tools-deuda">
+                <input type="search" id="acc-buscar-deuda" class="form-control form-control-sm" placeholder="Buscar factura…">
+                <select id="acc-filtro-deuda" class="form-control form-control-sm">
+                    <option value="todas">Todas</option>
+                    <option value="compatibles">Compatibles con el crédito</option>
+                    <option value="sugeridas">Con matching</option>
+                    <option value="vencidas">Vencidas</option>
+                    <option value="excluidas">Excluidas</option>
+                </select>
+            </div>
+            <div class="acc-pane-body" id="acc-deudas-body"></div>
+        </section>
+    </div>
+
+    <div class="acc-board">
+        <div class="acc-board-head">
+            <h3>Matching en curso</h3>
+            <span class="acc-count" id="acc-board-resumen">Sin líneas</span>
+        </div>
+        <div class="acc-board-legend">
+            <span class="acc-badge auto">Sugerida</span> se recálcula sola.
+            <span class="acc-badge manual">Fijada</span> la cambiaste vos y no se toca.
+            Destildá una factura para sacarla del matching.
+            Misma moneda: DC si cambió la cotización. Distinta moneda: cargá la cotización de liquidación y tildá la factura: se convierte, se consume cada cubeta en su moneda y se asienta DC. El FIFO no cruza monedas.
+        </div>
+        <div id="acc-board-body" class="acc-board-body"></div>
+    </div>
+
+    <div class="acc-recientes">
+        <h3>Ya aplicadas (se pueden deshacer)</h3>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Crédito</th>
+                        <th>Deuda</th>
+                        <th class="text-right">Monto</th>
+                        <th class="text-right">DC</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="acc-recientes-body">
+                    <tr><td colspan="6" class="text-muted text-center">Seleccione un cliente</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="acc-dock">
+        <div class="acc-dock-stat">Se va a aplicar<strong id="acc-dock-aplicar">0,00</strong></div>
+        <div class="acc-dock-stat">Libre del crédito<strong id="acc-dock-resto">—</strong></div>
+        <div class="acc-dock-stat">Dif. de cambio<strong id="acc-dock-dc">—</strong></div>
+        <div class="acc-dock-stat">Pares<strong id="acc-dock-lineas">0</strong></div>
+        <div class="acc-bar" id="acc-dock-bar"><span></span></div>
+        <span class="acc-toast-error" id="acc-dock-error"></span>
+        @if (can('aplicar-cuentacorriente-cliente', false))
+            <button type="button" id="btn-acc-aplicar" class="btn btn-success btn-aplicar" disabled>Confirmar matching</button>
+        @endif
+    </div>
+</div>
+@include('includes.ventas.modalconsultacliente')
+@endsection

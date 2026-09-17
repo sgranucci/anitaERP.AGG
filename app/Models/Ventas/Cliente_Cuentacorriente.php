@@ -17,6 +17,11 @@ class Cliente_Cuentacorriente extends Model implements Auditable
 	
     protected $table = 'cliente_cuentacorriente';
 
+    protected $casts = [
+        'fecha' => 'date',
+        'fechavencimiento' => 'date',
+    ];
+
 	public function clientes()
 	{
     	return $this->belongsTo(Cliente::class, 'cliente_id', 'id');

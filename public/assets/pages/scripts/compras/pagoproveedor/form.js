@@ -330,6 +330,8 @@
             if (!actual) {
                 $monto.val($monto.data('saldo'));
             }
+        } else if (!checked && $monto.length) {
+            $monto.val('');
         }
     }
 
@@ -650,8 +652,12 @@
     $(document).on('change', '.pp-sel-deuda', function () {
         var $tr = $(this).closest('tr');
         var $monto = $tr.find('.pp-monto-aplicar');
-        if (this.checked && (!parseFloat($monto.val()) || parseFloat($monto.val()) === 0)) {
-            $monto.val($monto.data('saldo'));
+        if (this.checked) {
+            if (!parseFloat($monto.val()) || parseFloat($monto.val()) === 0) {
+                $monto.val($monto.data('saldo'));
+            }
+        } else {
+            $monto.val('');
         }
         sincronizarCamposAplicacion();
         if (typeof flModificaAsiento !== 'undefined') {
@@ -661,13 +667,82 @@
 
     $(document).on('input change', '.pp-monto-aplicar', function () {
         var $tr = $(this).closest('tr');
-        if (parseFloat($(this).val() || '0') > 0) {
-            $tr.find('.pp-sel-deuda').prop('checked', true);
-        }
+        var monto = parseFloat($(this).val() || '0') || 0;
+        $tr.find('.pp-sel-deuda').prop('checked', monto > 0.009);
         sincronizarCamposAplicacion();
         if (typeof flModificaAsiento !== 'undefined') {
             flModificaAsiento = true;
         }
+    });
+
+    function limpiarAplicacionesPagoproveedor() {
+        $('#tabla-deuda-proveedor tbody tr').each(function () {
+            var $tr = $(this);
+            if (!$tr.find('.pp-monto-aplicar').length) {
+                return;
+            }
+            $tr.find('.pp-sel-deuda').prop('checked', false);
+            $tr.find('.pp-monto-aplicar').val('');
+        });
+        sincronizarCamposAplicacion();
+        if (typeof programarCalculoRetenciones === 'function') {
+            programarCalculoRetenciones();
+        }
+        if (typeof flModificaAsiento !== 'undefined') {
+            flModificaAsiento = true;
+        }
+    }
+
+    function aplicarSecuencialPorMontoPagoproveedor(montoTotal) {
+        var restante = Math.round((parseFloat(String(montoTotal || '0').replace(',', '.')) || 0) * 100) / 100;
+        limpiarAplicacionesPagoproveedor();
+        if (restante <= 0.009) {
+            return;
+        }
+        $('#tabla-deuda-proveedor tbody tr').each(function () {
+            if (restante <= 0.009) {
+                return false;
+            }
+            var $tr = $(this);
+            var $monto = $tr.find('.pp-monto-aplicar');
+            if (!$monto.length) {
+                return;
+            }
+            // Solo deudas (facturas); NC/OPA (signo negativo) se tildan a mano.
+            if (signoFila($tr) < 0) {
+                return;
+            }
+            var saldo = parseFloat($monto.data('saldo') || '0') || 0;
+            var aplicar = Math.min(saldo, restante);
+            if (aplicar <= 0.009) {
+                return;
+            }
+            $monto.val(aplicar.toFixed(2));
+            $tr.find('.pp-sel-deuda').prop('checked', true);
+            restante = Math.round((restante - aplicar) * 100) / 100;
+        });
+        sincronizarCamposAplicacion();
+        if (typeof programarCalculoRetenciones === 'function') {
+            programarCalculoRetenciones();
+        }
+        if (typeof flModificaAsiento !== 'undefined') {
+            flModificaAsiento = true;
+        }
+    }
+
+    $(document).on('click', '#pp-btn-aplicar-secuencial', function (e) {
+        e.preventDefault();
+        aplicarSecuencialPorMontoPagoproveedor($('#pp-monto-aplicar-secuencial').val());
+    });
+    $(document).on('keydown', '#pp-monto-aplicar-secuencial', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            aplicarSecuencialPorMontoPagoproveedor($(this).val());
+        }
+    });
+    $(document).on('click', '#pp-btn-limpiar-aplicaciones', function (e) {
+        e.preventDefault();
+        limpiarAplicacionesPagoproveedor();
     });
 
     $('#proveedor_id')

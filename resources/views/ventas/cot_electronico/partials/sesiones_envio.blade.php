@@ -57,11 +57,17 @@
                         <th class="text-center">OK</th>
                         <th class="text-center">Errores</th>
                         <th>Estado</th>
-                        <th style="width:90px;"></th>
+                        <th style="width:140px;"></th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($sesiones as $sesion)
+                        @php
+                            $guiaSesion = $sesion->cotGuia ?? null;
+                            $mostrarSuburbano = ! empty($guiaSuburbanoHabilitado)
+                                && $guiaSesion
+                                && \App\Support\Ventas\CotGuiaSuburbanoSupport::esSuburbano($guiaSesion->transportes);
+                        @endphp
                         <tr class="{{ ($sesionId ?? null) === $sesion->id ? 'table-info' : '' }}">
                             <td>{{ $sesion->id }}</td>
                             <td>{{ $sesion->fecha_envio?->format('d/m/Y H:i') }}</td>
@@ -101,6 +107,13 @@
                                     <a href="{{ route('sesion_impresion_cot', ['id' => $sesion->id]) }}"
                                         class="btn btn-outline-success btn-sm" title="Enviar constancias COT a la impresora">
                                         <i class="fa fa-print"></i>
+                                    </a>
+                                @endif
+                                @if ($mostrarSuburbano)
+                                    <a href="{{ route('cot_electronico_guia_suburbano_excel', ['id' => $guiaSesion->id]) }}"
+                                        class="btn btn-outline-success btn-sm"
+                                        title="Descargar gu&iacute;a suburbano Excel">
+                                        <i class="fas fa-file-excel"></i>
                                     </a>
                                 @endif
                                 <a href="{{ route('listar_cot_electronico_sesion', ['formato' => 'PDF', 'id' => $sesion->id]) }}"

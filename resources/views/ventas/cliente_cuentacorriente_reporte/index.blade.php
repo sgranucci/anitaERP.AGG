@@ -8,11 +8,14 @@
 <script>
     window.CC_CLIENTES_REPORTE = {
         clientesIniciales: @json($clientes_iniciales ?? []),
+        vendedoresIniciales: @json($vendedores_iniciales ?? []),
         leerClienteUrlBase: @json(url('ventas/leerunclienteporcodigo')),
+        leerVendedorUrlBase: @json(url('ventas/leervendedor')),
         consultado: @json(! empty($consultado)),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/vendedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/vendedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente_cuentacorriente_reporte/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente_cuentacorriente_reporte/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
@@ -50,7 +53,7 @@
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Consultá la <strong>deuda pendiente</strong> o la <strong>ficha corrida</strong> de uno, varios o todos los clientes.
-                        Elegí primero cómo querés seleccionar clientes; el resto de filtros se aplica igual en todos los casos.
+                        Podés acotar por <strong>vendedor</strong> (todos, lista o rango de códigos). El resto de filtros se aplica igual en todos los casos.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
@@ -77,6 +80,21 @@
                         </div>
                     </div>
 
+                    <div class="mb-2 pl-lg-2">
+                        <span class="badge badge-secondary">1</span>
+                        <strong class="ml-1">Corte por vendedor</strong>
+                        <span class="text-muted small ml-1">— el listado se agrupa con encabezado y total por cada vendedor</span>
+                    </div>
+                    @include('ventas.cliente_cuentacorriente_reporte.partials.selector_vendedores', [
+                        'filtros' => $filtros,
+                        'vendedores_iniciales' => $vendedores_iniciales ?? [],
+                    ])
+
+                    <div class="mb-2 pl-lg-2">
+                        <span class="badge badge-secondary">2</span>
+                        <strong class="ml-1">Corte por clientes</strong>
+                        <span class="text-muted small ml-1">— opcional; si elegís vendedores, queda en «Todos» automáticamente</span>
+                    </div>
                     @include('ventas.cliente_cuentacorriente_reporte.partials.selector_clientes', [
                         'filtros' => $filtros,
                         'clientes_iniciales' => $clientes_iniciales ?? [],
@@ -168,6 +186,7 @@
 
                     <p class="small mb-2">
                         {{ $subtitulo ?? '' }}
+                        · <strong>Vendedores:</strong> {{ $resultado['stats']['vendedores'] ?? 0 }}
                         · <strong>Clientes:</strong> {{ $resultado['stats']['clientes'] ?? 0 }}
                         · <strong>Movimientos:</strong> {{ $resultado['stats']['movimientos'] ?? 0 }}
                         @if (($resultado['stats']['aplicaciones'] ?? 0) > 0)
@@ -223,6 +242,18 @@
                     <style>
                         #tabla-cc-clientes-reporte thead tr { background-color: #85C1E9; color: #17202A; }
                         #tabla-cc-clientes-reporte thead th { font-weight: 600; border-color: #7fb3d5; }
+                        #tabla-cc-clientes-reporte .cc-rep-header-vendedor {
+                            background: #1b4f72;
+                            color: #fff;
+                            font-weight: 700;
+                        }
+                        #tabla-cc-clientes-reporte .cc-rep-header-vendedor a { color: #d6eaf8; }
+                        #tabla-cc-clientes-reporte .cc-rep-total-vendedor {
+                            background: #f5b041;
+                            font-weight: 700;
+                            border-top: 2px solid #b9770e;
+                            color: #1b4f72;
+                        }
                         #tabla-cc-clientes-reporte .cc-rep-header { background: #d6eaf8; font-weight: 600; }
                         #tabla-cc-clientes-reporte .cc-rep-total {
                             background: #f9e79f;
@@ -267,4 +298,5 @@
 </div>
 
 @include('includes.ventas.modalconsultacliente')
+@include('includes.ventas.modalconsultavendedor')
 @endsection

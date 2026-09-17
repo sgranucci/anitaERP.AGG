@@ -132,10 +132,17 @@ final class ChequeFormOldInputSupport
             return null;
         }
 
+        $nroInternoRaw = self::at($old, 'nro_interno_anita_recibidos', $i, '');
+        $nroInterno = is_numeric($nroInternoRaw) ? (int) $nroInternoRaw : null;
+        if ($nroInterno !== null && $nroInterno <= 0) {
+            $nroInterno = null;
+        }
+
         return (object) [
             'id' => self::at($old, 'cheque_recibido_ids', $i, ''),
             'banco_id' => $bancoId,
             'numerocheque' => $nro,
+            'nro_interno_anita' => $nroInterno,
             'fechapago' => self::at($old, 'fechapago_recibidos', $i, ''),
             'sucursalpago' => self::at($old, 'sucursalpago_recibidos', $i, ''),
             'cuentalibradora' => self::at($old, 'cuentalibradora_recibidos', $i, ''),

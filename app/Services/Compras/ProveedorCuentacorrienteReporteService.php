@@ -319,7 +319,7 @@ class ProveedorCuentacorrienteReporteService
                     ->selectRaw('SUM(total)')
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
-            ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
+            ->whereRaw(SqlDialectSupport::sqlAlcanceDeudaAbiertaProveedorCc())
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         $this->aplicarFiltrosComunes($query, $filtros, $proveedorIds);

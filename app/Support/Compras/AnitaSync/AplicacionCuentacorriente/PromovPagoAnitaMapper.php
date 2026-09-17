@@ -3,6 +3,8 @@
 namespace App\Support\Compras\AnitaSync\AplicacionCuentacorriente;
 
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\PromovCuotaAnitaMapper;
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Configuracion\MonedaAnitaCodigoSupport;
 
 /**
  * Fila promov de OP / OPA (crédito). Misma estructura que la cuota de factura.
@@ -27,6 +29,31 @@ final class PromovPagoAnitaMapper
         if ($fecha === '') {
             $fecha = '0';
         }
+        $codMon = MonedaAnitaCodigoSupport::normalizar($lado['cod_mon'] ?? '1');
+
+        // Ferli: sin prov_empresa ni *_marca (PromovCuotaAnitaFerliMapper).
+        if (EntornoEmpresaSupport::esFerli()) {
+            return "
+            '".$e($lado['proveedor'], 6)."',
+            '".$e($lado['tipo'], 3)."',
+            '".$e($lado['letra'], 1)."',
+            '".(int) $lado['sucursal']."',
+            '".(int) $lado['numero']."',
+            '   ',
+            ' ',
+            '0',
+            '0',
+            '".$fecha."',
+            '".$fecha."',
+            '".AplicacionCuentacorrienteAnitaLadoSupport::decimal($monto)."',
+            '".$codMon."',
+            '".AplicacionCuentacorrienteAnitaLadoSupport::decimal((float) $lado['cotizacion'])."',
+            '".(int) ($lado['nro_cuota'] ?? 0)."',
+            '0',
+            '0',
+            '".(int) ($lado['nro_interno'] ?? 0)."'
+        ";
+        }
 
         return "
             '".$e($lado['proveedor'], 6)."',
@@ -41,7 +68,7 @@ final class PromovPagoAnitaMapper
             '".$fecha."',
             '".$fecha."',
             '".AplicacionCuentacorrienteAnitaLadoSupport::decimal($monto)."',
-            '".$e((string) $lado['cod_mon'], 3)."',
+            '".$codMon."',
             '".AplicacionCuentacorrienteAnitaLadoSupport::decimal((float) $lado['cotizacion'])."',
             '".(int) ($lado['nro_cuota'] ?? 0)."',
             '0',

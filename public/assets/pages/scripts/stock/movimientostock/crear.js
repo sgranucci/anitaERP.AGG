@@ -85,6 +85,9 @@
 		});
 
 		function movimientoRestaStockEnDepositoOrigen() {
+			if (window.msPermiteSaldosNegativos) {
+				return false;
+			}
 			if (typeof window.msDepositoOrigenRequiereControlStock === 'function'
 				&& !window.msDepositoOrigenRequiereControlStock()) {
 				return false;

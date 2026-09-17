@@ -16,7 +16,7 @@
             <label for="consultachequecartera" class="col-form-label col-auto pr-2">Buscar:</label>
             <div class="col">
               <input type="text" name="consultachequecartera" id="consultachequecartera" class="form-control" autocomplete="off" autofocus
-                placeholder="Nro. interno Anita, nro. cheque, monto, cliente…">
+                placeholder="Nro. interno / cheque…  Enter acepta si hay uno">
             </div>
           </div>
         </form>

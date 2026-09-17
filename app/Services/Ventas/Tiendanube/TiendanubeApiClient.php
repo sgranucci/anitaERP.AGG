@@ -45,6 +45,23 @@ final class TiendanubeApiClient
     }
 
     /**
+     * @param  array<string,mixed>  $body
+     * @return array{ok:bool,status:int,data?:mixed,error?:string}
+     */
+    public function put(string $path, array $body = []): array
+    {
+        return $this->request('PUT', $path, [], $body);
+    }
+
+    /**
+     * @return array{ok:bool,status:int,data?:mixed,error?:string}
+     */
+    public function delete(string $path): array
+    {
+        return $this->request('DELETE', $path);
+    }
+
+    /**
      * Lista pedidos paginados. page empieza en 1.
      *
      * @param  array<string,scalar|null>  $filtros
@@ -70,14 +87,73 @@ final class TiendanubeApiClient
     }
 
     /**
-     * Publica factura asociada al pedido (requiere write_orders).
+     * Publica factura en el pedido vía metafield oficial `nfe/list` (requiere write_orders).
+     * Docs: GET/POST/PUT metafields — no existe /orders/{id}/invoices.
      *
-     * @param  array<string,mixed>  $invoice
+     * @param  array{key:string,link?:string|null,fulfillment_order_id?:string|null}  $invoice
      * @return array{ok:bool,status:int,data?:mixed,error?:string}
      */
     public function crearInvoice(int $orderId, array $invoice): array
     {
-        return $this->post('orders/'.$orderId.'/invoices', $invoice);
+        $key = trim((string) ($invoice['key'] ?? ''));
+        if ($key === '') {
+            return ['ok' => false, 'status' => 0, 'error' => 'Invoice sin key (CAE/número)'];
+        }
+
+        $entry = array_filter([
+            'key' => $key,
+            'link' => isset($invoice['link']) && $invoice['link'] !== '' ? (string) $invoice['link'] : null,
+            'fulfillment_order_id' => isset($invoice['fulfillment_order_id']) && $invoice['fulfillment_order_id'] !== ''
+                ? (string) $invoice['fulfillment_order_id']
+                : null,
+        ], static fn ($v) => $v !== null);
+
+        $existente = $this->get('metafields/orders', [
+            'per_page' => 1,
+            'owner_id' => $orderId,
+            'namespace' => 'nfe',
+            'key' => 'list',
+            'fields' => 'id,value',
+        ]);
+        if (! ($existente['ok'] ?? false)) {
+            return $existente;
+        }
+
+        $rows = is_array($existente['data'] ?? null) ? $existente['data'] : [];
+        $meta = $rows[0] ?? null;
+        $lista = [];
+        if (is_array($meta) && isset($meta['value']) && is_string($meta['value']) && $meta['value'] !== '') {
+            $decoded = json_decode($meta['value'], true);
+            if (is_array($decoded)) {
+                $lista = $decoded;
+            }
+        }
+
+        foreach ($lista as $item) {
+            if (is_array($item) && (string) ($item['key'] ?? '') === $key) {
+                return ['ok' => true, 'status' => 200, 'data' => $meta, 'error' => null];
+            }
+        }
+        $lista[] = $entry;
+        $valueJson = json_encode($lista, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($valueJson === false) {
+            return ['ok' => false, 'status' => 0, 'error' => 'No se pudo serializar lista de invoices'];
+        }
+
+        if (is_array($meta) && (int) ($meta['id'] ?? 0) > 0) {
+            return $this->put('metafields/'.(int) $meta['id'], [
+                'value' => $valueJson,
+            ]);
+        }
+
+        return $this->post('metafields', [
+            'namespace' => 'nfe',
+            'key' => 'list',
+            'value' => $valueJson,
+            'description' => 'Lista de facturas',
+            'owner_resource' => 'Order',
+            'owner_id' => $orderId,
+        ]);
     }
 
     /**
@@ -109,6 +185,7 @@ final class TiendanubeApiClient
             $response = match (strtoupper($method)) {
                 'POST' => $pending->post($url, $body ?? []),
                 'PUT' => $pending->put($url, $body ?? []),
+                'DELETE' => $pending->delete($url),
                 default => $pending->get($url, $query),
             };
         } catch (\Throwable $e) {

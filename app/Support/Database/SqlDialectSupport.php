@@ -311,6 +311,18 @@ final class SqlDialectSupport
     }
 
     /**
+     * Alcance del modo «deuda» proveedor: comprobantes con saldo (FC/ND/NC)
+     * o créditos/adelantos (OPA/OPP) sin factura aún no aplicados.
+     * Sin esto, un proveedor solo con saldo acreedor (ej. pago a cuenta) no aparece.
+     */
+    public static function sqlAlcanceDeudaAbiertaProveedorCc(
+        string $alias = 'proveedor_cuentacorriente'
+    ): string {
+        return '('.$alias.'.comprobante_proveedor_id IS NOT NULL'
+            .' OR ('.$alias.'.pagoproveedor_id IS NOT NULL AND '.$alias.'.total < 0))';
+    }
+
+    /**
      * Condición WHERE portable: saldo de CC cliente aún no cancelado del todo.
      */
     public static function sqlSaldoPendienteClienteCc(): string

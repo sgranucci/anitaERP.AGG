@@ -164,6 +164,9 @@ class PagoproveedorController extends Controller
         $mensaje = $numero !== ''
             ? 'Orden de pago '.$numero.' grabada.'
             : 'Orden de pago grabada.';
+        if (! empty($resultado['aviso'])) {
+            $mensaje .= ' '.$resultado['aviso'];
+        }
 
         return redirect()
             ->route('pagoproveedor', ['empresa_id' => $empresaId])
@@ -505,8 +508,9 @@ class PagoproveedorController extends Controller
         }
 
         $mensaje = sprintf(
-            'Anita → ERP: %d CP, %d CC, %d aplicaciones (a procesar %d; ya al día %d).',
+            'Anita → ERP: %d CP, %d OPA, %d CC, %d aplicaciones (a procesar %d; ya al día %d).',
             (int) ($stats['cp_creados'] ?? 0),
+            (int) ($stats['opa_creados'] ?? 0),
             (int) ($stats['cc_creadas'] ?? 0),
             (int) ($stats['aplicaciones_creadas'] ?? 0),
             (int) ($stats['a_procesar'] ?? 0),
@@ -518,11 +522,13 @@ class PagoproveedorController extends Controller
             'mensaje' => $mensaje,
             'stats' => [
                 'cp_creados' => (int) ($stats['cp_creados'] ?? 0),
+                'opa_creados' => (int) ($stats['opa_creados'] ?? 0),
                 'cc_creadas' => (int) ($stats['cc_creadas'] ?? 0),
                 'aplicaciones_creadas' => (int) ($stats['aplicaciones_creadas'] ?? 0),
                 'a_procesar' => (int) ($stats['a_procesar'] ?? 0),
                 'omitidas_al_dia' => (int) ($stats['omitidas_al_dia'] ?? 0),
                 'omitidas_sin_compra' => (int) ($stats['omitidas_sin_compra'] ?? 0),
+                'credito_sin_compra_anita' => (int) ($stats['credito_sin_compra_anita'] ?? 0),
                 'errores' => array_slice((array) ($stats['errores'] ?? []), 0, 10),
             ],
         ]);

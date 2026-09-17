@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Exports\Ventas\CotGuiaSuburbanoExport;
 use App\Exports\Ventas\CotSesionEnvioExport;
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\CotGuia;
@@ -12,10 +13,12 @@ use App\Services\Ventas\ComprobanteImpresionSesionService;
 use App\Services\Ventas\CotElectronico\ArbaCotPresentacionService;
 use App\Services\Ventas\CotElectronico\CotElectronicoService;
 use App\Services\Ventas\CotElectronico\CotGuiaService;
+use App\Services\Ventas\CotElectronico\CotGuiaSuburbanoExcelService;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionSalidaUsuarioSupport;
 use App\Support\Ventas\CotConfiguracionSupport;
 use App\Support\Ventas\CotElectronicoPreferenciasUsuario;
+use App\Support\Ventas\CotGuiaSuburbanoSupport;
 use App\Support\Ventas\CotRemitoTotalesSupport;
 use App\Support\Ventas\CuitFormatoValidacionSupport;
 use Carbon\Carbon;
@@ -31,6 +34,7 @@ class CotElectronicoController extends Controller
         private ComprobanteImpresionSesionService $impresionSesionService,
         private CotGuiaService $guiaService,
         private CotGuiaRepository $guiaRepository,
+        private CotGuiaSuburbanoExcelService $guiaSuburbanoExcelService,
     ) {}
 
     public function index(Request $request)
@@ -143,6 +147,8 @@ class CotElectronicoController extends Controller
                 'resultadoPruebaConexion' => session('resultadoPruebaConexion'),
                 'ambiente' => (string) config('arba_cot.ambiente', 'test'),
                 'siguienteNumeroGuia' => $this->guiaRepository->siguienteNumero(),
+                'guiaSuburbanoHabilitado' => CotGuiaSuburbanoSupport::habilitadoEnEntorno(),
+                'esGuiaSuburbano' => CotGuiaSuburbanoSupport::esSuburbano($guia?->transportes),
                 'urlsGuia' => [
                     'guardar' => route('cot_electronico_guia_guardar'),
                     'resolver' => route('cot_electronico_guia_resolver_factura'),
@@ -150,9 +156,37 @@ class CotElectronicoController extends Controller
                     'enviar' => route('cot_electronico_guia_enviar'),
                     'consultar' => route('cot_electronico_guia_consultar'),
                     'leer' => route('cot_electronico'),
+                    'suburbanoExcel' => $guia
+                        ? route('cot_electronico_guia_suburbano_excel', ['id' => $guia->id])
+                        : '',
                 ],
             ]
         ));
+    }
+
+    public function exportarGuiaSuburbano(int $id)
+    {
+        can('procesar-cot-electronico');
+        if (! CotGuiaSuburbanoSupport::habilitadoEnEntorno()) {
+            abort(404);
+        }
+
+        $guia = $this->guiaService->cargar($id);
+        if ($guia === null) {
+            abort(404);
+        }
+
+        try {
+            $payload = $this->guiaSuburbanoExcelService->armar($guia);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()
+                ->route('cot_electronico', ['guia_id' => $guia->id])
+                ->withErrors([$e->getMessage()]);
+        }
+
+        $nombre = 'guia_suburbano_'.$guia->numero.'_'.date('Ymd_His').'.xlsx';
+
+        return (new CotGuiaSuburbanoExport($payload))->download($nombre);
     }
 
     public function guardarGuia(Request $request)
@@ -378,6 +412,7 @@ class CotElectronicoController extends Controller
             'sesionDetalle' => $sesionDetalle,
             'remitosSesion' => $remitosSesion,
             'sesionId' => $sesionId,
+            'guiaSuburbanoHabilitado' => CotGuiaSuburbanoSupport::habilitadoEnEntorno(),
         ];
     }
 

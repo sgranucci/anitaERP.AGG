@@ -78,6 +78,78 @@ class VentaDeudaImportarDesdeAnitaService
     }
 
     /**
+     * Cabeceras ERP desde climov cuando Anita no tiene fila en `venta` (COA, etc.).
+     *
+     * @param  list<array<string, mixed>>  $climovs
+     * @return array<string, mixed>
+     */
+    public function importarDesdeClimov(
+        array $climovs,
+        bool $dryRun = true,
+        int $usuarioId = 1,
+        string $leyenda = 'Importado Anita climov (crédito sin venta)',
+    ): array {
+        $stats = $this->statsVacios($dryRun);
+        $stats['claves'] = count($climovs);
+        if ($climovs === []) {
+            return $stats;
+        }
+
+        $anita = [];
+        foreach ($climovs as $climov) {
+            $fila = $this->filaVentaSinteticaDesdeClimov($climov);
+            $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDocumento(
+                (string) ($fila['ven_tipo'] ?? ''),
+                (string) ($fila['ven_letra'] ?? ''),
+                (int) ($fila['ven_sucursal'] ?? 0),
+                (int) ($fila['ven_nro'] ?? 0),
+            );
+            if ($clave === '' || str_starts_with($clave, '|')) {
+                continue;
+            }
+            $anita[$clave] = $fila;
+        }
+        $stats['anita_venta'] = count($anita);
+
+        return $this->procesarFilasAnita($anita, [], $dryRun, $usuarioId, $leyenda, $stats);
+    }
+
+    /**
+     * @param  array<string, mixed>  $climov
+     * @return array<string, mixed>
+     */
+    private function filaVentaSinteticaDesdeClimov(array $climov): array
+    {
+        return [
+            'ven_cliente' => $climov['cliv_cliente'] ?? '',
+            'ven_tipo' => $climov['cliv_tipo'] ?? '',
+            'ven_letra' => $climov['cliv_letra'] ?? '',
+            'ven_sucursal' => $climov['cliv_sucursal'] ?? 0,
+            'ven_nro' => $climov['cliv_nro'] ?? 0,
+            'ven_fecha' => $climov['cliv_fecha'] ?? '',
+            'ven_fecha_vto' => $climov['cliv_fecha_vto'] ?? ($climov['cliv_fecha'] ?? ''),
+            'ven_monto' => $climov['cliv_monto'] ?? 0,
+            'ven_gravado' => 0,
+            'ven_impuesto1' => 0,
+            'ven_exento' => 0,
+            'ven_cod_mon' => $climov['cliv_cod_mon'] ?? 1,
+            'ven_cotizacion' => $climov['cliv_cotizacion'] ?? 1,
+            'ven_nombre_cliente' => '',
+            'ven_direccion_cli' => '',
+            'ven_localidad_cli' => '',
+            'ven_provincia_cli' => '',
+            'ven_cod_postal_cli' => '',
+            'ven_cuit_cli' => '',
+            'ven_cond_iva_cli' => 0,
+            'ven_cond_venta' => 0,
+            'ven_vendedor' => '',
+            'ven_cta_cte' => 'S',
+            'ven_porc_desc' => 0,
+            'ven_monto_desc' => 0,
+        ];
+    }
+
+    /**
      * Importa comprobantes Anita del rango (ven_fecha) que falten en ERP.
      *
      * @param  list<string>|null  $tipos  null = TIPOS_IVA_VENTAS

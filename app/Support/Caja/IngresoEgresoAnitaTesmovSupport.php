@@ -12,6 +12,7 @@ use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplicacionCuentacorrienteAnitaLadoSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
+use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -108,7 +109,7 @@ final class IngresoEgresoAnitaTesmovSupport
 
         $where = ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
             .' AND axp_rec = '.(int) $ctx['nro']
-            .' AND axp_empresa = '.(int) $ctx['empresa'];
+            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag((int) $ctx['empresa']);
         $rawList = (new ApiAnita)->apiCallEscritura([
             'acc' => 'list',
             'sistema' => self::sistema(),
@@ -378,14 +379,14 @@ final class IngresoEgresoAnitaTesmovSupport
                 'auxpag',
                 ' WHERE axp_tipo = '.self::escSql($tipoBorrar)
                     .' AND axp_rec = '.$nro
-                    .' AND axp_empresa = '.$empresa,
+                    .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag($empresa),
                 $contexto.' auxpag '.$tipoBorrar
             );
             self::deleteWhere(
                 'tesmov',
                 ' WHERE tesv_tipo = '.self::escSql($tipoBorrar)
                     .' AND tesv_nro = '.$nro
-                    .' AND tesv_empresa = '.$empresa,
+                    .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa),
                 $contexto.' tesmov '.$tipoBorrar
             );
             self::deleteWhere(
@@ -450,13 +451,18 @@ final class IngresoEgresoAnitaTesmovSupport
 
         $where = ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
             .' AND axp_rec = '.(int) $ctx['nro']
-            .' AND axp_empresa = '.(int) $ctx['empresa'];
+            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag((int) $ctx['empresa']);
+
+        $camposList = 'axp_rec,axp_tipo,axp_tipo_ap,axp_sucursal,axp_sucursal_cob';
+        if (! CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()) {
+            $camposList .= ',axp_empresa';
+        }
 
         $rawList = (new ApiAnita)->apiCallEscritura([
             'acc' => 'list',
             'sistema' => self::sistema(),
             'tabla' => 'auxpag',
-            'campos' => 'axp_rec,axp_tipo,axp_tipo_ap,axp_sucursal,axp_sucursal_cob,axp_empresa',
+            'campos' => $camposList,
             'whereArmado' => $where,
         ], 'caja IE auxpag list sucursal_cob '.$movimiento->id);
 
@@ -555,12 +561,16 @@ final class IngresoEgresoAnitaTesmovSupport
             return $base;
         }
 
+        $camposTes = 'tesv_tipo,tesv_nro,tesv_cuenta,tesv_importe,tesv_desc_mov';
+        if (! CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()) {
+            $camposTes .= ',tesv_empresa';
+        }
         $tesmov = self::listarFilasAnita(
             'tesmov',
-            'tesv_tipo,tesv_nro,tesv_cuenta,tesv_importe,tesv_desc_mov,tesv_empresa',
+            $camposTes,
             ' WHERE tesv_tipo = '.self::escSql($ctx['tipo'])
                 .' AND tesv_nro = '.(int) $ctx['nro']
-                .' AND tesv_empresa = '.(int) $ctx['empresa'],
+                .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov((int) $ctx['empresa']),
             'caja IE tesmov TRA list '.$movimiento->id
         );
 
@@ -631,7 +641,7 @@ final class IngresoEgresoAnitaTesmovSupport
             $whereTes = ' WHERE tesv_tipo = '.self::escSql($ctx['tipo'])
                 .' AND tesv_nro = '.(int) $ctx['nro']
                 .' AND tesv_cuenta = '.$cuentaSql
-                .' AND tesv_empresa = '.(int) $ctx['empresa'];
+                .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov((int) $ctx['empresa']);
             $rawTes = (new ApiAnita)->apiCallEscritura([
                 'tabla' => 'tesmov',
                 'acc' => 'update',
@@ -646,7 +656,7 @@ final class IngresoEgresoAnitaTesmovSupport
             $whereAxp = ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
                 .' AND axp_rec = '.(int) $ctx['nro']
                 .' AND axp_banco = '.$cuentaSql
-                .' AND axp_empresa = '.(int) $ctx['empresa']
+                .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag((int) $ctx['empresa'])
                 .' AND axp_tipo_ap <> '.self::escSql('CHP');
             $rawAxp = (new ApiAnita)->apiCallEscritura([
                 'tabla' => 'auxpag',
@@ -788,6 +798,76 @@ final class IngresoEgresoAnitaTesmovSupport
             // a-movim.c SOLPAGO → pag_tipo_vale=SOL + pag_nro_vale=solicitud
             $tipoVale = 'SOL';
             $nroVale = (int) $ctx['spCodigo'];
+        }
+
+        if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli()) {
+            $raw = (new ApiAnita)->apiCallEscritura([
+                'tabla' => 'pago',
+                'acc' => 'insert',
+                'sistema' => self::sistema(),
+                'campos' => '
+                    pag_pro,
+                    pag_fecha,
+                    pag_tipo,
+                    pag_rec,
+                    pag_trec,
+                    pag_cotizacion,
+                    pag_leyenda,
+                    pag_entregado_a,
+                    pag_letra,
+                    pag_sucursal,
+                    pag_mov_ext,
+                    pag_cod_mon_me,
+                    pag_cobrador,
+                    pag_sucursal_p,
+                    pag_recibo_p,
+                    pag_sin_comision,
+                    pag_empresa,
+                    pag_legajo,
+                    pag_tipo_vale,
+                    pag_nro_vale,
+                    pag_reintegro,
+                    pag_adelanto,
+                    pag_adelanto_util,
+                    pag_devolucion,
+                    pag_vale,
+                    pag_vendedor,
+                    pag_usuario,
+                    pag_fecha_ult_act',
+                'valores' => "
+                    '".$ctx['proveedorCodigo']."',
+                    '".$ctx['fecha']."',
+                    '".self::esc($ctx['tipo'])."',
+                    '".$ctx['nro']."',
+                    '".$ctx['total']."',
+                    '".$ctx['cotizacion']."',
+                    '".self::esc($ctx['detalle'])."',
+                    '".self::esc($ctx['entregadoA'])."',
+                    '".self::esc($ctx['letra'])."',
+                    '".$ctx['sucursal']."',
+                    'E',
+                    '2',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    '".$ctx['empresa']."',
+                    '0',
+                    '".self::esc($tipoVale)."',
+                    '".$nroVale."',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    '0',
+                    '".self::esc($ctx['usuario'])."',
+                    '".date('Ymd')."'",
+            ], 'caja IE pago insert '.$movimiento->id);
+
+            self::assertOk($raw, 'pago', $movimiento->id);
+
+            return;
         }
 
         $raw = (new ApiAnita)->apiCallEscritura([
@@ -960,6 +1040,12 @@ final class IngresoEgresoAnitaTesmovSupport
         $sucursalCob = $desdePagoProveedor ? (int) $ctx['empresa'] : (int) $ctx['sucursal'];
         $sucursalAxp = $sucursalAxpOverride !== null ? $sucursalAxpOverride : (int) $ctx['sucursal'];
 
+        $extra = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertAuxpagEmpresaConceptoCbu(
+            (int) $ctx['empresa'],
+            0,
+            self::cbuAnita22((string) ($ctx['cbuPago'] ?? ''))
+        );
+
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'auxpag',
             'acc' => 'insert',
@@ -980,10 +1066,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 axp_letra_cob,
                 axp_sucursal_cob,
                 axp_vendedor,
-                axp_nro_interno,
-                axp_empresa,
-                axp_concepto,
-                axp_cbu',
+                axp_nro_interno'.$extra['campos'],
             'valores' => "
                 '".$ctx['proveedorCodigo']."',
                 '".$ctx['fecha']."',
@@ -1000,10 +1083,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".self::esc($ctx['letra'])."',
                 '".$sucursalCob."',
                 '0',
-                '0',
-                '".$ctx['empresa']."',
-                '0',
-                '".self::esc(self::cbuAnita22((string) ($ctx['cbuPago'] ?? '')))."'",
+                '0'".$extra['valores'],
         ], 'caja IE auxpag '.$tipoAp);
 
         self::assertOk($raw, 'auxpag '.$tipoAp, (int) $ctx['nro']);
@@ -1092,6 +1172,12 @@ final class IngresoEgresoAnitaTesmovSupport
     ): void {
         $letraComp = self::esc($ctx['letra'] ?? ' ');
 
+        $extra = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertAuxpagEmpresaConceptoCbu(
+            (int) $ctx['empresa'],
+            0,
+            ' '
+        );
+
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'auxpag',
             'acc' => 'insert',
@@ -1112,10 +1198,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 axp_letra_cob,
                 axp_sucursal_cob,
                 axp_vendedor,
-                axp_nro_interno,
-                axp_empresa,
-                axp_concepto,
-                axp_cbu',
+                axp_nro_interno'.$extra['campos'],
             'valores' => "
                 '".$ctx['proveedorCodigo']."',
                 '".$ctx['fecha']."',
@@ -1132,10 +1215,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".self::esc($ctx['letra'])."',
                 '".$ctx['empresa']."',
                 '0',
-                '0',
-                '".$ctx['empresa']."',
-                '0',
-                ' '",
+                '0'".$extra['valores'],
         ], 'caja IE auxpag '.$tipoAp);
 
         self::assertOk($raw, 'auxpag '.$tipoAp, (int) $ctx['nro']);
@@ -1277,6 +1357,12 @@ final class IngresoEgresoAnitaTesmovSupport
                     ?: ($deuda->proveedores->conceptogasto_id ?? 0)
             );
 
+            $extra = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertAuxpagEmpresaConceptoCbu(
+                (int) $ctx['empresa'],
+                $conceptoCashflow,
+                ' '
+            );
+
             $raw = (new ApiAnita)->apiCallEscritura([
                 'tabla' => 'auxpag',
                 'acc' => 'insert',
@@ -1297,10 +1383,7 @@ final class IngresoEgresoAnitaTesmovSupport
                     axp_letra_cob,
                     axp_sucursal_cob,
                     axp_vendedor,
-                    axp_nro_interno,
-                    axp_empresa,
-                    axp_concepto,
-                    axp_cbu',
+                    axp_nro_interno'.$extra['campos'],
                 'valores' => "
                     '".$ctx['proveedorCodigo']."',
                     '".$ctx['fecha']."',
@@ -1317,10 +1400,7 @@ final class IngresoEgresoAnitaTesmovSupport
                     '".self::esc($ctx['letra'])."',
                     '".$ctx['empresa']."',
                     '0',
-                    '".(int) ($lado['nro_interno'] ?? 0)."',
-                    '".$ctx['empresa']."',
-                    '".$conceptoCashflow."',
-                    ' '",
+                    '".(int) ($lado['nro_interno'] ?? 0)."'".$extra['valores'],
             ], 'caja IE auxpag FAC '.$lado['etiqueta']);
 
             self::assertOk($raw, 'auxpag FAC '.$lado['etiqueta'], (int) $ctx['nro']);
@@ -1353,6 +1433,10 @@ final class IngresoEgresoAnitaTesmovSupport
         $desc = $descTesmov !== null && $descTesmov !== ''
             ? $descTesmov
             : self::recortar($ctx['entregadoA'] !== '' ? $ctx['entregadoA'] : $ctx['detalle'], 30);
+        $extra = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertTesmovEmpresaMoneda(
+            (int) $ctx['empresa'],
+            $monedaId
+        );
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'tesmov',
             'acc' => 'insert',
@@ -1369,11 +1453,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 tesv_cotizacion,
                 tesv_desc_mov,
                 tesv_conciliado,
-                tesv_contrapartida,
-                tesv_nro_conc,
-                tesv_fecha_conc,
-                tesv_empresa,
-                tesv_cod_mon',
+                tesv_contrapartida'.$extra['campos'],
             'valores' => "
                 '".str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT)."',
                 '".$ctx['fecha']."',
@@ -1386,11 +1466,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$cotizacion."',
                 '".self::esc($desc)."',
                 ' ',
-                'S/C',
-                '0',
-                '0',
-                '".$ctx['empresa']."',
-                '".$monedaId."'",
+                'S/C'".$extra['valores'],
         ], 'caja IE tesmov');
 
         self::assertOk($raw, 'tesmov', (int) $nro);
@@ -1470,6 +1546,11 @@ final class IngresoEgresoAnitaTesmovSupport
         ], 'caja IE cpromae '.$cheque->id);
         self::assertOk($raw, 'cpromae', $cheque->id);
 
+        $extraAxp = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertAuxpagEmpresaConceptoCbu(
+            (int) $ctx['empresa'],
+            0,
+            ' '
+        );
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'auxpag',
             'acc' => 'insert',
@@ -1490,10 +1571,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 axp_letra_cob,
                 axp_sucursal_cob,
                 axp_vendedor,
-                axp_nro_interno,
-                axp_empresa,
-                axp_concepto,
-                axp_cbu',
+                axp_nro_interno'.$extraAxp['campos'],
             'valores' => "
                 '".$proveedorCodigo."',
                 '".$ctx['fecha']."',
@@ -1510,13 +1588,14 @@ final class IngresoEgresoAnitaTesmovSupport
                 ' ',
                 '".$sucursalesAxp['axp_sucursal_cob']."',
                 '0',
-                '0',
-                '".$ctx['empresa']."',
-                '0',
-                ' '",
+                '0'".$extraAxp['valores'],
         ], 'caja IE auxpag CHP '.$cheque->id);
         self::assertOk($raw, 'auxpag CHP', $cheque->id);
 
+        $extraTes = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertTesmovEmpresaMoneda(
+            (int) $ctx['empresa'],
+            $monedaId
+        );
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'tesmov',
             'acc' => 'insert',
@@ -1533,11 +1612,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 tesv_cotizacion,
                 tesv_desc_mov,
                 tesv_conciliado,
-                tesv_contrapartida,
-                tesv_nro_conc,
-                tesv_fecha_conc,
-                tesv_empresa,
-                tesv_cod_mon',
+                tesv_contrapartida'.$extraTes['campos'],
             'valores' => "
                 '".str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT)."',
                 '".$fechaEmi."',
@@ -1550,11 +1625,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$cotizacion."',
                 '".self::esc($entregado)."',
                 ' ',
-                ' ',
-                '0',
-                '0',
-                '".$ctx['empresa']."',
-                '".$monedaId."'",
+                ' '".$extraTes['valores'],
         ], 'caja IE tesmov CHP '.$cheque->id);
         self::assertOk($raw, 'tesmov CHP', $cheque->id);
     }
@@ -1576,7 +1647,7 @@ final class IngresoEgresoAnitaTesmovSupport
 
         self::deleteWhere('tesmov', " WHERE tesv_tipo = 'CHP' AND tesv_nro = ".$nroCheque
             .' AND tesv_cuenta = '.self::escSql($cuentaPad)
-            .' AND tesv_empresa = '.(int) $ctx['empresa'],
+            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov((int) $ctx['empresa']),
             'caja IE tesmov CHP delete '.$cheque->id);
 
         self::deleteWhere('cpromae', ' WHERE cpro_cuenta = '.self::escSql($cuentaPad)
@@ -1630,6 +1701,11 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         $sucursalesAxp = ChequePropioAuxpagAnitaMapper::sucursales($nroCheque, (int) $ctx['empresa']);
+        $extraAxp = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertAuxpagEmpresaConceptoCbu(
+            (int) $ctx['empresa'],
+            0,
+            ' '
+        );
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'auxpag',
             'acc' => 'insert',
@@ -1650,10 +1726,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 axp_letra_cob,
                 axp_sucursal_cob,
                 axp_vendedor,
-                axp_nro_interno,
-                axp_empresa,
-                axp_concepto,
-                axp_cbu',
+                axp_nro_interno'.$extraAxp['campos'],
             'valores' => "
                 '".$proveedorCodigo."',
                 '".$ctx['fecha']."',
@@ -1670,13 +1743,14 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".self::esc($ctx['letra'])."',
                 '".$sucursalesAxp['axp_sucursal_cob']."',
                 '0',
-                '0',
-                '".$ctx['empresa']."',
-                '0',
-                ' '",
+                '0'".$extraAxp['valores'],
         ], 'caja IE auxpag CHP anula '.$cheque->id);
         self::assertOk($raw, 'auxpag CHP anula', $cheque->id);
 
+        $extraTes = CobranzaAnitaCheBanEsquemaSupport::sufijoInsertTesmovEmpresaMoneda(
+            (int) $ctx['empresa'],
+            $monedaId
+        );
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'tesmov',
             'acc' => 'insert',
@@ -1693,11 +1767,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 tesv_cotizacion,
                 tesv_desc_mov,
                 tesv_conciliado,
-                tesv_contrapartida,
-                tesv_nro_conc,
-                tesv_fecha_conc,
-                tesv_empresa,
-                tesv_cod_mon',
+                tesv_contrapartida'.$extraTes['campos'],
             'valores' => "
                 '".$cuentaPad."',
                 '".$ctx['fecha']."',
@@ -1710,11 +1780,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$cotizacion."',
                 '".self::esc(self::recortar((string) ($ctx['detalle'] ?? 'ANULA CHP'), 30))."',
                 ' ',
-                'S/C',
-                '0',
-                '0',
-                '".$ctx['empresa']."',
-                '".$monedaId."'",
+                'S/C'".$extraTes['valores'],
         ], 'caja IE tesmov CHP anula '.$cheque->id);
         self::assertOk($raw, 'tesmov CHP anula', $cheque->id);
     }
@@ -1781,7 +1847,7 @@ final class IngresoEgresoAnitaTesmovSupport
             'axp_tipo_ap,axp_nro,axp_banco,axp_sucursal',
             ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
                 .' AND axp_rec = '.(int) $ctx['nro']
-                .' AND axp_empresa = '.(int) $ctx['empresa'],
+                .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag((int) $ctx['empresa']),
             'caja IE auxpag TRA tesmov '.$movimientoId
         );
 
@@ -1810,7 +1876,7 @@ final class IngresoEgresoAnitaTesmovSupport
                     ' WHERE tesv_tipo = '.self::escSql($tipoTes)
                         .' AND tesv_nro = '.$nroTes
                         .' AND tesv_cuenta = '.self::escSql($cuenta)
-                        .' AND tesv_empresa = '.(int) $ctx['empresa'],
+                        .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov((int) $ctx['empresa']),
                     'caja IE tesmov '.$tipoTes.' delete '.$movimientoId
                 );
             }

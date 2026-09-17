@@ -59,7 +59,7 @@
                             <th>Moneda</th>
                             <th>Monto</th>
                             <th>Movimientos</th>
-                            <th class="width40" data-orderable="false"></th>
+                            <th class="width120 text-nowrap" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -99,14 +99,14 @@
                                 @endfor
                                 </ul>
                             </td>
-                            <td>
+                            <td class="text-nowrap width120" style="white-space: nowrap;">
                        			@if (can('editar-cobranza', false))
                                 	<a href="{{route('editar_cobranza', ['id' => $data->id, 'origen' => 'cobranza'])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
                        			@if (can('borrar-cobranza', false))
-                                <form action="{{route('eliminar_cobranza', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
+                                <form action="{{route('eliminar_cobranza', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST" style="display:inline;">
                                     @csrf @method("delete")
                                     <button type="submit" onclick="eliminarCobranza(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
                                         <i class="fa fa-times-circle text-danger"></i>
@@ -114,7 +114,7 @@
                                 </form>
 								@endif
                                 @if (can('listar-cobranza', false))
-                                	<a href="{{route('listar_una_cobranza', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Listar la Cobranza">
+                                	<a href="{{route('listar_una_cobranza', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Listar la Cobranza" target="_blank" rel="noopener">
                                    	<i class="fa fa-print"></i>
                                 	</a>
 								@endif

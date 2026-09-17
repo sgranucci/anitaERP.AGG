@@ -27,7 +27,8 @@
     @if (! empty($stats))
         <tr>
             <td colspan="{{ $colspan }}">
-                Clientes: {{ $stats['clientes'] ?? 0 }}
+                Vendedores: {{ $stats['vendedores'] ?? 0 }}
+                · Clientes: {{ $stats['clientes'] ?? 0 }}
                 · Movimientos: {{ $stats['movimientos'] ?? 0 }}
                 @if (($stats['aplicaciones'] ?? 0) > 0)
                     · Aplicaciones: {{ $stats['aplicaciones'] }}
@@ -38,7 +39,7 @@
     <thead>
         <tr>
             <th>Código</th>
-            <th>Cliente</th>
+            <th>Cliente / Vendedor</th>
             <th>Empresa</th>
             <th>Fecha</th>
             <th>Vencimiento</th>
@@ -63,9 +64,19 @@
         @foreach ($filas as $fila)
             @php $tipo = $fila['tipo'] ?? ''; @endphp
             <tr>
-                <td>{{ in_array($tipo, ['header_cliente', 'total_cliente'], true) ? ($fila['cliente_codigo'] ?? '') : '' }}</td>
                 <td>
-                    @if ($tipo === 'header_cliente')
+                    @if (in_array($tipo, ['header_vendedor', 'total_vendedor'], true))
+                        {{ $fila['vendedor_codigo'] ?? '' }}
+                    @elseif (in_array($tipo, ['header_cliente', 'total_cliente'], true))
+                        {{ $fila['cliente_codigo'] ?? '' }}
+                    @endif
+                </td>
+                <td>
+                    @if ($tipo === 'header_vendedor')
+                        Vendedor: {{ $fila['vendedor_nombre'] ?? '' }}
+                    @elseif ($tipo === 'total_vendedor')
+                        Total vendedor {{ $fila['vendedor_nombre'] ?? '' }}
+                    @elseif ($tipo === 'header_cliente')
                         {{ $fila['cliente_nombre'] ?? '' }}
                     @elseif ($tipo === 'total_cliente')
                         Total {{ $fila['cliente_nombre'] ?? '' }}
@@ -76,7 +87,7 @@
                 <td>{{ $tipo === 'header_cliente' ? ($fila['nombreempresa'] ?? '') : '' }}</td>
                 <td>{{ $fila['fecha'] ?? '' }}</td>
                 <td>{{ $fila['fechavencimiento'] ?? '' }}</td>
-                <td>{{ $tipo === 'header_cliente' ? '' : ($fila['comprobante'] ?? '') }}</td>
+                <td>{{ in_array($tipo, ['header_cliente', 'header_vendedor'], true) ? '' : ($fila['comprobante'] ?? '') }}</td>
                 <td>{{ $fila['etiqueta_moneda'] ?? ($fila['abreviatura'] ?? '') }}</td>
                 @if ($modoDeuda)
                     <td>{{ isset($fila['importe']) ? number_format((float) $fila['importe'], 2, '.', '') : '' }}</td>

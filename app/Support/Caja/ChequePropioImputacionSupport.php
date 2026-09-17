@@ -69,8 +69,21 @@ final class ChequePropioImputacionSupport
 
         $codigo = (string) config('caja.valores_a_depositar_cuenta_codigo');
         $cuenta = $cuentacontableRepository->findPorCodigo($empresaId, $codigo);
+        if ($cuenta !== null) {
+            return $cuenta->id;
+        }
 
-        return $cuenta?->id;
+        // Ferli: plan contable solo en empresa 1; cobranza puede ser emp 2/3.
+        if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli() && $codigo !== '') {
+            $cuenta = \App\Models\Contable\Cuentacontable::query()
+                ->where('codigo', $codigo)
+                ->orderBy('empresa_id')
+                ->first();
+
+            return $cuenta?->id;
+        }
+
+        return null;
     }
 
     /** Estado inicial al emitir cheque propio. */

@@ -8,6 +8,7 @@ use App\Models\Caja\Cheque;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Seguridad\Usuario;
+use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
@@ -232,8 +233,11 @@ final class PagoproveedorAnitaAuditoriaDiariaService
 
         $whereTes = ' WHERE tesv_tipo = '.$this->escSql($tipo)
             .' AND tesv_nro = '.$nro
-            .' AND tesv_empresa = '.$empresaAnita;
-        $tesmov = $this->listar($sistema, 'tesmov', 'tesv_tipo,tesv_nro,tesv_empresa,tesv_importe', $whereTes);
+            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresaAnita);
+        $camposTes = CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()
+            ? 'tesv_tipo,tesv_nro,tesv_importe'
+            : 'tesv_tipo,tesv_nro,tesv_empresa,tesv_importe';
+        $tesmov = $this->listar($sistema, 'tesmov', $camposTes, $whereTes);
         if ($tesmov['error'] !== null) {
             $problemas[] = 'Lectura tesmov Anita: '.$tesmov['error'];
         }
@@ -247,8 +251,11 @@ final class PagoproveedorAnitaAuditoriaDiariaService
 
         $whereAux = ' WHERE axp_tipo = '.$this->escSql($tipo)
             .' AND axp_rec = '.$nro
-            .' AND axp_empresa = '.$empresaAnita;
-        $auxpag = $this->listar($sistema, 'auxpag', 'axp_tipo,axp_rec,axp_tipo_ap,axp_empresa', $whereAux);
+            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag($empresaAnita);
+        $camposAux = CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()
+            ? 'axp_tipo,axp_rec,axp_tipo_ap'
+            : 'axp_tipo,axp_rec,axp_tipo_ap,axp_empresa';
+        $auxpag = $this->listar($sistema, 'auxpag', $camposAux, $whereAux);
         if ($auxpag['error'] !== null) {
             $problemas[] = 'Lectura auxpag Anita: '.$auxpag['error'];
         } elseif ($auxpag['filas'] === []) {
@@ -473,7 +480,7 @@ final class PagoproveedorAnitaAuditoriaDiariaService
 
         $whereChp = " WHERE tesv_tipo = 'CHP' AND tesv_nro = ".$nroCheque
             .' AND tesv_cuenta = '.$this->escSql($cuentaPad)
-            .' AND tesv_empresa = '.$empresaAnita;
+            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresaAnita);
         $tesChp = $this->listar($sistema, 'tesmov', 'tesv_tipo,tesv_nro,tesv_importe', $whereChp);
         if ($tesChp['error'] !== null) {
             $problemas[] = $etiqueta.': lectura tesmov CHP '.$tesChp['error'];
@@ -485,11 +492,14 @@ final class PagoproveedorAnitaAuditoriaDiariaService
             .' AND axp_rec = '.$nro
             .' AND axp_tipo_ap = '.$this->escSql('CHP')
             .' AND axp_nro = '.$nroCheque
-            .' AND axp_empresa = '.$empresaAnita;
+            .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaAuxpag($empresaAnita);
+        $camposAuxChp = CobranzaAnitaCheBanEsquemaSupport::omitirColumnasEmpresaAggCheBan()
+            ? 'axp_tipo,axp_nro,axp_tipo_ap,axp_sucursal,axp_sucursal_cob'
+            : 'axp_tipo,axp_nro,axp_tipo_ap,axp_sucursal,axp_sucursal_cob,axp_empresa';
         $auxChp = $this->listar(
             $sistema,
             'auxpag',
-            'axp_tipo,axp_nro,axp_tipo_ap,axp_sucursal,axp_sucursal_cob,axp_empresa',
+            $camposAuxChp,
             $whereAuxChp
         );
         if ($auxChp['error'] !== null) {

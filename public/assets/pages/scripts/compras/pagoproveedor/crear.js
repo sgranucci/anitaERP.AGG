@@ -45,10 +45,24 @@ var flModificaAsiento = false;
         });
     }
 
+    function filaCuentaPagoproveedorConDatos($tr) {
+        if (!$tr || !$tr.length) {
+            return false;
+        }
+        var codigo = String($tr.find('.codigo').val() || '').trim();
+        var id = String($tr.find('.cuentacaja_id').val() || '').trim();
+        var monto = Math.abs(parseFloat(String($tr.find('.monto').val() || '').replace(',', '.')) || 0);
+        return id !== '' || codigo !== '' || monto > 0.000001;
+    }
+
     function totalMediosPagoproveedor() {
         var total = 0;
-        $('#tbody-cuenta-table .monto').each(function () {
-            total += Math.abs(parseFloat(String($(this).val()).replace(',', '.')) || 0);
+        $('#tbody-cuenta-table tr').each(function () {
+            var $tr = $(this);
+            if (!filaCuentaPagoproveedorConDatos($tr)) {
+                return;
+            }
+            total += Math.abs(parseFloat(String($tr.find('.monto').val()).replace(',', '.')) || 0);
         });
         if (typeof sumaMontosChequesIngresoEgreso === 'function') {
             try {
@@ -205,6 +219,34 @@ var flModificaAsiento = false;
                 el.select();
             }
         }, 0);
+    }
+
+    function empresaIdPagoproveedorActual() {
+        var v = parseInt(String($('#empresa_id').val() || '0'), 10) || 0;
+        if (v > 0) {
+            return v;
+        }
+        return parseInt(String($('input[name="empresa_id"]').first().val() || '0'), 10) || 0;
+    }
+
+    /** Al abrir crear/editar: empresa ya elegida → código proveedor; si no → select empresa. */
+    function enfocarInicioPagoproveedor() {
+        window.setTimeout(function () {
+            var el = empresaIdPagoproveedorActual() > 0
+                ? document.getElementById('codigoproveedor')
+                : document.getElementById('empresa_id');
+            if (!el || el.disabled || el.readOnly) {
+                return;
+            }
+            try {
+                el.focus({ preventScroll: true });
+            } catch (e) {
+                el.focus();
+            }
+            if (typeof el.select === 'function' && el.tagName === 'INPUT' && el.type !== 'hidden') {
+                el.select();
+            }
+        }, 150);
     }
 
     function limpiarCuentaEnFila($tr) {
@@ -529,19 +571,23 @@ var flModificaAsiento = false;
     function generaAsientoContable(onDone) {
         var datosCuentasCaja = [];
         $('#tbody-cuenta-table tr').each(function () {
-            var monto = Math.abs(parseFloat($(this).find('.monto').val()) || 0);
+            var $tr = $(this);
+            if (!filaCuentaPagoproveedorConDatos($tr)) {
+                return;
+            }
+            var monto = Math.abs(parseFloat($tr.find('.monto').val()) || 0);
             if (monto <= 0) {
                 return;
             }
             datosCuentasCaja.push({
-                cuentacaja_ids: $(this).find('.cuentacaja_id').val(),
-                moneda_ids: $(this).find('.moneda').val(),
+                cuentacaja_ids: $tr.find('.cuentacaja_id').val(),
+                moneda_ids: $tr.find('.moneda').val(),
                 montos: monto,
                 cotizaciones: (function () {
                     var cotPago = parseFloat($('#cotizacion').val() || '0') || 0;
                     return cotPago > 0 ? cotPago : 1;
                 })(),
-                observaciones: $(this).find('.observacion').val()
+                observaciones: $tr.find('.observacion').val()
             });
         });
 
@@ -586,7 +632,7 @@ var flModificaAsiento = false;
             },
             success: function (data) {
                 if (data.mensaje !== 'ok') {
-                    alert('Error en generación del asiento contable');
+                    alert((data.errores || data.mensaje || 'Error en generación del asiento contable'));
                     if (typeof onDone === 'function') {
                         onDone(false);
                     }
@@ -672,6 +718,8 @@ var flModificaAsiento = false;
     }
 
     $(function () {
+        enfocarInicioPagoproveedor();
+
         $('#agrega_renglon_cuenta').on('click', function (e) {
             e.preventDefault();
             agregaUnRenglon();

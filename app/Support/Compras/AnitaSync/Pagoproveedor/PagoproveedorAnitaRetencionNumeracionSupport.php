@@ -13,13 +13,14 @@ use Illuminate\Support\Facades\Log;
  *
  * MultiEmpresa:
  *   Ganancias → G{n} | IVA → V{n} | SUSS → S{n} | IIBB → T{n}
- * Monoempresa:
- *   RGP | RIP | RSP | RTP
+ * Monoempresa (Ferli / AGG sin O{n}):
+ *   RGP | RIP | RSP | RTP  (claves de tesorería tctes)
  *
- * Resolución de num_clave:
- *   1) t_comp (compras) con esa clave → tcomp_refer
- *   2) fallback config pagoproveedor.retencion_num_clave[prefijo][empresaAnita]
- *   3) la clave misma como num_clave en ventas.numerador
+ * Resolución de num_clave (ventas.numerador):
+ *   1) tctes (che_ban): tctes_clave = RGP/… → tctes_numero (ej. Ferli RGP→310)
+ *   2) t_comp (compras) con esa clave → tcomp_refer
+ *   3) fallback config pagoproveedor.retencion_num_clave[prefijo][empresaAnita] (solo MultiEmpresa)
+ *   4) la clave misma como num_clave
  *
  * Semántica Anita al grabar:
  *   - Ganancias: un número por cada régimen con importe > 0
@@ -106,6 +107,8 @@ final class PagoproveedorAnitaRetencionNumeracionSupport
             throw new \RuntimeException('Numeración Anita de retenciones deshabilitada.');
         }
 
+        self::assertNumeradorDisponible($tiporetencion, $empresaId);
+
         $prefijo = self::prefijoPorTiporetencion($tiporetencion);
         $claveTes = self::claveTesParaEmpresa($prefijo, $empresaId);
         $segundos = max(5, (int) config('pagoproveedor.numeracion_lock_segundos', 15));
@@ -122,50 +125,136 @@ final class PagoproveedorAnitaRetencionNumeracionSupport
     }
 
     /**
-     * Resuelve num_clave de ventas.numerador a partir de la clave lee_num_tes.
+     * Solo lectura: confirma que el numerador del certificado existe antes de consumirlo.
+     */
+    public static function assertNumeradorDisponible(string $tiporetencion, int $empresaId): void
+    {
+        if (! self::estaHabilitada()) {
+            return;
+        }
+
+        $prefijo = self::prefijoPorTiporetencion($tiporetencion);
+        $claveTes = self::claveTesParaEmpresa($prefijo, $empresaId);
+        $claveNum = self::resolverClaveNumerador($claveTes, $prefijo, $empresaId);
+        self::leerUltimoNumero($claveNum);
+    }
+
+    /**
+     * Resuelve num_clave de ventas.numerador a partir de la clave lee_num_tes / tctes.
      */
     public static function resolverClaveNumerador(string $claveTes, string $prefijo, int $empresaId): string
     {
+        // Ferli/AGG: RGP/RIP/RSP/RTP viven en tctes; el numerador es tctes_numero.
+        $desdeTctes = self::numeroDesdeTctes($claveTes);
+        if ($desdeTctes !== null) {
+            return $desdeTctes;
+        }
+
         $desdeTcomp = self::referDesdeTComp($claveTes);
         if ($desdeTcomp !== null) {
             return $desdeTcomp;
         }
 
-        $nroEmp = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
-        $mapa = config('pagoproveedor.retencion_num_clave', []);
-        $fallback = $mapa[$prefijo][$nroEmp] ?? $mapa[$prefijo][(string) $nroEmp] ?? null;
-        if (is_string($fallback) && $fallback !== '') {
-            return $fallback;
+        // Mapa G1→331… solo MultiEmpresa (AGG) cuando no hay tctes/t_comp.
+        if (self::esMultiempresa()) {
+            $nroEmp = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
+            $mapa = config('pagoproveedor.retencion_num_clave', []);
+            $fallback = $mapa[$prefijo][$nroEmp] ?? $mapa[$prefijo][(string) $nroEmp] ?? null;
+            if (is_string($fallback) && $fallback !== '') {
+                return $fallback;
+            }
         }
 
         return $claveTes;
     }
 
+    /**
+     * tctes_clave (RGP/…) → tctes_numero (ref. a ventas.numerador).
+     * Sistema: mismo que tesmov IE (che_ban).
+     */
+    private static function numeroDesdeTctes(string $claveTes): ?string
+    {
+        $claveTes = strtoupper(substr(trim($claveTes), 0, 3));
+        if ($claveTes === '') {
+            return null;
+        }
+
+        try {
+            $sistema = (string) config(
+                'caja.ingresoegreso_anita_tesmov_sistema',
+                config('pagoproveedor.anita_sistema_tctes', 'che_ban')
+            );
+            $raw = (new ApiAnita)->apiCallEscritura([
+                'acc' => 'list',
+                'sistema' => $sistema,
+                'tabla' => 'tctes',
+                'campos' => 'tctes_clave,tctes_numero,tctes_desc',
+                'whereArmado' => ' WHERE tctes_clave = '.self::escSqlLiteral($claveTes),
+            ], 'pagoproveedor tctes ret '.$claveTes);
+
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err !== null) {
+                Log::warning('pagoproveedor.retencion.tctes', ['clave' => $claveTes, 'error' => $err]);
+
+                return null;
+            }
+
+            $fila = ApiAnita::primeraFilaLista((string) $raw);
+            if ($fila === null) {
+                return null;
+            }
+
+            $numero = trim((string) ($fila->tctes_numero ?? ''));
+            $numero = ltrim($numero, '0');
+            if ($numero === '' || $numero === '0') {
+                return null;
+            }
+
+            return $numero;
+        } catch (\Throwable $e) {
+            Log::warning('pagoproveedor.retencion.tctes_exception', [
+                'clave' => $claveTes,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+    }
+
     private static function referDesdeTComp(string $claveTes): ?string
     {
-        $api = new ApiAnita;
-        $raw = $api->apiCallEscritura([
-            'acc' => 'list',
-            'sistema' => (string) config('pagoproveedor.anita_sistema_tcomp', 'compras'),
-            'tabla' => 't_comp',
-            'campos' => 'tcomp_refer',
-            'whereArmado' => ' WHERE tcomp_clave = '.self::escSqlLiteral($claveTes),
-        ], 'pagoproveedor t_comp ret '.$claveTes);
+        try {
+            $api = new ApiAnita;
+            $raw = $api->apiCallEscritura([
+                'acc' => 'list',
+                'sistema' => (string) config('pagoproveedor.anita_sistema_tcomp', 'compras'),
+                'tabla' => 't_comp',
+                'campos' => 'tcomp_refer',
+                'whereArmado' => ' WHERE tcomp_clave = '.self::escSqlLiteral($claveTes),
+            ], 'pagoproveedor t_comp ret '.$claveTes);
 
-        $err = ApiAnita::extraerMensajeError($raw);
-        if ($err !== null) {
-            Log::warning('pagoproveedor.retencion.t_comp', ['clave' => $claveTes, 'error' => $err]);
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err !== null) {
+                Log::warning('pagoproveedor.retencion.t_comp', ['clave' => $claveTes, 'error' => $err]);
+
+                return null;
+            }
+
+            $fila = ApiAnita::primeraFilaLista((string) $raw);
+            $refer = trim((string) ($fila->tcomp_refer ?? ''));
+            if ($refer === '' || $refer === '000') {
+                return null;
+            }
+
+            return $refer;
+        } catch (\Throwable $e) {
+            Log::warning('pagoproveedor.retencion.t_comp_exception', [
+                'clave' => $claveTes,
+                'error' => $e->getMessage(),
+            ]);
 
             return null;
         }
-
-        $fila = ApiAnita::primeraFilaLista((string) $raw);
-        $refer = trim((string) ($fila->tcomp_refer ?? ''));
-        if ($refer === '' || $refer === '000') {
-            return null;
-        }
-
-        return $refer;
     }
 
     public static function leerUltimoNumero(string $claveNumerador): int
@@ -188,7 +277,7 @@ final class PagoproveedorAnitaRetencionNumeracionSupport
         if ($fila === null || ! isset($fila->num_ult_numero)) {
             throw new \RuntimeException(
                 'Numerador Anita inexistente para retención (num_clave='.$claveNumerador
-                .'). Crear la clave o cargar pagoproveedor.retencion_num_clave.'
+                .'). Revisar tctes (RGP/RIP/RSP/RTP → tctes_numero) o ventas.numerador.'
             );
         }
 

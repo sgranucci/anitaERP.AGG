@@ -3,11 +3,15 @@
 return [
     /*
      * Numeración OP vía Anita (pago.c):
-     * - MultiEmpresa: t_comp O{empresa} → numerador (O1→223, O2→224, O3→225).
-     * - Mono: t_comp PAGOPROVEEDOR_ANITA_TCOMP_CLAVE (OPP→205).
+     * - MultiEmpresa (AGG): t_comp O{empresa} → numerador (O1→223, O2→224, O3→225).
+     * - Mono (Ferli y resto): t_comp PAGOPROVEEDOR_ANITA_TCOMP_CLAVE (OPP→203/205).
+     * Default: true solo en AGG; el resto usa OPP salvo override explícito.
      */
     'anita_multiempresa' => filter_var(
-        env('PAGOPROVEEDOR_ANITA_MULTIEMPRESA', true),
+        env(
+            'PAGOPROVEEDOR_ANITA_MULTIEMPRESA',
+            strtoupper(trim((string) env('EMPRESA', 'AGG'))) === 'AGG' ? 'true' : 'false'
+        ),
         FILTER_VALIDATE_BOOLEAN
     ),
     'anita_tcomp_clave' => env('PAGOPROVEEDOR_ANITA_TCOMP_CLAVE', 'OPP'),
@@ -70,9 +74,9 @@ return [
     'numeracion_lock_segundos' => (int) env('PAGOPROVEEDOR_NUMERACION_LOCK', 15),
 
     /*
-     * Certificados de retención (lee_num_tes): clave G/V/T/S{n} o RGP/RIP/RTP/RSP.
-     * Si no hay t_comp con esa clave, se usa este mapa empresaAnita → num_clave ventas.
-     * Valores actuales del numerador Anita (Biyemas/Kandiko/Rebisco).
+     * Certificados de retención (lee_num_tes / tctes):
+     * - Mono (Ferli): tctes RGP/RIP/RSP/RTP → tctes_numero (310/317/312/311).
+     * - MultiEmpresa AGG: t_comp G{n}/V{n}/S{n}/T{n} o mapa abajo.
      */
     'retencion_num_clave' => [
         'G' => [ // Ganancias

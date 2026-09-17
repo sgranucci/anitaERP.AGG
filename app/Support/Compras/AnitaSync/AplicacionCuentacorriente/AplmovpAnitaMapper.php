@@ -111,8 +111,13 @@ final class AplmovpAnitaMapper
     public static function codMon(array $deuda): string
     {
         $codigo = trim((string) ($deuda['cod_mon'] ?? ''));
+        if ($codigo !== '' && ctype_digit($codigo)) {
+            return AplicacionCuentacorrienteAnitaLadoSupport::esc($codigo, 3);
+        }
 
-        return $codigo !== '' ? AplicacionCuentacorrienteAnitaLadoSupport::esc($codigo, 3) : '1';
+        return \App\Support\Configuracion\MonedaAnitaCodigoSupport::normalizar(
+            $codigo !== '' ? $codigo : '1'
+        );
     }
 
     /**

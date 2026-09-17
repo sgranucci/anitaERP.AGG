@@ -11,6 +11,7 @@ use App\Services\Ventas\ClienteCuentacorrienteReporteService;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use App\Support\Ventas\ClienteCuentacorrienteReporteClienteSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteFiltros;
+use App\Support\Ventas\ClienteCuentacorrienteReporteVendedorSupport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
 
@@ -66,6 +67,7 @@ class ClienteCuentacorrienteReporteController extends Controller
         }
 
         $clientesIniciales = $this->clientesInicialesParaVista($filtros, $resultado);
+        $vendedoresIniciales = $this->vendedoresInicialesParaVista($filtros, $resultado);
 
         return view('ventas.cliente_cuentacorriente_reporte.index', [
             'filtros' => $filtros,
@@ -76,6 +78,7 @@ class ClienteCuentacorrienteReporteController extends Controller
             'filas' => $filas,
             'filasVista' => $filasVista,
             'clientes_iniciales' => $clientesIniciales,
+            'vendedores_iniciales' => $vendedoresIniciales,
             'subtitulo' => ClienteCuentacorrienteReporteFiltros::armarSubtitulo(
                 $filtros,
                 $this->nombreEmpresa($filtros['empresa_id'] ?? null)
@@ -198,6 +201,24 @@ class ClienteCuentacorrienteReporteController extends Controller
 
         if (($filtros['alcance_clientes'] ?? '') === ClienteCuentacorrienteReporteFiltros::ALCANCE_PUNTUALES) {
             return ClienteCuentacorrienteReporteClienteSupport::etiquetasPorIds($filtros['cliente_ids'] ?? []);
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|null  $resultado
+     * @return list<array{id:int,codigo:string,nombre:string}>
+     */
+    private function vendedoresInicialesParaVista(array $filtros, ?array $resultado): array
+    {
+        if (! empty($resultado['vendedores_resueltos'])) {
+            return $resultado['vendedores_resueltos'];
+        }
+
+        if (($filtros['alcance_vendedores'] ?? '') === ClienteCuentacorrienteReporteFiltros::ALCANCE_PUNTUALES) {
+            return ClienteCuentacorrienteReporteVendedorSupport::etiquetasPorIds($filtros['vendedor_ids'] ?? []);
         }
 
         return [];

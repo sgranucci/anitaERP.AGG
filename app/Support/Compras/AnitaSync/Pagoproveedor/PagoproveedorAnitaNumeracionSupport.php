@@ -69,6 +69,8 @@ final class PagoproveedorAnitaNumeracionSupport
             throw new \RuntimeException('Numeración Anita de OP deshabilitada (PAGOPROVEEDOR_ANITA_ESCRITURA_HABILITADA).');
         }
 
+        self::assertNumeradorDisponible($empresaId);
+
         $segundos = max(5, (int) config('pagoproveedor.numeracion_lock_segundos', 15));
         $claveTcomp = self::claveTCompParaEmpresa($empresaId);
         $lock = Cache::lock('pagoproveedor:numeracion:opp:'.$claveTcomp, $segundos);
@@ -81,6 +83,21 @@ final class PagoproveedorAnitaNumeracionSupport
 
             return $siguiente;
         });
+    }
+
+    /**
+     * Solo lectura: verifica que exista t_comp + numerador antes de consumir un número.
+     * Evita quemar el correlativo de OP si luego falla otra validación/Anita.
+     */
+    public static function assertNumeradorDisponible(int $empresaId): void
+    {
+        if (! self::estaHabilitada()) {
+            return;
+        }
+
+        $claveTcomp = self::claveTCompParaEmpresa($empresaId);
+        $clave = self::resolverClaveNumeradorDesdeTComp($claveTcomp);
+        self::leerUltimoNumero($clave);
     }
 
     public static function resolverClaveNumeradorDesdeTComp(?string $claveTcomp = null): string
@@ -103,7 +120,12 @@ final class PagoproveedorAnitaNumeracionSupport
         $fila = ApiAnita::primeraFilaLista((string) $raw);
         $refer = trim((string) ($fila->tcomp_refer ?? ''));
         if ($refer === '' || $refer === '000') {
-            throw new \RuntimeException('t_comp sin tcomp_refer válido para clave '.$claveTcomp.'.');
+            $hint = self::esMultiempresa()
+                ? ' En instalaciones monoempresa (p.ej. Ferli) use PAGOPROVEEDOR_ANITA_MULTIEMPRESA=false para numerar con OPP.'
+                : '';
+            throw new \RuntimeException(
+                't_comp sin tcomp_refer válido para clave '.$claveTcomp.'.'.$hint
+            );
         }
 
         return $refer;

@@ -12,6 +12,7 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Venta;
 use App\Models\Contable\Asiento;
+use App\Models\Seguridad\Usuario;
 use Auth;
 
 class Cobranza extends Model implements Auditable
@@ -78,7 +79,7 @@ class Cobranza extends Model implements Auditable
 
     public function tipotransaccioncajas()
     {
-        return $this->belongsTo(Tipotransaccion_caja::class, 'tipotransaccion_caja_id');
+        return $this->belongsTo(Tipotransaccion_Caja::class, 'tipotransaccion_caja_id');
     }
 
     public function clientes()

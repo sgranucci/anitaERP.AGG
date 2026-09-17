@@ -16,16 +16,28 @@ final class ChequeTerceroCtermaeInsertAnitaSupport
 {
     /**
      * Obtiene el próximo cter_nro_interno (max+1).
+     * Requiere sistema che_ban: sin eso el bridge no descarga el CSV y se usaba 1 por error.
      */
     public static function siguienteNroInterno(): ?int
     {
         try {
             $api = new ApiAnita();
-            $dataAnita = json_decode($api->apiCall([
+            $raw = $api->apiCall([
                 'acc' => 'list',
+                'sistema' => 'che_ban',
                 'tabla' => 'ctermae',
                 'campos' => 'max(cter_nro_interno) as numerointerno',
-            ]));
+            ]);
+            $err = ApiAnita::extraerMensajeError(is_string($raw) ? $raw : null);
+            if ($err !== null) {
+                Log::warning('Cheque CHT: error al leer max cter_nro_interno', [
+                    'error' => $err,
+                    'ferli' => EntornoEmpresaSupport::esFerli(),
+                ]);
+
+                return null;
+            }
+            $dataAnita = json_decode((string) $raw);
             if (! is_array($dataAnita) || $dataAnita === []) {
                 return 1;
             }

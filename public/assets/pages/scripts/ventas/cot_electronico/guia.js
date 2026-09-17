@@ -9,6 +9,8 @@
     var urls = $card.data('urls') || {};
     var csrf = $card.data('csrf') || $('input[name="_token"]').first().val();
     var arcaConstanciaUrl = $card.data('arca-constancia-url') || '';
+    var suburbanoHabilitado = String($card.data('suburbano-habilitado') || '0') === '1';
+    var suburbanoExcelBase = String($card.data('suburbano-excel-base') || '').replace(/\/$/, '');
     var consultaCuitXhr = null;
 
     function token() {
@@ -197,6 +199,33 @@
         if (soloDigitosCuit($input.val()).length === 11) {
             consultarTitularCuit();
         }
+    }
+
+    function esTransporteSuburbano() {
+        var nombre = String($('#nombretransporte').val() || '').toUpperCase();
+        var codigo = String($('#transporte_codigo').val() || '').trim();
+        if (nombre.indexOf('SUBURBANO') !== -1) {
+            return true;
+        }
+        return codigo === '88';
+    }
+
+    function actualizarBotonGuiaSuburbano() {
+        var $btn = $('#btn-guia-suburbano-excel');
+        if (!$btn.length || !suburbanoHabilitado) {
+            return;
+        }
+        var guiaId = String($('#guia_id').val() || '').trim();
+        var mostrar = guiaId !== '' && esTransporteSuburbano();
+        if (!mostrar) {
+            $btn.addClass('d-none').attr('href', '#');
+            return;
+        }
+        var href = urls.suburbanoExcel || '';
+        if (!href && suburbanoExcelBase) {
+            href = suburbanoExcelBase + '/' + encodeURIComponent(guiaId) + '/suburbano-excel';
+        }
+        $btn.removeClass('d-none').attr('href', href || '#');
     }
 
     function actualizarTotales() {
@@ -606,12 +635,33 @@
                     enfocar('#cuit_chofer');
                 }
             });
+            actualizarBotonGuiaSuburbano();
         }, 200);
     });
     $(document).on('blur change', '#transporte_codigo', function () {
         setTimeout(function () {
             rellenarChoferDesdeTransporte();
+            actualizarBotonGuiaSuburbano();
         }, 200);
+    });
+    $(document).on('input change', '#nombretransporte', function () {
+        actualizarBotonGuiaSuburbano();
+    });
+
+    $('#btn-guia-suburbano-excel').on('click', function (e) {
+        if ($(this).hasClass('d-none')) {
+            e.preventDefault();
+            return;
+        }
+        if (!esTransporteSuburbano()) {
+            e.preventDefault();
+            alert('La guía Excel suburbano solo aplica cuando el expreso es suburbano.');
+            return;
+        }
+        if (!$('#guia_id').val()) {
+            e.preventDefault();
+            alert('Guarde la guía antes de descargar el Excel suburbano.');
+        }
     });
 
     function rellenarChoferDesdeTransporte(done) {
@@ -763,6 +813,7 @@
 
     window.addEventListener('pageshow', ocultarOverlay);
     actualizarTotales();
+    actualizarBotonGuiaSuburbano();
     inicializarCuitChofer();
 
     if (typeof window.activa_eventos_consultatransporte === 'function') {

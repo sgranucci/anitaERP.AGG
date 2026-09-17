@@ -118,6 +118,12 @@ function activa_eventos_consultavendedor()
             codigo: $.trim($row.find('.codigo').text()),
         };
 
+        if (typeof window.onVendedorElegidoEnConsulta === 'function'
+            && window.onVendedorElegidoEnConsulta(data) === true) {
+            $('#consultavendedorModal').modal('hide');
+            return;
+        }
+
         if (ptrVendedor_id && ptrVendedor_id.length) {
             ptrVendedor_id.val(data.id);
             ptrCodigoVendedor_id.val(data.codigo);

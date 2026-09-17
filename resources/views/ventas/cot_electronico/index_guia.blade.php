@@ -52,7 +52,9 @@
         <div class="card card-primary" id="card-cot-guia"
             data-urls='@json($urlsGuia)'
             data-csrf="{{ csrf_token() }}"
-            data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}">
+            data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}"
+            data-suburbano-habilitado="{{ ! empty($guiaSuburbanoHabilitado) ? '1' : '0' }}"
+            data-suburbano-excel-base="{{ url('ventas/cot-electronico/guia') }}">
             <div class="card-header">
                 <h3 class="card-title">Gu&iacute;a de remitos / COT</h3>
                 <div class="card-tools d-flex align-items-center">
@@ -236,6 +238,14 @@
                             {{ ! empty($imprimirAlProcesar) ? 'checked' : '' }}>
                         <label class="form-check-label" for="imprimir_al_procesar">Imprimir COT al procesar</label>
                     </div>
+                @endif
+                @if (! empty($guiaSuburbanoHabilitado))
+                    <a id="btn-guia-suburbano-excel"
+                        href="{{ ! empty($urlsGuia['suburbanoExcel']) ? $urlsGuia['suburbanoExcel'] : '#' }}"
+                        class="btn btn-outline-success btn-sm ml-2{{ empty($esGuiaSuburbano) || empty($guia?->id) ? ' d-none' : '' }}"
+                        title="Descargar control de remitos Excel (formato suburbano)">
+                        <i class="fas fa-file-excel"></i> Gu&iacute;a suburbano
+                    </a>
                 @endif
                 <a href="{{ route('cot_electronico') }}" class="btn btn-outline-secondary btn-sm ml-2">
                     <i class="fa fa-file"></i> Nueva gu&iacute;a

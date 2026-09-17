@@ -258,6 +258,7 @@ class ChequeRepository implements ChequeRepositoryInterface
 			$fechapagos = $data['fechapagos'];
 			$banco_ids = $data['banco_ids'];
 			$numerocheques = $data['numerocheques'];
+			$negociables = $data['negociables'] ?? [];
 			$cotizacioncheques = $data['cotizacioncheques'];
 			$sucursalpagos = $data['sucursalpagos'];
             $cuentalibradoras = $data['cuentalibradoras'];
@@ -280,6 +281,11 @@ class ChequeRepository implements ChequeRepositoryInterface
 				{
 					if ($i < count($cheque_ids))
 					{
+						$negociable = ChequePropioInstrumentoSupport::negociable(
+							(string) ($negociables[$i] ?? ''),
+							'N'
+						);
+						$numero = (string) ($numerocheques[$i] ?? '');
 						$cheque = $this->model->findOrFail($_id[$i])->update([
 									"cobranza_id" => $id,
                                     'origen' => 'R',
@@ -287,7 +293,9 @@ class ChequeRepository implements ChequeRepositoryInterface
                                     'fechapago' => $fechapagos[$i],
                                     'empresa_id' => $data['empresa_id'],
                                     'caja_id' => $data['caja_id'],
-                                    'numerocheque' => $numerocheques[$i],
+                                    'numerocheque' => $numero,
+                                    'negociable' => $negociable,
+                                    'nro_echeq' => ChequePropioInstrumentoSupport::nroEcheq($negociable, $numero) ?: null,
                                     'moneda_id' => $monedacheque_ids[$i],
                                     'monto' => $montocheques[$i],
                                     'cotizacion' => $cotizacioncheques[$i],
@@ -307,6 +315,11 @@ class ChequeRepository implements ChequeRepositoryInterface
 			{
 				if ($monedacheque_ids[$i_movimiento] != '') 
                 {
+					$negociable = ChequePropioInstrumentoSupport::negociable(
+						(string) ($negociables[$i_movimiento] ?? ''),
+						'N'
+					);
+					$numero = (string) ($numerocheques[$i_movimiento] ?? '');
                     $cheque = $this->model->create([
                                 "cobranza_id" => $id,
                                 'origen' => 'R',
@@ -314,7 +327,9 @@ class ChequeRepository implements ChequeRepositoryInterface
                                 'fechapago' => $fechapagos[$i_movimiento],
                                 'empresa_id' => $data['empresa_id'],
                                 'caja_id' => $data['caja_id'],
-                                'numerocheque' => $numerocheques[$i_movimiento],
+                                'numerocheque' => $numero,
+                                'negociable' => $negociable,
+                                'nro_echeq' => ChequePropioInstrumentoSupport::nroEcheq($negociable, $numero) ?: null,
                                 'moneda_id' => $monedacheque_ids[$i_movimiento],
                                 'monto' => $montocheques[$i_movimiento],
                                 'cotizacion' => $cotizacioncheques[$i_movimiento],

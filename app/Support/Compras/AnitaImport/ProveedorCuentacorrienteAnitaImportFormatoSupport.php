@@ -99,6 +99,10 @@ final class ProveedorCuentacorrienteAnitaImportFormatoSupport
                 static fn ($t) => ComprobanteProveedorAnitaImportClaveSupport::tipo((string) $t),
                 (array) ($cfg['tipos_no_deuda'] ?? [])
             )),
+            'tipos_credito_sin_compra' => array_values(array_map(
+                static fn ($t) => ComprobanteProveedorAnitaImportClaveSupport::tipo((string) $t),
+                (array) ($cfg['tipos_credito_sin_compra'] ?? ['OPA'])
+            )),
             'tolerancia_aplicado' => (float) ($cfg['tolerancia_aplicado'] ?? 0.02),
             'empresa_id_default' => max(1, (int) ($cfg['empresa_id_default'] ?? 1)),
             'bridge_list_reintentos' => max(1, (int) ($cfg['bridge_list_reintentos'] ?? 6)),
@@ -112,6 +116,14 @@ final class ProveedorCuentacorrienteAnitaImportFormatoSupport
         $tipo = ComprobanteProveedorAnitaImportClaveSupport::tipo($tipo);
 
         return $tipo !== '' && in_array($tipo, $perfil['tipos_no_deuda'], true);
+    }
+
+    public static function esTipoCreditoSinCompra(string $tipo, ?array $perfil = null): bool
+    {
+        $perfil ??= self::perfil();
+        $tipo = ComprobanteProveedorAnitaImportClaveSupport::tipo($tipo);
+
+        return $tipo !== '' && in_array($tipo, $perfil['tipos_credito_sin_compra'], true);
     }
 
     private static function resolverTieneEmpresa(mixed $envValor): bool

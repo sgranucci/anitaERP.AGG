@@ -662,7 +662,8 @@ function serializarChequesEmitidos() {
             moneda_ids: $(this).find('.moneda_emitido_id').val(),
             montos: monto,
             cotizaciones: $(this).find('.cotizacioncheque_emitido').val(),
-            fechapagos: $(this).find('.fechapago_emitido').val()
+            fechapagos: $(this).find('.fechapago_emitido').val(),
+            numerocheques: $(this).find('.numerocheque_emitido').val()
         });
     });
     return JSON.stringify(datos);

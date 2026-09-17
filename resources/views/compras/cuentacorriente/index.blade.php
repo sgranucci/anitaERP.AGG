@@ -105,7 +105,7 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                             @if ($modoCuentaCorriente)
                                 Cuenta corriente (Debe / Haber)
                             @else
-                                Deuda (facturas impagas)
+                                Deuda (facturas, NC y adelantos)
                             @endif
                         </label>
                     </div>

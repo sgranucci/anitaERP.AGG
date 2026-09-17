@@ -103,9 +103,42 @@ final class TiendanubePedidoMaestrosSupport
 
     /**
      * Sugiere cuentacaja del uso «TIENDA NUBE» según gateway TN.
+     * Prioridad: mapa explícito config → heurística por nombre → primera del uso.
      */
-    public static function sugerirCuentacajaId(?string $gateway): ?int
+    public static function sugerirCuentacajaId(?string $gateway, ?string $gatewayName = null, ?array $paymentJson = null): ?int
     {
+        $map = (array) config('tiendanube.gateway_cuentacaja', []);
+        $keys = array_filter([
+            strtolower(trim((string) $gateway)),
+            strtolower(trim((string) $gatewayName)),
+            strtolower(trim((string) ($paymentJson['method'] ?? ''))),
+            strtolower(trim((string) ($paymentJson['credit_card_company'] ?? ''))),
+        ]);
+        foreach ($keys as $key) {
+            if ($key === '' || ! array_key_exists($key, $map)) {
+                continue;
+            }
+            $val = $map[$key];
+            if ($val === null || $val === '') {
+                continue;
+            }
+            if (is_numeric($val)) {
+                $asId = (int) $val;
+                if ($asId > 0 && Cuentacaja::query()->whereKey($asId)->exists()) {
+                    return $asId;
+                }
+                $byCodigo = (int) (Cuentacaja::query()->where('codigo', (string) $val)->value('id') ?? 0);
+                if ($byCodigo > 0) {
+                    return $byCodigo;
+                }
+            } elseif (is_string($val)) {
+                $byCodigo = (int) (Cuentacaja::query()->where('codigo', $val)->value('id') ?? 0);
+                if ($byCodigo > 0) {
+                    return $byCodigo;
+                }
+            }
+        }
+
         $cuentas = self::cuentacajasOperativas();
         if ($cuentas->isEmpty()) {
             return null;
@@ -114,8 +147,13 @@ final class TiendanubePedidoMaestrosSupport
             return (int) $cuentas->first()->id;
         }
 
-        $gateway = strtolower(trim((string) $gateway));
-        $tokens = self::tokensBusquedaGateway($gateway);
+        $haystackGw = strtolower(trim(implode(' ', array_filter([
+            (string) $gateway,
+            (string) $gatewayName,
+            (string) ($paymentJson['method'] ?? ''),
+            (string) ($paymentJson['credit_card_company'] ?? ''),
+        ]))));
+        $tokens = self::tokensBusquedaGateway($haystackGw);
 
         $mejor = null;
         $mejorScore = 0;
@@ -137,7 +175,6 @@ final class TiendanubePedidoMaestrosSupport
             return (int) $mejor->id;
         }
 
-        // Fallback: primera del uso (orden)
         return (int) $cuentas->first()->id;
     }
 
@@ -148,9 +185,10 @@ final class TiendanubePedidoMaestrosSupport
     {
         return match (true) {
             $gateway === '' => [],
-            str_contains($gateway, 'mercado') || $gateway === 'credit_card' => ['mercadopago', 'mep', 'mercado'],
+            str_contains($gateway, 'naranja') => ['naranja', 'mercadopago', 'mep'],
+            str_contains($gateway, 'mercado') || str_contains($gateway, 'credit_card') => ['mercadopago', 'mep', 'mercado'],
             str_contains($gateway, 'boa') => ['boa', 'nube'],
-            $gateway === 'custom' || str_contains($gateway, 'nube') || str_contains($gateway, 'offline') => ['pago nube', 'nube', '609'],
+            str_contains($gateway, 'custom') || str_contains($gateway, 'nube') || str_contains($gateway, 'offline') => ['pago nube', 'nube', '609'],
             str_contains($gateway, 'libre') => ['mercadolibre', 'meli'],
             default => array_values(array_filter(preg_split('/[\s_\-]+/', $gateway) ?: [])),
         };

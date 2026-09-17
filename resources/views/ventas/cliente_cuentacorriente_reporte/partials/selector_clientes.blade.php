@@ -212,6 +212,19 @@
     }
     .cc-reporte-alcance-texto strong { display: block; color: #1b4f72; font-size: 0.95rem; }
     .cc-reporte-alcance-texto small { line-height: 1.25; }
+    .cc-reporte-alcance.is-dimmed {
+        opacity: 0.55;
+        pointer-events: none;
+        filter: grayscale(0.15);
+    }
+    .cc-reporte-alcance.is-dimmed .cc-reporte-alcance-card.is-active {
+        background: #fff;
+        box-shadow: none;
+    }
+    .cc-reporte-alcance.is-dimmed .cc-reporte-alcance-card.is-active .cc-reporte-alcance-icono {
+        background: #eef2f7;
+        color: #2c3e50;
+    }
     @media (max-width: 991.98px) {
         .cc-reporte-alcance-opciones { grid-template-columns: 1fr; }
         .cc-reporte-alcance-card { border-right: 0; border-bottom: 1px solid #dee2e6; }

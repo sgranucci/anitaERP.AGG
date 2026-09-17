@@ -42,6 +42,12 @@ return [
 
     'cliente_contado_id' => (int) env('TIENDANUBE_CLIENTE_CONTADO_ID', 1),
 
+    // Cliente CF (letra B) — Ferli: CONSUMIDOR FINAL import Anita
+    'cliente_cf_id' => (int) env('TIENDANUBE_CLIENTE_CF_ID', 2194),
+
+    // Cliente RI base para Factura A (percepciones según padrón)
+    'cliente_ri_id' => (int) env('TIENDANUBE_CLIENTE_RI_ID', 1),
+
     // Artículo para flete / envío (SKU ERP Ferli = FL).
     'articulo_envio_sku' => env('TIENDANUBE_ARTICULO_ENVIO_SKU', 'FL'),
 
@@ -51,6 +57,10 @@ return [
     // Uso de cuentas de caja del canal (maestro usocuentacaja).
     'usocuentacaja_nombre' => env('TIENDANUBE_USO_CUENTACAJA', 'TIENDA NUBE'),
 
+    // Mapa opcional gateway/method → id o código cuentacaja (JSON). Vacío = heurística + uso.
+    // Ej: {"credit_card":"611","custom":"609","tarjeta_naranja":"611"}
+    'gateway_cuentacaja' => json_decode((string) env('TIENDANUBE_GATEWAY_CUENTACAJA', '{}'), true) ?: [],
+
     'genera_contabilidad_cobranza' => filter_var(
         env('TIENDANUBE_GENERA_CONTABILIDAD_COBRANZA', false),
         FILTER_VALIDATE_BOOLEAN
@@ -58,9 +68,15 @@ return [
 
     'sync_page_size' => (int) env('TIENDANUBE_SYNC_PAGE_SIZE', 50),
 
-    // Subir invoice a TN tras emitir (requiere write_orders). Off hasta ampliar scopes.
+    // Subir invoice a TN tras emitir (requiere write_orders).
     'publicar_factura_en_pedido' => filter_var(
-        env('TIENDANUBE_PUBLICAR_FACTURA', false),
+        env('TIENDANUBE_PUBLICAR_FACTURA', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    // Mail automático al email del comprador TN al emitir.
+    'enviar_factura_mail' => filter_var(
+        env('TIENDANUBE_ENVIAR_FACTURA_MAIL', true),
         FILTER_VALIDATE_BOOLEAN
     ),
 ];

@@ -28,6 +28,7 @@ class ClienteCuentacorrienteAnitaImportFormatoSupportTest extends TestCase
             'cliente_cuentacorriente_anita.campos_climov' => '',
             'cliente_cuentacorriente_anita.campos_aplmov' => '',
             'cliente_cuentacorriente_anita.tipos_no_deuda' => ['COB', 'COA'],
+            'cliente_cuentacorriente_anita.tipos_credito_sin_venta' => ['COA'],
             'cliente_cuentacorriente_anita.aplmov_fallback_ref_como_cob' => true,
             'cliente_cuentacorriente_anita.tolerancia_aplicado' => 0.02,
             'cliente_cuentacorriente_anita.bridge_list_reintentos' => 3,

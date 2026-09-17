@@ -17,7 +17,7 @@ class CotSesionEnvioRepository
     public function leeSesiones(array $filtros, bool $paginar = true): LengthAwarePaginator|Collection
     {
         $query = $this->querySesiones($filtros)
-            ->with(['usuarios'])
+            ->with(['usuarios', 'cotGuia.transportes'])
             ->orderByDesc('fecha_envio')
             ->orderByDesc('id');
 
@@ -31,7 +31,7 @@ class CotSesionEnvioRepository
     public function leeSesion(int $id): ?CotSesionEnvio
     {
         return CotSesionEnvio::query()
-            ->with(['usuarios', 'remitos.clientes', 'remitos.transportes'])
+            ->with(['usuarios', 'remitos.clientes', 'remitos.transportes', 'cotGuia.transportes'])
             ->find($id);
     }
 

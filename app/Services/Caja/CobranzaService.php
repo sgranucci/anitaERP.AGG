@@ -30,7 +30,12 @@ use App\Repositories\Configuracion\Retencion_CobranzaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Contable\CuentaAutomaticaClaves;
+use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Models\Contable\Cuentacontable;
 use App\Services\Caja\CobranzaDescuentoNotaCreditoService;
 use App\Services\Ordenventa\OrdenventaService;
 use App\Models\Configuracion\Empresa;
@@ -142,113 +147,126 @@ class CobranzaService
 
 	public function guardaCobranza($request, $origen = null)
 	{
-		session(['empresa_id' => $request->empresa_id]);
-		$data = $request->all();
+		try {
+			session(['empresa_id' => $request->empresa_id]);
+			$data = $request->all();
 
-		PeriodoContableCierreSupport::assertOperacionPermitida(
-			(int) ($data['empresa_id'] ?? 0),
-			(string) ($data['fecha'] ?? date('Y-m-d')),
-			PeriodoContableCierreSupport::ALCANCE_COBRANZA
-		);
+			PeriodoContableCierreSupport::assertOperacionPermitida(
+				(int) ($data['empresa_id'] ?? 0),
+				(string) ($data['fecha'] ?? date('Y-m-d')),
+				PeriodoContableCierreSupport::ALCANCE_COBRANZA
+			);
 
-   		// Crea estado
-	   	$data['fechas'][] = Carbon::now();
-//dd($data);
-		if (config('cobranza.GRABACION') == "CON_PRECARGA")
-		{
-	   		$data['estados'][] = Cobranza_Estado::$enumEstado[1]['nombre'];
-	   		$data['observacionestados'][] = "Alta de Pre Carga";
-			$data['estado'] = Cobranza_Estado::$enumEstado[1]['nombre'];
-		}
-		else
-		{
-	   		$data['estados'][] = Cobranza_Estado::$enumEstado[0]['nombre'];
-	   		$data['observacionestados'][] = "Alta de Cobranza";
-			$data['estado'] = Cobranza_Estado::$enumEstado[0]['nombre'];
-		}
-		$data['usuario_ids'][] = Auth::user()->id;
+			// Crea estado
+			$data['fechas'][] = Carbon::now();
+			if (config('cobranza.GRABACION') == "CON_PRECARGA")
+			{
+				$data['estados'][] = Cobranza_Estado::$enumEstado[1]['nombre'];
+				$data['observacionestados'][] = "Alta de Pre Carga";
+				$data['estado'] = Cobranza_Estado::$enumEstado[1]['nombre'];
+			}
+			else
+			{
+				$data['estados'][] = Cobranza_Estado::$enumEstado[0]['nombre'];
+				$data['observacionestados'][] = "Alta de Cobranza";
+				$data['estado'] = Cobranza_Estado::$enumEstado[0]['nombre'];
+			}
+			$data['usuario_ids'][] = Auth::user()->id;
 
-		return CobranzaNumeracionTransaccion::conExclusividad(
-			(int) $data['empresa_id'],
-			(int) $data['tipotransaccion_caja_id'],
-			function () use ($data, $request, $origen) {
-				$data['numerotransaccion'] = CobranzaNumeracionTransaccion::calcularSiguienteNumeroSecuencialBd(
-					(int) $data['empresa_id'],
-					(int) $data['tipotransaccion_caja_id'],
-				);
-				$data['usuario_id'] = Auth::user()->id;
+			return CobranzaNumeracionTransaccion::conExclusividad(
+				(int) $data['empresa_id'],
+				(int) $data['tipotransaccion_caja_id'],
+				function () use ($data, $request, $origen) {
+					$data['numerotransaccion'] = CobranzaNumeracionTransaccion::calcularSiguienteNumeroSecuencialBd(
+						(int) $data['empresa_id'],
+						(int) $data['tipotransaccion_caja_id'],
+					);
+					$data['usuario_id'] = Auth::user()->id;
 
-				if (! isset($data['detalle'])) {
-					$data['detalle'] = 'Cobranza Nro. '.$data['numerotransaccion'];
-				}
-
-				if (isset($data['ordenventa_id']) && $data['ordenventa_id'] > 0) {
-					$ordenventa = $this->ordenventaService->leeOrdenVenta($data['ordenventa_id']);
-
-					if ($ordenventa) {
-						$data['detalle'] .= ' Orden de Venta Nro. '.$ordenventa->numeroordenventa;
-					}
-				}
-
-				if ($origen) {
-					$this->procesarDescuentosAntesDeGrabar($data);
-
-					$cobranza = $this->cobranzaRepository->create($data);
-
-					if (! $cobranza) {
-						throw new Exception('Error en grabacion');
+					if (! isset($data['detalle'])) {
+						$data['detalle'] = 'Cobranza Nro. '.$data['numerotransaccion'];
 					}
 
-					Self::agrega($data, $cobranza, $request);
-					$this->persistirDescuentosCobranza($cobranza->id, $data);
-				} else {
-					DB::beginTransaction();
-					try {
+					if (isset($data['ordenventa_id']) && $data['ordenventa_id'] > 0) {
+						$ordenventa = $this->ordenventaService->leeOrdenVenta($data['ordenventa_id']);
+
+						if ($ordenventa) {
+							$data['detalle'] .= ' Orden de Venta Nro. '.$ordenventa->numeroordenventa;
+						}
+					}
+
+					if ($origen) {
 						$this->procesarDescuentosAntesDeGrabar($data);
 
 						$cobranza = $this->cobranzaRepository->create($data);
 
-						if ($cobranza == 'Error') {
+						if (! $cobranza) {
 							throw new Exception('Error en grabacion');
 						}
 
-						if ($cobranza) {
-							Self::agrega($data, $cobranza, $request);
-							$this->persistirDescuentosCobranza($cobranza->id, $data);
+						Self::agrega($data, $cobranza, $request);
+						$this->persistirDescuentosCobranza($cobranza->id, $data);
+
+						return $this->respuestaExitoGrabacionCobranza($cobranza, $request);
+					} else {
+						DB::beginTransaction();
+						try {
+							$this->procesarDescuentosAntesDeGrabar($data);
+
+							$cobranza = $this->cobranzaRepository->create($data);
+
+							if ($cobranza == 'Error') {
+								throw new Exception('Error en grabacion');
+							}
+
+							if ($cobranza) {
+								Self::agrega($data, $cobranza, $request);
+								$this->persistirDescuentosCobranza($cobranza->id, $data);
+							}
+
+							$anita = self::grabaAnita(
+								$data['fecha'],
+								'COB',
+								'X',
+								0,
+								$data['numerotransaccion'],
+								$data['totalfinalcobranza'],
+								$data['cotizacion_cobranza'],
+								$data['detalle'],
+								$data['empresa_id'],
+								$data,
+							);
+
+							if (isset($anita['error'])) {
+								throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+							}
+
+							if ($data['ordenventa_id'] > 0) {
+								$this->ordenventaService->marcaOrdenVentaCobrada($data['ordenventa_id']);
+							}
+
+							DB::commit();
+						} catch (\Exception $e) {
+							DB::rollback();
+
+							return ['errores' => $e->getMessage()];
 						}
 
-						$anita = self::grabaAnita(
-							$data['fecha'],
-							'COB',
-							'X',
-							0,
-							$data['numerotransaccion'],
-							$data['totalfinalcobranza'],
-							$data['cotizacion_cobranza'],
-							$data['detalle'],
-							$data['empresa_id'],
-							$data,
-						);
-
-						if (isset($anita['error'])) {
-							throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
-						}
-
-						if ($data['ordenventa_id'] > 0) {
-							$this->ordenventaService->marcaOrdenVentaCobrada($data['ordenventa_id']);
-						}
-
-						DB::commit();
-					} catch (\Exception $e) {
-						DB::rollback();
-
-						return ['errores' => $e->getMessage()];
+						return $this->respuestaExitoGrabacionCobranza($cobranza, $request);
 					}
-				}
+				},
+			);
+		} catch (\Throwable $e) {
+			Log::error('cobranza.guarda.fallo', [
+				'message' => $e->getMessage(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'empresa_id' => $request->empresa_id ?? null,
+				'tipotransaccion_caja_id' => $request->tipotransaccion_caja_id ?? null,
+			]);
 
-				return ['mensaje' => 'ok'];
-			},
-		);
+			return ['errores' => $e->getMessage()];
+		}
 	}
 
 	private function agrega($data, $cobranza, $request)
@@ -298,6 +316,9 @@ class CobranzaService
 
 			$data['observacion'] = $data['detalle'];
 
+			if (! is_array($data['observaciones'] ?? null)) {
+				$data['observaciones'] = [];
+			}
 			for ($i = 0; $i < count($data['observaciones']); $i++)
 			{
 				if ($data['observaciones'][$i] == null)
@@ -314,8 +335,14 @@ class CobranzaService
 		}
 
 		// Verifica si tiene que crear un anticipo de cuenta corriente
-		$totalCobranzas = $data['totalcobranzas'];
-		$monedaCobranza_ids = $data['moneda_cobranza_ids'];
+		$totalCobranzas = $data['totalcobranzas'] ?? [];
+		if (! is_array($totalCobranzas)) {
+			$totalCobranzas = $totalCobranzas !== null && $totalCobranzas !== '' ? [$totalCobranzas] : [];
+		}
+		$monedaCobranza_ids = $data['moneda_cobranza_ids'] ?? [];
+		if (! is_array($monedaCobranza_ids)) {
+			$monedaCobranza_ids = $monedaCobranza_ids !== null && $monedaCobranza_ids !== '' ? [$monedaCobranza_ids] : [];
+		}
 
 		for ($i = 0; $i < count($totalCobranzas); $i++)
 		{
@@ -326,7 +353,7 @@ class CobranzaService
 						'fechavencimiento' => $data['fecha'],
 						'cliente_id' => $data['cliente_id'],
 						'total' => -$totalCobranzas[$i],
-						'moneda_id' => $monedaCobranza_ids[$i],
+						'moneda_id' => $monedaCobranza_ids[$i] ?? ($data['moneda_id'] ?? 1),
 						'cotizacion' => $data['cotizacion_cobranza'],
 						'cobranza_id' => $data['cobranza_id'],
 						'empresa_id' => $data['empresa_id']
@@ -340,48 +367,57 @@ class CobranzaService
         session(['empresa_id' => $request->empresa_id]);
 		$data = $request->all();
 
-		PeriodoContableCierreSupport::assertOperacionPermitida(
-			(int) ($data['empresa_id'] ?? 0),
-			(string) ($data['fecha'] ?? date('Y-m-d')),
-			PeriodoContableCierreSupport::ALCANCE_COBRANZA
-		);
+		try {
+			PeriodoContableCierreSupport::assertOperacionPermitida(
+				(int) ($data['empresa_id'] ?? 0),
+				(string) ($data['fecha'] ?? date('Y-m-d')),
+				PeriodoContableCierreSupport::ALCANCE_COBRANZA
+			);
 
-		// Crea estado
-		$data['fechas'][] = Carbon::now();
-		$data['estados'][] = $data['estado'];
-		$data['observacionestados'][] = "Actualización de Cobranza";
-		$data['usuario_ids'][] = Auth::user()->id;
+			// Crea estado
+			$data['fechas'][] = Carbon::now();
+			$data['estados'][] = $data['estado'];
+			$data['observacionestados'][] = "Actualización de Cobranza";
+			$data['usuario_ids'][] = Auth::user()->id;
 
-		if ($origen)
-			Self::actualiza($data, $id, $request);
-		else
-		{
-			DB::beginTransaction();
-			try
-			{
+			if ($origen) {
 				Self::actualiza($data, $id, $request);
+			} else {
+				DB::beginTransaction();
+				try {
+					Self::actualiza($data, $id, $request);
 
-				if ($data['ordenventa_id'] > 0)
-					$ordenventa = $this->ordenventaService->marcaOrdenVentaCobrada($data['ordenventa_id']);
+					if (($data['ordenventa_id'] ?? 0) > 0) {
+						$this->ordenventaService->marcaOrdenVentaCobrada($data['ordenventa_id']);
+					}
 
-				// Graba anita por cobranza
-				//$anita = self::grabaAnita($data['fecha'], 'COB', 'X', 0, $data['numerotransaccion'], $data['totalfinalcobranza'], $data['cotizacion_cobranza'],
-				//				$data['detalle'], $data['empresa_id'], $data);
+					DB::commit();
+				} catch (\Exception $e) {
+					DB::rollback();
+					Log::error('cobranza.actualiza.fallo', [
+						'message' => $e->getMessage(),
+						'file' => $e->getFile(),
+						'line' => $e->getLine(),
+						'cobranza_id' => $id,
+						'estado' => $data['estado'] ?? null,
+					]);
 
-				//if (isset($anita['error']))
-				//{
-				//	if ($anita['error'] == 'Error')
-				//		throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
-				//}
-
-				DB::commit();
-			} catch (\Exception $e) {
-				DB::rollback();
-
-				return ['errores' => $e->getMessage()];
+					return ['errores' => $e->getMessage()];
+				}
 			}
+
+			return ['mensaje' => 'ok'];
+		} catch (\Throwable $e) {
+			Log::error('cobranza.actualiza.fallo', [
+				'message' => $e->getMessage(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+				'cobranza_id' => $id,
+				'estado' => $data['estado'] ?? null,
+			]);
+
+			return ['errores' => $e->getMessage()];
 		}
-        return ['mensaje' => 'ok'];
     }
 
 	private function actualiza($data, $id, $request)
@@ -420,16 +456,20 @@ class CobranzaService
 		{
 			// Busca el asiento correspondiente a la cobranza
 			$asiento = $this->asientoRepository->leeAsientoPorClave($id, 'cobranza_id');
+			$asientoLista = is_countable($asiento) ? $asiento : [];
 
-			if (count($asiento) > 0)
+			if (count($asientoLista) > 0)
 			{
-				$asiento_id = $asiento[0]->id;
-				$data['tipoasiento_id'] = $asiento[0]->tipoasiento_id;
-				$data['numeroasiento'] = $asiento[0]->numeroasiento;
+				$asiento_id = $asientoLista[0]->id;
+				$data['tipoasiento_id'] = $asientoLista[0]->tipoasiento_id;
+				$data['numeroasiento'] = $asientoLista[0]->numeroasiento;
 			}
 
 			// Arma el asiento contable
-			$data['moneda_ids'] = $data['monedaasiento_ids'];
+			$data['moneda_ids'] = $data['monedaasiento_ids'] ?? [];
+			if (! is_array($data['moneda_ids'])) {
+				$data['moneda_ids'] = $data['moneda_ids'] !== null && $data['moneda_ids'] !== '' ? [$data['moneda_ids']] : [];
+			}
 
 			if (!isset($data['centrocostoasiento_ids']))
 			{
@@ -439,10 +479,13 @@ class CobranzaService
 			else
 				$data['centrocosto_ids'] = $data['centrocostoasiento_ids'];
 
-			$data['debes'] = $data['debeasientos'];
-			$data['haberes'] = $data['haberasientos'];
-			$data['cotizaciones'] = $data['cotizacionasientos'];
-			$data['observaciones'] = $data['observacionasientos'];
+			$data['debes'] = $data['debeasientos'] ?? [];
+			$data['haberes'] = $data['haberasientos'] ?? [];
+			$data['cotizaciones'] = $data['cotizacionasientos'] ?? [];
+			$data['observaciones'] = $data['observacionasientos'] ?? [];
+			if (! is_array($data['observaciones'])) {
+				$data['observaciones'] = [];
+			}
 			$data['cobranza_id'] = $id;
 			$data['observacion'] = $data['detalle'];
 
@@ -452,7 +495,7 @@ class CobranzaService
 					$data['observaciones'][$i] = $data['detalle'];
 			}
 
-			if (count($asiento) > 0)
+			if (count($asientoLista) > 0)
 			{
 				// Busca tipo de asiento de tesoreria
 				$tipoasiento = $this->tipoasientoRepository->findPorAbreviatura('TES');
@@ -503,14 +546,20 @@ class CobranzaService
 		// Verifica si tiene que crear un anticipo de cuenta corriente con cobranza != 0 y venta en null
 		$cliente_cuentacorriente = $this->cliente_cuentacorrienteRepository->buscaPorVentaCobranza(null, $data['cobranza_id']);
 
-		foreach($cliente_cuentacorriente as $cobranza)
+		foreach ($cliente_cuentacorriente ?? [] as $cobranza)
 		{
 			// Borra el anticipo de la cuenta corriente
 			$this->cliente_cuentacorrienteRepository->find($cobranza->id)->delete();
 		}
 
-		$totalCobranzas = $data['totalcobranzas'];
-		$monedaCobranza_ids = $data['moneda_cobranza_ids'];
+		$totalCobranzas = $data['totalcobranzas'] ?? [];
+		if (! is_array($totalCobranzas)) {
+			$totalCobranzas = $totalCobranzas !== null && $totalCobranzas !== '' ? [$totalCobranzas] : [];
+		}
+		$monedaCobranza_ids = $data['moneda_cobranza_ids'] ?? [];
+		if (! is_array($monedaCobranza_ids)) {
+			$monedaCobranza_ids = $monedaCobranza_ids !== null && $monedaCobranza_ids !== '' ? [$monedaCobranza_ids] : [];
+		}
 		for ($i = 0; $i < count($totalCobranzas); $i++)
 		{
 			if ($totalCobranzas[$i] > 0)
@@ -520,7 +569,7 @@ class CobranzaService
 						'fechavencimiento' => $data['fecha'],
 						'cliente_id' => $data['cliente_id'],
 						'total' => -$totalCobranzas[$i],
-						'moneda_id' => $monedaCobranza_ids[$i],
+						'moneda_id' => $monedaCobranza_ids[$i] ?? ($data['moneda_id'] ?? 1),
 						'cotizacion' => $data['cotizacion_cobranza'],
 						'cobranza_id' => $data['cobranza_id'],
 						'empresa_id' => $data['empresa_id']
@@ -577,14 +626,18 @@ class CobranzaService
 
 	public function generaAsientoContable(array $data)
 	{
-		$datosCaja = json_decode($data['datoscaja']);
-		$datosContables = json_decode($data['datoscontables']);
-		$datosCheque = json_decode($data['datoscheques']);
-		$datosRetencion = json_decode($data['datosretenciones']);
-		$datosComprobantes = json_decode($data['datoscomprobantes']);
-		$tipotransaccion_caja_id = json_decode($data['tipotransaccion_caja_id']);
-		$empresa_id = json_decode($data['empresa_id']);
-//logger()->error('Error crítico', ['contexto' => $datosCaja]);
+		$datosCaja = $this->decodeListaAsiento($data['datoscaja'] ?? []);
+		$datosContables = $this->decodeListaAsiento($data['datoscontables'] ?? []);
+		$datosCheque = $this->decodeListaAsiento($data['datoscheques'] ?? []);
+		$datosRetencion = $this->decodeListaAsiento($data['datosretenciones'] ?? []);
+		$datosComprobantes = $this->decodeListaAsiento($data['datoscomprobantes'] ?? []);
+		$tipotransaccion_caja_id = is_numeric($data['tipotransaccion_caja_id'] ?? null)
+			? (int) $data['tipotransaccion_caja_id']
+			: (int) json_decode($data['tipotransaccion_caja_id'] ?? '0');
+		$empresa_id = is_numeric($data['empresa_id'] ?? null)
+			? (int) $data['empresa_id']
+			: (int) json_decode($data['empresa_id'] ?? '0');
+
 		$tipotransaccion_caja = $this->tipotransaccion_cajaRepository->find($tipotransaccion_caja_id);
 		$signo = 1;
 		if ($tipotransaccion_caja)
@@ -647,19 +700,21 @@ class CobranzaService
 			// Agrega cuentas de cheques
 			foreach($datosCheque as $cheque)
 			{
-				// Busca codigo de cuenta en funcion de la empresa
-				$codigocuentacontable = config('cobranza.VALORES_A_DEPOSITAR.'.$empresa_id);
+				$montoCheque = (float) ($cheque->montos ?? 0);
+				if (abs($montoCheque) < 0.000001) {
+					continue;
+				}
 
-				$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigocuentacontable);
+				$cuentacontable = $this->resolverCuentaValoresADepositar((int) $empresa_id);
 
 				if ($cuentacontable)
 				{
-					if ((float) $cheque->montos * $signo > 0)
+					if ($montoCheque * $signo > 0)
 						$d_h = 'D';
 					else
 						$d_h = 'H';
 
-					Self::agregaCuenta($asiento, $cuentacontable->id, $cheque->moneda_ids, $cheque->cotizaciones, $d_h, $cheque->montos);				
+					Self::agregaCuenta($asiento, $cuentacontable->id, $cheque->moneda_ids, $cheque->cotizaciones, $d_h, abs($montoCheque));				
 				}
 			}
 
@@ -671,11 +726,15 @@ class CobranzaService
 
 				if ($retencion_cobranza)
 				{
+					$cuentacontable_id = null;
 					// Busca en funcion de la empresa
 					foreach ($retencion_cobranza->retencion_cobranza_cuentacontables as $cuenta)
 					{
 						if ($cuenta->empresa_id == $empresa_id)
 							$cuentacontable_id = $cuenta->cuentacontable_id;
+					}
+					if (!$cuentacontable_id) {
+						continue;
 					}
 					if ((float) $retencion->montos * $signo > 0)
 						$d_h = 'D';
@@ -687,23 +746,55 @@ class CobranzaService
 			}
 		}
 
-		// Agrega la contrapartida sumando los comprobantes
+		// Contrapartida: una línea de deudores por moneda (no una por factura)
 		if (count($datosContables) == 0)
 		{
-			foreach($datosComprobantes as $comprobante)
-			{
-				$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, config('cliente.DEUDORES_POR_VENTAS'));
+			$totalesDeudores = [];
+			foreach ($datosComprobantes as $comprobante) {
+				$montoComp = abs((float) ($comprobante->montos ?? 0));
+				if ($montoComp < 0.000001) {
+					continue;
+				}
+				$monedaId = (int) ($comprobante->moneda_ids ?? 1) ?: 1;
+				$cotizacion = (float) ($comprobante->cotizaciones ?? 1);
+				if ($cotizacion <= 0) {
+					$cotizacion = 1.0;
+				}
+				if (! isset($totalesDeudores[$monedaId])) {
+					$totalesDeudores[$monedaId] = [
+						'monto' => 0.0,
+						'cotizacion' => $cotizacion,
+					];
+				}
+				$totalesDeudores[$monedaId]['monto'] += $montoComp;
+			}
 
-				if ($cuentacontable)
-				{
-					// Invierte signos
-					if ((float) $comprobante->montos * $signo > 0)
-						$d_h = 'H';
-					else
-						$d_h = 'D';
+			$codigoDeudores = (int) config('cliente.DEUDORES_POR_VENTAS');
+			$cuentacontableDeudores = $codigoDeudores > 0
+				? $this->resolverCuentacontablePorCodigo((int) $empresa_id, $codigoDeudores)
+				: null;
 
-					Self::agregaCuenta($asiento, $cuentacontable->id, $comprobante->moneda_ids, $comprobante->cotizaciones, $d_h, $comprobante->montos);				
-				}				
+			foreach ($totalesDeudores as $monedaId => $total) {
+				if (! $cuentacontableDeudores) {
+					break;
+				}
+				$d_h = ($total['monto'] * $signo > 0) ? 'H' : 'D';
+				Self::agregaCuenta(
+					$asiento,
+					$cuentacontableDeudores->id,
+					$monedaId,
+					$total['cotizacion'],
+					$d_h,
+					$total['monto']
+				);
+			}
+
+			if ($asiento === []) {
+				return [
+					'mensaje' => 'ok',
+					'asiento' => [],
+					'errores' => 'No se pudo armar el asiento: faltan cuentas contables (valores a depositar / deudores) o no hay montos de medios/comprobantes.',
+				];
 			}
 
 			// Agrega si se paga de mas va contra anticipo de clientes
@@ -725,7 +816,10 @@ class CobranzaService
 
 			if (abs($totalDebe-$totalHaber) > 0.009)
 			{
-				$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, config('cliente.ANTICIPO_DE_CLIENTES'));
+				$codigoAnticipo = (int) config('cliente.ANTICIPO_DE_CLIENTES');
+				$cuentacontable = $codigoAnticipo > 0
+					? $this->resolverCuentacontablePorCodigo((int) $empresa_id, $codigoAnticipo)
+					: null;
 
 				if ($cuentacontable)
 				{
@@ -745,8 +839,39 @@ class CobranzaService
 		return ['mensaje' => 'ok', 'asiento' => $asiento];
 	}
 
+	/**
+	 * @param  mixed  $raw
+	 * @return list<object>
+	 */
+	private function decodeListaAsiento($raw): array
+	{
+		if (is_array($raw)) {
+			return array_values($raw);
+		}
+		if ($raw === null || $raw === '') {
+			return [];
+		}
+		$decoded = is_string($raw) ? json_decode($raw) : $raw;
+		if (! is_array($decoded)) {
+			return [];
+		}
+
+		return array_values($decoded);
+	}
+
 	private function agregaCuenta(&$asiento, $cuentacontable_id, $moneda_id, $cotizacion, $d_h, $monto)
 	{
+		$monto = abs((float) $monto);
+		if ($monto < 0.000001 || ! $cuentacontable_id) {
+			return;
+		}
+
+		$moneda_id = (int) $moneda_id ?: 1;
+		$cotizacion = (float) $cotizacion;
+		if ($cotizacion <= 0) {
+			$cotizacion = 1.0;
+		}
+
 		if ($d_h == 'D')
 		{
 			$debe = $monto; $haber = 0;
@@ -756,15 +881,18 @@ class CobranzaService
 			$debe = 0; $haber = $monto;
 		}
 
-		for ($i = 0, $flExiste = false; $i < count($asiento) && !$flExiste; $i++)
-		{
-			if ($asiento[$i]['cuentacontable_id'] == $cuentacontable_id &&
-				$asiento[$i]['moneda_id'] == $moneda_id &&
-				$asiento[$i]['cotizacion'] == $cotizacion &&
-				$asiento[$i]['d_h'] == $d_h)
-				$flExiste = true;
+		$indiceExistente = null;
+		foreach ($asiento as $i => $linea) {
+			if ((int) $linea['cuentacontable_id'] === (int) $cuentacontable_id &&
+				(int) $linea['moneda_id'] === $moneda_id &&
+				abs((float) $linea['cotizacion'] - $cotizacion) < 0.000001 &&
+				$linea['d_h'] === $d_h) {
+				$indiceExistente = $i;
+				break;
+			}
 		}
-		if (!$flExiste)
+
+		if ($indiceExistente === null)
 		{
 			$cuentacontable = $this->cuentacontableRepository->find($cuentacontable_id);
 
@@ -773,7 +901,7 @@ class CobranzaService
 								'codigo' => $cuentacontable->codigo,
 								'nombre' => $cuentacontable->nombre,
 								'moneda_id' => $moneda_id,
-								'cotizacion' => (float) $cotizacion,
+								'cotizacion' => $cotizacion,
 								'centrocosto_id' => 0,
 								'debe' => (float) $debe,
 								'haber' => (float) $haber,
@@ -784,8 +912,8 @@ class CobranzaService
 		}
 		else
 		{
-			$asiento[$i]['debe'] += $debe;
-			$asiento[$i]['haber'] += $haber;
+			$asiento[$indiceExistente]['debe'] += $debe;
+			$asiento[$indiceExistente]['haber'] += $haber;
 		}	
 	}
 
@@ -798,69 +926,28 @@ class CobranzaService
 		$codigoCliente = $cliente->codigo;
 		$numerodocumento = $cliente->numerodocumento;
 
-		// Graba pago
-        $apiAnita = new ApiAnita();
+		$ctxBase = [
+			'codigoCliente' => $codigoCliente,
+			'fecha' => $fecha,
+			'tipo' => $tipo,
+			'numeroRecibo' => $numeroRecibo,
+			'totalRecibo' => $totalRecibo,
+			'cotizacion' => $cotizacion,
+			'leyenda' => $leyenda,
+			'letra' => $letra,
+			'puntoVenta' => $puntoVenta,
+			'empresa' => $empresa,
+		];
 
-		$grabaAnita = array( 	'tabla' => 'pago', 
-						'acc' => 'insert',
-						'sistema' => 'che_ban',
-            			'campos' => ' 
-							pag_pro,
-							pag_fecha,
-							pag_tipo,
-							pag_rec,
-							pag_trec,
-							pag_cotizacion,
-							pag_leyenda,
-							pag_entregado_a,
-							pag_letra,
-							pag_sucursal,
-							pag_mov_ext,
-							pag_cod_mon_me,
-							pag_cobrador,
-							pag_sucursal_p,
-							pag_recibo_p,
-							pag_sin_comision,
-							pag_emp_sueldos,
-							pag_legajo,
-							pag_tipo_vale,
-							pag_nro_vale,
-							pag_vendedor,
-							pag_usuario,
-							pag_fecha_ult_act,
-							pag_empresa,
-							pag_fecha_pago,
-							pag_documento_id',
-            			'valores' => " 
-							'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
-							'".date('Ymd', strtotime($fecha))."',
-							'".substr($tipo, 0, 3)."',
-							'".$numeroRecibo."',
-							'".$totalRecibo."',
-							'".$cotizacion."',
-							'".$leyenda."',
-							'".' '."',
-							'".$letra."',
-							'".$puntoVenta."',
-							'".' '."',
-							'".'0'."',
-							'".'0'."',
-							'".'0'."',
-							'".'0'."',
-							'".'0'."',
-							'".'0'."',
-							'".'0'."',
-							'".' '."',
-							'".'0'."',
-							'".'0'."',
-							'".Auth::user()->nombre."',
-							'".date_format(Carbon::now(), 'Ymd')."',
-							'".$empresa."',
-							'".'0'."',
-							'".'0'."'"
-					);
-
-        $pago = $apiAnita->apiCallEscritura($grabaAnita);
+		$apiAnita = new ApiAnita();
+		$pagoPayload = CobranzaAnitaCheBanEsquemaSupport::payloadPago($ctxBase);
+		$apiAnita->apiCallEscritura([
+			'tabla' => 'pago',
+			'acc' => 'insert',
+			'sistema' => 'che_ban',
+			'campos' => $pagoPayload['campos'],
+			'valores' => $pagoPayload['valores'],
+		]);
 
 		// Graba cuentas de caja
 		if (isset($data['cuentacaja_ids']))
@@ -874,108 +961,53 @@ class CobranzaService
 
 			for ($i = 0; $i < count($cuentacaja_ids); $i++)
 			{
-				// Lee la cuenta
+				$monto = (float) ($montos[$i] ?? 0);
+				if (($cuentacaja_ids[$i] ?? null) === null || $cuentacaja_ids[$i] === '' || abs($monto) < 0.000001) {
+					continue;
+				}
+
 				$cuentacaja = $this->cuentacajaRepository->find($cuentacaja_ids[$i]);
-				
-				$codigoCuenta = '';
-				if ($cuentacaja)
-					$codigoCuenta = $cuentacaja->codigo;
-		
-				// Graba auxpag
-				$apiAnita = new ApiAnita();
+				$codigoCuenta = $cuentacaja ? $cuentacaja->codigo : '';
 
-				$grabaAnita = array( 	'tabla' => 'auxpag', 
-								'acc' => 'insert',
-								'sistema' => 'che_ban',
-								'campos' => ' 
-									axp_pro,
-									axp_fecha,
-									axp_rec,
-									axp_tipo,
-									axp_nro,
-									axp_tipo_ap,
-									axp_monto_ap,
-									axp_cod_mon_co,
-									axp_fecha_co,
-									axp_banco,
-									axp_letra_comp,
-									axp_sucursal,
-									axp_letra_cob,
-									axp_sucursal_cob,
-									axp_vendedor,
-									axp_nro_interno,
-									axp_empresa,
-									axp_concepto,
-									axp_cbu',
-								'valores' => "   
-									'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
-									'".date('Ymd', strtotime($fecha))."',
-									'".$numeroRecibo."',
-									'".substr($tipo, 0, 3)."',
-									'".'0'."',
-									'".'ATE'."',
-									'".$montos[$i]."',
-									'".$moneda_ids[$i]."',
-									'".'0'."',
-									'".str_pad($codigoCuenta, 8, "0", STR_PAD_LEFT)."',
-									'".' '."',
-									'".'0'."',
-									'".$letra."',
-									'".$puntoVenta."',
-									'".'0'."',
-									'".'0'."',
-									'".$empresa."',
-									'".'0'."',
-									'".' '."'"
-							);  
-							
-				$auxpag = $apiAnita->apiCallEscritura($grabaAnita);
+				$auxCtx = array_merge($ctxBase, [
+					'nro' => '0',
+					'tipoAp' => 'ATE',
+					'monto' => $montos[$i],
+					'monedaId' => $moneda_ids[$i],
+					'banco' => $codigoCuenta,
+					'letraComp' => ' ',
+					'sucursal' => '0',
+					'letraCob' => $letra,
+					'sucursalCob' => $puntoVenta,
+					'vendedor' => '0',
+					'nroInterno' => '0',
+					'concepto' => '0',
+					'cbu' => ' ',
+				]);
+				$auxPayload = CobranzaAnitaCheBanEsquemaSupport::payloadAuxpag($auxCtx);
+				$apiAnita->apiCallEscritura([
+					'tabla' => 'auxpag',
+					'acc' => 'insert',
+					'sistema' => 'che_ban',
+					'campos' => $auxPayload['campos'],
+					'valores' => $auxPayload['valores'],
+				]);
 
-
-				// Graba tesmov
-				$apiAnita = new ApiAnita();
-
-				$grabaAnita = array( 	'tabla' => 'tesmov', 
-								'acc' => 'insert',
-								'sistema' => 'che_ban',
-								'campos' => ' 			
-									tesv_cuenta,
-									tesv_fecha_mov,
-									tesv_fecha_dev,
-									tesv_tipo,
-									tesv_letra,
-									tesv_sucursal,
-									tesv_nro,
-									tesv_importe,
-									tesv_cotizacion,
-									tesv_desc_mov,
-									tesv_conciliado,
-									tesv_contrapartida,
-									tesv_nro_conc,
-									tesv_fecha_conc,
-									tesv_empresa,
-									tesv_cod_mon',
-								'valores' => " 
-									'".str_pad($codigoCuenta, 8, "0", STR_PAD_LEFT)."',
-									'".date('Ymd', strtotime($fecha))."',
-									'".date('Ymd', strtotime($fecha))."',
-									'".substr($tipo, 0, 3)."',
-									'".$letra."',
-									'".$puntoVenta."',
-									'".$numeroRecibo."',
-									'".$montos[$i]."',
-									'".$cotizaciones[$i]."',
-									'".$data['detalle']."',
-									'".' '."',
-									'".' '."',
-									'".'0'."',
-									'".'0'."',
-									'".$empresa."',
-									'".$moneda_ids[$i]."'"
-							);
-							
-				$tesmov = $apiAnita->apiCallEscritura($grabaAnita);
-
+				$tesCtx = array_merge($ctxBase, [
+					'codigoCuenta' => $codigoCuenta,
+					'monto' => $montos[$i],
+					'cotizacion' => $cotizaciones[$i],
+					'detalle' => $data['detalle'] ?? '',
+					'monedaId' => $moneda_ids[$i],
+				]);
+				$tesPayload = CobranzaAnitaCheBanEsquemaSupport::payloadTesmov($tesCtx);
+				$apiAnita->apiCallEscritura([
+					'tabla' => 'tesmov',
+					'acc' => 'insert',
+					'sistema' => 'che_ban',
+					'campos' => $tesPayload['campos'],
+					'valores' => $tesPayload['valores'],
+				]);
 			}
 		}
 
@@ -983,7 +1015,6 @@ class CobranzaService
 		if (isset($data['idcuentacorrientes']))
 		{
 			$cliente_cuentacorriente_ids = $data['idcuentacorrientes'];
-			$venta_ids = $data['idventas'];
 			$moneda_ids = $data['monedacomprobante_ids'];
 			$montos = $data['montoaplicadocomprobantes'];
 			$cotizaciones = $data['cotizacioncomprobantes'];
@@ -992,91 +1023,55 @@ class CobranzaService
 
 			for ($i = 0; $i < count($cliente_cuentacorriente_ids); $i++)
 			{
-				$codigo = $codigoComprobantes[$i];
+				$monto = (float) ($montos[$i] ?? 0);
+				if (($cliente_cuentacorriente_ids[$i] ?? null) === null || $cliente_cuentacorriente_ids[$i] === '' || abs($monto) < 0.000001) {
+					continue;
+				}
 
+				$codigo = $codigoComprobantes[$i];
 				$tipoComprobante = substr($codigo, 0, 3);
 				$letraComprobante = substr($codigo, 4, 1);
 				$sucursalComprobante = substr($codigo, 6, 5);
 				$nroComprobante = substr($codigo, 12, 8);
-				
-				// Graba climov	
-				$apiAnita = new ApiAnita();
 
-				$grabaAnita = array( 	'tabla' => 'climov', 
-								'acc' => 'insert',
-								'sistema' => 'ventas',
-								'campos' => ' 
-									cliv_cliente,
-									cliv_tipo,
-									cliv_letra,
-									cliv_sucursal,
-									cliv_nro,
-									cliv_ref_tipo,
-									cliv_ref_letra,
-									cliv_ref_sucursal,
-									cliv_ref_nro,
-									cliv_fecha,
-									cliv_fecha_vto,
-									cliv_monto,
-									cliv_cod_mon,
-									cliv_cotizacion,
-									cliv_nro_cuota,
-									cliv_t_cobrado,
-									cliv_fecha_cobro,
-									cliv_cedio_a,
-									cliv_estado,
-									cliv_empresa',
-								'valores' => " 
-									'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
-									'".substr($tipo, 0, 3)."',
-									'".$letra."',
-									'".$puntoVenta."',
-									'".$numeroRecibo."',
-									'".$tipoComprobante."',
-									'".$letraComprobante."',
-									'".$sucursalComprobante."',
-									'".$nroComprobante."',
-									'".date('Ymd', strtotime($fecha))."',
-									'".date('Ymd', strtotime($fecha))."',
-									'".$montos[$i]."',
-									'".$moneda_ids[$i]."',
-									'".$cotizaciones[$i]."',
-									'".'0'."',
-									'".'0'."',
-									'".'0'."',
-									'".'0'."',
-									'".'C'."',
-									'".$empresa."'"
-							);
-				$climov = $apiAnita->apiCallEscritura($grabaAnita);
+				$cliCtx = array_merge($ctxBase, [
+					'tipoComprobante' => $tipoComprobante,
+					'letraComprobante' => $letraComprobante,
+					'sucursalComprobante' => $sucursalComprobante,
+					'nroComprobante' => $nroComprobante,
+					'monto' => $montos[$i],
+					'monedaId' => $moneda_ids[$i],
+					'cotizacion' => $cotizaciones[$i],
+				]);
+				$cliPayload = CobranzaAnitaCheBanEsquemaSupport::payloadClimov($cliCtx);
+				$apiAnita->apiCallEscritura([
+					'tabla' => 'climov',
+					'acc' => 'insert',
+					'sistema' => 'ventas',
+					'campos' => $cliPayload['campos'],
+					'valores' => $cliPayload['valores'],
+				]);
 
-				
-				// Modifica lo aplicado a la factura
-				$apiAnita = new ApiAnita();
-
-				$grabaAnita = array( 	'acc' => 'update', 
-								'tabla' => 'climov',
-								'sistema' => 'ventas',
-								'valores' => " 
+				$apiAnita->apiCallEscritura([
+					'acc' => 'update',
+					'tabla' => 'climov',
+					'sistema' => 'ventas',
+					'valores' => "
 								cliv_t_cobrado   = cliv_t_cobrado + ".$montos[$i].",
 								cliv_fecha_cobro = '".date('Ymd', strtotime($fecha))."',
 								cliv_estado 	 = '".($saldoComprobantes[$i] != 0 ? 'I' : 'C')."' ",
-								'whereArmado' => " WHERE 
+					'whereArmado' => " WHERE
 									cliv_tipo     = '".$tipoComprobante."' AND
 									cliv_letra    = '".$letraComprobante."' AND
 									cliv_sucursal = '".$sucursalComprobante."' AND
-									cliv_nro      = '".$nroComprobante."' " );
+									cliv_nro      = '".$nroComprobante."' ",
+				]);
 
-				$climov = $apiAnita->apiCallEscritura($grabaAnita);		
-				
-													
-				// Graba aplmov
-				$apiAnita = new ApiAnita();
-
-				$grabaAnita = array('tabla' => 'aplmov', 
-								'acc' => 'insert',
-								'sistema' => 'ventas',
-								'campos' => ' 
+				$apiAnita->apiCallEscritura([
+					'tabla' => 'aplmov',
+					'acc' => 'insert',
+					'sistema' => 'ventas',
+					'campos' => '
 										aplv_tipo,
 										aplv_letra,
 										aplv_sucursal,
@@ -1095,182 +1090,114 @@ class CobranzaService
 										aplv_sucursal_cob,
 										aplv_nro_cob,
 										aplv_fecha_aplic',
-								'valores' => " 
+					'valores' => "
 										'".$tipoComprobante."',
 										'".$letraComprobante."',
 										'".$sucursalComprobante."',
 										'".$nroComprobante."',
-										'".'1'."',
+										'1',
 										'".substr($tipo, 0, 3)."',
 										'".$letra."',
 										'".$puntoVenta."',
 										'".$numeroRecibo."',
 										'".date('Ymd', strtotime($fecha))."',
 										'".$montos[$i]."',
-										'".$moneda_ids[$i]."',
+										'".\App\Support\Configuracion\MonedaAnitaCodigoSupport::normalizar($moneda_ids[$i])."',
 										'".$cotizaciones[$i]."',
 										'".substr($tipo, 0, 3)."',
 										'".$letra."',
 										'".$puntoVenta."',
 										'".$numeroRecibo."',
-										'".date('Ymd', strtotime($fecha))."'"
-							);
-				$aplmov = $apiAnita->apiCallEscritura($grabaAnita);
+										'".date('Ymd', strtotime($fecha))."'",
+				]);
 
-				
-				// Graba auxpag del comprobante
-				$apiAnita = new ApiAnita();
-
-				$grabaAnita = array('tabla' => 'auxpag', 
-								'acc' => 'insert',
-								'sistema' => 'che_ban',
-								'campos' => ' 
-									axp_pro,
-									axp_fecha,
-									axp_rec,
-									axp_tipo,
-									axp_nro,
-									axp_tipo_ap,
-									axp_monto_ap,
-									axp_cod_mon_co,
-									axp_fecha_co,
-									axp_banco,
-									axp_letra_comp,
-									axp_sucursal,
-									axp_letra_cob,
-									axp_sucursal_cob,
-									axp_vendedor,
-									axp_nro_interno,
-									axp_empresa,
-									axp_concepto,
-									axp_cbu',
-								'valores' => "   
-									'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
-									'".date('Ymd', strtotime($fecha))."',
-									'".$numeroRecibo."',
-									'".substr($tipo, 0, 3)."',
-									'".$nroComprobante."',
-									'".$tipoComprobante."',
-									'".$montos[$i]."',
-									'".$moneda_ids[$i]."',
-									'".'0'."',
-									'".'000001'."',
-									'".$letraComprobante."',
-									'".$sucursalComprobante."',
-									'".$letra."',
-									'".$puntoVenta."',
-									'".'0'."',
-									'".'0'."',
-									'".$empresa."',
-									'".'0'."',
-									'".' '."'"
-							);  
-							
-				$auxpag = $apiAnita->apiCallEscritura($grabaAnita);
-
+				$auxCtx = array_merge($ctxBase, [
+					'nro' => $nroComprobante,
+					'tipoAp' => $tipoComprobante,
+					'monto' => $montos[$i],
+					'monedaId' => $moneda_ids[$i],
+					'banco' => '000001',
+					'letraComp' => $letraComprobante,
+					'sucursal' => $sucursalComprobante,
+					'letraCob' => $letra,
+					'sucursalCob' => $puntoVenta,
+					'vendedor' => '0',
+					'nroInterno' => '0',
+					'concepto' => '0',
+					'cbu' => ' ',
+				]);
+				$auxPayload = CobranzaAnitaCheBanEsquemaSupport::payloadAuxpag($auxCtx);
+				$apiAnita->apiCallEscritura([
+					'tabla' => 'auxpag',
+					'acc' => 'insert',
+					'sistema' => 'che_ban',
+					'campos' => $auxPayload['campos'],
+					'valores' => $auxPayload['valores'],
+				]);
 			}
 		}
 
 		// Graba cheques
 		if (isset($data['cheque_ids']))
 		{
-		    $cheque_ids = $data['cheque_ids'];
+			$cheque_ids = $data['cheque_ids'];
 			$fechapagos = $data['fechapagos'];
 			$codigobancos = $data['codigobancos'];
 			$nombrebancos = $data['nombrebancos'];
 			$numerocheques = $data['numerocheques'];
 			$cotizacioncheques = $data['cotizacioncheques'];
 			$sucursalpagos = $data['sucursalpagos'];
-            $cuentalibradoras = $data['cuentalibradoras'];
-            $monedacheque_ids = $data['monedacheque_ids'];
+			$cuentalibradoras = $data['cuentalibradoras'];
+			$monedacheque_ids = $data['monedacheque_ids'];
 			$montocheques = $data['montocheques'];
+
+			$numeroInternoBase = self::traeUltimoChequeDeTercero();
+			if ($numeroInternoBase === 'error' || $numeroInternoBase === null || $numeroInternoBase === '') {
+				throw new Exception('No se pudo obtener el próximo número interno de cheque Anita (ctermae).');
+			}
+			$numeroInternoSecuencia = (int) $numeroInternoBase;
 
 			for ($i = 0; $i < count($cheque_ids); $i++)
 			{
-				// Lee ultimo numero de cheque 
-				$numeroInterno = Selft::traeUltimoChequeDeTercero();
+				$monto = (float) ($montocheques[$i] ?? 0);
+				if (abs($monto) < 0.000001) {
+					continue;
+				}
 
-				if ($data['fechapago'] > $data['fecha'])
-					$camara = '2';
-				else
-					$camara = '1';
+				$numeroInterno = $numeroInternoSecuencia;
+				$numeroInternoSecuencia++;
 
-				// Graba ctermae del comprobante
-				$apiAnita = new ApiAnita();
+				$fechaCheque = $fechapagos[$i] ?? ($data['fechapago'] ?? $fecha);
+				$camara = ((string) $fechaCheque > (string) $fecha) ? '2' : '1';
 
-				$grabaAnita = array( 	'tabla' => 'ctermae', 
-								'acc' => 'insert',
-								'sistema' => 'che_ban',
-								'campos' => ' 
-										cter_nro_interno,     
-										cter_fecha_cheque,    
-										cter_fecha_ingreso,   
-										cter_fecha_dep,  
-										cter_fecha_acreed,    
-										cter_fecha_baja,      
-										cter_nro_cheque,   
-										cter_importe,      
-										cter_cliente,     
-										cter_proveedor,    
-										cter_entregado_a,  
-										cter_nro_recibo,   
-										cter_nro_op,       
-										cter_banco_emision,
-										cter_cuenta,       
-										cter_nro_boleta,   
-										cter_clearing,     
-										cter_entregado_por,
-										cter_interior,     
-										cter_nro_caucion,  
-										cter_cod_mon,      
-										cter_cotizacion,   
-										cter_estado,       
-										cter_cedio_a,     
-										cter_nro_cesion,   
-										cter_sucursal_bco, 
-										cter_cod_pos_bco,  
-										cter_cta_libradora,
-										cter_cod_banco,    
-										cter_cuit_emisor,  
-										cter_empresa',
-								'valores' => "   
-									'".$numeroInterno."',
-									'".date('Ymd', strtotime($fechapagos[$i]))."',
-									'".date('Ymd', strtotime($fecha))."',
-									'".'0'."',
-									'".'0'."',
-									'".'0'."',
-									'".$numerocheques[$i]."',
-									'".$montocheques[$i]."',
-									'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."',
-									'".''."',
-									'".''."',
-									'".$numeroRecibo."',
-									'".'0'."',
-									'".$nombrebancos[$i]."',
-									'".''."',
-									'".'0'."',
-									'".'0'."',
-									'".$data['nombrecliente']."',
-									'".$camara."',
-									'".'0'."',
-									'".$monedacheque_ids[$i]."',
-									'".$cotizacioncheques[$i]."',
-									'".' '."',
-									'".'0'."',
-									'".'0'."',
-									'".$sucursalpagos[$i]."',
-									'".'0'."',
-									'".$cuentalibradoras[$i]."',
-									'".$codigobancos[$i]."',
-									'".$numerodocumento."',
-									'".$empresa."' 
-								"
-							);
+				$cterCtx = [
+					'numeroInterno' => $numeroInterno,
+					'fechaCheque' => $fechaCheque,
+					'fechaIngreso' => $fecha,
+					'numeroCheque' => $numerocheques[$i],
+					'importe' => $montocheques[$i],
+					'codigoCliente' => $codigoCliente,
+					'numeroRecibo' => $numeroRecibo,
+					'nombreBanco' => $nombrebancos[$i] ?? '',
+					'entregadoPor' => $data['nombrecliente'] ?? '',
+					'camara' => $camara,
+					'monedaId' => $monedacheque_ids[$i],
+					'cotizacion' => $cotizacioncheques[$i],
+					'sucursalBanco' => $sucursalpagos[$i] ?? '0',
+					'cuentaLibradora' => $cuentalibradoras[$i] ?? '0',
+					'codigoBanco' => $codigobancos[$i] ?? '0',
+					'cuit' => $numerodocumento,
+					'empresa' => $empresa,
+				];
+				$cterPayload = CobranzaAnitaCheBanEsquemaSupport::payloadCtermae($cterCtx);
+				$apiAnita->apiCallEscritura([
+					'tabla' => 'ctermae',
+					'acc' => 'insert',
+					'sistema' => 'che_ban',
+					'campos' => $cterPayload['campos'],
+					'valores' => $cterPayload['valores'],
+				], 'ctermae insert cobranza');
 
-				$ctermae = $apiAnita->apiCallEscritura($grabaAnita);
-
-				// Vincula nro interno Anita al cheque ERP recién grabado (cartera CHT).
 				$chequeErp = \App\Models\Caja\Cheque::query()
 					->where('origen', 'R')
 					->whereNull('nro_interno_anita')
@@ -1282,56 +1209,29 @@ class CobranzaService
 					$this->chequeRepository->vincularNroInternoAnita((int) $chequeErp->id, (int) $numeroInterno);
 				}
 
-				// Graba auxpag del comprobante
-				$apiAnita = new ApiAnita();
-
-				$grabaAnita = array( 	'tabla' => 'auxpag', 
-								'acc' => 'insert',
-								'sistema' => 'che_ban',
-								'campos' => ' 
-									axp_pro,
-									axp_fecha,
-									axp_rec,
-									axp_tipo,
-									axp_nro,
-									axp_tipo_ap,
-									axp_monto_ap,
-									axp_cod_mon_co,
-									axp_fecha_co,
-									axp_banco,
-									axp_letra_comp,
-									axp_sucursal,
-									axp_letra_cob,
-									axp_sucursal_cob,
-									axp_vendedor,
-									axp_nro_interno,
-									axp_empresa,
-									axp_concepto,
-									axp_cbu',
-								'valores' => "   
-									'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
-									'".date('Ymd', strtotime($fecha))."',
-									'".$numeroRecibo."',
-									'".substr($tipo, 0, 3)."',
-									'".$numeroInterno."',
-									'".'CHT'."',
-									'".$montocheques[$i]."',
-									'".$monedacheque_ids[$i]."',
-									'".'0'."',
-									'".'000001'."',
-									'".' '."',
-									'".'0'."',
-									'".$letra."',
-									'".$puntoVenta."',
-									'".'0'."',
-									'".'0'."',
-									'".$empresa."',
-									'".'0'."',
-									'".' '."'"
-							);  
-							
-				$auxpag = $apiAnita->apiCallEscritura($grabaAnita);
-
+				$auxCtx = array_merge($ctxBase, [
+					'nro' => $numeroInterno,
+					'tipoAp' => 'CHT',
+					'monto' => $montocheques[$i],
+					'monedaId' => $monedacheque_ids[$i],
+					'banco' => '000001',
+					'letraComp' => ' ',
+					'sucursal' => '0',
+					'letraCob' => $letra,
+					'sucursalCob' => $puntoVenta,
+					'vendedor' => '0',
+					'nroInterno' => '0',
+					'concepto' => '0',
+					'cbu' => ' ',
+				]);
+				$auxPayload = CobranzaAnitaCheBanEsquemaSupport::payloadAuxpag($auxCtx);
+				$apiAnita->apiCallEscritura([
+					'tabla' => 'auxpag',
+					'acc' => 'insert',
+					'sistema' => 'che_ban',
+					'campos' => $auxPayload['campos'],
+					'valores' => $auxPayload['valores'],
+				], 'auxpag CHT cobranza');
 			}
 		}
 
@@ -1344,68 +1244,46 @@ class CobranzaService
 
 			for ($i = 0; $i < count($retencion_cobranza_ids); $i++)
 			{
-				// Lee retencion cobranza
+				$monto = (float) ($montos[$i] ?? 0);
+				if (($retencion_cobranza_ids[$i] ?? null) === null || $retencion_cobranza_ids[$i] === '' || abs($monto) < 0.000001) {
+					continue;
+				}
+
 				$retencion_cobranza = $this->retencion_cobranzaRepository->find($retencion_cobranza_ids[$i]);
-
-				$jurisdiccion = "902";
-				if ($retencion_cobranza)
+				$jurisdiccion = '902';
+				if ($retencion_cobranza) {
 					$jurisdiccion = $retencion_cobranza->provincias->jurisdiccion;
+				}
+				$tipoComprobante = 'R'.substr($jurisdiccion, 1, 2);
 
-				$tipoComprobante = 'R'.substr($jurisdiccion,1,2);
-
-				// Graba auxpag
-				$grabaAnita = array( 	'tabla' => 'auxpag', 
-								'acc' => 'insert',
-								'sistema' => 'che_ban',
-								'campos' => ' 
-									axp_pro,
-									axp_fecha,
-									axp_rec,
-									axp_tipo,
-									axp_nro,
-									axp_tipo_ap,
-									axp_monto_ap,
-									axp_cod_mon_co,
-									axp_fecha_co,
-									axp_banco,
-									axp_letra_comp,
-									axp_sucursal,
-									axp_letra_cob,
-									axp_sucursal_cob,
-									axp_vendedor,
-									axp_nro_interno,
-									axp_empresa,
-									axp_concepto,
-									axp_cbu',
-								'valores' => "   
-									'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
-									'".date('Ymd', strtotime($fecha))."',
-									'".$numeroRecibo."',
-									'".substr($tipo, 0, 3)."',
-									'".'0'."',
-									'".$tipoComprobante."',
-									'".$montos[$i]."',
-									'".$moneda_ids[$i]."',
-									'".'0'."',
-									'".' '."',
-									'".' '."',
-									'".'0'."',
-									'".$letra."',
-									'".$puntoVenta."',
-									'".'0'."',
-									'".'0'."',
-									'".$empresa."',
-									'".'0'."',
-									'".' '."'"
-							);  
-							
-				$auxpag = $apiAnita->apiCallEscritura($grabaAnita);
-
+				$auxCtx = array_merge($ctxBase, [
+					'nro' => '0',
+					'tipoAp' => $tipoComprobante,
+					'monto' => $montos[$i],
+					'monedaId' => $moneda_ids[$i],
+					'banco' => '0',
+					'letraComp' => ' ',
+					'sucursal' => '0',
+					'letraCob' => $letra,
+					'sucursalCob' => $puntoVenta,
+					'vendedor' => '0',
+					'nroInterno' => '0',
+					'concepto' => '0',
+					'cbu' => ' ',
+				]);
+				$auxPayload = CobranzaAnitaCheBanEsquemaSupport::payloadAuxpag($auxCtx);
+				$apiAnita->apiCallEscritura([
+					'tabla' => 'auxpag',
+					'acc' => 'insert',
+					'sistema' => 'che_ban',
+					'campos' => $auxPayload['campos'],
+					'valores' => $auxPayload['valores'],
+				]);
 			}
 		}
-		
+
 		return ['Success'];
-	}	
+	}
 
 	// Borra cobranza en Anita
 	public function borraAnita($tipo, $letra, $puntoventa, $numero, $empresa)
@@ -1425,24 +1303,12 @@ class CobranzaService
 
     public function traeUltimoChequeDeTercero()
     {
-        // Lee numerador desde anita
-		$apiAnita = new ApiAnita();
-        $grabaAnita = array( 
-            'acc' => 'list', 
-			'tabla' => 'ctermae', 
-            'campos' => '
-                max(cter_nro_interno) as numerointerno
-			' 
-        );
-        $dataAnita = json_decode($apiAnita->apiCall($grabaAnita));
-        
-        if (count($dataAnita) > 0)
-            $nro = $dataAnita[0]->numerointerno + 1;
+		$nro = \App\Support\Caja\ChequeTerceroCtermaeInsertAnitaSupport::siguienteNroInterno();
+		if ($nro === null || $nro <= 0) {
+			return 'error';
+		}
 
-		if (!isset($nro))
-            return 'error';
-        
-        return $nro;
+		return $nro;
     }
 
 	public function leeHistoriaCobranza($cobranza_id)
@@ -1458,10 +1324,24 @@ class CobranzaService
 		//$pdfMerger = PDFMerger::init();
 
 		$cobranza = $this->cobranzaRepository->find($id);
+		$cobranza->loadMissing([
+			'usuarios',
+			'monedas',
+			'clientes',
+			'empresas',
+			'tipotransaccioncajas',
+			'asientos.asiento_movimientos.cuentacontables',
+			'caja_movimientos.caja_movimiento_cuentacajas.cuentacajas',
+			'caja_movimientos.caja_movimiento_cuentacajas.monedas',
+			'cheques.bancos',
+			'cheques.monedas',
+		]);
 
 		$letra = 'X';
 
-		$nombre_pdf = 'cobranza-'.$cobranza->numerotransaccion.'-empresa-'.$cobranza->empresas->nombre.'-'.$cobranza->clientes->nombre;
+		$nombreEmpresa = preg_replace('/[^A-Za-z0-9_\-]+/', '_', (string) ($cobranza->empresas->nombre ?? 'empresa'));
+		$nombreCliente = preg_replace('/[^A-Za-z0-9_\-]+/', '_', (string) ($cobranza->clientes->nombre ?? 'cliente'));
+		$nombre_pdf = 'cobranza-'.$cobranza->numerotransaccion.'-empresa-'.$nombreEmpresa.'-'.$nombreCliente;
 
 		// Arma tablas para calculo de impuestos
 		// Lee el cliente
@@ -1516,15 +1396,17 @@ class CobranzaService
 
 		// Lee cuentas 
 		$tblCuenta = [];
-		foreach($cobranza->caja_movimientos[0]->caja_movimiento_cuentacajas as $cuenta)
-		{
-			$tblCuenta[] = [
-				'nombre' => $cuenta->cuentacajas->nombre,
-				'moneda' => $cuenta->monedas->abreviatura,
-				'moneda_id' => $cuenta->moneda_id,
-				'monto' => $cuenta->monto,
-				'cotizacion' => $cuenta->cotizacion
-			];
+		$cajaMovimiento = $cobranza->caja_movimientos->first();
+		if ($cajaMovimiento) {
+			foreach ($cajaMovimiento->caja_movimiento_cuentacajas as $cuenta) {
+				$tblCuenta[] = [
+					'nombre' => $cuenta->cuentacajas->nombre ?? '',
+					'moneda' => $cuenta->monedas->abreviatura ?? '',
+					'moneda_id' => $cuenta->moneda_id,
+					'monto' => $cuenta->monto,
+					'cotizacion' => $cuenta->cotizacion,
+				];
+			}
 		}
 
 		// Lee Cheques
@@ -1534,11 +1416,11 @@ class CobranzaService
 			$tblCheques[] = [
 				'fechapago' => $cheque->fechapago,
 				'numerocheque' => $cheque->numerocheque,
-				'moneda' => $cheque->monedas->abreviatura,
+				'moneda' => $cheque->monedas->abreviatura ?? '',
 				'moneda_id' => $cheque->moneda_id,
 				'monto' => $cheque->monto,
 				'cotizacion' => $cheque->cotizacion,
-				'banco' => $cheque->bancos->nombre,
+				'banco' => $cheque->bancos->nombre ?? '',
 				'sucursalpago' => $cheque->sucursalpago,
 				'cuentalibradora' => $cheque->cuentalibradora
 			];
@@ -1569,12 +1451,45 @@ class CobranzaService
 																		))
 			    ->render();
 		$path = storage_path('pdf/caja');
+		if (! is_dir($path)) {
+			mkdir($path, 0755, true);
+		}
 
-        $pdf = App::make('dompdf.wrapper');
-        $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-        $pdf->download($nombre_pdf.'.pdf');
+		$pdf = App::make('dompdf.wrapper');
+		$pdf->loadHTML($view)->setPaper('a4');
+		$archivo = $path.'/'.$nombre_pdf.'.pdf';
+		$pdf->save($archivo);
 
-		return response()->download($path.'/'.$nombre_pdf.'.pdf');
+		return response()->file($archivo, [
+			'Content-Type' => 'application/pdf',
+			'Content-Disposition' => 'inline; filename="'.$nombre_pdf.'.pdf"',
+		]);
+	}
+
+	/**
+	 * Respuesta AJAX post-alta: abre PDF del recibo (mismo patrón que IE / OP).
+	 *
+	 * @return array{mensaje: string, cobranza_id: int, url_comprobante_pdf: string, redirect_url?: string}
+	 */
+	private function respuestaExitoGrabacionCobranza($cobranza, $request): array
+	{
+		$id = (int) ($cobranza->id ?? 0);
+		$respuesta = [
+			'mensaje' => 'ok',
+			'cobranza_id' => $id,
+			'url_comprobante_pdf' => route('listar_una_cobranza', ['id' => $id]),
+		];
+
+		$origenUi = (string) ($request->input('origen') ?? '');
+		if ($origenUi === 'movimientocaja') {
+			$respuesta['redirect_url'] = url('caja/movimientocaja');
+		} elseif ($origenUi === 'ordenventa') {
+			$respuesta['redirect_url'] = (string) ($request->input('referer') ?: url('caja/cobranza'));
+		} else {
+			$respuesta['redirect_url'] = route('cobranza');
+		}
+
+		return $respuesta;
 	}
 
 	public function editaUnaCobranza($cobranza_id, $origen = null)
@@ -1854,5 +1769,42 @@ class CobranzaService
 			$data['cotizacionasientos'][] = $linea['cotizacion'] ?? 1;
 			$data['observacionasientos'][] = $linea['observacion'] ?? $data['detalle'];
 		}
+	}
+
+	private function resolverCuentaValoresADepositar(int $empresaId): ?Cuentacontable
+	{
+		$id = \App\Support\Caja\ChequePropioImputacionSupport::resolverCuentacontableIdValoresADepositar(
+			$empresaId,
+			$this->cuentacontableRepository
+		);
+		if ($id !== null && $id > 0) {
+			return $this->cuentacontableRepository->find($id);
+		}
+
+		$codigo = (int) config('caja.valores_a_depositar_cuenta_codigo');
+
+		return $this->resolverCuentacontablePorCodigo($empresaId, $codigo);
+	}
+
+	private function resolverCuentacontablePorCodigo(int $empresaId, int $codigo): ?Cuentacontable
+	{
+		if ($codigo <= 0) {
+			return null;
+		}
+
+		$cuenta = $this->cuentacontableRepository->findPorCodigo($empresaId, $codigo);
+		if ($cuenta) {
+			return $cuenta;
+		}
+
+		// Ferli: un solo plan en empresa 1; la cobranza puede ser de emp 2/3.
+		if (EntornoEmpresaSupport::esFerli()) {
+			return Cuentacontable::query()
+				->where('codigo', $codigo)
+				->orderBy('empresa_id')
+				->first();
+		}
+
+		return null;
 	}
 }

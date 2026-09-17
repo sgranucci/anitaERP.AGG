@@ -6,6 +6,7 @@
 @section("scripts")
 <script>
     window.movimientoStockModoFerli = @json($movimientoStockModoFerli ?? false);
+    window.msPermiteSaldosNegativos = @json((bool) config('stock.permite_saldos_negativos'));
     window.movimientoStockPreviewConversionFormulaUrl = @json(route('preview_conversion_formula_movimientostock'));
     window.movimientoStockSaldoOrigenUrl = @json(route('movimientostock_saldo_articulo'));
     window.movimientoStockPrecioLineaUrl = @json(route('movimientostock_precio_linea'));

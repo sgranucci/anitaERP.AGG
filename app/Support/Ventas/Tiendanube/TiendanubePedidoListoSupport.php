@@ -69,7 +69,11 @@ final class TiendanubePedidoListoSupport
             $motivos[] = 'Sin depósito default';
         }
 
-        $cuentacajaId = TiendanubePedidoMaestrosSupport::sugerirCuentacajaId($pedido->gateway);
+        $cuentacajaId = TiendanubePedidoMaestrosSupport::sugerirCuentacajaId(
+            $pedido->gateway,
+            $pedido->gateway_name,
+            is_array($pedido->payment_json) ? $pedido->payment_json : null
+        );
         if (! $cuentacajaId) {
             $motivos[] = 'Sin cuentas de caja con uso «'
                 .TiendanubeUsoCuentacajaSupport::nombre()
@@ -100,11 +104,13 @@ final class TiendanubePedidoListoSupport
                 'puntoventa_id' => $pvId,
                 'deposito_id' => $depId,
                 'listaprecio_id' => $listaId,
-                'cliente_id' => $pedido->cliente_id ? (int) $pedido->cliente_id : null,
+                'cliente_id' => null,
+                'letra' => TiendanubePedidoReceptorSupport::LETRA_B,
                 'receptor' => [
                     'nombre' => $pedido->customer_name,
-                    'nrodoc' => $doc !== '' ? $doc : null,
+                    'numerodocumento' => $doc !== '' ? $doc : null,
                     'email' => $pedido->customer_email,
+                    'domicilio' => TiendanubePedidoReceptorSupport::domicilioDesdePedido($pedido),
                 ],
                 'medios_pago' => [[
                     'cuentacaja_id' => (int) $cuentacajaId,

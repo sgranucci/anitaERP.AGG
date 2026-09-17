@@ -1781,6 +1781,7 @@ Route::post('ventas/cot-electronico/guia/pendientes', 'Ventas\CotElectronicoCont
 Route::post('ventas/cot-electronico/guia/consultar', 'Ventas\CotElectronicoController@consultarGuias')->name('cot_electronico_guia_consultar');
 Route::get('ventas/listar-cot-electronico/{formato?}', 'Ventas\CotElectronicoController@exportar')->name('listar_cot_electronico');
 Route::get('ventas/listar-cot-electronico-sesion/{id}/{formato?}', 'Ventas\CotElectronicoController@exportarSesion')->name('listar_cot_electronico_sesion')->where('id', '[0-9]+');
+Route::get('ventas/cot-electronico/guia/{id}/suburbano-excel', 'Ventas\CotElectronicoController@exportarGuiaSuburbano')->name('cot_electronico_guia_suburbano_excel')->where('id', '[0-9]+');
 Route::get('ventas/cot-configuracion', 'Ventas\CotConfiguracionController@index')->name('cot_configuracion');
 Route::put('ventas/cot-configuracion', 'Ventas\CotConfiguracionController@actualizar')->name('actualizar_cot_configuracion');
 
@@ -2391,6 +2392,13 @@ Route::get('ventas/cliente/listacuentacorriente/{id}', 'Ventas\ClienteController
 Route::get('ventas/cliente/consultadeuda/{cliente_id}/{empresa_id}/{venta_id?}', 'Ventas\ClienteController@consultarDeuda')->name('consultar_deuda_cliente');
 Route::get('ventas/cliente/editacuentacorriente/{id}', 'Ventas\ClienteController@editarCuentaCorriente')->name('editar_cuentacorriente_cliente');
 Route::get('ventas/cliente/leercuentacorrienteaplicacion/{id}', 'Ventas\ClienteController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion');
+
+Route::get('ventas/aplicacion-cuentacorriente', 'Ventas\ClienteCuentacorrienteAplicacionController@index')->name('aplicacion_cuentacorriente_cliente')->middleware('modo.consulta');
+Route::get('ventas/aplicacion-cuentacorriente/api/pendientes', 'Ventas\ClienteCuentacorrienteAplicacionController@apiPendientes')->name('api_pendientes_aplicacion_cuentacorriente_cliente');
+Route::get('ventas/aplicacion-cuentacorriente/api/sugerir', 'Ventas\ClienteCuentacorrienteAplicacionController@apiSugerir')->name('api_sugerir_aplicacion_cuentacorriente_cliente');
+Route::get('ventas/aplicacion-cuentacorriente/api/cotizacion-moneda-fecha', 'Ventas\ClienteCuentacorrienteAplicacionController@apiCotizacionMonedaFecha')->name('api_cotizacion_aplicacion_cuentacorriente_cliente');
+Route::post('ventas/aplicacion-cuentacorriente/aplicar', 'Ventas\ClienteCuentacorrienteAplicacionController@aplicar')->name('aplicar_cuentacorriente_cliente');
+Route::post('ventas/aplicacion-cuentacorriente/{id}/desaplicar', 'Ventas\ClienteCuentacorrienteAplicacionController@desaplicar')->name('desaplicar_cuentacorriente_cliente');
 /*
  * Pedidos — CRUD:
  * Calzados Ferli usa PedidoFerliController (combinaciones / módulos / talles).
@@ -3145,6 +3153,14 @@ Route::post('caja/remesa/api/lineas-empresa', 'Caja\RemesaController@apiLineasEm
 
 Route::get('caja/remesa-reporte', 'Caja\RemesaReporteController@index')->name('remesa_reporte');
 Route::get('caja/listar-remesa-reporte/{formato}', 'Caja\RemesaReporteController@exportar')->name('listar_remesa_reporte');
+
+Route::get('caja/movimientos-caja-reporte', 'Caja\MovimientosCajaReporteController@index')->name('movimientos_caja_reporte');
+Route::get('caja/listar-movimientos-caja-reporte/{formato}', 'Caja\MovimientosCajaReporteController@exportar')
+    ->name('listar_movimientos_caja_reporte');
+
+Route::get('caja/cierre-caja-reporte', 'Caja\CierreCajaReporteController@index')->name('cierre_caja_reporte');
+Route::get('caja/listar-cierre-caja-reporte/{formato}', 'Caja\CierreCajaReporteController@exportar')
+    ->name('listar_cierre_caja_reporte');
 
 /*
  * Voucher

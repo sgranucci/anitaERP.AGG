@@ -61,7 +61,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
             $importarVentas ? ' | importa ventas faltantes' : ' | sin importar ventas',
             $cerrarSinDeudaAnita ? ' | cierra extras sin deuda Anita' : '',
         ));
-        $this->line('Filtro: Anita venta (no PRE/COB). Luego climov+aplmov → cliente_cuentacorriente.');
+        $this->line('Filtro: Anita venta + créditos climov sin venta (COA). Luego climov+aplmov → cliente_cuentacorriente.');
         if ($cerrarSinDeudaAnita && $cliente === '') {
             $this->warn('Cierre de extras para TODOS los clientes con deuda ERP abierta.');
         }
@@ -89,6 +89,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
         $this->table(['Métrica', 'Cantidad'], [
             ['climov Anita', $stats['anita_climov']],
             ['Anita venta (deuda)', $stats['anita_venta']],
+            ['Crédito sin venta Anita (COA…)', $stats['credito_sin_venta_anita'] ?? 0],
             ['Sin Anita venta', $stats['omitidas_sin_anita_venta']],
             ['Tipo no deuda / PRE', $stats['omitidas_tipo_no_deuda']],
             ['Ventas faltantes ERP', $stats['ventas_faltantes_erp']],

@@ -22,6 +22,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
 use App\Support\Compras\PagoproveedorEdicionCandadoSupport;
@@ -69,34 +70,42 @@ class PagoproveedorService
      */
     public function generaAsientoContable(array $data): array
     {
-        $decode = static function ($raw): array {
-            if (is_array($raw)) {
-                return $raw;
-            }
-            $decoded = json_decode((string) ($raw ?? '[]'));
+        try {
+            $decode = static function ($raw): array {
+                if (is_array($raw)) {
+                    return $raw;
+                }
+                $decoded = json_decode((string) ($raw ?? '[]'));
 
-            return is_array($decoded) ? $decoded : [];
-        };
+                return is_array($decoded) ? $decoded : [];
+            };
 
-        $asiento = PagoproveedorAsientoArmadoSupport::armar(
-            $decode($data['datoscaja'] ?? []),
-            $decode($data['datoscontables'] ?? []),
-            $decode($data['datoscheques_emitidos'] ?? []),
-            $decode($data['datoscheques_recibidos'] ?? []),
-            $decode($data['datoscomprobantes'] ?? []),
-            $decode($data['datosretenciones'] ?? []),
-            (int) ($data['empresa_id'] ?? 0),
-            (int) ($data['proveedor_id'] ?? 0),
-            (string) ($data['fecha'] ?? date('Y-m-d')),
-            $this->cuentacajaRepository,
-            $this->cuentacontableRepository,
-            (string) ($data['proveedor_nombre'] ?? ''),
-            (string) ($data['numerotransaccion'] ?? $data['numero_op'] ?? ''),
-            (int) ($data['moneda_id'] ?? 1),
-            NumeroDecimalLocalSupport::aFloat($data['cotizacion'] ?? 1, 1.0),
-        );
+            $asiento = PagoproveedorAsientoArmadoSupport::armar(
+                $decode($data['datoscaja'] ?? []),
+                $decode($data['datoscontables'] ?? []),
+                $decode($data['datoscheques_emitidos'] ?? []),
+                $decode($data['datoscheques_recibidos'] ?? []),
+                $decode($data['datoscomprobantes'] ?? []),
+                $decode($data['datosretenciones'] ?? []),
+                (int) ($data['empresa_id'] ?? 0),
+                (int) ($data['proveedor_id'] ?? 0),
+                (string) ($data['fecha'] ?? date('Y-m-d')),
+                $this->cuentacajaRepository,
+                $this->cuentacontableRepository,
+                (string) ($data['proveedor_nombre'] ?? ''),
+                (string) ($data['numerotransaccion'] ?? $data['numero_op'] ?? ''),
+                (int) ($data['moneda_id'] ?? 1),
+                NumeroDecimalLocalSupport::aFloat($data['cotizacion'] ?? 1, 1.0),
+            );
 
-        return ['mensaje' => 'ok', 'asiento' => $asiento];
+            return ['mensaje' => 'ok', 'asiento' => $asiento];
+        } catch (\Throwable $e) {
+            Log::warning('pagoproveedor.genera_asiento.fallo', [
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
     }
 
     /**
@@ -120,6 +129,8 @@ class PagoproveedorService
             }
             // Validar asiento ANTES de abrir TX / numerar OP / tocar Anita.
             $this->assertAsientoBalanceadoAntesDeGrabar($data, $estado);
+            // Preflight numeradores Anita (solo lectura): evita quemar correlativos si falta retención/OPP.
+            $this->assertNumeradoresAnitaAntesDeGrabar($empresaId, $data, $estado);
 
             $pago = DB::transaction(function () use ($data, $request, $empresaId, $estado) {
                 $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId);
@@ -166,13 +177,31 @@ class PagoproveedorService
                 return $pago;
             });
 
-            $this->sincronizarAnitaTesoreria($pago->fresh(), false);
+            $avisoAnita = null;
+            try {
+                $this->sincronizarAnitaTesoreria($pago->fresh(), false);
+            } catch (\Throwable $eAnita) {
+                // La OP ya está commitida en ERP; no fingir que "no grabó" (evita reintentos duplicados).
+                Log::error('pagoproveedor.anita.sync_post_commit.fallo', [
+                    'pagoproveedor_id' => $pago->id,
+                    'numero' => $pago->numerotransaccion,
+                    'mensaje' => $eAnita->getMessage(),
+                ]);
+                $avisoAnita = 'OP grabada en ERP (#'.$pago->numerotransaccion
+                    .') pero falló la réplica Anita: '.$eAnita->getMessage()
+                    .'. No vuelva a grabar la misma OP; revise sincronización/auditoría.';
+            }
 
-            return [
+            $out = [
                 'mensaje' => 'ok',
                 'pagoproveedor_id' => $pago->id,
                 'numerotransaccion' => (string) $pago->numerotransaccion,
             ];
+            if ($avisoAnita !== null) {
+                $out['aviso'] = $avisoAnita;
+            }
+
+            return $out;
         } catch (\Throwable $e) {
             Log::error('pagoproveedor.guardar.fallo', [
                 'mensaje' => $e->getMessage(),
@@ -325,6 +354,138 @@ class PagoproveedorService
         return AsientoCargaManualSupport::fueEditadoManual(
             $data['carga_cuentacontable_manuales'] ?? []
         );
+    }
+
+    /**
+     * Solo lectura: OP + certificados de retención que se van a emitir.
+     * Debe correr ANTES de cualquier siguienteNumeroConLock (Anita no revierte al rollback MySQL).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function assertNumeradoresAnitaAntesDeGrabar(int $empresaId, array $data, string $estado): void
+    {
+        if ($estado === 'PRE CARGA' || ! PagoproveedorAnitaNumeracionSupport::estaHabilitada()) {
+            return;
+        }
+
+        PagoproveedorAnitaNumeracionSupport::assertNumeradorDisponible($empresaId);
+
+        $tipos = $this->tiposRetencionConImporteDesdeRequest($data);
+        if ($tipos === []) {
+            $tipos = $this->tiposRetencionPrevistosPorCalculo($empresaId, $data);
+        }
+        foreach ($tipos as $tipo) {
+            PagoproveedorAnitaRetencionNumeracionSupport::assertNumeradorDisponible($tipo, $empresaId);
+        }
+    }
+
+    /**
+     * Misma lógica que persistirRetenciones, sin escribir: qué tipos saldrían con importe.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<string>
+     */
+    private function tiposRetencionPrevistosPorCalculo(int $empresaId, array $data): array
+    {
+        $proveedorId = (int) ($data['proveedor_id'] ?? 0);
+        if ($proveedorId <= 0) {
+            return [];
+        }
+        $proveedor = Proveedor::query()->find($proveedorId);
+        if ($proveedor === null) {
+            return [];
+        }
+
+        $aplicaciones = $this->aplicacionesDesdeData($data);
+        $ctx = $this->retencionesPagoContextoBuilder->armarInput(
+            proveedor: $proveedor,
+            aplicaciones: $aplicaciones,
+            fecha: (string) ($data['fecha'] ?? date('Y-m-d')),
+            empresaId: $empresaId ?: null,
+            monedaPagoId: (int) ($data['moneda_id'] ?? 1),
+            cotizacionPago: NumeroDecimalLocalSupport::aFloat($data['cotizacion'] ?? 0) ?: null,
+            excluirPagoproveedorId: null,
+            overrides: [
+                'retencionganancia_id' => $data['retencionganancia_id'] ?? null,
+                'retencioniva_id' => $data['retencioniva_id'] ?? null,
+                'retencionsuss_id' => $data['retencionsuss_id'] ?? null,
+                'iibb_provincia_id' => $data['iibb_provincia_id'] ?? null,
+                'iibb_tasa' => $data['iibb_tasa'] ?? null,
+                'calcular_ganancias' => $data['calcular_ganancias'] ?? true,
+                'calcular_iva' => $data['calcular_iva'] ?? true,
+                'calcular_suss' => $data['calcular_suss'] ?? true,
+                'calcular_iibb' => $data['calcular_iibb'] ?? true,
+            ],
+            importeNetoFallback: (float) ($data['importe_neto_retencion'] ?? $data['monto'] ?? $data['totalfinalpago'] ?? 0),
+            importeIvaFallback: (float) ($data['importe_iva_retencion'] ?? 0),
+        );
+        $resultado = $this->retencionesPagoCalculator->calcular($ctx['input']);
+
+        $tipos = [];
+        if ($resultado->ganancias->aplica && $resultado->ganancias->importeRetencion > 0) {
+            $tipos[] = Pagoproveedor_Retencion::TIPO_GANANCIAS;
+        }
+        if ($resultado->iva->aplica && $resultado->iva->importeRetencion > 0) {
+            $tipos[] = Pagoproveedor_Retencion::TIPO_IVA;
+        }
+        if ($resultado->suss->aplica && $resultado->suss->importeRetencion > 0) {
+            $tipos[] = Pagoproveedor_Retencion::TIPO_SUSS;
+        }
+        if ($resultado->iibb->aplica && $resultado->iibb->importeRetencion > 0) {
+            $tipos[] = Pagoproveedor_Retencion::TIPO_IIBB;
+        }
+
+        return $tipos;
+    }
+
+    /**
+     * Tipos de retención con importe > 0 según el JSON de pantalla o flags de cálculo.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<string>
+     */
+    private function tiposRetencionConImporteDesdeRequest(array $data): array
+    {
+        $tipos = [];
+        $raw = $data['pp_retenciones_json'] ?? $data['retenciones_json'] ?? null;
+        if (is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded)) {
+                $mapa = [
+                    'ganancias' => Pagoproveedor_Retencion::TIPO_GANANCIAS,
+                    'iva' => Pagoproveedor_Retencion::TIPO_IVA,
+                    'suss' => Pagoproveedor_Retencion::TIPO_SUSS,
+                    'iibb' => Pagoproveedor_Retencion::TIPO_IIBB,
+                ];
+                foreach ($mapa as $clave => $tipo) {
+                    $fila = $decoded[$clave] ?? null;
+                    if (! is_array($fila)) {
+                        continue;
+                    }
+                    if (! empty($fila['aplica']) && (float) ($fila['importe'] ?? 0) > 0) {
+                        $tipos[] = $tipo;
+                    }
+                }
+
+                return $tipos;
+            }
+        }
+
+        // Fallback: si la pantalla mandó importes sueltos.
+        if (NumeroDecimalLocalSupport::aFloat($data['retencion_ganancias'] ?? 0) > 0) {
+            $tipos[] = Pagoproveedor_Retencion::TIPO_GANANCIAS;
+        }
+        if (NumeroDecimalLocalSupport::aFloat($data['retencion_iva'] ?? 0) > 0) {
+            $tipos[] = Pagoproveedor_Retencion::TIPO_IVA;
+        }
+        if (NumeroDecimalLocalSupport::aFloat($data['retencion_suss'] ?? 0) > 0) {
+            $tipos[] = Pagoproveedor_Retencion::TIPO_SUSS;
+        }
+        if (NumeroDecimalLocalSupport::aFloat($data['retencion_iibb'] ?? 0) > 0) {
+            $tipos[] = Pagoproveedor_Retencion::TIPO_IIBB;
+        }
+
+        return $tipos;
     }
 
     /**

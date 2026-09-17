@@ -7,6 +7,7 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Provincia;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Collection;
@@ -157,13 +158,24 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
         ];
 
         foreach ($pares as [$tabla, $pref]) {
-            $where = ' WHERE '.$pref.'_empresa = '.(int) $ctx['empresa']
-                .' AND '.$pref.'_sucursal = '.(int) $ctx['sucursal']
+            // Ferli: sin *_empresa en retmov / retibrmov / retimov / retsmov.
+            $where = ' WHERE '.$pref.'_sucursal = '.(int) $ctx['sucursal']
                 .' AND '.$pref.'_nro = '.(int) $ctx['nro']
                 .' AND '.$pref.'_tipo IN ('.$inTipos.')';
+            if (! EntornoEmpresaSupport::esFerli()) {
+                $where = ' WHERE '.$pref.'_empresa = '.(int) $ctx['empresa']
+                    .' AND '.$pref.'_sucursal = '.(int) $ctx['sucursal']
+                    .' AND '.$pref.'_nro = '.(int) $ctx['nro']
+                    .' AND '.$pref.'_tipo IN ('.$inTipos.')';
+            }
 
             self::deleteWhere($tabla, $where, 'pagoproveedor ret '.$tabla.' '.$pago->id);
         }
+    }
+
+    private static function omitirEmpresaRetencionesAnita(): bool
+    {
+        return EntornoEmpresaSupport::esFerli();
     }
 
     /**
@@ -223,6 +235,11 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
             ? abs((float) $pago->monto)
             : (float) ($det['pago_actual_anita'] ?? $netoPago);
 
+        $camposEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ',
+                retv_empresa';
+        $valorEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ",
+                '".$ctx['empresa']."'";
+
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'retmov',
             'acc' => 'insert',
@@ -247,8 +264,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 retv_nombre_prov,
                 retv_cuit_prov,
                 retv_porc_excl,
-                retv_cod_mon,
-                retv_empresa',
+                retv_cod_mon'.$camposEmpresa,
             'valores' => "
                 '".self::codigoProveedor6($proveedor)."',
                 '".self::esc($ctx['tipo'])."',
@@ -269,8 +285,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 '".self::esc(self::recortar((string) ($proveedor->nombre ?? ''), 30))."',
                 '".self::esc(self::recortar(self::cuitProveedor($proveedor), 15))."',
                 '".self::num($porcExcl)."',
-                '".self::esc(self::codMonedaAnita($pago))."',
-                '".$ctx['empresa']."'",
+                '".self::esc(self::codMonedaAnita($pago))."'".$valorEmpresa,
         ], 'pagoproveedor retmov '.$pago->id);
 
         self::assertOk($raw, 'retmov', (int) $pago->id);
@@ -298,6 +313,11 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
             $letraComp = ' ';
         }
 
+        $camposEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ',
+                retibr_empresa';
+        $valorEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ",
+                '".$ctx['empresa']."'";
+
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'retibrmov',
             'acc' => 'insert',
@@ -321,8 +341,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 retibr_nro_comp,
                 retibr_fecha_comp,
                 retibr_nro_interno,
-                retibr_provincia,
-                retibr_empresa',
+                retibr_provincia'.$camposEmpresa,
             'valores' => "
                 '".self::codigoProveedor6($proveedor)."',
                 '".self::esc($ctx['tipo'])."',
@@ -342,8 +361,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 '".(int) ($det['nro_comp'] ?? 0)."',
                 '".(int) ($det['fecha_comp'] ?? 0)."',
                 '".(int) ($det['nro_interno'] ?? 0)."',
-                '".$provinciaAnita."',
-                '".$ctx['empresa']."'",
+                '".$provinciaAnita."'".$valorEmpresa,
         ], 'pagoproveedor retibrmov '.$pago->id);
 
         self::assertOk($raw, 'retibrmov', (int) $pago->id);
@@ -374,6 +392,11 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
             $letraComp = ' ';
         }
 
+        $camposEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ',
+                retiv_empresa';
+        $valorEmpresa = self::omitirEmpresaRetencionesAnita() ? '' : ",
+                '".$ctx['empresa']."'";
+
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'retimov',
             'acc' => 'insert',
@@ -401,8 +424,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 retiv_nro_interno,
                 retiv_nombre_prov,
                 retiv_cuit_prov,
-                retiv_porc_excl,
-                retiv_empresa',
+                retiv_porc_excl'.$camposEmpresa,
             'valores' => "
                 '".self::codigoProveedor6($proveedor)."',
                 '".self::esc($ctx['tipo'])."',
@@ -426,8 +448,7 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 '".(int) ($det['nro_interno'] ?? 0)."',
                 '".self::esc(self::recortar((string) ($proveedor->nombre ?? ''), 30))."',
                 '".self::esc(self::recortar(self::cuitProveedor($proveedor), 15))."',
-                '".self::num($porcExcl)."',
-                '".$ctx['empresa']."'",
+                '".self::num($porcExcl)."'".$valorEmpresa,
         ], 'pagoproveedor retimov '.$pago->id);
 
         self::assertOk($raw, 'retimov', (int) $pago->id);
@@ -447,11 +468,36 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
         $baseCalculo = (float) ($det['base_retenible'] ?? $det['base_calculo'] ?? $ret->base_calculo);
         $codigoRet = (int) ($ret->codigo_retencion ?: ($det['codigo'] ?? 0));
 
-        $raw = (new ApiAnita)->apiCallEscritura([
-            'tabla' => 'retsmov',
-            'acc' => 'insert',
-            'sistema' => self::sistema(),
-            'campos' => '
+        // Ferli: sin retsv_empresa (entre nro_ret y base_calculo en AGG).
+        if (self::omitirEmpresaRetencionesAnita()) {
+            $campos = '
+                retsv_proveedor,
+                retsv_tipo,
+                retsv_letra,
+                retsv_sucursal,
+                retsv_nro,
+                retsv_fecha,
+                retsv_codigo_ret,
+                retsv_gravado,
+                retsv_retencion,
+                retsv_porc_ret,
+                retsv_nro_ret,
+                retsv_base_calculo';
+            $valores = "
+                '".self::codigoProveedor6($proveedor)."',
+                '".self::esc($ctx['tipo'])."',
+                '".self::esc($ctx['letra'])."',
+                '".$ctx['sucursal']."',
+                '".$ctx['nro']."',
+                '".$ctx['fecha']."',
+                '".$codigoRet."',
+                '".self::num($gravado)."',
+                '".self::num((float) $ret->importe)."',
+                '".self::num((float) $ret->alicuota)."',
+                '".(int) $ret->nro_certificado."',
+                '".self::num($baseCalculo)."'";
+        } else {
+            $campos = '
                 retsv_proveedor,
                 retsv_tipo,
                 retsv_letra,
@@ -464,8 +510,8 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 retsv_porc_ret,
                 retsv_nro_ret,
                 retsv_empresa,
-                retsv_base_calculo',
-            'valores' => "
+                retsv_base_calculo';
+            $valores = "
                 '".self::codigoProveedor6($proveedor)."',
                 '".self::esc($ctx['tipo'])."',
                 '".self::esc($ctx['letra'])."',
@@ -478,7 +524,15 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
                 '".self::num((float) $ret->alicuota)."',
                 '".(int) $ret->nro_certificado."',
                 '".$ctx['empresa']."',
-                '".self::num($baseCalculo)."'",
+                '".self::num($baseCalculo)."'";
+        }
+
+        $raw = (new ApiAnita)->apiCallEscritura([
+            'tabla' => 'retsmov',
+            'acc' => 'insert',
+            'sistema' => self::sistema(),
+            'campos' => $campos,
+            'valores' => $valores,
         ], 'pagoproveedor retsmov '.$pago->id);
 
         self::assertOk($raw, 'retsmov', (int) $pago->id);
@@ -525,9 +579,10 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
 
     private static function codMonedaAnita(Pagoproveedor $pago): string
     {
-        $monedaId = (int) ($pago->moneda_id ?: 1);
-
-        return $monedaId <= 1 ? '1' : (string) min($monedaId, 9);
+        return \App\Support\Configuracion\MonedaAnitaCodigoSupport::desdeMoneda(
+            $pago->monedas,
+            (int) ($pago->moneda_id ?: 1)
+        );
     }
 
     private static function deleteWhere(string $tabla, string $where, string $contexto): void
@@ -541,11 +596,15 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
 
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
-            Log::error('pagoproveedor.anita.retencion.delete_fail', [
-                'tabla' => $tabla,
-                'contexto' => $contexto,
-                'error' => $err,
-            ]);
+            try {
+                Log::error('pagoproveedor.anita.retencion.delete_fail', [
+                    'tabla' => $tabla,
+                    'contexto' => $contexto,
+                    'error' => $err,
+                ]);
+            } catch (\Throwable) {
+                // no bloquear sync por permiso de log
+            }
             throw new \RuntimeException('Error al borrar '.$tabla.' Anita: '.$err);
         }
     }
@@ -554,11 +613,15 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
     {
         $err = ApiAnita::extraerMensajeError($raw);
         if ($err !== null) {
-            Log::error('pagoproveedor.anita.retencion.insert_fail', [
-                'tabla' => $tabla,
-                'ref' => $refId,
-                'error' => $err,
-            ]);
+            try {
+                Log::error('pagoproveedor.anita.retencion.insert_fail', [
+                    'tabla' => $tabla,
+                    'ref' => $refId,
+                    'error' => $err,
+                ]);
+            } catch (\Throwable) {
+                // no bloquear sync por permiso de log
+            }
             throw new \RuntimeException('Error al grabar '.$tabla.' Anita: '.$err);
         }
     }

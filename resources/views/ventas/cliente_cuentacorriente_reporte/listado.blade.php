@@ -3,6 +3,7 @@
     $coleccionLogos = collect($filas ?? [])->map(fn ($f) => ['nombreempresa' => $f['nombreempresa'] ?? '']);
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogos);
     $totalClientes = (int) (($resultado['stats']['clientes'] ?? 0));
+    $totalVendedores = (int) (($resultado['stats']['vendedores'] ?? 0));
     $tituloReporte = $titulo ?? 'Cuenta corriente clientes';
 @endphp
 <!DOCTYPE html>
@@ -24,12 +25,23 @@
         }
         table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
         table.data tbody tr.cc-rep-header { background-color: #d6eaf8; font-weight: bold; }
+        table.data tbody tr.cc-rep-header-vendedor {
+            background-color: #1b4f72;
+            color: #ffffff;
+            font-weight: bold;
+        }
         table.data tbody tr.cc-rep-total {
             background-color: #f9e79f;
             font-weight: bold;
             color: #1b4f72;
         }
-        table.data tbody tr.cc-rep-total td {
+        table.data tbody tr.cc-rep-total-vendedor {
+            background-color: #f5b041;
+            font-weight: bold;
+            color: #1b4f72;
+        }
+        table.data tbody tr.cc-rep-total td,
+        table.data tbody tr.cc-rep-total-vendedor td {
             border-top: 2px solid #b7950b;
             font-size: 8px;
         }
@@ -55,6 +67,9 @@
                 <div class="meta">{{ $subtitulo ?? '' }}</div>
             </td>
             <td style="width: 22%; text-align: right; font-size: 8px;">
+                @if ($totalVendedores > 0)
+                    Vendedores: {{ $totalVendedores }}<br>
+                @endif
                 @if ($totalClientes > 0)
                     Clientes: {{ $totalClientes }}
                 @endif

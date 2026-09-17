@@ -1014,6 +1014,7 @@ class TransferenciaMercaderiaService
         }
 
         $controlaStock = DepmaeControlStockSupport::manejaControlStock($depositoSalida);
+        $debeValidarSaldo = DepmaeControlStockSupport::debeValidarSaldoDisponible($depositoSalida);
 
         try {
             $lineasResueltas = $this->resolverLineas($lineas, $depositoEntrada, $empresaId, false);
@@ -1026,10 +1027,10 @@ class TransferenciaMercaderiaService
             ];
         }
 
-        if (! $controlaStock) {
+        if (! $debeValidarSaldo) {
             return [
                 'viable' => true,
-                'controla_stock' => false,
+                'controla_stock' => $controlaStock,
                 'mensaje_resumen' => '',
                 'lineas_detalle' => $this->armarDetalleEvaluacionSaldos($lineasResueltas, [], true),
             ];
@@ -1148,7 +1149,7 @@ class TransferenciaMercaderiaService
     private function validarCantidadesContraSaldo(int $depositoSalidaId, array $lineas): void
     {
         $deposito = Depmae::query()->find($depositoSalidaId);
-        if (! DepmaeControlStockSupport::manejaControlStock($deposito)) {
+        if (! DepmaeControlStockSupport::debeValidarSaldoDisponible($deposito)) {
             return;
         }
 

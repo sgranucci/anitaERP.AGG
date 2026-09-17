@@ -6,6 +6,7 @@ use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CotSesionEnvio extends Model
 {
@@ -41,6 +42,11 @@ class CotSesionEnvio extends Model
     public function remitos(): HasMany
     {
         return $this->hasMany(CotRemitoEnvio::class, 'cot_sesion_envio_id');
+    }
+
+    public function cotGuia(): HasOne
+    {
+        return $this->hasOne(CotGuia::class, 'cot_sesion_envio_id');
     }
 
     public function usuarios(): BelongsTo

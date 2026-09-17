@@ -51,7 +51,22 @@ $ncTipotransaccionPorLetra = (static function (): array {
 })();
 
 return [
-	"GRABACION" => "CON_PRECARGA",
+	/**
+	 * CON_PRECARGA = alta en estado PRE CARGA (sin asiento hasta confirmar; circuito AGG).
+	 * Cualquier otro valor = CONFIRMADA + asiento al grabar (Ferli y similares).
+	 */
+	'GRABACION' => (static function (): string {
+		$override = env('COBRANZA_GRABACION');
+		if ($override !== null && trim((string) $override) !== '') {
+			return strtoupper(trim((string) $override));
+		}
+		$empresa = strtoupper(trim((string) env('EMPRESA', '')));
+		if ($empresa === 'CALZADOS FERLI' || str_contains($empresa, 'FERLI')) {
+			return 'SIN_PRECARGA';
+		}
+
+		return 'CON_PRECARGA';
+	})(),
 
     /** Descuentos en cobranza → NC fiscal en ARCA al confirmar/grabar */
     'descuento_nc_habilitado' => filter_var(env('COBRANZA_DESCUENTO_NC_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
@@ -82,18 +97,34 @@ return [
 
     /**
      * tipotransaccion_caja_id que usan numerador secuencial (MAX+1 solo dígitos).
-     * Gastronomía (p. ej. id 2) queda fuera: numerotransaccion = B-00008-00807543 desde venta.codigo.
-     * Incluir REM (5), RMI (6), TRA (7), ING (8), EGR (9), OPP (10) y OPA (11) además de COB (1).
-     * OPA (anticipo SP) también entra por semilla Anita si el id no está en esta lista.
+     * Gastronomía (p. ej. id 2 AGG) queda fuera: numerotransaccion = B-00008-00807543 desde venta.codigo.
+     * AGG: COB(1), REM(5), RMI(6), TRA(7), ING(8), EGR(9), OPP(10), OPA(11).
+     * Ferli: COB(12), OPP(13), DEV(14), ING(15), EGR(16) — ver .env del cliente.
+     * Además CobranzaNumeracionTransaccion reconoce COB/REM/RMI/DEV y OPP/OPA/ING/EGR/TRA por abreviatura.
      */
     'tipotransaccion_caja_ids_secuencial' => array_values(array_filter(array_map(
         'intval',
         explode(',', (string) env('COBRANZA_TIPOTRANSACCION_SECUENCIAL_IDS', '1,5,6,7,8,9,10,11')),
     ))),
 
+    /**
+     * Alinear numerotransaccion de COB con MAX(pag_rec) de Anita (che_ban.pago).
+     * Evita arrancar en 1 cuando el ERP está vacío y Anita ya tiene la serie viva.
+     */
+    'anita_numeracion_habilitada' => filter_var(
+        env('COBRANZA_ANITA_NUMERACION_HABILITADA', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+    'anita_numeracion_tipos_pago' => array_values(array_filter(array_map(
+        static fn ($t) => strtoupper(trim((string) $t)),
+        explode(',', (string) env('COBRANZA_ANITA_NUMERACION_TIPOS', 'COB')),
+    ))),
+    'anita_numeracion_fecha_desde' => (int) env('COBRANZA_ANITA_NUMERACION_FECHA_DESDE', 20200101),
+    'anita_numeracion_pag_rec_max' => (int) env('COBRANZA_ANITA_NUMERACION_PAG_REC_MAX', 499999),
+
     "VALORES_A_DEPOSITAR" => [
-            '1' => 111040000,
-            '2' => 111040000,
-            '3' => 111040000
+            '1' => (int) env('CAJA_VALORES_A_DEPOSITAR_CUENTA_CODIGO', 111040000),
+            '2' => (int) env('CAJA_VALORES_A_DEPOSITAR_CUENTA_CODIGO', 111040000),
+            '3' => (int) env('CAJA_VALORES_A_DEPOSITAR_CUENTA_CODIGO', 111040000),
             ],
     ];

@@ -53,6 +53,17 @@ final class CobranzaNumeracionTransaccion
         ), static fn (int $id) => $id > 0)));
     }
 
+    /**
+     * Abreviaturas administrativas con MAX+1 (ids cambian por cliente: AGG 1 vs Ferli 12).
+     * No incluir tipos POS gastronomía (numerotransaccion = B-00008-… desde venta.codigo).
+     *
+     * @return list<string>
+     */
+    public static function abreviaturasSecuencialesAdmin(): array
+    {
+        return ['COB', 'REM', 'RMI', 'DEV'];
+    }
+
     public static function usaNumeracionSecuencial(int $tipotransaccionCajaId): bool
     {
         if (in_array($tipotransaccionCajaId, self::tiposTransaccionSecuencial(), true)) {
@@ -61,7 +72,14 @@ final class CobranzaNumeracionTransaccion
 
         // OPP/OPA/EGR/ING/TRA: secuenciales aunque el id no esté en el .env
         // (OPA se dio de alta después de la lista fija COB/REM/RMI/TRA/ING/EGR/OPP).
-        return SistemaNumeradorSupport::aplicaTipoCaja($tipotransaccionCajaId);
+        if (SistemaNumeradorSupport::aplicaTipoCaja($tipotransaccionCajaId)) {
+            return true;
+        }
+
+        // COB/REM/RMI/DEV por abreviatura: Ferli usa id 12 para COB; el .env AGG (1,5,…) no aplica.
+        $abrev = IngresoEgresoAnitaNumeracionSupport::abreviaturaTipo($tipotransaccionCajaId);
+
+        return $abrev !== '' && in_array($abrev, self::abreviaturasSecuencialesAdmin(), true);
     }
 
     /**
@@ -150,6 +168,12 @@ final class CobranzaNumeracionTransaccion
                 $tipotransaccionCajaId,
                 $max
             );
+        }
+
+        // COB (y tipos alineados): serie operativa Anita pago.pag_rec + MAX ERP.
+        $maxAnita = CobranzaAnitaNumeracionSupport::maximoParaTipoCaja($tipotransaccionCajaId);
+        if ($maxAnita > $max) {
+            $max = $maxAnita;
         }
 
         return self::siguienteDesdeMaximo($max);

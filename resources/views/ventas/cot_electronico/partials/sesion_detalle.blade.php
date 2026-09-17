@@ -34,6 +34,12 @@
             </div>
 
             <div class="mb-2">
+                @php
+                    $guiaDetalle = $sesionDetalle->cotGuia ?? null;
+                    $mostrarSuburbanoDetalle = ! empty($guiaSuburbanoHabilitado)
+                        && $guiaDetalle
+                        && \App\Support\Ventas\CotGuiaSuburbanoSupport::esSuburbano($guiaDetalle->transportes);
+                @endphp
                 @if ($sesionDetalle->cantidad_ok > 0)
                     <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id]) }}"
                         class="btn btn-app bg-success" title="Enviar constancias COT a la impresora">
@@ -42,6 +48,12 @@
                     <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'pdf' => 1]) }}"
                         class="btn btn-app bg-primary" title="Descargar PDF de constancias sin enviar a impresora">
                         <i class="fas fa-file-alt"></i> Constancia
+                    </a>
+                @endif
+                @if ($mostrarSuburbanoDetalle)
+                    <a href="{{ route('cot_electronico_guia_suburbano_excel', ['id' => $guiaDetalle->id]) }}"
+                        class="btn btn-app bg-success" title="Descargar gu&iacute;a suburbano Excel">
+                        <i class="fas fa-file-excel"></i> Suburbano
                     </a>
                 @endif
                 <a href="{{ route('listar_cot_electronico_sesion', ['id' => $sesionDetalle->id, 'formato' => 'PDF']) }}"

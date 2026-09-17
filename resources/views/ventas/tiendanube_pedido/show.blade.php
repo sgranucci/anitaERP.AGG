@@ -177,6 +177,18 @@
                             <div class="card-header"><strong>Datos fiscales del comprador</strong></div>
                             <div class="card-body">
                                 <div class="form-group row">
+                                    <label class="col-lg-3 control-label text-right pr-2 requerido">Tipo comprobante</label>
+                                    <div class="col-lg-4">
+                                        <select name="letra" id="tn-letra" class="form-control">
+                                            <option value="B" @if (($letraDefault ?? 'B') === 'B') selected @endif>Factura B (default)</option>
+                                            <option value="A" @if (($letraDefault ?? 'B') === 'A') selected @endif>Factura A (con percepciones)</option>
+                                        </select>
+                                        <small class="form-text text-muted">
+                                            Factura A exige CUIT y calcula percepciones IIBB/IVA según padrón.
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="form-group row">
                                     <label class="col-lg-3 control-label text-right pr-2">Nombre / Razón social</label>
                                     <div class="col-lg-6">
                                         <input type="text" name="receptor_nombre" class="form-control"
@@ -195,6 +207,14 @@
                                     <div class="col-lg-5">
                                         <input type="email" name="receptor_email" class="form-control"
                                                value="{{ old('receptor_email', $pedido->customer_email) }}">
+                                        <small class="form-text text-muted">Se envía la factura automáticamente a este email al emitir.</small>
+                                    </div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="col-lg-3 control-label text-right pr-2">Domicilio</label>
+                                    <div class="col-lg-7">
+                                        <input type="text" name="receptor_domicilio" class="form-control"
+                                               value="{{ old('receptor_domicilio', $domicilioDefault ?? '') }}">
                                     </div>
                                 </div>
                                 <div class="form-group row">
@@ -214,8 +234,23 @@
                             <div class="card-header"><strong>Medios de pago</strong></div>
                             <div class="card-body">
                                 <p class="text-muted mb-2">
-                                    Gateway TN: <strong>{{ $pedido->gateway_name ?: $pedido->gateway ?: '—' }}</strong>
-                                    — total a cubrir: <strong id="tn-total-pedido">{{ number_format((float) $pedido->total, 2, '.', '') }}</strong>
+                                    Gateway TN:
+                                    <strong>{{ $pagoDetalle['gateway_name'] ?? ($pedido->gateway_name ?: ($pedido->gateway ?: '—')) }}</strong>
+                                    @if (!empty($pagoDetalle['method']))
+                                        · método <code>{{ $pagoDetalle['method'] }}</code>
+                                    @endif
+                                    @if (!empty($pagoDetalle['card']))
+                                        · tarjeta <code>{{ $pagoDetalle['card'] }}</code>
+                                    @endif
+                                    @if (!empty($pagoDetalle['installments']))
+                                        · cuotas {{ $pagoDetalle['installments'] }}
+                                    @endif
+                                    — total a cubrir:
+                                    <strong id="tn-total-pedido">{{ number_format((float) $pedido->total, 2, '.', '') }}</strong>
+                                </p>
+                                <p class="small text-muted mb-2">
+                                    Las cuentas listadas son las del uso <strong>TIENDA NUBE</strong> (ABM Cuentas de caja).
+                                    Mapa fijo opcional: <code>TIENDANUBE_GATEWAY_CUENTACAJA</code> en .env.
                                 </p>
                                 <table class="table table-sm table-bordered" id="tabla-medios-tn">
                                     <thead style="background:#85C1E9;color:#17202A;">

@@ -42,6 +42,14 @@ return [
     'movimiento_edicion_solo_dia' => filter_var(env('STOCK_MOV_EDICION_SOLO_DIA', false), FILTER_VALIDATE_BOOLEAN),
 
     /*
+    | Salidas / transferencias: permitir cantidad > saldo (stock negativo).
+    | true  → se sigue mostrando el saldo en pantalla, pero no se bloquea el grabado.
+    | false → valida saldo y rechaza (comportamiento estricto).
+    | Independiente del tipo de depósito «Centro de consumo» (ese ya no controla saldo).
+    */
+    'permite_saldos_negativos' => filter_var(env('STOCK_PERMITE_SALDOS_NEGATIVOS', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
     | stkmov Anita legacy desactivado para procesos ERP de stock (mov. manual, transferencias,
     | recuento, préstamos, recepción proveedor COM). Facturación ventas sigue con su bridge.
     */
