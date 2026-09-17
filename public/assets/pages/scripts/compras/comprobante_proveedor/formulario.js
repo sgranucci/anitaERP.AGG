@@ -1539,6 +1539,20 @@ $(function () {
             return;
         }
 
+        var precargaId = parseInt(String($form.attr('data-precarga-id') || '0'), 10) || 0;
+        var precargaTotal = parseFloat($form.attr('data-precarga-total') || '0') || 0;
+        // Precarga sin importes (LEGAJO/scan): no armar plantilla en $0; el modal de consulta sí lista la unión.
+        if (precargaId > 0 && !(precargaTotal > 0.0001)) {
+            var $avisoSin = $('#cp-conceptos-tipo-aviso');
+            if ($avisoSin.length) {
+                $avisoSin.removeClass('d-none').html(
+                    '<i class="fa fa-info-circle"></i> Esta precarga no trae importes (p. ej. PDF de legajo sin OCR). '
+                    + 'Completá los montos a mano; con FPB+OC el modal lista la unión de conceptos sin duplicar.'
+                );
+            }
+            return;
+        }
+
         var $aviso = $('#cp-conceptos-tipo-aviso');
         var base = typeof window.carpetaBase !== 'undefined' ? window.carpetaBase : '';
         var params = {};

@@ -12,8 +12,14 @@ use RuntimeException;
  */
 final class ComprobanteProveedorCuotasTotalSupport
 {
-    /** Misma tolerancia de centavos que el cuadre de asiento (0,05). */
+    /**
+     * Tope para bloquear grabación con desvío grande (p. ej. cuotas de otra factura).
+     * No usar para decidir si alinear: en ME 0,02 USD × cotización rompe el control en ARS.
+     */
     public const TOLERANCIA = 0.05;
+
+    /** Diferencia en centavos de la moneda del comprobante: hay que absorber residual. */
+    public const EPSILON_ALINEAR = 0.005;
 
     /**
      * @param  iterable<int, array<string, mixed>|object>  $cuotas

@@ -9,6 +9,7 @@ use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Compras\OrdencompraLegajoScanAnitaDescartarService;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -150,6 +151,19 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
         Comprobante_Proveedor::query()
             ->where('precarga_comprobante_proveedor_id', $precargaId)
             ->update(['precarga_comprobante_proveedor_id' => null]);
+
+        $precarga = Precarga_Comprobante_Proveedor::query()->find($precargaId);
+        if ($precarga) {
+            try {
+                app(OrdencompraLegajoScanAnitaDescartarService::class)->descartarSiCorresponde($precarga);
+            } catch (\Throwable $e) {
+                // El borrado ERP no debe fallar si Anita/descarte auxiliar falla.
+                \Illuminate\Support\Facades\Log::warning('precarga.delete.scan_anita_descartar', [
+                    'precarga_id' => $precargaId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $precarga_comprobante_proveedor = $this->model->destroy($precargaId);
 

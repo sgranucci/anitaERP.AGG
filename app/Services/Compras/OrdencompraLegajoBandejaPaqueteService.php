@@ -88,7 +88,9 @@ class OrdencompraLegajoBandejaPaqueteService
                 $precargaIds[] = (int) $f['id'];
             }
         }
-        $asignadas = $this->asignacionesPorPrecarga($precargaIds);
+        // Todas las FC→COM del legajo (incluye ya en CxP / precargas no listadas),
+        // para que el modal no ofrezca COM ya vinculadas a otra factura.
+        $asignadas = $this->asignacionesActualesDelLegajo($oc);
         $comprobantes = $this->comprobantesDelLegajo($oc, $precargaIds);
         $facturas = $this->marcarFacturasCargadasEnCxp($facturas, $comprobantes);
         $facturas = $this->fusionarComprobantesEnFacturas($facturas, $comprobantes);

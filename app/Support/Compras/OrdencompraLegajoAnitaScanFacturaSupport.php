@@ -4,6 +4,7 @@ namespace App\Support\Compras;
 
 use App\ApiAnita;
 use App\Models\Compras\Ordencompra;
+use App\Services\Compras\OrdencompraLegajoScanAnitaDescartarService;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -17,35 +18,82 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
     /** @var array<int, list<array<string, mixed>>> */
     private static array $facturasPorOcCache = [];
 
+    /** @var array<int, list<array<string, mixed>>> cache sin filtrar descartes (para resolver al borrar) */
+    private static array $facturasPorOcCacheCrudo = [];
+
+    public static function forgetCache(): void
+    {
+        self::$filasPorNrosCache = [];
+        self::$facturasPorOcCache = [];
+        self::$facturasPorOcCacheCrudo = [];
+    }
+
     /**
      * @param  list<Ordencompra>  $ocs
      * @return array<int, list<array<string, mixed>>>
      */
     public static function facturasPorOcs(iterable $ocs): array
     {
+        $crudo = self::facturasPorOcsCrudo($ocs);
+        $ocIds = array_keys($crudo);
+        $descartados = self::documentoIdsDescartados($ocIds);
+
+        $out = [];
+        foreach ($crudo as $ocId => $scans) {
+            $omitidos = $descartados[$ocId] ?? [];
+            if ($omitidos === []) {
+                $out[$ocId] = $scans;
+                self::$facturasPorOcCache[$ocId] = $scans;
+
+                continue;
+            }
+            $filtrados = [];
+            foreach ($scans as $scan) {
+                $docId = (int) ($scan['documento_id'] ?? 0);
+                if ($docId > 0 && isset($omitidos[$docId])) {
+                    continue;
+                }
+                $filtrados[] = $scan;
+            }
+            $out[$ocId] = $filtrados;
+            self::$facturasPorOcCache[$ocId] = $filtrados;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Igual que facturasPorOcs pero incluye scans ya descartados en ERP
+     * (útil al borrar precarga para resolver el documento_id a desvincular).
+     *
+     * @param  list<Ordencompra>  $ocs
+     * @return array<int, list<array<string, mixed>>>
+     */
+    public static function facturasPorOcsCrudo(iterable $ocs): array
+    {
         $porClave = [];
-        $pendientes = [];
+        $listaOcs = [];
         foreach ($ocs as $oc) {
+            $listaOcs[] = $oc;
             $ocId = (int) $oc->id;
-            if ($ocId > 0 && array_key_exists($ocId, self::$facturasPorOcCache)) {
+            if ($ocId > 0 && array_key_exists($ocId, self::$facturasPorOcCacheCrudo)) {
                 continue;
             }
             $nro = (int) preg_replace('/\D+/', '', (string) $oc->numeroordencompra);
             $emp = self::empresaAnitaId($oc);
             if ($nro <= 0 || $emp <= 0) {
                 if ($ocId > 0) {
-                    self::$facturasPorOcCache[$ocId] = [];
+                    self::$facturasPorOcCacheCrudo[$ocId] = [];
                 }
                 continue;
             }
             $porClave[$emp.'|'.$nro] = $ocId;
-            $pendientes[] = $oc;
         }
         if ($porClave === []) {
             $out = [];
-            foreach ($ocs as $oc) {
+            foreach ($listaOcs as $oc) {
                 $ocId = (int) $oc->id;
-                $out[$ocId] = self::$facturasPorOcCache[$ocId] ?? [];
+                $out[$ocId] = self::$facturasPorOcCacheCrudo[$ocId] ?? [];
             }
 
             return $out;
@@ -57,7 +105,7 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         )));
         $filas = self::listarScanFactura($nros);
         foreach ($porClave as $ocId) {
-            self::$facturasPorOcCache[$ocId] = self::$facturasPorOcCache[$ocId] ?? [];
+            self::$facturasPorOcCacheCrudo[$ocId] = self::$facturasPorOcCacheCrudo[$ocId] ?? [];
         }
         foreach ($filas as $fila) {
             $emp = (int) ($fila['iempresaid'] ?? 0);
@@ -73,7 +121,7 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
             );
             $tipoLabel = OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipoGen);
             $etiqueta = OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipoGen, $numero);
-            self::$facturasPorOcCache[$ocId][] = [
+            self::$facturasPorOcCacheCrudo[$ocId][] = [
                 'id' => 'anita-'.$docId,
                 'origen' => 'anita',
                 'origen_label' => PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA),
@@ -96,9 +144,9 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         }
 
         $out = [];
-        foreach ($ocs as $oc) {
+        foreach ($listaOcs as $oc) {
             $ocId = (int) $oc->id;
-            $out[$ocId] = self::$facturasPorOcCache[$ocId] ?? [];
+            $out[$ocId] = self::$facturasPorOcCacheCrudo[$ocId] ?? [];
         }
 
         return $out;
@@ -115,6 +163,35 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         }
 
         return self::facturasPorOcs([$oc])[$ocId] ?? [];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public static function facturasDeOcIncluyendoDescartados(Ordencompra $oc): array
+    {
+        $ocId = (int) $oc->id;
+        if ($ocId > 0 && array_key_exists($ocId, self::$facturasPorOcCacheCrudo)) {
+            return self::$facturasPorOcCacheCrudo[$ocId];
+        }
+
+        return self::facturasPorOcsCrudo([$oc])[$ocId] ?? [];
+    }
+
+    /**
+     * @param  list<int>  $ordencompraIds
+     * @return array<int, array<int, true>>
+     */
+    private static function documentoIdsDescartados(array $ordencompraIds): array
+    {
+        try {
+            return app(OrdencompraLegajoScanAnitaDescartarService::class)
+                ->documentoIdsDescartadosPorOcIds($ordencompraIds);
+        } catch (\Throwable $e) {
+            Log::warning('bandeja.anita_scan_factura.descartados', ['error' => $e->getMessage()]);
+
+            return [];
+        }
     }
 
     public static function rutaPdf(int $documentoId): ?string
@@ -261,6 +338,9 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         if ($documentoId <= 0) {
             return null;
         }
+        if (self::estaDescartadoEnOc($oc, $documentoId)) {
+            return null;
+        }
         $nro = (int) preg_replace('/\D+/', '', (string) $oc->numeroordencompra);
         $emp = self::empresaAnitaId($oc);
         if ($nro <= 0 || $emp <= 0) {
@@ -277,6 +357,16 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         }
 
         return null;
+    }
+
+    private static function estaDescartadoEnOc(Ordencompra $oc, int $documentoId): bool
+    {
+        try {
+            return app(OrdencompraLegajoScanAnitaDescartarService::class)
+                ->estaDescartado($oc, $documentoId);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     private static function empresaAnitaId(Ordencompra $oc): int

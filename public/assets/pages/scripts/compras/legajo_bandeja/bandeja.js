@@ -441,22 +441,27 @@
         }
         var idsAsig = asignarEstado.mapa[String(activo)] || [];
         var ocupadasPorOtra = comIdsOcupadasPorOtraFactura(activo);
+        var visibles = 0;
         asignarEstado.coms.forEach(function (c) {
             var checked = idsAsig.indexOf(c.id) !== -1 || idsAsig.indexOf(String(c.id)) !== -1;
             var ocupada = ocupadasPorOtra[String(c.id)];
-            var disabled = ocupada && !checked;
-            var hint = ocupada
-                ? ' <small class="text-danger">(ya asignada a ' + esc(ocupada) + ')</small>'
-                : '';
+            // Ya vinculada a otra factura: no ofrecerla (salvo que figure en esta, caso inconsistente).
+            if (ocupada && !checked) {
+                return;
+            }
+            visibles += 1;
             $coms.append(
                 '<div class="form-check">' +
                 '<input class="form-check-input js-bandeja-asig-com" type="checkbox" data-com-id="' + c.id + '" id="ban_com_' + c.id + '"' +
-                (checked ? ' checked' : '') + (disabled ? ' disabled' : '') + '>' +
+                (checked ? ' checked' : '') + '>' +
                 '<label class="form-check-label" for="ban_com_' + c.id + '">' + esc(c.documento) +
                 (c.fecha ? ' <small class="text-muted">' + esc(c.fecha) + '</small>' : '') +
-                hint + '</label></div>'
+                '</label></div>'
             );
         });
+        if (!visibles && asignarEstado.coms.length) {
+            $coms.append('<p class="text-muted mb-0 small">Las COM del legajo ya están asignadas a otras facturas.</p>');
+        }
     }
 
     function etiquetaFacturaAsignacion(facId) {
@@ -524,6 +529,18 @@
         }
     }
 
+    function esFacturaEditableAsignacion(f) {
+        if (!f || f.cargado_cxp) {
+            return false;
+        }
+        var idStr = String(f.id);
+        return /^\d+$/.test(idStr) || /^anita-\d+$/i.test(idStr);
+    }
+
+    function idsRecepcionAsignadas(raw) {
+        return (raw || []).map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; });
+    }
+
     function renderAsignar(paquete) {
         var facs = (paquete && paquete.facturas) || [];
         var coms = ((paquete && paquete.coms) || []).filter(function (c) { return c.confirmada; });
@@ -532,17 +549,19 @@
         asignarEstado.coms = coms;
         asignarEstado.tiposOpciones = (paquete && paquete.tipos_opciones) || [];
         asignarEstado.mapa = {};
+        // Incluir también asignaciones de facturas ya en CxP / no editables:
+        // si no, esas COM aparecen libres y el guardado falla en servidor.
+        Object.keys(asignadas).forEach(function (key) {
+            asignarEstado.mapa[String(key)] = idsRecepcionAsignadas(asignadas[key]);
+        });
         facs.forEach(function (f) {
-            // Solo comprobantes pendientes del envío. Los cp-* (ya en CxP sin precarga) no se asignan.
-            var idStr = String(f.id);
-            var esPrecargaNum = /^\d+$/.test(idStr);
-            var esAnita = /^anita-\d+$/i.test(idStr);
-            if (f.cargado_cxp || (!esPrecargaNum && !esAnita)) {
+            if (!esFacturaEditableAsignacion(f)) {
                 return;
             }
-            var key = idStr;
-            var ids = asignadas[key] || asignadas[f.id] || [];
-            asignarEstado.mapa[key] = ids.map(function (id) { return parseInt(id, 10); }).filter(function (id) { return id > 0; });
+            var key = String(f.id);
+            if (!Object.prototype.hasOwnProperty.call(asignarEstado.mapa, key)) {
+                asignarEstado.mapa[key] = idsRecepcionAsignadas(asignadas[key] || asignadas[f.id]);
+            }
         });
         var pendientes = facs.filter(function (f) { return !f.cargado_cxp; });
         var prefer = pendientes.find(function (f) {
@@ -885,6 +904,21 @@
                 if (!/^\d+$/.test(idStr) && !/^anita-\d+$/i.test(idStr)) {
                     return;
                 }
+                var fac = asignarEstado.facs.find(function (f) { return String(f.id) === idStr; });
+                // No reenviar vínculos de facturas ya en CxP (solo sirven para ocupación en UI).
+                if (fac && fac.cargado_cxp) {
+                    return;
+                }
+                if (!fac && !/^\d+$/.test(idStr)) {
+                    return;
+                }
+                // Precarga del legajo no listada / anulada: conservar ocupación, no pisar en save.
+                if (!fac) {
+                    return;
+                }
+                if (!esFacturaEditableAsignacion(fac)) {
+                    return;
+                }
                 var recepcionIds = asignarEstado.mapa[preId] || [];
                 recepcionIds.forEach(function (rid) {
                     if (rid > 0 && vistas[rid] && String(vistas[rid]) !== idStr) {
@@ -897,6 +931,19 @@
                 asignaciones.push({
                     precarga_id: preId,
                     recepcion_ids: recepcionIds
+                });
+            });
+            // Conflictos con COM ya tomadas por facturas no editables (CxP / fuera de lista).
+            Object.keys(asignarEstado.mapa).forEach(function (preId) {
+                var idStr = String(preId);
+                var fac = asignarEstado.facs.find(function (f) { return String(f.id) === idStr; });
+                if (fac ? esFacturaEditableAsignacion(fac) : false) {
+                    return;
+                }
+                (asignarEstado.mapa[preId] || []).forEach(function (rid) {
+                    if (rid > 0 && vistas[rid]) {
+                        dup = rid;
+                    }
                 });
             });
             if (dup) {

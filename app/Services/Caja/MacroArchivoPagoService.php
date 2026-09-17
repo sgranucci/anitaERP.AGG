@@ -380,6 +380,8 @@ class MacroArchivoPagoService
             $nombre = trim((string) ($prom?->prom_nombre ?? $proCod));
             $envioOp = false;
             $ordenPagoBase = MacroArchivoPagoFormatoSupport::ordenPagoTransferencia($tipo, $suc, $rec);
+            // Como p-enviamacro: RTN usa el último orden_pago grabado en OPG (cheque incluye nro).
+            $ordenPagoRtn = $ordenPagoBase;
             $comps = [];
 
             foreach ($lineas as $axp) {
@@ -419,6 +421,7 @@ class MacroArchivoPagoService
                     }
                     $modalidad = MacroArchivoPagoFormatoSupport::modalidadCheque($emi, $fechChStr);
                     $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque($tipo, $suc, $rec, $nroCh);
+                    $ordenPagoRtn = $orden;
                     $filas[] = [
                         'origen' => 'Anita',
                         'medio' => 'cheque',
@@ -451,6 +454,7 @@ class MacroArchivoPagoService
                     $codBanco = (int) ($prop?->prop_cod_banco ?? 0);
                     $modalidad = MacroArchivoPagoFormatoSupport::modalidadTransferencia($val['cbu'], $codBanco ?: null);
                     $orden = $ordenPagoBase;
+                    $ordenPagoRtn = $orden;
                     $filas[] = [
                         'origen' => 'Anita',
                         'medio' => 'transferencia',
@@ -481,7 +485,7 @@ class MacroArchivoPagoService
                     array_push(
                         $retenciones,
                         ...MacroArchivoPagoRetencionTextoSupport::desdeComprobantes(
-                            $ordenPagoBase,
+                            $ordenPagoRtn,
                             $comps,
                             $usuarioRet
                         )
@@ -500,7 +504,7 @@ class MacroArchivoPagoService
                 array_push(
                     $retenciones,
                     ...MacroArchivoPagoRetencionTextoSupport::desdeAnitaBloques(
-                        $ordenPagoBase,
+                        $ordenPagoRtn,
                         $bloquesRet,
                         $usuarioRet,
                         $nombre,
@@ -638,6 +642,7 @@ class MacroArchivoPagoService
             $rec = (int) $op->numerotransaccion;
             $fecha = self::fechaYmd($op->fecha);
             $agrego = false;
+            $ordenPagoRtn = MacroArchivoPagoFormatoSupport::ordenPagoTransferencia($tipo, $suc, $rec);
 
             if ($incluirCheques) {
                 foreach ($op->cheques as $ch) {
@@ -658,6 +663,7 @@ class MacroArchivoPagoService
                     );
                     $paraDep = strtoupper(substr(trim((string) ($ch->para_dep ?? '')), 0, 1));
                     $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque($tipo, $suc, $rec, $nroCh);
+                    $ordenPagoRtn = $orden;
                     $filas[] = [
                         'origen' => 'ERP',
                         'medio' => 'cheque',
@@ -718,6 +724,7 @@ class MacroArchivoPagoService
                     } else {
                         $modalidad = MacroArchivoPagoFormatoSupport::modalidadTransferencia($val['cbu']);
                         $orden = MacroArchivoPagoFormatoSupport::ordenPagoTransferencia($tipo, $suc, $rec);
+                        $ordenPagoRtn = $orden;
                         $filas[] = [
                             'origen' => 'ERP',
                             'medio' => 'transferencia',
@@ -745,13 +752,12 @@ class MacroArchivoPagoService
 
             if ($agrego && $cuit !== '') {
                 $beneficiarios[$cuit] = $this->beneficiarioDesdeProveedorErp($prov, $cuit, $codigo, $nombre);
-                $ordenBase = MacroArchivoPagoFormatoSupport::ordenPagoTransferencia($tipo, $suc, $rec);
                 $compsErp = $this->comprobantesDesdePagoproveedor($op);
                 if ($compsErp !== []) {
                     array_push(
                         $retenciones,
                         ...MacroArchivoPagoRetencionTextoSupport::desdeComprobantes(
-                            $ordenBase,
+                            $ordenPagoRtn,
                             $compsErp,
                             $usuarioRet
                         )
@@ -760,7 +766,7 @@ class MacroArchivoPagoService
                 array_push(
                     $retenciones,
                     ...MacroArchivoPagoRetencionTextoSupport::desdePagoproveedor(
-                        $ordenBase,
+                        $ordenPagoRtn,
                         $op,
                         $usuarioRet
                     )

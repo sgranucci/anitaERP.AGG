@@ -214,7 +214,7 @@ class ComprobanteProveedorComplianceValidacionService
             ->values()
             ->all();
 
-        $ivas = [];
+        $ivasPorTasa = [];
         $netosPorTasa = [];
 
         foreach ($lineas as $linea) {
@@ -236,14 +236,28 @@ class ComprobanteProveedorComplianceValidacionService
 
             if ($tipo === 'I') {
                 $tasa = round((float) ($concepto->impuestos?->valor ?? 0), 3);
-                $ivas[] = ['monto' => $monto, 'tasa' => $tasa, 'nombre' => (string) $concepto->nombre];
+                $clave = (string) $tasa;
+                if (! isset($ivasPorTasa[$clave])) {
+                    $ivasPorTasa[$clave] = [
+                        'monto' => 0.0,
+                        'tasa' => $tasa,
+                        'nombres' => [],
+                    ];
+                }
+                $ivasPorTasa[$clave]['monto'] = round($ivasPorTasa[$clave]['monto'] + $monto, 2);
+                $ivasPorTasa[$clave]['nombres'][] = (string) $concepto->nombre;
             }
         }
 
-        foreach ($ivas as $iva) {
+        foreach ($ivasPorTasa as $iva) {
             $tasa = (float) $iva['tasa'];
+            $nombres = array_values(array_unique(array_filter($iva['nombres'])));
+            $etiquetaIva = count($nombres) > 1
+                ? implode(' + ', $nombres)
+                : ($nombres[0] ?? 'IVA');
+
             if ($tasa <= 0) {
-                $resultado['avisos'][] = 'Concepto IVA «'.$iva['nombre'].'» sin alícuota en el maestro; no se pudo validar contra tasas del sistema.';
+                $resultado['avisos'][] = 'Concepto IVA «'.$etiquetaIva.'» sin alícuota en el maestro; no se pudo validar contra tasas del sistema.';
                 continue;
             }
 
@@ -251,22 +265,23 @@ class ComprobanteProveedorComplianceValidacionService
                 $resultado['errores'][] = sprintf(
                     'La alícuota %s%% del IVA «%s» no está cargada en impuestos del sistema.',
                     number_format($tasa, 2, ',', '.'),
-                    $iva['nombre']
+                    $etiquetaIva
                 );
                 continue;
             }
 
+            // Varias líneas I a la misma alícuota (FPB multi-CC: 503+311+411) se cotejan
+            // sumadas contra el gravado de esa tasa, no cada una contra el neto total.
             $netoTeorico = round($iva['monto'] / ($tasa / 100.0), 2);
             $netoReal = (float) ($netosPorTasa[(string) $tasa] ?? 0);
             if ($netoReal <= 0) {
-                // Intentar neto sin tasa o total de gravados
                 $netoReal = (float) array_sum($netosPorTasa);
             }
 
             if ($netoReal > 0 && abs($netoReal - $netoTeorico) > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA) {
                 $resultado['errores'][] = sprintf(
                     'IVA «%s» (%s%%) $%s implica gravado ≈ $%s, pero el neto informado es $%s (tol. $%s).',
-                    $iva['nombre'],
+                    $etiquetaIva,
                     number_format($tasa, 2, ',', '.'),
                     number_format($iva['monto'], 2, ',', '.'),
                     number_format($netoTeorico, 2, ',', '.'),
