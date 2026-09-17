@@ -39,8 +39,28 @@
         margin-bottom: 0.75rem;
     }
     .pp-barra .pp-nombre-activo { font-weight: 600; font-size: 1rem; }
-    .pp-barra .form-control-sm { min-width: 110px; }
     .pp-barra .pp-btns .btn { margin: 0 0.2rem 0.25rem 0; }
+    .pp-meses-chips .btn {
+        margin: 0 0.25rem 0.25rem 0;
+        min-width: 5.5rem;
+    }
+    .pp-meses-chips .btn.pp-chip-on {
+        background: #2471A3;
+        border-color: #2471A3;
+        color: #fff;
+        font-weight: 600;
+    }
+    .pp-prorrateo-preview {
+        font-size: 0.85rem;
+        color: #1B4F72;
+        background: #D6EAF8;
+        border-radius: 3px;
+        padding: 0.25rem 0.5rem;
+        display: inline-block;
+    }
+    .pp-matriz thead th.pp-th-seleccionada {
+        box-shadow: inset 0 -3px 0 #2471A3;
+    }
 </style>
 @endsection
 
@@ -141,38 +161,40 @@ window.programaPagoCfg = {
                                 <div class="ml-auto small text-muted" id="pp-progreso-texto">—</div>
                             </div>
 
-                            <div class="d-flex flex-wrap align-items-end pp-btns">
-                                <div class="mr-2 mb-1">
-                                    <label class="small d-block mb-0">Poner todo en</label>
-                                    <select id="pp-mes-todo" class="form-control form-control-sm"></select>
+                            <div class="mb-2">
+                                <div class="small text-muted mb-1">
+                                    Marcá los meses (o TRANSF) donde va el pago de este proveedor:
                                 </div>
-                                <div class="mr-2 mb-1">
-                                    <label class="small d-block mb-0">50/50 mes A</label>
-                                    <select id="pp-mes-a" class="form-control form-control-sm"></select>
+                                <div class="pp-meses-chips" id="pp-meses-chips"></div>
+                                <div class="mt-1">
+                                    <span class="pp-prorrateo-preview" id="pp-prorrateo-preview">Seleccioná uno o más períodos</span>
                                 </div>
-                                <div class="mr-2 mb-1">
-                                    <label class="small d-block mb-0">50/50 mes B</label>
-                                    <select id="pp-mes-b" class="form-control form-control-sm"></select>
-                                </div>
-                                <div class="mb-1">
-                                    @if ($data->incluye_transf)
-                                        <button type="button" class="btn btn-sm btn-warning" id="pp-btn-asistente-transf" title="Todo el saldo a TRANSF y pasa al siguiente">
-                                            TRANSF y siguiente
-                                        </button>
-                                    @endif
-                                    <button type="button" class="btn btn-sm btn-info" id="pp-btn-asistente-mes" title="Todo el saldo al mes elegido y pasa al siguiente">
-                                        Mes y siguiente
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-primary" id="pp-btn-asistente-5050" title="50% / 50% entre A y B y pasa al siguiente">
-                                        50/50 y siguiente
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="pp-btn-asistente-saltar">
-                                        Siguiente sin marcar
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" id="pp-btn-limpiar" title="Limpiar montos del proveedor activo">
-                                        Limpiar
-                                    </button>
-                                </div>
+                            </div>
+
+                            <div class="d-flex flex-wrap align-items-center pp-btns mb-1">
+                                <button type="button" class="btn btn-sm btn-primary" id="pp-btn-partir-igual"
+                                        title="Reparte el saldo en partes iguales entre los períodos marcados">
+                                    Partir igual
+                                </button>
+                                <button type="button" class="btn btn-sm btn-info" id="pp-btn-todo-seleccion"
+                                        title="Pone todo el saldo en el único período marcado (si hay más de uno, usa el primero)">
+                                    Todo en marcado
+                                </button>
+                                <button type="button" class="btn btn-sm btn-success" id="pp-btn-partir-y-seguir"
+                                        title="Partir igual y pasar al siguiente pendiente">
+                                    Partir y siguiente
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="pp-btn-limpiar-chips"
+                                        title="Desmarcar períodos">
+                                    Desmarcar meses
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" id="pp-btn-limpiar"
+                                        title="Limpiar montos del proveedor activo">
+                                    Limpiar montos
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="pp-btn-asistente-saltar">
+                                    Siguiente sin marcar
+                                </button>
                             </div>
 
                             <div class="d-flex flex-wrap align-items-center mt-2">
@@ -194,7 +216,9 @@ window.programaPagoCfg = {
                                     <th class="pp-col-proveedor">Proveedor</th>
                                     <th class="text-right">Saldo</th>
                                     @foreach($columnas as $col)
-                                        <th class="text-right">{{ $col['etiqueta'] }}</th>
+                                        <th class="text-right" data-clave="{{ $col['clave'] }}" title="Clic para marcar/desmarcar en el prorrateo" style="cursor:pointer;">
+                                            {{ $col['etiqueta'] }}
+                                        </th>
                                     @endforeach
                                     <th class="text-right">Total</th>
                                     <th>Obs.</th>

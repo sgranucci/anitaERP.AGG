@@ -3,6 +3,8 @@
 
     var cfg = window.programaPagoCfg || { columnas: [], tieneTransf: false };
     var idxActivo = -1;
+    /** @type {Object.<string, boolean>} */
+    var mesesMarcados = {};
 
     function parseMonto(val) {
         var n = parseFloat(String(val || '').replace(',', '.'));
@@ -43,6 +45,21 @@
         $tr.find('.pp-asig').val('0');
     }
 
+    function columnasAplicables() {
+        return (cfg.columnas || []).slice();
+    }
+
+    function clavesMarcadas() {
+        return columnasAplicables()
+            .map(function (c) { return c.clave; })
+            .filter(function (clave) { return !!mesesMarcados[clave]; });
+    }
+
+    function etiquetaClave(clave) {
+        var col = columnasAplicables().find(function (c) { return c.clave === clave; });
+        return col ? col.etiqueta : clave;
+    }
+
     function estadoFila($tr) {
         var saldo = saldoFila($tr);
         var tot = totalFila($tr);
@@ -62,7 +79,6 @@
                 $tr.show();
                 return;
             }
-            // Mantener visible la fila activa aunque esté completa
             var i = $tr.index();
             if (i === idxActivo || estadoFila($tr) !== 'completo') {
                 $tr.show();
@@ -91,6 +107,8 @@
         aplicarFiltroVista();
         actualizarProgreso();
         actualizarPanelAsistente();
+        actualizarPreviewProrrateo();
+        resaltarTheadSeleccion();
     }
 
     function recalcular() {
@@ -135,13 +153,11 @@
     function actualizarProgreso() {
         var total = filas().length;
         var pendientes = 0;
-        var parciales = 0;
         var completos = 0;
         filas().forEach(function ($tr) {
             var est = estadoFila($tr);
             if (est === 'pendiente') pendientes++;
-            else if (est === 'parcial') parciales++;
-            else completos++;
+            else if (est === 'completo') completos++;
         });
         $('#pp-progreso-texto').text(completos + ' OK / ' + total + ' · ' + pendientes + ' sin marcar');
         var pct = total ? Math.round((completos / total) * 100) : 0;
@@ -160,6 +176,7 @@
         if (lista.length === 0) {
             idxActivo = -1;
             actualizarPanelAsistente();
+            actualizarPreviewProrrateo();
             return;
         }
         if (i < 0) {
@@ -206,26 +223,38 @@
         $('#pp-asistente-pos').text('Proveedor ' + (idxActivo + 1) + ' de ' + filas().length);
     }
 
+    /**
+     * Reparte saldo en partes iguales; el resto de centavos va al último.
+     * @param {JQuery} $tr
+     * @param {string[]} claves
+     */
+    function aplicarProrrateoIgual($tr, claves) {
+        if (!$tr || !claves || !claves.length) {
+            alert('Marcá al menos un período (mes o TRANSF).');
+            return false;
+        }
+        var saldo = saldoFila($tr);
+        var n = claves.length;
+        var base = redondear(Math.floor((saldo / n) * 100) / 100);
+        limpiarAsignaciones($tr);
+        var acumulado = 0;
+        for (var i = 0; i < n; i++) {
+            var monto = (i === n - 1) ? redondear(saldo - acumulado) : base;
+            setAsig($tr, claves[i], monto);
+            acumulado = redondear(acumulado + monto);
+        }
+        recalcular();
+        return true;
+    }
+
     function aplicarTodoEnClave($tr, clave) {
         if (!$tr || !clave) {
-            return;
+            return false;
         }
         limpiarAsignaciones($tr);
         setAsig($tr, clave, saldoFila($tr));
         recalcular();
-    }
-
-    function aplicar5050($tr, claveA, claveB) {
-        if (!$tr || !claveA || !claveB || claveA === claveB) {
-            alert('Elija dos meses distintos para el 50/50.');
-            return;
-        }
-        var saldo = saldoFila($tr);
-        var mitad = redondear(saldo / 2);
-        limpiarAsignaciones($tr);
-        setAsig($tr, claveA, mitad);
-        setAsig($tr, claveB, redondear(saldo - mitad));
-        recalcular();
+        return true;
     }
 
     function irSiguientePendiente() {
@@ -241,44 +270,84 @@
                 return;
             }
         }
-        // Todos OK: quedarse en el actual o el primero
         setActivo(idxActivo >= 0 ? idxActivo : 0);
     }
 
-    function marcarYSeguir(fn) {
-        var $tr = filaActiva();
-        if (!$tr) {
-            alert('No hay proveedor seleccionado.');
-            return;
-        }
-        fn($tr);
-        irSiguientePendiente();
+    function actualizarChipsUi() {
+        $('#pp-meses-chips .pp-chip-mes').each(function () {
+            var clave = $(this).data('clave');
+            $(this).toggleClass('pp-chip-on', !!mesesMarcados[clave]);
+            $(this).attr('aria-pressed', mesesMarcados[clave] ? 'true' : 'false');
+        });
+        actualizarPreviewProrrateo();
+        resaltarTheadSeleccion();
     }
 
-    function poblarSelectsMeses() {
-        var meses = (cfg.columnas || []).filter(function (c) { return c.anio_mes; });
-        var $a = $('#pp-mes-a');
-        var $b = $('#pp-mes-b');
-        var $todo = $('#pp-mes-todo');
-        [$a, $b, $todo].forEach(function ($sel) {
-            $sel.empty();
-            meses.forEach(function (c) {
-                $sel.append($('<option/>').val(c.clave).text(c.etiqueta));
-            });
+    function resaltarTheadSeleccion() {
+        $('#tabla-programa-pago thead th[data-clave]').each(function () {
+            var clave = $(this).data('clave');
+            $(this).toggleClass('pp-th-seleccionada', !!mesesMarcados[clave]);
         });
-        if (meses.length >= 2) {
-            $a.val(meses[0].clave);
-            $b.val(meses[1].clave);
-            $todo.val(meses[0].clave);
-        } else if (meses.length === 1) {
-            $a.val(meses[0].clave);
-            $b.val(meses[0].clave);
-            $todo.val(meses[0].clave);
+    }
+
+    function actualizarPreviewProrrateo() {
+        var $tr = filaActiva();
+        var claves = clavesMarcadas();
+        var $prev = $('#pp-prorrateo-preview');
+        if (!$prev.length) {
+            return;
         }
-        if (cfg.tieneTransf) {
-            $todo.prepend($('<option/>').val('transf').text('TRANSF'));
-            $todo.val('transf');
+        if (!claves.length) {
+            $prev.text('Seleccioná uno o más períodos');
+            return;
         }
+        var nombres = claves.map(etiquetaClave).join(' + ');
+        if (!$tr) {
+            $prev.text(claves.length + ' período(s): ' + nombres);
+            return;
+        }
+        var saldo = saldoFila($tr);
+        if (claves.length === 1) {
+            $prev.text('Todo → ' + nombres + ' = ' + fmt(saldo));
+            return;
+        }
+        var base = redondear(Math.floor((saldo / claves.length) * 100) / 100);
+        var ultimo = redondear(saldo - base * (claves.length - 1));
+        $prev.text(
+            claves.length + ' períodos (' + nombres + '): ~' + fmt(base) +
+            ' c/u' + (ultimo !== base ? ' (último ' + fmt(ultimo) + ')' : '')
+        );
+    }
+
+    function poblarChipsMeses() {
+        var $wrap = $('#pp-meses-chips');
+        if (!$wrap.length) {
+            return;
+        }
+        $wrap.empty();
+        columnasAplicables().forEach(function (c) {
+            var $btn = $('<button type="button" class="btn btn-sm btn-outline-secondary pp-chip-mes"/>')
+                .attr('data-clave', c.clave)
+                .attr('aria-pressed', 'false')
+                .text(c.etiqueta);
+            $wrap.append($btn);
+            mesesMarcados[c.clave] = false;
+        });
+    }
+
+    function toggleMes(clave) {
+        if (!clave) {
+            return;
+        }
+        mesesMarcados[clave] = !mesesMarcados[clave];
+        actualizarChipsUi();
+    }
+
+    function limpiarChips() {
+        Object.keys(mesesMarcados).forEach(function (k) {
+            mesesMarcados[k] = false;
+        });
+        actualizarChipsUi();
     }
 
     $(function () {
@@ -290,7 +359,7 @@
             activa_eventos_consultaproveedor();
         }
 
-        poblarSelectsMeses();
+        poblarChipsMeses();
 
         $(document).on('input change', '.pp-asig, .pp-obs', recalcular);
 
@@ -316,7 +385,18 @@
             }
         });
 
+        $(document).on('click', '.pp-chip-mes', function () {
+            toggleMes(String($(this).data('clave')));
+        });
+
+        // Clic en cabecera de mes también marca/desmarca
+        $(document).on('click', '#tabla-programa-pago thead th[data-clave]', function () {
+            toggleMes(String($(this).data('clave')));
+        });
+
         $('#pp-solo-pendientes').on('change', aplicarFiltroVista);
+
+        $('#pp-btn-limpiar-chips').on('click', limpiarChips);
 
         $('#pp-btn-limpiar').on('click', function () {
             var $tr = filaActiva();
@@ -335,28 +415,42 @@
             setActivo(idxActivo + 1);
         });
 
-        $('#pp-btn-asistente-transf').on('click', function () {
-            if (!cfg.tieneTransf) {
+        $('#pp-btn-partir-igual').on('click', function () {
+            var $tr = filaActiva();
+            if (!$tr) {
+                alert('Seleccioná un proveedor.');
                 return;
             }
-            marcarYSeguir(function ($tr) {
-                aplicarTodoEnClave($tr, 'transf');
-            });
+            aplicarProrrateoIgual($tr, clavesMarcadas());
         });
 
-        $('#pp-btn-asistente-mes').on('click', function () {
-            var clave = $('#pp-mes-todo').val();
-            marcarYSeguir(function ($tr) {
-                aplicarTodoEnClave($tr, clave);
-            });
+        $('#pp-btn-todo-seleccion').on('click', function () {
+            var $tr = filaActiva();
+            var claves = clavesMarcadas();
+            if (!$tr) {
+                alert('Seleccioná un proveedor.');
+                return;
+            }
+            if (!claves.length) {
+                alert('Marcá el período de destino.');
+                return;
+            }
+            if (claves.length > 1 && !confirm('Hay ' + claves.length + ' períodos marcados. ¿Poner TODO el saldo en el primero (' + etiquetaClave(claves[0]) + ')?')) {
+                return;
+            }
+            aplicarTodoEnClave($tr, claves[0]);
         });
 
-        $('#pp-btn-asistente-5050').on('click', function () {
-            var a = $('#pp-mes-a').val();
-            var b = $('#pp-mes-b').val();
-            marcarYSeguir(function ($tr) {
-                aplicar5050($tr, a, b);
-            });
+        $('#pp-btn-partir-y-seguir').on('click', function () {
+            var $tr = filaActiva();
+            if (!$tr) {
+                alert('Seleccioná un proveedor.');
+                return;
+            }
+            if (!aplicarProrrateoIgual($tr, clavesMarcadas())) {
+                return;
+            }
+            irSiguientePendiente();
         });
 
         $('#pp-btn-asistente-saltar').on('click', function () {

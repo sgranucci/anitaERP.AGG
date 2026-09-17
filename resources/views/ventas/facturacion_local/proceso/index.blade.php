@@ -112,7 +112,7 @@ window.FACTURACION_LOCAL = {
                     @endif
                 </span>
             </div>
-            <div class="fl-ctx-item fl-ctx-prox" id="fl-proximo-comprobante" title="Próximo número sugerido (letra B / CF; informativo — al emitir se confirma)">
+            <div class="fl-ctx-item fl-ctx-prox" id="fl-proximo-comprobante" title="Próximo número: con webservice consulta ARCA; al emitir se confirma">
                 <span class="fl-ctx-lbl">Próxima factura</span>
                 <span class="fl-ctx-val" id="fl-ctx-prox-val">{{ $ctx['proxima_etiqueta'] ?? '—' }}</span>
             </div>
