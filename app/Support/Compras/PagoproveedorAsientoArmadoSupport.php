@@ -20,9 +20,13 @@ use RuntimeException;
  * Haber: cuentas de caja, cheques, retenciones; NC restan de proveedores; OPA al Haber de anticipos
  * (o de proveedores si la empresa no tiene cuenta de anticipo).
  *
- * Cotización (pago.c in_cotizacion): una sola TC del pago en TODAS las líneas del asiento
- * (también MN, para poder expresar el movimiento en ME). La diferencia vs cotización de
- * factura va a diferencia de cambio (P&L), no a otra TC por línea.
+ * Moneda de la operación = moneda del pago. Todas las líneas del asiento van en esa moneda
+ * (importes convertidos). Cotización única del pago en todas las líneas (también MN, para
+ * poder expresar el movimiento en ME). La diferencia vs cotización de factura va a
+ * diferencia de cambio (P&L), no a otra TC por línea.
+ *
+ * Cruzada (ej. factura DOL / pago PES): proveedor al valor libro en PES (monto × cot_factura);
+ * DC = valor_libro − valor_liquidación asienta la pérdida/ganancia sin “anticipo” parche.
  *
  * Retenciones: se calculan en MN; en el asiento van en moneda del pago convertidas al
  * cambio del pago.
@@ -111,14 +115,20 @@ final class PagoproveedorAsientoArmadoSupport
                 continue;
             }
             $obs = trim((string) ($mov->observaciones ?? ''));
-            $monedaLin = (int) ($mov->moneda_ids ?? $monedaPagoId);
+            $monedaMedio = (int) ($mov->moneda_ids ?? $monedaPagoId);
+            $montoLin = self::convertirImporteAMonedaPago(
+                $monto,
+                $monedaMedio,
+                $monedaPagoId,
+                $cotizacionPago
+            );
             self::agregaCuenta(
                 $asiento,
                 (int) $cuentacaja->cuentacontable_id,
-                $monedaLin,
-                self::cotizacionParaLinea($monedaLin, $cotizacionPago),
+                $monedaPagoId,
+                self::cotizacionParaLinea($monedaPagoId, $cotizacionPago),
                 'H',
-                $monto,
+                $montoLin,
                 $cuentacontableRepository,
                 $obs !== '' ? $obs : $conceptoPago
             );
@@ -150,15 +160,21 @@ final class PagoproveedorAsientoArmadoSupport
                     .'). Verifique que la cuenta de caja tenga cuentacontable_id o, si usa diferidos, Contable → Cuentas automáticas (caja.cheques_diferidos).'
                 );
             }
-            $monedaLin = (int) ($cheque->moneda_ids ?? $monedaPagoId);
+            $monedaMedio = (int) ($cheque->moneda_ids ?? $monedaPagoId);
+            $montoLin = self::convertirImporteAMonedaPago(
+                $monto,
+                $monedaMedio,
+                $monedaPagoId,
+                $cotizacionPago
+            );
             $nroCh = (string) ($cheque->numerocheques ?? $cheque->numerocheque ?? '');
             self::agregaCuenta(
                 $asiento,
                 $cuentaId,
-                $monedaLin,
-                self::cotizacionParaLinea($monedaLin, $cotizacionPago),
+                $monedaPagoId,
+                self::cotizacionParaLinea($monedaPagoId, $cotizacionPago),
                 'H',
-                $monto,
+                $montoLin,
                 $cuentacontableRepository,
                 self::conceptoChequePropio($proveedorNombre, $nroCh)
             );
@@ -180,14 +196,20 @@ final class PagoproveedorAsientoArmadoSupport
                     .'Configure Contable → Cuentas automáticas (caja.valores_a_depositar).'
                 );
             }
-            $monedaLin = (int) ($cheque->moneda_ids ?? $monedaPagoId);
+            $monedaMedio = (int) ($cheque->moneda_ids ?? $monedaPagoId);
+            $montoLin = self::convertirImporteAMonedaPago(
+                $monto,
+                $monedaMedio,
+                $monedaPagoId,
+                $cotizacionPago
+            );
             self::agregaCuenta(
                 $asiento,
                 $cuentaId,
-                $monedaLin,
-                self::cotizacionParaLinea($monedaLin, $cotizacionPago),
+                $monedaPagoId,
+                self::cotizacionParaLinea($monedaPagoId, $cotizacionPago),
                 'H',
-                $monto,
+                $montoLin,
                 $cuentacontableRepository,
                 $conceptoPago
             );
@@ -234,6 +256,7 @@ final class PagoproveedorAsientoArmadoSupport
         $totalesPorCuenta = [];
         $dcTotal = 0.0;
         $cuentaApRef = 0;
+        $dcSoloPnL = false; // cruzada a MN: proveedor a valor libro; DC sin contraasiento en AP
         foreach ($datosComprobantes as $comp) {
             $comp = self::asObject($comp);
             $monto = abs((float) ($comp->montos ?? 0));
@@ -242,7 +265,7 @@ final class PagoproveedorAsientoArmadoSupport
             }
             $ccId = (int) ($comp->proveedor_cuentacorriente_ids ?? $comp->idcuentacorrientes ?? 0);
             $cuentaId = 0;
-            $monedaId = (int) ($comp->moneda_ids ?? 1);
+            $monedaDeudaId = (int) ($comp->moneda_ids ?? 1);
             $cc = null;
             if ($ccId > 0) {
                 $cc = Proveedor_Cuentacorriente::query()
@@ -256,7 +279,7 @@ final class PagoproveedorAsientoArmadoSupport
                 $cuentaAnticipo = ProveedorAnticipoCuentaContableSupport::cuentaParaCreditoAplicado($cc);
                 if ($cuentaAnticipo) {
                     $cuentaId = $cuentaAnticipo;
-                    $monedaId = (int) ($cc->moneda_id ?: $monedaId);
+                    $monedaDeudaId = (int) ($cc->moneda_id ?: $monedaDeudaId);
                 }
             }
             if ($cuentaId <= 0 && $cc?->comprobante_proveedores) {
@@ -264,30 +287,58 @@ final class PagoproveedorAsientoArmadoSupport
                     $cc->comprobante_proveedores,
                     $proveedor
                 );
-                $monedaId = ProveedorCuentaContableMonedaSupport::monedaIdParaCuentaProveedor($cc->comprobante_proveedores)
-                    ?: $monedaId;
+                $monedaDeudaId = ProveedorCuentaContableMonedaSupport::monedaIdParaCuentaProveedor($cc->comprobante_proveedores)
+                    ?: $monedaDeudaId;
             }
             if ($cuentaId <= 0) {
-                $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId($proveedor, $monedaId);
+                $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId($proveedor, $monedaDeudaId);
             }
             if ($cuentaId <= 0) {
                 continue;
             }
-            // Misma TC del pago (no la de la factura). DC cubre la diferencia.
-            // Signo: factura DEBE; NC/OPA HABER (OPA a anticipos si hay cuenta).
-            $cotLinea = self::cotizacionParaLinea($monedaId, $cotizacionPago);
-            $key = $cuentaId.'|'.$monedaId.'|'.$cotLinea;
+
+            $cotDeuda = (float) ($comp->cotizaciones ?? $comp->cotizacion ?? 1);
+            $cotApl = (float) ($comp->cotizacion_aplicadas ?? $comp->cotizacion_aplicada ?? 0);
+            if ($cotApl <= 0) {
+                $cotApl = $cotizacionPago;
+            }
+            $liq = PagoproveedorLiquidacionSupport::calcular(
+                $monto,
+                $monedaDeudaId,
+                $cotDeuda,
+                $monedaPagoId,
+                $cotApl
+            );
+
+            // Preferir DC ya liquidada en el form / persistida; si no, la del support.
+            $dcLinea = isset($comp->diferencias_cambio)
+                ? (float) $comp->diferencias_cambio
+                : (isset($comp->diferencia_cambio) ? (float) $comp->diferencia_cambio : $liq['dc']);
+
+            // Moneda de la operación: importe en moneda del pago.
+            // Cruzada hacia MN → valor libro (la DC completa hasta liquidación).
+            // Misma moneda / cruzada hacia ME → monto o equivalente de liquidación.
+            if ($liq['cruzada'] && $monedaPagoId <= $monedaLocal) {
+                $montoEnMonedaPago = (float) $liq['valor_local_deuda'];
+                $dcSoloPnL = true;
+            } elseif ($liq['cruzada']) {
+                $montoEnMonedaPago = (float) $liq['equivalente_pago'];
+            } else {
+                $montoEnMonedaPago = $monto;
+            }
+
+            $cotLinea = self::cotizacionParaLinea($monedaPagoId, $cotizacionPago);
+            $key = $cuentaId.'|'.$monedaPagoId.'|'.$cotLinea;
             if (! isset($totalesPorCuenta[$key])) {
                 $totalesPorCuenta[$key] = [
                     'cuentacontable_id' => $cuentaId,
-                    'moneda_id' => $monedaId,
+                    'moneda_id' => $monedaPagoId,
                     'cotizacion' => $cotLinea,
                     'monto' => 0.0,
                 ];
             }
-            $totalesPorCuenta[$key]['monto'] += $signo * $monto;
-            $dcLinea = isset($comp->diferencias_cambio) ? (float) $comp->diferencias_cambio : (float) ($comp->diferencia_cambio ?? 0);
-            $dcTotal += $dcLinea;
+            $totalesPorCuenta[$key]['monto'] += $signo * $montoEnMonedaPago;
+            $dcTotal += $signo * $dcLinea;
             if ($signo > 0) {
                 $cuentaApRef = $cuentaId;
             }
@@ -317,14 +368,18 @@ final class PagoproveedorAsientoArmadoSupport
             $proveedor,
             $cuentacontableRepository,
             $conceptoPago,
-            $cotizacionPago
+            $cotizacionPago,
+            $dcSoloPnL,
+            $empresaId
         );
 
         self::agregarAnticipoSiCorresponde(
             $asiento,
             $empresaId,
             $cuentacontableRepository,
-            $conceptoAnticipo
+            $conceptoAnticipo,
+            $monedaPagoId,
+            $cotizacionPago
         );
 
         return $asiento;
@@ -371,19 +426,36 @@ final class PagoproveedorAsientoArmadoSupport
         int $monedaPagoId,
         float $cotizacionPago
     ): float {
-        $montoMn = abs($montoMn);
-        if ($montoMn < 0.0001) {
+        return self::convertirImporteAMonedaPago($montoMn, self::monedaLocalId(), $monedaPagoId, $cotizacionPago);
+    }
+
+    /**
+     * Lleva un importe a la moneda del pago (moneda de la operación).
+     * MN→ME: ÷ TC. ME→MN: × TC. Misma moneda: sin cambio.
+     */
+    public static function convertirImporteAMonedaPago(
+        float $monto,
+        int $monedaOrigenId,
+        int $monedaPagoId,
+        float $cotizacionPago
+    ): float {
+        $monto = abs($monto);
+        if ($monto < 0.0001) {
             return 0.0;
         }
-        if ($monedaPagoId <= self::monedaLocalId()) {
-            return round($montoMn, 4);
+        if ($monedaOrigenId === $monedaPagoId) {
+            return round($monto, 4);
         }
         $cot = $cotizacionPago > 0 ? $cotizacionPago : 1.0;
-        if ($cot <= 0) {
-            return round($montoMn, 4);
+        $local = self::monedaLocalId();
+        if ($monedaOrigenId <= $local && $monedaPagoId > $local) {
+            return round($monto / $cot, 4);
+        }
+        if ($monedaOrigenId > $local && $monedaPagoId <= $local) {
+            return round($monto * $cot, 4);
         }
 
-        return round($montoMn / $cot, 4);
+        return round($monto, 4);
     }
 
     private static function monedaLocalId(): int
@@ -458,8 +530,15 @@ final class PagoproveedorAsientoArmadoSupport
         int $empresaId,
         CuentacontableRepositoryInterface $cuentacontableRepository,
         string $concepto,
+        int $monedaPagoId = 1,
+        float $cotizacionPago = 1.0,
     ): void {
-        $linea = PagoproveedorAnticipoAsientoSupport::linea($asiento, $empresaId);
+        $linea = PagoproveedorAnticipoAsientoSupport::linea(
+            $asiento,
+            $empresaId,
+            $monedaPagoId,
+            $cotizacionPago
+        );
         if ($linea === null) {
             return;
         }
@@ -581,34 +660,28 @@ final class PagoproveedorAsientoArmadoSupport
         CuentacontableRepositoryInterface $cuentacontableRepository,
         string $concepto,
         float $cotizacionPago = 1.0,
+        bool $soloPnL = false,
+        int $empresaId = 0,
     ): void {
         $dcTotal = round($dcTotal, 4);
         if (abs($dcTotal) < 0.01) {
             return;
         }
 
-        $cuentaDcId = 0;
-        $ids = array_filter([
-            $cuentaApId,
-            (int) ($proveedor->cuentacontable_id ?? 0),
-            (int) ($proveedor->cuentacontableme_id ?? 0),
-        ]);
-        foreach ($ids as $id) {
-            $cuenta = $cuentacontableRepository->find($id);
-            $dcId = (int) ($cuenta->cuentacontable_difcambio_id ?? 0);
-            if ($dcId > 0 && $dcId !== (int) $id) {
-                $cuentaDcId = $dcId;
-                break;
-            }
-        }
+        $cuentaDcId = self::resolverCuentaDcId($cuentaApId, $proveedor, $cuentacontableRepository, $empresaId);
         if ($cuentaDcId <= 0) {
-            return;
+            throw new RuntimeException(
+                'Hay diferencia de cambio ('.number_format(abs($dcTotal), 2, ',', '.').') pero falta la cuenta '
+                .'de diferencia de cambio en Proveedores ME/MN. Configúrela en Contable → Cuentas (Dif. de cambio).'
+            );
         }
 
         $monedaLocal = self::monedaLocalId();
         $cot = self::cotizacionParaLinea($monedaLocal, $cotizacionPago);
         $importe = abs($dcTotal);
-        $perdida = $dcTotal > 0;
+        // dc = valor_libro − valor_liquidación. dc < 0 → pérdida (Debe DC).
+        $perdida = $dcTotal < 0;
+
         self::agregaCuenta(
             $asiento,
             $cuentaDcId,
@@ -619,7 +692,9 @@ final class PagoproveedorAsientoArmadoSupport
             $cuentacontableRepository,
             $concepto
         );
-        if ($cuentaApId > 0) {
+
+        // Misma moneda ME: contraasiento en AP en MN. Cruzada a MN a valor libro: solo P&L.
+        if (! $soloPnL && $cuentaApId > 0) {
             self::agregaCuenta(
                 $asiento,
                 $cuentaApId,
@@ -631,6 +706,38 @@ final class PagoproveedorAsientoArmadoSupport
                 $concepto
             );
         }
+    }
+
+    private static function resolverCuentaDcId(
+        int $cuentaApId,
+        ?Proveedor $proveedor,
+        CuentacontableRepositoryInterface $cuentacontableRepository,
+        int $empresaId = 0,
+    ): int {
+        $ids = array_filter([
+            $cuentaApId,
+            (int) ($proveedor->cuentacontable_id ?? 0),
+            (int) ($proveedor->cuentacontableme_id ?? 0),
+        ]);
+        foreach ($ids as $id) {
+            $cuenta = $cuentacontableRepository->find($id);
+            $dcId = (int) ($cuenta->cuentacontable_difcambio_id ?? 0);
+            if ($dcId > 0 && $dcId !== (int) $id) {
+                return $dcId;
+            }
+        }
+
+        if ($empresaId > 0) {
+            $fallback = \App\Models\Contable\Cuentacontable::query()
+                ->where('empresa_id', $empresaId)
+                ->where('codigo', '532020001')
+                ->value('id');
+            if ($fallback) {
+                return (int) $fallback;
+            }
+        }
+
+        return 0;
     }
 
     /**
