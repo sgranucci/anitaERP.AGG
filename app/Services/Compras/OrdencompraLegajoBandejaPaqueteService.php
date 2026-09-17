@@ -111,22 +111,14 @@ class OrdencompraLegajoBandejaPaqueteService
                 continue;
             }
             if ($enCxp) {
-                $urlCargar = route('crear_comprobante_proveedor', array_filter([
-                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
-                    'ordencompra_id' => (int) $oc->id,
-                    'precarga_id' => ($siguiente['precarga_id'] ?? null) ?: null,
-                ]));
+                $urlCargar = $this->urlCargarFacturaDesdePendiente((int) $oc->id, $siguiente);
             }
             break;
         }
         if ($siguiente === null) {
             $siguiente = $pendientes[0] ?? null;
             if ($enCxp && $siguiente !== null) {
-                $urlCargar = route('crear_comprobante_proveedor', array_filter([
-                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
-                    'ordencompra_id' => (int) $oc->id,
-                    'precarga_id' => ($siguiente['precarga_id'] ?? null) ?: null,
-                ]));
+                $urlCargar = $this->urlCargarFacturaDesdePendiente((int) $oc->id, $siguiente);
             }
         }
 
@@ -187,6 +179,26 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $pendiente
+     */
+    private function urlCargarFacturaDesdePendiente(int $ocId, array $pendiente): string
+    {
+        $params = [
+            'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+            'ordencompra_id' => $ocId,
+        ];
+        $precargaId = (int) ($pendiente['precarga_id'] ?? 0);
+        $anitaId = trim((string) ($pendiente['anita_id'] ?? ''));
+        if ($precargaId > 0) {
+            $params['precarga_id'] = $precargaId;
+        } elseif ($anitaId !== '') {
+            $params['anita_id'] = $anitaId;
+        }
+
+        return route('crear_comprobante_proveedor', $params);
     }
 
     /**
@@ -1001,10 +1013,21 @@ class OrdencompraLegajoBandejaPaqueteService
             $claves[$this->claveFacturaEtiqueta((string) ($pre['etiqueta'] ?? ''))] = true;
         }
         $out = [];
+        $enCxp = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0));
         foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) as $scan) {
             $clave = $this->claveFacturaEtiqueta((string) ($scan['etiqueta'] ?? ''));
             if ($clave !== '' && isset($claves[$clave])) {
                 continue;
+            }
+            if ($enCxp) {
+                $anitaId = (string) ($scan['id'] ?? '');
+                if ($anitaId !== '') {
+                    $scan['url_cargar_cxp'] = route('crear_comprobante_proveedor', [
+                        'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+                        'ordencompra_id' => (int) $oc->id,
+                        'anita_id' => $anitaId,
+                    ]);
+                }
             }
             $out[] = $scan;
         }

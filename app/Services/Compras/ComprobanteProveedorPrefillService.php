@@ -31,6 +31,7 @@ class ComprobanteProveedorPrefillService
         private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
         private CotizacionQueryInterface $cotizacionQuery,
         private OrdencompraAnitaSyncService $ordencompraAnitaSyncService,
+        private OrdencompraLegajoBandejaPaqueteService $paqueteService,
     ) {}
 
   /**
@@ -48,12 +49,17 @@ class ComprobanteProveedorPrefillService
     {
         $precargaId = (int) $request->input('precarga_id', 0);
         $ordencompraId = (int) $request->input('ordencompra_id', 0);
+        $anitaId = trim((string) $request->input('anita_id', ''));
 
         if ($precargaId > 0) {
             $prefill = $this->desdePrecarga($precargaId);
             $this->completarPdfDesdeScanAnita($prefill);
 
             return $prefill;
+        }
+
+        if ($anitaId !== '' && $ordencompraId > 0) {
+            return $this->desdeAnitaScanDelLegajo($ordencompraId, $anitaId);
         }
 
         if ($ordencompraId > 0) {
@@ -207,8 +213,14 @@ class ComprobanteProveedorPrefillService
         });
 
         if ($conceptos->isEmpty() && (int) ($data->tipotransaccion_compra_id ?? 0) > 0) {
+            $numeroOc = (string) (
+                $ordencompra?->numeroordencompra
+                ?? $precarga->numeroordencompra
+                ?? ''
+            );
             $conceptos = ConceptoIvacompraConsultaSupport::renglonesPlantillaParaTipo(
-                (int) $data->tipotransaccion_compra_id
+                (int) $data->tipotransaccion_compra_id,
+                $numeroOc !== '' ? $numeroOc : null,
             );
         }
 
@@ -314,9 +326,27 @@ class ComprobanteProveedorPrefillService
         $ordencompra = Ordencompra::query()
             ->with(['empresas', 'proveedores.condicionivas', 'ordencompra_articulos'])
             ->findOrFail($ordencompraId);
-        $precarga = OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajo($ordencompra);
-        if ($precarga) {
-            $prefill = $this->desdePrecarga((int) $precarga->id);
+
+        $pendiente = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($ordencompra)[0] ?? null;
+        if ($pendiente !== null) {
+            $precargaPendienteId = (int) ($pendiente['precarga_id'] ?? 0);
+            $anitaPendienteId = trim((string) ($pendiente['anita_id'] ?? ''));
+            if ($precargaPendienteId > 0) {
+                $prefill = $this->desdePrecarga($precargaPendienteId);
+                $this->completarPdfDesdeScanAnita($prefill, $ordencompra);
+
+                return $prefill;
+            }
+            if ($anitaPendienteId !== '') {
+                return $this->desdeAnitaScanDelLegajo($ordencompraId, $anitaPendienteId);
+            }
+        }
+
+        // Un solo PDF en el legajo: seguro reutilizarlo (alta desde OC).
+        // Con varios, no elegir uno arbitrario (evita CPB con PDF de FPB).
+        $unica = $this->unicaPrecargaConPdfDelLegajo($ordencompra);
+        if ($unica) {
+            $prefill = $this->desdePrecarga((int) $unica->id);
             $this->completarPdfDesdeScanAnita($prefill, $ordencompra);
 
             return $prefill;
@@ -328,11 +358,59 @@ class ComprobanteProveedorPrefillService
         return $prefill;
     }
 
+    private function unicaPrecargaConPdfDelLegajo(Ordencompra $oc): ?Precarga_Comprobante_Proveedor
+    {
+        $numero = trim((string) ($oc->numeroordencompra ?? ''));
+        $empresaId = (int) ($oc->empresa_id ?? 0);
+        if ($numero === '' || $empresaId <= 0) {
+            return null;
+        }
+
+        $rows = Precarga_Comprobante_Proveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->where('numeroordencompra', $numero)
+            ->whereNotNull('rutaalmacenamiento')
+            ->where('rutaalmacenamiento', '!=', '')
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+            })
+            ->orderByDesc('id')
+            ->limit(2)
+            ->get();
+
+        return $rows->count() === 1 ? $rows->first() : null;
+    }
+
+    /** @return array<string, mixed> */
+    public function desdeAnitaScanDelLegajo(int $ordencompraId, string $anitaRef): array
+    {
+        $ordencompra = Ordencompra::query()
+            ->with(['empresas', 'proveedores.condicionivas', 'ordencompra_articulos'])
+            ->findOrFail($ordencompraId);
+        $documentoId = OrdencompraLegajoAnitaScanFacturaSupport::documentoIdDesdeAnitaRef($anitaRef);
+        if ($documentoId <= 0) {
+            $prefill = $this->desdeOrdencompra($ordencompraId);
+            $this->completarPdfDesdeScanAnita($prefill, $ordencompra);
+
+            return $prefill;
+        }
+
+        $precarga = $this->paqueteService->resolverPrecargaParaAsignacion($ordencompra, 'anita-'.$documentoId);
+        $prefill = $this->desdePrecarga((int) $precarga->id);
+        $this->completarPdfDesdeScanAnita($prefill, $ordencompra, $documentoId);
+
+        return $prefill;
+    }
+
     /**
      * @param  array<string, mixed>  $prefill
      */
-    private function completarPdfDesdeScanAnita(array &$prefill, ?Ordencompra $ordencompra = null): void
-    {
+    private function completarPdfDesdeScanAnita(
+        array &$prefill,
+        ?Ordencompra $ordencompra = null,
+        ?int $documentoIdPreferido = null,
+    ): void {
         if (filled($prefill['ruta_factura_pdf'] ?? null)) {
             return;
         }
@@ -342,8 +420,28 @@ class ComprobanteProveedorPrefillService
         }
         $oc->loadMissing('empresas:id,codigo,nombre');
         $scans = OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc);
-        $docId = (int) ($scans[0]['documento_id'] ?? 0);
-        if ($docId <= 0) {
+        if ($scans === []) {
+            return;
+        }
+
+        $data = $prefill['data'] ?? null;
+        $letra = $data instanceof Comprobante_Proveedor ? (string) ($data->letra ?? '') : '';
+        $sucursal = $data instanceof Comprobante_Proveedor ? (int) ($data->sucursal ?? 0) : 0;
+        $numero = $data instanceof Comprobante_Proveedor ? (int) ($data->numerocomprobante ?? 0) : 0;
+        $tipo = null;
+        if ($data instanceof Comprobante_Proveedor) {
+            $tipo = OrdencompraLegajoDocumentoTipoSupport::desdeComprobante($data);
+        }
+
+        $docId = OrdencompraLegajoAnitaScanFacturaSupport::documentoIdCompatible(
+            $scans,
+            $letra,
+            $sucursal,
+            $numero,
+            $tipo,
+            $documentoIdPreferido,
+        );
+        if ($docId === null || $docId <= 0) {
             return;
         }
         $path = OrdencompraLegajoAnitaScanFacturaSupport::rutaPdf($docId);

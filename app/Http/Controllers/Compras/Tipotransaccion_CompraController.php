@@ -241,16 +241,31 @@ class Tipotransaccion_CompraController extends Controller
         ]);
     }
 
-    public function conceptosIvaPorTipo(int $id)
+    public function conceptosIvaPorTipo(int $id, Request $request)
     {
         if (! $this->puedeConsultarTipotransaccionCompra()) {
             abort(403);
         }
 
-        $lista = ConceptoIvacompraConsultaSupport::listarPorTipoTransaccion($id);
+        $numeroOc = trim((string) (
+            $request->query('numero_oc')
+            ?? $request->query('numeroordencompra')
+            ?? $request->input('numero_oc')
+            ?? $request->input('numeroordencompra')
+            ?? ''
+        ));
+        $numeroOc = $numeroOc !== '' ? $numeroOc : null;
+
+        $lista = ConceptoIvacompraConsultaSupport::listarPorTipoTransaccion($id, null, $numeroOc);
+
+        $tipo = Tipotransaccion_Compra::query()->find($id);
+        $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+        $esProrrateo = \App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev);
 
         return response()->json([
             'ok' => true,
+            'prorrateo_multi_cc' => $esProrrateo && $numeroOc !== null,
+            'numero_oc' => $numeroOc,
             'conceptos' => $lista->map(function ($c) {
                 $formula = (string) ($c->formula ?? '');
                 $parsed = ConceptoIvacompraFormulaSupport::parse($formula);

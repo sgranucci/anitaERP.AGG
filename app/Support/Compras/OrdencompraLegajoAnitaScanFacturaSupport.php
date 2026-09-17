@@ -137,6 +137,117 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         return null;
     }
 
+    /**
+     * Elige el PDF Anita que corresponde al comprobante (nunca el "primero" del legajo).
+     *
+     * Prioridad: documento explícito → match letra/sucursal/número (+tipo si hay varios)
+     * → único scan del legajo si el prefill aún no tiene número.
+     *
+     * @param  list<array<string, mixed>>  $scans
+     */
+    public static function documentoIdCompatible(
+        array $scans,
+        string $letra = '',
+        int $sucursal = 0,
+        int $numero = 0,
+        ?string $tipo = null,
+        ?int $documentoIdPreferido = null,
+    ): ?int {
+        if ($documentoIdPreferido !== null && $documentoIdPreferido > 0) {
+            foreach ($scans as $scan) {
+                if ((int) ($scan['documento_id'] ?? 0) === $documentoIdPreferido) {
+                    return $documentoIdPreferido;
+                }
+            }
+
+            return $documentoIdPreferido;
+        }
+
+        $clave = self::claveNumeroFactura($letra, $sucursal, $numero);
+        if ($clave !== '') {
+            $matches = [];
+            foreach ($scans as $scan) {
+                $scanClave = self::claveDesdeEtiqueta((string) ($scan['numero'] ?? $scan['etiqueta'] ?? ''));
+                if ($scanClave !== $clave) {
+                    continue;
+                }
+                $docId = (int) ($scan['documento_id'] ?? 0);
+                if ($docId <= 0) {
+                    continue;
+                }
+                $matches[] = [
+                    'documento_id' => $docId,
+                    'tipo' => strtoupper(trim((string) ($scan['tipo'] ?? ''))),
+                ];
+            }
+            if ($matches === []) {
+                return null;
+            }
+            $tipoNorm = strtoupper(trim((string) $tipo));
+            if ($tipoNorm !== '' && count($matches) > 1) {
+                $porTipo = array_values(array_filter(
+                    $matches,
+                    static fn (array $m) => ($m['tipo'] === '' || $m['tipo'] === $tipoNorm)
+                ));
+                if (count($porTipo) === 1) {
+                    return $porTipo[0]['documento_id'];
+                }
+                if ($porTipo !== []) {
+                    $matches = $porTipo;
+                }
+            }
+            if (count($matches) === 1) {
+                return $matches[0]['documento_id'];
+            }
+
+            return null;
+        }
+
+        if (count($scans) === 1) {
+            $docId = (int) ($scans[0]['documento_id'] ?? 0);
+
+            return $docId > 0 ? $docId : null;
+        }
+
+        return null;
+    }
+
+    public static function documentoIdDesdeAnitaRef(string $anitaRef): int
+    {
+        $anitaRef = trim($anitaRef);
+        if ($anitaRef === '') {
+            return 0;
+        }
+        if (preg_match('/^anita-(\d+)$/i', $anitaRef, $m)) {
+            return (int) $m[1];
+        }
+        if (ctype_digit($anitaRef)) {
+            return (int) $anitaRef;
+        }
+
+        return 0;
+    }
+
+    private static function claveNumeroFactura(string $letra, int $sucursal, int $numero): string
+    {
+        $letra = strtoupper(trim($letra));
+        if ($letra === '' && $numero <= 0) {
+            return '';
+        }
+
+        return ($letra !== '' ? $letra : 'FC').'|'.$sucursal.'|'.$numero;
+    }
+
+    private static function claveDesdeEtiqueta(string $etiqueta): string
+    {
+        $etiqueta = strtoupper(trim($etiqueta));
+        if (preg_match('/([A-Z])\s+(\d{1,5})-(\d{1,8})/', $etiqueta, $m)) {
+            return $m[1].'|'.((int) $m[2]).'|'.((int) $m[3]);
+        }
+
+        return '';
+    }
+
     public static function perteneceAlLegajo(Ordencompra $oc, int $documentoId): bool
     {
         return self::filaDeOc($oc, $documentoId) !== null;

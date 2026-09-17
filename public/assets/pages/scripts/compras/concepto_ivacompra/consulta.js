@@ -16,13 +16,27 @@ function tipotransaccionCompraIdConsultaConcepto() {
     return v > 0 ? v : 0;
 }
 
+function numeroOcConsultaConceptoIva() {
+    var $f = $('#form-comprobante-proveedor');
+    var n = String(($f.length ? $f.attr('data-numero-oc') : '') || '').trim();
+    if (n) {
+        return n;
+    }
+    return String($('#numeroordencompra').val() || $('input[name="numeroordencompra"]').val() || '').trim();
+}
+
 function actualizarAvisoModalConceptoIva(tipoId) {
     var $aviso = $('#consultaconcepto_ivacompra-aviso');
     if (!$aviso.length) {
         return;
     }
     if (tipoId > 0) {
-        $aviso.text('Filtrado por tipo de comprobante id ' + tipoId + '.');
+        var oc = numeroOcConsultaConceptoIva();
+        $aviso.text(
+            'Filtrado por tipo de comprobante id ' + tipoId
+            + (oc ? ' · OC ' + oc + ' (unión multi-CC si aplica)' : '')
+            + '.'
+        );
     } else {
         $aviso.text('Seleccione el tipo de comprobante en Datos principales.');
     }
@@ -33,6 +47,16 @@ function buscar_datos_concepto_ivacompra(consulta) {
     actualizarAvisoModalConceptoIva(tipoId);
     $('#datosconcepto_ivacompra').html('<tr><td colspan="5" class="text-muted">Buscando…</td></tr>');
 
+    var data = {
+        consulta: consulta || '',
+        tipotransaccion_compra_id: tipoId,
+        _token: $('meta[name="csrf-token"]').attr('content')
+    };
+    var numeroOc = numeroOcConsultaConceptoIva();
+    if (numeroOc) {
+        data.numero_oc = numeroOc;
+    }
+
     $.ajax({
         url: urlAppComprasConceptoIva('/compras/concepto_ivacompra/consulta'),
         type: 'POST',
@@ -40,11 +64,7 @@ function buscar_datos_concepto_ivacompra(consulta) {
         headers: {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
         },
-        data: {
-            consulta: consulta || '',
-            tipotransaccion_compra_id: tipoId,
-            _token: $('meta[name="csrf-token"]').attr('content')
-        }
+        data: data
     })
         .done(function (respuesta) {
             var html = (respuesta && respuesta.data) ? respuesta.data : '';
@@ -97,6 +117,17 @@ function resolverConceptoIvacompraPorCodigo($input) {
         return;
     }
 
+    var dataResolver = {
+        valor: codigo,
+        tipotransaccion_compra_id: tipoId,
+        empresa_id: parseInt(String($('#empresa_id').val() || '0'), 10) || 0,
+        _token: $('meta[name="csrf-token"]').attr('content')
+    };
+    var numeroOcResolver = numeroOcConsultaConceptoIva();
+    if (numeroOcResolver) {
+        dataResolver.numero_oc = numeroOcResolver;
+    }
+
     $.ajax({
         url: urlAppComprasConceptoIva('/compras/concepto_ivacompra/resolver'),
         type: 'POST',
@@ -104,12 +135,7 @@ function resolverConceptoIvacompraPorCodigo($input) {
         headers: {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
         },
-        data: {
-            valor: codigo,
-            tipotransaccion_compra_id: tipoId,
-            empresa_id: parseInt(String($('#empresa_id').val() || '0'), 10) || 0,
-            _token: $('meta[name="csrf-token"]').attr('content')
-        }
+        data: dataResolver
     })
         .done(function (res) {
             if (!res || !res.ok) {

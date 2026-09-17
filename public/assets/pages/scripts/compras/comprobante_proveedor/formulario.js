@@ -1513,45 +1513,78 @@ $(function () {
         actualizarColumnaCuentaDebe();
     }
 
+    function numeroOcComprobante() {
+        var $f = $('#form-comprobante-proveedor');
+        var n = String(($f.length ? $f.attr('data-numero-oc') : '') || '').trim();
+        if (n) {
+            return n;
+        }
+        return String($('#numeroordencompra').val() || $('input[name="numeroordencompra"]').val() || '').trim();
+    }
+
     function precargarConceptosPorTipo(tipoId, forzar) {
         var id = parseInt(tipoId || '0', 10) || 0;
         if (id <= 0 || contabilizado) {
             return;
         }
         var hayMontos = false;
-        if (!forzar) {
-            $('#tbody-concepto-table tr.item-concepto').each(function () {
-                var monto = parseMonto($(this).find('.monto').val() || '0');
-                if (Math.abs(monto) >= 0.0001) {
-                    hayMontos = true;
-                }
-            });
-            if (hayMontos) {
-                return;
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var monto = parseMonto($(this).find('.monto').val() || '0');
+            if (Math.abs(monto) >= 0.0001) {
+                hayMontos = true;
             }
+        });
+        // Nunca pisar conceptos ya valuados (p. ej. precarga prorrateada).
+        if (hayMontos) {
+            return;
         }
 
         var $aviso = $('#cp-conceptos-tipo-aviso');
         var base = typeof window.carpetaBase !== 'undefined' ? window.carpetaBase : '';
-        $.getJSON(base + '/compras/tipotransaccion_compra/' + id + '/conceptos-iva')
+        var params = {};
+        var numeroOc = numeroOcComprobante();
+        if (numeroOc) {
+            params.numero_oc = numeroOc;
+        }
+        $.getJSON(base + '/compras/tipotransaccion_compra/' + id + '/conceptos-iva', params)
             .done(function (res) {
                 var lista = (res && res.conceptos) || [];
                 limpiarFilasConceptos();
                 if (!lista.length) {
                     agregarFilaConcepto({}, '');
                     if ($aviso.length) {
+                        var msgVacio = numeroOc
+                            ? 'El tipo no tiene conceptos IVA (ni unión desde la OC). Agréguelos manualmente.'
+                            : 'El tipo no tiene conceptos IVA configurados. Si es FPB/prorrateado multi-CC, vinculá la OC.';
                         $aviso.removeClass('d-none').html(
-                            '<i class="fa fa-info-circle"></i> El tipo no tiene conceptos IVA configurados. Agréguelos manualmente.'
+                            '<i class="fa fa-info-circle"></i> ' + msgVacio
                         );
                     }
                 } else {
+                    var vistos = {};
+                    var agregados = 0;
                     lista.forEach(function (c) {
+                        var cid = parseInt(String(c && c.id ? c.id : '0'), 10) || 0;
+                        var codigo = String((c && c.codigo) || '').trim();
+                        var clave = cid > 0 ? ('id:' + cid) : (codigo ? ('cod:' + codigo) : '');
+                        if (clave && vistos[clave]) {
+                            return;
+                        }
+                        if (clave) {
+                            vistos[clave] = true;
+                        }
                         agregarFilaConcepto(c, '');
+                        agregados++;
                     });
                     enriquecerMetaGravadosDesdeFormulas();
                     if ($aviso.length) {
+                        var msgOk = (res && res.prorrateo_multi_cc)
+                            ? ('Conceptos de la unión multi-CC (OC ' + (numeroOc || '—')
+                                + ', sin duplicados). Complete o revise los montos.')
+                            : 'Conceptos precargados según el tipo de comprobante. Complete los montos.';
                         $aviso.removeClass('d-none').html(
-                            '<i class="fa fa-check-circle"></i> Conceptos precargados según el tipo de comprobante. Complete los montos.'
+                            '<i class="fa fa-check-circle"></i> ' + msgOk
+                            + (agregados ? ' (' + agregados + ')' : '')
                         );
                     }
                 }

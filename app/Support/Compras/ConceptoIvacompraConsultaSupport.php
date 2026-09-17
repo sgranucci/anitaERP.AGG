@@ -3,32 +3,31 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Concepto_Ivacompra;
+use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Compras\Tipotransaccion_Compra_Concepto_Ivacompra;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Collection;
 
 /**
  * Lista conceptos IVA compra filtrados por tipo de comprobante (pivot).
+ * Tipos prorrateados multi-CC (FPB/…): sin plantilla fija → unión deduplicada desde los finos de la OC.
  */
 final class ConceptoIvacompraConsultaSupport
 {
     /**
      * @return Collection<int, Concepto_Ivacompra>
      */
-    public static function listarPorTipoTransaccion(int $tipotransaccionCompraId, ?string $consulta = null): Collection
-    {
+    public static function listarPorTipoTransaccion(
+        int $tipotransaccionCompraId,
+        ?string $consulta = null,
+        ?string $numeroOc = null,
+    ): Collection {
         if ($tipotransaccionCompraId <= 0) {
             return collect();
         }
 
-        $conceptoIds = Tipotransaccion_Compra_Concepto_Ivacompra::query()
-            ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
-            ->pluck('concepto_ivacompra_id')
-            ->unique()
-            ->filter()
-            ->values()
-            ->all();
-
+        $conceptoIds = self::idsConceptoParaTipo($tipotransaccionCompraId, $numeroOc);
         if ($conceptoIds === []) {
             return collect();
         }
@@ -46,20 +45,26 @@ final class ConceptoIvacompraConsultaSupport
             });
         }
 
+        // Dedup por id (unión multi-fino puede repetir el mismo concepto).
         return $query
             ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
             ->orderBy('nombre')
-            ->get();
+            ->get()
+            ->unique('id')
+            ->values();
     }
 
-    public static function resolverPorCodigoOId(int $tipotransaccionCompraId, string $valor): ?Concepto_Ivacompra
-    {
+    public static function resolverPorCodigoOId(
+        int $tipotransaccionCompraId,
+        string $valor,
+        ?string $numeroOc = null,
+    ): ?Concepto_Ivacompra {
         $valor = trim($valor);
         if ($tipotransaccionCompraId <= 0 || $valor === '') {
             return null;
         }
 
-        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId, null);
+        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId, null, $numeroOc);
         if ($lista->isEmpty()) {
             return null;
         }
@@ -78,15 +83,21 @@ final class ConceptoIvacompraConsultaSupport
         return $lista->first(fn (Concepto_Ivacompra $c) => (string) $c->codigo === $valor);
     }
 
-    public static function tipoTieneConceptosConfigurados(int $tipotransaccionCompraId): bool
-    {
+    public static function tipoTieneConceptosConfigurados(
+        int $tipotransaccionCompraId,
+        ?string $numeroOc = null,
+    ): bool {
         if ($tipotransaccionCompraId <= 0) {
             return false;
         }
 
-        return Tipotransaccion_Compra_Concepto_Ivacompra::query()
+        if (Tipotransaccion_Compra_Concepto_Ivacompra::query()
             ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
-            ->exists();
+            ->exists()) {
+            return true;
+        }
+
+        return self::idsConceptoParaTipo($tipotransaccionCompraId, $numeroOc) !== [];
     }
 
     /**
@@ -94,9 +105,11 @@ final class ConceptoIvacompraConsultaSupport
      *
      * @return Collection<int, \App\Models\Compras\Comprobante_Proveedor_Concepto>
      */
-    public static function renglonesPlantillaParaTipo(int $tipotransaccionCompraId): Collection
-    {
-        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId);
+    public static function renglonesPlantillaParaTipo(
+        int $tipotransaccionCompraId,
+        ?string $numeroOc = null,
+    ): Collection {
+        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId, null, $numeroOc);
         if ($lista->isEmpty()) {
             return collect();
         }
@@ -111,5 +124,54 @@ final class ConceptoIvacompraConsultaSupport
 
             return $renglon;
         });
+    }
+
+    /**
+     * IDs únicos: pivot del tipo, o unión de finos origen si es FxP* y hay OC.
+     *
+     * @return list<int>
+     */
+    public static function idsConceptoParaTipo(int $tipotransaccionCompraId, ?string $numeroOc = null): array
+    {
+        if ($tipotransaccionCompraId <= 0) {
+            return [];
+        }
+
+        $desdePivot = Tipotransaccion_Compra_Concepto_Ivacompra::query()
+            ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
+            ->pluck('concepto_ivacompra_id')
+            ->map(static fn ($id): int => (int) $id)
+            ->filter(static fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($desdePivot !== []) {
+            return $desdePivot;
+        }
+
+        $numeroOc = trim((string) $numeroOc);
+        if ($numeroOc === '') {
+            return [];
+        }
+
+        $tipo = Tipotransaccion_Compra::query()->find($tipotransaccionCompraId);
+        if (! $tipo) {
+            return [];
+        }
+
+        $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+        if (! PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev)) {
+            return [];
+        }
+
+        try {
+            $ids = app(PrecargaProveedorProrrateoMultiCcSupport::class)
+                ->idsPermitidosParaTipo($tipo, $numeroOc);
+        } catch (\Throwable) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map('intval', array_filter($ids))));
     }
 }

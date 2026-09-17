@@ -377,8 +377,14 @@ class OrdencompraLegajoBandejaService
             'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
             'ordencompra_id' => $ocId,
         ];
-        if (($primeraFac['origen'] ?? '') === 'precarga' && (int) ($primeraFac['id'] ?? 0) > 0) {
+        $origen = (string) ($primeraFac['origen'] ?? '');
+        if ($origen === 'precarga' && (int) ($primeraFac['id'] ?? 0) > 0) {
             $params['precarga_id'] = (int) $primeraFac['id'];
+        } elseif ($origen === 'anita') {
+            $anitaId = trim((string) ($primeraFac['id'] ?? $primeraFac['anita_id'] ?? ''));
+            if ($anitaId !== '') {
+                $params['anita_id'] = $anitaId;
+            }
         }
 
         return route('crear_comprobante_proveedor', $params);
