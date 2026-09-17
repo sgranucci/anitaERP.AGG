@@ -440,15 +440,44 @@
             return;
         }
         var idsAsig = asignarEstado.mapa[String(activo)] || [];
+        var ocupadasPorOtra = comIdsOcupadasPorOtraFactura(activo);
         asignarEstado.coms.forEach(function (c) {
             var checked = idsAsig.indexOf(c.id) !== -1 || idsAsig.indexOf(String(c.id)) !== -1;
+            var ocupada = ocupadasPorOtra[String(c.id)];
+            var disabled = ocupada && !checked;
+            var hint = ocupada
+                ? ' <small class="text-danger">(ya asignada a ' + esc(ocupada) + ')</small>'
+                : '';
             $coms.append(
                 '<div class="form-check">' +
-                '<input class="form-check-input js-bandeja-asig-com" type="checkbox" data-com-id="' + c.id + '" id="ban_com_' + c.id + '"' + (checked ? ' checked' : '') + '>' +
+                '<input class="form-check-input js-bandeja-asig-com" type="checkbox" data-com-id="' + c.id + '" id="ban_com_' + c.id + '"' +
+                (checked ? ' checked' : '') + (disabled ? ' disabled' : '') + '>' +
                 '<label class="form-check-label" for="ban_com_' + c.id + '">' + esc(c.documento) +
-                (c.fecha ? ' <small class="text-muted">' + esc(c.fecha) + '</small>' : '') + '</label></div>'
+                (c.fecha ? ' <small class="text-muted">' + esc(c.fecha) + '</small>' : '') +
+                hint + '</label></div>'
             );
         });
+    }
+
+    function etiquetaFacturaAsignacion(facId) {
+        var fac = asignarEstado.facs.find(function (f) { return String(f.id) === String(facId); });
+        return fac ? (fac.etiqueta || ('#' + facId)) : ('#' + facId);
+    }
+
+    function comIdsOcupadasPorOtraFactura(facActivaId) {
+        var ocupadas = {};
+        Object.keys(asignarEstado.mapa).forEach(function (preId) {
+            if (String(preId) === String(facActivaId)) {
+                return;
+            }
+            var ids = asignarEstado.mapa[preId] || [];
+            ids.forEach(function (id) {
+                if (id > 0) {
+                    ocupadas[String(id)] = etiquetaFacturaAsignacion(preId);
+                }
+            });
+        });
+        return ocupadas;
     }
 
     function itemAsignarDoc(f) {
@@ -832,24 +861,48 @@
             $('#bandejaAsignarComs .js-bandeja-asig-com:checked').each(function () {
                 ids.push(parseInt($(this).data('com-id'), 10));
             });
-            asignarEstado.mapa[activo] = ids.filter(function (id) { return id > 0; });
+            ids = ids.filter(function (id) { return id > 0; });
+            var ocupadas = comIdsOcupadasPorOtraFactura(activo);
+            var conflicto = ids.filter(function (id) { return !!ocupadas[String(id)]; });
+            if (conflicto.length) {
+                alert('La COM ya está asignada a otra factura del legajo. Cada recepción solo puede vincularse a un comprobante.');
+                $(this).prop('checked', false);
+                return;
+            }
+            asignarEstado.mapa[activo] = ids;
             renderAsignarListaDocs();
+            renderAsignarComsActivo();
         });
 
         $('#formBandejaAsignarCom').on('submit', function (e) {
             e.preventDefault();
             var $form = $(this);
             var asignaciones = [];
+            var vistas = {};
+            var dup = null;
             Object.keys(asignarEstado.mapa).forEach(function (preId) {
                 var idStr = String(preId);
                 if (!/^\d+$/.test(idStr) && !/^anita-\d+$/i.test(idStr)) {
                     return;
                 }
+                var recepcionIds = asignarEstado.mapa[preId] || [];
+                recepcionIds.forEach(function (rid) {
+                    if (rid > 0 && vistas[rid] && String(vistas[rid]) !== idStr) {
+                        dup = rid;
+                    }
+                    if (rid > 0) {
+                        vistas[rid] = idStr;
+                    }
+                });
                 asignaciones.push({
                     precarga_id: preId,
-                    recepcion_ids: asignarEstado.mapa[preId] || []
+                    recepcion_ids: recepcionIds
                 });
             });
+            if (dup) {
+                alert('La misma COM quedó asignada a más de una factura. Corrija antes de guardar.');
+                return;
+            }
             $.ajax({
                 url: $form.attr('action'),
                 method: 'POST',

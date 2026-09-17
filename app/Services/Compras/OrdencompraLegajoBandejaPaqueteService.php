@@ -15,6 +15,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Compras\ComprobanteProveedorReservaComLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
@@ -240,21 +241,42 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
         $todosIds = array_values(array_unique($todosIds));
+        $etiquetasCom = [];
         if ($todosIds !== []) {
-            $validas = Recepcion_Proveedor::query()
+            $comsValidas = Recepcion_Proveedor::query()
                 ->where('ordencompra_id', $oc->id)
                 ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
                 ->where('estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
                 ->whereIn('id', $todosIds)
-                ->pluck('id')
-                ->map(static fn ($id) => (int) $id)
+                ->get(['id', 'numerorecepcion']);
+            $validas = $comsValidas
+                ->map(static fn ($row) => (int) $row->id)
                 ->all();
+            foreach ($comsValidas as $com) {
+                $cid = (int) $com->id;
+                $nro = trim((string) ($com->numerorecepcion ?? ''));
+                $etiquetasCom[$cid] = $nro !== '' ? 'Nº '.$nro : '#'.$cid;
+            }
             $faltan = array_values(array_diff($todosIds, $validas));
             if ($faltan !== []) {
                 throw ValidationException::withMessages([
                     'recepcion_ids' => 'Hay COM que no pertenecen a esta OC o no están confirmadas.',
                 ]);
             }
+        }
+
+        $mapaEfectivo = $this->asignacionesActualesDelLegajo($oc);
+        foreach ($normalizadas as $precargaId => $ids) {
+            $mapaEfectivo[(int) $precargaId] = $ids;
+        }
+        $conflicto = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
+            $mapaEfectivo,
+            $etiquetasCom
+        );
+        if ($conflicto !== null) {
+            throw ValidationException::withMessages([
+                'recepcion_ids' => $conflicto,
+            ]);
         }
 
         DB::transaction(function () use ($normalizadas) {
@@ -466,6 +488,29 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         return $out;
+    }
+
+    /**
+     * Asignaciones FC→COM actuales de las precargas del legajo.
+     *
+     * @return array<int, list<int>>
+     */
+    public function asignacionesActualesDelLegajo(Ordencompra $oc): array
+    {
+        $numero = trim((string) $oc->numeroordencompra);
+        $empresaId = (int) $oc->empresa_id;
+        if ($numero === '' || $empresaId <= 0 || ! Schema::hasTable('precarga_comprobante_proveedor_recepcion')) {
+            return [];
+        }
+
+        $precargaIds = Precarga_Comprobante_Proveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->where('numeroordencompra', $numero)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        return $this->asignacionesPorPrecarga($precargaIds);
     }
 
     /**

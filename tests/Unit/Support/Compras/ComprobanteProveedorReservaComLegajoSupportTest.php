@@ -88,4 +88,29 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
 
         $this->assertNull($mensaje);
     }
+
+    public function test_bloquea_misma_com_en_dos_facturas_del_legajo(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
+            [
+                746 => [67323],
+                752 => [67323],
+            ],
+            [67323 => 'Nº 167637'],
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('167637', $mensaje);
+        $this->assertStringContainsString('otra factura', $mensaje);
+    }
+
+    public function test_permite_com_distintas_por_factura(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas([
+            746 => [67323],
+            752 => [67322],
+        ]);
+
+        $this->assertNull($mensaje);
+    }
 }
