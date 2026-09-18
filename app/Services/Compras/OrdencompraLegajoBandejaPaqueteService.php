@@ -3,6 +3,7 @@
 namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Pagoproveedor_Comprobante;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
@@ -13,6 +14,7 @@ use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
+use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorReservaComLegajoSupport;
@@ -428,6 +430,8 @@ class OrdencompraLegajoBandejaPaqueteService
             ->orderByDesc('id')
             ->get(['id', 'numerorecepcion', 'fecha', 'estado', 'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro']);
 
+        $facturadas = $this->idsComFacturadasEnCxp($rows->pluck('id')->map(static fn ($id) => (int) $id)->all());
+
         $out = [];
         foreach ($rows as $rec) {
             $id = (int) $rec->id;
@@ -437,6 +441,7 @@ class OrdencompraLegajoBandejaPaqueteService
                 'fecha' => $rec->fecha ? $rec->fecha->format('d/m/Y') : '',
                 'estado' => (string) $rec->estado,
                 'confirmada' => $rec->estado === Recepcion_Proveedor::ESTADO_CONFIRMADA,
+                'facturada_en_cxp' => isset($facturadas[$id]),
                 'url_pdf' => route('ordencompra_legajo_bandeja_com_pdf', [
                     'id' => (int) $oc->id,
                     'recepcion' => $id,
@@ -444,6 +449,33 @@ class OrdencompraLegajoBandejaPaqueteService
                 ]),
                 'url_editar' => route('editar_recepcion_proveedor', ['id' => $id]),
             ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<int>  $recepcionIds
+     * @return array<int, true>
+     */
+    private function idsComFacturadasEnCxp(array $recepcionIds): array
+    {
+        $recepcionIds = array_values(array_filter($recepcionIds, static fn (int $id) => $id > 0));
+        if ($recepcionIds === [] || ! Schema::hasTable('comprobante_proveedor_recepcion')) {
+            return [];
+        }
+
+        $ids = DB::table('comprobante_proveedor_recepcion as cpr')
+            ->join('comprobante_proveedor as cp', 'cp.id', '=', 'cpr.comprobante_proveedor_id')
+            ->whereIn('cpr.recepcion_proveedor_id', $recepcionIds)
+            ->where('cp.estado', ComprobanteProveedorEstados::CONTABILIZADO)
+            ->pluck('cpr.recepcion_proveedor_id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        $out = [];
+        foreach ($ids as $id) {
+            $out[$id] = true;
         }
 
         return $out;
@@ -505,9 +537,9 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
-     * Asignaciones FC→COM actuales de las precargas del legajo.
+     * Asignaciones FC→COM actuales del legajo (precargas + CP ya en CxP).
      *
-     * @return array<int, list<int>>
+     * @return array<int|string, list<int>>
      */
     public function asignacionesActualesDelLegajo(Ordencompra $oc): array
     {
@@ -517,14 +549,144 @@ class OrdencompraLegajoBandejaPaqueteService
             return [];
         }
 
-        $precargaIds = Precarga_Comprobante_Proveedor::query()
+        $precargas = Precarga_Comprobante_Proveedor::query()
             ->where('empresa_id', $empresaId)
             ->where('numeroordencompra', $numero)
+            ->get(['id', 'letra', 'sucursal', 'numerocomprobante']);
+        $precargaIds = $precargas
             ->pluck('id')
             ->map(static fn ($id) => (int) $id)
             ->all();
 
-        return $this->asignacionesPorPrecarga($precargaIds);
+        $asignadas = $this->asignacionesPorPrecarga($precargaIds);
+
+        return $this->incorporarAsignacionesDeComprobantesCxp(
+            $asignadas,
+            $this->comprobantesDelLegajo($oc, $precargaIds),
+            $this->comsPorComprobanteDelLegajo($oc, $precargaIds),
+            $precargas->map(static fn ($pre) => [
+                'id' => (int) $pre->id,
+                'letra' => (string) ($pre->letra ?? ''),
+                'sucursal' => (int) ($pre->sucursal ?? 0),
+                'numerocomprobante' => (int) ($pre->numerocomprobante ?? 0),
+            ])->all(),
+        );
+    }
+
+    /**
+     * COM ya vinculadas a un CP del legajo (incluye facturas anuales importadas sin precarga).
+     *
+     * @param  array<int|string, list<int>>  $asignadas
+     * @param  list<array<string, mixed>>  $comprobantes
+     * @param  array<int, list<int>>  $comsPorComprobante
+     * @param  list<array{id: int, letra?: string, sucursal?: int, numerocomprobante?: int}>  $precargas
+     * @return array<int|string, list<int>>
+     */
+    public function incorporarAsignacionesDeComprobantesCxp(
+        array $asignadas,
+        array $comprobantes,
+        array $comsPorComprobante,
+        array $precargas = [],
+    ): array {
+        $prePorClave = [];
+        foreach ($precargas as $pre) {
+            $preId = (int) ($pre['id'] ?? 0);
+            if ($preId <= 0) {
+                continue;
+            }
+            $clave = $this->claveLetraSucursalNumero(
+                (string) ($pre['letra'] ?? ''),
+                (int) ($pre['sucursal'] ?? 0),
+                (int) ($pre['numerocomprobante'] ?? 0),
+            );
+            if ($clave !== '') {
+                $prePorClave[$clave] = $preId;
+            }
+        }
+
+        foreach ($comprobantes as $cp) {
+            $cpId = (int) ($cp['id'] ?? 0);
+            $ids = $comsPorComprobante[$cpId] ?? [];
+            if ($cpId <= 0 || $ids === []) {
+                continue;
+            }
+            $preId = (int) ($cp['precarga_id'] ?? 0);
+            if ($preId <= 0) {
+                $clave = $this->claveLetraSucursalNumero(
+                    (string) ($cp['letra'] ?? ''),
+                    (int) ($cp['sucursal'] ?? 0),
+                    (int) ($cp['numerocomprobante'] ?? 0),
+                );
+                $preId = $clave !== '' ? (int) ($prePorClave[$clave] ?? 0) : 0;
+            }
+            $key = $preId > 0 ? $preId : ('cp-'.$cpId);
+            $asignadas[$key] ??= [];
+            foreach ($ids as $rid) {
+                $rid = (int) $rid;
+                if ($rid > 0 && ! in_array($rid, $asignadas[$key], true)) {
+                    $asignadas[$key][] = $rid;
+                }
+            }
+        }
+
+        return $asignadas;
+    }
+
+    /**
+     * @param  list<int>  $precargaIds
+     * @return array<int, list<int>>
+     */
+    private function comsPorComprobanteDelLegajo(Ordencompra $oc, array $precargaIds): array
+    {
+        if (! Schema::hasTable('comprobante_proveedor_recepcion')) {
+            return [];
+        }
+
+        $cpIds = Comprobante_Proveedor::query()
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+            })
+            ->where(function ($q) use ($oc, $precargaIds) {
+                $q->where('ordencompra_id', $oc->id);
+                if ($precargaIds !== []) {
+                    $q->orWhereIn('precarga_comprobante_proveedor_id', $precargaIds);
+                }
+            })
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        if ($cpIds === []) {
+            return [];
+        }
+
+        $out = [];
+        $rows = Comprobante_Proveedor_Recepcion::query()
+            ->whereIn('comprobante_proveedor_id', $cpIds)
+            ->orderBy('orden')
+            ->orderBy('id')
+            ->get(['comprobante_proveedor_id', 'recepcion_proveedor_id']);
+        foreach ($rows as $row) {
+            $cpId = (int) $row->comprobante_proveedor_id;
+            $rid = (int) $row->recepcion_proveedor_id;
+            if ($cpId <= 0 || $rid <= 0) {
+                continue;
+            }
+            $out[$cpId] ??= [];
+            $out[$cpId][] = $rid;
+        }
+
+        return $out;
+    }
+
+    private function claveLetraSucursalNumero(string $letra, int $sucursal, int $numero): string
+    {
+        $letra = strtoupper(trim($letra));
+        if ($letra === '' || $numero <= 0) {
+            return '';
+        }
+
+        return $letra.'|'.$sucursal.'|'.$numero;
     }
 
     /**
@@ -1421,14 +1583,18 @@ class OrdencompraLegajoBandejaPaqueteService
     private function documentoCom(Recepcion_Proveedor $rec): string
     {
         $nro = $rec->numerorecepcion ?: $rec->id;
-        if ($rec->anita_tipo && $rec->anita_sucursal && $rec->anita_nro) {
-            return sprintf(
-                'COM %s %s %d-%d',
-                $rec->anita_tipo,
-                $rec->anita_letra ?? '',
-                $rec->anita_sucursal,
-                $rec->anita_nro
-            );
+        $anitaTipo = strtoupper(trim((string) ($rec->anita_tipo ?? '')));
+        $anitaLetra = trim((string) ($rec->anita_letra ?? ''));
+        $anitaSuc = ltrim((string) ($rec->anita_sucursal ?? ''), '0');
+        $anitaNro = ltrim((string) ($rec->anita_nro ?? ''), '0');
+        if ($anitaNro !== '') {
+            $pref = $anitaTipo !== '' ? $anitaTipo : 'COM';
+            $medio = trim($anitaLetra.' '.$anitaSuc);
+            if ($pref === 'COM') {
+                return $medio !== '' ? 'COM '.$medio.'-'.$anitaNro : 'COM '.$anitaNro;
+            }
+
+            return $medio !== '' ? $pref.' '.$medio.'-'.$anitaNro : $pref.' '.$anitaNro;
         }
 
         return 'COM #'.$nro;

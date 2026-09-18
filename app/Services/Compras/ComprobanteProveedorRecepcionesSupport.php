@@ -311,7 +311,8 @@ class ComprobanteProveedorRecepcionesSupport
     ): array {
         $disponibles = $this->listarDisponibles($ordencompraId, $comprobanteId)->pluck('id')->all();
 
-        if ($contextoLegajo
+        if ($ordencompraId <= 0
+            && $contextoLegajo
             && (int) ($contextoLegajo['proveedor_id'] ?? 0) > 0
             && (int) ($contextoLegajo['empresa_id'] ?? 0) > 0) {
             $legajo = $this->listarSinFacturarEnLegajo(

@@ -55,13 +55,35 @@
         $iframe.removeAttr('src');
     }
 
+    function mapaComAsignadaA(paquete) {
+        var facs = {};
+        ((paquete && paquete.facturas) || []).forEach(function (f) {
+            facs[String(f.id)] = f.etiqueta || ('#' + f.id);
+        });
+        ((paquete && paquete.comprobantes) || []).forEach(function (c) {
+            facs['cp-' + c.id] = c.etiqueta || ('CP #' + c.id);
+        });
+        var out = {};
+        var asignadas = (paquete && paquete.asignadas) || {};
+        Object.keys(asignadas).forEach(function (preId) {
+            var label = facs[String(preId)] || ('#' + preId);
+            (asignadas[preId] || []).forEach(function (id) {
+                if (id > 0) {
+                    out[String(id)] = label;
+                }
+            });
+        });
+        return out;
+    }
+
     function renderComs(paquete) {
         var $tb = $('#tablaBandejaComs tbody').empty();
         var $pdf = $('#bandejaComPdf');
         var coms = (paquete && paquete.coms) || [];
+        var asignadaA = mapaComAsignadaA(paquete);
         mostrarPdf($pdf, '');
         if (!coms.length) {
-            $tb.append('<tr><td colspan="3" class="text-center text-muted">No hay COM en este legajo.</td></tr>');
+            $tb.append('<tr><td colspan="4" class="text-center text-muted">No hay COM en este legajo.</td></tr>');
             return;
         }
         coms.forEach(function (c, i) {
@@ -70,6 +92,7 @@
             $tr.append('<td>' + esc(c.documento || ('#' + c.id)) + '</td>');
             $tr.append('<td>' + esc(c.fecha || '') + '</td>');
             $tr.append('<td>' + esc(c.estado || '') + '</td>');
+            $tr.append('<td>' + esc(asignadaA[String(c.id)] || '—') + '</td>');
             if (i === 0) {
                 $tr.addClass('table-info');
             }
@@ -441,25 +464,28 @@
         }
         var idsAsig = asignarEstado.mapa[String(activo)] || [];
         var ocupadasPorOtra = comIdsOcupadasPorOtraFactura(activo);
-        var visibles = 0;
+        var libres = 0;
         asignarEstado.coms.forEach(function (c) {
             var checked = idsAsig.indexOf(c.id) !== -1 || idsAsig.indexOf(String(c.id)) !== -1;
             var ocupada = ocupadasPorOtra[String(c.id)];
-            // Ya vinculada a otra factura: no ofrecerla (salvo que figure en esta, caso inconsistente).
-            if (ocupada && !checked) {
-                return;
+            var motivo = ocupada
+                ? ('asignada a ' + ocupada)
+                : (c.facturada_en_cxp ? 'ya facturada en CxP' : '');
+            var bloqueada = !!(!checked && motivo);
+            if (!bloqueada) {
+                libres += 1;
             }
-            visibles += 1;
             $coms.append(
-                '<div class="form-check">' +
+                '<div class="form-check' + (bloqueada ? ' text-muted' : '') + '">' +
                 '<input class="form-check-input js-bandeja-asig-com" type="checkbox" data-com-id="' + c.id + '" id="ban_com_' + c.id + '"' +
-                (checked ? ' checked' : '') + '>' +
+                (checked ? ' checked' : '') + (bloqueada ? ' disabled' : '') + '>' +
                 '<label class="form-check-label" for="ban_com_' + c.id + '">' + esc(c.documento) +
                 (c.fecha ? ' <small class="text-muted">' + esc(c.fecha) + '</small>' : '') +
+                (bloqueada ? ' <small class="text-muted">— ' + esc(motivo) + '</small>' : '') +
                 '</label></div>'
             );
         });
-        if (!visibles && asignarEstado.coms.length) {
+        if (!libres) {
             $coms.append('<p class="text-muted mb-0 small">Las COM del legajo ya están asignadas a otras facturas.</p>');
         }
     }
@@ -877,7 +903,7 @@
                 return;
             }
             var ids = [];
-            $('#bandejaAsignarComs .js-bandeja-asig-com:checked').each(function () {
+            $('#bandejaAsignarComs .js-bandeja-asig-com:checked:not(:disabled)').each(function () {
                 ids.push(parseInt($(this).data('com-id'), 10));
             });
             ids = ids.filter(function (id) { return id > 0; });

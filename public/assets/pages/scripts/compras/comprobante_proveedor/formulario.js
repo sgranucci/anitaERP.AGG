@@ -719,7 +719,7 @@ $(function () {
             suma += m;
         });
         suma = Math.round(suma * 100) / 100;
-        if (Math.abs(suma - total) <= 0.05) {
+        if (Math.abs(suma - total) < 0.005) {
             return;
         }
 
@@ -728,6 +728,22 @@ $(function () {
             var $unico = $rows.first().find('[name="cuota_monto[]"]');
             if ($unico.length && !$unico.prop('readonly')) {
                 $unico.val(fmt(total));
+            }
+            return;
+        }
+
+        // Residual de centavos (p. ej. 0,02 USD): última cuota. No reescalar el plan.
+        if (Math.abs(suma - total) <= 0.05) {
+            var resto = 0;
+            $rows.each(function (i) {
+                if (i === n - 1) {
+                    return;
+                }
+                resto += Math.abs(parseMonto($(this).find('[name="cuota_monto[]"]').val() || '0'));
+            });
+            var $last = $rows.last().find('[name="cuota_monto[]"]');
+            if ($last.length && !$last.prop('readonly')) {
+                $last.val(fmt(Math.round((total - resto) * 100) / 100));
             }
             return;
         }
@@ -2288,7 +2304,7 @@ $(function () {
         $('#cp-legajo-anticipada-banner').addClass('d-none');
         cpFilasOVacias($('#cp-legajo-facturas-body'), '<tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>');
         cpFilasOVacias($('#cp-legajo-comprobantes-body'), '<tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>');
-        cpFilasOVacias($('#cp-legajo-coms-body'), '<tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>');
+        cpFilasOVacias($('#cp-legajo-coms-body'), '<tr><td colspan="4" class="text-muted text-center">Cargando…</td></tr>');
         cpFilasOVacias($('#cp-legajo-devoluciones-body'), '<tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>');
         $('#modalCpVerLegajo').modal('show');
 
@@ -2367,14 +2383,28 @@ $(function () {
             });
             cpFilasOVacias($('#cp-legajo-comprobantes-body'), cpHtml);
 
+            var comAsignadaA = {};
+            Object.keys(p.asignadas || {}).forEach(function (preId) {
+                var fac = (p.facturas || []).find(function (f) { return String(f.id) === String(preId); });
+                var cp = (p.comprobantes || []).find(function (c) { return ('cp-' + c.id) === String(preId); });
+                var label = (fac && fac.etiqueta) || (cp && cp.etiqueta) || ('#' + preId);
+                (p.asignadas[preId] || []).forEach(function (id) {
+                    if (id > 0) {
+                        comAsignadaA[String(id)] = label;
+                    }
+                });
+            });
             var comHtml = '';
             (p.coms || []).forEach(function (c) {
                 var doc = c.documento || ('#' + c.id);
-                if (c.url_editar) {
+                if (c.url_pdf) {
+                    doc = '<a href="' + c.url_pdf + '" target="_blank" rel="noopener">' + doc + '</a>';
+                } else if (c.url_editar) {
                     doc = '<a href="' + c.url_editar + '" target="_blank" rel="noopener">' + doc + '</a>';
                 }
                 comHtml += '<tr><td class="align-middle">' + doc + '</td><td class="align-middle">' + (c.fecha || '—') +
-                    '</td><td class="align-middle">' + (c.estado || '—') + '</td></tr>';
+                    '</td><td class="align-middle">' + (c.estado || '—') +
+                    '</td><td class="align-middle">' + (comAsignadaA[String(c.id)] || '—') + '</td></tr>';
             });
             cpFilasOVacias($('#cp-legajo-coms-body'), comHtml);
 

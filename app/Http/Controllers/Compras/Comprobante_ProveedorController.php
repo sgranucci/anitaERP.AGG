@@ -1317,7 +1317,8 @@ class Comprobante_ProveedorController extends Controller
         $coleccion = collect();
 
         if ($ordencompraId > 0) {
-            $coleccion = $this->recepcionesSupport->listarDisponibles($ordencompraId, $comprobanteId, false);
+            // Solo COM de esta OC: no ofrecer ni auto-seleccionar una COM de otro trimestre/OC.
+            return $this->recepcionesSupport->listarDisponibles($ordencompraId, $comprobanteId, false);
         }
 
         $proveedorId = (int) ($data->proveedor_id ?? 0);
@@ -1328,18 +1329,13 @@ class Comprobante_ProveedorController extends Controller
 
         $data?->loadMissing('ordencompras');
         $sectorId = $data?->ordencompras?->sector_legajocompra_id;
-        if (! $sectorId && $ordencompraId > 0) {
-            $sectorId = Ordencompra::query()->whereKey($ordencompraId)->value('sector_legajocompra_id');
-        }
 
-        $legajo = $this->recepcionesSupport->listarSinFacturarEnLegajo(
+        return $this->recepcionesSupport->listarSinFacturarEnLegajo(
             $proveedorId,
             $empresaId,
             $sectorId ? (int) $sectorId : null,
             $comprobanteId,
         );
-
-        return $legajo->merge($coleccion)->unique('id')->values();
     }
 
     /** @param list<int> $recepcionesSeleccionadas */

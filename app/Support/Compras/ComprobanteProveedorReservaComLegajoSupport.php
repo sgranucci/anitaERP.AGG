@@ -129,7 +129,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
     /**
      * Una misma COM no puede quedar asignada a dos facturas del legajo.
      *
-     * @param  array<int, list<int>>  $asignacionesPorPrecarga  precarga_id => recepcion_ids
+     * @param  array<int|string, list<int>>  $asignacionesPorPrecarga  precarga_id|cp-N => recepcion_ids
      * @param  array<int, string>  $etiquetasCom  recepcion_id => etiqueta visible (opcional)
      */
     public static function mensajeComDuplicadaEntreFacturas(
@@ -138,8 +138,8 @@ final class ComprobanteProveedorReservaComLegajoSupport
     ): ?string {
         $duenoPorCom = [];
         foreach ($asignacionesPorPrecarga as $precargaId => $recepcionIds) {
-            $preId = (int) $precargaId;
-            if ($preId <= 0) {
+            $dueno = is_numeric($precargaId) ? (int) $precargaId : trim((string) $precargaId);
+            if ($dueno === 0 || $dueno === '0' || $dueno === '') {
                 continue;
             }
             foreach ((array) $recepcionIds as $recepcionId) {
@@ -147,14 +147,14 @@ final class ComprobanteProveedorReservaComLegajoSupport
                 if ($rid <= 0) {
                     continue;
                 }
-                if (isset($duenoPorCom[$rid]) && $duenoPorCom[$rid] !== $preId) {
+                if (isset($duenoPorCom[$rid]) && $duenoPorCom[$rid] !== $dueno) {
                     $etiqueta = trim((string) ($etiquetasCom[$rid] ?? ''));
                     $comLabel = $etiqueta !== '' ? $etiqueta : '#'.$rid;
 
                     return 'La COM '.$comLabel.' ya está asignada a otra factura del legajo. '
                         .'Cada recepción solo puede vincularse a un comprobante.';
                 }
-                $duenoPorCom[$rid] = $preId;
+                $duenoPorCom[$rid] = $dueno;
             }
         }
 

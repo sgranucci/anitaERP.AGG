@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use RuntimeException;
 
@@ -103,12 +104,17 @@ class ComprobanteProveedorCuentacorrienteService
             $cuotas[] = [
                 'numero_cuota' => 1,
                 'fechavencimiento' => $fechaBase,
-                'monto' => round((float) $comprobante->total, 4),
+                'monto' => round((float) $comprobante->total, 2),
                 'formapago_id' => 1,
                 'detalle' => null,
                 'ordencompra_comprobante_cuota_id' => null,
             ];
         }
+
+        $cuotas = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta(
+            $cuotas,
+            (float) ($comprobante->total ?? 0),
+        );
 
         foreach ($cuotas as $cuota) {
             Comprobante_Proveedor_Cuota::query()->create([

@@ -4,6 +4,7 @@ namespace Tests\Unit\Support\Compras;
 
 use App\Support\Compras\ContratoPeriodoServicioSupport;
 use App\Support\Compras\ContratoValidacionAbonoCumplimientoSupport;
+use App\Support\Compras\ContratoValidacionAbonoDocumentoSupport;
 use App\Support\Compras\ContratoValidacionAbonoEstados;
 use App\Support\Compras\ContratoValidacionAbonoPermisoSupport;
 use App\Support\Compras\ContratoValidacionAbonoPoliticaSupport;
@@ -148,5 +149,23 @@ class ContratoValidacionAbonoP0Test extends TestCase
         $this->assertFalse(ContratoValidacionAbonoPermisoSupport::puedeCompletar(15, 22, false, false));
         $this->assertTrue(ContratoValidacionAbonoPermisoSupport::puedeCompletar(15, 22, true, false));
         $this->assertTrue(ContratoValidacionAbonoPermisoSupport::puedeCompletar(15, 0, false, true));
+    }
+
+    public function test_validacion_sin_com_ni_factura_es_huerfana(): void
+    {
+        $this->assertTrue(ContratoValidacionAbonoDocumentoSupport::esHuerfana(null, false, null, false));
+        $this->assertTrue(ContratoValidacionAbonoDocumentoSupport::esHuerfana(0, false, 0, false));
+    }
+
+    public function test_validacion_de_com_borrada_es_huerfana(): void
+    {
+        $this->assertTrue(ContratoValidacionAbonoDocumentoSupport::esHuerfana(65634, false, null, false));
+        $this->assertFalse(ContratoValidacionAbonoDocumentoSupport::esHuerfana(65633, true, null, false));
+    }
+
+    public function test_validacion_de_factura_borrada_es_huerfana(): void
+    {
+        $this->assertTrue(ContratoValidacionAbonoDocumentoSupport::esHuerfana(null, false, 99, false));
+        $this->assertFalse(ContratoValidacionAbonoDocumentoSupport::esHuerfana(null, false, 99, true));
     }
 }

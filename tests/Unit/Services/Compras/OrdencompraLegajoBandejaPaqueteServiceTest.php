@@ -245,4 +245,58 @@ class OrdencompraLegajoBandejaPaqueteServiceTest extends TestCase
         $this->assertSame(27647, $out[0]['comprobante_proveedor_id']);
         $this->assertSame(1234.5, $out[0]['total']);
     }
+
+    public function test_incorpora_com_del_cp_anual_aunque_la_precarga_tenga_otra(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+        $out = $svc->incorporarAsignacionesDeComprobantesCxp(
+            [
+                404 => [65392],
+                927 => [64439],
+            ],
+            [
+                [
+                    'id' => 26847,
+                    'precarga_id' => null,
+                    'letra' => 'A',
+                    'sucursal' => 3,
+                    'numerocomprobante' => 18,
+                ],
+            ],
+            [
+                26847 => [64439, 65392],
+            ],
+            [
+                ['id' => 404, 'letra' => 'A', 'sucursal' => 3, 'numerocomprobante' => 18],
+                ['id' => 927, 'letra' => 'A', 'sucursal' => 3, 'numerocomprobante' => 57],
+            ],
+        );
+
+        $this->assertSame([65392, 64439], $out[404]);
+        $this->assertSame([64439], $out[927]);
+    }
+
+    public function test_incorpora_com_de_cp_sin_precarga_con_clave_sintetica(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+        $out = $svc->incorporarAsignacionesDeComprobantesCxp(
+            [927 => [65392]],
+            [
+                [
+                    'id' => 26847,
+                    'precarga_id' => null,
+                    'letra' => 'A',
+                    'sucursal' => 3,
+                    'numerocomprobante' => 18,
+                ],
+            ],
+            [26847 => [64439]],
+            [
+                ['id' => 927, 'letra' => 'A', 'sucursal' => 3, 'numerocomprobante' => 57],
+            ],
+        );
+
+        $this->assertSame([64439], $out['cp-26847']);
+        $this->assertSame([65392], $out[927]);
+    }
 }

@@ -4,7 +4,9 @@ namespace App\Models\Compras;
 
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Compras\ContratoValidacionAbonoDocumentoSupport;
 use App\Support\Compras\ContratoValidacionAbonoEstados;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class Contrato_Validacion_Abono extends Model
@@ -54,6 +56,11 @@ class Contrato_Validacion_Abono extends Model
     public function respuestas()
     {
         return $this->hasMany(Contrato_Validacion_Abono_Respuesta::class, 'contrato_validacion_abono_id');
+    }
+
+    public function scopeConDocumentoVivo(Builder $query): Builder
+    {
+        return ContratoValidacionAbonoDocumentoSupport::filtrarVivas($query);
     }
 
     public function estaCompleta(): bool

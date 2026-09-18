@@ -113,4 +113,18 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
 
         $this->assertNull($mensaje);
     }
+
+    public function test_bloquea_com_ya_vinculada_a_cp_del_legajo(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
+            [
+                'cp-26847' => [64439],
+                927 => [64439],
+            ],
+            [64439 => 'Nº 166067'],
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('166067', $mensaje);
+    }
 }

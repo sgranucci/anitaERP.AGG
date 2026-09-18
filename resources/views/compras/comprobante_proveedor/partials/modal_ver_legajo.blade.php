@@ -50,11 +50,12 @@
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered mb-0" style="table-layout: fixed; width: 100%;">
                                 <colgroup>
-                                    <col style="width: 46%;">
-                                    <col style="width: 24%;">
-                                    <col style="width: 30%;">
+                                    <col style="width: 38%;">
+                                    <col style="width: 18%;">
+                                    <col style="width: 18%;">
+                                    <col style="width: 26%;">
                                 </colgroup>
-                                <thead><tr><th>Documento</th><th>Fecha</th><th>Estado</th></tr></thead>
+                                <thead><tr><th>Documento</th><th>Fecha</th><th>Estado</th><th>Asignada a</th></tr></thead>
                                 <tbody id="cp-legajo-coms-body">
                                     <tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>
                                 </tbody>

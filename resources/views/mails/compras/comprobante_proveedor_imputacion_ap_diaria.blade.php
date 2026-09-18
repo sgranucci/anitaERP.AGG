@@ -115,8 +115,8 @@
                 <td align="right">{{ number_format((float) ($fila['cc_ars'] ?? 0), 2, ',', '.') }}</td>
                 <td align="right">{{ number_format((float) ($fila['asiento_ars'] ?? 0), 2, ',', '.') }}</td>
                 <td align="right">{{ number_format((float) ($fila['ctamov_ars'] ?? 0), 2, ',', '.') }}</td>
-                <td align="right">{{ number_format((float) ($fila['diff_cc_asiento'] ?? 0), 2, ',', '.') }}</td>
-                <td align="right">{{ number_format((float) ($fila['diff_asiento_ctamov'] ?? 0), 2, ',', '.') }}</td>
+                <td align="right">{{ number_format(round((float) ($fila['cc_ars'] ?? 0) - (float) ($fila['asiento_ars'] ?? 0), 2), 2, ',', '.') }}</td>
+                <td align="right">{{ number_format(round((float) ($fila['asiento_ars'] ?? 0) - (float) ($fila['ctamov_ars'] ?? 0), 2), 2, ',', '.') }}</td>
                 <td>{{ $fila['alertas_texto'] ?? '' }}</td>
             </tr>
         @endforeach

@@ -588,7 +588,7 @@ Bandeja de legajos
                             <div class="col-lg-4 mb-2">
                                 <div class="table-responsive" style="max-height: 70vh; overflow:auto;">
                                     <table class="table table-sm table-striped table-hover mb-0" id="tablaBandejaComs">
-                                        <thead><tr><th>Documento</th><th>Fecha</th><th>Estado</th></tr></thead>
+                                        <thead><tr><th>Documento</th><th>Fecha</th><th>Estado</th><th>Asignada a</th></tr></thead>
                                         <tbody></tbody>
                                     </table>
                                 </div>

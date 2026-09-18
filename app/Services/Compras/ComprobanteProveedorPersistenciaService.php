@@ -382,14 +382,6 @@ class ComprobanteProveedorPersistenciaService
             $tieneCom = $this->recepcionesSupport
                 ->listarDisponibles((int) $ordencompra->id, null, false)
                 ->isNotEmpty();
-            if (! $tieneCom) {
-                $tieneCom = $this->recepcionesSupport->listarSinFacturarEnLegajo(
-                    (int) $ordencompra->proveedor_id,
-                    (int) $ordencompra->empresa_id,
-                    $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
-                    null,
-                )->isNotEmpty();
-            }
             $tipoDoc = OrdencompraLegajoDocumentoTipoSupport::desdeTipotransaccionId(
                 (int) ($payload['tipotransaccion_compra_id'] ?? 0)
             );
@@ -883,14 +875,6 @@ class ComprobanteProveedorPersistenciaService
             $tieneCom = $this->recepcionesSupport
                 ->listarDisponibles($ordencompraId, $excluirComprobanteId, false)
                 ->isNotEmpty();
-            if (! $tieneCom) {
-                $tieneCom = $this->recepcionesSupport->listarSinFacturarEnLegajo(
-                    (int) $ordencompra->proveedor_id,
-                    (int) $ordencompra->empresa_id,
-                    $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
-                    $excluirComprobanteId,
-                )->isNotEmpty();
-            }
             $tipoDoc = OrdencompraLegajoDocumentoTipoSupport::desdeTipotransaccionId(
                 (int) ($payload['tipotransaccion_compra_id'] ?? 0)
             );

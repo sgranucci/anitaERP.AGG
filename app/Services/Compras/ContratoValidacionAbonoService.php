@@ -11,11 +11,13 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Compras\ContratoPeriodoServicioSupport;
 use App\Support\Compras\ContratoValidacionAbonoCumplimientoSupport;
+use App\Support\Compras\ContratoValidacionAbonoDocumentoSupport;
 use App\Support\Compras\ContratoValidacionAbonoEstados;
 use App\Support\Compras\ContratoValidacionAbonoPoliticaSupport;
 use App\Support\Seguridad\IngresoProveedorConsultaSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class ContratoValidacionAbonoService
@@ -139,17 +141,63 @@ class ContratoValidacionAbonoService
         );
     }
 
+    public function eliminarDeRecepcion(int $recepcionId): int
+    {
+        if ($recepcionId <= 0) {
+            return 0;
+        }
+
+        return $this->eliminarPorDocumento('recepcion_proveedor_id', $recepcionId);
+    }
+
+    public function eliminarDeComprobante(int $comprobanteId): int
+    {
+        if ($comprobanteId <= 0) {
+            return 0;
+        }
+
+        return $this->eliminarPorDocumento('comprobante_proveedor_id', $comprobanteId);
+    }
+
+    /**
+     * Borra validaciones cuya COM o factura ya no existe.
+     */
+    public function purgarHuerfanas(?int $ordencompraId = null): int
+    {
+        $query = Contrato_Validacion_Abono::query()
+            ->when($ordencompraId && $ordencompraId > 0, fn ($q) => $q->where('ordencompra_id', $ordencompraId));
+
+        $ids = [];
+        foreach ($query->get(['id', 'recepcion_proveedor_id', 'comprobante_proveedor_id']) as $validacion) {
+            $rp = (int) ($validacion->recepcion_proveedor_id ?? 0);
+            $cp = (int) ($validacion->comprobante_proveedor_id ?? 0);
+            $rpExiste = $rp > 0 && Recepcion_Proveedor::query()->whereKey($rp)->exists();
+            $cpExiste = $cp > 0 && Comprobante_Proveedor::query()->whereKey($cp)->exists();
+            if (ContratoValidacionAbonoDocumentoSupport::esHuerfana($rp ?: null, $rpExiste, $cp ?: null, $cpExiste)) {
+                $ids[] = (int) $validacion->id;
+            }
+        }
+
+        return $this->eliminarPorIds($ids, [
+            'motivo' => 'huerfana',
+            'ordencompra_id' => $ordencompraId,
+        ]);
+    }
+
     /**
      * @return list<string>
      */
     public function erroresEnvioCuentasAPagar(Ordencompra $oc): array
     {
+        $this->purgarHuerfanas((int) $oc->id);
+
         $politica = ContratoValidacionAbonoPoliticaSupport::desdeOc($oc);
         if (! ($politica['aplica'] ?? false)) {
             return [];
         }
 
         $pendientes = Contrato_Validacion_Abono::query()
+            ->conDocumentoVivo()
             ->where('ordencompra_id', (int) $oc->id)
             ->where('estado', ContratoValidacionAbonoEstados::PENDIENTE)
             ->count();
@@ -161,6 +209,7 @@ class ContratoValidacionAbonoService
         }
 
         $incumplidas = Contrato_Validacion_Abono::query()
+            ->conDocumentoVivo()
             ->where('ordencompra_id', (int) $oc->id)
             ->where('estado', ContratoValidacionAbonoEstados::COMPLETA)
             ->get();
@@ -368,6 +417,49 @@ class ContratoValidacionAbonoService
         );
 
         return $snapshot;
+    }
+
+    private function eliminarPorDocumento(string $columna, int $documentoId): int
+    {
+        $ids = Contrato_Validacion_Abono::query()
+            ->where($columna, $documentoId)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return $this->eliminarPorIds($ids, [
+            'motivo' => 'documento_eliminado',
+            'columna' => $columna,
+            'documento_id' => $documentoId,
+        ]);
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @param  array<string, mixed>  $contexto
+     */
+    private function eliminarPorIds(array $ids, array $contexto = []): int
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', $ids),
+            static fn (int $id) => $id > 0
+        )));
+        if ($ids === []) {
+            return 0;
+        }
+
+        Contrato_Validacion_Abono_Respuesta::query()
+            ->whereIn('contrato_validacion_abono_id', $ids)
+            ->delete();
+        $borradas = Contrato_Validacion_Abono::query()->whereIn('id', $ids)->delete();
+        if ($borradas > 0) {
+            Log::info('contrato_validacion_abono.eliminadas', array_merge($contexto, [
+                'ids' => $ids,
+                'cantidad' => $borradas,
+            ]));
+        }
+
+        return $borradas;
     }
 
     public function usuarioActualId(): int

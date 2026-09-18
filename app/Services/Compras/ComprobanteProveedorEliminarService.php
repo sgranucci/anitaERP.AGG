@@ -136,6 +136,9 @@ class ComprobanteProveedorEliminarService
                 Comprobante_Proveedor_Archivo::query()->where('comprobante_proveedor_id', $comprobante->id)
             );
 
+            app(ContratoValidacionAbonoService::class)
+                ->eliminarDeComprobante((int) $comprobante->id);
+
             if ($tambienPrecarga) {
                 $comprobante->forceFill(['precarga_comprobante_proveedor_id' => null])->save();
             }

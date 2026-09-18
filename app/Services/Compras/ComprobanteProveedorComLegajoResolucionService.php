@@ -195,14 +195,6 @@ class ComprobanteProveedorComLegajoResolucionService
         ?string $fechaFacturaYmd = null,
     ): array {
         $recepciones = $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId);
-        if ($recepciones->isEmpty()) {
-            $recepciones = $this->recepcionesSupport->listarSinFacturarEnLegajo(
-                (int) $ordencompra->proveedor_id,
-                (int) $ordencompra->empresa_id,
-                $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
-                $excluirComprobanteId,
-            );
-        }
 
         $recepciones = $this->recepcionesSupport
             ->enriquecerConImporteEnMonedaFactura(

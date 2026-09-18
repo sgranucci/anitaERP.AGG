@@ -879,6 +879,9 @@ class RecepcionProveedorSurmarService
                     ]);
             }
 
+            app(\App\Services\Compras\ContratoValidacionAbonoService::class)
+                ->eliminarDeRecepcion($recepcionId);
+
             $recepcion->delete();
         });
     }

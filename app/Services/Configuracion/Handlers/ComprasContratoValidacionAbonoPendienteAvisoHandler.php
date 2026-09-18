@@ -62,14 +62,24 @@ class ComprasContratoValidacionAbonoPendienteAvisoHandler implements ModuloAviso
 
     public function linkConsulta(int $entityId): ?string
     {
-        $val = Contrato_Validacion_Abono::query()->find($entityId);
+        $val = Contrato_Validacion_Abono::query()
+            ->with(['recepcion_proveedores', 'comprobante_proveedores'])
+            ->find($entityId);
         if (! $val) {
             return null;
         }
         if ((int) ($val->recepcion_proveedor_id ?? 0) > 0) {
+            if (! $val->recepcion_proveedores) {
+                return null;
+            }
+
             return url('stock/recepcion-proveedor/'.$val->recepcion_proveedor_id.'/validacion-abono');
         }
         if ((int) ($val->comprobante_proveedor_id ?? 0) > 0) {
+            if (! $val->comprobante_proveedores) {
+                return null;
+            }
+
             return url('compras/comprobante-proveedor/'.$val->comprobante_proveedor_id.'/validacion-abono');
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Models\Stock;
 
+use App\Models\Compras\Contrato_Validacion_Abono;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
@@ -9,6 +10,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
+use App\Services\Compras\ContratoValidacionAbonoService;
 use Illuminate\Database\Eloquent\Model;
 
 class Recepcion_Proveedor extends Model
@@ -24,6 +26,14 @@ class Recepcion_Proveedor extends Model
     public const ESTADO_ANULADA = 'ANULADA';
 
     protected $table = 'recepcion_proveedor';
+
+    protected static function booted(): void
+    {
+        static::deleting(function (self $recepcion): void {
+            app(ContratoValidacionAbonoService::class)
+                ->eliminarDeRecepcion((int) $recepcion->id);
+        });
+    }
 
     protected $fillable = [
         'ordencompra_id', 'tipo', 'recepcion_referencia_id', 'empresa_id', 'proveedor_id', 'deposito_id',
@@ -99,6 +109,11 @@ class Recepcion_Proveedor extends Model
     public function centrocostos()
     {
         return $this->belongsTo(Centrocosto::class, 'centrocosto_id');
+    }
+
+    public function contrato_validaciones_abono()
+    {
+        return $this->hasMany(Contrato_Validacion_Abono::class, 'recepcion_proveedor_id');
     }
 
     public function recepcion_proveedor_articulos()

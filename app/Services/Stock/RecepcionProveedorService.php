@@ -569,6 +569,7 @@ class RecepcionProveedorService
         }
 
         DB::transaction(function () use ($recepcion) {
+            $this->contratoValidacionAbonoService->eliminarDeRecepcion((int) $recepcion->id);
             foreach ($recepcion->recepcion_proveedor_archivos as $archivo) {
                 RecepcionProveedorArchivoSupport::eliminarFisico($archivo);
             }

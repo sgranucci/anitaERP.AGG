@@ -3,6 +3,7 @@
 namespace Tests\Unit\Services\Compras;
 
 use App\Http\Controllers\Compras\Comprobante_ProveedorController;
+use App\Services\Compras\ComprobanteProveedorComLegajoResolucionService;
 use App\Services\Compras\ComprobanteProveedorPersistenciaService;
 use App\Services\Compras\ComprobanteProveedorPrefillService;
 use App\Services\Compras\ComprobanteProveedorRecepcionesSupport;
@@ -51,5 +52,26 @@ class ComprobanteProveedorAltaSinBloqueoAnitaTest extends TestCase
         $this->assertTrue($controller->hasMethod('apiAvisoFacturaYaEnAnita'));
         $this->assertTrue($controller->hasMethod('apiSincronizarOcComAlta'));
         $this->assertTrue($controller->hasMethod('avisoFacturaYaMarcadaEnErpDesdePrefill'));
+    }
+
+    public function test_carga_con_oc_no_toma_com_de_otra_oc(): void
+    {
+        $controller = (string) file_get_contents(
+            (new ReflectionClass(Comprobante_ProveedorController::class))->getFileName()
+        );
+        $this->assertStringContainsString('Solo COM de esta OC', $controller);
+
+        $auto = (string) file_get_contents(
+            (new ReflectionClass(ComprobanteProveedorComLegajoResolucionService::class))->getFileName()
+        );
+        $this->assertDoesNotMatchRegularExpression(
+            '/listarDisponibles\(\(int\) \$ordencompra->id, \$excluirComprobanteId\);\s+if \(\$recepciones->isEmpty\(\)\)/s',
+            $auto
+        );
+
+        $permitidas = (string) file_get_contents(
+            (new ReflectionClass(ComprobanteProveedorRecepcionesSupport::class))->getFileName()
+        );
+        $this->assertStringContainsString('$ordencompraId <= 0', $permitidas);
     }
 }

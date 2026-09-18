@@ -113,4 +113,42 @@ class ComprobanteProveedorCuotasTotalSupportTest extends TestCase
         $alineado = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta($desvio, 100.0);
         $this->assertSame(100.0, $alineado[0]['monto']);
     }
+
+    public function test_residual_de_centavos_se_absorbe_en_la_ultima(): void
+    {
+        $out = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta([
+            ['monto' => 237.38],
+            ['monto' => 224.05],
+            ['monto' => 224.05],
+        ], 685.52);
+
+        $this->assertSame(237.38, $out[0]['monto']);
+        $this->assertSame(224.05, $out[1]['monto']);
+        $this->assertEqualsWithDelta(224.09, $out[2]['monto'], 0.001);
+        $this->assertEqualsWithDelta(685.52, $out[0]['monto'] + $out[1]['monto'] + $out[2]['monto'], 0.001);
+    }
+
+    public function test_alinea_residual_me_que_antes_pasaba_la_tolerancia(): void
+    {
+        $cuotas = [];
+        for ($i = 0; $i < 23; $i++) {
+            $cuotas[] = ['monto' => 23.52];
+        }
+        $cuotas[] = ['monto' => 23.56];
+        $this->assertEqualsWithDelta(564.52, ComprobanteProveedorCuotasTotalSupport::sumaMontos($cuotas), 0.001);
+
+        $out = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta($cuotas, 564.50);
+        $this->assertSame(23.52, $out[0]['monto']);
+        $this->assertEqualsWithDelta(23.54, $out[23]['monto'], 0.001);
+        $this->assertEqualsWithDelta(564.50, ComprobanteProveedorCuotasTotalSupport::sumaMontos($out), 0.001);
+    }
+
+    public function test_una_cuota_con_desvio_de_cinco_centavos_se_alinea_al_total(): void
+    {
+        $out = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta([
+            ['monto' => 364443.95],
+        ], 364444.00);
+
+        $this->assertSame(364444.00, $out[0]['monto']);
+    }
 }

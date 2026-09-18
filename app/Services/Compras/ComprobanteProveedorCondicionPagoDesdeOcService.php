@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Comprobante;
+use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use Carbon\Carbon;
 
@@ -175,14 +176,14 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
         foreach ($cuotasOc as $cuotaOc) {
             if ($sumOc > 0) {
                 if ($n === $ultimo) {
-                    $monto = round($totalComprobante - $asignado, 4);
+                    $monto = round($totalComprobante - $asignado, 2);
                 } else {
-                    $monto = round((float) $cuotaOc->monto * $factor, 4);
+                    $monto = round((float) $cuotaOc->monto * $factor, 2);
                     $asignado += $monto;
                 }
             } else {
                 // OC sin montos: toda la factura en la primera cuota (moneda factura).
-                $monto = $n === 1 ? round($totalComprobante, 4) : 0.0;
+                $monto = $n === 1 ? round($totalComprobante, 2) : 0.0;
             }
 
             $cuotas[] = [
@@ -200,6 +201,11 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
             ];
             $n++;
         }
+
+        $cuotas = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta(
+            $cuotas,
+            $totalComprobante,
+        );
 
         return [
             'condicionpago_id' => $ocComprobante->condicionpago_id,
@@ -263,13 +269,13 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
         foreach ($cuotasPrev as $cuotaPrev) {
             if ($sumPrev > 0) {
                 if ($n === $ultimo) {
-                    $monto = round($totalComprobante - $asignado, 4);
+                    $monto = round($totalComprobante - $asignado, 2);
                 } else {
-                    $monto = round((float) $cuotaPrev->monto * $factor, 4);
+                    $monto = round((float) $cuotaPrev->monto * $factor, 2);
                     $asignado += $monto;
                 }
             } else {
-                $monto = $n === 1 ? round($totalComprobante, 4) : 0.0;
+                $monto = $n === 1 ? round($totalComprobante, 2) : 0.0;
             }
 
             $vto = $cuotaPrev->fechavencimiento
@@ -289,6 +295,11 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
             ];
             $n++;
         }
+
+        $cuotas = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta(
+            $cuotas,
+            $totalComprobante,
+        );
 
         return [
             'condicionpago_id' => $anterior->condicionpago_id

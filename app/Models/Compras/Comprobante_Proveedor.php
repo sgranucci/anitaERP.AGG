@@ -10,6 +10,7 @@ use App\Models\Configuracion\Provincia;
 use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Services\Compras\ContratoValidacionAbonoService;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -18,6 +19,14 @@ class Comprobante_Proveedor extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $table = 'comprobante_proveedor';
+
+    protected static function booted(): void
+    {
+        static::deleting(function (self $comprobante): void {
+            app(ContratoValidacionAbonoService::class)
+                ->eliminarDeComprobante((int) $comprobante->id);
+        });
+    }
 
     protected $fillable = [
         'empresa_id', 'proveedor_id', 'tipotransaccion_compra_id', 'ordencompra_id',
@@ -161,5 +170,10 @@ class Comprobante_Proveedor extends Model implements Auditable
     public function tracking_indice()
     {
         return $this->hasOne(Comprobante_Tracking_Indice::class, 'comprobante_proveedor_id');
+    }
+
+    public function contrato_validaciones_abono()
+    {
+        return $this->hasMany(Contrato_Validacion_Abono::class, 'comprobante_proveedor_id');
     }
 }

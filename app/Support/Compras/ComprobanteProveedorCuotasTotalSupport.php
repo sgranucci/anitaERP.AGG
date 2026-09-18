@@ -150,7 +150,45 @@ final class ComprobanteProveedorCuotasTotalSupport
     }
 
     /**
-     * Si las cuotas no cuadran con el total, las reescala; si ya cuadran, no toca.
+     * Deja las cuotas como están y manda el residual de centavos a la última.
+     * Evita reescalar un plan (p. ej. 24 cuotas USD crecientes) por 0,02 de redondeo.
+     *
+     * @param  list<array<string, mixed>>  $cuotas
+     * @return list<array<string, mixed>>
+     */
+    public static function absorberResidualEnUltima(array $cuotas, float $total): array
+    {
+        if ($cuotas === []) {
+            return [];
+        }
+
+        $totalAbs = round(abs($total), 2);
+        $n = count($cuotas);
+        if ($n === 1) {
+            $cuotas[0]['monto'] = $totalAbs;
+
+            return $cuotas;
+        }
+
+        $asignado = 0.0;
+        foreach ($cuotas as $i => $_) {
+            if ($i === $n - 1) {
+                $cuotas[$i]['monto'] = round($totalAbs - $asignado, 2);
+            } else {
+                $monto = round(abs(self::montoDe($cuotas[$i])), 2);
+                $cuotas[$i]['monto'] = $monto;
+                $asignado += $monto;
+            }
+        }
+
+        return $cuotas;
+    }
+
+    /**
+     * Si las cuotas no cuadran con el total, las alinea; si ya cuadran al centavo, no toca.
+     *
+     * Residual chico (redondeo, típico ME × cotización): última cuota.
+     * Desvío grande (cambió el total de conceptos): reescala proporcional.
      *
      * @param  list<array<string, mixed>>  $cuotas
      * @return list<array<string, mixed>>
@@ -160,9 +198,19 @@ final class ComprobanteProveedorCuotasTotalSupport
         float $total,
         float $tolerancia = self::TOLERANCIA,
     ): array {
-        $cuadre = self::cuadreConTotal($total, $cuotas, $tolerancia);
+        $cuadre = self::cuadreConTotal($total, $cuotas, self::EPSILON_ALINEAR);
         if (! ($cuadre['aplica'] ?? false) || ($cuadre['cuadra'] ?? true)) {
             return $cuotas;
+        }
+
+        $diferencia = (float) ($cuadre['diferencia'] ?? 0);
+        if ($diferencia <= $tolerancia + 0.000001) {
+            $alineado = self::absorberResidualEnUltima($cuotas, $total);
+            $verifica = self::cuadreConTotal($total, $alineado, self::EPSILON_ALINEAR);
+            $ultimo = abs(self::montoDe($alineado[count($alineado) - 1]));
+            if (($verifica['cuadra'] ?? false) && $ultimo >= 0) {
+                return $alineado;
+            }
         }
 
         return self::redistribuirAlTotal($cuotas, $total);

@@ -587,18 +587,6 @@ class ComprobanteProveedorControlesLegajoService
             ->pluck('id')
             ->map(static fn ($id) => (int) $id)
             ->all();
-        if ($disponibles === []) {
-            $disponibles = $this->recepcionesSupport
-                ->listarSinFacturarEnLegajo(
-                    (int) $ordencompra->proveedor_id,
-                    (int) $ordencompra->empresa_id,
-                    $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
-                    $excluirComprobanteId,
-                )
-                ->pluck('id')
-                ->map(static fn ($id) => (int) $id)
-                ->all();
-        }
 
         $pendientes = array_values(array_filter(
             OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($ordencompra),
@@ -653,15 +641,6 @@ class ComprobanteProveedorControlesLegajoService
 
     private function tieneComDisponiblesEnLegajo(Ordencompra $ordencompra, ?int $excluirComprobanteId): bool
     {
-        if ($this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId)->isNotEmpty()) {
-            return true;
-        }
-
-        return $this->recepcionesSupport->listarSinFacturarEnLegajo(
-            (int) $ordencompra->proveedor_id,
-            (int) $ordencompra->empresa_id,
-            $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
-            $excluirComprobanteId,
-        )->isNotEmpty();
+        return $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId)->isNotEmpty();
     }
 }
