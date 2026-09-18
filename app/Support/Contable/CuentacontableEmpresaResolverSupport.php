@@ -32,11 +32,34 @@ final class CuentacontableEmpresaResolverSupport
             return null;
         }
 
-        $homologada = (int) (Cuentacontable::query()
+        return self::resolverIdDesdeCodigo($codigo, $empresaId);
+    }
+
+    public static function resolverIdDesdeCodigo(string $codigo, int $empresaId): ?int
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '' || $empresaId <= 0) {
+            return null;
+        }
+
+        $id = (int) (Cuentacontable::query()
             ->where('empresa_id', $empresaId)
             ->where('codigo', $codigo)
             ->value('id') ?? 0);
+        if ($id > 0) {
+            return $id;
+        }
 
-        return $homologada > 0 ? $homologada : null;
+        $sinCeros = ltrim($codigo, '0');
+        if ($sinCeros === '' || $sinCeros === $codigo) {
+            return null;
+        }
+
+        $id = (int) (Cuentacontable::query()
+            ->where('empresa_id', $empresaId)
+            ->where('codigo', $sinCeros)
+            ->value('id') ?? 0);
+
+        return $id > 0 ? $id : null;
     }
 }

@@ -81,24 +81,24 @@ class ApiAnita
 
     /**
      * INFORMIXSERVER para el `sql` del bridge HTTP.
-     * Si ANITA_IP y LOCAL_IP son el mismo host, el CLI corre en Anita y debe usar
-     * IFX_SERVER_LOCAL (bincadmin). IFX_SERVER (bi7ncadmin) es alias remoto y el
-     * UNLOAD no genera el CSV.
+     * El CLI corre en el host Anita: sqlhosts local es IFX_SERVER_LOCAL (bincadmin).
+     * IFX_SERVER (bi7ncadmin) es el alias remoto del ERP y dispara Informix 25596
+     * (no está en sqlhosts) → UNLOAD no genera el CSV.
      */
     public static function resolverIfxServerDelBridge(?string $claveIfx = null): string
     {
-        if ($claveIfx !== null && trim($claveIfx) !== '') {
-            return self::resolverIfxServer($claveIfx);
+        $resolved = self::resolverIfxServer($claveIfx);
+        $local = trim((string) config('anita.ifx_server_local', ''));
+        if ($local === '') {
+            return $resolved;
         }
 
-        $local = trim((string) config('anita.ifx_server_local', ''));
-        $anitaIp = trim((string) config('anita.ip', ''));
-        $localIp = trim((string) config('anita.local_ip', ''));
-        if ($local !== '' && $anitaIp !== '' && $localIp !== '' && $anitaIp === $localIp) {
+        $remoto = trim((string) config('anita.ifx_server', ''));
+        if ($resolved === '' || $resolved === $remoto || $resolved === 'bi7ncadmin') {
             return $local;
         }
 
-        return self::resolverIfxServer();
+        return $resolved;
     }
 
     public function apiCallHttp($data)
@@ -110,7 +110,7 @@ class ApiAnita
         }
 
         if (isset($data['ifx_server'])) {
-            $data['IFX_SERVER'] = self::resolverIfxServer((string) $data['ifx_server']);
+            $data['IFX_SERVER'] = self::resolverIfxServerDelBridge((string) $data['ifx_server']);
         } else {
             $data['IFX_SERVER'] = self::resolverIfxServerDelBridge();
         }
@@ -267,6 +267,7 @@ class ApiAnita
         return stripos($m, 'failed to open stream') !== false
             || stripos($m, 'UNLOAD no generó el archivo CSV') !== false
             || stripos($m, 'not a valid stream resource') !== false
+            || stripos($m, 'INFORMIXSERVER value is not listed') !== false
             || (stripos($m, 'fopen(') !== false && stripos($m, '.csv') !== false);
     }
 
@@ -365,11 +366,19 @@ class ApiAnita
 
         $decoded = json_decode($trim, true);
         if (is_array($decoded)) {
+            $msg = '';
             if (isset($decoded['Error']) && (string) $decoded['Error'] !== '') {
-                return (string) $decoded['Error'];
+                $msg = (string) $decoded['Error'];
+            } elseif (isset($decoded['error']) && (string) $decoded['error'] !== '') {
+                $msg = (string) $decoded['error'];
             }
-            if (isset($decoded['error']) && (string) $decoded['error'] !== '') {
-                return (string) $decoded['error'];
+            if ($msg !== '') {
+                $ifxOut = trim((string) ($decoded['informix_output'] ?? ''));
+                if ($ifxOut !== '') {
+                    $msg .= ' '.$ifxOut;
+                }
+
+                return $msg;
             }
 
             return null;

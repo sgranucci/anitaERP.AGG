@@ -4,6 +4,7 @@ namespace App\Models\Stock;
 
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
+use App\Support\Stock\ArticuloCuentacontableEmpresasSupport;
 use App\Support\Stock\ArticuloImpuestoAnitaSupport;
 use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
 use App\Support\Stock\StockAnitaBridgeSupport;
@@ -1114,8 +1115,7 @@ class Articulo extends Model implements Auditable
                 \App\Support\Stock\ArticuloSkuMatchSupport::inactivarDuplicados($skuLocal, (int) $articulo->id);
             }
 
-            // Agrega cuentas contables
-            $this->articulo_cuentacontableRepository = App::make(\App\Repositories\Stock\Articulo_CuentacontableRepositoryInterface::class);
+            // Agrega cuentas contables homologadas por empresa (no reutilizar el id de Biyemas).
             $empresasSync = array_values(array_filter(
                 array_map('intval', (array) config('stock.depmae_anita_empresas_sync', [1])),
                 fn (int $id) => $id > 0 && Empresa::query()->whereKey($id)->exists()
@@ -1123,46 +1123,42 @@ class Articulo extends Model implements Auditable
             if ($empresasSync === []) {
                 $empresasSync = [1];
             }
-            foreach ($empresasSync as $empresaId) {
-                if ($cuentacontableventa_id > 0) {
-                    $this->articulo_cuentacontableRepository->createUnique([
-                        'articulo_id' => $articulo->id,
-                        'empresa_id' => $empresaId,
-                        'tipoimputacion' => 'VENTAS',
-                        'cuentacontable_id' => $cuentacontableventa_id,
-                        'creousuario_id' => Auth::user()->id,
-                    ]);
-                }
-
-                if ($cuentacontablecompra_id > 0) {
-                    $this->articulo_cuentacontableRepository->createUnique([
-                        'articulo_id' => $articulo->id,
-                        'empresa_id' => $empresaId,
-                        'tipoimputacion' => 'COMPRAS',
-                        'cuentacontable_id' => $cuentacontablecompra_id,
-                        'creousuario_id' => Auth::user()->id,
-                    ]);
-                }
-
-                if ($cuentacontableimpinterno_id > 0) {
-                    $this->articulo_cuentacontableRepository->createUnique([
-                        'articulo_id' => $articulo->id,
-                        'empresa_id' => $empresaId,
-                        'tipoimputacion' => 'GASTOS',
-                        'cuentacontable_id' => $cuentacontableimpinterno_id,
-                        'creousuario_id' => Auth::user()->id,
-                    ]);
-                }
-
-                if ($cuentaContableGasto_id > 0) {
-                    $this->articulo_cuentacontableRepository->createUnique([
-                        'articulo_id' => $articulo->id,
-                        'empresa_id' => $empresaId,
-                        'tipoimputacion' => 'IMPUESTOS INTERNOS',
-                        'cuentacontable_id' => $cuentaContableGasto_id,
-                        'creousuario_id' => Auth::user()->id,
-                    ]);
-                }
+            $usuarioCuentasId = (int) (Auth::id() ?? 0);
+            if ($cuentacontableventa_id > 0) {
+                ArticuloCuentacontableEmpresasSupport::asegurarDesdeCuentaOrigen(
+                    (int) $articulo->id,
+                    'VENTAS',
+                    (int) $cuentacontableventa_id,
+                    $usuarioCuentasId,
+                    $empresasSync
+                );
+            }
+            if ($cuentacontablecompra_id > 0) {
+                ArticuloCuentacontableEmpresasSupport::asegurarDesdeCuentaOrigen(
+                    (int) $articulo->id,
+                    'COMPRAS',
+                    (int) $cuentacontablecompra_id,
+                    $usuarioCuentasId,
+                    $empresasSync
+                );
+            }
+            if ($cuentacontableimpinterno_id > 0) {
+                ArticuloCuentacontableEmpresasSupport::asegurarDesdeCuentaOrigen(
+                    (int) $articulo->id,
+                    'GASTOS',
+                    (int) $cuentacontableimpinterno_id,
+                    $usuarioCuentasId,
+                    $empresasSync
+                );
+            }
+            if ($cuentaContableGasto_id > 0) {
+                ArticuloCuentacontableEmpresasSupport::asegurarDesdeCuentaOrigen(
+                    (int) $articulo->id,
+                    'IMPUESTOS INTERNOS',
+                    (int) $cuentaContableGasto_id,
+                    $usuarioCuentasId,
+                    $empresasSync
+                );
             }
 
             // Agrega estados

@@ -6,7 +6,6 @@ use App\ApiAnita;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Articulo;
-use App\Models\Stock\Articulo_Cuentacontable;
 use App\Models\Stock\Articulo_Estado;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Linea;
@@ -14,6 +13,7 @@ use App\Models\Stock\Material;
 use App\Models\Stock\Unidadmedida;
 use App\Models\Ventas\Canal;
 use App\Models\Ventas\LocalVenta;
+use App\Support\Stock\ArticuloCuentacontableEmpresasSupport;
 use App\Support\Stock\ArticuloImpuestoAnitaSupport;
 use App\Support\Stock\ArticuloSkuMatchSupport;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
@@ -268,28 +268,20 @@ final class ArticuloCanalSyncService
         ]);
 
         if ($ctaVentaId) {
-            $empresaVenta = (int) Cuentacontable::query()->whereKey($ctaVentaId)->value('empresa_id');
-            if ($empresaVenta > 0) {
-                Articulo_Cuentacontable::create([
-                    'articulo_id' => $articulo->id,
-                    'empresa_id' => $empresaVenta,
-                    'tipoimputacion' => 'VENTAS',
-                    'cuentacontable_id' => $ctaVentaId,
-                    'creousuario_id' => $usuarioId,
-                ]);
-            }
+            ArticuloCuentacontableEmpresasSupport::asegurarDesdeCuentaOrigen(
+                (int) $articulo->id,
+                'VENTAS',
+                (int) $ctaVentaId,
+                $usuarioId
+            );
         }
         if ($ctaCompraId) {
-            $empresaCompra = (int) Cuentacontable::query()->whereKey($ctaCompraId)->value('empresa_id');
-            if ($empresaCompra > 0) {
-                Articulo_Cuentacontable::create([
-                    'articulo_id' => $articulo->id,
-                    'empresa_id' => $empresaCompra,
-                    'tipoimputacion' => 'COMPRAS',
-                    'cuentacontable_id' => $ctaCompraId,
-                    'creousuario_id' => $usuarioId,
-                ]);
-            }
+            ArticuloCuentacontableEmpresasSupport::asegurarDesdeCuentaOrigen(
+                (int) $articulo->id,
+                'COMPRAS',
+                (int) $ctaCompraId,
+                $usuarioId
+            );
         }
 
         return $articulo;

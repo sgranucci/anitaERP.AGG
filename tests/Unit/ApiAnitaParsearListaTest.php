@@ -89,8 +89,25 @@ final class ApiAnitaParsearListaTest extends TestCase
         $this->assertTrue(ApiAnita::esErrorCsvUnloadFaltante(
             'UNLOAD no generó el archivo CSV (revisar permisos, ruta o SQL Informix).'
         ));
+        $this->assertTrue(ApiAnita::esErrorCsvUnloadFaltante(
+            '25596: The INFORMIXSERVER value is not listed in the sqlhosts file or the Registry.'
+        ));
         $this->assertFalse(ApiAnita::esErrorCsvUnloadFaltante('timeout bridge'));
         $this->assertFalse(ApiAnita::esErrorCsvUnloadFaltante(null));
         $this->assertFalse(ApiAnita::esErrorCsvUnloadFaltante('[]'));
+    }
+
+    public function test_extraer_mensaje_incluye_salida_informix(): void
+    {
+        $raw = json_encode([
+            'Error' => 'UNLOAD no generó el archivo CSV (revisar permisos, ruta o SQL Informix).',
+            'informix_output' => '25596: The INFORMIXSERVER value is not listed in the sqlhosts file or the Registry.',
+        ]);
+
+        $msg = ApiAnita::extraerMensajeError($raw);
+        $this->assertNotNull($msg);
+        $this->assertStringContainsString('UNLOAD no generó el archivo CSV', (string) $msg);
+        $this->assertStringContainsString('25596', (string) $msg);
+        $this->assertTrue(ApiAnita::esErrorCsvUnloadFaltante($msg));
     }
 }

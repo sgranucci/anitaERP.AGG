@@ -58,24 +58,34 @@ $fp1 = fopen($_nombre_file, "w");
 fprintf($fp1, "%s", $sql);
 fclose($fp1);
 
-$ifxServer = (! empty($data['IFX_SERVER']) ? $data['IFX_SERVER'] : 'bincadmin');
-// sql(1) usa sqlhosts de ESTE host. bi7ncadmin es el alias remoto del ERP.
-if ($ifxServer === 'bi7ncadmin') {
+$ifxServer = (! empty($data['IFX_SERVER']) ? trim($data['IFX_SERVER']) : 'bincadmin');
+// sql(1) usa sqlhosts de ESTE host. bi7ncadmin es el alias remoto del ERP (Informix 25596).
+if ($ifxServer == 'bi7ncadmin') {
 	$ifxServer = 'bincadmin';
 }
-$_cmdd = "export LD_ASSUME_KERNEL=2.4.19;export INFORMIXDIR=/home/informix;export LD_LIBRARY_PATH=:/home/informix/lib:/home/informix/lib/esql:/home/informix_esql/lib;export INFORMIXSERVER=".$ifxServer.";cd ".$path_sistema."/".$sistema.";";
+$_cmdd_pre = "export LD_ASSUME_KERNEL=2.4.19;export INFORMIXDIR=/home/informix;export LD_LIBRARY_PATH=:/home/informix/lib:/home/informix/lib/esql:/home/informix_esql/lib;export INFORMIXSERVER=";
+$_cmdd_post = ";cd ".$path_sistema."/".$sistema.";";
 
-$_cmd = $_cmdd."sql ".$sistema." ".$_nombre_file." 2>&1";
+$_cmd = $_cmdd_pre.$ifxServer.$_cmdd_post."sql ".$sistema." ".$_nombre_file." 2>&1";
 
 $arr = shell_exec($_cmd);
 
 if ($data['acc'] == "list" || $data['acc'] == "customSql") {
+	if (! is_readable($_nombre_ret) && $ifxServer != 'bincadmin') {
+		$outIfx = trim((string) $arr);
+		if ($outIfx != '' && (strpos($outIfx, '25596') !== false || strpos($outIfx, 'INFORMIXSERVER') !== false)) {
+			$ifxServer = 'bincadmin';
+			$_cmd = $_cmdd_pre.$ifxServer.$_cmdd_post."sql ".$sistema." ".$_nombre_file." 2>&1";
+			$arr = shell_exec($_cmd);
+		}
+	}
 	if (! is_readable($_nombre_ret)) {
 		header('Content-Type: application/json; charset=utf-8');
 		echo json_encode(array(
 			'Error' => 'UNLOAD no generó el archivo CSV (revisar permisos, ruta o SQL Informix).',
 			'csv_esperado' => $_nombre_ret,
 			'sql_file' => $_nombre_file,
+			'informix_server' => $ifxServer,
 			'informix_output' => trim((string) $arr),
 		));
 		@unlink($_nombre_file);
