@@ -7,8 +7,12 @@ use Carbon\Carbon;
 /**
  * Importe del comprobante a comparar con la provisión COM (neto sin IVA).
  *
+ * La provisión COM de cigarrillos incluye impuesto interno (asiento de la recepción).
+ * En letra A el comparable es neto gravado + II, no el neto solo: si no, YAFEMA y similares
+ * devolvían el legajo a Compras por una diferencia que no es de precio.
+ *
  * Las conversiones de moneda viven en ComprobanteProveedorMonedaMotor; acá solo se elige
- * qué importe de la factura se compara (total vs neto gravado) y se delega la conversión.
+ * qué importe de la factura se compara (total vs neto+II) y se delega la conversión.
  */
 final class ComprobanteProveedorImporteComparacionComSupport
 {
@@ -39,10 +43,14 @@ final class ComprobanteProveedorImporteComparacionComSupport
         }
 
         $gravado = 0.0;
+        $impuestoInterno = 0.0;
         foreach ($conceptos as $linea) {
             $tipo = (string) ($linea->concepto_ivacompras?->tipoconcepto ?? '');
+            $monto = (float) ($linea->monto ?? 0);
             if (ComprobanteProveedorConceptoIvaTipos::esNeto($tipo)) {
-                $gravado += (float) ($linea->monto ?? 0);
+                $gravado += $monto;
+            } elseif (ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno($tipo)) {
+                $impuestoInterno += $monto;
             }
         }
 
@@ -51,13 +59,22 @@ final class ComprobanteProveedorImporteComparacionComSupport
         }
 
         if ($gravado <= 0) {
-            $gravado = $total;
+            // Último recurso: el total ya incluye II, IVA y percepciones.
+            return [
+                'importe' => round($total, 2),
+                'tipo' => 'total',
+                'etiqueta' => 'total (sin neto discriminado)',
+            ];
         }
 
+        $incluyeIi = abs($impuestoInterno) > 0.005;
+
         return [
-            'importe' => round($gravado, 2),
-            'tipo' => 'gravado',
-            'etiqueta' => 'neto gravado (letra A)',
+            'importe' => round($gravado + $impuestoInterno, 2),
+            'tipo' => $incluyeIi ? 'gravado_mas_ii' : 'gravado',
+            'etiqueta' => $incluyeIi
+                ? 'neto + impuesto interno (letra A)'
+                : 'neto gravado (letra A)',
         ];
     }
 

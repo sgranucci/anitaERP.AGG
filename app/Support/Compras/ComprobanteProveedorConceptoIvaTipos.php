@@ -15,6 +15,9 @@ final class ComprobanteProveedorConceptoIvaTipos
     /** Impuestos y percepciones → deben por cuenta del concepto. */
     public const IMPUESTO = ['I', 'P', 'B', 'M', 'T', 'S', 'A'];
 
+    /** Impuesto interno / I.T.C. (enum valor T). */
+    public const IMPUESTO_INTERNO = 'T';
+
     /** Percepción IVA (enum valor P). */
     public const PERCEPCION_IVA = 'P';
 
@@ -32,6 +35,20 @@ final class ComprobanteProveedorConceptoIvaTipos
     public static function esImpuesto(?string $tipoconcepto): bool
     {
         return in_array((string) $tipoconcepto, self::IMPUESTO, true);
+    }
+
+    public static function esImpuestoInterno(?string $tipoconcepto): bool
+    {
+        return strtoupper((string) $tipoconcepto) === self::IMPUESTO_INTERNO;
+    }
+
+    /**
+     * Contra COM valuada cierran la provisión FAR: neto + impuesto interno.
+     * La recepción ya debitó el II; en la factura no se vuelve a imputar a su cuenta.
+     */
+    public static function revierteProvisionCom(?string $tipoconcepto): bool
+    {
+        return self::esNeto($tipoconcepto) || self::esImpuestoInterno($tipoconcepto);
     }
 
     /** Solo tipoconcepto B — no inferir por nombre ni por retieneIIBB. */

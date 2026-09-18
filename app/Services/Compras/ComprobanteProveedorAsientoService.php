@@ -261,7 +261,8 @@ class ComprobanteProveedorAsientoService
             $tipoConcepto = (string) ($concepto?->tipoconcepto ?? '');
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
 
-            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            // Neto + II: la COM ya debitó el impuesto interno; acá solo se revierte FAR.
+            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom($tipoConcepto)) {
                 $totalNetoConceptos += $monto;
 
                 continue;
@@ -476,7 +477,8 @@ class ComprobanteProveedorAsientoService
                         .')'.$detalleYa
                         .' es del '.number_format($pct, 2, ',', '.')
                         .'%, mayor al '.number_format(ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA_PCT, 0)
-                        .'%. Revise precios o cantidades; no se puede imputar automáticamente.'
+                        .'%. El comparable incluye impuesto interno (ya provisionado en la COM). '
+                        .'Revise precios o cantidades; no se puede imputar automáticamente.'
                     );
                 }
 

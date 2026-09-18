@@ -270,6 +270,9 @@
                 window.recepcionProveedorEnviandoTrasModal = false;
                 return true;
             }
+            if ($form.find('input[name="accion"][data-rp-accion-confirmar="1"]').val() === 'confirmar') {
+                return true;
+            }
             e.preventDefault();
             solicitarPreviewYDecidir($form);
             return false;

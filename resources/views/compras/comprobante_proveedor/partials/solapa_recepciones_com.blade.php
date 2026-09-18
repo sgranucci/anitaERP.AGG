@@ -57,8 +57,9 @@
                     ({{ number_format((float) $legajo_ya_facturado_importe, 2, ',', '.') }}),
                     igual que Anita resta lo aplicado en <code>aplicped</code>.
                 @endif
-                Al contabilizar: el asiento de la recepción no se modifica; la factura debita la provisión (neto COM),
-                impuestos y —si el neto supera la COM— la diferencia prorrateada en cuentas de artículos; el haber va a proveedores.
+                La comparación usa neto gravado más impuesto interno (la provisión COM de cigarrillos ya incluye el II).
+                Al contabilizar: el asiento de la recepción no se modifica; la factura debita la provisión (neto+II),
+                IVA y percepciones; el II no se vuelve a debitar. Si el comparable supera la COM, la diferencia se prorratea en cuentas de artículos; el haber va a proveedores.
             </p>
 
             @if (! empty($comResolucion['importe_comparacion']))
@@ -272,9 +273,9 @@
                 <div class="mt-3 p-2 border rounded bg-light small" id="cp-com-asiento-hint">
                     <strong><i class="fa fa-calculator"></i> Impacto en asiento (modo COM):</strong>
                     <ul class="mb-0 pl-3 mt-1">
-                        <li>Debe: reversión de provisión (facturas a recibir) por el neto COM seleccionado</li>
-                        <li>Debe: impuestos de la factura (conceptos IVA)</li>
-                        <li>Debe: si neto factura &gt; provisión COM → diferencia prorrateada en cuentas de artículos de la COM</li>
+                        <li>Debe: reversión de provisión (facturas a recibir) por neto COM + impuesto interno ya provisionado</li>
+                        <li>Debe: IVA y percepciones de la factura (el impuesto interno no se duplica)</li>
+                        <li>Debe: si neto+II factura &gt; provisión COM → diferencia prorrateada en cuentas de artículos de la COM</li>
                         <li>Haber: cuenta del proveedor (según moneda MN/ME)</li>
                         <li>El asiento de la recepción permanece intacto</li>
                     </ul>

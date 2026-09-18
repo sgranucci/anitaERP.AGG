@@ -6,6 +6,7 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
+use App\Models\Stock\Tipoarticulo;
 use App\Models\Stock\Unidadmedida;
 use App\Support\Compras\ArticuloProveedorCodigoSyncSupport;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
@@ -88,6 +89,10 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
                 continue;
             }
 
+            if (self::articuloOmiteCatalogoProveedor($articulo)) {
+                continue;
+            }
+
             $evaluacion = self::evaluarLineaCatalogoPreview(
                 $proveedorId,
                 $articulo,
@@ -97,7 +102,7 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
                 $formIdx
             );
 
-            if ($evaluacion !== null) {
+            if ($evaluacion !== null && self::accionPreviewRequiereModal($evaluacion['accion'] ?? null)) {
                 $lineas[] = $evaluacion;
             }
         }
@@ -106,6 +111,45 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
             'requiere_modal' => $lineas !== [],
             'lineas' => $lineas,
         ];
+    }
+
+    /**
+     * Servicios / conceptos contables no tienen código de mercadería de proveedor.
+     */
+    public static function articuloOmiteCatalogoProveedor(?Articulo $articulo): bool
+    {
+        if ($articulo === null) {
+            return false;
+        }
+
+        $tipoId = (int) ($articulo->tipoarticulo_id ?? 0);
+        if ($tipoId <= 0) {
+            return false;
+        }
+
+        if (ArticuloIndumentariaTipoSupport::esServicio($tipoId)) {
+            return true;
+        }
+
+        $abrev = strtoupper(trim((string) (
+            Tipoarticulo::query()->whereKey($tipoId)->value('abreviatura') ?? ''
+        )));
+
+        return in_array($abrev, ['1', '2'], true);
+    }
+
+    /**
+     * `sin_codigo` es opcional: no debe interrumpir Guardar / Guardar y confirmar
+     * (típico en COM de servicios sin catálogo proveedor).
+     */
+    public static function accionPreviewRequiereModal(?string $accion): bool
+    {
+        $accion = strtolower(trim((string) $accion));
+        if ($accion === '' || $accion === 'sin_codigo') {
+            return false;
+        }
+
+        return in_array($accion, ['crear', 'completar', 'complementar', 'conflicto'], true);
     }
 
     /** @return list<array{id: int, abreviatura: string, nombre: string}> */
@@ -204,17 +248,9 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
         }
 
         if ($codigo === null) {
-            return self::filaPreviewRespuesta(
-                $formIdx,
-                $articulo,
-                'sin_codigo',
-                'Opcional',
-                true,
-                $datos,
-                $meta,
-                null,
-                'Sin código de proveedor detectado. Complete solo si dispone del dato; puede guardar sin completar.'
-            );
+            // COM de servicios / carga manual: no hay código de proveedor.
+            // No interrumpir Guardar ni Guardar y confirmar con un modal opcional.
+            return null;
         }
 
         if ($filaExistente === null) {
@@ -345,6 +381,9 @@ final class RecepcionProveedorArticuloProveedorSyncSupport
             $articulo = Articulo::query()->find((int) $linea->articulo_id);
         }
         if ($articulo === null) {
+            return;
+        }
+        if (self::articuloOmiteCatalogoProveedor($articulo)) {
             return;
         }
 

@@ -1328,12 +1328,25 @@
             limpiarAccionConfirmarEnFormulario($('#form-recepcion-proveedor'));
         });
         $('#btn-modal-confirmar-recepcion-aceptar').on('click', function () {
-            $('#modalConfirmarRecepcionDiferencias').modal('hide');
-            if (window.recepcionProveedorConfirmarAlGuardar || !$('#form-recepcion-confirmar').length) {
-                enviarGuardarYConfirmarRecepcion();
-                return;
-            }
-            enviarConfirmacionRecepcion($('#form-recepcion-confirmar'));
+            var $modal = $('#modalConfirmarRecepcionDiferencias');
+            var $btn = $(this);
+            var hecho = false;
+            var continuar = function () {
+                if (hecho) {
+                    return;
+                }
+                hecho = true;
+                $btn.prop('disabled', false);
+                if (window.recepcionProveedorConfirmarAlGuardar || !$('#form-recepcion-confirmar').length) {
+                    enviarGuardarYConfirmarRecepcion();
+                    return;
+                }
+                enviarConfirmacionRecepcion($('#form-recepcion-confirmar'));
+            };
+            $btn.prop('disabled', true);
+            $modal.one('hidden.bs.modal', continuar);
+            $modal.modal('hide');
+            window.setTimeout(continuar, 400);
         });
     }
 

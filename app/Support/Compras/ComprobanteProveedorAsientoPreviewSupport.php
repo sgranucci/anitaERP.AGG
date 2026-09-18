@@ -320,12 +320,12 @@ final class ComprobanteProveedorAsientoPreviewSupport
 
             $tipoConcepto = (string) ($concepto->tipoconcepto ?? '');
 
-            // Sin COM asignada cuando el flujo la exige: el neto no usa la cuenta del concepto.
-            if ($exigeAsignarCom && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            // Sin COM asignada cuando el flujo la exige: neto/II no usan la cuenta del concepto.
+            if ($exigeAsignarCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom($tipoConcepto)) {
                 continue;
             }
 
-            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom($tipoConcepto)) {
                 continue;
             }
 

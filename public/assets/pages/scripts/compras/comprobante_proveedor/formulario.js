@@ -29,6 +29,7 @@ $(function () {
         }
 
     var TIPOS_NETO = ['N', 'G', 'E'];
+    var TIPO_IMPUESTO_INTERNO = 'T';
 
     function parseMonto(val) {
         if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.parseDecimal === 'function') {
@@ -250,9 +251,19 @@ $(function () {
      * La columna Cuenta DEBE solo se muestra si el renglón no está cubierto por COM
      * ni por otra regla con cuenta ya resuelta (maestro, contrato, artículos OC).
      */
+    function esImpuestoInterno(tipoConcepto) {
+        return String(tipoConcepto || '').toUpperCase() === TIPO_IMPUESTO_INTERNO;
+    }
+
+    function revierteProvisionCom(tipoConcepto) {
+        var tipo = String(tipoConcepto || '').toUpperCase();
+        return TIPOS_NETO.indexOf(tipo) >= 0 || esImpuestoInterno(tipo);
+    }
+
     function reglaCubreCuentaDebeSinEditor(tipoConcepto) {
-        var esNeto = TIPOS_NETO.indexOf(String(tipoConcepto || '')) >= 0;
-        if (esModoAsignaRecepcion() && esNeto) {
+        var tipo = String(tipoConcepto || '');
+        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0;
+        if (esModoAsignaRecepcion() && revierteProvisionCom(tipo)) {
             return true;
         }
         // OC asociada: neto → cuentas de artículos (igual FAC diferencia / contrato).
@@ -1219,6 +1230,46 @@ $(function () {
         });
     }
 
+    function importeComparableComDesdeConceptos() {
+        var letra = String($('#letra').val() || '').toUpperCase().trim();
+        var total = 0;
+        var gravado = 0;
+        var impuestoInterno = 0;
+        var hayLineas = false;
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $row = $(this);
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
+            var monto = parseMonto($row.find('.monto').val() || '0');
+            if (conceptoId <= 0 || Math.abs(monto) < 0.0001) {
+                return;
+            }
+            hayLineas = true;
+            total += monto;
+            var tip = String((conceptosMeta[conceptoId] || {}).tipoconcepto || '').toUpperCase();
+            if (TIPOS_NETO.indexOf(tip) >= 0) {
+                gravado += monto;
+            } else if (esImpuestoInterno(tip)) {
+                impuestoInterno += monto;
+            }
+        });
+        if (!hayLineas) {
+            return 0;
+        }
+        if (letra !== '' && letra !== 'A') {
+            return Math.round(total * 100) / 100;
+        }
+        if (gravado <= 0) {
+            var subtotal = parseMonto($('#subtotal').val() || '0');
+            if (subtotal > 0) {
+                gravado = subtotal;
+            }
+        }
+        if (gravado <= 0) {
+            return Math.round(total * 100) / 100;
+        }
+        return Math.round((gravado + impuestoInterno) * 100) / 100;
+    }
+
     function actualizarUiRecepcionesCom() {
         var $bloque = $('#cp-bloque-recepciones-com');
         if (!$bloque.length) {
@@ -1233,7 +1284,12 @@ $(function () {
         }
 
         var toleranciaPct = parseFloat($bloque.attr('data-tolerancia-pct')) || 0;
-        var importeRef = parseFloat($bloque.attr('data-importe-ref')) || 0;
+        var importeRef = importeComparableComDesdeConceptos();
+        if (!(importeRef > 0)) {
+            importeRef = parseFloat($bloque.attr('data-importe-ref')) || 0;
+        } else {
+            $bloque.attr('data-importe-ref', String(importeRef));
+        }
         var yaFacturado = parseFloat($bloque.attr('data-ya-facturado')) || 0;
 
         var sumaCom = 0;
@@ -1319,6 +1375,7 @@ $(function () {
 
     $(document).on('change', '#tbody-concepto-table .concepto_ivacompra_id, #tbody-concepto-table .monto, #tbody-concepto-table .cp-celda-cuenta-debe .cuentacontable_id', function () {
         marcarAvisosConceptosLocales();
+        actualizarUiRecepcionesCom();
         programarPreviewAsiento();
     });
 

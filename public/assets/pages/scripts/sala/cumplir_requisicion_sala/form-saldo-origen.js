@@ -139,13 +139,20 @@
 
     function asegurarBackdropLimpio() {
         // Evita UI "trabada" si un modal de dep\u00f3sito cerr\u00f3 mal.
+        // No tocar backdrop mientras un modal est\u00e1 abri\u00e9ndose (display:block sin .show).
         window.setTimeout(function () {
             if ($('.modal.show').length) {
                 return;
             }
+            var $abierto = $('.modal').filter(function () {
+                return $(this).css('display') === 'block';
+            });
+            if ($abierto.length) {
+                return;
+            }
             $('body').removeClass('modal-open');
             $('.modal-backdrop').remove();
-        }, 50);
+        }, 150);
     }
 
     function ocultarAvisoSaldo() {

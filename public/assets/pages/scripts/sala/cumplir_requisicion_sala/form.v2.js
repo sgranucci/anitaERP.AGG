@@ -12,6 +12,8 @@
     var onAceptarParcialCallback = null;
     var colaValidacionFila = [];
     var validacionFilaActiva = false;
+    var validacionGeneracion = 0;
+    var timerMostrarModal = null;
     var tecnicosCache = {};
     var indiceLinea = $('#tbody-lineas-cumple tr.fila-cumple-linea').length;
 
@@ -391,9 +393,63 @@
         actualizarEtiquetaAutorizacion($fila);
     }
 
+    function $modalesCumple() {
+        return $('#modalMotivoParcialCumple, #modalAutorizacionLineaCumple');
+    }
+
+    function hayModalCumpleVisible() {
+        var $modales = $modalesCumple();
+        return $modales.hasClass('show') || $modales.is(':visible');
+    }
+
     function hayModalCumpleAbierto() {
-        return $('#modalMotivoParcialCumple').is(':visible') ||
-            $('#modalAutorizacionLineaCumple').is(':visible');
+        return !!filaModalParcial || !!filaModalAuth || hayModalCumpleVisible();
+    }
+
+    function cancelarValidacionesPendientes() {
+        validacionGeneracion += 1;
+        colaValidacionFila = [];
+        validacionFilaActiva = false;
+        if (timerMostrarModal) {
+            clearTimeout(timerMostrarModal);
+            timerMostrarModal = null;
+        }
+        if (!hayModalCumpleVisible()) {
+            filaModalParcial = null;
+            onAceptarParcialCallback = null;
+            filaModalAuth = null;
+            onAceptarAuthCallback = null;
+        }
+    }
+
+    function callbackSiGeneracionActual(generacion, fn) {
+        return function () {
+            if (generacion !== validacionGeneracion) {
+                return;
+            }
+            if (typeof fn === 'function') {
+                fn.apply(null, arguments);
+            }
+        };
+    }
+
+    function mostrarModalCumple($modal) {
+        if (timerMostrarModal) {
+            clearTimeout(timerMostrarModal);
+            timerMostrarModal = null;
+        }
+        var $otros = $modalesCumple().filter('.show').not($modal);
+        if ($otros.length) {
+            $otros.one('hidden.bs.modal', function () {
+                timerMostrarModal = window.setTimeout(function () {
+                    timerMostrarModal = null;
+                    $modal.modal('show');
+                }, 50);
+            });
+            $otros.modal('hide');
+            return;
+        }
+        $modal.modal('show');
     }
 
     function estadoDefaultPorDestino($fila, entrega, pendiente) {
@@ -422,16 +478,18 @@
         }
 
         var item = colaValidacionFila.shift();
+        var generacion = validacionGeneracion;
         validacionFilaActiva = true;
-        ejecutarValidacionCantidadEnFila(item.$fila, function (ok) {
+        ejecutarValidacionCantidadEnFila(item.$fila, callbackSiGeneracionActual(generacion, function (ok) {
             finalizarValidacionFila(ok, item.alListo);
-        });
+        }));
     }
 
     function validarCantidadEnFila($fila, alListo) {
+        var generacion = validacionGeneracion;
         colaValidacionFila.push({
             $fila: $fila,
-            alListo: typeof alListo === 'function' ? alListo : null,
+            alListo: callbackSiGeneracionActual(generacion, typeof alListo === 'function' ? alListo : null),
         });
         procesarColaValidacionFila();
     }
@@ -453,9 +511,7 @@
         $('#modal-auth-responsable').val($fila.find('.input-nombreresponsable').val() || '');
         var sku = skuDeFila($fila);
         $('#modal-auth-articulo').text(sku ? ('Art\u00edculo: ' + sku) : '');
-        window.setTimeout(function () {
-            $('#modalAutorizacionLineaCumple').modal('show');
-        }, 80);
+        mostrarModalCumple($('#modalAutorizacionLineaCumple'));
     }
 
     function mostrarModalParcial($fila, entrega, pendiente, alAceptar) {
@@ -465,9 +521,7 @@
         $('#modal-parcial-articulo').text((sku || 'Art\u00edculo') + ' \u2014 pendiente ' + pendiente + ', entrega ' + entrega);
         var motivoActual = String($fila.find('.input-estadoparcial').val() || '');
         $('#modal-parcial-motivo').val(motivoActual);
-        window.setTimeout(function () {
-            $('#modalMotivoParcialCumple').modal('show');
-        }, 80);
+        mostrarModalCumple($('#modalMotivoParcialCumple'));
     }
 
     function ejecutarValidacionCantidadEnFila($fila, alListo) {
@@ -547,11 +601,7 @@
                 return;
             }
             if (datos.motivo) {
-                mostrarModalAutorizacion($fila, entrega, pendiente, function (ok) {
-                    if (typeof alListo === 'function') {
-                        alListo(ok !== false);
-                    }
-                });
+                pedirOAplicarAutorizacion($fila, entrega, pendiente, alListo);
                 return;
             }
             mostrarModalParcial($fila, entrega, pendiente, function (ok) {
@@ -572,6 +622,25 @@
             return;
         }
 
+        pedirOAplicarAutorizacion($fila, entrega, pendiente, alListo);
+    }
+
+    function aplicarAutorizacionPorDefecto($fila, entrega, pendiente) {
+        $fila.find('.input-estado-linea').val(estadoDefaultPorDestino($fila, entrega, pendiente));
+        if (!$fila.find('.input-fecha-entrega').val()) {
+            $fila.find('.input-fecha-entrega').val(new Date().toISOString().slice(0, 10));
+        }
+        actualizarEtiquetaAutorizacion($fila);
+    }
+
+    function pedirOAplicarAutorizacion($fila, entrega, pendiente, alListo) {
+        if (grabarPendiente) {
+            aplicarAutorizacionPorDefecto($fila, entrega, pendiente);
+            if (typeof alListo === 'function') {
+                alListo(true);
+            }
+            return;
+        }
         mostrarModalAutorizacion($fila, entrega, pendiente, function (ok) {
             if (typeof alListo === 'function') {
                 alListo(ok !== false);
@@ -834,34 +903,36 @@
         continuarGrabarDesdeIndice(0);
     }
 
-    function esperarValidacionesYGrabar() {
+    function vigilarGrabarSinModal() {
         var inicio = Date.now();
         function tick() {
-            if (hayModalCumpleAbierto()) {
+            if (!grabarPendiente || enviandoFormulario) {
+                return;
+            }
+            if (hayModalCumpleVisible()) {
                 inicio = Date.now();
-            } else if (Date.now() - inicio > 15000) {
-                validacionFilaActiva = false;
-                colaValidacionFila = [];
+            } else if (Date.now() - inicio > 8000) {
+                cancelarValidacionesPendientes();
                 restaurarBotonGrabar();
                 mostrarErrorCumple(
-                    'No se pudo completar la validaci\u00f3n de las l\u00edneas. '
-                    + 'Cierre cualquier ventana de autorizaci\u00f3n o motivo parcial e intente de nuevo.'
+                    'No se pudo completar la validaci\u00f3n de las l\u00edneas. Intente grabar de nuevo.'
                 );
                 return;
             }
-            if (validacionFilaActiva || hayModalCumpleAbierto() || colaValidacionFila.length > 0) {
-                window.setTimeout(tick, 80);
-                return;
-            }
-            validarFilasIncompletasAntesDeGrabar(function () {
-                ejecutarSecuenciaGrabar();
-            });
+            window.setTimeout(tick, 200);
         }
         tick();
     }
 
     function iniciarGrabar() {
         if (enviandoFormulario || grabarPendiente) {
+            return;
+        }
+
+        if (hayModalCumpleVisible()) {
+            mostrarErrorCumple(
+                'Cierre la ventana de autorizaci\u00f3n o motivo parcial e intente de nuevo.'
+            );
             return;
         }
 
@@ -886,7 +957,11 @@
             return;
         }
 
-        esperarValidacionesYGrabar();
+        cancelarValidacionesPendientes();
+        vigilarGrabarSinModal();
+        validarFilasIncompletasAntesDeGrabar(function () {
+            ejecutarSecuenciaGrabar();
+        });
     }
 
     $(function () {
@@ -979,11 +1054,11 @@
             renderCabecera(null, Object.keys(numReqs).length > 1);
         });
 
-        $(document).on('blur focusout', '.input-cantidad-entrega', function (e) {
+        $(document).on('blur', '.input-cantidad-entrega', function (e) {
             if (grabarPendiente) {
                 return;
             }
-            if (e.type === 'focusout' && e.relatedTarget && $(e.relatedTarget).closest('#btn-grabar-cumple').length) {
+            if (e.relatedTarget && $(e.relatedTarget).closest('#btn-grabar-cumple').length) {
                 return;
             }
             validarCantidadEnFila($(this).closest('tr'));
@@ -1052,6 +1127,7 @@
                     cb(false);
                 }
             }
+            window.setTimeout(procesarColaValidacionFila, 50);
         });
 
         $('#btn-aceptar-autorizacion-linea').on('click', function () {
@@ -1093,6 +1169,7 @@
             }
             authModalAceptado = false;
             filaModalAuth = null;
+            window.setTimeout(procesarColaValidacionFila, 50);
         });
 
         $('#btn-grabar-cumple').on('click', function (e) {
