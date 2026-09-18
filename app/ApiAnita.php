@@ -79,6 +79,28 @@ class ApiAnita
         return trim((string) config('anita.ifx_server', ''));
     }
 
+    /**
+     * INFORMIXSERVER para el `sql` del bridge HTTP.
+     * Si ANITA_IP y LOCAL_IP son el mismo host, el CLI corre en Anita y debe usar
+     * IFX_SERVER_LOCAL (bincadmin). IFX_SERVER (bi7ncadmin) es alias remoto y el
+     * UNLOAD no genera el CSV.
+     */
+    public static function resolverIfxServerDelBridge(?string $claveIfx = null): string
+    {
+        if ($claveIfx !== null && trim($claveIfx) !== '') {
+            return self::resolverIfxServer($claveIfx);
+        }
+
+        $local = trim((string) config('anita.ifx_server_local', ''));
+        $anitaIp = trim((string) config('anita.ip', ''));
+        $localIp = trim((string) config('anita.local_ip', ''));
+        if ($local !== '' && $anitaIp !== '' && $localIp !== '' && $anitaIp === $localIp) {
+            return $local;
+        }
+
+        return self::resolverIfxServer();
+    }
+
     public function apiCallHttp($data)
     {
         $acc = (string) ($data['acc'] ?? '');
@@ -90,7 +112,7 @@ class ApiAnita
         if (isset($data['ifx_server'])) {
             $data['IFX_SERVER'] = self::resolverIfxServer((string) $data['ifx_server']);
         } else {
-            $data['IFX_SERVER'] = self::resolverIfxServer();
+            $data['IFX_SERVER'] = self::resolverIfxServerDelBridge();
         }
 
         $bdd = (string) config('anita.bdd', 'ventas');

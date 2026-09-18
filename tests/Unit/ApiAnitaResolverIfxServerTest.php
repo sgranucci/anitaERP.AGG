@@ -50,4 +50,34 @@ final class ApiAnitaResolverIfxServerTest extends TestCase
 
         $this->assertSame('bi7ncadmin', self::resolverIfxServer());
     }
+
+    public function test_bridge_mismo_host_usa_ifx_local(): void
+    {
+        config([
+            'anita.ip' => '10.20.30.200:8080',
+            'anita.local_ip' => '10.20.30.200:8080',
+            'anita.ifx_server' => 'bi7ncadmin',
+            'anita.ifx_server_local' => 'bincadmin',
+            'anita.ifx_servers' => [
+                'IFX_SERVER' => 'bi7ncadmin',
+                'IFX_SERVER_LOCAL' => 'bincadmin',
+            ],
+        ]);
+
+        $this->assertSame('bincadmin', ApiAnita::resolverIfxServerDelBridge());
+        $this->assertSame('bi7ncadmin', ApiAnita::resolverIfxServerDelBridge('IFX_SERVER'));
+        $this->assertSame('kancadmin', ApiAnita::resolverIfxServerDelBridge('kancadmin'));
+    }
+
+    public function test_bridge_hosts_distintos_usa_ifx_global(): void
+    {
+        config([
+            'anita.ip' => '10.20.30.200:8080',
+            'anita.local_ip' => '192.168.1.10:8080',
+            'anita.ifx_server' => 'bi7ncadmin',
+            'anita.ifx_server_local' => 'bincadmin',
+        ]);
+
+        $this->assertSame('bi7ncadmin', ApiAnita::resolverIfxServerDelBridge());
+    }
 }

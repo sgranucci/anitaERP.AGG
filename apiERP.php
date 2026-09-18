@@ -59,6 +59,10 @@ fprintf($fp1, "%s", $sql);
 fclose($fp1);
 
 $ifxServer = (! empty($data['IFX_SERVER']) ? $data['IFX_SERVER'] : 'bincadmin');
+// sql(1) usa sqlhosts de ESTE host. bi7ncadmin es el alias remoto del ERP.
+if ($ifxServer === 'bi7ncadmin') {
+	$ifxServer = 'bincadmin';
+}
 $_cmdd = "export LD_ASSUME_KERNEL=2.4.19;export INFORMIXDIR=/home/informix;export LD_LIBRARY_PATH=:/home/informix/lib:/home/informix/lib/esql:/home/informix_esql/lib;export INFORMIXSERVER=".$ifxServer.";cd ".$path_sistema."/".$sistema.";";
 
 $_cmd = $_cmdd."sql ".$sistema." ".$_nombre_file." 2>&1";
