@@ -212,15 +212,9 @@ class ComprobanteProveedorPrefillService
             ]);
         });
 
-        // En LEGAJO/scan ($0 sin OCR) no inventar filas en cero: confunde al cargar.
-        // La plantilla vacía solo aplica si la precarga debería traer importes (API/IA) y vino sin líneas.
-        $origenSinImportes = PrecargaComprobanteOrigenEntrada::sinImportesEsperados(
-            $precarga->origen_entrada ?? null
-        );
-        if ($conceptos->isEmpty()
-            && ! $origenSinImportes
-            && (int) ($data->tipotransaccion_compra_id ?? 0) > 0
-        ) {
+        // Tipo normal sin renglones de precarga: plantilla = conceptos asignados al tipo.
+        // Prorrateo (FPB/…): no inventar plantilla; van los de la precarga (unión ya armada).
+        if ($conceptos->isEmpty() && (int) ($data->tipotransaccion_compra_id ?? 0) > 0) {
             $numeroOc = (string) (
                 $ordencompra?->numeroordencompra
                 ?? $precarga->numeroordencompra

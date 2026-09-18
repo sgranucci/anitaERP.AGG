@@ -26,7 +26,8 @@
                     <p class="text-muted small mb-3">
                         Generación del archivo RG 738/99 para presentación en ARCA.
                         Ventas: percepciones desde <code>venta_impuesto</code>.
-                        Compras: retenciones desde Anita (<code>retmov</code> / <code>retimov</code>) con régimen de tablas ERP.
+                        Compras: retenciones desde Anita (<code>retmov</code> / <code>retimov</code>)
+                        y, si faltan, las OPs nativas del ERP (<code>pagoproveedor_retencion</code>) sin duplicar.
                         Sueldos: retenciones 4ta categoría desde <code>auxrec</code>.
                     </p>
 

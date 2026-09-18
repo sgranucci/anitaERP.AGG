@@ -1673,7 +1673,7 @@
         }
 
         item.cantidad = parseFloat(cantidad) || 0;
-        if (importeOpcional !== undefined && importeOpcional !== null && !isNaN(importeOpcional) && puedeModificarPrecioRecepcion()) {
+        if (importeOpcional !== undefined && importeOpcional !== null && !isNaN(importeOpcional)) {
             sincronizarPrecioDesdeImporte(item, importeOpcional, item.cantidad);
         } else {
             item.precio = redondearPrecioUnitario(precio);
@@ -1742,11 +1742,15 @@
         var bloqueadoPrecio = soloLectura || !puedeModificarPrecioRecepcion();
 
         if (bloqueadoPrecio) {
-            var html = '<span class="text-right d-block item-precio-text">' + formatearImporteRecepcion(precio) + '</span>'
-                + '<input type="hidden" class="item-precio" name="items[' + idx + '][precio]" value="' + precio + '">';
+            var precioMostrar = precio;
             if (precioSolicitado !== null && !isNaN(precioSolicitado) && Math.abs(precioSolicitado - precioOc) >= 0.0001) {
-                html += '<small class="d-block text-info text-right" title="Precio solicitado seg&uacute;n factura/remito">'
-                    + 'Sol.: ' + formatearImporteRecepcion(precioSolicitado) + '</small>';
+                precioMostrar = precioSolicitado;
+            }
+            var html = '<span class="text-right d-block item-precio-text">' + formatearImporteRecepcion(precioMostrar) + '</span>'
+                + '<input type="hidden" class="item-precio" name="items[' + idx + '][precio]" value="' + precioMostrar + '">';
+            if (precioSolicitado !== null && !isNaN(precioSolicitado) && Math.abs(precioSolicitado - precioOc) >= 0.0001) {
+                html += '<small class="d-block text-muted text-right" title="Precio original de la OC">'
+                    + 'OC: ' + formatearImporteRecepcion(precioOc) + '</small>';
             }
             html += '<input type="hidden" class="item-precio-solicitado" name="items[' + idx + '][precio_solicitado]" value="'
                 + (precioSolicitado !== null && !isNaN(precioSolicitado) ? precioSolicitado : '') + '">';
@@ -1839,7 +1843,7 @@
         $('#modal-linea-precio-unit').val(
             puedeModificarPrecioRecepcion() || soloLectura ? precioMostrar : precioSolicitado
         ).prop('readonly', soloLectura);
-        $('#modal-linea-importe').val(importeLineaRecepcion(item).toFixed(2)).prop('readonly', soloLectura || !puedeModificarPrecioRecepcion());
+        $('#modal-linea-importe').val(importeLineaRecepcion(item).toFixed(2)).prop('readonly', soloLectura);
         $('#modal-linea-comentario-precio').val(item.comentario_precio || '').prop('readonly', soloLectura);
         $('#btn-modal-linea-precio-aplicar').toggle(!soloLectura);
         actualizarAvisoDiffModalLineaPrecio(
@@ -1867,7 +1871,7 @@
         var precioSolicitado = null;
 
         if (!puedeModificarPrecioRecepcion()) {
-            precio = precioOc > 0 ? precioOc : (parseFloat(item.precio || 0) || 0);
+            precio = precioIngresado;
             precioSolicitado = precioIngresado;
             if (lineaTieneDiferenciaPrecio(precioOc, precioSolicitado) && comentario === '') {
                 alert('Indique el motivo de la diferencia de precio respecto a la OC.');

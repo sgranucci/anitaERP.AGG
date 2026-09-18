@@ -10,8 +10,9 @@ use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Collection;
 
 /**
- * Lista conceptos IVA compra filtrados por tipo de comprobante (pivot).
- * Tipos prorrateados multi-CC (FPB/…): sin plantilla fija → unión deduplicada desde los finos de la OC.
+ * Lista conceptos IVA compra del tipo de comprobante (pivot).
+ * Tipos prorrateados (FPB/CPB/…): el F1 lista la unión de los finos de la OC;
+ * la plantilla de renglones no se arma (van los de la precarga).
  */
 final class ConceptoIvacompraConsultaSupport
 {
@@ -101,7 +102,8 @@ final class ConceptoIvacompraConsultaSupport
     }
 
     /**
-     * Renglones de concepto (monto 0) configurados para el tipo — plantilla de carga.
+     * Plantilla de renglones ($0) con todos los conceptos asignados al tipo.
+     * En tipos prorrateados no hay plantilla: se usan los renglones de la precarga (unión).
      *
      * @return Collection<int, \App\Models\Compras\Comprobante_Proveedor_Concepto>
      */
@@ -109,6 +111,16 @@ final class ConceptoIvacompraConsultaSupport
         int $tipotransaccionCompraId,
         ?string $numeroOc = null,
     ): Collection {
+        if ($tipotransaccionCompraId <= 0) {
+            return collect();
+        }
+
+        $tipo = Tipotransaccion_Compra::query()->find($tipotransaccionCompraId);
+        $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+        if ($tipo && PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev)) {
+            return collect();
+        }
+
         $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId, null, $numeroOc);
         if ($lista->isEmpty()) {
             return collect();

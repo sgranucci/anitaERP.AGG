@@ -33,7 +33,7 @@ class RecepcionProveedorPrecioPendienteSupportTest extends TestCase
             ],
         ], false);
 
-        $this->assertSame(100.0, $items[0]['precio']);
+        $this->assertSame(115.5, $items[0]['precio']);
         $this->assertSame(115.5, $items[0]['precio_solicitado']);
         $this->assertTrue($items[0]['fl_precio_diferencia']);
     }

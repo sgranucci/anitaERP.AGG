@@ -6,6 +6,7 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ticket\Areadestino;
 use App\Models\Ticket\Ticket_Configuracion_Areadestino;
+use App\Models\Ticket\Ticket_Configuracion_Cc_Exclusion;
 use App\Models\Ticket\Ticket_Configuracion_Centrocosto;
 use App\Models\Ticket\Tecnico_Ticket;
 use App\Support\Ticket\TicketModoOperacionSupport;
@@ -130,10 +131,10 @@ class TicketConfiguracionService
             return [];
         }
 
-        $excluirIds = array_values(array_unique(array_filter([
-            (int) $creador->id,
-            (int) $autor->id,
-        ])));
+        $excluirIds = self::unirIdsExclusionCc(
+            [(int) $creador->id, (int) $autor->id],
+            $this->idsExcluidosCcComentario()
+        );
 
         $query = Usuario::query()
             ->soloActivos()
@@ -169,6 +170,116 @@ class TicketConfiguracionService
         }
 
         return $emails;
+    }
+
+    /**
+     * @param  list<int|string>  ...$grupos
+     * @return list<int>
+     */
+    public static function unirIdsExclusionCc(array ...$grupos): array
+    {
+        $ids = [];
+        foreach ($grupos as $grupo) {
+            foreach ($grupo as $id) {
+                $id = (int) $id;
+                if ($id > 0) {
+                    $ids[$id] = $id;
+                }
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function idsExcluidosCcComentario(): array
+    {
+        return Ticket_Configuracion_Cc_Exclusion::query()
+            ->pluck('usuario_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return Collection<int, object{
+     *     usuario_id: int,
+     *     usuario: string,
+     *     nombre: string,
+     *     email: string|null,
+     *     centrocosto: string|null
+     * }>
+     */
+    public function filasExclusionCc(): Collection
+    {
+        return Ticket_Configuracion_Cc_Exclusion::query()
+            ->with(['usuario.centrocostos'])
+            ->get()
+            ->map(function (Ticket_Configuracion_Cc_Exclusion $fila) {
+                $usuario = $fila->usuario;
+                if (! $usuario) {
+                    return null;
+                }
+
+                return (object) [
+                    'usuario_id' => (int) $fila->usuario_id,
+                    'usuario' => (string) ($usuario->usuario ?? ''),
+                    'nombre' => (string) ($usuario->nombre ?? ''),
+                    'email' => $usuario->email ?? null,
+                    'centrocosto' => $usuario->centrocostos->nombre ?? null,
+                ];
+            })
+            ->filter()
+            ->sortBy(fn ($fila) => mb_strtolower($fila->nombre.' '.$fila->usuario))
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, Usuario>
+     */
+    public function usuariosCandidatosExclusionCc(): Collection
+    {
+        $excluidos = $this->idsExcluidosCcComentario();
+
+        return Usuario::query()
+            ->soloActivos()
+            ->with('centrocostos')
+            ->whereNotNull('email')
+            ->where('email', '!=', '')
+            ->when($excluidos !== [], fn ($q) => $q->whereNotIn('id', $excluidos))
+            ->orderBy('nombre')
+            ->get();
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $usuarioIds
+     */
+    public function guardarExclusionCc(array $usuarioIds): void
+    {
+        $ids = self::unirIdsExclusionCc($usuarioIds);
+        if ($ids !== []) {
+            $ids = Usuario::query()
+                ->whereIn('id', $ids)
+                ->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->filter(static fn (int $id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        DB::transaction(function () use ($ids) {
+            Ticket_Configuracion_Cc_Exclusion::query()->delete();
+            foreach ($ids as $usuarioId) {
+                Ticket_Configuracion_Cc_Exclusion::query()->create([
+                    'usuario_id' => $usuarioId,
+                ]);
+            }
+        });
     }
 
     /**

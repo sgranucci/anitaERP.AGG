@@ -10,6 +10,7 @@ use App\Repositories\Compras\RetenciongananciaRepositoryInterface;
 use App\Repositories\Compras\RetencionivaRepositoryInterface;
 use App\Support\Contable\Sicore\SicoreCompraConcmovAnitaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
+use App\Support\Contable\Sicore\SicoreErpComplementoSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
 use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use App\Support\Contable\Sicore\SicoreProveedorErpSupport;
@@ -149,15 +150,22 @@ final class SicoreComprasDatosService
             }
         }
 
-        return array_merge(
+        $out = array_merge(
             $out,
             $this->desdeDevolucionesChequeSubdiario($empresaId, $fechaDesde, $fechaHasta, $config),
-            $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'G'),
+        );
+
+        return array_merge(
+            $out,
+            SicoreErpComplementoSupport::soloNuevos(
+                $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'G'),
+                $out,
+            ),
         );
     }
 
     /**
-     * Retenciones de pagos ERP (pagoproveedor_retencion) — complementa retmov Anita.
+     * Retenciones de pagos ERP (pagoproveedor_retencion) — solo OPs que Anita no trajo.
      *
      * @return list<array<string, mixed>>
      */
@@ -312,7 +320,10 @@ final class SicoreComprasDatosService
 
         return array_merge(
             $out,
-            $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'I'),
+            SicoreErpComplementoSupport::soloNuevos(
+                $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, 'I'),
+                $out,
+            ),
         );
     }
 

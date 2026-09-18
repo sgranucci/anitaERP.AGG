@@ -72,5 +72,90 @@
             $(this).addClass('active');
             aplicarFiltros();
         });
+
+        function actualizarStatExclusion() {
+            var total = $('#tabla-ticket-exclusion tbody tr[data-usuario-id]').length;
+            $('#ticket-cfg-stat-exclusion').text(total);
+        }
+
+        function asegurarFilaVaciaExclusion() {
+            var $tbody = $('#tabla-ticket-exclusion tbody');
+            var hayFilas = $tbody.find('tr[data-usuario-id]').length > 0;
+            $tbody.find('tr.ticket-cfg-exclusion-vacia').remove();
+            if (!hayFilas) {
+                $tbody.append(
+                    '<tr class="ticket-cfg-exclusion-vacia">' +
+                    '<td colspan="4" class="ticket-cfg-empty">Nadie excluido. El CC llega a todos los usuarios del centro.</td>' +
+                    '</tr>'
+                );
+            }
+        }
+
+        function escaparHtml(valor) {
+            return $('<div>').text(valor == null ? '' : String(valor)).html();
+        }
+
+        $('#ticket-cfg-exclusion-agregar').on('click', function () {
+            var $select = $('#ticket-cfg-exclusion-usuario');
+            var $option = $select.find('option:selected');
+            var id = $.trim($option.val() || '');
+            if (!id) {
+                return;
+            }
+            if ($('#tabla-ticket-exclusion tbody tr[data-usuario-id="' + id + '"]').length) {
+                $select.val('');
+                return;
+            }
+
+            var nombre = $option.data('nombre') || $option.text();
+            var usuario = $option.data('usuario') || '';
+            var email = $option.data('email') || '—';
+            var centrocosto = $option.data('centrocosto') || '—';
+
+            $('#tabla-ticket-exclusion tbody tr.ticket-cfg-exclusion-vacia').remove();
+            $('#tabla-ticket-exclusion tbody').append(
+                '<tr data-usuario-id="' + escaparHtml(id) + '">' +
+                '<td><input type="hidden" name="usuario_ids[]" value="' + escaparHtml(id) + '">' +
+                '<strong>' + escaparHtml(nombre) + '</strong>' +
+                '<div class="text-muted small">' + escaparHtml(usuario) + '</div></td>' +
+                '<td>' + escaparHtml(email) + '</td>' +
+                '<td>' + escaparHtml(centrocosto) + '</td>' +
+                '<td class="text-center">' +
+                '<button type="button" class="btn btn-link btn-sm text-danger ticket-cfg-exclusion-quitar" title="Quitar">' +
+                '<i class="fa fa-times"></i></button></td></tr>'
+            );
+            $option.remove();
+            $select.val('');
+            actualizarStatExclusion();
+        });
+
+        $('#tabla-ticket-exclusion').on('click', '.ticket-cfg-exclusion-quitar', function () {
+            var $row = $(this).closest('tr');
+            var id = $row.attr('data-usuario-id');
+            var nombre = $.trim($row.find('strong').first().text());
+            var usuario = $.trim($row.find('.text-muted.small').first().text());
+            var email = $.trim($row.find('td').eq(1).text());
+            var centrocosto = $.trim($row.find('td').eq(2).text());
+            $row.remove();
+
+            var $select = $('#ticket-cfg-exclusion-usuario');
+            if (id && $select.find('option[value="' + id + '"]').length === 0) {
+                var etiqueta = nombre + (usuario ? ' (' + usuario + ')' : '');
+                if (centrocosto && centrocosto !== '—') {
+                    etiqueta += ' — ' + centrocosto;
+                }
+                var $option = $('<option></option>')
+                    .val(id)
+                    .text(etiqueta)
+                    .attr('data-usuario', usuario)
+                    .attr('data-nombre', nombre)
+                    .attr('data-email', email === '—' ? '' : email)
+                    .attr('data-centrocosto', centrocosto === '—' ? '' : centrocosto);
+                $select.append($option);
+            }
+
+            asegurarFilaVaciaExclusion();
+            actualizarStatExclusion();
+        });
     });
 })(jQuery);

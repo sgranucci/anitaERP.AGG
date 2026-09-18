@@ -23,9 +23,10 @@ final class RecepcionProveedorPrecioPendienteSupport
     }
 
     /**
-     * Sin permiso de precio: la COM usa siempre el de la OC.
-     * Solo una solicitud explícita (`precio_solicitado` del modal) se conserva;
-     * no se infiere desde `precio` (OCR / importe) para no bloquear la recepción.
+     * Sin permiso de precio: no se infiere diferencia desde `precio` (OCR / importe).
+     * Si el operador cargó un precio de factura/remito explícito (`precio_solicitado`
+     * del modal), la COM graba ese importe — no el de la OC. En OC anuales el
+     * precio de cada mes suele diferir del pedido y tiene que quedar en la recepción.
      *
      * @param  list<array<string, mixed>>  $items
      * @return list<array<string, mixed>>
@@ -44,19 +45,21 @@ final class RecepcionProveedorPrecioPendienteSupport
                 ? (float) $item['precio_solicitado']
                 : null;
 
-            $item['precio'] = $precioOc > 0 ? $precioOc : $precioEnviado;
-
             $tieneSolicitud = $precioSolicitado !== null
                 && $precioOc > 0
                 && abs($precioSolicitado - $precioOc) >= 0.0001;
 
-            $item['precio_solicitado'] = $tieneSolicitud ? $precioSolicitado : null;
-            $item['fl_precio_diferencia'] = $tieneSolicitud;
             if ($tieneSolicitud && trim((string) ($item['comentario_precio'] ?? '')) === '') {
                 throw new \RuntimeException(
                     'Indique el motivo de la diferencia de precio respecto a la OC (línea con precio solicitado distinto).'
                 );
             }
+
+            $item['precio'] = $tieneSolicitud
+                ? $precioSolicitado
+                : ($precioOc > 0 ? $precioOc : $precioEnviado);
+            $item['precio_solicitado'] = $tieneSolicitud ? $precioSolicitado : null;
+            $item['fl_precio_diferencia'] = $tieneSolicitud;
 
             $normalizados[] = $item;
         }

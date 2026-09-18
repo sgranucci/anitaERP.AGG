@@ -21,8 +21,10 @@
         <h4 class="mb-2">Conceptos de IVA compra</h4>
         <p class="text-muted small mb-3">
             Agregue uno o más renglones. Código + Enter o <kbd>F1</kbd>/lupa para consultar.
-            El modal lista conceptos del <strong>tipo de comprobante</strong>; en tipos prorrateados multi-CC (FPB/…)
-            usa la unión de los finos de la OC (sin duplicar).
+            En tipos normales se precarga la plantilla con <strong>todos</strong> los conceptos
+            asignados al tipo de comprobante. En prorrateadas multi-CC (FPB/CPB/…) no hay plantilla:
+            se usan los renglones de la precarga (unión ya armada). El modal F1, en esos tipos,
+            lista la unión de los finos de la OC (sin duplicar).
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
             La columna <strong>Cuenta DEBE</strong> solo aparece para casos puntuales (p. ej. contrato manual
             o impuestos sin cuenta en el maestro). El neto con OC toma por defecto las cuentas de los artículos;

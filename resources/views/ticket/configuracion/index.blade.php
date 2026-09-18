@@ -196,6 +196,18 @@
     .ticket-cfg-page .badge-modo-dispatch {
         background: #64748b;
     }
+    .ticket-cfg-page .ticket-cfg-add-exclusion {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        align-items: center;
+        width: 100%;
+        max-width: 36rem;
+    }
+    .ticket-cfg-page .ticket-cfg-add-exclusion select {
+        flex: 1 1 16rem;
+        min-width: 12rem;
+    }
 </style>
 @endsection
 
@@ -235,6 +247,10 @@
                 <div class="ticket-cfg-stat">
                     <strong id="ticket-cfg-stat-activos">{{ $activos }}</strong>
                     <span>Aviso CC</span>
+                </div>
+                <div class="ticket-cfg-stat">
+                    <strong id="ticket-cfg-stat-exclusion">{{ $filasExclusion->count() }}</strong>
+                    <span>Sin CC</span>
                 </div>
             </div>
         </div>
@@ -335,7 +351,8 @@
                     Cuando un técnico responde un ticket, el mail va al usuario que lo originó.
                     Con el flag activo, se agrega en copia (CC) a los demás usuarios activos de ese
                     centro de costo <strong>y la misma empresa de origen</strong> del ticket
-                    (<code>ticket.empresa_id</code> / <code>usuario_empresa</code>). Tope blando:
+                    (<code>ticket.empresa_id</code> / <code>usuario_empresa</code>), salvo los de la
+                    lista de exclusión. Tope blando:
                     {{ (int) config('ticket.notificacion_cc_max_destinatarios', 100) }} destinatarios en CC
                     (Office 365 suele admitir hasta ~500 entre To+CC+Bcc).
                 </span>
@@ -430,6 +447,100 @@
                     <div class="card-footer text-right">
                         <button type="submit" class="btn btn-primary">
                             <i class="fa fa-save"></i> Guardar notificaciones
+                        </button>
+                    </div>
+                @endif
+            </form>
+        </div>
+
+        {{-- Exclusiones de CC --}}
+        <div class="card card-ticket-cfg">
+            <div class="card-header">
+                <h3 class="card-title">
+                    <i class="fa fa-ban mr-1"></i> No copiar a estos usuarios
+                </h3>
+                <span class="card-subtitle">
+                    Aunque su centro de costo tenga el aviso activo, estos usuarios no entran en el CC
+                    cuando un técnico responde. El dueño del ticket sigue recibiendo el mail en el Para.
+                </span>
+            </div>
+
+            <form action="{{ route('actualiza_configuracion_ticket_exclusion') }}" method="POST" id="form-ticket-configuracion-exclusion" autocomplete="off">
+                @csrf
+                @method('PUT')
+
+                <div class="card-body">
+                    @if ($puedeActualizar)
+                        <div class="ticket-cfg-toolbar">
+                            <div class="ticket-cfg-add-exclusion">
+                                <select id="ticket-cfg-exclusion-usuario" class="form-control form-control-sm">
+                                    <option value="">Agregar usuario…</option>
+                                    @foreach ($usuariosCandidatosExclusion as $usuario)
+                                        <option value="{{ $usuario->id }}"
+                                                data-usuario="{{ $usuario->usuario }}"
+                                                data-nombre="{{ $usuario->nombre }}"
+                                                data-email="{{ $usuario->email }}"
+                                                data-centrocosto="{{ $usuario->centrocostos->nombre ?? '' }}">
+                                            {{ $usuario->nombre }} ({{ $usuario->usuario }})
+                                            @if ($usuario->centrocostos)
+                                                — {{ $usuario->centrocostos->nombre }}
+                                            @endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="ticket-cfg-exclusion-agregar">
+                                    <i class="fa fa-plus"></i> Agregar
+                                </button>
+                            </div>
+                        </div>
+                    @endif
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover table-bordered mb-0 table-ticket-cfg" id="tabla-ticket-exclusion">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Mail</th>
+                                    <th>Centro de costo</th>
+                                    @if ($puedeActualizar)
+                                        <th style="width:8%" class="text-center"></th>
+                                    @endif
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($filasExclusion as $fila)
+                                    <tr data-usuario-id="{{ $fila->usuario_id }}">
+                                        <td>
+                                            <input type="hidden" name="usuario_ids[]" value="{{ $fila->usuario_id }}">
+                                            <strong>{{ $fila->nombre }}</strong>
+                                            <div class="text-muted small">{{ $fila->usuario }}</div>
+                                        </td>
+                                        <td>{{ $fila->email ?: '—' }}</td>
+                                        <td>{{ $fila->centrocosto ?: '—' }}</td>
+                                        @if ($puedeActualizar)
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-link btn-sm text-danger ticket-cfg-exclusion-quitar" title="Quitar">
+                                                    <i class="fa fa-times"></i>
+                                                </button>
+                                            </td>
+                                        @endif
+                                    </tr>
+                                @empty
+                                    <tr class="ticket-cfg-exclusion-vacia">
+                                        <td colspan="{{ $puedeActualizar ? 4 : 3 }}" class="ticket-cfg-empty">
+                                            Nadie excluido. El CC llega a todos los usuarios del centro.
+                                        </td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                @if ($puedeActualizar)
+                    <div class="card-footer text-right">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa fa-save"></i> Guardar exclusiones
                         </button>
                     </div>
                 @endif

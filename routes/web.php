@@ -4246,6 +4246,7 @@ Route::post('ticket/bandeja/{id}/asignar', 'Ticket\TicketBandejaController@asign
 Route::get('ticket/configuracion', 'Ticket\Configuracion_TicketController@index')->name('consulta_configuracion_ticket');
 Route::put('ticket/configuracion', 'Ticket\Configuracion_TicketController@actualizar')->name('actualiza_configuracion_ticket');
 Route::put('ticket/configuracion/areadestino', 'Ticket\Configuracion_TicketController@actualizarAreadestino')->name('actualiza_configuracion_ticket_areadestino');
+Route::put('ticket/configuracion/exclusion', 'Ticket\Configuracion_TicketController@actualizarExclusion')->name('actualiza_configuracion_ticket_exclusion');
 
 /*
  * Salas

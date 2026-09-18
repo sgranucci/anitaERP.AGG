@@ -65,4 +65,56 @@ class IngresoEgresoSolicitudpagoAsientoCuadreTest extends TestCase
 
         $this->assertEqualsWithDelta(619721.42, (float) $ajustado[0]['debe'], 0.001);
     }
+
+    public function test_pisar_banco_de_la_sp_con_cuenta_financiera_elegida(): void
+    {
+        // OP 125043: asiento SP = Macro CABA; IE = cuenta 127 Macro Gerli.
+        $asientoSp = [
+            [
+                'cuentacontable_id' => 385,
+                'codigo' => '213010023',
+                'debe' => 470042.58,
+                'haber' => '',
+            ],
+            [
+                'cuentacontable_id' => 48,
+                'codigo' => '111050016',
+                'debe' => '',
+                'haber' => 470042.58,
+            ],
+        ];
+        $caja = [[
+            'cuentacontable_id' => 41,
+            'codigo' => '111050009',
+            'debe' => '',
+            'haber' => 470042.58,
+        ]];
+
+        $ajustado = IngresoEgresoSolicitudpagoSupport::reemplazarPiernaFinanciera($asientoSp, $caja);
+
+        $this->assertCount(2, $ajustado);
+        $this->assertSame(385, (int) $ajustado[0]['cuentacontable_id']);
+        $this->assertSame('213010023', $ajustado[0]['codigo']);
+        $this->assertEqualsWithDelta(470042.58, (float) $ajustado[0]['debe'], 0.001);
+        $this->assertSame(41, (int) $ajustado[1]['cuentacontable_id']);
+        $this->assertSame('111050009', $ajustado[1]['codigo']);
+        $this->assertEqualsWithDelta(470042.58, (float) $ajustado[1]['haber'], 0.001);
+        $codigos = array_column($ajustado, 'codigo');
+        $this->assertNotContains('111050016', $codigos);
+    }
+
+    public function test_sin_cuenta_caja_conserva_el_asiento_de_la_sp(): void
+    {
+        $asientoSp = [[
+            'cuentacontable_id' => 48,
+            'codigo' => '111050016',
+            'debe' => '',
+            'haber' => 100.00,
+        ]];
+
+        $this->assertSame(
+            $asientoSp,
+            IngresoEgresoSolicitudpagoSupport::reemplazarPiernaFinanciera($asientoSp, [])
+        );
+    }
 }

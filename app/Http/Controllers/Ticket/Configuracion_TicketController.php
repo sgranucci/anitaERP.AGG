@@ -24,13 +24,17 @@ class Configuracion_TicketController extends Controller
         $filasArea = $this->configuracionService->filasAreadestino();
         $areasClaim = $filasArea->where('modo_operacion', TicketModoOperacionSupport::MODO_CLAIM)->count();
         $modosOperacion = TicketModoOperacionSupport::opcionesModo();
+        $filasExclusion = $this->configuracionService->filasExclusionCc();
+        $usuariosCandidatosExclusion = $this->configuracionService->usuariosCandidatosExclusionCc();
 
         return view('ticket.configuracion.index', compact(
             'filas',
             'activos',
             'filasArea',
             'areasClaim',
-            'modosOperacion'
+            'modosOperacion',
+            'filasExclusion',
+            'usuariosCandidatosExclusion'
         ));
     }
 
@@ -64,5 +68,21 @@ class Configuracion_TicketController extends Controller
         return redirect()
             ->route('consulta_configuracion_ticket')
             ->with('mensaje', 'Modo de operación por área actualizado');
+    }
+
+    public function actualizarExclusion(Request $request)
+    {
+        can('actualizar-configuracion-ticket');
+
+        $usuarioIds = $request->input('usuario_ids', []);
+        if (! is_array($usuarioIds)) {
+            $usuarioIds = [];
+        }
+
+        $this->configuracionService->guardarExclusionCc($usuarioIds);
+
+        return redirect()
+            ->route('consulta_configuracion_ticket')
+            ->with('mensaje', 'Exclusiones de CC actualizadas');
     }
 }

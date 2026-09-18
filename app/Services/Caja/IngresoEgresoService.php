@@ -117,6 +117,7 @@ class IngresoEgresoService
 				$request->merge(['montos' => $data['montos']]);
 			}
 			IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($data);
+			IngresoEgresoSolicitudpagoSupport::pisarPiernaFinancieraEnDataAsiento($data);
 		} catch (InvalidArgumentException $e) {
 			return ['errores' => $e->getMessage()];
 		}
@@ -300,6 +301,7 @@ class IngresoEgresoService
 				$request->merge(['montos' => $data['montos']]);
 			}
 			IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($data);
+			IngresoEgresoSolicitudpagoSupport::pisarPiernaFinancieraEnDataAsiento($data);
 		} catch (InvalidArgumentException $e) {
 			return ['errores' => $e->getMessage()];
 		}
@@ -723,6 +725,29 @@ class IngresoEgresoService
 				}
 			}
 		}
+
+		if ($solicitudpagoId > 0 && $asiento !== []) {
+			$monedaIdAsiento = (int) ($asiento[0]['moneda_id'] ?? 1);
+			$cotizAsiento = $asiento[0]['cotizacion'] ?? 1;
+			$cajaParaPierna = is_array($datosCaja) ? $datosCaja : [];
+			foreach ($cajaParaPierna as $movimiento) {
+				$monedaMov = (int) ($movimiento->moneda_ids ?? 0);
+				if ($monedaMov > 0) {
+					$monedaIdAsiento = $monedaMov;
+					$cotizAsiento = $movimiento->cotizaciones ?? $cotizAsiento;
+					break;
+				}
+			}
+			$asiento = IngresoEgresoSolicitudpagoSupport::aplicarPiernaFinancieraALineas(
+				$asiento,
+				$cajaParaPierna,
+				$empresa_id,
+				$monedaIdAsiento,
+				$cotizAsiento,
+				(int) $signo
+			);
+		}
+
 		return ['mensaje' => 'ok', 'asiento' => $asiento];
 	}
 

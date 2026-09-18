@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Contable\Sicore;
 
 use App\Models\Contable\Sicore_Config;
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
@@ -12,7 +13,7 @@ use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 use Illuminate\Support\Collection;
 
 /**
- * Conciliación SICORE vs mayor: suma del período vs col. P (saldo ejerc. ERP)
+ * Conciliación SICORE vs mayor: suma del período vs col. P (saldo ejerc. Anita)
  * al último movimiento ≤ fecha_hasta de la quincena/mes elegida.
  */
 final class SicoreConciliacionContableService
@@ -47,7 +48,12 @@ final class SicoreConciliacionContableService
                 }
             }
         }
-        $this->saldoEjercicioSupport->precargar($empresaId, $hasta, array_values($codigosSaldo));
+        $this->saldoEjercicioSupport->precargar(
+            $empresaId,
+            $hasta,
+            array_values($codigosSaldo),
+            MayorFuenteConsultaSupport::MODO_ANITA,
+        );
 
         $items = [];
         foreach ($configs as $config) {
@@ -76,12 +82,13 @@ final class SicoreConciliacionContableService
 
             $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
 
-            // Col. P del mayor plano: saldo de ejercicio al último movimiento ≤ fecha_hasta.
+            // Col. P del mayor Anita: saldo de ejercicio al último movimiento ≤ fecha_hasta.
             $totalMayor = $this->saldoEjercicioSupport->saldoComparable(
                 $empresaId,
                 $hasta,
                 $cuentasDetalle,
                 $cuentaInversa,
+                MayorFuenteConsultaSupport::MODO_ANITA,
             );
 
             $dif = round($totalSicore - $totalMayor, 2);

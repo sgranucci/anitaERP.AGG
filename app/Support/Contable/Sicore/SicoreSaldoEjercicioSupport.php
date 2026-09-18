@@ -10,19 +10,21 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 
 /**
- * Saldo de ejercicio (columna P del mayor ERP) a fecha_hasta.
+ * Saldo de ejercicio (columna P) a fecha_hasta.
  *
- * Misma criterio que SUSS: lee asientos ERP (col. P / saldo ejerc.).
  * El rango visible es un solo día (fecha_hasta); el SI acumula desde
  * {@see MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD}, así el saldo_ejercicio
  * final es el de la columna P al último movimiento ≤ fecha_hasta.
  *
- * Una sola corrida del mayor por (empresa, fecha_hasta) carga todas las
+ * Fuente por defecto: ERP (SUSS / IIBB). SICORE pasa Anita para cuadrar
+ * contra el Excel del mayor clásico mientras las OP del período sigan en Anita.
+ *
+ * Una sola corrida del mayor por (empresa, fecha_hasta, fuente) carga todas las
  * cuentas pedidas en el request.
  */
 final class SicoreSaldoEjercicioSupport
 {
-    /** @var array<string, array<int, float>> empresa|hasta => [codigo => saldo plano debe-haber] */
+    /** @var array<string, array<int, float>> empresa|hasta|fuente => [codigo => saldo plano debe-haber] */
     private array $cacheLote = [];
 
     public function __construct(
@@ -41,6 +43,7 @@ final class SicoreSaldoEjercicioSupport
         string $fechaHastaIso,
         array $cuentasDetalle,
         bool $cuentaInversa = true,
+        string $fuente = MayorFuenteConsultaSupport::MODO_ERP,
     ): float {
         $codigos = $this->codigosNumericos($cuentasDetalle);
         if ($empresaId <= 0 || $codigos === [] || $fechaHastaIso === '') {
@@ -52,7 +55,7 @@ final class SicoreSaldoEjercicioSupport
             return 0.0;
         }
 
-        $mapa = $this->saldosPlanoPorCuenta($empresaId, $hastaYmd, $codigos);
+        $mapa = $this->saldosPlanoPorCuenta($empresaId, $hastaYmd, $codigos, $fuente);
         $sumaPlano = 0.0;
         foreach ($codigos as $codigo) {
             $sumaPlano += (float) ($mapa[$codigo] ?? 0);
@@ -67,14 +70,18 @@ final class SicoreSaldoEjercicioSupport
      *
      * @param  list<int>  $codigos
      */
-    public function precargar(int $empresaId, string $fechaHastaIso, array $codigos): void
-    {
+    public function precargar(
+        int $empresaId,
+        string $fechaHastaIso,
+        array $codigos,
+        string $fuente = MayorFuenteConsultaSupport::MODO_ERP,
+    ): void {
         $codigos = array_values(array_unique(array_filter(array_map('intval', $codigos), static fn (int $c) => $c > 0)));
         $hastaYmd = (int) str_replace('-', '', $fechaHastaIso);
         if ($empresaId <= 0 || $codigos === [] || $hastaYmd < MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD) {
             return;
         }
-        $this->saldosPlanoPorCuenta($empresaId, $hastaYmd, $codigos);
+        $this->saldosPlanoPorCuenta($empresaId, $hastaYmd, $codigos, $fuente);
     }
 
     /**
@@ -98,9 +105,14 @@ final class SicoreSaldoEjercicioSupport
      * @param  list<int>  $codigos
      * @return array<int, float>
      */
-    private function saldosPlanoPorCuenta(int $empresaId, int $hastaYmd, array $codigos): array
-    {
-        $claveLote = $empresaId.'|'.$hastaYmd;
+    private function saldosPlanoPorCuenta(
+        int $empresaId,
+        int $hastaYmd,
+        array $codigos,
+        string $fuente = MayorFuenteConsultaSupport::MODO_ERP,
+    ): array {
+        $fuente = MayorFuenteConsultaSupport::normalizarModo($fuente);
+        $claveLote = $empresaId.'|'.$hastaYmd.'|'.$fuente;
         $mapa = $this->cacheLote[$claveLote] ?? [];
         $faltantes = [];
         foreach ($codigos as $codigo) {
@@ -118,7 +130,6 @@ final class SicoreSaldoEjercicioSupport
 
         // fecha_desde = fecha_hasta: el SI ya trae el acumulado previo; la col. P
         // del último movimiento del día es el saldo de ejercicio a conciliar.
-        // Fuente ERP (mismo criterio que SUSS / mayor contable migrado).
         $resultado = $this->procesador->generar(
             [$empresaId],
             $hastaYmd,
@@ -134,7 +145,7 @@ final class SicoreSaldoEjercicioSupport
             null,
             false,
             false,
-            MayorFuenteConsultaSupport::MODO_ERP,
+            $fuente,
         );
 
         $encontradas = [];

@@ -1538,9 +1538,27 @@ $(function () {
         return String($('#numeroordencompra').val() || $('input[name="numeroordencompra"]').val() || '').trim();
     }
 
+    function esTipoProrrateadoComprobante() {
+        var abrev = String(
+            $('#tipotransaccion_compra_id_abreviatura').val()
+            || $('.abreviaturatipotransaccioncompra').first().val()
+            || ''
+        ).toUpperCase().trim();
+        if (abrev.length < 3) {
+            return false;
+        }
+        return abrev.charAt(1) === 'P'
+            && ['F', 'C', 'D'].indexOf(abrev.charAt(0)) >= 0
+            && ['B', 'S', 'L', 'U'].indexOf(abrev.charAt(2)) >= 0;
+    }
+
     function precargarConceptosPorTipo(tipoId, forzar) {
         var id = parseInt(tipoId || '0', 10) || 0;
         if (id <= 0 || contabilizado) {
+            return;
+        }
+        // FPB/CPB/…: no armar plantilla; los renglones vienen de la precarga (unión).
+        if (esTipoProrrateadoComprobante()) {
             return;
         }
         var hayMontos = false;
@@ -1550,22 +1568,12 @@ $(function () {
                 hayMontos = true;
             }
         });
-        // Nunca pisar conceptos ya valuados (p. ej. precarga prorrateada).
+        // Nunca pisar conceptos ya valuados (p. ej. precarga prorrateada / API/IA).
         if (hayMontos) {
             return;
         }
-
-        var precargaId = parseInt(String($form.attr('data-precarga-id') || '0'), 10) || 0;
-        var precargaTotal = parseFloat($form.attr('data-precarga-total') || '0') || 0;
-        // Precarga sin importes (LEGAJO/scan): no armar plantilla en $0; el modal de consulta sí lista la unión.
-        if (precargaId > 0 && !(precargaTotal > 0.0001)) {
-            var $avisoSin = $('#cp-conceptos-tipo-aviso');
-            if ($avisoSin.length) {
-                $avisoSin.removeClass('d-none').html(
-                    '<i class="fa fa-info-circle"></i> Esta precarga no trae importes (p. ej. PDF de legajo sin OCR). '
-                    + 'Completá los montos a mano; con FPB+OC el modal lista la unión de conceptos sin duplicar.'
-                );
-            }
+        // Tampoco pisar renglones ya elegidos (edición, precarga con IDs, plantilla del server).
+        if (hayConceptosCargados()) {
             return;
         }
 
@@ -1576,8 +1584,12 @@ $(function () {
         if (numeroOc) {
             params.numero_oc = numeroOc;
         }
+        var totalCabeceraAntes = parseMonto($('#total').val() || '0');
         $.getJSON(base + '/compras/tipotransaccion_compra/' + id + '/conceptos-iva', params)
             .done(function (res) {
+                if (res && res.prorrateo_multi_cc) {
+                    return;
+                }
                 var lista = (res && res.conceptos) || [];
                 limpiarFilasConceptos();
                 if (!lista.length) {
@@ -1608,17 +1620,17 @@ $(function () {
                     });
                     enriquecerMetaGravadosDesdeFormulas();
                     if ($aviso.length) {
-                        var msgOk = (res && res.prorrateo_multi_cc)
-                            ? ('Conceptos de la unión multi-CC (OC ' + (numeroOc || '—')
-                                + ', sin duplicados). Complete o revise los montos.')
-                            : 'Conceptos precargados según el tipo de comprobante. Complete los montos.';
+                        var msgOk = 'Conceptos del tipo de comprobante. Complete los montos.';
                         $aviso.removeClass('d-none').html(
                             '<i class="fa fa-check-circle"></i> ' + msgOk
                             + (agregados ? ' (' + agregados + ')' : '')
                         );
                     }
                 }
-                sincronizarTotalesDesdeConceptos();
+                // Plantilla en $0: no llevar a 0 el total/cuotas de una precarga API/IA/portal.
+                if (!(Math.abs(totalCabeceraAntes) >= 0.0001)) {
+                    sincronizarTotalesDesdeConceptos();
+                }
                 programarPreviewAsiento();
             })
             .fail(function () {
@@ -1680,7 +1692,7 @@ $(function () {
         alCambiarTipoComprobante(tipoId);
     });
 
-    // Si el alta viene con tipo y sin conceptos con monto, precargar plantilla del tipo.
+    // Alta con tipo y grilla vacía (sin IDs): plantilla del tipo. No corre si ya hay renglones.
     (function precargaInicialConceptosTipo() {
         if (contabilizado) {
             return;

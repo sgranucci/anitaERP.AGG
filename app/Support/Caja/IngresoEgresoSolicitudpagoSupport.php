@@ -9,6 +9,7 @@ use App\Models\Contable\Cuentacontable;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
 use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use InvalidArgumentException;
@@ -259,17 +260,104 @@ class IngresoEgresoSolicitudpagoSupport
             return self::lineasAsientoOpa($sp, $empresaAsiento, $monedaId, $cotizacion, $lineas, $lineasCaja);
         }
 
+        return self::reemplazarPiernaFinanciera($lineas, $lineasCaja);
+    }
+
+    /**
+     * La cuenta financiera del IE pisa el banco/caja del asiento de la SP.
+     * Conserva gasto/retenciones (no 111xxx) y agrega la pierna de las cuentas de caja.
+     *
+     * @param  list<array<string, mixed>>  $lineasAsiento
+     * @param  list<array<string, mixed>>  $lineasCaja
+     * @return list<array<string, mixed>>
+     */
+    public static function reemplazarPiernaFinanciera(array $lineasAsiento, array $lineasCaja): array
+    {
         if ($lineasCaja === []) {
-            return $lineas;
+            return $lineasAsiento;
         }
 
         $sinBanco = array_values(array_filter(
-            $lineas,
+            $lineasAsiento,
             static fn (array $linea) => ! self::esCodigoCajaBanco((string) ($linea['codigo'] ?? ''))
         ));
         $sinBanco = self::ajustarLineasNoBancoAlCaja($sinBanco, $lineasCaja);
 
         return array_merge($sinBanco, $lineasCaja);
+    }
+
+    /**
+     * Al grabar IE desde SP: reemplaza 111xxx del asiento POST por la cuenta
+     * contable de las cuentacaja seleccionadas (OP 125043: 127 vs banco de la SP).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function pisarPiernaFinancieraEnDataAsiento(array &$data): void
+    {
+        $spId = self::solicitudpagoIdDesdeData($data);
+        if ($spId <= 0) {
+            return;
+        }
+
+        $cuentaIds = array_values((array) ($data['cuentacontable_ids'] ?? []));
+        if ($cuentaIds === []) {
+            return;
+        }
+
+        $datosCaja = self::datosCajaDesdeData($data);
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+        $signo = self::signoOperacionDesdeData($data);
+        $monedaCotiz = self::monedaYCotizacionDesdeDatosCaja($datosCaja);
+        $lineas = self::lineasAsientoDesdeData($data);
+        $cc = self::centrocostoPiernaFinanciera($lineas);
+        $lineasCaja = self::lineasDesdeCuentacaja(
+            $datosCaja,
+            $empresaId,
+            $monedaCotiz['moneda_id'],
+            $monedaCotiz['cotizacion'],
+            $signo,
+            $cc
+        );
+        if ($lineasCaja === []) {
+            return;
+        }
+
+        self::escribirLineasAsientoEnData($data, self::reemplazarPiernaFinanciera($lineas, $lineasCaja));
+    }
+
+    /**
+     * Preview: si el asiento ya venía armado (datoscontables), igual pisa 111xxx
+     * con las cuentas de caja actuales.
+     *
+     * @param  list<array<string, mixed>>  $lineasAsiento
+     * @param  list<object>  $datosCaja
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarPiernaFinancieraALineas(
+        array $lineasAsiento,
+        array $datosCaja,
+        int $empresaId,
+        int $monedaId,
+        float|int|string $cotizacion,
+        int $signoOperacion = -1
+    ): array {
+        if ($lineasAsiento === [] || $datosCaja === []) {
+            return $lineasAsiento;
+        }
+
+        $lineasCaja = self::lineasDesdeCuentacaja(
+            $datosCaja,
+            $empresaId,
+            $monedaId,
+            $cotizacion,
+            $signoOperacion,
+            self::centrocostoPiernaFinanciera($lineasAsiento)
+        );
+        if ($lineasCaja === []) {
+            return $lineasAsiento;
+        }
+
+        return self::reemplazarPiernaFinanciera($lineasAsiento, $lineasCaja);
     }
 
     /**
@@ -493,6 +581,161 @@ class IngresoEgresoSolicitudpagoSupport
         }
 
         return $lineas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function signoOperacionDesdeData(array $data): int
+    {
+        $tipoId = (int) ($data['tipotransaccion_caja_id'] ?? 0);
+        if ($tipoId <= 0) {
+            return -1;
+        }
+
+        $tipo = Tipotransaccion_Caja::query()->find($tipoId);
+        if ($tipo && IngresoEgresoTransferenciaSupport::esTransferencia($tipo)) {
+            return 1;
+        }
+
+        return ($tipo && ($tipo->signo ?? '') === 'I') ? 1 : -1;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<object>
+     */
+    private static function datosCajaDesdeData(array $data): array
+    {
+        $ids = array_values((array) ($data['cuentacaja_ids'] ?? []));
+        $montos = array_values((array) ($data['montos'] ?? []));
+        $monedas = array_values((array) ($data['moneda_ids'] ?? []));
+        $cotizaciones = array_values((array) ($data['cotizaciones'] ?? []));
+        $out = [];
+        foreach ($ids as $i => $id) {
+            $cajaId = (int) $id;
+            if ($cajaId <= 0) {
+                continue;
+            }
+            $out[] = (object) [
+                'cuentacaja_ids' => $cajaId,
+                'montos' => NumeroDecimalLocalSupport::aFloat($montos[$i] ?? 0),
+                'moneda_ids' => (int) ($monedas[$i] ?? 0),
+                'cotizaciones' => $cotizaciones[$i] ?? 1,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<object>  $datosCaja
+     * @return array{moneda_id: int, cotizacion: float|int|string}
+     */
+    private static function monedaYCotizacionDesdeDatosCaja(array $datosCaja): array
+    {
+        foreach ($datosCaja as $movimiento) {
+            $monedaMov = (int) ($movimiento->moneda_ids ?? 0);
+            if ($monedaMov > 0) {
+                return [
+                    'moneda_id' => $monedaMov,
+                    'cotizacion' => $movimiento->cotizaciones ?? 1,
+                ];
+            }
+        }
+
+        return ['moneda_id' => 1, 'cotizacion' => 1];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<array<string, mixed>>
+     */
+    private static function lineasAsientoDesdeData(array $data): array
+    {
+        $cuentaIds = array_values((array) ($data['cuentacontable_ids'] ?? []));
+        $codigos = array_values((array) ($data['codigoasientos'] ?? []));
+        $nombres = array_values((array) ($data['nombrecuentacontables'] ?? []));
+        $ccs = array_values((array) ($data['centrocostoasiento_ids'] ?? []));
+        $monedas = array_values((array) ($data['monedaasiento_ids'] ?? []));
+        $debes = array_values((array) ($data['debeasientos'] ?? []));
+        $haberes = array_values((array) ($data['haberasientos'] ?? []));
+        $cotizaciones = array_values((array) ($data['cotizacionasientos'] ?? []));
+        $obs = array_values((array) ($data['observacionasientos'] ?? []));
+        $manual = array_values((array) ($data['carga_cuentacontable_manuales'] ?? []));
+
+        $lineas = [];
+        foreach ($cuentaIds as $i => $cuentaId) {
+            $cuentaId = (int) $cuentaId;
+            if ($cuentaId <= 0) {
+                continue;
+            }
+            $codigo = trim((string) ($codigos[$i] ?? ''));
+            if ($codigo === '') {
+                $codigo = (string) (Cuentacontable::query()->whereKey($cuentaId)->value('codigo') ?? '');
+            }
+            $debe = NumeroDecimalLocalSupport::aFloat($debes[$i] ?? '');
+            $haber = NumeroDecimalLocalSupport::aFloat($haberes[$i] ?? '');
+            $lineas[] = [
+                'cuentacontable_id' => $cuentaId,
+                'codigo' => $codigo,
+                'nombre' => (string) ($nombres[$i] ?? ''),
+                'moneda_id' => (int) ($monedas[$i] ?? 0),
+                'cotizacion' => $cotizaciones[$i] ?? 1,
+                'centrocosto_id' => (int) ($ccs[$i] ?? 0),
+                'debe' => $debe >= 0.01 ? round($debe, 2) : '',
+                'haber' => $haber >= 0.01 ? round($haber, 2) : '',
+                'observacion' => (string) ($obs[$i] ?? ''),
+                'carga_cuentacontable_manual' => (string) ($manual[$i] ?? 'N'),
+            ];
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private static function escribirLineasAsientoEnData(array &$data, array $lineas): void
+    {
+        $data['cuentacontable_ids'] = [];
+        $data['cuentacontable_id_previa'] = [];
+        $data['codigoasientos'] = [];
+        $data['codigo_previo_cuentacontables'] = [];
+        $data['nombrecuentacontables'] = [];
+        $data['centrocostoasiento_ids'] = [];
+        $data['centrocostoasiento_id_previo'] = [];
+        $data['monedaasiento_ids'] = [];
+        $data['monedaasiento_id_previo'] = [];
+        $data['debeasientos'] = [];
+        $data['haberasientos'] = [];
+        $data['cotizacionasientos'] = [];
+        $data['observacionasientos'] = [];
+        $data['carga_cuentacontable_manuales'] = [];
+        $data['cuenta'] = [];
+
+        foreach ($lineas as $linea) {
+            $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
+            $codigo = (string) ($linea['codigo'] ?? '');
+            $monedaId = (int) ($linea['moneda_id'] ?? 0);
+            $cc = (int) ($linea['centrocosto_id'] ?? 0);
+            $data['cuentacontable_ids'][] = $cuentaId;
+            $data['cuentacontable_id_previa'][] = $cuentaId;
+            $data['codigoasientos'][] = $codigo;
+            $data['codigo_previo_cuentacontables'][] = $codigo;
+            $data['nombrecuentacontables'][] = (string) ($linea['nombre'] ?? '');
+            $data['centrocostoasiento_ids'][] = $cc;
+            $data['centrocostoasiento_id_previo'][] = $cc;
+            $data['monedaasiento_ids'][] = $monedaId;
+            $data['monedaasiento_id_previo'][] = $monedaId;
+            $data['debeasientos'][] = $linea['debe'] ?? '';
+            $data['haberasientos'][] = $linea['haber'] ?? '';
+            $data['cotizacionasientos'][] = $linea['cotizacion'] ?? 1;
+            $data['observacionasientos'][] = $linea['observacion'] ?? '';
+            $data['carga_cuentacontable_manuales'][] = $linea['carga_cuentacontable_manual'] ?? 'N';
+            $data['cuenta'][] = 1;
+        }
     }
 
     /**

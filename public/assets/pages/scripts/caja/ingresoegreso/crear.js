@@ -256,28 +256,29 @@ var montoPendienteSp = 0;
 			// Valida montos asiento
 			sumaMontoAsiento();
 
+			// Pago SP: el asiento de la solicitud trae su banco. Si se eligió otra
+			// cuenta financiera (o el asiento se armó antes), hay que regenerarlo
+			// aunque ya cierre; si no, queda el banco de la SP (OP 125043).
+			if (esPagoSolicitudPagoIe() && (flModificaAsiento || !asientoIeBalanceado())) {
+				flModificaAsiento = true;
+				generaAsientoContable(function (ok) {
+					if (!ok) {
+						liberarBannerGrabacionIe();
+						return;
+					}
+					sumaMontoAsiento();
+					if (!validarBalanceAsientoIe()) {
+						liberarBannerGrabacionIe();
+						muestraVentanaAsiento();
+						return;
+					}
+					continuarGrabacionTrasValidaciones();
+				});
+				return;
+			}
+
 			if (!asientoIeBalanceado())
 			{
-				// Pago SP: el asiento pudo generarse antes de completar la cuenta de caja.
-				// Se regenera una vez con los datos actuales y se vuelve a validar.
-				if (esPagoSolicitudPagoIe()) {
-					flModificaAsiento = true;
-					generaAsientoContable(function (ok) {
-						if (!ok) {
-							liberarBannerGrabacionIe();
-							return;
-						}
-						sumaMontoAsiento();
-						if (!validarBalanceAsientoIe()) {
-							liberarBannerGrabacionIe();
-							muestraVentanaAsiento();
-							return;
-						}
-						continuarGrabacionTrasValidaciones();
-					});
-					return;
-				}
-
 				validarBalanceAsientoIe();
 				flError = true;
 				muestraVentanaAsiento();

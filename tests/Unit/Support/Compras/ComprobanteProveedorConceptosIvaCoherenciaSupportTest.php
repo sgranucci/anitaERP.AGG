@@ -91,4 +91,18 @@ class ComprobanteProveedorConceptosIvaCoherenciaSupportTest extends TestCase
         $this->assertTrue($resultado['descartó']);
         $this->assertCount(3, $resultado['lineas']);
     }
+
+    public function test_plantilla_en_cero_no_entra_al_grabar_ni_a_coherencia(): void
+    {
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
+            [10, 20, 30, 0],
+            [0, '0,00', 150.5, 99],
+            [1, 2, 3, 4]
+        );
+
+        $this->assertCount(1, $lineas);
+        $this->assertSame(30, $lineas[0]['concepto_ivacompra_id']);
+        $this->assertEqualsWithDelta(150.5, $lineas[0]['monto'], 0.0001);
+        $this->assertSame(3, $lineas[0]['cuentacontabledebe_id']);
+    }
 }
