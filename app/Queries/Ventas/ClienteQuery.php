@@ -3,6 +3,7 @@
 namespace App\Queries\Ventas;
 
 use App\Models\Ventas\Cliente;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 
 class ClienteQuery implements ClienteQueryInterface
 {
@@ -43,11 +44,14 @@ class ClienteQuery implements ClienteQueryInterface
 
     public function allQueryCargaPedido(array $campos)
     {
-        return $this->model->select($campos)
-                ->orderBy('nombre','ASC')
-                ->where([['estado','0'],['nombre','!=',' ']])
-                ->orWhere([['estado','!=','0'],['nombre','!=',' '],['tiposuspension_id','!=','1']])
-                ->get();
+        return $this->allQueryPorContexto($campos, ClientePoliticaComercialSupport::OP_PEDIDO);
+    }
+
+    public function allQueryPorContexto(array $campos, string $contexto)
+    {
+        return ClientePoliticaComercialSupport::queryParaContexto($campos, $contexto)
+            ->orderBy('nombre', 'ASC')
+            ->get();
     }
 
     public function traeClienteporCodigo($codigo)

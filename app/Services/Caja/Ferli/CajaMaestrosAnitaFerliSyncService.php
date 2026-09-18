@@ -12,7 +12,8 @@ use RuntimeException;
  * Maestros de caja para Calzados Ferli (bridge ANITA_IP /usr2/ferli → che_ban.tesmae).
  *
  * - cuentacaja ← tesmae (repositorio genérico; Ferli no usa tesmcbu AGG).
- * - tipotransaccion_caja: Anita tesoreria.t_comp no UNLOAD en Ferli → stubs operativos ERP.
+     * - tipotransaccion_caja: Anita tesoreria.t_comp no UNLOAD en Ferli → stubs operativos ERP
+     *   (COB/OPP/DEV/ING/EGR/TRA). TRA no existe en tctes Ferli; tesmov nativo es TED/TEH.
  * - usocuentacaja «Local» para POS facturación local.
  */
 final class CajaMaestrosAnitaFerliSyncService
@@ -24,6 +25,7 @@ final class CajaMaestrosAnitaFerliSyncService
         ['abreviatura' => 'DEV', 'nombre' => 'Devolución cobranza', 'operacion' => 'E', 'signo' => 'E'],
         ['abreviatura' => 'ING', 'nombre' => 'Ingreso de caja', 'operacion' => 'I', 'signo' => 'I'],
         ['abreviatura' => 'EGR', 'nombre' => 'Egreso de caja', 'operacion' => 'E', 'signo' => 'E'],
+        ['abreviatura' => 'TRA', 'nombre' => 'Transferencia', 'operacion' => 'T', 'signo' => 'I'],
     ];
 
     public function __construct(

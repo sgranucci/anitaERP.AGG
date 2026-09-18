@@ -47,7 +47,9 @@ final class IngresoEgresoChequeAsientoSupport
                 continue;
             }
 
-            $d_h = $signo > 0 ? 'H' : 'D';
+            // Emisión = salida de tesorería (banco / diferidos). Igual que OP proveedor: siempre Haber.
+            // El signo I/E invertía la OP (egreso) y dejaba el banco en el Debe.
+            $d_h = self::dhEmitido();
             self::agregaCuenta(
                 $asiento,
                 $cuentacontableId,
@@ -70,7 +72,7 @@ final class IngresoEgresoChequeAsientoSupport
                 continue;
             }
 
-            $d_h = $signo > 0 ? 'D' : 'H';
+            $d_h = self::dhRecibido($signo);
             self::agregaCuenta(
                 $asiento,
                 $valoresId,
@@ -162,12 +164,29 @@ final class IngresoEgresoChequeAsientoSupport
         $cotizacion = (float) ($par->cotizaciones ?? $par->cotizacion_reemplazo ?? 1);
 
         if ($origen === 'E') {
-            $d_h = ($signo > 0) ? ($esAnulacion ? 'D' : 'H') : ($esAnulacion ? 'H' : 'D');
+            $d_h = self::dhEmitido($esAnulacion);
         } else {
-            $d_h = ($signo > 0) ? ($esAnulacion ? 'H' : 'D') : ($esAnulacion ? 'D' : 'H');
+            $d_h = self::dhRecibido($signo, $esAnulacion);
         }
 
         self::agregaCuenta($asiento, $cuentacontableId, $monedaId, $cotizacion, $d_h, $monto, $cuentacontableRepository);
+    }
+
+    /** Cheque propio emitido: sale plata del banco. Anulación revierte. */
+    public static function dhEmitido(bool $esAnulacion = false): string
+    {
+        return $esAnulacion ? 'D' : 'H';
+    }
+
+    /** Cheque de terceros: ingreso a cartera (Debe) o entrega/egreso (Haber). */
+    public static function dhRecibido(int $signo, bool $esAnulacion = false): string
+    {
+        $dh = $signo > 0 ? 'D' : 'H';
+        if ($esAnulacion) {
+            return $dh === 'D' ? 'H' : 'D';
+        }
+
+        return $dh;
     }
 
     private static function agregaCuenta(

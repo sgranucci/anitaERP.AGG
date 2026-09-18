@@ -115,7 +115,7 @@ class FacturaMailEnvioService
 
         /** @var Cliente|null $cliente */
         $cliente = $venta->clientes;
-        if ($cfg->exigir_flag_cliente) {
+        if ($automatico && $cfg->exigir_flag_cliente) {
             $flag = Schema::hasColumn('cliente', 'enviar_factura_mail')
                 ? (bool) ($cliente?->enviar_factura_mail ?? false)
                 : false;

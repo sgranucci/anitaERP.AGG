@@ -24,7 +24,7 @@
             <input type="hidden" name="piezas[]" class="pieza" value="0">
         </td>
         <td class="align-middle">
-            <input type="text" style="text-align: right;" name="precios[]" class="form-control form-control-sm precio" readonly value="{{ $precio ?? '' }}" />
+            <input type="text" style="text-align: right;" name="precios[]" class="form-control form-control-sm precio" autocomplete="off" value="{{ $precio ?? '' }}" />
         </td>
         <td class="align-middle text-center">
             <input name="checkssinfiltro[]" class="checkSinFiltro" title="Todos los art&iacute;culos" type="checkbox" autocomplete="off">

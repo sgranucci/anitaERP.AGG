@@ -1,5 +1,5 @@
 <template id="template-renglon-comprobante">
-    <tr class="item-comprobante">
+    <tr class="item-comprobante" data-lado="deuda">
         <td class="text-center align-middle">
             <input name="checkaplicaciones[]" class="checkaplicacion" type="checkbox" autocomplete="off">
             <input type="hidden" class="idcuentacorriente form-control" name="idcuentacorrientes[]" value="" >
@@ -21,7 +21,7 @@
             <input type="date" class="fechavencimientocomprobante form-control" name="fechavencimientocomprobantes[]" value="" readonly>
         </td>
         <td>
-            <select name="monedacomprobante_ids[]" data-placeholder="Moneda" class="monedacomprobante form-control required" required readonly data-fouc>
+            <select name="monedacomprobante_ids[]" data-placeholder="Moneda" class="monedacomprobante form-control" readonly data-fouc>
                 <option value="">-- Seleccionar --</option>
                 @foreach($moneda_query as $value)
                     <option value="{{ $value->id }}" selected="select">{{ $value->abreviatura }}</option>

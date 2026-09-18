@@ -104,8 +104,10 @@ class Pagoproveedor extends Model
 
     public function asientos()
     {
+        // Si se regrabó la OP puede haber más de un asiento con este pagoproveedor_id.
+        // El más nuevo es el que quedó en asiento_id; latestOfMany evita mostrar el viejo.
         return $this->hasOne(Asiento::class, 'pagoproveedor_id')
-            ->with('asiento_movimientos');
+            ->latestOfMany('id');
     }
 
     /**

@@ -1,4 +1,10 @@
 @extends("theme.$theme.layout")
+@php
+    $estadoCob = (string) ($data->estado ?? '');
+    $politicaCliente = isset($data) && $data->clientes
+        ? \App\Support\Ventas\ClientePoliticaComercialSupport::payload($data->clientes)
+        : null;
+@endphp
 @section('titulo')
     Editar cobranza
 @endsection
@@ -31,13 +37,11 @@ window.chequeRechazoNdUrls = {
 @include('includes.contable.asiento_montos_formato_js')
 <script src="{{ asset('assets/pages/scripts/contable/asiento/asiento_externo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/asiento_externo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'cobranza', 'politicaCliente' => $politicaCliente ?? null])
 <script src="{{ asset('assets/pages/scripts/caja/banco/consulta.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
-@php
-    $estadoCob = (string) ($data->estado ?? '');
-@endphp
 <div class="row" id="editar">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -64,7 +68,7 @@ window.chequeRechazoNdUrls = {
                     @endif
                 </div>
             </div>
-            <form action="{{ route('actualizar_cobranza', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{ route('actualizar_cobranza', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" data-usuario-id="{{ auth()->id() }}" data-mensaje-grabacion="Grabando cobranza…">
                 <input type="hidden" class="caja_id" id="caja_id" name="caja_id" value="{{ $data->caja_id ?? '' }}">
                 <input type="hidden" class="cobranza_id" id="cobranza_id" name="cobranza_id" value="{{ $data->id ?? '' }}">
                 <input type="hidden" class="origen" id="origen" name="origen" value="{{ $origen ?? '' }}">

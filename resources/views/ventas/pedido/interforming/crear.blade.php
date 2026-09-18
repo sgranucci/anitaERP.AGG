@@ -5,6 +5,7 @@ Nuevo pedido Interforming
 
 @section("scripts")
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido'])
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/vendedor/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}" type="text/javascript"></script>

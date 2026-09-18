@@ -122,6 +122,9 @@ class ComprobanteImpresionProgramaRepository implements ComprobanteImpresionProg
             'nombre' => trim((string) ($data['nombre'] ?? '')),
             'empresa_id' => $empresaId > 0 ? $empresaId : null,
             'permite_disparo_al_grabar' => ! empty($data['permite_disparo_al_grabar']),
+            'enviar_automatico_al_facturar' => array_key_exists('enviar_automatico_al_facturar', $data)
+                ? ! empty($data['enviar_automatico_al_facturar'])
+                : true,
         ];
     }
 

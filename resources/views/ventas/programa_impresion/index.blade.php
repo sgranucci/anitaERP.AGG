@@ -59,7 +59,8 @@
                             <th>Empresa</th>
                             <th>Formularios</th>
                             <th>Reglas</th>
-                            <th>Disparo al grabar</th>
+                            <th>Dispara impresión</th>
+                            <th>Auto impresora</th>
                             <th class="width160 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -73,6 +74,7 @@
                             <td>{{ $data->formularios_count }}</td>
                             <td>{{ $data->reglas_count }}</td>
                             <td>{{ $data->permite_disparo_al_grabar ? 'Sí' : 'No' }}</td>
+                            <td>{{ ($data->enviar_automatico_al_facturar ?? true) ? 'Sí' : 'No' }}</td>
                             <td class="width160 text-nowrap">
                                 @if (can('editar-programa-impresion', false))
                                 <a href="{{ route('editar_programa_impresion', array_merge(['id' => $data->id], $retornoListadoQuery)) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

@@ -17,8 +17,33 @@
         return !!($tr && $tr.length && $tr.hasClass('ms-linea-simple'));
     }
 
+    function msCampoPrecio($tr) {
+        return $tr.find('input.precio').first();
+    }
+
+    function msPrecioEsManual($tr) {
+        return msCampoPrecio($tr).attr('data-ms-precio-manual') === '1';
+    }
+
+    function msMarcarPrecioManual($trOInput) {
+        var $el = $trOInput && $trOInput.is && $trOInput.is('input.precio')
+            ? $trOInput
+            : msCampoPrecio($trOInput);
+        $el.attr('data-ms-precio-manual', '1');
+    }
+
+    function msLimpiarPrecioManual($tr) {
+        msCampoPrecio($tr).removeAttr('data-ms-precio-manual');
+    }
+
+    window.msPrecioEsManual = msPrecioEsManual;
+    window.msMarcarPrecioManual = msMarcarPrecioManual;
+    window.msLimpiarPrecioManual = msLimpiarPrecioManual;
+
     /**
      * Ferli: con combinaciones = calzado (comb/módulo/medidas).
+     * Cantidad de calzado sigue viniendo del modal de talles (readonly).
+     * Precio queda editable para corregir lista / última compra.
      * Sin combinaciones = no venta → cantidad y precio editables (modo original).
      */
     window.msAplicarModoLineaFerli = function ($tr, esArticuloVenta) {
@@ -35,7 +60,7 @@
         if (esArticuloVenta) {
             $tr.removeClass('ms-linea-simple');
             $cant.removeClass('cantidad-stock').prop('readonly', true);
-            $precio.prop('readonly', true);
+            $precio.prop('readonly', false);
             $comb.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
             $mod.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
             $flags.prop('disabled', false);
@@ -49,7 +74,7 @@
             $tr.find('.combinacion_id_previa, .modulo_id_previa, .desc_combinacion, .desc_modulo, .medidas').val('');
             $flags.prop('checked', false);
             var articuloId = msFilaArticuloId($tr);
-            if (articuloId) {
+            if (articuloId && !msPrecioEsManual($tr)) {
                 msResolverPrecioLinea($tr, articuloId);
             }
             if (typeof window.msEnfocarCantidadFila === 'function') {
@@ -85,12 +110,17 @@
         $tr.find('.abrev-umd-alter').text(umdAlt);
     };
 
-    window.msResolverPrecioLinea = function ($tr, articuloId) {
+    window.msResolverPrecioLinea = function ($tr, articuloId, opciones) {
         if (!$tr || !$tr.length) {
             return;
         }
+        opciones = opciones || {};
+        var forzar = !!opciones.forzar;
         // En Ferli solo resuelve precio automático en líneas no venta (sin combinaciones).
         if (msEsModoFerli() && !msEsLineaSimple($tr)) {
+            return;
+        }
+        if (!forzar && msPrecioEsManual($tr)) {
             return;
         }
         var url = window.movimientoStockPrecioLineaUrl || '';
@@ -104,6 +134,12 @@
             tipotransaccion_stock_id: tipoId,
             fecha: $('#fecha').val() || ''
         }).done(function (data) {
+            if (String(msFilaArticuloId($tr)) !== String(articuloId)) {
+                return;
+            }
+            if (!forzar && msPrecioEsManual($tr)) {
+                return;
+            }
             if (!data || data.precio == null) {
                 return;
             }
@@ -158,7 +194,8 @@
         });
     }
 
-    window.msRefrescarPreciosTodasLasFilas = function () {
+    window.msRefrescarPreciosTodasLasFilas = function (opciones) {
+        opciones = opciones || {};
         $('#tbody-tabla tr.item-pedido').each(function () {
             var $tr = $(this);
             if (msEsModoFerli() && !msEsLineaSimple($tr)) {
@@ -166,7 +203,7 @@
             }
             var articuloId = msFilaArticuloId($tr);
             if (articuloId) {
-                msResolverPrecioLinea($tr, articuloId);
+                msResolverPrecioLinea($tr, articuloId, opciones);
             }
         });
     };
@@ -203,6 +240,8 @@
         $tr.find('.codigoarticulo').val(dataArticulo.sku || '');
         $tr.find('.descripcionarticulo').val(dataArticulo.descripcion || dataArticulo.nombre || '');
         $tr.find('.articulo_id_previo').val(articuloId > 0 ? articuloId : '');
+        msLimpiarPrecioManual($tr);
+        $tr.find('.precio').val('');
         msAplicarTipoTransferenciaContableSiCorresponde($tr, articuloId);
 
         if (typeof actualizarLinkEditarArticulo === 'function') {
@@ -226,7 +265,7 @@
                 }
             }
             msEnriquecerUmDesdeArticulo($tr, dataArticulo);
-            msResolverPrecioLinea($tr, articuloId);
+            msResolverPrecioLinea($tr, articuloId, { forzar: true });
             $tr.find('.cantidad-stock').val('');
             $tr.find('.cant-unidad').val('');
             msEnfocarCantidadFila($tr);
@@ -399,6 +438,21 @@
             }
         });
 
+        $(document).on('input.msPrecioManual', '#tabla-items-movimientostock input.precio', function () {
+            msMarcarPrecioManual($(this));
+            if (typeof window.movStockProgramarPreviewAsiento === 'function') {
+                window.movStockProgramarPreviewAsiento();
+            }
+        });
+
+        if ($('#movimientostockid').length) {
+            $('#tabla-items-movimientostock input.precio').each(function () {
+                if (($(this).val() || '').trim() !== '') {
+                    msMarcarPrecioManual($(this));
+                }
+            });
+        }
+
         if (msEsModoFerli()) {
             $(document).on('change.msCheckSinFiltro', '.checkSinFiltro', function () {
                 var $tr = $(this).closest('tr');
@@ -422,7 +476,7 @@
             $(document).on('input change', '#tabla-items-movimientostock .cant-unidad', function () {
                 msRecalcularCantidadesStandard($(this).closest('tr'), 'cant_unidad');
             });
-            $(document).on('change input', '#tabla-items-movimientostock .cantidad-stock, #tabla-items-movimientostock .precio', function () {
+            $(document).on('change input', '#tabla-items-movimientostock .cantidad-stock', function () {
                 if (typeof window.movStockProgramarPreviewAsiento === 'function') {
                     window.movStockProgramarPreviewAsiento();
                 }

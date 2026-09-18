@@ -325,7 +325,7 @@ class RemitoController extends Controller
             }
         }
         if (! $flEncontro) {
-            return back()->with('errores', ['Cliente '.$remito->clientes->nombre.' no activo']);
+            // Remito histórico: se puede abrir aunque el cliente ya no entre en carga.
         }
 
         $prefsFacturacion = UsuarioPreferenciaFacturacionSupport::leer();
@@ -436,7 +436,7 @@ class RemitoController extends Controller
         &$unidadmedida_query,
         $remito = null
     ) {
-        $cliente_query = $this->clienteQuery->allQueryCargaPedido(['id', 'nombre', 'codigo']);
+        $cliente_query = $this->clienteQuery->allQueryPorContexto(['id', 'nombre', 'codigo'], \App\Support\Ventas\ClientePoliticaComercialSupport::OP_BOLETA);
         $tiposuspensioncliente_query = $this->tiposuspencionclienteRepository->all();
         $motivocierrepedido_query = $this->motivocierrepedidoRepository->all();
         $condicionventa_query = Condicionventa::all();

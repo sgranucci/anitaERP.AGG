@@ -1,6 +1,6 @@
 <template id="template-renglon">
 	<tr class="item-pedido">
-    	<td>
+    	<td class="factura-col-item">
        		<input type="text" name="items[]" class="form-control item" value="1" readonly>
             <input type="hidden" name="medidas[]" class="form-control medidas" readonly value="" />
             <input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="" />
@@ -11,7 +11,7 @@
 			<input type="hidden" name="loteids[]" class="form-control loteids" value="" />
 			<input type="hidden" name="cantidades[]" class="form-control cantidad" value="" />
         </td>
-		<td>
+		<td class="factura-col-articulo">
 			<div class="factura-sku-campo" id="articulo">
 				<input type="hidden" name="articulo[]" class="form-control iiarticulo" readonly value="1" />
 				<input type="hidden" class="articulo_id" name="articulo_ids[]" value="" >
@@ -34,7 +34,7 @@
 			</div>
 		</td>		
 		<td class="factura-col-detalle">
-			<input type="text" style="WIDTH: 220px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="" readonly>
+			<input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="" readonly>
 			<textarea name="leyendas_linea[]" class="d-none factura-ta-leyenda-linea" aria-hidden="true"></textarea>
 			<div class="factura-leyenda-badge"></div>
 		</td>
@@ -67,10 +67,10 @@
             </select>
 			<input type="hidden" name="descuentoventaanterior_ids[]" class="form-control descuentoventaanterior_id" value="" />
 		</td>
-        <td>
+        <td class="factura-col-precio">
         	<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" value="" readonly/>
         </td>
-        <td class="text-nowrap">
+        <td class="text-nowrap factura-col-acciones">
 			<button type="button" title="Leyenda / comentario de la l&iacute;nea" class="btn-accion-tabla factura-abrir-leyenda-linea tooltipsC">
 				<i class="fa fa-align-left"></i>
 			</button>

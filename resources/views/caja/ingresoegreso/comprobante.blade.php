@@ -10,6 +10,9 @@
         th { background: #85C1E9; color: #17202A; padding: 4px; border: 1px solid #ccc; text-align: left; }
         td { padding: 4px; border: 1px solid #ccc; }
         .meta td { border: none; padding: 2px 4px; }
+        .cabecera-doc { text-align: right; vertical-align: top; }
+        .cabecera-doc h1 { margin: 0 0 2px; text-align: right; }
+        .cabecera-doc .generado { text-align: right; }
         .right { text-align: right; }
         .logo { max-height: 48px; max-width: 160px; }
         .total-grande {
@@ -43,11 +46,25 @@
         ?: optional($movimiento->usuarios)->nombre
         ?: '';
 
+    $esTra = \App\Support\Caja\IngresoEgresoTransferenciaSupport::esTransferencia(
+        $movimiento->tipotransaccioncajas ?? null
+    );
+    $tituloDoc = $esTra
+        ? mb_strtoupper(\App\Support\Caja\IngresoEgresoTransferenciaSupport::NOMBRE, 'UTF-8')
+        : trim('Orden de pago '.$tipo);
+
     $totalAbs = 0.0;
     $cotizacionMostrada = null;
     $monedaAbrTotal = '';
     foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
-        $totalAbs += abs((float) $linea->monto);
+        $montoLinea = (float) $linea->monto;
+        if ($esTra) {
+            if ($montoLinea > 0) {
+                $totalAbs += $montoLinea;
+            }
+        } else {
+            $totalAbs += abs($montoLinea);
+        }
         $monedaIdLinea = (int) ($linea->moneda_id ?? 1);
         $cotizLinea = (float) ($linea->cotizacion ?? 0);
         if ($monedaIdLinea > 1 && $cotizLinea > 0 && $cotizacionMostrada === null) {
@@ -114,9 +131,9 @@
                 <img class="logo" src="{{ $logo['uri'] }}" alt="logo">
             @endif
         </td>
-        <td style="width:70%; vertical-align:middle;">
-            <h1>Orden de pago {{ $tipo }} {{ $movimiento->numerotransaccion }}</h1>
-            <div>Generado {{ now()->format('d/m/Y H:i') }}</div>
+        <td class="cabecera-doc" style="width:70%;">
+            <h1>{{ $tituloDoc }} {{ $movimiento->numerotransaccion }}</h1>
+            <div class="generado">Generado {{ now()->format('d/m/Y H:i') }}</div>
         </td>
     </tr>
 </table>

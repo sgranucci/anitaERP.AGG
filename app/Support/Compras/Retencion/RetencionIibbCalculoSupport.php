@@ -16,7 +16,7 @@ final class RetencionIibbCalculoSupport
         }
 
         if ($neto <= 0) {
-            return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_SIN_TASA, [
+            return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_SIN_BASE_FACTURA, [
                 'importe_neto_pago' => $neto,
             ]);
         }

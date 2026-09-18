@@ -11,6 +11,8 @@
     #tabla-movimientos-caja-reporte .mov-caja-total-general td { background: #D5D8DC; font-weight: 600; }
 </style>
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cuentacaja/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/movimientos_caja_reporte/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/movimientos_caja_reporte/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script>
 (function () {
     var overlay = document.getElementById('movimientos-caja-reporte-overlay');
@@ -158,19 +160,23 @@
                         </div>
                     </div>
 
-                    <div class="form-group row">
-                        <label for="cuentacaja_id" class="col-lg-2 control-label text-right pr-2">Cuenta de caja</label>
-                        <div class="col-lg-6">
-                            <select name="cuentacaja_id" id="cuentacaja_id" class="form-control">
-                                <option value="0">Todas</option>
-                                @foreach ($cuentas as $cuenta)
-                                    <option value="{{ $cuenta->id }}" @selected((int) ($filtros['cuentacaja_id'] ?? 0) === (int) $cuenta->id)>
-                                        {{ $cuenta->codigo }} — {{ $cuenta->nombre }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
+                    @php
+                        $cuentaFiltroId = (int) ($filtros['cuentacaja_id'] ?? 0);
+                    @endphp
+                    @include('caja.partials.campo_consulta_cuentacaja', [
+                        'prefix' => 'mov_caja_rep',
+                        'layout' => 'form_row',
+                        'label' => 'Cuenta de caja',
+                        'inputName' => 'cuentacaja_id',
+                        'inputId' => 'cuentacaja_id',
+                        'cuentacajaId' => $cuentaFiltroId > 0 ? $cuentaFiltroId : '',
+                        'codigo' => $cuentaFiltro->codigo ?? '',
+                        'nombre' => $cuentaFiltro->nombre ?? '',
+                        'col_label' => 'col-lg-2 control-label text-right pr-2',
+                        'col_input' => 'col-lg-6',
+                        'required' => false,
+                        'ayuda' => 'Vacío = todas las cuentas. F1 o lupa abre la consulta.',
+                    ])
 
                     <div class="form-group row mb-0">
                         <div class="col-lg-2"></div>
@@ -233,4 +239,5 @@
         </div>
     </div>
 </div>
+@include('includes.caja.modalconsultacuentacaja')
 @endsection

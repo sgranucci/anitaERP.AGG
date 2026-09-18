@@ -91,10 +91,15 @@ function aplicarCuentaContableEnContexto($ctx, data) {
     $ctx = contextoCuentaContableVivo($ctx);
     if ($ctx && $ctx.length) {
         // Código/nombre antes del change: el preview del CP lee esos campos al sincronizar.
-        $ctx.find('.codigocuentacontable').first().val(data.codigo);
+        var $codigoCtx = $ctx.find('.codigocuentacontable').first();
+        if (!$codigoCtx.length) {
+            $codigoCtx = $ctx.find('.codigoasiento').first();
+        }
+        $codigoCtx.val(data.codigo);
         $ctx.find('.nombrecuentacontable').first().val(data.nombre);
         $ctx.find('.cuentacontable_id_previa').val(data.id);
         $ctx.find('.codigo_previo').val(data.codigo);
+        $ctx.find('.codigo_previo_cuentacontable').val(data.codigo);
         actualizarLinkEditarCuentaContable($ctx, data.id);
         $ctx.find('.cuentacontable_id').first().val(data.id).trigger('change');
         // Contexto de grilla/campo: no tocar otros .tm-cuentacontable-campo del form.
@@ -130,11 +135,16 @@ function refrescarCentroCostoTrasCuenta($ctx, data) {
     }
 
     var $tr = $ctx.is('tr') ? $ctx : $ctx.closest('tr');
-    if (!$tr.length || !$tr.find('.centrocosto').length) {
+    var $ccAsiento = $tr.find('.centrocostoasiento');
+    var tieneCcAsiento = $ccAsiento.length > 0;
+    if (!$tr.length || (!$tr.find('.centrocosto').length && !tieneCcAsiento)) {
         return;
     }
 
     var $codigo = $tr.find('.codigocuentacontable').first();
+    if (!$codigo.length) {
+        $codigo = $tr.find('.codigoasiento').first();
+    }
     if (!$codigo.length) {
         return;
     }
@@ -147,11 +157,28 @@ function refrescarCentroCostoTrasCuenta($ctx, data) {
     if (data && data.manejaccosto !== undefined) {
         var manejaCc = data.manejaccosto === 'S' || data.manejaccosto === '1' || data.manejaccosto === 1;
         if (!manejaCc) {
-            $tr.find('.centrocosto').empty().append('<option value="0" selected>Sin CC</option>').attr('readonly', true);
-            $tr.find('.centrocosto_id_previo').val('0');
+            if (tieneCcAsiento) {
+                $ccAsiento.empty().append('<option value="0" selected>Sin CC</option>').attr('readonly', true);
+            } else {
+                $tr.find('.centrocosto').empty().append('<option value="0" selected>Sin CC</option>').attr('readonly', true);
+                $tr.find('.centrocosto_id_previo').val('0');
+            }
             return;
         }
-        $tr.find('.centrocosto').attr('readonly', false);
+        if (tieneCcAsiento) {
+            $ccAsiento.attr('readonly', false);
+        } else {
+            $tr.find('.centrocosto').attr('readonly', false);
+        }
+    }
+
+    if (tieneCcAsiento && typeof completarCentroCostoAsiento === 'function') {
+        var ccPrevioAsiento = parseInt($tr.find('.centrocostoasiento_id_previo').val() || '0', 10) || 0;
+        completarCentroCostoAsiento($codigo.get(0), cuentaId, ccPrevioAsiento);
+        if (typeof marcaAsientoLineaManual === 'function') {
+            marcaAsientoLineaManual($tr);
+        }
+        return;
     }
 
     if (typeof completarCentroCosto === 'function') {
@@ -292,6 +319,7 @@ $(document)
             $el.hasClass('codigodeposito') ||
             $el.hasClass('sku') || $el.hasClass('codigoarticulo') ||
             $el.hasClass('codigocuentacontable') || $el.is('#codigocuentacontable') ||
+            $el.hasClass('codigoasiento') ||
             $el.is('#consultacuentacontable') ||
             $el.is('#consultadeposito, #consultapuntoventa, #consultatipotransaccionventa, #consultacuentacaja, #consultalistaprecio') ||
             $el.hasClass('codigopuntoventa') ||

@@ -11,6 +11,7 @@
 @php
     $colLabel = 'col-lg-2 control-label text-right pr-2';
     $colInput = 'col-lg-4';
+    $estadoPickingFacturado = \App\Support\Ventas\PedidoPickingFerliSupport::FACTURADO;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -139,6 +140,7 @@
                                 <th class="text-right">Precio</th>
                                 <th>Lote / OT</th>
                                 <th>Dep&oacute;sito</th>
+                                <th>Factura</th>
                                 <th>Marcado</th>
                             </tr>
                         </thead>
@@ -153,13 +155,18 @@
                                         }
                                     }
                                     $nroPicking = optional($linea->pickingCabecera)->codigo;
+                                    $facturada = ($linea->picking_facturado ?? '') === $estadoPickingFacturado;
+                                    $etiquetaFactura = \App\Support\Ventas\PedidoPickingFerliSupport::etiquetaFacturaDesdeVenta($linea->pickingVenta);
                                 @endphp
                                 <tr>
                                     <td>
                                         <input type="checkbox" class="check-picking-linea"
                                             value="{{ $linea->id }}"
                                             data-ot="{{ (int) ($linea->ot_id ?? 0) }}"
-                                            data-cliente="{{ (int) ($linea->pedidos->cliente_id ?? 0) }}">
+                                            data-cliente="{{ (int) ($linea->pedidos->cliente_id ?? 0) }}"
+                                            @if ($facturada)
+                                                disabled
+                                            @endif>
                                     </td>
                                     <td>{{ $nroPicking ?? '—' }}</td>
                                     <td>{{ $linea->pedidos->codigo ?? $linea->pedido_id }}</td>
@@ -170,11 +177,12 @@
                                     <td class="text-right">{{ number_format((float) $linea->precio, 2, ',', '.') }}</td>
                                     <td>{{ $linea->picking_lote_codigo }}</td>
                                     <td>{{ $depTxt }}</td>
+                                    <td>{{ $etiquetaFactura !== '' ? $etiquetaFactura : ($facturada ? 'Facturada' : '') }}</td>
                                     <td>{{ optional($linea->picking_at)->format('d/m/Y H:i') }}</td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="11" class="text-center text-muted py-4">No hay l&iacute;neas pendientes con los filtros indicados.</td>
+                                    <td colspan="12" class="text-center text-muted py-4">No hay l&iacute;neas con los filtros indicados.</td>
                                 </tr>
                             @endforelse
                         </tbody>

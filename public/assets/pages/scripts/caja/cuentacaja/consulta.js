@@ -1,4 +1,10 @@
 function empresaIdConsultaCuentacaja() {
+    if (typeof window.empresaIdConsultaCuentacajaOverride === 'function') {
+        var over = window.empresaIdConsultaCuentacajaOverride();
+        if (over !== undefined && over !== null) {
+            return String(over);
+        }
+    }
     var $emp = $('#empresa_id');
     if (!$emp.length || String($emp.val() || '').trim() === '') {
         $emp = $('#wz_empresa_id');

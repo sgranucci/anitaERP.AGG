@@ -83,7 +83,7 @@
                 window.movStockProgramarPreviewAsiento();
             }
         } else if (typeof window.msResolverPrecioLinea === 'function') {
-            window.msResolverPrecioLinea($tr, parseInt(datos.articulo_id, 10) || 0);
+            window.msResolverPrecioLinea($tr, parseInt(datos.articulo_id, 10) || 0, { forzar: true });
         }
     }
 

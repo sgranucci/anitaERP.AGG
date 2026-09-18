@@ -3,17 +3,24 @@
 namespace App\Support\Ventas;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Articulo_Movimiento;
+use App\Models\Stock\Articulo_Movimiento_Talle;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Lote;
 use App\Models\Stock\Modulo;
+use App\Models\Ventas\Ordentrabajo;
+use App\Models\Ventas\Ordentrabajo_Combinacion_Talle;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Pedido_Picking;
+use App\Models\Ventas\Venta;
+use App\Models\Ventas\Venta_Emision;
 use App\Repositories\Ventas\Pedido_Combinacion_TalleRepositoryInterface;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +38,8 @@ final class PedidoPickingFerliSupport
     public const NO_MARCADO = 'N';
 
     public const FACTURADO = 'S';
+
+    public const CONCEPTO_DEVOLUCION_NC_PICKING_PREFIJO = 'Devolución NC OT/lote #';
 
     private const SESSION_PICKING_ACTIVO = 'picking_pedido_activo_id';
 
@@ -250,7 +259,8 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * NC total Ferli: deja las líneas de esa FAC listas para volver a facturar por picking.
+     * NC total Ferli: libera las líneas de esa FAC para un picking nuevo.
+     * Quita facturado y la marca de picking (lote queda en stock vía reverso CONSUME_OT).
      */
     public static function reabrirFacturadoPorVenta(int $ventaId): int
     {
@@ -264,16 +274,320 @@ final class PedidoPickingFerliSupport
             ->update([
                 'picking_facturado' => self::NO_MARCADO,
                 'picking_venta_id' => null,
+                'picking' => self::NO_MARCADO,
+                'picking_id' => null,
+                'picking_lote_codigo' => null,
+                'picking_deposito_id' => null,
+                'picking_at' => null,
+                'picking_usuario_id' => null,
                 'updated_at' => now(),
             ]);
+    }
+
+    public static function conceptoDevolucionNcPicking(int $movimientoOrigenId): string
+    {
+        return self::CONCEPTO_DEVOLUCION_NC_PICKING_PREFIJO.$movimientoOrigenId;
+    }
+
+    /**
+     * ¿El movimiento es un consumo de lote/OT (salida) revertible para un picking nuevo?
+     *
+     * @param  object|array<string, mixed>  $mov
+     */
+    public static function esConsumoPickingRevertible($mov): bool
+    {
+        $lote = trim((string) self::valorMovimiento($mov, 'lote', ''));
+        if ($lote === '' || $lote === '0') {
+            return false;
+        }
+
+        return (float) self::valorMovimiento($mov, 'cantidad', 0) < 0;
+    }
+
+    /**
+     * Entrada compensatoria con el mismo lote/OT del consumo de picking.
+     *
+     * @param  object|array<string, mixed>  $mov
+     * @return array<string, mixed>|null
+     */
+    public static function payloadReversoConsumoPicking($mov, int $ventaNcId, string $fecha): ?array
+    {
+        if (! self::esConsumoPickingRevertible($mov)) {
+            return null;
+        }
+
+        $fechaYmd = Carbon::parse($fecha)->format('Y-m-d');
+        $otId = (int) self::valorMovimiento($mov, 'ordentrabajo_id', 0);
+        $pcId = (int) self::valorMovimiento($mov, 'pedido_combinacion_id', 0);
+        $loteImpId = (int) self::valorMovimiento($mov, 'loteimportacion_id', 0);
+        $tipoVentaId = (int) self::valorMovimiento($mov, 'tipotransaccion_id', 0);
+        $tipoStockId = (int) self::valorMovimiento($mov, 'tipotransaccion_stock_id', 0);
+        $depositoId = (int) self::valorMovimiento($mov, 'deposito_id', 0);
+        $moduloId = (int) self::valorMovimiento($mov, 'modulo_id', 0);
+        $combinacionId = (int) self::valorMovimiento($mov, 'combinacion_id', 0);
+        $listaprecioId = (int) self::valorMovimiento($mov, 'listaprecio_id', 0);
+        $monedaId = (int) self::valorMovimiento($mov, 'moneda_id', 0);
+        $colorId = (int) self::valorMovimiento($mov, 'color_id', 0);
+        $talleId = (int) self::valorMovimiento($mov, 'talle_id', 0);
+
+        return [
+            'fecha' => $fechaYmd,
+            'fechajornada' => $fechaYmd,
+            'tipotransaccion_id' => $tipoVentaId > 0 ? $tipoVentaId : null,
+            'tipotransaccion_stock_id' => $tipoStockId > 0 ? $tipoStockId : null,
+            'venta_id' => $ventaNcId > 0 ? $ventaNcId : null,
+            'venta_emision_id' => null,
+            'movimientostock_id' => null,
+            'pedido_combinacion_id' => $pcId > 0 ? $pcId : null,
+            'ordentrabajo_id' => $otId > 0 ? $otId : null,
+            'lote' => trim((string) self::valorMovimiento($mov, 'lote', '')),
+            'articulo_id' => (int) self::valorMovimiento($mov, 'articulo_id', 0),
+            'color_id' => $colorId > 0 ? $colorId : null,
+            'talle_id' => $talleId > 0 ? $talleId : null,
+            'numeroparte' => self::valorMovimiento($mov, 'numeroparte', null),
+            'combinacion_id' => $combinacionId > 0 ? $combinacionId : null,
+            'concepto' => self::conceptoDevolucionNcPicking((int) self::valorMovimiento($mov, 'id', 0)),
+            'modulo_id' => $moduloId > 0 ? $moduloId : null,
+            'cantidad' => -1 * (float) self::valorMovimiento($mov, 'cantidad', 0),
+            'caja' => self::valorMovimiento($mov, 'caja', null),
+            'pieza' => self::valorMovimiento($mov, 'pieza', null),
+            'precio' => self::valorMovimiento($mov, 'precio', 0),
+            'costo' => self::valorMovimiento($mov, 'costo', 0),
+            'listaprecio_id' => $listaprecioId > 0 ? $listaprecioId : null,
+            'incluyeimpuesto' => self::valorMovimiento($mov, 'incluyeimpuesto', null),
+            'moneda_id' => $monedaId > 0 ? $monedaId : null,
+            'descuento' => self::valorMovimiento($mov, 'descuento', null),
+            'descuentointegrado' => self::valorMovimiento($mov, 'descuentointegrado', null),
+            'deposito_id' => $depositoId > 0 ? $depositoId : 1,
+            'loteimportacion_id' => $loteImpId > 0 ? $loteImpId : null,
+        ];
+    }
+
+    /**
+     * @param  object|array<string, mixed>  $mov
+     * @param  mixed  $default
+     * @return mixed
+     */
+    private static function valorMovimiento($mov, string $campo, $default = null)
+    {
+        if (is_array($mov)) {
+            return $mov[$campo] ?? $default;
+        }
+
+        return $mov->{$campo} ?? $default;
+    }
+
+    /**
+     * Devuelve al stock el lote/OT consumido al facturar picking o al armar la OT desde stock.
+     */
+    public static function revertirConsumoStockPorVenta(int $ventaOrigenId, int $ventaNcId = 0, ?string $fecha = null): int
+    {
+        if ($ventaOrigenId <= 0 || ! self::habilitado()) {
+            return 0;
+        }
+
+        $fechaYmd = $fecha ? Carbon::parse($fecha)->format('Y-m-d') : now()->toDateString();
+        $revertidos = 0;
+
+        foreach (self::movimientosConsumoDeFactura($ventaOrigenId) as $mov) {
+            $payload = self::payloadReversoConsumoPicking($mov, $ventaNcId, $fechaYmd);
+            if ($payload === null) {
+                continue;
+            }
+
+            $concepto = (string) $payload['concepto'];
+            $yaDevuelto = Articulo_Movimiento::query()
+                ->where(function ($q) use ($concepto, $mov) {
+                    $q->where('concepto', $concepto)
+                        ->orWhere('concepto', 'Devolución NC picking #'.(int) $mov->id);
+                })
+                ->exists();
+            if ($yaDevuelto) {
+                continue;
+            }
+
+            $reverso = Articulo_Movimiento::query()->create($payload);
+            foreach ($mov->articulo_movimiento_talles as $talle) {
+                Articulo_Movimiento_Talle::query()->create([
+                    'articulo_movimiento_id' => $reverso->id,
+                    'pedido_combinacion_talle_id' => $talle->pedido_combinacion_talle_id,
+                    'talle_id' => $talle->talle_id,
+                    'cantidad' => -1 * (float) $talle->cantidad,
+                    'precio' => $talle->precio,
+                ]);
+            }
+            $revertidos++;
+        }
+
+        return $revertidos;
+    }
+
+    /**
+     * Consumos de picking (venta_id) y de OT armada desde stock (pedido_combinacion / OT de la FAC).
+     *
+     * @return Collection<int, Articulo_Movimiento>
+     */
+    public static function movimientosConsumoDeFactura(int $ventaOrigenId): Collection
+    {
+        $pcIds = [];
+        $otIds = [];
+
+        foreach (Venta_Emision::query()
+            ->where('venta_id', $ventaOrigenId)
+            ->get(['pedido_combinacion_id', 'ordentrabajo_id']) as $emision
+        ) {
+            $pcId = (int) ($emision->pedido_combinacion_id ?? 0);
+            if ($pcId > 0) {
+                $pcIds[$pcId] = $pcId;
+            }
+            $otId = (int) ($emision->ordentrabajo_id ?? 0);
+            if ($otId > 0) {
+                $otIds[$otId] = $otId;
+            }
+        }
+
+        foreach (Pedido_Combinacion::query()
+            ->where('picking_venta_id', $ventaOrigenId)
+            ->get(['id', 'ot_id']) as $linea
+        ) {
+            $pcId = (int) $linea->id;
+            if ($pcId > 0) {
+                $pcIds[$pcId] = $pcId;
+            }
+            $otId = (int) ($linea->ot_id ?? 0);
+            if ($otId > 0) {
+                $otIds[$otId] = $otId;
+            }
+        }
+
+        $pcIds = array_values($pcIds);
+        $otIds = array_values($otIds);
+
+        return Articulo_Movimiento::query()
+            ->with('articulo_movimiento_talles')
+            ->where(function ($q) use ($ventaOrigenId, $pcIds, $otIds) {
+                $q->where('venta_id', $ventaOrigenId);
+                if ($pcIds !== []) {
+                    $q->orWhereIn('pedido_combinacion_id', $pcIds);
+                } elseif ($otIds !== []) {
+                    $q->orWhereIn('ordentrabajo_id', $otIds);
+                }
+            })
+            ->orderBy('id')
+            ->get()
+            ->unique('id')
+            ->values();
+    }
+
+    /**
+     * OT/lote asignado a la línea: picking, OT stock de origen, o código de la OT facturada.
+     */
+    public static function loteAsignadoParaStock(Pedido_Combinacion $linea, int $ordentrabajoId = 0): string
+    {
+        $picking = trim((string) ($linea->picking_lote_codigo ?? ''));
+        if ($picking !== '' && $picking !== '0') {
+            return $picking;
+        }
+
+        $otId = $ordentrabajoId > 0 ? $ordentrabajoId : (int) ($linea->ot_id ?? 0);
+        if ($otId <= 0) {
+            return '';
+        }
+
+        $stockCodigo = Ordentrabajo_Combinacion_Talle::query()
+            ->where('ordentrabajo_id', $otId)
+            ->whereNotNull('ordentrabajo_stock_id')
+            ->where('ordentrabajo_stock_id', '<>', 0)
+            ->orderBy('id')
+            ->value('ordentrabajo_stock_id');
+        $stockCodigo = trim((string) ($stockCodigo ?? ''));
+        if ($stockCodigo !== '' && $stockCodigo !== '0') {
+            return $stockCodigo;
+        }
+
+        $codigoOt = trim((string) (Ordentrabajo::query()->whereKey($otId)->value('codigo') ?? ''));
+        if ($codigoOt !== '' && $codigoOt !== '0') {
+            return $codigoOt;
+        }
+
+        return '';
+    }
+
+    public static function netCantidadPorLotePedidoCombinacion(int $pedidoCombinacionId, string $lote): float
+    {
+        $lote = trim($lote);
+        if ($pedidoCombinacionId <= 0 || $lote === '' || $lote === '0') {
+            return 0.0;
+        }
+
+        return (float) Articulo_Movimiento::query()
+            ->where('pedido_combinacion_id', $pedidoCombinacionId)
+            ->where('lote', $lote)
+            ->sum('cantidad');
+    }
+
+    /**
+     * Al facturar OT (sin picking): consume el lote/OT asignado si todavía no salió de stock.
+     * Evita doble consumo cuando la OT ya se armó desde stock; sí consume tras una NC o en OT de producción.
+     *
+     * @param  list<int>  $pedidoCombinacionIds
+     * @param  list<int>  $ordentrabajoIds
+     */
+    public static function grabarConsumoStockOtAlFacturar(
+        array $pedidoCombinacionIds,
+        array $ordentrabajoIds,
+        string $fecha,
+        int $ventaId,
+        int $depositoId = 0
+    ): void {
+        if (! self::habilitado()) {
+            return;
+        }
+
+        $ids = array_values(array_filter(array_map('intval', $pedidoCombinacionIds), fn ($id) => $id > 0));
+        if ($ids === []) {
+            return;
+        }
+
+        $lineas = Pedido_Combinacion::query()
+            ->with(['articulos', 'combinaciones', 'pedido_combinacion_talles'])
+            ->whereIn('id', $ids)
+            ->get()
+            ->keyBy('id');
+
+        foreach (array_values($pedidoCombinacionIds) as $off => $pedidoCombinacionId) {
+            $linea = $lineas->get((int) $pedidoCombinacionId);
+            if (! $linea) {
+                continue;
+            }
+            if (($linea->picking ?? self::NO_MARCADO) === self::MARCADO) {
+                continue;
+            }
+            $otId = (int) ($ordentrabajoIds[$off] ?? ($linea->ot_id ?? 0));
+            $lote = self::loteAsignadoParaStock($linea, $otId);
+            if ($lote === '') {
+                continue;
+            }
+            if (self::netCantidadPorLotePedidoCombinacion((int) $linea->id, $lote) < 0) {
+                continue;
+            }
+
+            self::grabarConsumoStock($linea, $fecha, $ventaId, $lote, $depositoId > 0 ? $depositoId : null, $otId);
+        }
     }
 
     /**
      * Consume de stock (tipo 4) al facturar picking — sin crear OT de consumo.
      * Patrón PedidoServiceFerli::generaMovimientoStock.
      */
-    public static function grabarConsumoStock(Pedido_Combinacion $linea, string $fecha, int $ventaId = 0): void
-    {
+    public static function grabarConsumoStock(
+        Pedido_Combinacion $linea,
+        string $fecha,
+        int $ventaId = 0,
+        ?string $loteCodigo = null,
+        ?int $depositoId = null,
+        ?int $ordentrabajoId = null
+    ): void {
         $linea->loadMissing(['articulos', 'combinaciones', 'pedido_combinacion_talles']);
 
         $articulo = $linea->articulos;
@@ -282,22 +596,24 @@ final class PedidoPickingFerliSupport
             throw new RuntimeException('Artículo/combinación inexistente para consumo de picking');
         }
 
-        $loteCodigo = trim((string) ($linea->picking_lote_codigo ?? ''));
+        $loteCodigo = trim((string) ($loteCodigo ?? $linea->picking_lote_codigo ?? ''));
         if ($loteCodigo === '' || $loteCodigo === '0') {
             throw new RuntimeException('Falta lote/OT de picking para consumo de stock');
         }
 
-        $depositoId = (int) ($linea->picking_deposito_id ?? 0);
+        $depositoId = (int) ($depositoId ?? $linea->picking_deposito_id ?? 0);
         if ($depositoId <= 0) {
             $depositoId = 1;
         }
+
+        $otId = (int) ($ordentrabajoId ?? $linea->ot_id ?? 0);
 
         $dataArticuloMovimiento = [
             'fecha' => $fecha,
             'fechajornada' => $fecha,
             'tipotransaccion_id' => config('consprod.TIPOTRANSACCION_CONSUME_OT'),
             'pedido_combinacion_id' => $linea->id,
-            'ordentrabajo_id' => (int) ($linea->ot_id ?? 0),
+            'ordentrabajo_id' => $otId,
             'venta_id' => $ventaId > 0 ? $ventaId : null,
             'lote' => $loteCodigo,
             'articulo_id' => $articulo->id,
@@ -325,7 +641,9 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * Líneas marcadas pendientes de facturar (workbench / excel).
+     * Líneas marcadas de picking (workbench / excel).
+     * Sin picking concreto: solo pendientes de facturar.
+     * Con picking (id/código): incluye facturadas para reimprimir con factura.
      *
      * @return Collection<int, Pedido_Combinacion>
      */
@@ -335,7 +653,8 @@ final class PedidoPickingFerliSupport
         ?string $loteDesde = null,
         ?string $loteHasta = null,
         ?int $pickingId = null,
-        ?int $pickingCodigo = null
+        ?int $pickingCodigo = null,
+        bool $incluirFacturadas = false
     ): Collection {
         $q = Pedido_Combinacion::query()
             ->with([
@@ -346,15 +665,20 @@ final class PedidoPickingFerliSupport
                 'pedido_combinacion_talles.talles',
                 'lotes',
                 'pickingCabecera',
+                'pickingVenta.tipotransacciones',
+                'pickingVenta.puntoventas',
             ])
             ->where('picking', self::MARCADO)
             ->where(function ($w) {
-                $w->whereNull('picking_facturado')
-                    ->orWhere('picking_facturado', '<>', self::FACTURADO);
-            })
-            ->where(function ($w) {
                 $w->whereNull('estado')->orWhere('estado', '<>', 'A');
             });
+
+        if (! $incluirFacturadas) {
+            $q->where(function ($w) {
+                $w->whereNull('picking_facturado')
+                    ->orWhere('picking_facturado', '<>', self::FACTURADO);
+            });
+        }
 
         if ($pickingId && $pickingId > 0) {
             $q->where('picking_id', $pickingId);
@@ -379,7 +703,7 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * Filas para Excel de picking (Linea, Art, Descripcion, talles, T, QM, TT, Precio, Situacion, OT, deposito, Bultos).
+     * Filas para Excel de picking (Linea, Art, Descripcion, talles, T, QM, TT, Precio, Situacion, OT, deposito, Observacion, Bultos).
      *
      * @param  Collection<int, Pedido_Combinacion>  $lineas
      * @return list<array<string, mixed>>
@@ -388,6 +712,7 @@ final class PedidoPickingFerliSupport
     {
         $depositos = Depmae::query()->get()->keyBy('id');
         $filas = [];
+        $nombreEmpresa = trim((string) config('app.empresa'));
 
         foreach ($lineas as $linea) {
             $medidas = [];
@@ -418,6 +743,7 @@ final class PedidoPickingFerliSupport
             $sku = (string) ($linea->articulos->sku ?? '');
             $codigoComb = (string) ($linea->combinaciones->codigo ?? '');
             $fotoNombre = (string) ($linea->combinaciones->foto ?? '');
+            $fechaPicking = $linea->pickingCabecera?->fecha?->format('d/m/Y') ?? '';
 
             $filas[] = [
                 'pedido_combinacion_id' => $linea->id,
@@ -434,12 +760,103 @@ final class PedidoPickingFerliSupport
                 'situacion' => 'ENTREGA INMEDIATA',
                 'numero_ot' => $loteTxt,
                 'deposito' => $depositoTxt,
+                'observacion' => trim((string) ($linea->observacion ?? '')),
+                'factura' => self::etiquetaFacturaDesdeVenta($linea->pickingVenta),
+                'picking_codigo' => (int) ($linea->pickingCabecera->codigo ?? 0),
+                'fecha_picking' => $fechaPicking,
                 'modulo_id' => $linea->modulo_id,
+                'nombreempresa' => $nombreEmpresa,
                 'foto_path' => ArticuloCombinacionFotoSupport::rutaAbsoluta($fotoNombre, $sku, $codigoComb),
             ];
         }
 
         return $filas;
+    }
+
+    /**
+     * Encabezado del Excel: título + datos del picking (cliente, fecha, pedido, factura si hay).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return array{titulo: string, lineas: list<string>}
+     */
+    public static function encabezadoExcel(array $filas, ?Pedido_Picking $picking = null, string $filtrosExtra = ''): array
+    {
+        $codigo = $picking ? (int) $picking->codigo : (int) ($filas[0]['picking_codigo'] ?? 0);
+        $titulo = $codigo > 0 ? 'PICKING #'.$codigo : 'PICKING';
+
+        $fecha = '';
+        if ($picking && $picking->fecha) {
+            $fecha = $picking->fecha->format('d/m/Y');
+        } else {
+            $fechas = self::valoresUnicosFilas($filas, 'fecha_picking');
+            $fecha = $fechas === [] ? '' : implode(', ', $fechas);
+        }
+
+        $lineas = [];
+        if ($fecha !== '') {
+            $lineas[] = 'Fecha: '.$fecha;
+        }
+        $clientes = self::valoresUnicosFilas($filas, 'cliente');
+        if ($clientes !== []) {
+            $lineas[] = 'Cliente: '.implode(', ', $clientes);
+        }
+        $pedidos = self::valoresUnicosFilas($filas, 'pedido_codigo');
+        if ($pedidos !== []) {
+            $lineas[] = 'Pedido origen: '.implode(', ', $pedidos);
+        }
+        $facturas = self::valoresUnicosFilas($filas, 'factura');
+        if ($facturas !== []) {
+            $lineas[] = 'Factura: '.implode(', ', $facturas);
+        }
+        $obsPicking = trim((string) ($picking->observacion ?? ''));
+        if ($obsPicking !== '') {
+            $lineas[] = 'Observación picking: '.$obsPicking;
+        }
+        $filtrosExtra = trim($filtrosExtra);
+        if ($filtrosExtra !== '') {
+            $lineas[] = $filtrosExtra;
+        }
+
+        return [
+            'titulo' => $titulo,
+            'lineas' => $lineas,
+        ];
+    }
+
+    public static function etiquetaFacturaDesdeVenta(?Venta $venta): string
+    {
+        if (! $venta) {
+            return '';
+        }
+
+        $codigo = trim((string) ($venta->codigo ?? ''));
+        if ($codigo !== '') {
+            return $codigo;
+        }
+
+        $abrev = trim((string) ($venta->tipotransacciones?->abreviatura ?? ''));
+        $pv = str_pad((string) ($venta->puntoventas?->codigo ?? 0), 5, '0', STR_PAD_LEFT);
+        $nro = str_pad((string) ((int) ($venta->numerocomprobante ?? 0)), 8, '0', STR_PAD_LEFT);
+        $etiqueta = trim($abrev.' '.$pv.'-'.$nro);
+
+        return $etiqueta === '00000-00000000' ? '' : $etiqueta;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<string>
+     */
+    private static function valoresUnicosFilas(array $filas, string $clave): array
+    {
+        $valores = [];
+        foreach ($filas as $fila) {
+            $valor = trim((string) ($fila[$clave] ?? ''));
+            if ($valor !== '' && $valor !== '0') {
+                $valores[$valor] = true;
+            }
+        }
+
+        return array_keys($valores);
     }
 
     public static function etiquetaLoteImportacion(?int $loteId): string
@@ -552,6 +969,23 @@ final class PedidoPickingFerliSupport
             $pedidoCombinacionIds[] = (int) $linea->id;
             $otId = (int) ($linea->ot_id ?? 0);
             $ordentrabajoIds[] = $otId > 0 ? $otId : 0;
+            $talles = [];
+            $pares = 0.0;
+            foreach ($linea->pedido_combinacion_talles as $talle) {
+                $cantTalle = (float) $talle->cantidad;
+                if ($cantTalle == 0.0) {
+                    continue;
+                }
+                $pares += $cantTalle;
+                $talles[] = [
+                    'nombre' => (string) ($talle->talles->nombre ?? $talle->talle_id),
+                    'cantidad' => $cantTalle,
+                    'talle_id' => (int) $talle->talle_id,
+                ];
+            }
+            usort($talles, static fn (array $a, array $b) => (float) $a['nombre'] <=> (float) $b['nombre']);
+            $cantidad = (float) ($linea->cantidad ?: $pares);
+
             $filas[] = [
                 'pedido_combinacion_id' => (int) $linea->id,
                 'ordentrabajo_id' => $otId > 0 ? $otId : 0,
@@ -559,14 +993,21 @@ final class PedidoPickingFerliSupport
                 'cliente' => $linea->pedidos->clientes->nombre ?? '',
                 'sku' => $linea->articulos->sku ?? '',
                 'combinacion' => $linea->combinaciones->nombre ?? '',
-                'cantidad' => (float) $linea->cantidad,
+                'cantidad' => $cantidad,
+                'talles' => $talles,
             ];
+        }
+
+        $totalPares = 0.0;
+        foreach ($filas as $fila) {
+            $totalPares += (float) ($fila['cantidad'] ?? 0);
         }
 
         return [
             'pedido_combinacion_ids' => $pedidoCombinacionIds,
             'ordentrabajo_ids' => $ordentrabajoIds,
             'filas' => $filas,
+            'total_pares' => $totalPares,
             'nombrecliente' => $lineas->first()->pedidos->clientes->nombre ?? '',
             'cliente_id' => (int) ($lineas->first()->pedidos->cliente_id ?? 0),
         ];

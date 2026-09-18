@@ -41,16 +41,42 @@
     </div>
 </div>
 <div class="form-group row">
-    <label class="col-lg-3 control-label text-right pr-2">Disparo al grabar</label>
+    <label class="col-lg-3 control-label text-right pr-2">Disparar impresión</label>
     <div class="col-lg-6">
         <div class="form-check">
             <input type="hidden" name="permite_disparo_al_grabar" value="0">
             <input type="checkbox" name="permite_disparo_al_grabar" id="permite_disparo_al_grabar" class="form-check-input" value="1"
                 {{ old('permite_disparo_al_grabar', $data->permite_disparo_al_grabar ?? false) ? 'checked' : '' }}>
             <label class="form-check-label" for="permite_disparo_al_grabar">
-                Permite disparar la sesión al grabar la factura (también debe estar tildado en Mi impresora de la sesión)
+                Al facturar (pedido, mostrador o picking), abrir el proceso de impresión
             </label>
         </div>
+        <p class="text-muted small mb-0">
+            Destildado: la factura se genera y no abre la sesión. Tildado: usa el tilde de abajo (impresora o quedarse en el programa).
+        </p>
+    </div>
+</div>
+<div class="form-group row">
+    <label class="col-lg-3 control-label text-right pr-2">Al facturar</label>
+    <div class="col-lg-6">
+        @php
+            $enviarAutoFacturar = (string) old(
+                'enviar_automatico_al_facturar',
+                ($data->enviar_automatico_al_facturar ?? true) ? '1' : '0'
+            ) === '1';
+        @endphp
+        <div class="form-check">
+            <input type="hidden" name="enviar_automatico_al_facturar" value="0">
+            <input type="checkbox" name="enviar_automatico_al_facturar" id="enviar_automatico_al_facturar" class="form-check-input" value="1"
+                {{ $enviarAutoFacturar ? 'checked' : '' }}>
+            <label class="form-check-label" for="enviar_automatico_al_facturar">
+                Enviar a impresora automáticamente
+            </label>
+        </div>
+        <p class="text-muted small mb-0">
+            Solo aplica si está tildado disparar impresión. Destildado: se queda en la sesión para elegir copias
+            (por ejemplo Envío) y tocar Ejecutar sesión.
+        </p>
     </div>
 </div>
 

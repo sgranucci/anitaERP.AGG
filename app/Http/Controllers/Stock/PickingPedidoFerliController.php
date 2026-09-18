@@ -54,6 +54,7 @@ class PickingPedidoFerliController extends Controller
         );
 
         $lineas = collect();
+        $tienePicking = $pickingId > 0 || $pickingCodigo > 0;
         if ($consultar) {
             $lineas = PedidoPickingFerliSupport::lineasPendientes(
                 $clienteId > 0 ? $clienteId : null,
@@ -62,6 +63,7 @@ class PickingPedidoFerliController extends Controller
                 $loteHasta !== '' ? $loteHasta : null,
                 $pickingId > 0 ? $pickingId : null,
                 $pickingId <= 0 && $pickingCodigo > 0 ? $pickingCodigo : null,
+                $tienePicking,
             );
         }
 
@@ -108,6 +110,7 @@ class PickingPedidoFerliController extends Controller
         $pickingId = (int) $request->input('picking_id', 0);
         $pickingCodigo = (int) $request->input('picking_codigo', 0);
 
+        $tienePicking = $pickingId > 0 || $pickingCodigo > 0;
         $lineas = PedidoPickingFerliSupport::lineasPendientes(
             $clienteId > 0 ? $clienteId : null,
             $depositoId > 0 ? $depositoId : null,
@@ -115,13 +118,24 @@ class PickingPedidoFerliController extends Controller
             $loteHasta !== '' ? $loteHasta : null,
             $pickingId > 0 ? $pickingId : null,
             $pickingId <= 0 && $pickingCodigo > 0 ? $pickingCodigo : null,
+            $tienePicking,
         );
 
-        $tituloFiltros = $this->subtituloFiltros($request);
+        $picking = PedidoPickingFerliSupport::findPicking(
+            $pickingId > 0 ? $pickingId : null,
+            $pickingCodigo > 0 ? $pickingCodigo : null,
+        );
+        $filas = PedidoPickingFerliSupport::filasExcelFragola($lineas);
+        $encabezado = PedidoPickingFerliSupport::encabezadoExcel(
+            $filas,
+            $picking,
+            $this->subtituloFiltrosExtra($request),
+        );
 
         return (new PickingPedidoFerliExport(
-            PedidoPickingFerliSupport::filasExcelFragola($lineas),
-            $tituloFiltros,
+            $filas,
+            $encabezado['titulo'],
+            $encabezado['lineas'],
         ))->download('picking_pedido.xlsx');
     }
 
@@ -250,16 +264,9 @@ class PickingPedidoFerliController extends Controller
         }
     }
 
-    private function subtituloFiltros(Request $request): string
+    private function subtituloFiltrosExtra(Request $request): string
     {
         $partes = [];
-        $pickingCodigo = (int) $request->input('picking_codigo', 0);
-        if ($pickingCodigo > 0) {
-            $partes[] = 'Picking #'.$pickingCodigo;
-        }
-        if ((int) $request->input('cliente_id') > 0) {
-            $partes[] = 'Cliente #'.(int) $request->input('cliente_id');
-        }
         if ((int) $request->input('deposito_id') > 0) {
             $partes[] = 'Depósito #'.(int) $request->input('deposito_id');
         }
@@ -269,6 +276,6 @@ class PickingPedidoFerliController extends Controller
             $partes[] = 'Lote '.$desde.' / '.$hasta;
         }
 
-        return $partes === [] ? 'Pendientes de facturar' : implode(' | ', $partes);
+        return implode(' | ', $partes);
     }
 }

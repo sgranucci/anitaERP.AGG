@@ -37,6 +37,7 @@ class ValidacionProgramaImpresion extends FormRequest
             'nombre' => 'required|max:120',
             'empresa_id' => 'nullable|integer|exists:empresa,id',
             'permite_disparo_al_grabar' => 'nullable|boolean',
+            'enviar_automatico_al_facturar' => 'nullable|boolean',
             'formularios' => 'required|array|min:1',
             'formularios.*.id' => 'nullable|integer',
             'formularios.*.orden' => 'nullable|integer|min:1',

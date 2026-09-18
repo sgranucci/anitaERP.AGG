@@ -94,6 +94,7 @@
 								<input type="hidden" name="estadoclientes[]" class="form-control estadocliente" value="{{ $ordentrabajoitem['estadocliente'] }}">
 								<input type="hidden" name="nombretiposuspensionclientes[]" class="form-control nombretiposuspensioncliente" value="{{ $ordentrabajoitem['nombretiposuspensioncliente'] }}">
 								<input type="hidden" name="tiposuspensioncliente_ids[]" class="form-control tiposuspensioncliente_id" value="{{ $ordentrabajoitem['tiposuspensioncliente_id'] }}">
+								<input type="hidden" class="form-control politica_comercial" value='@json($ordentrabajoitem["politica_comercial"] ?? [])'>
 							</td>
 							<td>
 								<input type="text" name="codigos[]" class="form-control codigo" value="{{ $ordentrabajoitem['codigo'] }}" readonly>

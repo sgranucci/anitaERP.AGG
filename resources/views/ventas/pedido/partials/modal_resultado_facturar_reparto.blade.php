@@ -28,13 +28,13 @@
                         <input class="form-check-input" type="radio" name="reparto_impresion_modo" id="reparto_imp_ninguna" value="ninguna">
                         <label class="form-check-label" for="reparto_imp_ninguna">No imprimir ahora</label>
                     </div>
-                    <div class="form-check mb-1">
+                    <div class="form-check mb-1" id="wrap-reparto-imp-completa">
                         <input class="form-check-input" type="radio" name="reparto_impresion_modo" id="reparto_imp_completa" value="completa" checked>
                         <label class="form-check-label" for="reparto_imp_completa">
                             Imprimir todas las copias del programa (como al facturar un pedido)
                         </label>
                     </div>
-                    <div class="form-check mb-1">
+                    <div class="form-check mb-1" id="wrap-reparto-imp-elegir">
                         <input class="form-check-input" type="radio" name="reparto_impresion_modo" id="reparto_imp_elegir" value="elegir">
                         <label class="form-check-label" for="reparto_imp_elegir">
                             Abrir el programa y elegir qué copias mandar

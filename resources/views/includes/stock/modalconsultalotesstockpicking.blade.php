@@ -51,6 +51,48 @@
             flex-wrap: wrap;
             gap: 0.5rem;
           }
+          .consultalotesstockpicking-contexto .clsp-numeracion {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 0.5rem;
+            background: #FCF3CF;
+            border: 1px solid #F4D03F;
+            color: #6E2C00;
+            font-weight: 700;
+            padding: 0.4rem 0.7rem;
+            border-radius: 4px;
+            margin-bottom: 0.55rem;
+            line-height: 1.3;
+          }
+          .consultalotesstockpicking-contexto .clsp-numeracion .clsp-badge-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            opacity: 0.85;
+          }
+          .consultalotesstockpicking-contexto .clsp-numeracion .clsp-numeracion-txt {
+            font-size: 1.15rem;
+            font-weight: 800;
+            letter-spacing: 0.01em;
+          }
+          .consultalotesstockpicking-contexto .clsp-numeracion .clsp-numeracion-mod {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #7D6608;
+          }
+          #tabla-data-lotes-stock-picking td.clsp-medidas {
+            font-weight: 700;
+            color: #1B4F72;
+            white-space: normal;
+          }
+          #tabla-data-lotes-stock-picking tr.clsp-fila-cubre {
+            background: #D5F5E3;
+          }
+          #tabla-data-lotes-stock-picking tr.clsp-fila-cubre td.clsp-medidas {
+            color: #145A32;
+          }
           .consultalotesstockpicking-contexto .clsp-badge {
             display: inline-flex;
             align-items: baseline;
@@ -89,6 +131,7 @@
               <tr>
                 <th>Lote / OT</th>
                 <th>M&oacute;dulo</th>
+                <th>Medidas</th>
                 <th>Dep&oacute;sito</th>
                 <th class="text-right">Saldo (pares)</th>
                 <th style="width:1%;">Acciones</th>

@@ -20,10 +20,16 @@
             </div>
             <label for="tipotransaccion_caja_id" class="col-lg-2 control-label text-right pr-2">Tipo de transacci&oacute;n</label>
             <div class="col-lg-4">
+                @php
+                    $tipoTransaccionSel = old(
+                        'tipotransaccion_caja_id',
+                        $data->tipotransaccion_caja_id ?? ($tipotransaccion_caja_id ?? session('tipotransaccioncobranza_caja_id'))
+                    );
+                @endphp
                 <select name="tipotransaccion_caja_id" id="tipotransaccion_caja_id" data-placeholder="Tipo de transacci&oacute;n" class="form-control required" data-fouc required>
                     <option value="">-- Seleccionar --</option>
                     @foreach($tipotransaccion_caja_query as $value)
-                        <option value="{{ $value->id }}" @selected((int) old('tipotransaccion_caja_id', $data->tipotransaccion_caja_id ?? session('tipotransaccioncobranza_caja_id')) === (int) $value->id)>
+                        <option value="{{ $value->id }}" @selected((int) $tipoTransaccionSel === (int) $value->id)>
                             {{ $value->nombre }}
                         </option>
                     @endforeach
@@ -70,6 +76,7 @@
                     </a>
                 </div>
                 <small class="form-text text-muted">F1 o lupa consulta; Enter resuelve por c&oacute;digo.</small>
+                <label id="nombretiposuspension" class="col-form-label text-danger mb-0 d-block"></label>
             </div>
         </div>
         <div class="form-group row">
@@ -160,6 +167,10 @@
                 flex-shrink: 0;
             }
             #comprobante-table tr.tiene-descuento-cobranza { background: #e8f8f0; }
+            #comprobante-table tr.item-comprobante-credito .montocomprobante,
+            #comprobante-table tr.item-comprobante-credito .saldocomprobante {
+                color: #c0392b;
+            }
         </style>
         <div class="table-responsive">
             <table class="table table-sm table-bordered table-hover" id="comprobante-table">
@@ -207,22 +218,25 @@
                             $ccFila = $comprobante->cliente_cuentacorrientes;
                             $totalCc = (float) ($ccFila->total ?? 0);
                             $aplicadoCc = (float) ($ccFila->cliente_cuentacorriente_aplicaciones?->sum('total') ?? 0);
-                            $saldoPendiente = \App\Support\Ventas\ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
+                            $esCredito = $totalCc < 0;
+                            $saldoPendiente = \App\Support\Ventas\ClienteCuentacorrienteGrillaSupport::saldoPendiente(
                                 $totalCc,
                                 $aplicadoCc
                             );
                             // Si esta cobranza ya imputó en CC, reincorporar ese monto al disponible editable.
                             $cobranzaIdEdit = (int) ($data->id ?? 0);
                             $aplicadoEstaCobranza = $cobranzaIdEdit > 0
-                                ? abs((float) ($ccFila->cliente_cuentacorriente_aplicaciones
+                                ? (float) ($ccFila->cliente_cuentacorriente_aplicaciones
                                     ?->where('cobranza_id', $cobranzaIdEdit)
-                                    ->sum('total') ?? 0))
+                                    ->sum('total') ?? 0)
                                 : 0.0;
                             $montoAplicadoEsta = abs((float) ($comprobante->montoaplicado ?? 0));
-                            $saldoDisponible = round($saldoPendiente + $aplicadoEstaCobranza, 2);
-                            $saldoMostrar = round(max(0, $saldoDisponible - $montoAplicadoEsta), 2);
+                            $saldoDisponible = round($saldoPendiente - $aplicadoEstaCobranza, 2);
+                            $saldoMostrar = $esCredito
+                                ? round($saldoDisponible + $montoAplicadoEsta, 2)
+                                : round($saldoDisponible - $montoAplicadoEsta, 2);
                         @endphp
-                        <tr class="item-comprobante{{ $tieneDescuentoPendiente ? ' tiene-descuento-cobranza' : '' }}">
+                        <tr class="item-comprobante{{ $tieneDescuentoPendiente ? ' tiene-descuento-cobranza' : '' }}{{ $esCredito ? ' item-comprobante-credito' : '' }}" data-lado="{{ $esCredito ? 'credito' : 'deuda' }}">
                             <td class="text-center align-middle">
                                 <input name="checkaplicaciones[]" class="checkaplicacion" type="checkbox" autocomplete="off" @checked($montoAplicadoEsta > 0.009)>
                                 <input type="hidden" class="idcuentacorriente form-control" name="idcuentacorrientes[]" value="{{ $ccId }}" >
@@ -264,7 +278,7 @@
                                 <input type="number" style="text-align: right;" name="cotizacioncomprobantes[]" class="form-control cotizacioncomprobante" value="{{ old('cotizaciones[]', $comprobante->cotizacion ?? '0') }}" readonly>
                             </td>
                             <td>
-                                <input type="number" style="text-align: right;" name="montocomprobantes[]" class="form-control montocomprobante" value="{{ old('montocomprobantes[]', abs($totalCc) ?: '') }}" readonly>
+                                <input type="number" style="text-align: right;" name="montocomprobantes[]" class="form-control montocomprobante" value="{{ old('montocomprobantes[]', $totalCc != 0.0 ? number_format($totalCc, 2, '.', '') : '') }}" readonly>
                             </td>
                             <td class="cob-col-aplicar">
                                 <input type="number" name="montoaplicadocomprobantes[]" class="form-control montoaplicadocomprobante cob-monto-aplicar" value="{{ old('montoaplicados[]', $montoAplicadoEsta > 0 ? number_format($montoAplicadoEsta, 2, '.', '') : '') }}">

@@ -26,23 +26,100 @@
 		background: #85C1E9;
 		color: #17202A;
 	}
+	#itemspedido-table thead th {
+		white-space: nowrap;
+		vertical-align: middle;
+	}
+	.factura-items-wrap {
+		overflow-x: auto;
+	}
+	#itemspedido-table {
+		table-layout: fixed;
+		width: 100%;
+		margin-bottom: 0;
+	}
 	#itemspedido-table td,
 	#total-factura-table td {
 		vertical-align: middle;
 	}
+	#itemspedido-table.table-sm td,
+	#itemspedido-table.table-sm th {
+		padding: 0.3rem 0.35rem;
+	}
+	#itemspedido-table input.form-control,
+	#itemspedido-table select.form-control,
+	#itemspedido-table textarea.form-control {
+		min-width: 0;
+		width: 100%;
+		max-width: 100%;
+		box-sizing: border-box;
+	}
 	#itemspedido-table.factura-grilla-concepto tr td {
 		vertical-align: top;
 	}
+	#itemspedido-table .descripcionarticulo {
+		width: 100%;
+		min-width: 0;
+		height: calc(2.25rem + 2px);
+	}
 	#itemspedido-table .descripcionarticulo.factura-detalle-concepto {
 		width: 100%;
-		min-width: 360px;
+		min-width: 0;
 		min-height: 110px;
 		height: auto;
 		resize: vertical;
 	}
+	#itemspedido-table th.factura-col-item,
+	#itemspedido-table td.factura-col-item {
+		width: 3.4rem;
+	}
+	#itemspedido-table .item {
+		padding-left: 0.2rem;
+		padding-right: 0.2rem;
+		text-align: center;
+	}
+	#itemspedido-table th.factura-col-articulo,
+	#itemspedido-table td.factura-col-articulo {
+		width: 12.5rem;
+	}
+	#itemspedido-table th.factura-col-detalle,
+	#itemspedido-table td.factura-col-detalle {
+		width: auto;
+	}
 	#itemspedido-table.factura-grilla-concepto th.factura-col-detalle,
 	#itemspedido-table.factura-grilla-concepto td.factura-col-detalle {
 		width: 52%;
+	}
+	#itemspedido-table th.factura-col-cantidad,
+	#itemspedido-table td.factura-col-cantidad,
+	#itemspedido-table th.factura-col-kilo,
+	#itemspedido-table td.factura-col-kilo,
+	#itemspedido-table th.factura-col-caja,
+	#itemspedido-table td.factura-col-caja,
+	#itemspedido-table th.factura-col-pieza,
+	#itemspedido-table td.factura-col-pieza {
+		width: 5.6rem;
+	}
+	#itemspedido-table th.factura-col-iva,
+	#itemspedido-table td.factura-col-iva {
+		width: 7.2rem;
+	}
+	#itemspedido-table th.factura-col-precio,
+	#itemspedido-table td.factura-col-precio {
+		width: 7.2rem;
+	}
+	#itemspedido-table th.factura-col-descuento,
+	#itemspedido-table td.factura-col-descuento {
+		width: 5.6rem;
+	}
+	#itemspedido-table th.factura-col-umd,
+	#itemspedido-table td.factura-col-umd {
+		width: 4.6rem;
+	}
+	#itemspedido-table th.factura-col-acciones,
+	#itemspedido-table td.factura-col-acciones {
+		width: 4.4rem;
+		text-align: center;
 	}
 	#itemspedido-table.factura-grilla-concepto th.factura-col-descuento,
 	#itemspedido-table.factura-grilla-concepto td.factura-col-descuento {
@@ -97,13 +174,14 @@
 		align-items: center;
 		gap: 4px;
 		margin: 0;
+		min-width: 0;
 	}
 	#itemspedido-table .factura-sku-campo .btn-accion-tabla {
 		flex-shrink: 0;
 		line-height: 1;
 	}
 	#itemspedido-table .factura-sku-campo .codigoarticulo {
-		width: 7.5rem;
+		width: auto;
 		min-width: 0;
 		flex: 1 1 auto;
 		height: calc(2.25rem + 2px);
@@ -118,6 +196,28 @@
 	.factura-datos-compactos .alert {
 		padding: 0.35rem 0.6rem;
 		margin-bottom: 0.35rem;
+	}
+	#itemspedido-table tr.nc-linea-excluida {
+		opacity: 0.45;
+		background: #f4f6f7;
+	}
+	#itemspedido-table .nc-devolver-col {
+		width: 2.6rem;
+		text-align: center;
+	}
+	#itemspedido-table .nc-devolver-col .nc-devolver-mismo-modulo {
+		display: block;
+		margin: 2px auto 0;
+	}
+	#itemspedido-table .nc-linea-extra {
+		display: block;
+		font-size: 0.75rem;
+		color: #5d6d7e;
+		margin-top: 2px;
+		line-height: 1.2;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 </style>
 <div class="form1">
@@ -200,7 +300,7 @@
 			$fceComprobanteReferenciado = old('fce_comprobante_referenciado', $fceComprobanteReferenciado ?? '');
 			$fceAnulacion = old('fce_anulacion', $fceAnulacion ?? '');
 		@endphp
-		<div id="fce-nc-mostrador-wrap" class="{{ $ncOrigenEsFce ? '' : 'd-none' }}"
+		<div id="fce-nc-mostrador-wrap" class="{{ ($ncOrigenEsFce || ! empty($modoNc) || ! empty($flGeneraNotaDeCredito)) ? '' : 'd-none' }}"
 			data-nc-origen-fce="{{ $ncOrigenEsFce ? '1' : '0' }}"
 			data-limite-fce="{{ \App\Support\Configuracion\ParametroSistemaSupport::limiteFce() }}">
 			<div class="form-group row tm-fce-referencia-campo">
@@ -219,6 +319,7 @@
 					</div>
 				</div>
 			</div>
+			@include('ventas.factura.partials.panel_devolucion_nc')
 			<div class="form-group row" id="fce-anulacion-wrap">
 				<label for="fce_anulacion" class="col-lg-3 control-label text-right pr-2" id="fce_anulacion_label" title="Obligatorio si asocia FCE o emite NCE (opcional ARCA 22).">Anulaci&oacute;n FCE</label>
 				<select name="fce_anulacion" id="fce_anulacion" class="col-lg-8 form-control" data-fouc>
@@ -426,6 +527,15 @@
 <div class="card card-outline card-info" id="factura-carga-contenido">
     <div class="card-header py-2">
         <h3 class="card-title mb-0">&Iacute;tems</h3>
+		@if (! empty($flGeneraNotaDeCredito))
+			<div class="card-tools">
+				<input type="hidden" id="nc-devolver-modulo-ref" value="0">
+				<input type="hidden" id="nc-devolver-comb-ref" value="0">
+				<button type="button" id="nc-devolver-todo" class="btn btn-outline-secondary btn-sm">Devolver todo</button>
+				<button type="button" id="nc-devolver-articulo" class="btn btn-outline-secondary btn-sm">Solo art&iacute;culo buscado</button>
+				<button type="button" id="nc-devolver-ninguno" class="btn btn-outline-secondary btn-sm">Ninguno</button>
+			</div>
+		@endif
     </div>
     <div class="card-body">
 		@php
@@ -448,26 +558,31 @@
 				}
 			}
 		@endphp
+		<div class="table-responsive factura-items-wrap">
     	<table class="table table-sm table-bordered table-hover{{ $grillaSoloConcepto ? ' factura-grilla-concepto' : '' }}{{ $grillaConIva ? ' factura-grilla-con-iva' : '' }}" id="itemspedido-table">
     		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
-    				<th style="width: 5%;">Item</th>
-    				<th style="width: 12%;">Art&iacute;culo / concepto</th>
+					@if (! empty($flGeneraNotaDeCredito))
+					<th class="nc-devolver-col" title="Incluir en la nota de cr&eacute;dito">Dev.</th>
+					@endif
+    				<th class="factura-col-item">Item</th>
+    				<th class="factura-col-articulo">Art&iacute;culo / concepto</th>
 					@if ($layoutItemsPedido)
 					<th class="factura-col-detalle">Detalle</th>
-					<th class="factura-col-iva" style="width: 9%;">IVA</th>
+					<th class="factura-col-iva">IVA</th>
 					<th class="factura-col-umd">UMD</th>
-    				<th class="factura-col-caja" style="width: 9%;">Cajas</th>
-    				<th class="factura-col-pieza" style="width: 9%;">Piezas</th>
-    				<th class="factura-col-kilo" style="width: 9%;">{{ $grillaSoloConcepto ? 'Cantidad' : 'Kilos' }}</th>
+    				<th class="factura-col-caja">Cajas</th>
+    				<th class="factura-col-pieza">Piezas</th>
+    				<th class="factura-col-kilo">{{ $grillaSoloConcepto ? 'Cantidad' : 'Kilos' }}</th>
 					<th class="factura-col-descuento">Dto.</th>
 					@else
-					<th style="width: 50%;">Detalle</th>
-					<th class="factura-col-iva" style="width: 9%;">IVA</th>
-    				<th style="width: 10%;">Cantidad</th>
-					<th style="width: 10%;">Descuento</th>
+					<th class="factura-col-detalle">Detalle</th>
+					<th class="factura-col-iva">IVA</th>
+    				<th class="factura-col-cantidad">Cantidad</th>
+					<th class="factura-col-descuento">Descuento</th>
 					@endif
-    				<th style="width: 9%; text-align: right;">Precio</th>
+    				<th class="factura-col-precio text-right">Precio</th>
+					<th class="factura-col-acciones"></th>
     			</tr>				
     		</thead>
     		<tbody id="tbody-tabla">
@@ -532,9 +647,75 @@
 							$textoDetalleMostrar = $esLineaConcepto
 								? $detalleEmision
 								: ($descArticuloMostrar !== '' ? $descArticuloMostrar : $detalleEmision);
+							$ncPendientesPorEmision = $ncPendientesPorEmision ?? [];
+							$articuloNcFiltro = (int) ($articuloNcFiltro ?? 0);
+							$pendNc = $ncPendientesPorEmision[(int) ($item->id ?? 0)] ?? null;
+							$cantidadOriginalNc = (float) ($item->cantidad ?? 0);
+							$cantidadPendienteNc = isset($pendNc['pendiente']) ? (float) $pendNc['pendiente'] : $cantidadOriginalNc;
+							$yaAcreditadaNc = (float) ($pendNc['acreditada'] ?? 0);
+							$marcarDevolverNc = empty($flGeneraNotaDeCredito)
+								|| $articuloNcFiltro <= 0
+								|| (int) ($item->articulo_id ?? 0) === $articuloNcFiltro;
+							if (! empty($flGeneraNotaDeCredito) && $cantidadPendienteNc <= 0) {
+								$marcarDevolverNc = false;
+							}
+							if (! empty($flGeneraNotaDeCredito)
+								&& $articuloNcFiltro > 0
+								&& $marcarDevolverNc
+								&& old('cantidades.'.$loop->index) === null
+								&& old('kilos.'.$loop->index) === null) {
+								$kiloItem = $cantidadPendienteNc;
+							}
+							$extraNcPartes = [];
+							$combCodigoNc = trim((string) ($item->combinaciones?->codigo ?? ''));
+							if ($combCodigoNc !== '') {
+								$extraNcPartes[] = 'Comb. '.$combCodigoNc;
+							}
+							$modCodigoNc = trim((string) ($item->modulos?->codigo ?? ''));
+							$modNombreNc = trim((string) ($item->modulos?->nombre ?? ''));
+							if ($modCodigoNc !== '') {
+								$extraNcPartes[] = 'Mód. '.$modCodigoNc;
+							} elseif ($modNombreNc !== '') {
+								$extraNcPartes[] = 'Mód. '.$modNombreNc;
+							}
+							$talleNc = trim((string) ($item->talles?->nombre ?? ''));
+							if ($talleNc === '') {
+								$talleNc = trim((string) ($item->talles?->codigo ?? ''));
+							}
+							if ($talleNc !== '') {
+								$extraNcPartes[] = 'Talle '.$talleNc;
+							}
+							if ($yaAcreditadaNc > 0.0001) {
+								$extraNcPartes[] = 'Ya NC '.number_format($yaAcreditadaNc, 2, ',', '.')
+									.' · pend. '.number_format($cantidadPendienteNc, 2, ',', '.');
+							}
+							$extraNcTexto = implode(' · ', $extraNcPartes);
+							$trNcClass = (! empty($flGeneraNotaDeCredito) ? ' nc-linea-origen' : '')
+								.((! empty($flGeneraNotaDeCredito) && ! $marcarDevolverNc) ? ' nc-linea-excluida' : '');
 						@endphp
-            			<tr class="{{ $layoutItemsPedido ? 'item-pedido' : 'item-factura' }}{{ $esLineaConcepto ? ' item-concepto-venta' : '' }}">
-               				<td>
+            			<tr class="{{ $layoutItemsPedido ? 'item-pedido' : 'item-factura' }}{{ $esLineaConcepto ? ' item-concepto-venta' : '' }}{{ $trNcClass }}"
+							data-articulo-id="{{ (int) ($item->articulo_id ?? 0) }}"
+							data-combinacion-id="{{ (int) ($item->combinacion_id ?? 0) }}"
+							data-modulo-id="{{ (int) ($item->modulo_id ?? 0) }}"
+							data-talle-id="{{ (int) ($item->talle_id ?? 0) }}"
+							data-cantidad-pendiente="{{ number_format((float) $cantidadPendienteNc, 4, '.', '') }}">
+							@if (! empty($flGeneraNotaDeCredito))
+							<td class="nc-devolver-col">
+								<input type="checkbox" class="nc-devolver" title="Devolver esta l&iacute;nea"
+									@if ($marcarDevolverNc)
+										checked
+									@endif
+									@if ($cantidadPendienteNc <= 0)
+										disabled
+									@endif>
+								@if ((int) ($item->modulo_id ?? 0) > 0 || (int) ($item->combinacion_id ?? 0) > 0)
+									<button type="button" class="btn-accion-tabla nc-devolver-mismo-modulo tooltipsC" title="Marcar todo el m&oacute;dulo / combinaci&oacute;n">
+										<i class="fa fa-th"></i>
+									</button>
+								@endif
+							</td>
+							@endif
+               				<td class="factura-col-item">
                					<input type="text" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
                 				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{ $valorOldIndice('listasprecios_id', $idxItem, $item->listaprecio_id ?? '') }}" />
                 				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{ $valorOldIndice('monedas_id', $idxItem, $item->moneda_id ?? '') }}" />
@@ -546,7 +727,7 @@
 									<input type="hidden" name="descuentos[]" class="form-control descuento" value="0" />
 								@endif
                 			</td>
-                            <td>
+                            <td class="factura-col-articulo">
                                 <div class="factura-sku-campo" id="articulo">
                                     <input type="hidden" name="articulo[]" class="form-control iiarticulo" readonly value="{{ $loop->index+1 }}" />
                                     <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{$item->articulo_id ?? ''}}" >
@@ -569,10 +750,13 @@
 								@if ($esLineaConcepto && $grillaSoloConcepto)
                                 <textarea class="descripcionarticulo form-control factura-detalle-concepto" name="descripcionarticulos[]" rows="3" placeholder="Detalle (ej. AUTO FIAT UNO dominio XXX)">{{ $textoDetalleMostrar }}</textarea>
 								@else
-                                <input type="text" style="WIDTH: {{ $layoutItemsPedido ? '220' : '700' }}px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ $textoDetalleMostrar }}" @if($layoutItemsPedido && ! $esLineaConcepto) readonly @endif>
+                                <input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ $textoDetalleMostrar }}" @if($layoutItemsPedido && ! $esLineaConcepto) readonly @endif>
 								@endif
 								<textarea name="leyendas_linea[]" class="d-none factura-ta-leyenda-linea" aria-hidden="true">{{ $leyendaLineaItem }}</textarea>
 								<div class="factura-leyenda-badge" title="{{ $leyendaLineaItem }}">{{ $leyendaLineaItem !== '' ? $leyendaLineaItem : '' }}</div>
+								@if ($extraNcTexto !== '')
+									<span class="nc-linea-extra">{{ $extraNcTexto }}</span>
+								@endif
                             </td>
 							<td class="factura-col-iva">
 								@include('ventas.factura.partials.select_iva_linea', [
@@ -615,17 +799,17 @@
 								<input type="hidden" name="descuentoventaanterior_ids[]" class="form-control descuentoventaanterior_id" value="{{ $descuentoVentaIdItem }}" />
 							</td>
 							@else
-							<td>
+							<td class="factura-col-cantidad">
 								<input type="text" name="cantidades[]" class="form-control cantidad" value="{{ number_format($numeroOldIndice('cantidades', $idxItem, optional($item)->cantidad ?? 0), 2) }}" />
                 			</td>		
-							<td>
+							<td class="factura-col-descuento">
 								<input type="text" name="descuentos[]" class="form-control descuento" value="{{ number_format($numeroOldIndice('descuentos', $idxItem, optional($item)->descuento ?? 0), 2) }}" />
                 			</td>
 							@endif								
-                			<td>
+                			<td class="factura-col-precio">
                 				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" @if(! $esLineaConcepto) readonly @endif value="{{ \App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport::formatLiteral($valorOldIndice('precios', $idxItem, optional($item)->precio ?? 0)) }}" />
                 			</td>							
-                			<td class="text-nowrap">
+                			<td class="text-nowrap factura-col-acciones">
 								<button type="button" title="Leyenda / comentario de la l&iacute;nea" class="btn-accion-tabla factura-abrir-leyenda-linea tooltipsC{{ $leyendaLineaItem !== '' ? ' tiene-leyenda' : '' }}">
 									<i class="fa fa-align-left"></i>
 								</button>
@@ -638,6 +822,7 @@
 				@endif
        		</tbody>
        	</table>
+		</div>
 		@if ($layoutItemsPedido)
 			<input type="hidden" id="categoria_secos_id" class="form-control" value="{{config('cliente.CATEGORIA_SECOS_ID')}}" />
 			<input type="hidden" id="subcategoria_maquina_id" class="form-control" value="{{config('cliente.SUBCATEGORIA_MAQUINA_ID')}}" />
@@ -789,4 +974,5 @@
 @include('includes.ventas.modalconsultaconceptoventa')
 @include('includes.ventas.modalconsultacontratoventa')
 @include('includes.ventas.modalconsultafactura_referencia')
+@include('includes.ventas.modalconsultafacturas_articulo')
 <script src="{{ asset('assets/pages/scripts/ventas/contrato_venta/consulta.js') }}" type="text/javascript"></script>

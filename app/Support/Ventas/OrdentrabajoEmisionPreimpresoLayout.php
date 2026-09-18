@@ -4,19 +4,76 @@ namespace App\Support\Ventas;
 
 /**
  * Coordenadas en mm desde el borde superior-izquierdo de A4 portrait.
- * Fuente: /usr/local/forms/otfragola.ps y otfragola2.ps (host 160.132.0.254).
+ * Fuente: spool/forms/otfragola.ps, otfragola2.ps, otferli.ps, otferli2.ps.
  * Overlay para papel preimpreso (el PS casi no dibuja marco).
  * COMPLETA = 2 hojas x 4 paneles (copias 1-4 y 5-8).
+ *
+ * Marca 1 (Ferli) o numeración CHICO → grilla 18-41 (otferli).
+ * Resto → grilla Fragola 35-42 (otfragola).
  */
 final class OrdentrabajoEmisionPreimpresoLayout
 {
-    /** QR izquierdo por panel (imp_ot: translate 10,{700,505,295,80} pt). */
-    public const QR_PANELES = [
-        ['x' => 3.53, 'y' => 50.09, 's' => 18.0],
-        ['x' => 3.53, 'y' => 118.89, 's' => 18.0],
-        ['x' => 3.53, 'y' => 192.98, 's' => 18.0],
-        ['x' => 3.53, 'y' => 268.82, 's' => 18.0],
-    ];
+    /**
+     * QR: imp_ot hace `translate 10,{700,505,295,80}` + `.10 .10 scale` sobre el EPS.
+     * QrCode size(400) × 0.10 = 40 pt = 14.1 mm. Más grande pisa CLIENTE y la grilla Ferli.
+     * En PDF se emite SVG (no PNG) para que a 14 mm siga nítido para la cámara.
+     */
+    public const QR_SIZE_MM = 14.0;
+
+    public const QR_X_PT = 10.0;
+
+    /** @var list<float> */
+    public const QR_Y_PT = [700.0, 505.0, 295.0, 80.0];
+
+    /**
+     * El .ps posiciona con moveto = línea de base (Helvetica-Narrow-Bold 12 pt).
+     * CSS `top` es el borde superior: subir el ascendente (~0.73 em) para no
+     * correr medidas/OT hacia abajo ni recortar el último panel.
+     */
+    public const TEXTO_ASCENDENTE_MM = 3.1;
+
+    /**
+     * @return list<array{x:float,y:float,s:float}>
+     */
+    public static function qrPaneles(): array
+    {
+        $size = self::QR_SIZE_MM;
+        $x = round(self::QR_X_PT * 25.4 / 72, 2);
+        $qrs = [];
+        foreach (self::QR_Y_PT as $yPt) {
+            $bottomFromTopMm = (842.0 - $yPt) * 25.4 / 72;
+            $qrs[] = [
+                'x' => $x,
+                'y' => round($bottomFromTopMm - $size, 2),
+                's' => $size,
+            ];
+        }
+
+        return $qrs;
+    }
+
+    public static function topCssMm(float $yBaselineMm): float
+    {
+        return round($yBaselineMm - self::TEXTO_ASCENDENTE_MM, 2);
+    }
+
+    /**
+     * @return list<array{y:float,x:float,k:string}>
+     */
+    public static function pagina(int $pagina, int $mventa, string $numeracion): array
+    {
+        $numeracion = strtoupper(trim($numeracion));
+        $usaFerli = ($mventa === 1) || ($numeracion === 'CHICO');
+        if ($usaFerli) {
+            $layout = self::paginaFerli($pagina);
+
+            return $layout !== [] ? $layout : self::paginaFerli(1);
+        }
+
+        $layout = self::paginaFragola($pagina);
+
+        return $layout !== [] ? $layout : self::paginaFragola(1);
+    }
 
     /** @return list<array{y:float,x:float,k:string}> */
     public static function paginaFragola(int $pagina): array
@@ -24,6 +81,16 @@ final class OrdentrabajoEmisionPreimpresoLayout
         return match ($pagina) {
             1 => self::FRAGOLA_P1,
             2 => self::FRAGOLA_P2,
+            default => [],
+        };
+    }
+
+    /** @return list<array{y:float,x:float,k:string}> */
+    public static function paginaFerli(int $pagina): array
+    {
+        return match ($pagina) {
+            1 => self::FERLI_P1,
+            2 => self::FERLI_P2,
             default => [],
         };
     }
@@ -193,5 +260,300 @@ final class OrdentrabajoEmisionPreimpresoLayout
             ['y' => 285.75, 'x' => 85.72, 'k' => 'medida_41'],
             ['y' => 285.75, 'x' => 96.84, 'k' => 'medida_42'],
             ['y' => 285.75, 'x' => 153.46, 'k' => 'codigo'],
+        ];
+
+    private const FERLI_P1 = [
+            ['y' => 7.62, 'x' => 36.51, 'k' => 'cliente0'],
+            ['y' => 7.94, 'x' => 123.82, 'k' => 'titulo_0'],
+            ['y' => 7.94, 'x' => 192.09, 'k' => 'tot_pares'],
+            ['y' => 10.48, 'x' => 36.51, 'k' => 'cliente1'],
+            ['y' => 14.29, 'x' => 34.61, 'k' => 'fondo'],
+            ['y' => 14.29, 'x' => 68.26, 'k' => 'cod_art_fmt'],
+            ['y' => 14.29, 'x' => 149.22, 'k' => 'codigo_articulo'],
+            ['y' => 14.29, 'x' => 169.86, 'k' => 'tipo_corte'],
+            ['y' => 20.32, 'x' => 39.69, 'k' => 'combinacion'],
+            ['y' => 20.64, 'x' => 161.92, 'k' => 'fecha_fmt'],
+            ['y' => 23.81, 'x' => 146.05, 'k' => 'localidad_fmt'],
+            ['y' => 25.4, 'x' => 28.57, 'k' => 'pedidos_fmt'],
+            ['y' => 26.99, 'x' => 146.05, 'k' => 'vendedor'],
+            ['y' => 30.16, 'x' => 28.57, 'k' => 'cliente2'],
+            ['y' => 34.92, 'x' => 28.57, 'k' => 'cliente3'],
+            ['y' => 39.69, 'x' => 28.57, 'k' => 'cliente4'],
+            ['y' => 44.45, 'x' => 28.57, 'k' => 'cliente5'],
+            ['y' => 49.21, 'x' => 28.57, 'k' => 'cliente6'],
+            ['y' => 53.97, 'x' => 152.4, 'k' => 'obs1'],
+            ['y' => 55.18, 'x' => 57.47, 'k' => 'medida_22'],
+            ['y' => 55.18, 'x' => 70.17, 'k' => 'medida_23'],
+            ['y' => 55.18, 'x' => 82.87, 'k' => 'medida_24'],
+            ['y' => 55.56, 'x' => 9.52, 'k' => 'medida_18'],
+            ['y' => 55.56, 'x' => 22.22, 'k' => 'medida_19'],
+            ['y' => 55.56, 'x' => 33.34, 'k' => 'medida_20'],
+            ['y' => 55.56, 'x' => 46.04, 'k' => 'medida_21'],
+            ['y' => 55.56, 'x' => 93.66, 'k' => 'medida_25'],
+            ['y' => 55.56, 'x' => 106.36, 'k' => 'medida_26'],
+            ['y' => 55.56, 'x' => 117.47, 'k' => 'medida_27'],
+            ['y' => 55.56, 'x' => 128.59, 'k' => 'medida_28'],
+            ['y' => 55.56, 'x' => 139.7, 'k' => 'medida_29'],
+            ['y' => 57.15, 'x' => 152.4, 'k' => 'obs2'],
+            ['y' => 60.32, 'x' => 152.4, 'k' => 'obs3'],
+            ['y' => 63.5, 'x' => 152.4, 'k' => 'obs4'],
+            ['y' => 65.09, 'x' => 9.52, 'k' => 'medida_30'],
+            ['y' => 65.09, 'x' => 22.22, 'k' => 'medida_31'],
+            ['y' => 65.09, 'x' => 33.34, 'k' => 'medida_32'],
+            ['y' => 65.09, 'x' => 46.04, 'k' => 'medida_33'],
+            ['y' => 65.09, 'x' => 57.15, 'k' => 'medida_34'],
+            ['y' => 65.09, 'x' => 69.85, 'k' => 'medida_35'],
+            ['y' => 65.09, 'x' => 82.55, 'k' => 'medida_36'],
+            ['y' => 65.09, 'x' => 93.66, 'k' => 'medida_37'],
+            ['y' => 65.09, 'x' => 106.36, 'k' => 'medida_38'],
+            ['y' => 65.09, 'x' => 117.47, 'k' => 'medida_39'],
+            ['y' => 65.09, 'x' => 128.59, 'k' => 'medida_40'],
+            ['y' => 65.09, 'x' => 139.7, 'k' => 'medida_41'],
+            ['y' => 66.67, 'x' => 161.92, 'k' => 'codigo'],
+            ['y' => 77.79, 'x' => 146.05, 'k' => 'titulo_1'],
+            ['y' => 80.96, 'x' => 36.51, 'k' => 'cliente0'],
+            ['y' => 82.55, 'x' => 192.09, 'k' => 'tot_pares'],
+            ['y' => 84.14, 'x' => 36.51, 'k' => 'cliente1'],
+            ['y' => 88.9, 'x' => 147.64, 'k' => 'codigo_articulo'],
+            ['y' => 89.22, 'x' => 35.56, 'k' => 'fondo'],
+            ['y' => 94.61, 'x' => 39.69, 'k' => 'material2'],
+            ['y' => 98.74, 'x' => 39.69, 'k' => 'material3'],
+            ['y' => 103.19, 'x' => 39.69, 'k' => 'material4'],
+            ['y' => 106.36, 'x' => 33.34, 'k' => 'forrado_base_fmt'],
+            ['y' => 111.12, 'x' => 33.34, 'k' => 'aplique0'],
+            ['y' => 115.89, 'x' => 33.34, 'k' => 'aplique1'],
+            ['y' => 120.65, 'x' => 33.34, 'k' => 'aplique2'],
+            ['y' => 128.21, 'x' => 57.47, 'k' => 'medida_22'],
+            ['y' => 128.21, 'x' => 70.17, 'k' => 'medida_23'],
+            ['y' => 128.21, 'x' => 82.87, 'k' => 'medida_24'],
+            ['y' => 128.59, 'x' => 9.52, 'k' => 'medida_18'],
+            ['y' => 128.59, 'x' => 22.22, 'k' => 'medida_19'],
+            ['y' => 128.59, 'x' => 33.34, 'k' => 'medida_20'],
+            ['y' => 128.59, 'x' => 46.04, 'k' => 'medida_21'],
+            ['y' => 128.59, 'x' => 93.66, 'k' => 'medida_25'],
+            ['y' => 128.59, 'x' => 106.36, 'k' => 'medida_26'],
+            ['y' => 128.59, 'x' => 117.47, 'k' => 'medida_27'],
+            ['y' => 128.59, 'x' => 128.59, 'k' => 'medida_28'],
+            ['y' => 128.59, 'x' => 139.7, 'k' => 'medida_29'],
+            ['y' => 139.7, 'x' => 9.52, 'k' => 'medida_30'],
+            ['y' => 139.7, 'x' => 22.22, 'k' => 'medida_31'],
+            ['y' => 139.7, 'x' => 33.34, 'k' => 'medida_32'],
+            ['y' => 139.7, 'x' => 46.04, 'k' => 'medida_33'],
+            ['y' => 139.7, 'x' => 57.78, 'k' => 'medida_34'],
+            ['y' => 139.7, 'x' => 70.17, 'k' => 'medida_35'],
+            ['y' => 139.7, 'x' => 82.55, 'k' => 'medida_36'],
+            ['y' => 139.7, 'x' => 93.66, 'k' => 'medida_37'],
+            ['y' => 139.7, 'x' => 106.36, 'k' => 'medida_38'],
+            ['y' => 139.7, 'x' => 117.47, 'k' => 'medida_39'],
+            ['y' => 139.7, 'x' => 128.59, 'k' => 'medida_40'],
+            ['y' => 139.7, 'x' => 139.7, 'k' => 'medida_41'],
+            ['y' => 139.7, 'x' => 160.34, 'k' => 'codigo'],
+            ['y' => 152.4, 'x' => 146.05, 'k' => 'titulo_2'],
+            ['y' => 155.89, 'x' => 34.92, 'k' => 'cliente0'],
+            ['y' => 157.16, 'x' => 192.09, 'k' => 'tot_pares'],
+            ['y' => 160.34, 'x' => 34.92, 'k' => 'cliente1'],
+            ['y' => 163.19, 'x' => 33.34, 'k' => 'fondo'],
+            ['y' => 163.51, 'x' => 147.64, 'k' => 'codigo_articulo'],
+            ['y' => 169.86, 'x' => 39.69, 'k' => 'combinacion'],
+            ['y' => 182.56, 'x' => 30.16, 'k' => 'plvista'],
+            ['y' => 182.56, 'x' => 120.65, 'k' => 'serigrafia'],
+            ['y' => 203.14, 'x' => 57.47, 'k' => 'medida_22'],
+            ['y' => 203.14, 'x' => 70.17, 'k' => 'medida_23'],
+            ['y' => 203.14, 'x' => 82.87, 'k' => 'medida_24'],
+            ['y' => 203.2, 'x' => 106.36, 'k' => 'medida_26'],
+            ['y' => 203.52, 'x' => 9.52, 'k' => 'medida_18'],
+            ['y' => 203.52, 'x' => 22.22, 'k' => 'medida_19'],
+            ['y' => 203.52, 'x' => 33.34, 'k' => 'medida_20'],
+            ['y' => 203.52, 'x' => 46.04, 'k' => 'medida_21'],
+            ['y' => 203.52, 'x' => 93.66, 'k' => 'medida_25'],
+            ['y' => 203.52, 'x' => 117.47, 'k' => 'medida_27'],
+            ['y' => 203.52, 'x' => 128.59, 'k' => 'medida_28'],
+            ['y' => 203.52, 'x' => 139.7, 'k' => 'medida_29'],
+            ['y' => 214.31, 'x' => 106.36, 'k' => 'medida_38'],
+            ['y' => 214.31, 'x' => 160.34, 'k' => 'codigo'],
+            ['y' => 214.63, 'x' => 9.52, 'k' => 'medida_30'],
+            ['y' => 214.63, 'x' => 22.22, 'k' => 'medida_31'],
+            ['y' => 214.63, 'x' => 33.34, 'k' => 'medida_32'],
+            ['y' => 214.63, 'x' => 46.04, 'k' => 'medida_33'],
+            ['y' => 214.63, 'x' => 57.78, 'k' => 'medida_34'],
+            ['y' => 214.63, 'x' => 70.17, 'k' => 'medida_35'],
+            ['y' => 214.63, 'x' => 82.55, 'k' => 'medida_36'],
+            ['y' => 214.63, 'x' => 93.66, 'k' => 'medida_37'],
+            ['y' => 214.63, 'x' => 117.47, 'k' => 'medida_39'],
+            ['y' => 214.63, 'x' => 128.59, 'k' => 'medida_40'],
+            ['y' => 214.63, 'x' => 139.7, 'k' => 'medida_41'],
+            ['y' => 227.01, 'x' => 146.05, 'k' => 'titulo_3'],
+            ['y' => 230.19, 'x' => 34.92, 'k' => 'cliente0'],
+            ['y' => 231.77, 'x' => 192.09, 'k' => 'tot_pares'],
+            ['y' => 233.36, 'x' => 34.92, 'k' => 'cliente1'],
+            ['y' => 238.12, 'x' => 33.34, 'k' => 'fondo'],
+            ['y' => 238.12, 'x' => 149.22, 'k' => 'codigo_articulo'],
+            ['y' => 244.47, 'x' => 39.69, 'k' => 'combinacion'],
+            ['y' => 257.17, 'x' => 31.75, 'k' => 'plvista'],
+            ['y' => 257.17, 'x' => 120.65, 'k' => 'serigrafia'],
+            ['y' => 277.81, 'x' => 9.52, 'k' => 'medida_18'],
+            ['y' => 277.81, 'x' => 22.22, 'k' => 'medida_19'],
+            ['y' => 277.81, 'x' => 33.34, 'k' => 'medida_20'],
+            ['y' => 277.81, 'x' => 46.04, 'k' => 'medida_21'],
+            ['y' => 277.81, 'x' => 57.15, 'k' => 'medida_22'],
+            ['y' => 277.81, 'x' => 69.85, 'k' => 'medida_23'],
+            ['y' => 277.81, 'x' => 82.55, 'k' => 'medida_24'],
+            ['y' => 277.81, 'x' => 93.66, 'k' => 'medida_25'],
+            ['y' => 277.81, 'x' => 104.77, 'k' => 'medida_26'],
+            ['y' => 277.81, 'x' => 117.47, 'k' => 'medida_27'],
+            ['y' => 277.81, 'x' => 128.59, 'k' => 'medida_28'],
+            ['y' => 277.81, 'x' => 139.7, 'k' => 'medida_29'],
+            ['y' => 287.34, 'x' => 8.89, 'k' => 'medida_30'],
+            ['y' => 287.34, 'x' => 21.59, 'k' => 'medida_31'],
+            ['y' => 287.34, 'x' => 32.7, 'k' => 'medida_32'],
+            ['y' => 287.34, 'x' => 45.4, 'k' => 'medida_33'],
+            ['y' => 287.34, 'x' => 57.15, 'k' => 'medida_34'],
+            ['y' => 287.34, 'x' => 69.53, 'k' => 'medida_35'],
+            ['y' => 287.34, 'x' => 81.91, 'k' => 'medida_36'],
+            ['y' => 287.34, 'x' => 93.03, 'k' => 'medida_37'],
+            ['y' => 287.34, 'x' => 104.77, 'k' => 'medida_38'],
+            ['y' => 287.34, 'x' => 116.84, 'k' => 'medida_39'],
+            ['y' => 287.34, 'x' => 127.95, 'k' => 'medida_40'],
+            ['y' => 287.34, 'x' => 139.06, 'k' => 'medida_41'],
+            ['y' => 288.92, 'x' => 158.75, 'k' => 'codigo'],
+        ];
+
+    private const FERLI_P2 = [
+            ['y' => 7.94, 'x' => 36.51, 'k' => 'cliente0'],
+            ['y' => 7.94, 'x' => 125.41, 'k' => 'titulo_0'],
+            ['y' => 7.94, 'x' => 192.09, 'k' => 'tot_pares'],
+            ['y' => 11.11, 'x' => 36.51, 'k' => 'cliente1'],
+            ['y' => 14.29, 'x' => 33.34, 'k' => 'fondo'],
+            ['y' => 14.29, 'x' => 69.85, 'k' => 'cod_art_fmt'],
+            ['y' => 14.29, 'x' => 149.22, 'k' => 'codigo_articulo'],
+            ['y' => 14.29, 'x' => 166.69, 'k' => 'tipo_corte_forro'],
+            ['y' => 20.64, 'x' => 39.69, 'k' => 'combinacion'],
+            ['y' => 36.51, 'x' => 10.58, 'k' => 'forrado_fondo1'],
+            ['y' => 41.27, 'x' => 38.1, 'k' => 'forrado_fondo2'],
+            ['y' => 55.18, 'x' => 57.47, 'k' => 'medida_22'],
+            ['y' => 55.18, 'x' => 70.17, 'k' => 'medida_23'],
+            ['y' => 55.18, 'x' => 82.87, 'k' => 'medida_24'],
+            ['y' => 55.56, 'x' => 9.52, 'k' => 'medida_18'],
+            ['y' => 55.56, 'x' => 22.22, 'k' => 'medida_19'],
+            ['y' => 55.56, 'x' => 33.34, 'k' => 'medida_20'],
+            ['y' => 55.56, 'x' => 46.04, 'k' => 'medida_21'],
+            ['y' => 55.56, 'x' => 93.66, 'k' => 'medida_25'],
+            ['y' => 55.56, 'x' => 104.77, 'k' => 'medida_26'],
+            ['y' => 55.56, 'x' => 117.47, 'k' => 'medida_27'],
+            ['y' => 55.56, 'x' => 128.59, 'k' => 'medida_28'],
+            ['y' => 55.56, 'x' => 139.7, 'k' => 'medida_29'],
+            ['y' => 66.67, 'x' => 9.52, 'k' => 'medida_30'],
+            ['y' => 66.67, 'x' => 22.22, 'k' => 'medida_31'],
+            ['y' => 66.67, 'x' => 33.34, 'k' => 'medida_32'],
+            ['y' => 66.67, 'x' => 46.04, 'k' => 'medida_33'],
+            ['y' => 66.67, 'x' => 57.78, 'k' => 'medida_34'],
+            ['y' => 66.67, 'x' => 70.17, 'k' => 'medida_35'],
+            ['y' => 66.67, 'x' => 82.55, 'k' => 'medida_36'],
+            ['y' => 66.67, 'x' => 93.66, 'k' => 'medida_37'],
+            ['y' => 66.67, 'x' => 104.77, 'k' => 'medida_38'],
+            ['y' => 66.67, 'x' => 117.47, 'k' => 'medida_39'],
+            ['y' => 66.67, 'x' => 128.59, 'k' => 'medida_40'],
+            ['y' => 66.67, 'x' => 139.7, 'k' => 'medida_41'],
+            ['y' => 66.67, 'x' => 158.75, 'k' => 'codigo'],
+            ['y' => 77.79, 'x' => 146.05, 'k' => 'titulo_1'],
+            ['y' => 80.96, 'x' => 36.51, 'k' => 'cliente0'],
+            ['y' => 82.55, 'x' => 192.09, 'k' => 'tot_pares'],
+            ['y' => 84.14, 'x' => 36.51, 'k' => 'cliente1'],
+            ['y' => 88.26, 'x' => 33.34, 'k' => 'fondo'],
+            ['y' => 88.58, 'x' => 149.22, 'k' => 'codigo_articulo'],
+            ['y' => 94.93, 'x' => 39.69, 'k' => 'combinacion'],
+            ['y' => 111.12, 'x' => 33.34, 'k' => 'plarmado'],
+            ['y' => 128.21, 'x' => 57.47, 'k' => 'medida_22'],
+            ['y' => 128.21, 'x' => 70.17, 'k' => 'medida_23'],
+            ['y' => 128.21, 'x' => 82.87, 'k' => 'medida_24'],
+            ['y' => 128.59, 'x' => 9.52, 'k' => 'medida_18'],
+            ['y' => 128.59, 'x' => 22.22, 'k' => 'medida_19'],
+            ['y' => 128.59, 'x' => 33.34, 'k' => 'medida_20'],
+            ['y' => 128.59, 'x' => 46.04, 'k' => 'medida_21'],
+            ['y' => 128.59, 'x' => 93.66, 'k' => 'medida_25'],
+            ['y' => 128.59, 'x' => 104.77, 'k' => 'medida_26'],
+            ['y' => 128.59, 'x' => 117.47, 'k' => 'medida_27'],
+            ['y' => 128.59, 'x' => 128.59, 'k' => 'medida_28'],
+            ['y' => 128.59, 'x' => 139.7, 'k' => 'medida_29'],
+            ['y' => 139.7, 'x' => 9.52, 'k' => 'medida_30'],
+            ['y' => 139.7, 'x' => 22.22, 'k' => 'medida_31'],
+            ['y' => 139.7, 'x' => 33.34, 'k' => 'medida_32'],
+            ['y' => 139.7, 'x' => 46.04, 'k' => 'medida_33'],
+            ['y' => 139.7, 'x' => 57.78, 'k' => 'medida_34'],
+            ['y' => 139.7, 'x' => 70.17, 'k' => 'medida_35'],
+            ['y' => 139.7, 'x' => 82.55, 'k' => 'medida_36'],
+            ['y' => 139.7, 'x' => 93.66, 'k' => 'medida_37'],
+            ['y' => 139.7, 'x' => 104.77, 'k' => 'medida_38'],
+            ['y' => 139.7, 'x' => 117.47, 'k' => 'medida_39'],
+            ['y' => 139.7, 'x' => 128.59, 'k' => 'medida_40'],
+            ['y' => 139.7, 'x' => 139.7, 'k' => 'medida_41'],
+            ['y' => 139.7, 'x' => 158.75, 'k' => 'codigo'],
+            ['y' => 150.81, 'x' => 146.05, 'k' => 'titulo_2'],
+            ['y' => 156.53, 'x' => 36.51, 'k' => 'cliente0'],
+            ['y' => 157.16, 'x' => 192.09, 'k' => 'tot_pares'],
+            ['y' => 160.34, 'x' => 36.51, 'k' => 'cliente1'],
+            ['y' => 163.51, 'x' => 33.34, 'k' => 'fondo'],
+            ['y' => 163.51, 'x' => 147.64, 'k' => 'codigo_articulo'],
+            ['y' => 169.86, 'x' => 39.69, 'k' => 'combinacion'],
+            ['y' => 187.32, 'x' => 30.16, 'k' => 'puntera'],
+            ['y' => 187.32, 'x' => 114.3, 'k' => 'contrafuerte'],
+            ['y' => 201.23, 'x' => 57.47, 'k' => 'medida_22'],
+            ['y' => 201.23, 'x' => 70.17, 'k' => 'medida_23'],
+            ['y' => 201.23, 'x' => 82.87, 'k' => 'medida_24'],
+            ['y' => 201.61, 'x' => 9.52, 'k' => 'medida_18'],
+            ['y' => 201.61, 'x' => 22.22, 'k' => 'medida_19'],
+            ['y' => 201.61, 'x' => 33.34, 'k' => 'medida_20'],
+            ['y' => 201.61, 'x' => 46.04, 'k' => 'medida_21'],
+            ['y' => 201.61, 'x' => 93.66, 'k' => 'medida_25'],
+            ['y' => 201.61, 'x' => 104.77, 'k' => 'medida_26'],
+            ['y' => 201.61, 'x' => 117.47, 'k' => 'medida_27'],
+            ['y' => 201.61, 'x' => 128.59, 'k' => 'medida_28'],
+            ['y' => 201.61, 'x' => 139.7, 'k' => 'medida_29'],
+            ['y' => 212.72, 'x' => 9.52, 'k' => 'medida_30'],
+            ['y' => 212.72, 'x' => 22.22, 'k' => 'medida_31'],
+            ['y' => 212.72, 'x' => 33.34, 'k' => 'medida_32'],
+            ['y' => 212.72, 'x' => 46.04, 'k' => 'medida_33'],
+            ['y' => 212.72, 'x' => 57.78, 'k' => 'medida_34'],
+            ['y' => 212.72, 'x' => 70.17, 'k' => 'medida_35'],
+            ['y' => 212.72, 'x' => 82.55, 'k' => 'medida_36'],
+            ['y' => 212.72, 'x' => 93.66, 'k' => 'medida_37'],
+            ['y' => 212.72, 'x' => 104.77, 'k' => 'medida_38'],
+            ['y' => 212.72, 'x' => 117.47, 'k' => 'medida_39'],
+            ['y' => 212.72, 'x' => 128.59, 'k' => 'medida_40'],
+            ['y' => 212.72, 'x' => 139.7, 'k' => 'medida_41'],
+            ['y' => 212.72, 'x' => 158.75, 'k' => 'codigo'],
+            ['y' => 227.01, 'x' => 146.05, 'k' => 'titulo_3'],
+            ['y' => 230.19, 'x' => 34.92, 'k' => 'cliente0'],
+            ['y' => 231.77, 'x' => 192.09, 'k' => 'tot_pares'],
+            ['y' => 233.36, 'x' => 34.92, 'k' => 'cliente1'],
+            ['y' => 236.54, 'x' => 33.34, 'k' => 'fondo_color'],
+            ['y' => 238.12, 'x' => 147.95, 'k' => 'codigo_articulo'],
+            ['y' => 243.52, 'x' => 39.69, 'k' => 'combinacion'],
+            ['y' => 261.94, 'x' => 31.75, 'k' => 'empaque_fmt'],
+            ['y' => 277.43, 'x' => 56.83, 'k' => 'medida_22'],
+            ['y' => 277.43, 'x' => 69.53, 'k' => 'medida_23'],
+            ['y' => 277.43, 'x' => 82.23, 'k' => 'medida_24'],
+            ['y' => 277.81, 'x' => 8.89, 'k' => 'medida_18'],
+            ['y' => 277.81, 'x' => 21.59, 'k' => 'medida_19'],
+            ['y' => 277.81, 'x' => 32.7, 'k' => 'medida_20'],
+            ['y' => 277.81, 'x' => 45.4, 'k' => 'medida_21'],
+            ['y' => 277.81, 'x' => 93.03, 'k' => 'medida_25'],
+            ['y' => 277.81, 'x' => 104.77, 'k' => 'medida_26'],
+            ['y' => 277.81, 'x' => 116.84, 'k' => 'medida_27'],
+            ['y' => 277.81, 'x' => 127.95, 'k' => 'medida_28'],
+            ['y' => 277.81, 'x' => 139.06, 'k' => 'medida_29'],
+            ['y' => 288.92, 'x' => 8.89, 'k' => 'medida_30'],
+            ['y' => 288.92, 'x' => 21.59, 'k' => 'medida_31'],
+            ['y' => 288.92, 'x' => 32.7, 'k' => 'medida_32'],
+            ['y' => 288.92, 'x' => 45.4, 'k' => 'medida_33'],
+            ['y' => 288.92, 'x' => 57.15, 'k' => 'medida_34'],
+            ['y' => 288.92, 'x' => 69.53, 'k' => 'medida_35'],
+            ['y' => 288.92, 'x' => 81.91, 'k' => 'medida_36'],
+            ['y' => 288.92, 'x' => 93.03, 'k' => 'medida_37'],
+            ['y' => 288.92, 'x' => 104.77, 'k' => 'medida_38'],
+            ['y' => 288.92, 'x' => 116.84, 'k' => 'medida_39'],
+            ['y' => 288.92, 'x' => 127.95, 'k' => 'medida_40'],
+            ['y' => 288.92, 'x' => 139.06, 'k' => 'medida_41'],
+            ['y' => 288.92, 'x' => 160.34, 'k' => 'codigo'],
         ];
 }

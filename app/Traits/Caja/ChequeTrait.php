@@ -17,15 +17,15 @@ trait ChequeTrait {
 
 	/** Anita cpro_para_dep (pago.c CHP usa E). Independiente del carácter O/N. */
 	public static $enumParaDep = [
-		['id' => '1', 'valor' => 'E', 'nombre'  => 'E (CHP / e-cheq)'],
-		['id' => '2', 'valor' => 'N', 'nombre'  => 'N'],
-		['id' => '3', 'valor' => 'S', 'nombre'  => 'S'],
-		['id' => '4', 'valor' => 'O', 'nombre'  => 'O'],
+		['id' => '1', 'valor' => 'E', 'nombre'  => 'Estándar CHP (E)'],
+		['id' => '2', 'valor' => 'N', 'nombre'  => 'Anita N'],
+		['id' => '3', 'valor' => 'S', 'nombre'  => 'Anita S'],
+		['id' => '4', 'valor' => 'O', 'nombre'  => 'Anita O'],
 			];
 
 	public static $enumNegociable = [
 		['id' => '1', 'valor' => 'N', 'nombre'  => 'Físico'],
-		['id' => '2', 'valor' => 'E', 'nombre'  => 'Electrónico'],
+		['id' => '2', 'valor' => 'E', 'nombre'  => 'e-cheq'],
 			];
 			
 	public static $enumEstado = [

@@ -47,6 +47,7 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\ArcaFacturaQrSupport;
+use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Support\Ventas\QrCodePngSupport;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Stock\Articulo;
@@ -62,10 +63,13 @@ use App\Support\Ventas\CaiRemitoVigenteSupport;
 use App\Support\Ventas\RemitoFormularioLeyendaSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
+use App\Support\Ventas\PedidoPickingFerliSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\TransporteDepositoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
+use App\Support\Ventas\ComprobanteImpresionResolverSupport;
 use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\VillafrancaFacturacionSupport;
 use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
@@ -714,6 +718,10 @@ class FacturacionService
 			$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
 			if (!$cliente)
 				return ['error' => 'Cliente inexistente'];
+
+			if ($errorPolitica = $this->errorPoliticaComercialFactura($cliente, $data)) {
+				return $errorPolitica;
+			}
 
 			if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
 				return $errorDespacho;
@@ -1607,12 +1615,12 @@ class FacturacionService
 	 * @param  array<int|string, mixed>  $retorno
 	 * @return array<int|string, mixed>
 	 */
-	private function anexarUrlImpresionSesion($retorno, ?array $dataOrigen = null)
+	protected function anexarUrlImpresionSesion($retorno, ?array $dataOrigen = null)
 	{
 		if (! is_array($retorno) || $retorno === []) {
 			return $retorno;
 		}
-		if (isset($retorno['error']) && ! array_is_list($retorno)) {
+		if (! array_is_list($retorno) && ! empty($retorno['error'])) {
 			return $retorno;
 		}
 
@@ -1637,7 +1645,11 @@ class FacturacionService
 		}
 
 		$retornoIndex = is_array($dataOrigen) ? (string) ($dataOrigen['retorno_index'] ?? '') : '';
-		$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId, $retornoIndex);
+		if (! ComprobanteImpresionResolverSupport::dispararProcesoImpresionAlFacturar($ventaId, $remitoId, $pedidoId)) {
+			return $retorno;
+		}
+		$autoEnviar = ComprobanteImpresionResolverSupport::enviarAutomaticoAlFacturar($ventaId, $remitoId, $pedidoId);
+		$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId, $retornoIndex, $autoEnviar);
 		if ($url === null) {
 			return $retorno;
 		}
@@ -1879,6 +1891,12 @@ class FacturacionService
 		$fechaFactura = $data['fechafactura'];
 		$leyenda = $data['leyendafactura'];
 		$actividad_arca_id = $data['actividad_arca_id'];
+
+		$clienteOrdenventa = $this->clienteQuery->traeClienteporId($cliente_id);
+		$tipotransaccionOrdenventa = $this->tipotransaccionRepository->find($tipoTransaccion_id);
+		if ($errorPolitica = $this->errorPoliticaComercialFactura($clienteOrdenventa, $data, $tipotransaccionOrdenventa)) {
+			return $errorPolitica;
+		}
 
 		$dataFactura = $calculoFactura['datosfactura'];
 		$conceptosTotales = $calculoFactura['conceptostotales'];
@@ -2876,6 +2894,11 @@ class FacturacionService
 
 		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
 
+		$clientePolitica = $this->clienteQuery->traeClienteporId($cliente_id);
+		if ($errorPolitica = $this->errorPoliticaComercialFactura($clientePolitica, $data, $tipotransaccion)) {
+			return $errorPolitica;
+		}
+
 		$codigoTipoTransaccion = $tipotransaccion->codigo;
 		$this->nombreTipoTransaccion = $tipotransaccion->nombre;
 		$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
@@ -3275,7 +3298,7 @@ class FacturacionService
 		else
 			$graba = ['error' => 'No pudo leer punto de venta'];
 
-		return $graba;
+		return $this->anexarUrlImpresionSesion($graba, $data);
 	}
 
 	// Factura por item de OT
@@ -3390,6 +3413,10 @@ class FacturacionService
 
 						if (!$cliente)
 							return ['error' => 'Cliente inexistente'];
+
+						if ($errorPolitica = $this->errorPoliticaComercialFactura($cliente, $data)) {
+							return $errorPolitica;
+						}
 
 						if ($cliente->numerodocumento == null)
 							return ['error' => 'No tiene CUIT'];
@@ -3531,6 +3558,19 @@ class FacturacionService
 		}
 		$this->sincronizarLugarEntregaFacturaOt($pedido);
 
+		$hookConsumoOt = null;
+		if (PedidoPickingFerliSupport::habilitado()) {
+			$hookConsumoOt = function ($vta) use ($pedidos_combinacion_id, $ordenestrabajo_id, $fechaFactura, $deposito) {
+				PedidoPickingFerliSupport::grabarConsumoStockOtAlFacturar(
+					array_values(array_map('intval', (array) $pedidos_combinacion_id)),
+					array_values(array_map('intval', (array) $ordenestrabajo_id)),
+					(string) $fechaFactura,
+					(int) $vta->id,
+					(int) $deposito
+				);
+			};
+		}
+
 		return $this->emitirFacturaOtDesdeDataFactura(
 			$data,
 			$dataFactura,
@@ -3544,7 +3584,8 @@ class FacturacionService
 			$puntoventa_id,
 			$tipoTransaccion_id,
 			$pedidos_combinacion_id,
-			$ordenestrabajo_id
+			$ordenestrabajo_id,
+			$hookConsumoOt
 		);
 	}
 
@@ -4174,13 +4215,14 @@ class FacturacionService
 					}
 				}
 
-				return [
+				return $this->anexarUrlImpresionSesion([
 					'factura' => $numero,
 					'error' => '',
 					'venta_id' => (int) $vta->id,
 					'remito_id' => (int) ($vta->fresh()->remito_id ?? 0),
+					'pedido_id' => (int) ($pedido->id ?? 0),
 					'anita_ok' => true,
-				];
+				], $data);
 			}
 		}
 		else
@@ -4696,14 +4738,16 @@ class FacturacionService
 					substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'], $vta->id);
 			}
 
-			// Ferli: NC total sobre FAC de OT/picking → línea de pedido facturable otra vez
+			// Ferli: NC total sobre FAC de OT/picking → stock con lote/OT original + línea para nuevo picking
 			if (EntornoEmpresaSupport::esFerli() && $tipotransaccion->esNotaCredito() && (int) $venta_id > 0) {
 				$opcionesNc = is_array($opcionesEmision) ? $opcionesEmision : [];
 				\App\Support\Ventas\Ferli\NotaCreditoReabrePedidoOtFerliSupport::alGrabarNc(
 					(int) $venta_id,
 					abs((float) $totalComprobante),
 					$tipotransaccion,
-					$opcionesNc
+					$opcionesNc,
+					(int) $vta->id,
+					(string) $fechaFactura
 				);
 			}
 
@@ -7742,6 +7786,18 @@ class FacturacionService
 		return ClienteDespachoSupport::errorNoFacturable((int) $clienteId);
 	}
 
+	/**
+	 * @return array{error: string}|null
+	 */
+	protected function errorPoliticaComercialFactura($cliente, array $data = [], $tipotransaccion = null): ?array
+	{
+		if ($this->esEmisionPos($data)) {
+			return null;
+		}
+
+		return ClientePoliticaComercialSupport::errorSiNoPermiteFactura($cliente, $tipotransaccion);
+	}
+
 	private function tipoEmiteRemito($tipotransaccion): bool
 	{
 		return $tipotransaccion instanceof Tipotransaccion
@@ -7811,7 +7867,7 @@ class FacturacionService
 	 * Depósito de stock: formulario, si no el del reparto (factura o pedido), si no default de ventas.
 	 * Emisión POS: solo el depósito explícito del payload (0 = no resolver por reparto).
 	 */
-	private function depositoIdDesdePayload(array $data, mixed $cliente = null, mixed $pedido = null): int
+	protected function depositoIdDesdePayload(array $data, mixed $cliente = null, mixed $pedido = null): int
 	{
 		$id = (int) ($data['deposito_id'] ?? $data['deposito'] ?? 0);
 		if ($id > 0) {
@@ -8544,7 +8600,7 @@ class FacturacionService
 		$fpdi->Output($destino, 'F');
 	}
 
-	public function editaUnaFactura($id, $flGeneraNotaDeCredito = null)
+	public function editaUnaFactura($id, $flGeneraNotaDeCredito = null, int $articuloNcFiltro = 0)
 	{
 	   	$data = Self::leeFactura($id);
 
@@ -8580,6 +8636,26 @@ class FacturacionService
 		$ncOrigenEsFce = false;
 		$fceComprobanteReferenciado = old('fce_comprobante_referenciado', '');
 		$fceAnulacion = old('fce_anulacion', '');
+		$ncPendientesPorEmision = [];
+		$articuloNcFiltro = $articuloNcFiltro > 0 ? $articuloNcFiltro : (int) request()->query('articulo_id', 0);
+		$articuloNcCodigo = '';
+		$articuloNcDescripcion = '';
+		if (isset($flGeneraNotaDeCredito)) {
+			$ncPendientesPorEmision = app(VentaFacturasPorArticuloClienteSupport::class)
+				->pendientesPorEmision((int) $data->id);
+			if ($articuloNcFiltro > 0) {
+				foreach ($data->venta_emisiones ?? [] as $emNc) {
+					if ((int) ($emNc->articulo_id ?? 0) === $articuloNcFiltro) {
+						$articuloNcCodigo = (string) ($emNc->articulos?->sku ?? '');
+						$articuloNcDescripcion = (string) ($emNc->articulos?->descripcion ?? '');
+						break;
+					}
+				}
+				if ($fceAnulacion === '') {
+					$fceAnulacion = 'N';
+				}
+			}
+		}
 		if (isset($flGeneraNotaDeCredito) && ArcaFceNcMostradorSupport::facturaEsFce($data)) {
 			$ncOrigenEsFce = true;
 			if ($fceComprobanteReferenciado === '') {
@@ -8596,7 +8672,8 @@ class FacturacionService
             'transporte_query', 'formapago_query', 'incoterm_query', 'flGeneraNotaDeCredito', 'moneda_query',
 			'actividad_arca_query', 'urlOrigen', 'consultaFacturasDia',
 			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query',
-			'ncOrigenEsFce', 'fceComprobanteReferenciado', 'fceAnulacion')); 
+			'ncOrigenEsFce', 'fceComprobanteReferenciado', 'fceAnulacion',
+			'ncPendientesPorEmision', 'articuloNcFiltro', 'articuloNcCodigo', 'articuloNcDescripcion')); 
 	}
 
 	/*
@@ -9410,6 +9487,9 @@ class FacturacionService
 		if (! $cliente) {
 			return ['error' => 'Cliente inexistente'];
 		}
+		if ($errorPolitica = $this->errorPoliticaComercialFactura($cliente, $data)) {
+			return $errorPolitica;
+		}
 		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
 			return $errorDespacho;
 		}
@@ -9498,7 +9578,7 @@ class FacturacionService
 		return $this->normalizarCantidadBulto($this->cantidadBulto ?? 0);
 	}
 
-	private function normalizarCantidadBulto(mixed $valor): int
+	protected function normalizarCantidadBulto(mixed $valor): int
 	{
 		if ($valor === null || $valor === '') {
 			return 0;

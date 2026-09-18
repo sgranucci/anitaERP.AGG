@@ -14,10 +14,17 @@ class ComprobanteImpresionPrograma extends Model implements Auditable
 
     protected $table = 'comprobante_impresion_programa';
 
-    protected $fillable = ['codigo', 'nombre', 'empresa_id', 'permite_disparo_al_grabar'];
+    protected $fillable = [
+        'codigo',
+        'nombre',
+        'empresa_id',
+        'permite_disparo_al_grabar',
+        'enviar_automatico_al_facturar',
+    ];
 
     protected $casts = [
         'permite_disparo_al_grabar' => 'boolean',
+        'enviar_automatico_al_facturar' => 'boolean',
     ];
 
     public function empresa(): BelongsTo

@@ -90,7 +90,12 @@ class BancoRepository implements BancoRepositoryInterface
         return $banco;
     }
 
-	public function findPorCodigo($codigo)
+    public function findPorId($id)
+    {
+        return $this->model->find($id);
+    }
+
+    public function findPorCodigo($codigo)
     {
         $codigo = trim((string) $codigo);
         if ($codigo === '') {

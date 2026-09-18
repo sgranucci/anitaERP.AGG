@@ -217,7 +217,8 @@
     <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script src="{{asset("assets/js/scripts.js")}}"></script>
-    <script src="{{asset("assets/js/funciones.js")}}"></script>
+    <script src="{{ asset('assets/js/funciones.js') }}?v={{ @filemtime(public_path('assets/js/funciones.js')) ?: time() }}"></script>
+    <script src="{{ asset('assets/pages/scripts/ventas/cliente/politica-comercial.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/politica-comercial.js')) ?: time() }}"></script>
     <script src="{{asset('assets/js/modo-consulta.js')}}"></script>
     <script src="{{ asset('assets/js/grabacion-bloqueo-submit.js') }}?v={{ @filemtime(public_path('assets/js/grabacion-bloqueo-submit.js')) ?: time() }}"></script>
     @if ($modoEmbed)

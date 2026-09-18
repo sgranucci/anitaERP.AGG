@@ -11,6 +11,7 @@ use App\Models\Ventas\CotRemitoEnvio;
 use App\Models\Ventas\Transporte;
 use App\Models\Ventas\Venta;
 use App\Repositories\Ventas\CotGuiaRepository;
+use App\Support\Ventas\CotGuiaFacturaIdentidadSupport;
 use App\Support\Ventas\CotImporteRemitoSupport;
 use App\Support\Ventas\CuitFormatoValidacionSupport;
 use Carbon\Carbon;
@@ -35,12 +36,22 @@ class CotGuiaService
 
     public function cargar(int $id): ?CotGuia
     {
-        return $this->guiaRepository->find($id);
+        $guia = $this->guiaRepository->find($id);
+        if ($guia !== null) {
+            $this->hidratarIdentidadFacturaDesdeVenta($guia);
+        }
+
+        return $guia;
     }
 
     public function cargarPorNumero(int $numero): ?CotGuia
     {
-        return $this->guiaRepository->findPorNumero($numero);
+        $guia = $this->guiaRepository->findPorNumero($numero);
+        if ($guia !== null) {
+            $this->hidratarIdentidadFacturaDesdeVenta($guia);
+        }
+
+        return $guia;
     }
 
     /**
@@ -102,6 +113,18 @@ class CotGuiaService
             }
 
             $linea = $this->mapearRemitoConsultaALineaGuia($fila);
+
+            // Completa identidad + bultos/pares/valor desde la factura (Anita/ERP).
+            $resuelto = $this->resolverFactura(
+                (string) $linea['tipo'],
+                (string) $linea['letra'],
+                (int) $linea['sucursal'],
+                (int) $linea['numero'],
+            );
+            if ($resuelto['ok'] ?? false) {
+                $linea = $this->aplicarIdentidadResuelta($linea, $resuelto['linea']);
+            }
+
             $claveFactura = $this->claveFactura(
                 (string) $linea['tipo'],
                 (string) $linea['letra'],
@@ -112,34 +135,12 @@ class CotGuiaService
                 continue;
             }
 
-            // Completa bultos/pares/valor desde la factura (Anita/ERP); kilos del remito no son pares.
-            $resuelto = $this->resolverFactura(
-                (string) $linea['tipo'],
-                (string) $linea['letra'],
-                (int) $linea['sucursal'],
-                (int) $linea['numero'],
-            );
-            if ($resuelto['ok'] ?? false) {
-                $datos = $resuelto['linea'];
-                $linea['bultos'] = (float) ($datos['bultos'] ?? $linea['bultos']);
-                $linea['cantidad'] = (float) ($datos['cantidad'] ?? 0);
-                if ((float) ($datos['valor_declarado'] ?? 0) > 0) {
-                    $linea['valor_declarado'] = (float) $datos['valor_declarado'];
-                }
-                if (! empty($datos['etiqueta'])) {
-                    $linea['etiqueta'] = (string) $datos['etiqueta'];
-                }
-                if (! empty($datos['venta_id'])) {
-                    $linea['venta_id'] = (int) $datos['venta_id'];
-                }
-            }
-
             $pendientes[] = array_merge($linea, [
                 'clave_remito' => (string) ($fila['clave'] ?? ''),
                 'ya_enviado' => false,
-                'factura_codigo' => (string) ($fila['factura_codigo'] ?? $linea['etiqueta']),
-                'importe' => (float) ($fila['importe'] ?? $linea['valor_declarado']),
-                'cliente_nombre' => (string) ($fila['cliente_nombre'] ?? $linea['cliente_nombre']),
+                'factura_codigo' => (string) ($linea['etiqueta'] ?? $fila['factura_codigo'] ?? ''),
+                'importe' => (float) ($linea['valor_declarado'] ?? $fila['importe'] ?? 0),
+                'cliente_nombre' => (string) ($linea['cliente_nombre'] ?? $fila['cliente_nombre'] ?? ''),
             ]);
         }
 
@@ -160,6 +161,7 @@ class CotGuiaService
         }
 
         $guia->loadMissing(['lineas', 'transportes']);
+        $this->hidratarIdentidadFacturaDesdeVenta($guia);
         if ($guia->lineas->isEmpty()) {
             return [
                 'ok' => false,
@@ -266,6 +268,15 @@ class CotGuiaService
         $out = [];
         foreach (CotGuiaLinea::query()->where('cot_guia_id', $guiaId)->get() as $linea) {
             $out[$this->claveFactura($linea->tipo, $linea->letra, (int) $linea->sucursal, (int) $linea->numero)] = true;
+            $identidad = $this->identidadDesdeVentaId((int) ($linea->venta_id ?? 0) ?: null);
+            if ($identidad !== null) {
+                $out[$this->claveFactura(
+                    $identidad['tipo'],
+                    $identidad['letra'],
+                    $identidad['sucursal'],
+                    $identidad['numero']
+                )] = true;
+            }
         }
 
         return $out;
@@ -280,14 +291,24 @@ class CotGuiaService
         $anita = is_array($fila['anita'] ?? null) ? $fila['anita'] : [];
         $tipo = strtoupper(trim((string) ($anita['tipo'] ?? $fila['tipo'] ?? 'FAC')));
         $letra = strtoupper(trim((string) ($anita['letra'] ?? $fila['letra'] ?? 'A')));
-        $sucursal = (int) ($anita['sucursal_factura'] ?? $fila['sucursal'] ?? 0);
-        $numero = (int) ($anita['nro_fact'] ?? $fila['numero_remito'] ?? 0);
+        $sucursal = (int) ($anita['sucursal_factura'] ?? 0);
+        $numero = (int) ($anita['nro_fact'] ?? 0);
 
-        if ($tipo === 'REM' || $numero < 1) {
-            // Ferli L8 / Bierzo: remito = nro factura cuando no hay anita factura
-            $tipo = $tipo === 'REM' ? 'FAC' : $tipo;
-            $numero = (int) ($fila['numero_remito'] ?? $numero);
-            $sucursal = (int) ($fila['sucursal'] ?? $sucursal);
+        $ventaId = ((int) ($fila['venta_id'] ?? 0)) ?: null;
+        if (CotGuiaFacturaIdentidadSupport::pareceRemito($tipo, $letra) || $numero < 1) {
+            $desdeVenta = $this->identidadDesdeVentaId($ventaId);
+            if ($desdeVenta !== null) {
+                $tipo = $desdeVenta['tipo'];
+                $letra = $desdeVenta['letra'];
+                $sucursal = $desdeVenta['sucursal'];
+                $numero = $desdeVenta['numero'];
+            } else {
+                // No usar PV/letra del remito (Ferli REM R 9 vs FAC A 12).
+                $tipo = $tipo === 'REM' ? 'FAC' : $tipo;
+                $letra = '';
+                $sucursal = 0;
+                $numero = (int) ($fila['numero_remito'] ?? $numero);
+            }
         }
 
         return [
@@ -324,21 +345,20 @@ class CotGuiaService
             ? $fechaGuia
             : Carbon::parse((string) $fechaGuia);
 
-        $resuelto = $this->resolverFactura(
-            (string) $linea->tipo,
-            (string) $linea->letra,
-            (int) $linea->sucursal,
-            (int) $linea->numero,
-        );
-        if (! ($resuelto['ok'] ?? false)) {
+        $datos = $this->resolverLineaGuia($linea);
+        if ($datos === null) {
             return null;
         }
 
-        $datos = $resuelto['linea'];
         $numeroRemito = (int) ($datos['numero_remito'] ?? $linea->numero);
         if ($numeroRemito < 1) {
             $numeroRemito = (int) $linea->numero;
         }
+
+        $tipoFactura = (string) ($datos['tipo'] ?? $linea->tipo);
+        $letraFactura = (string) ($datos['letra'] ?? $linea->letra);
+        $sucursalFactura = (int) ($datos['sucursal'] ?? $linea->sucursal);
+        $numeroFactura = (int) ($datos['numero'] ?? $linea->numero);
 
         $importe = (float) ($linea->valor_declarado > 0
             ? $linea->valor_declarado
@@ -364,14 +384,14 @@ class CotGuiaService
         $fila = CotImporteRemitoSupport::aplicarAFila([
             'clave' => implode('|', ['REM', 'R', 1, $numeroRemito]),
             'origen' => 'cot_guia',
-            'remito_id' => null,
+            'remito_id' => ((int) ($datos['remito_id'] ?? 0)) ?: null,
             'venta_id' => ((int) ($linea->venta_id ?: ($datos['venta_id'] ?? 0))) ?: null,
             'anita' => [
                 'fuente' => 'guia',
-                'tipo' => $linea->tipo,
-                'letra' => $linea->letra,
-                'sucursal_factura' => (int) $linea->sucursal,
-                'nro_fact' => (int) $linea->numero,
+                'tipo' => $tipoFactura,
+                'letra' => $letraFactura,
+                'sucursal_factura' => $sucursalFactura,
+                'nro_fact' => $numeroFactura,
                 'cliente_codigo' => (string) ($linea->cliente_codigo ?? ''),
             ],
             'cliente_id' => $clienteId ?: null,
@@ -382,7 +402,7 @@ class CotGuiaService
             'fecha_remito' => $fecha->format('Y-m-d'),
             'fecha_factura' => $fecha->format('d/m/Y'),
             'desde_factura' => true,
-            'factura_codigo' => $linea->etiquetaFactura(),
+            'factura_codigo' => (string) ($datos['etiqueta'] ?? $linea->etiquetaFactura()),
             'cliente_codigo' => (string) ($linea->cliente_codigo ?? $datos['cliente_codigo'] ?? ''),
             'cliente_nombre' => (string) ($linea->cliente_nombre ?? $datos['cliente_nombre'] ?? ''),
             'transporte_id' => (int) $reparto['transporte_id'],
@@ -444,41 +464,7 @@ class CotGuiaService
             return null;
         }
 
-        $cliente = $venta->clientes;
-        $transporte = $venta->transportes;
-        $importe = (float) ($venta->total ?? 0);
-        $numeroRemito = (int) ($venta->numeroremito ?: $venta->numerocomprobante);
-        $pv = (int) ($venta->puntoventas->codigo ?? $sucursal);
-        $abr = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? ($tipo !== '' ? $tipo : 'FAC'))));
-        if ($abr === '') {
-            $abr = 'FAC';
-        }
-
-        $letraResuelta = $letra !== '' ? $letra : $this->letraDesdeAnitaODefault($abr, $pv, (int) $venta->numerocomprobante);
-        $pares = $this->paresDeFactura($abr, $letraResuelta, $pv, (int) $venta->numerocomprobante, (int) $venta->id);
-
-        return [
-            'tipo' => substr($abr, 0, 3),
-            'letra' => substr($letraResuelta, 0, 1),
-            'sucursal' => $pv,
-            'numero' => (int) $venta->numerocomprobante,
-            'cliente_codigo' => (string) ($cliente->codigo ?? ''),
-            'cliente_nombre' => (string) ($cliente->nombre ?? ''),
-            'cliente_id' => (int) ($cliente->id ?? 0) ?: null,
-            'bultos' => (float) ($venta->cantidadbulto ?? 0),
-            'cantidad' => $pares,
-            'valor_declarado' => $importe,
-            'transporte_id' => (int) ($transporte->id ?? 0) ?: null,
-            'transporte_codigo' => (string) ($transporte->codigo ?? ''),
-            'entrega' => (string) ($venta->lugarentrega ?? ''),
-            'venta_id' => (int) $venta->id,
-            'numero_remito' => $numeroRemito,
-            'etiqueta' => sprintf('%s %s-%04d-%08d', $abr, $letraResuelta, $pv, (int) $venta->numerocomprobante),
-            'destinatario' => $this->consultaService->destinatarioPublicoDesdeCliente(
-                $cliente,
-                (string) ($cliente->codigo ?? '')
-            ),
-        ];
+        return $this->lineaDesdeVentaErp($venta);
     }
 
     /**
@@ -616,5 +602,157 @@ class CotGuiaService
             $sucursal,
             $numero,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function resolverLineaGuia(CotGuiaLinea $linea): ?array
+    {
+        $ventaId = (int) ($linea->venta_id ?? 0);
+        if ($ventaId > 0) {
+            $venta = Venta::query()
+                ->with([
+                    'clientes.localidades',
+                    'clientes.provincias',
+                    'clientes.condicionivas',
+                    'clientes.tipodocumentos',
+                    'puntoventas',
+                    'tipotransacciones',
+                    'transportes',
+                    'venta_impuestos',
+                ])
+                ->find($ventaId);
+            if ($venta !== null) {
+                return $this->lineaDesdeVentaErp($venta);
+            }
+        }
+
+        $resuelto = $this->resolverFactura(
+            (string) $linea->tipo,
+            (string) $linea->letra,
+            (int) $linea->sucursal,
+            (int) $linea->numero,
+        );
+        if ($resuelto['ok'] ?? false) {
+            return $resuelto['linea'];
+        }
+
+        if (CotGuiaFacturaIdentidadSupport::pareceRemito((string) $linea->tipo, (string) $linea->letra)) {
+            $resuelto = $this->resolverFactura('FAC', '', 0, (int) $linea->numero);
+            if ($resuelto['ok'] ?? false) {
+                return $resuelto['linea'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $linea
+     * @param  array<string, mixed>  $datos
+     * @return array<string, mixed>
+     */
+    private function aplicarIdentidadResuelta(array $linea, array $datos): array
+    {
+        foreach (['tipo', 'letra', 'sucursal', 'numero', 'etiqueta', 'venta_id', 'entrega', 'cliente_codigo', 'cliente_nombre'] as $campo) {
+            if (isset($datos[$campo]) && $datos[$campo] !== '' && $datos[$campo] !== null) {
+                $linea[$campo] = $datos[$campo];
+            }
+        }
+        $linea['bultos'] = (float) ($datos['bultos'] ?? $linea['bultos']);
+        $linea['cantidad'] = (float) ($datos['cantidad'] ?? 0);
+        if ((float) ($datos['valor_declarado'] ?? 0) > 0) {
+            $linea['valor_declarado'] = (float) $datos['valor_declarado'];
+        }
+
+        return $linea;
+    }
+
+    /**
+     * @return array{tipo: string, letra: string, sucursal: int, numero: int}|null
+     */
+    private function identidadDesdeVentaId(?int $ventaId): ?array
+    {
+        if ($ventaId === null || $ventaId < 1) {
+            return null;
+        }
+
+        $venta = Venta::query()
+            ->with(['puntoventas', 'tipotransacciones'])
+            ->find($ventaId);
+
+        return $venta !== null ? CotGuiaFacturaIdentidadSupport::desdeVenta($venta) : null;
+    }
+
+    private function hidratarIdentidadFacturaDesdeVenta(CotGuia $guia): void
+    {
+        $guia->loadMissing(['lineas']);
+        foreach ($guia->lineas as $linea) {
+            if (! CotGuiaFacturaIdentidadSupport::pareceRemito((string) $linea->tipo, (string) $linea->letra)) {
+                continue;
+            }
+            $identidad = $this->identidadDesdeVentaId((int) ($linea->venta_id ?? 0) ?: null);
+            if ($identidad === null) {
+                continue;
+            }
+            $linea->tipo = $identidad['tipo'];
+            $linea->letra = $identidad['letra'];
+            $linea->sucursal = $identidad['sucursal'];
+            $linea->numero = $identidad['numero'];
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function lineaDesdeVentaErp(Venta $venta): array
+    {
+        $cliente = $venta->clientes;
+        $transporte = $venta->transportes;
+        $identidad = CotGuiaFacturaIdentidadSupport::desdeVenta($venta)
+            ?? CotGuiaFacturaIdentidadSupport::normalizar(
+                (string) ($venta->tipotransacciones->abreviatura ?? 'FAC'),
+                'A',
+                (int) ($venta->puntoventas->codigo ?? 0),
+                (int) $venta->numerocomprobante
+            );
+        $pares = $this->paresDeFactura(
+            $identidad['tipo'],
+            $identidad['letra'],
+            $identidad['sucursal'],
+            $identidad['numero'],
+            (int) $venta->id
+        );
+
+        return [
+            'tipo' => $identidad['tipo'],
+            'letra' => $identidad['letra'],
+            'sucursal' => $identidad['sucursal'],
+            'numero' => $identidad['numero'],
+            'cliente_codigo' => (string) ($cliente->codigo ?? ''),
+            'cliente_nombre' => (string) ($cliente->nombre ?? ''),
+            'cliente_id' => (int) ($cliente->id ?? 0) ?: null,
+            'bultos' => (float) ($venta->cantidadbulto ?? 0),
+            'cantidad' => $pares,
+            'valor_declarado' => (float) ($venta->total ?? 0),
+            'transporte_id' => (int) ($transporte->id ?? 0) ?: null,
+            'transporte_codigo' => (string) ($transporte->codigo ?? ''),
+            'entrega' => (string) ($venta->lugarentrega ?? ''),
+            'venta_id' => (int) $venta->id,
+            'remito_id' => (int) ($venta->remito_id ?? 0) ?: null,
+            'numero_remito' => (int) ($venta->numeroremito ?: $venta->numerocomprobante),
+            'etiqueta' => sprintf(
+                '%s %s-%04d-%08d',
+                $identidad['tipo'],
+                $identidad['letra'],
+                $identidad['sucursal'],
+                $identidad['numero']
+            ),
+            'destinatario' => $this->consultaService->destinatarioPublicoDesdeCliente(
+                $cliente,
+                (string) ($cliente->codigo ?? '')
+            ),
+        ];
     }
 }

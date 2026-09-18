@@ -1,7 +1,7 @@
 <template id="template-renglon-retencion">
     <tr class="item-cobranza-retencion">
         <td>
-            <select name="retencion_cobranza_ids[]" data-placeholder="Retenci&oacute;n" class="retencion_cobranza_id form-control required" required data-fouc>
+            <select name="retencion_cobranza_ids[]" data-placeholder="Retenci&oacute;n" class="retencion_cobranza_id form-control" data-fouc>
                 <option value="">-- Seleccionar --</option>
                 @foreach($retencion_cobranza_query as $value)
                     <option value="{{ $value->id }}">{{ $value->nombre }}</option>
@@ -15,7 +15,7 @@
             <input type="text" class="tasaretencion form-control text-right" name="tasa_retenciones[]" value="">
         </td>
         <td>
-            <select name="moneda_retencion_ids[]" data-placeholder="Moneda" class="monedaretencion_id form-control required" required data-fouc>
+            <select name="moneda_retencion_ids[]" data-placeholder="Moneda" class="monedaretencion_id form-control" data-fouc>
                 @foreach($moneda_query as $value)
                     <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>
                 @endforeach

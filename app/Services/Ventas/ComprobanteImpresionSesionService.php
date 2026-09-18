@@ -704,6 +704,7 @@ class ComprobanteImpresionSesionService
                 'codigo' => $programa->codigo,
                 'nombre' => $programa->nombre,
                 'permite_disparo_al_grabar' => (bool) $programa->permite_disparo_al_grabar,
+                'enviar_automatico_al_facturar' => (bool) $programa->enviar_automatico_al_facturar,
             ] : null,
             'pack' => $pack,
             'documentos' => $docs,

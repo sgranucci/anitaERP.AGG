@@ -15,12 +15,15 @@ final class PromovPagadoAnitaMapper
     public static function whereCuota(array $lado): string
     {
         $e = static fn (string $v, int $max = 0) => AplicacionCuentacorrienteAnitaLadoSupport::esc($v, $max);
-        $where = " WHERE prov_proveedor = '".$e($lado['proveedor'], 6)."'
-            AND prov_tipo = '".$e($lado['tipo'], 3)."'
-            AND prov_letra = '".$e($lado['letra'], 1)."'
-            AND prov_sucursal = '".(int) $lado['sucursal']."'
-            AND prov_nro = '".(int) $lado['numero']."'
-            AND prov_nro_cuota = '".(int) $lado['nro_cuota']."' ";
+        $where = ' WHERE prov_proveedor = \''.$e($lado['proveedor'], 6).'\''
+            .' AND prov_tipo = \''.$e($lado['tipo'], 3).'\''
+            .' AND prov_sucursal = \''.(int) $lado['sucursal'].'\''
+            .' AND prov_nro = \''.(int) $lado['numero'].'\''
+            .' AND prov_nro_cuota = \''.(int) $lado['nro_cuota'].'\' ';
+        $letra = $e($lado['letra'], 1);
+        if ($letra !== '' && $letra !== ' ') {
+            $where .= ' AND prov_letra = \''.$letra.'\' ';
+        }
 
         if ((int) ($lado['nro_interno'] ?? 0) > 0) {
             $where .= " AND prov_nro_interno = '".(int) $lado['nro_interno']."' ";

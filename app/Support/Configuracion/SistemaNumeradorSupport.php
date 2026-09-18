@@ -6,6 +6,7 @@ use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\SistemaNumerador;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
+use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -220,15 +221,42 @@ final class SistemaNumeradorSupport
             ->where('empresa_id', $empresaId)
             ->first();
 
-        if ($existente !== null) {
-            return $existente;
+        $clave = null;
+        $sinPuenteDocumento = EntornoEmpresaSupport::esFerli()
+            && strtoupper($abrev) === IngresoEgresoTransferenciaSupport::ABREV_TRA;
+
+        if (! $sinPuenteDocumento) {
+            try {
+                $claveInt = IngresoEgresoAnitaNumeracionSupport::claveNumerador($empresaId, $tipotransaccionCajaId);
+                if ($claveInt > 0) {
+                    $clave = (string) $claveInt;
+                }
+            } catch (\Throwable $e) {
+                // Sin semilla Anita: igual se crea/conserva fila ERP.
+            }
         }
 
-        $clave = null;
-        try {
-            $clave = (string) IngresoEgresoAnitaNumeracionSupport::claveNumerador($empresaId, $tipotransaccionCajaId);
-        } catch (\Throwable $e) {
-            // Sin semilla Anita: igual se crea fila ERP en 0.
+        if ($existente !== null) {
+            // Ferli: alinear semilla AGG (346/223) a tctes/t_comp, o quitar puente TRA.
+            // AGG: no tocar claves ya grabadas.
+            if (EntornoEmpresaSupport::esFerli()) {
+                if ($sinPuenteDocumento && self::tienePuenteAnita($existente)) {
+                    $existente->anita_sistema = null;
+                    $existente->anita_fuente = null;
+                    $existente->anita_clave = null;
+                    $existente->save();
+                } elseif ($clave !== null
+                    && $clave !== ''
+                    && (string) $existente->anita_clave !== $clave
+                ) {
+                    $existente->anita_sistema = IngresoEgresoAnitaNumeracionSupport::sistemaNumerador();
+                    $existente->anita_fuente = 'numerador';
+                    $existente->anita_clave = $clave;
+                    $existente->save();
+                }
+            }
+
+            return $existente;
         }
 
         $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);

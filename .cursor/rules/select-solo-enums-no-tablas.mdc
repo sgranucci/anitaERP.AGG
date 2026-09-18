@@ -1,0 +1,47 @@
+---
+description: Nunca armar un select con filas de una tabla; solo enums o arrays en memoria. Tablas maestras siempre van por modal.
+alwaysApply: true
+---
+
+# Select: solo enums o memoria — tablas van por modal
+
+Un `<select>` **nunca** se llena con registros de una tabla (cuenta de caja, depósito, artículo, empleado, usuario, proveedor, cliente, concepto, cuenta contable, centro de costo, etc.). Eso va **siempre** por el componente de consulta: hidden ID + código editable + descripción readonly + F1 / lupa / modal.
+
+## Select permitido
+
+Solo cuando las opciones **no salen de una query**:
+
+- Enum cerrado del dominio (`estado`, `tipo`, `turno`, `orden`, `formato`).
+- Array o constantes en memoria (`match`, lista hardcodeada, `TIPO_TODOS` / `TIPO_COBRO`).
+- Empresa del usuario: `form-empresa-asignada` o checkboxes de reportes (`asignacion_empresas_checkboxes`).
+
+## Prohibido
+
+```blade
+{{-- ❌ Query/colección de tabla maestra en un select --}}
+<select name="cuentacaja_id">
+    <option value="0">Todas</option>
+    @foreach ($cuentas as $cuenta)
+        <option value="{{ $cuenta->id }}">{{ $cuenta->codigo }} — {{ $cuenta->nombre }}</option>
+    @endforeach
+</select>
+```
+
+## Correcto
+
+```blade
+@include('caja.partials.campo_consulta_cuentacaja', [
+    'prefix' => 'reporte',
+    'layout' => 'form_row',
+    'cuentacajaId' => $cuentaId ?: '',
+    'codigo' => $cuenta->codigo ?? '',
+    'nombre' => $cuenta->nombre ?? '',
+    'required' => false,
+    'ayuda' => 'Vacío = todas las cuentas.',
+])
+@include('includes.caja.modalconsultacuentacaja')
+```
+
+Scripts: `caja/cuentacaja/consulta.js` + eventos F1/Enter/lupa del formulario. En filtros, vacío = sin filtro (todas).
+
+UX de teclado, blur y alertas: `campos-tablas-consulta-modal-teclado.mdc`.

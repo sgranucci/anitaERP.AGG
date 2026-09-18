@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Exports\Caja;
 
+use App\Support\Caja\CierreCajaReporteSecciones;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -37,6 +38,29 @@ class CierreCajaReporteExport implements FromView, WithColumnFormatting, WithCol
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
+    /** @var list<int> */
+    private array $filasSeparador = [];
+
+    /** @var list<int> */
+    private array $filasTituloSeccion = [];
+
+    /** @var list<int> */
+    private array $filasCabeceraSeccion = [];
+
+    /** @var list<int> */
+    private array $filasTotal = [];
+
+    /**
+     * @var list<array{
+     *     header: int,
+     *     from: int,
+     *     to: int,
+     *     col_ultima: string,
+     *     cols_numericas: list<string>
+     * }>
+     */
+    private array $rangosBloque = [];
+
     /**
      * @param  list<array<string, mixed>>  $filas
      * @param  array<string, mixed>  $resultado
@@ -53,8 +77,9 @@ class CierreCajaReporteExport implements FromView, WithColumnFormatting, WithCol
         $filasMeta = $this->contarFilasMetaEncabezado();
         $offsetLogo = $this->hayFilaLogos ? 1 : 0;
         $this->filaTituloExcel = $offsetLogo + 1;
-        $this->filaCabecerasExcel = $offsetLogo + $filasMeta + 1;
-        $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+        $this->mapearFilasBloques($offsetLogo + $filasMeta);
+        $this->filaCabecerasExcel = $this->filasCabeceraSeccion[0] ?? ($offsetLogo + $filasMeta + 1);
+        $this->filaPrimeraDatosExcel = $this->filasTituloSeccion[0] ?? ($this->filaCabecerasExcel);
     }
 
     public function view(): View
@@ -74,10 +99,10 @@ class CierreCajaReporteExport implements FromView, WithColumnFormatting, WithCol
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
-            'D' => '#,##0.00',
-            'E' => '#,##0.00',
-            'F' => '#,##0.00',
-            'G' => '#,##0.00',
+            'D' => NumberFormat::FORMAT_TEXT,
+            'E' => NumberFormat::FORMAT_TEXT,
+            'F' => NumberFormat::FORMAT_TEXT,
+            'G' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -85,10 +110,10 @@ class CierreCajaReporteExport implements FromView, WithColumnFormatting, WithCol
     {
         return [
             'A' => 14,
-            'B' => 32,
-            'C' => 18,
-            'D' => 14,
-            'E' => 14,
+            'B' => 36,
+            'C' => 16,
+            'D' => 16,
+            'E' => 16,
             'F' => 14,
             'G' => 14,
         ];
@@ -96,11 +121,16 @@ class CierreCajaReporteExport implements FromView, WithColumnFormatting, WithCol
 
     public function styles(Worksheet $sheet)
     {
+        $estiloCab = [
+            'font' => ['bold' => true, 'color' => ['rgb' => '17202A'], 'size' => 11, 'name' => 'Arial'],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '85C1E9']],
+        ];
+        if ($this->filasCabeceraSeccion === []) {
+            return [];
+        }
+
         return [
-            $this->filaCabecerasExcel => [
-                'font' => ['bold' => true, 'color' => ['rgb' => '17202A'], 'size' => 11, 'name' => 'Arial'],
-                'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '85C1E9']],
-            ],
+            $this->filasCabeceraSeccion[0] => $estiloCab,
         ];
     }
 
@@ -131,21 +161,51 @@ class CierreCajaReporteExport implements FromView, WithColumnFormatting, WithCol
                 $filaTit = $this->filaTituloExcel;
                 $ultimaMeta = $filaTit + $filasMeta - 1;
                 for ($f = $filaTit; $f <= $ultimaMeta; $f++) {
-                    $sheet->mergeCells('A'.$f.':'.self::COL_ULTIMA.$f);
+                    $this->mergeSiHaceFalta($sheet, 'A'.$f.':'.self::COL_ULTIMA.$f);
                 }
                 $sheet->getRowDimension($filaTit)->setRowHeight(28);
                 $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
                     'font' => ['bold' => true, 'size' => 16, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
                 ]);
-                $sheet->getStyle('A'.($filaTit + 1).':'.self::COL_ULTIMA.$ultimaMeta)->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 10, 'name' => 'Arial', 'color' => ['rgb' => '444444']],
-                ]);
-                $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.self::COL_ULTIMA.$this->filaCabecerasExcel)
-                    ->applyFromArray([
+                if ($ultimaMeta > $filaTit) {
+                    $sheet->getStyle('A'.($filaTit + 1).':'.self::COL_ULTIMA.$ultimaMeta)->applyFromArray([
+                        'font' => ['bold' => true, 'size' => 10, 'name' => 'Arial', 'color' => ['rgb' => '444444']],
+                    ]);
+                }
+                foreach ($this->filasSeparador as $filaSep) {
+                    $this->mergeSiHaceFalta($sheet, 'A'.$filaSep.':'.self::COL_ULTIMA.$filaSep);
+                    $sheet->getRowDimension($filaSep)->setRowHeight(18);
+                }
+                foreach ($this->filasTituloSeccion as $filaTitulo) {
+                    $this->mergeSiHaceFalta($sheet, 'A'.$filaTitulo.':'.self::COL_ULTIMA.$filaTitulo);
+                    $sheet->getRowDimension($filaTitulo)->setRowHeight(22);
+                    $sheet->getStyle('A'.$filaTitulo.':'.self::COL_ULTIMA.$filaTitulo)->applyFromArray([
+                        'font' => ['bold' => true, 'size' => 11, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D6EAF8']],
+                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
+                    ]);
+                }
+                foreach ($this->rangosBloque as $rango) {
+                    $colUlt = $rango['col_ultima'];
+                    $sheet->getStyle('A'.$rango['header'].':'.$colUlt.$rango['header'])->applyFromArray([
                         'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '85C1E9']],
                         'font' => ['bold' => true, 'color' => ['rgb' => '17202A'], 'name' => 'Arial', 'size' => 11],
                     ]);
+                    if ($rango['from'] <= $rango['to'] && $rango['cols_numericas'] !== []) {
+                        foreach ($rango['cols_numericas'] as $col) {
+                            $sheet->getStyle($col.$rango['from'].':'.$col.$rango['to'])->applyFromArray([
+                                'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
+                            ]);
+                        }
+                    }
+                }
+                foreach ($this->filasTotal as $filaTotal) {
+                    $sheet->getStyle('A'.$filaTotal.':'.self::COL_ULTIMA.$filaTotal)->applyFromArray([
+                        'font' => ['bold' => true, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
+                        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => 'D5D8DC']],
+                    ]);
+                }
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];
@@ -164,5 +224,43 @@ class CierreCajaReporteExport implements FromView, WithColumnFormatting, WithCol
         }
 
         return $filasMeta;
+    }
+
+    private function mergeSiHaceFalta(Worksheet $sheet, string $range): void
+    {
+        foreach ($sheet->getMergeCells() as $merged) {
+            if ($merged === $range) {
+                return;
+            }
+        }
+        $sheet->mergeCells($range);
+    }
+
+    private function mapearFilasBloques(int $filaAnterior): void
+    {
+        $fila = $filaAnterior;
+        foreach (CierreCajaReporteSecciones::bloques($this->resultado) as $bloque) {
+            $fila++;
+            $this->filasSeparador[] = $fila;
+            $fila++;
+            $this->filasTituloSeccion[] = $fila;
+            $fila++;
+            $this->filasCabeceraSeccion[] = $fila;
+            $header = $fila;
+            $from = $fila + 1;
+            foreach ($bloque['filas'] as $r) {
+                $fila++;
+                if (($r['tipo_fila'] ?? '') === 'total') {
+                    $this->filasTotal[] = $fila;
+                }
+            }
+            $this->rangosBloque[] = [
+                'header' => $header,
+                'from' => $from,
+                'to' => $fila,
+                'col_ultima' => (string) $bloque['col_ultima'],
+                'cols_numericas' => $bloque['cols_numericas'],
+            ];
+        }
     }
 }

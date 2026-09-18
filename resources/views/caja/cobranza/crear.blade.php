@@ -10,6 +10,7 @@
 @include('includes.contable.asiento_montos_formato_js')
 <script src="{{ asset('assets/pages/scripts/contable/asiento/asiento_externo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/asiento_externo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'cobranza'])
 <script src="{{ asset('assets/pages/scripts/caja/banco/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/cobranza/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cobranza/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/cobranza/descuento_comprobante.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cobranza/descuento_comprobante.js')) ?: time() }}" type="text/javascript"></script>
@@ -42,7 +43,7 @@ window.chequeRechazoNdUrls = {
                     </a>
                 </div>
             </div>
-            <form action="{{ route('guardar_cobranza') }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{ route('guardar_cobranza') }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" data-usuario-id="{{ auth()->id() }}" data-mensaje-grabacion="Grabando cobranza…">
                 @csrf
                 @if (isset($caja_id))
                     <input type="hidden" class="caja_id" id="caja_id" name="caja_id" value="{{ $caja_id ?? '' }}">

@@ -212,6 +212,56 @@ final class ComprobanteImpresionResolverSupport
         return $progEmp === (int) $empresaId;
     }
 
+    /**
+     * Pedido, mostrador y picking: si el programa pide abrir el proceso de impresión.
+     */
+    public static function dispararProcesoImpresionAlFacturar(?int $ventaId, ?int $remitoId, ?int $pedidoId): bool
+    {
+        $programa = self::programaDesdeDocumentos((int) $ventaId, (int) $remitoId, (int) $pedidoId);
+        if (! $programa) {
+            return false;
+        }
+
+        return (bool) $programa->permite_disparo_al_grabar;
+    }
+
+    /**
+     * Si el programa pide mandar a impresora al facturar (vs. quedarse en la sesión).
+     */
+    public static function enviarAutomaticoAlFacturar(?int $ventaId, ?int $remitoId, ?int $pedidoId): bool
+    {
+        $programa = self::programaDesdeDocumentos((int) $ventaId, (int) $remitoId, (int) $pedidoId);
+        if (! $programa) {
+            return true;
+        }
+
+        return (bool) $programa->enviar_automatico_al_facturar;
+    }
+
+    public static function programaDesdeDocumentos(int $ventaId, int $remitoId, int $pedidoId): ?ComprobanteImpresionPrograma
+    {
+        if ($ventaId > 0) {
+            $venta = Venta::query()->with(['puntoventas', 'transportes'])->find($ventaId);
+            if ($venta) {
+                return self::contextoDesdeVenta($venta)['programa'] ?? null;
+            }
+        }
+        if ($remitoId > 0) {
+            $remito = Remito::query()->find($remitoId);
+            if ($remito) {
+                return self::contextoDesdeRemito($remito)['programa'] ?? null;
+            }
+        }
+        if ($pedidoId > 0) {
+            $pedido = Pedido::query()->find($pedidoId);
+            if ($pedido) {
+                return self::contextoDesdePedido($pedido)['programa'] ?? null;
+            }
+        }
+
+        return null;
+    }
+
     private static function provinciaEntregaId(?int $clienteEntregaId): ?int
     {
         if ($clienteEntregaId === null || $clienteEntregaId <= 0) {

@@ -120,8 +120,9 @@ class CierreCajaReporteController extends Controller
                 }
                 $nombre = 'reporte_cierre_caja';
                 $pdf = \App::make('dompdf.wrapper');
+                $pdf->loadHTML($view);
                 $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view)->save($path.'/'.$nombre.'.pdf');
+                $pdf->save($path.'/'.$nombre.'.pdf');
 
                 return response()->download($path.'/'.$nombre.'.pdf');
 

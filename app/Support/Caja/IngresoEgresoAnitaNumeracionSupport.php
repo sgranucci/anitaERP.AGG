@@ -4,6 +4,8 @@ namespace App\Support\Caja;
 
 use App\ApiAnita;
 use App\Models\Caja\Tipotransaccion_Caja;
+use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\SistemaNumeradorSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Log;
@@ -11,12 +13,17 @@ use Illuminate\Support\Facades\Log;
 /**
  * Numeración IE (OPP/OPA/EGR/ING/TRA) alineada a Anita ventas.numerador (num_clave por empresa).
  *
- * Semillas default (num_clave):
+ * Semillas default (num_clave AGG):
  * - OPP: 223/224/225 (emp 1/2/3) — misma semilla que OP MultiEmpresa O1/O2/O3
  * - OPA: mismas claves que OPP (el tipo de comprobante diferencia anticipo vs pago)
  * - EGR: 361/362/363
  * - ING: 346/347/348
  * - TRA: 334/335/336
+ *
+ * Solo Ferli (no usa esas semillas):
+ * - OPP/OPA: t_comp (OPP→203)
+ * - ING/EGR: tctes_numero (ambos 304)
+ * - TRA: sin numerador de documento en Anita (tesmov nativo TED/TEH 308/309)
  *
  * El resto de tipos (COB/REM/RMI/…) sigue con semilla propia ERP (MAX+1).
  * Se puede apagar con CAJA_IE_ANITA_NUMERACION_HABILITADA=false.
@@ -111,12 +118,34 @@ final class IngresoEgresoAnitaNumeracionSupport
             );
         }
 
+        if (EntornoEmpresaSupport::esFerli() && in_array($abrev, ['OPP', 'OPA'], true)) {
+            $desdeTcomp = self::claveNumeradorOpDesdeTComp($empresaId);
+            if ($desdeTcomp > 0) {
+                return $desdeTcomp;
+            }
+        }
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            $desdeTctes = self::claveNumeradorDesdeTctes($abrev);
+            if ($desdeTctes > 0) {
+                return $desdeTctes;
+            }
+            if ($abrev === 'TRA') {
+                throw new \RuntimeException(
+                    'Ferli no tiene numerador Anita de documento para TRA (tesmov nativo TED/TEH).'
+                );
+            }
+        }
+
         $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
         if ($empresaAnita <= 0) {
             throw new \RuntimeException('No se pudo resolver código Anita de empresa '.$empresaId.' para numerar IE.');
         }
 
         $clave = (int) ($mapa[$abrev][$empresaAnita] ?? 0);
+        if ($clave <= 0 && EntornoEmpresaSupport::esFerli()) {
+            $clave = (int) ($mapa[$abrev][1] ?? 0);
+        }
         if ($clave <= 0) {
             throw new \RuntimeException(
                 'Sin semilla Anita para '.$abrev.' / empresa Anita '.$empresaAnita
@@ -125,6 +154,83 @@ final class IngresoEgresoAnitaNumeracionSupport
         }
 
         return $clave;
+    }
+
+    /**
+     * Ferli: ING/EGR (y otros) vía tctes_numero → ventas.numerador.
+     * No usar ventas.t_comp ING (en Ferli es ingreso de stock, clave 127).
+     */
+    public static function claveNumeradorDesdeTctes(string $abreviatura): int
+    {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return 0;
+        }
+
+        $abrev = strtoupper(substr(trim($abreviatura), 0, 3));
+        if ($abrev === '') {
+            return 0;
+        }
+
+        try {
+            $sistema = (string) config('caja.ingresoegreso_anita_tesmov_sistema', 'che_ban');
+            $raw = (new ApiAnita)->apiCallEscritura([
+                'acc' => 'list',
+                'sistema' => $sistema,
+                'tabla' => 'tctes',
+                'campos' => 'tctes_clave,tctes_numero,tctes_desc',
+                'whereArmado' => ' WHERE tctes_clave = '.self::escSqlLiteral($abrev),
+            ], 'caja IE tctes numerador '.$abrev);
+
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err !== null) {
+                Log::warning('caja.ie.numeracion.tctes', [
+                    'abrev' => $abrev,
+                    'error' => $err,
+                ]);
+
+                return 0;
+            }
+
+            $fila = ApiAnita::primeraFilaLista((string) $raw);
+            $numero = ltrim(trim((string) ($fila->tctes_numero ?? '')), '0');
+            if ($numero === '' || $numero === '0') {
+                return 0;
+            }
+
+            return max(0, (int) $numero);
+        } catch (\Throwable $e) {
+            Log::warning('caja.ie.numeracion.tctes_exception', [
+                'abrev' => $abrev,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 0;
+        }
+    }
+
+    /**
+     * Ferli: clave de numerador de OP vía t_comp (mismo criterio que pago a proveedores).
+     * AGG no usa este camino.
+     */
+    public static function claveNumeradorOpDesdeTComp(int $empresaId): int
+    {
+        if (! EntornoEmpresaSupport::esFerli()) {
+            return 0;
+        }
+
+        try {
+            $claveTcomp = PagoproveedorAnitaNumeracionSupport::claveTCompParaEmpresa($empresaId);
+            $refer = PagoproveedorAnitaNumeracionSupport::resolverClaveNumeradorDesdeTComp($claveTcomp);
+
+            return max(0, (int) $refer);
+        } catch (\Throwable $e) {
+            Log::warning('caja.ie.numeracion.tcomp_op', [
+                'empresa_id' => $empresaId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return 0;
+        }
     }
 
     public static function leerUltimoNumero(int $claveNumerador): int

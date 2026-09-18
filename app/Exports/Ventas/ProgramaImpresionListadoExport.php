@@ -23,7 +23,7 @@ class ProgramaImpresionListadoExport implements FromView, ShouldAutoSize, WithCo
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'G';
+    private const COL_ULTIMA = 'H';
 
     /** @var array<string, mixed>|string|null */
     private $filtros;
@@ -125,6 +125,7 @@ class ProgramaImpresionListadoExport implements FromView, ShouldAutoSize, WithCo
             'E' => 12,
             'F' => 10,
             'G' => 18,
+            'H' => 24,
         ];
     }
 

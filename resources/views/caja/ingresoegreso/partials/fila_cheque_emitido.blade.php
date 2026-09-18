@@ -60,7 +60,6 @@
     <td>
         @php
             $caracterEnum = $caracter_enum ?? \App\Models\Caja\Cheque::$enumCaracter;
-            $paraDepEnum = $para_dep_enum ?? \App\Models\Caja\Cheque::$enumParaDep;
             $negociableEnum = $negociable_enum ?? \App\Models\Caja\Cheque::$enumNegociable;
             $caracterVal = (string) ($cheque?->caracter
                 ?: \App\Support\Caja\ChequePropioInstrumentoSupport::caracterDefault());
@@ -74,23 +73,21 @@
                     ?: \App\Support\Caja\ChequePropioInstrumentoSupport::negociableDefault())
             );
         @endphp
-        <select name="caracter_emitidos[]" class="form-control form-control-sm caracter_emitido" title="Carácter legal (impreso)">
+        <label class="d-block text-muted mb-0" style="font-size:10px;line-height:1.2;">A la orden</label>
+        <select name="caracter_emitidos[]" class="form-control form-control-sm caracter_emitido" title="Texto legal impreso en el cheque. Por defecto: No a la orden.">
             @foreach ($caracterEnum as $car)
                 @if ($car['valor'] !== 'R')
                     <option value="{{ $car['valor'] }}" @selected($car['valor'] === $caracterVal)>{{ $car['nombre'] }}</option>
                 @endif
             @endforeach
         </select>
-        <select name="para_dep_emitidos[]" class="form-control form-control-sm para_dep_emitido mt-1" title="Anita para depositar (cpro_para_dep)">
-            @foreach ($paraDepEnum as $pd)
-                <option value="{{ $pd['valor'] }}" @selected($pd['valor'] === $paraDepVal)>{{ $pd['nombre'] }}</option>
-            @endforeach
-        </select>
-        <select name="negociable_emitidos[]" class="form-control form-control-sm negociable_emitido mt-1" title="Anita negociable: físico / electrónico">
+        <label class="d-block text-muted mb-0 mt-1" style="font-size:10px;line-height:1.2;">F&iacute;sico / e-cheq</label>
+        <select name="negociable_emitidos[]" class="form-control form-control-sm negociable_emitido" title="Sale de la chequera: f&iacute;sico o e-cheq">
             @foreach ($negociableEnum as $neg)
                 <option value="{{ $neg['valor'] }}" @selected($neg['valor'] === $negociableVal)>{{ $neg['nombre'] }}</option>
             @endforeach
         </select>
+        <input type="hidden" name="para_dep_emitidos[]" class="para_dep_emitido" value="{{ $paraDepVal }}">
         <input type="hidden" name="nro_echeq_emitidos[]" class="nro_echeq_emitido" value="{{ $cheque?->nro_echeq ?? '' }}">
         <input type="hidden" name="fecha_entrega_emitidos[]" class="fecha_entrega_emitido" value="{{ $cheque?->fecha_entrega ?? '' }}">
     </td>
@@ -103,7 +100,7 @@
     <td>
         <select name="moneda_emitido_ids[]" class="form-control form-control-sm moneda_emitido_id">
             @foreach ($moneda_query as $m)
-                <option value="{{ $m->id }}" @selected($cheque && (int) $m->id === (int) $cheque->moneda_id)>{{ $m->abreviatura }}</option>
+                <option value="{{ $m->id }}" @selected(($cheque && (int) $m->id === (int) $cheque->moneda_id) || (! $cheque && (int) $m->id === (int) config('cotizacion.ID_MONEDA_DEFAULT', 1)))>{{ $m->abreviatura }}</option>
             @endforeach
         </select>
     </td>

@@ -26,6 +26,7 @@ use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
+use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
@@ -525,19 +526,7 @@ class IngresoEgresoService
 		$solicitudpagoId = IngresoEgresoSolicitudpagoSupport::solicitudpagoIdDesdeData($data);
 
 		$tipotransaccion_caja = $this->tipotransaccion_cajaRepository->find($tipotransaccion_caja_id);
-		$signo = 1;
-		if ($tipotransaccion_caja)
-		{
-			if ($tipotransaccion_caja->signo == 'I')
-				$signo = 1;
-			else
-				$signo = -1;
-		}
-
-		// Transferencia (TRA): los montos ya vienen firmados (+ entrada / − salida).
-		if (IngresoEgresoTransferenciaSupport::esTransferencia($tipotransaccion_caja)) {
-			$signo = 1;
-		}
+		$signo = IngresoEgresoCajaMontoSignoSupport::signoPersistencia($tipotransaccion_caja);
 
 		// Pago desde SP: asiento = cuentas de la solicitud (on the fly).
 		if ($solicitudpagoId > 0 && count($datosContables) == 0) {
@@ -558,6 +547,16 @@ class IngresoEgresoService
 					}
 				}
 				if ($monedaId <= 0) {
+					foreach ($datosChequesEmitidos as $chequeSp) {
+						$monedaMov = (int) ($chequeSp->moneda_ids ?? 0);
+						if ($monedaMov > 0) {
+							$monedaId = $monedaMov;
+							$cotizacion = $chequeSp->cotizaciones ?? 1;
+							break;
+						}
+					}
+				}
+				if ($monedaId <= 0) {
 					$monedaId = 1;
 				}
 
@@ -570,6 +569,42 @@ class IngresoEgresoService
 					(int) $signo
 				);
 				if ($asientoSp !== []) {
+					$lineasCheques = [];
+					IngresoEgresoChequeAsientoSupport::agregarLineasCheques(
+						$lineasCheques,
+						$datosChequesEmitidos,
+						$datosChequesRecibidos,
+						$datosChequesReemplazo,
+						$signo,
+						$empresa_id,
+						$fechaOperacion,
+						$this->cuentacajaRepository,
+						$this->cuentacontableRepository
+					);
+					if ($lineasCheques !== []) {
+						$hayCaja = false;
+						foreach ($datosCaja as $movCajaSp) {
+							if ((int) ($movCajaSp->cuentacaja_ids ?? 0) > 0
+								&& abs((float) ($movCajaSp->montos ?? 0)) > 0.01) {
+								$hayCaja = true;
+								break;
+							}
+						}
+						$financierasCaja = [];
+						if ($hayCaja) {
+							$financierasCaja = array_values(array_filter(
+								$asientoSp,
+								static fn (array $linea) => IngresoEgresoSolicitudpagoSupport::esCodigoCajaBanco(
+									(string) ($linea['codigo'] ?? '')
+								)
+							));
+						}
+						$asientoSp = IngresoEgresoSolicitudpagoSupport::reemplazarPiernaFinanciera(
+							$asientoSp,
+							array_merge($financierasCaja, $lineasCheques)
+						);
+					}
+
 					return ['mensaje' => 'ok', 'asiento' => $asientoSp];
 				}
 			}

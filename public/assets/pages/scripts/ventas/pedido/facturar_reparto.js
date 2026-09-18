@@ -186,12 +186,18 @@
             );
         });
 
-        var puedeImprimir = !!(resultadoImpresion.completa || resultadoImpresion.elegir);
+        var puedeCompleta = !!resultadoImpresion.completa;
+        var puedeElegir = !!resultadoImpresion.elegir;
+        var puedeImprimir = puedeCompleta || puedeElegir;
         $('#opciones-impresion-reparto').toggle(puedeImprimir);
-        $('#reparto_imp_completa').prop('disabled', !resultadoImpresion.completa);
-        $('#reparto_imp_elegir').prop('disabled', !resultadoImpresion.elegir);
-        if (puedeImprimir && resultadoImpresion.completa) {
+        $('#reparto_imp_completa').prop('disabled', !puedeCompleta);
+        $('#wrap-reparto-imp-completa').toggle(puedeCompleta);
+        $('#reparto_imp_elegir').prop('disabled', !puedeElegir);
+        $('#wrap-reparto-imp-elegir').toggle(puedeElegir);
+        if (puedeCompleta) {
             $('#reparto_imp_completa').prop('checked', true);
+        } else if (puedeElegir) {
+            $('#reparto_imp_elegir').prop('checked', true);
         } else {
             $('#reparto_imp_ninguna').prop('checked', true);
         }

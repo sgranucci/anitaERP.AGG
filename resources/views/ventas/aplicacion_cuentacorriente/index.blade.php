@@ -13,7 +13,10 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}" type="text/javascript"></script>
+@php
+    $accClienteJs = public_path('assets/pages/scripts/ventas/cliente/consulta.js');
+@endphp
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ is_file($accClienteJs) ? filemtime($accClienteJs) : time() }}" type="text/javascript"></script>
 <script>
     window.APLICACION_CC_INICIAL = @json($aplicacionCcInicial);
 </script>
@@ -63,21 +66,25 @@
         <div class="form-row align-items-end">
             <div class="form-group col-md-2 mb-2">
                 <label class="small mb-1">Empresa</label>
-                <select name="empresa_id" id="empresa_id" class="form-control form-control-sm">
-                    <option value="">Todas</option>
-                    @foreach ($empresa_query as $e)
-                        <option value="{{ $e->id }}" @selected((int) $empresa_id === (int) $e->id)>{{ $e->nombre }}</option>
-                    @endforeach
-                </select>
+                @include('includes.form-empresa-asignada-control', [
+                    'empresa_query' => $empresa_query,
+                    'empresa_id' => $empresa_id ?: null,
+                    'required' => false,
+                    'permite_vacio' => collect($empresa_query)->count() !== 1,
+                    'opcion_vacia' => 'Todas',
+                    'select_class' => 'form-control-sm',
+                ])
             </div>
-            <div class="form-group col-md-4 mb-2">
+            <div class="form-group col-md-4 mb-2 tm-cliente-campo gastro-campo-consulta">
                 <label class="small mb-1">Cliente</label>
                 <div class="input-group input-group-sm">
                     <input type="hidden" name="cliente_id" id="cliente_id" class="cliente_id" value="{{ $cliente_id ?: '' }}">
-                    <input type="text" class="form-control codigocliente" id="codigocliente" placeholder="Código" value="{{ $codigoCliente }}">
+                    <input type="text" class="form-control codigocliente" id="codigocliente"
+                           placeholder="Código" value="{{ $codigoCliente }}" autocomplete="off"
+                           title="Código de cliente. F1 = consulta, Enter = resolver">
                     <input type="text" class="form-control nombrecliente" id="nombrecliente" readonly placeholder="Nombre" value="{{ $nombreCliente }}">
                     <div class="input-group-append">
-                        <button type="button" class="btn btn-info consultacliente" title="Consultar"><i class="fa fa-search"></i></button>
+                        <button type="button" class="btn btn-info consultacliente" title="Consultar clientes (F1)"><i class="fa fa-search"></i></button>
                     </div>
                 </div>
             </div>

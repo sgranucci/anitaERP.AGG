@@ -2548,6 +2548,7 @@ Route::get('ventas/impresion-sesion/descargar', 'Ventas\ComprobanteImpresionSesi
 Route::get('ventas/factura/generanotadecredito/{id}', 'Ventas\FacturacionController@generaNotaDeCredito')->name('generar_notadecredito');
 Route::post('ventas/factura/consulta-referencia', 'Ventas\FacturacionController@consultaComprobanteReferencia')->name('consulta_factura_referencia');
 Route::get('ventas/factura/resolver-referencia', 'Ventas\FacturacionController@resolverComprobanteReferencia')->name('resolver_factura_referencia');
+Route::post('ventas/factura/consulta-facturas-por-articulo', 'Ventas\FacturacionController@consultaFacturasPorArticulo')->name('consulta_facturas_por_articulo');
 Route::post('ventas/calcula_factura_general', 'Ventas\FacturacionController@calculaFacturaGeneral')->name('calcula_factura_general');
 
 /* PRODUCCION */
@@ -2729,6 +2730,7 @@ Route::post('caja/cheque', 'Caja\ChequeController@guardar')->name('guardar_chequ
 Route::post('caja/cheque/consulta-cartera', 'Caja\ChequeController@consultaCartera')->name('consulta_cheque_cartera');
 Route::post('caja/cheque/resolver-cartera', 'Caja\ChequeController@resolverCartera')->name('resolver_cheque_cartera');
 Route::post('caja/cheque/depositar-masivo', 'Caja\ChequeController@depositarMasivo')->name('depositar_masivo_cheque');
+Route::get('caja/cheque/comprobante-deposito', 'Caja\ChequeController@comprobanteDeposito')->name('comprobante_deposito_cheque');
 Route::post('caja/cheque/acreditar-masivo', 'Caja\ChequeController@acreditarMasivo')->name('acreditar_masivo_cheque');
 Route::post('caja/cheque/caucionar-masivo', 'Caja\ChequeController@caucionarMasivo')->name('caucionar_masivo_cheque');
 Route::get('caja/cheque/{id}/rechazo-nd', 'Caja\ChequeController@datosRechazoNd')->name('datos_rechazo_nd_cheque');

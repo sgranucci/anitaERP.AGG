@@ -2,15 +2,30 @@
 
 namespace App\Support\Caja;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
+
 /**
  * Mapeo cpromae de cheques propios emitidos (CHP), alineado a lo que graba Anita pago.c.
  *
  * Muestra típica MACRO (79030350–79030365):
  * estado espacio (diferido / no debitado), cotización 1 si PES, para_dep E,
  * negociable N (física), estado_banco espacio, fecha_entrega/sucursal/tipo_distrib 0.
+ *
+ * Ferli: schema che_ban.cpromae sin columnas extendidas (cpro_fecha_entrega, cpro_empresa, …).
+ * Esas claves se omiten al mapear para no romper el INSERT. AGG las sigue grabando.
  */
 final class ChequePropioCpromaeAnitaMapper
 {
+    /** Columnas AGG que no existen en cpromae Ferli. */
+    private const CAMPOS_EXTENDIDOS = [
+        'cpro_fecha_entrega',
+        'cpro_empresa',
+        'cpro_negociable',
+        'cpro_estado_banco',
+        'cpro_sucursal_pago',
+        'cpro_tipo_distrib',
+        'cpro_nro_e_cheq',
+    ];
     /**
      * @param  array{
      *   cuenta?:string,
@@ -67,7 +82,7 @@ final class ChequePropioCpromaeAnitaMapper
         $proveedor = str_pad(ltrim((string) ($in['proveedor'] ?? '0'), '0') ?: '0', 6, '0', STR_PAD_LEFT);
         $modelo = (int) preg_replace('/\D/', '', (string) ($in['chequera_codigo'] ?? '0'));
 
-        return [
+        $out = [
             'cpro_cuenta' => $cuenta,
             'cpro_nro_cheque' => (string) $nro,
             'cpro_fecha_cheque' => self::ymd($in['fecha_pago'] ?? ''),
@@ -97,6 +112,14 @@ final class ChequePropioCpromaeAnitaMapper
             'cpro_tipo_distrib' => $tipoDist !== '' ? $tipoDist : '0',
             'cpro_nro_e_cheq' => $negociable === 'E' ? ($nroEcheq !== '' ? $nroEcheq : (string) $nro) : ' ',
         ];
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            foreach (self::CAMPOS_EXTENDIDOS as $campo) {
+                unset($out[$campo]);
+            }
+        }
+
+        return $out;
     }
 
     public static function estado(string $fechaEmision, string $fechaPago, string $estadoErp = ''): string

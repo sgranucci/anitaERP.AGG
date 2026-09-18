@@ -15,6 +15,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'factura'])
 @php
     $layoutItemsPedido = $layoutItemsPedido ?? facturaUsaLayoutItemsPedido();
 @endphp
@@ -29,6 +30,7 @@
 @include('ventas.partials.aviso_deposito_facturacion')
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/factura/consulta_referencia.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/consulta_referencia.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/factura/nc_devolucion.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/nc_devolucion.js')) ?: time() }}" type="text/javascript"></script>
 @if ($layoutItemsPedido)
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear-bierzo-items.js')) ?: time() }}" type="text/javascript"></script>
 @endif
@@ -76,7 +78,7 @@
         @include('includes.mensaje')
         <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Crear comprobante de venta</h3>
+                <h3 class="card-title">{{ ! empty($modoNc) ? 'Crear nota de crédito' : 'Crear comprobante de venta' }}</h3>
                 <div class="card-tools">
                     @include('includes.ventas.link_mi_impresora')
                     <a href="{{route('factura')}}" class="btn btn-outline-info btn-sm">
@@ -87,7 +89,7 @@
             <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="factura" data-sin-bloqueo-grabacion="1" data-factura-redirect="{{ route('factura') }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
                 @csrf
                 <div class="card-body">
-                    @php $datos = ["funcion" => "crear", "layoutItemsPedido" => $layoutItemsPedido]; @endphp
+                    @php $datos = ["funcion" => "crear", "layoutItemsPedido" => $layoutItemsPedido, "modoNc" => ! empty($modoNc)]; @endphp
                     @include('ventas.factura.form', $datos)
                 </div>
                 <div class="card-footer">

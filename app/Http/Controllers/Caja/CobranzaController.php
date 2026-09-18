@@ -289,8 +289,8 @@ class CobranzaController extends Controller
         can('actualizar-cobranza');
 
         session(['empresa_id' => $request->empresa_id]);
-        session(['tipotransaccion_caja_id' => $request->tipotransaccion_caja_id]);
-        
+        session(['tipotransaccioncobranza_caja_id' => $request->tipotransaccion_caja_id]);
+
         return $this->cobranzaService->actualizaCobranza($request, $id);
     }
 

@@ -25,6 +25,7 @@ class ValidacionTiposuspensioncliente extends FormRequest
     {
         return [
             'nombre' => 'required|max:255|unique:tiposuspensioncliente,nombre,' . $this->route('id'),
+            'codigo' => 'nullable|in:MOROSO,PROFORMA,BLOQUEADO',
         ];
     }
 }

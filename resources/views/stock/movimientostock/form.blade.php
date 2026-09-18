@@ -384,7 +384,7 @@
     				<th class="col-comb">Combinaci&oacute;n</th>
     				<th class="col-mod">M&oacute;dulo</th>
     				<th class="col-qty text-right">Cantidad</th>
-    				<th class="col-precio text-right" title="Modo calzados: precio por talle/lista.">Precio</th>
+    				<th class="col-precio text-right" title="Calzado: se sugiere por talle/lista y se puede corregir. No venta: editable (última compra).">Precio</th>
 					<th class="col-flag" title="Todos los art&iacute;culos">A</th>
     				<th class="col-flag" title="Todas las combinaciones">C</th>
                     @else

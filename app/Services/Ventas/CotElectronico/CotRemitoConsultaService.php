@@ -10,6 +10,7 @@ use App\Models\Ventas\CotRemitoEnvio;
 use App\Models\Ventas\Remito;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\ArbaCotProvinciaSupport;
+use App\Support\Ventas\CotGuiaFacturaIdentidadSupport;
 use App\Support\Ventas\CotImporteRemitoSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
 use App\Support\Ventas\RemitoEstadosSupport;
@@ -250,6 +251,7 @@ class CotRemitoConsultaService
                 'puntoventas',
                 'ventas.venta_impuestos',
                 'ventas.tipotransacciones',
+                'ventas.puntoventas',
                 'remito_articulos.articulos.unidadesdemedidas',
             ])
             ->orderBy('numero')
@@ -457,12 +459,34 @@ class CotRemitoConsultaService
             'remito_erp' => $this->calcularImporteLineasRemito($remito),
         ]);
 
+        $venta = $remito->ventas;
+        $identidadFactura = $venta !== null
+            ? CotGuiaFacturaIdentidadSupport::desdeVenta($venta)
+            : null;
+        $anita = $identidadFactura === null ? null : [
+            'fuente' => 'erp_venta',
+            'tipo' => $identidadFactura['tipo'],
+            'letra' => $identidadFactura['letra'],
+            'sucursal_factura' => $identidadFactura['sucursal'],
+            'nro_fact' => $identidadFactura['numero'],
+            'cliente_codigo' => (string) ($cliente->codigo ?? ''),
+        ];
+        $facturaCodigo = $identidadFactura === null
+            ? ''
+            : sprintf(
+                '%s %s-%04d-%08d',
+                $identidadFactura['tipo'],
+                $identidadFactura['letra'],
+                $identidadFactura['sucursal'],
+                $identidadFactura['numero']
+            );
+
         return CotImporteRemitoSupport::aplicarAFila([
             'clave' => $this->claveRemito('REM', 'R', $sucursal, $numeroRemito),
             'origen' => 'erp',
             'remito_id' => (int) $remito->id,
             'venta_id' => (int) ($remito->venta_id ?? 0) ?: null,
-            'anita' => null,
+            'anita' => $anita,
             'cliente_id' => (int) ($cliente->id ?? 0) ?: null,
             'tipo' => 'REM',
             'letra' => 'R',
@@ -471,7 +495,7 @@ class CotRemitoConsultaService
             'fecha_remito' => $fechaRemito->format('Y-m-d'),
             'fecha_factura' => $fechaRemito->format('d/m/Y'),
             'desde_factura' => (int) ($remito->venta_id ?? 0) > 0,
-            'factura_codigo' => '',
+            'factura_codigo' => $facturaCodigo,
             'cliente_codigo' => (string) ($cliente->codigo ?? ''),
             'cliente_nombre' => trim((string) ($cliente->nombre ?? '')),
             'transporte_id' => $transporteId,
@@ -1160,6 +1184,13 @@ class CotRemitoConsultaService
 
         if ($origen === 'erp') {
             return $this->productosDesdeRemitoErp((int) ($filaRemito['remito_id'] ?? 0));
+        }
+
+        if ($origen === 'cot_guia') {
+            $desdeRemito = $this->productosDesdeRemitoErp((int) ($filaRemito['remito_id'] ?? 0));
+            if ($desdeRemito !== []) {
+                return $desdeRemito;
+            }
         }
 
         $anita = $filaRemito['anita'] ?? null;

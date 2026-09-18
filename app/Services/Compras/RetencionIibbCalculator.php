@@ -5,10 +5,11 @@ namespace App\Services\Compras;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\RetencionIIBB;
 use App\Models\Compras\RetencionIIBB_Condicion;
-use App\Models\Configuracion\CondicionIIBB;
 use App\Models\Configuracion\Provincia;
 use App\Services\Configuracion\IIBBService;
+use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\Retencion\RetencionIibbCalculoSupport;
+use App\Support\Compras\Retencion\RetencionIibbElegibilidadSupport;
 use App\Support\Compras\Retencion\RetencionIibbInput;
 use App\Support\Compras\Retencion\RetencionIibbResultado;
 use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
@@ -47,21 +48,24 @@ class RetencionIibbCalculator
         ?bool $retieneOverride = null,
         ?int $empresaId = null,
     ): RetencionIibbResultado {
+        if ($importeNetoPago <= 0) {
+            return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_SIN_BASE_FACTURA, [
+                'importe_neto_pago' => $importeNetoPago,
+            ]);
+        }
+
         $condicionId = $condicionIibbIdOverride ?? ($proveedor->condicionIIBB_id
             ? (int) $proveedor->condicionIIBB_id
             : null);
 
-        $condicion = $condicionId
-            ? CondicionIIBB::query()->find($condicionId)
-            : null;
+        if (! RetencionIibbElegibilidadSupport::correspondePorCondicionIibb($proveedor, $condicionIibbIdOverride)) {
+            return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_NO_RETIENE, [
+                'proveedor_id' => (int) ($proveedor->id ?? 0),
+                'condicion_iibb_id' => $condicionId,
+            ]);
+        }
 
-        $retieneCatalogo = $condicion !== null
-            && strtoupper((string) ($condicion->formacalculo ?? '')) !== 'N'
-            && strtoupper((string) ($condicion->estado ?? 'A')) === 'A';
-
-        $retiene = $retieneOverride ?? $retieneCatalogo;
-
-        if (! $retiene) {
+        if ($retieneOverride === false) {
             return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_NO_RETIENE, [
                 'condicion_iibb_id' => $condicionId,
             ]);
@@ -74,7 +78,7 @@ class RetencionIibbCalculator
             $parametrica = $this->resolverCatalogoAgente($empresaId);
             $provinciaId = $parametrica?->provincia_id
                 ? (int) $parametrica->provincia_id
-                : (EmpresaJurisdiccionIibbSupport::provinciaIdsRetencion($empresaId)[0] ?? null);
+                : $this->provinciaIdAgentePreferida($empresaId);
         } else {
             $parametrica = RetencionIIBB::query()
                 ->with(['retencionIIBB_condiciones', 'provincias'])
@@ -144,21 +148,41 @@ class RetencionIibbCalculator
     }
 
     /**
-     * Catálogo Anita de la primera provincia donde la empresa es agente.
-     * Sin matriz (tabla vacía) → primera fila del catálogo, como antes.
+     * Catálogo del agente: prioriza Buenos Aires (902), que es la única
+     * jurisdicción con base recortada en la OP. Sin eso, orderBy(id) tomaba
+     * Capital (CABA) y retenía AGIP sobre un neto ARBA o sobre un anticipo.
      */
     private function resolverCatalogoAgente(?int $empresaId): ?RetencionIIBB
     {
         $query = RetencionIIBB::query()
-            ->with(['retencionIIBB_condiciones', 'provincias'])
-            ->orderBy('id');
+            ->with(['retencionIIBB_condiciones', 'provincias']);
 
         $agenteIds = EmpresaJurisdiccionIibbSupport::provinciaIdsRetencion($empresaId);
+        $baId = ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID;
+        $puedeArba = $agenteIds === [] || in_array($baId, $agenteIds, true);
+        if ($puedeArba) {
+            $arba = (clone $query)->where('provincia_id', $baId)->first();
+            if ($arba instanceof RetencionIIBB) {
+                return $arba;
+            }
+        }
+
         if ($agenteIds !== []) {
             $query->whereIn('provincia_id', $agenteIds);
         }
 
-        return $query->first();
+        return $query->orderBy('id')->first();
+    }
+
+    private function provinciaIdAgentePreferida(?int $empresaId): ?int
+    {
+        $ids = EmpresaJurisdiccionIibbSupport::provinciaIdsRetencion($empresaId);
+        $baId = ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID;
+        if ($ids === [] || in_array($baId, $ids, true)) {
+            return $baId;
+        }
+
+        return $ids[0] ?? null;
     }
 
     private function resolverFilaCondicion(?RetencionIIBB $parametrica, ?int $condicionId): ?RetencionIIBB_Condicion

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
-use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\MovimientosCajaReporteFiltros;
 use Illuminate\Database\Eloquent\Builder;
@@ -279,22 +278,6 @@ class MovimientosCajaReporteService
         }
 
         return $codigo !== '' ? $codigo : ($nombre !== '' ? $nombre : 'Sin cuenta');
-    }
-
-    /**
-     * @param  list<int>  $empresaIds
-     * @return \Illuminate\Support\Collection<int, Cuentacaja>
-     */
-    public function cuentasFiltro(array $empresaIds)
-    {
-        $q = Cuentacaja::query()->orderBy('codigo');
-        if ($empresaIds !== []) {
-            $q->where(function ($w) use ($empresaIds) {
-                $w->whereNull('empresa_id')->orWhereIn('empresa_id', $empresaIds);
-            });
-        }
-
-        return $q->get(['id', 'codigo', 'nombre']);
     }
 
     private function aplicarFiltroTipo(Builder $query, string $tipo): void

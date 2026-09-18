@@ -123,6 +123,32 @@ return [
             'permiso' => 'editar-pedidos',
         ],
     ],
+    'politica_comercial' => [
+        [
+            'herramienta' => 'F1 / lupa de clientes',
+            'ubicacion' => 'Campo código de cliente',
+            'accion' => 'Abre la consulta según la pantalla: pedido, boleta, factura o cobranza. Enter resuelve el código.',
+            'permiso' => 'según el proceso',
+        ],
+        [
+            'herramienta' => 'Aviso de política',
+            'ubicacion' => 'Junto al cliente (banner)',
+            'accion' => 'Muestra Moroso, Proforma o Suspendido con el motivo y la leyenda. No es «cliente no activo».',
+            'permiso' => '—',
+        ],
+        [
+            'herramienta' => 'Tipos de suspensión',
+            'ubicacion' => 'Ventas → Tablas de ventas',
+            'accion' => 'ABM del motivo (nombre) y de la política (Moroso / Proforma / Suspendido).',
+            'permiso' => 'listar-tipos-suspension-clientes',
+        ],
+        [
+            'herramienta' => 'Cobranza confirmada',
+            'ubicacion' => 'Caja → Cobranzas',
+            'accion' => 'Al confirmar el cobro de un moroso, el cliente pasa a Proforma (pide y boleta; no factura).',
+            'permiso' => 'crear-cobranza / actualizar-cobranza',
+        ],
+    ],
     'conceptos_venta' => [
         [
             'herramienta' => 'Nuevo concepto',

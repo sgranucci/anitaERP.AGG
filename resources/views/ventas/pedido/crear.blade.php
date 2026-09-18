@@ -14,6 +14,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido'])
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>

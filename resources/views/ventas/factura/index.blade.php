@@ -53,6 +53,11 @@ use App\Support\Ventas\PedidoListadoSupport;
                             <i class="fa fa-link"></i> Asignar remitos
                         </a>
                     @endif
+                    @if (can('generar-nota-de-credito', false))
+                        <a href="{{ route('crear_factura', ['modo' => 'nc']) }}" class="btn btn-outline-light btn-sm mr-1 mb-1" title="Nota de crédito: buscar factura por artículo">
+                            <i class="fa fa-undo"></i> Nota de crédito
+                        </a>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-factura',
                         'filtroValor' => $filtros['valor'] ?? '',
@@ -153,14 +158,14 @@ use App\Support\Ventas\PedidoListadoSupport;
                                 	<a href="{{route('lista_una_factura_copias', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Imprimir eligiendo copias">
                                    	<i class="fa fa-copy"></i>
                                 	</a>
-                                	@can('enviar-factura-mail')
+                                	@if (can('enviar-factura-mail', false))
                                 	<form action="{{ route('enviar_factura_mail', $comprobante->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar la factura por mail al cliente?');">
                                 		@csrf
                                 		<button type="submit" class="btn-accion-tabla tooltipsC" title="Enviar factura por mail" style="border:0;background:transparent;padding:0;">
                                 			<i class="fa fa-envelope text-primary"></i>
                                 		</button>
                                 	</form>
-                                	@endcan
+                                	@endif
 								@endif
                             	</td>
                         	</tr>

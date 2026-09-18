@@ -63,7 +63,8 @@
 </div>
 <div class="form-group row">
 	<label for="para_dep" class="col-lg-3 col-form-label">Para depositar (Anita)</label>
-	<select id="para_dep" name="para_dep" class="col-lg-4 form-control">
+	<div class="col-lg-4">
+	<select id="para_dep" name="para_dep" class="form-control">
     	@php $paraDepEnum = $para_dep_enum ?? \App\Models\Caja\Cheque::$enumParaDep; @endphp
        	@foreach($paraDepEnum as $paraDep)
 			@if ($paraDep['valor'] == old('para_dep',$data->para_dep ?? 'E'))
@@ -73,9 +74,11 @@
 			@endif
     	@endforeach
 	</select>
+	<small class="form-text text-muted">Marca interna de tesorer&iacute;a Anita (<code>cpro_para_dep</code>). En cheques propios CHP usar E. No es el car&aacute;cter &laquo;a la orden&raquo; ni f&iacute;sico/e-cheq.</small>
+	</div>
 </div>
 <div class="form-group row">
-	<label for="negociable" class="col-lg-3 col-form-label">Negociable (Anita)</label>
+	<label for="negociable" class="col-lg-3 col-form-label">F&iacute;sico / e-cheq</label>
 	<select id="negociable" name="negociable" class="col-lg-4 form-control">
     	@php $negociableEnum = $negociable_enum ?? \App\Models\Caja\Cheque::$enumNegociable; @endphp
        	@foreach($negociableEnum as $negociable)

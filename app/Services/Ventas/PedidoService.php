@@ -16,6 +16,7 @@ use App\Models\Configuracion\Salida;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\VillafrancaFacturacionSupport;
@@ -611,6 +612,13 @@ class PedidoService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
+
+		if ($funcion === 'create') {
+			$errorPolitica = ClientePoliticaComercialSupport::errorSiNoPermite($cliente, ClientePoliticaComercialSupport::OP_PEDIDO);
+			if ($errorPolitica !== null) {
+				return $errorPolitica;
+			}
+		}
 
 		$errorEntrega = ClienteEntregaPedidoSupport::validarSeleccionParaCliente(
 			(int) $data['cliente_id'],

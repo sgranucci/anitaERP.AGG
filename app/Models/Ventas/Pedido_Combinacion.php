@@ -110,6 +110,11 @@ class Pedido_Combinacion extends Model
         return $this->belongsTo(Pedido_Picking::class, 'picking_id');
     }
 
+    public function pickingVenta()
+    {
+        return $this->belongsTo(Venta::class, 'picking_venta_id');
+    }
+
 	public function getModuloIdAttribute($value)
     {
 		if ($value == null || $value == 0)

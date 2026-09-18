@@ -194,9 +194,13 @@ class PagoproveedorController extends Controller
             return back()->withErrors(['error' => $resultado['errores']])->withInput();
         }
 
+        $empresaId = (int) $request->empresa_id;
+
         return redirect()
-            ->route('editar_pagoproveedor', $id)
-            ->with('mensaje', 'Orden de pago actualizada.');
+            ->route('pagoproveedor', ['empresa_id' => $empresaId])
+            ->with('mensaje', 'Orden de pago actualizada.')
+            ->with('imprimir_pagoproveedor_url', route('imprimir_pagoproveedor', $id))
+            ->with('imprimir_comprobante_label', 'Imprimir orden de pago');
     }
 
     public function confirmar(Request $request, int $id)
@@ -310,6 +314,11 @@ class PagoproveedorController extends Controller
             'credito',
             $empresaId
         );
+        if ($pagoId > 0) {
+            $esDeEstaOp = static fn ($cc): bool => (int) ($cc->pagoproveedor_id ?? 0) === $pagoId;
+            $filasTodas = $filasTodas->reject($esDeEstaOp)->values();
+            $creditos = $creditos->reject($esDeEstaOp)->values();
+        }
         $filas = $filasTodas->where('empresa_id', $empresaId)->concat($creditos)->unique('id')->values();
         $aviso = null;
         if ($filas->isEmpty() && $filasTodas->isNotEmpty()) {
@@ -405,6 +414,10 @@ class PagoproveedorController extends Controller
                     continue;
                 }
                 if ((int) $cc->empresa_id !== $empresaId) {
+                    continue;
+                }
+                if ((int) ($cc->pagoproveedor_id ?? 0) === $pagoId
+                    && PagoproveedorAplicacionLadoSupport::esOpa($cc)) {
                     continue;
                 }
                 $ccId = (int) $cc->id;
@@ -540,7 +553,7 @@ class PagoproveedorController extends Controller
             return response()->json(['error' => 'Sin permiso'], 403);
         }
         $proveedorId = (int) $request->input('proveedor_id', 0);
-        $proveedor = Proveedor::query()->find($proveedorId);
+        $proveedor = Proveedor::query()->with(['condicionivas', 'condicionIIBBs'])->find($proveedorId);
         if ($proveedor === null) {
             return response()->json(['error' => 'Proveedor no encontrado'], 422);
         }

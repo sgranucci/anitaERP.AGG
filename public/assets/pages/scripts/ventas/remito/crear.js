@@ -1227,18 +1227,9 @@
 				}
 
 				// Debe chequear estado del cliente
-				if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
-					(tiposuspensioncliente_id == PROFORMA ||
-					tiposuspensioncliente_id == MOROSO ||
-					tiposuspensioncliente_id == NO_FACTURAR
-					))
+				if (window.clientePoliticaComercial && !window.clientePoliticaComercial.permiteOperacion('factura'))
 				{
-					var etiquetaEstado = (nombretiposuspensioncliente || '').trim();
-					if (!etiquetaEstado) {
-						var e = String(estadocliente || '').toUpperCase();
-						etiquetaEstado = e === '1' ? 'Suspendido' : (e === 'R' ? 'Regularizado' : (e || '(sin detalle)'));
-					}
-					alert("No puede facturar cliente en estado "+etiquetaEstado);
+					alert(window.clientePoliticaComercial.mensaje('factura'));
 					$(tilde).prop("checked",false);
 					return;
 				}
@@ -2615,6 +2606,9 @@
 				$('#zonavta_id').val(zonavta_id);
 			}
 			$('#tiposuspension_id').val(tiposuspension_id);
+			if (data.politica_comercial && window.clientePoliticaComercial) {
+				window.clientePoliticaComercial.setActual(data.politica_comercial);
+			}
 			// Lee zona de venta
 			leeZonaVta();			
 		});
@@ -2626,6 +2620,10 @@
 
     function muestraTipoSuspension()
     {
+		if (window.clientePoliticaComercial) {
+			window.clientePoliticaComercial.pintarBanner();
+			return;
+		}
 		var tiposuspensioncliente_query = $("#tiposuspensioncliente_query").val();
         var tiposuspension_id = $("#tiposuspension_id").val();
 		

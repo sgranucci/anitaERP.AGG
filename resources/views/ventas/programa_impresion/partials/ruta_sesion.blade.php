@@ -16,7 +16,8 @@
         }
     }
     $esLoteReparto = ($sesion['origen_tipo'] ?? '') === 'REPARTO' || ! empty($sesion['lote_venta_ids']);
-    $mostrarChecksPapel = $cantidadPapel > 1 || $esLoteReparto;
+    $hayEnvio = isset($porFormulario['ENVIO']);
+    $mostrarChecksPapel = $cantidadPapel > 1 || $esLoteReparto || $hayEnvio;
 @endphp
 @if ($porFormulario !== [])
 <div class="programa-ruta-preview mb-3" aria-label="Ruta de copias de esta sesión">
@@ -79,7 +80,13 @@
                     }
                 @endphp
                 <div class="sesion-ruta-hoja {{ $estado }}{{ $esNas ? ' es-nas' : '' }}">
-                    @if ($esNas)
+                    @if ($esNas && ($linea['formulario'] ?? '') === 'ENVIO')
+                        <label class="sesion-copia-check mb-1">
+                            <input type="checkbox" name="pack_idx[]" value="{{ $item['i'] }}" form="form-ejecutar-sesion" class="sesion-copia-idx" checked="checked">
+                            Incluir
+                        </label>
+                        <div class="sesion-nas-badge mb-1">NAS · no va al PDF</div>
+                    @elseif ($esNas)
                         <div class="sesion-nas-badge mb-1">NAS · no va al PDF</div>
                     @elseif ($mostrarChecksPapel)
 						<label class="sesion-copia-check mb-1">

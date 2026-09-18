@@ -11,6 +11,7 @@ use App\Support\Caja\ChequePropioImputacionSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
 use RuntimeException;
 
 /**
@@ -87,15 +88,21 @@ final class PagoproveedorAsientoArmadoSupport
                 }
                 $obs = trim((string) ($linea->observacionasientos ?? ''));
                 $monedaLin = (int) ($linea->monedaasiento_ids ?? $monedaPagoId);
+                $cotLin = NumeroDecimalLocalSupport::aFloat($linea->cotizacionasientos ?? 0);
+                if ($cotLin <= 0) {
+                    $cotLin = self::cotizacionParaLinea($monedaLin, $cotizacionPago);
+                }
+                $debeLin = NumeroDecimalLocalSupport::aFloat($linea->debeasientos ?? 0);
+                $haberLin = NumeroDecimalLocalSupport::aFloat($linea->haberasientos ?? 0);
                 $asiento[] = [
                     'cuentacontable_id' => $cuentaId,
                     'codigo' => $cuenta->codigo,
                     'nombre' => $cuenta->nombre,
                     'moneda_id' => $monedaLin,
-                    'cotizacion' => self::cotizacionParaLinea($monedaLin, $cotizacionPago),
+                    'cotizacion' => $cotLin,
                     'centrocosto_id' => (int) ($linea->centrocostoasiento_ids ?? 0),
-                    'debe' => $linea->debeasientos ?? '',
-                    'haber' => $linea->haberasientos ?? '',
+                    'debe' => $debeLin > 0.0001 ? round($debeLin, 2) : '',
+                    'haber' => $haberLin > 0.0001 ? round($haberLin, 2) : '',
                     'observacion' => $obs !== '' ? $obs : $conceptoPago,
                     'carga_cuentacontable_manual' => $linea->carga_cuentacontable_manuales ?? 'N',
                 ];

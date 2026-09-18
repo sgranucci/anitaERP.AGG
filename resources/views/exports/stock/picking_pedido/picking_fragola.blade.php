@@ -2,13 +2,32 @@
     $desdeMedida = (int) ($desdeMedida ?? config('consprod.DESDE_MEDIDA'));
     $hastaMedida = (int) ($hastaMedida ?? config('consprod.HASTA_MEDIDA'));
     $conFoto = (bool) ($conFoto ?? true);
+    $totalColumnas = (int) ($totalColumnas ?? (($conFoto ? 1 : 0) + 3 + ($hastaMedida - $desdeMedida + 1) + 9));
+    $lineasMeta = $lineasMeta ?? [];
 @endphp
 <table>
+    @if (! empty($reservarFilaLogoExcel))
+        <tr>
+            <td colspan="{{ $totalColumnas }}" style="height: 52px;">&#160;</td>
+        </tr>
+    @endif
     <tr>
-        <td colspan="{{ ($conFoto ? 1 : 0) + 3 + ($hastaMedida - $desdeMedida + 1) + 8 }}">
-            <strong>PICKING {{ $subtitulo ?? '' }}</strong>
+        <td colspan="{{ $totalColumnas }}">
+            <strong style="font-size: 16pt;">{{ $titulo ?? 'PICKING' }}</strong>
         </td>
     </tr>
+    <tr>
+        <td colspan="{{ $totalColumnas }}" style="font-size: 10pt; color: #444;">
+            Generado {{ date('d/m/Y H:i') }}
+        </td>
+    </tr>
+    @foreach ($lineasMeta as $lineaMeta)
+        <tr>
+            <td colspan="{{ $totalColumnas }}" style="font-size: 10pt; color: #444;">
+                {{ $lineaMeta }}
+            </td>
+        </tr>
+    @endforeach
     <thead>
         <tr>
             @if ($conFoto)
@@ -27,6 +46,7 @@
             <th>SITUACION</th>
             <th>NUMERO OT</th>
             <th>deposito</th>
+            <th>Observacion</th>
             <th>Bultos</th>
         </tr>
     </thead>
@@ -42,7 +62,7 @@
             @endphp
             <tr>
                 @if ($conFoto)
-                    <td></td>
+                    <td>&#160;</td>
                 @endif
                 <td>{{ $fila['nombrelinea'] ?? '' }}</td>
                 <td>{{ $fila['sku'] ?? '' }}</td>
@@ -52,6 +72,8 @@
                     <td>
                         @if ($cant !== null && (float) $cant != 0.0)
                             {{ (float) $cant }}
+                        @else
+                            &#160;
                         @endif
                     </td>
                 @endfor
@@ -62,7 +84,8 @@
                 <td>{{ $fila['situacion'] ?? 'ENTREGA INMEDIATA' }}</td>
                 <td>{{ $fila['numero_ot'] ?? '' }}</td>
                 <td>{{ $fila['deposito'] ?? '' }}</td>
-                <td></td>
+                <td>{{ $fila['observacion'] ?? '' }}</td>
+                <td>&#160;</td>
             </tr>
         @endforeach
     </tbody>

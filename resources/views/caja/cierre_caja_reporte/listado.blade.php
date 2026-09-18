@@ -15,15 +15,38 @@
     <meta charset="utf-8">
     <title>{{ $titulo }}</title>
     <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 8px; color: #222; }
-        table.data { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
-        table.data th, table.data td { border: 1px solid #cccccc; padding: 3px 4px; }
-        table.data thead th { background: #85C1E9; color: #17202A; }
+        @page { size: legal landscape; margin: 10mm 8mm; }
+        html, body { margin: 0; padding: 0; width: 100%; }
+        body { font-family: DejaVu Sans, sans-serif; font-size: 7px; color: #222; }
+        .bloque-cierre { margin: 0 0 10px 0; width: 100%; page-break-inside: auto; }
+        table.titulo-bloque { width: 100%; border-collapse: collapse; margin: 0 0 3px 0; table-layout: fixed; }
+        table.titulo-bloque td {
+            background: #D6EAF8;
+            color: #17202A;
+            font-weight: bold;
+            font-size: 10px;
+            padding: 4px 6px;
+            border: 1px solid #85C1E9;
+        }
+        table.data {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0;
+            table-layout: fixed;
+        }
+        table.data th, table.data td {
+            border: 1px solid #cccccc;
+            padding: 2px 3px;
+            vertical-align: top;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            overflow: hidden;
+        }
+        table.data thead th { background: #85C1E9; color: #17202A; font-size: 6.5px; }
         table.data tr:nth-child(even) td { background: #f5f5f5; }
-        .seccion td { background: #D6EAF8 !important; font-weight: bold; }
-        .total td { background: #D5D8DC !important; font-weight: bold; }
+        table.data tr.total td { background: #D5D8DC !important; font-weight: bold; }
         .text-right { text-align: right; }
-        h3 { font-size: 11px; margin: 12px 0 4px; }
     </style>
 </head>
 <body>

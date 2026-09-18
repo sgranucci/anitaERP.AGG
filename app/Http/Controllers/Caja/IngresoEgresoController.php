@@ -29,6 +29,7 @@ use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
+use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Queries\Caja\Caja_MovimientoQueryInterface;
 use App\Exports\Caja\Caja_MovimientoExport;
@@ -504,9 +505,14 @@ class IngresoEgresoController extends Controller
         $path = $dir.'/op_'.$movimiento->id.'.pdf';
         $pdf->save($path);
 
+        $esTra = IngresoEgresoTransferenciaSupport::esTransferencia($movimiento->tipotransaccioncajas ?? null);
+        $nombreArchivo = $esTra
+            ? 'transferencia_'.$movimiento->numerotransaccion.'.pdf'
+            : 'orden_pago_'.$movimiento->numerotransaccion.'.pdf';
+
         return response()->file($path, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="orden_pago_'.$movimiento->numerotransaccion.'.pdf"',
+            'Content-Disposition' => 'inline; filename="'.$nombreArchivo.'"',
         ]);
     }
 

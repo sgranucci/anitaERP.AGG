@@ -10,6 +10,7 @@ use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Repositories\Ventas\OrdentrabajoRepositoryInterface;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Ventas\PuntoventaEmpresaSupport;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Models\Ventas\Cliente_Entrega;
 use App\Services\Stock\Articulo_MovimientoService;
@@ -827,6 +828,17 @@ class PedidoServiceFerli
 	  	ini_set('memory_limit', '512M');
 
 		$cliente = $this->clienteQuery->traeClienteporId($data['cliente_id']);
+
+		if (! $cliente) {
+			return ['error' => 'Cliente inexistente'];
+		}
+
+		if ($funcion === 'create') {
+			$errorPolitica = ClientePoliticaComercialSupport::errorSiNoPermite($cliente, ClientePoliticaComercialSupport::OP_PEDIDO);
+			if ($errorPolitica !== null) {
+				return $errorPolitica;
+			}
+		}
 
 		$data['estado'] = '0';
 		$data['tipo'] = 'PED';

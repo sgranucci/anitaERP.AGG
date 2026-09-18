@@ -64,4 +64,10 @@ final class ChequePropioInstrumentoSupport
 
         return trim($numerocheque);
     }
+
+    /** Etiqueta de impresión / consulta: e-cheq vs físico. */
+    public static function etiquetaNegociable(?string $valor): string
+    {
+        return strtoupper(trim((string) $valor)) === 'E' ? 'e-cheq' : 'Físico';
+    }
 }

@@ -64,6 +64,7 @@ use App\Support\Ventas\ArcaPadronClienteOperacionValidacionSupport;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\ClienteFacturasApocrifasSupport;
 use App\Support\Ventas\ClienteDocumentoUnicoSupport;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Services\Arca\ConstanciaInscripcionService;
 use Carbon\Carbon;
 use Mail;
@@ -252,7 +253,18 @@ class ClienteController extends Controller
 
 	public function leerCliente($cliente_id)
     {
-        return $this->clienteQuery->traeClienteporId($cliente_id, ['id','vendedor_id','transporte_id','condicionventa_id','descuento','tiposuspension_id','lugarentrega','zonavta_id'])->toArray();
+        $cliente = $this->clienteQuery->traeClienteporId($cliente_id, [
+            'id', 'vendedor_id', 'transporte_id', 'condicionventa_id', 'descuento',
+            'tiposuspension_id', 'lugarentrega', 'zonavta_id', 'estado', 'leyenda', 'nombre',
+        ]);
+        if (! $cliente) {
+            return null;
+        }
+
+        $data = $cliente->toArray();
+        $data['politica_comercial'] = ClientePoliticaComercialSupport::payload($cliente);
+
+        return $data;
     }
 
     /**
@@ -842,7 +854,8 @@ class ClienteController extends Controller
     {
         return $this->clienteRepository->consultaCliente(
             $request->consulta,
-            $request->boolean('omitir_cliente_despacho')
+            $request->boolean('omitir_cliente_despacho'),
+            (string) $request->input('contexto', 'consultar')
         );
 	}
 
@@ -880,12 +893,12 @@ class ClienteController extends Controller
 
     public function leeUnCliente($cliente_id)
     {
-        return ($this->clienteRepository->find($cliente_id));
+        return ClientePoliticaComercialSupport::anexarPayloadAlCliente($this->clienteRepository->find($cliente_id));
 	}
 
     public function leeUnClientePorCodigo($cliente_id)
     {
-        return ($this->clienteRepository->findPorCodigo($cliente_id));
+        return ClientePoliticaComercialSupport::anexarPayloadAlCliente($this->clienteRepository->findPorCodigo($cliente_id));
 	}
 
     public function emiteNc($cliente_id)

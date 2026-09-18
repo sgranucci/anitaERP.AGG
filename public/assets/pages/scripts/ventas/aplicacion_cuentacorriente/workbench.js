@@ -6,6 +6,10 @@
         return;
     }
 
+    if (typeof window.activa_eventos_consultacliente === 'function') {
+        window.activa_eventos_consultacliente();
+    }
+
     var TOL = 0.01;
     var state = {
         creditos: [],
@@ -1259,8 +1263,7 @@
         recomponerAuto();
         pintar();
     });
-    $(document).on('change.cpClienteCargado', '#cliente_id', cargar);
-    $('#cliente_id').on('change', cargar);
+    $(document).off('change.cpClienteCargado', '#cliente_id').on('change.cpClienteCargado', '#cliente_id', cargar);
 
     if (window.APLICACION_CC_INICIAL) {
         aplicarWorkbench(window.APLICACION_CC_INICIAL);

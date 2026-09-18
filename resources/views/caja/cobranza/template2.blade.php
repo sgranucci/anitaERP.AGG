@@ -18,7 +18,7 @@
             <input type="text" class="nombre form-control" name="nombres[]" value="" readonly placeholder="Descripci&oacute;n">
         </td>
         <td>
-            <select name="moneda_ids[]" data-placeholder="Moneda" class="moneda form-control" required readonly data-fouc>
+            <select name="moneda_ids[]" data-placeholder="Moneda" class="moneda form-control" readonly data-fouc>
                 <option value="">-- Seleccionar --</option>
                 @foreach($moneda_query as $value)
                     <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>

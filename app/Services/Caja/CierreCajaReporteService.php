@@ -9,6 +9,7 @@ use App\Models\Caja\Cheque;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\CierreCajaReporteFiltros;
+use App\Support\Caja\CierreCajaReporteSecciones;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -612,24 +613,21 @@ class CierreCajaReporteService
     ): array {
         $out = [];
         $nombreEmp = $nombresEmpresa[0] ?? '';
-
-        $bloques = [
-            ['titulo' => 'Resumen de movimientos por cuenta', 'filas' => $saldos],
-            ['titulo' => 'Cheques propios emitidos', 'filas' => $emitidos],
-            ['titulo' => 'Depósitos', 'filas' => $depositos],
-            ['titulo' => 'Cobranzas / Pagos', 'filas' => $cobroPago['filas'] ?? []],
-            ['titulo' => 'Cheques de terceros recibidos', 'filas' => $recibidos],
-            ['titulo' => 'Cheques de terceros rechazados', 'filas' => $rechazados],
-            ['titulo' => 'Cheques entregados en caución', 'filas' => $caucion],
+        $parcial = [
+            'saldos' => $saldos,
+            'cheques_emitidos' => $emitidos,
+            'depositos' => $depositos,
+            'cobro_pago' => $cobroPago,
+            'cheques_recibidos' => $recibidos,
+            'cheques_rechazados' => $rechazados,
+            'cheques_caucion' => $caucion,
         ];
 
-        foreach ($bloques as $bloque) {
-            if (($bloque['filas'] ?? []) === []) {
-                continue;
-            }
+        foreach (CierreCajaReporteSecciones::bloques($parcial) as $bloque) {
             $out[] = [
                 'tipo_fila' => 'seccion',
                 'titulo' => $bloque['titulo'],
+                'seccion' => $bloque['clave'],
                 'nombreempresa' => $nombreEmp,
             ];
             foreach ($bloque['filas'] as $fila) {

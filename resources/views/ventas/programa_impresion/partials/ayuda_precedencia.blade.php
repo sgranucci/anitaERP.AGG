@@ -19,6 +19,11 @@
         Si un reparto especial entrega en Tucum&aacute;n, gana la provincia.
         En AGG o en la nube, cada empresa (Biyemas, Kandiko, etc.) tiene sus propios programas.
     </p>
+    <p class="mb-2 small">
+        <strong>Al facturar</strong> (pedido, mostrador y picking) el programa usa dos tildes:
+        <em>Disparar impresión</em> abre la sesión; <em>Enviar a impresora automáticamente</em> manda el papel
+        o deja la sesión para elegir copias (Envío, etc.).
+    </p>
     <p class="mb-0 small">
         <strong>Impresora:</strong> en las copias de papel dej&aacute; <em>Impresora del usuario</em>
         para que cada operador (Omard, Daniela, etc.) imprima en su cola desde la sesi&oacute;n.

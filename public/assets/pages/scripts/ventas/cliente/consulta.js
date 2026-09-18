@@ -51,11 +51,15 @@ function enfocarCampoTrasClienteCargado() {
     }
     if ($('#codigotransporte').length > 0) {
         $('#codigotransporte').focus();
+        return;
+    }
+    if ($('#acc-workbench').length && $('#acc-fecha').length) {
+        $('#acc-fecha').focus();
     }
 }
 
 function mensajeInicialConsultaCliente() {
-    return '<tr><td colspan="7" class="text-muted">Ingrese al menos 2 caracteres para buscar (solo clientes activos).</td></tr>';
+    return '<tr><td colspan="7" class="text-muted">Ingrese al menos 2 caracteres para buscar.</td></tr>';
 }
 
 function parsearHtmlConsultaCliente(respuesta) {
@@ -110,9 +114,11 @@ function resolverPtrClienteDesdeBoton($btn) {
 
 function leerFilaClienteConsulta($link) {
     var $tr = $link.closest('tr');
+    var $nombre = $tr.find('td.nombre').first().clone();
+    $nombre.find('.badge').remove();
     return {
         id: $.trim($tr.find('td.id').first().text()),
-        nombre: $.trim($tr.find('td.nombre').first().text()),
+        nombre: $.trim($nombre.text()),
         codigo: $.trim($tr.find('td.codigo').first().text()),
     };
 }
@@ -184,7 +190,7 @@ function aplicarSeleccionClienteFactura(fila) {
         $('#codigocliente').val(fila.codigo);
     }
     if ($('#acc-workbench').length) {
-        $('#cliente_id').trigger('change.cpClienteCargado').trigger('change');
+        $('#cliente_id').trigger('change.cpClienteCargado');
     }
 }
 
@@ -213,18 +219,49 @@ function consultaClienteModalEnUso() {
 
 function abrirModalConsultaClienteDesdeInput($input) {
     consultaClienteModalAbriendo = true;
+    var $origen = $input;
     var $btn = $input.closest('.tm-cliente-campo, .gastro-campo-consulta, #div-cliente, .form-group, tr')
         .find('button.consultacliente')
         .first();
     if ($btn.length) {
-        $btn.trigger('click');
-        return;
+        $origen = $btn;
     }
-    var ctx = resolverPtrClienteDesdeBoton($input);
+    var ctx = resolverPtrClienteDesdeBoton($origen);
     ptrcliente_id = ctx.$id;
     ptrnombrecliente = ctx.$nombre;
     $('#consultaclienteModal').data('gastroConsultaDestino', 'factura');
     $('#consultaclienteModal').modal('show');
+}
+
+function aceptarCodigoClienteDesdeInput($input) {
+    if (consultaClienteModalEnUso()) {
+        return;
+    }
+    var codigo = String($input.val() || '').trim();
+    $input.removeAttr('data-cliente-invalido');
+    clienteInvalidoAvisadoClave = '';
+    if (codigo === '') {
+        var $id = $input.closest('.tm-cliente-campo, .gastro-campo-consulta, .form-group, tr').find('#cliente_id, .cliente_id').first();
+        if (!$id.length) {
+            $id = $('#cliente_id');
+        }
+        $id.val('');
+        $input.closest('.tm-cliente-campo, .gastro-campo-consulta, .form-group, tr').find('#nombrecliente, .nombrecliente').first().val('');
+        if ($('#acc-workbench').length) {
+            $('#cliente_id').trigger('change.cpClienteCargado');
+        }
+        return;
+    }
+    leeUnCliente(0, codigo, true);
+}
+
+function elegirPrimerClienteDelModal() {
+    var $btn = $('#datoscliente .eligeconsultacliente').first();
+    if ($btn.length) {
+        $btn.trigger('click');
+        return true;
+    }
+    return false;
 }
 
 function manejarF1CodigoClienteCapture(e) {
@@ -254,6 +291,52 @@ if (!window.__clienteF1CaptureActivo) {
     window.__clienteF1CaptureActivo = true;
 }
 
+function manejarEnterCodigoClienteCapture(e) {
+    if (!(e && (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13))) {
+        return;
+    }
+    var target = e.target;
+    if (!esInputCodigoCliente(target)) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    if (consultaClienteModalEnUso()) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    var $input = $(target);
+    $input.data('cli-enter-procesado', 1);
+    aceptarCodigoClienteDesdeInput($input);
+}
+
+if (!window.__clienteEnterCaptureActivo) {
+    document.addEventListener('keydown', manejarEnterCodigoClienteCapture, true);
+    window.__clienteEnterCaptureActivo = true;
+}
+
+function manejarEnterBuscadorClienteCapture(e) {
+    if (!(e && (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13))) {
+        return;
+    }
+    var target = e.target;
+    if (!target || target.id !== 'consultacliente') {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (!elegirPrimerClienteDelModal()) {
+        buscar_datos_cliente(target.value);
+    }
+}
+
+if (!window.__clienteEnterModalCaptureActivo) {
+    document.addEventListener('keydown', manejarEnterBuscadorClienteCapture, true);
+    window.__clienteEnterModalCaptureActivo = true;
+}
+
 function buscar_datos_cliente(consulta) {
     var termino = (consulta != null && consulta !== undefined) ? String(consulta).trim() : '';
     var token = $('meta[name="csrf-token"]').attr('content')
@@ -270,6 +353,9 @@ function buscar_datos_cliente(consulta) {
             consulta: termino,
             _token: token,
             omitir_cliente_despacho: window.CLIENTE_DESPACHO_NO_FACTURAR ? 1 : 0,
+            contexto: (window.clientePoliticaComercial && window.clientePoliticaComercial.contexto)
+                ? window.clientePoliticaComercial.contexto()
+                : (window.CLIENTE_CONSULTA_CONTEXTO || 'consultar'),
         },
     })
     .done (function(respuesta) {
@@ -308,9 +394,13 @@ $(document).on('keyup', '#consultacliente', function () {
 
 function activa_eventos_consultacliente()
 {
-    $('.consultacliente')
-        .off('click.consultaClienteAbrir')
-        .on('click.consultaClienteAbrir', function () {
+    $(document)
+        .off('click.consultaClienteAbrir', '.consultacliente')
+        .on('click.consultaClienteAbrir', '.consultacliente', function (event) {
+            if ($(this).closest('#datoscliente').length) {
+                return;
+            }
+            event.preventDefault();
             consultaClienteModalAbriendo = true;
             var ctx = resolverPtrClienteDesdeBoton($(this));
             ptrcliente_id = ctx.$id;
@@ -328,6 +418,25 @@ function activa_eventos_consultacliente()
         })
         .on('hidden.bs.modal.consultaCliente', function () {
             consultaClienteModalAbriendo = false;
+        });
+
+    $('#consultaclienteModal form')
+        .off('submit.consultaCliente')
+        .on('submit.consultaCliente', function (e) {
+            e.preventDefault();
+        });
+
+    $(document)
+        .off('keydown.consultaClienteEnterModal', '#consultacliente')
+        .on('keydown.consultaClienteEnterModal', '#consultacliente', function (e) {
+            if (e.which !== 13 && e.key !== 'Enter') {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            if (!elegirPrimerClienteDelModal()) {
+                buscar_datos_cliente($(this).val());
+            }
         });
 
     $(document)
@@ -386,6 +495,10 @@ function activa_eventos_consultacliente()
         .on('change.consultaClienteId', function (event) {
             event.preventDefault();
 
+            if ($('#acc-workbench').length) {
+                return;
+            }
+
             let cliente_id = $("#cliente_id").val();
 
             if ($.isNumeric(cliente_id)) {
@@ -396,25 +509,36 @@ function activa_eventos_consultacliente()
         });
 
     $('#codigocliente')
-        .off('change.consultaClienteCodigo input.consultaClienteCodigo')
+        .off('change.consultaClienteCodigo input.consultaClienteCodigo blur.consultaClienteCodigo')
         .on('input.consultaClienteCodigo', function () {
             clienteInvalidoAvisadoClave = '';
             $(this).removeAttr('data-cliente-invalido');
         })
+        .on('blur.consultaClienteCodigo', function () {
+            if ($(this).data('cli-enter-procesado')) {
+                $(this).removeData('cli-enter-procesado');
+            }
+        })
         .on('change.consultaClienteCodigo', function (event) {
             event.preventDefault();
+
+            if ($(this).data('cli-enter-procesado')) {
+                $(this).removeData('cli-enter-procesado');
+                return;
+            }
 
             if (consultaClienteModalEnUso()) {
                 return;
             }
 
-            let codigocliente = $("#codigocliente").val();
+            let codigocliente = String($("#codigocliente").val() || '').trim();
 
-            if ($.isNumeric(codigocliente)) {
-                leeUnCliente(0, codigocliente, true);
-            } else {
+            if (codigocliente === '') {
                 $("#nombrecliente").val("");
+                return;
             }
+
+            leeUnCliente(0, codigocliente, true);
         });
 
     $('.cliente_id')
@@ -493,6 +617,10 @@ function claveConsultaCliente(cliente_id, codigocliente) {
 }
 
 function avisarClienteNoActivo(nombre, clave) {
+    avisarClientePolitica('Cliente ' + nombre + ' no habilitado para esta operación', clave);
+}
+
+function avisarClientePolitica(mensaje, clave) {
     if (clienteInvalidoAvisadoClave === clave) {
         return;
     }
@@ -502,7 +630,7 @@ function avisarClienteNoActivo(nombre, clave) {
         window.liberarPantallaModalesBloqueados();
     }
     setTimeout(function () {
-        alert('Cliente ' + nombre + ' no activo');
+        alert(mensaje);
     }, 0);
 }
 
@@ -532,7 +660,16 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
                 if (window.bloquearClienteDespachoEnFacturacion(data.id)) {
                     return;
                 }
-                if (!window.clienteEstaHabilitadoParaFacturacion(data.estado))
+                var politica = data.politica_comercial || null;
+                if (window.clientePoliticaComercial) {
+                    window.clientePoliticaComercial.setActual(politica);
+                }
+                var contextoOp = (window.clientePoliticaComercial && window.clientePoliticaComercial.contexto)
+                    ? window.clientePoliticaComercial.contexto()
+                    : 'consultar';
+                var permiteContexto = !window.clientePoliticaComercial
+                    || window.clientePoliticaComercial.permiteOperacion(contextoOp, politica);
+                if (!permiteContexto)
                 {
                     if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
                         window.limpiarSeleccionClienteOperacion();
@@ -540,7 +677,10 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
                         window.invalidarEstadoPadronOperacion();
                     }
                     if (avisar) {
-                        avisarClienteNoActivo(data.nombre, clave);
+                        var msg = window.clientePoliticaComercial
+                            ? window.clientePoliticaComercial.mensaje(contextoOp, politica)
+                            : ('Cliente ' + (data.nombre || '') + ' no habilitado para esta operación');
+                        avisarClientePolitica(msg, clave);
                     }
                     $('#codigocliente').attr('data-cliente-invalido', '1').trigger('focus');
                 }
@@ -551,6 +691,12 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
                         $("#cliente_id").val(data.id);
                         $("#nombrecliente").val(nombreClienteDisplayConCodigo(data.codigo, data.nombre));
                         $("#estadocliente").val(data.estado != null ? data.estado : '');
+                        $("#tiposuspensioncliente_id").val(data.tiposuspension_id != null ? data.tiposuspension_id : '');
+                        $("#tiposuspension_id").val(data.tiposuspension_id != null ? data.tiposuspension_id : '');
+                        var nombreTipo = (data.tipossuspensioncliente && data.tipossuspensioncliente.nombre)
+                            ? data.tipossuspensioncliente.nombre
+                            : ((data.politica_comercial && data.politica_comercial.motivo) || '');
+                        $("#nombretiposuspensioncliente").val(nombreTipo);
 
                         $("#domicilio").val(data.domicilio);
                         $("#codigopostal").val(data.codigopostal);
@@ -588,7 +734,7 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
                         invocarDatosClienteTrasSeleccion(data.id, data);
                         enfocarCampoTrasClienteCargado();
                         if ($('#acc-workbench').length) {
-                            $('#cliente_id').trigger('change.cpClienteCargado').trigger('change');
+                            $('#cliente_id').trigger('change.cpClienteCargado');
                         }
                     }
 
@@ -644,6 +790,9 @@ function leeUnCliente(cliente_id, codigocliente, avisar)
         $("#nombrecliente").val("");
 }
 
-
-
+$(function () {
+    if ($('.codigocliente').length || $('#consultaclienteModal').length) {
+        activa_eventos_consultacliente();
+    }
+});
 

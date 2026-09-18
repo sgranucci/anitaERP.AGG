@@ -305,6 +305,9 @@ class PagoproveedorService
         PagoproveedorAplicacionCuentacorrienteSupport::reemplazarAplicaciones($pago, $aplicaciones);
 
         $anticipo = (float) ($data['anticipo'] ?? $data['totalanticipo'] ?? 0);
+        if ($anticipo <= 0 && ! $this->hayAplicacionConMonto($aplicaciones)) {
+            $anticipo = abs((float) ($pago->monto ?? $data['monto'] ?? 0));
+        }
         if ($anticipo > 0) {
             PagoproveedorAplicacionCuentacorrienteSupport::crearAnticipo(
                 $pago,
@@ -312,6 +315,9 @@ class PagoproveedorService
                 (int) ($pago->moneda_id ?: ($data['moneda_id'] ?? 1)),
                 (float) ($pago->cotizacion ?: 1),
             );
+            if (! $this->hayAplicacionConMonto($aplicaciones)) {
+                $this->marcarComoOpa($pago);
+            }
         }
 
         $this->persistirRetenciones($pago, $data);
@@ -391,7 +397,7 @@ class PagoproveedorService
         if ($proveedorId <= 0) {
             return [];
         }
-        $proveedor = Proveedor::query()->find($proveedorId);
+        $proveedor = Proveedor::query()->with(['condicionivas', 'condicionIIBBs'])->find($proveedorId);
         if ($proveedor === null) {
             return [];
         }
@@ -692,11 +698,40 @@ class PagoproveedorService
     }
 
     /**
+     * @param  list<array<string, mixed>>  $aplicaciones
+     */
+    private function hayAplicacionConMonto(array $aplicaciones): bool
+    {
+        foreach ($aplicaciones as $apl) {
+            if ((int) ($apl['proveedor_cuentacorriente_id'] ?? 0) > 0
+                && abs((float) ($apl['montoaplicado'] ?? 0)) > 0.01) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function marcarComoOpa(Pagoproveedor $pago): void
+    {
+        $tipoOpaId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorAbreviaturaPublica('OPA');
+        $upd = ['tipocomprobante' => 'OPA'];
+        if ($tipoOpaId > 0) {
+            $upd['tipotransaccion_caja_id'] = $tipoOpaId;
+        }
+        $this->pagoproveedorRepository->update($upd, $pago->id);
+        $pago->tipocomprobante = 'OPA';
+        if ($tipoOpaId > 0) {
+            $pago->tipotransaccion_caja_id = $tipoOpaId;
+        }
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     private function persistirRetenciones(Pagoproveedor $pago, array $data): void
     {
-        $proveedor = Proveedor::query()->find((int) $pago->proveedor_id);
+        $proveedor = Proveedor::query()->with(['condicionivas', 'condicionIIBBs'])->find((int) $pago->proveedor_id);
         if ($proveedor === null) {
             return;
         }
@@ -950,6 +985,33 @@ class PagoproveedorService
         // Clave comprobante Anita (igual que IE OPP / a-movim MultiEmpresa): sin letra.
         $payload = array_merge($payload, $this->referenciaComprobanteCtamov($pago));
 
+        $asientoId = (int) ($pago->asiento_id ?? 0);
+        if ($asientoId <= 0) {
+            $porPago = $this->asientoRepository->leeAsientoPorClave($pago->id, 'pagoproveedor_id');
+            $ultimo = $porPago->sortByDesc('id')->first();
+            if ($ultimo) {
+                $asientoId = (int) $ultimo->id;
+            }
+        }
+        if ($asientoId > 0) {
+            try {
+                $existente = $this->asientoRepository->find($asientoId);
+            } catch (\Throwable $e) {
+                $existente = null;
+            }
+            if ($existente) {
+                $payload['tipoasiento_id'] = $existente->tipoasiento_id ?: $payload['tipoasiento_id'];
+                $payload['numeroasiento'] = $existente->numeroasiento;
+                $this->asientoRepository->update($payload, $asientoId);
+                $this->asientoMovimientoRepository->update($payload, $asientoId);
+                if ((int) ($pago->asiento_id ?? 0) !== $asientoId) {
+                    $this->pagoproveedorRepository->update(['asiento_id' => $asientoId], $pago->id);
+                }
+
+                return;
+            }
+        }
+
         $asiento = $this->asientoRepository->create($payload);
         if ($asiento === 'Error' || ! $asiento) {
             throw new Exception('Error al grabar asiento de la OP.');
@@ -1029,14 +1091,21 @@ class PagoproveedorService
                 $this->registrarEstado($pago, 'CONFIRMADA', 'Confirmación de orden de pago');
 
                 // Re-persistir retenciones (certificados) y asiento si hay datos de cuentas.
+                // No pasar el monto de la OP como neto IIBB: un anticipo sin factura
+                // no tiene destino BA y eso inventaba retención CABA.
                 $data = [
                     'monto' => $pago->monto,
-                    'importe_neto_retencion' => $pago->monto,
                     'calcular_ganancias' => true,
                     'calcular_iva' => true,
                     'calcular_suss' => true,
                     'calcular_iibb' => true,
                 ];
+                foreach ($pago->pagoproveedor_comprobantes ?? [] as $i => $pc) {
+                    $data['idcuentacorrientes'][$i] = (int) $pc->proveedor_cuentacorriente_id;
+                    $data['montoaplicadocomprobantes'][$i] = (float) $pc->montoaplicado;
+                    $data['cotizacion_aplicada_dia'][$i] = (float) ($pc->cotizacion_aplicada ?: $pc->cotizacion ?: 0);
+                    $data['monedacomprobante_ids'][$i] = (int) ($pc->moneda_id ?: 0);
+                }
                 $this->persistirRetenciones($pago, $data);
 
                 if (! $pago->asiento_id && ! $pago->asientos) {
@@ -1274,6 +1343,15 @@ class PagoproveedorService
 
                 $this->registrarEstado($pago, $estado, 'Alta desde propuesta de pagos #'.$propuestaPagoId);
                 PagoproveedorAplicacionCuentacorrienteSupport::reemplazarAplicaciones($pago, $aplicaciones);
+                if (! $this->hayAplicacionConMonto($aplicaciones) && abs((float) $monto) > 0) {
+                    PagoproveedorAplicacionCuentacorrienteSupport::crearAnticipo(
+                        $pago,
+                        abs((float) $monto),
+                        (int) $monedaId,
+                        1.0,
+                    );
+                    $this->marcarComoOpa($pago);
+                }
 
                 if ($calcularRetenciones && (bool) config('propuesta_pago.calcular_retenciones_al_ejecutar', true)) {
                     $payloadRet = [

@@ -63,7 +63,7 @@
                 aplicarCantidadSegunNpu($tr);
             });
             if (typeof window.msRefrescarPreciosTodasLasFilas === 'function') {
-                window.msRefrescarPreciosTodasLasFilas();
+                window.msRefrescarPreciosTodasLasFilas({ forzar: true });
             }
             return;
         }

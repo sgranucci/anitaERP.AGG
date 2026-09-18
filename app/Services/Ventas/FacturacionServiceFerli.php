@@ -213,6 +213,9 @@ class FacturacionServiceFerli extends FacturacionService
             if (! $cliente) {
                 return ['error' => 'Cliente inexistente'];
             }
+            if ($errorPolitica = $this->errorPoliticaComercialFactura($cliente, $data)) {
+                return $errorPolitica;
+            }
             if ($cliente->numerodocumento == null) {
                 return ['error' => 'No tiene CUIT'];
             }

@@ -23,11 +23,13 @@ use App\Support\Caja\ChequeAgingListadoFiltros;
 use App\Support\Caja\ChequeCarteraAgingSupport;
 use App\Support\Caja\ChequeCarteraConsultaSupport;
 use App\Support\Caja\ChequeCashflowSemanalSupport;
+use App\Support\Caja\ChequeDepositoComprobanteSupport;
 use App\Support\Caja\ChequeDepositoConciliacionFiltros;
 use App\Support\Caja\ChequeDepositoConciliacionSupport;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequeNdConfigSupport;
 use App\Support\Caja\Echeq\ChequeEcheqProviderResolver;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
 use InvalidArgumentException;
 
@@ -91,7 +93,6 @@ class ChequeController extends Controller
             'puede_nd_cheque' => $puede_nd_cheque,
             'puede_depositar_cheque' => $puede_depositar_cheque,
             'puede_caucionar_cheque' => $puede_caucionar_cheque,
-            'cuentacaja_deposito_query' => $this->cuentacajaRepository->all(),
             'filtros' => $filtros,
             'filtrosQuery' => ChequeListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => ChequeListadoFiltros::CAMPOS,
@@ -301,6 +302,9 @@ class ChequeController extends Controller
                 $request->input('fecha'),
                 $request->input('nro_boleta'),
             );
+            $resultado['url_comprobante_pdf'] = ChequeDepositoComprobanteSupport::url([
+                (int) ($resultado['cheque_id'] ?? 0),
+            ]);
 
             return response()->json(['mensaje' => 'ok', 'data' => $resultado]);
         } catch (InvalidArgumentException $e) {
@@ -328,6 +332,13 @@ class ChequeController extends Controller
                 $request->input('fecha'),
                 $request->input('nro_boleta'),
             );
+            $okIds = [];
+            foreach ($resultado['detalle'] ?? [] as $fila) {
+                if (! empty($fila['ok'])) {
+                    $okIds[] = (int) ($fila['cheque_id'] ?? 0);
+                }
+            }
+            $resultado['url_comprobante_pdf'] = ChequeDepositoComprobanteSupport::url($okIds);
 
             return response()->json(['mensaje' => 'ok', 'data' => $resultado]);
         } catch (InvalidArgumentException $e) {
@@ -335,6 +346,31 @@ class ChequeController extends Controller
         } catch (Exception $e) {
             return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * PDF boleta de depósito CHT (uno o varios) para archivo.
+     */
+    public function comprobanteDeposito(Request $request)
+    {
+        can('listar-cheque');
+
+        try {
+            $datos = ChequeDepositoComprobanteSupport::armar(
+                ChequeDepositoComprobanteSupport::parseIds($request->input('ids')),
+                $this->empresaRepository
+            );
+        } catch (InvalidArgumentException $e) {
+            abort(404, $e->getMessage());
+        }
+
+        $nombre = ChequeDepositoComprobanteSupport::nombreArchivo(
+            (int) $datos['total_cantidad'],
+            (string) $datos['fecha_deposito']
+        );
+        $pdf = Pdf::loadView('caja.cheque.comprobante_deposito', $datos)->setPaper('a4', 'portrait');
+
+        return $pdf->stream($nombre);
     }
 
     /**
@@ -359,7 +395,6 @@ class ChequeController extends Controller
             'filtrosQuery' => ChequeAgingListadoFiltros::paraQueryString($filtros),
             'hasta' => $resumen['hasta'],
             'puede_depositar_cheque' => can('editar-cheque', false) || can('actualizar-cheque', false),
-            'cuentacaja_deposito_query' => $this->cuentacajaRepository->all(),
         ]);
     }
 

@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Caja;
 
 use App\Exports\Caja\MovimientosCajaReporteExport;
 use App\Http\Controllers\Controller;
+use App\Models\Caja\Cuentacaja;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\MovimientosCajaReporteService;
 use App\Support\Caja\MovimientosCajaReporteFiltros;
@@ -65,14 +66,14 @@ class MovimientosCajaReporteController extends Controller
             );
         }
 
+        $cuentaFiltroId = (int) ($filtros['cuentacaja_id'] ?? 0);
+
         return view('caja.movimientos_caja_reporte.index', [
             'filtros' => $filtros,
             'filtrosQuery' => MovimientosCajaReporteFiltros::paraQueryString($filtros, $consultado),
             'consultado' => $consultado,
             'empresa_query' => $empresaQuery,
-            'cuentas' => $this->service->cuentasFiltro($filtros['empresa_ids'] !== []
-                ? $filtros['empresa_ids']
-                : $permitidas),
+            'cuentaFiltro' => $cuentaFiltroId > 0 ? Cuentacaja::query()->find($cuentaFiltroId) : null,
             'resultado' => $resultado,
             'filasPaginadas' => $filasPaginadas,
             'puede_ver_ingresoegreso' => can('editar-ingresos-egresos-caja', false) || can('listar-ingresos-egresos-caja', false) || can('actualizar-ingresos-egresos-caja', false),

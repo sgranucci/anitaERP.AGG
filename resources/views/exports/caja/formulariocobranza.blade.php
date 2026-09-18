@@ -214,12 +214,14 @@
 @endif
 
 @if (count($tblCheques) > 0)
-    <h3>Cheques</h3>
+    <h3>Cheques de terceros</h3>
     <table>
         <thead>
             <tr>
                 <th>Fecha pago</th>
-                <th>Nro</th>
+                <th>N&deg; int.</th>
+                <th>Tipo</th>
+                <th>Nro cheque</th>
                 <th>Banco</th>
                 <th>Mon</th>
                 <th class="right">Cotiz.</th>
@@ -230,6 +232,8 @@
             @foreach ($tblCheques as $cheque)
                 <tr>
                     <td>{{ date('d/m/Y', strtotime($cheque['fechapago'] ?? '')) }}</td>
+                    <td>{{ $cheque['nro_interno_anita'] ?? '' }}</td>
+                    <td>{{ $cheque['tipo_instrumento'] ?? '' }}</td>
                     <td>{{ $cheque['numerocheque'] }}</td>
                     <td>{{ $cheque['banco'] }}</td>
                     <td>{{ $cheque['moneda'] }}</td>
@@ -239,6 +243,7 @@
             @endforeach
         </tbody>
     </table>
+    <p class="muted">N&deg; int. = n&uacute;mero interno secuencial (b&uacute;squeda / endoso en cartera).</p>
 @endif
 
 @if (count($tblRetenciones) > 0)

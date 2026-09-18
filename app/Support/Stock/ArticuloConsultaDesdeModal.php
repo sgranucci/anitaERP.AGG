@@ -79,7 +79,12 @@ class ArticuloConsultaDesdeModal
             || can('consultar-precios-local', false)
             || can('crear-ordenes-de-trabajo', false)
             || can('editar-ordenes-de-trabajo', false)
-            || can('listar-ordenes-de-trabajo', false);
+            || can('listar-ordenes-de-trabajo', false)
+            || can('crear-factura', false)
+            || can('editar-factura', false)
+            || can('listar-factura', false)
+            || can('facturar', false)
+            || can('generar-nota-de-credito', false);
     }
 
     public static function urlEditar(int $id): string

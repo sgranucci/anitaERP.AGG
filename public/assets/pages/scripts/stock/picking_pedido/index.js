@@ -3,6 +3,7 @@
 
     var pedido_combinacion_ids = [];
     var ordentrabajo_ids = [];
+    var filasFacturaPicking = [];
     var nombrecliente = '';
     var descuentoCliente = 0;
     var offFactura = 0;
@@ -33,6 +34,28 @@
         overlay.classList.add('d-none');
         overlay.style.display = '';
         overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    function extraerUrlImpresionSesion(data) {
+        var items = Array.isArray(data) ? data : [data];
+        for (var i = 0; i < items.length; i++) {
+            var item = items[i];
+            if (item && typeof item === 'object' && item.impresion_url) {
+                var url = String(item.impresion_url).trim();
+                if (url !== '') {
+                    return url;
+                }
+            }
+        }
+        return null;
+    }
+
+    function pathRetornoPicking() {
+        try {
+            return window.location.pathname + window.location.search;
+        } catch (e) {
+            return '';
+        }
     }
 
     function leePuntoVenta(puntoventa_id) {
@@ -115,9 +138,45 @@
         leePuntoVenta(puntoVentaDefault);
     }
 
+    function escHtml(valor) {
+        return String(valor == null ? '' : valor)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function renderMedidasFacturaPicking(filas) {
+        var $dest = $('#facturarMedidasModal');
+        $dest.empty();
+        var tot = 0;
+        (filas || []).forEach(function (fila) {
+            var cant = parseFloat(fila.cantidad) || 0;
+            tot += cant;
+            var titulo = escHtml((fila.sku || '') + ' ' + (fila.combinacion || ''));
+            $dest.append('<div class="mb-1"><strong>' + titulo + '</strong> — ' + cant.toFixed(0) + ' pares</div>');
+            var talles = fila.talles || [];
+            if (!talles.length) {
+                return;
+            }
+            var html = "<table class='table table-bordered table-sm table-striped mb-3'><thead><tr>";
+            talles.forEach(function (t) {
+                html += "<th class='text-center' style='min-width:32px;background:#D2D8DC;'>" + escHtml(t.nombre) + "</th>";
+            });
+            html += "</tr></thead><tbody><tr>";
+            talles.forEach(function (t) {
+                var q = parseFloat(t.cantidad);
+                html += "<td class='text-center'><input type='text' class='cantidadesportalles form-control form-control-sm text-center' readonly value='" + (q ? q : '') + "' style='width:42px;display:inline-block;'></td>";
+            });
+            html += "</tr></tbody></table>";
+            $dest.append(html);
+        });
+        $('#facturartotpares').val(tot ? String(Math.round(tot)) : '');
+    }
+
     $(function () {
         $('#check-all-picking').on('change', function () {
-            $('.check-picking-linea').prop('checked', $(this).is(':checked'));
+            $('.check-picking-linea:not(:disabled)').prop('checked', $(this).is(':checked'));
         });
 
         $('#btn-facturar-picking').on('click', function () {
@@ -139,6 +198,7 @@
                     }
                     pedido_combinacion_ids = data.pedido_combinacion_ids || [];
                     ordentrabajo_ids = data.ordentrabajo_ids || [];
+                    filasFacturaPicking = data.filas || [];
                     nombrecliente = data.nombrecliente || '';
                     descuentoCliente = 0;
                     offFactura = pedido_combinacion_ids.length;
@@ -157,9 +217,8 @@
             modal.find('#nombrecliente').val(nombrecliente);
             modal.find('.modal-title').text('Factura PICKING — ' + nombrecliente);
             modal.find('#descuentopie').val(descuentoCliente);
-            modal.find('#facturarMedidasModal').empty();
-            modal.find('#facturartotpares').val('');
             cargarSelectsModal(modal);
+            renderMedidasFacturaPicking(filasFacturaPicking);
             alert('Va a facturar ' + offFactura + ' ítems de picking');
         });
 
@@ -210,16 +269,24 @@
                 mercaderia: mercaderia,
                 leyendaexportacion: leyendaexportacion,
                 transporte_id: transporte_id,
+                retorno_index: pathRetornoPicking(),
                 _token: token
             })
                 .done(function (data, status) {
-                    ocultarOverlay();
                     if (data.error != '') {
+                        ocultarOverlay();
                         alert(data.error);
-                    } else {
-                        alert('Factura Número: ' + data.factura + '\nEstado: ' + status);
-                        window.location.reload();
+                        return;
                     }
+                    var urlImpresion = extraerUrlImpresionSesion(data);
+                    if (urlImpresion) {
+                        mostrarOverlay('Abriendo programa de impresión…');
+                        window.location = urlImpresion;
+                        return;
+                    }
+                    ocultarOverlay();
+                    alert('Factura Número: ' + data.factura + '\nEstado: ' + status);
+                    window.location.reload();
                 })
                 .fail(function (xhr) {
                     ocultarOverlay();

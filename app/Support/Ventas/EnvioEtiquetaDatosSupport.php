@@ -16,6 +16,30 @@ use App\Models\Ventas\Venta;
 final class EnvioEtiquetaDatosSupport
 {
     /**
+     * Una etiqueta de ENVÍO por bulto del remito (venta.cantidadbulto).
+     * Si no hay cabecera, suma cajas de líneas de remito o de emisión.
+     */
+    public static function cantidadEtiquetasDesdeVenta(Venta $venta): int
+    {
+        $bultos = (int) ($venta->cantidadbulto ?? 0);
+        if ($bultos <= 0) {
+            $venta->loadMissing(['remitos.remito_articulos', 'venta_emisiones']);
+            $sumaCajas = 0.0;
+            foreach ($venta->remitos?->remito_articulos ?? [] as $linea) {
+                $sumaCajas += (float) ($linea->caja ?? 0);
+            }
+            if ($sumaCajas <= 0.00001) {
+                foreach ($venta->venta_emisiones ?? [] as $emision) {
+                    $sumaCajas += (float) ($emision->caja ?? 0);
+                }
+            }
+            $bultos = (int) round($sumaCajas);
+        }
+
+        return max(1, min(999, $bultos));
+    }
+
+    /**
      * @return array{
      *   remitente: array{razon_social: string, domicilio: string, localidad: string, telefono: string},
      *   destinatario: array{nombre: string, domicilio: string, localidad_cp: string, provincia: string, entrega_en: string}

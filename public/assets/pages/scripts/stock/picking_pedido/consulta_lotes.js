@@ -29,7 +29,93 @@
             combinacionTxt: textoOpcionSeleccionada($tr.find('.combinacion')),
             moduloTxt: textoOpcionSeleccionada($tr.find('.modulo')),
             paresLinea: parseFloat(cantRaw) || 0,
+            numeracion: numeracionLineaDeFila($tr),
         };
+    }
+
+    function numeracionLineaDeFila($tr) {
+        var raw = String($tr.find('.medidas').val() || '').trim();
+        if (!raw) {
+            return [];
+        }
+        try {
+            var arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) {
+                return [];
+            }
+            return arr
+                .map(function (x) {
+                    return {
+                        medida: String((x && (x.medida || x.nombre)) || '').trim(),
+                        cantidad: parseFloat(x && x.cantidad) || 0
+                    };
+                })
+                .filter(function (x) {
+                    return x.medida !== '' && x.cantidad > 0;
+                })
+                .sort(function (a, b) {
+                    return (parseFloat(a.medida) || 0) - (parseFloat(b.medida) || 0);
+                });
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function textoNumeracion(pares) {
+        return (pares || []).map(function (p) {
+            return p.medida + ':' + formatearPares(p.cantidad);
+        }).join(' ');
+    }
+
+    function textoNumeracionEstiloModulo(pares) {
+        if (!pares || !pares.length) {
+            return '';
+        }
+        var desde = pares[0].medida;
+        var hasta = pares[pares.length - 1].medida;
+        var cants = pares.map(function (p) {
+            return String(parseInt(p.cantidad, 10) || 0);
+        }).join('-');
+        return '(' + desde + '-' + hasta + ') ' + cants;
+    }
+
+    function parseMedidasStock(txt) {
+        var out = [];
+        String(txt || '').split(/\s+/).forEach(function (p) {
+            if (!p) {
+                return;
+            }
+            var bits = p.split(':');
+            if (bits.length !== 2) {
+                return;
+            }
+            var cant = parseFloat(bits[1]);
+            if (!bits[0] || !(cant > 0)) {
+                return;
+            }
+            out.push({ medida: String(bits[0]).trim(), cantidad: cant });
+        });
+        return out;
+    }
+
+    function stockCubreNumeracion(stockPares, pedidoPares) {
+        if (!pedidoPares || !pedidoPares.length || !stockPares || !stockPares.length) {
+            return false;
+        }
+        var porMedida = {};
+        stockPares.forEach(function (p) {
+            porMedida[p.medida] = (porMedida[p.medida] || 0) + (parseFloat(p.cantidad) || 0);
+        });
+        for (var i = 0; i < pedidoPares.length; i++) {
+            var need = parseFloat(pedidoPares[i].cantidad) || 0;
+            if (need <= 0) {
+                continue;
+            }
+            if ((porMedida[pedidoPares[i].medida] || 0) + 0.0001 < need) {
+                return false;
+            }
+        }
+        return true;
     }
 
     function formatearPares(n) {
@@ -107,6 +193,15 @@
             badges += badgePares('Pares línea', ctx.paresLinea);
         }
 
+        var numeracionHtml = '';
+        if (ctx.numeracion && ctx.numeracion.length) {
+            numeracionHtml = '<div class="clsp-numeracion">' +
+                '<span class="clsp-badge-label">Numeración</span>' +
+                '<span class="clsp-numeracion-txt">' + escaparHtml(textoNumeracion(ctx.numeracion)) + '</span>' +
+                '<span class="clsp-numeracion-mod">' + escaparHtml(textoNumeracionEstiloModulo(ctx.numeracion)) + '</span>' +
+                '</div>';
+        }
+
         var articuloHtml = '';
         if (sku && desc) {
             articuloHtml = '<span class="clsp-sku">' + escaparHtml(sku) + '</span> — ' + escaparHtml(desc);
@@ -119,6 +214,7 @@
         return '<div class="clsp-banner">' +
             '<div class="clsp-articulo">' + articuloHtml + '</div>' +
             (meta.length ? '<div class="clsp-meta">' + meta.join(' · ') + '</div>' : '') +
+            numeracionHtml +
             (badges ? '<div class="clsp-pares">' + badges + '</div>' : '') +
             '</div>';
     }
@@ -144,16 +240,23 @@
                 ? 'Sin lotes/OT con saldo para el módulo de la línea. Desmarcá «Solo módulo de la línea» para ver stock de otros módulos.'
                 : 'Sin lotes/OT con saldo pendiente';
             $tbody.append(
-                '<tr><td colspan="5" class="text-center text-muted">' + hint + '</td></tr>'
+                '<tr><td colspan="6" class="text-center text-muted">' + hint + '</td></tr>'
             );
             return;
         }
         $.each(filas, function (_i, fila) {
             var saldo = Number(fila.saldo || 0);
             var saldoTxt = saldo.toLocaleString('es-AR', { maximumFractionDigits: 0 });
+            var moduloTxt = fila.modulo || (fila.modulo_id ? ('#' + fila.modulo_id) : '');
+            var medidasStock = parseMedidasStock(fila.medidas);
+            var cubre = stockCubreNumeracion(medidasStock, opts.numeracion || []);
             var $tr = $('<tr/>');
+            if (cubre) {
+                $tr.addClass('clsp-fila-cubre');
+            }
             $tr.append($('<td/>').text(fila.lote || ''));
-            $tr.append($('<td/>').text(fila.modulo || (fila.modulo_id ? ('#' + fila.modulo_id) : '')));
+            $tr.append($('<td/>').text(moduloTxt));
+            $tr.append($('<td class="clsp-medidas"/>').text(fila.medidas || ''));
             $tr.append($('<td/>').text(fila.deposito || ''));
             $tr.append($('<td class="text-right"/>').html(
                 '<strong style="font-size:1.1rem;color:#6E2C00;">' + escaparHtml(saldoTxt) + '</strong>'
@@ -181,7 +284,7 @@
         var token = $('#csrf_token').val();
         pintarContexto(armarHtmlContexto(ctx, null));
         $('#datoslotesstockpicking').html(
-            '<tr><td colspan="5" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Buscando…</td></tr>'
+            '<tr><td colspan="6" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Buscando…</td></tr>'
         );
 
         $.post(carpetaBase + '/stock/picking-pedido/consulta-lotes-stock', {
@@ -199,7 +302,7 @@
                     return;
                 }
                 pintarContexto(armarHtmlContexto(ctx, data));
-                renderFilas(data.filas || [], { soloModulo: soloModulo });
+                renderFilas(data.filas || [], { soloModulo: soloModulo, numeracion: ctx.numeracion || [] });
             })
             .fail(function (xhr) {
                 var msg = (xhr.responseJSON && xhr.responseJSON.error)

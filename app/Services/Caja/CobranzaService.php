@@ -30,6 +30,7 @@ use App\Repositories\Configuracion\Retencion_CobranzaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
@@ -46,6 +47,8 @@ use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Caja\Cobranza_Estado;
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\Cliente;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
@@ -206,8 +209,9 @@ class CobranzaService
 
 						Self::agrega($data, $cobranza, $request);
 						$this->persistirDescuentosCobranza($cobranza->id, $data);
+						$avisoPolitica = $this->aplicarPoliticaTrasCobranzaConfirmada($data);
 
-						return $this->respuestaExitoGrabacionCobranza($cobranza, $request);
+						return $this->respuestaExitoGrabacionCobranza($cobranza, $request, $avisoPolitica);
 					} else {
 						DB::beginTransaction();
 						try {
@@ -252,7 +256,9 @@ class CobranzaService
 							return ['errores' => $e->getMessage()];
 						}
 
-						return $this->respuestaExitoGrabacionCobranza($cobranza, $request);
+						$avisoPolitica = $this->aplicarPoliticaTrasCobranzaConfirmada($data);
+
+						return $this->respuestaExitoGrabacionCobranza($cobranza, $request, $avisoPolitica);
 					}
 				},
 			);
@@ -306,12 +312,7 @@ class CobranzaService
 				throw new Exception('Error en grabacion, no existe tipo de asiento de tesoreria');
 
 			// Arma el asiento contable
-			$data['moneda_ids'] = $data['monedaasiento_ids'];
-			$data['centrocosto_ids'] = $data['centrocostoasiento_ids'];
-			$data['debes'] = $data['debeasientos'];
-			$data['haberes'] = $data['haberasientos'];
-			$data['cotizaciones'] = $data['cotizacionasientos'];
-			$data['observaciones'] = $data['observacionasientos'];
+			$data = $this->asignarIdsAsientoDesdeFormulario($data);
 			$data['cobranza_id'] = $cobranza->id;
 
 			$data['observacion'] = $data['detalle'];
@@ -334,32 +335,7 @@ class CobranzaService
 				$asiento_movimiento = $this->asiento_movimientoRepository->create($data, $asiento->id);
 		}
 
-		// Verifica si tiene que crear un anticipo de cuenta corriente
-		$totalCobranzas = $data['totalcobranzas'] ?? [];
-		if (! is_array($totalCobranzas)) {
-			$totalCobranzas = $totalCobranzas !== null && $totalCobranzas !== '' ? [$totalCobranzas] : [];
-		}
-		$monedaCobranza_ids = $data['moneda_cobranza_ids'] ?? [];
-		if (! is_array($monedaCobranza_ids)) {
-			$monedaCobranza_ids = $monedaCobranza_ids !== null && $monedaCobranza_ids !== '' ? [$monedaCobranza_ids] : [];
-		}
-
-		for ($i = 0; $i < count($totalCobranzas); $i++)
-		{
-			if ($totalCobranzas[$i] > 0)
-			{
-				$cliente_cuentacorriente = $this->cliente_cuentacorrienteRepository->create([
-						'fecha' => $data['fecha'],
-						'fechavencimiento' => $data['fecha'],
-						'cliente_id' => $data['cliente_id'],
-						'total' => -$totalCobranzas[$i],
-						'moneda_id' => $monedaCobranza_ids[$i] ?? ($data['moneda_id'] ?? 1),
-						'cotizacion' => $data['cotizacion_cobranza'],
-						'cobranza_id' => $data['cobranza_id'],
-						'empresa_id' => $data['empresa_id']
-				]);		
-			}
-		}
+		$this->persistirAnticiposPagoDeMas($data, $cobranza->id);
 	}
 
     public function actualizaCobranza($request, $id, $origen = null)
@@ -406,7 +382,13 @@ class CobranzaService
 				}
 			}
 
-			return ['mensaje' => 'ok'];
+			$ok = ['mensaje' => 'ok'];
+			$avisoPolitica = $this->aplicarPoliticaTrasCobranzaConfirmada($data);
+			if ($avisoPolitica) {
+				$ok['aviso_politica'] = $avisoPolitica;
+			}
+
+			return $ok;
 		} catch (\Throwable $e) {
 			Log::error('cobranza.actualiza.fallo', [
 				'message' => $e->getMessage(),
@@ -466,26 +448,7 @@ class CobranzaService
 			}
 
 			// Arma el asiento contable
-			$data['moneda_ids'] = $data['monedaasiento_ids'] ?? [];
-			if (! is_array($data['moneda_ids'])) {
-				$data['moneda_ids'] = $data['moneda_ids'] !== null && $data['moneda_ids'] !== '' ? [$data['moneda_ids']] : [];
-			}
-
-			if (!isset($data['centrocostoasiento_ids']))
-			{
-				for ($i = 0; $i < count($data['moneda_ids']); $i++)
-					$data['centrocosto_ids'][$i] = null;
-			}
-			else
-				$data['centrocosto_ids'] = $data['centrocostoasiento_ids'];
-
-			$data['debes'] = $data['debeasientos'] ?? [];
-			$data['haberes'] = $data['haberasientos'] ?? [];
-			$data['cotizaciones'] = $data['cotizacionasientos'] ?? [];
-			$data['observaciones'] = $data['observacionasientos'] ?? [];
-			if (! is_array($data['observaciones'])) {
-				$data['observaciones'] = [];
-			}
+			$data = $this->asignarIdsAsientoDesdeFormulario($data);
 			$data['cobranza_id'] = $id;
 			$data['observacion'] = $data['detalle'];
 
@@ -543,39 +506,15 @@ class CobranzaService
 					$asiento_movimiento = $this->asiento_movimientoRepository->create($data, $asiento->id);
 			}
 		}
-		// Verifica si tiene que crear un anticipo de cuenta corriente con cobranza != 0 y venta en null
+		// Recrea anticipos si cobraron de más (crédito sin venta)
 		$cliente_cuentacorriente = $this->cliente_cuentacorrienteRepository->buscaPorVentaCobranza(null, $data['cobranza_id']);
 
-		foreach ($cliente_cuentacorriente ?? [] as $cobranza)
+		foreach ($cliente_cuentacorriente ?? [] as $anticipoCc)
 		{
-			// Borra el anticipo de la cuenta corriente
-			$this->cliente_cuentacorrienteRepository->find($cobranza->id)->delete();
+			$this->cliente_cuentacorrienteRepository->find($anticipoCc->id)->delete();
 		}
 
-		$totalCobranzas = $data['totalcobranzas'] ?? [];
-		if (! is_array($totalCobranzas)) {
-			$totalCobranzas = $totalCobranzas !== null && $totalCobranzas !== '' ? [$totalCobranzas] : [];
-		}
-		$monedaCobranza_ids = $data['moneda_cobranza_ids'] ?? [];
-		if (! is_array($monedaCobranza_ids)) {
-			$monedaCobranza_ids = $monedaCobranza_ids !== null && $monedaCobranza_ids !== '' ? [$monedaCobranza_ids] : [];
-		}
-		for ($i = 0; $i < count($totalCobranzas); $i++)
-		{
-			if ($totalCobranzas[$i] > 0)
-			{
-				$cliente_cuentacorriente = $this->cliente_cuentacorrienteRepository->create([
-						'fecha' => $data['fecha'],
-						'fechavencimiento' => $data['fecha'],
-						'cliente_id' => $data['cliente_id'],
-						'total' => -$totalCobranzas[$i],
-						'moneda_id' => $monedaCobranza_ids[$i] ?? ($data['moneda_id'] ?? 1),
-						'cotizacion' => $data['cotizacion_cobranza'],
-						'cobranza_id' => $data['cobranza_id'],
-						'empresa_id' => $data['empresa_id']
-				]);		
-			}
-		}
+		$this->persistirAnticiposPagoDeMas($data, $id);
 
 		$this->persistirDescuentosCobranza($id, $data);
 	}
@@ -751,8 +690,8 @@ class CobranzaService
 		{
 			$totalesDeudores = [];
 			foreach ($datosComprobantes as $comprobante) {
-				$montoComp = abs((float) ($comprobante->montos ?? 0));
-				if ($montoComp < 0.000001) {
+				$montoComp = (float) ($comprobante->montos ?? 0);
+				if (abs($montoComp) < 0.000001) {
 					continue;
 				}
 				$monedaId = (int) ($comprobante->moneda_ids ?? 1) ?: 1;
@@ -778,14 +717,18 @@ class CobranzaService
 				if (! $cuentacontableDeudores) {
 					break;
 				}
-				$d_h = ($total['monto'] * $signo > 0) ? 'H' : 'D';
+				$montoDeudores = (float) ($total['monto'] ?? 0);
+				if (abs($montoDeudores) < 0.000001) {
+					continue;
+				}
+				$d_h = ($montoDeudores * $signo > 0) ? 'H' : 'D';
 				Self::agregaCuenta(
 					$asiento,
 					$cuentacontableDeudores->id,
 					$monedaId,
 					$total['cotizacion'],
 					$d_h,
-					$total['monto']
+					abs($montoDeudores)
 				);
 			}
 
@@ -1413,9 +1356,12 @@ class CobranzaService
 		$tblCheques = [];
 		foreach($cobranza->cheques as $cheque)
 		{
+			$nroInterno = (int) ($cheque->nro_interno_anita ?? 0);
 			$tblCheques[] = [
 				'fechapago' => $cheque->fechapago,
 				'numerocheque' => $cheque->numerocheque,
+				'nro_interno_anita' => $nroInterno > 0 ? $nroInterno : null,
+				'tipo_instrumento' => ChequePropioInstrumentoSupport::etiquetaNegociable($cheque->negociable ?? null),
 				'moneda' => $cheque->monedas->abreviatura ?? '',
 				'moneda_id' => $cheque->moneda_id,
 				'monto' => $cheque->monto,
@@ -1469,9 +1415,9 @@ class CobranzaService
 	/**
 	 * Respuesta AJAX post-alta: abre PDF del recibo (mismo patrón que IE / OP).
 	 *
-	 * @return array{mensaje: string, cobranza_id: int, url_comprobante_pdf: string, redirect_url?: string}
+	 * @return array{mensaje: string, cobranza_id: int, url_comprobante_pdf: string, redirect_url?: string, aviso_politica?: string}
 	 */
-	private function respuestaExitoGrabacionCobranza($cobranza, $request): array
+	private function respuestaExitoGrabacionCobranza($cobranza, $request, ?string $avisoPolitica = null): array
 	{
 		$id = (int) ($cobranza->id ?? 0);
 		$respuesta = [
@@ -1479,6 +1425,9 @@ class CobranzaService
 			'cobranza_id' => $id,
 			'url_comprobante_pdf' => route('listar_una_cobranza', ['id' => $id]),
 		];
+		if ($avisoPolitica) {
+			$respuesta['aviso_politica'] = $avisoPolitica;
+		}
 
 		$origenUi = (string) ($request->input('origen') ?? '');
 		if ($origenUi === 'movimientocaja') {
@@ -1490,6 +1439,31 @@ class CobranzaService
 		}
 
 		return $respuesta;
+	}
+
+	private function aplicarPoliticaTrasCobranzaConfirmada(array $data): ?string
+	{
+		if (($data['estado'] ?? '') !== Cobranza_Estado::$enumEstado[0]['nombre']) {
+			return null;
+		}
+
+		$clienteId = (int) ($data['cliente_id'] ?? 0);
+		if ($clienteId <= 0) {
+			return null;
+		}
+
+		try {
+			$cliente = Cliente::query()->find($clienteId);
+
+			return ClientePoliticaComercialSupport::pasarMorosoAProformaPorCobranza($cliente);
+		} catch (\Throwable $e) {
+			Log::error('cobranza.politica.moroso_proforma', [
+				'message' => $e->getMessage(),
+				'cliente_id' => $clienteId,
+			]);
+
+			return null;
+		}
 	}
 
 	public function editaUnaCobranza($cobranza_id, $origen = null)
@@ -1685,12 +1659,7 @@ class CobranzaService
 				throw new Exception('Error en grabacion, no existe tipo de asiento de tesoreria');
 			}
 
-			$data['moneda_ids'] = $data['monedaasiento_ids'];
-			$data['centrocosto_ids'] = $data['centrocostoasiento_ids'];
-			$data['debes'] = $data['debeasientos'];
-			$data['haberes'] = $data['haberasientos'];
-			$data['cotizaciones'] = $data['cotizacionasientos'];
-			$data['observaciones'] = $data['observacionasientos'];
+			$data = $this->asignarIdsAsientoDesdeFormulario($data);
 			$data['cobranza_id'] = $cobranza->id;
 			$data['observacion'] = $data['detalle'];
 
@@ -1806,5 +1775,73 @@ class CobranzaService
 		}
 
 		return null;
+	}
+
+	/**
+	 * El select de CC del asiento no siempre viaja en el POST (cuenta de efectivo
+	 * sin centros, o el combo todavía vacío al grabar). En edición ya se toleraba.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function asignarIdsAsientoDesdeFormulario(array $data): array
+	{
+		$monedaIds = $data['monedaasiento_ids'] ?? [];
+		if (! is_array($monedaIds)) {
+			$monedaIds = ($monedaIds !== null && $monedaIds !== '') ? [$monedaIds] : [];
+		}
+		$data['moneda_ids'] = $monedaIds;
+
+		if (! isset($data['centrocostoasiento_ids']) || ! is_array($data['centrocostoasiento_ids'])) {
+			$data['centrocosto_ids'] = [];
+			foreach (array_keys($monedaIds) as $i) {
+				$data['centrocosto_ids'][$i] = null;
+			}
+		} else {
+			$data['centrocosto_ids'] = $data['centrocostoasiento_ids'];
+		}
+
+		$data['debes'] = is_array($data['debeasientos'] ?? null) ? $data['debeasientos'] : [];
+		$data['haberes'] = is_array($data['haberasientos'] ?? null) ? $data['haberasientos'] : [];
+		$data['cotizaciones'] = is_array($data['cotizacionasientos'] ?? null) ? $data['cotizacionasientos'] : [];
+		$data['observaciones'] = is_array($data['observacionasientos'] ?? null) ? $data['observacionasientos'] : [];
+
+		return $data;
+	}
+
+	/**
+	 * Si los medios superan lo aplicado (pago de más), deja un crédito en CC
+	 * (sin venta) para la próxima cobranza. totalcobranzas = aplicado − medios.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function persistirAnticiposPagoDeMas(array $data, $cobranzaId): void
+	{
+		$totalCobranzas = $data['totalcobranzas'] ?? [];
+		if (! is_array($totalCobranzas)) {
+			$totalCobranzas = ($totalCobranzas !== null && $totalCobranzas !== '') ? [$totalCobranzas] : [];
+		}
+		$monedaCobranzaIds = $data['moneda_cobranza_ids'] ?? [];
+		if (! is_array($monedaCobranzaIds)) {
+			$monedaCobranzaIds = ($monedaCobranzaIds !== null && $monedaCobranzaIds !== '') ? [$monedaCobranzaIds] : [];
+		}
+
+		foreach ($totalCobranzas as $i => $saldoMoneda) {
+			$excedente = (float) $saldoMoneda;
+			if ($excedente > -0.009) {
+				continue;
+			}
+
+			$this->cliente_cuentacorrienteRepository->create([
+				'fecha' => $data['fecha'],
+				'fechavencimiento' => $data['fecha'],
+				'cliente_id' => $data['cliente_id'],
+				'total' => $excedente,
+				'moneda_id' => $monedaCobranzaIds[$i] ?? ($data['moneda_id'] ?? 1),
+				'cotizacion' => $data['cotizacion_cobranza'] ?? 1,
+				'cobranza_id' => $cobranzaId,
+				'empresa_id' => $data['empresa_id'],
+			]);
+		}
 	}
 }

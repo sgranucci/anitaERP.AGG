@@ -302,6 +302,7 @@
 		var comprobantes = [];
 		var errores = [];
 		var redirect = '';
+		var impresionUrl = '';
 		var i;
 		for (i = 0; i < items.length; i++) {
 			var item = items[i];
@@ -311,6 +312,9 @@
 			}
 			if (item.redirect) {
 				redirect = String(item.redirect);
+			}
+			if (item.impresion_url) {
+				impresionUrl = String(item.impresion_url).trim();
 			}
 			var errorItem = item.error ? String(item.error).trim() : '';
 			var factura = extraerFacturaRespuestaMostrador(item);
@@ -344,10 +348,25 @@
 			facturas: comprobantes,
 			errores: exito ? [] : errores,
 			redirect: redirect,
+			impresionUrl: impresionUrl,
 		};
 	}
 
 	function mostrarResultadoFacturaMostrador(resumen) {
+		if (resumen.exito && resumen.impresionUrl) {
+			if (window.FacturaProcesoOverlay && typeof window.FacturaProcesoOverlay.mostrarResultado === 'function') {
+				window.FacturaProcesoOverlay.mostrarResultado({
+					tipo: 'ok',
+					titulo: resumen.titulo,
+					subtitulo: 'Abriendo programa de impresión…',
+					facturas: resumen.facturas,
+					errores: [],
+					boton: 'Imprimiendo…',
+				});
+			}
+			window.location.href = resumen.impresionUrl;
+			return;
+		}
 		if (!window.FacturaProcesoOverlay || typeof window.FacturaProcesoOverlay.mostrarResultado !== 'function') {
 			if (resumen.exito) {
 				window.location.href = resumen.redirect || (document.getElementById('formgeneral') || {}).getAttribute('data-factura-redirect') || window.location.href;
@@ -388,6 +407,14 @@
 
 		if (typeof window.validarFceNcMostradorAntesSubmit === 'function'
 			&& window.validarFceNcMostradorAntesSubmit() === false) {
+			if (window.FacturaProcesoOverlay) {
+				window.FacturaProcesoOverlay.detener();
+			}
+			return;
+		}
+
+		if (typeof window.ncDevolucionValidarSubmit === 'function'
+			&& window.ncDevolucionValidarSubmit() === false) {
 			if (window.FacturaProcesoOverlay) {
 				window.FacturaProcesoOverlay.detener();
 			}
@@ -496,6 +523,12 @@
 			return;
 		}
 
+		var esNc = (typeof facturaTipoEsNotaCreditoMostrador === 'function' && facturaTipoEsNotaCreditoMostrador());
+		if (!esNc && window.clientePoliticaComercial && !window.clientePoliticaComercial.permiteOperacion('factura')) {
+			alert(window.clientePoliticaComercial.mensaje('factura'));
+			return;
+		}
+
         var tipotransaccion_id = $("#tipotransaccion_id").val();
 		var puntoventa_id = $("#puntoventa_id").val();
 
@@ -520,6 +553,11 @@
 			return;
 		}
 
+		if (typeof window.ncDevolucionValidarSubmit === 'function'
+			&& window.ncDevolucionValidarSubmit() === false) {
+			return;
+		}
+
         // Controla datos correctos
 		var item = 0;
 		var flError = false;
@@ -530,6 +568,9 @@
 		$(selectorRenglones).each(function(index) {
 			item = item + 1;
 			var $tr = $(this);
+			if ($tr.hasClass('nc-linea-excluida')) {
+				return;
+			}
 			var articulo_id = $tr.find('.articulo_id').val();
 			var codigo = $tr.find('.codigoarticulo').val();
 			var conceptoVentaId = $tr.find('.concepto_venta_id').val();
@@ -710,6 +751,9 @@
 				}
 			}
 			$('#tiposuspension_id').val(tiposuspension_id);
+			if (data.politica_comercial && window.clientePoliticaComercial) {
+				window.clientePoliticaComercial.setActual(data.politica_comercial);
+			}
 		});
 		
         setTimeout(() => {
@@ -719,6 +763,10 @@
 
     function muestraTipoSuspension()
     {
+		if (window.clientePoliticaComercial) {
+			window.clientePoliticaComercial.pintarBanner();
+			return;
+		}
 		var tiposuspensioncliente_query = $("#tiposuspensioncliente_query").val();
         var tiposuspension_id = $("#tiposuspension_id").val();
 		
@@ -1772,6 +1820,13 @@
 
         $("#tbody-tabla").append(renglon);
         actualizaRenglones();
+
+		if ($('#formgeneral').attr('data-factura-proceso') === 'nc') {
+			var $ultima = $('#tbody-tabla tr').last();
+			if ($ultima.length && !$ultima.find('.nc-devolver').length && $('#itemspedido-table thead .nc-devolver-col').length) {
+				$ultima.prepend('<td class="nc-devolver-col"></td>');
+			}
+		}
 
 		activa_eventos(false);
 		if (typeof window.aplicarConceptoVentaCabeceraALineasVacias === 'function') {

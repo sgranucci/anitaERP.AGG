@@ -23,7 +23,8 @@ window.chequeDepositoUrls = {
     depositarMasivo: @json(route('depositar_masivo_cheque'))
 };
 </script>
-<script src="{{asset("assets/pages/scripts/caja/cheque/deposito.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cuentacaja/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cheque/deposito.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cheque/deposito.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @if ($puede_caucionar_cheque ?? false)
 <script>
@@ -158,7 +159,10 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                             @if (($puede_depositar_cheque ?? false) || ($puede_caucionar_cheque ?? false))
                             <td class="text-center">
                                 @if ($puedeDepositar || $puedeCaucionar)
-                                    <input type="checkbox" class="cheque-select-row" value="{{ $data->id }}" />
+                                    <input type="checkbox" class="cheque-select-row" value="{{ $data->id }}"
+                                           data-monto="{{ number_format((float) $data->monto, 2, '.', '') }}"
+                                           data-moneda="{{ $data->monedas->abreviatura ?? '$' }}"
+                                           data-empresa-id="{{ (int) ($data->empresa_id ?? 0) }}" />
                                 @endif
                             </td>
                             @endif
@@ -224,9 +228,20 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                             class="btn-accion-tabla tooltipsC btn-deposito-cheque"
                                             title="Depositar"
                                             data-cheque-id="{{ $data->id }}"
-                                            data-cheque-ref="{{ $data->numerocheque }} / {{ $data->bancos->nombre ?? '' }}">
+                                            data-cheque-ref="{{ $data->numerocheque }} / {{ $data->bancos->nombre ?? '' }}"
+                                            data-cheque-monto="{{ number_format((float) $data->monto, 2, '.', '') }}"
+                                            data-cheque-moneda="{{ $data->monedas->abreviatura ?? '$' }}"
+                                            data-empresa-id="{{ (int) ($data->empresa_id ?? 0) }}">
                                         <i class="fa fa-university text-primary"></i>
                                     </button>
+                                @endif
+                                @if (! empty($data->fecha_deposito))
+                                    <a href="{{ route('comprobante_deposito_cheque', ['ids' => $data->id]) }}"
+                                       class="btn-accion-tabla tooltipsC"
+                                       title="PDF boleta de depósito"
+                                       target="_blank" rel="noopener">
+                                        <i class="fa fa-file-pdf-o text-danger"></i>
+                                    </a>
                                 @endif
                                 @if ($puedeCaucionar)
                                     <button type="button"
@@ -276,6 +291,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
 @endif
 @if ($puede_depositar_cheque ?? false)
     @include('caja.cheque.modal_deposito')
+    @include('includes.caja.modalconsultacuentacaja')
 @endif
 @if ($puede_caucionar_cheque ?? false)
     @include('caja.cheque.modal_caucion')

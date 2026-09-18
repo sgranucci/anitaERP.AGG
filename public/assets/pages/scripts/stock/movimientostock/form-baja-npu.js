@@ -69,7 +69,7 @@
                 $tr.find('.precio').prop('readonly', true);
             });
             if (typeof window.msRefrescarPreciosTodasLasFilas === 'function') {
-                window.msRefrescarPreciosTodasLasFilas();
+                window.msRefrescarPreciosTodasLasFilas({ forzar: true });
             }
         } else {
             $tabla.find('.cantidad-stock, .cant-unidad, .precio').prop('readonly', false);
@@ -115,7 +115,7 @@
                 if (typeof window.msResolverPrecioLinea === 'function') {
                     var articuloId = parseInt($tr.find('input.articulo_id[name="articulos_id[]"]').val(), 10) || 0;
                     if (articuloId > 0) {
-                        window.msResolverPrecioLinea($tr, articuloId);
+                        window.msResolverPrecioLinea($tr, articuloId, { forzar: true });
                     }
                 }
                 return;

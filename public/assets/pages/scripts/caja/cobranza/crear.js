@@ -80,12 +80,14 @@ var saldoFinalCobranza = 0;
 			ocultarSolapasCob();
             $(".form2").show();
 			marcarSolapaCobActiva($(this));
+			sugerirMontoCajaDesdeAplicado();
         });
 		$("#botonform3").click(function(e){
 			e.preventDefault();
 			ocultarSolapasCob();
 			$(".form3").show();
 			marcarSolapaCobActiva($(this));
+			sugerirMontoChequeDesdeAplicado();
         });
 		$("#botonform4").click(function(e){
 			e.preventDefault();
@@ -297,10 +299,13 @@ var saldoFinalCobranza = 0;
 				}
 			}
 	
-			if (!flError)
+			if (!flError) {
+				marcarFilasVaciasCobranza();
 				$( "#form-general" ).submit();
+			}
 		});
 
+		aplicarUltimaTipoTransaccionCobranzaSiCorresponde();
 		activarTecladoCobranza();
     });
 
@@ -346,6 +351,69 @@ var saldoFinalCobranza = 0;
 		var comprobante = String($tr.find('.comprobanteretencion').val() || '').trim();
 		var monto = numeroSeguroCob($tr.find('.montoretencion').val());
 		return ret !== '' || comprobante !== '' || Math.abs(monto) > 0.000001;
+	}
+
+	function marcarFilasVaciasCobranza() {
+		function marcar($trs, conDatos) {
+			$trs.each(function () {
+				var $tr = $(this);
+				$tr.toggleClass('erp-fila-vacia', !conDatos($tr));
+			});
+		}
+		marcar($('#tbody-cuenta-table tr'), filaCuentaCobranzaConDatos);
+		marcar($('#tbody-cobranza-cheque-table tr'), filaChequeCobranzaConDatos);
+		marcar($('#tbody-cobranza-retencion-table tr'), filaRetencionCobranzaConDatos);
+		marcar($('#tbody-cuenta-asiento-table tr.item-cuenta-asiento'), function ($tr) {
+			if (!$tr || !$tr.length) {
+				return false;
+			}
+			var codigo = String($tr.find('.codigoasiento').val() || '').trim();
+			var id = String($tr.find('.cuentacontable_id').val() || '').trim();
+			var debe = numeroSeguroCob($tr.find('.debeasiento').val());
+			var haber = numeroSeguroCob($tr.find('.haberasiento').val());
+			return id !== '' || codigo !== '' || Math.abs(debe) > 0.000001 || Math.abs(haber) > 0.000001;
+		});
+	}
+
+	function claveUltimaTipoCobranza() {
+		var usuarioId = String($('#form-general').attr('data-usuario-id') || '').trim();
+		return 'anitaERP_cobranza_ultima_tipotransaccion' + (usuarioId ? '_u' + usuarioId : '');
+	}
+
+	function guardarUltimaTipoTransaccionCobranza(tipoId) {
+		var key = claveUltimaTipoCobranza();
+		var id = String(tipoId || '').trim();
+		if (!key || !id) {
+			return;
+		}
+		try {
+			localStorage.setItem(key, id);
+		} catch (eIgn) {}
+	}
+
+	function aplicarUltimaTipoTransaccionCobranzaSiCorresponde() {
+		var $sel = $('#tipotransaccion_caja_id');
+		if (!$sel.length) {
+			return;
+		}
+		if (String($('#id').val() || '').trim() !== '') {
+			guardarUltimaTipoTransaccionCobranza($sel.val());
+			return;
+		}
+		if (String($sel.val() || '').trim() !== '') {
+			guardarUltimaTipoTransaccionCobranza($sel.val());
+			return;
+		}
+		var guardada = '';
+		try {
+			guardada = String(localStorage.getItem(claveUltimaTipoCobranza()) || '').trim();
+		} catch (eIgn) {
+			guardada = '';
+		}
+		if (!guardada || !$sel.find('option[value="' + guardada + '"]').length) {
+			return;
+		}
+		$sel.val(guardada).trigger('change');
 	}
 
 	function monedaBaseCobranza() {
@@ -408,15 +476,29 @@ var saldoFinalCobranza = 0;
 		return Number.isFinite(coef) ? coef : 1;
 	}
 
+	function esCreditoComprobante($tr) {
+		if (!$tr || !$tr.length) {
+			return false;
+		}
+		if (String($tr.attr('data-lado') || '') === 'credito') {
+			return true;
+		}
+		return numeroSeguroCob($tr.find('.montocomprobante').val()) < 0;
+	}
+
+	function signoAplicacionComprobante($tr) {
+		return esCreditoComprobante($tr) ? -1 : 1;
+	}
+
 	function disponibleComprobante($tr) {
 		var disponible = parseFloat($tr.find('.saldocomprobante').attr('data-saldo-disponible'));
 		if (!Number.isFinite(disponible)) {
 			disponible = numeroSeguroCob($tr.find('.saldocomprobante').val());
 		}
-		if (!Number.isFinite(disponible) || disponible <= 0) {
+		if (!Number.isFinite(disponible) || Math.abs(disponible) <= 0.000001) {
 			disponible = numeroSeguroCob($tr.find('.montocomprobante').val());
 		}
-		return Math.max(0, disponible);
+		return Math.abs(disponible);
 	}
 
 	function limpiarAplicacionesComprobantes() {
@@ -443,6 +525,9 @@ var saldoFinalCobranza = 0;
 				return false;
 			}
 			var $tr = $(this);
+			if (esCreditoComprobante($tr)) {
+				return;
+			}
 			var disponible = disponibleComprobante($tr);
 			var aplicar = Math.min(disponible, restante);
 			if (aplicar <= 0.009) {
@@ -461,8 +546,8 @@ var saldoFinalCobranza = 0;
 		var saldoDeuda = 0;
 		var montoDeuda = 0;
 		$('#tbody-comprobante-table .montoaplicadocomprobante').each(function () {
-			aplicado += parseFloat(String($(this).val()).replace(',', '.')) || 0;
 			var $tr = $(this).closest('tr');
+			aplicado += signoAplicacionComprobante($tr) * (parseFloat(String($(this).val()).replace(',', '.')) || 0);
 			saldoDeuda += parseFloat(String($tr.find('.saldocomprobante').val()).replace(',', '.')) || 0;
 			montoDeuda += parseFloat(String($tr.find('.montocomprobante').val()).replace(',', '.')) || 0;
 		});
@@ -529,6 +614,163 @@ var saldoFinalCobranza = 0;
 
 	window.pintarResumenLiquidacion = pintarResumenLiquidacion;
 
+	function importeFilaCuentaCobEnMonedaBase($tr) {
+		var valor = numeroSeguroCob($tr.find('.monto').val());
+		var moneda = $tr.find('.moneda').val();
+		var cotizacion = $tr.find('.cotizacion').val();
+		return valor * coefSeguroCob(monedaBaseCobranza(), moneda, cotizacion);
+	}
+
+	function importeFilaChequeCobEnMonedaBase($tr) {
+		var valor = numeroSeguroCob($tr.find('.montocheque').val());
+		var moneda = $tr.find('.monedacheque_id').val();
+		var cotizacion = $tr.find('.cotizacioncheque').val();
+		return valor * coefSeguroCob(monedaBaseCobranza(), moneda, cotizacion);
+	}
+
+	function montoRestanteCobranza($trExcluir) {
+		var monedaDefault = monedaBaseCobranza();
+		var aplicado = 0;
+		$('#tbody-comprobante-table .montoaplicadocomprobante').each(function () {
+			var valor = numeroSeguroCob($(this).val());
+			if (Math.abs(valor) < 0.000001) {
+				return;
+			}
+			var $tr = $(this).closest('tr');
+			valor *= signoAplicacionComprobante($tr);
+			var moneda = $tr.find('.monedacomprobante').val();
+			var cotizacion = $tr.find('.cotizacioncomprobante').val();
+			aplicado += valor * coefSeguroCob(monedaDefault, moneda, cotizacion);
+		});
+
+		var descuentos = 0;
+		if (typeof totalDescuentosPorMoneda === 'function') {
+			var dm = totalDescuentosPorMoneda();
+			idMoneda.forEach(function (moneda) {
+				var desc = (dm && dm[moneda]) || 0;
+				if (desc <= 0) {
+					return;
+				}
+				var cotizacion = $('#tbody-comprobante-table .monedacomprobante').filter(function () {
+					return $(this).val() == moneda;
+				}).first().parents('tr').find('.cotizacioncomprobante').val();
+				descuentos += desc * coefSeguroCob(monedaDefault, moneda, cotizacion);
+			});
+		}
+
+		var retenciones = 0;
+		$('#tbody-cobranza-retencion-table tr').each(function () {
+			var $tr = $(this);
+			if (!filaRetencionCobranzaConDatos($tr)) {
+				return;
+			}
+			var valor = numeroSeguroCob($tr.find('.montoretencion').val());
+			var moneda = $tr.find('.monedaretencion_id').val();
+			var cotizacion = $tr.find('.cotizacionretencion').val();
+			retenciones += valor * coefSeguroCob(monedaDefault, moneda, cotizacion);
+		});
+
+		var medios = 0;
+		$('#tbody-cuenta-table tr').each(function () {
+			if ($trExcluir && this === $trExcluir[0]) {
+				return;
+			}
+			if (!filaCuentaCobranzaConDatos($(this))) {
+				return;
+			}
+			medios += importeFilaCuentaCobEnMonedaBase($(this));
+		});
+		$('#tbody-cobranza-cheque-table tr').each(function () {
+			if ($trExcluir && this === $trExcluir[0]) {
+				return;
+			}
+			if (!filaChequeCobranzaConDatos($(this))) {
+				return;
+			}
+			medios += importeFilaChequeCobEnMonedaBase($(this));
+		});
+
+		var resto = Math.round((aplicado - descuentos - retenciones - medios) * 100) / 100;
+		return resto > 0 ? resto : 0;
+	}
+
+	function montoRestanteEnMonedaFilaCob($tr, selectorMoneda, selectorCotizacion) {
+		var restoBase = montoRestanteCobranza($tr);
+		if (restoBase <= 0) {
+			return 0;
+		}
+		var monedaDefault = monedaBaseCobranza();
+		var moneda = $tr.find(selectorMoneda).val();
+		var cotizacion = $tr.find(selectorCotizacion).val();
+		var coef = coefSeguroCob(monedaDefault, moneda, cotizacion);
+		if (!coef) {
+			coef = 1;
+		}
+		return Math.round((restoBase / coef) * 100) / 100;
+	}
+
+	function precargarMontoRestanteEnCuenta($tr, forzar) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var $monto = $tr.find('.monto');
+		if (!$monto.length) {
+			return;
+		}
+		var actual = numeroSeguroCob($monto.val());
+		if (!forzar && actual > 0) {
+			return;
+		}
+		var resto = montoRestanteEnMonedaFilaCob($tr, '.moneda', '.cotizacion');
+		if (resto > 0) {
+			$monto.val(resto.toFixed(2));
+			sumaMonto();
+		}
+	}
+
+	function precargarMontoRestanteEnCheque($tr, forzar) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var $monto = $tr.find('.montocheque');
+		if (!$monto.length) {
+			return;
+		}
+		var actual = numeroSeguroCob($monto.val());
+		if (!forzar && actual > 0) {
+			return;
+		}
+		var resto = montoRestanteEnMonedaFilaCob($tr, '.monedacheque_id', '.cotizacioncheque');
+		if (resto > 0) {
+			$monto.val(resto.toFixed(2));
+			sumaMontoCheque();
+		}
+	}
+
+	function sugerirMontoCajaDesdeAplicado() {
+		var $filas = $('#tbody-cuenta-table tr');
+		if (!$filas.length) {
+			agregaUnRenglonCuenta();
+			$filas = $('#tbody-cuenta-table tr');
+		}
+		var $vacia = $filas.filter(function () {
+			return !(numeroSeguroCob($(this).find('.monto').val()) > 0);
+		}).first();
+		if ($vacia.length) {
+			precargarMontoRestanteEnCuenta($vacia, true);
+		}
+	}
+
+	function sugerirMontoChequeDesdeAplicado() {
+		var $filas = $('#tbody-cobranza-cheque-table tr');
+		var $vacia = $filas.filter(function () {
+			return !(numeroSeguroCob($(this).find('.montocheque').val()) > 0);
+		}).first();
+		if ($vacia.length) {
+			precargarMontoRestanteEnCheque($vacia, true);
+		}
+	}
+
 	function enfocarCampoCob(el) {
 		if (!el) {
 			return;
@@ -563,6 +805,7 @@ var saldoFinalCobranza = 0;
 				$tr.find('.moneda').val(data.moneda_id);
 				$tr.find('.codigo_previo').val(codigo);
 				flModificaAsiento = true;
+				precargarMontoRestanteEnCuenta($tr, false);
 				sumaMonto();
 				if (typeof onOk === 'function') {
 					onOk(true);
@@ -864,7 +1107,7 @@ var saldoFinalCobranza = 0;
 
 		$('#tipotransaccion_caja_id').on('change', function (event) {
 			event.preventDefault();
-
+			guardarUltimaTipoTransaccionCobranza($(this).val());
 			buscaTipoTransaccionCaja();
 		});
 		
@@ -872,38 +1115,14 @@ var saldoFinalCobranza = 0;
 			leeCuentaCorriente();
 		});
 
-		$('.codigo').on('change', function (event) {
-			event.preventDefault();
-			var codigo = $(this);
-			var codigo_ant = $(this).parents("tr").find(".codigo_previo").val();
-			var codigo_nuevo = codigo.val();
-			let empresa_id = $('#empresa_id').val();
-
-			let url_cta = carpetaBase+'/caja/cuentacaja/leercuentacajaporcodigo/'+codigo_nuevo;
-
-			$.get(url_cta, function(data){
-				if (data.id > 0)
-				{
-					$(codigo).parents("tr").find('.cuentacaja_id').val(data.id);
-					$(codigo).parents("tr").find(".cuentacaja_id_previa").val(data.id);
-					$(codigo).parents("tr").find(".nombre").val(data.nombre);
-					$(codigo).parents("tr").find(".moneda").val(data.moneda_id);
-					
-					flModificaAsiento = true;
-
-					// Hace focus sobre el primer elemento de la tabla
-					let ptrUltimoRenglon = $("#tbody-cuenta-table tr:last");
-					$(ptrUltimoRenglon).find('.monto').focus();
-				}
-				else
-				{
-					alert("No existe la cuenta de caja");
-
-					// Borra el renglon
-					$(codigo).parents('tr').remove();
-					return;
-				}
-			});
+		$('#cuenta-table').off('change.cobCuentacaja', '.codigo');
+		$('#cuenta-table').on('change.cobCuentacaja', '.codigo', function () {
+			var $input = $(this);
+			var codigoNuevo = String($input.val() || '').trim();
+			if (!codigoNuevo || codigoNuevo === 'undefined') {
+				return;
+			}
+			buscarCuentaCajaCob($input);
 		});
 
 		$('.consultacuentacaja').on('click', function (event) {
@@ -945,8 +1164,11 @@ var saldoFinalCobranza = 0;
 			$('#consultacuentacajaModal').modal('hide');
 			flModificaAsiento = true;
 
-			// Hace focus sobre el primer elemento de la tabla
-			let ptrUltimoRenglon = $("#tbody-cuenta-table tr:last");
+			let ptrUltimoRenglon = $(cuentacajaxcodigo).parents('tr');
+			if (!ptrUltimoRenglon.length) {
+				ptrUltimoRenglon = $("#tbody-cuenta-table tr:last");
+			}
+			precargarMontoRestanteEnCuenta(ptrUltimoRenglon, false);
 			$(ptrUltimoRenglon).find('.monto').focus();
 		});
 
@@ -1048,17 +1270,21 @@ var saldoFinalCobranza = 0;
 	function actualizaSaldoComprobante(ptr)
 	{
 		let $tr = $(ptr).parents("tr");
-		let disponible = disponibleComprobante($tr);
+		let disponibleSigned = parseFloat($tr.find('.saldocomprobante').attr('data-saldo-disponible'));
+		if (!Number.isFinite(disponibleSigned)) {
+			disponibleSigned = numeroSeguroCob($tr.find('.montocomprobante').val());
+		}
 		let aplicadoRaw = $tr.find('.montoaplicadocomprobante').val();
-		let saldo;
-
-		if (aplicadoRaw !== '' && aplicadoRaw !== null && Number.isFinite(parseFloat(String(aplicadoRaw).replace(',', '.'))))
-			saldo = disponible - numeroSeguroCob(aplicadoRaw);
-		else
-			saldo = disponible;
+		let aplicado = 0;
+		if (aplicadoRaw !== '' && aplicadoRaw !== null && Number.isFinite(parseFloat(String(aplicadoRaw).replace(',', '.')))) {
+			aplicado = Math.abs(numeroSeguroCob(aplicadoRaw));
+		}
+		let saldo = esCreditoComprobante($tr)
+			? (disponibleSigned + aplicado)
+			: (disponibleSigned - aplicado);
 
 		if (!Number.isFinite(saldo)) {
-			saldo = disponible;
+			saldo = disponibleSigned;
 		}
 
 		$tr.find('.saldocomprobante').val(saldo.toFixed(2));
@@ -1104,6 +1330,7 @@ var saldoFinalCobranza = 0;
 		$(ptrUltimoRenglon).find('.codigo').focus();
 
 		activa_eventos(false);
+		precargarMontoRestanteEnCuenta(ptrUltimoRenglon, true);
 
 		flModificaAsiento = true;
     }
@@ -1128,15 +1355,19 @@ var saldoFinalCobranza = 0;
     	event.preventDefault();
 
     	let renglon = $('#template-renglon-cheque').html();
-		let monedaDefault = $("#tbody-cobranza-cheque-table").children(':first').find('.moneda').val();
 
     	$("#tbody-cobranza-cheque-table").append(renglon);
 
 		// Hace focus sobre el primer elemento de la tabla
 		let ptrUltimoRenglon = $("#tbody-cobranza-cheque-table tr:last");
+		var monedaDefault = monedaBaseCobranza();
+		if (monedaDefault) {
+			ptrUltimoRenglon.find('.monedacheque_id').val(monedaDefault);
+		}
 		$(ptrUltimoRenglon).find('.fechapago').focus();
 
 		activa_eventos(false);
+		precargarMontoRestanteEnCheque(ptrUltimoRenglon, true);
 
 		flModificaAsiento = true;
     }
@@ -1294,42 +1525,43 @@ var saldoFinalCobranza = 0;
 				$fila.find('.monedacomprobante').val(item.moneda_id);
 				$fila.find('.cotizacioncomprobante').val(Number(item.cotizacion || 0).toFixed(4));
 
-				// Monto = total original del comprobante.
-				// Saldo = pendiente real (total + aplicaciones firmadas); los pagos a cuenta NO van a "Aplicado".
-				// Aplicado = solo lo que se cobra en ESTA cobranza (vacío al cargar).
 				var totalComp = parseFloat(item.total) || 0;
 				var aplicadoPrevio = (item.aplicado === null || item.aplicado === undefined)
 					? 0
 					: (parseFloat(item.aplicado) || 0);
 				var saldoDisponible = (item.saldo !== undefined && item.saldo !== null)
-					? Math.abs(parseFloat(item.saldo) || 0)
-					: Math.abs(totalComp + aplicadoPrevio);
+					? (parseFloat(item.saldo) || 0)
+					: (totalComp + aplicadoPrevio);
+				var lado = item.lado || ((totalComp < 0 || saldoDisponible < 0) ? 'credito' : 'deuda');
+				$fila.attr('data-lado', lado);
+				$fila.toggleClass('item-comprobante-credito', lado === 'credito');
 
-				$fila.find('.montocomprobante').val(Math.abs(totalComp).toFixed(2));
+				$fila.find('.montocomprobante').val(totalComp.toFixed(2));
 				$fila.find('.montoaplicadocomprobante').val('');
 				$fila.find('.saldocomprobante')
 					.val(saldoDisponible.toFixed(2))
 					.attr('data-saldo-disponible', saldoDisponible.toFixed(2));
 				$fila.find('.checkaplicacion').prop('checked', false);
 
-				let urlEditarFactura = route('editar_factura', ':id');
-				let urlGenerarNotaDeCredito = route('generar_notadecredito', ':id');
-				let urlListarFactura = route('lista_una_factura', ':id');
-
-            	let url = urlEditarFactura;
-            	url = url.replace(':id', item.idventa);
-
-				$fila.find('.editarfactura').attr("href", url);
-
-            	let url2 = urlGenerarNotaDeCredito;
-            	url2 = url2.replace(':id', item.idventa);
-
-				$fila.find('.generarnotadecredito').attr("href", url2);				
-
-            	let url3 = urlListarFactura;
-            	url3 = url3.replace(':id', item.idventa);
-
-				$fila.find('.listarfactura').attr("href", url3);
+				if (item.idventa) {
+					let urlEditarFactura = route('editar_factura', ':id');
+					let urlGenerarNotaDeCredito = route('generar_notadecredito', ':id');
+					let urlListarFactura = route('lista_una_factura', ':id');
+					$fila.find('.editarfactura').attr('href', urlEditarFactura.replace(':id', item.idventa)).show();
+					$fila.find('.generarnotadecredito').attr('href', urlGenerarNotaDeCredito.replace(':id', item.idventa)).show();
+					$fila.find('.listarfactura').attr('href', urlListarFactura.replace(':id', item.idventa)).show();
+				} else {
+					$fila.find('.editarfactura, .generarnotadecredito').hide();
+					if (item.cobranza_id && typeof route === 'function') {
+						try {
+							$fila.find('.listarfactura').attr('href', route('listar_una_cobranza', item.cobranza_id)).show();
+						} catch (e) {
+							$fila.find('.listarfactura').hide();
+						}
+					} else {
+						$fila.find('.listarfactura').hide();
+					}
+				}
 
 				if (venta_id > 0)
 				{
@@ -1338,6 +1570,13 @@ var saldoFinalCobranza = 0;
 					$('#nombrecliente').val(item.nombrecliente);
 					if (item.codigocliente) {
 						$('#codigocliente').val(item.codigocliente);
+					}
+					if (item.cliente_id && window.clientePoliticaComercial) {
+						$.get(carpetaBase+'/ventas/leeruncliente/'+item.cliente_id).done(function (cli) {
+							if (cli && cli.politica_comercial) {
+								window.clientePoliticaComercial.setActual(cli.politica_comercial);
+							}
+						});
 					}
 				}
 			});
@@ -1368,12 +1607,13 @@ var saldoFinalCobranza = 0;
 
 		$("#tbody-comprobante-table .montoaplicadocomprobante").each(function() {
             let valor = parseFloat($(this).val());
-			let moneda = $(this).parents("tr").find('.monedacomprobante').val();
-			let cotizacion = $(this).parents("tr").find('.cotizacioncomprobante').val();
+			let $tr = $(this).parents("tr");
+			let moneda = $tr.find('.monedacomprobante').val();
+			let cotizacion = $tr.find('.cotizacioncomprobante').val();
 			let coef = calculaCoeficienteMoneda(monedaDefault, moneda, cotizacion);
 
 			if (!Number.isNaN(valor))
-				totalMoneda[moneda] += valor;
+				totalMoneda[moneda] += valor * signoAplicacionComprobante($tr);
         });
 
 		// Muestra totales por moneda
@@ -1535,8 +1775,10 @@ var saldoFinalCobranza = 0;
 			if (Math.abs(valor) < 0.000001) {
 				return;
 			}
-			let moneda = $(this).parents("tr").find('.monedacomprobante').val();
-			let cotizacion = $(this).parents("tr").find('.cotizacioncomprobante').val();
+			let $tr = $(this).parents("tr");
+			valor *= signoAplicacionComprobante($tr);
+			let moneda = $tr.find('.monedacomprobante').val();
+			let cotizacion = $tr.find('.cotizacioncomprobante').val();
 			let coef = coefSeguroCob(monedaDefault, moneda, cotizacion);
 
 			if (moneda && Number.isFinite(totalMoneda[moneda])) {
@@ -1686,17 +1928,22 @@ var saldoFinalCobranza = 0;
 
 		// Carga los comprobantes aplicados
 		$("#comprobante-table .codigocomprobante").each(function() {
-			moneda_ids = $(this).parents("tr").find(".monedacomprobante").val();
+			var $tr = $(this).parents("tr");
+			moneda_ids = $tr.find(".monedacomprobante").val();
 
-			montos = $(this).parents("tr").find(".montoaplicadocomprobante").val();
-			cotizaciones = $(this).parents("tr").find(".cotizacioncomprobante").val();
+			montos = numeroSeguroCob($tr.find(".montoaplicadocomprobante").val());
+			cotizaciones = $tr.find(".cotizacioncomprobante").val();
 
-			if (montos != 0)
+			if (Math.abs(montos) > 0.000001) {
+				if (esCreditoComprobante($tr)) {
+					montos = -Math.abs(montos);
+				}
 				datosComprobantes.push({
 					moneda_ids,
 					montos,
 					cotizaciones
-				});			
+				});
+			}
 		});
 		datosComprobantes = JSON.stringify(datosComprobantes);
 
@@ -1853,6 +2100,9 @@ var saldoFinalCobranza = 0;
                         	'</td>'+
                         	'<td>'+
                             	'<select name="centrocostoasiento_ids[]" data-placeholder="Centro de costo" class="centrocostoasiento form-control" data-fouc>'+
+								((centroCosto && parseInt(centroCosto, 10) > 0)
+									? '<option value="'+centroCosto+'" selected>'+centroCosto+'</option>'
+									: '<option value="0" selected>Sin CC</option>')+
                             	'</select>'+
                             	'<input type="hidden" class="centrocostoasiento_id_previo" name="centrocostoasiento_id_previo[]" value="'+centroCosto+'" >'+
                         	'</td>'+
@@ -1981,8 +2231,47 @@ var saldoFinalCobranza = 0;
 		}
 	}
 
+	function iniciarBannerGrabacionCob()
+	{
+		if (window.cobGrabacionEnCurso) {
+			return false;
+		}
+		window.cobGrabacionEnCurso = true;
+		$('#botonform0').prop('disabled', true).addClass('disabled');
+		var form = document.getElementById('form-general');
+		if (window.AnitaGrabacion) {
+			if (form && typeof AnitaGrabacion.marcar === 'function') {
+				AnitaGrabacion.marcar(form);
+			} else if (typeof AnitaGrabacion.mostrar === 'function') {
+				var titulo = (form && form.getAttribute('data-mensaje-grabacion')) || 'Grabando cobranza…';
+				AnitaGrabacion.mostrar(titulo);
+			}
+		}
+		return true;
+	}
+
+	function liberarBannerGrabacionCob(opciones)
+	{
+		opciones = opciones || {};
+		var mantenerBloqueo = !!opciones.mantenerBloqueoEnvio;
+		if (!mantenerBloqueo) {
+			window.cobGrabacionEnCurso = false;
+			$('#botonform0').prop('disabled', false).removeClass('disabled');
+			$('#form-general').data('cob-ajax-enviado', false);
+		}
+		if (window.AnitaGrabacion && typeof AnitaGrabacion.liberar === 'function') {
+			AnitaGrabacion.liberar();
+		}
+	}
+
 	$("#form-general").submit(function (e) {
 		e.preventDefault();
+		if ($(this).data('cob-ajax-enviado')) {
+			iniciarBannerGrabacionCob();
+			return;
+		}
+		$(this).data('cob-ajax-enviado', true);
+		iniciarBannerGrabacionCob();
 		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.normalizarAntesDeEnviar === 'function') {
 			AsientoMontosFormato.normalizarAntesDeEnviar(this);
 		}
@@ -2016,7 +2305,8 @@ var saldoFinalCobranza = 0;
 			processData: false, //importante enviar este parametro en false
 			success: function (data) {
 				if (data.mensaje == 'ok') {
-					alert("Se grabó transacción de caja con éxito");
+					liberarBannerGrabacionCob({mantenerBloqueoEnvio: true});
+					alert("Se grabó transacción de caja con éxito" + (data.aviso_politica ? "\n\n" + data.aviso_politica : ""));
 
 					if (data.url_comprobante_pdf) {
 						window.open(data.url_comprobante_pdf, '_blank', 'noopener');
@@ -2045,6 +2335,7 @@ var saldoFinalCobranza = 0;
 					return;
 				}
 
+				liberarBannerGrabacionCob();
 				if (data.errores)
 					alert("Error de grabación: " + data.errores);
 				else
@@ -2060,6 +2351,7 @@ var saldoFinalCobranza = 0;
 					detalle = ': ' + data.responseJSON.message;
 				}
 
+				liberarBannerGrabacionCob();
 				if( data.status === 422 ) {
 					alert("Error de grabación, verifique los datos" + detalle);
 				}
@@ -2084,17 +2376,16 @@ var saldoFinalCobranza = 0;
 
 	function buscaTipoTransaccionCaja()
 	{
-		let tipotransaccion_caja_id = $('#tipotransaccion_caja_id').val();
-		let url = carpetaBase+'/caja/leertipotransaccion_caja/'+tipotransaccion_caja_id;
+		var tipotransaccion_caja_id = String($('#tipotransaccion_caja_id').val() || '').trim();
+		if (!tipotransaccion_caja_id || tipotransaccion_caja_id === 'undefined') {
+			return;
+		}
+		var url = carpetaBase+'/caja/leertipotransaccion_caja/'+encodeURIComponent(tipotransaccion_caja_id);
 
 		$.get(url, function(data){
-			if (data.id > 0)
-			{
-			}
-			else
+			if (!data || !(data.id > 0))
 			{
 				alert("No existe el tipo de transaccion de caja");
-				return;
 			}
 		});
 	}

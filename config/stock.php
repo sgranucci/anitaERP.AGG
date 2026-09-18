@@ -37,7 +37,7 @@ return [
     | true  → solo se pueden modificar o eliminar movimientos cuya fecha sea la del día.
     |          Los de fechas anteriores quedan únicamente con la opción Revertir (auditable).
     | false → edición/eliminación sin restricción de fecha (comportamiento histórico).
-    | Para AGG queda activo.
+    | AGG: true. Ferli: false (pueden corregir precios en movimientos viejos y además Revertir).
     */
     'movimiento_edicion_solo_dia' => filter_var(env('STOCK_MOV_EDICION_SOLO_DIA', false), FILTER_VALIDATE_BOOLEAN),
 

@@ -593,8 +593,9 @@ var flModificaAsiento = false;
 
         var datosCuentasContables = [];
         var preservarAsientoManual = (typeof window.asientoTieneEdicionManual === 'function' && window.asientoTieneEdicionManual())
-            || window.flAsientoEditadoManual === true;
-        // Si el asiento fue editado a mano, siempre reenviar esas líneas (no regenerar desde deuda/medios).
+            || window.flAsientoEditadoManual === true
+            || $.trim($('input[name="numeroasiento"]').val() || '') !== '';
+        // Si el asiento fue editado a mano o ya está grabado, reenviar esas líneas (no regenerar desde deuda/medios).
         if (!flModificaAsiento || preservarAsientoManual) {
             $('#cuenta-asiento-table .item-cuenta-asiento').each(function () {
                 datosCuentasContables.push({
@@ -646,9 +647,9 @@ var flModificaAsiento = false;
                         '<input type="hidden" name="cuenta[]" class="form-control iicuentacontable" readonly value="' + (index + 1) + '" />' +
                         '<input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="' + value.cuentacontable_id + '" >' +
                         '<input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="' + value.cuentacontable_id + '" >' +
-                        '<button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">' +
+                        '<button type="button" title="Consulta cuentas (F1)" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">' +
                         '<i class="fa fa-search text-primary"></i></button>' +
-                        '<input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="' + value.codigo + '" >' +
+                        '<input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="' + value.codigo + '" title="Código: Enter valida, F1 consulta" autocomplete="off">' +
                         '<input type="hidden" class="codigo_previo_cuentacontable" name="codigo_previo_cuentacontables[]" value="" >' +
                         '<input type="hidden" class="carga_cuentacontable_manual" name="carga_cuentacontable_manuales[]" value="' + (value.carga_cuentacontable_manual || 'N') + '" >' +
                         '</div></td>' +
@@ -698,10 +699,38 @@ var flModificaAsiento = false;
         });
     }
 
+    function parseImporteAsientoUi(valor) {
+        if (window.AsientoMontosFormato && window.AsientoMontosFormato.parseDecimal) {
+            return AsientoMontosFormato.parseDecimal(valor);
+        }
+        var t = String(valor == null ? '' : valor).trim().replace(/\s/g, '');
+        if (t.indexOf(',') >= 0) {
+            t = t.replace(/\./g, '').replace(',', '.');
+        }
+        var n = parseFloat(t);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function sincronizarTotalesAsientoDesdeTabla() {
+        if (typeof sumaMontoAsiento === 'function') {
+            sumaMontoAsiento();
+        }
+        totalDebeAsiento = parseImporteAsientoUi($('#totaldebeasiento').val());
+        totalHaberAsiento = parseImporteAsientoUi($('#totalhaberasiento').val());
+    }
+
     function muestraVentanaAsiento() {
-        if (totalDebeAsiento === 0 && totalHaberAsiento === 0) {
+        var tieneLineas = $('#cuenta-asiento-table .item-cuenta-asiento').length > 0;
+        if (tieneLineas) {
+            sincronizarTotalesAsientoDesdeTabla();
+        }
+        var asientoYaGrabado = $.trim($('input[name="numeroasiento"]').val() || '') !== '';
+        var preservar = (typeof window.asientoTieneEdicionManual === 'function' && window.asientoTieneEdicionManual())
+            || window.flAsientoEditadoManual === true
+            || asientoYaGrabado;
+        if (!tieneLineas) {
             generaAsientoContable();
-        } else if (flModificaAsiento) {
+        } else if (flModificaAsiento && !preservar) {
             generaAsientoContable();
         }
         ocultarForms();
@@ -719,6 +748,12 @@ var flModificaAsiento = false;
 
     $(function () {
         enfocarInicioPagoproveedor();
+        if ($('#cuenta-asiento-table .item-cuenta-asiento').length > 0) {
+            sincronizarTotalesAsientoDesdeTabla();
+            if ($.trim($('input[name="numeroasiento"]').val() || '') !== '') {
+                window.flAsientoEditadoManual = true;
+            }
+        }
 
         $('#agrega_renglon_cuenta').on('click', function (e) {
             e.preventDefault();
@@ -844,6 +879,39 @@ var flModificaAsiento = false;
                 alert('Debe seleccionar empresa');
                 return;
             }
+
+            var flErrorMoneda = false;
+            $('#tbody-cuenta-table .item-cuenta').each(function () {
+                var $trCta = $(this);
+                var $monCta = $trCta.find('.moneda');
+                if (!filaCuentaPagoproveedorConDatos($trCta)) {
+                    $monCta.prop('required', false);
+                    return;
+                }
+                $monCta.prop('required', true);
+                if ($monCta.val() === '') {
+                    alert('Debe ingresar moneda en la cuenta de caja. Si paga solo con cheque emitido, deje el renglón de cuentas de caja vacío o elimínelo.');
+                    flErrorMoneda = true;
+                    $monCta.trigger('focus');
+                    return false;
+                }
+            });
+            $('#tbody-cheque-emitido-table .item-cheque-emitido').each(function () {
+                var $trCh = $(this);
+                var montoCh = Math.abs(parseFloat(String($trCh.find('.montocheque_emitido').val() || '').replace(',', '.')) || 0);
+                if (!(montoCh > 0.000001)) {
+                    return;
+                }
+                if (!$trCh.find('.moneda_emitido_id').val()) {
+                    alert('Debe ingresar moneda en el cheque emitido.');
+                    flErrorMoneda = true;
+                    return false;
+                }
+            });
+            if (flErrorMoneda) {
+                return;
+            }
+
             completarProveedorEmitidos();
             if (typeof window.sincronizarCamposAplicacion === 'function') {
                 window.sincronizarCamposAplicacion();
@@ -853,8 +921,8 @@ var flModificaAsiento = false;
                 if (typeof sumaMontoAsiento === 'function') {
                     sumaMontoAsiento();
                 }
-                var td = parseFloat($('#totaldebeasiento').val()) || 0;
-                var th = parseFloat($('#totalhaberasiento').val()) || 0;
+                var td = parseImporteAsientoUi($('#totaldebeasiento').val());
+                var th = parseImporteAsientoUi($('#totalhaberasiento').val());
                 if ($('#cuenta-asiento-table .item-cuenta-asiento').length === 0 || (td === 0 && th === 0)) {
                     alert('Falta el asiento contable. Abra la pestaña Asiento Contable antes de grabar.');
                     muestraVentanaAsiento();
@@ -869,7 +937,8 @@ var flModificaAsiento = false;
             }
 
             var asientoManual = (typeof window.asientoTieneEdicionManual === 'function' && window.asientoTieneEdicionManual())
-                || window.flAsientoEditadoManual === true;
+                || window.flAsientoEditadoManual === true
+                || $.trim($('input[name="numeroasiento"]').val() || '') !== '';
             var tieneAsiento = $('#cuenta-asiento-table .item-cuenta-asiento').length > 0;
 
             // No regenerar si el usuario editó cuentas a mano, ni si el asiento ya está al día.

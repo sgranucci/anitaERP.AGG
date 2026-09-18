@@ -29,6 +29,309 @@ var totalHaberAsiento = 0;
 		return manual;
 	};
 
+	function esTeclaF1Asiento(e) {
+		return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+	}
+
+	function esTeclaEnterAsiento(e) {
+		return e && (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13);
+	}
+
+	function modalConsultaCuentaAsientoAbierto() {
+		var $modal = $('#consultacuentaModal');
+		return window.__asientoAbriendoModalCuenta
+			|| (typeof abriendoModalCuentaContable !== 'undefined' && abriendoModalCuentaContable)
+			|| ($modal.length > 0 && ($modal.hasClass('show') || $modal.hasClass('in') || $modal.is(':visible')));
+	}
+
+	function apuntarPtrsConsultaCuentaAsiento($tr) {
+		cuentacontablexcodigo = $tr.find('.cuentacontable_id');
+		nombrecontablexcodigo = $tr.find('.nombrecuentacontable');
+		codigocontablexcodigo = $tr.find('.codigoasiento');
+		if (typeof ptrCuentacontableContext !== 'undefined') {
+			ptrCuentacontableContext = $tr;
+		}
+		window.ptrIeCpFilaCuentaConcepto = null;
+	}
+
+	function abrirConsultaCuentaAsientoFila($tr) {
+		var empresaId = $('#empresa_id').val();
+		if (!empresaId) {
+			alert('Debe ingresar empresa');
+			return;
+		}
+		apuntarPtrsConsultaCuentaAsiento($tr);
+		window.__asientoConsultaCuentaOrigen = true;
+		window.__asientoAbriendoModalCuenta = true;
+		if (typeof abriendoModalCuentaContable !== 'undefined') {
+			abriendoModalCuentaContable = true;
+		}
+		$('#consultacuentacontable').val('');
+		$('#datoscuentas').html('');
+		$('#consultaempresa_id').val(empresaId);
+		$('#consultacuentaModal').modal('show');
+		if (typeof buscar_datos === 'function') {
+			buscar_datos('');
+		}
+	}
+
+	function limpiarCuentaAsientoEnFila($tr, conservarCodigo) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		$tr.find('.cuentacontable_id, .cuentacontable_id_previa').val('');
+		$tr.find('.nombrecuentacontable').val('');
+		$tr.find('.codigo_previo_cuentacontable').val('');
+		if (!conservarCodigo) {
+			$tr.find('.codigoasiento').val('');
+		}
+	}
+
+	function aplicarCuentaAsientoEnFila($tr, data) {
+		if (!$tr || !$tr.length || !data || !(parseInt(data.id, 10) > 0)) {
+			return;
+		}
+		$tr.find('.cuentacontable_id').val(data.id);
+		$tr.find('.cuentacontable_id_previa').val(data.id);
+		if (data.codigo != null && data.codigo !== '') {
+			$tr.find('.codigoasiento').val(data.codigo);
+			$tr.find('.codigo_previo_cuentacontable').val(data.codigo);
+		} else {
+			$tr.find('.codigo_previo_cuentacontable').val($tr.find('.codigoasiento').val());
+		}
+		$tr.find('.nombrecuentacontable').val(data.nombre || '');
+		$tr.find('.codigoasiento').removeData('asiento-codigo-invalido');
+		marcaAsientoLineaManual($tr);
+	}
+
+	function refrescarCcAsientoTrasCuenta($tr, data) {
+		var $codigo = $tr.find('.codigoasiento');
+		var cuentaId = parseInt((data && data.id) || $tr.find('.cuentacontable_id').val() || '0', 10) || 0;
+		if (cuentaId <= 0) {
+			return $.Deferred().resolve().promise();
+		}
+		var ccPrevio = parseInt($tr.find('.centrocostoasiento_id_previo').val() || '0', 10) || 0;
+		if (data && data.manejaccosto !== undefined) {
+			var manejaCc = data.manejaccosto === 'S' || data.manejaccosto === '1' || data.manejaccosto === 1;
+			if (!manejaCc) {
+				$tr.find('.centrocostoasiento').empty().append('<option value="0" selected>Sin CC</option>').attr('readonly', true);
+				return $.Deferred().resolve().promise();
+			}
+			$tr.find('.centrocostoasiento').attr('readonly', false);
+		}
+		return completarCentroCostoAsiento($codigo, cuentaId, ccPrevio);
+	}
+
+	function enfocarCampoAsiento(el) {
+		if (!el) {
+			return;
+		}
+		setTimeout(function () {
+			el.focus();
+			if (typeof el.select === 'function' && el.tagName === 'INPUT' && el.type !== 'hidden') {
+				el.select();
+			}
+		}, 0);
+	}
+
+	function centrocostoAsientoRequiereEleccion($tr) {
+		var $cc = $tr.find('.centrocostoasiento');
+		if (!$cc.length || $cc.prop('disabled') || $cc.prop('readonly')) {
+			return false;
+		}
+		return $cc.find('option').filter(function () {
+			var v = String(this.value || '').trim();
+			return v !== '' && v !== '0';
+		}).length > 0;
+	}
+
+	function enfocarSiguienteTrasCuentaAsiento($tr) {
+		if (centrocostoAsientoRequiereEleccion($tr)) {
+			$tr.find('.centrocostoasiento').trigger('focus');
+			return;
+		}
+		var debe = $tr.find('.debeasiento')[0];
+		if (debe && !debe.disabled && !debe.readOnly) {
+			enfocarCampoAsiento(debe);
+			return;
+		}
+		var haber = $tr.find('.haberasiento')[0];
+		if (haber && !haber.disabled && !haber.readOnly) {
+			enfocarCampoAsiento(haber);
+		}
+	}
+
+	function avisarCuentaAsientoInvalida($input) {
+		var $modal = $('#consultacuentaModal');
+		if ($modal.length && ($modal.hasClass('show') || $modal.is(':visible'))) {
+			$modal.modal('hide');
+		}
+		setTimeout(function () {
+			alert('No existe la cuenta');
+			enfocarCampoAsiento($input[0]);
+		}, 0);
+	}
+
+	function filaAsientoDesdePtrCuenta() {
+		if (!codigocontablexcodigo || !codigocontablexcodigo.length) {
+			return $();
+		}
+		var nodo = codigocontablexcodigo.get(0);
+		if (!nodo || !document.contains(nodo)) {
+			return $();
+		}
+		return $(nodo).closest('tr.item-cuenta-asiento');
+	}
+
+	function resolverCodigoAsiento($input, opciones) {
+		opciones = opciones || {};
+		var alertar = opciones.alertar === true;
+		var avanzar = opciones.avanzar === true;
+		var onDone = typeof opciones.onDone === 'function' ? opciones.onDone : function () {};
+		var $tr = $input.closest('tr.item-cuenta-asiento');
+		var codigoNuevo = String($input.val() || '').trim();
+		var empresaId = $('#empresa_id').val();
+		var codigoAnt = String($tr.find('.codigo_previo_cuentacontable').val() || '').trim();
+		var idActual = parseInt($tr.find('.cuentacontable_id').val() || '0', 10) || 0;
+
+		if (modalConsultaCuentaAsientoAbierto()) {
+			onDone(false);
+			return;
+		}
+
+		if (!codigoNuevo) {
+			limpiarCuentaAsientoEnFila($tr, true);
+			onDone(false);
+			return;
+		}
+
+		if (!empresaId) {
+			if (alertar) {
+				alert('Debe ingresar empresa');
+			}
+			onDone(false);
+			return;
+		}
+
+		if (codigoNuevo === codigoAnt && idActual > 0) {
+			if (avanzar) {
+				enfocarSiguienteTrasCuentaAsiento($tr);
+			}
+			onDone(true);
+			return;
+		}
+
+		var urlCta = carpetaBase + '/contable/cuentacontable/leercuentacontableporcodigo/'
+			+ empresaId + '/' + encodeURIComponent(codigoNuevo);
+
+		$.get(urlCta, function (data) {
+			if (data && parseInt(data.id, 10) > 0) {
+				aplicarCuentaAsientoEnFila($tr, data);
+				$.when(refrescarCcAsientoTrasCuenta($tr, data)).always(function () {
+					if (avanzar) {
+						enfocarSiguienteTrasCuentaAsiento($tr);
+					}
+					onDone(true);
+				});
+				return;
+			}
+			$input.data('asiento-codigo-invalido', 1);
+			limpiarCuentaAsientoEnFila($tr, true);
+			if (alertar) {
+				avisarCuentaAsientoInvalida($input);
+			}
+			onDone(false);
+		}).fail(function () {
+			$input.data('asiento-codigo-invalido', 1);
+			limpiarCuentaAsientoEnFila($tr, true);
+			if (alertar) {
+				avisarCuentaAsientoInvalida($input);
+			}
+			onDone(false);
+		});
+	}
+
+	function aplicarEleccionModalCuentaAsiento(data) {
+		var $tr = filaAsientoDesdePtrCuenta();
+		if (!$tr.length) {
+			return false;
+		}
+		aplicarCuentaAsientoEnFila($tr, data);
+		$.when(refrescarCcAsientoTrasCuenta($tr, data)).always(function () {
+			enfocarSiguienteTrasCuentaAsiento($tr);
+		});
+		return true;
+	}
+
+	function activarTecladoGrillaAsiento() {
+		if (window.__asientoTecladoActivo) {
+			return;
+		}
+		window.__asientoTecladoActivo = true;
+
+		document.addEventListener('keydown', function (e) {
+			var target = e.target;
+			if (!target || !target.closest) {
+				return;
+			}
+			var tabla = target.closest('#cuenta-asiento-table');
+			if (!tabla) {
+				return;
+			}
+			var $tr = $(target).closest('tr.item-cuenta-asiento');
+			if (!$tr.length) {
+				return;
+			}
+
+			if (esTeclaF1Asiento(e)) {
+				if (!$(target).is('.codigoasiento, .nombrecuentacontable, .consultacuenta')) {
+					return;
+				}
+				if (target.readOnly && !$(target).hasClass('nombrecuentacontable')) {
+					return;
+				}
+				if (modalConsultaCuentaAsientoAbierto()) {
+					return;
+				}
+				e.preventDefault();
+				e.stopPropagation();
+				if (typeof e.stopImmediatePropagation === 'function') {
+					e.stopImmediatePropagation();
+				}
+				abrirConsultaCuentaAsientoFila($tr);
+				return;
+			}
+
+			if (!esTeclaEnterAsiento(e)) {
+				return;
+			}
+			if (!$(target).hasClass('codigoasiento')) {
+				return;
+			}
+			if (target.readOnly || target.disabled) {
+				return;
+			}
+			if (modalConsultaCuentaAsientoAbierto()) {
+				return;
+			}
+
+			e.preventDefault();
+			e.stopPropagation();
+			if (typeof e.stopImmediatePropagation === 'function') {
+				e.stopImmediatePropagation();
+			}
+
+			var $input = $(target);
+			$input.data('asiento-enter-procesado', 1);
+			var codigo = String($input.val() || '').trim();
+			if (codigo === '') {
+				abrirConsultaCuentaAsientoFila($tr);
+				return;
+			}
+			resolverCodigoAsiento($input, { alertar: true, avanzar: true });
+		}, true);
+	}
+
     $(function () {
         $('#agrega_renglon_asiento').on('click', agregaRenglonCuentaAsiento);
         $(document).on('click', '.eliminar_cuenta_asiento', borraRenglonCuentaAsiento);
@@ -59,116 +362,114 @@ var totalHaberAsiento = 0;
 
 	function activa_eventosAsiento(flInicio)
 	{
-		// Si esta agregando items desactiva los eventos
-		if (!flInicio)
-		{
-			$('.consultacuenta').off('click');
-			$('.codigoasiento').off('change');
-			$('.debeasiento').off('change input');
-			$('.haberasiento').off('change input');
-			$('.cotizacionasiento').off('change input');
-			$('.monedaasiento').off('change');
+		activarTecladoGrillaAsiento();
+
+		if (window.__asientoExtEventosActivos) {
+			return;
 		}
-		
-		$('.codigoasiento').on('change', function (event) {
-			event.preventDefault();
-			var codigo = $(this);
-			var $tr = $(this).parents("tr");
-			var codigo_ant = $tr.find(".codigo_previo_cuentacontable").val();
-			var codigo_nuevo = codigo.val();
-			let empresa_id = $('#empresa_id').val();
+		window.__asientoExtEventosActivos = true;
 
-			let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
-
-			$.get(url_cta, function(data){
-				if (data.id > 0)
-				{
-					$tr.find('.cuentacontable_id').val(data.id);
-					$tr.find(".cuentacontable_id_previa").val(data.id);
-					$tr.find(".nombrecuentacontable").val(data.nombre);
-					marcaAsientoLineaManual($tr);
-				}
-				else
-				{
-					alert("No existe la cuenta");
-
-					// Borra el renglon
-					$tr.remove();
-					window.flAsientoEditadoManual = true;
+		$(document)
+			.off('change.asientoExt blur.asientoExt', '#cuenta-asiento-table .codigoasiento')
+			.on('change.asientoExt blur.asientoExt', '#cuenta-asiento-table .codigoasiento', function (event) {
+				var $input = $(this);
+				if ($input.data('asiento-enter-procesado')) {
+					$input.removeData('asiento-enter-procesado');
 					return;
+				}
+				if (modalConsultaCuentaAsientoAbierto()) {
+					return;
+				}
+				var codigoActual = String($input.val() || '').trim();
+				var codigoPrevio = String($input.closest('tr').find('.codigo_previo_cuentacontable').val() || '').trim();
+				if (codigoActual === codigoPrevio) {
+					return;
+				}
+				event.preventDefault();
+				resolverCodigoAsiento($input, { alertar: false, avanzar: false });
+			});
+
+		$(document)
+			.off('input.asientoExt', '#cuenta-asiento-table .codigoasiento')
+			.on('input.asientoExt', '#cuenta-asiento-table .codigoasiento', function () {
+				$(this).removeData('asiento-codigo-invalido');
+			});
+
+		$(document)
+			.off('click.asientoExt', '#cuenta-asiento-table .consultacuenta')
+			.on('click.asientoExt', '#cuenta-asiento-table .consultacuenta', function (event) {
+				event.preventDefault();
+				var $tr = $(this).closest('tr.item-cuenta-asiento');
+				if (!$tr.length) {
+					return;
+				}
+				abrirConsultaCuentaAsientoFila($tr);
+			});
+
+		$('#consultacuentaModal')
+			.off('shown.bs.modal.asientoExt')
+			.on('shown.bs.modal.asientoExt', function () {
+				window.__asientoAbriendoModalCuenta = false;
+				$(this).find('[autofocus]').focus();
+			})
+			.off('hidden.bs.modal.asientoExt')
+			.on('hidden.bs.modal.asientoExt', function () {
+				window.__asientoAbriendoModalCuenta = false;
+				setTimeout(function () {
+					window.__asientoConsultaCuentaOrigen = false;
+				}, 0);
+			});
+
+		$(document)
+			.off('click.asientoExtElige', '.eligeconsultacuentacontable')
+			.on('click.asientoExtElige', '.eligeconsultacuentacontable', function () {
+				if (!window.__asientoConsultaCuentaOrigen) {
+					return;
+				}
+				var $trModal = $(this).closest('tr');
+				var data = {
+					id: $.trim($trModal.find('.cuentacontable_id').first().text()),
+					codigo: $.trim($trModal.find('.codigocuentacontable').first().text()),
+					nombre: $.trim($trModal.find('.nombrecuentacontable').first().text()),
+				};
+				if (aplicarEleccionModalCuentaAsiento(data)) {
+					$('#consultacuentaModal').modal('hide');
 				}
 			});
 
-			if (codigo_nuevo != codigo_ant && empresa_id)
-				leeCentroCostoAsiento(this);
-		});
+		$(document)
+			.off('change.asientoExt input.asientoExt', '#cuenta-asiento-table .debeasiento')
+			.on('change.asientoExt input.asientoExt', '#cuenta-asiento-table .debeasiento', function (event) {
+				event.preventDefault();
+				if (event.type === 'change') {
+					marcaAsientoLineaManual($(this).closest('tr'));
+				}
+				sumaMontoAsiento();
+			});
 
-		$('.consultacuenta').on('click', function (event) {
-        	cuentacontablexcodigo = $(this).parents("tr").find(".cuentacontable_id");
-			nombrecontablexcodigo = $(this).parents("tr").find(".nombrecuentacontable");
-			codigocontablexcodigo = $(this).parents("tr").find(".codigoasiento");
-			let empresa_id = $('#empresa_id').val();
+		$(document)
+			.off('change.asientoExt input.asientoExt', '#cuenta-asiento-table .haberasiento')
+			.on('change.asientoExt input.asientoExt', '#cuenta-asiento-table .haberasiento', function (event) {
+				event.preventDefault();
+				if (event.type === 'change') {
+					marcaAsientoLineaManual($(this).closest('tr'));
+				}
+				sumaMontoAsiento();
+			});
 
-        	// Abre modal de consulta
-			if (empresa_id)
-				$("#consultacuentaModal").modal('show');
-			else	
-				alert('Debe ingresar empresa');
-    	});
+		$(document)
+			.off('change.asientoExt input.asientoExt', '#cuenta-asiento-table .cotizacionasiento')
+			.on('change.asientoExt input.asientoExt', '#cuenta-asiento-table .cotizacionasiento', function (event) {
+				event.preventDefault();
+				sumaMontoAsiento();
+			});
 
-		$('#consultacuentaModal').on('shown.bs.modal', function () {
-			$(this).find('[autofocus]').focus();
-		})
-
-    	$('#aceptaconsultacuentaModal').on('click', function () {
-        	$('#consultacuentaModal').modal('hide');
-    	});
-
-		$(document).on('click', '.eligeconsultacuentacontable', function () {
-			var seleccion = $(this).parents("tr").children().html();
-			var nombre = $(this).parents("tr").find(".nombrecuentacontable").html();
-			var codigo = $(this).parents("tr").find(".codigocuentacontable").html();
-
-			// Asigna a grilla los valores devueltos por consulta
-			$(cuentacontablexcodigo).val(seleccion);
-			$(nombrecontablexcodigo).val(nombre);
-			$(codigocontablexcodigo).val(codigo);
-
-			//* Asigna nueva cuentacontable
-			var $trAsiento = $(cuentacontablexcodigo).parents("tr");
-			$trAsiento.find(".cuentacontable_id_previa").val($(cuentacontablexcodigo).val());
-			marcaAsientoLineaManual($trAsiento);
-		
-			$('#consultacuentaModal').modal('hide');
-
-			leeCentroCostoAsiento(codigocontablexcodigo);
-		});
-
-		$('.debeasiento').on('change input', function (event) {
-			event.preventDefault();
-			if (event.type === 'change') {
-				marcaAsientoLineaManual($(this).parents('tr'));
-			}
-			sumaMontoAsiento();
-		});
-
-		$('.haberasiento').on('change input', function (event) {
-			event.preventDefault();
-			if (event.type === 'change') {
-				marcaAsientoLineaManual($(this).parents('tr'));
-			}
-			sumaMontoAsiento();
-		});
-
-		$('.cotizacionasiento').on('change input', function (event) {
-			event.preventDefault();
-			sumaMontoAsiento();
-		});
-
-		$('.monedaasiento').on('change', function (event) {
-			event.preventDefault();
-			leeCotizacionAsiento(this);
-		});
+		$(document)
+			.off('change.asientoExt', '#cuenta-asiento-table .monedaasiento')
+			.on('change.asientoExt', '#cuenta-asiento-table .monedaasiento', function (event) {
+				event.preventDefault();
+				leeCotizacionAsiento(this);
+			});
 	}
 
     function agregaRenglonCuentaAsiento(){
@@ -271,26 +572,25 @@ var totalHaberAsiento = 0;
 				let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
 				return $.get(url_cta, function(data){
-					$(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
-					$(codigo).parents("tr").find(".cuentacontable_id_previa").val(data.id);
-					$(codigo).parents("tr").find(".nombrecuentacontable").val(data.nombre);
+					var $trCc = $(codigo).parents("tr");
+					$trCc.find('.cuentacontable_id').val(data.id);
+					$trCc.find(".cuentacontable_id_previa").val(data.id);
+					$trCc.find(".nombrecuentacontable").val(data.nombre);
+					$trCc.find(".codigo_previo_cuentacontable").val(codigo_nuevo);
 					if (data.manejaccosto === 'S')
 					{
-						$(codigo).parents("tr").find('.centrocostoasiento').attr("readonly", false);
+						$trCc.find('.centrocostoasiento').attr("readonly", false);
 
-						var ccPrevio = parseInt($(codigo).parents("tr").find('.centrocostoasiento_id_previo').val() || '0', 10) || 0;
+						var ccPrevio = parseInt($trCc.find('.centrocostoasiento_id_previo').val() || '0', 10) || 0;
 						completarCentroCosto(codigo, data.id, ccPrevio);
 					}
 					else
 					{
-						$(codigo).parents("tr").find('.centrocostoasiento').empty();
-						$(codigo).parents("tr").find('.centrocostoasiento').append('<option value="0" selected>Sin CC</option>');
-						$(codigo).parents("tr").find('.centrocostoasiento').attr("readonly", true);
+						$trCc.find('.centrocostoasiento').empty();
+						$trCc.find('.centrocostoasiento').append('<option value="0" selected>Sin CC</option>');
+						$trCc.find('.centrocostoasiento').attr("readonly", true);
 					}
 				});
-
-				//* Asigna nuevo codigo de cuenta
-				$(this).parents("tr").find(".codigo_previo_cuentacontable").val(codigo_nuevo);
 			}
 		}
 	}
@@ -303,21 +603,28 @@ var totalHaberAsiento = 0;
 
 	function controlaCentroCosto()
 	{
-		let flError = false;
+		var flError = false;
 
-		$("#tbody-cuenta-asiento-table .centrocostoasiento").each(function() {
-			var centrocosto_id = $(this);
-			var codigo = $(this).parents("tr").find(".codigocuentacontable").val();
-
-			let url_cta = carpetaBase+'/caja/cuentacaja/leercuentacajaporcodigo/'+codigo;
-
-			$.get(url_cta, function(data){
-				if (data.manejaccosto != 'N' && !$.isNumeric(centrocosto_id))
-					flError = true;	
-			});
+		$("#tbody-cuenta-asiento-table .centrocostoasiento").each(function () {
+			var $sel = $(this);
+			if ($sel.prop('disabled') || $sel.is('[readonly]')) {
+				return;
+			}
+			var val = String($sel.val() || '').trim();
+			if (val !== '' && val !== '0') {
+				return;
+			}
+			var requiereCc = $sel.find('option').filter(function () {
+				var v = String(this.value || '').trim();
+				return v !== '' && v !== '0';
+			}).length > 0;
+			if (requiereCc) {
+				flError = true;
+				return false;
+			}
 		});
 
-		return(flError);
+		return flError;
 	}
 
 	function leeCotizacionAsiento(ptr)

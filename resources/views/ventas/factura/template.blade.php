@@ -1,6 +1,6 @@
 <template id="template-renglon">
 	<tr class="item-pedido">
-		<td>
+		<td class="factura-col-item">
 			<input type="text" name="items[]" class="form-control item" value="1" readonly>
 			<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="" />
 			<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="" />
@@ -9,7 +9,7 @@
 			<input type="hidden" name="ids[]" class="form-control ids" value="" />
 			<input type="hidden" name="loteids[]" class="form-control loteids" value="" />
 		</td>
-		<td>
+		<td class="factura-col-articulo">
 			<div class="factura-sku-campo" id="articulo">
 				<input type="hidden" name="articulo[]" class="form-control iiarticulo" readonly value="" />
 				<input type="hidden" class="articulo_id" name="articulo_ids[]" value="" >
@@ -32,23 +32,23 @@
 			</div>
 		</td>		
 		<td class="factura-col-detalle">
-			<input type="text" style="WIDTH: 700px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="">
+			<input type="text" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="">
 			<textarea name="leyendas_linea[]" class="d-none factura-ta-leyenda-linea" aria-hidden="true"></textarea>
 			<div class="factura-leyenda-badge"></div>
 		</td>
 		<td class="factura-col-iva">
 			@include('ventas.factura.partials.select_iva_linea')
 		</td>
-		<td>
+		<td class="factura-col-cantidad">
 			<input type="text" name="cantidades[]" class="form-control cantidad" value="" />
 		</td>	
-		<td>
+		<td class="factura-col-descuento">
 			<input type="text" name="descuentos[]" class="form-control descuento" value="" />
 		</td>			
-		<td>
+		<td class="factura-col-precio">
 			<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" value="" />
 		</td>	
-        <td class="text-nowrap">
+        <td class="text-nowrap factura-col-acciones">
 			<button type="button" title="Leyenda / comentario de la l&iacute;nea" class="btn-accion-tabla factura-abrir-leyenda-linea tooltipsC">
 				<i class="fa fa-align-left"></i>
 			</button>

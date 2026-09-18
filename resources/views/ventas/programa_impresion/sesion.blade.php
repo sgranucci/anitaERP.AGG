@@ -82,6 +82,22 @@ window.impresionSesionFaltaImpresora = @json(! empty($sesion['faltante_impresora
                     </div>
                 @endif
 
+                @php
+                    $hayEnvioSesion = false;
+                    foreach (($sesion['pack'] ?? []) as $lineaPack) {
+                        if (($lineaPack['formulario'] ?? '') === 'ENVIO') {
+                            $hayEnvioSesion = true;
+                            break;
+                        }
+                    }
+                @endphp
+                @if ($hayEnvioSesion && empty($autoEjecutar))
+                    <div class="alert alert-info py-2 mb-3">
+                        El programa incluye <strong>Envío</strong>. Destildá esas copias si no las querés y después tocá
+                        <strong>Ejecutar sesión</strong>.
+                    </div>
+                @endif
+
                 @include('ventas.programa_impresion.partials.mi_impresora', [
                     'sesion' => $sesion,
                     'programaSeteo' => $programaSeteo ?? null,

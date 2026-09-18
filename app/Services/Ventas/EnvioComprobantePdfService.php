@@ -23,6 +23,8 @@ final class EnvioComprobantePdfService
                 'clientes.localidades',
                 'clientes.provincias',
                 'transportes',
+                'remitos.remito_articulos',
+                'venta_emisiones',
             ])
             ->find($ventaId);
         if (! $venta) {
@@ -30,6 +32,7 @@ final class EnvioComprobantePdfService
         }
 
         $etiqueta = EnvioEtiquetaDatosSupport::desdeVenta($venta);
+        $cantidadEnvios = EnvioEtiquetaDatosSupport::cantidadEtiquetasDesdeVenta($venta);
 
         $nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) ($venta->nombre ?? 'cliente')) ?: 'cliente';
         $nombrePdf = 'envio-'.$ventaId.'-'.$nombreCliente;
@@ -41,6 +44,7 @@ final class EnvioComprobantePdfService
         $view = View::make('exports.ventas.envio', [
             'venta' => $venta,
             'etiqueta' => $etiqueta,
+            'cantidadEnvios' => $cantidadEnvios,
         ])->render();
 
         $pdf = App::make('dompdf.wrapper');

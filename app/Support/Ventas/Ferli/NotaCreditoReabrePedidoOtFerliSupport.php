@@ -13,21 +13,23 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Ferli: NC total sobre FAC de OT/picking → libera la línea del pedido para refacturar.
- * Quita tarea FACTURADA (venta_id) y marca picking_facturado de esa venta.
+ * Quita tarea FACTURADA (venta_id), restaura stock con el lote/OT asignado (picking o OT desde stock) y desmarca picking.
  */
 final class NotaCreditoReabrePedidoOtFerliSupport
 {
     /**
      * @param  array<string, mixed>|null  $opcionesEmision
-     * @return array{aplicado: bool, tareas_borradas: int, picking_reabiertos: int, motivo?: string}
+     * @return array{aplicado: bool, tareas_borradas: int, picking_reabiertos: int, movimientos_revertidos: int, motivo?: string}
      */
     public static function alGrabarNc(
         int $ventaOrigenId,
         float $totalNcAbsoluto,
         $tipotransaccion,
-        ?array $opcionesEmision = null
+        ?array $opcionesEmision = null,
+        int $ventaNcId = 0,
+        ?string $fechaNc = null
     ): array {
-        $vacio = ['aplicado' => false, 'tareas_borradas' => 0, 'picking_reabiertos' => 0];
+        $vacio = ['aplicado' => false, 'tareas_borradas' => 0, 'picking_reabiertos' => 0, 'movimientos_revertidos' => 0];
 
         if (! EntornoEmpresaSupport::esFerli()) {
             return $vacio + ['motivo' => 'no_ferli'];
@@ -52,6 +54,12 @@ final class NotaCreditoReabrePedidoOtFerliSupport
 
         $tareaFacturadaId = (int) config('consprod.TAREA_FACTURADA');
 
+        $movimientosRevertidos = PedidoPickingFerliSupport::revertirConsumoStockPorVenta(
+            $ventaOrigenId,
+            $ventaNcId,
+            $fechaNc
+        );
+
         $tareasBorradas = EloquentAuditDeleteSupport::each(
             Ordentrabajo_Tarea::query()
                 ->where('venta_id', $ventaOrigenId)
@@ -63,17 +71,20 @@ final class NotaCreditoReabrePedidoOtFerliSupport
         try {
             Log::info('ferli.nc.reabre_pedido_ot', [
                 'venta_origen_id' => $ventaOrigenId,
+                'venta_nc_id' => $ventaNcId,
                 'tareas_borradas' => $tareasBorradas,
                 'picking_reabiertos' => $pickingReabiertos,
+                'movimientos_revertidos' => $movimientosRevertidos,
             ]);
         } catch (\Throwable) {
             // No tumbar la NC por fallo de log (permisos storage).
         }
 
         return [
-            'aplicado' => $tareasBorradas > 0 || $pickingReabiertos > 0,
+            'aplicado' => $tareasBorradas > 0 || $pickingReabiertos > 0 || $movimientosRevertidos > 0,
             'tareas_borradas' => $tareasBorradas,
             'picking_reabiertos' => $pickingReabiertos,
+            'movimientos_revertidos' => $movimientosRevertidos,
         ];
     }
 

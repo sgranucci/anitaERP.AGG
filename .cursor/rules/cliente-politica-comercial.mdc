@@ -1,0 +1,41 @@
+---
+description: Política comercial del cliente — tope de circuito (pedido / boleta / factura)
+globs: app/Support/Ventas/ClientePoliticaComercialSupport.php,app/Models/Ventas/Cliente.php,app/Models/Ventas/Tiposuspensioncliente.php,app/Http/Controllers/Ventas/ClienteController.php,app/Http/Controllers/Ventas/Pedido*.php,app/Http/Controllers/Ventas/Facturacion*.php,app/Services/Ventas/Pedido*.php,app/Services/Ventas/Facturacion*.php,app/Services/Ventas/OrdentrabajoService.php,app/Services/Ventas/RemitoService.php,public/assets/pages/scripts/ventas/cliente/**,public/assets/pages/scripts/ventas/pedido/**
+alwaysApply: false
+---
+
+# Cliente: política comercial (tope de circuito)
+
+No tratar la suspensión como un boolean. El cliente existe siempre (ABM, CC, estadística). Lo que cambia es **hasta dónde llega el circuito**.
+
+Punto único: `App\Support\Ventas\ClientePoliticaComercialSupport`.
+
+| Política | Pedido | Boleta / OT / remito | Factura | Cobranza |
+|---|---|---|---|---|
+| `NORMAL` | sí | sí | sí | sí |
+| `MOROSO` | sí | no | no | sí (al confirmar pasa a `PROFORMA`) |
+| `PROFORMA` | sí | sí | no | sí |
+| `BLOQUEADO` | no (ni aparece en carga) | no | no | sí (no cambia la política) |
+
+`tiposuspensioncliente.codigo` es la política. El **nombre** y `cliente.leyenda` son el motivo.
+
+## Consulta modal
+
+Pasar `contexto` (`pedido` / `boleta` / `factura` / `cobranza` / `consultar`). Vista: `@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido'])`.
+
+No usar `scopeActivos()` para elegir cliente en un proceso. Cobranza lista a todos (incluido bloqueado).
+
+## Backend
+
+```php
+ClientePoliticaComercialSupport::errorSiNoPermite($cliente, ClientePoliticaComercialSupport::OP_PEDIDO);
+ClientePoliticaComercialSupport::errorSiNoPermite($cliente, ClientePoliticaComercialSupport::OP_BOLETA);
+ClientePoliticaComercialSupport::errorSiNoPermiteFactura($cliente, $tipotransaccion); // NC no corta
+ClientePoliticaComercialSupport::pasarMorosoAProformaPorCobranza($cliente); // solo cobranza confirmada
+```
+
+## Prohibido
+
+- IDs hardcodeados (`tiposuspension_id == 3`, `config('cliente.MOROSO')`) para cortar operaciones.
+- Rechazar en JS por `estado != 0` (esconde moroso y proforma).
+- Duplicar la matriz en pedido / OT / remito / factura.

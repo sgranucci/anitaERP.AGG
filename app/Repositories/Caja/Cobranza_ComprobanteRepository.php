@@ -143,7 +143,7 @@ class Cobranza_ComprobanteRepository implements Cobranza_ComprobanteRepositoryIn
 					{
 						$monto = 0;
 						if ($montos[$i] != null && $montos[$i] != 0)
-							$monto = $montos[$i] * $signo;
+							$monto = $this->montoAplicacionDocumento((float) $montos[$i], $signo, $cliente_cuentacorriente_ids[$i]);
 
 						$cobranza_comprobante = $this->model->findOrFail($_id[$i])->update([
 									"cobranza_id" => $id,
@@ -226,7 +226,7 @@ class Cobranza_ComprobanteRepository implements Cobranza_ComprobanteRepositoryIn
 				{
 					$monto = 0;
 					if ($montos[$i_movimiento] != null && $montos[$i_movimiento] != 0)
-						$monto = $montos[$i_movimiento] * $signo;
+						$monto = $this->montoAplicacionDocumento((float) $montos[$i_movimiento], $signo, $cliente_cuentacorriente_ids[$i_movimiento]);
 
 					$cobranza_comprobante = $this->model->create([
 						"cobranza_id" => $id,
@@ -305,6 +305,28 @@ class Cobranza_ComprobanteRepository implements Cobranza_ComprobanteRepositoryIn
 		}
 
 		return $cobranza_comprobante;
+	}
+
+	/**
+	 * En créditos (COA, NC) el formulario manda el absoluto a aplicar;
+	 * hay que invertir el signo para consumir el saldo y no inflarlo.
+	 */
+	private function montoAplicacionDocumento(float $montoFormulario, int $signoCobranza, $clienteCuentacorrienteId): float
+	{
+		$monto = abs($montoFormulario) * $signoCobranza;
+		if ($clienteCuentacorrienteId === null || $clienteCuentacorrienteId === '') {
+			return $monto;
+		}
+		try {
+			$cc = $this->cliente_cuentacorrienteRepository->find($clienteCuentacorrienteId);
+		} catch (\Throwable) {
+			return $monto;
+		}
+		if ($cc && (float) $cc->total < 0) {
+			return -$monto;
+		}
+
+		return $monto;
 	}
 }
 

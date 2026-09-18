@@ -37,7 +37,7 @@
             <input type="text" class="cuentalibradora form-control" name="cuentalibradoras[]" value="">
         </td>
         <td>
-            <select name="monedacheque_ids[]" data-placeholder="Moneda" class="monedacheque_id form-control required" required data-fouc>
+            <select name="monedacheque_ids[]" data-placeholder="Moneda" class="monedacheque_id form-control" data-fouc>
                 @foreach($moneda_query as $value)
                     <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>
                 @endforeach

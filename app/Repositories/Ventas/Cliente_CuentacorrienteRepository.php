@@ -355,16 +355,16 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                                                 'cliente_cuentacorriente.cotizacion as cotizacion',
                                                 'cliente_cuentacorriente.empresa_id as empresa_id',
                                                 'cliente_cuentacorriente.cobranza_id as cobranza_id',
-                                                'venta.codigo as codigo',
-                                                'puntoventa.empresa_id as empresa_id',
                                                 'moneda.abreviatura as abreviaturamoneda',
                                                 'cliente.nombre as nombrecliente',
                                                 'cliente.codigo as codigocliente'
                                                 )
+                                                ->selectRaw("CASE WHEN venta.id IS NULL THEN CONCAT('ANT ', COALESCE(cobranza.numerotransaccion, cliente_cuentacorriente.cobranza_id)) ELSE venta.codigo END as codigo")
                                                 ->leftJoin('venta', 'venta.id', 'cliente_cuentacorriente.venta_id')
-                                                ->join('puntoventa', 'puntoventa.id', 'venta.puntoventa_id')
+                                                ->leftJoin('puntoventa', 'puntoventa.id', 'venta.puntoventa_id')
+                                                ->leftJoin('cobranza', 'cobranza.id', 'cliente_cuentacorriente.cobranza_id')
                                                 ->join('moneda', 'moneda.id', 'cliente_cuentacorriente.moneda_id')
-                                                ->join('cliente', 'cliente.id', 'venta.cliente_id')
+                                                ->join('cliente', 'cliente.id', 'cliente_cuentacorriente.cliente_id')
                                                 ->addSelect([
                                                     'aplicado' => Cliente_Cuentacorriente_Aplicacion::query()
                                                         ->selectRaw('SUM(total)')
@@ -375,7 +375,13 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             $cuentacorriente = $cuentacorriente->where('venta.id', $venta_id);
         else
             $cuentacorriente = $cuentacorriente->where('cliente_cuentacorriente.cliente_id', $cliente_id)
-                                                ->where('puntoventa.empresa_id', $empresa_id);
+                                                ->where(function ($q) use ($empresa_id) {
+                                                    $q->where('puntoventa.empresa_id', $empresa_id)
+                                                        ->orWhere(function ($q2) use ($empresa_id) {
+                                                            $q2->whereNull('cliente_cuentacorriente.venta_id')
+                                                                ->where('cliente_cuentacorriente.empresa_id', $empresa_id);
+                                                        });
+                                                });
         
         $cuentacorriente = $cuentacorriente->orderBy('fecha', 'asc')->get();
 
@@ -400,10 +406,11 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                 'nombrecliente' => $fila->nombrecliente,
                 'codigocliente' => $fila->codigocliente,
                 'aplicado' => $fila->aplicado,
-                'saldo' => ClienteCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
+                'saldo' => ClienteCuentacorrienteGrillaSupport::saldoPendiente(
                     (float) $fila->total,
                     $fila->aplicado !== null ? (float) $fila->aplicado : null
                 ),
+                'lado' => ((float) $fila->total) < 0 ? 'credito' : 'deuda',
             ];
         })->values();
     }

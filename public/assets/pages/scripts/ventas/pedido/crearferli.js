@@ -502,13 +502,9 @@
 					return;
 				}
 				// Debe chequear estado del cliente (Activo y Regularizado pueden facturar)
-				if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
-					(tiposuspensioncliente_id == PROFORMA ||
-					tiposuspensioncliente_id == MOROSO ||
-					tiposuspensioncliente_id == NO_FACTURAR
-					))
+				if (window.clientePoliticaComercial && !window.clientePoliticaComercial.permiteOperacion('factura'))
 				{
-					alert("No puede facturar cliente en estado "+etiquetaEstadoClienteParaFactura(estadocliente, nombretiposuspensioncliente));
+					alert(window.clientePoliticaComercial.mensaje('factura'));
 					$(tilde).prop("checked",false);
 					return;
 				}
@@ -1099,8 +1095,8 @@
 			alert("No puede volver a generar OT");
 		else
 		{
-			if (tiposuspension_id == 3)
-				alert('No puede generar ot a cliente moroso');
+			if (window.clientePoliticaComercial && !window.clientePoliticaComercial.permiteOperacion('boleta'))
+				alert(window.clientePoliticaComercial.mensaje('boleta'));
 			else
 			{
 				if (tipoalta == 'P')
@@ -1772,6 +1768,9 @@
 				$('#descuento').val(descuento);
 			}
 			$('#tiposuspension_id').val(tiposuspension_id);
+			if (data.politica_comercial && window.clientePoliticaComercial) {
+				window.clientePoliticaComercial.setActual(data.politica_comercial);
+			}
 		});
 		
         setTimeout(() => {
@@ -1781,6 +1780,10 @@
 
     function muestraTipoSuspension()
     {
+		if (window.clientePoliticaComercial) {
+			window.clientePoliticaComercial.pintarBanner();
+			return;
+		}
 		var tiposuspensioncliente_query = $("#tiposuspensioncliente_query").val();
         var tiposuspension_id = $("#tiposuspension_id").val();
 		

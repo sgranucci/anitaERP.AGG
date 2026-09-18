@@ -4,6 +4,7 @@ namespace App\Repositories\Caja;
 
 use App\Models\Caja\Caja_Movimiento_Cuentacaja;
 use App\Repositories\Caja\Tipotransaccion_CajaRepositoryInterface;
+use App\Support\Caja\IngresoEgresoCajaMontoSignoSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
@@ -81,14 +82,7 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 		{
 			$tipotransaccion_caja = $this->tipotransaccion_cajaRepository->find($data['tipotransaccion_caja_id']);
 
-			$signo = 1;
-			if ($tipotransaccion_caja)
-			{
-				if ($tipotransaccion_caja->signo == 'I')
-					$signo = 1;
-				else
-					$signo = -1;
-			}
+			$signo = IngresoEgresoCajaMontoSignoSupport::signoPersistencia($tipotransaccion_caja);
 			$cuentacaja_ids = $data['cuentacaja_ids'] ?? [];
 			$moneda_ids = $data['moneda_ids'] ?? [];
 			$montos = NumeroDecimalLocalSupport::listaAFloat($data['montos'] ?? []);

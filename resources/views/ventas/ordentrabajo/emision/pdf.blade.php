@@ -12,7 +12,7 @@
             width: 210mm;
             height: 297mm;
             font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
-            font-size: 9pt;
+            font-size: 12pt;
             color: #000000;
         }
         .pagina {
@@ -27,14 +27,17 @@
             position: absolute;
             white-space: nowrap;
             overflow: hidden;
-            line-height: 1.05;
+            line-height: 1;
             font-weight: bold;
         }
-        .campo-titulo { font-size: 10pt; }
-        .campo-ot { font-size: 11pt; }
-        .campo-pares { font-size: 10pt; }
+        .campo-titulo { font-size: 12pt; }
+        .campo-ot { font-size: 12pt; }
+        .campo-pares { font-size: 12pt; }
         .qr {
             position: absolute;
+            background: #ffffff;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
         }
     </style>
 </head>

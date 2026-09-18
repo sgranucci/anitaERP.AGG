@@ -33,10 +33,11 @@ use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\FacturaExport;
 use App\Models\Ventas\Venta;
-use App\Services\Ventas\ComprobanteImpresionSesionService;
+use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\ComprobanteReferenciaConsultaSupport;
+use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
 class FacturacionController extends Controller
@@ -194,6 +195,15 @@ class FacturacionController extends Controller
             array_splice($unidadmedida_query, 1, 1);
         }
 
+        $modoNc = request('modo') === 'nc' && can('generar-nota-de-credito', false);
+        if ($modoNc) {
+            $tipotransaccion_query = $this->tipotransaccionRepository->all(['C'], ['A']);
+            $primeroNc = $tipotransaccion_query->first();
+            if ($primeroNc) {
+                $tipotransacciondefault_id = $primeroNc->id;
+            }
+        }
+
         return view('ventas.factura.crear', compact(
             'data',
             'mventa_query', 'modulo_query', 'listaprecio_query',
@@ -201,7 +211,8 @@ class FacturacionController extends Controller
             'puntoventaremitodefault_id',
             'deposito_query', 'lote_query', 'cliente_query', 'vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'moneda_query', 'actividad_arca_query',
-            'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query'));
+            'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query',
+            'modoNc'));
     }
 
     public function preferencias(Request $request): JsonResponse
@@ -260,7 +271,7 @@ class FacturacionController extends Controller
 					(string) $data['factura'],
 					isset($data['venta_id']) ? (int) $data['venta_id'] : null,
 					isset($data['aviso_caea']) ? (string) $data['aviso_caea'] : null,
-					url('ventas/factura'),
+					$this->redirectPostFacturaMostrador($data),
 					$mensaje,
 				);
 			}
@@ -341,7 +352,7 @@ class FacturacionController extends Controller
         }
         $puntoventa_query = $this->puntoventaRepository->all();
         $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get();
-        $cliente_query = $this->clienteQuery->allQueryCargaPedido(['id','nombre','codigo']);
+        $cliente_query = $this->clienteQuery->allQueryPorContexto(['id','nombre','codigo'], \App\Support\Ventas\ClientePoliticaComercialSupport::OP_FACTURA);
         $vendedor_query = Vendedor::all();
 		$vendedor_query->prepend((object) ['id'=>'0','nombre'=>'Primero']);
 		$vendedor_query->push((object) ['id'=>'99999999','nombre'=>'Ultimo']);
@@ -442,7 +453,9 @@ class FacturacionController extends Controller
     {
         can('generar-nota-de-credito');
 
-        return $this->facturacionService->editaUnaFactura($id, true);
+        $articuloId = (int) request()->query('articulo_id', 0);
+
+        return $this->facturacionService->editaUnaFactura($id, true, $articuloId);
     }
 
     public function calculaFacturaGeneral(Request $request)
@@ -495,16 +508,6 @@ class FacturacionController extends Controller
             );
         }
 
-        try {
-            app(ComprobanteImpresionSesionService::class)
-                ->dispararAlGrabarVenta((int) ($comprobante['venta_id'] ?? 0));
-        } catch (\Throwable $e) {
-            Log::warning('ventas.factura.impresion_al_grabar', [
-                'venta_id' => $comprobante['venta_id'] ?? null,
-                'error' => $e->getMessage(),
-            ]);
-        }
-
         $mensaje = 'Comprobante '.$comprobante['factura'].' generado con éxito';
         if (! empty($comprobante['aviso_caea'])) {
             $mensaje .= ' '.$comprobante['aviso_caea'];
@@ -517,7 +520,7 @@ class FacturacionController extends Controller
             (string) ($comprobante['factura'] ?? ''),
             isset($comprobante['venta_id']) ? (int) $comprobante['venta_id'] : null,
             isset($comprobante['aviso_caea']) ? (string) $comprobante['aviso_caea'] : null,
-            url('ventas/factura'),
+            $this->redirectPostFacturaMostrador($comprobante),
             $mensaje,
         );
     }
@@ -544,6 +547,20 @@ class FacturacionController extends Controller
         }
 
         return $this->responderComprobanteMostrador($request, false, (string) $bloqueo['error']);
+    }
+
+    /**
+     * Sesión de impresión si el programa dispara; si no, listado de facturas.
+     */
+    private function redirectPostFacturaMostrador(array $comprobante): string
+    {
+        $url = trim((string) ($comprobante['impresion_url'] ?? ''));
+        $retorno = (string) (parse_url(url('ventas/factura'), PHP_URL_PATH) ?: '');
+        if ($url !== '') {
+            return ComprobanteImpresionSesionUrlSupport::anexarRetorno($url, $retorno);
+        }
+
+        return url('ventas/factura');
     }
 
     private function requestQuiereJsonOverlay(Request $request): bool
@@ -573,6 +590,9 @@ class FacturacionController extends Controller
                     'venta_id' => $ventaId,
                     'aviso_caea' => $avisoCaea,
                     'redirect' => $redirect,
+                    'impresion_url' => (is_string($redirect) && str_contains($redirect, 'impresion-sesion'))
+                        ? $redirect
+                        : null,
                 ]]);
             }
 
@@ -682,6 +702,85 @@ class FacturacionController extends Controller
                 'origen' => (string) ($item['origen'] ?? ''),
             ],
         ]);
+    }
+
+    /**
+     * Facturas ERP del cliente que contienen un artículo (NC parcial / devolución).
+     */
+    public function consultaFacturasPorArticulo(Request $request): JsonResponse
+    {
+        $this->assertPuedeConsultarFacturasPorArticuloNc();
+
+        $clienteId = (int) $request->input('cliente_id', 0);
+        if ($clienteId <= 0) {
+            return response()->json([
+                'data' => '<tr><td colspan="6" class="text-muted">Seleccione un cliente primero.</td></tr>',
+            ]);
+        }
+
+        $articuloId = (int) $request->input('articulo_id', 0);
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $consulta = trim((string) $request->input('consulta', ''));
+
+        $filas = app(VentaFacturasPorArticuloClienteSupport::class)->listar(
+            $clienteId,
+            $articuloId,
+            $empresaId,
+            $consulta
+        );
+
+        $puedeAbm = can('listar-factura', false) || can('editar-factura', false) || can('facturar', false);
+        $puedeNc = can('generar-nota-de-credito', false);
+        if ($filas === []) {
+            $msg = $articuloId > 0
+                ? 'No hay facturas de este cliente con ese artículo.'
+                : 'Sin facturas del cliente.';
+
+            return response()->json(['data' => '<tr><td colspan="6">'.e($msg).'</td></tr>']);
+        }
+
+        $html = '';
+        foreach ($filas as $row) {
+            $codigo = (string) ($row['codigo'] ?? '');
+            $total = number_format((float) ($row['total'] ?? 0), 2, ',', '.');
+            $cant = number_format((float) ($row['cantidad'] ?? 0), 2, ',', '.');
+            $pend = number_format((float) ($row['cantidad_pendiente'] ?? 0), 2, ',', '.');
+            $ventaId = (int) ($row['venta_id'] ?? 0);
+            $html .= '<tr data-venta-id="'.$ventaId.'">';
+            $html .= '<td class="venta_codigo">'.e($codigo).'</td>';
+            $html .= '<td class="fecha_venta">'.e((string) ($row['fecha'] ?? '')).'</td>';
+            $html .= '<td class="text-right">'.($articuloId > 0 ? e($cant) : '—').'</td>';
+            $html .= '<td class="text-right">'.($articuloId > 0 ? e($pend) : '—').'</td>';
+            $html .= '<td class="text-right">'.e($total).'</td>';
+            $html .= '<td class="text-nowrap">';
+            if ($puedeNc && $ventaId > 0) {
+                $html .= '<a class="btn btn-warning btn-sm eligeconsultafacturaarticulo" href="#">Elegir</a>';
+            }
+            if ($puedeAbm && $ventaId > 0) {
+                $url = route('editar_factura', [
+                    'id' => $ventaId,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+                $html .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+            }
+            $html .= '</td></tr>';
+        }
+
+        return response()->json(['data' => $html]);
+    }
+
+    private function assertPuedeConsultarFacturasPorArticuloNc(): void
+    {
+        if (
+            ! can('generar-nota-de-credito', false)
+            && ! can('crear-factura', false)
+            && ! can('editar-factura', false)
+            && ! can('listar-factura', false)
+            && ! can('facturar', false)
+        ) {
+            abort(403, 'Sin permiso para consultar facturas por artículo');
+        }
     }
 
     private function assertPuedeConsultarReferenciaFactura(): void

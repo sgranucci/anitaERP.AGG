@@ -7,6 +7,7 @@ use App\Models\Ventas\Tiposuspensioncliente;
 use App\Services\Arca\WsapocConsultaService;
 use App\Traits\Ventas\ClienteTrait;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 /**
@@ -342,7 +343,15 @@ final class ClienteFacturasApocrifasSupport
             return (int) $existente;
         }
 
-        $creado = Tiposuspensioncliente::query()->create(['nombre' => $nombre]);
+        $attrs = ['nombre' => $nombre];
+        try {
+            if (Schema::hasColumn('tiposuspensioncliente', 'codigo')) {
+                $attrs['codigo'] = 'BLOQUEADO';
+            }
+        } catch (Throwable) {
+        }
+
+        $creado = Tiposuspensioncliente::query()->create($attrs);
 
         return (int) $creado->id;
     }

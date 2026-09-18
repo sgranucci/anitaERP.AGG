@@ -20,6 +20,7 @@ use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Ventas\QrCodePngSupport;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
 use App\Support\Ventas\OrdentrabajoEmisionPreimpresoLayout;
 use App\Models\Configuracion\Salida;
@@ -145,6 +146,23 @@ class OrdentrabajoService
 		else 
 			$ids = $id_items;
 
+		if ($ids !== []) {
+			$primer = $this->pedido_combinacionRepository->find($ids[0]);
+			if ($primer) {
+				$pedidoPre = $this->pedidoQuery->leePedidoporId($primer->pedido_id)->first();
+				if ($pedidoPre) {
+					$clientePre = $this->clienteQuery->traeClienteporId($pedidoPre->cliente_id);
+					$errorPolitica = ClientePoliticaComercialSupport::errorSiNoPermite(
+						$clientePre,
+						ClientePoliticaComercialSupport::OP_BOLETA
+					);
+					if ($errorPolitica !== null) {
+						return $errorPolitica;
+					}
+				}
+			}
+		}
+
 		$flBoletasJuntas = false;
 		if (count($ids) > 1)
 			$flBoletasJuntas = true; 
@@ -162,7 +180,7 @@ class OrdentrabajoService
 				$ot_stock = $this->ordentrabajoQuery->leeOrdenTrabajoPorCodigo($ot->codigo);
 				if ($ot_stock)
 				{
-					$lote_id = $ot_stock->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedido_combinaciones->lote_id;
+					$lote_id = $ot_stock->pedidoCombinacionVigente()?->lote_id;
 				}
 			}
 			else // Asigna el codigo de lote ingresado
@@ -1220,16 +1238,16 @@ class OrdentrabajoService
 	private function armarDatosEmisionOtUna(string $codigo, string $tipoemision): ?array
 	{
 		$ot = $this->ordentrabajoQuery->leeOrdenTrabajoPorCodigo($codigo);
-		if (! $ot || empty($ot->ordentrabajo_combinacion_talles[0])) {
+		$lineas = $ot?->ordentrabajoCombinacionTallesVigentes();
+		$pedidoCombinacion = $ot?->pedidoCombinacionVigente();
+		if (! $ot || ! $lineas || $lineas->isEmpty() || ! $pedidoCombinacion) {
 			return null;
 		}
 
 		$mventa = 0;
 		$observacion = '';
 		$leyendaPedido = '';
-		$articulo = $this->articuloQuery->traeArticuloPorId(
-			$ot->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedido_combinaciones->articulo_id
-		);
+		$articulo = $this->articuloQuery->traeArticuloPorId($pedidoCombinacion->articulo_id);
 		if ($articulo) {
 			$mventa = (int) $articulo->mventa_id;
 		}
@@ -1239,36 +1257,36 @@ class OrdentrabajoService
 		$medidas = [];
 		$pedidos = [];
 
-		foreach ($ot->ordentrabajo_combinacion_talles as $item) {
-			$talle = Talle::find($item->pedido_combinacion_talles->talle_id);
+		foreach ($lineas as $item) {
+			$pct = $item->pedido_combinacion_talles;
+			$talle = Talle::find($pct->talle_id);
 			if ($talle) {
-				$medidas[] = ['medida' => $talle->nombre, 'cantidad' => $item->pedido_combinacion_talles->cantidad];
+				$medidas[] = ['medida' => $talle->nombre, 'cantidad' => $pct->cantidad];
 
 				if ($talle->nombre >= config('consprod.DESDE_INTERVALO1') && $talle->nombre <= config('consprod.HASTA_INTERVALO1')) {
-					$this->tot_pares1 += $item->pedido_combinacion_talles->cantidad;
+					$this->tot_pares1 += $pct->cantidad;
 				}
 				if ($talle->nombre >= config('consprod.DESDE_INTERVALO2') && $talle->nombre <= config('consprod.HASTA_INTERVALO2')) {
-					$this->tot_pares2 += $item->pedido_combinacion_talles->cantidad;
+					$this->tot_pares2 += $pct->cantidad;
 				}
 				if ($talle->nombre >= config('consprod.DESDE_INTERVALO3') && $talle->nombre <= config('consprod.HASTA_INTERVALO3')) {
-					$this->tot_pares3 += $item->pedido_combinacion_talles->cantidad;
+					$this->tot_pares3 += $pct->cantidad;
 				}
 				if ($talle->nombre >= config('consprod.DESDE_INTERVALO4') && $talle->nombre <= config('consprod.HASTA_INTERVALO4')) {
-					$this->tot_pares4 += $item->pedido_combinacion_talles->cantidad;
+					$this->tot_pares4 += $pct->cantidad;
 				}
 			}
-			$totPares += $item->pedido_combinacion_talles->cantidad;
+			$totPares += $pct->cantidad;
 
-			if (! in_array($item->pedido_combinacion_talles->pedidos_combinacion->pedido_id, $pedidos, true)) {
-				$pedidos[] = $item->pedido_combinacion_talles->pedidos_combinacion->pedido_id;
+			$pc = $pct->pedidos_combinacion;
+			if ($pc && ! in_array($pc->pedido_id, $pedidos, true)) {
+				$pedidos[] = $pc->pedido_id;
 			}
-			$observacion = $item->pedido_combinacion_talles->pedidos_combinacion->observacion;
-			$leyendaPedido = $item->pedido_combinacion_talles->pedidos_combinacion->pedidos->leyenda;
+			$observacion = $pc?->observacion ?? $observacion;
+			$leyendaPedido = $pc?->pedidos?->leyenda ?? $leyendaPedido;
 		}
 
-		$combinacion = Combinacion::find(
-			$ot->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedido_combinaciones->combinacion_id
-		);
+		$combinacion = Combinacion::find($pedidoCombinacion->combinacion_id);
 
 		$nombreFondo = '';
 		$colorFondo = '';
@@ -1402,18 +1420,22 @@ class OrdentrabajoService
 		$clientes = [];
 		$localidadId = 0;
 		$nombreVendedor = '';
-		foreach ($ot->ordentrabajo_combinacion_talles as $item) {
-			if (($item->clientes->tipossuspensioncliente->id ?? 0) > 0) {
-				$tiposuspension = $item->clientes->tipossuspensioncliente->nombre;
-				$descCliente = substr($item->clientes->nombre, 0, 20).' '.substr($tiposuspension, 0, 8);
+		foreach ($lineas as $item) {
+			$cliente = $item->clientes;
+			if (! $cliente) {
+				continue;
+			}
+			$suspension = $cliente->tipossuspensioncliente;
+			if ((int) ($suspension?->id ?? 0) > 0) {
+				$descCliente = substr($cliente->nombre, 0, 20).' '.substr((string) $suspension->nombre, 0, 8);
 			} else {
-				$descCliente = $item->clientes->nombre;
+				$descCliente = $cliente->nombre;
 			}
 
 			if (! in_array($descCliente, $clientes, true)) {
 				$clientes[] = $descCliente;
-				$localidadId = $item->clientes->localidad_id;
-				$clicomi = $this->cliente_comisionQuery->traeVendedor($item->clientes->codigo, $mventa);
+				$localidadId = $cliente->localidad_id;
+				$clicomi = $this->cliente_comisionQuery->traeVendedor($cliente->codigo, $mventa);
 				if ($clicomi) {
 					$nombreVendedor = $clicomi[0]->vend_nombre;
 				}
@@ -1426,11 +1448,15 @@ class OrdentrabajoService
 			$nombreLocalidad = $localidad->nombre;
 		}
 
-		$leyenda = trim((string) ($ot->leyenda.' '.$observacion.' '.$leyendaPedido));
+		$leyenda = trim(implode(' ', array_filter([
+			$this->textoOVacioPreimpresoOt($ot->leyenda ?? null),
+			$this->textoOVacioPreimpresoOt($observacion),
+			$this->textoOVacioPreimpresoOt($leyendaPedido),
+		], static fn (string $parte): bool => $parte !== '')));
 
 		$copias = OrdentrabajoEmisionCopiaSupport::cantidadCopias($tipoemision);
 		$titulosCopia = OrdentrabajoEmisionCopiaSupport::titulos($tipoemision);
-		$qrDataUri = QrCodePngSupport::dataUri((string) $ot->codigo, 220, 1);
+		$qrDataUri = QrCodePngSupport::svgDataUri((string) $ot->codigo, 4);
 
 		$doc = [
 			'codigo' => (string) $ot->codigo,
@@ -1480,7 +1506,7 @@ class OrdentrabajoService
 	}
 
 	/**
-	 * Páginas A4 portrait con campos en coordenadas del PostScript Ferli (preimpreso).
+	 * Páginas A4 portrait con campos en coordenadas del PostScript (preimpreso).
 	 *
 	 * @param  array<string, mixed>  $doc
 	 * @return list<array{campos: list<array{y:float,x:float,k:string,v:string,max_w:float}>, qrs: list<array{x:float,y:float,s:float,uri:string}>}>
@@ -1491,15 +1517,14 @@ class OrdentrabajoService
 		$tipoemision = strtoupper((string) ($doc['tipoemision'] ?? 'COMPLETA'));
 		$titulos = $doc['titulos_copia'] ?? OrdentrabajoEmisionCopiaSupport::titulos($tipoemision);
 		$qrUri = (string) ($doc['qr_data_uri'] ?? '');
+		$mventa = (int) ($doc['mventa'] ?? 0);
+		$numeracion = (string) ($doc['numeracion'] ?? '');
 
 		$cantidadPaginas = ($tipoemision === 'COMPLETA') ? 2 : 1;
 		$paginas = [];
 
 		for ($pagina = 1; $pagina <= $cantidadPaginas; $pagina++) {
-			$layout = OrdentrabajoEmisionPreimpresoLayout::paginaFragola($pagina);
-			if ($layout === []) {
-				$layout = OrdentrabajoEmisionPreimpresoLayout::paginaFragola(1);
-			}
+			$layout = OrdentrabajoEmisionPreimpresoLayout::pagina($pagina, $mventa, $numeracion);
 
 			$offsetTitulo = ($pagina - 1) * 4;
 			$valoresPagina = $valores;
@@ -1514,12 +1539,12 @@ class OrdentrabajoService
 			$campos = [];
 			foreach ($layout as $pos) {
 				$k = (string) ($pos['k'] ?? '');
-				$v = (string) ($valoresPagina[$k] ?? '');
+				$v = $this->textoOVacioPreimpresoOt((string) ($valoresPagina[$k] ?? ''));
 				if ($v === '') {
 					continue;
 				}
 				$campos[] = [
-					'y' => (float) $pos['y'],
+					'y' => OrdentrabajoEmisionPreimpresoLayout::topCssMm((float) $pos['y']),
 					'x' => (float) $pos['x'],
 					'k' => $k,
 					'v' => $v,
@@ -1528,7 +1553,7 @@ class OrdentrabajoService
 			}
 
 			$qrs = [];
-			foreach (OrdentrabajoEmisionPreimpresoLayout::QR_PANELES as $idx => $qrPos) {
+			foreach (OrdentrabajoEmisionPreimpresoLayout::qrPaneles() as $idx => $qrPos) {
 				if ($tipoemision !== 'COMPLETA' && $idx > 0) {
 					break;
 				}
@@ -1628,12 +1653,25 @@ class OrdentrabajoService
 
 	private function prefijoCampoOt(string $prefijo, string $valor): string
 	{
-		$valor = trim($valor);
+		$valor = $this->textoOVacioPreimpresoOt($valor);
 		if ($valor === '') {
 			return '';
 		}
 
 		return $prefijo.$valor;
+	}
+
+	/**
+	 * Informix/Anita a veces graba el literal "NULL" en leyendas vacías.
+	 */
+	private function textoOVacioPreimpresoOt(?string $valor): string
+	{
+		$valor = trim((string) $valor);
+		if ($valor === '' || strcasecmp($valor, 'NULL') === 0) {
+			return '';
+		}
+
+		return $valor;
 	}
 
 	/**
@@ -1804,10 +1842,12 @@ class OrdentrabajoService
 			$observacion = '';
 			$leyendaPedido = '';
 			$leyenda = '';
-			if ($ot)
+			$lineas = $ot?->ordentrabajoCombinacionTallesVigentes();
+			$pedidoCombinacion = $ot?->pedidoCombinacionVigente();
+			if ($ot && $lineas && $lineas->isNotEmpty() && $pedidoCombinacion)
 			{
 				// Lee articulo
-			 	$articulo = $this->articuloQuery->traeArticuloPorId($ot->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedido_combinaciones->articulo_id);
+			 	$articulo = $this->articuloQuery->traeArticuloPorId($pedidoCombinacion->articulo_id);
 
 				if ($articulo)
 					$mventa = $articulo->mventa_id;
@@ -1817,36 +1857,37 @@ class OrdentrabajoService
 				$totPares = 0;
 				$medidas = [];
 				$pedidos = [];
-				foreach($ot->ordentrabajo_combinacion_talles as $item)
+				foreach($lineas as $item)
 				{
-					// lee el talle 
-					$talle = Talle::find($item->pedido_combinacion_talles->talle_id);
+					$pct = $item->pedido_combinacion_talles;
+					$talle = Talle::find($pct->talle_id);
 
 					if ($talle)
 					{
-						$medidas[] = ['medida' => $talle->nombre, 'cantidad' => $item->pedido_combinacion_talles->cantidad];
+						$medidas[] = ['medida' => $talle->nombre, 'cantidad' => $pct->cantidad];
 						
 						if ($talle->nombre >= config('consprod.DESDE_INTERVALO1') && $talle->nombre <= config('consprod.HASTA_INTERVALO1'))
-							$this->tot_pares1 += $item->pedido_combinacion_talles->cantidad;
+							$this->tot_pares1 += $pct->cantidad;
 
 						if ($talle->nombre >= config('consprod.DESDE_INTERVALO2') && $talle->nombre <= config('consprod.HASTA_INTERVALO2'))
-							$this->tot_pares2 += $item->pedido_combinacion_talles->cantidad;
+							$this->tot_pares2 += $pct->cantidad;
 
 						if ($talle->nombre >= config('consprod.DESDE_INTERVALO3') && $talle->nombre <= config('consprod.HASTA_INTERVALO3'))
-							$this->tot_pares3 += $item->pedido_combinacion_talles->cantidad;
+							$this->tot_pares3 += $pct->cantidad;
 
 						if ($talle->nombre >= config('consprod.DESDE_INTERVALO4') && $talle->nombre <= config('consprod.HASTA_INTERVALO4'))
-							$this->tot_pares4 += $item->pedido_combinacion_talles->cantidad;
+							$this->tot_pares4 += $pct->cantidad;
 					}
-					$totPares += $item->pedido_combinacion_talles->cantidad;
+					$totPares += $pct->cantidad;
 
-					if (!in_array($item->pedido_combinacion_talles->pedidos_combinacion->pedido_id, $pedidos))
-						$pedidos[] = $item->pedido_combinacion_talles->pedidos_combinacion->pedido_id;
-					$observacion = $item->pedido_combinacion_talles->pedidos_combinacion->observacion;
-					$leyendaPedido = $item->pedido_combinacion_talles->pedidos_combinacion->pedidos->leyenda;
+					$pc = $pct->pedidos_combinacion;
+					if ($pc && !in_array($pc->pedido_id, $pedidos))
+						$pedidos[] = $pc->pedido_id;
+					$observacion = $pc?->observacion ?? $observacion;
+					$leyendaPedido = $pc?->pedidos?->leyenda ?? $leyendaPedido;
 				}
 				// Lee combinacion 
-				$combinacion = Combinacion::find($ot->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedido_combinaciones->combinacion_id);
+				$combinacion = Combinacion::find($pedidoCombinacion->combinacion_id);
 
 				$nombreFondo = '';
 				$colorFondo = '';
@@ -1978,23 +2019,27 @@ class OrdentrabajoService
 				$clientes = [];
 				$localidad_id = 0;
 				$nombreVendedor = [];
-				foreach ($ot->ordentrabajo_combinacion_talles as $item)
+				foreach ($lineas as $item)
 				{
-					if ($item->clientes->tipossuspensioncliente->id ?? 0 > 0)
+					$cliente = $item->clientes;
+					if (! $cliente) {
+						continue;
+					}
+					$suspension = $cliente->tipossuspensioncliente;
+					if ((int) ($suspension?->id ?? 0) > 0)
 					{
-						$tiposuspension = $item->clientes->tipossuspensioncliente->nombre;
-						$descCliente = substr($item->clientes->nombre,0,20).' '.substr($tiposuspension, 0, 8);
+						$descCliente = substr($cliente->nombre,0,20).' '.substr((string) $suspension->nombre, 0, 8);
 					}
 					else
-						$descCliente = $item->clientes->nombre;
+						$descCliente = $cliente->nombre;
 
 					if (!in_array($descCliente, $clientes))
 					{
 						$clientes[] = $descCliente;
-						$localidad_id = $item->clientes->localidad_id;
+						$localidad_id = $cliente->localidad_id;
 
 						// Lee el vendedor
-						$clicomi = $this->cliente_comisionQuery->traeVendedor($item->clientes->codigo, $mventa);
+						$clicomi = $this->cliente_comisionQuery->traeVendedor($cliente->codigo, $mventa);
 
 						if ($clicomi)
 						{
@@ -2781,15 +2826,15 @@ class OrdentrabajoService
 				if ($articulo)
 					$descripcionArticulo = $articulo->descripcion;
 
-				foreach ($ot->ordentrabajo_combinacion_talles as $item)
+				foreach ($ot->ordentrabajoCombinacionTallesVigentes() as $item)
 				{
-					// lee el talle 
-					$talle = Talle::find($item->pedido_combinacion_talles->talle_id);
+					$pct = $item->pedido_combinacion_talles;
+					$talle = Talle::find($pct->talle_id);
 
 					if ($talle)
 					{
 						if ($caja->desdenro <= $talle->nombre && $caja->hastanro >= $talle->nombre)
-							$cantidad += $item->pedido_combinacion_talles->cantidad;
+							$cantidad += $pct->cantidad;
 					}
 				}
 				$arrayCajas[] = ['descripcion' => $descripcionArticulo, 'cantidad' => $cantidad];
@@ -3227,8 +3272,9 @@ class OrdentrabajoService
 		{
 			// Lee articulo
 			$articulo = false;
-			if (count($ot->ordentrabajo_combinacion_talles) > 0)
-				$articulo = $this->articuloQuery->traeArticuloPorId($ot->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedido_combinaciones->articulo_id);
+			$pedidoCombinacion = $ot->pedidoCombinacionVigente();
+			if ($pedidoCombinacion)
+				$articulo = $this->articuloQuery->traeArticuloPorId($pedidoCombinacion->articulo_id);
 
 			if ($articulo)
 			{
@@ -3236,7 +3282,7 @@ class OrdentrabajoService
 				$nombreLinea = $articulo->lineas->nombre;
 
 				$pares = 0;
-				foreach($ot->ordentrabajo_combinacion_talles as $item)
+				foreach($ot->ordentrabajoCombinacionTallesVigentes() as $item)
 				{
 					$pares += $item->pedido_combinacion_talles->cantidad;
 				}

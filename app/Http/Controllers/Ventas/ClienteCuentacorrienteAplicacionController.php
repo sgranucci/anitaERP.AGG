@@ -32,7 +32,11 @@ class ClienteCuentacorrienteAplicacionController extends Controller
         can('aplicar-cuentacorriente-cliente');
 
         $clienteId = (int) $request->query('cliente_id', 0);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) $request->query('empresa_id', 0);
+        if ($empresaId <= 0 && $empresaQuery->count() === 1) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
         $cliente = null;
         if ($clienteId > 0) {
             try {
@@ -65,7 +69,7 @@ class ClienteCuentacorrienteAplicacionController extends Controller
         $volverClienteId = (int) $request->query('volver_cliente_id', $clienteId);
 
         return view('ventas.aplicacion_cuentacorriente.index', [
-            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'empresa_query' => $empresaQuery,
             'cliente' => $cliente,
             'cliente_id' => $clienteId,
             'empresa_id' => $empresaId,

@@ -6,7 +6,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Pedidos, Facturación y Abonos',
-    'version' => '1.2',
+    'version' => '1.3',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -14,7 +14,7 @@ return [
         [
             'titulo' => '1. Introducción y roles',
             'parrafos' => [
-                'Este manual describe dos circuitos de Ventas en Anita ERP: (A) pedidos de mercadería con pesada y facturación en planta, y (B) abonos / contratos de servicio con conceptos, tags y cola de facturación periódica.',
+                'Este manual describe dos circuitos de Ventas en Anita ERP: (A) pedidos de mercadería con pesada y facturación en planta, y (B) abonos / contratos de servicio con conceptos, tags y cola de facturación periódica. Antes de cargar un pedido, una boleta o una factura conviene conocer la política comercial del cliente (capítulo 5): no es un «suspendido sí/no», sino hasta dónde puede avanzar el circuito.',
                 'El circuito de pedidos (EL BIERZO) comercializa en cajas, piezas y kilos; el importe facturado se basa en la pesada real registrada en planta.',
                 'El circuito de abonos (menú Ventas → Abonos) gestiona servicios recurrentes: conceptos con plantillas de texto fiscal, contratos por cliente, períodos a facturar y avisos de vencimiento. No forma parte de «Tablas de ventas»: es un módulo operativo.',
                 'Perfiles del circuito de pedidos:',
@@ -38,6 +38,7 @@ return [
                     ['Conceptos de venta', 'ventas/concepto-venta', 'Administración / facturación'],
                     ['Abonos / contratos', 'ventas/contrato-venta', 'Administración / facturación'],
                     ['Cola facturación abonos', 'ventas/contrato-venta-cola', 'Administración / facturación'],
+                    ['Tipos de suspensión', 'ventas/tiposuspensioncliente', 'Administración'],
                     ['Manual en línea', 'ventas/manual', 'Todos con acceso a Ventas'],
                 ],
             ],
@@ -99,7 +100,51 @@ return [
             ],
         ],
         [
-            'titulo' => '5. Carga de pedido (vendedores remotos)',
+            'titulo' => '5. Política comercial del cliente',
+            'captura_id' => 'flujo_politica_cliente',
+            'herramientas_clave' => 'politica_comercial',
+            'parrafos' => [
+                'La suspensión del cliente no es un interruptor de encendido/apagado. El cliente sigue existiendo (ABM, cuenta corriente, estadística, historial). Lo que cambia es hasta dónde puede avanzar el circuito comercial: consultar → pedido → boleta / OT / remito → factura. La cobranza nunca se corta.',
+                'Eso se llama política comercial. El nombre del tipo de suspensión y la leyenda del cliente son el motivo (deuda vencida, proforma, apócrifas, etc.); no definen por sí solos qué se puede hacer.',
+                'Acceso para parametrizar: Ventas → Tablas de ventas → Tipos de suspensión de clientes (ventas/tiposuspensioncliente). En cada tipo se elige la política: Moroso, Proforma o Suspendido. El nombre queda como texto de motivo.',
+            ],
+            'tabla' => [
+                'caption' => 'Qué se puede hacer según la política',
+                'headers' => ['Política', 'Pedido', 'Boleta / OT / remito', 'Factura', 'Cobranza'],
+                'rows' => [
+                    ['Normal', 'Sí', 'Sí', 'Sí', 'Sí'],
+                    ['Moroso', 'Sí', 'No', 'No', 'Sí — al confirmar el cobro pasa a Proforma'],
+                    ['Proforma', 'Sí', 'Sí', 'No', 'Sí'],
+                    ['Suspendido', 'No (ni aparece en la carga)', 'No', 'No', 'Sí (no cambia la política)'],
+                ],
+            ],
+            'parrafos2' => [
+                'En la consulta de clientes (F1 o lupa) el listado depende de la pantalla: en pedido se ocultan los suspendidos y se muestran morosos y proforma con una etiqueta; en boleta/OT/remito no aparecen los morosos; en factura solo los que pueden facturar; en cobranza aparecen todos, incluido el suspendido.',
+                'Al elegir un cliente con política distinta de Normal, el formulario muestra un aviso con la política, el motivo y la leyenda. El sistema no lo trata como «cliente no activo».',
+            ],
+            'items' => [
+                'Moroso: se toma el pedido (compromiso comercial) pero no se fabrica ni se entrega (sin OT/boleta/remito) y no se factura. Al cobrar una cobranza confirmada, el cliente pasa a Proforma.',
+                'Proforma: se puede pedir y boletar/entregar; la factura fiscal espera el cobro o la regularización.',
+                'Suspendido: no entra en carga de pedidos. El maestro queda para cuenta corriente, juicios e informes. Igual se le puede cobrar.',
+                'Notas de crédito y el POS de gastronomía no usan este tope: no se bloquean por política comercial.',
+                'Un pedido o remito ya grabado se puede abrir aunque el cliente haya pasado a suspendido después; no se puede dar de alta uno nuevo.',
+            ],
+            'nota' => 'El estado fiscal del cliente (activo / regularizado ARCA) es otra cosa: no reemplaza la política comercial. Si un cliente moroso o proforma no aparece en el pedido, avise a sistemas: la consulta debe usar el contexto del proceso, no «solo activos».',
+            'tabla2' => [
+                'caption' => 'Pantallas donde se aplica',
+                'headers' => ['Pantalla', 'Ruta', 'Efecto'],
+                'rows' => [
+                    ['Pedido', 'ventas/pedido/crear', 'No carga suspendidos; moroso y proforma sí, con aviso'],
+                    ['Orden de trabajo / boleta', 'ventas/ordentrabajo', 'No genera OT a moroso ni a suspendido'],
+                    ['Remito', 'ventas/remito', 'No genera remito a moroso ni a suspendido'],
+                    ['Factura', 'ventas/factura', 'No factura a moroso, proforma ni suspendido (salvo NC)'],
+                    ['Cobranza', 'caja/cobranza', 'Siempre se cobra; moroso confirmado pasa a proforma'],
+                    ['Tipos de suspensión', 'ventas/tiposuspensioncliente', 'Define la política (código) y el motivo (nombre)'],
+                ],
+            ],
+        ],
+        [
+            'titulo' => '6. Carga de pedido (vendedores remotos)',
             'captura_id' => 'pedido_crear',
             'parrafos' => [
                 'Esta sección está orientada a vendedores que cargan pedidos desde fuera de la planta. El objetivo es registrar con precisión qué pide el cliente y cuánto (en cajas/piezas/kilos teóricos), sin necesidad de pesar.',
@@ -109,7 +154,7 @@ return [
                 'caption' => 'Campos de cabecera',
                 'headers' => ['Campo', 'Descripción', 'Consejo'],
                 'rows' => [
-                    ['Cliente', 'Código + nombre. Lupa para consultar clientes. Si no existe, puede usar Alta cliente provisorio.', 'Verifique suspensión (moroso, proforma, no facturar) antes de confirmar.'],
+                    ['Cliente', 'Código + nombre. F1 o lupa para consultar. Si no existe, puede usar Alta cliente provisorio.', 'Vea el capítulo 5: moroso y proforma sí se cargan; suspendido no aparece. El aviso en pantalla indica hasta dónde llega el circuito.'],
                     ['Vendedor', 'Vendedor asignado al pedido.', 'Seleccione su nombre en el desplegable.'],
                     ['Reparto', 'Transporte / línea de reparto (código + lupa).', 'Define logística y puede influir en facturación dividida.'],
                     ['Lugar de entrega', 'Dirección o referencia de entrega.', 'Sea específico: el listado impreso lo usa logística.'],
@@ -131,7 +176,7 @@ return [
             'nota' => 'Recordatorio para vendedores remotos: su pedido quedará en estado Pendiente y aparecerá en el listado de la empresa. Depósito lo imprimirá y preparará. Usted no debe completar la pesada ni facturar salvo que su rol lo autorice expresamente en planta.',
         ],
         [
-            'titulo' => '6. Edición, guardado y estados',
+            'titulo' => '7. Edición, guardado y estados',
             'captura_id' => 'pedido_editar',
             'herramientas_clave' => 'edicion_pedido',
             'parrafos' => [
@@ -145,7 +190,7 @@ return [
             ],
         ],
         [
-            'titulo' => '7. Pesada con lectura QR',
+            'titulo' => '8. Pesada con lectura QR',
             'parrafos' => [
                 'La pesada se realiza en planta, cuando la mercadería ya está preparada y etiquetada. Cada caja lleva un código QR con la información de peso real.',
                 'En la edición del pedido → botón Pesada → se abre el modal Pesada del Pedido.',
@@ -175,7 +220,7 @@ return [
             ],
         ],
         [
-            'titulo' => '8. Facturación y remito',
+            'titulo' => '9. Facturación y remito',
             'parrafos' => [
                 'La facturación se ejecuta desde la edición del pedido, una vez que la pesada refleja el peso real a entregar.',
                 'Verifique que el pedido esté en estado Pendiente y con pesada cargada → presione Factura → se abre el modal Facturación de Pedido con los ítems pendientes.',
@@ -197,7 +242,7 @@ return [
             ],
         ],
         [
-            'titulo' => '9. Emisión fiscal (ARCA)',
+            'titulo' => '10. Emisión fiscal (ARCA)',
             'parrafos' => [
                 'La factura se emite contra ARCA (ex AFIP) mediante el webservice configurado en el punto de venta.',
             ],
@@ -210,7 +255,7 @@ return [
             ],
         ],
         [
-            'titulo' => '10. Herramientas del listado y reportes',
+            'titulo' => '11. Herramientas del listado y reportes',
             'parrafos' => [
                 'Además del listado operativo, existen reportes bajo Ventas (según permisos del menú):',
             ],
@@ -240,7 +285,7 @@ return [
             'nota' => 'Al consultar, el encabezado del reporte y las exportaciones PDF/Excel muestran el criterio aplicado (por ejemplo «Todos», «Repartos 1, 4, 6» o «1 al 10»). Pulse Enter en el código para validar un reparto individual; si cargó una lista separada por comas, el sistema la interpreta como varios repartos y no busca un código único.',
         ],
         [
-            'titulo' => '11. Cierre de pedidos y anulaciones',
+            'titulo' => '12. Cierre de pedidos y anulaciones',
             'captura_id' => 'pedido_cerrar',
             'parrafos' => [
                 'Cierre masivo (ventas/pedido/cerrar): permite cerrar pedidos hasta una fecha con un motivo de cierre. Uso administrativo para pedidos vencidos o no concretados.',
@@ -249,11 +294,12 @@ return [
             ],
         ],
         [
-            'titulo' => '12. Permisos principales',
+            'titulo' => '13. Permisos principales',
             'tabla' => [
                 'caption' => 'Permisos — pedidos y facturación',
                 'headers' => ['Permiso', 'Uso'],
                 'rows' => [
+                    ['listar-tipos-suspension-clientes / crear-tipos-suspension-clientes / editar-tipos-suspension-clientes', 'ABM de políticas (moroso / proforma / suspendido)'],
                     ['listar-pedidos', 'Ver listado e imprimir pedidos'],
                     ['crear-pedidos', 'Alta de pedidos (vendedores remotos)'],
                     ['editar-pedidos', 'Modificar, pesar, facturar'],
@@ -278,13 +324,16 @@ return [
             ],
         ],
         [
-            'titulo' => '13. Errores frecuentes y buenas prácticas',
+            'titulo' => '14. Errores frecuentes y buenas prácticas',
             'tabla' => [
                 'caption' => 'Pedidos — problema → solución',
                 'headers' => ['Situación', 'Qué hacer'],
                 'rows' => [
                     ['No puede generar pedidos con más de 42 ítems', 'Dividir en dos pedidos o consolidar líneas.'],
-                    ['Cliente moroso / proforma / no facturar', 'Resolver con administración antes de facturar; el sistema alerta en pantalla.'],
+                    ['Cliente moroso: no genera boleta ni factura', 'Es correcto. Se puede cargar el pedido. Al confirmar una cobranza, pasa a Proforma (pide y boleta; no factura).'],
+                    ['Cliente proforma: no factura', 'Es correcto. Pedido y boleta/OT sí. La factura espera el cobro o la regularización.'],
+                    ['Cliente suspendido no aparece en el pedido', 'Es correcto. No se le carga pedido nuevo. Sí se cobra (caja/cobranza) y se consulta en ABM/CC.'],
+                    ['El sistema dice «cliente no activo» al elegir un moroso', 'No debería: avise a sistemas. La consulta del pedido debe mostrar moroso y proforma con etiqueta, no tratarlos como inactivos.'],
                     ['Kilos pesados superan kilos pedidos', 'Revise si escaneó caja de más o corrija cantidades pedidas con planta.'],
                     ['Caja ya leída', 'QR duplicado; no escanee dos veces la misma caja.'],
                     ['No factura sin actividad ARCA', 'Complete actividad en el PV o seleccione otro PV fiscal válido.'],
@@ -306,13 +355,13 @@ return [
                 ],
             ],
             'items' => [
-                'Buenas prácticas — vendedor remoto: cargar reparto y lugar de entrega correctos; usar UMD coherente; dejar pesada en cero; usar leyendas para observaciones; confirmar que el pedido aparece Pendiente tras guardar.',
+                'Buenas prácticas — vendedor remoto: cargar reparto y lugar de entrega correctos; usar UMD coherente; dejar pesada en cero; usar leyendas para observaciones; confirmar que el pedido aparece Pendiente tras guardar; si el cliente muestra aviso Moroso o Proforma, no intente boletar/facturar: avise a administración.',
                 'Buenas prácticas — planta: imprimir listado al recibir pedidos del día; pesar todas las cajas antes de facturar; verificar Total pesados; facturar el mismo día del despacho cuando sea posible.',
                 'Buenas prácticas — abonos: definir tags en el concepto antes de alta masiva de contratos; guardar datos fijos (dominio, patente) en el abono; facturar períodos desde la cola; revisar avisos de vencimiento.',
             ],
         ],
         [
-            'titulo' => '14. Módulo Abonos — visión general',
+            'titulo' => '15. Módulo Abonos — visión general',
             'parrafos' => [
                 'El módulo Abonos vive bajo Ventas (no bajo Tablas de ventas). Une tres pantallas: Conceptos de venta (qué se factura y cómo se describe), Abonos / contratos (a quién y con qué datos fijos) y Cola de facturación (qué períodos faltan emitir).',
                 'Flujo recomendado: 1) crear o ajustar el concepto con plantilla y tags; 2) dar de alta el abono del cliente; 3) facturar el período desde la cola o el facturador; 4) el sistema deja histórico del período y guarda los valores de tags usados en la emisión.',
@@ -330,7 +379,7 @@ return [
             'nota' => 'La facturación fiscal sigue siendo el mismo circuito de Ventas (punto de venta, ARCA, PDF). El módulo Abonos prepara el renglón (cliente, concepto, descripción y período) para no reescribir a mano cada mes.',
         ],
         [
-            'titulo' => '15. Conceptos de venta y plantillas',
+            'titulo' => '16. Conceptos de venta y plantillas',
             'herramientas_clave' => 'conceptos_venta',
             'parrafos' => [
                 'Un concepto de venta es el ítem que se elige en facturación mostrador o en un abono: código, nombre, precio, alícuota, cuenta contable y descripción fiscal (texto que ve ARCA / PDF).',
@@ -357,7 +406,7 @@ return [
             'nota' => 'Si al emitir queda un @clave@ sin resolver, el sistema rechaza la factura. Complete todos los tags pedibles o quite el tag de la plantilla.',
         ],
         [
-            'titulo' => '16. Tags de sistema y condicionales',
+            'titulo' => '17. Tags de sistema y condicionales',
             'parrafos' => [
                 'Los tags de sistema se rellenan automáticamente al emitir. No hace falta cargarlos en el abono ni en el modal.',
             ],
@@ -383,7 +432,7 @@ return [
             ],
         ],
         [
-            'titulo' => '17. Abonos / contratos de cliente',
+            'titulo' => '18. Abonos / contratos de cliente',
             'herramientas_clave' => 'contratos_venta',
             'parrafos' => [
                 'El abono (contrato de venta) vincula un cliente con un concepto, con vigencia, periodicidad, precio opcional y datos fijos (los mismos tags del concepto).',
@@ -411,7 +460,7 @@ return [
             'nota' => 'Suspenda el abono si el cliente deja de usar el servicio; así deja de aparecer en la cola sin borrar el histórico.',
         ],
         [
-            'titulo' => '18. Cola de facturación de abonos',
+            'titulo' => '19. Cola de facturación de abonos',
             'herramientas_clave' => 'cola_contratos_venta',
             'parrafos' => [
                 'La cola lista períodos pendientes de abonos activos según vigencia y periodicidad.',
@@ -427,7 +476,7 @@ return [
             'nota' => 'Permisos: listar-contrato-venta-cola para ver la cola; facturar-contrato-venta-cola para enviar a facturar.',
         ],
         [
-            'titulo' => '19. Facturar un abono (paso a paso)',
+            'titulo' => '20. Facturar un abono (paso a paso)',
             'parrafos' => [
                 'Puede facturar desde la cola (recomendado) o eligiendo el concepto/abono en el facturador de Ventas.',
             ],
@@ -444,7 +493,7 @@ return [
             ],
         ],
         [
-            'titulo' => '20. Avisos de vencimiento de abonos',
+            'titulo' => '21. Avisos de vencimiento de abonos',
             'parrafos' => [
                 'El sistema puede avisar por correo los abonos próximos a vencer o ya vencidos. El aviso no factura: solo alerta a administración para renovar, suspender o facturar el último período.',
             ],

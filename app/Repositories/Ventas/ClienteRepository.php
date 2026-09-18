@@ -40,6 +40,7 @@ use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
 use App\Support\Ventas\ClienteCoeficienteExtraSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Services\Ventas\ClienteAnitaSyncService;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
@@ -2867,11 +2868,12 @@ class ClienteRepository implements ClienteRepositoryInterface
         return $cliente;
     }
 
-	public function consultaCliente($consulta, bool $omitirClienteDespacho = false)
+	public function consultaCliente($consulta, bool $omitirClienteDespacho = false, string $contexto = 'consultar')
     {
 		$columns = ['cliente.id', 'cliente.nombre', 'cliente.codigo', 'cliente.domicilio', 'cliente.numerodocumento', 'provincia.nombre', 'localidad.nombre'];
         $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'numerodocumento', 'provincia', 'localidad'];
 		$colspan = count($columnsOut) + 1;
+		$contexto = ClientePoliticaComercialSupport::normalizarOperacion($contexto);
 
 		$consulta = is_string($consulta) ? trim($consulta) : '';
 		$minLen = preg_match('/^\d+$/', $consulta) ? 1 : 2;
@@ -2879,7 +2881,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		if (mb_strlen($consulta) < $minLen) {
 			$hint = 'Ingrese al menos '.$minLen
 				.($minLen === 1 ? ' dígito' : ' caracteres')
-				.' para buscar (solo clientes activos).';
+				.' para buscar.';
 
 			return json_encode([
 				'data' => '<tr><td colspan="'.$colspan.'" class="text-muted">'.$hint.'</td></tr>',
@@ -2894,12 +2896,16 @@ class ClienteRepository implements ClienteRepositoryInterface
                                     'cliente.codigo as codigo',
 									'cliente.domicilio as domicilio',
 									'cliente.numerodocumento as numerodocumento',
+									'cliente.estado as estado',
+									'cliente.tiposuspension_id as tiposuspension_id',
+									'cliente.leyenda as leyenda',
 									'provincia.nombre as provincia',
 									'localidad.nombre as localidad')
 							->leftjoin('provincia', 'provincia.id', '=', 'cliente.provincia_id')
 							->leftjoin('localidad', 'localidad.id', '=', 'cliente.localidad_id')
-							->activos()
 							->whereNull('cliente.deleted_at');
+
+		ClientePoliticaComercialSupport::aplicarFiltroQuery($data, $contexto);
 
 		if ($omitirClienteDespacho && ClienteDespachoSupport::circuitoHabilitado()) {
 			$despachoId = ClienteDespachoSupport::id();
@@ -2940,9 +2946,18 @@ class ClienteRepository implements ClienteRepositoryInterface
 			foreach ($data as $row)
 			{
                 $flSinDatos = false;
-                $output['data'] .= '<tr>';
-                for ($i = 0; $i < $count; $i++)
-                    $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';
+                $politica = ClientePoliticaComercialSupport::payload($row);
+                $output['data'] .= '<tr data-politica="'.e($politica['politica']).'">';
+                for ($i = 0; $i < $count; $i++) {
+                    $valor = e((string) ($row->{$columnsOut[$i]} ?? ''));
+                    if ($columnsOut[$i] === 'nombre' && $politica['politica'] !== ClientePoliticaComercialSupport::NORMAL) {
+                        $claseBadge = $politica['politica'] === ClientePoliticaComercialSupport::MOROSO
+                            ? 'warning'
+                            : ($politica['politica'] === ClientePoliticaComercialSupport::PROFORMA ? 'success' : 'danger');
+                        $valor .= ' <span class="badge badge-'.$claseBadge.'">'.e($politica['etiqueta']).'</span>';
+                    }
+                    $output['data'] .= '<td class="'.$columnsOut[$i].'">'.$valor.'</td>';
+                }
                 $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacliente">Elegir</a></td>';
                 $output['data'] .= '</tr>';
 			}

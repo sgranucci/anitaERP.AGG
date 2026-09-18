@@ -22,6 +22,7 @@
             page-break-inside: avoid;
         }
         table.etiqueta-ultima { margin-bottom: 0; }
+        table.etiqueta-salto { page-break-after: always; margin-bottom: 0; }
         td.remitente {
             height: 45mm;
             vertical-align: top;
@@ -90,9 +91,22 @@
     $rem = $etiqueta['remitente'] ?? [];
     $des = $etiqueta['destinatario'] ?? [];
     $telMostrar = trim((string) ($rem['telefono'] ?? ''));
+    $cantidadEnvios = max(1, (int) ($cantidadEnvios ?? 1));
 @endphp
-@for ($i = 0; $i < 2; $i++)
-    <table class="etiqueta{{ $i === 1 ? ' etiqueta-ultima' : '' }}">
+@for ($i = 0; $i < $cantidadEnvios; $i++)
+    @php
+        $esUltima = $i === ($cantidadEnvios - 1);
+        $cierraHoja = ($i % 2 === 1) || $esUltima;
+        $saltoDespues = ($i % 2 === 1) && ! $esUltima;
+        $clasesEtiqueta = 'etiqueta';
+        if ($cierraHoja) {
+            $clasesEtiqueta .= ' etiqueta-ultima';
+        }
+        if ($saltoDespues) {
+            $clasesEtiqueta .= ' etiqueta-salto';
+        }
+    @endphp
+    <table class="{{ $clasesEtiqueta }}">
         <tr>
             <td class="remitente">
                 <div class="rotulo">ENVIO DE:</div>

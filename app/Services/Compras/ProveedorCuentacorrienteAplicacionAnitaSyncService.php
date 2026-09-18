@@ -464,6 +464,9 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         if ($lado === null || ! $this->esTipoPagoAnita((string) $lado['tipo'])) {
             return;
         }
+        if ((int) ($lado['nro_cuota'] ?? 0) <= 0) {
+            $lado['nro_cuota'] = 1;
+        }
 
         $monto = abs((float) ($ccPago->pagoproveedores?->monto ?? 0));
         if ($monto < 0.0001) {
@@ -479,10 +482,19 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
             'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
         ]));
         if ($parsed['error_lectura'] !== null) {
-            Log::warning('anita_bridge.fallo', [
-                'contexto' => 'promov list OP '.$lado['etiqueta'],
-                'mensaje' => $parsed['error_lectura'],
-            ]);
+            if (ApiAnita::esErrorCsvUnloadFaltante($parsed['error_lectura'])) {
+                $this->insertarPromovPago($ccPago, $lado, $monto);
+
+                return;
+            }
+            try {
+                Log::warning('anita_bridge.fallo', [
+                    'contexto' => 'promov list OP '.$lado['etiqueta'],
+                    'mensaje' => $parsed['error_lectura'],
+                ]);
+            } catch (\Throwable $e) {
+                // Log de archivo no escribible no debe impedir el espejo a Anita.
+            }
 
             return;
         }

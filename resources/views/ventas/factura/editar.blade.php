@@ -22,10 +22,17 @@
 <script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+@php
+    $politicaCliente = isset($data) && isset($data->clientes)
+        ? \App\Support\Ventas\ClientePoliticaComercialSupport::payload($data->clientes)
+        : null;
+@endphp
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'factura', 'politicaCliente' => $politicaCliente])
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('ventas.partials.aviso_deposito_facturacion')
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/factura/consulta_referencia.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/consulta_referencia.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/factura/nc_devolucion.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/nc_devolucion.js')) ?: time() }}" type="text/javascript"></script>
 @if ($layoutItemsPedido)
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear-bierzo-items.js')) ?: time() }}" type="text/javascript"></script>
 @endif
@@ -116,14 +123,14 @@
                         <a href="{{route('lista_una_factura_copias', ['id' => $data->id])}}" class="btn btn-outline-light btn-sm" title="Imprimir eligiendo copias">
                             <i class="fa fa-copy"></i> Copias
                         </a>
-                        @can('enviar-factura-mail')
+                        @if (can('enviar-factura-mail', false))
                         <form action="{{ route('enviar_factura_mail', $data->id) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Enviar la factura por mail al cliente?');">
                             @csrf
                             <button type="submit" class="btn btn-outline-light btn-sm" title="Enviar factura por mail">
                                 <i class="fa fa-envelope"></i> Mail
                             </button>
                         </form>
-                        @endcan
+                        @endif
                     @endif
                     <a href="{{ isset($urlOrigen) ? 'javascript:history.back()' : route('factura') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> {{ isset($urlOrigen) ? 'Volver atrás' : 'Volver al listado' }}

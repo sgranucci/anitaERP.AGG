@@ -34,14 +34,23 @@ class Ordentrabajo extends Model
 	 */
 	public function pedidoCombinacionVigente(): ?Pedido_Combinacion
 	{
-		foreach ($this->ordentrabajo_combinacion_talles as $oct) {
-			$pedidoCombinacion = $oct->pedido_combinacion_talles->pedidos_combinacion ?? null;
-			if ($pedidoCombinacion !== null) {
-				return $pedidoCombinacion;
-			}
+		foreach ($this->ordentrabajoCombinacionTallesVigentes() as $oct) {
+			return $oct->pedido_combinacion_talles->pedidos_combinacion;
 		}
 
 		return null;
+	}
+
+	/**
+	 * OCT con PCT y pedido_combinacion existentes.
+	 * Import L8 / reedición de pedido pueden dejar filas huérfanas (FK checks off).
+	 */
+	public function ordentrabajoCombinacionTallesVigentes()
+	{
+		return $this->ordentrabajo_combinacion_talles->filter(function ($oct) {
+			return $oct->pedido_combinacion_talles
+				&& $oct->pedido_combinacion_talles->pedidos_combinacion;
+		});
 	}
 
 }

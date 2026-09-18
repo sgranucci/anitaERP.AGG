@@ -477,15 +477,22 @@ class Articulo_MovimientoService
 
 	/**
 	 * Lotes/OT con saldo pendiente (> 0) para artículo+combinación (modal picking Ferli).
+	 * El saldo se netea por lote (todos los módulos), igual que el reporte Stock por OT.
+	 * Un consumo Abierto sobre un lote cargado en 12 D no debe esconder el remanente.
 	 *
-	 * @return list<array{lote: string, modulo_id: int, modulo: string, saldo: float, deposito_id: int, deposito: string}>
+	 * @return list<array{lote: string, modulo_id: int, modulo: string, saldo: float, deposito_id: int, deposito: string, medidas: string}>
 	 */
 	public function leeLotesStockPendientes(int $articuloId, int $combinacionId, ?int $moduloId = null, ?string $texto = null): array
 	{
+		$filtraModuloId = ($moduloId && $moduloId > 0 && ! $this->esModuloAbiertoPicking($moduloId))
+			? $moduloId
+			: null;
+
+		// Siempre leer todos los módulos: el saldo físico del lote es el neto.
 		$movimientos = $this->articulo_movimientoQuery->leeMovimientosLotesArticuloCombinacion(
 			$articuloId,
 			$combinacionId,
-			$moduloId,
+			null,
 			$texto
 		);
 
@@ -498,45 +505,143 @@ class Articulo_MovimientoService
 				continue;
 			}
 			$moduloMovId = (int) ($mov->modulo_id ?? 0);
-			$key = $lote.'|'.$moduloMovId;
-			if (! isset($agrupados[$key])) {
-				$agrupados[$key] = [
+			$cantidad = (float) ($mov->cantidad ?? 0);
+			if (! isset($agrupados[$lote])) {
+				$agrupados[$lote] = [
 					'lote' => $lote,
-					'modulo_id' => $moduloMovId,
-					'modulo' => trim((string) (($mov->modulo_codigo ?? '').' '.($mov->modulo_nombre ?? ''))),
+					'modulo_id' => 0,
+					'modulo' => '',
 					'saldo' => 0.0,
 					'deposito_id' => 0,
 					'deposito' => '',
 					'deposito_codigo' => '',
 					'deposito_nombre' => '',
+					'medidas' => '',
+					'_modulos' => [],
+					'_talles' => [],
+					'_modulos_ids' => [],
 				];
 			}
-			$agrupados[$key]['saldo'] += (float) ($mov->cantidad ?? 0);
+			$agrupados[$lote]['saldo'] += $cantidad;
+			$agrupados[$lote]['_modulos_ids'][$moduloMovId] = true;
+			$agrupados[$lote]['_modulos'][$moduloMovId] = [
+				'saldo' => (float) (($agrupados[$lote]['_modulos'][$moduloMovId]['saldo'] ?? 0) + $cantidad),
+				'etiqueta' => trim((string) (($mov->modulo_codigo ?? '').' '.($mov->modulo_nombre ?? ''))),
+			];
+			$talleNom = trim((string) ($mov->nombretalle ?? ''));
+			if ($talleNom !== '') {
+				$agrupados[$lote]['_talles'][$talleNom] = (float) (($agrupados[$lote]['_talles'][$talleNom] ?? 0) + $cantidad);
+			}
 			if ((int) ($mov->tipotransaccion_id ?? 0) === $tipoAlta && (int) ($mov->deposito_id ?? 0) > 0) {
-				$agrupados[$key]['deposito_id'] = (int) $mov->deposito_id;
-				$agrupados[$key]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
-				$agrupados[$key]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
-				$agrupados[$key]['deposito'] = trim(
+				$agrupados[$lote]['deposito_id'] = (int) $mov->deposito_id;
+				$agrupados[$lote]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
+				$agrupados[$lote]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
+				$agrupados[$lote]['deposito'] = trim(
 					($mov->deposito_codigo ?? '').'-'.($mov->deposito_nombre ?? ''),
 					'-'
 				);
-			} elseif ($agrupados[$key]['deposito_id'] <= 0 && (int) ($mov->deposito_id ?? 0) > 0) {
-				$agrupados[$key]['deposito_id'] = (int) $mov->deposito_id;
-				$agrupados[$key]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
-				$agrupados[$key]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
-				$agrupados[$key]['deposito'] = trim(
+			} elseif ($agrupados[$lote]['deposito_id'] <= 0 && (int) ($mov->deposito_id ?? 0) > 0) {
+				$agrupados[$lote]['deposito_id'] = (int) $mov->deposito_id;
+				$agrupados[$lote]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
+				$agrupados[$lote]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
+				$agrupados[$lote]['deposito'] = trim(
 					($mov->deposito_codigo ?? '').'-'.($mov->deposito_nombre ?? ''),
 					'-'
 				);
 			}
 		}
 
-		$filas = array_values(array_filter($agrupados, static fn (array $f) => $f['saldo'] > 0));
+		$filas = [];
+		foreach ($agrupados as $fila) {
+			if ($fila['saldo'] <= 0) {
+				continue;
+			}
+			if ($filtraModuloId && empty($fila['_modulos_ids'][$filtraModuloId])) {
+				continue;
+			}
+
+			$mejorModuloId = 0;
+			$mejorSaldo = -INF;
+			$mejorEtiqueta = '';
+			foreach ($fila['_modulos'] as $modId => $info) {
+				if ((float) $info['saldo'] > $mejorSaldo) {
+					$mejorSaldo = (float) $info['saldo'];
+					$mejorModuloId = (int) $modId;
+					$mejorEtiqueta = (string) $info['etiqueta'];
+				}
+			}
+			$fila['modulo_id'] = $mejorModuloId;
+			$fila['modulo'] = $mejorEtiqueta;
+
+			$talles = $fila['_talles'];
+			ksort($talles, SORT_NATURAL);
+			$medidas = [];
+			foreach ($talles as $nombre => $cant) {
+				if (abs((float) $cant) < 0.0001) {
+					continue;
+				}
+				$medidas[] = $nombre.':'.(int) round((float) $cant);
+			}
+			$fila['medidas'] = implode(' ', $medidas);
+			// Módulo Abierto no trae la numeración en el nombre (a diferencia de 12 C, 12 D, etc.).
+			if ($this->esModuloAbiertoPicking($mejorModuloId) && $fila['medidas'] !== '') {
+				$estilo = $this->numeracionEstiloModuloDesdeMedidas($fila['medidas']);
+				if ($estilo !== '' && stripos($fila['modulo'], $estilo) === false) {
+					$fila['modulo'] = trim($fila['modulo'].' '.$estilo);
+				}
+			}
+			unset($fila['_modulos'], $fila['_talles'], $fila['_modulos_ids']);
+			$filas[] = $fila;
+		}
+
 		usort($filas, static function (array $a, array $b) {
 			return [$a['lote'], $a['modulo_id']] <=> [$b['lote'], $b['modulo_id']];
 		});
 
 		return $filas;
+	}
+
+	private function esModuloAbiertoPicking(int $moduloId): bool
+	{
+		if ($moduloId === 30) {
+			return true;
+		}
+		$modulo = Modulo::query()->find($moduloId, ['id', 'codigo', 'nombre']);
+		if (! $modulo) {
+			return false;
+		}
+
+		return stripos((string) ($modulo->nombre ?? ''), 'abierto') !== false
+			|| trim((string) ($modulo->codigo ?? '')) === '99';
+	}
+
+	/**
+	 * Convierte "36:2 37:3 38:3 39:2 40:1 41:1" en "(36-41) 2-3-3-2-1-1" (mismo estilo que el nombre del módulo cerrado).
+	 */
+	private function numeracionEstiloModuloDesdeMedidas(string $medidas): string
+	{
+		$pares = [];
+		foreach (preg_split('/\s+/', trim($medidas)) ?: [] as $parte) {
+			$bits = explode(':', $parte, 2);
+			if (count($bits) !== 2) {
+				continue;
+			}
+			$nombre = trim((string) $bits[0]);
+			$cant = (int) round((float) $bits[1]);
+			if ($nombre === '' || $cant <= 0) {
+				continue;
+			}
+			$pares[] = ['medida' => $nombre, 'cantidad' => $cant];
+		}
+		if ($pares === []) {
+			return '';
+		}
+
+		$desde = $pares[0]['medida'];
+		$hasta = $pares[count($pares) - 1]['medida'];
+		$cants = implode('-', array_map(static fn (array $p) => (string) $p['cantidad'], $pares));
+
+		return '('.$desde.'-'.$hasta.') '.$cants;
 	}
 
 	// Borra un registro por ID de movimiento de stock

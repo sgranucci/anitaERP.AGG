@@ -626,7 +626,11 @@
         var residual = Math.round((medios - desembolsar) * 100) / 100;
         var asientoManual = (typeof window.asientoTieneEdicionManual === 'function' && window.asientoTieneEdicionManual())
             || window.flAsientoEditadoManual === true;
-        if (residual > 0.01 && !asientoManual) {
+        var hayAplicaciones = $form.find('input[name="idcuentacorrientes[]"]').filter(function () {
+            return parseInt($(this).val(), 10) > 0;
+        }).length > 0;
+        // Asiento a mano sobre cuenta de anticipo (sin facturas) igual es OPA en CC.
+        if (residual > 0.01 && (!asientoManual || !hayAplicaciones)) {
             $form.append($('<input type="hidden" name="anticipo">').val(residual.toFixed(2)));
             $form.append($('<input type="hidden" name="totalanticipo">').val(residual.toFixed(2)));
         }

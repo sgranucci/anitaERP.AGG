@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Storage;
 
 class Tiposuspensioncliente extends Model
 {
-    protected $fillable = ['nombre'];
+    protected $fillable = ['nombre', 'codigo'];
     protected $table = 'tiposuspensioncliente';
 }
 

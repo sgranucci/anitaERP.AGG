@@ -5,6 +5,12 @@ Editar pedido Interforming
 
 @section("scripts")
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
+@php
+    $politicaCliente = isset($pedido) && $pedido->clientes
+        ? \App\Support\Ventas\ClientePoliticaComercialSupport::payload($pedido->clientes)
+        : null;
+@endphp
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido', 'politicaCliente' => $politicaCliente])
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/vendedor/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}" type="text/javascript"></script>

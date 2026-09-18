@@ -91,12 +91,12 @@
                                 <input type="hidden" name="cuentacontable[]" class="form-control iicuentacontable" readonly value="{{ $loop->index+1 }}" />
                                 <input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="{{$cuenta->cuentacontable_id ?? ''}}" >
                                 <input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="{{$cuenta->cuentacontable_id ?? ''}}" >
-                                <button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">
+                                <button type="button" title="Consulta cuentas (F1)" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">
                                         <i class="fa fa-search text-primary"></i>
                                 </button>
-                                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" >
+                                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" title="C&oacute;digo: Enter valida, F1 consulta" autocomplete="off">
                                 <input type="hidden" class="codigo_previo_cuentacontable" name="codigo_previo_cuentacontables[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" >
-                                <input type="hidden" class="carga_cuentacontable_manual" name="carga_cuentacontable_manuales[]" value="{{ $valorOldIndiceAsiento('carga_cuentacontable_manuales', (int) $loop->index, '0') }}" >
+                                <input type="hidden" class="carga_cuentacontable_manual" name="carga_cuentacontable_manuales[]" value="{{ $valorOldIndiceAsiento('carga_cuentacontable_manuales', (int) $loop->index, 'S') }}" >
                             </div>
                         </td>							
                         <td>

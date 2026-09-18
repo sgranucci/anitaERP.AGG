@@ -130,12 +130,14 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             'articulo_movimiento.tipotransaccion_id as tipotransaccion_id',
             'articulo_movimiento.deposito_id as deposito_id',
             'articulo_movimiento_talle.cantidad as cantidad',
+            'talle.nombre as nombretalle',
             'modulo.codigo as modulo_codigo',
             'modulo.nombre as modulo_nombre',
             'depmae.codigo as deposito_codigo',
             'depmae.nombre as deposito_nombre'
         )
             ->join('articulo_movimiento_talle', 'articulo_movimiento_talle.articulo_movimiento_id', 'articulo_movimiento.id')
+            ->leftJoin('talle', 'talle.id', 'articulo_movimiento_talle.talle_id')
             ->leftJoin('modulo', 'modulo.id', 'articulo_movimiento.modulo_id')
             ->leftJoin('depmae', 'depmae.id', 'articulo_movimiento.deposito_id')
             ->where('articulo_movimiento.articulo_id', $articuloId)

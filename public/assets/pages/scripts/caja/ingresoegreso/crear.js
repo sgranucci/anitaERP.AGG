@@ -208,12 +208,33 @@ var montoPendienteSp = 0;
 			iniciarBannerGrabacionIe();
 
 			let flError = false;
-	
-			$("#tbody-cuenta-table .moneda").each(function() {
-				if ($(this).val() === '')
-				{
-					alert("Debe ingresar moneda");
+
+			$("#tbody-cuenta-table .item-cuenta").each(function() {
+				var $trCta = $(this);
+				var $monCta = $trCta.find('.moneda');
+				if (renglonCuentaVacio($trCta)) {
+					$monCta.prop('required', false);
+					return;
+				}
+				$monCta.prop('required', true);
+				if ($monCta.val() === '') {
+					alert("Debe ingresar moneda en la cuenta de caja. Si paga solo con cheque emitido, deje el renglón de cuentas de caja vacío o elimínelo.");
 					flError = true;
+					$monCta.trigger('focus');
+					return false;
+				}
+			});
+
+			$("#tbody-cheque-emitido-table .item-cheque-emitido").each(function () {
+				var $trCh = $(this);
+				var montoCh = parseTotalAsientoCampo($trCh.find('.montocheque_emitido').val());
+				if (!(montoCh > 0.000001)) {
+					return;
+				}
+				if (!$trCh.find('.moneda_emitido_id').val()) {
+					alert("Debe ingresar moneda en el cheque emitido.");
+					flError = true;
+					return false;
 				}
 			});
 
@@ -256,10 +277,10 @@ var montoPendienteSp = 0;
 			// Valida montos asiento
 			sumaMontoAsiento();
 
-			// Pago SP: el asiento de la solicitud trae su banco. Si se eligió otra
-			// cuenta financiera (o el asiento se armó antes), hay que regenerarlo
-			// aunque ya cierre; si no, queda el banco de la SP (OP 125043).
-			if (esPagoSolicitudPagoIe() && (flModificaAsiento || !asientoIeBalanceado())) {
+			// Regenera asiento si cambió caja/cheques (incluye OP solo con cheque emitido)
+			// o si es pago SP (el asiento de la solicitud trae su banco; si se eligió
+			// otra cuenta financiera hay que regenerarlo, OP 125043).
+			if (flModificaAsiento || (esPagoSolicitudPagoIe() && !asientoIeBalanceado())) {
 				flModificaAsiento = true;
 				generaAsientoContable(function (ok) {
 					if (!ok) {
@@ -364,6 +385,10 @@ var montoPendienteSp = 0;
 			{
 				// Valida el ingreso de los centros de costo
 				$("#cuenta-asiento-table .item-cuenta-asiento").each(function() {
+					var ctaAsiento = parseInt($(this).find('.cuentacontable_id').val() || '0', 10) || 0;
+					if (ctaAsiento <= 0) {
+						return;
+					}
 					centrocostoasiento_id = $(this).find(".centrocostoasiento").val();
 	
 					if (!$.isNumeric(centrocostoasiento_id))
@@ -689,7 +714,6 @@ var montoPendienteSp = 0;
 		// Si esta agregando items desactiva los eventos
 		if (!flInicio)
 		{
-			$('.consultacuenta').off('click');
 			$('#cuenta-table .consultacuentacaja').off('click');
 			$('#cuenta-table .codigo').off('change');
 			$('#cuenta-table .monto').off('change');
@@ -1073,8 +1097,11 @@ var montoPendienteSp = 0;
 			return;
 		}
 
-		// Genera datos de las cuentas de caja cargadas
+		// Genera datos de las cuentas de caja cargadas (omite renglones vacíos)
 		$("#cuenta-table .item-cuenta").each(function() {
+			if (renglonCuentaVacio($(this))) {
+				return;
+			}
 			cuentacaja_ids = $(this).find(".cuentacaja_id").val();
 			moneda_ids = $(this).find(".moneda").val();
 
@@ -1183,10 +1210,10 @@ var montoPendienteSp = 0;
 								'<input type="hidden" name="cuenta[]" class="form-control iicuentacontable" readonly value="1" />'+
 								'<input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="'+cuentaContableId+'" >'+
 								'<input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="'+cuentaContableId+'" >'+
-								'<button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">'+
+								'<button type="button" title="Consulta cuentas (F1)" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">'+
 									'<i class="fa fa-search text-primary"></i>'+
 								'</button>'+
-								'<input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="'+cuentaContableCodigo+'" >'+
+								'<input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="'+cuentaContableCodigo+'" title="Código: Enter valida, F1 consulta" autocomplete="off">'+
 								'<input type="hidden" class="codigo_previo_cuentacontable" name="codigo_previo_cuentacontables[]" value="'+cuentaContableCodigo+'" >'+
 								'<input type="hidden" class="carga_cuentacontable_manual" name="carga_cuentacontable_manuales[]" value="'+cargaCuentacontableManual+'" >'+
 								'</div>'+
@@ -1653,6 +1680,9 @@ var montoPendienteSp = 0;
 
 	function renglonCuentaVacio($tr)
 	{
+		if (!$tr || !$tr.length) {
+			return true;
+		}
 		var cta = parseInt($tr.find('.cuentacaja_id').val() || '0', 10);
 		var codigo = String($tr.find('.codigo').val() || '').trim();
 		var monto = parseTotalAsientoCampo($tr.find('.monto').val());
@@ -1680,7 +1710,7 @@ var montoPendienteSp = 0;
 		}
 		if (cantidadRenglonesCuenta() === 0 && flCrear) {
 			agregaUnRenglon();
-		} else {
+		} 		else {
 			actualizaRenglonesCuenta();
 		}
 	}

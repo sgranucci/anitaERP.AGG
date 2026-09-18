@@ -122,7 +122,9 @@ return [
     /*
      * Numeración IE alineada a Anita ventas.numerador (num_clave por empresa).
      * false = solo MAX+1 ERP (semilla propia). true = lee/avanza Anita (hasta apagarlo).
-     * Nota: las semillas viven en sistema "ventas" (no shared); OPP=223/224/225 = mismas OP Anita.
+     * Nota: las semillas viven en sistema "ventas" (no shared); OPP=223/224/225 = mismas OP Anita (AGG).
+     * Ferli: OPP/OPA vía t_comp (203); ING/EGR vía tctes (304); TRA sin numerador de documento
+     * (tesmov nativo TED/TEH). Las semillas AGG 346/361/334 no existen en Ferli.
      */
     'ingresoegreso_anita_numeracion_habilitada' => filter_var(
         env('CAJA_IE_ANITA_NUMERACION_HABILITADA', true),

@@ -117,19 +117,17 @@ function facturarPedido(item)
         alert("No puede facturar cliente STOCK");
         return;
     }
-    // Debe chequear estado del cliente
-    if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
-        (tiposuspensioncliente_id == PROFORMA ||
-        tiposuspensioncliente_id == MOROSO ||
-        tiposuspensioncliente_id == NO_FACTURAR
-        ))
-    {
-        var etiquetaEstado = (nombretiposuspensioncliente || '').trim();
-        if (!etiquetaEstado) {
-            var e = String(estadocliente || '').toUpperCase();
-            etiquetaEstado = e === '1' ? 'Suspendido' : (e === 'R' ? 'Regularizado' : (e || '(sin detalle)'));
+    // Debe chequear política comercial del cliente de la fila
+    var politicaFila = null;
+    try {
+        var rawPolitica = $(item).parents("tr").find(".politica_comercial").val();
+        if (rawPolitica) {
+            politicaFila = JSON.parse(rawPolitica);
         }
-        alert("No puede facturar cliente en estado "+etiquetaEstado);
+    } catch (ePol) {}
+    if (window.clientePoliticaComercial && !window.clientePoliticaComercial.permiteOperacion('factura', politicaFila))
+    {
+        alert(window.clientePoliticaComercial.mensaje('factura', politicaFila));
         return;
     }
 

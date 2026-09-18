@@ -43,40 +43,69 @@ final class QrCodePngSupport
         return 'data:image/png;base64,'.base64_encode($png);
     }
 
+    /**
+     * SVG vectorial (mejor para laser / cámara: no se interpola como el PNG).
+     */
+    public static function svgDataUri(string $contenido, int $marginModulos = 4): string
+    {
+        $svg = self::svg($contenido, $marginModulos);
+        if ($svg === '') {
+            return '';
+        }
+
+        return 'data:image/svg+xml;base64,'.base64_encode($svg);
+    }
+
+    public static function svg(string $contenido, int $marginModulos = 4): string
+    {
+        $matrix = self::matriz($contenido, $marginModulos, ErrorCorrectionLevel::Q());
+        if ($matrix === null) {
+            return '';
+        }
+
+        [, $lado, $puntos] = $matrix;
+        $rects = [];
+        foreach ($puntos as [$x, $y]) {
+            $rects[] = '<rect x="'.$x.'" y="'.$y.'" width="1" height="1"/>';
+        }
+
+        return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '.$lado.' '.$lado
+            .'" width="'.$lado.'" height="'.$lado.'" shape-rendering="crispEdges">'
+            .'<rect width="'.$lado.'" height="'.$lado.'" fill="#ffffff"/>'
+            .'<g fill="#000000">'.implode('', $rects).'</g></svg>';
+    }
+
     private static function pngConGd(string $contenido, int $sizePx, int $marginModulos): string
     {
-        $qr = Encoder::encode($contenido, ErrorCorrectionLevel::M());
-        $matrix = $qr->getMatrix();
-        $modulos = $matrix->getWidth();
-        $lado = $modulos + (2 * $marginModulos);
+        $matrix = self::matriz($contenido, $marginModulos);
+        if ($matrix === null) {
+            return '';
+        }
+
+        [, $lado, $puntos] = $matrix;
         $escala = max(1, (int) floor($sizePx / max(1, $lado)));
         $pixeles = $lado * $escala;
 
-        $img = imagecreate($pixeles, $pixeles);
+        $img = imagecreatetruecolor($pixeles, $pixeles);
         if ($img === false) {
             throw new \RuntimeException('No se pudo crear la imagen del QR.');
         }
 
         $blanco = imagecolorallocate($img, 255, 255, 255);
         $negro = imagecolorallocate($img, 0, 0, 0);
-        imagefill($img, 0, 0, $blanco);
+        imagefilledrectangle($img, 0, 0, $pixeles - 1, $pixeles - 1, $blanco);
 
-        for ($y = 0; $y < $modulos; $y++) {
-            for ($x = 0; $x < $modulos; $x++) {
-                if ($matrix->get($x, $y) !== 1) {
-                    continue;
-                }
-                $x0 = ($x + $marginModulos) * $escala;
-                $y0 = ($y + $marginModulos) * $escala;
-                imagefilledrectangle(
-                    $img,
-                    $x0,
-                    $y0,
-                    $x0 + $escala - 1,
-                    $y0 + $escala - 1,
-                    $negro
-                );
-            }
+        foreach ($puntos as [$x, $y]) {
+            $x0 = $x * $escala;
+            $y0 = $y * $escala;
+            imagefilledrectangle(
+                $img,
+                $x0,
+                $y0,
+                $x0 + $escala - 1,
+                $y0 + $escala - 1,
+                $negro
+            );
         }
 
         ob_start();
@@ -85,5 +114,36 @@ final class QrCodePngSupport
         imagedestroy($img);
 
         return $png;
+    }
+
+    /**
+     * @return array{0: int, 1: int, 2: list<array{0: int, 1: int}>}|null
+     */
+    private static function matriz(
+        string $contenido,
+        int $marginModulos,
+        ?ErrorCorrectionLevel $errorCorrection = null
+    ): ?array {
+        $contenido = trim($contenido);
+        $marginModulos = max(0, $marginModulos);
+        if ($contenido === '') {
+            return null;
+        }
+
+        $qr = Encoder::encode($contenido, $errorCorrection ?? ErrorCorrectionLevel::M());
+        $byteMatrix = $qr->getMatrix();
+        $modulos = $byteMatrix->getWidth();
+        $lado = $modulos + (2 * $marginModulos);
+        $puntos = [];
+        for ($y = 0; $y < $modulos; $y++) {
+            for ($x = 0; $x < $modulos; $x++) {
+                if ($byteMatrix->get($x, $y) !== 1) {
+                    continue;
+                }
+                $puntos[] = [$x + $marginModulos, $y + $marginModulos];
+            }
+        }
+
+        return [$modulos, $lado, $puntos];
     }
 }

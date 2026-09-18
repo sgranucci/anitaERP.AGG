@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 280" font-family="DejaVu Sans, Arial, sans-serif">
+  <rect width="920" height="280" fill="#f8fafc"/>
+  <text x="460" y="22" text-anchor="middle" font-size="14" font-weight="bold" fill="#1F4E79">Politica comercial: hasta donde llega el circuito</text>
+  <text x="460" y="42" text-anchor="middle" font-size="11" fill="#5D6D7E">Consultar y cobrar siempre. El tope corta pedido, boleta/OT o factura.</text>
+  <g font-size="11" fill="#17202A">
+    <rect x="20" y="58" width="130" height="44" rx="6" fill="#cce5ff" stroke="#007bff"/>
+    <text x="85" y="77" text-anchor="middle" font-weight="bold">1. Pedido</text>
+    <text x="85" y="93" text-anchor="middle" font-size="10">Carga comercial</text>
+    <text x="160" y="85" font-size="16" fill="#2E75B6">&gt;</text>
+    <rect x="176" y="58" width="150" height="44" rx="6" fill="#fff3cd" stroke="#ffc107"/>
+    <text x="251" y="77" text-anchor="middle" font-weight="bold">2. Boleta / OT</text>
+    <text x="251" y="93" text-anchor="middle" font-size="10">Remito / entrega</text>
+    <text x="336" y="85" font-size="16" fill="#2E75B6">&gt;</text>
+    <rect x="352" y="58" width="130" height="44" rx="6" fill="#f8d7da" stroke="#dc3545"/>
+    <text x="417" y="77" text-anchor="middle" font-weight="bold">3. Factura</text>
+    <text x="417" y="93" text-anchor="middle" font-size="10">Comprobante fiscal</text>
+    <text x="492" y="85" font-size="16" fill="#2E75B6">&gt;</text>
+    <rect x="508" y="58" width="140" height="44" rx="6" fill="#d4edda" stroke="#28a745"/>
+    <text x="578" y="77" text-anchor="middle" font-weight="bold">Cobranza</text>
+    <text x="578" y="93" text-anchor="middle" font-size="10">Nunca se corta</text>
+    <rect x="668" y="58" width="232" height="44" rx="6" fill="#e2d5f1" stroke="#6f42c1"/>
+    <text x="784" y="77" text-anchor="middle" font-weight="bold">Moroso + cobro</text>
+    <text x="784" y="93" text-anchor="middle" font-size="10">Pasa a Proforma</text>
+  </g>
+  <g font-size="11">
+    <rect x="20" y="122" width="880" height="140" rx="8" fill="#ffffff" stroke="#cccccc"/>
+    <text x="36" y="144" font-weight="bold" fill="#1F4E79">Cortes</text>
+    <text x="36" y="168" fill="#17202A"><tspan font-weight="bold" fill="#856404">Moroso:</tspan> pide; no boleta ni factura.</text>
+    <text x="36" y="188" fill="#17202A"><tspan font-weight="bold" fill="#155724">Proforma:</tspan> pide y boleta; no factura.</text>
+    <text x="36" y="208" fill="#17202A"><tspan font-weight="bold" fill="#721c24">Suspendido:</tspan> no aparece en carga de pedidos. Se cobra igual.</text>
+    <text x="36" y="228" fill="#17202A"><tspan font-weight="bold">Normal:</tspan> circuito completo. NC y POS gastronomia no usan este tope.</text>
+    <text x="36" y="248" fill="#5D6D7E" font-size="10">El nombre del tipo y la leyenda son el motivo. La politica (codigo) define el efecto.</text>
+  </g>
+</svg>

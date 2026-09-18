@@ -11,7 +11,8 @@ window.chequeDepositoUrls = {
     depositarMasivo: @json(route('depositar_masivo_cheque'))
 };
 </script>
-<script src="{{ asset('assets/pages/scripts/caja/cheque/deposito.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cuentacaja/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cheque/deposito.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cheque/deposito.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @endsection
 
@@ -133,6 +134,8 @@ window.chequeDepositoUrls = {
                                 style="opacity:.55;">
                             <i class="fa fa-university"></i> Depositar sel.
                         </button>
+                        <span id="cheque-seleccion-resumen" class="badge badge-success mr-2 py-2 px-2 align-middle"
+                              style="display:none; font-size:0.9rem;"></span>
                         @endif
                         @include('includes.exportar-tabla-queryparams', [
                             'ruta' => 'lista_aging_cheque',
@@ -172,7 +175,10 @@ window.chequeDepositoUrls = {
                                     @if ($puedeDepositar)
                                     <td class="text-center">
                                         @if ($f['puede_depositar'] ?? false)
-                                            <input type="checkbox" class="cheque-select-row" value="{{ $f['id'] }}" />
+                                            <input type="checkbox" class="cheque-select-row" value="{{ $f['id'] }}"
+                                                   data-monto="{{ number_format((float) $f['monto'], 2, '.', '') }}"
+                                                   data-moneda="{{ ($f['moneda'] ?? '') !== '' ? $f['moneda'] : '$' }}"
+                                                   data-empresa-id="{{ (int) ($f['empresa_id'] ?? 0) }}" />
                                         @endif
                                     </td>
                                     @endif
@@ -205,7 +211,10 @@ window.chequeDepositoUrls = {
                                                     class="btn-accion-tabla tooltipsC btn-deposito-cheque"
                                                     title="Depositar"
                                                     data-cheque-id="{{ $f['id'] }}"
-                                                    data-cheque-ref="{{ $f['numerocheque'] }} / {{ $f['banco'] }}">
+                                                    data-cheque-ref="{{ $f['numerocheque'] }} / {{ $f['banco'] }}"
+                                                    data-cheque-monto="{{ number_format((float) $f['monto'], 2, '.', '') }}"
+                                                    data-cheque-moneda="{{ ($f['moneda'] ?? '') !== '' ? $f['moneda'] : '$' }}"
+                                                    data-empresa-id="{{ (int) ($f['empresa_id'] ?? 0) }}">
                                                 <i class="fa fa-university text-primary"></i>
                                             </button>
                                         @endif
@@ -232,5 +241,6 @@ window.chequeDepositoUrls = {
 </div>
 @if ($puedeDepositar)
     @include('caja.cheque.modal_deposito')
+    @include('includes.caja.modalconsultacuentacaja')
 @endif
 @endsection

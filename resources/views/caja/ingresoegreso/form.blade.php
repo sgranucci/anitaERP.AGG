@@ -148,12 +148,11 @@
             </thead>
             <tbody id="tbody-cuenta-table">
             @php
-                $abrevTipoIe = optional($data->tipotransaccioncajas ?? null)->abreviatura;
-                if (! $abrevTipoIe && isset($tipotransaccion_caja_query)) {
+                $tipoIe = $data->tipotransaccioncajas ?? null;
+                if (! $tipoIe && isset($tipotransaccion_caja_query)) {
                     $tipoSelId = (int) old('tipotransaccion_caja_id', $data->tipotransaccion_caja_id ?? 0);
-                    $abrevTipoIe = optional($tipotransaccion_caja_query->firstWhere('id', $tipoSelId))->abreviatura;
+                    $tipoIe = $tipotransaccion_caja_query->firstWhere('id', $tipoSelId);
                 }
-                $preservarSignoMonto = strtoupper((string) $abrevTipoIe) === \App\Support\Caja\IngresoEgresoTransferenciaSupport::ABREV_TRA;
                 $lineasCuentas = collect();
                 if (isset($data) && $data->caja_movimiento_cuentacajas && $data->caja_movimiento_cuentacajas->count() > 0) {
                     $lineasCuentas = $data->caja_movimiento_cuentacajas;
@@ -192,7 +191,10 @@
                             @php
                                 $montoLinea = '';
                                 if (is_object($cuenta) && isset($cuenta->monto)) {
-                                    $montoRaw = $preservarSignoMonto ? $cuenta->monto : abs($cuenta->monto);
+                                    $montoRaw = \App\Support\Caja\IngresoEgresoCajaMontoSignoSupport::aFormulario(
+                                        (float) $cuenta->monto,
+                                        $tipoIe
+                                    );
                                     $montoLinea = number_format((float) $montoRaw, 2, ',', '.');
                                 }
                             @endphp

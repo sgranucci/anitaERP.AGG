@@ -564,7 +564,9 @@ class PedidoFerliController extends Controller
 			}
 		}
 		if (!$flEncontro)
-			return back()->with('errores', ['Cliente '.$pedido->clientes->nombre.' no activo']);
+		{
+			// Pedido histórico: se puede abrir aunque el cliente ya no entre en carga (p.ej. suspendido).
+		}
 
 		$puntoventadefault_id = cache()->get(generaKey('puntoventa'));
 		$puntoventaremitodefault_id = cache()->get(generaKey('puntoventaremito'));

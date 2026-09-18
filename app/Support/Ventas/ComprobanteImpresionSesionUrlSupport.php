@@ -8,35 +8,31 @@ namespace App\Support\Ventas;
  */
 final class ComprobanteImpresionSesionUrlSupport
 {
-    public static function postFacturacion(?int $ventaId, ?int $remitoId, ?int $pedidoId, string $retornoPath = ''): ?string
+    public static function postFacturacion(?int $ventaId, ?int $remitoId, ?int $pedidoId, string $retornoPath = '', bool $autoEnviar = true): ?string
     {
         $ventaId = (int) $ventaId;
         $remitoId = (int) $remitoId;
         $pedidoId = (int) $pedidoId;
 
-        // auto + enviar_impresora: misma ruta que "Imprimir" del listado de facturas
-        // (sesión se abre y despacha a impresora sin paso manual).
+        // auto: misma ruta que "Imprimir" del listado (despacha sin paso manual).
+        // Sin auto (elegir): abre la sesión para destildar copias (p. ej. Envío) y ejecutar a mano.
+        $flags = $autoEnviar
+            ? ['auto' => 1, 'enviar_impresora' => 1]
+            : ['elegir' => 1, 'enviar_impresora' => 1];
+
         $url = null;
         if ($ventaId > 0 && PedidoFacturaAnitaArchivosSupport::esVentaIdVisible($ventaId)) {
-            $url = route('sesion_impresion_factura', [
-                'id' => $ventaId,
-                'auto' => 1,
-                'enviar_impresora' => 1,
-            ]);
+            $url = route('sesion_impresion_factura', ['id' => $ventaId] + $flags);
         } elseif ($remitoId > 0) {
             $url = route('sesion_impresion_remito', [
                 'id' => $remitoId,
-                'auto' => 1,
                 'pack' => 1,
-                'enviar_impresora' => 1,
-            ]);
+            ] + $flags);
         } elseif ($pedidoId > 0) {
             $url = route('sesion_impresion_pedido', [
                 'id' => $pedidoId,
-                'auto' => 1,
                 'pack' => 1,
-                'enviar_impresora' => 1,
-            ]);
+            ] + $flags);
         }
 
         if ($url === null) {
@@ -44,6 +40,55 @@ final class ComprobanteImpresionSesionUrlSupport
         }
 
         return self::anexarRetorno($url, $retornoPath);
+    }
+
+    /**
+     * URLs de sesión tras facturar un lote de pedidos (reparto El Bierzo).
+     * Respeta los tildes del programa de la primera factura del lote.
+     *
+     * @param  list<int>  $ventaIds
+     * @return array{completa: ?string, elegir: ?string}
+     */
+    public static function postFacturacionReparto(array $ventaIds, int $transporteId, string $retornoPath = ''): array
+    {
+        $ventaIds = array_values(array_unique(array_filter(array_map('intval', $ventaIds))));
+        $vacio = ['completa' => null, 'elegir' => null];
+        if ($ventaIds === [] || $transporteId <= 0) {
+            return $vacio;
+        }
+
+        $ventaId = $ventaIds[0];
+        if (! ComprobanteImpresionResolverSupport::dispararProcesoImpresionAlFacturar($ventaId, 0, 0)) {
+            return $vacio;
+        }
+
+        $base = [
+            'transporteId' => $transporteId,
+            'venta_ids' => implode(',', $ventaIds),
+        ];
+        $auto = ComprobanteImpresionResolverSupport::enviarAutomaticoAlFacturar($ventaId, 0, 0);
+        if ($auto) {
+            $url = route('sesion_impresion_reparto_pedidos', $base + [
+                'pack_completo' => 1,
+                'auto' => 1,
+                'enviar_impresora' => 1,
+            ]);
+
+            return [
+                'completa' => self::anexarRetorno($url, $retornoPath),
+                'elegir' => null,
+            ];
+        }
+
+        $url = route('sesion_impresion_reparto_pedidos', $base + [
+            'pack_completo' => 1,
+            'elegir' => 1,
+        ]);
+
+        return [
+            'completa' => null,
+            'elegir' => self::anexarRetorno($url, $retornoPath),
+        ];
     }
 
     /**

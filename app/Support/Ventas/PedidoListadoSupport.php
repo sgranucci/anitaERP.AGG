@@ -77,6 +77,14 @@ final class PedidoListadoSupport
             return false;
         }
 
+        $clientePedido = $pedido->clientes ?? null;
+        if ($clientePedido && ! ClientePoliticaComercialSupport::permite(
+            $clientePedido,
+            ClientePoliticaComercialSupport::OP_FACTURA
+        )) {
+            return false;
+        }
+
         foreach ($pedido->pedido_articulos ?? [] as $item) {
             if (! PedidoEstadoErpSupport::esItemPendienteFacturable($item->estado ?? null)) {
                 continue;

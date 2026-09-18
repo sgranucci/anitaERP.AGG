@@ -142,14 +142,17 @@ function facturarPedido(item)
         alert("No puede facturar cliente STOCK");
         return;
     }
-    // Debe chequear estado del cliente (Activo y Regularizado pueden facturar)
-    if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
-        (tiposuspensioncliente_id == PROFORMA ||
-        tiposuspensioncliente_id == MOROSO ||
-        tiposuspensioncliente_id == NO_FACTURAR
-        ))
+    // Debe chequear política comercial del cliente de la fila
+    var politicaFila = null;
+    try {
+        var rawPolitica = $(item).parents("tr").find(".politica_comercial").val();
+        if (rawPolitica) {
+            politicaFila = JSON.parse(rawPolitica);
+        }
+    } catch (ePol) {}
+    if (window.clientePoliticaComercial && !window.clientePoliticaComercial.permiteOperacion('factura', politicaFila))
     {
-        alert("No puede facturar cliente en estado "+etiquetaEstadoClienteParaFactura(estadocliente, nombretiposuspensioncliente));
+        alert(window.clientePoliticaComercial.mensaje('factura', politicaFila));
         return;
     }
 

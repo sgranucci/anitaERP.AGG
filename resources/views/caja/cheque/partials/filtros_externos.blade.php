@@ -100,6 +100,8 @@
                     style="opacity:.55;">
                 <i class="fa fa-university"></i> Depositar sel.
             </button>
+            <span id="cheque-seleccion-resumen" class="badge badge-success ml-1 py-2 px-2 align-middle"
+                  style="display:none; font-size:0.9rem;"></span>
             @endif
             @if ($puede_caucionar_cheque ?? false)
             <button type="button" id="btn-caucion-masivo" class="btn btn-warning btn-sm" disabled

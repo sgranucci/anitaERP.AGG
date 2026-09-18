@@ -50,6 +50,10 @@ final class ComprobanteImpresionPackSupport
             }
 
             if ($esNas) {
+                $esEnvio = (is_array($linea) ? ($linea['formulario'] ?? '') : '') === ComprobanteImpresionFormulario::ENVIO;
+                if ($esEnvio && $idxsElegidos !== null && ! in_array((int) $idx, $idxsElegidos, true)) {
+                    continue;
+                }
                 $nas[] = (int) $idx;
 
                 continue;

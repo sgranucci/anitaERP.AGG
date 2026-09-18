@@ -115,7 +115,7 @@ final class ManualMockupCatalogo
             'stock' => ['circuito_estados'],
             'vending' => ['flujo'],
             'canjes-marketing' => ['flujo'],
-            'ventas' => ['flujo_pedidos'],
+            'ventas' => ['flujo_pedidos', 'flujo_politica_cliente'],
             'propuesta-pago' => ['flujo_premium', 'pp_autorizacion'],
             'reporte-definible' => [
                 'mapa_modulo', 'glosario_flujo', 'fuente_verdad', 'layouts', 'consolidacion',

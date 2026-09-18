@@ -99,7 +99,7 @@ return [
      * tipotransaccion_caja_id que usan numerador secuencial (MAX+1 solo dígitos).
      * Gastronomía (p. ej. id 2 AGG) queda fuera: numerotransaccion = B-00008-00807543 desde venta.codigo.
      * AGG: COB(1), REM(5), RMI(6), TRA(7), ING(8), EGR(9), OPP(10), OPA(11).
-     * Ferli: COB(12), OPP(13), DEV(14), ING(15), EGR(16) — ver .env del cliente.
+     * Ferli: COB(12), OPP(13), DEV(14), ING(15), EGR(16), TRA(17) — ver .env del cliente.
      * Además CobranzaNumeracionTransaccion reconoce COB/REM/RMI/DEV y OPP/OPA/ING/EGR/TRA por abreviatura.
      */
     'tipotransaccion_caja_ids_secuencial' => array_values(array_filter(array_map(

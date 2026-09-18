@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.2',
+    'version' => '1.3',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Pedidos, Facturación y Abonos',
 
@@ -15,6 +15,11 @@ return [
             'titulo' => 'Circuito pedido → pesada → factura',
             'seccion' => '3. Circuito completo del pedido',
         ],
+        'flujo_politica_cliente' => [
+            'archivo' => 'flujo-politica-cliente.svg',
+            'titulo' => 'Tope de circuito según política del cliente',
+            'seccion' => '5. Política comercial del cliente',
+        ],
         'pedido_listado' => [
             'archivo' => 'pedido-listado.png',
             'titulo' => 'Listado de pedidos de clientes',
@@ -23,17 +28,17 @@ return [
         'pedido_crear' => [
             'archivo' => 'pedido-crear.png',
             'titulo' => 'Alta de pedido — cabecera e ítems',
-            'seccion' => '5. Carga de pedido (vendedores remotos)',
+            'seccion' => '6. Carga de pedido (vendedores remotos)',
         ],
         'pedido_editar' => [
             'archivo' => 'pedido-editar.png',
             'titulo' => 'Edición del pedido — pesada y facturación',
-            'seccion' => '6. Edición, guardado y estados',
+            'seccion' => '7. Edición, guardado y estados',
         ],
         'pedido_cerrar' => [
             'archivo' => 'pedido-cerrar.png',
             'titulo' => 'Cierre masivo de pedidos',
-            'seccion' => '11. Cierre de pedidos y anulaciones',
+            'seccion' => '12. Cierre de pedidos y anulaciones',
         ],
     ],
 ];

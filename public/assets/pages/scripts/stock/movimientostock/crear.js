@@ -338,27 +338,23 @@
 		cantidadmodal_txt = "";
 	}
 
-	function asignaPrecio(Particulo_id, Ptalle_id)
-	{
-		// Lee talles del modulo
-        $.get(carpetaBase+'/stock/asignaprecio/'+Particulo_id+'/'+Ptalle_id, function(data){
-           	var prec = $.map(data, function(value, index){
-               	return [value];
-           	});
-			dpr=[];
-			dlp=[];
-			dii=[];
-			dmo=[];
-           	$.each(prec, function(index,value){
-				dpr.push(value.precio);
-				dlp.push(value.listaprecio_id);
-				dii.push(value.incluyeimpuesto);
-				dmo.push(value.moneda_id);
+	function asignaPrecioPorTalles(articuloId, talleIds) {
+		var ready = $.Deferred();
+		var ids = (talleIds || []).map(function (id) {
+			return String(id || '').replace(/[^A-Za-z0-9]/g, '');
+		}).filter(Boolean).join(',');
+		if (!articuloId || !ids) {
+			ready.resolve([]);
+			return ready.promise();
+		}
+		$.get(carpetaBase+'/stock/asignaprecio/'+articuloId+'/'+ids)
+			.done(function (data) {
+				ready.resolve($.isArray(data) ? data : []);
+			})
+			.fail(function () {
+				ready.resolve([]);
 			});
-		});
-        setTimeout(() => {
-			return(precio);
-        }, 300);
+		return ready.promise();
 	}
 
     $(function () {
@@ -545,83 +541,83 @@
 
 		// Acepta modal de medidas
 		$('#aceptaModal').on('click', function () {
-		  	let jsonObject = new Array();
-
-			med = [];
-			$(".medidasportalles").each(function() {
-            	med.push($(this).val());
-			});
-			talleid = [];
-			$(".tallesid").each(function() {
-            	talleid.push($(this).val());
-			});
-			cant = [];
-			$(".cantidadesportalles").each(function() {
-            	cant.push($(this).val());
-			});
-        	prec = []
-        	$(".preciosportalles").each(function(){
-            	prec.push($(this).val());
-        	});
-
-			let jsonTallesId = JSON.stringify(talleid); 
-
-			asignaPrecio(articulo_id, jsonTallesId);
-
-			off = 0;
-		    var flError = false;
-        	setTimeout(() => {
-			for (let i in med) 
-			{
-				if (cant[i] == '')
-					cant[i] = 0;
-			  	jsonObject.push({
-					medida: med[i],
-				  	cantidad: cant[i],
-				  	precio: dpr[i],
-				  	listaprecio: dlp[i],
-				  	incluyeimpuesto: dii[i],
-				  	moneda: dmo[i],
-				  	talle_id: talleid[i]
-				});
-			  	// Valida cantidades que tengan precio
-			    if (cant[i] > 0 && dpr[i] == 0)
-			  	{
-					flError = true;	  	
-					// Pedido por gaby 27/6 porque todos los articulos de la expo no tienen precio
-				    //alert('Medida '+med[i]+' Cantidad '+cant[i]+' No tiene precio asignado');
-			  	}
-				if (dpr[i] > 0)
-					off = i;		
+			var $tr = $(cantidad).closest('tr');
+			if (!$tr.length) {
+				return;
 			}
 
-			let jsonString = JSON.stringify(jsonObject); 
+			var med = [];
+			$(".medidasportalles").each(function() {
+				med.push($(this).val());
+			});
+			var talleid = [];
+			$(".tallesid").each(function() {
+				talleid.push($(this).val());
+			});
+			var cant = [];
+			$(".cantidadesportalles").each(function() {
+				cant.push($(this).val());
+			});
+			var articuloIdFila = msFilaArticuloId($tr);
+			var precioManual = typeof window.msPrecioEsManual === 'function' && window.msPrecioEsManual($tr);
 
-			// Asigna medidas, cantidades y precios
-			$(cantidad).parents('tr').find('.medidas').val(jsonString);
+			function aplicarMedidas(preciosTalle) {
+				preciosTalle = preciosTalle || [];
+				var jsonObject = [];
+				var off = 0;
+				for (var i = 0; i < med.length; i++) {
+					var cantTalle = cant[i] === '' || cant[i] == null ? 0 : cant[i];
+					var dato = preciosTalle[i] || {};
+					var precioTalle = parseFloat(dato.precio);
+					if (!isFinite(precioTalle)) {
+						precioTalle = 0;
+					}
+					jsonObject.push({
+						medida: med[i],
+						cantidad: cantTalle,
+						precio: precioTalle,
+						listaprecio: dato.listaprecio_id,
+						incluyeimpuesto: dato.incluyeimpuesto,
+						moneda: dato.moneda_id,
+						talle_id: talleid[i]
+					});
+					if (precioTalle > 0) {
+						off = i;
+					}
+				}
 
-			// Asigna variables de precio
-			var pre = fNumero(dpr[off], 2);
-			var lis = fNumero(dlp[off], 0);
-			var inc = fNumero(dii[off], 0);
-			var mon = fNumero(dmo[off], 0);
-			if (pre === 'NaN' || pre < 0 || pre > 9999999999)
-			  	pre = 0;
-	
-			$(cantidad).parents('tr').find('.precio').val(pre);
-			$(cantidad).parents('tr').find('.listaprecio_id').val(lis);
-			$(cantidad).parents('tr').find('.incluyeimpuesto').val(inc);
-			$(cantidad).parents('tr').find('.moneda_id').val(mon);
-	
-        	}, 300);
+				$tr.find('.medidas').val(JSON.stringify(jsonObject));
 
-			$('#medidasModal').modal('hide');
+				if (!precioManual) {
+					var datoOff = preciosTalle[off] || {};
+					var pre = fNumero(datoOff.precio, 2);
+					var lis = fNumero(datoOff.listaprecio_id, 0);
+					var inc = fNumero(datoOff.incluyeimpuesto, 0);
+					var mon = fNumero(datoOff.moneda_id, 0);
+					if (pre === 'NaN' || pre < 0 || pre > 9999999999) {
+						pre = 0;
+					}
+					$tr.find('.precio').val(pre);
+					$tr.find('.listaprecio_id').val(lis);
+					$tr.find('.incluyeimpuesto').val(inc);
+					$tr.find('.moneda_id').val(mon);
+				}
 
-			// Asigna total de pares a la cantidad del item en el formulario
-			sumaPares(modalActivo, 'cantidadesportalles');
-			muestraTotalPares();
-			$(cantidad).val(totPares);
-			TotalParesPedido();
+				sumaPares(modalActivo, 'cantidadesportalles');
+				muestraTotalPares();
+				$tr.find('.cantidad').first().val(totPares);
+				if (typeof TotalParesPedido === 'function') {
+					TotalParesPedido();
+				}
+				if (typeof window.movStockProgramarPreviewAsiento === 'function') {
+					window.movStockProgramarPreviewAsiento();
+				}
+			}
+
+			asignaPrecioPorTalles(articuloIdFila, talleid).always(function (data) {
+				aplicarMedidas($.isArray(data) ? data : []);
+				$('#medidasModal').modal('hide');
+			});
 		});
 
 		$('#medidasModal').on('hidden.bs.modal', function () {

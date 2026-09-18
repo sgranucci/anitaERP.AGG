@@ -7,6 +7,7 @@ use App\Models\Ventas\PedidoArticuloInterforming;
 use App\Models\Ventas\PedidoInterforming;
 use App\Support\Ventas\PedidoEstadosInterforming;
 use App\Support\Ventas\PedidoInterformingFasonSupport;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\PedidoInterformingListadoFiltros;
 use App\Support\Ventas\PedidoInterformingSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -102,6 +103,14 @@ class PedidoInterformingService
         $items = $this->normalizarItems($data['items'] ?? []);
         if ($items === []) {
             return ['error' => 'No puede grabar pedidos sin ítems'];
+        }
+
+        $cliente = \App\Models\Ventas\Cliente::query()->find((int) ($data['cliente_id'] ?? 0));
+        if ($modo === 'create') {
+            $errorPolitica = ClientePoliticaComercialSupport::errorSiNoPermite($cliente, ClientePoliticaComercialSupport::OP_PEDIDO);
+            if ($errorPolitica !== null) {
+                return $errorPolitica;
+            }
         }
 
         if (! empty($data['orden_compra'])) {

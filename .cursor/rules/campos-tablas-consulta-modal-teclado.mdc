@@ -7,6 +7,8 @@ alwaysApply: true
 
 En formularios y filtros, toda referencia a una tabla maestra (empleado, artículo, depósito, usuario, concepto, cuenta, centro de costo, etc.) debe usar el componente de consulta compartido del recurso.
 
+**Nunca** armar un `<select>` con filas de una tabla. El select solo vale para enums fijos o arrays en memoria. Ver `select-solo-enums-no-tablas.mdc`.
+
 ## UX obligatoria
 
 - Guardar el ID real en hidden cuando el proceso lo necesite.
@@ -35,11 +37,12 @@ En formularios y filtros, toda referencia a una tabla maestra (empleado, artícu
 
 ## No aplica
 
-- Enumeraciones pequeñas y cerradas (estado, turno, tipo, orden) pueden seguir como `<select>`.
+- Enumeraciones pequeñas y cerradas en memoria (estado, turno, tipo, orden, formato) pueden seguir como `<select>`.
 - Fechas, importes, porcentajes y texto libre siguen como inputs normales.
+- Empresa asignada: partial `form-empresa-asignada` / checkboxes de reportes (no es un maestro consultable).
 
 ## Prohibido
 
-- `<select>` masivo con registros de una tabla maestra.
+- `<select>` alimentado por una tabla o query (`@foreach ($cuentas as $cuenta)`, depósitos, artículos, empleados, etc.).
 - Duplicar consultas SQL o modales cuando ya existe un componente compartido.
 - Implementar lupa sin F1/Enter o Enter que envíe el formulario accidentalmente.

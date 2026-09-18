@@ -15,6 +15,7 @@
     var NO_FACTURAR = "{{ config('cliente.NO_FACTURAR') }}";
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
 </script>
+@include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'boleta'])
 <script src="{{asset("assets/pages/scripts/ventas/ordentrabajo/editarferli.js")}}" type="text/javascript"></script>
 @endsection
 

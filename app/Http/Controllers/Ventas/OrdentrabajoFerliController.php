@@ -15,6 +15,7 @@ use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
 use App\Services\Ventas\OrdentrabajoService;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 
 /**
  * OT Ferli (combinación / módulo / transporte L8).
@@ -75,14 +76,15 @@ class OrdentrabajoFerliController extends OrdentrabajoController
 
         $data = [];
         $transporte_id = 0;
-        foreach ($ordentrabajo->ordentrabajo_combinacion_talles as $ot) {
-            $item = $ot->pedido_combinacion_talles->pedidos_combinacion;
+        foreach ($ordentrabajo->ordentrabajoCombinacionTallesVigentes() as $ot) {
+            $pct = $ot->pedido_combinacion_talles;
+            $item = $pct->pedidos_combinacion;
 
             $medidas = [
-                'talle' => $ot->pedido_combinacion_talles->talle_id,
-                'nombretalle' => $ot->pedido_combinacion_talles->talles->nombre,
-                'cantidad' => $ot->pedido_combinacion_talles->cantidad,
-                'precio' => $ot->pedido_combinacion_talles->precio,
+                'talle' => $pct->talle_id,
+                'nombretalle' => $pct->talles?->nombre ?? '',
+                'cantidad' => $pct->cantidad,
+                'precio' => $pct->precio,
             ];
 
             $idItem = $item->id;
@@ -101,23 +103,24 @@ class OrdentrabajoFerliController extends OrdentrabajoController
                     'id' => $item->id,
                     'codigo' => $item->pedido_id,
                     'pedidocombinacion_id' => $item->id,
-                    'descuentopie' => $item->pedidos->descuento,
-                    'cliente' => $ot->clientes->nombre,
-                    'cliente_id' => $ot->clientes->id,
-                    'estadocliente' => $ot->clientes->estado,
-                    'tiposuspensioncliente_id' => $ot->clientes->tiposuspension_id,
-                    'nombretiposuspensioncliente' => $ot->clientes->tipossuspensioncliente->nombre ?? '',
-                    'articulo' => $item->articulos->descripcion,
-                    'sku' => $item->articulos->sku,
-                    'articulo_id' => $item->articulos->id,
+                    'descuentopie' => $item->pedidos?->descuento ?? 0,
+                    'cliente' => $ot->clientes?->nombre ?? '',
+                    'cliente_id' => $ot->clientes?->id ?? '',
+                    'estadocliente' => $ot->clientes?->estado ?? '',
+                    'tiposuspensioncliente_id' => $ot->clientes?->tiposuspension_id ?? '',
+                    'nombretiposuspensioncliente' => $ot->clientes?->tipossuspensioncliente?->nombre ?? '',
+                    'politica_comercial' => ClientePoliticaComercialSupport::payload($ot->clientes),
+                    'articulo' => $item->articulos?->descripcion ?? '',
+                    'sku' => $item->articulos?->sku ?? '',
+                    'articulo_id' => $item->articulos?->id ?? $item->articulo_id,
                     'modulo_id' => $item->modulo_id,
                     'pares' => $item->cantidad,
                     'combinacion_id' => $item->combinacion_id,
-                    'nombre_combinacion' => $combinacion->nombre,
+                    'nombre_combinacion' => $combinacion?->nombre ?? '',
                     'medidas' => [$medidas],
                 ];
 
-                $transporte_id = $item->pedidos->transporte_id;
+                $transporte_id = $item->pedidos?->transporte_id ?? 0;
             } else {
                 $data[$ii]['medidas'][] = $medidas;
             }
@@ -168,7 +171,7 @@ class OrdentrabajoFerliController extends OrdentrabajoController
         &$incoterm_query,
         &$transporte_query
     ) {
-        $cliente_query = $this->clienteQuery->allQueryporEstado(['id', 'nombre', 'codigo'], '0');
+        $cliente_query = $this->clienteQuery->allQueryPorContexto(['id', 'nombre', 'codigo'], ClientePoliticaComercialSupport::OP_BOLETA);
         $mventa_query = Mventa::all();
         $talle_query = Talle::all();
         $articulo_query = $this->articuloQuery->allQuery(['id', 'sku', 'descripcion', 'mventa_id']);
@@ -179,10 +182,11 @@ class OrdentrabajoFerliController extends OrdentrabajoController
         $incoterm_query = $this->incotermRepository->all();
         $transporte_query = $this->transporteRepository->all();
 
-        if ($ordentrabajo->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles) {
-            $mventa_id = $ordentrabajo->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedidos_combinacion->articulos->mventa_id;
-            $articulo_id = $ordentrabajo->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedidos_combinacion->articulo_id;
-            $combinacion_id = $ordentrabajo->ordentrabajo_combinacion_talles[0]->pedido_combinacion_talles->pedidos_combinacion->combinacion_id;
+        $pedidoCombinacion = $ordentrabajo->pedidoCombinacionVigente();
+        if ($pedidoCombinacion) {
+            $mventa_id = $pedidoCombinacion->articulos?->mventa_id ?? '';
+            $articulo_id = $pedidoCombinacion->articulo_id;
+            $combinacion_id = $pedidoCombinacion->combinacion_id;
         } else {
             $mventa_id = $articulo_id = $combinacion_id = '';
         }

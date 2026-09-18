@@ -19,6 +19,8 @@ final class RetencionIibbResultado
 
     public const MOTIVO_EXCLUIDO = 'excluido';
 
+    public const MOTIVO_SIN_BASE_FACTURA = 'sin_base_factura';
+
     public const MOTIVO_OK = 'ok';
 
     /**

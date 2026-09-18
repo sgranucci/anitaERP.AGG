@@ -27,6 +27,7 @@ use App\Support\Ventas\KiloCategoriaListadoFiltros;
 use App\Support\Ventas\ListadoRepartoFechaEntregaSupport;
 use App\Support\Ventas\PedidoListadoFiltros;
 use App\Support\Ventas\PedidoListadoSupport;
+use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
@@ -277,16 +278,13 @@ class PedidoController extends Controller
 		$impresionUrlCompleta = null;
 		$impresionUrlElegir = null;
 		if ($resultado['venta_ids'] !== [] && can('listar-factura', false)) {
-			$baseImpresion = [
-				'transporteId' => $transporteId,
-				'venta_ids' => implode(',', $resultado['venta_ids']),
-				'retorno' => $retornoPath,
-			];
-			$impresionUrlCompleta = route('sesion_impresion_reparto_pedidos', $baseImpresion + [
-				'pack_completo' => 1,
-				'auto' => 1,
-			]);
-			$impresionUrlElegir = route('sesion_impresion_reparto_pedidos', $baseImpresion);
+			$urls = ComprobanteImpresionSesionUrlSupport::postFacturacionReparto(
+				$resultado['venta_ids'],
+				$transporteId,
+				$retornoPath
+			);
+			$impresionUrlCompleta = $urls['completa'];
+			$impresionUrlElegir = $urls['elegir'];
 		}
 
 		return response()->json([
@@ -1051,7 +1049,9 @@ class PedidoController extends Controller
 			}
 		}
 		if (!$flEncontro)
-			return back()->with('errores', ['Cliente '.$pedido->clientes->nombre.' no activo']);
+		{
+			// Pedido histórico: se puede abrir aunque el cliente ya no entre en carga (p.ej. suspendido).
+		}
 
 		$prefsFacturacion = UsuarioPreferenciaFacturacionSupport::leer();
 		$puntoventadefault_id = $prefsFacturacion['puntoventa_id'];

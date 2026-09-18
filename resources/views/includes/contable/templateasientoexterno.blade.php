@@ -5,10 +5,10 @@
                 <input type="hidden" name="cuenta[]" class="form-control iicuentacontable" readonly value="1" />
                 <input type="hidden" class="cuentacontable_id" name="cuentacontable_ids[]" value="" >
                 <input type="hidden" class="cuentacontable_id_previa" name="cuentacontable_id_previa[]" value="" >
-                <button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">
+                <button type="button" title="Consulta cuentas (F1)" style="padding:1;" class="btn-accion-tabla consultacuenta tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="" >
+                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="" title="C&oacute;digo: Enter valida, F1 consulta" autocomplete="off">
                 <input type="hidden" class="codigo_previo_cuentacontable" name="codigo_previo_cuentacontables[]" value="" >
                 <input type="hidden" class="carga_cuentacontable_manual" name="carga_cuentacontable_manuales[]" value="1" >
             </div>
@@ -21,7 +21,7 @@
             </select>
         </td>
         <td>
-            <select name="monedaasiento_ids[]" data-placeholder="Moneda" class="monedaasiento form-control" required data-fouc>
+            <select name="monedaasiento_ids[]" data-placeholder="Moneda" class="monedaasiento form-control" data-fouc>
                 <option value="">-- Seleccionar --</option>
                     @foreach($moneda_query as $key => $value)
                         @if( (int) $value->id == (int) old('monedaasiento_ids[]', $cuenta->moneda_id ?? ''))

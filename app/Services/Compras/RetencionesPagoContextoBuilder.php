@@ -43,9 +43,11 @@ class RetencionesPagoContextoBuilder
         if ($bases === null || ($bases->origen === 'fallback_bruto' && $bases->brutoAplicado <= 0 && $importeNetoFallback !== null)) {
             $netoFb = round((float) ($importeNetoFallback ?? 0), 2);
             $ivaFb = round((float) ($importeIvaFallback ?? 0), 2);
+            // Anticipo / sin factura: no hay destino BA para recortar IIBB.
+            // Usar el bruto como base inventaba retención CABA (primera jur. agente).
             $bases = new RetencionesPagoBasesResultado(
                 netoGanancias: $netoFb,
-                netoIibb: $netoFb,
+                netoIibb: 0.0,
                 netoGravado: $netoFb,
                 netoExento: 0.0,
                 netoNogravado: 0.0,

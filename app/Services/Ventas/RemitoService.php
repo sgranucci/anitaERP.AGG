@@ -20,6 +20,7 @@ use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Stock\MovimientoStockService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
+use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\RemitoKilosVillafrancaSupport;
@@ -171,6 +172,13 @@ class RemitoService
 
         if (! $cliente) {
             return ['error' => 'Cliente inexistente'];
+        }
+
+        if ($funcion === 'create') {
+            $errorPolitica = ClientePoliticaComercialSupport::errorSiNoPermite($cliente, ClientePoliticaComercialSupport::OP_BOLETA);
+            if ($errorPolitica !== null) {
+                return $errorPolitica;
+            }
         }
 
         $errorEntrega = ClienteEntregaPedidoSupport::validarSeleccionParaCliente(

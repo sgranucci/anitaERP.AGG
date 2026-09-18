@@ -101,4 +101,12 @@ class RetencionIibbCalculoSupportTest extends TestCase
         $this->assertFalse($r->aplica);
         $this->assertSame(RetencionIibbResultado::MOTIVO_SIN_TASA, $r->motivo);
     }
+
+    public function test_neto_cero_no_aplica(): void
+    {
+        $r = $this->support->calcular(new RetencionIibbInput(0.0, 3.0, true));
+
+        $this->assertFalse($r->aplica);
+        $this->assertSame(RetencionIibbResultado::MOTIVO_SIN_BASE_FACTURA, $r->motivo);
+    }
 }
