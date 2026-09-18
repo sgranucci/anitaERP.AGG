@@ -353,6 +353,7 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
         return Comprobante_Proveedor::query()
             ->with([
                 'comprobante_proveedor_conceptos.concepto_ivacompras',
+                'comprobante_proveedor_recepciones.recepcion_proveedores:id,impuesto_interno',
                 'tipotransaccion_compras:id,signo,abreviatura',
                 'proveedores:id,condicioniva_id',
             ])
@@ -437,12 +438,18 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
             $condicionIva = null;
         }
 
+        $incluirIi = ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno(
+            ($cp->comprobante_proveedor_recepciones ?? collect())->map(
+                static fn ($vinculo) => $vinculo->recepcion_proveedores ?? null
+            )
+        );
         $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
             (string) ($cp->letra ?? ''),
             $condicionIva,
             (float) ($cp->total ?? 0),
             (float) ($cp->subtotal ?? 0),
             $cp->comprobante_proveedor_conceptos ?? [],
+            $incluirIi,
         );
         $monto = round((float) $meta['importe'], 2);
         if ($esNc) {

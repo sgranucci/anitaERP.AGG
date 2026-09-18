@@ -32,6 +32,12 @@ return [
 
     'bridge_list_reintentos' => (int) env('ANITA_BRIDGE_LIST_REINTENTOS', 6),
 
+    /**
+     * acc=list/customSql: reintentos si el bridge no genera el CSV (fopen cmd_sql.*-list-*.csv).
+     * El apiERP.php viejo en /usr2/www/htdocs/ usa timestamp corto y choca bajo carga.
+     */
+    'bridge_csv_faltante_reintentos' => (int) env('ANITA_BRIDGE_CSV_FALTANTE_REINTENTOS', 3),
+
     'bridge_connect_timeout' => (int) env('ANITA_BRIDGE_CONNECT_TIMEOUT', 10),
 
     'bridge_timeout' => (int) env('ANITA_BRIDGE_TIMEOUT', 300),

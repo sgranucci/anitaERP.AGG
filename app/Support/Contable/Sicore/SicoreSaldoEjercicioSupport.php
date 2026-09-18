@@ -16,7 +16,7 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
  * {@see MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD}, así el saldo_ejercicio
  * final es el de la columna P al último movimiento ≤ fecha_hasta.
  *
- * Fuente por defecto: ERP (SUSS / IIBB). SICORE pasa Anita para cuadrar
+ * Fuente por defecto: ERP (SUSS). SICORE e IIBB pasan Anita para cuadrar
  * contra el Excel del mayor clásico mientras las OP del período sigan en Anita.
  *
  * Una sola corrida del mayor por (empresa, fecha_hasta, fuente) carga todas las

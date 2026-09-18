@@ -18,6 +18,12 @@ final class ComprobanteProveedorConceptoIvaTipos
     /** Impuesto interno / I.T.C. (enum valor T). */
     public const IMPUESTO_INTERNO = 'T';
 
+    /**
+     * Códigos Anita de II (conccomp). El 5 suele venir como tipo N (no gravado)
+     * y el 510 (I.T.C.) como T; ambos son impuesto interno, no mercadería.
+     */
+    public const CODIGOS_IMPUESTO_INTERNO = ['5', '510'];
+
     /** Percepción IVA (enum valor P). */
     public const PERCEPCION_IVA = 'P';
 
@@ -37,18 +43,40 @@ final class ComprobanteProveedorConceptoIvaTipos
         return in_array((string) $tipoconcepto, self::IMPUESTO, true);
     }
 
-    public static function esImpuestoInterno(?string $tipoconcepto): bool
+    public static function esImpuestoInterno(?string $tipoconcepto, string|int|null $codigo = null): bool
     {
-        return strtoupper((string) $tipoconcepto) === self::IMPUESTO_INTERNO;
+        if (strtoupper((string) $tipoconcepto) === self::IMPUESTO_INTERNO) {
+            return true;
+        }
+
+        $cod = trim((string) $codigo);
+
+        return $cod !== '' && in_array($cod, self::CODIGOS_IMPUESTO_INTERNO, true);
     }
 
     /**
-     * Contra COM valuada cierran la provisión FAR: neto + impuesto interno.
-     * La recepción ya debitó el II; en la factura no se vuelve a imputar a su cuenta.
+     * Neto de mercadería (sin impuesto interno, aunque Anita lo haya dejado en tipo N).
      */
-    public static function revierteProvisionCom(?string $tipoconcepto): bool
+    public static function esNetoMercaderia(?string $tipoconcepto, string|int|null $codigo = null): bool
     {
-        return self::esNeto($tipoconcepto) || self::esImpuestoInterno($tipoconcepto);
+        return self::esNeto($tipoconcepto) && ! self::esImpuestoInterno($tipoconcepto, $codigo);
+    }
+
+    /**
+     * Contra COM valuada cierran la provisión FAR.
+     * El II solo revierte FAR si esa COM ya lo provisionó (cigarrillos).
+     * En gastronomía YAFEMA la COM no lleva II: el concepto va a su cuenta.
+     */
+    public static function revierteProvisionCom(
+        ?string $tipoconcepto,
+        string|int|null $codigo = null,
+        bool $comIncluyeImpuestoInterno = false,
+    ): bool {
+        if (self::esImpuestoInterno($tipoconcepto, $codigo)) {
+            return $comIncluyeImpuestoInterno;
+        }
+
+        return self::esNeto($tipoconcepto);
     }
 
     /** Solo tipoconcepto B — no inferir por nombre ni por retieneIIBB. */

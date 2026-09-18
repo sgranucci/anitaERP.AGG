@@ -6,13 +6,14 @@ namespace App\Services\Contable\IngresosBrutos;
 
 use App\Models\Contable\Iibb_Presentacion_Config;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
 use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 
 /**
- * Conciliación IIBB vs mayor: suma del período vs col. P (saldo ejerc.)
- * del último movimiento de la quincena/mes elegida.
+ * Conciliación IIBB vs mayor: suma del período vs col. P (saldo ejerc. Anita)
+ * al último movimiento ≤ fecha_hasta de la quincena/mes elegida.
  */
 final class IngresosBrutosConciliacionContableService
 {
@@ -53,12 +54,13 @@ final class IngresosBrutosConciliacionContableService
 
         $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
 
-        // Col. P del mayor plano: saldo de ejercicio al último movimiento ≤ fecha_hasta.
+        // Col. P del mayor Anita: saldo de ejercicio al último movimiento ≤ fecha_hasta.
         $totalMayor = $this->saldoEjercicioSupport->saldoComparable(
             $empresaId,
             $hasta,
             $cuentasDetalle,
             $cuentaInversa,
+            MayorFuenteConsultaSupport::MODO_ANITA,
         );
 
         $tolerancia = IngresosBrutosFormatoArbaSupport::tolerancia();

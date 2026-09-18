@@ -200,12 +200,14 @@ class ComprobanteProveedorControlesLegajoService
             return $resultado;
         }
 
+        $incluirIi = ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno($recepciones);
         $importeMeta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
             $letra,
             $condicionivaProveedorId,
             $total,
             $subtotal,
             $conceptos,
+            $incluirIi,
         );
         $importeFactura = (float) $importeMeta['importe'];
 

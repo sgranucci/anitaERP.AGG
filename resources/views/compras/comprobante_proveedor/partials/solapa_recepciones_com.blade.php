@@ -57,9 +57,11 @@
                     ({{ number_format((float) $legajo_ya_facturado_importe, 2, ',', '.') }}),
                     igual que Anita resta lo aplicado en <code>aplicped</code>.
                 @endif
-                La comparación usa neto gravado más impuesto interno (la provisión COM de cigarrillos ya incluye el II).
-                Al contabilizar: el asiento de la recepción no se modifica; la factura debita la provisión (neto+II),
-                IVA y percepciones; el II no se vuelve a debitar. Si el comparable supera la COM, la diferencia se prorratea en cuentas de artículos; el haber va a proveedores.
+                Se compara el <strong>neto gravado</strong> de la factura con la provisión de la COM.
+                El impuesto interno solo se suma si esa COM ya lo provisionó (cigarrillos).
+                Si la COM no lo lleva (p. ej. gastronomía YAFEMA), el II va a su cuenta y no dispara diferencia.
+                Al contabilizar: el asiento de la recepción no se modifica; la factura debita la provisión (neto
+                y, si corresponde, II), IVA y percepciones. Si el comparable supera la COM, la diferencia se prorratea en cuentas de artículos; el haber va a proveedores.
             </p>
 
             @if (! empty($comResolucion['importe_comparacion']))
@@ -141,6 +143,7 @@
                                 data-numerorecepcion="{{ $recepcion->numerorecepcion ?? '' }}"
                                 data-importe-com="{{ $importeComFactura }}"
                                 data-importe-com-me="{{ $importeComMe }}"
+                                data-incluye-ii="{{ ((float) ($recepcion->impuesto_interno ?? 0) > 0.005) ? '1' : '0' }}"
                                 data-cotizacion-com="{{ $cotCom }}">
                                 <td class="text-center align-middle">
                                     <input type="checkbox"

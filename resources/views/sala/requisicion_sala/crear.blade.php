@@ -5,7 +5,7 @@ Requisición de sala
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/deposito.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/sala/requisicion_sala/grabando.js') }}?v={{ filemtime(public_path('assets/pages/scripts/sala/requisicion_sala/grabando.js')) }}" type="text/javascript"></script>

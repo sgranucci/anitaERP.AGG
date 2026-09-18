@@ -89,6 +89,8 @@ return [
     'asiento_numeracion_lock_espera_segundos' => (int) env('ASIENTO_NUMERACION_LOCK_ESPERA_SEGUNDOS', 30),
     // Tras leer numabm+1: si ctamov ya tiene ese nro (Anita nativo en paralelo), saltar hasta N libres.
     'asiento_numeracion_max_saltos_ocupados' => (int) env('ASIENTO_NUMERACION_MAX_SALTOS_OCUPADOS', 50),
+    // Lectura numabm/numerador: el bridge a veces no genera el CSV (fopen) o lista vacío.
+    'asiento_numabm_reintentos' => (int) env('ASIENTO_NUMABM_REINTENTOS', 3),
     // Si la verificación post-insert lee 0/desbalance, reintentar delete+insert N veces (Anita ocupado / body vacío).
     'asiento_ctamov_reintentos_si_vacio' => (int) env('ASIENTO_CTAMOV_REINTENTOS_SI_VACIO', 3),
 

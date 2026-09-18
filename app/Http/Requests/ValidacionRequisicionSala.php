@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
+use App\Support\Sala\RequisicionSalaArticuloCatalogoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -78,10 +79,10 @@ class ValidacionRequisicionSala extends FormRequest
 
                     foreach ($articuloIds as $articuloId) {
                         $depositoEntregaId = (int) ($depositosPorArticulo[$articuloId] ?? 0);
-                        if (! UsuarioDepositoAutorizado::articuloAutorizadoPorDepositoEntrega($depositoEntregaId)) {
+                        if (! RequisicionSalaArticuloCatalogoSupport::articuloPermitido($depositoEntregaId)) {
                             $validator->errors()->add(
                                 'articulo_ids',
-                                'Hay artículos cuyo depósito de entrega no está autorizado para su usuario.'
+                                'Hay artículos cuyo depósito de entrega no está permitido para requisición de sala.'
                             );
                             break;
                         }

@@ -1292,11 +1292,7 @@ class ArticuloController extends Controller
         }
 
         if (filter_var($request->input('filtrar_depositos_usuario'), FILTER_VALIDATE_BOOLEAN)) {
-            $depositoIdConsulta = $request->filled('deposito_id') ? (int) $request->input('deposito_id') : null;
-            \App\Support\Stock\UsuarioDepositoAutorizado::aplicarFiltroArticuloPorDepositoEntrega(
-                $query,
-                $depositoIdConsulta
-            );
+            \App\Support\Sala\RequisicionSalaArticuloCatalogoSupport::aplicarFiltroArticulo($query);
         }
 
         \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivos($query);
@@ -1333,11 +1329,19 @@ class ArticuloController extends Controller
                 'articulo.sku',
             );
         } else {
-            $like = '%'.$consulta.'%';
-            $query->where(function ($q) use ($columns, $cont, $like) {
-                $q->where($columns[0], 'LIKE', $like);
-                for ($i = 1; $i < $cont; $i++) {
-                    $q->orWhere($columns[$i], 'LIKE', $like);
+            $tokens = preg_split('/\s+/u', $consulta, -1, PREG_SPLIT_NO_EMPTY);
+            if (! is_array($tokens) || $tokens === []) {
+                $tokens = [$consulta];
+            }
+            $query->where(function ($q) use ($columns, $cont, $tokens) {
+                foreach ($tokens as $token) {
+                    $like = '%'.$token.'%';
+                    $q->where(function ($inner) use ($columns, $cont, $like) {
+                        $inner->where($columns[0], 'LIKE', $like);
+                        for ($i = 1; $i < $cont; $i++) {
+                            $inner->orWhere($columns[$i], 'LIKE', $like);
+                        }
+                    });
                 }
             });
         }
@@ -1512,13 +1516,9 @@ class ArticuloController extends Controller
         }
 
         if ($articulo && filter_var($request->input('filtrar_depositos_usuario'), FILTER_VALIDATE_BOOLEAN)) {
-            $depositoIdConsulta = $request->filled('deposito_id') ? (int) $request->input('deposito_id') : null;
-            $idsPermitidos = \App\Support\Stock\UsuarioDepositoAutorizado::idsParaFiltroArticulo($depositoIdConsulta);
-            if ($idsPermitidos !== null) {
-                $depositoEntregaId = (int) ($articulo->depositoentrega_id ?? 0);
-                if ($idsPermitidos === [] || ! in_array($depositoEntregaId, $idsPermitidos, true)) {
-                    return response()->json(null);
-                }
+            $depositoEntregaId = (int) ($articulo->depositoentrega_id ?? 0);
+            if (! \App\Support\Sala\RequisicionSalaArticuloCatalogoSupport::articuloPermitido($depositoEntregaId)) {
+                return response()->json(null);
             }
         }
 

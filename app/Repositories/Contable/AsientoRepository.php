@@ -1341,15 +1341,12 @@ class AsientoRepository implements AsientoRepositoryInterface
 			if (isset($this->path_sistema)) {
 				$data['path_sistema'] = $this->path_sistema;
 			}
-			$parsed = ApiAnita::parsearRespuestaLista((string) $apiAnita->apiCall($data));
-			if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
-				throw new \RuntimeException(
-					'No se pudo leer numerador Anita (clave 501): '
-					.($parsed['error_lectura'] ?? 'sin filas')
-				);
-			}
 
-			return (int) ($parsed['filas'][0]->num_ult_numero ?? 0) + 1;
+			return (int) ($this->listarNumeradorAnitaConReintento(
+				$apiAnita,
+				$data,
+				'numerador Anita (clave 501)'
+			)['filas'][0]->num_ult_numero ?? 0) + 1;
 		}
 
 		$data = [
@@ -1363,15 +1360,42 @@ class AsientoRepository implements AsientoRepositoryInterface
 		if (isset($this->path_sistema)) {
 			$data['path_sistema'] = $this->path_sistema;
 		}
-		$parsed = ApiAnita::parsearRespuestaLista((string) $apiAnita->apiCall($data));
-		if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
-			throw new \RuntimeException(
-				'No se pudo leer numabm Anita (a-ctamov.c emp '.$codigoEmpresa.'): '
-				.($parsed['error_lectura'] ?? 'sin filas')
-			);
+
+		return (int) ($this->listarNumeradorAnitaConReintento(
+			$apiAnita,
+			$data,
+			'numabm Anita (a-ctamov.c emp '.$codigoEmpresa.')'
+		)['filas'][0]->numa_ult_numero ?? 0) + 1;
+	}
+
+	/**
+	 * Reintenta list del numerador: el bridge viejo a veces no genera el CSV (fopen) o lista vacío.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array{filas: list<object>, error_lectura: ?string}
+	 */
+	private function listarNumeradorAnitaConReintento(ApiAnita $apiAnita, array $data, string $contexto): array
+	{
+		$max = max(1, (int) config('contable.asiento_numabm_reintentos', 3));
+		$ultimoError = 'sin filas';
+
+		for ($intento = 1; $intento <= $max; $intento++) {
+			$parsed = ApiAnita::parsearRespuestaLista((string) $apiAnita->apiCall($data));
+			if ($parsed['error_lectura'] === null && $parsed['filas'] !== []) {
+				return $parsed;
+			}
+			$ultimoError = $parsed['error_lectura'] ?? 'sin filas';
+			if ($intento < $max) {
+				Log::warning('asiento_anita.numeracion.lectura_reintento', [
+					'contexto' => $contexto,
+					'intento' => $intento,
+					'mensaje' => $ultimoError,
+				]);
+				usleep(200000 * $intento);
+			}
 		}
 
-		return (int) ($parsed['filas'][0]->numa_ult_numero ?? 0) + 1;
+		throw new \RuntimeException('No se pudo leer '.$contexto.': '.$ultimoError);
 	}
 
 	private function persistirNumeradorAnita(int|string $codigoEmpresa, int $numeroAsignado): void

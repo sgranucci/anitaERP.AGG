@@ -111,7 +111,8 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
             $total += $monto;
             $tipo = (string) ($linea->concepto_ivacompras?->tipoconcepto ?? '');
-            if (ComprobanteProveedorConceptoIvaTipos::esNeto($tipo)) {
+            $codigo = (string) ($linea->concepto_ivacompras?->codigo ?? '');
+            if (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)) {
                 $subtotal += $monto;
             }
         }
@@ -192,10 +193,11 @@ final class ComprobanteProveedorAsientoPreviewSupport
     {
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras.impuestos',
+            'comprobante_proveedor_conceptos.concepto_ivacompras.concepto_ivacompra_empresas',
             'proveedores',
             'ordencompras',
             'tipotransaccion_compras',
-            'comprobante_proveedor_recepciones',
+            'comprobante_proveedor_recepciones.recepcion_proveedores',
         ]);
         $conceptosParaInferir = $comprobante->comprobante_proveedor_conceptos
             ->map(static fn ($l) => $l->concepto_ivacompras)
@@ -223,6 +225,12 @@ final class ComprobanteProveedorAsientoPreviewSupport
         $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
         $usaProvisionCom = $modoAsignaRecepcion
             && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
+        $comIncluyeIi = $usaProvisionCom
+            && ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno(
+                ($comprobante->comprobante_proveedor_recepciones ?? collect())->map(
+                    static fn ($vinculo) => $vinculo->recepcion_proveedores ?? null
+                )
+            );
         $fechaFacturaYmd = null;
         if ($comprobante->fechacomprobante instanceof \DateTimeInterface) {
             $fechaFacturaYmd = $comprobante->fechacomprobante->format('Y-m-d');
@@ -319,26 +327,58 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
 
             $tipoConcepto = (string) ($concepto->tipoconcepto ?? '');
+            $codigoConcepto = (string) ($concepto->codigo ?? '');
 
-            // Sin COM asignada cuando el flujo la exige: neto/II no usan la cuenta del concepto.
-            if ($exigeAsignarCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom($tipoConcepto)) {
+            // Sin COM asignada cuando el flujo la exige: neto de mercadería no usa la cuenta del concepto.
+            if ($exigeAsignarCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom(
+                $tipoConcepto,
+                $codigoConcepto,
+                $comIncluyeIi
+            )) {
                 continue;
             }
 
-            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom($tipoConcepto)) {
+            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom(
+                $tipoConcepto,
+                $codigoConcepto,
+                $comIncluyeIi
+            )) {
                 continue;
+            }
+
+            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
+                $empresaIdIi = (int) ($comprobante->empresa_id ?? 0);
+                $cuentaIi = (int) ($linea->cuentacontabledebe_id ?? 0);
+                if ($cuentaIi <= 0) {
+                    $cuentaIi = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaIdIi) ?? 0);
+                }
+                if ($cuentaIi > 0 || $comprobante->ordencompras || $comprobante->comprobante_proveedor_recepciones->isNotEmpty()) {
+                    continue;
+                }
             }
 
             // Neto de factura anticipada: usa cuenta automática de anticipo, no la del concepto.
-            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
                 continue;
             }
 
-            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
                 continue;
             }
 
-            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
                 $cuentaManualId = OrdencompraContratoRutaFacturaSupport::cuentaDebeNetoManual(
                     $comprobante->ordencompras,
                     (int) ($linea->cuentacontabledebe_id ?? 0),
@@ -357,7 +397,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
-            $esNeto = ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto);
+            $esNeto = ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipoConcepto, $codigoConcepto);
             $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
             if ($cuentaId <= 0) {
                 $cuentaId = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaId));

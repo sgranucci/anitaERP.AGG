@@ -11,12 +11,39 @@ use Tests\TestCase;
 
 class ComprobanteProveedorImporteComparacionComSupportTest extends TestCase
 {
-    public function test_letra_a_incluye_impuesto_interno_en_el_comparable_contra_com(): void
+    public function test_letra_a_no_suma_ii_si_la_com_no_lo_provisiono(): void
     {
         $conceptos = [
-            $this->linea('G', 1000.00),
-            $this->linea('T', 400.00),
-            $this->linea('I', 210.00),
+            $this->linea('G', 823635.59, '50'),
+            $this->linea('N', 83355.91, '5'),
+            $this->linea('I', 172963.47, '503'),
+        ];
+
+        $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
+            'A',
+            1,
+            1079954.97,
+            823635.59,
+            $conceptos,
+        );
+
+        $this->assertSame(823635.59, $meta['importe']);
+        $this->assertSame('gravado', $meta['tipo']);
+        $this->assertFalse(
+            ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(823635.59, 823635.59, 5.0)
+        );
+        $this->assertTrue(
+            ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(906991.50, 823635.59, 5.0),
+            'Si se suma el II tipo N (código 5) contra una COM sin II, YAFEMA FGA queda fuera de tolerancia.'
+        );
+    }
+
+    public function test_letra_a_incluye_ii_solo_cuando_la_com_lo_provisiono(): void
+    {
+        $conceptos = [
+            $this->linea('G', 1000.00, '50'),
+            $this->linea('T', 400.00, '510'),
+            $this->linea('I', 210.00, '503'),
         ];
 
         $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
@@ -25,6 +52,7 @@ class ComprobanteProveedorImporteComparacionComSupportTest extends TestCase
             1610.00,
             1000.00,
             $conceptos,
+            true,
         );
 
         $this->assertSame(1400.00, $meta['importe']);
@@ -33,17 +61,13 @@ class ComprobanteProveedorImporteComparacionComSupportTest extends TestCase
         $this->assertFalse(
             ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(1400.00, 1400.00, 5.0)
         );
-        $this->assertTrue(
-            ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(1000.00, 1400.00, 5.0),
-            'Sin el II el comparable viejo (solo neto) queda fuera de tolerancia, caso YAFEMA.'
-        );
     }
 
     public function test_letra_a_sin_ii_sigue_usando_solo_neto_gravado(): void
     {
         $conceptos = [
-            $this->linea('G', 1000.00),
-            $this->linea('I', 210.00),
+            $this->linea('G', 1000.00, '50'),
+            $this->linea('I', 210.00, '503'),
         ];
 
         $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
@@ -73,29 +97,47 @@ class ComprobanteProveedorImporteComparacionComSupportTest extends TestCase
         $this->assertSame('total', $meta['tipo']);
     }
 
-    public function test_asiento_contra_com_acumula_ii_en_la_provision(): void
+    public function test_provision_incluye_ii_segun_campo_de_recepcion(): void
+    {
+        $this->assertFalse(
+            ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno([
+                (object) ['impuesto_interno' => 0],
+            ])
+        );
+        $this->assertTrue(
+            ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno([
+                (object) ['impuesto_interno' => 1500.25],
+            ])
+        );
+    }
+
+    public function test_asiento_contra_com_usa_flag_de_ii_en_la_provision(): void
     {
         $src = (string) file_get_contents(
             (new ReflectionClass(ComprobanteProveedorAsientoService::class))->getFileName()
         );
         $this->assertStringContainsString(
-            'ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom($tipoConcepto)',
+            'ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom(',
             $src
         );
+        $this->assertStringContainsString('$comIncluyeIi', $src);
         $preview = (string) file_get_contents(
             (new ReflectionClass(ComprobanteProveedorAsientoPreviewSupport::class))->getFileName()
         );
         $this->assertStringContainsString(
-            'ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom($tipoConcepto)',
+            'ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom(',
             $preview
         );
     }
 
-    private function linea(string $tipo, float $monto): object
+    private function linea(string $tipo, float $monto, string $codigo = ''): object
     {
         return (object) [
             'monto' => $monto,
-            'concepto_ivacompras' => (object) ['tipoconcepto' => $tipo],
+            'concepto_ivacompras' => (object) [
+                'tipoconcepto' => $tipo,
+                'codigo' => $codigo,
+            ],
         ];
     }
 }

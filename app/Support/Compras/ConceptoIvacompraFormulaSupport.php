@@ -84,7 +84,7 @@ final class ConceptoIvacompraFormulaSupport
             }
 
             $tipoI = strtoupper((string) ($meta[$id]['tipoconcepto'] ?? ''));
-            if (! in_array($tipoI, ['I', 'G', 'E'], true)) {
+            if (! in_array($tipoI, ['I', 'G', 'E', 'T', 'P', 'B', 'M', 'S', 'A', 'N'], true)) {
                 $meta[$id]['tipoconcepto'] = 'I';
             }
             if ((float) ($meta[$id]['impuesto_tasa'] ?? 0) <= 0) {
@@ -131,7 +131,7 @@ final class ConceptoIvacompraFormulaSupport
             }
 
             $tipoI = strtoupper((string) ($concepto->tipoconcepto ?? ''));
-            if (! in_array($tipoI, ['I', 'G', 'E'], true)) {
+            if (! in_array($tipoI, ['I', 'G', 'E', 'T', 'P', 'B', 'M', 'S', 'A', 'N'], true)) {
                 $concepto->setAttribute('tipoconcepto', 'I');
             }
             $concepto->setAttribute('_tasa_formula', round($parsed['coeficiente'] * 100, 3));

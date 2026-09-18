@@ -61,16 +61,19 @@ class ComprobanteProveedorComLegajoResolucionService
         );
 
         $conceptosIvacompra = $this->cargarConceptosPrecarga($precarga);
+        $conceptosLineas = $precarga->precarga_comprobante_proveedor_conceptos->map(function ($linea) use ($conceptosIvacompra) {
+            $linea->setRelation('concepto_ivacompras', $conceptosIvacompra->get((int) $linea->concepto_ivacompra_id));
+
+            return $linea;
+        });
+        $incluirIi = ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno($recepciones);
         $importeMeta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
             (string) ($precarga->letra ?? ''),
             $precarga->proveedores?->condicioniva_id ?? Proveedor::query()->whereKey($precarga->proveedor_id)->value('condicioniva_id'),
             (float) $precarga->total,
             (float) $precarga->subtotal,
-            $precarga->precarga_comprobante_proveedor_conceptos->map(function ($linea) use ($conceptosIvacompra) {
-                $linea->setRelation('concepto_ivacompras', $conceptosIvacompra->get((int) $linea->concepto_ivacompra_id));
-
-                return $linea;
-            }),
+            $conceptosLineas,
+            $incluirIi,
         );
         // Manda la moneda de la factura: comparar en esa moneda (no forzar a pesos).
         $importeFactura = (float) $importeMeta['importe'];
@@ -209,12 +212,14 @@ class ComprobanteProveedorComLegajoResolucionService
             ])
             ->values();
 
+        $incluirIi = ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno($recepciones);
         $importeMeta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
             $letra,
             $condicionivaProveedorId,
             $total,
             $subtotal,
             $conceptos,
+            $incluirIi,
         );
         // Manda la moneda de la factura.
         $importe = (float) $importeMeta['importe'];

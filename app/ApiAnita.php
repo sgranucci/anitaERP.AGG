@@ -114,24 +114,50 @@ class ApiAnita
         $timeout = (int) ($data['curl_timeout'] ?? config('anita.bridge_timeout', 120));
         unset($data['curl_timeout']);
 
-        $curl = curl_init();
         $payload = json_encode($data);
+        $esLectura = in_array($acc, ['list', 'customSql'], true);
+        $maxIntentos = $esLectura
+            ? max(1, (int) config('anita.bridge_csv_faltante_reintentos', 3))
+            : 1;
 
-        curl_setopt_array($curl, [
-            CURLOPT_URL => $url, CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => false, CURLOPT_CUSTOMREQUEST => 'POST', CURLOPT_POSTFIELDS => $payload,
-        ]);
-        curl_setopt($curl, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
-        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, (int) config('anita.bridge_connect_timeout', 10));
-        curl_setopt($curl, CURLOPT_TIMEOUT, max(5, $timeout));
-        $response = curl_exec($curl);
-        if (curl_errno($curl)) {
-            $errorMsg = curl_error($curl);
-            curl_close($curl);
+        $response = false;
+        $httpCode = 0;
+        $errorMsg = null;
+        for ($intento = 1; $intento <= $maxIntentos; $intento++) {
+            $http = $this->postBridgeHttp($url, $payload, $timeout);
+            $response = $http['body'];
+            $httpCode = $http['http_code'];
+            $errorMsg = $http['curl_error'];
+            if ($errorMsg !== null) {
+                break;
+            }
 
+            $trimIntento = trim((string) $response);
+            if (
+                $esLectura
+                && $intento < $maxIntentos
+                && $httpCode < 400
+                && $response !== false
+                && $trimIntento !== ''
+                && self::esErrorCsvUnloadFaltante(
+                    self::parsearRespuestaLista($trimIntento)['error_lectura']
+                )
+            ) {
+                Log::warning('anita_bridge.list_csv_faltante_reintento', [
+                    'intento' => $intento,
+                    'tabla' => $data['tabla'] ?? null,
+                    'sistema' => $data['sistema'] ?? null,
+                    'acc' => $acc,
+                ]);
+                usleep(200000 * $intento);
+                continue;
+            }
+            break;
+        }
+
+        if ($errorMsg !== null) {
             return json_encode(['Error' => 'Bridge HTTP Anita: '.$errorMsg]);
         }
-        $httpCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        curl_close($curl);
 
         // Sin esto un 500/502 con body vacío se devolvía como '[]' en acc=list: indistinguible
         // de "no hay filas" y por lo tanto invisible para quien consume el resultado.
@@ -175,6 +201,51 @@ class ApiAnita
         }
 
         return $response;
+    }
+
+    /**
+     * @return array{body: string|false, http_code: int, curl_error: ?string}
+     */
+    private function postBridgeHttp(string $url, string $payload, int $timeout): array
+    {
+        $curl = curl_init();
+        curl_setopt_array($curl, [
+            CURLOPT_URL => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HEADER => false,
+            CURLOPT_CUSTOMREQUEST => 'POST',
+            CURLOPT_POSTFIELDS => $payload,
+        ]);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, (int) config('anita.bridge_connect_timeout', 10));
+        curl_setopt($curl, CURLOPT_TIMEOUT, max(5, $timeout));
+        $response = curl_exec($curl);
+        $curlError = curl_errno($curl) ? curl_error($curl) : null;
+        $httpCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        return [
+            'body' => $response,
+            'http_code' => $httpCode,
+            'curl_error' => $curlError,
+        ];
+    }
+
+    /**
+     * true si el bridge no llegó a generar/abrir el CSV del UNLOAD (colisión de cmd_sql o SQL fallido).
+     */
+    public static function esErrorCsvUnloadFaltante(?string $mensaje): bool
+    {
+        if ($mensaje === null || trim($mensaje) === '') {
+            return false;
+        }
+
+        $m = $mensaje;
+
+        return stripos($m, 'failed to open stream') !== false
+            || stripos($m, 'UNLOAD no generó el archivo CSV') !== false
+            || stripos($m, 'not a valid stream resource') !== false
+            || (stripos($m, 'fopen(') !== false && stripos($m, '.csv') !== false);
     }
 
     /**

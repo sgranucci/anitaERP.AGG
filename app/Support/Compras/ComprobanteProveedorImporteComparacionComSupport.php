@@ -7,12 +7,13 @@ use Carbon\Carbon;
 /**
  * Importe del comprobante a comparar con la provisión COM (neto sin IVA).
  *
- * La provisión COM de cigarrillos incluye impuesto interno (asiento de la recepción).
- * En letra A el comparable es neto gravado + II, no el neto solo: si no, YAFEMA y similares
- * devolvían el legajo a Compras por una diferencia que no es de precio.
+ * El II de la factura (tipo T o código Anita 5, a veces cargado como N) no es
+ * mercadería. Solo se suma al comparable cuando la COM ya lo provisionó
+ * (cigarrillos: recepcion.impuesto_interno > 0). En gastronomía YAFEMA la COM
+ * es solo el gravado; si se suma el II, CxP ve un falso desvío y devuelve el legajo.
  *
  * Las conversiones de moneda viven en ComprobanteProveedorMonedaMotor; acá solo se elige
- * qué importe de la factura se compara (total vs neto+II) y se delega la conversión.
+ * qué importe de la factura se compara (total vs neto / neto+II) y se delega la conversión.
  */
 final class ComprobanteProveedorImporteComparacionComSupport
 {
@@ -29,6 +30,7 @@ final class ComprobanteProveedorImporteComparacionComSupport
         float $total,
         float $subtotal,
         iterable $conceptos,
+        bool $incluirImpuestoInterno = false,
     ): array {
         $monoId = (int) config('arca.padron_validacion_cliente.condicioniva_monotributo_id', 4);
         $esMonotributo = $condicionivaProveedorId !== null && (int) $condicionivaProveedorId === $monoId;
@@ -45,12 +47,14 @@ final class ComprobanteProveedorImporteComparacionComSupport
         $gravado = 0.0;
         $impuestoInterno = 0.0;
         foreach ($conceptos as $linea) {
-            $tipo = (string) ($linea->concepto_ivacompras?->tipoconcepto ?? '');
+            $concepto = $linea->concepto_ivacompras ?? null;
+            $tipo = (string) ($concepto?->tipoconcepto ?? '');
+            $codigo = (string) ($concepto?->codigo ?? '');
             $monto = (float) ($linea->monto ?? 0);
-            if (ComprobanteProveedorConceptoIvaTipos::esNeto($tipo)) {
-                $gravado += $monto;
-            } elseif (ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno($tipo)) {
+            if (ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno($tipo, $codigo)) {
                 $impuestoInterno += $monto;
+            } elseif (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)) {
+                $gravado += $monto;
             }
         }
 
@@ -67,15 +71,34 @@ final class ComprobanteProveedorImporteComparacionComSupport
             ];
         }
 
-        $incluyeIi = abs($impuestoInterno) > 0.005;
+        $incluyeIi = $incluirImpuestoInterno && abs($impuestoInterno) > 0.005;
 
         return [
-            'importe' => round($gravado + $impuestoInterno, 2),
+            'importe' => round($incluyeIi ? $gravado + $impuestoInterno : $gravado, 2),
             'tipo' => $incluyeIi ? 'gravado_mas_ii' : 'gravado',
             'etiqueta' => $incluyeIi
-                ? 'neto + impuesto interno (letra A)'
+                ? 'neto + impuesto interno (letra A, COM con II)'
                 : 'neto gravado (letra A)',
         ];
+    }
+
+    /**
+     * True si alguna recepción ya debitó impuesto interno en su asiento de provisión.
+     *
+     * @param  iterable<object{impuesto_interno?: mixed}|null>  $recepciones
+     */
+    public static function provisionIncluyeImpuestoInterno(iterable $recepciones): bool
+    {
+        foreach ($recepciones as $recepcion) {
+            if ($recepcion === null) {
+                continue;
+            }
+            if ((float) ($recepcion->impuesto_interno ?? 0) > 0.005) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

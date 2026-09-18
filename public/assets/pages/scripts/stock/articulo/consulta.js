@@ -21,15 +21,6 @@ function empresaIdConsultaArticulo() {
     return v > 0 ? String(v) : '';
 }
 
-function depositoIdConsultaArticulo() {
-    var $dep = $('#deposito_id');
-    if (!$dep.length) {
-        return '';
-    }
-    var v = parseInt(String($dep.val() || '0'), 10);
-    return v > 0 ? String(v) : '';
-}
-
 function consultaArticuloFiltrarDepositosUsuario() {
     if ($('#consultaarticuloModal').data('articuloFiltrarDepositosUsuario')) {
         return true;
@@ -52,10 +43,6 @@ function urlLeerArticuloPorSku(sku, queryExtra) {
     }
     if (consultaArticuloFiltrarDepositosUsuario()) {
         parts.push('filtrar_depositos_usuario=1');
-        var depositoId = depositoIdConsultaArticulo();
-        if (depositoId !== '') {
-            parts.push('deposito_id=' + encodeURIComponent(depositoId));
-        }
     }
     if (parts.length) {
         url += '?' + parts.join('&');
@@ -432,10 +419,6 @@ function buscar_datos_articulo(consulta) {
     }
     if (consultaArticuloFiltrarDepositosUsuario()) {
         postData.filtrar_depositos_usuario = 1;
-        var depositoIdConsulta = depositoIdConsultaArticulo();
-        if (depositoIdConsulta !== '') {
-            postData.deposito_id = depositoIdConsulta;
-        }
     }
     var empresaIdConsulta = empresaIdConsultaArticulo();
     if (empresaIdConsulta !== '') {

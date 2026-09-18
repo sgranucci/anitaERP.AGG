@@ -70,4 +70,27 @@ final class ApiAnitaParsearListaTest extends TestCase
         $this->assertNull(ApiAnita::mensajeRespuestaUnloadEnEscritura('1 row(s) inserted.'));
         $this->assertNull(ApiAnita::extraerMensajeError('1 row(s) inserted.'));
     }
+
+    public function test_warning_fopen_csv_es_error_lectura_reintentable(): void
+    {
+        $html = '<br />'."\n"
+            .'<b>Warning</b>:  fopen(/usr2/biyemas/shared/cmd_sql.17897565-list-25081.csv) '
+            .'[function.fopen]: failed to open stream: No such file or directory in '
+            .'/usr2/www/htdocs/apiERP.php on line 62<br />'."\n"
+            .'<b>Warning</b>:  fgets(): supplied argument is not a valid stream resource in '
+            .'/usr2/www/htdocs/apiERP.php on line 64<br />'."\n"
+            .'[]';
+
+        $parsed = ApiAnita::parsearRespuestaLista($html);
+        $this->assertSame([], $parsed['filas']);
+        $this->assertNotNull($parsed['error_lectura']);
+        $this->assertTrue(ApiAnita::esErrorCsvUnloadFaltante($parsed['error_lectura']));
+
+        $this->assertTrue(ApiAnita::esErrorCsvUnloadFaltante(
+            'UNLOAD no generó el archivo CSV (revisar permisos, ruta o SQL Informix).'
+        ));
+        $this->assertFalse(ApiAnita::esErrorCsvUnloadFaltante('timeout bridge'));
+        $this->assertFalse(ApiAnita::esErrorCsvUnloadFaltante(null));
+        $this->assertFalse(ApiAnita::esErrorCsvUnloadFaltante('[]'));
+    }
 }

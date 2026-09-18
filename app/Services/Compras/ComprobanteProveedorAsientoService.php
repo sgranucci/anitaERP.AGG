@@ -176,6 +176,7 @@ class ComprobanteProveedorAsientoService
     {
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras.impuestos',
+            'comprobante_proveedor_conceptos.concepto_ivacompras.concepto_ivacompra_empresas',
             'proveedores',
             'tipotransaccion_compras',
             'ordencompras.ordencompra_articulos.articulos.articulo_cuentacontables',
@@ -251,6 +252,13 @@ class ComprobanteProveedorAsientoService
             'diferencia'
         );
 
+        $comIncluyeIi = $usaProvisionCom
+            && ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno(
+                ($comprobante->comprobante_proveedor_recepciones ?? collect())->map(
+                    static fn ($vinculo) => $vinculo->recepcion_proveedores ?? null
+                )
+            );
+
         foreach ($comprobante->comprobante_proveedor_conceptos as $linea) {
             $concepto = $linea->concepto_ivacompras;
             $monto = round(abs((float) $linea->monto), 2);
@@ -259,11 +267,63 @@ class ComprobanteProveedorAsientoService
             }
 
             $tipoConcepto = (string) ($concepto?->tipoconcepto ?? '');
+            $codigoConcepto = (string) ($concepto?->codigo ?? '');
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
 
-            // Neto + II: la COM ya debitó el impuesto interno; acá solo se revierte FAR.
-            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom($tipoConcepto)) {
+            // Mercadería (y II solo si la COM ya lo provisionó) cierra FAR.
+            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom(
+                $tipoConcepto,
+                $codigoConcepto,
+                $comIncluyeIi
+            )) {
                 $totalNetoConceptos += $monto;
+
+                continue;
+            }
+
+            // II no provisionado en la COM (YAFEMA gastronomía): no cierra FAR.
+            // Cuenta del concepto si hay; si no, mismo destino que los artículos (MAT. PRIMA).
+            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
+                $empresaIdIi = (int) ($comprobante->empresa_id ?? 0);
+                $cuentaIi = (int) ($linea->cuentacontabledebe_id ?? 0);
+                if ($cuentaIi <= 0) {
+                    $cuentaIi = (int) ($concepto?->cuentacontableDebeIdParaEmpresa($empresaIdIi) ?? 0);
+                }
+                if ($cuentaIi > 0) {
+                    $lineasDebe[] = [
+                        'cuentacontable_id' => $cuentaIi,
+                        'importe' => $monto,
+                        'centrocosto_id' => $centrocostoId,
+                        'observacion' => $descLineaErp,
+                        'origen' => 'impuesto',
+                        'editable_cuenta' => false,
+                        'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
+                    ];
+                } else {
+                    $lineasIi = $this->lineasDebeDiferenciaArticulosProrrateada(
+                        $comprobante,
+                        $monto,
+                        $centrocostoId
+                    );
+                    if ($lineasIi === []) {
+                        throw new RuntimeException(
+                            'Falta cuenta contable DEBE para impuesto interno «'
+                            .($concepto?->nombre ?? $linea->concepto_ivacompra_id)
+                            .'» y no hay renglones de COM/OC para imputarlo.'
+                        );
+                    }
+                    foreach ($lineasIi as &$lineaIi) {
+                        $lineaIi['observacion'] = $descLineaErp;
+                        $lineaIi['origen'] = 'impuesto_interno';
+                        $lineaIi['editable_cuenta'] = false;
+                        $lineaIi['concepto_ivacompra_id'] = (int) ($linea->concepto_ivacompra_id ?? 0);
+                    }
+                    unset($lineaIi);
+                    $lineasDebe = array_merge($lineasDebe, $lineasIi);
+                }
 
                 continue;
             }
@@ -277,7 +337,10 @@ class ComprobanteProveedorAsientoService
 
             // Con OC asociada (NC/ND/FAC sin COM valuada): neto → cuentas de artículos de la OC
             // (o override del renglón si el usuario cambió la cuenta en la solapa Asiento).
-            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
                 $totalNetoConceptos += $monto;
                 $netoConceptosDetalle[] = [
                     'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
@@ -289,7 +352,10 @@ class ComprobanteProveedorAsientoService
             }
 
             // Contrato sin recepción: neto → cuenta del contrato (o override del renglón).
-            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
                 $cuentaManualId = OrdencompraContratoRutaFacturaSupport::cuentaDebeNetoManual(
                     $comprobante->ordencompras,
                     (int) ($linea->cuentacontabledebe_id ?? 0),
@@ -316,7 +382,10 @@ class ComprobanteProveedorAsientoService
             }
 
             // OC anticipada sin COM: neto → anticipo (Capex / sin Capex); impuestos siguen por concepto.
-            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
                 $lineasDebe[] = [
                     'cuentacontable_id' => $cuentaAnticipoId,
                     'importe' => $monto,
@@ -331,7 +400,10 @@ class ComprobanteProveedorAsientoService
             }
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
-            $esNetoSinReferencia = ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto);
+            $esNetoSinReferencia = ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            );
             // Sin OC/COM: cuenta del renglón o maestro; el neto se puede completar en la solapa asiento.
             $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
             if ($cuentaId <= 0) {
@@ -477,8 +549,11 @@ class ComprobanteProveedorAsientoService
                         .')'.$detalleYa
                         .' es del '.number_format($pct, 2, ',', '.')
                         .'%, mayor al '.number_format(ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA_PCT, 0)
-                        .'%. El comparable incluye impuesto interno (ya provisionado en la COM). '
-                        .'Revise precios o cantidades; no se puede imputar automáticamente.'
+                        .'%. El comparable es el gravado'
+                        .($comIncluyeIi
+                            ? ' más impuesto interno (la COM ya lo provisionó)'
+                            : ' (el impuesto interno no entra si la COM no lo provisionó)')
+                        .'. Revise precios o cantidades; no se puede imputar automáticamente.'
                     );
                 }
 

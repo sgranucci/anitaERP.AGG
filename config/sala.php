@@ -15,10 +15,18 @@ return [
 
     /**
      * Códigos depmae asignados automáticamente a usuarios con rol Tecnico-sala
-     * (por empresa del usuario). Restringe depósitos y artículos en requisición de sala.
+     * (por empresa del usuario). Restringe el depósito de cabecera (destino).
      *
      * @var list<string>
      */
     'tecnico_sala_depositos_codigos' => ['403', '404', '405', '406'],
+
+    /**
+     * Depósitos de entrega (origen) del catálogo de artículos en requisición de sala.
+     * Distintos de 403–406: esos son destino del técnico, no el almacén del SKU.
+     *
+     * @var list<string>
+     */
+    'requisicion_articulos_depositos_codigos' => ['4001', '4002', '4003', '4004', '4006', '4007', '406'],
 
 ];

@@ -30,6 +30,7 @@ $(function () {
 
     var TIPOS_NETO = ['N', 'G', 'E'];
     var TIPO_IMPUESTO_INTERNO = 'T';
+    var CODIGOS_IMPUESTO_INTERNO = ['5', '510'];
 
     function parseMonto(val) {
         if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.parseDecimal === 'function') {
@@ -251,19 +252,36 @@ $(function () {
      * La columna Cuenta DEBE solo se muestra si el renglón no está cubierto por COM
      * ni por otra regla con cuenta ya resuelta (maestro, contrato, artículos OC).
      */
-    function esImpuestoInterno(tipoConcepto) {
-        return String(tipoConcepto || '').toUpperCase() === TIPO_IMPUESTO_INTERNO;
+    function esImpuestoInterno(tipoConcepto, codigo) {
+        if (String(tipoConcepto || '').toUpperCase() === TIPO_IMPUESTO_INTERNO) {
+            return true;
+        }
+        var cod = String(codigo || '').trim();
+        return cod !== '' && CODIGOS_IMPUESTO_INTERNO.indexOf(cod) >= 0;
     }
 
-    function revierteProvisionCom(tipoConcepto) {
+    function comSeleccionadasIncluyenIi() {
+        var incluye = false;
+        $('.cp-com-check:checked').each(function () {
+            if (String($(this).closest('.cp-com-fila').attr('data-incluye-ii') || '') === '1') {
+                incluye = true;
+            }
+        });
+        return incluye;
+    }
+
+    function revierteProvisionCom(tipoConcepto, codigo) {
+        if (esImpuestoInterno(tipoConcepto, codigo)) {
+            return comSeleccionadasIncluyenIi();
+        }
         var tipo = String(tipoConcepto || '').toUpperCase();
-        return TIPOS_NETO.indexOf(tipo) >= 0 || esImpuestoInterno(tipo);
+        return TIPOS_NETO.indexOf(tipo) >= 0;
     }
 
-    function reglaCubreCuentaDebeSinEditor(tipoConcepto) {
+    function reglaCubreCuentaDebeSinEditor(tipoConcepto, codigo) {
         var tipo = String(tipoConcepto || '');
-        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0;
-        if (esModoAsignaRecepcion() && revierteProvisionCom(tipo)) {
+        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0 && !esImpuestoInterno(tipo, codigo);
+        if (esModoAsignaRecepcion() && revierteProvisionCom(tipo, codigo)) {
             return true;
         }
         // OC asociada: neto → cuentas de artículos (igual FAC diferencia / contrato).
@@ -280,9 +298,10 @@ $(function () {
         }
         var meta = conceptosMeta[conceptoId] || {};
         var tipo = String(meta.tipoconcepto || '');
-        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0;
+        var codigo = String(meta.codigo || '');
+        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0 && !esImpuestoInterno(tipo, codigo);
 
-        if (reglaCubreCuentaDebeSinEditor(tipo)) {
+        if (reglaCubreCuentaDebeSinEditor(tipo, codigo)) {
             return { id: -1, codigo: '', nombre: '', via: 'regla' };
         }
 
@@ -309,10 +328,11 @@ $(function () {
         }
         var meta = conceptosMeta[conceptoId] || {};
         var tipo = String(meta.tipoconcepto || '');
-        if (reglaCubreCuentaDebeSinEditor(tipo)) {
+        var codigo = String(meta.codigo || '');
+        if (reglaCubreCuentaDebeSinEditor(tipo, codigo)) {
             return false;
         }
-        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0;
+        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0 && !esImpuestoInterno(tipo, codigo);
         // Neto sin OC/COM: la cuenta se elige en la solapa Asiento contable.
         if (esNeto && !contratoImputacionManual()) {
             return false;
@@ -380,9 +400,10 @@ $(function () {
         var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
         var meta = conceptosMeta[conceptoId] || {};
         var tipo = String(meta.tipoconcepto || '');
+        var codigo = String(meta.codigo || '');
         // Neto cubierto por OC/COM: no precargar la cuenta del maestro (sale de artículos OC;
         // el override solo se setea desde la solapa Asiento contable).
-        if (conceptoId > 0 && reglaCubreCuentaDebeSinEditor(tipo)) {
+        if (conceptoId > 0 && reglaCubreCuentaDebeSinEditor(tipo, codigo)) {
             if (forzar) {
                 setCuentaDebeEnFila($row, { id: 0, codigo: '', nombre: '' });
             } else {
@@ -1245,11 +1266,13 @@ $(function () {
             }
             hayLineas = true;
             total += monto;
-            var tip = String((conceptosMeta[conceptoId] || {}).tipoconcepto || '').toUpperCase();
-            if (TIPOS_NETO.indexOf(tip) >= 0) {
-                gravado += monto;
-            } else if (esImpuestoInterno(tip)) {
+            var meta = conceptosMeta[conceptoId] || {};
+            var tip = String(meta.tipoconcepto || '').toUpperCase();
+            var codigo = String(meta.codigo || '');
+            if (esImpuestoInterno(tip, codigo)) {
                 impuestoInterno += monto;
+            } else if (TIPOS_NETO.indexOf(tip) >= 0) {
+                gravado += monto;
             }
         });
         if (!hayLineas) {
@@ -1267,7 +1290,10 @@ $(function () {
         if (gravado <= 0) {
             return Math.round(total * 100) / 100;
         }
-        return Math.round((gravado + impuestoInterno) * 100) / 100;
+        if (comSeleccionadasIncluyenIi()) {
+            return Math.round((gravado + impuestoInterno) * 100) / 100;
+        }
+        return Math.round(gravado * 100) / 100;
     }
 
     function actualizarUiRecepcionesCom() {
@@ -1779,6 +1805,7 @@ $(function () {
 
     $(document).on('change', '#cp-bloque-recepciones-com input[type=checkbox]', function () {
         actualizarUiRecepcionesCom();
+        actualizarColumnaCuentaDebe();
         programarPreviewAsiento();
     });
 
