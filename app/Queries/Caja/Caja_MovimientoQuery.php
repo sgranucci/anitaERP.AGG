@@ -80,7 +80,7 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
                                 ->join('tipotransaccion_caja', 'tipotransaccion_caja.id', '=', 'caja_movimiento.tipotransaccion_caja_id')
                                 ->join('empresa', 'empresa.id', '=', 'caja_movimiento.empresa_id')
                                 ->leftjoin('conceptogasto', 'conceptogasto.id', '=', 'caja_movimiento.conceptogasto_id')
-                                ->with('caja_movimiento_cuentacajas');
+                                ->with(['caja_movimiento_cuentacajas', 'cheques']);
 
         if ($caja_id > 0) {
             $caja_movimientos->where('caja_movimiento.caja_id', $caja_id);

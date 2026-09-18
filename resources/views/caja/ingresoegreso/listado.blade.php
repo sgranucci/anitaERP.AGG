@@ -51,19 +51,14 @@
                     <td>{{ $data->ordenservicio_id }}</td>
                 @endif
                 <td>
-                    @php $totalIngreso = 0; $totalEgreso = 0; @endphp
-                    @foreach ($data->caja_movimiento_cuentacajas as $movimiento)
-                        @php
-                            $coef = ($movimiento->moneda_id > 1) ? $movimiento->cotizacion : 1.;
-                            $totalIngreso += ($movimiento->monto > 0 ? $movimiento->monto * $coef : 0);
-                            $totalEgreso += ($movimiento->monto < 0 ? abs($movimiento->monto * $coef) : 0);
-                        @endphp
-                    @endforeach
-                    {{ number_format($totalIngreso != 0 ? $totalIngreso : $totalEgreso, 2, ',', '.') }}
+                    @php
+                        $ieMonto = \App\Support\Caja\IngresoEgresoListadoMontoSupport::resumen($data);
+                    @endphp
+                    {{ number_format($ieMonto['monto'], 2, ',', '.') }}
                 </td>
                 <td>
-                    @foreach ($data->caja_movimiento_cuentacajas as $movimiento)
-                        {{ $movimiento->cuentacajas->nombre ?? '' }} {{ number_format((float) $movimiento->monto, 2, ',', '.') }}
+                    @foreach ($ieMonto['lineas'] as $lineaMov)
+                        {{ $lineaMov }}
                         @if (! $loop->last)
                             <br>
                         @endif

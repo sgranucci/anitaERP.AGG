@@ -95,9 +95,15 @@
                         texto += ' Anulación N° ' + respuesta.resultado.numerotransaccion + '.';
                     }
                     // Evitar toast amarillo/verde que “cuelga” mientras recarga: el overlay ya informa.
+                    // Anular físico borra el movimiento: no recargar editar (queda 404).
                     mostrarProcesando('Listo', texto + ' Actualizando el listado…');
                     window.setTimeout(function () {
-                        window.location.reload();
+                        var destino = $form.attr('data-redirect');
+                        if (destino) {
+                            window.location.href = destino;
+                        } else {
+                            window.location.reload();
+                        }
                     }, 400);
                     return;
                 }

@@ -1,4 +1,5 @@
 @php
+    use App\Support\Caja\IngresoEgresoListadoMontoSupport;
     use App\Support\Configuracion\EmpresaLogoArchivo;
 
     $esExcel = ! empty($esExcel);
@@ -118,21 +119,14 @@
                 @endif
                 <td class="num">
                     @php
-                        $totalIngreso = 0;
-                        $totalEgreso = 0;
-                        foreach ($data->caja_movimiento_cuentacajas as $movimiento) {
-                            $coef = $movimiento->moneda_id > 1 ? $movimiento->cotizacion : 1.0;
-                            $totalIngreso += ($movimiento->monto > 0 ? $movimiento->monto * $coef : 0);
-                            $totalEgreso += ($movimiento->monto < 0 ? abs($movimiento->monto * $coef) : 0);
-                        }
-                        $montoFila = $totalIngreso != 0 ? $totalIngreso : $totalEgreso;
+                        $ieMonto = IngresoEgresoListadoMontoSupport::resumen($data);
                     @endphp
-                    {{ $fmtMonto($montoFila) }}
+                    {{ $fmtMonto($ieMonto['monto']) }}
                 </td>
                 <td>
                     <ul>
-                        @foreach ($data->caja_movimiento_cuentacajas as $movimiento)
-                            <li>{{ $movimiento->cuentacajas->nombre }} {{ $movimiento->monto != 0 ? $fmtTexto($movimiento->monto) : '' }}</li>
+                        @foreach ($ieMonto['lineas'] as $lineaMov)
+                            <li>{{ $lineaMov }}</li>
                         @endforeach
                     </ul>
                 </td>

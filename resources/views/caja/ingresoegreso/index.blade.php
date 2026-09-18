@@ -7,11 +7,12 @@
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/filtro.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @php
     use App\Support\Caja\IngresoEgresoListadoFiltros;
+    use App\Support\Caja\IngresoEgresoListadoMontoSupport;
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route('ingresoegreso', IngresoEgresoListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
 @endphp
@@ -111,23 +112,15 @@
                                 <td>{{ $data->ordenservicio_id }}</td>
                             @endif
                             <td class="text-right">
-                                @php $totalIngreso = 0; $totalEgreso = 0; @endphp
-                                @foreach ($data->caja_movimiento_cuentacajas as $movimiento)
-                                    @php
-                                        $coef = ($movimiento->moneda_id > 1) ? $movimiento->cotizacion : 1.;
-                                        $totalIngreso += ($movimiento->monto > 0 ? $movimiento->monto * $coef : 0);
-                                        $totalEgreso += ($movimiento->monto < 0 ? abs($movimiento->monto * $coef) : 0);
-                                    @endphp
-                                @endforeach
-                                {{ number_format($totalIngreso != 0 ? $totalIngreso : $totalEgreso, 2, ',', '.') }}
+                                @php
+                                    $ieMonto = IngresoEgresoListadoMontoSupport::resumen($data);
+                                @endphp
+                                {{ number_format($ieMonto['monto'], 2, ',', '.') }}
                             </td>
                             <td>
                                 <ul class="mb-0 pl-3 small">
-                                @foreach ($data->caja_movimiento_cuentacajas as $movimiento)
-                                    <li>
-                                        {{ $movimiento->cuentacajas->nombre ?? '' }}
-                                        {{ number_format((float) $movimiento->monto, 2, ',', '.') }}
-                                    </li>
+                                @foreach ($ieMonto['lineas'] as $lineaMov)
+                                    <li>{{ $lineaMov }}</li>
                                 @endforeach
                                 </ul>
                             </td>

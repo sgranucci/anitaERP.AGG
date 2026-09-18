@@ -19,7 +19,7 @@
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/cheques.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/cheques.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/conceptos_ivacompra_coherencia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/comprobantes_ivacompra.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     var urlConsultaProveedor = "{{ route('editar_proveedor', ':id') }}";
     var ingresoEgresoChequeDiferidosHabilitado = @json((bool) config('caja.cheque_propio_imputacion_diferidos_habilitado'));
@@ -98,7 +98,8 @@
                         && empty($data->caja_movimiento_revertido_por_id)
                     )
                     <form action="{{ route('anular_fisicamente_ingresoegreso', $data->id) }}"
-                          class="d-inline form-anular-fisico-ie" method="POST">
+                          class="d-inline form-anular-fisico-ie" method="POST"
+                          data-redirect="{{ $volverUrl }}">
                         @csrf
                         <button type="submit" class="btn btn-outline-danger btn-sm" title="Anular físicamente">
                             <i class="fa fa-ban"></i> Anular físico
