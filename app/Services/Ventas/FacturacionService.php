@@ -7748,7 +7748,7 @@ class FacturacionService
 					}
 				}
 
-				// Agrega total de logistica
+				// Agrega total de logistica y de abasto (El Bierzo).
 				if (strtoupper(config('app.empresa')) == 'EL BIERZO')
 				{
 					if (strpos($conc['concepto'], 'Logistica') !== false)
@@ -7760,6 +7760,16 @@ class FacturacionService
 						$cuenta = 0;
 						if ($cuentacontable)
 							$cuenta = $cuentacontable->id;
+					}
+
+					if (str_contains((string) $conc['concepto'], 'Abasto'))
+					{
+						$codigoAbasto = (string) config('facturacion.CUENTACONTABLE_ABASTO', '302080000');
+						$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigoAbasto);
+						if (! $cuentacontable) {
+							throw new Exception('Falta la cuenta contable de abasto ('.$codigoAbasto.') para esta empresa.');
+						}
+						$cuenta = $cuentacontable->id;
 					}
 				}
 

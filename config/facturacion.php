@@ -62,6 +62,8 @@ switch(strtoupper(config('app.empresa')))
             "CUENTACONTABLE_IVA" => '211170000',
             "CUENTACONTABLE_VENTA" => '301100000',
             "CUENTACONTABLE_LOGISTICA" => '301100000',
+            // Abasto El Bierzo (a-comprob / ARCA tributo 99). Haber; contrapartida deudores.
+            "CUENTACONTABLE_ABASTO" => '302080000',
             "IMPUESTO_LOGISTICA_ID" => 3, // Asume que logistica es al 21%
             "USA_DETRACCION" => 'N',
             "PUNTOVENTA_DIVISION_ID" => 5,
