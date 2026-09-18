@@ -60,7 +60,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{ route('grabar_cumplir_requisicion_sala') }}" method="POST" id="form-cumple-requisicion-sala" autocomplete="off">
+            <form action="{{ route('grabar_cumplir_requisicion_sala') }}" method="POST" id="form-cumple-requisicion-sala" autocomplete="off" novalidate>
                 @csrf
                 <input type="hidden" name="requisicion_sala_id" id="requisicion_sala_id" value="{{ old('requisicion_sala_id', $requisicion->id ?? '') }}">
                 <input type="hidden" id="requisicion_empresa_id" value="{{ $requisicion->empresa_id ?? '' }}">
@@ -308,7 +308,7 @@
                 </div>
 
                 <div class="card-footer">
-                    <button type="submit" class="btn btn-primary" id="btn-grabar-cumple" {{ $requisicion ? '' : 'disabled' }}>
+                    <button type="button" class="btn btn-primary" id="btn-grabar-cumple" {{ $requisicion ? '' : 'disabled' }}>
                         <i class="fa fa-save"></i> Grabar cumplimiento
                     </button>
                 </div>

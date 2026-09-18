@@ -29,15 +29,35 @@ use Illuminate\Support\Facades\Log;
  */
 class ArcaCaeaPresentacionService
 {
+    /** @var array<int, list<array<string, mixed>>> */
+    private array $ultimosArcaHermanosMemo = [];
+
     public function __construct(
         private FacturaelectronicaService $facturaelectronicaService,
         private ArcaCaeaQuincenalOrquestadorService $orquestador,
     ) {}
 
     /**
+     * Recuento en vivo para la pantalla CAEA. No persiste ni consulta SOAP ARCA.
+     * El último autorizado se reusa del máximo ya conocido (esta u otras quincenas).
+     *
      * @return array<string, mixed>
      */
-    public function resumirPeriodo(ArcaCaea $registro, ?array $ultimosArca = null): array
+    public function resumirPeriodoParaPantalla(ArcaCaea $registro, bool $incluirAnita = false): array
+    {
+        $prev = is_array($registro->informe_resumen) ? $registro->informe_resumen : [];
+        $ultimos = $this->ultimosArcaLocalEnriquecidos(
+            (int) $registro->empresa_id,
+            is_array($prev['ultimos_arca'] ?? null) ? $prev['ultimos_arca'] : [],
+        );
+
+        return $this->resumirPeriodo($registro, $ultimos, $incluirAnita);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function resumirPeriodo(ArcaCaea $registro, ?array $ultimosArca = null, bool $incluirAnita = true): array
     {
         $registro->loadMissing('empresa');
         $empresaId = (int) $registro->empresa_id;
@@ -51,13 +71,15 @@ class ArcaCaeaPresentacionService
         $error = (clone $query)->where('venta.caea_informado_estado', 'error')->count();
         $pendientes = (clone $query)->whereNull('venta.caea_informado_estado')->count();
 
-        $anita = $this->resumenAnitaIvaVentasPeriodo($registro, $ultimosArca ?? []);
-        $total += $anita['total'];
-        $ok += $anita['informados_ok'];
-        $pendientes += $anita['pendientes'];
+        if ($incluirAnita) {
+            $anita = $this->resumenAnitaIvaVentasPeriodo($registro, $ultimosArca ?? []);
+            $total += $anita['total'];
+            $ok += $anita['informados_ok'];
+            $pendientes += $anita['pendientes'];
+        }
 
-        $porTipo = $this->ultimosPorTipoPv($registro, $ultimosArca);
-        $cola = $this->analizarColaInformeArca($registro, $ultimosArca ?? []);
+        $porTipo = $this->ultimosPorTipoPv($registro, $ultimosArca, $incluirAnita);
+        $cola = $this->analizarColaInformeArca($registro, $ultimosArca ?? [], $incluirAnita);
 
         return [
             'total' => $total,
@@ -85,7 +107,7 @@ class ArcaCaeaPresentacionService
      *   cola_informe: list<array<string, mixed>>
      * }
      */
-    private function analizarColaInformeArca(ArcaCaea $registro, array $ultimosArca): array
+    private function analizarColaInformeArca(ArcaCaea $registro, array $ultimosArca, bool $incluirAnita = true): array
     {
         if ($ultimosArca === []) {
             return ['informables_ahora' => 0, 'bloqueados_hueco' => 0, 'cola_informe' => []];
@@ -173,7 +195,9 @@ class ArcaCaeaPresentacionService
             }
         }
 
-        $this->analizarColaInformeAnita($registro, $ultimosMap, $colaPorGrupo, $informables, $bloqueados);
+        if ($incluirAnita) {
+            $this->analizarColaInformeAnita($registro, $ultimosMap, $colaPorGrupo, $informables, $bloqueados);
+        }
 
         // No rellenar la cola con PV/tipos de otras quincenas de la empresa:
         // en el index solo interesa qué falta informar de ESTA quincena.
@@ -1075,7 +1099,6 @@ class ArcaCaeaPresentacionService
                 // de esta quincena si otra quincena de la empresa ya consultó uno mayor.
                 'ultimos_arca' => $this->ultimosArcaLocalEnriquecidos(
                     (int) $registro->empresa_id,
-                    (int) $registro->id,
                     is_array($prev['ultimos_arca'] ?? null) ? $prev['ultimos_arca'] : [],
                 ),
                 'errores_consulta' => is_array($prev['errores_consulta_arca'] ?? null) ? $prev['errores_consulta_arca'] : [],
@@ -1186,7 +1209,7 @@ class ArcaCaeaPresentacionService
      * @param  list<array<string, mixed>>|null  $ultimosArca
      * @return list<array<string, mixed>>
      */
-    private function ultimosPorTipoPv(ArcaCaea $registro, ?array $ultimosArca = null): array
+    private function ultimosPorTipoPv(ArcaCaea $registro, ?array $ultimosArca = null, bool $incluirAnita = true): array
     {
         $fechas = CaeaQuincenaSupport::fechasQuincena((int) $registro->periodo, (int) $registro->orden);
         $nroCaea = trim((string) ($registro->nro_caea ?? ''));
@@ -1202,7 +1225,7 @@ class ArcaCaeaPresentacionService
 
         // Solo PV/tipos con comprobantes de esta quincena (no relleno con mapa empresa).
         $clavesPeriodo = [];
-        foreach ($this->listarCombinacionesTipoPv($registro) as $combo) {
+        foreach ($this->listarCombinacionesTipoPv($registro, $incluirAnita) as $combo) {
             $clave = $this->claveGrupoInforme((int) $combo['pto_vta'], (int) $combo['tipo_afip']);
             $clavesPeriodo[$clave] = $combo;
         }
@@ -1351,7 +1374,7 @@ class ArcaCaeaPresentacionService
     /**
      * @return list<array<string, mixed>>
      */
-    private function listarCombinacionesTipoPv(ArcaCaea $registro): array
+    private function listarCombinacionesTipoPv(ArcaCaea $registro, bool $incluirAnita = true): array
     {
         $fechas = CaeaQuincenaSupport::fechasQuincena((int) $registro->periodo, (int) $registro->orden);
         $nroCaea = trim((string) ($registro->nro_caea ?? ''));
@@ -1380,7 +1403,12 @@ class ArcaCaeaPresentacionService
             ->orderBy('puntoventa.codigo');
         $this->aplicarFiltroSucursalesInforme($query, (int) $registro->empresa_id);
 
-        return $this->fusionarCombinacionesAnita($registro, $this->mapearCombinacionesTipoPv($query->get()));
+        $combos = $this->mapearCombinacionesTipoPv($query->get());
+        if (! $incluirAnita) {
+            return $combos;
+        }
+
+        return $this->fusionarCombinacionesAnita($registro, $combos);
     }
 
     /**
@@ -1428,7 +1456,7 @@ class ArcaCaeaPresentacionService
      * @param  list<array<string, mixed>>  $ultimosLocales
      * @return list<array<string, mixed>>
      */
-    private function ultimosArcaLocalEnriquecidos(int $empresaId, int $registroIdActual, array $ultimosLocales): array
+    private function ultimosArcaLocalEnriquecidos(int $empresaId, array $ultimosLocales): array
     {
         /** @var array<string, array<string, mixed>> $porClave */
         $porClave = [];
@@ -1444,9 +1472,35 @@ class ArcaCaeaPresentacionService
             $porClave[$this->claveGrupoInforme($pto, $tipo)] = $ua;
         }
 
+        foreach ($this->ultimosArcaHermanosEmpresa($empresaId) as $ua) {
+            $pto = (int) ($ua['pto_vta'] ?? 0);
+            $tipo = (int) ($ua['tipo_afip'] ?? 0);
+            if ($pto <= 0 || $tipo <= 0) {
+                continue;
+            }
+            $clave = $this->claveGrupoInforme($pto, $tipo);
+            $candidato = (int) ($ua['ultimo_arca'] ?? 0);
+            $actual = (int) ($porClave[$clave]['ultimo_arca'] ?? -1);
+            if ($candidato > $actual) {
+                $porClave[$clave] = $ua;
+            }
+        }
+
+        return array_values($porClave);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function ultimosArcaHermanosEmpresa(int $empresaId): array
+    {
+        if (array_key_exists($empresaId, $this->ultimosArcaHermanosMemo)) {
+            return $this->ultimosArcaHermanosMemo[$empresaId];
+        }
+
+        $out = [];
         $hermanos = ArcaCaea::query()
             ->where('empresa_id', $empresaId)
-            ->where('id', '!=', $registroIdActual)
             ->whereNotNull('informe_resumen')
             ->get(['id', 'informe_resumen']);
 
@@ -1456,24 +1510,15 @@ class ArcaCaeaPresentacionService
                 continue;
             }
             foreach ($resumen['ultimos_arca'] ?? [] as $ua) {
-                if (! is_array($ua)) {
-                    continue;
-                }
-                $pto = (int) ($ua['pto_vta'] ?? 0);
-                $tipo = (int) ($ua['tipo_afip'] ?? 0);
-                if ($pto <= 0 || $tipo <= 0) {
-                    continue;
-                }
-                $clave = $this->claveGrupoInforme($pto, $tipo);
-                $candidato = (int) ($ua['ultimo_arca'] ?? 0);
-                $actual = (int) ($porClave[$clave]['ultimo_arca'] ?? -1);
-                if ($candidato > $actual) {
-                    $porClave[$clave] = $ua;
+                if (is_array($ua)) {
+                    $out[] = $ua;
                 }
             }
         }
 
-        return array_values($porClave);
+        $this->ultimosArcaHermanosMemo[$empresaId] = $out;
+
+        return $out;
     }
 
     /**

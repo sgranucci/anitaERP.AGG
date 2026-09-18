@@ -29,17 +29,18 @@
             <div class="card-body">
                 <p class="text-muted small mb-3">
                     <i class="fa fa-info-circle"></i>
+                    Al entrar, los contadores se leen en vivo desde las facturas del ERP (el cierre Waitry suma comprobantes todos los días).
                     El ícono <i class="fa fa-paper-plane text-primary"></i> encola la presentación de comprobantes pendientes o con error en ARCA (segundo plano).
                     @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
-                        Incluye las facturas de Anita (bridge) de la sucursal 5 de Bierzo; Villafranca no se informa.
+                        Al presentar también se incluyen las facturas de Anita (bridge) de la sucursal 5 de Bierzo; Villafranca no se informa.
                     @else
-                        Incluye también los comprobantes CAEA que viven en Anita (bridge) y no están en el ERP.
+                        Al presentar también se incluyen los comprobantes CAEA que viven en Anita (bridge) y no están en el ERP.
                     @endif
                     El avión azul <strong>no arranca solo</strong>: hay que hacer click (y confirmar) para encolar.
                     Solo está activo cuando falta informar comprobantes de la quincena y no hay otro proceso de esa quincena en cola.
                     Mientras corre, el avión se deshabilita y verás <i class="fa fa-spinner fa-spin text-warning"></i>.
                     Al terminar el proceso recibirás un mail con el resultado.
-                    Use <i class="fa fa-calculator text-secondary"></i> para refrescar contadores consultando ARCA sin enviar comprobantes.
+                    Use <i class="fa fa-calculator text-secondary"></i> solo para consultar el último autorizado en ARCA (no hace falta para ver las facturas nuevas).
                     En el detalle (ojo) hay una herramienta para presentar un comprobante suelto (ERP o Anita), útil para FCE.
                 </p>
                 <form method="get" action="{{ route('arca_caea') }}" class="d-flex flex-wrap align-items-end mb-3">
@@ -137,7 +138,7 @@
                             @forelse ($registros as $r)
                                 @php
                                     $meta = $filasMeta[$r->id] ?? null;
-                                    $resInf = is_array($meta['resumen'] ?? null) ? $meta['resumen'] : (is_array($r->informe_resumen) ? $r->informe_resumen : []);
+                                    $resInf = is_array($meta['resumen'] ?? null) ? $meta['resumen'] : [];
                                     $badge = $meta['badge'] ?? ($r->informe_estado ?? 'pendiente');
                                     $leyenda = $meta['leyenda'] ?? '';
                                     $puedePresentar = (bool) ($meta['puede_presentar'] ?? false);

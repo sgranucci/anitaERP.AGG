@@ -16,9 +16,9 @@ use Illuminate\Support\Facades\Log;
 final class RequisicionSalaNpuTransferenciaSupport
 {
     /**
-     * @param  list<array{articulo_id: int, cantidad: float, numeroparte?: string}>  $lineas
+     * @param  list<array{articulo_id: int, cantidad?: float, numeroparte?: string}>  $lineas
      */
-    public static function asegurarRegistrados(array $lineas): void
+    public static function asegurarRegistrados(array $lineas, bool $sincronizarAnita = true): void
     {
         $service = app(ArticuloParteUnicaService::class);
 
@@ -53,10 +53,11 @@ final class RequisicionSalaNpuTransferenciaSupport
                 continue;
             }
 
-            $service->crear($articuloId, $npu);
-            Log::info('RequisicionSala: NPU registrado al transferir a laboratorio (sin movimiento NPUAL)', [
+            $service->crear($articuloId, $npu, $sincronizarAnita);
+            Log::info('RequisicionSala: NPU dado de alta (no estaba en ERP)', [
                 'articulo_id' => $articuloId,
                 'numeroparte' => $npu,
+                'sincronizar_anita' => $sincronizarAnita,
             ]);
         }
     }

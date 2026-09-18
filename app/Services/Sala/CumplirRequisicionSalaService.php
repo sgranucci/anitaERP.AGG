@@ -17,6 +17,7 @@ use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoParcialTrait;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoTrait;
 use App\Support\Sala\RequisicionSalaDepositoLaboratorioSupport;
+use App\Support\Sala\RequisicionSalaNpuTransferenciaSupport;
 use App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use Auth;
@@ -634,19 +635,33 @@ class CumplirRequisicionSalaService
         }
 
         $npu = trim((string) ($fila['numeroparte'] ?? $linea->numeroparte ?? ''));
-        // 0 / 0000 es placeholder (Anita / líneas sin parte única), no un NPU real.
-        if ($npu === '' || (ctype_digit($npu) && (int) $npu <= 0)) {
+        $npuVacio = $npu === '' || (ctype_digit($npu) && (int) $npu <= 0);
+        $articulo = $linea->articulos;
+        $articuloId = (int) $linea->articulo_id;
+        $articuloManejaNpu = RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo);
+
+        if ($npuVacio) {
+            if ($articuloManejaNpu && $entrega > 0) {
+                throw new \RuntimeException(
+                    'El artículo '.($articulo?->sku ?? '').' lleva número de parte única: indique el NPU para cumplir.'
+                );
+            }
+
             return null;
         }
         if (strlen($npu) > 50) {
             throw new \RuntimeException('El NPU no puede superar 50 caracteres.');
         }
 
-        $articulo = $linea->articulos;
-        $articuloId = (int) $linea->articulo_id;
-        $articuloManejaNpu = RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo);
-
         if ($articuloManejaNpu && $articuloId > 0) {
+            // Si la req. ya trae NPU (Recpunica/Anita) y no está en ERP, se da de alta
+            // igual que al transferir a laboratorio: articulo_parte_unica + stk_parte_unica.
+            RequisicionSalaNpuTransferenciaSupport::asegurarRegistrados([
+                [
+                    'articulo_id' => $articuloId,
+                    'numeroparte' => $npu,
+                ],
+            ]);
             ArticuloParteUnicaDisponibilidadSupport::assertActivaParaUso($npu, $articuloId);
         } elseif ($articuloManejaNpu && ArticuloParteUnicaDisponibilidadSupport::estaDadaDeBaja($npu)) {
             throw new \RuntimeException('El NPU '.$npu.' fue dado de baja y no puede utilizarse.');

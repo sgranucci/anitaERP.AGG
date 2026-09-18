@@ -62,58 +62,21 @@ class ArcaCaeaController extends Controller
 
         $registros = $query->paginate(30)->appends($this->filtrosIndexParaQuery($filtrosIndex));
 
+        if ($forzarSyncArca) {
+            $porEmpresaSync = [];
+            foreach ($registros as $registro) {
+                if ($registro->estaAutorizado()) {
+                    $porEmpresaSync[(int) $registro->empresa_id][] = $registro;
+                }
+            }
+            foreach ($porEmpresaSync as $regsEmpresa) {
+                $this->presentacionService->actualizarResumenesEmpresa($regsEmpresa, null, true);
+            }
+        }
+
         $filasMeta = [];
-        /** @var array<int, list<ArcaCaea>> $porEmpresaSync */
-        $porEmpresaSync = [];
         foreach ($registros as $registro) {
-            if (! $registro->estaAutorizado()) {
-                continue;
-            }
-            $resumen = is_array($registro->informe_resumen) ? $registro->informe_resumen : null;
-            if ($forzarSyncArca && ($resumen === null || $this->periodoNecesitaSyncArca($resumen ?? []))) {
-                // Solo la calculadora / post-informe: consultar ARCA.
-                $porEmpresaSync[(int) $registro->empresa_id][] = $registro;
-            }
-        }
-
-        /** @var array<int, array<string, mixed>> $resumenesSync */
-        $resumenesSync = [];
-        foreach ($porEmpresaSync as $regsEmpresa) {
-            foreach ($this->presentacionService->actualizarResumenesEmpresa($regsEmpresa, null, true) as $id => $resumen) {
-                $resumenesSync[(int) $id] = $resumen;
-            }
-        }
-
-        foreach ($registros as $registro) {
-            if (! $registro->estaAutorizado()) {
-                continue;
-            }
-            $registro->loadMissing('empresa');
-            $resumen = $resumenesSync[(int) $registro->id]
-                ?? (is_array($registro->informe_resumen) ? $registro->informe_resumen : null);
-            if ($resumen === null) {
-                $resumen = [];
-            }
-            $procesoActivo = ArcaCaeaInformeColaSupport::estaActivo((int) $registro->id);
-            $progresoActivo = $procesoActivo
-                ? ArcaCaeaInformeColaSupport::progreso((int) $registro->id)
-                : null;
-            $puedePresentar = ! $procesoActivo
-                && ArcaCaeaInformeUiSupport::puedePresentarAhora($resumen);
-            $leyenda = $procesoActivo
-                ? ArcaCaeaInformeColaSupport::leyendaProcesoActivo($progresoActivo)
-                : ArcaCaeaInformeUiSupport::leyendaFaltante($resumen);
-            $filasMeta[$registro->id] = [
-                'resumen' => $resumen,
-                'proceso_activo' => $procesoActivo,
-                'progreso' => $progresoActivo,
-                'puede_presentar' => $puedePresentar,
-                'leyenda' => $leyenda,
-                'titulo_overlay' => ArcaCaeaInformeUiSupport::tituloProcesando($registro),
-                'badge' => $procesoActivo
-                    ? 'procesando'
-                    : ArcaCaeaInformeUiSupport::badgeInformeEstado($registro->informe_estado, $resumen),
-            ];
+            $filasMeta[$registro->id] = $this->metaPantalla($registro);
         }
 
         $empresas = $user->usuario_empresas->sortBy('nombre');
@@ -149,23 +112,16 @@ class ArcaCaeaController extends Controller
             && $this->anitaSync->estaHabilitado()
             && $registro->estaAutorizado();
         $puedeInformar = can('informar-arca-caea', false) && $registro->estaAutorizado();
-        $resumenInforme = is_array($registro->informe_resumen) ? $registro->informe_resumen : [];
+        $meta = $this->metaPantalla($registro, true);
+        $resumenInforme = is_array($meta['resumen'] ?? null) ? $meta['resumen'] : [];
         $erroresInforme = [];
         if ($registro->estaAutorizado()) {
-            // Modal: pintar con resumen persistido (el recálculo local pega Anita y cuelga la UI).
             $erroresInforme = $this->presentacionService->listarErroresInforme($registro, 30);
         }
-        $leyendaInforme = ArcaCaeaInformeUiSupport::leyendaFaltante(is_array($resumenInforme) ? $resumenInforme : null);
-        $procesoActivo = $registro->estaAutorizado()
-            && ArcaCaeaInformeColaSupport::estaActivo((int) $registro->id);
-        $progresoActivo = $procesoActivo
-            ? ArcaCaeaInformeColaSupport::progreso((int) $registro->id)
-            : null;
-        if ($procesoActivo) {
-            $leyendaInforme = ArcaCaeaInformeColaSupport::leyendaProcesoActivo($progresoActivo);
-        }
-        $puedePresentar = ! $procesoActivo
-            && ArcaCaeaInformeUiSupport::puedePresentarAhora(is_array($resumenInforme) ? $resumenInforme : null);
+        $leyendaInforme = (string) ($meta['leyenda'] ?? '');
+        $procesoActivo = (bool) ($meta['proceso_activo'] ?? false);
+        $progresoActivo = $meta['progreso'] ?? null;
+        $puedePresentar = (bool) ($meta['puede_presentar'] ?? false);
         $erroresAgrupados = $registro->estaAutorizado()
             ? $this->presentacionService->agruparErroresInforme($registro, 15)
             : [];
@@ -260,7 +216,10 @@ class ArcaCaeaController extends Controller
         can('listar-arca-caea');
 
         $registro = $this->resolverRegistroPermitido($id);
-        $resumen = is_array($registro->informe_resumen) ? $registro->informe_resumen : [];
+        $resumen = [];
+        if ($registro->estaAutorizado()) {
+            $resumen = $this->presentacionService->resumirPeriodoParaPantalla($registro, false);
+        }
         $puedeBase = $registro->estaAutorizado()
             && ArcaCaeaInformeUiSupport::puedePresentarAhora($resumen);
         $estado = ArcaCaeaInformeColaSupport::estadoUi((int) $registro->id, $puedeBase);
@@ -336,7 +295,7 @@ class ArcaCaeaController extends Controller
         $mensaje = 'La presentación CAEA de '.$empresa.' ('.$quincena.') se encoló como un solo proceso en segundo plano '
             .'(todas las facturas pendientes de la quincena, no un job por comprobante). '
             .'Al terminar o frenarse recibirás un mail en '.$email.' indicando hasta dónde llegó y el motivo. '
-            .'Podés seguir trabajando; usá el ícono de calculadora para refrescar contadores.';
+            .'Podés seguir trabajando; al recargar la pantalla se recuentan las facturas del ERP.';
 
         Log::info('arca.caea.informe.encolado', [
             'arca_caea_id' => $registro->id,
@@ -557,37 +516,51 @@ class ArcaCaeaController extends Controller
     }
 
     /**
-     * @param  array<string, mixed>  $resumen
-     */
-    private function periodoNecesitaSyncArca(array $resumen): bool
-    {
-        return ArcaCaeaInformeUiSupport::tienePendienteInforme($resumen)
-            || (int) ($resumen['bloqueados_hueco'] ?? 0) > 0;
-    }
-
-    /**
-     * Resumen ya tiene contadores locales pero el estado guardado no refleja la realidad
-     * (p. ej. quincena sin comprobantes marcada como pendiente).
+     * Contadores para listado/detalle: ventas ERP ahora. Anita solo en el modal de una quincena abierta.
      *
-     * @param  array<string, mixed>  $resumen
+     * @return array{
+     *   resumen: array<string, mixed>,
+     *   proceso_activo: bool,
+     *   progreso: array<string, mixed>|null,
+     *   puede_presentar: bool,
+     *   leyenda: string,
+     *   titulo_overlay: string,
+     *   badge: string
+     * }
      */
-    private function periodoEstadoDesactualizado(ArcaCaea $registro, array $resumen): bool
+    private function metaPantalla(ArcaCaea $registro, bool $detalle = false): array
     {
-        $total = (int) ($resumen['total'] ?? -1);
-        if ($total === 0 && $registro->informe_estado !== ArcaCaea::INFORME_ESTADO_OK) {
-            return true;
+        $registro->loadMissing('empresa');
+        $resumen = [];
+        if ($registro->estaAutorizado()) {
+            $incluirAnita = $detalle && CaeaQuincenaSupport::quincenaAbiertaEnPantalla(
+                $registro->fecha_vigencia_hasta,
+                $registro->fecha_tope_informe,
+            );
+            $resumen = $this->presentacionService->resumirPeriodoParaPantalla($registro, $incluirAnita);
         }
 
-        if ($resumen === [] || ! array_key_exists('informables_ahora', $resumen)) {
-            return true;
-        }
+        $procesoActivo = $registro->estaAutorizado()
+            && ArcaCaeaInformeColaSupport::estaActivo((int) $registro->id);
+        $progresoActivo = $procesoActivo
+            ? ArcaCaeaInformeColaSupport::progreso((int) $registro->id)
+            : null;
+        $puedePresentar = ! $procesoActivo
+            && ArcaCaeaInformeUiSupport::puedePresentarAhora($resumen);
+        $leyenda = $procesoActivo
+            ? ArcaCaeaInformeColaSupport::leyendaProcesoActivo($progresoActivo)
+            : ArcaCaeaInformeUiSupport::leyendaFaltante($resumen);
 
-        $esperable = ArcaCaeaInformeUiSupport::badgeInformeEstado($registro->informe_estado, $resumen);
-        if ($esperable === 'ok' && $registro->informe_estado !== ArcaCaea::INFORME_ESTADO_OK
-            && (int) ($resumen['pendientes'] ?? 0) === 0 && (int) ($resumen['errores'] ?? 0) === 0) {
-            return true;
-        }
-
-        return false;
+        return [
+            'resumen' => $resumen,
+            'proceso_activo' => $procesoActivo,
+            'progreso' => $progresoActivo,
+            'puede_presentar' => $puedePresentar,
+            'leyenda' => $leyenda,
+            'titulo_overlay' => ArcaCaeaInformeUiSupport::tituloProcesando($registro),
+            'badge' => $procesoActivo
+                ? 'procesando'
+                : ArcaCaeaInformeUiSupport::badgeInformeEstado($registro->informe_estado, $resumen),
+        ];
     }
 }

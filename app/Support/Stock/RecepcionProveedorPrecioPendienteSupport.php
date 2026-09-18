@@ -44,12 +44,20 @@ final class RecepcionProveedorPrecioPendienteSupport
             $precioSolicitado = isset($item['precio_solicitado']) && $item['precio_solicitado'] !== ''
                 ? (float) $item['precio_solicitado']
                 : null;
+            $comentario = trim((string) ($item['comentario_precio'] ?? ''));
+
+            // Grilla editable sin permiso: si el operador cambió el precio y comentó,
+            // no exigir precio_solicitado (OCR sigue sin comentario y no infiere).
+            if ($precioSolicitado === null && $comentario !== '' && $precioOc > 0
+                && abs($precioEnviado - $precioOc) >= 0.0001) {
+                $precioSolicitado = $precioEnviado;
+            }
 
             $tieneSolicitud = $precioSolicitado !== null
                 && $precioOc > 0
                 && abs($precioSolicitado - $precioOc) >= 0.0001;
 
-            if ($tieneSolicitud && trim((string) ($item['comentario_precio'] ?? '')) === '') {
+            if ($tieneSolicitud && $comentario === '') {
                 throw new \RuntimeException(
                     'Indique el motivo de la diferencia de precio respecto a la OC (línea con precio solicitado distinto).'
                 );

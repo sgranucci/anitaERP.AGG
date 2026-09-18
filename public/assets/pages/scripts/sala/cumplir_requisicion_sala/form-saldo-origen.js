@@ -192,8 +192,13 @@
             $ul.append('<li>Revise los datos e intente nuevamente.</li>');
         }
         $box.removeClass('d-none');
-        var top = $box.offset() ? $box.offset().top - 80 : 0;
-        $('html, body').animate({ scrollTop: Math.max(top, 0) }, 200);
+        var el = $box.get(0);
+        if (el && typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            var top = $box.offset() ? $box.offset().top - 80 : 0;
+            $('html, body').animate({ scrollTop: Math.max(top, 0) }, 200);
+        }
     }
 
     function recolectarInconsistenciasSaldos(opciones) {

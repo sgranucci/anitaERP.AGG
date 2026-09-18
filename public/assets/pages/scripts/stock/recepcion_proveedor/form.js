@@ -729,6 +729,10 @@
             item.comentario_diferencia = $.trim($comentarioDiferenciaPorIdx(idx).find('.item-comentario-diferencia').val() || '');
             item.comentario_precio = $.trim($comentarioPorIdx(idx).find('.item-comentario-precio').val() || '');
             item.precio = parseFloat($(this).find('.item-precio').val()) || 0;
+            sincronizarPrecioSolicitadoDesdeEdicion(item);
+            $(this).find('.item-precio-solicitado').val(
+                item.precio_solicitado != null && item.precio_solicitado !== '' ? item.precio_solicitado : ''
+            );
             var $subDiff = $comentarioDiferenciaPorIdx(idx);
             if ($subDiff.find('.item-saldo-parcial-btn.active[data-val="CERRAR"]').length) {
                 item.fl_cerrar_linea_oc = true;
@@ -1681,8 +1685,8 @@
 
         if (precioSolicitado !== undefined && precioSolicitado !== null) {
             item.precio_solicitado = redondearPrecioUnitario(precioSolicitado);
-        } else if (puedeModificarPrecioRecepcion()) {
-            item.precio_solicitado = null;
+        } else {
+            sincronizarPrecioSolicitadoDesdeEdicion(item);
         }
 
         if (comentarioPrecio !== undefined) {
@@ -1715,6 +1719,32 @@
         return !!window.recepcionProveedorPuedeModificarPrecio;
     }
 
+    /**
+     * Sin permiso de precio la grilla igual se puede editar (OC anual / factura del mes).
+     * El backend solo conserva esa diferencia si viaja en precio_solicitado.
+     */
+    function sincronizarPrecioSolicitadoDesdeEdicion(item) {
+        if (!item) {
+            return;
+        }
+        if (puedeModificarPrecioRecepcion()) {
+            item.precio_solicitado = null;
+            return;
+        }
+        var precio = redondearPrecioUnitario(item.precio);
+        item.precio = precio;
+        item.precio_solicitado = precio;
+    }
+
+    function actualizarPrecioSolicitadoEnFila($tr, item) {
+        sincronizarPrecioSolicitadoDesdeEdicion(item);
+        if ($tr && $tr.length) {
+            $tr.find('.item-precio-solicitado').val(
+                item.precio_solicitado != null && item.precio_solicitado !== '' ? item.precio_solicitado : ''
+            );
+        }
+    }
+
     function puedeAgregarArticuloExtraRecepcion() {
         return !!window.recepcionProveedorPuedeAgregarArticuloExtra;
     }
@@ -1739,33 +1769,40 @@
         var precioSolicitado = item.precio_solicitado != null && item.precio_solicitado !== ''
             ? parseFloat(item.precio_solicitado)
             : null;
-        var bloqueadoPrecio = soloLectura || !puedeModificarPrecioRecepcion();
-
-        if (bloqueadoPrecio) {
-            var precioMostrar = precio;
-            if (precioSolicitado !== null && !isNaN(precioSolicitado) && Math.abs(precioSolicitado - precioOc) >= 0.0001) {
-                precioMostrar = precioSolicitado;
-            }
-            var html = '<span class="text-right d-block item-precio-text">' + formatearImporteRecepcion(precioMostrar) + '</span>'
-                + '<input type="hidden" class="item-precio" name="items[' + idx + '][precio]" value="' + precioMostrar + '">';
-            if (precioSolicitado !== null && !isNaN(precioSolicitado) && Math.abs(precioSolicitado - precioOc) >= 0.0001) {
-                html += '<small class="d-block text-muted text-right" title="Precio original de la OC">'
-                    + 'OC: ' + formatearImporteRecepcion(precioOc) + '</small>';
-            }
-            html += '<input type="hidden" class="item-precio-solicitado" name="items[' + idx + '][precio_solicitado]" value="'
-                + (precioSolicitado !== null && !isNaN(precioSolicitado) ? precioSolicitado : '') + '">';
-
-            return html;
+        var precioMostrar = precio;
+        if (!puedeModificarPrecioRecepcion() && precioSolicitado !== null && !isNaN(precioSolicitado)
+            && Math.abs(precioSolicitado - precioOc) >= 0.0001) {
+            precioMostrar = precioSolicitado;
+        }
+        var solHidden = '';
+        if (!puedeModificarPrecioRecepcion()) {
+            solHidden = precioSolicitado !== null && !isNaN(precioSolicitado)
+                ? precioSolicitado
+                : precioMostrar;
+        }
+        var htmlOc = '';
+        if (!puedeModificarPrecioRecepcion() && precioOc > 0 && Math.abs(precioMostrar - precioOc) >= 0.0001) {
+            htmlOc = '<small class="d-block text-muted text-right" title="Precio original de la OC">'
+                + 'OC: ' + formatearImporteRecepcion(precioOc) + '</small>';
         }
 
-        return '<input type="number" step="0.000001" min="0" class="form-control form-control-sm text-right item-precio input-precio-recepcion" name="items[' + idx + '][precio]" value="' + precio + '">'
-            + '<input type="hidden" class="item-precio-solicitado" name="items[' + idx + '][precio_solicitado]" value="">';
+        if (soloLectura) {
+            return '<span class="text-right d-block item-precio-text">' + formatearImporteRecepcion(precioMostrar) + '</span>'
+                + '<input type="hidden" class="item-precio" name="items[' + idx + '][precio]" value="' + precioMostrar + '">'
+                + htmlOc
+                + '<input type="hidden" class="item-precio-solicitado" name="items[' + idx + '][precio_solicitado]" value="'
+                + solHidden + '">';
+        }
+
+        return '<input type="number" step="0.000001" min="0" class="form-control form-control-sm text-right item-precio input-precio-recepcion" name="items[' + idx + '][precio]" value="' + precioMostrar + '">'
+            + '<input type="hidden" class="item-precio-solicitado" name="items[' + idx + '][precio_solicitado]" value="' + solHidden + '">'
+            + htmlOc;
     }
 
     function htmlCeldaImporteLinea(item, idx, soloLectura) {
         var importe = importeLineaRecepcion(item);
         var html = '<div class="celda-importe-linea">';
-        var importeSoloLectura = soloLectura || !puedeModificarPrecioRecepcion();
+        var importeSoloLectura = soloLectura;
         if (importeSoloLectura) {
             html += '<div class="d-flex align-items-center justify-content-end">';
             html += '<span class="item-importe-linea-text font-weight-bold mr-1">' + formatearImporteRecepcion(importe) + '</span>';
@@ -2768,6 +2805,7 @@
                 item.cantidad = parseFloat($(this).val()) || 0;
             } else if ($(this).hasClass('item-precio')) {
                 item.precio = parseFloat($(this).val()) || 0;
+                actualizarPrecioSolicitadoEnFila($tr, item);
             }
             if (cantidadTotalRecibida(item) <= 0.000001 && lineaEsDeOc(item)) {
                 if (String(item.accion_linea_oc || '').toUpperCase() !== 'CERRAR') {
@@ -2841,9 +2879,6 @@
             if (sincronizandoImporteLinea) {
                 return;
             }
-            if (!puedeModificarPrecioRecepcion()) {
-                return;
-            }
             var $tr = $(this).closest('tr.item-recepcion-linea');
             var idx = parseInt($tr.data('idx'), 10);
             var item = itemsActuales[idx];
@@ -2854,6 +2889,7 @@
             var importe = parseFloat($(this).val()) || 0;
             sincronizarPrecioDesdeImporte(item, importe, item.cantidad);
             $tr.find('.item-precio').val(item.precio);
+            actualizarPrecioSolicitadoEnFila($tr, item);
             actualizarComentarioPrecioFila(idx);
             actualizarTotalRecepcion();
         });

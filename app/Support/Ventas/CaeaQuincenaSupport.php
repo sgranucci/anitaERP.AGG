@@ -91,6 +91,29 @@ final class CaeaQuincenaSupport
     }
 
     /**
+     * Quincena todavía en vigencia o dentro del plazo de informe.
+     * En esas, el listado CAEA recuenta ventas en vivo (el cierre Waitry suma facturas todos los días).
+     */
+    public static function quincenaAbiertaEnPantalla(
+        Carbon|string|null $vigenciaHasta,
+        Carbon|string|null $topeInforme,
+        ?Carbon $hoy = null,
+    ): bool {
+        $hoy = ($hoy ?? now())->copy()->startOfDay();
+        foreach ([$vigenciaHasta, $topeInforme] as $fecha) {
+            if ($fecha === null || $fecha === '') {
+                continue;
+            }
+            $d = $fecha instanceof Carbon ? $fecha->copy()->startOfDay() : Carbon::parse((string) $fecha)->startOfDay();
+            if ($d->greaterThanOrEqualTo($hoy)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Periodo y orden a partir de fecha Informix (YYYYMMDD entero).
      *
      * @return array{periodo: int, orden: int}

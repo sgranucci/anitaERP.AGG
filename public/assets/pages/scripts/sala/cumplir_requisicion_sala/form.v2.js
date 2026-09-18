@@ -78,6 +78,10 @@
         return $.trim($fila.find('.crs-sku-texto').text() || '');
     }
 
+    function esCantidadEntera(n) {
+        return Number.isFinite(n) && Math.abs(n - Math.round(n)) < 1e-9;
+    }
+
     function actualizarEtiquetaAutorizacion($fila) {
         var estado = String($fila.find('.input-estado-linea').val() || '');
         var $label = $fila.find('.autorizacion-linea-label');
@@ -388,8 +392,8 @@
     }
 
     function hayModalCumpleAbierto() {
-        return $('#modalMotivoParcialCumple').hasClass('show') ||
-            $('#modalAutorizacionLineaCumple').hasClass('show');
+        return $('#modalMotivoParcialCumple').is(':visible') ||
+            $('#modalAutorizacionLineaCumple').is(':visible');
     }
 
     function estadoDefaultPorDestino($fila, entrega, pendiente) {
@@ -488,7 +492,7 @@
             return;
         }
 
-        if (!Number.isInteger(entrega)) {
+        if (!esCantidadEntera(entrega)) {
             alert('La cantidad debe ser un n\u00famero entero (sin decimales).');
             $fila.find('.input-cantidad-entrega').val('');
             if (typeof alListo === 'function') {
@@ -511,12 +515,17 @@
         if (controlaStock && saldoAttr !== '' && saldoAttr !== undefined) {
             var saldo = Number(saldoAttr);
             if (!Number.isNaN(saldo) && saldo + 1e-9 < entrega) {
-                // Solo marca visual: la validaci\u00f3n bloqueante es al grabar.
                 $fila.addClass('fila-saldo-insuficiente');
                 var $span = $fila.find('.ms-saldo-origen');
                 $span.removeClass('text-muted text-success text-warning').addClass('text-danger font-weight-bold');
+                if (grabarPendiente) {
+                    mostrarErrorCumple(
+                        'Saldo insuficiente en dep\u00f3sito origen para '
+                        + (skuDeFila($fila) || 'el art\u00edculo')
+                        + ' (saldo ' + saldo + ', solicitado ' + entrega + ').'
+                    );
+                }
                 if (typeof alListo === 'function') {
-                    // En flujo de grabar: no continuar hasta corregir (crsValidarSaldosAntesDeGrabar ya actu\u00f3).
                     alListo(false);
                 }
                 return;
@@ -717,8 +726,13 @@
             });
         }
         $box.removeClass('d-none');
-        var top = $box.offset() ? $box.offset().top - 80 : 0;
-        $('html, body').animate({ scrollTop: Math.max(top, 0) }, 200);
+        var el = $box.get(0);
+        if (el && typeof el.scrollIntoView === 'function') {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+            var top = $box.offset() ? $box.offset().top - 80 : 0;
+            $('html, body').animate({ scrollTop: Math.max(top, 0) }, 200);
+        }
     }
 
     function ocultarErrorCumple() {
@@ -785,8 +799,7 @@
         grabarIndiceLinea = indice;
         validarCantidadEnFila($fila, function (ok) {
             if (!ok) {
-                grabarPendiente = false;
-                $('#btn-grabar-cumple').prop('disabled', false);
+                restaurarBotonGrabar();
                 return;
             }
             continuarGrabarDesdeIndice(indice + 1);
@@ -808,6 +821,7 @@
         }
         validarCantidadEnFila($incompleta, function (ok) {
             if (!ok) {
+                restaurarBotonGrabar();
                 return;
             }
             validarFilasIncompletasAntesDeGrabar(alContinuar);
@@ -821,17 +835,33 @@
     }
 
     function esperarValidacionesYGrabar() {
-        if (validacionFilaActiva || hayModalCumpleAbierto() || colaValidacionFila.length > 0) {
-            window.setTimeout(esperarValidacionesYGrabar, 80);
-            return;
+        var inicio = Date.now();
+        function tick() {
+            if (hayModalCumpleAbierto()) {
+                inicio = Date.now();
+            } else if (Date.now() - inicio > 15000) {
+                validacionFilaActiva = false;
+                colaValidacionFila = [];
+                restaurarBotonGrabar();
+                mostrarErrorCumple(
+                    'No se pudo completar la validaci\u00f3n de las l\u00edneas. '
+                    + 'Cierre cualquier ventana de autorizaci\u00f3n o motivo parcial e intente de nuevo.'
+                );
+                return;
+            }
+            if (validacionFilaActiva || hayModalCumpleAbierto() || colaValidacionFila.length > 0) {
+                window.setTimeout(tick, 80);
+                return;
+            }
+            validarFilasIncompletasAntesDeGrabar(function () {
+                ejecutarSecuenciaGrabar();
+            });
         }
-        validarFilasIncompletasAntesDeGrabar(function () {
-            ejecutarSecuenciaGrabar();
-        });
+        tick();
     }
 
     function iniciarGrabar() {
-        if (enviandoFormulario) {
+        if (enviandoFormulario || grabarPendiente) {
             return;
         }
 
@@ -847,9 +877,12 @@
         }
 
         ocultarErrorCumple();
+        grabarPendiente = true;
+        $('#btn-grabar-cumple').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Validando&hellip;');
 
         if (typeof window.crsValidarSaldosAntesDeGrabar === 'function'
             && !window.crsValidarSaldosAntesDeGrabar()) {
+            restaurarBotonGrabar();
             return;
         }
 
@@ -1062,15 +1095,20 @@
             filaModalAuth = null;
         });
 
-        $('#form-cumple-requisicion-sala').on('submit', function (e) {
-            if (enviandoFormulario) {
-                return;
-            }
+        $('#btn-grabar-cumple').on('click', function (e) {
             e.preventDefault();
             iniciarGrabar();
         });
-    });
-}(jQuery));
 
-window.crsActualizarEtiquetaAutorizacion = actualizarEtiquetaAutorizacion;
-window.cumpleRequisicionSalaFormV = 2;
+        $('#form-cumple-requisicion-sala').on('submit', function (e) {
+            e.preventDefault();
+            if (enviandoFormulario) {
+                return;
+            }
+            iniciarGrabar();
+        });
+    });
+
+    window.crsActualizarEtiquetaAutorizacion = actualizarEtiquetaAutorizacion;
+    window.cumpleRequisicionSalaFormV = 2;
+}(jQuery));

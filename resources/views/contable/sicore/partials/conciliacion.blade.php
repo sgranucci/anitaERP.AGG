@@ -24,7 +24,7 @@
                         @foreach ($conciliacion['items'] ?? [] as $item)
                             <tr @class([
                                 'table-success' => ! empty($item['cuadra']),
-                                'table-danger' => empty($item['cuadra']) && ($item['registros'] ?? 0) > 0,
+                                'table-danger' => empty($item['cuadra']),
                             ])>
                                 <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
                                 <td>{{ $item['nombre'] ?? '' }}</td>

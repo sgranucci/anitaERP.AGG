@@ -38,6 +38,21 @@ class RecepcionProveedorPrecioPendienteSupportTest extends TestCase
         $this->assertTrue($items[0]['fl_precio_diferencia']);
     }
 
+    public function test_sin_permiso_infiere_solicitud_desde_precio_con_comentario(): void
+    {
+        $items = RecepcionProveedorPrecioPendienteSupport::normalizarItemsSegunPermiso([
+            [
+                'precio_ordencompra' => 100.0,
+                'precio' => 115.5,
+                'comentario_precio' => 'OC anual',
+            ],
+        ], false);
+
+        $this->assertSame(115.5, $items[0]['precio']);
+        $this->assertSame(115.5, $items[0]['precio_solicitado']);
+        $this->assertTrue($items[0]['fl_precio_diferencia']);
+    }
+
     public function test_ocr_sin_permiso_restaura_precios_de_oc(): void
     {
         $lineas = RecepcionProveedorPrecioPendienteSupport::aplicarPreciosOcrSegunPermiso([
