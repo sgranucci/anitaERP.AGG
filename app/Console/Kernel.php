@@ -395,6 +395,28 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/comprobante-proveedor-imputacion-ap-schedule.log'))
             ->when(fn () => (bool) config('comprobante_proveedor_anita.imputacion_ap_diaria.habilitada', true));
 
+        $ventanaImputacionOp = max(1, (int) config('pagoproveedor.imputacion_ap_diaria.ventana_dias', 7));
+        $schedule->command('pagoproveedor:auditar-imputacion-ap', [
+            '--desde' => Carbon::today()->subDays($ventanaImputacionOp - 1)->toDateString(),
+            '--hasta' => Carbon::today()->toDateString(),
+        ])
+            ->dailyAt((string) config('pagoproveedor.imputacion_ap_diaria.hora', '08:50'))
+            ->runInBackground()
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/pagoproveedor-imputacion-ap-schedule.log'))
+            ->when(fn () => (bool) config('pagoproveedor.imputacion_ap_diaria.habilitada', true));
+
+        $ventanaImputacionIe = max(1, (int) config('caja.ingresoegreso_imputacion_diaria.ventana_dias', 7));
+        $schedule->command('ingresoegreso:auditar-imputacion', [
+            '--desde' => Carbon::today()->subDays($ventanaImputacionIe - 1)->toDateString(),
+            '--hasta' => Carbon::today()->toDateString(),
+        ])
+            ->dailyAt((string) config('caja.ingresoegreso_imputacion_diaria.hora', '08:55'))
+            ->runInBackground()
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/ingresoegreso-imputacion-schedule.log'))
+            ->when(fn () => (bool) config('caja.ingresoegreso_imputacion_diaria.habilitada', true));
+
         $schedule->command('rendicion-estacionamiento:auditoria-anita')
             ->dailyAt((string) config('rendicion_estacionamiento_anita.auditoria_diaria.hora', '07:30'))
             ->runInBackground()

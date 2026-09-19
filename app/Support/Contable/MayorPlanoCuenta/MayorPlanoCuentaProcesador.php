@@ -615,7 +615,9 @@ class MayorPlanoCuentaProcesador
             'cuenta_desde' => $cuentaDesde,
             'cuenta_hasta' => $cuentaHasta,
             'cuentas' => $cuentas,
-            'excluir_origen_subdiario' => ! $incluyeSubdiario,
+            // ERP nativo: [SUBD]/[SUBH] ya son asientos de `asiento`. No restarlos
+            // del snapshot (el checkbox subdiario es del bridge Anita).
+            'excluir_origen_subdiario' => false,
         ]);
 
         if (($resultado['fuente'] ?? '') !== 'saldos_mes') {

@@ -12,6 +12,7 @@ use App\Support\Compras\ProveedorCuentacorrienteReporteFiltros;
 use App\Support\Compras\ProveedorCuentacorrienteReporteProveedorSupport;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
+use Jurosh\PDFMerge\PDFMerger;
 use Maatwebsite\Excel\Excel;
 
 class ProveedorCuentacorrienteReporteController extends Controller
@@ -39,9 +40,7 @@ class ProveedorCuentacorrienteReporteController extends Controller
         $filasVista = [];
 
         if ($request->boolean('consultar') && ProveedorCuentacorrienteReporteFiltros::tieneCriteriosAplicados($filtros)) {
-            ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
-                'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
-            ]);
+            $this->persistirPreferencias($filtros);
 
             ini_set('memory_limit', '-1');
             ini_set('max_execution_time', '0');
@@ -78,7 +77,7 @@ class ProveedorCuentacorrienteReporteController extends Controller
             'proveedores_iniciales' => $proveedoresIniciales,
             'subtitulo' => ProveedorCuentacorrienteReporteFiltros::armarSubtitulo(
                 $filtros,
-                $this->nombreEmpresa($filtros['empresa_id'] ?? null)
+                $this->textoEmpresas($filtros, $empresaQuery)
             ),
             'puede_ver_proveedor' => can('editar-proveedor', false) || can('listar-proveedor', false),
             'puede_ver_comprobante' => can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false),
@@ -109,34 +108,19 @@ class ProveedorCuentacorrienteReporteController extends Controller
             : 'Deuda de proveedores';
         $subtitulo = ProveedorCuentacorrienteReporteFiltros::armarSubtitulo(
             $filtros,
-            $this->nombreEmpresa($filtros['empresa_id'] ?? null)
+            $this->textoEmpresas($filtros, $empresaQuery)
         );
 
         switch (strtoupper($formato)) {
             case 'PDF':
-                $view = \View::make('compras.proveedor_cuentacorriente_reporte.listado', [
-                    'filas' => $filas,
-                    'resultado' => $resultado,
-                    'filtros' => $filtros,
-                    'titulo' => $titulo,
-                    'subtitulo' => $subtitulo,
-                    'mostrarLinks' => false,
-                    'para_pdf' => true,
-                    'puede_ver_proveedor' => false,
-                    'puede_ver_comprobante' => false,
-                    'puede_ver_pago' => false,
-                ])->render();
-
-                $path = storage_path('pdf/listados');
-                if (! is_dir($path)) {
-                    mkdir($path, 0755, true);
+                if (count($filtros['empresa_ids'] ?? []) > 1 && empty($filtros['consolidar_empresas'])) {
+                    return $this->descargarPdfPorEmpresa($filtros, $resultado, $titulo);
                 }
-                $nombrePdf = 'proveedor_cc_reporte_'.date('Ymd_His');
-                $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
 
-                return response()->download($path.'/'.$nombrePdf.'.pdf');
+                return $this->descargarPdf(
+                    $this->renderizarPdf($filas, $resultado, $filtros, $titulo, $subtitulo),
+                    'proveedor_cc_reporte_'.date('Ymd_His')
+                );
 
             case 'EXCEL':
                 return (new ProveedorCuentacorrienteReporteExport($filas, $titulo, $subtitulo, $resultado, $filtros))
@@ -154,35 +138,190 @@ class ProveedorCuentacorrienteReporteController extends Controller
     }
 
     /**
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     */
+    private function renderizarPdf(
+        array $filas,
+        array $resultado,
+        array $filtros,
+        string $titulo,
+        string $subtitulo
+    ): string {
+        return \View::make('compras.proveedor_cuentacorriente_reporte.listado', [
+            'filas' => $filas,
+            'resultado' => $resultado,
+            'filtros' => $filtros,
+            'titulo' => $titulo,
+            'subtitulo' => $subtitulo,
+            'mostrarLinks' => false,
+            'para_pdf' => true,
+            'puede_ver_proveedor' => false,
+            'puede_ver_comprobante' => false,
+            'puede_ver_pago' => false,
+        ])->render();
+    }
+
+    private function descargarPdf(string $html, string $nombre)
+    {
+        $path = storage_path('pdf/listados');
+        if (! is_dir($path)) {
+            mkdir($path, 0755, true);
+        }
+
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->setPaper('legal', 'landscape');
+        $pdf->loadHTML($html)->save($path.'/'.$nombre.'.pdf');
+
+        return response()->download($path.'/'.$nombre.'.pdf')->deleteFileAfterSend(true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $resultadoCompleto
+     */
+    private function descargarPdfPorEmpresa(array $filtros, array $resultadoCompleto, string $titulo)
+    {
+        $dir = storage_path('pdf/listados');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        $temporales = [];
+
+        try {
+            foreach ($resultadoCompleto['secciones'] ?? [] as $seccion) {
+                $empresaId = (int) ($seccion['empresa_id'] ?? 0);
+                $filtrosEmpresa = array_merge($filtros, [
+                    'empresa_ids' => [$empresaId],
+                    'empresa_id' => $empresaId,
+                    'consolidar_empresas' => true,
+                ]);
+                $subtitulo = trim((string) ($seccion['empresa_nombre'] ?? ''))
+                    .' · '.ProveedorCuentacorrienteReporteFiltros::armarSubtitulo($filtrosEmpresa);
+                $html = $this->renderizarPdf(
+                    $seccion['filas'] ?? [],
+                    array_merge($resultadoCompleto, [
+                        'filas' => $seccion['filas'] ?? [],
+                        'totales' => $seccion['totales'] ?? [],
+                        'stats' => $seccion['stats'] ?? [],
+                    ]),
+                    $filtrosEmpresa,
+                    $titulo,
+                    $subtitulo
+                );
+
+                $temp = $dir.'/proveedor_cc_reporte_tmp_'.uniqid('', true).'.pdf';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($html)->save($temp);
+                $temporales[] = $temp;
+            }
+
+            $nombreBase = 'proveedor_cc_reporte_'.date('Ymd_His');
+            $destino = $dir.'/'.$nombreBase.'.pdf';
+
+            if ($temporales === []) {
+                return $this->descargarPdf(
+                    $this->renderizarPdf(
+                        $resultadoCompleto['filas'] ?? [],
+                        $resultadoCompleto,
+                        $filtros,
+                        $titulo,
+                        ProveedorCuentacorrienteReporteFiltros::armarSubtitulo($filtros)
+                    ),
+                    $nombreBase
+                );
+            }
+
+            if (count($temporales) === 1) {
+                rename($temporales[0], $destino);
+                $temporales = [];
+            } else {
+                $merger = new PDFMerger;
+                foreach ($temporales as $ruta) {
+                    $merger->addPDF($ruta, 'all', 'horizontal');
+                }
+                $merger->merge('file', $destino);
+            }
+
+            return response()->download($destino, $nombreBase.'.pdf')->deleteFileAfterSend(true);
+        } finally {
+            foreach ($temporales as $ruta) {
+                if (is_file($ruta)) {
+                    @unlink($ruta);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function persistirPreferencias(array $filtros): void
+    {
+        ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
+            'empresa_ids' => ProveedorCuentacorrienteReporteFiltros::empresaIds($filtros),
+            'consolidar_empresas' => (bool) ($filtros['consolidar_empresas'] ?? true),
+        ]);
+    }
+
+    /**
      * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
     private function aplicarPreferenciasEmpresa(Request $request, array $filtros, $empresaQuery): array
     {
-        if (! empty($filtros['empresa_id'])) {
-            return $filtros;
+        $permitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        if (($filtros['empresa_ids'] ?? []) === []) {
+            $cached = ReportePreferenciasUsuario::leerEmpresaIds(self::PREFERENCIAS_CLAVE);
+            if ($cached !== null && $cached !== []) {
+                $filtros['empresa_ids'] = ReportePreferenciasUsuario::filtrarEmpresaIdsPermitidas($cached, $permitidos);
+            } elseif (($cachedId = ReportePreferenciasUsuario::leerEmpresaId(self::PREFERENCIAS_CLAVE)) !== null
+                && in_array($cachedId, $permitidos, true)) {
+                $filtros['empresa_ids'] = [$cachedId];
+            }
+        } else {
+            $filtros['empresa_ids'] = ReportePreferenciasUsuario::filtrarEmpresaIdsPermitidas(
+                $filtros['empresa_ids'],
+                $permitidos
+            );
         }
 
-        $permitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
-        $cached = ReportePreferenciasUsuario::leerEmpresaId(self::PREFERENCIAS_CLAVE);
-        if ($cached !== null && in_array($cached, $permitidos, true)) {
-            $filtros['empresa_id'] = $cached;
-        } elseif ($empresaQuery->count() === 1) {
-            $filtros['empresa_id'] = (int) $empresaQuery->first()->id;
+        if (($filtros['empresa_ids'] ?? []) === [] && $empresaQuery->count() >= 1) {
+            $filtros['empresa_ids'] = $empresaQuery->count() === 1
+                ? [(int) $empresaQuery->first()->id]
+                : $permitidos;
+        }
+
+        $filtros['empresa_id'] = $filtros['empresa_ids'][0] ?? null;
+
+        if (! $request->has('consolidar_empresas')) {
+            $filtros['consolidar_empresas'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'consolidar_empresas',
+                true
+            );
         }
 
         return $filtros;
     }
 
-    private function nombreEmpresa(mixed $empresaId): ?string
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
+     */
+    private function textoEmpresas(array $filtros, $empresaQuery): string
     {
-        $id = (int) $empresaId;
-        if ($id <= 0) {
-            return null;
+        $ids = ProveedorCuentacorrienteReporteFiltros::empresaIds($filtros);
+        if ($ids === []) {
+            return '';
         }
 
-        return $this->empresaRepository->findPorId($id)?->nombre;
+        return $empresaQuery->whereIn('id', $ids)->pluck('nombre')->implode(', ');
     }
 
     /**

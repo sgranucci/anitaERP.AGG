@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas;
 
+use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Configuracion\CotizacionVigenteSupport;
@@ -26,12 +27,30 @@ class ClienteCuentacorrienteReporteService
      *   filas: list<array<string, mixed>>,
      *   totales: array<string, mixed>,
      *   advertencias: list<string>,
-     *   stats: array{clientes: int, movimientos: int, aplicaciones: int},
+     *   stats: array{clientes: int, vendedores: int, movimientos: int, aplicaciones: int},
      *   clientes_resueltos: list<array{id:int,codigo:string,nombre:string}>,
-     *   vendedores_resueltos: list<array{id:int,codigo:string,nombre:string}>
+     *   vendedores_resueltos: list<array{id:int,codigo:string,nombre:string}>,
+     *   secciones: list<array<string, mixed>>
      * }
      */
     public function generar(array $filtros): array
+    {
+        $empresaIds = ClienteCuentacorrienteReporteFiltros::empresaIds($filtros);
+        if (ClienteCuentacorrienteReporteFiltros::consolidarEmpresas($filtros) || $empresaIds === []) {
+            $resultado = $this->generarInterno($filtros);
+            $resultado['secciones'] = [];
+
+            return $resultado;
+        }
+
+        return $this->generarPorEmpresa($filtros, $empresaIds);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function generarInterno(array $filtros): array
     {
         $resClientes = ClienteCuentacorrienteReporteClienteSupport::resolver($filtros);
         $resVendedores = ClienteCuentacorrienteReporteVendedorSupport::resolver($filtros);
@@ -174,7 +193,7 @@ class ClienteCuentacorrienteReporteService
                 $primero = $movsCliente->first();
                 $clienteCodigo = trim((string) ($primero->clientes->codigo ?? $primero->codigocliente ?? ''));
                 $clienteNombre = (string) ($primero->clientes->nombre ?? $primero->nombrecliente ?? '');
-                $nombreEmpresa = (string) ($primero->empresas->nombre ?? '');
+                $nombreEmpresa = $this->nombreEmpresaUnicaGrupo($movsCliente);
 
                 $filas[] = [
                     'tipo' => 'header_cliente',
@@ -182,6 +201,7 @@ class ClienteCuentacorrienteReporteService
                     'cliente_codigo' => $clienteCodigo,
                     'cliente_nombre' => $clienteNombre,
                     'nombreempresa' => $nombreEmpresa,
+                    'empresa_id' => (int) ($primero->empresa_id ?? 0),
                     'vendedor_id' => (int) $vendedorId,
                     'vendedor_codigo' => $vendedorCodigo,
                     'vendedor_nombre' => $vendedorNombre,
@@ -262,13 +282,14 @@ class ClienteCuentacorrienteReporteService
                         continue;
                     }
 
+                    $nombreEmpresaMov = (string) ($mov->empresas->nombre ?? '');
                     $filaMov = [
                         'tipo' => 'movimiento',
                         'id' => (int) $mov->id,
                         'cliente_id' => (int) $clienteId,
                         'cliente_codigo' => $clienteCodigo,
                         'cliente_nombre' => $clienteNombre,
-                        'nombreempresa' => $nombreEmpresa,
+                        'nombreempresa' => $nombreEmpresaMov,
                         'empresa_id' => (int) ($mov->empresa_id ?? 0),
                         'vendedor_id' => (int) $vendedorId,
                         'vendedor_codigo' => $vendedorCodigo,
@@ -303,7 +324,7 @@ class ClienteCuentacorrienteReporteService
                             'cliente_id' => (int) $clienteId,
                             'cliente_codigo' => $clienteCodigo,
                             'cliente_nombre' => $clienteNombre,
-                            'nombreempresa' => $nombreEmpresa,
+                            'nombreempresa' => $nombreEmpresaMov,
                             'fecha' => $this->fmtFecha($apl->fecha ?? $apl->fechaaplicacion ?? null),
                             'fechavencimiento' => '',
                             'comprobante' => '↳ Aplicación: '.(string) ($apl->comprobanteaplicado ?? $apl->comprobante ?? ('#'.$apl->id)),
@@ -480,9 +501,9 @@ class ClienteCuentacorrienteReporteService
      */
     private function aplicarFiltrosComunes(Builder $query, array $filtros, array $clienteIds, array $vendedorIds = []): void
     {
-        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-        if ($empresaId > 0) {
-            $query->where('cliente_cuentacorriente.empresa_id', $empresaId);
+        $empresaIds = ClienteCuentacorrienteReporteFiltros::empresaIds($filtros);
+        if ($empresaIds !== []) {
+            $query->whereIn('cliente_cuentacorriente.empresa_id', $empresaIds);
         }
 
         $fechaDesde = trim((string) ($filtros['fecha_desde'] ?? ''));
@@ -546,9 +567,9 @@ class ClienteCuentacorrienteReporteService
             ->where('cliente_id', $clienteId)
             ->whereDate('fecha', '<', $fechaDesde);
 
-        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-        if ($empresaId > 0) {
-            $query->where('empresa_id', $empresaId);
+        $empresaIds = ClienteCuentacorrienteReporteFiltros::empresaIds($filtros);
+        if ($empresaIds !== []) {
+            $query->whereIn('empresa_id', $empresaIds);
         }
 
         $origen = 0.0;
@@ -713,5 +734,117 @@ class ClienteCuentacorrienteReporteService
             'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
             'modo' => ClienteCuentacorrienteReporteFiltros::MODO_DEUDA,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  list<int>  $empresaIds
+     * @return array<string, mixed>
+     */
+    private function generarPorEmpresa(array $filtros, array $empresaIds): array
+    {
+        $filas = [];
+        $secciones = [];
+        $advertencias = [];
+        $clientesResueltos = [];
+        $vendedoresResueltos = [];
+        $stats = ['clientes' => 0, 'vendedores' => 0, 'movimientos' => 0, 'aplicaciones' => 0];
+        $totales = $this->totalesVacios();
+        $huboDatos = false;
+
+        foreach ($empresaIds as $empresaId) {
+            $res = $this->generarInterno(array_merge($filtros, [
+                'empresa_ids' => [$empresaId],
+                'empresa_id' => $empresaId,
+                'consolidar_empresas' => true,
+            ]));
+            $advertencias = array_merge($advertencias, $res['advertencias'] ?? []);
+            if ($clientesResueltos === [] && ! empty($res['clientes_resueltos'])) {
+                $clientesResueltos = $res['clientes_resueltos'];
+            }
+            if ($vendedoresResueltos === [] && ! empty($res['vendedores_resueltos'])) {
+                $vendedoresResueltos = $res['vendedores_resueltos'];
+            }
+            if (($res['filas'] ?? []) === []) {
+                continue;
+            }
+
+            $huboDatos = true;
+            $nombre = $this->nombreEmpresaPorId($empresaId);
+            $secciones[] = [
+                'empresa_id' => $empresaId,
+                'empresa_nombre' => $nombre,
+                'filas' => $res['filas'],
+                'totales' => $res['totales'],
+                'stats' => $res['stats'] ?? [],
+            ];
+            $filas[] = [
+                'tipo' => 'header_empresa',
+                'empresa_id' => $empresaId,
+                'nombreempresa' => $nombre,
+                'empresa_nombre' => $nombre,
+                'comprobante' => 'Empresa',
+            ];
+            foreach ($res['filas'] as $fila) {
+                $filas[] = $fila;
+            }
+            $stats['clientes'] += (int) ($res['stats']['clientes'] ?? 0);
+            $stats['vendedores'] += (int) ($res['stats']['vendedores'] ?? 0);
+            $stats['movimientos'] += (int) ($res['stats']['movimientos'] ?? 0);
+            $stats['aplicaciones'] += (int) ($res['stats']['aplicaciones'] ?? 0);
+            $totales['debe'] += (float) ($res['totales']['debe'] ?? 0);
+            $totales['haber'] += (float) ($res['totales']['haber'] ?? 0);
+            $totales['pendiente'] += (float) ($res['totales']['pendiente'] ?? 0);
+            $totales['modo'] = (string) ($res['totales']['modo'] ?? $totales['modo']);
+            $totales['abreviatura'] = (string) ($res['totales']['abreviatura'] ?? $totales['abreviatura']);
+        }
+
+        $advertencias = array_values(array_unique($advertencias));
+        if (! $huboDatos) {
+            return [
+                'filas' => [],
+                'totales' => $this->totalesVacios(),
+                'advertencias' => $advertencias !== []
+                    ? $advertencias
+                    : ['Sin movimientos para los filtros indicados.'],
+                'stats' => ['clientes' => 0, 'vendedores' => 0, 'movimientos' => 0, 'aplicaciones' => 0],
+                'clientes_resueltos' => $clientesResueltos,
+                'vendedores_resueltos' => $vendedoresResueltos,
+                'secciones' => [],
+            ];
+        }
+
+        return [
+            'filas' => $filas,
+            'totales' => $totales,
+            'advertencias' => $advertencias,
+            'stats' => $stats,
+            'clientes_resueltos' => $clientesResueltos,
+            'vendedores_resueltos' => $vendedoresResueltos,
+            'secciones' => $secciones,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Cliente_Cuentacorriente>  $movimientos
+     */
+    private function nombreEmpresaUnicaGrupo(Collection $movimientos): string
+    {
+        $nombres = $movimientos
+            ->map(static fn ($m) => (string) ($m->empresas->nombre ?? ''))
+            ->filter(static fn (string $n) => $n !== '')
+            ->unique()
+            ->values();
+
+        return $nombres->count() === 1 ? (string) $nombres->first() : '';
+    }
+
+    private function nombreEmpresaPorId(int $empresaId): string
+    {
+        if ($empresaId <= 0) {
+            return '';
+        }
+
+        return (string) (Empresa::query()->whereKey($empresaId)->value('nombre') ?? '');
     }
 }

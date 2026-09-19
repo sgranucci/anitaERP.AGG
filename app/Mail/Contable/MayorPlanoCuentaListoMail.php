@@ -46,11 +46,14 @@ class MayorPlanoCuentaListoMail extends Mailable
             ]);
 
         $adjunto = (string) ($this->datos['adjunto_path'] ?? '');
-        $nombre = (string) ($this->datos['nombre_archivo'] ?? 'mayor_plano.csv');
+        $nombre = (string) ($this->datos['nombre_archivo'] ?? 'mayor_plano.xlsx');
         if ($adjunto !== '' && is_file($adjunto)) {
+            $esXlsx = str_ends_with(strtolower($nombre), '.xlsx');
             $mail->attach($adjunto, [
-                'as' => $nombre !== '' ? $nombre : 'mayor_plano.csv',
-                'mime' => 'text/csv',
+                'as' => $nombre !== '' ? $nombre : 'mayor_plano.xlsx',
+                'mime' => $esXlsx
+                    ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    : 'text/csv',
             ]);
         }
 

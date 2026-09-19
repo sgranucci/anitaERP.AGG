@@ -3,9 +3,9 @@
 return [
     /*
      * Numeración OP vía Anita (pago.c):
-     * - MultiEmpresa (AGG): t_comp O{empresa} → numerador (O1→223, O2→224, O3→225).
-     * - Mono (Ferli y resto): t_comp PAGOPROVEEDOR_ANITA_TCOMP_CLAVE (OPP→203/205).
-     * Default: true solo en AGG; el resto usa OPP salvo override explícito.
+     * - MultiEmpresa (AGG, pago.c nro_op): t_comp O{empresa} para OPP y OPA (O1→223…).
+     * - Mono (Ferli): t_comp = comprobante (OPP o OPA). ADELANTO numera con OPA.
+     * Default: true solo en AGG.
      */
     'anita_multiempresa' => filter_var(
         env(
@@ -15,6 +15,8 @@ return [
         FILTER_VALIDATE_BOOLEAN
     ),
     'anita_tcomp_clave' => env('PAGOPROVEEDOR_ANITA_TCOMP_CLAVE', 'OPP'),
+    /** Ferli / mono: t_comp de anticipo (pago.c in_tcomp=OPA). MultiEmpresa ignora esto y usa O{n}. */
+    'anita_tcomp_clave_opa' => env('PAGOPROVEEDOR_ANITA_TCOMP_CLAVE_OPA', 'OPA'),
     'anita_sistema_tcomp' => env('PAGOPROVEEDOR_ANITA_SISTEMA_TCOMP', 'compras'),
     'anita_sistema_numerador' => env('PAGOPROVEEDOR_ANITA_SISTEMA_NUMERADOR', 'ventas'),
     /** Sistema Anita para retmov / retibrmov / retimov / retsmov. */
@@ -69,6 +71,24 @@ return [
         'auto_reparar' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_AUTO_REPARAR', false), FILTER_VALIDATE_BOOLEAN),
         'mail_siempre' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_MAIL_SIEMPRE', false), FILTER_VALIDATE_BOOLEAN),
         'mail_si_reparo' => filter_var(env('PAGOPROVEEDOR_AUDITORIA_ANITA_MAIL_SI_REPARO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
+
+    /*
+     * Control diario OP a OP: CC ERP ↔ asiento ERP ↔ promov Anita ↔ ctamov Anita
+     */
+    'imputacion_ap_diaria' => [
+        'habilitada' => filter_var(env('PAGOPROVEEDOR_IMPUTACION_AP_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('PAGOPROVEEDOR_IMPUTACION_AP_HORA', '08:50'),
+        'email' => env('PAGOPROVEEDOR_IMPUTACION_AP_EMAIL', env('PAGOPROVEEDOR_AUDITORIA_ANITA_EMAIL', env('COMPROBANTE_PROVEEDOR_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com'))),
+        'ventana_dias' => max(1, (int) env('PAGOPROVEEDOR_IMPUTACION_AP_VENTANA_DIAS', 7)),
+        'tolerancia' => (float) env('PAGOPROVEEDOR_IMPUTACION_AP_TOLERANCIA', 0.05),
+        'mail_siempre' => filter_var(env('PAGOPROVEEDOR_IMPUTACION_AP_MAIL_SIEMPRE', true), FILTER_VALIDATE_BOOLEAN),
+        'max_filas_mail' => max(10, (int) env('PAGOPROVEEDOR_IMPUTACION_AP_MAX_FILAS_MAIL', 80)),
+        'anita_reintentos_bridge' => max(1, (int) env('PAGOPROVEEDOR_IMPUTACION_AP_ANITA_REINTENTOS', 3)),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('PAGOPROVEEDOR_IMPUTACION_AP_EMPRESAS_IDS', '1,2,3'))
+        ))),
     ],
 
     'numeracion_lock_segundos' => (int) env('PAGOPROVEEDOR_NUMERACION_LOCK', 15),

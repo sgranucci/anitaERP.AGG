@@ -520,6 +520,27 @@ function activaEventosMayorPlanoCuentaFiltro() {
                 }
             });
         });
+
+    $(document)
+        .off('change.mpcFuente', 'input[name="fuente_mayor"]')
+        .on('change.mpcFuente', 'input[name="fuente_mayor"]', function () {
+            mayorPlanoSincronizarTildeSubdiario();
+        });
+    mayorPlanoSincronizarTildeSubdiario();
+}
+
+function mayorPlanoSincronizarTildeSubdiario() {
+    var $wrap = $('#mpc-incluye-subdiario-wrap');
+    if (!$wrap.length) {
+        return;
+    }
+
+    var $erp = $('#mpc-fuente-erp');
+    var ocultar = $erp.length > 0 && $erp.is(':checked');
+    $wrap.toggleClass('d-none', ocultar);
+    $wrap.find('input[name="incluye_subdiario"]').prop('disabled', ocultar);
+    $('#mpc-ayuda-subdiario-anita').toggleClass('d-none', ocultar);
+    $('#mpc-ayuda-subdiario-erp').toggleClass('d-none', !ocultar);
 }
 
 function mayorPlanoOnKeydownF1Capture(e) {
@@ -821,7 +842,7 @@ function mayorPlanoDispararDescargaBlob(blob, filename) {
 function mayorPlanoDescargarExportacion(href) {
     var formato = mayorPlanoFormatoExportacion(href);
     var subtitulo = formato === 'Excel plano'
-        ? 'Armando CSV del Excel plano (emisor, OC, CAPEX, facturas; sin IA). El aviso se cierra al terminar la descarga. Esc cancela el aviso.'
+        ? 'Armando Excel (.xlsx) con emisor, OC, CAPEX y facturas. El aviso se cierra al terminar la descarga. Esc cancela el aviso.'
         : 'Generando ' + formato + '… Puede demorar según el período. Pulse Esc para cerrar este aviso.';
 
     mayorPlanoMostrarOverlay('Exportando el mayor…', subtitulo);
@@ -858,12 +879,11 @@ function mayorPlanoDescargarExportacion(href) {
             throw new Error('Error HTTP ' + res.status + ' al exportar.');
         }
         var fallback = 'mayor_plano';
-        if (formato === 'Excel') {
+        if (formato === 'Excel' || formato === 'Excel plano') {
             fallback += '.xlsx';
         } else if (formato === 'PDF') {
             fallback += '.pdf';
         } else {
-            // Excel plano y CSV salen como .csv
             fallback += '.csv';
         }
         var filename = mayorPlanoNombreArchivoDisposition(res.headers.get('Content-Disposition'), fallback);
@@ -914,7 +934,7 @@ function mayorPlanoActivarOverlayProceso() {
             }
             mayorPlanoMostrarOverlay(
                 'Calculando el mayor…',
-                'Un mes, o un período largo con pocas cuentas, sale en pantalla. Solo períodos largos con todas las cuentas (o rango/lista grande) se encolan y el CSV llega por mail. No cierres la página hasta ver el aviso.'
+                'Un mes, o un período largo con pocas cuentas, sale en pantalla. Solo períodos largos con todas las cuentas (o rango/lista grande) se encolan y el Excel llega por mail. No cierres la página hasta ver el aviso.'
             );
         });
     });

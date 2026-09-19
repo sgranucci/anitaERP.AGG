@@ -52,7 +52,7 @@ class MayorPlanoCuentaListadoFiltros
             $request->input('centrocostos_codigo', ''),
         );
 
-        return [
+        $filtros = [
             'empresa_ids' => $empresaIds,
             'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'moneda_id' => max(1, (int) $request->input('moneda_id', 1)),
@@ -87,6 +87,29 @@ class MayorPlanoCuentaListadoFiltros
                 $request->input('fuente_mayor', MayorFuenteConsultaSupport::MODO_ERP)
             ),
         ];
+
+        // ERP nativo ya trae los asientos importados de subdiario; el tilde no aplica.
+        if ($filtros['fuente_mayor'] === MayorFuenteConsultaSupport::MODO_ERP) {
+            $filtros['incluye_subdiario'] = true;
+        }
+
+        return $filtros;
+    }
+
+    /**
+     * El filtro de subdiario solo vale en fuente Anita (bridge).
+     * Con ERP nativo los asientos 5.xxx ya están en `asiento` y no se recortan.
+     */
+    public static function incluyeSubdiarioEfectivo(array $filtros): bool
+    {
+        $fuente = MayorFuenteConsultaSupport::normalizarModo(
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
+        );
+        if ($fuente === MayorFuenteConsultaSupport::MODO_ERP) {
+            return true;
+        }
+
+        return ($filtros['incluye_subdiario'] ?? true) !== false;
     }
 
     public static function mostrarColumnaCentrocosto(array $filtros): bool
@@ -229,7 +252,7 @@ class MayorPlanoCuentaListadoFiltros
             $out['solo_moneda_origen'] = 1;
         }
 
-        if (($filtros['incluye_subdiario'] ?? true) === false) {
+        if (! self::incluyeSubdiarioEfectivo($filtros)) {
             $out['incluye_subdiario'] = 0;
         }
 

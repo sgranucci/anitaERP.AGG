@@ -8,8 +8,8 @@ use App\Mail\Contable\MayorPlanoCuentaListoMail;
 use App\Models\Seguridad\Usuario;
 use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCacheSupport;
-use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCsvExportSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaXlsxExportSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
- * Mayor plano de período largo: genera en worker el Excel plano (CSV enriquecido) y avisa por mail.
+ * Mayor plano de período largo: genera en worker el Excel plano (.xlsx) y avisa por mail.
  * Un mes (o rango corto) sigue saliendo en pantalla; no usa este job.
  */
 class GenerarMayorPlanoCuentaJob implements ShouldBeUnique, ShouldQueue
@@ -87,12 +87,11 @@ class GenerarMayorPlanoCuentaJob implements ShouldBeUnique, ShouldQueue
             $lineas = (int) ($resultado['totales']['lineas'] ?? 0);
             $stamp = now()->format('Ymd_His');
             $firmaCorta = substr(MayorPlanoCuentaListadoFiltros::firma($this->filtros), 0, 8);
-            $nombreArchivo = 'mayor_plano_excel_'.$stamp.'_u'.$this->usuarioId.'_'.$firmaCorta.'.csv';
+            $nombreArchivo = 'mayor_plano_excel_'.$stamp.'_u'.$this->usuarioId.'_'.$firmaCorta.'.xlsx';
             $rutaRelativa = 'exports/mayor_plano_async/'.$nombreArchivo;
             $rutaAbsoluta = storage_path('app/public/'.$rutaRelativa);
 
-            // Mismo layout que “Excel plano” en pantalla (emisor, OC, CAPEX, facturas; sin IA).
-            $export = MayorPlanoCuentaCsvExportSupport::escribirCsvExcelPlano(
+            $export = MayorPlanoCuentaXlsxExportSupport::escribirExcelPlano(
                 $reporteService,
                 $resultado,
                 $this->filtros,
@@ -111,8 +110,8 @@ class GenerarMayorPlanoCuentaJob implements ShouldBeUnique, ShouldQueue
                 'empresas' => $empresas,
                 'lineas' => $lineas,
                 'mensaje' => $adjunto !== ''
-                    ? 'Adjuntamos el Excel plano en CSV (emisor, OC, CAPEX, facturas); también está el enlace.'
-                    : 'Excel plano en CSV listo (emisor, OC, CAPEX, facturas). El archivo supera el límite de adjunto; descargalo con el enlace.',
+                    ? 'Adjuntamos el Excel plano (.xlsx) con emisor, OC, CAPEX y facturas; también está el enlace.'
+                    : 'Excel plano listo (.xlsx). El archivo supera el límite de adjunto; descargalo con el enlace.',
                 'url_descarga' => $url,
                 'nombre_archivo' => $nombreArchivo,
                 'adjunto_path' => $adjunto,

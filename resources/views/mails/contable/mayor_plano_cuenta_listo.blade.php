@@ -31,7 +31,7 @@
 @if ($ok)
     <p style="margin:0 0 12px 0;">
         Terminó el Excel plano del mayor analítico por cuenta (período largo: no se muestra en pantalla).
-        El CSV incluye emisor, OC, proyecto CAPEX, qué se compró y números de factura.
+        El Excel incluye emisor, OC, proyecto CAPEX, qué se compró y números de factura.
     </p>
 @else
     <p style="margin:0 0 12px 0;">
@@ -69,7 +69,7 @@
 @if ($ok && $url !== '')
     <p style="margin:0 0 8px 0;">
         <a href="{{ $url }}" style="display:inline-block; padding:10px 16px; background:#2471A3; color:#fff; text-decoration:none; border-radius:4px;">
-            Descargar Excel plano (CSV)
+            Descargar Excel plano
         </a>
     </p>
     <p style="margin:0; color:#777; font-size:12px;">

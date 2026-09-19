@@ -16,6 +16,7 @@
 
         return number_format($n, 2, ',', '.');
     };
+    $colSpan = 10 + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
 @endphp
 <thead>
     <tr>
@@ -44,22 +45,33 @@
 @forelse ($filas as $fila)
     @php
         $tipo = $fila['tipo'] ?? 'movimiento';
+        $esHeaderEmpresa = $tipo === 'header_empresa';
         $esHeaderVend = $tipo === 'header_vendedor';
         $esTotalVend = $tipo === 'total_vendedor';
         $esHeader = $tipo === 'header_cliente';
         $esTotal = $tipo === 'total_cliente';
         $esApl = $tipo === 'aplicacion';
         $esSaldoAnt = $tipo === 'saldo_anterior';
-        $trClass = $esHeaderVend
-            ? 'cc-rep-header-vendedor'
-            : ($esTotalVend
-                ? 'cc-rep-total-vendedor'
-                : ($esHeader
-                    ? 'cc-rep-header'
-                    : ($esTotal
-                        ? 'cc-rep-total'
-                        : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : '')))));
+        $trClass = $esHeaderEmpresa
+            ? 'cc-rep-header-empresa'
+            : ($esHeaderVend
+                ? 'cc-rep-header-vendedor'
+                : ($esTotalVend
+                    ? 'cc-rep-total-vendedor'
+                    : ($esHeader
+                        ? 'cc-rep-header'
+                        : ($esTotal
+                            ? 'cc-rep-total'
+                            : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : ''))))));
     @endphp
+    @if ($esHeaderEmpresa)
+        <tr class="{{ $trClass }}">
+            <td colspan="{{ $colSpan }}">
+                <strong>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</strong>
+            </td>
+        </tr>
+        @continue
+    @endif
     <tr class="{{ $trClass }}">
         <td>
             @if ($esHeaderVend || $esTotalVend)
@@ -89,7 +101,7 @@
             @endif
         </td>
         <td>
-            @if ($esHeader)
+            @if ($esHeader || $esApl || $esSaldoAnt || $tipo === 'movimiento')
                 {{ $fila['nombreempresa'] ?? '' }}
             @endif
         </td>

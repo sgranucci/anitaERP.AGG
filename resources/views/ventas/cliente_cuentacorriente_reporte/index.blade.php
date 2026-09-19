@@ -14,6 +14,7 @@
         consultado: @json(! empty($consultado)),
     };
 </script>
+<script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/vendedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/vendedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente_cuentacorriente_reporte/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente_cuentacorriente_reporte/filtro.js')) ?: time() }}" type="text/javascript"></script>
@@ -56,12 +57,14 @@
                         Podés acotar por <strong>vendedor</strong> (todos, lista o rango de códigos). El resto de filtros se aplica igual en todos los casos.
                     </p>
 
-                    @include('includes.form-empresa-asignada', [
+                    @include('includes.reportes.asignacion_empresas_checkboxes', [
                         'empresa_query' => $empresa_query,
-                        'empresa_id' => $filtros['empresa_id'] ?? null,
-                        'required' => true,
-                        'col_label' => $colLabel,
-                        'col_input' => 'col-lg-4',
+                        'empresa_ids_seleccionados' => $filtros['empresa_ids'] ?? [],
+                        'consolidar_empresas' => $filtros['consolidar_empresas'] ?? true,
+                        'reporte_clave' => 'cliente_cuentacorriente_reporte',
+                        'id_prefix' => 'cccli',
+                        'mostrar_consolidar' => true,
+                        'col_label' => 'col-lg-2 col-form-label text-right pr-2',
                     ])
 
                     <div class="form-group row">
@@ -242,7 +245,7 @@
                     <style>
                         #tabla-cc-clientes-reporte thead tr { background-color: #85C1E9; color: #17202A; }
                         #tabla-cc-clientes-reporte thead th { font-weight: 600; border-color: #7fb3d5; }
-                        #tabla-cc-clientes-reporte .cc-rep-header-vendedor {
+                        #tabla-cc-clientes-reporte .cc-rep-header-empresa {
                             background: #1b4f72;
                             color: #fff;
                             font-weight: 700;

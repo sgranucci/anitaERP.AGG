@@ -15,7 +15,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Lee asientos locales ERP y los proyecta como filas estilo ctamov para el mayor plano.
- * Asientos importados desde subdiario/subhist llevan tag [SUBD]/[SUBH] en observacion.
+ *
+ * Los importados desde subdiario/subhist ([SUBD]/[SUBH] en observacion) ya son
+ * asientos normales: el mayor ERP nativo los incluye siempre. El flag
+ * incluye_subdiario solo enriquece emisor desde subhist Anita; no filtra filas.
  */
 final class MayorPlanoCuentaErpAsientoReader
 {
@@ -138,13 +141,6 @@ final class MayorPlanoCuentaErpAsientoReader
                 'cco.codigo as ccosto_codigo',
                 'm.codigo as moneda_codigo',
             ], array_map(fn (string $columna) => 'a.'.$columna, array_merge($columnasFk, $columnasAnita))));
-
-        if (! $incluyeSubdiario) {
-            $query->where('a.observacion', 'not like', '%'.AnitaAsientoImportService::TAG_SUBHIST.'%')
-                ->where('a.observacion', 'not like', '%'.AnitaAsientoImportService::TAG_SUBDIARIO.'%')
-                ->where('a.observacion', 'not like', '%[subhist]%')
-                ->where('a.observacion', 'not like', '%[subdiario]%');
-        }
 
         if ($soloMovimientosVentas) {
             MayorPlanoCuentaVentasFiltroSupport::aplicarFiltroErpQuery($query, $columnasAnita);

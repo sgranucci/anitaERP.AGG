@@ -143,4 +143,11 @@ return [
         FILTER_VALIDATE_BOOLEAN
     ),
 
+    /*
+    | Retención IIBB en OP: omitir proveedores monotributistas.
+    | Provisorio AGG (hablar con Impuestos). Vacío = sí en AGG, no en el resto.
+    | true/false fuerza el corte en cualquier instalación.
+    */
+    'iibb_retencion_omite_monotributo' => env('COMPRAS_IIBB_OMITE_MONOTRIBUTO'),
+
 ];

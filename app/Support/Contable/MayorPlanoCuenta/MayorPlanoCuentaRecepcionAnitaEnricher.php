@@ -2,17 +2,14 @@
 
 namespace App\Support\Contable\MayorPlanoCuenta;
 
-use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Enlaza líneas Anita tipo COM con recepcion_proveedor y resuelve la OC real.
+ * Enlaza líneas tipo COM con recepcion_proveedor ERP y resuelve la OC real.
  *
  * El nro del COM no es la OC (choca con OCs homónimas de otro proveedor).
- * La OC Anita es el PEP en recepmae: recm_tipo_fac=PEP + recm_nro_fac
- * (ver RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera).
+ * La OC queda en recepcion_proveedor.ordencompra_id (ya importada). No va a recepmae/Anita.
  *
  * Las filas de pantalla a veces solo traen comprobante formateado (X0001-00159903)
  * sin letra/sucursal/nro sueltos: hay que parsearlos del texto.
@@ -31,7 +28,6 @@ class MayorPlanoCuentaRecepcionAnitaEnricher
 
         $partesPorIdx = [];
         $clavesRecepcion = [];
-        $nrosParaPep = [];
 
         foreach ($filas as $idx => $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
@@ -46,7 +42,6 @@ class MayorPlanoCuentaRecepcionAnitaEnricher
             if ((int) ($fila['recepcionproveedor_id'] ?? 0) <= 0) {
                 $clavesRecepcion[$clave] = true;
             }
-            $nrosParaPep[$partes['nro']] = $partes['nro'];
         }
 
         if ($partesPorIdx === []) {
@@ -129,113 +124,7 @@ class MayorPlanoCuentaRecepcionAnitaEnricher
             }
         }
 
-        // 3) Sin OC aún → PEP en recepmae (Anita).
-        $nrosFaltantes = [];
-        foreach ($partesPorIdx as $idx => $partes) {
-            if ((int) ($filas[$idx]['ordencompra_id'] ?? 0) > 0 && (int) ($filas[$idx]['nro_oc'] ?? 0) > 0) {
-                continue;
-            }
-            $nrosFaltantes[$partes['nro']] = $partes['nro'];
-        }
-
-        if ($nrosFaltantes === []) {
-            return $filas;
-        }
-
-        $pepPorClaveCom = $this->cargarPepDesdeRecepmae(array_values($nrosFaltantes));
-        if ($pepPorClaveCom === []) {
-            return $filas;
-        }
-
-        $numerosOc = array_values(array_unique(array_filter($pepPorClaveCom)));
-        $ocPorNumeroYEmpresa = $this->cargarOrdenesPorNumero($numerosOc);
-
-        foreach ($partesPorIdx as $idx => $partes) {
-            if ((int) ($filas[$idx]['ordencompra_id'] ?? 0) > 0 && (int) ($filas[$idx]['nro_oc'] ?? 0) > 0) {
-                continue;
-            }
-            $claveCom = $partes['letra'].'|'.$partes['sucursal'].'|'.$partes['nro'];
-            $nroPep = (int) ($pepPorClaveCom[$claveCom] ?? 0);
-            if ($nroPep <= 0) {
-                continue;
-            }
-
-            $filas[$idx]['nro_oc'] = $nroPep;
-            $empresaId = $partes['empresa_id'];
-            $ocId = (int) ($ocPorNumeroYEmpresa[$empresaId.'|'.$nroPep] ?? 0);
-            if ($ocId <= 0) {
-                $ocId = (int) ($ocPorNumeroYEmpresa['0|'.$nroPep] ?? 0);
-            }
-            if ($ocId > 0) {
-                $filas[$idx]['ordencompra_id'] = $ocId;
-            }
-        }
-
         return $filas;
-    }
-
-    /**
-     * @param  list<int>  $nrosCom
-     * @return array<string, int> clave letra|sucursal|nro => nro PEP/OC
-     */
-    private function cargarPepDesdeRecepmae(array $nrosCom): array
-    {
-        try {
-            $cabs = RecepcionProveedorAnitaImportSupport::listarRecepmaePorNros($nrosCom);
-        } catch (\Throwable $e) {
-            Log::warning('MayorPlanoCuentaRecepcionAnitaEnricher: recepmae PEP', [
-                'error' => $e->getMessage(),
-            ]);
-
-            return [];
-        }
-
-        $mapa = [];
-        foreach ($cabs as $cab) {
-            $letra = trim((string) ($cab->recm_letra ?? ' '));
-            if ($letra === '') {
-                $letra = ' ';
-            }
-            $sucursal = (int) ($cab->recm_sucursal ?? 0);
-            $nro = (int) ($cab->recm_nro ?? 0);
-            $pep = RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab);
-            if ($nro <= 0 || $pep <= 0) {
-                continue;
-            }
-            $mapa[$letra.'|'.$sucursal.'|'.$nro] = $pep;
-        }
-
-        return $mapa;
-    }
-
-    /**
-     * @param  list<int>  $numerosOc
-     * @return array<string, int> empresaId|numero => ordencompra_id (empresa 0 = cualquiera)
-     */
-    private function cargarOrdenesPorNumero(array $numerosOc): array
-    {
-        if ($numerosOc === [] || ! Schema::hasTable('ordencompra')) {
-            return [];
-        }
-
-        $mapa = [];
-        foreach (DB::table('ordencompra')
-            ->whereIn('numeroordencompra', $numerosOc)
-            ->orderBy('id')
-            ->get(['id', 'empresa_id', 'numeroordencompra']) as $row) {
-            $nro = (int) $row->numeroordencompra;
-            $emp = (int) ($row->empresa_id ?? 0);
-            $id = (int) $row->id;
-            $claveEmp = $emp.'|'.$nro;
-            if (! isset($mapa[$claveEmp])) {
-                $mapa[$claveEmp] = $id;
-            }
-            if (! isset($mapa['0|'.$nro])) {
-                $mapa['0|'.$nro] = $id;
-            }
-        }
-
-        return $mapa;
     }
 
     /**

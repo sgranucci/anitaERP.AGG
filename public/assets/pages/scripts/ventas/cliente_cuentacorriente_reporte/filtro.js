@@ -394,10 +394,10 @@
             }
         }
 
-        var empresa = $('#empresa_id').val();
-        if (!empresa) {
-            alert('Seleccione la empresa.');
-            $('#empresa_id').focus();
+        var checks = $('#form-cc-clientes-reporte').find('input[name="empresa_ids[]"]:checked');
+        var unica = $('#form-cc-clientes-reporte').find('input[name="empresa_ids[]"][type="hidden"]');
+        if (!unica.length && checks.length === 0) {
+            alert('Seleccione al menos una empresa.');
             return false;
         }
         return true;
@@ -632,6 +632,11 @@
         });
 
         $('#form-cc-clientes-reporte').on('submit', function (e) {
+            var btnConsol = this.querySelector('.btn-toggle-consolidar-empresas');
+            var inputConsol = this.querySelector('input[name="consolidar_empresas"]');
+            if (btnConsol && inputConsol) {
+                inputConsol.value = btnConsol.classList.contains('btn-success') ? '1' : '0';
+            }
             if (this.checkValidity && !this.checkValidity()) {
                 return;
             }

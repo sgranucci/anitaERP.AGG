@@ -40,6 +40,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
+use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 
@@ -130,10 +131,11 @@ class PagoproveedorService
             // Validar asiento ANTES de abrir TX / numerar OP / tocar Anita.
             $this->assertAsientoBalanceadoAntesDeGrabar($data, $estado);
             // Preflight numeradores Anita (solo lectura): evita quemar correlativos si falta retención/OPP.
-            $this->assertNumeradoresAnitaAntesDeGrabar($empresaId, $data, $estado);
+            $tipoComprobante = $this->resolverTipoComprobanteAlta($data);
+            $this->assertNumeradoresAnitaAntesDeGrabar($empresaId, $data, $estado, $tipoComprobante);
 
-            $pago = DB::transaction(function () use ($data, $request, $empresaId, $estado) {
-                $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId);
+            $pago = DB::transaction(function () use ($data, $request, $empresaId, $estado, $tipoComprobante) {
+                $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId, $tipoComprobante);
                 $sucursal = PagoproveedorAnitaNumeracionSupport::sucursalParaOp($empresaId);
 
                 $cbuElegido = ProveedorCbuPagoSupport::resolverDesdeRequest(
@@ -151,9 +153,11 @@ class PagoproveedorService
 
                 $pago = $this->pagoproveedorRepository->create([
                     'empresa_id' => $empresaId,
-                    'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null)
-                        ?: (IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig() ?: null),
-                    'tipocomprobante' => (string) ($data['tipocomprobante'] ?? config('pagoproveedor.tipocomprobante_default', 'OPP')),
+                    'tipotransaccion_caja_id' => $this->tipotransaccionCajaIdParaComprobante(
+                        $tipoComprobante,
+                        $data['tipotransaccion_caja_id'] ?? null
+                    ),
+                    'tipocomprobante' => $tipoComprobante,
                     'letra' => (string) config('pagoproveedor.letra_default', ' '),
                     'sucursal' => $sucursal,
                     'numerotransaccion' => (string) $numero,
@@ -368,13 +372,18 @@ class PagoproveedorService
      *
      * @param  array<string, mixed>  $data
      */
-    private function assertNumeradoresAnitaAntesDeGrabar(int $empresaId, array $data, string $estado): void
+    private function assertNumeradoresAnitaAntesDeGrabar(
+        int $empresaId,
+        array $data,
+        string $estado,
+        ?string $tipoComprobante = null
+    ): void
     {
         if ($estado === 'PRE CARGA' || ! PagoproveedorAnitaNumeracionSupport::estaHabilitada()) {
             return;
         }
 
-        PagoproveedorAnitaNumeracionSupport::assertNumeradorDisponible($empresaId);
+        PagoproveedorAnitaNumeracionSupport::assertNumeradorDisponible($empresaId, $tipoComprobante);
 
         $tipos = $this->tiposRetencionConImporteDesdeRequest($data);
         if ($tipos === []) {
@@ -695,6 +704,62 @@ class PagoproveedorService
         }
 
         return $out;
+    }
+
+    /**
+     * pago.c: ADELANTO fija in_tcomp=OPA antes de nro_op(). Hay que numerar con ese
+     * comprobante (Ferli t_comp OPA; MultiEmpresa sigue en O{n}).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function resolverTipoComprobanteAlta(array $data): string
+    {
+        $tipoCajaId = (int) ($data['tipotransaccion_caja_id'] ?? 0);
+        $abrevCaja = $tipoCajaId > 0
+            ? IngresoEgresoAnitaNumeracionSupport::abreviaturaTipo($tipoCajaId)
+            : '';
+
+        return PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante(
+            $abrevCaja === 'OPA' ? 'OPA' : (string) ($data['tipocomprobante'] ?? ''),
+            $this->esAnticipoSinAplicaciones($data)
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function esAnticipoSinAplicaciones(array $data): bool
+    {
+        $aplicaciones = $this->resolverAplicacionesDesdeRequest($data);
+        if ($this->hayAplicacionConMonto($aplicaciones)) {
+            return false;
+        }
+
+        $anticipo = (float) ($data['anticipo'] ?? $data['totalanticipo'] ?? 0);
+        if ($anticipo <= 0) {
+            $anticipo = abs((float) ($data['monto'] ?? $data['totalfinalpago'] ?? 0));
+        }
+
+        return $anticipo > 0.01;
+    }
+
+    private function tipotransaccionCajaIdParaComprobante(string $tipoComprobante, mixed $tipoCajaIdRequest): ?int
+    {
+        if (PagoproveedorAnitaNumeracionSupport::esTipoOpa($tipoComprobante)) {
+            $tipoOpaId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorAbreviaturaPublica('OPA');
+            if ($tipoOpaId > 0) {
+                return $tipoOpaId;
+            }
+        }
+
+        $tipoCajaId = (int) ($tipoCajaIdRequest ?: 0);
+        if ($tipoCajaId > 0) {
+            return $tipoCajaId;
+        }
+
+        $porConfig = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig();
+
+        return $porConfig ?: null;
     }
 
     /**
@@ -1311,7 +1376,12 @@ class PagoproveedorService
                 $chequeraId,
                 $nombreProveedorCheque
             ) {
-                $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId);
+                $esOpa = ! $this->hayAplicacionConMonto($aplicaciones) && abs((float) $monto) > 0;
+                $tipoComprobante = PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante(
+                    'OPP',
+                    $esOpa
+                );
+                $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId, $tipoComprobante);
                 $sucursal = PagoproveedorAnitaNumeracionSupport::sucursalParaOp($empresaId);
 
                 $chequera = null;
@@ -1324,7 +1394,8 @@ class PagoproveedorService
 
                 $pago = $this->pagoproveedorRepository->create([
                     'empresa_id' => $empresaId,
-                    'tipocomprobante' => (string) config('pagoproveedor.tipocomprobante_default', 'OPP'),
+                    'tipotransaccion_caja_id' => $this->tipotransaccionCajaIdParaComprobante($tipoComprobante, null),
+                    'tipocomprobante' => $tipoComprobante,
                     'letra' => (string) config('pagoproveedor.letra_default', ' '),
                     'sucursal' => $sucursal,
                     'numerotransaccion' => (string) $numero,

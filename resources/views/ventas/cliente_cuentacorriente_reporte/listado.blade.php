@@ -25,6 +25,11 @@
         }
         table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
         table.data tbody tr.cc-rep-header { background-color: #d6eaf8; font-weight: bold; }
+        table.data tbody tr.cc-rep-header-empresa {
+            background-color: #1b4f72;
+            color: #ffffff;
+            font-weight: bold;
+        }
         table.data tbody tr.cc-rep-header-vendedor {
             background-color: #1b4f72;
             color: #ffffff;

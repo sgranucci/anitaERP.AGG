@@ -16,6 +16,7 @@
 
         return number_format($n, 2, ',', '.');
     };
+    $colSpan = 10 + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
 @endphp
 <thead>
     <tr>
@@ -44,12 +45,23 @@
 @forelse ($filas as $fila)
     @php
         $tipo = $fila['tipo'] ?? 'movimiento';
+        $esHeaderEmpresa = $tipo === 'header_empresa';
         $esHeader = $tipo === 'header_proveedor';
         $esTotal = $tipo === 'total_proveedor';
         $esApl = $tipo === 'aplicacion';
         $esSaldoAnt = $tipo === 'saldo_anterior';
-        $trClass = $esHeader ? 'cc-rep-header' : ($esTotal ? 'cc-rep-total' : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : '')));
+        $trClass = $esHeaderEmpresa
+            ? 'cc-rep-header-empresa'
+            : ($esHeader ? 'cc-rep-header' : ($esTotal ? 'cc-rep-total' : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : ''))));
     @endphp
+    @if ($esHeaderEmpresa)
+        <tr class="{{ $trClass }}">
+            <td colspan="{{ $colSpan }}">
+                <strong>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</strong>
+            </td>
+        </tr>
+        @continue
+    @endif
     <tr class="{{ $trClass }}">
         <td>
             @if ($esHeader || $esTotal)
@@ -72,7 +84,7 @@
                 <em>{{ $fila['comprobante'] ?? 'Saldo anterior' }}</em>
             @endif
         </td>
-        <td>{{ $esHeader ? ($fila['nombreempresa'] ?? '') : '' }}</td>
+        <td>{{ ($esHeader || $esApl || $esSaldoAnt || $tipo === 'movimiento') ? ($fila['nombreempresa'] ?? '') : '' }}</td>
         <td>{{ $fila['fecha'] ?? '' }}</td>
         <td>{{ $fila['fechavencimiento'] ?? '' }}</td>
         <td>

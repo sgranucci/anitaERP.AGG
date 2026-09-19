@@ -50,6 +50,7 @@ class IngresoEgresoSolicitudpagoOpaTest extends TestCase
 
     public function test_semilla_anita_opa_comparte_serie_con_opp(): void
     {
+        // pago.c MultiEmpresa: nro_op usa O{nroemp} para OPP y OPA.
         $semillas = IngresoEgresoAnitaNumeracionSupport::semillasDefault();
 
         $this->assertArrayHasKey('OPA', $semillas);

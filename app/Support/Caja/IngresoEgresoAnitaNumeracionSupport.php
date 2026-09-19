@@ -15,13 +15,14 @@ use Illuminate\Support\Facades\Log;
  *
  * Semillas default (num_clave AGG):
  * - OPP: 223/224/225 (emp 1/2/3) — misma semilla que OP MultiEmpresa O1/O2/O3
- * - OPA: mismas claves que OPP (el tipo de comprobante diferencia anticipo vs pago)
+ * - OPA MultiEmpresa: mismas claves que OPP (pago.c nro_op usa O{nroemp}; pag_tipo diferencia)
  * - EGR: 361/362/363
  * - ING: 346/347/348
  * - TRA: 334/335/336
  *
  * Solo Ferli (no usa esas semillas):
- * - OPP/OPA: t_comp (OPP→203)
+ * - OPP: t_comp OPP
+ * - OPA: t_comp OPA (pago.c in_tcomp, no OPP)
  * - ING/EGR: tctes_numero (ambos 304)
  * - TRA: sin numerador de documento en Anita (tesmov nativo TED/TEH 308/309)
  *
@@ -119,7 +120,7 @@ final class IngresoEgresoAnitaNumeracionSupport
         }
 
         if (EntornoEmpresaSupport::esFerli() && in_array($abrev, ['OPP', 'OPA'], true)) {
-            $desdeTcomp = self::claveNumeradorOpDesdeTComp($empresaId);
+            $desdeTcomp = self::claveNumeradorOpDesdeTComp($empresaId, $abrev);
             if ($desdeTcomp > 0) {
                 return $desdeTcomp;
             }
@@ -209,23 +210,24 @@ final class IngresoEgresoAnitaNumeracionSupport
     }
 
     /**
-     * Ferli: clave de numerador de OP vía t_comp (mismo criterio que pago a proveedores).
-     * AGG no usa este camino.
+     * Ferli: clave de numerador de OP vía t_comp (pago.c: OPP u OPA según in_tcomp).
+     * AGG MultiEmpresa no usa este camino: OPA comparte O{nroemp} con OPP.
      */
-    public static function claveNumeradorOpDesdeTComp(int $empresaId): int
+    public static function claveNumeradorOpDesdeTComp(int $empresaId, string $abreviatura = 'OPP'): int
     {
         if (! EntornoEmpresaSupport::esFerli()) {
             return 0;
         }
 
         try {
-            $claveTcomp = PagoproveedorAnitaNumeracionSupport::claveTCompParaEmpresa($empresaId);
+            $claveTcomp = PagoproveedorAnitaNumeracionSupport::claveTCompParaEmpresa($empresaId, $abreviatura);
             $refer = PagoproveedorAnitaNumeracionSupport::resolverClaveNumeradorDesdeTComp($claveTcomp);
 
             return max(0, (int) $refer);
         } catch (\Throwable $e) {
             Log::warning('caja.ie.numeracion.tcomp_op', [
                 'empresa_id' => $empresaId,
+                'abrev' => $abreviatura,
                 'error' => $e->getMessage(),
             ]);
 

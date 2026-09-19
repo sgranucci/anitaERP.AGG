@@ -58,7 +58,7 @@ class MayorPlanoCuentaReporteService
             (int) ($filtros['cuenta_hasta'] ?? 0),
             (int) ($filtros['moneda_id'] ?? 1),
             (bool) ($filtros['solo_moneda_origen'] ?? false),
-            (bool) ($filtros['incluye_subdiario'] ?? true),
+            MayorPlanoCuentaListadoFiltros::incluyeSubdiarioEfectivo($filtros),
             (string) ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion'),
             $this->monedaConverter,
             array_values(array_filter(array_map('intval', $filtros['cuentas'] ?? []), fn (int $c) => $c > 0)),
@@ -189,7 +189,7 @@ class MayorPlanoCuentaReporteService
 
     /**
      * Cuadre contra total del listado IVA ventas / subdiario: el total del comprobante
-     * imputa Debe en Deudores (113100) o Caja (111100) segÃºn contado/cuenta corriente.
+     * imputa Debe en Deudores (113100) o Caja (111100) según contado/cuenta corriente.
      *
      * @param  list<array<string, mixed>>  $resumen
      * @return array{deudores: float, caja: float, total_cobro: float, deudores_codigo: string, caja_codigo: string}|null
@@ -294,7 +294,7 @@ class MayorPlanoCuentaReporteService
     }
 
     /**
-     * Pantalla: materializa y enriquece solo la pÃ¡gina (evita duplicar cientos de miles de lÃ­neas).
+     * Pantalla: materializa y enriquece solo la página (evita duplicar cientos de miles de líneas).
      * Con filtro_texto cae al aplanado completo (el filtro necesita el set entero).
      *
      * @param  array<string, mixed>  $resultado
@@ -316,7 +316,7 @@ class MayorPlanoCuentaReporteService
         $slice = [];
         $idx = 0;
 
-        // Solo materializa hasta el final de la pÃ¡gina pedida (no recorre 157k lÃ­neas al pedo).
+        // Solo materializa hasta el final de la página pedida (no recorre 157k líneas al pedo).
         $this->recorrerFilasEstructura($resultado, $filtros, false, function (array $fila) use (&$idx, &$slice, $offset, $hasta): bool {
             if ($idx >= $hasta) {
                 return false;
@@ -341,7 +341,7 @@ class MayorPlanoCuentaReporteService
     }
 
     /**
-     * Cuenta filas de estructura sin materializarlas (metadatos + count de lÃ­neas).
+     * Cuenta filas de estructura sin materializarlas (metadatos + count de líneas).
      *
      * @param  array<string, mixed>  $resultado
      * @param  array<string, mixed>  $filtros
@@ -413,7 +413,7 @@ class MayorPlanoCuentaReporteService
 
         $filas = $this->enriquecerEnlaces($filas, $empresaIds);
         $filas = $this->comprobanteEnricher->enriquecer($filas);
-        // COM Anita â†’ recepciÃ³n ERP (antes de mapear nro_oc a OC homÃ³nima).
+        // COM -> recepcion ERP (antes de mapear nro_oc a OC homonima). Sin bridge Anita.
         $filas = $this->recepcionAnitaEnricher->enriquecer($filas);
         $filas = $this->ordencompraEnricher->enriquecer($filas);
         $filas = $this->completarNroOcDesdeIds($filas);
@@ -587,7 +587,7 @@ class MayorPlanoCuentaReporteService
 
     /**
      * Recorre movimientos en lotes enriquecidos (para CSV streameado).
-     * Sin IA: el resumen de OC es determinÃ­stico (Ã­tems); Ollama en export traba el download.
+     * Sin IA: el resumen de OC es determinístico (ítems); Ollama en export traba el download.
      *
      * @param  array<string, mixed>  $resultado
      * @param  array<string, mixed>  $filtros
@@ -647,8 +647,8 @@ class MayorPlanoCuentaReporteService
     }
 
     /**
-     * Si hay ordencompra_id (p. ej. desde asiento), alinea nro_oc al nÃºmero real de esa OC.
-     * Con FK de asiento sobrescribe nros espurios (renglÃ³n aplicped confundido con OC).
+     * Si hay ordencompra_id (p. ej. desde asiento), alinea nro_oc al número real de esa OC.
+     * Con FK de asiento sobrescribe nros espurios (renglón aplicped confundido con OC).
      *
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
@@ -709,7 +709,7 @@ class MayorPlanoCuentaReporteService
             if ($mes > 0 && $anio > 0) {
                 $d = Carbon::createFromDate($anio, $mes, 1);
 
-                return $d->format('01/m/Y').' â€” '.$d->copy()->endOfMonth()->format('d/m/Y');
+                return $d->format('01/m/Y').' — '.$d->copy()->endOfMonth()->format('d/m/Y');
             }
         }
 
@@ -722,7 +722,7 @@ class MayorPlanoCuentaReporteService
             return '';
         }
 
-        return Carbon::parse($desde)->format('d/m/Y').' â€” '.Carbon::parse($hasta)->format('d/m/Y');
+        return Carbon::parse($desde)->format('d/m/Y').' — '.Carbon::parse($hasta)->format('d/m/Y');
     }
 
     /**
@@ -738,7 +738,7 @@ class MayorPlanoCuentaReporteService
             }
         }
 
-        return implode(' Â· ', $nombres);
+        return implode(' · ', $nombres);
     }
 
     /**
@@ -747,10 +747,10 @@ class MayorPlanoCuentaReporteService
     public function formatearInclusionAsientosTexto(array $filtros): string
     {
         return match ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion') {
-            'todos' => 'Incluye asiento de cierre y aj. x inflaciÃ³n',
+            'todos' => 'Incluye asiento de cierre y aj. x inflación',
             'sin_cierre' => 'No incluye asiento de cierre',
-            'sin_inflacion' => 'No incluye asiento de aj. x inflaciÃ³n',
-            default => 'No incluye asientos de cierre ni de aj. x inflaciÃ³n',
+            'sin_inflacion' => 'No incluye asiento de aj. x inflación',
+            default => 'No incluye asientos de cierre ni de aj. x inflación',
         };
     }
 
@@ -765,7 +765,7 @@ class MayorPlanoCuentaReporteService
         );
         $texto = $filtro->metaTexto();
 
-        return ! empty($filtros['agrupar_por_cc']) ? $texto.' Â· agrupado por CC' : $texto;
+        return ! empty($filtros['agrupar_por_cc']) ? $texto.' · agrupado por CC' : $texto;
     }
 
     /** @param array<string, mixed> $filtros */
@@ -786,11 +786,11 @@ class MayorPlanoCuentaReporteService
         if (! empty($filtros['solo_moneda_origen'])) {
             $partes[] = 'Solo moneda origen';
         }
-        if (($filtros['incluye_subdiario'] ?? true) === false) {
+        if (! MayorPlanoCuentaListadoFiltros::incluyeSubdiarioEfectivo($filtros)) {
             $partes[] = 'Sin subdiario';
         }
 
-        return implode(' Â· ', $partes);
+        return implode(' · ', $partes);
     }
 
     /**
@@ -889,7 +889,7 @@ class MayorPlanoCuentaReporteService
                 $lineasPorCc[$clave]['lineas'][] = $linea;
             }
 
-            // Sin movimientos: una solapa â€œSin CCâ€ para no perder saldo inicial de la cuenta.
+            // Sin movimientos: una solapa “Sin CC” para no perder saldo inicial de la cuenta.
             if ($lineasPorCc === []) {
                 $clave = '__SIN_CC__';
                 $lineasPorCc[$clave] = [
@@ -1055,8 +1055,8 @@ class MayorPlanoCuentaReporteService
             return $filas;
         }
 
-        // Las filas del reader ERP ya traen asiento_id: solo se resuelve por nÃºmero
-        // el tramo leÃ­do de Anita.
+        // Las filas del reader ERP ya traen asiento_id: solo se resuelve por número
+        // el tramo leído de Anita.
         $numerosAsiento = array_values(array_unique(array_filter(array_map(
             fn (array $f) => (int) ($f['asiento_id'] ?? 0) > 0 ? 0 : (int) ($f['nro_asiento'] ?? 0),
             $filas,

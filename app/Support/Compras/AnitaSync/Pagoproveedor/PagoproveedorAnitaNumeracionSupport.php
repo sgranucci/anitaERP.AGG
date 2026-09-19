@@ -8,9 +8,11 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Numeración OP MultiEmpresa (Anita pago.c nro_op):
- *   t_comp clave O{empresa} → tcomp_refer → numerador ventas.
- * Monoempresa: t_comp OPP (default) → refer (205).
+ * Numeración OP alineada a Anita pago.c nro_op():
+ *   - MultiEmpresa (AGG): t_comp O{nroemp} (O1/O2/O3) tanto para OPP como OPA.
+ *     pag_tipo queda OPP u OPA; el correlativo es el mismo.
+ *   - Mono (Ferli): t_comp = in_tcomp (OPP o OPA). ADELANTO fija OPA y numera
+ *     con ese comprobante (no con OPP).
  *
  * En MultiEmpresa la sucursal de la OP es el código de empresa Anita (pag_sucursal = nroemp).
  */
@@ -47,32 +49,70 @@ final class PagoproveedorAnitaNumeracionSupport
     }
 
     /**
-     * Clave t_comp: O{n} multiempresa o OPP/OPA según config.
+     * pago.c: ADELANTO → in_tcomp=OPA. Cualquier otro → OPP (salvo que ya venga OPA).
      */
-    public static function claveTCompParaEmpresa(int $empresaId): string
+    public static function normalizarTipoComprobante(?string $tipoComprobante, bool $esAnticipoSinAplicaciones = false): string
+    {
+        $tipo = strtoupper(substr(trim((string) $tipoComprobante), 0, 3));
+        if ($tipo === 'OPA' || $esAnticipoSinAplicaciones) {
+            return 'OPA';
+        }
+
+        return $tipo === '' ? 'OPP' : $tipo;
+    }
+
+    public static function esTipoOpa(?string $tipoComprobante): bool
+    {
+        return self::normalizarTipoComprobante($tipoComprobante) === 'OPA';
+    }
+
+    /**
+     * Clave t_comp de pago.c nro_op (sin consultar Anita).
+     * MultiEmpresa: siempre O{nroemp}. Mono: OPA o OPP según el comprobante.
+     */
+    public static function claveTCompParaTipo(string $tipoComprobante, int $codigoEmpresaAnita): string
     {
         if (self::esMultiempresa()) {
-            $nro = self::codigoEmpresaAnita($empresaId);
-            if ($nro <= 0) {
+            if ($codigoEmpresaAnita <= 0) {
                 throw new \RuntimeException('No se pudo resolver código Anita de empresa para numerar OP.');
             }
 
-            return 'O'.$nro;
+            return 'O'.$codigoEmpresaAnita;
         }
 
-        return (string) config('pagoproveedor.anita_tcomp_clave', 'OPP');
+        if (self::esTipoOpa($tipoComprobante)) {
+            $opa = strtoupper(substr(trim((string) config('pagoproveedor.anita_tcomp_clave_opa', 'OPA')), 0, 3));
+
+            return $opa !== '' ? $opa : 'OPA';
+        }
+
+        $opp = strtoupper(substr(trim((string) config('pagoproveedor.anita_tcomp_clave', 'OPP')), 0, 3));
+
+        return $opp !== '' ? $opp : 'OPP';
     }
 
-    public static function siguienteNumeroConLock(int $empresaId): int
+    /**
+     * Clave t_comp: MultiEmpresa O{n}; Ferli OPP o OPA según el comprobante.
+     */
+    public static function claveTCompParaEmpresa(int $empresaId, ?string $tipoComprobante = null): string
+    {
+        return self::claveTCompParaTipo(
+            self::normalizarTipoComprobante($tipoComprobante),
+            self::codigoEmpresaAnita($empresaId)
+        );
+    }
+
+    public static function siguienteNumeroConLock(int $empresaId, ?string $tipoComprobante = null): int
     {
         if (! self::estaHabilitada()) {
             throw new \RuntimeException('Numeración Anita de OP deshabilitada (PAGOPROVEEDOR_ANITA_ESCRITURA_HABILITADA).');
         }
 
-        self::assertNumeradorDisponible($empresaId);
+        $tipo = self::normalizarTipoComprobante($tipoComprobante);
+        self::assertNumeradorDisponible($empresaId, $tipo);
 
         $segundos = max(5, (int) config('pagoproveedor.numeracion_lock_segundos', 15));
-        $claveTcomp = self::claveTCompParaEmpresa($empresaId);
+        $claveTcomp = self::claveTCompParaEmpresa($empresaId, $tipo);
         $lock = Cache::lock('pagoproveedor:numeracion:opp:'.$claveTcomp, $segundos);
 
         return $lock->block($segundos, function () use ($claveTcomp) {
@@ -89,13 +129,13 @@ final class PagoproveedorAnitaNumeracionSupport
      * Solo lectura: verifica que exista t_comp + numerador antes de consumir un número.
      * Evita quemar el correlativo de OP si luego falla otra validación/Anita.
      */
-    public static function assertNumeradorDisponible(int $empresaId): void
+    public static function assertNumeradorDisponible(int $empresaId, ?string $tipoComprobante = null): void
     {
         if (! self::estaHabilitada()) {
             return;
         }
 
-        $claveTcomp = self::claveTCompParaEmpresa($empresaId);
+        $claveTcomp = self::claveTCompParaEmpresa($empresaId, $tipoComprobante);
         $clave = self::resolverClaveNumeradorDesdeTComp($claveTcomp);
         self::leerUltimoNumero($clave);
     }

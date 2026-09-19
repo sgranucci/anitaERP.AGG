@@ -159,12 +159,17 @@
                                             Solo movimientos en moneda origen
                                         </label>
                                     </div>
-                                    <div class="form-check mb-2">
-                                        <input type="hidden" name="incluye_subdiario" value="0">
+                                    @php
+                                        $fuenteMayorMpc = \App\Support\Contable\MayorFuenteConsultaSupport::normalizarModo($filtros['fuente_mayor'] ?? 'erp');
+                                        $ocultarIncluyeSubdiario = $fuenteMayorMpc === \App\Support\Contable\MayorFuenteConsultaSupport::MODO_ERP;
+                                    @endphp
+                                    <div class="form-check mb-2{{ $ocultarIncluyeSubdiario ? ' d-none' : '' }}" id="mpc-incluye-subdiario-wrap">
+                                        <input type="hidden" name="incluye_subdiario" value="0" @disabled($ocultarIncluyeSubdiario)>
                                         <input class="form-check-input" type="checkbox" name="incluye_subdiario" id="incluye_subdiario" value="1"
-                                            @checked($filtros['incluye_subdiario'] ?? true)>
+                                            @checked($filtros['incluye_subdiario'] ?? true)
+                                            @disabled($ocultarIncluyeSubdiario)>
                                         <label class="form-check-label" for="incluye_subdiario">
-                                            Incluir movimientos de subdiario
+                                            Incluir movimientos de subdiario (solo fuente Anita)
                                         </label>
                                     </div>
                                     <div class="form-check">
@@ -183,7 +188,12 @@
                                         </label>
                                     </div>
                                     <small class="text-muted d-block mt-2">
-                                        El subdiario completa las imputaciones que no existen en ctamov.
+                                        <span id="mpc-ayuda-subdiario-anita" class="{{ $ocultarIncluyeSubdiario ? 'd-none' : '' }}">
+                                            Fuente Anita: el subdiario Informix completa imputaciones que no est&aacute;n en ctamov.
+                                        </span>
+                                        <span id="mpc-ayuda-subdiario-erp" class="{{ $ocultarIncluyeSubdiario ? '' : 'd-none' }}">
+                                            Fuente ERP nativo: todos los asientos de <code>asiento</code> entran (incluye los importados de subdiario, nro. 5.xxx.xxx).
+                                        </span>
                                         Con &laquo;Solo movimientos de ventas&raquo; se usa subdiario sistema V del mes
                                         m&aacute;s ctamov de facturas ERP (asi_mon_ref=-1); totales por cuenta, sin tramo de saldo.
                                         La columna de centro de costo queda grabada como preferencia del usuario.
@@ -319,7 +329,7 @@
                                 $suffixPlano = count($paramsPlano) ? '?'.http_build_query($paramsPlano) : '';
                             @endphp
                             <a href="{{ route('listar_mayor_plano_cuenta', ['formato' => 'EXCEL_PLANO']).$suffixPlano }}"
-                                class="btn btn-app bg-info" title="Una fila por movimiento, con observación de OC y facturas (formato Anita)">
+                                class="btn btn-app bg-info" title="Excel (.xlsx): una fila por movimiento, con OC, CAPEX y facturas">
                                 <i class="fas fa-file-excel"></i> Excel plano
                             </a>
                         </div>

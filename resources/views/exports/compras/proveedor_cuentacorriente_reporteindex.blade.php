@@ -62,6 +62,23 @@
     <tbody>
         @foreach ($filas as $fila)
             @php $tipo = $fila['tipo'] ?? ''; @endphp
+            @if ($tipo === 'header_empresa')
+                <tr>
+                    <td></td>
+                    <td>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                </tr>
+                @continue
+            @endif
             <tr>
                 <td>{{ in_array($tipo, ['header_proveedor', 'total_proveedor'], true) ? ($fila['proveedor_codigo'] ?? '') : '' }}</td>
                 <td>
@@ -73,7 +90,7 @@
                         {{ $fila['comprobante'] ?? 'Saldo anterior' }}
                     @endif
                 </td>
-                <td>{{ $tipo === 'header_proveedor' ? ($fila['nombreempresa'] ?? '') : '' }}</td>
+                <td>{{ in_array($tipo, ['header_proveedor', 'aplicacion', 'saldo_anterior', 'movimiento'], true) ? ($fila['nombreempresa'] ?? '') : '' }}</td>
                 <td>{{ $fila['fecha'] ?? '' }}</td>
                 <td>{{ $fila['fechavencimiento'] ?? '' }}</td>
                 <td>{{ $tipo === 'header_proveedor' ? '' : ($fila['comprobante'] ?? '') }}</td>

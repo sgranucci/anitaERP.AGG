@@ -14,6 +14,7 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSuppo
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaConsultaAsyncSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCsvExportSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaXlsxExportSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
@@ -48,6 +49,13 @@ class MayorPlanoCuentaController extends Controller
         $filtros = $this->aplicarPreferenciasYDefaultsEmpresas($request, $filtros, $empresaQuery);
 
         $this->assertAccesoEmpresas($filtros['empresa_ids'] ?? []);
+
+        // PRG / paginado lee el cache gzip (~1 GB ene–ago). Sin esto PHP-FPM queda en 128M y da 500.
+        if ($request->boolean('consultar')
+            || MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)
+        ) {
+            MayorPlanoCuentaRuntimeSupport::elevarLimites();
+        }
 
         if ($request->boolean('consultar')) {
             ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
@@ -210,28 +218,30 @@ class MayorPlanoCuentaController extends Controller
         $formatoNorm = strtoupper($formato);
         $lineas = (int) ($resultado['totales']['lineas'] ?? 0);
 
-        // Excel plano: siempre CSV streameado (mismas columnas enriquecidas).
-        // PhpSpreadsheet FromView arma HTML de decenas de MB y traba el download (~17k filas).
+        // Excel plano y Excel de volumen alto: .xlsx en streaming (sin PhpSpreadsheet FromView).
         if ($formatoNorm === 'EXCEL_PLANO') {
             ignore_user_abort(true);
-            Log::info('mayor_plano_cuenta.export_excel_plano_csv', [
+            Log::info('mayor_plano_cuenta.export_excel_plano_xlsx', [
                 'lineas' => $lineas,
                 'usuario_id' => (int) (auth()->id() ?? 0),
             ]);
 
-            return $this->descargarCsvPlanoStream($filtros, $resultado, true);
+            return $this->descargarXlsxPlano($filtros, $resultado, true);
         }
 
-        // PhpSpreadsheet / DomPDF no bancan volúmenes grandes: CSV streameado.
         if ($lineas > 15000 && in_array($formatoNorm, ['EXCEL', 'PDF', 'CSV'], true)) {
             if ($formatoNorm === 'PDF') {
                 return redirect()->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
-                    ->with('error', 'El PDF no admite este volumen ('.$lineas.' movimientos). Use Excel plano o CSV.');
+                    ->with('error', 'El PDF no admite este volumen ('.$lineas.' movimientos). Use Excel o CSV.');
             }
 
             ignore_user_abort(true);
 
-            return $this->descargarCsvPlanoStream($filtros, $resultado, $formatoNorm === 'CSV');
+            if ($formatoNorm === 'CSV') {
+                return $this->descargarCsvPlanoStream($filtros, $resultado, true);
+            }
+
+            return $this->descargarXlsxPlano($filtros, $resultado, false);
         }
 
         $filas = $this->reporteService->aplanarFilas($resultado, $filtros, true);
@@ -295,8 +305,52 @@ class MayorPlanoCuentaController extends Controller
     }
 
     /**
-     * Excel plano → CSV en disco y descarga (sin PhpSpreadsheet ni IA).
-     * Escribir el archivo completo evita buffers de Apache/proxy que tragan el stream.
+     * Excel (.xlsx) en disco y descarga. Streaming XML+zip: no usa FromView.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $resultado
+     */
+    private function descargarXlsxPlano(array $filtros, array $resultado, bool $estiloAnita)
+    {
+        $nombre = $this->armarNombreArchivoExport(
+            $filtros,
+            'xlsx',
+            $estiloAnita ? 'mayor_plano' : 'mayor_analitico_cuenta',
+        );
+
+        $stamp = now()->format('Ymd_His');
+        $usuarioId = (int) (auth()->id() ?? 0);
+        $rutaRelativa = 'exports/mayor_plano_sync/'.$stamp.'_u'.$usuarioId.'_'.$nombre;
+        $rutaAbsoluta = storage_path('app/public/'.$rutaRelativa);
+
+        $t0 = microtime(true);
+        $export = MayorPlanoCuentaXlsxExportSupport::escribirExcelPlano(
+            $this->reporteService,
+            $resultado,
+            $filtros,
+            $rutaAbsoluta,
+        );
+        Log::info('mayor_plano_cuenta.export_excel_plano_xlsx_ok', [
+            'lineas' => $export['filas'],
+            'bytes' => $export['bytes'],
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+            'archivo' => $rutaRelativa,
+        ]);
+
+        if ($export['bytes'] <= 0 || ! is_file($rutaAbsoluta)) {
+            return redirect()
+                ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje-error', 'No se pudo generar el Excel del mayor plano.');
+        }
+
+        return response()->download($rutaAbsoluta, $nombre, [
+            'Content-Type' => MayorPlanoCuentaXlsxExportSupport::MIME,
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
+    /**
+     * CSV en disco y descarga (botón CSV o volúmenes grandes).
      *
      * @param  array<string, mixed>  $filtros
      * @param  array<string, mixed>  $resultado
@@ -306,7 +360,7 @@ class MayorPlanoCuentaController extends Controller
         $nombre = $this->armarNombreArchivoExport(
             $filtros,
             'csv',
-            $estiloAnita ? 'mayor_plano_anita' : 'mayor_analitico_cuenta',
+            $estiloAnita ? 'mayor_plano' : 'mayor_analitico_cuenta',
         );
 
         $stamp = now()->format('Ymd_His');
@@ -331,7 +385,7 @@ class MayorPlanoCuentaController extends Controller
         if ($export['bytes'] <= 0 || ! is_file($rutaAbsoluta)) {
             return redirect()
                 ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
-                ->with('mensaje-error', 'No se pudo generar el CSV del Excel plano.');
+                ->with('mensaje-error', 'No se pudo generar el CSV del mayor plano.');
         }
 
         return response()->download($rutaAbsoluta, $nombre, [
@@ -387,7 +441,7 @@ class MayorPlanoCuentaController extends Controller
             ->with(
                 'mensaje-aviso',
                 'Fuente Anita, período largo ('.$dias.' días'.($periodo !== '' ? ', '.$periodo : '').') con todas las cuentas o un rango/lista grande: '
-                .'el mayor se genera en segundo plano. Cuando termine te llega un mail a '.$email.' con el Excel plano (CSV). '
+                .'el mayor se genera en segundo plano. Cuando termine te llega un mail a '.$email.' con el Excel (.xlsx). '
                 .'Con fuente ERP, o con pocas cuentas (aunque el período sea largo), sigue saliendo en pantalla para analizar y exportar. Este aviso no se cierra solo.'
             )
             ->with('mayor_plano_async_pendiente', 1);

@@ -3,13 +3,12 @@
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\Support\Compras\ComprobanteProveedorEstados;
-use App\Support\Contable\MayorConcepto\MayorConceptoAnitaBridgeReader;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Completa el Excel plano con qué se compró (ítems/IA), proyecto CAPEX, facturas y usuario.
+ * Completa el Excel plano con qué se compró, proyecto CAPEX, facturas y usuario.
+ * Solo tablas ERP (ordencompra, comprobante_proveedor, asiento). Sin bridge Anita.
  * Las facturas de una misma OC van concatenadas en una sola celda (no se duplican filas).
  * COM/recepción no se listan como factura.
  */
@@ -17,7 +16,6 @@ class MayorPlanoCuentaExcelPlanoEnricher
 {
     public function __construct(
         private readonly MayorPlanoCuentaOcCompraResumenSupport $ocResumenSupport = new MayorPlanoCuentaOcCompraResumenSupport(),
-        private readonly MayorConceptoAnitaBridgeReader $anitaReader = new MayorConceptoAnitaBridgeReader(),
     ) {
     }
 
@@ -72,12 +70,10 @@ class MayorPlanoCuentaExcelPlanoEnricher
 
         $facturasPorOc = $this->cargarFacturasPorOc($ocIds);
         $this->agregarFacturasPorComprobanteOc($facturasPorOc, $ocIds);
-        $this->agregarFacturasDesdeAnita($facturasPorOc, $ocs);
         $facturasPorCp = $this->cargarFacturasPorId($cpIds);
         $capexPorOc = $this->cargarCapexPorOc($ocIds);
         $asientos = $this->cargarAsientos($asientoIds);
         $itemsPorOc = $this->cargarItemsPorOc($ocIds);
-        $this->completarItemsDesdeAnita($itemsPorOc, $ocs);
         $resumenesOc = $this->ocResumenSupport->resumirVarias($itemsPorOc, $usarIa);
 
         foreach ($filas as $idx => $fila) {
@@ -177,61 +173,6 @@ class MayorPlanoCuentaExcelPlanoEnricher
         }
 
         return $out;
-    }
-
-    /**
-     * @param  array<int, list<array{sku:string,descripcion:string,detalle:string,cantidad:float,partida:string}>>  $itemsPorOc
-     * @param  array{por_id: array<int, object>, por_numero: array<int, object>}  $ocs
-     */
-    private function completarItemsDesdeAnita(array &$itemsPorOc, array $ocs): void
-    {
-        $faltantes = [];
-        foreach ($ocs['por_id'] as $id => $oc) {
-            $ocId = (int) $id;
-            if (MayorPlanoCuentaOcCompraResumenSupport::resumenDeterministico($itemsPorOc[$ocId] ?? []) !== '') {
-                continue;
-            }
-            $nro = (int) ($oc->numeroordencompra ?? 0);
-            if ($nro > 0) {
-                $faltantes[$nro] = $ocId;
-            }
-        }
-        if ($faltantes === []) {
-            return;
-        }
-
-        $errores = [];
-        try {
-            $lineas = $this->anitaReader->cargarPendmovpPorNrosOc(array_keys($faltantes), $errores);
-        } catch (\Throwable $e) {
-            Log::warning('mayor_plano_excel.items_anita', ['error' => $e->getMessage()]);
-
-            return;
-        }
-        if ($errores !== []) {
-            Log::debug('mayor_plano_excel.items_anita_bridge', ['errores' => $errores]);
-        }
-
-        foreach ($lineas as $row) {
-            $nro = (int) ($row->penvp_nro ?? 0);
-            $ocId = (int) ($faltantes[$nro] ?? 0);
-            if ($ocId <= 0) {
-                continue;
-            }
-            $sku = trim((string) ($row->penvp_articulo ?? ''));
-            $desc = trim((string) ($row->penvp_desc ?? ''));
-            $partida = trim((string) ($row->penvp_partida ?? ''));
-            if ($sku === '' && $desc === '' && $partida === '') {
-                continue;
-            }
-            $itemsPorOc[$ocId][] = [
-                'sku' => $sku,
-                'descripcion' => $desc,
-                'detalle' => '',
-                'cantidad' => (float) ($row->penvp_cantidad ?? 0),
-                'partida' => $partida,
-            ];
-        }
     }
 
     /**
@@ -383,57 +324,6 @@ class MayorPlanoCuentaExcelPlanoEnricher
                 (string) ($row->letra ?? ''),
                 (int) ($row->sucursal ?? 0),
                 (string) ($row->numerocomprobante ?? ''),
-            );
-            if ($etiqueta === '') {
-                continue;
-            }
-            $facturasPorOc[$ocId][] = $etiqueta;
-        }
-    }
-
-    /**
-     * Facturas aplicadas a la OC en Anita (aplicped → COM/PEP).
-     *
-     * @param  array<int, list<string>>  $facturasPorOc
-     * @param  array{por_id: array<int, object>, por_numero: array<int, object>}  $ocs
-     */
-    private function agregarFacturasDesdeAnita(array &$facturasPorOc, array $ocs): void
-    {
-        $ocIdPorNro = [];
-        foreach ($ocs['por_id'] as $id => $oc) {
-            $nro = (int) ($oc->numeroordencompra ?? 0);
-            if ($nro > 0) {
-                $ocIdPorNro[$nro] = (int) $id;
-            }
-        }
-        if ($ocIdPorNro === []) {
-            return;
-        }
-
-        $nros = array_keys($ocIdPorNro);
-        $errores = [];
-        try {
-            $filas = array_merge(
-                $this->anitaReader->cargarAplicpedPorReferenciasTipo('COM', $nros, $errores),
-                $this->anitaReader->cargarAplicpedPorReferenciasTipo('PEP', $nros, $errores),
-            );
-        } catch (\Throwable $e) {
-            Log::warning('mayor_plano_excel.facturas_anita', ['error' => $e->getMessage()]);
-
-            return;
-        }
-
-        foreach ($filas as $row) {
-            $nroOc = (int) ($row->aplp_ref_nro ?? 0);
-            $ocId = (int) ($ocIdPorNro[$nroOc] ?? 0);
-            if ($ocId <= 0) {
-                continue;
-            }
-            $etiqueta = MayorPlanoCuentaExcelPlanoSupport::formatearNumeroFactura(
-                (string) ($row->aplp_tipo ?? ''),
-                (string) ($row->aplp_letra ?? ''),
-                (int) ($row->aplp_sucursal ?? 0),
-                (int) ($row->aplp_nro ?? 0),
             );
             if ($etiqueta === '') {
                 continue;

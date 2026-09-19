@@ -54,7 +54,7 @@ final class ProveedorCuentacorrienteReporteFiltros
             $cotizacionModo = self::COTIZACION_COMPROBANTE_O_DIA;
         }
 
-        $empresaId = (int) $request->input('empresa_id', 0);
+        $empresaIds = self::parseEmpresaIds($request);
         $fechaHasta = trim((string) $request->input('fecha_hasta', date('Y-m-d')));
         if ($fechaHasta === '') {
             $fechaHasta = date('Y-m-d');
@@ -63,7 +63,9 @@ final class ProveedorCuentacorrienteReporteFiltros
         $proveedorIds = self::parseIdsCsv($request->input('proveedor_ids', ''));
 
         return [
-            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'empresa_ids' => $empresaIds,
+            'empresa_id' => $empresaIds[0] ?? null,
+            'consolidar_empresas' => $request->boolean('consolidar_empresas', true),
             'modo' => $modo,
             'alcance_proveedores' => $alcance,
             'proveedor_ids' => $proveedorIds,
@@ -83,7 +85,7 @@ final class ProveedorCuentacorrienteReporteFiltros
      */
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        if (empty($filtros['empresa_id'])) {
+        if (self::empresaIds($filtros) === []) {
             return false;
         }
 
@@ -106,7 +108,6 @@ final class ProveedorCuentacorrienteReporteFiltros
     public static function paraQueryString(array $filtros): array
     {
         $out = [
-            'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             'modo' => $filtros['modo'] ?? self::MODO_DEUDA,
             'alcance_proveedores' => $filtros['alcance_proveedores'] ?? self::ALCANCE_TODOS,
             'fecha_desde' => $filtros['fecha_desde'] ?? '',
@@ -114,6 +115,13 @@ final class ProveedorCuentacorrienteReporteFiltros
             'expresion' => $filtros['expresion'] ?? self::EXPRESION_PESOS,
             'cotizacion_modo' => $filtros['cotizacion_modo'] ?? self::COTIZACION_COMPROBANTE_O_DIA,
         ];
+
+        foreach (self::empresaIds($filtros) as $empresaId) {
+            $out['empresa_ids'][] = $empresaId;
+        }
+        if (empty($filtros['consolidar_empresas'])) {
+            $out['consolidar_empresas'] = 0;
+        }
 
         if (! empty($filtros['incluir_aplicaciones'])) {
             $out['incluir_aplicaciones'] = 1;
@@ -179,12 +187,46 @@ final class ProveedorCuentacorrienteReporteFiltros
 
     /**
      * @param  array<string, mixed>  $filtros
+     * @return list<int>
      */
-    public static function armarSubtitulo(array $filtros, ?string $empresaNombre = null): string
+    public static function empresaIds(array $filtros): array
+    {
+        $ids = array_values(array_filter(
+            array_map('intval', $filtros['empresa_ids'] ?? []),
+            static fn (int $id) => $id > 0,
+        ));
+
+        if ($ids === [] && (int) ($filtros['empresa_id'] ?? 0) > 0) {
+            return [(int) $filtros['empresa_id']];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function esMultiempresa(array $filtros): bool
+    {
+        return count(self::empresaIds($filtros)) > 1;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function consolidarEmpresas(array $filtros): bool
+    {
+        return ! empty($filtros['consolidar_empresas']) || count(self::empresaIds($filtros)) <= 1;
+    }
+
+    public static function armarSubtitulo(array $filtros, string $empresasTexto = ''): string
     {
         $partes = [];
-        if ($empresaNombre) {
-            $partes[] = 'Empresa: '.$empresaNombre;
+        if ($empresasTexto !== '') {
+            $partes[] = (self::esMultiempresa($filtros) ? 'Empresas: ' : 'Empresa: ').$empresasTexto;
+            if (self::esMultiempresa($filtros)) {
+                $partes[] = self::consolidarEmpresas($filtros) ? 'Modo: consolidado' : 'Modo: por empresa';
+            }
         }
         $partes[] = self::etiquetaModo($filtros);
         $partes[] = self::etiquetaAlcance($filtros);
@@ -207,6 +249,25 @@ final class ProveedorCuentacorrienteReporteFiltros
         $ts = strtotime($ymd);
 
         return $ts ? date('d/m/Y', $ts) : $ymd;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function parseEmpresaIds(Request $request): array
+    {
+        $ids = collect($request->input('empresa_ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === [] && (int) $request->input('empresa_id', 0) > 0) {
+            return [(int) $request->input('empresa_id')];
+        }
+
+        return $ids;
     }
 
     /**

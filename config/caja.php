@@ -123,8 +123,9 @@ return [
      * Numeración IE alineada a Anita ventas.numerador (num_clave por empresa).
      * false = solo MAX+1 ERP (semilla propia). true = lee/avanza Anita (hasta apagarlo).
      * Nota: las semillas viven en sistema "ventas" (no shared); OPP=223/224/225 = mismas OP Anita (AGG).
-     * Ferli: OPP/OPA vía t_comp (203); ING/EGR vía tctes (304); TRA sin numerador de documento
-     * (tesmov nativo TED/TEH). Las semillas AGG 346/361/334 no existen en Ferli.
+     * Ferli: OPP vía t_comp OPP; OPA vía t_comp OPA (pago.c); ING/EGR vía tctes (304);
+     * TRA sin numerador de documento (tesmov nativo TED/TEH). Las semillas AGG 346/361/334
+     * no existen en Ferli.
      */
     'ingresoegreso_anita_numeracion_habilitada' => filter_var(
         env('CAJA_IE_ANITA_NUMERACION_HABILITADA', true),
@@ -137,7 +138,7 @@ return [
             2 => (int) env('CAJA_IE_ANITA_SEMILLA_OPP_EMP2', 224),
             3 => (int) env('CAJA_IE_ANITA_SEMILLA_OPP_EMP3', 225),
         ],
-        // Misma serie de OP Anita; el tipo de comprobante diferencia OPA vs OPP.
+        // Misma serie de OP Anita MultiEmpresa (pago.c O{nroemp}); pag_tipo diferencia OPA vs OPP.
         'OPA' => [
             1 => (int) env('CAJA_IE_ANITA_SEMILLA_OPA_EMP1', env('CAJA_IE_ANITA_SEMILLA_OPP_EMP1', 223)),
             2 => (int) env('CAJA_IE_ANITA_SEMILLA_OPA_EMP2', env('CAJA_IE_ANITA_SEMILLA_OPP_EMP2', 224)),
@@ -207,6 +208,24 @@ return [
         env('CAJA_IE_GRABACION_TIMING', false),
         FILTER_VALIDATE_BOOLEAN
     ),
+
+    /*
+     * Control diario I/E: caja/cheques ERP ↔ tesmov Anita; asiento ERP ↔ ctamov.
+     */
+    'ingresoegreso_imputacion_diaria' => [
+        'habilitada' => filter_var(env('CAJA_IE_IMPUTACION_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('CAJA_IE_IMPUTACION_HORA', '08:55'),
+        'email' => env('CAJA_IE_IMPUTACION_EMAIL', env('PAGOPROVEEDOR_IMPUTACION_AP_EMAIL', env('COMPROBANTE_PROVEEDOR_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com'))),
+        'ventana_dias' => max(1, (int) env('CAJA_IE_IMPUTACION_VENTANA_DIAS', 7)),
+        'tolerancia' => (float) env('CAJA_IE_IMPUTACION_TOLERANCIA', 0.05),
+        'mail_siempre' => filter_var(env('CAJA_IE_IMPUTACION_MAIL_SIEMPRE', true), FILTER_VALIDATE_BOOLEAN),
+        'max_filas_mail' => max(10, (int) env('CAJA_IE_IMPUTACION_MAX_FILAS_MAIL', 80)),
+        'anita_reintentos_bridge' => max(1, (int) env('CAJA_IE_IMPUTACION_ANITA_REINTENTOS', 3)),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('CAJA_IE_IMPUTACION_EMPRESAS_IDS', '1,2,3'))
+        ))),
+    ],
 
     /*
      * Árbol de aprobación opcional para IE por umbral de monto.
