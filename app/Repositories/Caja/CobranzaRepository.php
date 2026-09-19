@@ -8,6 +8,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
 use App\ApiAnita;
+use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
 use Carbon\Carbon;
 use Auth;
@@ -88,6 +89,7 @@ class CobranzaRepository implements CobranzaRepositoryInterface
 		// Elimina anita
 		if ($cobranza)
 		{
+			ChequeOperacionActivaSupport::anularPorCobranza((int) $cobranza->id);
 			$empresa = $this->empresaRepository->findPorId($cobranza->empresa_id);
 			if ($empresa)
 				$codigoEmpresa = $empresa->codigo;

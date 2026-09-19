@@ -8,6 +8,7 @@ use App\Models\Caja\Caja_Movimiento_Cuentacaja;
 use App\Models\Caja\Cheque;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Empresa;
+use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\CierreCajaReporteFiltros;
 use App\Support\Caja\CierreCajaReporteSecciones;
 use Illuminate\Support\Collection;
@@ -276,10 +277,8 @@ class CierreCajaReporteService
         $q = Cheque::query()
             ->with(['cuentacajas', 'bancos', 'empresas', 'monedas'])
             ->where('origen', 'E')
-            ->whereBetween('fechaemision', [$desde, $hasta])
-            ->where(function ($w) {
-                $w->whereNull('estado')->orWhereNotIn('estado', ['A']);
-            });
+            ->whereBetween('fechaemision', [$desde, $hasta]);
+        ChequeOperacionActivaSupport::aplicarFiltroQuery($q);
         $this->filtrarChequeEmpresaCuenta($q, $empresaIds, $cuentaFiltro);
 
         return $this->mapearChequesAgrupadosPorCuenta($q->orderBy('fechaemision')->orderBy('id')->get(), 'emitidos');
@@ -295,6 +294,7 @@ class CierreCajaReporteService
             ->with(['cuentacajas', 'cuentacajaDeposito', 'bancos', 'empresas', 'monedas', 'clientes'])
             ->whereNotNull('fecha_deposito')
             ->whereBetween('fecha_deposito', [$desde, $hasta]);
+        ChequeOperacionActivaSupport::aplicarFiltroQuery($q);
         if ($empresaIds !== []) {
             $q->whereIn('empresa_id', $empresaIds);
         }
@@ -346,10 +346,8 @@ class CierreCajaReporteService
         $q = Cheque::query()
             ->with(['cuentacajas', 'bancos', 'empresas', 'monedas', 'clientes'])
             ->where('origen', 'R')
-            ->whereBetween('fechaemision', [$desde, $hasta])
-            ->where(function ($w) {
-                $w->whereNull('estado')->orWhereNotIn('estado', ['A', 'R']);
-            });
+            ->whereBetween('fechaemision', [$desde, $hasta]);
+        ChequeOperacionActivaSupport::aplicarFiltroQuery($q);
         $this->filtrarChequeEmpresaCuenta($q, $empresaIds, $cuentaFiltro);
 
         return $this->mapearChequesDetalle($q->orderBy('fechaemision')->orderBy('id')->get(), 'recibidos');
@@ -372,6 +370,7 @@ class CierreCajaReporteService
                         ->whereBetween('fechaemision', [$desde, $hasta]);
                 });
             });
+        ChequeOperacionActivaSupport::aplicarFiltroQuery($q, ['A']);
         $this->filtrarChequeEmpresaCuenta($q, $empresaIds, $cuentaFiltro);
 
         return $this->mapearChequesDetalle($q->orderBy('fecha_rechazo')->orderBy('id')->get(), 'rechazados');
@@ -387,6 +386,7 @@ class CierreCajaReporteService
             ->with(['cuentacajas', 'bancos', 'empresas', 'monedas', 'clientes'])
             ->whereNotNull('fecha_caucion')
             ->whereBetween('fecha_caucion', [$desde, $hasta]);
+        ChequeOperacionActivaSupport::aplicarFiltroQuery($q);
         $this->filtrarChequeEmpresaCuenta($q, $empresaIds, $cuentaFiltro);
 
         return $this->mapearChequesDetalle($q->orderBy('fecha_caucion')->orderBy('id')->get(), 'caucion');

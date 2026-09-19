@@ -13,6 +13,10 @@
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 	<title>Cheques</title>
 	<style>
+		@include('includes.reportes.estilos_pdf_pagina', [
+			'pdf_size' => 'legal landscape',
+			'pdf_margin' => '14mm 16mm',
+		])
 		body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
 		table.data {
 			font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
@@ -41,6 +45,9 @@
 	</style>
 </head>
 <body>
+<table class="marco-pdf"><tr>
+	<td class="marco-lat"></td>
+	<td class="marco-centro">
 	<table class="listado-header">
 		<tr>
 			<td style="width: 35%;">
@@ -105,5 +112,8 @@
 			@endforeach
 		</tbody>
 	</table>
+	</td>
+	<td class="marco-lat"></td>
+</tr></table>
 </body>
 </html>

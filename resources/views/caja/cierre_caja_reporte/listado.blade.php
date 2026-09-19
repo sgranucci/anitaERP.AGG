@@ -15,9 +15,15 @@
     <meta charset="utf-8">
     <title>{{ $titulo }}</title>
     <style>
-        @page { size: legal landscape; margin: 10mm 8mm; }
-        html, body { margin: 0; padding: 0; width: 100%; }
-        body { font-family: DejaVu Sans, sans-serif; font-size: 7px; color: #222; }
+        @include('includes.reportes.estilos_pdf_pagina', [
+            'pdf_size' => 'legal landscape',
+            'pdf_margin' => '14mm 16mm',
+        ])
+        body {
+            font-family: DejaVu Sans, sans-serif;
+            font-size: 7px;
+            color: #222;
+        }
         .bloque-cierre { margin: 0 0 10px 0; width: 100%; page-break-inside: auto; }
         table.titulo-bloque { width: 100%; border-collapse: collapse; margin: 0 0 3px 0; table-layout: fixed; }
         table.titulo-bloque td {
@@ -50,6 +56,9 @@
     </style>
 </head>
 <body>
+<table class="marco-pdf"><tr>
+    <td class="marco-lat"></td>
+    <td class="marco-centro">
     <table style="width:100%; margin-bottom: 8px;">
         <tr>
             <td style="width:20%;">
@@ -72,5 +81,8 @@
         'resultado' => $resultado,
         'esPdf' => true,
     ])
+    </td>
+    <td class="marco-lat"></td>
+</tr></table>
 </body>
 </html>

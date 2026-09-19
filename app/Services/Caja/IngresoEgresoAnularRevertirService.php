@@ -10,6 +10,7 @@ use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Services\Solicitudpago\SolicitudpagoPagoDesdeCajaService;
+use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
@@ -74,7 +75,12 @@ class IngresoEgresoAnularRevertirService
             // Anita tesorería + cheques (antes de borrar ERP)
             IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($movimiento);
 
-            foreach ($movimiento->cheques as $cheque) {
+            ChequeOperacionActivaSupport::anularPorCajaMovimiento($movimiento);
+            if ((int) ($movimiento->cobranza_id ?? 0) > 0) {
+                ChequeOperacionActivaSupport::marcarCobranzaRevertida((int) $movimiento->cobranza_id);
+            }
+            $movimiento->unsetRelation('cheques');
+            foreach ($movimiento->cheques()->get() as $cheque) {
                 $cheque->delete();
             }
 
@@ -167,12 +173,9 @@ class IngresoEgresoAnularRevertirService
             ];
             $this->estadoRepository->create($estadoData, (int) $reverso->id);
 
-            foreach ($movimiento->cheques as $cheque) {
-                if (strtoupper((string) $cheque->origen) !== 'E') {
-                    continue;
-                }
-                $cheque->estado = 'A';
-                $cheque->save();
+            ChequeOperacionActivaSupport::anularPorCajaMovimiento($movimiento);
+            if ((int) ($movimiento->cobranza_id ?? 0) > 0) {
+                ChequeOperacionActivaSupport::marcarCobranzaRevertida((int) $movimiento->cobranza_id);
             }
 
             $asientoId = null;

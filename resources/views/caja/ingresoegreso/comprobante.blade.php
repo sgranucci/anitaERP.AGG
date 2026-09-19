@@ -3,6 +3,10 @@
 <head>
     <meta charset="utf-8">
     <style>
+        @include('includes.reportes.estilos_pdf_pagina', [
+            'pdf_size' => 'a4 portrait',
+            'pdf_margin' => '14mm 16mm',
+        ])
         body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #17202A; }
         h1 { font-size: 16px; margin: 0 0 8px; }
         h3 { font-size: 12px; margin: 14px 0 6px; }
@@ -31,6 +35,9 @@
     </style>
 </head>
 <body>
+<table class="marco-pdf"><tr>
+    <td class="marco-lat"></td>
+    <td class="marco-centro">
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
     use App\Support\Sueldos\NumeroALetrasEs;
@@ -320,5 +327,8 @@
         </td>
     </tr>
 </table>
+    </td>
+    <td class="marco-lat"></td>
+</tr></table>
 </body>
 </html>
