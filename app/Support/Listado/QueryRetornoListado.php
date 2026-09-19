@@ -41,6 +41,7 @@ class QueryRetornoListado
             'filtro_nivel',
             'estado_comb',
             'filtro_estado',
+            'filtro_canal',
         ] as $key) {
             if ($request->query->has($key)) {
                 return true;

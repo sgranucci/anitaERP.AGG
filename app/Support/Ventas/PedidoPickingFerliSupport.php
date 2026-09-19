@@ -20,6 +20,7 @@ use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
+use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -297,7 +298,8 @@ final class PedidoPickingFerliSupport
     public static function esConsumoPickingRevertible($mov): bool
     {
         $lote = trim((string) self::valorMovimiento($mov, 'lote', ''));
-        if ($lote === '' || $lote === '0') {
+        $otId = (int) self::valorMovimiento($mov, 'ordentrabajo_id', 0);
+        if (($lote === '' || $lote === '0') && $otId <= 0) {
             return false;
         }
 
@@ -607,6 +609,18 @@ final class PedidoPickingFerliSupport
         }
 
         $otId = (int) ($ordentrabajoId ?? $linea->ot_id ?? 0);
+        $loteMovimiento = $loteCodigo;
+        $otOrigen = Ordentrabajo::query()->where('codigo', $loteCodigo)->first();
+        $hayLoteImportado = Articulo_Movimiento::query()
+            ->where('articulo_id', $articulo->id)
+            ->where('combinacion_id', $combinacion->id)
+            ->where('lote', $loteCodigo)
+            ->where('lote', '>', 0)
+            ->exists();
+        if (! $hayLoteImportado && $otOrigen) {
+            $loteMovimiento = 0;
+            $otId = (int) $otOrigen->id;
+        }
 
         $dataArticuloMovimiento = [
             'fecha' => $fecha,
@@ -615,7 +629,7 @@ final class PedidoPickingFerliSupport
             'pedido_combinacion_id' => $linea->id,
             'ordentrabajo_id' => $otId,
             'venta_id' => $ventaId > 0 ? $ventaId : null,
-            'lote' => $loteCodigo,
+            'lote' => $loteMovimiento,
             'articulo_id' => $articulo->id,
             'combinacion_id' => $combinacion->id,
             'modulo_id' => $linea->modulo_id,

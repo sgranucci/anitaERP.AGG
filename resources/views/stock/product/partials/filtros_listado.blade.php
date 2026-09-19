@@ -10,10 +10,20 @@
     }
     $tieneCriteriosPanel = ArticuloFerliListadoFiltros::tieneCriteriosTexto($f);
     $limpiarUrlPanel = $limpiarUrl ?? route('products.index');
+    $fEstado = $f['estado'] ?? ArticuloFerliListadoFiltros::ESTADO_ACTIVO;
+    $fCanal = $f['canal'] ?? ArticuloFerliListadoFiltros::CANAL_TODOS;
     $fEstadoComb = $f['estado_comb'] ?? ArticuloFerliListadoFiltros::ESTADO_COMB_ACTIVAS;
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-producto-ferli" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    @if ($fEstado === '')
+        <input type="hidden" name="filtro_estado" value="TODOS">
+    @elseif ($fEstado !== ArticuloFerliListadoFiltros::ESTADO_ACTIVO)
+        <input type="hidden" name="filtro_estado" value="{{ $fEstado }}">
+    @endif
+    @if ($fCanal !== ArticuloFerliListadoFiltros::CANAL_TODOS)
+        <input type="hidden" name="filtro_canal" value="{{ $fCanal }}">
+    @endif
     @if ($fEstadoComb !== ArticuloFerliListadoFiltros::ESTADO_COMB_ACTIVAS)
         <input type="hidden" name="estado_comb" value="{{ $fEstadoComb }}">
     @endif

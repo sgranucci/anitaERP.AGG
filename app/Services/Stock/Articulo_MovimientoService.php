@@ -14,7 +14,9 @@ use App\Queries\Stock\Articulo_MovimientoQueryInterface;
 use App\Models\Stock\Modulo;
 use App\Models\Stock\Talle;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
+use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Cache;
@@ -285,77 +287,120 @@ class Articulo_MovimientoService
 										$desdecategoria_id, $hastacategoria_id,
 										$desdelote, $hastalote, $estadoot, $apertura, $deposito_id)
 	{
-		// Lee informacion del listado
-		$data = $this->articulo_movimientoQuery->generaDatosRepStockOt($estado, $mventa_id,
+		$data = collect($this->articulo_movimientoQuery->generaDatosRepStockOt($estado, $mventa_id,
 				$desdearticulo, $hastaarticulo,
 				$desdelinea_id, $hastalinea_id,
 				$desdecategoria_id, $hastacategoria_id,
-				$desdelote, $hastalote, $deposito_id);
+				$desdelote, $hastalote, $deposito_id));
 
-		// Arma el reporte
+		if ((int) $deposito_id === 0) {
+			$otIds = $data->pluck('ordentrabajo_id')->all();
+			$extras = $this->articulo_movimientoQuery->generaDatosOtEnProduccion(
+				$estado,
+				$mventa_id,
+				$desdearticulo,
+				$hastaarticulo,
+				$desdelinea_id,
+				$hastalinea_id,
+				$desdecategoria_id,
+				$hastacategoria_id,
+				$desdelote,
+				$hastalote,
+				$otIds
+			);
+			$data = $data->concat($extras);
+		}
+
+		$data = $data->sortBy(function ($row) {
+			return implode('|', [
+				(string) ($row['nombrelinea'] ?? ''),
+				(string) ($row['sku'] ?? ''),
+				(string) ($row['nombrecombinacion'] ?? ''),
+				ReporteStockOtSituacionSupport::identificadorExcel(
+					$row['lote'] ?? 0,
+					$row['ordentrabajo_codigo'] ?? ''
+				),
+			]);
+		})->values();
+
+		$otIdsSituacion = [];
+		foreach ($data as $row) {
+			$otId = (int) ($row['ordentrabajo_id'] ?? 0);
+			if ($otId > 0) {
+				$otIdsSituacion[] = $otId;
+			}
+		}
+		$situacionesPorOt = $this->situacionesReporteStockOtPorIds($otIdsSituacion);
+		$modulosCache = [];
+
 		$datas = [];
 		$medidas = [];
 		$anterLote = '';
 		$anterSku = '';
 		$anterCodigoCombinacion = '';
+		$anterClave = '';
 		$anterModulo_Id = 0;
 		$anterOrdentrabajo_id = 0;
 		$anterId = 0;
 		$totalPares = 0;
+		$situacion = ReporteStockOtSituacionSupport::ENTREGA_INMEDIATA;
+		$enProduccion = false;
+		$foto = null;
+		$nombreLinea = '';
+		$sku = '';
+		$codigoCombinacion = '';
+		$nombreCombinacion = '';
+		$lote = '';
+		$precio = 0;
+		$pedido = null;
+		$ordencompra = 0;
+		$modulo_id = 0;
+		$modulo = [];
+		$cantidadModulo = 0;
+
 		foreach ($data as $movimiento)
 		{
-			// Realiza corte
+			$claveFila = ReporteStockOtSituacionSupport::claveAgrupacion(
+				$movimiento['lote'] ?? 0,
+				(int) ($movimiento['ordentrabajo_id'] ?? 0)
+			);
 			if ($apertura != 'MOVIMIENTOS' ?
 				($anterSku != $movimiento['sku'] ||
 				$anterCodigoCombinacion != $movimiento['codigocombinacion'] ||
-				$anterLote != $movimiento['lote']) :
+				$anterClave != $claveFila) :
 				($anterSku != $movimiento['sku'] ||
 				$anterCodigoCombinacion != $movimiento['codigocombinacion'] ||
-				$anterLote != $movimiento['lote'] ||
+				$anterClave != $claveFila ||
 				$anterModulo_Id != $movimiento['modulo_id'] ||
 				($anterOrdentrabajo_id != 0 ? $anterOrdentrabajo_id != $movimiento['ordentrabajo_id'] : false) ||
 				$anterId != $movimiento['id']))
 			{
 				if ($anterSku != '' && $totalPares != 0)
 				{
-					// Filtra estado de OT 
-					$cc = false;
-					switch($estadoot)
-					{
-						case 'ENTREGA':
-							if ($situacion == 'ENTREGA INMEDIATA')
-								$cc = true;
-							break;
-						case 'PRODUCCION':
-							if ($situacion == 'En producción')
-								$cc = true;
-							break;
-						default:
-							$cc = true;
+					if (ReporteStockOtSituacionSupport::pasaFiltroEstadoOt((string) $estadoot, $situacion, $enProduccion)) {
+						$datas[] = $this->filaReporteStockOt(
+							$foto,
+							$nombreLinea,
+							$sku,
+							$codigoCombinacion,
+							$nombreCombinacion,
+							$lote,
+							$precio,
+							$situacion,
+							$enProduccion,
+							$modulo_id,
+							$cantidadModulo,
+							$modulo,
+							$pedido,
+							$ordencompra,
+							$medidas
+						);
 					}
-					if (!isset($situacion))
-						$situacion = '';
-					if ($cc)
-						$datas[] = [
-								'foto' => $foto,
-								'nombrelinea' => $nombreLinea,
-								'sku' => $sku,
-								'codigo' => $codigoCombinacion,
-								'nombrecombinacion' => $nombreCombinacion,
-								'lote' => $lote,
-								'precio' => $precio,
-								'situacion' => $situacion,
-								'modulo_id' => $modulo_id,
-								'cantidadmodulo' => $cantidadModulo,
-								'modulo' => $modulo,
-								'pedido' => $pedido,
-								'ordencompra' => $ordencompra,
-								'medidas' => $medidas
-						];
 				}
-				$anterSku = $movimiento['sku']; 
+				$anterSku = $movimiento['sku'];
 				$anterCodigoCombinacion = $movimiento['codigocombinacion'];
 				$anterLote = $movimiento['lote'];
+				$anterClave = $claveFila;
 				$anterModulo_Id = $movimiento['modulo_id'];
 				$anterOrdentrabajo_id = $movimiento['ordentrabajo_id'];
 				$anterId = $movimiento['id'];
@@ -365,32 +410,25 @@ class Articulo_MovimientoService
 				$sku = $movimiento['sku'];
 				$codigoCombinacion = $movimiento['codigocombinacion'];
 				$nombreCombinacion = $movimiento['nombrecombinacion'];
-				$lote = $movimiento['lote'];
+				$lote = ReporteStockOtSituacionSupport::identificadorExcel(
+					$movimiento['lote'] ?? 0,
+					$movimiento['ordentrabajo_codigo'] ?? ''
+				);
 				$precio = $movimiento['precio'];
 				$pedido = $movimiento['pedido'];
-				$ordencompra = $movimiento['ordentrabajo_id'];
+				$ordencompra = $movimiento['ordentrabajo_codigo'] ?? '';
 
 				$modulo_id = $movimiento['modulo_id'];
 				$medidas = [];
 				$totalPares = 0;
-				// Lee el modulo correspondiente
-				$modulo_talle = Modulo::where('id', $movimiento['modulo_id'])->with('talles')->get();
-				$modulo = [];
-				$cantidadModulo = 0;
-				foreach($modulo_talle[0]->talles as $unModulo)
-				{
-					$talle = Talle::find($unModulo->pivot->talle_id);
+				[$modulo, $cantidadModulo] = $this->curvaModuloReporteStockOt((int) $movimiento['modulo_id'], $modulosCache);
 
-					if ($talle)
-					{
-						$modulo[] = ['medida' => $unModulo->nombre,
-									'cantidad' => $unModulo->pivot->cantidad];
-						$cantidadModulo += $unModulo->pivot->cantidad;
-					}
-				}
+				$meta = $this->situacionFilaReporteStockOt($movimiento, $situacionesPorOt);
+				$situacion = $meta['situacion'];
+				$enProduccion = $meta['en_produccion'];
 			}
-			// Acumula medidas
-			for ($ii = 0, $flEncontro = false; $ii < count($medidas); $ii++)
+			$flEncontro = false;
+			for ($ii = 0; $ii < count($medidas); $ii++)
 			{
 				if ($medidas[$ii]['medida'] == $movimiento['nombretalle'])
 				{
@@ -405,67 +443,30 @@ class Articulo_MovimientoService
 				$medidas[] = ['medida' => $movimiento['nombretalle'], 'cantidad' => $movimiento['cantidad']];
 				$totalPares += $movimiento['cantidad'];
 			}
-			if ($movimiento['cantidad'] > 0)
-			{
-				// Lee tareas de la OT para ver situacion
-				$situacion = 'Pendiente de producción';
-				$ordentrabajo_tarea = $this->ordentrabajo_tareaRepository->findPorOrdentrabajoId($movimiento['ordentrabajo_id']);
-
-				if (count($ordentrabajo_tarea) > 0)
-				{
-					$situacion = '';
-					$nombreUltimaTarea = '';
-					foreach($ordentrabajo_tarea as $tarea)
-					{
-						if ($tarea->tarea_id == config('consprod.TAREA_TERMINADA') ||
-							$tarea->tarea_id == config('consprod.TAREA_TERMINADA_STOCK'))
-							$situacion = 'ENTREGA INMEDIATA';
-
-						$nombreUltimaTarea = $tarea->tareas->nombre;
-					}
-					if ($situacion != 'ENTREGA INMEDIATA')
-						$situacion = $nombreUltimaTarea;
-				}
-				else	
-					$situacion = 'ENTREGA INMEDIATA';
-			}
 		}
 		if ($anterSku != '' && $totalPares != 0)
 		{
-			// Filtra estado de OT 
-			$cc = false;
-			switch($estadoot)
-			{
-				case 'ENTREGA':
-					if ($situacion == 'ENTREGA INMEDIATA')
-						$cc = true;
-					break;
-				case 'PRODUCCION':
-					if ($situacion == 'En producción')
-						$cc = true;
-					break;
-				default:
-					$cc = true;
+			if (ReporteStockOtSituacionSupport::pasaFiltroEstadoOt((string) $estadoot, $situacion, $enProduccion)) {
+				$datas[] = $this->filaReporteStockOt(
+					$foto,
+					$nombreLinea,
+					$sku,
+					$codigoCombinacion,
+					$nombreCombinacion,
+					$lote,
+					$precio,
+					$situacion,
+					$enProduccion,
+					$modulo_id,
+					$cantidadModulo,
+					$modulo,
+					$pedido,
+					$ordencompra,
+					$medidas
+				);
 			}
-			if ($cc)
-				$datas[] = [
-						'foto' => $foto,
-						'nombrelinea' => $nombreLinea,
-						'sku' => $sku,
-						'codigo' => $codigoCombinacion,
-						'nombrecombinacion' => $nombreCombinacion,
-						'lote' => $lote,
-						'precio' => $precio,
-						'situacion' => $situacion,
-						'modulo_id' => $modulo_id,
-						'cantidadmodulo' => $cantidadModulo,
-						'modulo' => $modulo,
-						'pedido' => $pedido,
-						'ordencompra' => $ordencompra,
-						'medidas' => $medidas
-				];
 		}
-		//dd($datas);
+
 		return $datas;
 	}
 
@@ -501,14 +502,22 @@ class Articulo_MovimientoService
 
 		foreach ($movimientos as $mov) {
 			$lote = trim((string) ($mov->lote ?? ''));
-			if ($lote === '' || $lote === '0') {
+			$otCodigo = trim((string) ($mov->ordentrabajo_codigo ?? ''));
+			$otIdMov = (int) ($mov->ordentrabajo_id ?? 0);
+			if (ReporteStockOtSituacionSupport::esLoteImportado($lote)) {
+				$clave = 'L:'.$lote;
+				$numero = $lote;
+			} elseif ($otIdMov > 0 && $otCodigo !== '' && $otCodigo !== '0') {
+				$clave = 'OT:'.$otIdMov;
+				$numero = $otCodigo;
+			} else {
 				continue;
 			}
 			$moduloMovId = (int) ($mov->modulo_id ?? 0);
 			$cantidad = (float) ($mov->cantidad ?? 0);
-			if (! isset($agrupados[$lote])) {
-				$agrupados[$lote] = [
-					'lote' => $lote,
+			if (! isset($agrupados[$clave])) {
+				$agrupados[$clave] = [
+					'lote' => $numero,
 					'modulo_id' => 0,
 					'modulo' => '',
 					'saldo' => 0.0,
@@ -522,29 +531,29 @@ class Articulo_MovimientoService
 					'_modulos_ids' => [],
 				];
 			}
-			$agrupados[$lote]['saldo'] += $cantidad;
-			$agrupados[$lote]['_modulos_ids'][$moduloMovId] = true;
-			$agrupados[$lote]['_modulos'][$moduloMovId] = [
-				'saldo' => (float) (($agrupados[$lote]['_modulos'][$moduloMovId]['saldo'] ?? 0) + $cantidad),
+			$agrupados[$clave]['saldo'] += $cantidad;
+			$agrupados[$clave]['_modulos_ids'][$moduloMovId] = true;
+			$agrupados[$clave]['_modulos'][$moduloMovId] = [
+				'saldo' => (float) (($agrupados[$clave]['_modulos'][$moduloMovId]['saldo'] ?? 0) + $cantidad),
 				'etiqueta' => trim((string) (($mov->modulo_codigo ?? '').' '.($mov->modulo_nombre ?? ''))),
 			];
 			$talleNom = trim((string) ($mov->nombretalle ?? ''));
 			if ($talleNom !== '') {
-				$agrupados[$lote]['_talles'][$talleNom] = (float) (($agrupados[$lote]['_talles'][$talleNom] ?? 0) + $cantidad);
+				$agrupados[$clave]['_talles'][$talleNom] = (float) (($agrupados[$clave]['_talles'][$talleNom] ?? 0) + $cantidad);
 			}
 			if ((int) ($mov->tipotransaccion_id ?? 0) === $tipoAlta && (int) ($mov->deposito_id ?? 0) > 0) {
-				$agrupados[$lote]['deposito_id'] = (int) $mov->deposito_id;
-				$agrupados[$lote]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
-				$agrupados[$lote]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
-				$agrupados[$lote]['deposito'] = trim(
+				$agrupados[$clave]['deposito_id'] = (int) $mov->deposito_id;
+				$agrupados[$clave]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
+				$agrupados[$clave]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
+				$agrupados[$clave]['deposito'] = trim(
 					($mov->deposito_codigo ?? '').'-'.($mov->deposito_nombre ?? ''),
 					'-'
 				);
-			} elseif ($agrupados[$lote]['deposito_id'] <= 0 && (int) ($mov->deposito_id ?? 0) > 0) {
-				$agrupados[$lote]['deposito_id'] = (int) $mov->deposito_id;
-				$agrupados[$lote]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
-				$agrupados[$lote]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
-				$agrupados[$lote]['deposito'] = trim(
+			} elseif ($agrupados[$clave]['deposito_id'] <= 0 && (int) ($mov->deposito_id ?? 0) > 0) {
+				$agrupados[$clave]['deposito_id'] = (int) $mov->deposito_id;
+				$agrupados[$clave]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
+				$agrupados[$clave]['deposito_nombre'] = (string) ($mov->deposito_nombre ?? '');
+				$agrupados[$clave]['deposito'] = trim(
 					($mov->deposito_codigo ?? '').'-'.($mov->deposito_nombre ?? ''),
 					'-'
 				);
@@ -696,6 +705,131 @@ class Articulo_MovimientoService
 		}
 
 		return array_intersect_key($data, $columnasPermitidas);
+	}
+
+	/**
+	 * @param  list<int>  $ordentrabajoIds
+	 * @return array<int, array{situacion: string, en_produccion: bool}>
+	 */
+	private function situacionesReporteStockOtPorIds(array $ordentrabajoIds): array
+	{
+		$ids = array_values(array_unique(array_filter(array_map('intval', $ordentrabajoIds))));
+		$out = [];
+		foreach ($ids as $id) {
+			$out[$id] = ReporteStockOtSituacionSupport::desdeTareaIds([]);
+		}
+		if ($ids === []) {
+			return $out;
+		}
+
+		$rows = DB::table('ordentrabajo_tarea')
+			->whereIn('ordentrabajo_id', $ids)
+			->get(['ordentrabajo_id', 'tarea_id']);
+		$porOt = [];
+		foreach ($rows as $row) {
+			$porOt[(int) $row->ordentrabajo_id][] = (int) $row->tarea_id;
+		}
+		foreach ($porOt as $otId => $tareaIds) {
+			$out[$otId] = ReporteStockOtSituacionSupport::desdeTareaIds($tareaIds);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * @param  array<string, mixed>|\ArrayAccess  $movimiento
+	 * @param  array<int, array{situacion: string, en_produccion: bool}>  $situacionesPorOt
+	 * @return array{situacion: string, en_produccion: bool}
+	 */
+	private function situacionFilaReporteStockOt($movimiento, array $situacionesPorOt): array
+	{
+		if (! empty($movimiento['en_produccion_forzada'])) {
+			return [
+				'situacion' => ReporteStockOtSituacionSupport::EN_PRODUCCION,
+				'en_produccion' => true,
+			];
+		}
+
+		$otId = (int) ($movimiento['ordentrabajo_id'] ?? 0);
+		if ($otId > 0 && isset($situacionesPorOt[$otId])) {
+			return $situacionesPorOt[$otId];
+		}
+
+		return ReporteStockOtSituacionSupport::desdeTareaIds([]);
+	}
+
+	/**
+	 * @param  array<int, array{0: list<array{medida: mixed, cantidad: mixed}>, 1: float|int}>  $modulosCache
+	 * @return array{0: list<array{medida: mixed, cantidad: mixed}>, 1: float|int}
+	 */
+	private function curvaModuloReporteStockOt(int $moduloId, array &$modulosCache): array
+	{
+		if ($moduloId <= 0) {
+			return [[], 0];
+		}
+		if (isset($modulosCache[$moduloId])) {
+			return $modulosCache[$moduloId];
+		}
+
+		$modulo = [];
+		$cantidadModulo = 0;
+		$moduloTalle = Modulo::where('id', $moduloId)->with('talles')->first();
+		if ($moduloTalle && $moduloTalle->talles) {
+			foreach ($moduloTalle->talles as $unModulo) {
+				$talle = Talle::find($unModulo->pivot->talle_id);
+				if ($talle) {
+					$modulo[] = [
+						'medida' => $unModulo->nombre,
+						'cantidad' => $unModulo->pivot->cantidad,
+					];
+					$cantidadModulo += $unModulo->pivot->cantidad;
+				}
+			}
+		}
+		$modulosCache[$moduloId] = [$modulo, $cantidadModulo];
+
+		return $modulosCache[$moduloId];
+	}
+
+	/**
+	 * @param  list<array{medida: mixed, cantidad: mixed}>  $medidas
+	 * @param  list<array{medida: mixed, cantidad: mixed}>  $modulo
+	 * @return array<string, mixed>
+	 */
+	private function filaReporteStockOt(
+		$foto,
+		$nombreLinea,
+		$sku,
+		$codigoCombinacion,
+		$nombreCombinacion,
+		$lote,
+		$precio,
+		string $situacion,
+		bool $enProduccion,
+		$modulo_id,
+		$cantidadModulo,
+		array $modulo,
+		$pedido,
+		$ordencompra,
+		array $medidas
+	): array {
+		return [
+			'foto' => $foto,
+			'nombrelinea' => $nombreLinea,
+			'sku' => $sku,
+			'codigo' => $codigoCombinacion,
+			'nombrecombinacion' => $nombreCombinacion,
+			'lote' => $lote,
+			'precio' => $precio,
+			'situacion' => $situacion,
+			'en_produccion' => $enProduccion,
+			'modulo_id' => $modulo_id,
+			'cantidadmodulo' => $cantidadModulo,
+			'modulo' => $modulo,
+			'pedido' => $pedido,
+			'ordencompra' => $ordencompra,
+			'medidas' => $medidas,
+		];
 	}
 
 }

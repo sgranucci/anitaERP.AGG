@@ -139,6 +139,7 @@
                 </div>
             </div>
         </div>
+        @include('stock.articulo.partials.campo_canales_estados_ferli')
 		<div class="card-footer">
         	<div class="row">
             	@if ($edit)

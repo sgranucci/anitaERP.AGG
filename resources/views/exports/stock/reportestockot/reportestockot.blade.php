@@ -1,4 +1,4 @@
-<h2> Stock por OT </h2>
+<h2> Stock por OT &mdash; Situaci&oacute;n: EN PRODUCCION (rojo) = OT abierta; ENTREGA INMEDIATA = terminada en stock</h2>
 <h1><strong>Estado de combinaciones: {{$estado}}</strong>&nbsp;Marca: {{$nombremarca}}</h1>
 <h1><strong>Desde artículo: {{$desdearticulo}} Hasta articulo: {{$hastaarticulo}} </strong></h1>
 <h1><strong>Desde línea: {{$desdelinea}} Hasta linea: {{$hastalinea}} </strong></h1>

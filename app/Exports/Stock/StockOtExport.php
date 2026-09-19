@@ -23,6 +23,7 @@ use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Events\AfterSheet;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use PhpOffice\PhpSpreadsheet\Style\Color;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use Carbon\Carbon;
@@ -289,14 +290,25 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, Shou
         return [
             AfterSheet::class    => function(AfterSheet $event) use (&$filas, &$imprimeFoto, &$filaDatos) {
 
-                $event->sheet->getDelegate()->freezePane('A8');
-				$event->sheet->getDelegate()->getStyle('A:AP')->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+				$sheet = $event->sheet->getDelegate();
+                $sheet->freezePane('A8');
+				$sheet->getStyle('A:AP')->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+
+				foreach ($filas as $idx => $fila) {
+					if (empty($fila['en_produccion'])) {
+						continue;
+					}
+					$excelRow = $filaDatos + $idx;
+					$sheet->getStyle('A'.$excelRow.':BK'.$excelRow)
+						->getFont()
+						->getColor()
+						->setARGB(Color::COLOR_RED);
+				}
 
 				if ($imprimeFoto !== 'CON_FOTO' || $filas === []) {
 					return;
 				}
 
-				$sheet = $event->sheet->getDelegate();
 				$sheet->getColumnDimension('A')->setWidth(14);
 				foreach ($filas as $idx => $fila) {
 					$excelRow = $filaDatos + $idx;
