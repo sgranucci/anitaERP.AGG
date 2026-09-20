@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -22,9 +23,7 @@ return new class extends Migration
             return;
         }
 
-        $existe = collect(DB::select('SHOW INDEX FROM '.self::TABLA.' WHERE Key_name = ?', [self::INDICE]))
-            ->isNotEmpty();
-        if ($existe) {
+        if (MigrationDialectSupport::tieneIndice(self::TABLA, self::INDICE)) {
             return;
         }
 
@@ -54,14 +53,6 @@ return new class extends Migration
             return;
         }
 
-        $existe = collect(DB::select('SHOW INDEX FROM '.self::TABLA.' WHERE Key_name = ?', [self::INDICE]))
-            ->isNotEmpty();
-        if (! $existe) {
-            return;
-        }
-
-        Schema::table(self::TABLA, function (Blueprint $table) {
-            $table->dropUnique(self::INDICE);
-        });
+        MigrationDialectSupport::dropIndiceOUnique(self::TABLA, self::INDICE);
     }
 };
