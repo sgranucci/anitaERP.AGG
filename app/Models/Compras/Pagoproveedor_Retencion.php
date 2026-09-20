@@ -5,9 +5,16 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Provincia;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pagoproveedor_Retencion extends Model
+/**
+ * Auditable: la migración 2026_08_18_153000 quitó los softdeletes de las tablas de proceso
+ * con el criterio "baja física + audits", pero la mitad de audits nunca se implementó acá.
+ * Sin esto, borrar una retención no dejaba rastro de un certificado ya emitido al proveedor.
+ */
+class Pagoproveedor_Retencion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
 
     public const TIPO_GANANCIAS = 'G';
 
