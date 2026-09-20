@@ -701,6 +701,12 @@ class PagoproveedorService
             ];
         }
 
+        // La propuesta ya filtra las retenidas, pero acá también llega el armado manual de la OP
+        // con ids de cuenta corriente elegidos a mano: el bloqueo tiene que valer igual.
+        app(ComprobanteProveedorBloqueoPagoService::class)->assertNingunaBloqueada(
+            array_map(static fn (array $a) => (int) $a['proveedor_cuentacorriente_id'], $out)
+        );
+
         return $out;
     }
 
@@ -1130,6 +1136,64 @@ class PagoproveedorService
     }
 
     /**
+     * Baja de OP en PRE CARGA.
+     *
+     * No usa anularFisicamente: PRE CARGA no replica Anita. Pero sí tiene que
+     * revertirAplicacionesExistentes: el destroy solo deja ON DELETE SET NULL y el
+     * saldo de la factura queda “aplicado” sin OP.
+     *
+     * @return array{mensaje?:string,errores?:string}
+     */
+    public function eliminarPreCarga(int $id): array
+    {
+        try {
+            DB::transaction(function () use ($id) {
+                $pago = Pagoproveedor::query()->whereKey($id)->lockForUpdate()->first();
+                if ($pago === null) {
+                    throw new Exception('Orden de pago no encontrada.');
+                }
+                if ((string) $pago->estado !== 'PRE CARGA') {
+                    throw new Exception('Solo se pueden eliminar OP en PRE CARGA. Use anular o revertir.');
+                }
+
+                PagoproveedorAplicacionCuentacorrienteSupport::revertirAplicacionesExistentes($pago);
+
+                Pagoproveedor_Retencion::query()->where('pagoproveedor_id', $id)->get()
+                    ->each(fn (Pagoproveedor_Retencion $r) => $r->delete());
+
+                Cheque::query()->where('pagoproveedor_id', $id)->get()
+                    ->each(fn (Cheque $c) => $c->delete());
+
+                $cajaIds = Caja_Movimiento::query()
+                    ->where('pagoproveedor_id', $id)
+                    ->pluck('id')
+                    ->map(fn ($cid) => (int) $cid)
+                    ->all();
+                if ((int) ($pago->caja_movimiento_id ?? 0) > 0) {
+                    $cajaIds[] = (int) $pago->caja_movimiento_id;
+                }
+                \App\Support\Caja\CajaMovimientoEloquentDeleteSupport::eliminarPorQuery(
+                    Caja_Movimiento::query()->whereIn('id', array_unique(array_filter($cajaIds)))
+                );
+
+                // Si salió de una propuesta, liberar la línea para poder reejecutar.
+                \App\Models\Compras\PropuestaPagoLinea::query()
+                    ->where('pagoproveedor_id', $id)
+                    ->update([
+                        'pagoproveedor_id' => null,
+                        'estado_linea' => 'PENDIENTE',
+                    ]);
+
+                $this->pagoproveedorRepository->delete($id);
+            });
+
+            return ['mensaje' => 'ok'];
+        } catch (\Throwable $e) {
+            return ['errores' => $e->getMessage()];
+        }
+    }
+
+    /**
      * PRE CARGA → CONFIRMADA; re-persiste asiento/certificados si faltan.
      *
      * @return array{mensaje?:string,errores?:string}
@@ -1347,7 +1411,8 @@ class PagoproveedorService
      * no cierra, se cae toda la OP en lugar de quedar una OP confirmada sin contabilizar.
      *
      * @param  list<array{proveedor_cuentacorriente_id:int,montoaplicado:float,moneda_id?:int,cotizacion?:float}>  $aplicaciones
-     * @return array{mensaje?:string,errores?:string,pagoproveedor_id?:int}
+     * @param  bool  $sincronizarAnita  false si el caller tiene TX externa (p.ej. ejecutar propuesta)
+     * @return array{mensaje?:string,errores?:string,pagoproveedor_id?:int,aviso?:string}
      */
     public function crearDesdePropuesta(
         int $empresaId,
@@ -1366,6 +1431,7 @@ class PagoproveedorService
         ?int $chequeraId = null,
         ?string $nombreProveedorCheque = null,
         ?float $cotizacion = null,
+        bool $sincronizarAnita = true,
     ): array {
         $estado = ($confirmada ?? (bool) config('propuesta_pago.ejecutar_confirmada', true))
             ? 'CONFIRMADA'
@@ -1568,6 +1634,12 @@ class PagoproveedorService
                 'mensaje' => 'ok',
                 'pagoproveedor_id' => (int) $pago->id,
             ];
+
+            // Si se llama desde PropuestaPagoService::ejecutar (TX externa), Anita va
+            // DESPUÉS del commit de esa TX. Acá solo sincroniza cuando no hay TX padre.
+            if (! $sincronizarAnita) {
+                return $out;
+            }
 
             try {
                 $this->sincronizarAnitaTesoreria($pago->fresh(), false);

@@ -18,6 +18,7 @@ use Auth;
 use DB;
 use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class PropuestaPagoService
 {
@@ -25,8 +26,7 @@ class PropuestaPagoService
         private PropuestaPagoRepositoryInterface $propuestaPagoRepository,
         private PagoproveedorService $pagoproveedorService,
         private PropuestaPagoArbolIntegracionService $arbolIntegracionService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{mensaje?:string,errores?:string,propuesta_pago_id?:int}
@@ -188,138 +188,178 @@ class PropuestaPagoService
      */
     public function ejecutar(int $id): array
     {
-        $propuesta = $this->propuestaPagoRepository->findOrFail($id);
-        if ((string) $propuesta->estado !== 'AUTORIZADA') {
-            return ['ok' => false, 'mensaje' => 'Solo se puede ejecutar una propuesta AUTORIZADA.'];
-        }
-
-        $lineas = $propuesta->lineas
-            ->where('incluido', true)
-            ->filter(fn ($l) => (float) $l->monto_propuesto > 0 && empty($l->pagoproveedor_id));
-
-        if ($lineas->isEmpty()) {
-            return ['ok' => false, 'mensaje' => 'No hay líneas pendientes de ejecutar.'];
-        }
-
         $ops = [];
         $errores = [];
         $avisos = [];
 
-        DB::transaction(function () use ($propuesta, $lineas, &$ops, &$errores, &$avisos) {
-            $cajaId = (int) ($propuesta->caja_id ?: 0) ?: null;
-            $cuentacajaId = (int) ($propuesta->cuentacaja_id ?: 0) ?: null;
-            $chequeraId = (int) ($propuesta->chequera_id ?: 0) ?: null;
-            $calcularRet = (bool) config('propuesta_pago.calcular_retenciones_al_ejecutar', true);
+        try {
+            DB::transaction(function () use ($id, &$ops, &$errores) {
+                // Serializa dos ejecuciones concurrentes de la misma propuesta.
+                $propuesta = PropuestaPago::query()->whereKey($id)->lockForUpdate()->first();
+                if ($propuesta === null) {
+                    throw new Exception('Propuesta no encontrada.');
+                }
+                if ((string) $propuesta->estado !== 'AUTORIZADA') {
+                    throw new Exception('Solo se puede ejecutar una propuesta AUTORIZADA.');
+                }
 
-            // Una OP por proveedor + forma de pago (no mezclar Cheque con Transferencia)
-            $porGrupo = $lineas->groupBy(function ($l) {
-                return (int) $l->proveedor_id.'|'.(int) ($l->formapago_id ?: 0);
-            });
-            foreach ($porGrupo as $clave => $grupo) {
-                $aplicaciones = [];
-                $monto = 0.0;
-                $monedaId = (int) ($grupo->first()->moneda_id ?: 1);
-                $proveedorId = (int) $grupo->first()->proveedor_id;
-                $formapagoId = (int) ($grupo->first()->formapago_id ?: 0) ?: null;
-                $medios = [];
-                $nombreProv = '';
-                foreach ($grupo as $linea) {
-                    $monto += (float) $linea->monto_propuesto;
-                    $aplicaciones[] = [
-                        'proveedor_cuentacorriente_id' => (int) $linea->proveedor_cuentacorriente_id,
-                        'montoaplicado' => (float) $linea->monto_propuesto,
-                        'moneda_id' => (int) ($linea->moneda_id ?: $monedaId),
-                        'cotizacion' => 1,
-                    ];
-                    $p = PropuestaPagoLineaPresentacionSupport::enriquecer($linea, $propuesta);
-                    if ($nombreProv === '') {
-                        $nombreProv = $p['nombre_proveedor'];
+                $lineas = PropuestaPagoLinea::query()
+                    ->where('propuesta_pago_id', (int) $propuesta->id)
+                    ->where('incluido', true)
+                    ->where(function ($q) {
+                        $q->whereNull('pagoproveedor_id')->orWhere('pagoproveedor_id', 0);
+                    })
+                    ->where('monto_propuesto', '>', 0)
+                    ->lockForUpdate()
+                    ->get();
+
+                if ($lineas->isEmpty()) {
+                    throw new Exception('No hay líneas pendientes de ejecutar.');
+                }
+
+                $cajaId = (int) ($propuesta->caja_id ?: 0) ?: null;
+                $cuentacajaId = (int) ($propuesta->cuentacaja_id ?: 0) ?: null;
+                $chequeraId = (int) ($propuesta->chequera_id ?: 0) ?: null;
+                $calcularRet = (bool) config('propuesta_pago.calcular_retenciones_al_ejecutar', true);
+
+                // Una OP por proveedor + forma de pago (no mezclar Cheque con Transferencia)
+                $porGrupo = $lineas->groupBy(function ($l) {
+                    return (int) $l->proveedor_id.'|'.(int) ($l->formapago_id ?: 0);
+                });
+                foreach ($porGrupo as $clave => $grupo) {
+                    $aplicaciones = [];
+                    $monto = 0.0;
+                    $monedaId = (int) ($grupo->first()->moneda_id ?: 1);
+                    $proveedorId = (int) $grupo->first()->proveedor_id;
+                    $formapagoId = (int) ($grupo->first()->formapago_id ?: 0) ?: null;
+                    $medios = [];
+                    $nombreProv = '';
+                    foreach ($grupo as $linea) {
+                        $monto += (float) $linea->monto_propuesto;
+                        $aplicaciones[] = [
+                            'proveedor_cuentacorriente_id' => (int) $linea->proveedor_cuentacorriente_id,
+                            'montoaplicado' => (float) $linea->monto_propuesto,
+                            'moneda_id' => (int) ($linea->moneda_id ?: $monedaId),
+                            'cotizacion' => 1,
+                        ];
+                        $p = PropuestaPagoLineaPresentacionSupport::enriquecer($linea, $propuesta);
+                        if ($nombreProv === '') {
+                            $nombreProv = $p['nombre_proveedor'];
+                        }
+                        $etiqueta = trim(($p['medio_pago'] ?: 'S/medio').($p['detalle_pago'] !== '' ? ' '.$p['detalle_pago'] : ''));
+                        if ($etiqueta !== '' && ! in_array($etiqueta, $medios, true)) {
+                            $medios[] = $etiqueta;
+                        }
                     }
-                    $etiqueta = trim(($p['medio_pago'] ?: 'S/medio').($p['detalle_pago'] !== '' ? ' '.$p['detalle_pago'] : ''));
-                    if ($etiqueta !== '' && ! in_array($etiqueta, $medios, true)) {
-                        $medios[] = $etiqueta;
+
+                    $fpProv = PropuestaPagoInstrumentoSupport::resolverFormapagoProveedor($proveedorId, $formapagoId);
+                    $textoInst = PropuestaPagoInstrumentoSupport::textoInstrumento(
+                        $fpProv,
+                        $medios !== [] ? implode('; ', $medios) : ''
+                    );
+                    $esCheque = PropuestaPagoInstrumentoSupport::esCheque(
+                        $formapagoId,
+                        $medios[0] ?? ($textoInst)
+                    );
+
+                    $detalleOp = 'Propuesta #'.$propuesta->id;
+                    if ($textoInst !== '') {
+                        $detalleOp .= ' | '.$textoInst;
+                    }
+
+                    $cuentaEgreso = null;
+                    $chequeraOp = null;
+                    $cuentaLinea = (int) ($grupo->first(fn ($l) => (int) ($l->cuentacaja_id ?: 0) > 0)?->cuentacaja_id ?: 0);
+
+                    if ($esCheque && $chequeraId) {
+                        $chequeraOp = $chequeraId;
+                    } elseif ($cuentaLinea > 0) {
+                        $cuentaEgreso = $cuentaLinea;
+                    } elseif ($cuentacajaId && (
+                        $formapagoId === null
+                        || PropuestaPagoInstrumentoSupport::esTransferencia($formapagoId)
+                        || ($fpProv && trim((string) $fpProv->cbu) !== '')
+                    )) {
+                        $cuentaEgreso = $cuentacajaId;
+                    }
+
+                    // sincronizarAnita=false: Anita no puede correr dentro de esta TX externa
+                    // (el "commit" interno de crearDesdePropuesta es un savepoint).
+                    $resultado = $this->pagoproveedorService->crearDesdePropuesta(
+                        (int) $propuesta->empresa_id,
+                        $proveedorId,
+                        round($monto, 4),
+                        $monedaId,
+                        $propuesta->fecha?->format('Y-m-d') ?? date('Y-m-d'),
+                        (int) $propuesta->id,
+                        $aplicaciones,
+                        $detalleOp,
+                        PropuestaPagoModoSupport::ejecutarConfirmada((int) $propuesta->empresa_id),
+                        $cajaId,
+                        $cuentaEgreso,
+                        $calcularRet,
+                        $textoInst !== '' ? $textoInst : null,
+                        $chequeraOp,
+                        $nombreProv !== '' ? $nombreProv : null,
+                        null,
+                        false
+                    );
+
+                    if (! empty($resultado['errores'])) {
+                        $errores[] = 'Proveedor '.$proveedorId.' ('.$clave.'): '.$resultado['errores'];
+
+                        continue;
+                    }
+
+                    $opId = (int) $resultado['pagoproveedor_id'];
+                    $ops[] = $opId;
+                    foreach ($grupo as $linea) {
+                        $linea->pagoproveedor_id = $opId;
+                        $linea->estado_linea = 'EJECUTADA';
+                        $linea->save();
                     }
                 }
 
-                $fpProv = PropuestaPagoInstrumentoSupport::resolverFormapagoProveedor($proveedorId, $formapagoId);
-                $textoInst = PropuestaPagoInstrumentoSupport::textoInstrumento(
-                    $fpProv,
-                    $medios !== [] ? implode('; ', $medios) : ''
-                );
-                $esCheque = PropuestaPagoInstrumentoSupport::esCheque(
-                    $formapagoId,
-                    $medios[0] ?? ($textoInst)
-                );
-
-                $detalleOp = 'Propuesta #'.$propuesta->id;
-                if ($textoInst !== '') {
-                    $detalleOp .= ' | '.$textoInst;
+                // Sin OPs no se toca el estado: queda AUTORIZADA para reintentar.
+                if ($ops === []) {
+                    return;
                 }
 
-                $cuentaEgreso = null;
-                $chequeraOp = null;
-                // Override por línea: primera cuenta de las líneas del grupo
-                $cuentaLinea = (int) ($grupo->first(fn ($l) => (int) ($l->cuentacaja_id ?: 0) > 0)?->cuentacaja_id ?: 0);
+                $propuestaFresh = $this->propuestaPagoRepository->findOrFail((int) $propuesta->id);
+                $pendientes = $propuestaFresh->lineas
+                    ->where('incluido', true)
+                    ->filter(fn ($l) => (float) $l->monto_propuesto > 0 && empty($l->pagoproveedor_id));
 
-                if ($esCheque && $chequeraId) {
-                    $chequeraOp = $chequeraId;
-                } elseif ($cuentaLinea > 0) {
-                    $cuentaEgreso = $cuentaLinea;
-                } elseif ($cuentacajaId && (
-                    $formapagoId === null
-                    || PropuestaPagoInstrumentoSupport::esTransferencia($formapagoId)
-                    || ($fpProv && trim((string) $fpProv->cbu) !== '')
-                )) {
-                    $cuentaEgreso = $cuentacajaId;
-                }
-
-                $resultado = $this->pagoproveedorService->crearDesdePropuesta(
-                    (int) $propuesta->empresa_id,
-                    $proveedorId,
-                    round($monto, 4),
-                    $monedaId,
-                    $propuesta->fecha?->format('Y-m-d') ?? date('Y-m-d'),
+                $estadoFinal = $pendientes->isEmpty() ? 'EJECUTADA' : 'EJECUTADA_PARCIAL';
+                $this->propuestaPagoRepository->cambiarEstado(
                     (int) $propuesta->id,
-                    $aplicaciones,
-                    $detalleOp,
-                    PropuestaPagoModoSupport::ejecutarConfirmada((int) $propuesta->empresa_id),
-                    $cajaId,
-                    $cuentaEgreso,
-                    $calcularRet,
-                    $textoInst !== '' ? $textoInst : null,
-                    $chequeraOp,
-                    $nombreProv !== '' ? $nombreProv : null
+                    $estadoFinal,
+                    'Ejecución: '.count($ops).' OP (proveedor+medio; retenciones='.($calcularRet ? 'sí' : 'no').')'
                 );
+            });
+        } catch (\Throwable $e) {
+            return ['ok' => false, 'mensaje' => $e->getMessage()];
+        }
 
-                if (! empty($resultado['errores'])) {
-                    $errores[] = 'Proveedor '.$proveedorId.' ('.$clave.'): '.$resultado['errores'];
+        // Anita DESPUÉS del commit local: si falla, aviso (no reejecutar).
+        foreach ($ops as $opId) {
+            try {
+                $pago = \App\Models\Compras\Pagoproveedor::query()->find((int) $opId);
+                if ($pago === null) {
                     continue;
                 }
-                if (! empty($resultado['aviso'])) {
-                    $avisos[] = $resultado['aviso'];
-                }
-
-                $opId = (int) $resultado['pagoproveedor_id'];
-                $ops[] = $opId;
-                foreach ($grupo as $linea) {
-                    $linea->pagoproveedor_id = $opId;
-                    $linea->estado_linea = 'EJECUTADA';
-                    $linea->save();
-                }
+                $this->pagoproveedorService->sincronizarAnitaTesoreria($pago, false);
+            } catch (\Throwable $eAnita) {
+                Log::error('propuesta_pago.anita.sync_post_commit.fallo', [
+                    'propuesta_pago_id' => $id,
+                    'pagoproveedor_id' => $opId,
+                    'mensaje' => $eAnita->getMessage(),
+                ]);
+                $avisos[] = 'OP #'.$opId.' grabada en ERP pero falló la réplica Anita: '
+                    .$eAnita->getMessage()
+                    .'. No reejecute la propuesta; revise sincronización/auditoría.';
             }
-
-            $propuestaFresh = $this->propuestaPagoRepository->findOrFail((int) $propuesta->id);
-            $pendientes = $propuestaFresh->lineas
-                ->where('incluido', true)
-                ->filter(fn ($l) => (float) $l->monto_propuesto > 0 && empty($l->pagoproveedor_id));
-
-            $estadoFinal = $pendientes->isEmpty() ? 'EJECUTADA' : 'EJECUTADA_PARCIAL';
-            $this->propuestaPagoRepository->cambiarEstado(
-                (int) $propuesta->id,
-                $estadoFinal,
-                'Ejecución: '.count($ops).' OP (proveedor+medio; retenciones='.($calcularRet ? 'sí' : 'no').')'
-            );
-        });
+        }
 
         if ($errores !== [] && $ops === []) {
             return ['ok' => false, 'mensaje' => implode(' | ', $errores)];
@@ -554,6 +594,14 @@ class PropuestaPagoService
             ])
             ->where('proveedor_cuentacorriente.empresa_id', $empresaId)
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
+            // Facturas retenidas por el control de importes (criterio SAP): contabilizadas y en la
+            // cuenta del proveedor, pero fuera de toda propuesta hasta que se las libere.
+            ->whereNotExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('comprobante_proveedor as cp_bloq')
+                    ->whereColumn('cp_bloq.id', 'proveedor_cuentacorriente.comprobante_proveedor_id')
+                    ->where('cp_bloq.bloqueado_pago', true);
+            })
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         if ($desde) {

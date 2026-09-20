@@ -50,8 +50,7 @@ class PagoproveedorController extends Controller
         private PagoproveedorComprobantePdfService $pagoproveedorComprobantePdfService,
         private PagoproveedorEnvioProveedorService $pagoproveedorEnvioProveedorService,
         private ProveedorCuentacorrienteImportarDesdeAnitaService $proveedorCuentacorrienteImportarDesdeAnitaService,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -219,12 +218,10 @@ class PagoproveedorController extends Controller
     {
         can('borrar-pagoproveedor');
 
-        $pago = $this->pagoproveedorRepository->findOrFail($id);
-        if ((string) $pago->estado !== 'PRE CARGA') {
-            return redirect()->back()->with('mensaje', 'Solo se pueden eliminar OP en PRE CARGA. Use anular o revertir.');
+        $resultado = $this->pagoproveedorService->eliminarPreCarga($id);
+        if (! empty($resultado['errores'])) {
+            return redirect()->back()->with('mensaje', $resultado['errores']);
         }
-
-        $this->pagoproveedorRepository->delete($id);
 
         return redirect()->route('pagoproveedor')->with('mensaje', 'Orden de pago eliminada.');
     }
@@ -651,7 +648,6 @@ class PagoproveedorController extends Controller
     }
 
     /**
-     * @param  mixed  $raw
      * @return list<array<string, mixed>>
      */
     private function normalizarAplicacionesRequest(mixed $raw): array

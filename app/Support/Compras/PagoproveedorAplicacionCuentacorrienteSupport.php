@@ -35,6 +35,9 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
         }
 
         $comprobantes = [];
+        /** @var array<int, float> $consumidoEnEstaOp tope de saldo con varias líneas a la misma CC */
+        $consumidoEnEstaOp = [];
+
         foreach ($aplicaciones as $apl) {
             $ccId = (int) ($apl['proveedor_cuentacorriente_id'] ?? 0);
             $monto = round(abs((float) ($apl['montoaplicado'] ?? 0)), 4);
@@ -42,9 +45,12 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 continue;
             }
 
+            // lockForUpdate: dos OPs concurrentes no pueden pasar el mismo saldo.
             $deuda = Proveedor_Cuentacorriente::query()
                 ->with(['comprobante_proveedores.ordencompras.ordencompra_articulos', 'comprobante_proveedores.tipotransaccion_compras'])
-                ->find($ccId);
+                ->whereKey($ccId)
+                ->lockForUpdate()
+                ->first();
             if ($deuda === null) {
                 throw new RuntimeException("Cuenta corriente proveedor #{$ccId} no encontrada.");
             }
@@ -54,6 +60,9 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
             if ((int) $deuda->empresa_id !== (int) $pago->empresa_id) {
                 throw new RuntimeException('La deuda no pertenece a la empresa de la OP.');
             }
+
+            self::assertNoExcedeSaldoPendiente($deuda, $monto, $consumidoEnEstaOp[$ccId] ?? 0.0);
+            $consumidoEnEstaOp[$ccId] = round(($consumidoEnEstaOp[$ccId] ?? 0.0) + $monto, 4);
 
             if ($deuda->comprobante_proveedores instanceof Comprobante_Proveedor) {
                 $comprobantes[] = $deuda->comprobante_proveedores;
@@ -74,6 +83,7 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 continue;
             }
 
+            // Ya tomada con lock en el pase de validación de esta misma TX.
             $deuda = Proveedor_Cuentacorriente::query()
                 ->with(['comprobante_proveedores.tipotransaccion_compras', 'pagoproveedores'])
                 ->findOrFail($ccId);
@@ -174,6 +184,34 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
         Pagoproveedor_Comprobante::query()
             ->where('pagoproveedor_id', $pagoId)
             ->delete();
+    }
+
+    /**
+     * Impide sobreaplicar una factura/crédito. El saldo pendiente es el mismo criterio
+     * que la grilla de CC (total + SUM(aplicaciones)).
+     */
+    private static function assertNoExcedeSaldoPendiente(
+        Proveedor_Cuentacorriente $deuda,
+        float $monto,
+        float $yaConsumidoEnEstaOp
+    ): void {
+        $aplicado = (float) Proveedor_Cuentacorriente_Aplicacion::query()
+            ->where('proveedor_cuentacorriente_id', (int) $deuda->id)
+            ->sum('total');
+
+        $disponible = \App\Support\Compras\ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
+            (float) $deuda->total,
+            $aplicado
+        );
+        $disponible = round(max(0, $disponible - $yaConsumidoEnEstaOp), 4);
+
+        if (round($monto - $disponible, 4) > 0) {
+            throw new RuntimeException(
+                'El monto a aplicar ('.number_format($monto, 2, ',', '.')
+                .') supera el saldo pendiente de la CC #'.$deuda->id
+                .' (disponible '.number_format($disponible, 2, ',', '.').').'
+            );
+        }
     }
 
     /**
