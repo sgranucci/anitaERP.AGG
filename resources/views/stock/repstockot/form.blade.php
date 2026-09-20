@@ -121,13 +121,18 @@
 			<select name="estado" id="estado" data-placeholder="Estado de las combinaciones" class="col-lg-4 form-control required" data-fouc required>
 				<option value="">-- Seleccionar estado de las combinaciones --</option>
 				@foreach($estado_enum as $key => $value)
-					@if( $key == 'ACTIVAS')
-						<option value="{{ $key }}" selected="select">{{ $value }}</option>    
+					@if( $key == 'TODAS')
+						<option value="{{ $key }}" selected="select">{{ $value }}</option>
 					@else
-						<option value="{{ $key }}">{{ $value }}</option>    
+						<option value="{{ $key }}">{{ $value }}</option>
 					@endif
 				@endforeach
 			</select>
+			<div class="col-lg-5">
+				<small class="form-text text-muted">
+					Por defecto <strong>Todas</strong>: el stock importado suele tener combinaciones inactivas (Tomahawk, Ferli, etc.). Con solo Activas el Excel puede salir vac&iacute;o.
+				</small>
+			</div>
 		</div>
 		<div class="form-group row">
 			<label for="estadoOt" class="col-lg-3 col-form-label requerido">Estado de las OT</label>
@@ -135,9 +140,9 @@
 				<option value="">-- Seleccionar estado de las OT --</option>
 				@foreach($estadoOt_enum as $key => $value)
 					@if( $key == 'TODAS')
-						<option value="{{ $key }}" selected="select">{{ $value }}</option>    
+						<option value="{{ $key }}" selected="select">{{ $value }}</option>
 					@else
-						<option value="{{ $key }}">{{ $value }}</option>    
+						<option value="{{ $key }}">{{ $value }}</option>
 					@endif
 				@endforeach
 			</select>

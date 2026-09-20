@@ -1,41 +1,67 @@
-<h2> Stock por OT &mdash; Situaci&oacute;n: EN PRODUCCION (rojo) = OT abierta; ENTREGA INMEDIATA = terminada en stock</h2>
-<h1><strong>Estado de combinaciones: {{$estado}}</strong>&nbsp;Marca: {{$nombremarca}}</h1>
-<h1><strong>Desde artículo: {{$desdearticulo}} Hasta articulo: {{$hastaarticulo}} </strong></h1>
-<h1><strong>Desde línea: {{$desdelinea}} Hasta linea: {{$hastalinea}} </strong></h1>
-<h1><strong>Desde categoría: {{$desdecategoria}} Hasta linea: {{$hastacategoria}} </strong></h1>
-<h1><strong>Desde lote: {{$desdelote}} Hasta lote: {{$hastalote}} - {{$deposito}}</strong></h1>
+@php
+    $conFoto = ($imprimefoto ?? '') === 'CON_FOTO';
+    $medidasCols = $medidas_columnas ?? [];
+    $colspan = (int) ($total_columnas ?? (4 + count($medidasCols) + 7 + ($conFoto ? 1 : 0)));
+    $totalParesGeneral = 0.0;
+@endphp
 <table>
-	<thead>
-		<tr>
-			@if ($imprimefoto == 'CON_FOTO')
-				<th>Foto</th>
-			@endif
-			<th>L&iacute;nea</th>
-			<th>Art&iacute;culo</th>
-			<th>Combinaci&oacute;n</th>
-			<th>Descripci&oacute;n</th>
-			<th>Pedido</th>
-			<th>Ot</th>
-			@for ($ii = config('consprod.DESDE_MEDIDA'); $ii <= config('consprod.HASTA_MEDIDA'); $ii++)
-				<th>{{$ii}}</th>
-			@endfor
-			<th>Mod</th>
-			<th>M</th>
-			<th>Total</th>
-			@for ($ii = config('consprod.DESDE_MEDIDA'); $ii <= config('consprod.HASTA_MEDIDA'); $ii++)
-				<th>{{$ii}}</th>
-			@endfor
-			<th>Precio</th>
-			<th>Situaci&oacute;n</th>
-			<th>Numero OT (lote)</th>
-		</tr>
-	</thead>
-	<tbody>
-	@foreach ($data as $lote)
-
-		@include('exports.stock.reportestockot.imprimeunrenglon')
-			
-	@endforeach
-
-	</tbody>
+    <tbody>
+        <tr>
+            <td colspan="{{ $colspan }}">
+                <strong style="font-size: 14pt;">{{ $titulo ?? 'Stock por OT' }}</strong>
+            </td>
+        </tr>
+    </tbody>
+    <thead>
+        <tr>
+            @if ($conFoto)
+                <th>FOTO</th>
+            @endif
+            <th>LINEA</th>
+            <th>ART.</th>
+            <th>DESCRIPCION</th>
+            @foreach ($medidasCols as $medida)
+                <th>{{ $medida }}</th>
+            @endforeach
+            <th>PS.</th>
+            <th>Q M</th>
+            <th>N</th>
+            <th>TT.PS.</th>
+            <th>PRECIO</th>
+            <th>SITUACION</th>
+            <th>NUMERO OT</th>
+            <th>DEPOSITO</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach ($data as $lote)
+            @include('exports.stock.reportestockot.imprimeunrenglon', [
+                'lote' => $lote,
+                'imprimefoto' => $imprimefoto,
+                'medidas_columnas' => $medidasCols,
+            ])
+            @php
+                $totalParesGeneral += (float) ($lote['total_pares'] ?? 0);
+            @endphp
+        @endforeach
+        <tr>
+            @if ($conFoto)
+                <td></td>
+            @endif
+            <td></td>
+            <td></td>
+            <td></td>
+            @foreach ($medidasCols as $medida)
+                <td></td>
+            @endforeach
+            <td><strong>TOTAL</strong></td>
+            <td></td>
+            <td></td>
+            <td align="right"><strong>{{ number_format($totalParesGeneral, 0, ',', '.') }}</strong></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+        </tr>
+    </tbody>
 </table>
