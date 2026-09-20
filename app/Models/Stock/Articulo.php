@@ -588,7 +588,7 @@ class Articulo extends Model implements Auditable
                 $cuentacontableimpinterno_id = null;
             }
 
-            $usoarticulo_id = $data->stkm_tipo_articulo;
+            $usoarticulo_id = $data->stkm_tipo_articulo ?? 1;
 
             $unidadmedida = Unidadmedida::select('id')->where('id', $data->stkm_cod_umd)->first();
             if ($unidadmedida) {
@@ -606,45 +606,19 @@ class Articulo extends Model implements Auditable
             }
 
             if (config('app.empresa') == 'Calzados Ferli') {
-                $material = Material::select('id', 'codigo')->where('codigo', ltrim($data->stkm_marca, '0'))->first();
-                if ($material) {
-                    $material_id = $material->id;
-                } else {
-                    $material_id = null;
-                }
-
-                $subcategoria = Subcategoria::select('id', 'codigo')->where('codigo', ltrim($data->stkm_subcategoria, '0'))->first();
-                if ($subcategoria) {
-                    $subcategoria_id = $subcategoria->id;
-                } else {
-                    $subcategoria_id = null;
-                }
-
-                $tipocorte_id = $data->stkm_tipo_corte;
-
-                $articulo = Articulo::select('id', 'descripcion', 'sku')->where('sku', ltrim($data->stkm_puntera, '0'))->first();
+                $material = Material::select('id', 'codigo')->where('codigo', ltrim((string) ($data->stkm_marca ?? ''), '0'))->first();
+                $material_id = $material?->id;
+                $mventa_id = is_numeric($data->stkm_o_compra ?? null) && (int) $data->stkm_o_compra > 0
+                    ? (int) $data->stkm_o_compra
+                    : null;
+                $subcategoria_id = null;
+                $tipocorte_id = null;
                 $puntera_id = null;
-                if ($articulo) {
-                    $puntera = Puntera::select('id', 'articulo_id')->where('articulo_id', $articulo->id)->first();
-
-                    if ($puntera) {
-                        $puntera_id = $puntera->id;
-                    }
-                }
-
-                $articulo = Articulo::select('id', 'descripcion', 'sku')->where('sku', ltrim($data->stkm_contrafuerte, '0'))->first();
                 $contrafuerte_id = null;
-                if ($articulo) {
-                    $contrafuerte = Contrafuerte::select('id', 'articulo_id')->where('articulo_id', $articulo->id)->first();
-                    if ($contrafuerte) {
-                        $contrafuerte_id = $contrafuerte->id;
-                    }
-                }
-
-                $tipocorteforro_id = $data->stkm_tipo_cortefo;
-
-                $forro_id = $data->stkm_forro;
-                $compfondo_id = $data->stkm_compfondo;
+                $tipocorteforro_id = null;
+                $forro_id = null;
+                $compfondo_id = null;
+                $usoarticulo_id = 1;
             } else {
                 $subcategoria_id = null;
 
@@ -1045,6 +1019,37 @@ class Articulo extends Model implements Auditable
                     ]);
                     break;
 
+                case 'Calzados Ferli':
+                case 'CALZADOS FERLI':
+                    $arrayCampos = [
+                        'descripcion' => $data->stkm_desc,
+                        'sku' => ltrim($data->stkm_articulo, '0'),
+                        'detalle' => $data->stkm_desc,
+                        'empresa_id' => \App\Support\Stock\ArticuloListadoFiltros::empresaIdDesdeSyncAnita(),
+                        'unidadesxenvase' => $data->stkm_unidad_xenv,
+                        'skualternativo' => $data->stkm_articulo_prod,
+                        'categoria_id' => $categoria_id > 0 ? $categoria_id : null,
+                        'linea_id' => $linea_id,
+                        'mventa_id' => $mventa_id,
+                        'material_id' => $material_id ?? null,
+                        'peso' => $data->stkm_peso_aprox,
+                        'nofactura' => $data->stkm_fl_no_factura,
+                        'impuesto_id' => $impuesto_id,
+                        'formula' => $formulaErpId,
+                        'foto' => $data->stkm_nombre_foto,
+                        'unidadmedida_id' => $unidadmedida_id > 0 ? $unidadmedida_id : null,
+                        'unidadmedidaalternativa_id' => $unidadmedidaalternativa_id > 0 ? $unidadmedidaalternativa_id : null,
+                        'cuentacontableventa_id' => $cuentacontableventa_id > 0 ? $cuentacontableventa_id : null,
+                        'cuentacontablecompra_id' => $cuentacontablecompra_id > 0 ? $cuentacontablecompra_id : null,
+                        'cuentacontableimpinterno_id' => $cuentacontableimpinterno_id > 0 ? $cuentacontableimpinterno_id : null,
+                        'ppp' => $data->stkm_ppp,
+                        'usuario_id' => $usuario_id,
+                        'fechaultimacompra' => $fechaultimacompra,
+                        'usoarticulo_id' => $usoarticulo_id > 0 ? $usoarticulo_id : null,
+                        'estado' => 'ACTIVO',
+                    ];
+                    break;
+
                 default:
                     $arrayCampos = [
                         'descripcion' => $data->stkm_desc,
@@ -1317,103 +1322,11 @@ class Articulo extends Model implements Auditable
 
         switch (strtoupper(config('app.empresa'))) {
             case 'CALZADOS FERLI':
-                $data = ['tabla' => $this->tableAnita, 'acc' => 'insert',
-                    'campos' => ' 
-					stkm_articulo,
-					stkm_desc,
-					stkm_unidad_medida,
-					stkm_unidad_xenv,
-					stkm_proveedor,
-					stkm_agrupacion,
-					stkm_cta_contable,
-					stkm_cod_impuesto,
-					stkm_descuento,
-					stkm_p_rep,
-					stkm_cod_mon_p_rep,
-					stkm_imp_interno,
-					stkm_cta_cont_ii,
-					stkm_cant_compra1,
-					stkm_cant_compra2,
-					stkm_cant_compra3,
-					stkm_pre_compra1,
-					stkm_pre_compra2,
-					stkm_pre_compra3,
-					stkm_usuario,
-					stkm_terminal,
-					stkm_fe_ult_act,
-					stkm_articulo_prod,
-					stkm_peso_aprox,
-					stkm_marca,
-					stkm_linea,
-					stkm_cta_contablec,
-					stkm_fe_ult_compra,
-					stkm_o_compra,
-					stkm_fl_no_factura,
-					stkm_formula,
-					stkm_ppp,
-					stkm_nombre_foto,
-					stkm_cod_umd,
-					stkm_cod_umd_alter,
-					stkm_fecha_alta,
-					stkm_cod_nomenc,
-					stkm_tipo_articulo,
-					stkm_tipo_corte,
-					stkm_puntera,
-					stkm_contrafuerte,
-					stkm_tipo_cortefo,
-					stkm_forro,
-					stkm_compfondo,
-					stkm_clave_orden,
-					stkm_subcategoria
-					',
-                    'valores' => " 
-					'".str_pad($request->sku, 13, '0', STR_PAD_LEFT)."', 
-					'".$request->descripcion."',
-					'".$request->unidadesdemedidas->abreviatura."',
-					'".($request->unidadesxenvase == null ? 0 : $request->unidadesxenvase)."',
-					'".'000000'."',
-					'".str_pad($request->categorias->codigo, 4, '0', STR_PAD_LEFT)."',
-					'".($request->cuentascontablesventas ? $request->cuentascontablesventas->codigo : 0)."',
-					'".($request->impuesto_id == null || $request->impuesto_id == ' ' ? 0 : $request->impuesto_id)."',
-					'".'0'."',
-					'".'0'."',
-					'".'0'."',
-					'".'0'."',
-					'".($request->cuentascontablesimpinternos ? $request->cuentascontablesimpinternos->codigo : 0)."',
-					'".'0'."',
-					'".'0'."',
-					'".'0'."',
-					'".'0'."',
-					'".'0'."',
-					'".'0'."',
-					'".Auth::user()->nombre."',
-					'".'0'."',
-					'".$fecha."',
-					'".$request->skualternativo."',
-					'".($request->peso == null ? 0 : $request->peso)."',
-					'".($request->materiales ? str_pad($request->materiales->codigo, 8, '0', STR_PAD_LEFT) : '')."',
-					'".str_pad($request->lineas->codigo, 6, '0', STR_PAD_LEFT)."',
-					'".($request->cuentascontablescompras ? $request->cuentascontablescompras->codigo : 0)."',
-					'".Carbon::parse($request->fechaultimacompra)->format('Ymd')."',
-					'".$request->mventa_id."',
-					'".$request->nofactura."',
-					'".$this->codigoFormulaAnita($request)."',
-					'".($request->ppp == null ? 0 : $request->ppp)."',
-					'".$request->foto."',
-					'".$request->unidadmedida_id."',
-					'".($request->unidadmedidaalternativa_id == null ? 0 : $request->unidadmedidaalternativa_id)."',
-					'".$fecha."',
-					'".$request->nomenclador."',
-					'".$request->usoarticulo_id."',
-					'".($request->tipocorte_id ? $request->tipocorte_id : 0)."' ,
-					'".($request->punteras ? str_pad($request->punteras->articulos->sku, 13, '0', STR_PAD_LEFT) : '')."',
-					'".($request->contrafuertes ? str_pad($request->contrafuertes->articulos->sku, 13, '0', STR_PAD_LEFT) : '')."',
-					'".($request->tipocorteforro_id ? $request->tipocorteforro_id : 0)."' ,
-					'".$request->forro_id."',
-					'".$request->compfondo_id."',
-					'".substr($request->sku, -6)."',
-					'".($request->subcategoria_id ? $request->subcategoria_id : 0)."' ",
-                ];
+                $data = ArticuloStkmaeAnitaBridgeSupport::payloadInsertFerli(
+                    $request,
+                    $fecha,
+                    $this->codigoFormulaAnita($request)
+                );
                 break;
 
             case 'EL BIERZO':
@@ -2129,9 +2042,10 @@ class Articulo extends Model implements Auditable
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
         if (! $dataAnita) {
-            $this->guardarAnita($request);
-        } else {
-            switch (config('app.empresa')) {
+            return $this->guardarAnita($request);
+        }
+
+        switch (config('app.empresa')) {
                 case 'EL BIERZO':
                     self::armaVariableBierzo($request, $codigoSenasa, $tipoArticulo, $tipoProducto, $sectorSellado, $sala,
                         $enviaAlarma, $productoTercero);
@@ -2415,6 +2329,16 @@ class Articulo extends Model implements Auditable
                         'whereArmado' => " WHERE stkm_articulo = '".str_pad($id, 13, '0', STR_PAD_LEFT)."' "];
                     break;
 
+                case 'Calzados Ferli':
+                case 'CALZADOS FERLI':
+                    $data = ArticuloStkmaeAnitaBridgeSupport::payloadUpdateFerli(
+                        $request,
+                        $fecha,
+                        $this->codigoFormulaAnita($request),
+                        str_pad((string) $id, 13, '0', STR_PAD_LEFT)
+                    );
+                    break;
+
                 default:
                     $data = ['acc' => 'update', 'tabla' => $this->tableAnita,
                         'valores' => " stkm_desc = '".$request->descripcion."',
@@ -2458,7 +2382,6 @@ class Articulo extends Model implements Auditable
                         'whereArmado' => " WHERE stkm_articulo = '".str_pad($id, 13, '0', STR_PAD_LEFT)."' "];
                     break;
             }
-        }
         $stkmae = $apiAnita->apiCallEscritura($data);
 
 

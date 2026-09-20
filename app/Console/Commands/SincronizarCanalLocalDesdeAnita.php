@@ -50,11 +50,21 @@ class SincronizarCanalLocalDesdeAnita extends Command
                 ['Creados ahora', $resultado['creados']],
                 ['Errores de alta', $resultado['errores_alta']],
                 ['Sin match residual', $resultado['sin_match']],
+                ['Ya tenían Fábrica', $resultado['ya_fabrica'] ?? 0],
+                ['A asignar Fábrica (no están en Anita Local)', $resultado['a_asignar_fabrica'] ?? 0],
+                ['Asignados Fábrica ahora', $resultado['asignados_fabrica'] ?? 0],
+                ['LOCAL en ERP y no en Anita Local', $resultado['extras_local_n'] ?? 0],
             ]
         );
 
         if ($resultado['skus_a_asignar'] !== []) {
-            $this->line('SKUs a asignar (muestra): '.implode(', ', array_slice($resultado['skus_a_asignar'], 0, 30)));
+            $this->line('SKUs a asignar LOCAL (muestra): '.implode(', ', array_slice($resultado['skus_a_asignar'], 0, 30)));
+        }
+        if (($resultado['skus_a_asignar_fabrica'] ?? []) !== []) {
+            $this->line('SKUs a asignar FÁBRICA (muestra): '.implode(', ', $resultado['skus_a_asignar_fabrica']));
+        }
+        if (($resultado['extras_local'] ?? []) !== []) {
+            $this->warn('LOCAL en ERP y ausentes en Anita Local (muestra): '.implode(', ', $resultado['extras_local']));
         }
         if (($resultado['skus_a_crear'] ?? []) !== []) {
             $this->line('SKUs a crear (muestra): '.implode(', ', array_slice($resultado['skus_a_crear'], 0, 30)));

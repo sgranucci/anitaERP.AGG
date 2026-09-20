@@ -52,7 +52,17 @@
                             <tr><th>A asignar</th><td>{{ $resultado['a_asignar'] }}</td></tr>
                             <tr><th>Asignados ahora</th><td>{{ $resultado['asignados'] }}</td></tr>
                             <tr><th>Sin match</th><td>{{ $resultado['sin_match'] }}</td></tr>
+                            <tr><th>Ya tenían Fábrica</th><td>{{ $resultado['ya_fabrica'] ?? 0 }}</td></tr>
+                            <tr><th>A asignar Fábrica (no están en Anita Local)</th><td>{{ $resultado['a_asignar_fabrica'] ?? 0 }}</td></tr>
+                            <tr><th>Asignados Fábrica ahora</th><td>{{ $resultado['asignados_fabrica'] ?? 0 }}</td></tr>
+                            <tr><th>LOCAL en ERP y no en Anita Local</th><td>{{ $resultado['extras_local_n'] ?? 0 }}</td></tr>
                         </table>
+                        @if (! empty($resultado['skus_a_asignar']))
+                            <p class="small mb-1"><strong>LOCAL a marcar:</strong> {{ implode(', ', array_slice($resultado['skus_a_asignar'], 0, 30)) }}</p>
+                        @endif
+                        @if (! empty($resultado['extras_local']))
+                            <p class="small text-warning mb-1"><strong>LOCAL de más:</strong> {{ implode(', ', $resultado['extras_local']) }}</p>
+                        @endif
                         @if (($resultado['dry_run'] ?? true) && ($resultado['a_asignar'] ?? 0) > 0)
                             <div class="alert alert-warning">Revise el impacto y marque «Ejecutar» para persistir.</div>
                         @endif

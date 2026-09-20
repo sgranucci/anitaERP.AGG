@@ -101,18 +101,21 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
         						<td>{{ $articulo->stkm_marca ?? '' }}</td>
         						<td>{{ $articulo->stkm_linea ?? '' }}</td>
                                 @if (\App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva())
-                                    <td>
-                                        @php
-                                            $nombresCanal = $articulo->relationLoaded('canales')
-                                                ? $articulo->canales->pluck('nombre')->filter()->implode(', ')
-                                                : '';
-                                        @endphp
-                                        @if ($nombresCanal !== '')
-                                            <span class="badge badge-warning">{{ $nombresCanal }}</span>
-                                        @else
-                                            <span class="text-muted small">—</span>
-                                        @endif
-                                    </td>
+                                <td class="text-nowrap">
+                                    @php
+                                        $codigosCanal = $articulo->relationLoaded('canales')
+                                            ? $articulo->canales->pluck('codigo')->map(fn ($c) => strtoupper((string) $c))->all()
+                                            : [];
+                                        $tieneFab = in_array('FABRICA', $codigosCanal, true);
+                                        $tieneLoc = in_array('LOCAL', $codigosCanal, true);
+                                    @endphp
+                                    <span class="badge {{ $tieneFab ? 'badge-warning' : 'badge-light text-muted' }}" title="Canal fábrica">
+                                        Fábrica
+                                    </span>
+                                    <span class="badge {{ $tieneLoc ? 'badge-info' : 'badge-light text-muted' }}" title="Canal local">
+                                        Local
+                                    </span>
+                                </td>
                                 @endif
                                 <td>{{ $articulo->nofactura == '0' ? 'Facturable' : 'No facturable'}}</td>
                                 <td>
