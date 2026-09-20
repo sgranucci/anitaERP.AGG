@@ -28,6 +28,7 @@ mkdir -p "${BINLOG_DIR}"
 } > "${SNAPSHOT}"
 
 # Retención snapshots de índice
-find "${BINLOG_DIR}" -maxdepth 1 -name 'binlog_snapshot_*.txt' -mtime +"${BINLOG_RETENTION_DAYS}" -delete 2>/dev/null || true
+# -H: por si BINLOG_DIR cuelga de un BACKUP_DIR symlink.
+find -H "${BINLOG_DIR}" -maxdepth 1 -name 'binlog_snapshot_*.txt' -mtime +"${BINLOG_RETENTION_DAYS}" -delete 2>/dev/null || true
 
 echo "${SNAPSHOT}"

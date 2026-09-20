@@ -77,11 +77,13 @@ else
 fi
 
 # Copia binlogs cerrados si sudo NOPASSWD está configurado
-if sudo -n "${SCRIPT_DIR}/backup-binlog-copy-root.sh" 2>/dev/null; then
-    log "Binlog files: copia root OK"
+BINLOG_COPY_ERR="$(mktemp)"
+if sudo -n "${SCRIPT_DIR}/backup-binlog-copy-root.sh" >"${BINLOG_COPY_ERR}" 2>&1; then
+    log "Binlog files: $(tr '\n' ' ' <"${BINLOG_COPY_ERR}" | sed 's/[[:space:]]*$//')"
 else
-    log_warn "binlog files no copiados (opcional: sudoers → deploy/backup/sudoers.anitaERP-backup-binlog.example)"
+    log_warn "binlog files no copiados (sudoers → deploy/backup/sudoers.anitaERP-backup-binlog.example): $(head -c 200 "${BINLOG_COPY_ERR}" | tr '\n' ' ')"
 fi
+rm -f "${BINLOG_COPY_ERR}"
 
 # Retención dumps.
 # -H: BACKUP_DIR puede ser un symlink (en .210 apunta a /scan/anitaERP_Backup) y find NO
@@ -137,6 +139,34 @@ if [[ "${REMOTE_SYNC_ENABLED}" == "1" && -n "${REMOTE_HOST}" ]]; then
 
         if compgen -G "${BINLOG_DIR}/binlog_snapshot_"*.txt >/dev/null; then
             sync_with_rsync_or_scp "binlog snapshots" "${REMOTE_BINLOG}" "${BINLOG_DIR}"/binlog_snapshot_*.txt || true
+        fi
+
+        # Retención en el receptor: el .211 no corre backup-db.sh, así que sin esto los
+        # dumps se acumulan (ya pasó: /var al 100%, rsyncs truncados). Misma ventana que
+        # acá. Defensa en profundidad: cron de purge-receiver.sh en el .211.
+        if PURGE_OUT="$(ssh "${SSH_OPTS[@]}" "${REMOTE_USER}@${REMOTE_HOST}" bash -s -- \
+            "${REMOTE_DIR}" "${DB_NAME}" "${RETENTION_DAYS}" "${BINLOG_RETENTION_DAYS}" <<'REMOTE_PURGE'
+set -euo pipefail
+BACKUP_DIR="$1"
+DB_NAME="$2"
+RETENTION_DAYS="$3"
+BINLOG_RETENTION_DAYS="$4"
+d=0
+while IFS= read -r -d '' old; do
+    rm "${old}" && d=$((d+1)) || true
+done < <(find -H "${BACKUP_DIR}" -maxdepth 1 -name "${DB_NAME}_*.sql.gz" -mtime +"${RETENTION_DAYS}" -print0 2>/dev/null || true)
+b=0
+if [[ -d "${BACKUP_DIR}/binlog" ]]; then
+    while IFS= read -r -d '' old; do
+        rm "${old}" && b=$((b+1)) || true
+    done < <(find -H "${BACKUP_DIR}/binlog" -maxdepth 1 \( -name 'binlog.*' -o -name 'binlog_snapshot_*.txt' \) -mtime +"${BINLOG_RETENTION_DAYS}" -print0 2>/dev/null || true)
+fi
+echo "dumps=${d} binlog=${b} (retencion ${RETENTION_DAYS}/${BINLOG_RETENTION_DAYS}d)"
+REMOTE_PURGE
+        )"; then
+            log "Retención remota ${REMOTE_HOST}: ${PURGE_OUT}"
+        else
+            log_warn "retención remota en ${REMOTE_HOST} falló"
         fi
     else
         log_warn "SSH a ${REMOTE_HOST} falló — ejecutar una vez: ${SCRIPT_DIR}/setup-ssh-replica.sh"
