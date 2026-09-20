@@ -13,6 +13,11 @@ class CuentaGastronomia extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
 
+    // El alta de una cuenta ya queda identificada en la fila (mozo_gastronomia_id +
+    // identificador_pc + created_at), y al cerrarse genera la Venta, que sí se audita
+    // entera. Lo que importa acá es el after: descuentos, cliente VIP, reapertura.
+    protected $auditEvents = ['updated', 'deleted'];
+
     public const TIPO_MESA = 'mesa';
 
     public const TIPO_CUENTA = 'cuenta';

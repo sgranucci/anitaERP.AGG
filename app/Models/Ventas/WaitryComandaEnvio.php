@@ -9,6 +9,10 @@ class WaitryComandaEnvio extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
 
+    // Cola de envío a Waitry: el alta no aporta nada, lo que interesa es el cambio de
+    // estado (pendiente -> enviando -> ok/error).
+    protected $auditEvents = ['updated', 'deleted'];
+
     public const ESTADO_PENDIENTE = 'pendiente';
 
     public const ESTADO_ENVIANDO = 'enviando';

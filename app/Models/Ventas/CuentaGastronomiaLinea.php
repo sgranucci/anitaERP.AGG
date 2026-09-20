@@ -10,6 +10,10 @@ class CuentaGastronomiaLinea extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
 
+    // Renglón de consumo: el alta la cubre la cuenta padre. Se audita la modificación y
+    // el borrado, que es lo que se usa para revisar quitadas de items.
+    protected $auditEvents = ['updated', 'deleted'];
+
     protected $table = 'cuenta_gastronomia_linea';
 
     protected $fillable = [
