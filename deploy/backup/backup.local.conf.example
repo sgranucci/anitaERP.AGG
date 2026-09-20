@@ -14,3 +14,21 @@
 # REMOTE_SYNC_ENABLED=0
 # MIN_BACKUP_BYTES=500000
 # LOG_FILE="/var/www/html/anitaERP/backups/backup-db.log"
+#
+# --- OJO: el lado que RECIBE no tiene retención ---
+# RETENTION_DAYS solo borra en el server que corre este script. En el destino los dumps se
+# acumulan para siempre y nadie los limpia.
+#
+# Eso ya pasó: el 2026-09-20 el .211 tenía 72 dumps (34 GB) desde agosto, con /var al 100%
+# y cero bytes libres. Los rsync venían fallando desde el 16/9, y lo peligroso es que
+# dejaban archivos truncados con nombre válido: 9 dumps de entre 255 KB y 96 MB que
+# aparentaban ser backups del día pero no pasaban gzip -t. La última copia externa sana era
+# del 15/9 — cinco días sin off-site real, sin que nada avisara.
+#
+# Cómo quedó el .211: los backups se movieron a /home/sergio/anitaERP_Backup (partición /,
+# que tiene lugar) y REMOTE_DIR quedó como symlink apuntando ahí, así que esta config no
+# cambia. Sigue sin haber purga del lado receptor: a ~1,3 GB/día hay margen de unos 50 días.
+#
+# Antes de confiar en el off-site, verificar el destino de verdad:
+#   gzip -t <dump>  y  zcat <dump> | tail -1   → tiene que decir "Dump completed on ..."
+# El tamaño solo no alcanza: un rsync cortado deja archivos que parecen razonables.
