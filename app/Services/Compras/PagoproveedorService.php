@@ -284,9 +284,27 @@ class PagoproveedorService
                 $this->persistirDetalle($pago, $data, $request, false);
             });
 
-            $this->sincronizarAnitaTesoreria($this->pagoproveedorRepository->findOrFail($id), true);
+            $pago = $this->pagoproveedorRepository->findOrFail($id);
+            $avisoAnita = null;
+            try {
+                $this->sincronizarAnitaTesoreria($pago, true);
+            } catch (\Throwable $eAnita) {
+                Log::error('pagoproveedor.actualizar.anita.sync_post_commit.fallo', [
+                    'pagoproveedor_id' => $pago->id,
+                    'numero' => $pago->numerotransaccion,
+                    'mensaje' => $eAnita->getMessage(),
+                ]);
+                $avisoAnita = 'OP actualizada en ERP (#'.$pago->numerotransaccion
+                    .') pero falló la réplica Anita: '.$eAnita->getMessage()
+                    .'. No vuelva a grabar la misma OP; revise sincronización/auditoría.';
+            }
 
-            return ['mensaje' => 'ok'];
+            $out = ['mensaje' => 'ok'];
+            if ($avisoAnita !== null) {
+                $out['aviso'] = $avisoAnita;
+            }
+
+            return $out;
         } catch (\Throwable $e) {
             Log::error('pagoproveedor.actualizar.fallo', [
                 'id' => $id,
@@ -1194,15 +1212,18 @@ class PagoproveedorService
     }
 
     /**
-     * PRE CARGA → CONFIRMADA; re-persiste asiento/certificados si faltan.
+     * PRE CARGA → CONFIRMADA; re-persiste retenciones y arma asiento si falta.
      *
-     * @return array{mensaje?:string,errores?:string}
+     * @return array{mensaje?:string,errores?:string,aviso?:string}
      */
     public function confirmar(int $id): array
     {
         try {
             DB::transaction(function () use ($id) {
-                $pago = $this->pagoproveedorRepository->findOrFail($id);
+                $pago = Pagoproveedor::query()->whereKey($id)->lockForUpdate()->first();
+                if ($pago === null) {
+                    throw new Exception('Orden de pago no encontrada.');
+                }
                 if ((string) $pago->estado !== 'PRE CARGA') {
                     throw new Exception('Solo se puede confirmar una OP en PRE CARGA.');
                 }
@@ -1213,39 +1234,156 @@ class PagoproveedorService
                     PeriodoContableCierreSupport::ALCANCE_CAJA
                 );
 
+                $data = $this->armarDataDesdePagoPersistido($pago);
+                $tipoComprobante = PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante(
+                    (string) ($pago->tipocomprobante ?: 'OPP'),
+                    strtoupper((string) ($pago->tipocomprobante ?? '')) === 'OPA'
+                );
+                $this->assertNumeradoresAnitaAntesDeGrabar(
+                    (int) $pago->empresa_id,
+                    $data,
+                    'CONFIRMADA',
+                    $tipoComprobante
+                );
+
                 $this->pagoproveedorRepository->update(['estado' => 'CONFIRMADA'], $id);
                 $pago = $this->pagoproveedorRepository->findOrFail($id);
                 $this->registrarEstado($pago, 'CONFIRMADA', 'Confirmación de orden de pago');
 
-                // Re-persistir retenciones (certificados) y asiento si hay datos de cuentas.
                 // No pasar el monto de la OP como neto IIBB: un anticipo sin factura
                 // no tiene destino BA y eso inventaba retención CABA.
-                $data = [
-                    'monto' => $pago->monto,
+                $this->persistirRetenciones($pago, array_merge($data, [
                     'calcular_ganancias' => true,
                     'calcular_iva' => true,
                     'calcular_suss' => true,
                     'calcular_iibb' => true,
-                ];
-                foreach ($pago->pagoproveedor_comprobantes ?? [] as $i => $pc) {
-                    $data['idcuentacorrientes'][$i] = (int) $pc->proveedor_cuentacorriente_id;
-                    $data['montoaplicadocomprobantes'][$i] = (float) $pc->montoaplicado;
-                    $data['cotizacion_aplicada_dia'][$i] = (float) ($pc->cotizacion_aplicada ?: $pc->cotizacion ?: 0);
-                    $data['monedacomprobante_ids'][$i] = (int) ($pc->moneda_id ?: 0);
-                }
-                $this->persistirRetenciones($pago, $data);
+                ]));
 
-                if (! $pago->asiento_id && ! $pago->asientos) {
-                    // Sin líneas contables en request: no fuerza asiento vacío.
+                $pago = $pago->fresh();
+                if (! $pago->asiento_id) {
+                    $data = array_merge($data, $this->construirArraysAsientoDesdeOperacion($pago, $data));
+                    if (empty($data['cuentacontable_ids'])) {
+                        throw new Exception(
+                            'No se pudo armar el asiento contable al confirmar la OP #'
+                            .$pago->numerotransaccion
+                            .' (faltan medios de pago o aplicaciones). Edite la OP y complete caja/cheque.'
+                        );
+                    }
+                    AsientoBalanceSupport::assertBalanceadoDesdePayload([
+                        'debes' => $data['debeasientos'] ?? [],
+                        'haberes' => $data['haberasientos'] ?? [],
+                    ], 'asiento al confirmar OP #'.$pago->numerotransaccion);
+                    $this->persistirAsiento($pago, $data);
                 }
             });
 
-            $this->sincronizarAnitaTesoreria($this->pagoproveedorRepository->findOrFail($id), true);
+            $pago = $this->pagoproveedorRepository->findOrFail($id);
+            $avisoAnita = null;
+            try {
+                $this->sincronizarAnitaTesoreria($pago, true);
+            } catch (\Throwable $eAnita) {
+                Log::error('pagoproveedor.confirmar.anita.sync_post_commit.fallo', [
+                    'pagoproveedor_id' => $pago->id,
+                    'numero' => $pago->numerotransaccion,
+                    'mensaje' => $eAnita->getMessage(),
+                ]);
+                $avisoAnita = 'OP confirmada en ERP (#'.$pago->numerotransaccion
+                    .') pero falló la réplica Anita: '.$eAnita->getMessage()
+                    .'. No vuelva a confirmar; revise sincronización/auditoría.';
+            }
 
-            return ['mensaje' => 'ok'];
+            $out = ['mensaje' => 'ok'];
+            if ($avisoAnita !== null) {
+                $out['aviso'] = $avisoAnita;
+            }
+
+            return $out;
         } catch (\Throwable $e) {
             return ['errores' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Reconstruye el payload de medios/aplicaciones desde lo ya grabado (para confirmar).
+     *
+     * @return array<string, mixed>
+     */
+    private function armarDataDesdePagoPersistido(Pagoproveedor $pago): array
+    {
+        $pago->loadMissing([
+            'pagoproveedor_comprobantes',
+            'cheques',
+            'caja_movimientos.caja_movimiento_cuentacajas',
+        ]);
+
+        $data = [
+            'monto' => $pago->monto,
+            'moneda_id' => $pago->moneda_id,
+            'cotizacion' => $pago->cotizacion,
+            'fecha' => $pago->fecha?->format('Y-m-d'),
+            'proveedor_id' => $pago->proveedor_id,
+            'empresa_id' => $pago->empresa_id,
+            'idcuentacorrientes' => [],
+            'montoaplicadocomprobantes' => [],
+            'monedacomprobante_ids' => [],
+            'cotizacioncomprobantes' => [],
+            'cotizacion_aplicada_dia' => [],
+            'diferencias_cambio' => [],
+            'cuentacaja_ids' => [],
+            'montos' => [],
+            'moneda_ids' => [],
+            'cotizaciones' => [],
+            'observaciones' => [],
+            'numerocheque_emitidos' => [],
+            'montocheque_emitidos' => [],
+            'chequera_emitido_ids' => [],
+            'cuentacaja_emitido_ids' => [],
+            'fechapago_emitidos' => [],
+            'moneda_emitido_ids' => [],
+            'cotizacioncheque_emitidos' => [],
+        ];
+
+        foreach ($pago->pagoproveedor_comprobantes as $pc) {
+            $data['idcuentacorrientes'][] = (int) $pc->proveedor_cuentacorriente_id;
+            $data['montoaplicadocomprobantes'][] = (float) $pc->montoaplicado;
+            $data['monedacomprobante_ids'][] = (int) ($pc->moneda_id ?: $pago->moneda_id);
+            $data['cotizacioncomprobantes'][] = (float) ($pc->cotizacion ?: $pago->cotizacion ?: 1);
+            $data['cotizacion_aplicada_dia'][] = (float) ($pc->cotizacion_aplicada ?: $pc->cotizacion ?: 0);
+            $data['diferencias_cambio'][] = (float) ($pc->diferencia_cambio ?? 0);
+        }
+
+        foreach ($pago->caja_movimientos as $mov) {
+            foreach ($mov->caja_movimiento_cuentacajas ?? [] as $lin) {
+                $cid = (int) ($lin->cuentacaja_id ?? 0);
+                $monto = abs((float) ($lin->monto ?? 0));
+                if ($cid <= 0 || $monto <= 0) {
+                    continue;
+                }
+                $data['cuentacaja_ids'][] = $cid;
+                $data['montos'][] = $monto;
+                $data['moneda_ids'][] = (int) ($lin->moneda_id ?: $pago->moneda_id ?: 1);
+                $data['cotizaciones'][] = (float) ($lin->cotizacion ?: $pago->cotizacion ?: 1);
+                $data['observaciones'][] = (string) ($lin->observacion ?? '');
+            }
+        }
+
+        foreach ($pago->cheques as $ch) {
+            $monto = abs((float) ($ch->monto ?? 0));
+            if ($monto <= 0) {
+                continue;
+            }
+            $data['numerocheque_emitidos'][] = (string) ($ch->numerocheque ?? '');
+            $data['montocheque_emitidos'][] = $monto;
+            $data['chequera_emitido_ids'][] = (int) ($ch->chequera_id ?: 0);
+            $data['cuentacaja_emitido_ids'][] = (int) ($ch->cuentacaja_id ?: 0);
+            $data['fechapago_emitidos'][] = $ch->fechapago
+                ? (string) $ch->fechapago
+                : ($pago->fecha?->format('Y-m-d') ?? date('Y-m-d'));
+            $data['moneda_emitido_ids'][] = (int) ($ch->moneda_id ?: $pago->moneda_id ?: 1);
+            $data['cotizacioncheque_emitidos'][] = (float) ($ch->cotizacion ?: $pago->cotizacion ?: 1);
+        }
+
+        return $data;
     }
 
     /**
@@ -1448,6 +1586,39 @@ class PagoproveedorService
             PeriodoContableCierreSupport::ALCANCE_CAJA
         );
 
+        $esOpa = ! $this->hayAplicacionConMonto($aplicaciones) && abs((float) $monto) > 0;
+        $tipoComprobante = PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante(
+            'OPP',
+            $esOpa
+        );
+        $dataPreflight = [
+            'proveedor_id' => $proveedorId,
+            'fecha' => $fecha,
+            'moneda_id' => $monedaId,
+            'cotizacion' => $cotizacion ?? 1,
+            'monto' => $monto,
+            'idcuentacorrientes' => [],
+            'montoaplicadocomprobantes' => [],
+            'monedacomprobante_ids' => [],
+            'cotizacioncomprobantes' => [],
+            'cotizacion_aplicada_dia' => [],
+        ];
+        foreach ($aplicaciones as $apl) {
+            $dataPreflight['idcuentacorrientes'][] = (int) ($apl['proveedor_cuentacorriente_id'] ?? 0);
+            $dataPreflight['montoaplicadocomprobantes'][] = (float) ($apl['montoaplicado'] ?? 0);
+            $dataPreflight['monedacomprobante_ids'][] = (int) ($apl['moneda_id'] ?? 0) ?: $monedaId;
+            $cotApl = (float) ($apl['cotizacion'] ?? 0) ?: 1;
+            $dataPreflight['cotizacioncomprobantes'][] = $cotApl;
+            $dataPreflight['cotizacion_aplicada_dia'][] = (float) ($apl['cotizacion_aplicada'] ?? 0) ?: $cotApl;
+        }
+        // Antes de abrir TX / quemar correlativos: Anita no revierte al rollback MySQL.
+        $this->assertNumeradoresAnitaAntesDeGrabar(
+            $empresaId,
+            $dataPreflight,
+            $estado,
+            $tipoComprobante
+        );
+
         try {
             $pago = DB::transaction(function () use (
                 $empresaId,
@@ -1465,13 +1636,9 @@ class PagoproveedorService
                 $observacionCuentacaja,
                 $chequeraId,
                 $nombreProveedorCheque,
-                $cotizacion
+                $cotizacion,
+                $tipoComprobante
             ) {
-                $esOpa = ! $this->hayAplicacionConMonto($aplicaciones) && abs((float) $monto) > 0;
-                $tipoComprobante = PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante(
-                    'OPP',
-                    $esOpa
-                );
                 $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId, $tipoComprobante);
                 $sucursal = PagoproveedorAnitaNumeracionSupport::sucursalParaOp($empresaId);
 

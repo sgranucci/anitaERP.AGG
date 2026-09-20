@@ -597,7 +597,10 @@ class MacroArchivoPagoService
             ->where('empresa_id', $empresaId)
             ->whereBetween('fecha', [$fechaDesde, $fechaHasta])
             ->whereBetween('numerotransaccion', [$opDesde, $opHasta])
-            ->whereNotIn('estado', ['BAJA', 'REVERTIDA'])
+            ->whereNotIn('estado', ['BAJA', 'REVERTIDA', 'PAGADA', 'CONCILIADA'])
+            ->where(function ($q) {
+                $q->whereNull('bloqueado_banco')->orWhere('bloqueado_banco', false);
+            })
             ->where(function ($q) use ($tipoOp) {
                 $tipos = MacroArchivoPagoFormatoSupport::tiposComprobanteFiltro($tipoOp);
                 if ($tipos === null) {
@@ -814,6 +817,7 @@ class MacroArchivoPagoService
                         'proveedor' => (string) ($mov->proveedores->nombre ?? ''),
                         'motivo' => 'Sin CBU / monto',
                     ];
+
                     continue;
                 }
                 $filas[] = $fila;
@@ -938,6 +942,7 @@ class MacroArchivoPagoService
     /**
      * @param  list<array{tipo_apli:string,letra:string,sucursal:int,nro:int,monto_ap:float}>  $comps
      * @return list<array<string,mixed>>
+     *
      * @deprecated usar MacroArchivoPagoRetencionTextoSupport::desdeComprobantes
      */
     private function retencionesComprobantes(string $ordenPago, array $comps, string $usuario): array

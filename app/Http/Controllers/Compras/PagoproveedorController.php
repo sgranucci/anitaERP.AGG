@@ -194,10 +194,14 @@ class PagoproveedorController extends Controller
         }
 
         $empresaId = (int) $request->empresa_id;
+        $mensaje = 'Orden de pago actualizada.';
+        if (! empty($resultado['aviso'])) {
+            $mensaje .= ' '.$resultado['aviso'];
+        }
 
         return redirect()
             ->route('pagoproveedor', ['empresa_id' => $empresaId])
-            ->with('mensaje', 'Orden de pago actualizada.')
+            ->with('mensaje', $mensaje)
             ->with('imprimir_pagoproveedor_url', route('imprimir_pagoproveedor', $id))
             ->with('imprimir_comprobante_label', 'Imprimir orden de pago');
     }
@@ -211,7 +215,12 @@ class PagoproveedorController extends Controller
             return redirect()->back()->with('mensaje', $resultado['errores']);
         }
 
-        return redirect()->route('pagoproveedor')->with('mensaje', 'Orden de pago confirmada.');
+        $mensaje = 'Orden de pago confirmada.';
+        if (! empty($resultado['aviso'])) {
+            $mensaje .= ' '.$resultado['aviso'];
+        }
+
+        return redirect()->route('pagoproveedor')->with('mensaje', $mensaje);
     }
 
     public function eliminar(Request $request, int $id)

@@ -295,7 +295,10 @@ class InterbankingArchivoPagoService
             ->where('empresa_id', $empresaId)
             ->whereBetween('fecha', [$fechaDesde, $fechaHasta])
             ->whereBetween('numerotransaccion', [$opDesde, $opHasta])
-            ->whereNotIn('estado', ['BAJA', 'REVERTIDA'])
+            ->whereNotIn('estado', ['BAJA', 'REVERTIDA', 'PAGADA', 'CONCILIADA'])
+            ->where(function ($q) {
+                $q->whereNull('bloqueado_banco')->orWhere('bloqueado_banco', false);
+            })
             ->where(function ($q) use ($tipoOp) {
                 if ($tipoOp !== '' && $tipoOp !== '0') {
                     $q->whereRaw('UPPER(TRIM(tipocomprobante)) = ?', [strtoupper($tipoOp)]);
@@ -316,6 +319,7 @@ class InterbankingArchivoPagoService
                     'proveedor' => (string) ($op->proveedores->nombre ?? ''),
                     'motivo' => 'Sin CBU válido en proveedor_formapago / detalle',
                 ];
+
                 continue;
             }
             $filas[] = $fila;
@@ -353,6 +357,7 @@ class InterbankingArchivoPagoService
                     'proveedor' => (string) ($mov->proveedores->nombre ?? ''),
                     'motivo' => 'Sin CBU válido o monto cero',
                 ];
+
                 continue;
             }
             $filas[] = $fila;
