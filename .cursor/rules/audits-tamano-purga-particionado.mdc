@@ -1,0 +1,161 @@
+---
+description: Tabla audits — purga por retención, y procedimiento para recuperar espacio (OPTIMIZE o particionado con tabla espejo)
+globs: config/audits_purga.php,app/Console/Commands/PurgarAuditsCommand.php,config/audit.php
+alwaysApply: false
+---
+
+# Tabla `audits` — controlar el tamaño
+
+Medido el 2026-09-20: **4,80 GB** (3,55 de datos + 1,25 de índices), ~6,5 M filas, creciendo
+~1 M filas/mes. Es la tabla más grande de la base. Arranca en 2025-08-02, o sea que no hay
+años de historia: tiene 13 meses.
+
+Hay dos problemas distintos y se resuelven distinto:
+
+1. **Que siga creciendo** → se resuelve con `$auditEvents` y con la purga. Ya está hecho.
+2. **Recuperar los 4,8 GB ya ocupados** → necesita reconstruir la tabla. Es lo de abajo.
+
+## Restricción que manda sobre todo: el disco
+
+```
+/dev/sda4  54G  45G usados  7,1G disponibles  87%  /var
+```
+
+**7,1 GB libres contra una tabla de 4,8 GB.** Todo lo que reconstruya la tabla (`OPTIMIZE
+TABLE`, `ALTER TABLE ... PARTITION BY`, tabla espejo) escribe una copia completa antes de
+borrar la original, así que necesita tanto espacio libre como la tabla ocupa, más el binlog
+que genera. El margen real es de ~2 GB.
+
+Si el disco se llena a mitad de la operación, MySQL aborta y puede dejar el `.ibd`
+temporal ocupando lugar. **Antes de cualquier reconstrucción: verificar `df -h /var` y
+purgar binlogs viejos.**
+
+De ahí sale el orden correcto: **primero purgar, después reconstruir.** La purga baja el
+contenido lógico ~35%, así que la copia posterior mueve ~3 GB en vez de 4,8 y el espacio
+recuperado es mayor.
+
+## Por qué el DELETE no baja el tamaño
+
+Con `innodb_file_per_table = ON`, el `DELETE` marca las páginas como libres dentro de
+`audits.ibd` y MySQL las reusa para filas nuevas, pero **el archivo no se encoge**. Después
+de purgar 2,3 M filas el `.ibd` sigue pesando 4,8 GB. Eso no es un problema en sí: el
+espacio está disponible para el crecimiento futuro. Solo hay que reconstruir si hace falta
+devolverle los GB al sistema operativo.
+
+## La purga
+
+`php artisan audits:purge`, configurada en `config/audits_purga.php`. Agendada 03:50 y
+**deshabilitada por defecto**: se activa con `AUDITS_PURGA_HABILITADA=true` +
+`php artisan config:clear`.
+
+- Borra en lotes de 5.000 (`DELETE ... LIMIT` con 200 ms de pausa), con tope de 500.000
+  filas por corrida. Un `DELETE` único de millones de filas bloquea e infla el binlog.
+- Retención por defecto **6 meses**, con lista exacta y reglas por patrón para lo que se
+  guarda 10 años (fiscal, UIF, familia `Proveedor`, roles y permisos, árbol de aprobaciones).
+- `--dry-run` informa sin borrar. `--reglas` lista modelo por modelo la retención resuelta
+  y de dónde sale.
+
+**Antes de habilitarla, correr `--reglas` y revisar que nada sensible diga `DEFECTO`.** Con
+la retención por defecto en 6 meses, un modelo nuevo que nadie clasificó se purga en
+silencio. Los patrones existen justamente para eso, pero no cubren todo.
+
+## Recuperar espacio, opción A: `OPTIMIZE TABLE`
+
+Lo más simple. Reconstruye la tabla y devuelve el espacio libre al SO.
+
+```sql
+-- Con la purga ya corrida. Bloquea escrituras en audits mientras dura.
+OPTIMIZE TABLE audits;
+```
+
+El bloqueo es el problema: `audits` se escribe en cada `save()` de cualquier modelo
+auditado, así que mientras corre **el ERP queda congelado para escritura**. Con ~3 GB a
+copiar, contar minutos, no segundos. Va en ventana de mantenimiento.
+
+No hace falta parar Apache ni PHP: alcanza con que nadie grabe. Pero si alguien intenta,
+su request queda esperando hasta que termine.
+
+## Recuperar espacio, opción B: particionado con tabla espejo
+
+Solo si además de recuperar espacio se quiere que a futuro tirar un mes sea instantáneo
+(`DROP PARTITION` en vez de `DELETE`). Es bastante más trabajo.
+
+### Lo que hay que saber antes
+
+- **No hay "particionar de ahora en adelante".** La tabla está particionada o no; convertirla
+  copia todo el contenido.
+- **La columna de particionado tiene que estar en todas las claves únicas.** Hoy la PK de
+  `audits` es `id` sola, así que pasa a ser `(id, created_at)`. Verificado el 2026-09-20.
+- **InnoDB no admite FK en tablas particionadas.** `audits` no tiene ninguna (verificado:
+  0 FK entrantes y salientes), así que por este lado no hay bloqueo.
+- MySQL 8.4.6, InnoDB, `innodb_file_per_table = ON`.
+
+### Procedimiento
+
+Con `RENAME TABLE` el corte real es de menos de un segundo; la copia larga corre con el
+sistema andando.
+
+> **Estado de verificación.** Lo de arriba está comprobado contra esta base (versión, engine,
+> PK, ausencia de FK, disco libre). El DDL de abajo está escrito según el comportamiento
+> documentado de MySQL 8.4, pero **no se ejecutó**: crear tablas es persistir y esto es
+> producción. Antes de usarlo en serio, validarlo sobre una copia vacía
+> (`CREATE TABLE audits_prueba LIKE audits` + los dos `ALTER`, después `DROP`), que no toca
+> ninguna fila y confirma que la PK compuesta y el particionado son aceptados.
+
+```sql
+-- 1) Tabla espejo, ya particionada. Mismo esquema, PK compuesta y sin FK.
+CREATE TABLE audits_nueva LIKE audits;
+
+ALTER TABLE audits_nueva
+    DROP PRIMARY KEY,
+    ADD PRIMARY KEY (id, created_at);
+
+ALTER TABLE audits_nueva
+    PARTITION BY RANGE (TO_DAYS(created_at)) (
+        PARTITION p2025_08 VALUES LESS THAN (TO_DAYS('2025-09-01')),
+        PARTITION p2025_09 VALUES LESS THAN (TO_DAYS('2025-10-01')),
+        -- ... un mes por partición ...
+        PARTITION p2026_09 VALUES LESS THAN (TO_DAYS('2026-10-01')),
+        PARTITION pfuturo  VALUES LESS THAN MAXVALUE
+    );
+```
+
+```sql
+-- 2) Copiar por rangos de id, en tandas, con el sistema andando.
+--    Ojo: NO copiar de una sola vez, es la misma transacción gigante que se evita en la purga.
+INSERT INTO audits_nueva SELECT * FROM audits WHERE id BETWEEN ? AND ?;
+```
+
+```sql
+-- 3) Ventana corta. Acá sí no puede entrar nada nuevo.
+--    Copiar el remanente que entró durante el paso 2 y hacer el swap.
+INSERT INTO audits_nueva SELECT * FROM audits WHERE id > <ultimo_copiado>;
+
+RENAME TABLE audits TO audits_vieja, audits_nueva TO audits;
+```
+
+```sql
+-- 4) Recién cuando esté verificado (conteos por mes coincidentes):
+DROP TABLE audits_vieja;   -- acá se libera el espacio
+```
+
+El `DROP` del paso 4 es lo que devuelve los GB. Hasta entonces conviven las dos tablas, y
+**ahí está el pico de uso de disco**: con 7,1 GB libres y ~3 GB a copiar queda margen, pero
+hay que mirar `df -h` durante el paso 2.
+
+Mantenimiento posterior: agregar la partición del mes siguiente antes de que llegue
+(reorganizando `pfuturo`), y tirar las viejas con
+`ALTER TABLE audits DROP PARTITION p2025_08;`, que es instantáneo y sí libera espacio.
+
+### Si el paso 2 o 3 se corta
+
+`audits_nueva` es descartable: `DROP TABLE audits_nueva` y volver a empezar. Mientras no se
+haya ejecutado el `RENAME`, la tabla productiva es la original y no se tocó nada. El único
+punto irreversible es el `DROP TABLE audits_vieja` del paso 4.
+
+## Recomendación
+
+Con 13 meses de historia y el disco al 87%, lo sensato es: habilitar la purga, dejarla
+drenar las 5 corridas, y recién después evaluar si hace falta recuperar espacio. El
+particionado se justifica cuando la purga mensual ya sea rutina y molesten los minutos de
+`DELETE`; hoy no es el caso.
