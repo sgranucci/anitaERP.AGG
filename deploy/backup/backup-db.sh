@@ -83,13 +83,25 @@ else
     log_warn "binlog files no copiados (opcional: sudoers → deploy/backup/sudoers.anitaERP-backup-binlog.example)"
 fi
 
-# Retención dumps
+# Retención dumps.
+# -H: BACKUP_DIR puede ser un symlink (en .210 apunta a /scan/anitaERP_Backup) y find NO
+# sigue un symlink pasado como argumento salvo que se le pida. Sin esto encontraba 0
+# archivos y la retención no borraba nunca: se habían juntado 121 dumps (58 GB) informando
+# "0 eliminado(s)" en cada corrida.
 DELETED=0
+FAILED_RM=0
 while IFS= read -r -d '' old; do
-    rm -f "${old}"
-    DELETED=$((DELETED + 1))
-done < <(find "${BACKUP_DIR}" -maxdepth 1 -name "${DB_NAME}_*.sql.gz" -mtime +"${RETENTION_DAYS}" -print0 2>/dev/null || true)
+    # Sin -f: si el borrado falla (permisos en el share CIFS) se entera.
+    if rm "${old}" 2>/dev/null; then
+        DELETED=$((DELETED + 1))
+    else
+        FAILED_RM=$((FAILED_RM + 1))
+    fi
+done < <(find -H "${BACKUP_DIR}" -maxdepth 1 -name "${DB_NAME}_*.sql.gz" -mtime +"${RETENTION_DAYS}" -print0 2>/dev/null || true)
 log "Retención dumps: ${DELETED} eliminado(s) (> ${RETENTION_DAYS} días)"
+if [[ "${FAILED_RM}" -ne 0 ]]; then
+    log_warn "retención: ${FAILED_RM} dump(s) no se pudieron borrar (revisar permisos en ${BACKUP_DIR})"
+fi
 
 # Sync remoto (solo si REMOTE_SYNC_ENABLED=1 y REMOTE_HOST definido — típ. AGG .210)
 if [[ "${REMOTE_SYNC_ENABLED}" == "1" && -n "${REMOTE_HOST}" ]]; then
