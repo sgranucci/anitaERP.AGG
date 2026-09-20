@@ -145,6 +145,11 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(60)
             ->when(fn () => (bool) config('bitacora_acceso.habilitado', false));
 
+        $schedule->command('cache-archivos:purge')
+            ->dailyAt('04:10')
+            ->withoutOverlapping(60)
+            ->appendOutputTo(storage_path('logs/cache-archivos-purge.log'));
+
         // Deshabilitada por defecto: activar con AUDITS_PURGA_HABILITADA=true.
         $schedule->command('audits:purge')
             ->dailyAt('03:50')
