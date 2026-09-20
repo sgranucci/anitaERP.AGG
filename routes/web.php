@@ -3633,6 +3633,7 @@ Route::delete('compras/comprobante-proveedor/{id}/con-precarga', 'Compras\Compro
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor_nuevo');
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/contabilizar', 'Compras\Comprobante_ProveedorController@contabilizar')->name('contabilizar_comprobante_proveedor');
+Route::post('compras/comprobante-proveedor/{id}/liberar-bloqueo-pago', 'Compras\Comprobante_ProveedorController@liberarBloqueoPago')->name('liberar_bloqueo_pago_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@editarComprobante')->name('editar_validacion_abono_comprobante');
 Route::post('compras/comprobante-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@guardarComprobante')->name('guardar_validacion_abono_comprobante');
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca', 'Compras\Comprobante_ProveedorController@validarProveedorArcaPadron')->name('comprobante_proveedor_validar_proveedor_arca');
@@ -3926,6 +3927,8 @@ Route::get('compras/legajos/{id}/paquete', 'Compras\OrdencompraLegajoBandejaCont
 Route::post('compras/legajos/{id}/nota', 'Compras\OrdencompraLegajoBandejaController@guardarNota')->name('ordencompra_legajo_bandeja_nota');
 Route::post('compras/legajos/{id}/asignar-com', 'Compras\OrdencompraLegajoBandejaController@asignarCom')->name('ordencompra_legajo_bandeja_asignar_com');
 Route::post('compras/legajos/{id}/corregir-tipo-documento', 'Compras\OrdencompraLegajoBandejaController@corregirTipoDocumento')->name('ordencompra_legajo_bandeja_corregir_tipo');
+Route::post('compras/legajos/{id}/descartar-scan-anita', 'Compras\OrdencompraLegajoBandejaController@descartarScanAnita')->name('ordencompra_legajo_bandeja_descartar_scan');
+Route::post('compras/legajos/{id}/revertir-descarte-scan-anita', 'Compras\OrdencompraLegajoBandejaController@revertirDescarteScanAnita')->name('ordencompra_legajo_bandeja_revertir_descarte_scan');
 Route::get('compras/legajos/{id}/factura-pdf/{precarga}', 'Compras\OrdencompraLegajoBandejaController@verFacturaPdf')->name('ordencompra_legajo_bandeja_factura_pdf');
 Route::get('compras/legajos/{id}/factura-anita-pdf/{documento}', 'Compras\OrdencompraLegajoBandejaController@verFacturaAnitaPdf')->name('ordencompra_legajo_bandeja_factura_anita_pdf');
 Route::get('compras/legajos/{id}/com-pdf/{recepcion}', 'Compras\OrdencompraLegajoBandejaController@verComPdf')->name('ordencompra_legajo_bandeja_com_pdf');

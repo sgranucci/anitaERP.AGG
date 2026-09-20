@@ -70,6 +70,20 @@ Configuración comprobante proveedor
         <div class="card card-outline card-info mt-3">
             <div class="card-header">
                 <h3 class="card-title">Tolerancias de importe por centro de costo</h3>
+                <p class="text-muted mb-0 mt-1" style="font-size:12px;">
+                    Cada sentido se controla por separado. Dejar un límite vacío significa
+                    <strong>no verificar ese caso</strong>: sirve para permitir facturación parcial contra una
+                    misma COM sin frenar el legajo. Si se completan el % y el importe, alcanza con que se pase
+                    uno de los dos. Diferencias de hasta 0,05 siempre se aceptan.
+                </p>
+                <p class="text-muted mb-0 mt-1" style="font-size:12px;">
+                    <strong>Qué hacer si se pasa</strong> define la reacción del circuito.
+                    <em>No dejar cargar y devolver a Compras</em> frena la factura y avisa por correo: el
+                    problema no entra a la contabilidad pero el legajo queda detenido.
+                    <em>Cargar y bloquear para pago</em> es el criterio de SAP: la factura se contabiliza y
+                    queda en la cuenta del proveedor, pero ninguna propuesta de pago la toma hasta que
+                    alguien la libere explicando por qué. Cierra el circuito contable sin pagar la diferencia.
+                </p>
             </div>
             <form action="{{ route('guardar_tolerancias_comprobante_proveedor') }}" method="POST" id="form-tolerancias-cp" autocomplete="off">
                 @csrf
@@ -78,9 +92,17 @@ Configuración comprobante proveedor
                     <table class="table table-sm table-bordered mb-0" id="tolerancia-cp-table">
                         <thead style="background:#85C1E9;color:#17202A;">
                             <tr>
-                                <th>Centro de costo</th>
-                                <th style="width:180px;">Tolerancia importe %</th>
-                                <th class="width40"></th>
+                                <th rowspan="2">Centro de costo</th>
+                                <th colspan="2" class="text-center">Factura mayor que la COM (sobrefacturación)</th>
+                                <th colspan="2" class="text-center">Factura menor que la COM (facturación parcial)</th>
+                                <th rowspan="2" style="width:230px;" class="text-center">Qué hacer si se pasa</th>
+                                <th rowspan="2" class="width40"></th>
+                            </tr>
+                            <tr>
+                                <th style="width:120px;" class="text-center">Límite %</th>
+                                <th style="width:140px;" class="text-center">Límite importe</th>
+                                <th style="width:120px;" class="text-center">Límite %</th>
+                                <th style="width:140px;" class="text-center">Límite importe</th>
                             </tr>
                         </thead>
                         <tbody>

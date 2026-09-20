@@ -26,7 +26,9 @@ use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
+use App\Support\Compras\OrdencompraLegajoScanMaterializacionLock;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport;
@@ -45,8 +47,7 @@ class OrdencompraLegajoBandejaPaqueteService
     public function __construct(
         private PrecargaFacturaScanPathResolver $scanPathResolver,
         private OrdencompraLegajoFacturaPdfService $facturaPdfService,
-    ) {
-    }
+    ) {}
 
     public function encontrarOcVisible(int $id): Ordencompra
     {
@@ -99,7 +100,10 @@ class OrdencompraLegajoBandejaPaqueteService
         $asignadas = $this->asignacionesActualesDelLegajo($oc);
         $comprobantes = $this->comprobantesDelLegajo($oc, $precargaIds);
         $facturas = $this->marcarFacturasCargadasEnCxp($facturas, $comprobantes);
+        $facturas = $this->marcarDuplicadosFiscalesFueraDelLegajo($facturas);
         $facturas = $this->fusionarComprobantesEnFacturas($facturas, $comprobantes);
+        $facturas = $this->adjuntarScansAnitaAFacturas($oc, $facturas);
+        [$facturas, $coms] = $this->adjuntarAsignacionesYSugerenciasCom($facturas, $coms, $asignadas);
         $detallePagos = $this->resolverPagosDeComprobantes(
             array_map(static fn (array $c) => (int) $c['id'], $comprobantes)
         );
@@ -138,6 +142,8 @@ class OrdencompraLegajoBandejaPaqueteService
             'facturas' => $facturas,
             'tipos_opciones' => $tiposOpciones,
             'coms' => $coms,
+            'scans_descartados' => app(OrdencompraLegajoScanAnitaDescartarService::class)
+                ->descartadosVigentesDeOc($oc),
             'devoluciones' => $devoluciones,
             'asignadas' => $asignadas,
             'comprobantes' => $comprobantes,
@@ -323,9 +329,11 @@ class OrdencompraLegajoBandejaPaqueteService
             $previas = $this->asignacionesPorPrecarga(array_map('intval', array_keys($normalizadas)));
 
             foreach ($normalizadas as $precargaId => $ids) {
+                // De a un modelo: el delete masivo no dispara eventos y la baja no quedaría auditada.
                 Precarga_Comprobante_Proveedor_Recepcion::query()
                     ->where('precarga_comprobante_proveedor_id', $precargaId)
-                    ->delete();
+                    ->get()
+                    ->each(static fn (Precarga_Comprobante_Proveedor_Recepcion $fila) => $fila->delete());
                 foreach ($ids as $orden => $recepcionId) {
                     Precarga_Comprobante_Proveedor_Recepcion::query()->create([
                         'precarga_comprobante_proveedor_id' => $precargaId,
@@ -573,7 +581,7 @@ class OrdencompraLegajoBandejaPaqueteService
             ->orderByDesc('id')
             ->get([
                 'id', 'letra', 'sucursal', 'numerocomprobante', 'fechafactura',
-                'total', 'rutaalmacenamiento', 'estado', 'origen_entrada',
+                'subtotal', 'total', 'rutaalmacenamiento', 'estado', 'origen_entrada',
                 'tipotransaccion_compra_id',
             ]);
 
@@ -603,6 +611,7 @@ class OrdencompraLegajoBandejaPaqueteService
                 'sucursal' => (int) ($pre->sucursal ?? 0),
                 'numerocomprobante' => (int) ($pre->numerocomprobante ?? 0),
                 'fecha' => $pre->fechafactura ? $pre->fechafactura->format('d/m/Y') : '',
+                'subtotal' => $pre->subtotal !== null ? (float) $pre->subtotal : null,
                 'total' => $pre->total !== null ? (float) $pre->total : null,
                 'estado' => (string) ($pre->estado ?? ''),
                 'url_pdf' => route('ordencompra_legajo_bandeja_factura_pdf', [
@@ -631,20 +640,33 @@ class OrdencompraLegajoBandejaPaqueteService
             ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
             ->orderByDesc('fecha')
             ->orderByDesc('id')
-            ->get(['id', 'numerorecepcion', 'fecha', 'estado', 'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro']);
+            ->get([
+                'id', 'numerorecepcion', 'fecha', 'estado', 'numerofactura',
+                'anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro',
+            ]);
 
         $facturadas = $this->idsComFacturadasEnCxp($rows->pluck('id')->map(static fn ($id) => (int) $id)->all());
+        $provisionPorId = $this->provisionPorComIds(
+            $rows->pluck('id')->map(static fn ($id) => (int) $id)->all()
+        );
 
         $out = [];
         foreach ($rows as $rec) {
             $id = (int) $rec->id;
+            $numeroFactura = trim((string) ($rec->numerofactura ?? ''));
+            $parsed = $this->parsearNumeroFacturaCom($numeroFactura);
             $out[] = [
                 'id' => $id,
+                'numerorecepcion' => (int) ($rec->numerorecepcion ?? 0) ?: null,
                 'documento' => $this->documentoCom($rec),
                 'fecha' => $rec->fecha ? $rec->fecha->format('d/m/Y') : '',
                 'estado' => (string) $rec->estado,
                 'confirmada' => $rec->estado === Recepcion_Proveedor::ESTADO_CONFIRMADA,
                 'facturada_en_cxp' => isset($facturadas[$id]),
+                'neto' => $provisionPorId[$id] ?? null,
+                'numerofactura' => $numeroFactura !== '' ? $numeroFactura : null,
+                'factura_sucursal' => $parsed['sucursal'],
+                'factura_numero' => $parsed['numero'],
                 'url_pdf' => route('ordencompra_legajo_bandeja_com_pdf', [
                     'id' => (int) $oc->id,
                     'recepcion' => $id,
@@ -655,6 +677,284 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         return $out;
+    }
+
+    /**
+     * @param  list<int>  $comIds
+     * @return array<int, float>
+     */
+    private function provisionPorComIds(array $comIds): array
+    {
+        $comIds = array_values(array_filter($comIds, static fn (int $id) => $id > 0));
+        if ($comIds === []) {
+            return [];
+        }
+
+        $recepciones = Recepcion_Proveedor::query()
+            ->whereIn('id', $comIds)
+            ->with(['recepcion_proveedor_articulos'])
+            ->get();
+
+        $out = [];
+        foreach (
+            app(ComprobanteProveedorRecepcionesSupport::class)
+                ->enriquecerConImporteProvision($recepciones) as $recepcion
+        ) {
+            $neto = round((float) ($recepcion->importe_provision_com ?? 0), 2);
+            if ($neto > 0.00001) {
+                $out[(int) $recepcion->id] = $neto;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array{sucursal: int|null, numero: int|null}
+     */
+    private function parsearNumeroFacturaCom(string $numerofactura): array
+    {
+        $raw = trim($numerofactura);
+        if ($raw === '') {
+            return ['sucursal' => null, 'numero' => null];
+        }
+
+        // Formatos típicos Anita: "04-79223", "00004-00079223", "4/79223".
+        if (preg_match('/(\d+)\D+(\d+)\s*$/', $raw, $m)) {
+            return [
+                'sucursal' => (int) $m[1],
+                'numero' => (int) $m[2],
+            ];
+        }
+        if (preg_match('/(\d+)\s*$/', $raw, $m)) {
+            return ['sucursal' => null, 'numero' => (int) $m[1]];
+        }
+
+        return ['sucursal' => null, 'numero' => null];
+    }
+
+    /**
+     * Adjunta a cada factura/COM lo ya asignado y, si falta, la sugerencia por número de
+     * factura anotado en la COM o por neto coincidente. No escribe nada: solo orienta al operador.
+     *
+     * @param  list<array<string, mixed>>  $facturas
+     * @param  list<array<string, mixed>>  $coms
+     * @param  array<int|string, list<int>>  $asignadas
+     * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
+     */
+    private function adjuntarAsignacionesYSugerenciasCom(array $facturas, array $coms, array $asignadas): array
+    {
+        $comsPorId = [];
+        foreach ($coms as $com) {
+            $comsPorId[(int) ($com['id'] ?? 0)] = $com;
+        }
+
+        $facPorId = [];
+        foreach ($facturas as $fac) {
+            $facPorId[(string) ($fac['id'] ?? '')] = $fac;
+        }
+
+        $asignadaComAFac = [];
+        foreach ($asignadas as $facKey => $comIds) {
+            foreach ((array) $comIds as $comId) {
+                $rid = (int) $comId;
+                if ($rid > 0) {
+                    $asignadaComAFac[$rid] = (string) $facKey;
+                }
+            }
+        }
+
+        $sugeridaFacACom = $this->sugerirComPorFactura($facturas, $coms, $asignadaComAFac);
+        $sugeridaComAFac = [];
+        foreach ($sugeridaFacACom as $facKey => $info) {
+            $rid = (int) ($info['com_id'] ?? 0);
+            if ($rid > 0) {
+                $sugeridaComAFac[$rid] = [
+                    'factura_id' => (string) $facKey,
+                    'motivo' => (string) ($info['motivo'] ?? 'neto'),
+                ];
+            }
+        }
+
+        foreach ($facturas as &$fac) {
+            $key = (string) ($fac['id'] ?? '');
+            $idsAsig = array_values(array_filter(
+                array_map('intval', (array) ($asignadas[$key] ?? $asignadas[(int) $key] ?? [])),
+                static fn (int $id) => $id > 0
+            ));
+            $asignadasDetalle = [];
+            foreach ($idsAsig as $rid) {
+                $com = $comsPorId[$rid] ?? null;
+                $asignadasDetalle[] = [
+                    'id' => $rid,
+                    'documento' => (string) ($com['documento'] ?? ('COM #'.$rid)),
+                    'numerorecepcion' => $com['numerorecepcion'] ?? null,
+                    'neto' => $com['neto'] ?? null,
+                ];
+            }
+            $fac['coms_asignadas'] = $asignadasDetalle;
+            $fac['coms_asignadas_ids'] = $idsAsig;
+
+            $sug = $sugeridaFacACom[$key] ?? null;
+            if ($sug !== null && $idsAsig === []) {
+                $rid = (int) $sug['com_id'];
+                $com = $comsPorId[$rid] ?? null;
+                $fac['com_sugerida'] = [
+                    'id' => $rid,
+                    'documento' => (string) ($com['documento'] ?? ('COM #'.$rid)),
+                    'numerorecepcion' => $com['numerorecepcion'] ?? null,
+                    'neto' => $com['neto'] ?? null,
+                    'motivo' => (string) ($sug['motivo'] ?? 'neto'),
+                    'motivo_label' => $sug['motivo'] === 'numero'
+                        ? 'mismo nº de factura'
+                        : 'mismo neto',
+                ];
+            } else {
+                $fac['com_sugerida'] = null;
+            }
+        }
+        unset($fac);
+
+        foreach ($coms as &$com) {
+            $rid = (int) ($com['id'] ?? 0);
+            $facKey = $asignadaComAFac[$rid] ?? null;
+            if ($facKey !== null) {
+                $fac = $facPorId[$facKey] ?? null;
+                $com['asignada_a'] = [
+                    'id' => $facKey,
+                    'etiqueta' => (string) ($fac['etiqueta'] ?? ('#'.$facKey)),
+                ];
+                $com['sugerida_para'] = null;
+                continue;
+            }
+            $com['asignada_a'] = null;
+            $sug = $sugeridaComAFac[$rid] ?? null;
+            if ($sug !== null) {
+                $fac = $facPorId[$sug['factura_id']] ?? null;
+                $com['sugerida_para'] = [
+                    'id' => $sug['factura_id'],
+                    'etiqueta' => (string) ($fac['etiqueta'] ?? ('#'.$sug['factura_id'])),
+                    'motivo' => (string) ($sug['motivo'] ?? 'neto'),
+                    'motivo_label' => $sug['motivo'] === 'numero'
+                        ? 'mismo nº de factura'
+                        : 'mismo neto',
+                ];
+            } else {
+                $com['sugerida_para'] = null;
+            }
+        }
+        unset($com);
+
+        return [$facturas, $coms];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $facturas
+     * @param  list<array<string, mixed>>  $coms
+     * @param  array<int, string>  $asignadaComAFac
+     * @return array<string, array{com_id: int, motivo: string}>
+     */
+    private function sugerirComPorFactura(array $facturas, array $coms, array $asignadaComAFac): array
+    {
+        $comsLibres = [];
+        foreach ($coms as $com) {
+            $rid = (int) ($com['id'] ?? 0);
+            if ($rid <= 0 || isset($asignadaComAFac[$rid]) || ! empty($com['facturada_en_cxp'])) {
+                continue;
+            }
+            if (empty($com['confirmada'])) {
+                continue;
+            }
+            $comsLibres[$rid] = $com;
+        }
+
+        $out = [];
+        $usadas = [];
+
+        // 1) Match por número de factura anotado en la COM (el más confiable).
+        foreach ($facturas as $fac) {
+            if (! $this->facturaExigeComParaSugerencia($fac)) {
+                continue;
+            }
+            $key = (string) ($fac['id'] ?? '');
+            if ($key === '' || isset($out[$key])) {
+                continue;
+            }
+            $suc = (int) ($fac['sucursal'] ?? 0);
+            $nro = (int) ($fac['numerocomprobante'] ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            foreach ($comsLibres as $rid => $com) {
+                if (isset($usadas[$rid])) {
+                    continue;
+                }
+                $comNro = (int) ($com['factura_numero'] ?? 0);
+                if ($comNro !== $nro) {
+                    continue;
+                }
+                $comSuc = $com['factura_sucursal'];
+                if ($comSuc !== null && (int) $comSuc !== $suc && $suc > 0) {
+                    continue;
+                }
+                $out[$key] = ['com_id' => $rid, 'motivo' => 'numero'];
+                $usadas[$rid] = true;
+                break;
+            }
+        }
+
+        // 2) Match por neto (provisión COM ≈ subtotal factura), 1 a 1.
+        foreach ($facturas as $fac) {
+            if (! $this->facturaExigeComParaSugerencia($fac)) {
+                continue;
+            }
+            $key = (string) ($fac['id'] ?? '');
+            if ($key === '' || isset($out[$key])) {
+                continue;
+            }
+            $netoFac = (float) ($fac['subtotal'] ?? 0);
+            if ($netoFac <= 0.00001) {
+                continue;
+            }
+            $mejor = null;
+            $mejorDiff = null;
+            foreach ($comsLibres as $rid => $com) {
+                if (isset($usadas[$rid])) {
+                    continue;
+                }
+                $netoCom = (float) ($com['neto'] ?? 0);
+                if ($netoCom <= 0.00001) {
+                    continue;
+                }
+                $diff = abs($netoFac - $netoCom);
+                if ($diff > 0.05 && $diff / max($netoCom, $netoFac) > 0.002) {
+                    continue;
+                }
+                if ($mejorDiff === null || $diff < $mejorDiff) {
+                    $mejor = $rid;
+                    $mejorDiff = $diff;
+                }
+            }
+            if ($mejor !== null) {
+                $out[$key] = ['com_id' => $mejor, 'motivo' => 'neto'];
+                $usadas[$mejor] = true;
+            }
+        }
+
+        return $out;
+    }
+
+    private function facturaExigeComParaSugerencia(array $fac): bool
+    {
+        if (! empty($fac['cargado_cxp'])) {
+            return false;
+        }
+        $tipo = strtoupper(trim((string) ($fac['tipo'] ?? 'FC')));
+        if ($tipo === 'NC' || $tipo === 'ND') {
+            return false;
+        }
+
+        return ($fac['exige_com'] ?? true) !== false;
     }
 
     /**
@@ -1245,7 +1545,7 @@ class OrdencompraLegajoBandejaPaqueteService
             abort(404, 'La factura no pertenece a este legajo.');
         }
 
-        $existente = $this->precargaDelLegajoCompatibleConScan($oc, $fila);
+        $existente = $this->precargaDelLegajoCompatibleConScan($oc, $fila, $documentoId);
         if ($existente) {
             return $this->asegurarPdfScanEnPrecarga($oc, $existente, $documentoId, $fila);
         }
@@ -1264,6 +1564,18 @@ class OrdencompraLegajoBandejaPaqueteService
         $sucursal = (int) ($fila['isucursal'] ?? 0);
         $numero = (int) ($fila['inumero'] ?? 0);
         $fecha = $this->fechaYmdDesdeScanAnita((string) ($fila['ifecha'] ?? ''));
+
+        $anulada = $this->precargaAnuladaDelScan($oc, $documentoId, $letra, $sucursal, $numero);
+        if ($anulada !== null) {
+            // En la apertura del modal este error se loguea y se saltea; al asignar COM a mano desde
+            // el scan, el operador ve el motivo.
+            throw ValidationException::withMessages([
+                'precarga_id' => 'Este escaneo ya fue anulado en el legajo (factura #'.$anulada->id.', '
+                    .$anulada->letra.'-'.$anulada->sucursal.'-'.$anulada->numerocomprobante
+                    .'), así que no se vuelve a crear la precarga. Si hay que cargarlo igual, primero'
+                    .' hay que revertir esa anulación.',
+            ]);
+        }
 
         if ($numero > 0) {
             $dup = ComprobanteProveedorUnicidadSupport::findDuplicadoPrecarga(
@@ -1293,25 +1605,50 @@ class OrdencompraLegajoBandejaPaqueteService
         }
         $moneda = Moneda::query()->whereKey($monedaId)->first();
 
-        $precarga = Precarga_Comprobante_Proveedor::query()->create([
-            'empresa_id' => $empresaId,
-            'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
-            'proveedor_id' => $proveedorId,
-            'tipotransaccion_compra_id' => $tipoId,
-            'letra' => $letra,
-            'sucursal' => $sucursal,
-            'numerocomprobante' => $numero,
-            'fechafactura' => $fecha,
-            'numeroordencompra' => (string) $oc->numeroordencompra,
-            'subtotal' => 0,
-            'total' => 0,
-            'estado' => 'PENDIENTE',
-            'origen_entrada' => PrecargaComprobanteOrigenEntrada::SCAN_ANITA,
-            'pararevisar' => 1,
-            'moneda' => strtoupper(trim((string) ($moneda->abreviatura ?: $moneda->nombre ?: 'PESOS'))),
-            'moneda_id' => $monedaId,
-            'cotizacion' => 1,
-        ]);
+        // El CUIT sale del proveedor de la OC, no del scan: es parte de la clave fiscal y si queda
+        // en NULL el índice único no puede comparar (en MySQL un NULL nunca choca con otro NULL).
+        $cuit = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos($proveedorId, null);
+
+        try {
+            $precarga = Precarga_Comprobante_Proveedor::query()->create([
+                'empresa_id' => $empresaId,
+                'provincia_destino_id' => ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID,
+                'proveedor_id' => $proveedorId,
+                'identificacion_proveedor_cuit' => $cuit !== '' ? $cuit : null,
+                'tipotransaccion_compra_id' => $tipoId,
+                'letra' => $letra,
+                'sucursal' => $sucursal,
+                'numerocomprobante' => $numero,
+                'fechafactura' => $fecha,
+                'numeroordencompra' => (string) $oc->numeroordencompra,
+                'subtotal' => 0,
+                'total' => 0,
+                'estado' => 'PENDIENTE',
+                'origen_entrada' => PrecargaComprobanteOrigenEntrada::SCAN_ANITA,
+                'anita_scan_documento_id' => $documentoId,
+                'pararevisar' => 1,
+                'moneda' => strtoupper(trim((string) ($moneda->abreviatura ?: $moneda->nombre ?: 'PESOS'))),
+                'moneda_id' => $monedaId,
+                'cotizacion' => 1,
+            ]);
+        } catch (\Throwable $e) {
+            // Dos operadores abriendo el mismo legajo a la vez llegan acá con el chequeo de arriba ya
+            // vencido; el índice único los frena y el mensaje tiene que ser legible, no SQL.
+            $mensaje = ComprobanteProveedorUnicidadSupport::mensajeViolacionUnicidadPrecarga(
+                $e,
+                $empresaId,
+                $tipoId,
+                $letra,
+                $sucursal,
+                $numero,
+                $proveedorId,
+            );
+            if ($mensaje === null) {
+                throw $e;
+            }
+
+            throw ValidationException::withMessages(['precarga_id' => $mensaje]);
+        }
 
         return $this->asegurarPdfScanEnPrecarga($oc, $precarga, $documentoId, $fila);
     }
@@ -1319,8 +1656,11 @@ class OrdencompraLegajoBandejaPaqueteService
     /**
      * @param  array<string, mixed>  $fila
      */
-    private function precargaDelLegajoCompatibleConScan(Ordencompra $oc, array $fila): ?Precarga_Comprobante_Proveedor
-    {
+    private function precargaDelLegajoCompatibleConScan(
+        Ordencompra $oc,
+        array $fila,
+        int $documentoId = 0,
+    ): ?Precarga_Comprobante_Proveedor {
         $letra = strtoupper(trim((string) ($fila['cletra'] ?? '')));
         $sucursal = (int) ($fila['isucursal'] ?? 0);
         $numero = (int) ($fila['inumero'] ?? 0);
@@ -1339,6 +1679,18 @@ class OrdencompraLegajoBandejaPaqueteService
         );
         if ($delLegajo->isEmpty()) {
             return null;
+        }
+
+        // Primero por el documento del scan, que es el vínculo real: la letra, la sucursal y el número
+        // se editan, y cuando alguien los corrige el match por número deja el scan huérfano y el modal
+        // lo materializa de nuevo como precarga nueva.
+        if ($documentoId > 0) {
+            $porDocumento = $delLegajo->first(
+                fn (Precarga_Comprobante_Proveedor $p) => (int) ($p->anita_scan_documento_id ?? 0) === $documentoId
+            );
+            if ($porDocumento) {
+                return $porDocumento;
+            }
         }
 
         if ($numero > 0) {
@@ -1402,6 +1754,50 @@ class OrdencompraLegajoBandejaPaqueteService
         return $out;
     }
 
+    /**
+     * Una misma factura puede tener varios escaneos en Anita (se escaneó dos veces, o el proveedor
+     * mandó el PDF de nuevo). Al materializarse, todos caen en la misma precarga y solo se ve el PDF
+     * del primero: el resto queda invisible y sin forma de descartarlo. Acá se expone la lista completa.
+     *
+     * @param  list<array<string, mixed>>  $facturas
+     * @return list<array<string, mixed>>
+     */
+    private function adjuntarScansAnitaAFacturas(Ordencompra $oc, array $facturas): array
+    {
+        $porClave = [];
+        foreach ($facturas as $idx => $fac) {
+            // Las filas que ya son un scan sin precarga traen su propio documento y su propio botón.
+            if (($fac['origen'] ?? '') === 'anita') {
+                continue;
+            }
+            $clave = $this->claveFacturaEtiqueta((string) ($fac['etiqueta'] ?? ''));
+            if ($clave !== '') {
+                $porClave[$clave][] = $idx;
+            }
+        }
+        if ($porClave === []) {
+            return $facturas;
+        }
+
+        foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) as $scan) {
+            $documentoId = (int) ($scan['documento_id'] ?? 0);
+            $clave = $this->claveFacturaEtiqueta((string) ($scan['etiqueta'] ?? ''));
+            if ($documentoId <= 0 || $clave === '' || ! isset($porClave[$clave])) {
+                continue;
+            }
+            foreach ($porClave[$clave] as $idx) {
+                $facturas[$idx]['scans_anita'][] = [
+                    'documento_id' => $documentoId,
+                    'etiqueta' => (string) ($scan['etiqueta'] ?? ''),
+                    'fecha' => (string) ($scan['fecha'] ?? ''),
+                    'url_pdf' => (string) ($scan['url_pdf'] ?? ''),
+                ];
+            }
+        }
+
+        return $facturas;
+    }
+
     private function claveFacturaEtiqueta(string $etiqueta): string
     {
         $etiqueta = strtoupper(trim($etiqueta));
@@ -1414,20 +1810,33 @@ class OrdencompraLegajoBandejaPaqueteService
 
     private function materializarPdfsScanAnita(Ordencompra $oc): void
     {
-        foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) as $scan) {
-            $docId = (int) ($scan['documento_id'] ?? 0);
-            if ($docId <= 0) {
-                continue;
+        // Este alta corre al abrir el modal (un GET). El lock evita que dos aperturas simultáneas
+        // del mismo legajo entren las dos al alta de la misma precarga.
+        $lock = OrdencompraLegajoScanMaterializacionLock::intentar((int) $oc->id);
+        if ($lock === null) {
+            Log::info('bandeja.scan_pdf_precarga_tomado', ['oc' => (int) $oc->id]);
+
+            return;
+        }
+
+        try {
+            foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) as $scan) {
+                $docId = (int) ($scan['documento_id'] ?? 0);
+                if ($docId <= 0) {
+                    continue;
+                }
+                try {
+                    $this->precargaDesdeFacturaAnita($oc, $docId);
+                } catch (\Throwable $e) {
+                    Log::warning('bandeja.scan_pdf_precarga', [
+                        'oc' => (int) $oc->id,
+                        'documento' => $docId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
-            try {
-                $this->precargaDesdeFacturaAnita($oc, $docId);
-            } catch (\Throwable $e) {
-                Log::warning('bandeja.scan_pdf_precarga', [
-                    'oc' => (int) $oc->id,
-                    'documento' => $docId,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+        } finally {
+            OrdencompraLegajoScanMaterializacionLock::liberar($lock);
         }
     }
 
@@ -1441,6 +1850,7 @@ class OrdencompraLegajoBandejaPaqueteService
         array $fila,
     ): Precarga_Comprobante_Proveedor {
         $precarga = $this->marcarOrigenScanAnitaSiNoEsIa($precarga);
+        $precarga = $this->vincularScanAnitaSiFalta($precarga, $documentoId);
         $precarga = $this->alinearTipoPrecargaConScanAnita($oc, $precarga, $fila);
         $ruta = trim((string) ($precarga->rutaalmacenamiento ?? ''));
         if ($ruta !== '' && $this->scanPathResolver->resolve($ruta)) {
@@ -1499,6 +1909,71 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
+     * Anular una precarga es una decisión deliberada ("esta factura no va en este legajo"), así que su
+     * escaneo no puede volver a materializarse en la siguiente apertura del modal. Sin esto, anular una
+     * cáscara duplicada y reabrir el legajo la recrea igual.
+     *
+     * Busca por el documento del scan, y si la anulada es vieja y no tiene ese vínculo grabado, cae al
+     * número, que es como se venían uniendo scan y precarga.
+     */
+    private function precargaAnuladaDelScan(
+        Ordencompra $oc,
+        int $documentoId,
+        string $letra,
+        int $sucursal,
+        int $numero,
+    ): ?Precarga_Comprobante_Proveedor {
+        $anuladas = Precarga_Comprobante_Proveedor::query()
+            ->where('empresa_id', (int) $oc->empresa_id)
+            ->whereRaw("UPPER(TRIM(COALESCE(estado, ''))) = ?", [PrecargaComprobanteEstados::ANULADA])
+            ->get()
+            ->filter(fn (Precarga_Comprobante_Proveedor $p) => $this->precargaPerteneceAlLegajo($oc, $p));
+
+        if ($anuladas->isEmpty()) {
+            return null;
+        }
+
+        if ($documentoId > 0) {
+            $porDocumento = $anuladas->first(
+                fn (Precarga_Comprobante_Proveedor $p) => (int) ($p->anita_scan_documento_id ?? 0) === $documentoId
+            );
+            if ($porDocumento) {
+                return $porDocumento;
+            }
+        }
+
+        if ($numero <= 0) {
+            return null;
+        }
+
+        return $anuladas->first(function (Precarga_Comprobante_Proveedor $p) use ($letra, $sucursal, $numero) {
+            $mismaLetra = $letra === '' || strtoupper(trim((string) $p->letra)) === $letra;
+
+            return $mismaLetra
+                && (int) $p->sucursal === $sucursal
+                && (int) $p->numerocomprobante === $numero;
+        });
+    }
+
+    /**
+     * Graba de qué scan salió la precarga. Solo si está vacío: una factura puede tener más de un
+     * escaneo asociado y lo que interesa guardar es el que la originó, no el último que se miró.
+     */
+    private function vincularScanAnitaSiFalta(
+        Precarga_Comprobante_Proveedor $precarga,
+        int $documentoId,
+    ): Precarga_Comprobante_Proveedor {
+        if ($documentoId <= 0 || (int) ($precarga->anita_scan_documento_id ?? 0) > 0) {
+            return $precarga;
+        }
+
+        $precarga->anita_scan_documento_id = $documentoId;
+        $precarga->save();
+
+        return $precarga;
+    }
+
+    /**
      * Si el scan Anita trae ctipo NC/ND y la precarga quedó como FIS/FC, alinea el tipo fino.
      *
      * @param  array<string, mixed>  $fila
@@ -1524,10 +1999,58 @@ class OrdencompraLegajoBandejaPaqueteService
         if ($tipoId <= 0 || $tipoId === (int) $precarga->tipotransaccion_compra_id) {
             return $precarga;
         }
+        if ($this->alinearTipoCrearianDuplicado($precarga, $tipoId)) {
+            return $precarga;
+        }
         $precarga->tipotransaccion_compra_id = $tipoId;
         $precarga->save();
 
         return $precarga->fresh(['tipotransaccion_compras']) ?? $precarga;
+    }
+
+    /**
+     * El tipo define el código AFIP, y el código AFIP es parte de la clave fiscal. Alinear el tipo
+     * mueve la precarga de clave, así que puede chocar contra otra precarga viva: es como nació el
+     * par A-1151-748 (el mismo scan materializado dos veces, y al alinear el tipo quedaron iguales).
+     */
+    private function alinearTipoCrearianDuplicado(Precarga_Comprobante_Proveedor $precarga, int $tipoIdNuevo): bool
+    {
+        $numero = (int) ($precarga->numerocomprobante ?? 0);
+        if ($numero <= 0) {
+            return false;
+        }
+
+        $cuit = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+            $precarga->proveedor_id !== null ? (int) $precarga->proveedor_id : null,
+            $precarga->identificacion_proveedor_cuit,
+        );
+        $codigoAfip = ComprobanteProveedorUnicidadSupport::codigoAfipDesdeTipoId($tipoIdNuevo);
+        if ($cuit === '' || $codigoAfip === '') {
+            return false;
+        }
+
+        $duplicado = ComprobanteProveedorUnicidadSupport::findDuplicadoPrecargaPorAfip(
+            (int) $precarga->empresa_id,
+            $codigoAfip,
+            (string) $precarga->letra,
+            (int) $precarga->sucursal,
+            $numero,
+            $cuit,
+            (int) $precarga->id,
+        );
+        if ($duplicado === null) {
+            return false;
+        }
+
+        Log::warning('bandeja.alinear_tipo_scan_duplicaria', [
+            'precarga' => (int) $precarga->id,
+            'tipo_actual' => (int) $precarga->tipotransaccion_compra_id,
+            'tipo_nuevo' => $tipoIdNuevo,
+            'codigo_afip_nuevo' => $codigoAfip,
+            'choca_con_precarga' => (int) $duplicado->id,
+        ]);
+
+        return true;
     }
 
     /**
@@ -1654,6 +2177,75 @@ class OrdencompraLegajoBandejaPaqueteService
             $fac['cargado_cxp'] = $cargado;
         }
         unset($fac);
+
+        return $facturas;
+    }
+
+    /**
+     * La factura puede estar cargada en CxP bajo otra OC o sin OC (import de Anita): comparar contra
+     * los comprobantes del legajo no la ve, y el operador la trabaja hasta que el control de unicidad
+     * fiscal la rechaza al grabar. Acá se busca por la misma clave que ese control (AFIP + CUIT).
+     *
+     * @param  list<array<string, mixed>>  $facturas
+     * @return list<array<string, mixed>>
+     */
+    private function marcarDuplicadosFiscalesFueraDelLegajo(array $facturas): array
+    {
+        $pendientes = [];
+        foreach ($facturas as $idx => $fac) {
+            if (($fac['origen'] ?? 'precarga') !== 'precarga' || ! empty($fac['cargado_cxp'])) {
+                continue;
+            }
+            $preId = (int) ($fac['id'] ?? 0);
+            if ($preId > 0) {
+                $pendientes[$preId] = $idx;
+            }
+        }
+        if ($pendientes === []) {
+            return $facturas;
+        }
+
+        $precargas = Precarga_Comprobante_Proveedor::query()
+            ->whereIn('id', array_keys($pendientes))
+            ->get([
+                'id', 'empresa_id', 'proveedor_id', 'identificacion_proveedor_cuit',
+                'tipotransaccion_compra_id', 'letra', 'sucursal', 'numerocomprobante',
+            ]);
+
+        foreach ($precargas as $pre) {
+            $idx = $pendientes[(int) $pre->id] ?? null;
+            if ($idx === null || (int) $pre->numerocomprobante <= 0) {
+                continue;
+            }
+            $cuit = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
+                $pre->proveedor_id !== null ? (int) $pre->proveedor_id : null,
+                $pre->identificacion_proveedor_cuit,
+            );
+            $codigoAfip = ComprobanteProveedorUnicidadSupport::codigoAfipDesdeTipoId(
+                (int) $pre->tipotransaccion_compra_id
+            );
+            if ($cuit === '' || $codigoAfip === '') {
+                continue;
+            }
+            $duplicado = ComprobanteProveedorUnicidadSupport::findDuplicadoPorAfip(
+                (int) $pre->empresa_id,
+                $codigoAfip,
+                (string) $pre->letra,
+                (int) $pre->sucursal,
+                (int) $pre->numerocomprobante,
+                $cuit,
+            );
+            if ($duplicado === null) {
+                continue;
+            }
+            $facturas[$idx]['cargado_cxp'] = true;
+            $facturas[$idx]['cargado_cxp_fuera_legajo'] = true;
+            $facturas[$idx]['cargado_cxp_detalle'] = ComprobanteProveedorUnicidadSupport::mensajeDuplicado(
+                $duplicado,
+                $codigoAfip
+            );
+            $facturas[$idx]['url_comprobante'] = route('editar_comprobante_proveedor', ['id' => (int) $duplicado->id]);
+        }
 
         return $facturas;
     }

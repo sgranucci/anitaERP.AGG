@@ -93,6 +93,37 @@ final class ProveedorCuentacorrienteAnitaImportBridgeReader
     }
 
     /**
+     * Promov por clave documental (incluye saldadas: monto = t_pagado).
+     *
+     * @param  list<string>  $claves  proveedor|tipo|letra|suc|nro
+     * @return array<string, list<array<string, mixed>>>
+     */
+    public function indexarPromovPorClaves(array $claves, ?int $empresaCodigoAnita = null): array
+    {
+        $perfil = ProveedorCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $out = [];
+        foreach ($this->listarPorClaves(
+            $perfil['tabla_promov'],
+            $perfil['campos_promov'],
+            'prov_proveedor',
+            'prov_tipo',
+            'prov_letra',
+            'prov_sucursal',
+            'prov_nro',
+            $claves,
+            $perfil,
+            true,
+            $perfil['tiene_empresa'] ? $empresaCodigoAnita : null,
+            'prov_empresa',
+        ) as $fila) {
+            $clave = ComprobanteProveedorAnitaImportClaveSupport::claveDesdePromov($fila);
+            $out[$clave][] = $fila;
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<string>  $clavesDeuda  proveedor|tipo|letra|suc|nro
      * @return list<array<string, mixed>>
      */

@@ -231,12 +231,9 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         ?int $documentoIdPreferido = null,
     ): ?int {
         if ($documentoIdPreferido !== null && $documentoIdPreferido > 0) {
-            foreach ($scans as $scan) {
-                if ((int) ($scan['documento_id'] ?? 0) === $documentoIdPreferido) {
-                    return $documentoIdPreferido;
-                }
-            }
-
+            // Se respeta sin buscarlo en $scans a propósito: quien pasa un documento explícito ya
+            // validó que pertenezca al legajo (filaDeOc / perteneceAlLegajo, que abortan 404). Esta
+            // función NO valida pertenencia; si agregás un llamador nuevo, validá antes de llamar.
             return $documentoIdPreferido;
         }
 

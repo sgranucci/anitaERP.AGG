@@ -150,4 +150,11 @@ return [
     */
     'iibb_retencion_omite_monotributo' => env('COMPRAS_IIBB_OMITE_MONOTRIBUTO'),
 
+    /*
+    | Candado Redis sobre un comprobante mientras se contabiliza / descontabiliza /
+    | edita / elimina. Cubre la ventana MySQL + Anita (Anita queda fuera del TX).
+    */
+    'comprobante_escritura_lock_segundos' => max(30, (int) env('COMPRAS_COMPROBANTE_ESCRITURA_LOCK_SEGUNDOS', 120)),
+    'comprobante_escritura_lock_espera_segundos' => max(5, (int) env('COMPRAS_COMPROBANTE_ESCRITURA_LOCK_ESPERA', 30)),
+
 ];

@@ -10,6 +10,7 @@ class ComprobanteProveedorAnitaImportAplmovpSupportTest extends TestCase
     public function test_op_y_nc_son_credito(): void
     {
         $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esTipoPago('OPP'));
+        $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esTipoPago('AOP'));
         $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('NCA', []));
         $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('NCA', ['NCA' => 'R']));
         $this->assertFalse(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('FAC', ['FAC' => 'S']));

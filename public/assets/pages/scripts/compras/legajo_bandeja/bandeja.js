@@ -76,11 +76,59 @@
         return out;
     }
 
+    function chipComFactura(f) {
+        var asig = (f && f.coms_asignadas) || [];
+        if (asig.length) {
+            var labels = asig.map(function (c) {
+                return c.numerorecepcion ? ('COM ' + c.numerorecepcion) : (c.documento || ('#' + c.id));
+            });
+            return '<span class="badge badge-primary" title="' + esc(labels.join(', ')) + '">'
+                + esc(labels.length === 1 ? labels[0] : ('COM ×' + labels.length))
+                + '</span>';
+        }
+        var sug = f && f.com_sugerida;
+        if (sug) {
+            var lab = sug.numerorecepcion ? ('COM ' + sug.numerorecepcion) : (sug.documento || ('#' + sug.id));
+            return '<span class="badge badge-info" title="Sugerida: ' + esc(sug.motivo_label || '') + '">'
+                + esc(lab) + ' ¿?</span>';
+        }
+        var tipo = String((f && f.tipo) || 'FC').toUpperCase();
+        var exige = !f || (f.exige_com !== false && tipo !== 'NC' && tipo !== 'ND');
+        if (!exige) {
+            return '<span class="badge badge-light border text-muted">no exige</span>';
+        }
+        return '<span class="badge badge-warning">sin COM</span>';
+    }
+
+    function celdaAsignacionCom(c) {
+        if (c && c.asignada_a && c.asignada_a.etiqueta) {
+            return '<span class="badge badge-primary">' + esc(c.asignada_a.etiqueta) + '</span>';
+        }
+        if (c && c.sugerida_para && c.sugerida_para.etiqueta) {
+            return '<span class="badge badge-info" title="' + esc(c.sugerida_para.motivo_label || '') + '">'
+                + esc(c.sugerida_para.etiqueta) + ' ¿?</span>'
+                + (c.numerofactura
+                    ? '<br><small class="text-muted">anotada ' + esc(c.numerofactura) + '</small>'
+                    : '');
+        }
+        if (c && c.numerofactura) {
+            return '<span class="text-muted">—</span><br><small class="text-muted">anotada '
+                + esc(c.numerofactura) + '</small>';
+        }
+        return '—';
+    }
+
+    function fmtNetoCom(c) {
+        if (c == null || c.neto == null || c.neto === '') {
+            return '—';
+        }
+        return fmtMonto(c.neto);
+    }
+
     function renderComs(paquete) {
         var $tb = $('#tablaBandejaComs tbody').empty();
         var $pdf = $('#bandejaComPdf');
         var coms = (paquete && paquete.coms) || [];
-        var asignadaA = mapaComAsignadaA(paquete);
         mostrarPdf($pdf, '');
         if (!coms.length) {
             $tb.append('<tr><td colspan="4" class="text-center text-muted">No hay COM en este legajo.</td></tr>');
@@ -89,10 +137,12 @@
         coms.forEach(function (c, i) {
             var $tr = $('<tr class="js-bandeja-pdf-row" style="cursor:pointer;"></tr>');
             $tr.attr('data-url-pdf', c.url_pdf || '');
-            $tr.append('<td>' + esc(c.documento || ('#' + c.id)) + '</td>');
-            $tr.append('<td>' + esc(c.fecha || '') + '</td>');
+            $tr.append('<td>' + esc(c.documento || ('#' + c.id))
+                + (c.fecha ? '<br><small class="text-muted">' + esc(c.fecha) + '</small>' : '')
+                + '</td>');
+            $tr.append('<td class="text-right">' + fmtNetoCom(c) + '</td>');
             $tr.append('<td>' + esc(c.estado || '') + '</td>');
-            $tr.append('<td>' + esc(asignadaA[String(c.id)] || '—') + '</td>');
+            $tr.append('<td>' + celdaAsignacionCom(c) + '</td>');
             if (i === 0) {
                 $tr.addClass('table-info');
             }
@@ -142,7 +192,7 @@
         var facs = (paquete && paquete.facturas) || [];
         mostrarPdf($pdf, '');
         if (!facs.length) {
-            $tb.append('<tr><td colspan="5" class="text-center text-muted">No hay facturas ni comprobantes en este legajo.</td></tr>');
+            $tb.append('<tr><td colspan="6" class="text-center text-muted">No hay facturas ni comprobantes en este legajo.</td></tr>');
             return;
         }
         facs.forEach(function (f, i) {
@@ -150,6 +200,10 @@
             var estadoHtml = f.cargado_cxp
                 ? '<span class="badge badge-info">cargada</span>'
                 : '<span class="badge badge-warning">pendiente</span>';
+            if (f.cargado_cxp_fuera_legajo) {
+                estadoHtml = '<span class="badge badge-danger" title="' + esc(f.cargado_cxp_detalle || '')
+                    + '">cargada fuera de este legajo</span>';
+            }
             if (f.url_comprobante) {
                 estadoHtml += ' <a href="' + esc(f.url_comprobante) + '" target="_blank" rel="noopener" class="js-bandeja-abrir-cxp" title="Abrir en CxP">CxP</a>';
             }
@@ -165,9 +219,10 @@
             $tr.attr('data-url-pdf', f.url_pdf || '');
             $tr.attr('data-url-cxp', f.url_comprobante || '');
             $tr.attr('data-fac-key', String(f.id));
-            $tr.append('<td>' + etiquetaHtml + '</td>');
+            $tr.append('<td>' + etiquetaHtml + escaneosDeFactura(f) + '</td>');
             $tr.append('<td>' + esc(f.fecha || '') + '</td>');
             $tr.append('<td>' + esc(origen) + '</td>');
+            $tr.append('<td>' + chipComFactura(f) + '</td>');
             $tr.append('<td>' + estadoHtml + '</td>');
             $tr.append('<td>' + pagoHtml + '</td>');
             if (i === 0) {
@@ -406,19 +461,23 @@
         }
         var ids = asignarEstado.mapa[String(fac.id)] || [];
         if (ids.length) {
-            return '<span class="badge badge-primary">COM ×' + ids.length + '</span>';
+            return '<span class="badge bandeja-asig-badge-ok">COM ×' + ids.length + '</span>';
         }
-        return '<span class="badge badge-warning">sin COM</span>';
+        if (fac.com_sugerida && fac.com_sugerida.id) {
+            return '<span class="badge bandeja-asig-badge-sug">sugerida</span>';
+        }
+        return '<span class="badge bandeja-asig-badge-sin">sin COM</span>';
     }
 
     function renderAsignarComsActivo() {
         var $coms = $('#bandejaAsignarComs').empty();
         var activo = asignarEstado.activo;
         if (!activo) {
-            $coms.append('<p class="text-muted mb-0 small">Seleccioná un comprobante a la izquierda.</p>');
+            $coms.append('<p class="text-muted mb-0 p-3 small">Seleccioná un comprobante a la izquierda.</p>');
             return;
         }
         var fac = asignarEstado.facs.find(function (f) { return String(f.id) === String(activo); });
+        var $head = $('<div class="bandeja-asig-panel-head"></div>');
         var tipoActual = String((fac && (fac.tipo_abrev || fac.tipo_label || fac.tipo)) || 'FC').toUpperCase();
         if (fac && (fac.origen || 'precarga') === 'precarga' && /^\d+$/.test(String(fac.id))) {
             var opciones = (asignarEstado.tiposOpciones && asignarEstado.tiposOpciones.length)
@@ -439,55 +498,148 @@
                 var lab = opt.label || val;
                 return '<option value="' + esc(val) + '"' + (val === tipoActual ? ' selected' : '') + '>' + esc(lab) + '</option>';
             }).join('');
-            $coms.append(
-                '<div class="form-group mb-2">' +
-                '<label class="small mb-1" for="bandejaAsigTipoDoc">Tipo del comprobante</label>' +
+            $head.append(
+                '<div class="form-group">' +
+                '<label class="small mb-1" for="bandejaAsigTipoDoc">Tipo</label>' +
                 '<select id="bandejaAsigTipoDoc" class="form-control form-control-sm js-bandeja-asig-tipo" data-precarga-id="' + esc(String(fac.id)) + '">' +
                 optsHtml +
-                '</select>' +
-                '<small class="form-text text-muted">Podés corregir el tipo fino (p. ej. FIB ↔ FIS en servicios/prepagas, o FGA gastronomía).</small>' +
-                '</div>'
+                '</select></div>'
             );
         }
         if (fac && fac.cargado_cxp) {
-            $coms.prepend('<p class="text-success small mb-2">Ya está cargado en CxP. En una OC anual no forma parte de este envío.</p>');
+            $head.append('<p class="text-success small mb-2 mb-md-1">Ya está cargado en CxP.</p>');
         }
         var tipoFac = String((fac && fac.tipo) || 'FC').toUpperCase();
         var exige = !fac || (fac.exige_com !== false && tipoFac !== 'NC' && tipoFac !== 'ND');
         if (!exige) {
             var textoTipo = tipoFac === 'ND' ? 'nota de débito' : (tipoFac === 'NC' ? 'nota de crédito' : 'este tipo');
-            $coms.append('<p class="text-muted mb-2 small">Este comprobante es ' + textoTipo + ': no exige recepción COM.</p>');
+            $head.append('<p class="text-muted mb-1 small">Es ' + textoTipo + ': no exige COM.</p>');
         }
+        if (fac && (fac.subtotal != null || fac.total != null)) {
+            var imp = '<div class="bandeja-asig-importes">';
+            if (fac.subtotal != null) {
+                imp += '<span>Neto <strong>' + esc(fmtMonto(fac.subtotal)) + '</strong></span>';
+            }
+            if (fac.total != null && (fac.subtotal == null || Math.abs(Number(fac.subtotal) - Number(fac.total)) > 0.01)) {
+                imp += '<span>Total <strong>' + esc(fmtMonto(fac.total)) + '</strong></span>';
+            }
+            imp += '</div>';
+            $head.append(imp);
+        }
+        $coms.append($head);
+
         if (!asignarEstado.coms.length) {
-            $coms.append('<p class="text-muted mb-0">No hay COM confirmada para asignar.</p>');
+            $coms.append('<p class="text-muted mb-0 p-3 small">No hay COM confirmada para asignar.</p>');
             return;
         }
+
         var idsAsig = asignarEstado.mapa[String(activo)] || [];
         var ocupadasPorOtra = comIdsOcupadasPorOtraFactura(activo);
-        var libres = 0;
-        asignarEstado.coms.forEach(function (c) {
-            var checked = idsAsig.indexOf(c.id) !== -1 || idsAsig.indexOf(String(c.id)) !== -1;
+        var sugeridaId = fac && fac.com_sugerida && fac.com_sugerida.id ? Number(fac.com_sugerida.id) : 0;
+        var sugeridaMotivo = (fac && fac.com_sugerida && fac.com_sugerida.motivo_label)
+            || (fac && fac.com_sugerida && fac.com_sugerida.motivo)
+            || '';
+
+        var filas = asignarEstado.coms.map(function (c) {
+            var checked = idsAsig.indexOf(c.id) !== -1 || idsAsig.indexOf(String(c.id)) !== -1
+                || idsAsig.indexOf(Number(c.id)) !== -1;
             var ocupada = ocupadasPorOtra[String(c.id)];
-            var motivo = ocupada
-                ? ('asignada a ' + ocupada)
-                : (c.facturada_en_cxp ? 'ya facturada en CxP' : '');
-            var bloqueada = !!(!checked && motivo);
-            if (!bloqueada) {
-                libres += 1;
-            }
-            $coms.append(
-                '<div class="form-check' + (bloqueada ? ' text-muted' : '') + '">' +
-                '<input class="form-check-input js-bandeja-asig-com" type="checkbox" data-com-id="' + c.id + '" id="ban_com_' + c.id + '"' +
-                (checked ? ' checked' : '') + (bloqueada ? ' disabled' : '') + '>' +
-                '<label class="form-check-label" for="ban_com_' + c.id + '">' + esc(c.documento) +
-                (c.fecha ? ' <small class="text-muted">' + esc(c.fecha) + '</small>' : '') +
-                (bloqueada ? ' <small class="text-muted">— ' + esc(motivo) + '</small>' : '') +
-                '</label></div>'
-            );
+            var esSugerida = sugeridaId > 0 && Number(c.id) === sugeridaId;
+            var sugeridaOtra = !checked && !ocupada && c.sugerida_para
+                && String(c.sugerida_para.id) !== String(activo)
+                ? c.sugerida_para.etiqueta
+                : '';
+            var bloqueada = !!(!checked && (ocupada || c.facturada_en_cxp));
+            var orden = checked ? 0 : (esSugerida ? 1 : (bloqueada ? 3 : 2));
+            return { c: c, checked: checked, ocupada: ocupada, esSugerida: esSugerida, sugeridaOtra: sugeridaOtra, bloqueada: bloqueada, orden: orden };
         });
-        if (!libres) {
-            $coms.append('<p class="text-muted mb-0 small">Las COM del legajo ya están asignadas a otras facturas.</p>');
+        filas.sort(function (a, b) { return a.orden - b.orden; });
+
+        var disponibles = filas.filter(function (r) { return !r.bloqueada; });
+        var bloqueadas = filas.filter(function (r) { return r.bloqueada; });
+        var sugeridaRow = disponibles.find(function (r) { return r.esSugerida; });
+
+        var $list = $('<div class="bandeja-asig-com-list"></div>');
+
+        if (sugeridaRow) {
+            var matchTxt = 'Coincide con esta factura';
+            if (sugeridaRow.c.numerofactura) {
+                matchTxt = 'Coincide por nº de factura <strong>' + esc(sugeridaRow.c.numerofactura) + '</strong>';
+            } else if (sugeridaMotivo) {
+                matchTxt = esc(sugeridaMotivo);
+            }
+            $list.append('<div class="bandeja-asig-match">' + matchTxt + '</div>');
         }
+
+        if (disponibles.length) {
+            $list.append('<div class="bandeja-asig-grupo">Para esta factura</div>');
+            disponibles.forEach(function (row) {
+                $list.append(htmlFilaComAsignacion(row));
+            });
+        }
+
+        if (bloqueadas.length) {
+            $list.append('<div class="bandeja-asig-grupo" style="margin-top:0.85rem">Ya tomadas por otra factura</div>');
+            bloqueadas.forEach(function (row) {
+                $list.append(htmlFilaComAsignacion(row));
+            });
+        }
+
+        $coms.append($list);
+        if (!disponibles.length) {
+            $coms.append('<p class="text-muted mb-0 px-3 pb-2 small">Las COM del legajo ya están asignadas a otras facturas.</p>');
+        }
+    }
+
+    function htmlFilaComAsignacion(row) {
+        var c = row.c;
+        var badge = '';
+        if (row.esSugerida) {
+            badge = '<span class="badge bandeja-asig-badge-sug">sugerida</span>';
+        } else if (row.checked) {
+            badge = '<span class="badge bandeja-asig-badge-ok">asignada</span>';
+        }
+
+        var meta = [];
+        if (!row.bloqueada) {
+            if (c.fecha) {
+                meta.push('<span><b>Fecha</b>' + esc(c.fecha) + '</span>');
+            }
+            if (c.neto != null) {
+                meta.push('<span><b>Neto</b>' + esc(fmtMonto(c.neto)) + '</span>');
+            }
+            if (c.numerofactura) {
+                meta.push('<span><b>Factura</b>' + esc(c.numerofactura) + '</span>');
+            }
+        }
+
+        var tomada = '';
+        if (row.ocupada) {
+            tomada = '<span class="bandeja-asig-tomada">· ' + esc(row.ocupada) + '</span>';
+        } else if (row.sugeridaOtra) {
+            tomada = '<span class="bandeja-asig-tomada">· sugerida p/ ' + esc(row.sugeridaOtra) + '</span>';
+        } else if (c.facturada_en_cxp) {
+            tomada = '<span class="bandeja-asig-tomada">· en CxP</span>';
+        }
+
+        var clases = 'bandeja-asig-com-row';
+        if (row.bloqueada) {
+            clases += ' is-bloqueada';
+        }
+        if (row.checked) {
+            clases += ' is-checked';
+        }
+        if (row.esSugerida) {
+            clases += ' is-sugerida';
+        }
+
+        return '<div class="' + clases + '">' +
+            '<input class="form-check-input js-bandeja-asig-com" type="checkbox" data-com-id="' + c.id + '" id="ban_com_' + c.id + '"' +
+            (row.checked ? ' checked' : '') + (row.bloqueada ? ' disabled' : '') + '>' +
+            '<label class="bandeja-asig-com-body mb-0" for="ban_com_' + c.id + '">' +
+            '<span class="bandeja-asig-com-title">' + esc(c.documento) + badge + tomada + '</span>' +
+            (meta.length ? '<span class="bandeja-asig-com-meta">' + meta.join('') + '</span>' : '') +
+            '</label></div>';
     }
 
     function etiquetaFacturaAsignacion(facId) {
@@ -513,14 +665,106 @@
 
     function itemAsignarDoc(f) {
         var activo = String(asignarEstado.activo) === String(f.id);
-        var tipo = esc(f.tipo_label || f.tipo || 'FC');
+        var tipoRaw = String(f.tipo_label || f.tipo_abrev || f.tipo || '').trim();
+        var etiqueta = String(f.etiqueta || ('#' + f.id));
+        // Evitar "FGA" + "FGA A 0004-…" cuando la etiqueta ya arranca con el tipo.
+        var tipoYaEnEtiqueta = tipoRaw && etiqueta.toUpperCase().indexOf(tipoRaw.toUpperCase()) === 0;
+        var tipoBadge = (!tipoYaEnEtiqueta && tipoRaw)
+            ? '<span class="badge badge-light border text-dark mr-1">' + esc(tipoRaw) + '</span>'
+            : '';
         var extra = f.cargado_cxp ? ' text-muted' : '';
-        return '<a href="#" class="list-group-item list-group-item-action js-bandeja-asig-doc py-2' + (activo ? ' active' : '') + extra + '" data-doc-id="' + esc(String(f.id)) + '">' +
+        var meta = [];
+        if (f.fecha) {
+            meta.push(esc(f.fecha));
+        }
+        if (f.origen_label) {
+            meta.push(esc(f.origen_label));
+        }
+        return '<a href="#" class="list-group-item list-group-item-action js-bandeja-asig-doc' + (activo ? ' active' : '') + extra + '" data-doc-id="' + esc(String(f.id)) + '">' +
             '<div class="d-flex justify-content-between align-items-start">' +
-            '<div><span class="badge badge-dark mr-1">' + tipo + '</span>' + esc(f.etiqueta || ('#' + f.id)) +
-            (f.fecha ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.fecha) + '</small>' : '') +
-            (f.origen_label ? '<br><small class="' + (activo ? 'text-white-50' : 'text-muted') + '">' + esc(f.origen_label) + '</small>' : '') +
-            '</div><div class="ml-2 text-right">' + badgeComDoc(f) + '</div></div></a>';
+            '<div class="pr-2 min-w-0">' +
+            '<div class="bandeja-asig-doc-main">' + tipoBadge + esc(etiqueta) + '</div>' +
+            (meta.length ? '<div class="bandeja-asig-doc-meta">' + meta.join(' · ') + '</div>' : '') +
+            '</div><div class="ml-1 text-right flex-shrink-0">' + badgeComDoc(f) + botonDescartarScan(f) + '</div></div></a>';
+    }
+
+    // Solo los scans de Anita se pueden descartar del legajo: una precarga cargada a mano o un
+    // comprobante ya en CxP se corrigen por su propio camino.
+    function documentoAnitaDeFactura(f) {
+        if (!f || f.cargado_cxp) {
+            return 0;
+        }
+        var m = /^anita-(\d+)$/i.exec(String(f.id));
+        return m ? parseInt(m[1], 10) : 0;
+    }
+
+    function botonDescartarScan(f) {
+        var docId = documentoAnitaDeFactura(f);
+        if (!docId) {
+            return '';
+        }
+        return '<button type="button" class="btn btn-link btn-sm p-0 ml-2 text-danger js-bandeja-descartar-scan"'
+            + ' data-documento-id="' + docId + '" data-etiqueta="' + esc(f.etiqueta || ('#' + f.id)) + '"'
+            + ' title="Descartar este escaneo del legajo"><i class="fa fa-times-circle"></i></button>';
+    }
+
+    // Los escaneos de Anita de esta factura. Si hay más de uno hay que verlo: uno de los dos suele
+    // ser un escaneo repetido o de otra factura, y hasta ahora quedaba tapado por el primero.
+    function escaneosDeFactura(f) {
+        var scans = (f && f.scans_anita) || [];
+        if (!scans.length) {
+            return '';
+        }
+        var varios = scans.length > 1;
+        var html = '<div class="bandeja-fac-scans small mt-1">';
+        html += varios
+            ? '<span class="badge badge-warning mr-1" title="Esta factura tiene más de un escaneo en Anita. Revise cuál corresponde y descarte el que no.">'
+                + '<i class="fa fa-clone"></i> ' + scans.length + ' escaneos</span>'
+            : '<span class="text-muted mr-1">escaneo:</span>';
+        scans.forEach(function (s, idx) {
+            var titulo = 'Ver el escaneo Anita #' + s.documento_id + (s.fecha ? ' del ' + s.fecha : '');
+            html += '<span class="mr-2 text-nowrap">';
+            html += '<a href="#" class="js-bandeja-ver-scan" data-url-pdf="' + esc(s.url_pdf || '') + '"'
+                + ' title="' + esc(titulo) + '">' + (varios ? ('#' + (idx + 1)) : 'ver') + '</a>';
+            if (!f.cargado_cxp) {
+                html += '<button type="button" class="btn btn-link btn-sm p-0 ml-1 text-danger js-bandeja-descartar-scan"'
+                    + ' data-documento-id="' + esc(String(s.documento_id)) + '"'
+                    + ' data-etiqueta="' + esc((f.etiqueta || '') + ' (escaneo #' + s.documento_id + ')') + '"'
+                    + ' title="Descartar este escaneo del legajo"><i class="fa fa-times-circle"></i></button>';
+            }
+            html += '</span>';
+        });
+
+        return html + '</div>';
+    }
+
+    function renderScansDescartados(paquete) {
+        var $wrap = $('#bandejaScansDescartados');
+        if (!$wrap.length) {
+            return;
+        }
+        var lista = (paquete && paquete.scans_descartados) || [];
+        if (!lista.length) {
+            $wrap.empty().hide();
+            return;
+        }
+        var html = '<div class="alert alert-warning py-2 mb-2">'
+            + '<div class="font-weight-bold small mb-1">'
+            + '<i class="fa fa-eye-slash"></i> Escaneos descartados de este legajo (' + lista.length + ')</div>';
+        lista.forEach(function (d) {
+            html += '<div class="d-flex justify-content-between align-items-center border-top pt-1 mt-1">'
+                + '<div class="small"><strong>' + esc(d.etiqueta) + '</strong>'
+                + (d.motivo ? '<br><span class="text-muted">' + esc(d.motivo) + '</span>' : '')
+                + '<br><span class="text-muted">'
+                + esc([d.usuario, d.fecha].filter(function (v) { return !!v; }).join(' · '))
+                + '</span></div>'
+                + '<button type="button" class="btn btn-sm btn-outline-secondary js-bandeja-revertir-descarte"'
+                + ' data-documento-id="' + parseInt(d.documento_id, 10) + '"'
+                + ' data-etiqueta="' + esc(d.etiqueta) + '">'
+                + '<i class="fa fa-undo"></i> Deshacer</button></div>';
+        });
+        html += '</div>';
+        $wrap.html(html).show();
     }
 
     function renderAsignarListaDocs() {
@@ -539,15 +783,15 @@
             }
         });
         if (pendientes.length) {
-            $fac.append('<div class="list-group-item bg-light py-1 small font-weight-bold">Este envío (' + pendientes.length + ')</div>');
+            $fac.append('<div class="bandeja-asig-sec">Este envío · ' + pendientes.length + '</div>');
             pendientes.forEach(function (f) { $fac.append(itemAsignarDoc(f)); });
         } else {
-            $fac.append('<div class="p-2 text-muted small">No hay comprobantes pendientes: todos ya están en CxP.</div>');
+            $fac.append('<div class="p-3 text-muted small">No hay comprobantes pendientes: todos ya están en CxP.</div>');
         }
         if (cargados.length) {
             $fac.append(
-                '<a href="#" class="list-group-item bg-light py-1 small text-muted js-bandeja-toggle-cargados">' +
-                '▸ Ya en CxP — no se vuelven a mandar (' + cargados.length + ')</a>'
+                '<a href="#" class="bandeja-asig-sec d-block text-decoration-none js-bandeja-toggle-cargados" style="cursor:pointer;">'
+                + '▸ Ya en CxP · ' + cargados.length + '</a>'
             );
             var $wrap = $('<div class="js-bandeja-cargados-wrap" style="display:none"></div>');
             cargados.forEach(function (f) { $wrap.append(itemAsignarDoc(f)); });
@@ -588,15 +832,42 @@
             if (!Object.prototype.hasOwnProperty.call(asignarEstado.mapa, key)) {
                 asignarEstado.mapa[key] = idsRecepcionAsignadas(asignadas[key] || asignadas[f.id]);
             }
+            // Si todavía no hay asignación guardada, pre-tildar la sugerencia (número/neto).
+            // El operador puede destildar antes de guardar.
+            if ((!asignarEstado.mapa[key] || !asignarEstado.mapa[key].length)
+                && f.com_sugerida && f.com_sugerida.id) {
+                var sid = parseInt(f.com_sugerida.id, 10);
+                if (sid > 0) {
+                    var yaTomada = false;
+                    Object.keys(asignarEstado.mapa).forEach(function (otra) {
+                        if (otra === key) {
+                            return;
+                        }
+                        (asignarEstado.mapa[otra] || []).forEach(function (id) {
+                            if (Number(id) === sid) {
+                                yaTomada = true;
+                            }
+                        });
+                    });
+                    if (!yaTomada) {
+                        asignarEstado.mapa[key] = [sid];
+                    }
+                }
+            }
         });
         var pendientes = facs.filter(function (f) { return !f.cargado_cxp; });
         var prefer = pendientes.find(function (f) {
+            var tipo = String(f.tipo || 'FC').toUpperCase();
+            var exige = f.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
+            return exige && !(f.coms_asignadas && f.coms_asignadas.length) && f.com_sugerida;
+        }) || pendientes.find(function (f) {
             var tipo = String(f.tipo || 'FC').toUpperCase();
             return f.exige_com !== false && tipo !== 'NC' && tipo !== 'ND';
         }) || pendientes[0] || facs[0] || null;
         asignarEstado.activo = prefer ? String(prefer.id) : null;
         renderAsignarListaDocs();
         renderAsignarComsActivo();
+        renderScansDescartados(paquete);
 
         var $atajos = $('#bandejaAsignarAtajos').empty();
         var pendientesFac = facs.filter(function (f) { return !f.cargado_cxp; });
@@ -625,6 +896,42 @@
                 $atajos.append('<a href="' + esc(op.url) + '" class="btn btn-sm btn-outline-success mr-1">OP ' + esc(op.etiqueta) + '</a>');
             });
         }
+    }
+
+    function enviarAccionScan(url, documentoId, motivo, $btn) {
+        if (!url) {
+            alert('No se pudo resolver la acción sobre el escaneo.');
+            return;
+        }
+        var textoOriginal = $btn.html();
+        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: { _token: csrf(), documento_id: parseInt(documentoId, 10), motivo: motivo },
+            headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' }
+        }).done(function (resp) {
+            if (resp && resp.mensaje) {
+                alert(resp.mensaje);
+            }
+            if (resp && resp.paquete) {
+                renderAsignar(resp.paquete);
+            } else if (asignarEstado.urlPaquete) {
+                cargarPaquete(asignarEstado.urlPaquete, renderAsignar);
+            }
+        }).fail(function (xhr) {
+            var msg = 'No se pudo completar la acción sobre el escaneo.';
+            if (xhr.responseJSON && xhr.responseJSON.message) {
+                msg = xhr.responseJSON.message;
+            } else if (xhr.responseJSON && xhr.responseJSON.errors) {
+                msg = Object.keys(xhr.responseJSON.errors).map(function (k) {
+                    return xhr.responseJSON.errors[k].join(' ');
+                }).join(' ');
+            }
+            alert(msg);
+        }).always(function () {
+            $btn.prop('disabled', false).html(textoOriginal);
+        });
     }
 
     function cargarPaquete(url, done) {
@@ -796,7 +1103,8 @@
         });
 
         $(document).on('click', '.js-bandeja-pdf-row', function (e) {
-            if ($(e.target).closest('a').length) {
+            // Los links y botones de la fila (ver escaneo, descartar) manejan su propio click.
+            if ($(e.target).closest('a, button').length) {
                 return;
             }
             var url = $(this).data('url-pdf');
@@ -854,8 +1162,71 @@
             $('#bandejaAsignarPrecarga, #bandejaAsignarComs').html('<p class="text-muted p-2 mb-0">Cargando…</p>');
             $('#bandejaAsignarAtajos').empty();
             asignarEstado.urlCorregirTipo = String(urlPaquete).replace(/\/paquete\/?(\?.*)?$/, '/corregir-tipo-documento');
+            asignarEstado.urlPaquete = urlPaquete;
+            asignarEstado.urlDescartarScan = String(urlPaquete).replace(/\/paquete\/?(\?.*)?$/, '/descartar-scan-anita');
+            asignarEstado.urlRevertirDescarte = String(urlPaquete).replace(/\/paquete\/?(\?.*)?$/, '/revertir-descarte-scan-anita');
             $('#modalBandejaAsignarCom').modal('show');
             cargarPaquete(urlPaquete, renderAsignar);
+        });
+
+        // Ver un escaneo puntual de la factura en el visor del modal (sin abrir otra pestaña).
+        $(document).on('click', '.js-bandeja-ver-scan', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var url = String($(this).data('url-pdf') || '');
+            var $fila = $(this).closest('tr');
+            $fila.addClass('table-info').siblings().removeClass('table-info');
+            var $modal = $(this).closest('.modal');
+            var $iframe = $modal.find('.tab-pane.active iframe');
+            if (!$iframe.length) {
+                $iframe = $modal.find('iframe').first();
+            }
+            if (url) {
+                mostrarPdf($iframe, url);
+            } else {
+                mostrarSinPdf($iframe, '');
+            }
+        });
+
+        // Descarte de un escaneo mal vinculado: motivo obligatorio y reversible desde el mismo panel.
+        $(document).on('click', '.js-bandeja-descartar-scan', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var $btn = $(this);
+            var etiqueta = String($btn.data('etiqueta') || '');
+            var motivo = window.prompt(
+                'Descartar el escaneo ' + etiqueta + ' de este legajo.\n\n'
+                + 'Indique el motivo (queda registrado y se puede deshacer):'
+            );
+            if (motivo === null) {
+                return;
+            }
+            motivo = String(motivo).trim();
+            if (motivo.length < 5) {
+                alert('El motivo es obligatorio (mínimo 5 caracteres).');
+                return;
+            }
+            enviarAccionScan(asignarEstado.urlDescartarScan, $btn.data('documento-id'), motivo, $btn);
+        });
+
+        $(document).on('click', '.js-bandeja-revertir-descarte', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var $btn = $(this);
+            var etiqueta = String($btn.data('etiqueta') || '');
+            var motivo = window.prompt(
+                'Deshacer el descarte de ' + etiqueta + ': la factura vuelve al legajo.\n\n'
+                + 'Indique el motivo:'
+            );
+            if (motivo === null) {
+                return;
+            }
+            motivo = String(motivo).trim();
+            if (motivo.length < 5) {
+                alert('El motivo es obligatorio (mínimo 5 caracteres).');
+                return;
+            }
+            enviarAccionScan(asignarEstado.urlRevertirDescarte, $btn.data('documento-id'), motivo, $btn);
         });
 
         $(document).on('click', '.js-bandeja-asig-doc', function (e) {

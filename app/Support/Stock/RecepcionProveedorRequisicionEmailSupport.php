@@ -8,9 +8,13 @@ final class RecepcionProveedorRequisicionEmailSupport
 {
     public static function emailSolicitanteOc(Recepcion_Proveedor $recepcion): ?string
     {
+        // En Ordencompra la relación de creousuario_id se llama «usuarios»: pedir «creousuarios»
+        // hacía que este método lanzara RelationNotFoundException siempre, y como los handlers de
+        // aviso lo llaman dentro de un try que loguea y sigue, el aviso de recepción ingresada y la
+        // encuesta al proveedor nunca se enviaban.
         $recepcion->loadMissing([
             'ordencompras.requisiciones.usuarios',
-            'ordencompras.creousuarios',
+            'ordencompras.usuarios',
         ]);
 
         $oc = $recepcion->ordencompras;
@@ -23,6 +27,6 @@ final class RecepcionProveedorRequisicionEmailSupport
             return $emailReq;
         }
 
-        return trim((string) (optional($oc->creousuarios)->email ?? '')) ?: null;
+        return trim((string) (optional($oc->usuarios)->email ?? '')) ?: null;
     }
 }

@@ -98,6 +98,12 @@ class ConfiguracionComprobanteProveedorController extends Controller
             'tolerancias.*.centrocosto_id' => 'nullable|integer|exists:centrocosto,id',
             'tolerancias.*.es_default' => 'nullable|boolean',
             'tolerancias.*.tolerancia_importe_pct' => 'nullable|numeric|min:0|max:100',
+            // Vacío = no verificar ese sentido. Por eso son nullable y no se completan con 0.
+            'tolerancias.*.tolerancia_exceso_pct' => 'nullable|numeric|min:0|max:100',
+            'tolerancias.*.tolerancia_defecto_pct' => 'nullable|numeric|min:0|max:100',
+            'tolerancias.*.tolerancia_exceso_abs' => 'nullable|numeric|min:0',
+            'tolerancias.*.tolerancia_defecto_abs' => 'nullable|numeric|min:0',
+            'tolerancias.*.accion_fuera_tolerancia' => 'nullable|string|in:DEVOLVER_COMPRAS,BLOQUEAR_PAGO',
         ]);
 
         $empresaId = (int) $data['empresa_id'];
@@ -126,6 +132,11 @@ class ConfiguracionComprobanteProveedorController extends Controller
                 $empresaId,
                 $centrocostoId,
                 (float) ($fila['tolerancia_importe_pct'] ?? 0),
+                self::limiteOpcional($fila, 'tolerancia_exceso_pct'),
+                self::limiteOpcional($fila, 'tolerancia_defecto_pct'),
+                self::limiteOpcional($fila, 'tolerancia_exceso_abs'),
+                self::limiteOpcional($fila, 'tolerancia_defecto_abs'),
+                (string) ($fila['accion_fuera_tolerancia'] ?? ComprobanteProveedorToleranciaImporteSupport::ACCION_DEVOLVER_COMPRAS),
             );
             $keptIds[] = $registro->id;
         }
@@ -159,8 +170,31 @@ class ConfiguracionComprobanteProveedorController extends Controller
             ->with('mensaje', 'Tolerancias guardadas.');
     }
 
-    private function upsertTolerancia(int $empresaId, ?int $centrocostoId, float $pct): Configuracion_ComprobanteProveedorTolerancia
+    /**
+     * Campo vacío significa «no verificar ese sentido», así que no se convierte a 0.
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    private static function limiteOpcional(array $fila, string $campo): ?float
     {
+        $valor = $fila[$campo] ?? null;
+        if ($valor === null || $valor === '' || ! is_numeric($valor)) {
+            return null;
+        }
+
+        return (float) $valor;
+    }
+
+    private function upsertTolerancia(
+        int $empresaId,
+        ?int $centrocostoId,
+        float $pct,
+        ?float $excesoPct = null,
+        ?float $defectoPct = null,
+        ?float $excesoAbs = null,
+        ?float $defectoAbs = null,
+        string $accion = ComprobanteProveedorToleranciaImporteSupport::ACCION_DEVOLVER_COMPRAS,
+    ): Configuracion_ComprobanteProveedorTolerancia {
         $query = Configuracion_ComprobanteProveedorTolerancia::query()
             ->where('empresa_id', $empresaId);
         if ($centrocostoId === null) {
@@ -169,21 +203,28 @@ class ConfiguracionComprobanteProveedorController extends Controller
             $query->where('centrocosto_id', $centrocostoId);
         }
 
+        $payload = [
+            'tolerancia_importe_pct' => $pct,
+            'tolerancia_exceso_pct' => $excesoPct,
+            'tolerancia_defecto_pct' => $defectoPct,
+            'tolerancia_exceso_abs' => $excesoAbs,
+            'tolerancia_defecto_abs' => $defectoAbs,
+            'accion_fuera_tolerancia' => strtoupper($accion) === ComprobanteProveedorToleranciaImporteSupport::ACCION_BLOQUEAR_PAGO
+                ? ComprobanteProveedorToleranciaImporteSupport::ACCION_BLOQUEAR_PAGO
+                : ComprobanteProveedorToleranciaImporteSupport::ACCION_DEVOLVER_COMPRAS,
+            'activo' => true,
+        ];
+
         $registro = $query->first();
         if ($registro) {
-            $registro->update([
-                'tolerancia_importe_pct' => $pct,
-                'activo' => true,
-            ]);
+            $registro->update($payload);
 
             return $registro->fresh();
         }
 
-        return Configuracion_ComprobanteProveedorTolerancia::query()->create([
+        return Configuracion_ComprobanteProveedorTolerancia::query()->create($payload + [
             'empresa_id' => $empresaId,
             'centrocosto_id' => $centrocostoId,
-            'tolerancia_importe_pct' => $pct,
-            'activo' => true,
         ]);
     }
 }

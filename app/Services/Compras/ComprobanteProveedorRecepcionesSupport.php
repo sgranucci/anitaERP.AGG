@@ -3,10 +3,12 @@
 namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
+use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\RecepcionProveedorAsientoService;
 use App\Services\Stock\RecepcionProveedorImportarDesdeAnitaService;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
 use Illuminate\Database\Eloquent\Builder;
@@ -37,7 +39,7 @@ class ComprobanteProveedorRecepcionesSupport
             $this->asegurarRecepcionesDesdeAnita($ordencompraId);
         }
 
-        $yaFacturadas = $this->recepcionIdsFacturadas($comprobanteId);
+        $yaFacturadas = $this->recepcionIdsNoDisponibles($ordencompraId, $comprobanteId);
 
         return Recepcion_Proveedor::query()
             ->with([
@@ -66,6 +68,8 @@ class ComprobanteProveedorRecepcionesSupport
         ?int $sectorLegajocompraId,
         ?int $excluirComprobanteId = null,
     ): Collection {
+        // En legajo mixto (varias OC) no sabemos a priori si cada OC permite compartir:
+        // se excluyen solo las CONTABILIZADAS; el candado fino vive en sincronizar().
         $yaFacturadas = $this->recepcionIdsFacturadas($excluirComprobanteId);
 
         return Recepcion_Proveedor::query()
@@ -276,31 +280,46 @@ class ComprobanteProveedorRecepcionesSupport
             ->values()
             ->all();
 
-        Comprobante_Proveedor_Recepcion::query()
-            ->where('comprobante_proveedor_id', $comprobanteId)
-            ->delete();
+        // Todo en una transacción: antes el borrado ocurría fuera y una COM no permitida dejaba al
+        // comprobante sin ningún vínculo, porque la excepción saltaba después de haber borrado.
+        DB::transaction(function () use ($comprobanteId, $ordencompraId, $ids, $contextoLegajo) {
+            if ($ids !== []) {
+                // Lock sobre las COM reclamadas: dos comprobantes guardados a la vez calculaban
+                // «disponibles» en paralelo y los dos se quedaban con la misma recepción.
+                Recepcion_Proveedor::query()
+                    ->whereIn('id', $ids)
+                    ->lockForUpdate()
+                    ->pluck('id');
 
-        if ($ids === []) {
-            return;
-        }
+                // Validar con el lock tomado y antes de borrar nada.
+                $permitidos = $this->idsRecepcionesPermitidas($comprobanteId, $ordencompraId, $contextoLegajo);
+                foreach ($ids as $recepcionId) {
+                    if (! in_array($recepcionId, $permitidos, true)) {
+                        throw new RuntimeException(
+                            'La recepción #'.$recepcionId.' no está disponible (no confirmada, sin provisión o ya facturada).'
+                        );
+                    }
+                }
 
-        $permitidos = $this->idsRecepcionesPermitidas($comprobanteId, $ordencompraId, $contextoLegajo);
-
-        $orden = 0;
-        foreach ($ids as $recepcionId) {
-            if (! in_array($recepcionId, $permitidos, true)) {
-                throw new RuntimeException(
-                    'La recepción #'.$recepcionId.' no está disponible (no confirmada, sin provisión o ya facturada).'
-                );
+                // En OC normales una COM no puede estar en dos facturas (ni en borrador). En
+                // anticipada/contrato sí, y el freno es el importe al contabilizar.
+                $this->assertComNoTomadaPorOtroComprobante($comprobanteId, $ordencompraId, $ids);
             }
 
-            $orden++;
-            Comprobante_Proveedor_Recepcion::query()->create([
-                'comprobante_proveedor_id' => $comprobanteId,
-                'recepcion_proveedor_id' => $recepcionId,
-                'orden' => $orden,
-            ]);
-        }
+            Comprobante_Proveedor_Recepcion::query()
+                ->where('comprobante_proveedor_id', $comprobanteId)
+                ->delete();
+
+            $orden = 0;
+            foreach ($ids as $recepcionId) {
+                $orden++;
+                Comprobante_Proveedor_Recepcion::query()->create([
+                    'comprobante_proveedor_id' => $comprobanteId,
+                    'recepcion_proveedor_id' => $recepcionId,
+                    'orden' => $orden,
+                ]);
+            }
+        });
     }
 
     /** @return list<int> */
@@ -345,6 +364,84 @@ class ComprobanteProveedorRecepcionesSupport
         }
 
         return $query->pluck('cpr.recepcion_proveedor_id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * COM ya tomadas por otro comprobante (cualquier estado). Para OC normales eso las saca
+     * del listado; para anticipada/contrato solo se excluyen las CONTABILIZADAS (el reparto
+     * de provisión se controla por importe).
+     *
+     * @return list<int>
+     */
+    public function recepcionIdsNoDisponibles(int $ordencompraId, ?int $excluirComprobanteId = null): array
+    {
+        if ($this->permiteCompartirCom($ordencompraId)) {
+            return $this->recepcionIdsFacturadas($excluirComprobanteId);
+        }
+
+        $query = DB::table('comprobante_proveedor_recepcion as cpr')
+            ->whereExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('comprobante_proveedor as cp')
+                    ->whereColumn('cp.id', 'cpr.comprobante_proveedor_id');
+            });
+
+        if ($excluirComprobanteId) {
+            $query->where('cpr.comprobante_proveedor_id', '!=', $excluirComprobanteId);
+        }
+
+        return $query->pluck('cpr.recepcion_proveedor_id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * @param  list<int>  $recepcionIds
+     */
+    private function assertComNoTomadaPorOtroComprobante(
+        int $comprobanteId,
+        int $ordencompraId,
+        array $recepcionIds,
+    ): void {
+        if ($recepcionIds === [] || $this->permiteCompartirCom($ordencompraId)) {
+            return;
+        }
+
+        $tomada = DB::table('comprobante_proveedor_recepcion as cpr')
+            ->join('recepcion_proveedor as r', 'r.id', '=', 'cpr.recepcion_proveedor_id')
+            ->whereIn('cpr.recepcion_proveedor_id', $recepcionIds)
+            ->where('cpr.comprobante_proveedor_id', '!=', $comprobanteId)
+            ->orderBy('cpr.id')
+            ->first(['cpr.recepcion_proveedor_id', 'cpr.comprobante_proveedor_id', 'r.numerorecepcion']);
+
+        if ($tomada === null) {
+            return;
+        }
+
+        $nro = (int) ($tomada->numerorecepcion ?? 0);
+        $etiqueta = $nro > 0 ? (string) $nro : '#'.(int) $tomada->recepcion_proveedor_id;
+
+        throw new RuntimeException(
+            'La COM '.$etiqueta.' ya está asignada al comprobante #'
+            .(int) $tomada->comprobante_proveedor_id
+            .'. En este legajo cada recepción solo puede vincularse a una factura.'
+        );
+    }
+
+    private function permiteCompartirCom(int $ordencompraId): bool
+    {
+        if ($ordencompraId <= 0) {
+            return false;
+        }
+
+        $oc = Ordencompra::query()->find($ordencompraId);
+        if (! $oc) {
+            return false;
+        }
+
+        if (ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc)) {
+            return true;
+        }
+
+        return (bool) ($oc->es_contrato ?? false);
     }
 
     /**

@@ -106,7 +106,8 @@
             Destildar limpia el aplicado. <strong>Aplicar por monto</strong> reparte secuencialmente sobre las deudas (no sobre NC/OPA).
             @if (\App\Support\Configuracion\EntornoEmpresaSupport::esAgg())
                 <span class="d-block mt-1">
-                    <strong>Completar desde Anita</strong> importa al ERP la deuda impaga del proveedor (con <code>prov_empresa</code>) y refresca la grilla.
+                    <strong>Completar desde Anita</strong> trae deuda Anita del proveedor (empresas 1–3): altas nuevas con aplicaciones;
+                    facturas ya nativas del ERP no se pisan, solo se suman pagos/aplicaciones faltantes.
                 </span>
             @endif
         </p>

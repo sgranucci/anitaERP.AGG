@@ -544,6 +544,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
             $datosCp['provincia_destino_id'] = ComprobanteProveedorProvinciaDestinoSupport::DEFAULT_PROVINCIA_ID;
         }
         $comprobante = Comprobante_Proveedor::query()->create($datosCp);
+        app(ComprobanteProveedorCierrePrecargaLegajoService::class)->cerrarSinFallar($comprobante, $usuarioId);
 
         foreach ($item['conceptos'] as $concepto) {
             Comprobante_Proveedor_Concepto::query()->create([

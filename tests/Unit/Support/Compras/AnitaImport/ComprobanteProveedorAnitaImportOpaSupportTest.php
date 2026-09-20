@@ -7,10 +7,12 @@ use PHPUnit\Framework\TestCase;
 
 class ComprobanteProveedorAnitaImportOpaSupportTest extends TestCase
 {
-    public function test_solo_opa_es_adelanto(): void
+    public function test_solo_credito_sin_compra_es_adelanto(): void
     {
         $this->assertTrue(ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto('OPA'));
         $this->assertTrue(ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto('opa'));
+        $this->assertTrue(ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto('EGR'));
+        $this->assertTrue(ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto('IEV'));
         $this->assertFalse(ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto('OPP'));
         $this->assertFalse(ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto('APA'));
         $this->assertFalse(ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto('FNS'));
@@ -32,22 +34,25 @@ class ComprobanteProveedorAnitaImportOpaSupportTest extends TestCase
         ]));
     }
 
-    public function test_adelantos_pendientes_omite_aplicados_y_no_opa(): void
+    public function test_adelantos_pendientes_incluye_egr_y_omite_aplicados(): void
     {
         $adelantos = ComprobanteProveedorAnitaImportOpaSupport::adelantosPendientes([
             $this->promov('OPA', 124102, 1, 9055.89, 0, 20260730),
             $this->promov('OPA', 91156, 1, 1231146.26, 1231146.26, 20210923),
             $this->promov('OPP', 120184, 1, 16125309.20, 0, 20260106),
             $this->promov('OPA', 57372, 2, 8139.51, 0, 20260730, 2),
+            $this->promov('EGR', 2973, 1, 307064.55, 0, 20250115, 1, ' '),
         ]);
 
-        $this->assertCount(2, $adelantos);
-        $this->assertSame('OPA A 1-124102', $adelantos[0]['etiqueta']);
-        $this->assertSame(9055.89, $adelantos[0]['pendiente']);
-        $this->assertSame('2026-07-30', $adelantos[0]['fecha']);
-        $this->assertSame('003593|OPA|A|1|124102', $adelantos[0]['clave']);
-        $this->assertSame('OPA A 2-57372', $adelantos[1]['etiqueta']);
-        $this->assertSame(2, $adelantos[1]['empresa_codigo']);
+        $this->assertCount(3, $adelantos);
+        $this->assertSame('EGR   1-2973', $adelantos[0]['etiqueta']);
+        $this->assertSame(307064.55, $adelantos[0]['pendiente']);
+        $this->assertSame('OPA A 1-124102', $adelantos[1]['etiqueta']);
+        $this->assertSame(9055.89, $adelantos[1]['pendiente']);
+        $this->assertSame('2026-07-30', $adelantos[1]['fecha']);
+        $this->assertSame('003593|OPA|A|1|124102', $adelantos[1]['clave']);
+        $this->assertSame('OPA A 2-57372', $adelantos[2]['etiqueta']);
+        $this->assertSame(2, $adelantos[2]['empresa_codigo']);
     }
 
     public function test_agrupa_cuotas_de_la_misma_opa(): void
@@ -75,11 +80,12 @@ class ComprobanteProveedorAnitaImportOpaSupportTest extends TestCase
         float $pagado,
         int $fecha,
         int $empresa = 1,
+        string $letra = 'A',
     ): array {
         return [
             'prov_proveedor' => '3593',
             'prov_tipo' => $tipo,
-            'prov_letra' => 'A',
+            'prov_letra' => $letra,
             'prov_sucursal' => $sucursal,
             'prov_nro' => $nro,
             'prov_fecha' => $fecha,

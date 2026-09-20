@@ -50,6 +50,278 @@ Bandeja de legajos
         vertical-align: middle;
     }
 
+    /* ——— Modal Asignar COM ——— */
+    #modalBandejaAsignarCom .modal-body {
+        padding-top: 0.85rem;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-hint {
+        margin: 0 0 0.85rem;
+        padding: 0.55rem 0.75rem;
+        background: #f7f9fb;
+        border: 1px solid #e8eef3;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        color: #5a6a7a;
+        line-height: 1.4;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-col-label {
+        display: block;
+        margin-bottom: 0.4rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #6c7a89;
+    }
+    #modalBandejaAsignarCom #bandejaAsignarPrecarga {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        max-height: 52vh;
+        background: #fff;
+    }
+    #modalBandejaAsignarCom #bandejaAsignarPrecarga .list-group-item {
+        border: 0;
+        border-bottom: 1px solid #eef2f6;
+        padding: 0.65rem 0.75rem;
+        color: inherit;
+    }
+    #modalBandejaAsignarCom #bandejaAsignarPrecarga .list-group-item:last-child {
+        border-bottom: 0;
+    }
+    #modalBandejaAsignarCom #bandejaAsignarPrecarga .list-group-item.active,
+    #modalBandejaAsignarCom #bandejaAsignarPrecarga .js-bandeja-asig-doc.active {
+        background: #eef6ff;
+        color: #1a2332;
+        box-shadow: inset 3px 0 0 #2f80ed;
+    }
+    #modalBandejaAsignarCom #bandejaAsignarPrecarga .js-bandeja-asig-doc.active small {
+        color: #6c7a89 !important;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-sec {
+        padding: 0.4rem 0.75rem;
+        background: #f4f7fa;
+        border-bottom: 1px solid #e8eef3;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        color: #6c7a89;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-doc-main {
+        font-size: 0.88rem;
+        font-weight: 600;
+        line-height: 1.3;
+        color: #1a2332;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-doc-meta {
+        margin-top: 0.15rem;
+        font-size: 0.75rem;
+        color: #6c7a89;
+        line-height: 1.3;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-badge-sin {
+        background: #fff4e5;
+        color: #9a5b00;
+        border: 1px solid #f0d4a8;
+        font-weight: 600;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-badge-ok {
+        background: #e8f1ff;
+        color: #1d5bbf;
+        border: 1px solid #c5d8f8;
+        font-weight: 600;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-badge-sug {
+        background: #e8f7f5;
+        color: #0d6e63;
+        border: 1px solid #bfe6e0;
+        font-weight: 600;
+    }
+    #modalBandejaAsignarCom #bandejaAsignarComs {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0;
+        min-height: 8rem;
+        max-height: 52vh;
+        overflow: auto;
+        background: #fff;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-panel-head {
+        padding: 0.65rem 0.75rem;
+        border-bottom: 1px solid #eef2f6;
+        background: #fafbfc;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-panel-head .form-group {
+        margin-bottom: 0.45rem;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-panel-head .form-text {
+        margin-top: 0.2rem;
+        font-size: 0.72rem;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-importes {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem 1rem;
+        margin: 0;
+        font-size: 0.8rem;
+        color: #5a6a7a;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-importes strong {
+        color: #1a2332;
+        font-weight: 600;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-list {
+        padding: 0.55rem 0.65rem 0.75rem;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-grupo {
+        margin: 0 0 0.65rem;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #6c7a89;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-match {
+        margin: 0 0 0.55rem;
+        padding: 0.45rem 0.6rem;
+        border-radius: 6px;
+        background: #e7f6f3;
+        border: 1px solid #b6e0d8;
+        color: #0d5c54;
+        font-size: 0.82rem;
+        line-height: 1.35;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-match strong {
+        font-weight: 700;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.7rem;
+        padding: 0.75rem 0.85rem 0.75rem 0.85rem;
+        margin: 0 0 0.5rem;
+        border: 1px solid #d9e2ec;
+        border-radius: 8px;
+        background: #fff;
+        box-sizing: border-box;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-checked {
+        border-color: #2f80ed;
+        background: #eef5ff;
+        box-shadow: 0 0 0 1px rgba(47, 128, 237, 0.15);
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-sugerida {
+        border-color: #1a9b8a;
+        border-width: 2px;
+        background: #e8faf6;
+        box-shadow: 0 2px 8px rgba(26, 155, 138, 0.12);
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-sugerida.is-checked {
+        border-color: #1a9b8a;
+        background: #dff7f1;
+        box-shadow: 0 2px 10px rgba(26, 155, 138, 0.18);
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-bloqueada {
+        display: flex;
+        align-items: center;
+        min-height: 0;
+        padding: 0.4rem 0.65rem;
+        margin: 0 0 0.25rem;
+        border-style: solid;
+        border-width: 1px;
+        border-color: #e5e9ef;
+        background: #f5f7f9;
+        box-shadow: none;
+        opacity: 1;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-bloqueada .bandeja-asig-com-title {
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: #5a6a7a;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-bloqueada .bandeja-asig-com-meta,
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-bloqueada .bandeja-asig-com-nota {
+        display: none;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-bloqueada .bandeja-asig-com-title .badge {
+        display: none;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row.is-bloqueada .bandeja-asig-tomada {
+        display: inline;
+        margin-left: 0.35rem;
+        font-size: 0.72rem;
+        color: #7a8794;
+        font-weight: 400;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-row .form-check-input {
+        position: static;
+        float: none;
+        margin: 0.2rem 0 0;
+        flex: 0 0 1.15rem;
+        width: 1.15rem;
+        height: 1.15rem;
+        transform: none;
+        align-self: flex-start;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-body {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding-left: 0;
+        margin: 0;
+        cursor: pointer;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem 0.5rem;
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.35;
+        color: #122033;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-title .badge {
+        font-weight: 700;
+        font-size: 0.7rem;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        padding: 0.28em 0.55em;
+        white-space: nowrap;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-meta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.35rem 0.5rem;
+        margin-top: 0.45rem;
+        padding-top: 0.45rem;
+        border-top: 1px solid rgba(0,0,0,0.06);
+        font-size: 0.78rem;
+        color: #4a5b6c;
+        line-height: 1.25;
+    }
+    @media (max-width: 767px) {
+        #modalBandejaAsignarCom .bandeja-asig-com-meta {
+            grid-template-columns: 1fr;
+        }
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-meta span {
+        display: block;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-meta b {
+        display: block;
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #8a97a5;
+        margin-bottom: 0.1rem;
+    }
+    #modalBandejaAsignarCom .bandeja-asig-com-nota {
+        display: none;
+    }
+
     /* Herramienta de pagos del legajo */
     .bandeja-pagos-tool {
         --bp-ink: #1a2332;
@@ -573,7 +845,7 @@ Bandeja de legajos
                             <div class="col-lg-4 mb-2">
                                 <div class="table-responsive" style="max-height: 70vh; overflow:auto;">
                                     <table class="table table-sm table-striped table-hover mb-0" id="tablaBandejaFacturas">
-                                        <thead><tr><th>Comprobante</th><th>Fecha</th><th>Origen</th><th>Estado</th><th>Pago</th></tr></thead>
+                                        <thead><tr><th>Comprobante</th><th>Fecha</th><th>Origen</th><th>COM</th><th>Estado</th><th>Pago</th></tr></thead>
                                         <tbody></tbody>
                                     </table>
                                 </div>
@@ -588,7 +860,7 @@ Bandeja de legajos
                             <div class="col-lg-4 mb-2">
                                 <div class="table-responsive" style="max-height: 70vh; overflow:auto;">
                                     <table class="table table-sm table-striped table-hover mb-0" id="tablaBandejaComs">
-                                        <thead><tr><th>Documento</th><th>Fecha</th><th>Estado</th><th>Asignada a</th></tr></thead>
+                                        <thead><tr><th>Documento</th><th>Neto</th><th>Estado</th><th>Asignada / sugerida</th></tr></thead>
                                         <tbody></tbody>
                                     </table>
                                 </div>
@@ -617,21 +889,19 @@ Bandeja de legajos
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small mb-3">
-                        Este envío incluye solo los comprobantes pendientes (aún no cargados en CxP).
-                        En una OC anual las FC/NC ya contabilizadas quedan aparte y no se vuelven a mandar.
-                        Seleccioná cada pendiente y asignale COM si corresponde.
-                        Si el tipo está mal (p.ej. ND marcada como FIS), corregilo con el selector a la derecha.
-                        Las notas de crédito y de débito no exigen recepción.
+                    <p class="bandeja-asig-hint">
+                        Solo pendientes (aún no cargados en CxP). Corregí el tipo a la derecha si hace falta.
+                        NC/ND no exigen COM. Un escaneo de Anita que no corresponda se descarta con la cruz (queda registrado y se puede deshacer).
                     </p>
                     <div class="row">
                         <div class="col-md-5 mb-3">
-                            <label class="small font-weight-bold">Comprobantes del legajo</label>
-                            <div id="bandejaAsignarPrecarga" class="list-group list-group-flush border rounded" style="max-height: 50vh; overflow:auto;"></div>
+                            <span class="bandeja-asig-col-label">Comprobantes del legajo</span>
+                            <div id="bandejaAsignarPrecarga" class="list-group list-group-flush"></div>
+                            <div id="bandejaScansDescartados" class="mt-2" style="display:none;"></div>
                         </div>
                         <div class="col-md-7 mb-3">
-                            <label class="small font-weight-bold">COM para el comprobante seleccionado</label>
-                            <div id="bandejaAsignarComs" class="border rounded p-2" style="min-height: 8rem; max-height: 50vh; overflow:auto;"></div>
+                            <span class="bandeja-asig-col-label">COM del comprobante seleccionado</span>
+                            <div id="bandejaAsignarComs"></div>
                         </div>
                     </div>
                     <div id="bandejaAsignarAtajos" class="mt-2"></div>

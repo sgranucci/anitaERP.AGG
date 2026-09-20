@@ -8,6 +8,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\OrdencompraGestionService;
 use App\Services\Compras\OrdencompraLegajoBandejaPaqueteService;
 use App\Services\Compras\OrdencompraLegajoBandejaService;
+use App\Services\Compras\OrdencompraLegajoScanAnitaDescartarService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
@@ -25,6 +26,7 @@ class OrdencompraLegajoBandejaController extends Controller
         private OrdencompraGestionService $gestionService,
         private RecepcionProveedorPdfService $comPdfService,
         private EmpresaRepositoryInterface $empresaRepository,
+        private OrdencompraLegajoScanAnitaDescartarService $scanDescartarService,
     ) {
         $this->middleware('auth');
     }
@@ -215,6 +217,58 @@ class OrdencompraLegajoBandejaController extends Controller
         return response()->json([
             'ok' => true,
             'mensaje' => 'Tipo de comprobante actualizado.',
+            'paquete' => $this->paqueteService->paquete($oc),
+        ]);
+    }
+
+    public function descartarScanAnita(Request $request, int $id)
+    {
+        $this->autorizar();
+        if (! $this->puedeAsignarCom()) {
+            can('actualizar-ordencompra');
+        }
+
+        $validated = $request->validate([
+            'documento_id' => 'required|integer|min:1',
+            'motivo' => 'required|string|min:5|max:255',
+        ]);
+
+        $oc = $this->paqueteService->encontrarOcVisible($id);
+        $this->scanDescartarService->descartarManual(
+            $oc,
+            (int) $validated['documento_id'],
+            (string) $validated['motivo']
+        );
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => 'Factura escaneada descartada del legajo. Se puede deshacer desde el mismo panel.',
+            'paquete' => $this->paqueteService->paquete($oc),
+        ]);
+    }
+
+    public function revertirDescarteScanAnita(Request $request, int $id)
+    {
+        $this->autorizar();
+        if (! $this->puedeAsignarCom()) {
+            can('actualizar-ordencompra');
+        }
+
+        $validated = $request->validate([
+            'documento_id' => 'required|integer|min:1',
+            'motivo' => 'required|string|min:5|max:255',
+        ]);
+
+        $oc = $this->paqueteService->encontrarOcVisible($id);
+        $this->scanDescartarService->revertir(
+            $oc,
+            (int) $validated['documento_id'],
+            (string) $validated['motivo']
+        );
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => 'Se deshizo el descarte: la factura escaneada vuelve al legajo.',
             'paquete' => $this->paqueteService->paquete($oc),
         ]);
     }

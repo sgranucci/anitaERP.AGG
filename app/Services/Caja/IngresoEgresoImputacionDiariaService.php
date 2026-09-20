@@ -6,6 +6,7 @@ use App\Mail\Caja\IngresoEgresoImputacionDiaria;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
+use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoImputacionDiariaAnitaReader;
 use App\Support\Caja\IngresoEgresoImputacionDiariaSupport as Ie;
 use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport;
@@ -56,6 +57,7 @@ final class IngresoEgresoImputacionDiariaService
                 'cheques.cuentacajas:id,codigo,nombre',
                 'asientos.asiento_movimientos',
                 'pagoproveedores.asientos.asiento_movimientos',
+                'movimientoOrigen.tipotransaccioncajas:id,abreviatura',
             ])
             ->whereIn('empresa_id', $empresaIds)
             ->whereDate('fecha', '>=', $desde)
@@ -142,6 +144,7 @@ final class IngresoEgresoImputacionDiariaService
                 'Caja + cheques ERP se cruza con tesmov Anita. El asiento ERP se cruza con ctamov.',
                 'En ING/EGR/TRA además se exige que caja+cheques cuadre con el total del asiento.',
                 'OPP/OPA de I/E no exigen caja = asiento (el asiento incluye AP/retenciones).',
+                'Compensatorios OPP/OPA se cruzan en Anita como AOP del nro original (no del nro ERP del reverso).',
             ],
         ];
 
@@ -168,12 +171,13 @@ final class IngresoEgresoImputacionDiariaService
         foreach ($movimientos as $mov) {
             $tipo = Ie::tipoDesdeAbreviatura((string) ($mov->tipotransaccioncajas?->abreviatura ?? ''));
             $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) $mov->empresa_id);
-            $nro = (int) $mov->numerotransaccion;
-            if ($empresaAnita > 0 && $nro > 0) {
+            $refAnita = IngresoEgresoAnitaTesmovSupport::referenciaAnitaParaControl($mov);
+            $nroAnita = (int) ($refAnita['numero'] ?? 0);
+            if ($empresaAnita > 0 && $nroAnita > 0) {
                 $clavesComp[] = [
                     'empresa_anita' => $empresaAnita,
-                    'tipo' => $tipo,
-                    'numero' => $nro,
+                    'tipo' => (string) ($refAnita['tipo'] ?? $tipo),
+                    'numero' => $nroAnita,
                 ];
             }
             $nroAsiento = (int) ($this->asientoDeMovimiento($mov)?->numeroasiento ?? 0);
@@ -266,7 +270,14 @@ final class IngresoEgresoImputacionDiariaService
                 : ['total_debe' => 0.0, 'total_haber' => 0.0, 'lineas_con_importe' => 0, 'balanceado' => true];
             $asientoArs = round(max((float) $balance['total_debe'], (float) $balance['total_haber']), 2);
 
-            $keyComp = IngresoEgresoImputacionDiariaAnitaReader::claveComprobante($empresaAnita, $tipo, $nro);
+            $refAnita = IngresoEgresoAnitaTesmovSupport::referenciaAnitaParaControl($mov);
+            $tipoAnita = (string) ($refAnita['tipo'] ?? $tipo);
+            $nroAnita = (int) ($refAnita['numero'] ?? $nro);
+            $keyComp = IngresoEgresoImputacionDiariaAnitaReader::claveComprobante(
+                $empresaAnita,
+                $tipoAnita,
+                $nroAnita
+            );
             $tes = $tesmov[$keyComp] ?? ['ars' => 0.0, 'lineas' => 0, 'encontrado' => false];
             $tesmovArs = round((float) ($tes['ars'] ?? 0), 2);
             $tieneTesmov = ! empty($tes['encontrado']);
@@ -303,6 +314,11 @@ final class IngresoEgresoImputacionDiariaService
                 $tolerancia
             );
 
+            $etiqueta = trim($tipo.' '.$nro);
+            if ($tipoAnita !== $tipo || $nroAnita !== $nro) {
+                $etiqueta .= ' → Anita '.$tipoAnita.' '.$nroAnita;
+            }
+
             $out[] = [
                 'id' => (int) $mov->id,
                 'tipo' => $tipo,
@@ -312,7 +328,9 @@ final class IngresoEgresoImputacionDiariaService
                 'proveedor_id' => (int) ($mov->proveedor_id ?? 0),
                 'nombre_proveedor' => (string) ($mov->proveedores?->nombre ?? ''),
                 'numerotransaccion' => $nro,
-                'etiqueta' => trim($tipo.' '.$nro),
+                'etiqueta' => $etiqueta,
+                'anita_tipo' => $tipoAnita,
+                'anita_numero' => $nroAnita,
                 'detalle' => (string) ($mov->detalle ?? ''),
                 'solicitudpago_id' => (int) ($mov->solicitudpago_id ?? 0),
                 'asiento_id' => (int) ($asiento?->id ?? 0),

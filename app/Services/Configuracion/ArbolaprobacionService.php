@@ -34,6 +34,7 @@ use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
+use App\Support\Configuracion\ArbolAprobacionCanalSupport;
 use App\Support\Configuracion\ArbolAprobacionContextoSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Configuracion\OcArbolTriggerCatalog;
@@ -971,6 +972,28 @@ class ArbolaprobacionService
         return $proximoNivel;
     }
 
+    /**
+     * En modo «solo bandeja» el aviso in-app sigue saliendo: es el único canal inmediato que queda,
+     * así que si falla se registra en lugar de tragarse el error en silencio.
+     *
+     * @param  array<string, mixed>  $extras
+     */
+    private function avisarEnBandejaSinCorreo(int $usuarioId, string $tipoarbol, $ptrcomprobante, array $extras): void
+    {
+        try {
+            app(\App\Services\Configuracion\AnitaNotificacionService::class)
+                ->avisarAprobacionPendiente($usuarioId, $tipoarbol, $ptrcomprobante, $extras);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        $this->logArbolAprobacion('solo_bandeja', [
+            'tipo_arbol' => $tipoarbol,
+            'comprobante' => $this->contextoComprobanteArbol($ptrcomprobante),
+            'destinatario_usuario_id' => $usuarioId,
+        ]);
+    }
+
     public function enviaCorreo($usuario_id, $tipoarbol, $ptrcomprobante, $linkaprobacion, $linkrechazo, $linkvisualizar, $mailExtras = null)
     {
         $usuario = $this->usuarioRepository->findOperativo((int) $usuario_id);
@@ -980,6 +1003,15 @@ class ArbolaprobacionService
             $extras = is_array($mailExtras) ? $mailExtras : [];
             if (empty($extras['link_bandeja'])) {
                 $extras['link_bandeja'] = urlAppAbsoluta('mis-aprobaciones');
+            }
+
+            // Modo «solo bandeja»: no se manda un correo por cada paso de cada nivel. El firmante se
+            // entera por la notificación in-app, el contador de Mis aprobaciones y el digest diario.
+            // Apagado por default: AGG sigue recibiendo el correo inmediato como hasta ahora.
+            if (ArbolAprobacionCanalSupport::soloBandeja((string) $tipoarbol)) {
+                $this->avisarEnBandejaSinCorreo((int) $usuario_id, (string) $tipoarbol, $ptrcomprobante, $extras);
+
+                return;
             }
 
             $mailOk = false;

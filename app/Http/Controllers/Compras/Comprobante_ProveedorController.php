@@ -14,6 +14,7 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
+use App\Services\Compras\ComprobanteProveedorBloqueoPagoService;
 use App\Services\Compras\ComprobanteProveedorPersistenciaService;
 use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPrefillService;
@@ -604,6 +605,34 @@ class Comprobante_ProveedorController extends Controller
             'precarga_id' => $precargaId,
             'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA,
         ]);
+    }
+
+    /**
+     * Liberación explícita de una factura retenida para pago (criterio SAP MRBR). El motivo es
+     * obligatorio: es la contrapartida de haber dejado pasar una diferencia contra la COM.
+     */
+    public function liberarBloqueoPago(Request $request, int $id)
+    {
+        can('liberar-bloqueo-pago-comprobante-proveedor');
+
+        $validated = $request->validate([
+            'motivo' => 'required|string|min:5|max:500',
+        ]);
+
+        $comprobante = Comprobante_Proveedor::query()->findOrFail($id);
+
+        try {
+            app(ComprobanteProveedorBloqueoPagoService::class)
+                ->liberar($comprobante, (string) $validated['motivo']);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('editar_comprobante_proveedor', ['id' => $id] + $this->queryRetornoListado($request))
+                ->with('errores', ['No se pudo liberar el bloqueo para pago. Motivo: '.$e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('editar_comprobante_proveedor', ['id' => $id] + $this->queryRetornoListado($request))
+            ->with('mensaje', 'Bloqueo para pago liberado. La factura ya puede incluirse en una orden de pago.');
     }
 
     public function contabilizar(Request $request, int $id)

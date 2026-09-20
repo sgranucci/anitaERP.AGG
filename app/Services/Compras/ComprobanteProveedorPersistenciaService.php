@@ -22,6 +22,7 @@ use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
@@ -42,6 +43,7 @@ use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Stock\ArticuloSkuMatchSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Throwable;
 
@@ -190,6 +192,15 @@ class ComprobanteProveedorPersistenciaService
 
     public function actualizarDesdeRequest(Request $request, int $id): Comprobante_Proveedor
     {
+        // Mismo candado que contabilizar/descontabilizar: editar un contabilizado los
+        // encadena y sin exclusión mutua dos «Guardar» en paralelo descontabilizan dos veces.
+        return ComprobanteProveedorEscrituraLock::ejecutar($id, function () use ($request, $id) {
+            return $this->actualizarDesdeRequestConCandado($request, $id);
+        });
+    }
+
+    private function actualizarDesdeRequestConCandado(Request $request, int $id): Comprobante_Proveedor
+    {
         $this->ultimosAvisosControles = [];
 
         $comprobante = $this->comprobanteRepository->find($id);
@@ -320,9 +331,23 @@ class ComprobanteProveedorPersistenciaService
 
     public function generarBorradorDesdePrecarga(int $precargaId): Comprobante_Proveedor
     {
-        $existente = Comprobante_Proveedor::query()
-            ->where('precarga_comprobante_proveedor_id', $precargaId)
-            ->first();
+        return ComprobanteProveedorEscrituraLock::ejecutarSobrePrecarga($precargaId, function () use ($precargaId) {
+            return $this->generarBorradorDesdePrecargaConCandado($precargaId);
+        });
+    }
+
+    private function generarBorradorDesdePrecargaConCandado(int $precargaId): Comprobante_Proveedor
+    {
+        // Lock de fila sobre la precarga + rechequeo: el unique de precarga_id es la red de
+        // seguridad; esto evita el error confuso al operador cuando el segundo clic llega tarde.
+        $existente = DB::transaction(function () use ($precargaId) {
+            Precarga_Comprobante_Proveedor::query()->whereKey($precargaId)->lockForUpdate()->first();
+
+            return Comprobante_Proveedor::query()
+                ->where('precarga_comprobante_proveedor_id', $precargaId)
+                ->lockForUpdate()
+                ->first();
+        });
 
         if ($existente) {
             throw new RuntimeException(
@@ -1008,10 +1033,17 @@ class ComprobanteProveedorPersistenciaService
             return;
         }
 
-        Precarga_Comprobante_Proveedor::query()
-            ->whereKey($precargaId)
-            ->where('estado', PrecargaComprobanteEstados::PENDIENTE)
-            ->update(['estado' => PrecargaComprobanteEstados::GENERADA]);
+        DB::transaction(function () use ($precargaId) {
+            Precarga_Comprobante_Proveedor::query()
+                ->whereKey($precargaId)
+                ->lockForUpdate()
+                ->first();
+
+            Precarga_Comprobante_Proveedor::query()
+                ->whereKey($precargaId)
+                ->where('estado', PrecargaComprobanteEstados::PENDIENTE)
+                ->update(['estado' => PrecargaComprobanteEstados::GENERADA]);
+        });
     }
 
     private function origenComprobanteDesdePrecarga(int $precargaId): string

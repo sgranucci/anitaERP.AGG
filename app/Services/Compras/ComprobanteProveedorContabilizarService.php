@@ -10,10 +10,12 @@ use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
+use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorPrecargaTotalSupport;
+use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
@@ -38,15 +40,11 @@ class ComprobanteProveedorContabilizarService
         private ComprobanteProveedorAsientoService $asientoService,
         private ComprobanteProveedorCuentacorrienteService $cuentacorrienteService,
         private ComprobanteProveedorAnitaSyncService $anitaSyncService,
+        private ComprobanteProveedorBloqueoPagoService $bloqueoPago,
     ) {}
 
-    public function contabilizar(int $comprobanteId): Comprobante_Proveedor
+    private function assertEstadoPermiteContabilizar(Comprobante_Proveedor $comprobante): void
     {
-        $comprobante = Comprobante_Proveedor::query()->find($comprobanteId);
-        if (! $comprobante) {
-            throw new RuntimeException('Comprobante de proveedor inexistente.');
-        }
-
         if ($comprobante->estado === ComprobanteProveedorEstados::CONTABILIZADO) {
             throw new RuntimeException('El comprobante ya está contabilizado.');
         }
@@ -54,6 +52,63 @@ class ComprobanteProveedorContabilizarService
         if (! in_array($comprobante->estado, self::ESTADOS_PERMITIDOS, true)) {
             throw new RuntimeException('No se puede contabilizar en estado «'.$comprobante->estado.'».');
         }
+    }
+
+    /**
+     * Último control antes de asentar: la COM asignada puede haber cambiado, haberla consumido otra
+     * factura, o venir de un borrador donde la diferencia de importe solo dejó un aviso
+     * ("Revise la COM asignada antes de contabilizar") que nadie hacía cumplir.
+     *
+     * Usa el verdicto sin efectos a propósito: validarYAplicar reescribe cotizaciones de la recepción
+     * y puede devolver el legajo a COMPRAS, efectos que no corresponden a un control de lectura.
+     */
+    private function assertComAsignadaSigueValida(Comprobante_Proveedor $comprobante): void
+    {
+        $recepcionIds = $comprobante->comprobante_proveedor_recepciones()
+            ->pluck('recepcion_proveedor_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+        if ($recepcionIds === []) {
+            return;
+        }
+
+        $detalle = app(ComprobanteProveedorControlesLegajoService::class)
+            ->detalleDiferenciaImporteDeComprobante($comprobante, $recepcionIds);
+        if ($detalle === null) {
+            return;
+        }
+
+        // Con política SAP la diferencia no frena el asiento: se contabiliza y se retiene el pago.
+        $oc = $comprobante->ordencompras ?? null;
+        if ($oc !== null && ComprobanteProveedorToleranciaImporteSupport::bloqueaPagoEnLugarDeDevolver($oc)) {
+            $this->bloqueoPago->bloquearPorControlAutomatico($comprobante, $detalle);
+
+            return;
+        }
+
+        throw new RuntimeException(
+            'No se puede contabilizar: '.$detalle
+            .' Corrija la COM asignada en el legajo y vuelva a intentar.'
+        );
+    }
+
+    public function contabilizar(int $comprobanteId): Comprobante_Proveedor
+    {
+        // Candado Redis: cubre la ventana completa (MySQL + Anita). El lockForUpdate del TX
+        // abajo cubre carreras entre código que no pase por este método.
+        return ComprobanteProveedorEscrituraLock::ejecutar($comprobanteId, function () use ($comprobanteId) {
+            return $this->contabilizarConCandado($comprobanteId);
+        });
+    }
+
+    private function contabilizarConCandado(int $comprobanteId): Comprobante_Proveedor
+    {
+        $comprobante = Comprobante_Proveedor::query()->find($comprobanteId);
+        if (! $comprobante) {
+            throw new RuntimeException('Comprobante de proveedor inexistente.');
+        }
+
+        $this->assertEstadoPermiteContabilizar($comprobante);
 
         app(ContratoValidacionAbonoService::class)->assertComprobanteContabilizable($comprobante);
 
@@ -76,6 +131,8 @@ class ComprobanteProveedorContabilizarService
             ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante)
         );
 
+        $this->assertComAsignadaSigueValida($comprobante);
+
         // Antes de asentar ERP: si Anita ya tiene la misma clave fiscal, no confirmar.
         ComprobanteProveedorAnitaCompraExistenciaSupport::assertDesdeComprobante($comprobante);
 
@@ -87,7 +144,18 @@ class ComprobanteProveedorContabilizarService
         $ctamovEscrito = false;
 
         try {
-            $resultadoErp = DB::transaction(function () use ($comprobante) {
+            $resultadoErp = DB::transaction(function () use ($comprobanteId) {
+                // Releer con candado de fila: el segundo request que llegó acá espera y,
+                // al despertar, ve CONTABILIZADO y aborta antes de generar otro asiento.
+                $comprobante = Comprobante_Proveedor::query()
+                    ->whereKey($comprobanteId)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $comprobante) {
+                    throw new RuntimeException('Comprobante de proveedor inexistente.');
+                }
+                $this->assertEstadoPermiteContabilizar($comprobante);
+
                 $comprobante->load('comprobante_proveedor_recepciones.recepcion_proveedores');
 
                 // 1) Asiento + CC solo en MySQL (sin tocar ctamov).
@@ -115,6 +183,7 @@ class ComprobanteProveedorContabilizarService
                 return $asientoErp;
             });
 
+            $comprobante = Comprobante_Proveedor::query()->findOrFail($comprobanteId);
             $numeroAsientoAnita = $resultadoErp['numeroasiento'];
 
             // 2) Anita compra/concmov/promov (fuera del TX MySQL: si falla, compensamos abajo).
@@ -268,6 +337,13 @@ class ComprobanteProveedorContabilizarService
      */
     public function descontabilizarSinPagos(int $comprobanteId): Comprobante_Proveedor
     {
+        return ComprobanteProveedorEscrituraLock::ejecutar($comprobanteId, function () use ($comprobanteId) {
+            return $this->descontabilizarSinPagosConCandado($comprobanteId);
+        });
+    }
+
+    private function descontabilizarSinPagosConCandado(int $comprobanteId): Comprobante_Proveedor
+    {
         $comprobante = Comprobante_Proveedor::query()
             ->with(['asientos', 'proveedores', 'tipotransaccion_compras'])
             ->find($comprobanteId);
@@ -278,11 +354,24 @@ class ComprobanteProveedorContabilizarService
 
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados($comprobanteId, 'descontabilizar');
 
-        if ($comprobante->estado !== ComprobanteProveedorEstados::CONTABILIZADO
-            && ! $comprobante->asiento_id
-            && ! $comprobante->anita_nro_interno) {
-            return $comprobante;
+        // Releer con candado de fila: si otro request ya descontabilizó, salimos sin tocar Anita.
+        $sigueContabilizado = DB::transaction(function () use ($comprobanteId): bool {
+            $actual = Comprobante_Proveedor::query()->whereKey($comprobanteId)->lockForUpdate()->first();
+            if (! $actual) {
+                throw new RuntimeException('Comprobante de proveedor inexistente.');
+            }
+
+            return $actual->estado === ComprobanteProveedorEstados::CONTABILIZADO
+                || (bool) $actual->asiento_id
+                || (bool) $actual->anita_nro_interno;
+        });
+
+        if (! $sigueContabilizado) {
+            return $comprobante->fresh();
         }
+
+        $comprobante->refresh();
+        $comprobante->loadMissing(['asientos', 'proveedores', 'tipotransaccion_compras']);
 
         $asientoId = (int) ($comprobante->asiento_id ?? 0);
         $numeroAsiento = $comprobante->asientos
@@ -339,19 +428,25 @@ class ComprobanteProveedorContabilizarService
      */
     private function revertirErpTrasFalloAnita(Comprobante_Proveedor $comprobante, bool $lanzarSiFalla = false): void
     {
-        $comprobante->refresh();
-        if ($comprobante->estado !== ComprobanteProveedorEstados::CONTABILIZADO
-            && ! $comprobante->asiento_id) {
-            return;
-        }
-
-        $asientoId = (int) ($comprobante->asiento_id ?? 0);
-
         try {
-            DB::transaction(function () use ($comprobante, $asientoId) {
+            DB::transaction(function () use ($comprobante) {
+                $actual = Comprobante_Proveedor::query()
+                    ->whereKey((int) $comprobante->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $actual) {
+                    return;
+                }
+                if ($actual->estado !== ComprobanteProveedorEstados::CONTABILIZADO
+                    && ! $actual->asiento_id) {
+                    return;
+                }
+
+                $asientoId = (int) ($actual->asiento_id ?? 0);
+
                 // Cuenta corriente generada en el intento.
                 $ccIds = DB::table('comprobante_proveedor_cuota')
-                    ->where('comprobante_proveedor_id', $comprobante->id)
+                    ->where('comprobante_proveedor_id', $actual->id)
                     ->whereNotNull('proveedor_cuentacorriente_id')
                     ->pluck('proveedor_cuentacorriente_id')
                     ->filter()
@@ -359,7 +454,7 @@ class ComprobanteProveedorContabilizarService
                     ->all();
 
                 DB::table('comprobante_proveedor_cuota')
-                    ->where('comprobante_proveedor_id', $comprobante->id)
+                    ->where('comprobante_proveedor_id', $actual->id)
                     ->update(['proveedor_cuentacorriente_id' => null]);
 
                 if ($ccIds !== []) {
@@ -369,7 +464,7 @@ class ComprobanteProveedorContabilizarService
                 }
 
                 // Soltar FK antes de borrar asiento (RESTRICT).
-                $comprobante->forceFill([
+                $actual->forceFill([
                     'asiento_id' => null,
                     'estado' => ComprobanteProveedorEstados::BORRADOR,
                 ])->save();
@@ -377,21 +472,20 @@ class ComprobanteProveedorContabilizarService
                 AsientoEloquentDeleteSupport::eliminarPorId($asientoId);
 
                 Comprobante_Proveedor_Estado::query()
-                    ->where('comprobante_proveedor_id', $comprobante->id)
+                    ->where('comprobante_proveedor_id', $actual->id)
                     ->where('estado', ComprobanteProveedorEstados::CONTABILIZADO)
                     ->orderByDesc('id')
                     ->limit(1)
                     ->delete();
             });
-        } catch (Throwable $revertEx) {
-            Log::error('comprobante_proveedor.revert_erp_tras_fallo_anita', [
-                'comprobante_id' => $comprobante->id,
-                'asiento_id' => $asientoId,
-                'error' => $revertEx->getMessage(),
+        } catch (Throwable $e) {
+            Log::error('comprobante_proveedor.revertir_erp_tras_fallo_anita', [
+                'comprobante_id' => (int) $comprobante->id,
+                'error' => $e->getMessage(),
             ]);
             if ($lanzarSiFalla) {
                 throw new RuntimeException(
-                    'No se pudo revertir el asiento/CC en ERP: '.$revertEx->getMessage()
+                    'No se pudo revertir el asiento/CC en ERP: '.$e->getMessage()
                 );
             }
         }

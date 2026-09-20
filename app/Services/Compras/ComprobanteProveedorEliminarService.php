@@ -12,6 +12,7 @@ use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
@@ -38,6 +39,16 @@ class ComprobanteProveedorEliminarService
      * @return array{mensaje: string, precarga_borrada: bool}
      */
     public function eliminar(int $comprobanteId, bool $tambienPrecarga = false): array
+    {
+        return ComprobanteProveedorEscrituraLock::ejecutar($comprobanteId, function () use ($comprobanteId, $tambienPrecarga) {
+            return $this->eliminarConCandado($comprobanteId, $tambienPrecarga);
+        });
+    }
+
+    /**
+     * @return array{mensaje: string, precarga_borrada: bool}
+     */
+    private function eliminarConCandado(int $comprobanteId, bool $tambienPrecarga = false): array
     {
         $comprobante = Comprobante_Proveedor::query()
             ->with([
@@ -85,8 +96,16 @@ class ComprobanteProveedorEliminarService
 
         // 2) ERP: CC, asiento, hijas y hard-delete cabecera.
         DB::transaction(function () use ($comprobante, $asientoId, $tambienPrecarga) {
+            $actual = Comprobante_Proveedor::query()
+                ->whereKey((int) $comprobante->id)
+                ->lockForUpdate()
+                ->first();
+            if (! $actual) {
+                throw new RuntimeException('Comprobante no encontrado.');
+            }
+
             $ccIds = DB::table('comprobante_proveedor_cuota')
-                ->where('comprobante_proveedor_id', $comprobante->id)
+                ->where('comprobante_proveedor_id', $actual->id)
                 ->whereNotNull('proveedor_cuentacorriente_id')
                 ->pluck('proveedor_cuentacorriente_id')
                 ->filter()
@@ -94,7 +113,7 @@ class ComprobanteProveedorEliminarService
                 ->all();
 
             DB::table('comprobante_proveedor_cuota')
-                ->where('comprobante_proveedor_id', $comprobante->id)
+                ->where('comprobante_proveedor_id', $actual->id)
                 ->update(['proveedor_cuentacorriente_id' => null]);
 
             if ($ccIds !== []) {
@@ -104,11 +123,11 @@ class ComprobanteProveedorEliminarService
             }
 
             // Soltar FKs RESTRICT antes de borrar asiento / precarga.
-            $comprobante->forceFill([
+            $actual->forceFill([
                 'asiento_id' => null,
                 'anita_nro_interno' => null,
                 'precarga_comprobante_proveedor_id' => $tambienPrecarga
-                    ? $comprobante->precarga_comprobante_proveedor_id
+                    ? $actual->precarga_comprobante_proveedor_id
                     : null,
             ])->save();
 
@@ -116,7 +135,7 @@ class ComprobanteProveedorEliminarService
 
             // Hijas (también CASCADE en MySQL; se borran explícitas por claridad).
             EloquentAuditDeleteSupport::each(
-                Comprobante_Proveedor_Recepcion::query()->where('comprobante_proveedor_id', $comprobante->id)
+                Comprobante_Proveedor_Recepcion::query()->where('comprobante_proveedor_id', $actual->id)
             );
             EloquentAuditDeleteSupport::each(
                 Comprobante_Proveedor_Concepto::query()->where('comprobante_proveedor_id', $comprobante->id)

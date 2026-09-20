@@ -29,7 +29,8 @@ final class ComprobanteProveedorAnitaImportAplmovpSupport
             return false;
         }
 
-        if (str_starts_with($tipo, 'OP')) {
+        // OPP/OPA/… y AOP (anulación de OP: mismo circuito, signo inverso).
+        if (str_starts_with($tipo, 'OP') || $tipo === 'AOP') {
             return true;
         }
 

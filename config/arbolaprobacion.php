@@ -37,6 +37,19 @@ return [
         'dominio' => 'sesion+permiso-modulo',
     ],
 
+    /*
+    | Modo «solo bandeja»: apaga el correo inmediato por cada paso del árbol y deja la notificación
+    | in-app, el contador de Mis aprobaciones y el digest diario. Hoy los tres canales salen juntos
+    | para el mismo firmante en cada nivel, más el recordatorio diario por movimiento pendiente.
+    |
+    | AGG: false (sigue todo igual que ahora). Se puede afinar por tipo de árbol, por ejemplo
+    | ARBOLAPROBACION_SOLO_BANDEJA_POR_TIPO no existe como env: para eso se edita este arreglo.
+    */
+    'solo_bandeja' => filter_var(env('ARBOLAPROBACION_SOLO_BANDEJA', false), FILTER_VALIDATE_BOOLEAN),
+
+    // Override por tipo de árbol: ['RE' => true, 'OC' => false, …]. Vacío = usa solo_bandeja.
+    'solo_bandeja_por_tipo' => [],
+
     // Cron: recordatorios individuales (ABM recordatorio=S).
     'recordatorio_hora' => env('ARBOLAPROBACION_RECORDATORIO_HORA', '09:00'),
 

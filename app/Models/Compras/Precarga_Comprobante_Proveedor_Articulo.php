@@ -4,9 +4,12 @@ namespace App\Models\Compras;
 
 use App\Models\Stock\Articulo;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Precarga_Comprobante_Proveedor_Articulo extends Model
+class Precarga_Comprobante_Proveedor_Articulo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $table = 'precarga_comprobante_proveedor_articulo';
 
     protected $fillable = [

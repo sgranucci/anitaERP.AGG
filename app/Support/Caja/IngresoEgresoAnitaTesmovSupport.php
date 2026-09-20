@@ -69,6 +69,40 @@ final class IngresoEgresoAnitaTesmovSupport
         'OPA' => 'AOP',
     ];
 
+    /**
+     * Clave Anita (tipo+nro) para cruzar tesmov/pago con un IE ERP.
+     * Compensatorios OPP/OPA → AOP con el nro del movimiento original (no el nro ERP del reverso).
+     *
+     * @return array{tipo: string, numero: int}
+     */
+    public static function referenciaAnitaParaControl(Caja_Movimiento $movimiento): array
+    {
+        $movimiento->loadMissing([
+            'tipotransaccioncajas:id,abreviatura',
+            'movimientoOrigen.tipotransaccioncajas:id,abreviatura',
+        ]);
+
+        $tipoErp = strtoupper(substr(trim((string) ($movimiento->tipotransaccioncajas->abreviatura ?? '')), 0, 3));
+        $nroErp = (int) $movimiento->numerotransaccion;
+        $origenId = (int) ($movimiento->caja_movimiento_origen_id ?? 0);
+
+        if ($origenId > 0 && isset(self::TIPOS_ANULACION[$tipoErp])) {
+            $orig = $movimiento->movimientoOrigen;
+            $nroOrig = (int) ($orig?->numerotransaccion ?? 0);
+            if ($nroOrig > 0) {
+                return [
+                    'tipo' => self::TIPOS_ANULACION[$tipoErp],
+                    'numero' => $nroOrig,
+                ];
+            }
+        }
+
+        return [
+            'tipo' => $tipoErp !== '' ? $tipoErp : 'OPP',
+            'numero' => $nroErp,
+        ];
+    }
+
     public static function grabarDesdeMovimiento(Caja_Movimiento $movimiento): void
     {
         self::grabarInterno($movimiento, 1.0, null, null, null);

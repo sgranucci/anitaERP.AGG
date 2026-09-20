@@ -19,7 +19,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
-    protected $description = 'Alinea deuda proveedores Anita (compra+promov+aplmovp) → ERP CP/CC; OPA pendientes → pagoproveedor+CC';
+    protected $description = 'Alinea deuda proveedores Anita→ERP (monto+aplmovp; nativas solo apps; OPA pendientes)';
 
     public function handle(ProveedorCuentacorrienteImportarDesdeAnitaService $service): int
     {
@@ -51,7 +51,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             $proveedor !== '' ? $proveedor : 'todos',
             $dryRun ? 'DRY-RUN' : 'EJECUTAR',
         ));
-        $this->line('Filtro: promov con saldo + Anita compra; OPA pendientes sin compra (excluye OPP/APA/…).');
+        $this->line('Filtro: promov pendiente + nativas ERP con apps Anita; OPA; no pisa CP nativos.');
 
         try {
             $stats = $service->importar(
@@ -78,21 +78,28 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
             ['Sin compra Anita', $stats['omitidas_sin_compra']],
             ['Sin proveedor ERP', $stats['omitidas_sin_proveedor']],
             ['Sin tipo', $stats['omitidas_sin_tipo']],
+            ['Empresa fuera de alcance', $stats['omitidas_empresa'] ?? 0],
             ['Ya al día', $stats['omitidas_al_dia']],
+            ['Nativas saldadas Anita (candidatas)', $stats['nativas_saldadas_anita'] ?? 0],
+            ['Nativas solo apps', $stats['nativas_solo_apps'] ?? 0],
             ['A procesar', $stats['a_procesar']],
             ['CP a crear / creados', $stats['a_crear_cp'].' / '.$stats['cp_creados']],
             ['OPA a crear / creados', $stats['a_crear_opa'].' / '.$stats['opa_creados']],
             ['CC a crear / creadas', $stats['a_crear_cc'].' / '.$stats['cc_creadas']],
+            ['Alinear ANITA_IMPORT', $stats['a_alinear_anita_import'] ?? 0],
             ['aplmovp Anita', $stats['anita_aplmovp']],
             ['Aplicaciones Anita (pares)', $stats['aplicaciones_anita']],
+            ['Docs con apps a importar', $stats['a_actualizar_aplicaciones'] ?? 0],
             ['Aplicaciones planificadas', $stats['aplicaciones_planificadas']],
             ['Aplicaciones creadas', $stats['aplicaciones_creadas']],
+            ['Aplicaciones omitidas (ya en ERP)', $stats['aplicaciones_omitidas'] ?? 0],
+            ['Pagos sintéticos CC', $stats['pagos_sinteticos'] ?? 0],
         ]);
 
         if ($stats['muestra'] !== []) {
             $this->line('Muestra (hasta 25):');
             $this->table(
-                ['Comprobante', 'Prov', 'Emp', 'Fecha', 'Total', 'Pag.Anita', 'Apl.ERP', 'CP', 'CC', 'Apl'],
+                ['Comprobante', 'Prov', 'Emp', 'Fecha', 'Total', 'Pag.Anita', 'Apl.ERP', 'CP', 'CC', 'Apl', 'Nativa'],
                 array_map(static fn (array $r) => [
                     $r['etiqueta'],
                     $r['proveedor'],
@@ -104,6 +111,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
                     $r['accion_cp'],
                     $r['accion_cc'],
                     $r['accion_apl'],
+                    ! empty($r['es_nativo']) ? 'sí' : '',
                 ], $stats['muestra'])
             );
         }

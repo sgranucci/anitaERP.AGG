@@ -15,6 +15,9 @@ final class PrecargaComprobanteEstados
     /** Factura ya cargada en Anita (nativo u otro origen); no se genera comprobante ERP. */
     public const CARGADA_ANITA = 'CARGADA_ANITA';
 
+    /** Descartada: no debe cargarse (duplicada, error de scan). No es un estado ofrecido en el ABM. */
+    public const ANULADA = 'ANULADA';
+
     /** @return list<string> */
     public static function todos(): array
     {
@@ -69,6 +72,6 @@ final class PrecargaComprobanteEstados
     {
         $e = strtoupper(trim((string) $estado));
 
-        return $e !== 'ANULADA' && $e !== self::CARGADA_ANITA;
+        return $e !== self::ANULADA && $e !== self::CARGADA_ANITA;
     }
 }

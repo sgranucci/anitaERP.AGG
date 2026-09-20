@@ -18,7 +18,8 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
     protected $fillable = ['empresa_id', 'provincia_destino_id', 'proveedor_id', 'identificacion_proveedor_cuit', 'tipotransaccion_compra_id', 'letra', 'sucursal', 
                             'numerocomprobante', 'fechafactura', 'fecharecepcionemail', 'fecharecepcionemail', 
                             'fechavencimientocaicae', 'fechavencimiento', 'numerocae', 'tipo_autorizacion', 'numeroordencompra', 'rutaalmacenamiento',
-                            'pararevisar', 'marca_error', 'aviso_error', 'subtotal', 'total', 'estado', 'anita_nro_interno', 'origen_entrada', 'moneda', 'moneda_id', 'cotizacion'];
+                            'pararevisar', 'marca_error', 'aviso_error', 'subtotal', 'total', 'estado', 'anita_nro_interno', 'anita_scan_documento_id',
+                            'origen_entrada', 'moneda', 'moneda_id', 'cotizacion'];
     protected $table = 'precarga_comprobante_proveedor';
 
     protected $casts = [
@@ -26,6 +27,21 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
         'fechavencimientocaicae' => 'date',
         'fechavencimiento' => 'date',
     ];
+
+    /**
+     * codigo_afip es derivado del tipo y está desnormalizado acá porque el índice único de la clave
+     * fiscal lo necesita en la fila (un índice no puede leer tipotransaccion_compra). El tipo interno
+     * lo adivina el scan y hay decenas por cada código AFIP, así que la clave se controla por el
+     * código, que es el dato estable.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (self $precarga): void {
+            $precarga->codigo_afip = \App\Support\Compras\ComprobanteProveedorUnicidadSupport::codigoAfipDesdeTipoId(
+                (int) $precarga->tipotransaccion_compra_id
+            );
+        });
+    }
 
 	public function precarga_comprobante_proveedor_conceptos()
 	{

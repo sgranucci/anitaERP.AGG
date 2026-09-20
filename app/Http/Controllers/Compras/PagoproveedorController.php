@@ -529,11 +529,12 @@ class PagoproveedorController extends Controller
         }
 
         $mensaje = sprintf(
-            'Anita → ERP: %d CP, %d OPA, %d CC, %d aplicaciones (a procesar %d; ya al día %d).',
+            'Anita → ERP: %d CP, %d OPA, %d CC, %d apps (%d nativas solo apps; a procesar %d; al día %d).',
             (int) ($stats['cp_creados'] ?? 0),
             (int) ($stats['opa_creados'] ?? 0),
             (int) ($stats['cc_creadas'] ?? 0),
             (int) ($stats['aplicaciones_creadas'] ?? 0),
+            (int) ($stats['nativas_solo_apps'] ?? 0),
             (int) ($stats['a_procesar'] ?? 0),
             (int) ($stats['omitidas_al_dia'] ?? 0),
         );
@@ -546,6 +547,8 @@ class PagoproveedorController extends Controller
                 'opa_creados' => (int) ($stats['opa_creados'] ?? 0),
                 'cc_creadas' => (int) ($stats['cc_creadas'] ?? 0),
                 'aplicaciones_creadas' => (int) ($stats['aplicaciones_creadas'] ?? 0),
+                'aplicaciones_omitidas' => (int) ($stats['aplicaciones_omitidas'] ?? 0),
+                'nativas_solo_apps' => (int) ($stats['nativas_solo_apps'] ?? 0),
                 'a_procesar' => (int) ($stats['a_procesar'] ?? 0),
                 'omitidas_al_dia' => (int) ($stats['omitidas_al_dia'] ?? 0),
                 'omitidas_sin_compra' => (int) ($stats['omitidas_sin_compra'] ?? 0),

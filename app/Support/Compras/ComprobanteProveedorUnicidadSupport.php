@@ -399,6 +399,54 @@ final class ComprobanteProveedorUnicidadSupport
         );
     }
 
+    public static function esViolacionUnicidadPrecarga(\Throwable $e): bool
+    {
+        return DbContencionSupport::esViolacionUnicidad(
+            $e,
+            'uq_precarga_comprobante_proveedor_por_afip',
+            'precarga_comprobante_proveedor',
+        );
+    }
+
+    /**
+     * Traduce la violación del índice único de precarga al mensaje de negocio (devuelve null si el
+     * error es otro). El chequeo previo puede quedar obsoleto entre el SELECT y el INSERT, así que
+     * este es el que ve el operador cuando dos orígenes cargan la misma factura a la vez.
+     */
+    public static function mensajeViolacionUnicidadPrecarga(
+        \Throwable $e,
+        int $empresaId,
+        int $tipotransaccionCompraId,
+        string $letra,
+        int $sucursal,
+        int $numerocomprobante,
+        ?int $proveedorId,
+        ?string $documentoEventual = null,
+        ?int $excluirPrecargaId = null,
+    ): ?string {
+        if (! self::esViolacionUnicidadPrecarga($e)) {
+            return null;
+        }
+
+        $codigoAfip = self::codigoAfipDesdeTipoId($tipotransaccionCompraId);
+        $duplicado = self::findDuplicadoPrecargaPorAfip(
+            $empresaId,
+            $codigoAfip,
+            $letra,
+            $sucursal,
+            $numerocomprobante,
+            self::resolverCuitDigitos($proveedorId, $documentoEventual),
+            $excluirPrecargaId,
+        );
+
+        if ($duplicado !== null) {
+            return self::mensajeDuplicadoPrecarga($duplicado, $codigoAfip);
+        }
+
+        return 'Factura duplicada: ya existe una precarga con la misma empresa, tipo AFIP, letra, '
+            .'sucursal, número y CUIT. Buscala en el legajo o en precargas.';
+    }
+
     public static function findDuplicadoPrecargaPorAfip(
         int $empresaId,
         string $codigoAfipNorm,

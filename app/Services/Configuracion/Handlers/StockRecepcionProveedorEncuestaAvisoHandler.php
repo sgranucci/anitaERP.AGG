@@ -31,7 +31,7 @@ class StockRecepcionProveedorEncuestaAvisoHandler implements ModuloAvisoDespacho
             'proveedores',
             'empresas',
             'ordencompras.requisiciones.usuarios',
-            'ordencompras.creousuarios',
+            'ordencompras.usuarios',
         ]);
 
         $email = RecepcionProveedorRequisicionEmailSupport::emailSolicitanteOc($rec);

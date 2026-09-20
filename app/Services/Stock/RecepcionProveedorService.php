@@ -1241,6 +1241,12 @@ class RecepcionProveedorService
     {
         $recepcion->loadMissing(['recepcion_proveedor_articulos', 'ordencompras']);
 
+        // Un correo por destinatario con todas sus novedades, en vez de hasta diez por recepción.
+        // Si el consolidado está apagado o falla, sigue el camino histórico por novedad.
+        if (app(RecepcionProveedorAvisoConfirmacionConsolidadoService::class)->enviar($recepcion)) {
+            return;
+        }
+
         if ($recepcion->fl_precio_diferencia
             || RecepcionProveedorDiferenciaSupport::recepcionTieneDiferenciaPrecioEstricta($recepcion)) {
             $this->moduloAvisoService->enviar('stock', 'recepcion_proveedor_precio_diferencia', $recepcion->id);

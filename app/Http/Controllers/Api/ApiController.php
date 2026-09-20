@@ -680,8 +680,20 @@ class ApiController extends Controller
                 'status' => 422,
             ], $e);
 
+            // Si la frenó el índice único de la clave fiscal, Anita tiene que recibir el motivo en
+            // castellano y con el id de la precarga que ya existe, no el texto del error de SQL.
+            $duplicada = ComprobanteProveedorUnicidadSupport::mensajeViolacionUnicidadPrecarga(
+                $e,
+                (int) $data['empresa_id'],
+                (int) $data['tipotransaccion_compra_id'],
+                (string) $data['letra'],
+                (int) $data['sucursal'],
+                (int) $data['numerocomprobante'],
+                $proveedor_id !== null ? (int) $proveedor_id : null,
+            );
+
             return response()->json([
-                'errores' => $e->getMessage(),
+                'errores' => $duplicada ?? $e->getMessage(),
             ], 422);
         }
     }

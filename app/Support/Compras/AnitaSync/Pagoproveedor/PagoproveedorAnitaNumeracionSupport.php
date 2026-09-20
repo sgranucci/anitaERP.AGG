@@ -5,6 +5,7 @@ namespace App\Support\Compras\AnitaSync\Pagoproveedor;
 use App\ApiAnita;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -104,11 +105,17 @@ final class PagoproveedorAnitaNumeracionSupport
 
     public static function siguienteNumeroConLock(int $empresaId, ?string $tipoComprobante = null): int
     {
+        $tipo = self::normalizarTipoComprobante($tipoComprobante);
+
+        // Smoke / labs: sin Anita no quemamos correlativo real; numeramos por max ERP.
         if (! self::estaHabilitada()) {
+            if (app()->environment(['testing', 'local'])) {
+                return self::siguienteNumeroLocalErp($empresaId, $tipo);
+            }
+
             throw new \RuntimeException('Numeración Anita de OP deshabilitada (PAGOPROVEEDOR_ANITA_ESCRITURA_HABILITADA).');
         }
 
-        $tipo = self::normalizarTipoComprobante($tipoComprobante);
         self::assertNumeradorDisponible($empresaId, $tipo);
 
         $segundos = max(5, (int) config('pagoproveedor.numeracion_lock_segundos', 15));
@@ -122,6 +129,29 @@ final class PagoproveedorAnitaNumeracionSupport
             self::actualizarNumerador($clave, $siguiente);
 
             return $siguiente;
+        });
+    }
+
+    /**
+     * Correlativo local (testing/local con Anita off): max(numerotransaccion)+1 por empresa/tipo/sucursal.
+     */
+    private static function siguienteNumeroLocalErp(int $empresaId, string $tipoComprobante): int
+    {
+        $sucursal = self::sucursalParaOp($empresaId);
+        $segundos = max(5, (int) config('pagoproveedor.numeracion_lock_segundos', 15));
+        $lockKey = 'pagoproveedor:numeracion:local:'.$empresaId.':'.$tipoComprobante.':'.$sucursal;
+        $lock = Cache::lock($lockKey, $segundos);
+
+        return $lock->block($segundos, function () use ($empresaId, $tipoComprobante, $sucursal) {
+            $max = (int) DB::table('pagoproveedor')
+                ->where('empresa_id', $empresaId)
+                ->where('tipocomprobante', $tipoComprobante)
+                ->where('sucursal', $sucursal)
+                ->whereNull('deleted_at')
+                ->selectRaw('MAX(CAST(numerotransaccion AS UNSIGNED)) as m')
+                ->value('m');
+
+            return max(1, $max + 1);
         });
     }
 

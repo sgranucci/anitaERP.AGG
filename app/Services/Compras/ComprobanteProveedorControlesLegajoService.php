@@ -80,6 +80,12 @@ class ComprobanteProveedorControlesLegajoService
             'cotizaciones_actualizadas' => [],
             'devolvio_compras' => false,
             'recepcion_ids_efectivos' => [],
+            // En modo no estricto la diferencia de importe solo deja un aviso; esta bandera permite
+            // que el paso previo a contabilizar la haga cumplir sin parsear el texto del aviso.
+            'diferencia_importe' => false,
+            'diferencia_importe_detalle' => null,
+            'bloquear_pago' => false,
+            'bloquear_pago_motivo' => null,
         ];
 
         if (! $ordencompra) {
@@ -251,58 +257,40 @@ class ComprobanteProveedorControlesLegajoService
             return $resultado;
         }
 
-        $importeComFactura = round((float) $recepciones->sum(
-            fn ($r) => (float) ($r->importe_provision_com_factura ?? $r->importe_provision_com ?? 0)
-        ), 2);
-        $importeComMe = round((float) $recepciones->sum(
-            fn ($r) => (float) ($r->importe_provision_com ?? 0)
-        ), 2);
-
-        // Provisión COM − FC en esas COM; si OC anticipada, también − anticipadas sin COM.
-        // No restar FC del legajo vinculadas a otras COM (Telefónica).
-        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableParaProvisionCom(
+        $detalle = $this->detalleDiferenciaImporteVsProvisionCom(
+            $ordencompra,
             $ids->all(),
-            (int) $ordencompra->id,
+            $recepciones,
+            $importeFactura,
+            (string) $importeMeta['etiqueta'],
             $ocAnticipada,
-            $excluirComprobanteId,
             $monedaId,
             $cotizacionFactura,
             $fechaComprobanteYmd,
-        );
-        $importeComDisponible = ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
-            $importeComFactura,
-            (float) $yaFacturado['importe'],
+            $excluirComprobanteId,
         );
 
-        if (ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
-            $importeFactura,
-            $importeComDisponible,
-            $toleranciaPct
-        )) {
-            $detalleYa = ((int) $yaFacturado['cantidad'] > 0)
-                ? sprintf(
-                    ' (COM %s − ya facturado %s)',
-                    number_format($importeComFactura, 2, ',', '.'),
-                    number_format((float) $yaFacturado['importe'], 2, ',', '.')
-                )
-                : '';
-            $detalle = sprintf(
-                'Importe factura (%s) %s vs provisión COM disponible %s%s%s. Tolerancia permitida: %s%% (centro de costo de la OC).',
-                $importeMeta['etiqueta'],
-                number_format($importeFactura, 2, ',', '.'),
-                number_format($importeComDisponible, 2, ',', '.'),
-                $detalleYa,
-                abs($importeComMe - $importeComFactura) > 0.05
-                    ? ' (ME origen '.number_format($importeComMe, 2, ',', '.').')'
-                    : '',
-                number_format($toleranciaPct, 2, ',', '.'),
-            );
+        if ($detalle !== null) {
+            $resultado['diferencia_importe'] = true;
+            $resultado['diferencia_importe_detalle'] = $detalle;
             if (! $estricto) {
                 // Generación de borrador / PDF+IA: no bloquear ni devolver a Compras.
                 $resultado['avisos'][] = $detalle.' Revise la COM asignada antes de contabilizar.';
 
                 return $resultado;
             }
+
+            // Política SAP: la factura entra a la contabilidad pero nace retenida para pago.
+            if (ComprobanteProveedorToleranciaImporteSupport::bloqueaPagoEnLugarDeDevolver($ordencompra)) {
+                $resultado['bloquear_pago'] = true;
+                $resultado['bloquear_pago_motivo'] = $detalle;
+                $resultado['avisos'][] = $detalle
+                    .' La factura se carga pero queda BLOQUEADA PARA PAGO: ninguna propuesta la va a tomar '
+                    .'hasta que se libere explícitamente.';
+
+                return $resultado;
+            }
+
             $this->devolverCompras->devolver(
                 (int) $ordencompra->id,
                 'Diferencia de importe factura vs recepción fuera de tolerancia',
@@ -430,8 +418,143 @@ class ComprobanteProveedorControlesLegajoService
      * @param  list<int|string>  $recepcionIds
      * @return ResultadoControles
      */
-    public function validarComprobante(Comprobante_Proveedor $comprobante, array $recepcionIds): array
-    {
+    /**
+     * Verdicto de importe factura vs provisión COM disponible. Sin efectos: no toca cotizaciones,
+     * no devuelve el legajo y no notifica. Devuelve el detalle si está fuera de tolerancia, o null.
+     *
+     * Única fuente de verdad de la comparación: la usan tanto validarYAplicar como el control
+     * previo a contabilizar, que no puede permitirse los efectos de validarYAplicar.
+     *
+     * @param  list<int>  $recepcionIds
+     * @param  \Illuminate\Support\Collection<int, Recepcion_Proveedor>  $recepciones  ya enriquecidas en moneda de la factura
+     */
+    public function detalleDiferenciaImporteVsProvisionCom(
+        Ordencompra $ordencompra,
+        array $recepcionIds,
+        $recepciones,
+        float $importeFactura,
+        string $etiquetaImporte,
+        bool $ocAnticipada,
+        int $monedaId,
+        float $cotizacionFactura,
+        string $fechaComprobanteYmd,
+        ?int $excluirComprobanteId = null,
+    ): ?string {
+        $importeComFactura = round((float) $recepciones->sum(
+            fn ($r) => (float) ($r->importe_provision_com_factura ?? $r->importe_provision_com ?? 0)
+        ), 2);
+        $importeComMe = round((float) $recepciones->sum(
+            fn ($r) => (float) ($r->importe_provision_com ?? 0)
+        ), 2);
+
+        // Provisión COM − FC en esas COM; si OC anticipada, también − anticipadas sin COM.
+        // No restar FC del legajo vinculadas a otras COM (Telefónica).
+        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableParaProvisionCom(
+            $recepcionIds,
+            (int) $ordencompra->id,
+            $ocAnticipada,
+            $excluirComprobanteId,
+            $monedaId,
+            $cotizacionFactura,
+            $fechaComprobanteYmd,
+        );
+        $importeComDisponible = ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
+            $importeComFactura,
+            (float) $yaFacturado['importe'],
+        );
+
+        $politica = ComprobanteProveedorToleranciaImporteSupport::politicaDesdeOc($ordencompra);
+        $sentido = ComprobanteProveedorToleranciaImporteSupport::sentidoFueraDePolitica(
+            $importeFactura,
+            $importeComDisponible,
+            $politica
+        );
+        if ($sentido === null) {
+            return null;
+        }
+
+        $detalleYa = ((int) $yaFacturado['cantidad'] > 0)
+            ? sprintf(
+                ' (COM %s − ya facturado %s)',
+                number_format($importeComFactura, 2, ',', '.'),
+                number_format((float) $yaFacturado['importe'], 2, ',', '.')
+            )
+            : '';
+
+        return sprintf(
+            'Importe factura (%s) %s vs provisión COM disponible %s%s%s: %s. Límite configurado para ese caso: %s (centro de costo de la OC).',
+            $etiquetaImporte,
+            number_format($importeFactura, 2, ',', '.'),
+            number_format($importeComDisponible, 2, ',', '.'),
+            $detalleYa,
+            abs($importeComMe - $importeComFactura) > 0.05
+                ? ' (ME origen '.number_format($importeComMe, 2, ',', '.').')'
+                : '',
+            ComprobanteProveedorToleranciaImporteSupport::etiquetaSentido($sentido),
+            ComprobanteProveedorToleranciaImporteSupport::limiteConfigurado($politica, $sentido),
+        );
+    }
+
+    /**
+     * Control de importe para el paso previo a contabilizar: arma el contexto desde el comprobante
+     * ya guardado y delega en el verdicto sin efectos. No dispara auto-asignación ni devoluciones.
+     *
+     * @param  list<int>  $recepcionIds
+     */
+    public function detalleDiferenciaImporteDeComprobante(
+        Comprobante_Proveedor $comprobante,
+        array $recepcionIds,
+    ): ?string {
+        $comprobante->loadMissing(['ordencompras', 'proveedores', 'comprobante_proveedor_conceptos.concepto_ivacompras']);
+        $ordencompra = $comprobante->ordencompras;
+        $recepcionIds = array_values(array_unique(array_filter(array_map('intval', $recepcionIds), fn (int $id) => $id > 0)));
+        if (! $ordencompra || $recepcionIds === []) {
+            return null;
+        }
+
+        if (! ComprobanteProveedorControlesConfigSupport::paraEmpresa((int) $ordencompra->empresa_id)['activo']) {
+            return null;
+        }
+
+        $recepciones = Recepcion_Proveedor::query()->whereIn('id', $recepcionIds)->get();
+        if ($recepciones->count() !== count($recepcionIds)) {
+            return null;
+        }
+
+        $monedaId = (int) ($comprobante->moneda_id ?? 1);
+        $cotizacion = (float) ($comprobante->cotizacion ?? 1);
+        $fechaYmd = $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d');
+
+        $importeMeta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
+            (string) ($comprobante->letra ?? ''),
+            $comprobante->proveedores?->condicioniva_id !== null
+                ? (int) $comprobante->proveedores->condicioniva_id
+                : null,
+            (float) ($comprobante->total ?? 0),
+            (float) ($comprobante->subtotal ?? 0),
+            $comprobante->comprobante_proveedor_conceptos,
+            ComprobanteProveedorImporteComparacionComSupport::provisionIncluyeImpuestoInterno($recepciones),
+        );
+
+        return $this->detalleDiferenciaImporteVsProvisionCom(
+            $ordencompra,
+            $recepcionIds,
+            $this->recepcionesSupport->enriquecerConImporteEnMonedaFactura($recepciones, $monedaId, $cotizacion, $fechaYmd),
+            (float) $importeMeta['importe'],
+            (string) $importeMeta['etiqueta'],
+            ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($ordencompra),
+            $monedaId,
+            $cotizacion,
+            $fechaYmd,
+            (int) $comprobante->id,
+        );
+    }
+
+    public function validarComprobante(
+        Comprobante_Proveedor $comprobante,
+        array $recepcionIds,
+        bool $estricto = true,
+    ): array {
         $comprobante->loadMissing([
             'ordencompras',
             'proveedores',
@@ -454,7 +577,7 @@ class ComprobanteProveedorControlesLegajoService
             (float) ($comprobante->subtotal ?? 0),
             $comprobante->comprobante_proveedor_conceptos,
             (int) $comprobante->id,
-            true,
+            $estricto,
             ComprobanteProveedorLineasFacturaSupport::desdeComprobante($comprobante),
             OrdencompraLegajoDocumentoTipoSupport::desdeComprobante($comprobante),
         );

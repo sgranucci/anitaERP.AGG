@@ -21,21 +21,22 @@ return [
     'campos_aplmovp' => env('PROVEEDOR_CC_ANITA_CAMPOS_APLMOVP', ''),
 
     /**
-     * Tipos que no son deuda/crédito pendiente de CC (OPP aplicadas, recibos, etc.).
-     * OPA sí se importa: resta deuda (anticipo sin aplicar).
+     * Tipos que no son deuda/crédito pendiente de CC (pagos/anulaciones, recibos, etc.).
+     * AOP = anulación de OP (espejo de OPP): se excluye igual que OPP.
+     * OPA/EGR/IEV/NCJ sí se importan como crédito (anticipo / egreso / ajuste).
      */
     'tipos_no_deuda' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('PROVEEDOR_CC_ANITA_TIPOS_NO_DEUDA', 'OPP,APA,REC,CHP,ANT'))
+        explode(',', (string) env('PROVEEDOR_CC_ANITA_TIPOS_NO_DEUDA', 'OPP,AOP,APA,REC,CHP,ANT'))
     ))),
 
     /**
-     * Créditos pendientes en promov sin fila en Anita `compra` (ej. OPA).
+     * Créditos pendientes en promov sin fila en Anita `compra`.
      * Se sintetiza pagoproveedor + CC negativa.
      */
     'tipos_credito_sin_compra' => array_values(array_filter(array_map(
         'trim',
-        explode(',', (string) env('PROVEEDOR_CC_ANITA_TIPOS_CREDITO_SIN_COMPRA', 'OPA'))
+        explode(',', (string) env('PROVEEDOR_CC_ANITA_TIPOS_CREDITO_SIN_COMPRA', 'OPA,EGR,IEV,NCJ'))
     ))),
 
     'tolerancia_aplicado' => (float) env('PROVEEDOR_CC_ANITA_TOLERANCIA', 0.02),

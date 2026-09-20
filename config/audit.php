@@ -192,7 +192,11 @@ return [
     |
     | Whether console events should be audited (eg. php artisan db:seed).
     |
+    | En true: los comandos agendados, los scripts de mantenimiento y el import de Anita dejan
+    | rastro en audits igual que la web. Cuesta poco (el import suma ~5 filas por factura, contra
+    | las ~240.000 semanales que ya genera la web) y sin esto los cambios masivos son invisibles.
+    |
     */
 
-    'console' => false,
+    'console' => filter_var(env('AUDIT_CONSOLE', false), FILTER_VALIDATE_BOOLEAN),
 ];

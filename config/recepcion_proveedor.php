@@ -83,6 +83,17 @@ return [
 
     'encuesta_habilitada' => filter_var(env('RECEPCION_PROVEEDOR_ENCUESTA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
 
+    /*
+    | Un correo por destinatario con todas las novedades de la recepción, en lugar de uno por cada
+    | novedad (ingreso, encuesta y hasta siete banderas de diferencia = ~10 correos por COM).
+    | No cambia quién recibe qué: cada persona ve solo las secciones que le corresponden según el
+    | ABM de avisos. En false vuelve al envío histórico, un correo por novedad.
+    */
+    'avisos_confirmacion_consolidados' => filter_var(
+        env('RECEPCION_PROVEEDOR_AVISOS_CONSOLIDADOS', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
     'encuesta_id' => (int) env('RECEPCION_PROVEEDOR_ENCUESTA_ID', 1),
 
     /*
