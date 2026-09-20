@@ -1,0 +1,59 @@
+---
+description: OP proveedores — anulación física y reversión: qué va dentro de la TX local y cómo recuperar un corte a medio camino
+globs: app/Services/Compras/PagoproveedorAnularRevertirService.php,app/Services/Compras/PagoproveedorService.php,app/Services/Compras/ProveedorCuentacorrienteAplicacionAnitaSyncService.php
+alwaysApply: false
+---
+
+# OP proveedores — anulación física y reversión frente a Anita
+
+Anita es **otra base**: no entra en el `DB::transaction` del ERP. Un rollback local no deshace lo
+que ya se escribió en Anita. Los dos caminos que borran plata se tratan distinto a propósito.
+
+## Reversión (`revertir`) — Anita va DESPUÉS del commit
+
+Genera un AOP compensatorio, así que **no es idempotente**: reintentar duplicaba el compensatorio.
+
+- Lo local (reverso, CC compensatoria, estado `REVERTIDA`) va dentro de `DB::transaction`, con
+  `lockForUpdate()` sobre la OP para revalidar estado ya tomada la fila.
+- El sync a Anita (`grabarReversoDesdeRetenciones`, `sincronizarAnulacionAnita`) corre **después
+  del commit**, en su propio `try/catch`.
+- Si Anita falla, **no** se lanza excepción: se loguea y se devuelve `aviso` en el array de retorno.
+  El controller lo concatena al mensaje de éxito. Tirar excepción ahí haría que el operador
+  reintente y duplique el compensatorio.
+- Las retenciones de la OP original **no se borran**. `pagoproveedor_retencion` no tiene
+  softdeletes (migración 2026_08_18_153000) ni implementa `Auditable`, así que borrarlas perdía sin
+  rastro certificados ya emitidos al proveedor. SICORE, IIBB y SUSS filtran por
+  `estado = 'CONFIRMADA'`, de modo que al quedar la OP en `REVERTIDA` esas filas salen solas de las
+  presentaciones.
+
+## Anulación física (`anularFisicamente`) — Anita va DENTRO de la TX
+
+Deuda técnica **conocida y aceptada**, no un descuido. Todo lo que hace este camino es **borrar**,
+y los borrados en Anita son idempotentes, así que el corte se recupera reintentando.
+
+Por qué sigue dentro: `revertirYEliminarPagoAnita()` relee
+`Proveedor_Cuentacorriente_Aplicacion` del ERP en el momento de la llamada. Para moverlo post-commit
+hay que precargar snapshots en memoria (`snapshotDesdeAplicacion()` ya es puro y sirve) y agregar
+variantes que los acepten en los supports de Anita de CC, tesorería, tesmov y retenciones.
+
+### Runbook: la anulación física cortó a mitad de camino
+
+Síntoma: la OP **sigue** en el ERP (no quedó en `BAJA`) pero en Anita ya no está la CC / promov /
+tesorería. Pasa si la transacción local falla después de los escritos a Anita.
+
+1. No tocar Anita a mano.
+2. **Reejecutar la anulación física de la misma OP** desde el ABM.
+3. Los borrados en Anita que ya corrieron son no-op: `revertir($snapshot)` hace `borrarAplmovp()`
+   (no encuentra fila y sigue) y las cargas de CC están guardadas con `if ($deudaCc)`.
+4. Verificar que la OP quedó en `BAJA` y sin aplicaciones, cheques, asiento ni movimiento de caja.
+
+Si el reintento vuelve a fallar, el problema es local (FK, período contable cerrado, candado de
+edición): resolver eso primero. No hace falta reparar Anita antes.
+
+## Si algún día se hace el refactor
+
+Sacar Anita de la TX en `anularFisicamente` exige, **en este orden**: snapshots de CC en memoria
+antes de los borrados locales, eager load del `Caja_Movimiento` con sus líneas, y variantes de
+`eliminarDesdeMovimiento` / `eliminarTesoreriaAnitaPorPago` / `eliminarDesdePago` que trabajen sobre
+lo precargado y no reconsulten el ERP. Es el camino más destructivo del módulo y hoy no tiene tests:
+no encarar sin cobertura previa.

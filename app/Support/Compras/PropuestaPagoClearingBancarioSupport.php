@@ -392,8 +392,8 @@ class PropuestaPagoClearingBancarioSupport
     {
         $op->loadMissing(['proveedores', 'pagoproveedor_retenciones']);
         $bruto = round((float) $op->monto, 2);
-        $ret = round((float) $op->pagoproveedor_retenciones->sum('monto'), 2);
-        $neto = round(max(0, $bruto - $ret), 2);
+        $ret = round($op->totalRetenciones(), 2);
+        $neto = $op->netoAPagar();
 
         $lineaLote = LoteBancarioLinea::query()
             ->where('pagoproveedor_id', $op->id)

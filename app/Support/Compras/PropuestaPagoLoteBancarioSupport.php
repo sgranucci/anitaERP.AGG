@@ -125,8 +125,8 @@ class PropuestaPagoLoteBancarioSupport
         $alias = trim((string) ($fp->alias_cbu ?? ''));
 
         $bruto = (float) $op->monto;
-        $ret = (float) $op->pagoproveedor_retenciones->sum('monto');
-        $neto = round(max(0, $bruto - $ret), 4);
+        $ret = $op->totalRetenciones();
+        $neto = $op->netoAPagar(4);
         $prov = $op->proveedores;
         $cuit = preg_replace('/\D+/', '', (string) ($prov->nroinscripcion ?? '')) ?? '';
 

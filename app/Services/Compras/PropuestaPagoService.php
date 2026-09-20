@@ -203,8 +203,9 @@ class PropuestaPagoService
 
         $ops = [];
         $errores = [];
+        $avisos = [];
 
-        DB::transaction(function () use ($propuesta, $lineas, &$ops, &$errores) {
+        DB::transaction(function () use ($propuesta, $lineas, &$ops, &$errores, &$avisos) {
             $cajaId = (int) ($propuesta->caja_id ?: 0) ?: null;
             $cuentacajaId = (int) ($propuesta->cuentacaja_id ?: 0) ?: null;
             $chequeraId = (int) ($propuesta->chequera_id ?: 0) ?: null;
@@ -294,6 +295,9 @@ class PropuestaPagoService
                     $errores[] = 'Proveedor '.$proveedorId.' ('.$clave.'): '.$resultado['errores'];
                     continue;
                 }
+                if (! empty($resultado['aviso'])) {
+                    $avisos[] = $resultado['aviso'];
+                }
 
                 $opId = (int) $resultado['pagoproveedor_id'];
                 $ops[] = $opId;
@@ -324,6 +328,9 @@ class PropuestaPagoService
         $msg = 'Ejecutada. OP: '.implode(', ', $ops);
         if ($errores !== []) {
             $msg .= ' — Parcial: '.implode(' | ', $errores);
+        }
+        if ($avisos !== []) {
+            $msg .= ' — Atención: '.implode(' | ', $avisos);
         }
 
         $bridge = PropuestaPagoBridgeBancarioSupport::intentarConciliarLote($id);

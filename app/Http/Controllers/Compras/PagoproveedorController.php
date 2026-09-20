@@ -249,10 +249,12 @@ class PagoproveedorController extends Controller
         try {
             $resultado = $this->anularRevertirService->revertir($id, $request->input('fecha'));
 
-            return redirect()->route('pagoproveedor')->with(
-                'mensaje',
-                'OP revertida. Compensatoria N° '.$resultado['numerotransaccion'].'.'
-            );
+            $mensaje = 'OP revertida. Compensatoria N° '.$resultado['numerotransaccion'].'.';
+            if (! empty($resultado['aviso'])) {
+                $mensaje .= ' '.$resultado['aviso'];
+            }
+
+            return redirect()->route('pagoproveedor')->with('mensaje', $mensaje);
         } catch (\Throwable $e) {
             return redirect()->back()->with('mensaje', $e->getMessage());
         }

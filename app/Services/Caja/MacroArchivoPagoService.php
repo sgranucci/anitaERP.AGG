@@ -707,8 +707,8 @@ class MacroArchivoPagoService
                     );
                     $val = CbuSupport::validarConMensaje($cbu);
                     $bruto = (float) $op->monto;
-                    $ret = (float) $op->pagoproveedor_retenciones->sum('monto');
-                    $neto = round(max(0, $bruto - $ret), 2);
+                    $ret = $op->totalRetenciones();
+                    $neto = $op->netoAPagar();
                     if (! $val['ok'] || $neto < 0.005) {
                         if (! $agrego) {
                             $omitidas[] = [

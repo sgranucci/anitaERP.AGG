@@ -102,6 +102,11 @@ class Pagoproveedor extends Model
             ->with('caja_movimiento_cuentacajas.cuentacajas');
     }
 
+    public function proveedor_cuentacorrientes()
+    {
+        return $this->hasMany(Proveedor_Cuentacorriente::class, 'pagoproveedor_id');
+    }
+
     public function asientos()
     {
         // Si se regrabó la OP puede haber más de un asiento con este pagoproveedor_id.
@@ -116,6 +121,25 @@ class Pagoproveedor extends Model
     public function scopeGeneradaEnErp(Builder $query): Builder
     {
         return $query->where('asiento_id', '>', 0);
+    }
+
+    /**
+     * Total retenido en la OP. La columna es `importe`: pedir `monto` devuelve null
+     * y el neto sale igual al bruto (se transfiere la retención al proveedor).
+     */
+    public function totalRetenciones(): float
+    {
+        $this->loadMissing('pagoproveedor_retenciones');
+
+        return (float) $this->pagoproveedor_retenciones->sum('importe');
+    }
+
+    /**
+     * Importe que efectivamente sale al proveedor: bruto menos retenciones.
+     */
+    public function netoAPagar(int $decimales = 2): float
+    {
+        return round(max(0, (float) $this->monto - $this->totalRetenciones()), $decimales);
     }
 
     public function etiquetaComprobante(): string

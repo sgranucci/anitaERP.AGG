@@ -57,7 +57,7 @@ class PropuestaPagoBridgeBancarioSupport
             $cbu = CbuSupport::normalizar((string) ($fp->cbu ?? ''));
         }
         $bruto = round((float) $op->monto, 2);
-        $neto = round(max(0, $bruto - (float) $op->pagoproveedor_retenciones->sum('monto')), 2);
+        $neto = $op->netoAPagar();
         $fecha = $op->fecha ? \Carbon\Carbon::parse($op->fecha) : \Carbon\Carbon::today();
         $dias = PropuestaPagoClearingBancarioSupport::diasVentana();
         $tol = PropuestaPagoClearingBancarioSupport::toleranciaMonto();

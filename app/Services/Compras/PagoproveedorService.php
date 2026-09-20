@@ -9,17 +9,21 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Proveedor;
-use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
 use App\Repositories\Caja\ChequeRepositoryInterface;
-use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
-use App\Repositories\Contable\AsientoRepositoryInterface;
+use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
+use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
+use App\Support\Caja\ChequePropioInstrumentoSupport;
+use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
+use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
+use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
@@ -31,6 +35,7 @@ use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCargaManualSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
@@ -38,11 +43,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use App\Support\Caja\ChequePropioInstrumentoSupport;
-use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
-use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
-use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
-use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 
 class PagoproveedorService
 {
@@ -60,8 +60,7 @@ class PagoproveedorService
         private CuentacajaRepositoryInterface $cuentacajaRepository,
         private CuentacontableRepositoryInterface $cuentacontableRepository,
         private ProveedorCuentacorrienteAplicacionAnitaSyncService $cuentacorrienteAnitaSyncService,
-    ) {
-    }
+    ) {}
 
     /**
      * Preview AJAX del asiento TES (no graba).
@@ -377,8 +376,7 @@ class PagoproveedorService
         array $data,
         string $estado,
         ?string $tipoComprobante = null
-    ): void
-    {
+    ): void {
         if ($estado === 'PRE CARGA' || ! PagoproveedorAnitaNumeracionSupport::estaHabilitada()) {
             return;
         }
@@ -1192,13 +1190,15 @@ class PagoproveedorService
     public function marcarPagada(int $id): array
     {
         try {
-            $pago = $this->pagoproveedorRepository->findOrFail($id);
-            PagoproveedorEdicionCandadoSupport::assertEditable($pago);
-            if ((string) $pago->estado !== 'CONFIRMADA') {
-                throw new Exception('Solo se puede marcar PAGADA una OP CONFIRMADA.');
-            }
-            $this->pagoproveedorRepository->update(['estado' => 'PAGADA'], $id);
-            $this->registrarEstado($pago, 'PAGADA', 'Marcada como pagada (bridge bancario manual / Interbanking pendiente)');
+            DB::transaction(function () use ($id) {
+                $pago = $this->pagoproveedorConLock($id);
+                PagoproveedorEdicionCandadoSupport::assertEditable($pago);
+                if ((string) $pago->estado !== 'CONFIRMADA') {
+                    throw new Exception('Solo se puede marcar PAGADA una OP CONFIRMADA.');
+                }
+                $this->pagoproveedorRepository->update(['estado' => 'PAGADA'], $id);
+                $this->registrarEstado($pago, 'PAGADA', 'Marcada como pagada (bridge bancario manual / Interbanking pendiente)');
+            });
 
             return ['mensaje' => 'ok'];
         } catch (\Throwable $e) {
@@ -1212,19 +1212,35 @@ class PagoproveedorService
     public function marcarConciliada(int $id): array
     {
         try {
-            $pago = $this->pagoproveedorRepository->findOrFail($id);
-            PagoproveedorEdicionCandadoSupport::assertEditable($pago);
-            if (! in_array((string) $pago->estado, ['CONFIRMADA', 'PAGADA'], true)) {
-                throw new Exception('Solo se puede marcar CONCILIADA una OP CONFIRMADA o PAGADA.');
-            }
-            // Enganche futuro: ConciliacionBancaria ↔ caja_movimiento_id de la OP.
-            $this->pagoproveedorRepository->update(['estado' => 'CONCILIADA'], $id);
-            $this->registrarEstado($pago, 'CONCILIADA', 'Marcada como conciliada (manual; FK caja_movimiento pendiente de Interbanking)');
+            DB::transaction(function () use ($id) {
+                $pago = $this->pagoproveedorConLock($id);
+                PagoproveedorEdicionCandadoSupport::assertEditable($pago);
+                if (! in_array((string) $pago->estado, ['CONFIRMADA', 'PAGADA'], true)) {
+                    throw new Exception('Solo se puede marcar CONCILIADA una OP CONFIRMADA o PAGADA.');
+                }
+                // Enganche futuro: ConciliacionBancaria ↔ caja_movimiento_id de la OP.
+                $this->pagoproveedorRepository->update(['estado' => 'CONCILIADA'], $id);
+                $this->registrarEstado($pago, 'CONCILIADA', 'Marcada como conciliada (manual; FK caja_movimiento pendiente de Interbanking)');
+            });
 
             return ['mensaje' => 'ok'];
         } catch (\Throwable $e) {
             return ['errores' => $e->getMessage()];
         }
+    }
+
+    /**
+     * OP con la fila tomada. Las transiciones de estado leían y escribían sin lock: dos
+     * pedidos simultáneos pasaban los dos controles y aplicaban ambos.
+     */
+    private function pagoproveedorConLock(int $id): Pagoproveedor
+    {
+        $pago = Pagoproveedor::query()->whereKey($id)->lockForUpdate()->first();
+        if ($pago === null) {
+            throw new Exception('No existe la OP #'.$id.'.');
+        }
+
+        return $pago;
     }
 
     /**
@@ -1235,36 +1251,37 @@ class PagoproveedorService
     public function vincularTransferenciaInterbanking(int $pagoproveedorId, int $interbankingTransferenciaId): array
     {
         try {
-            $pago = $this->pagoproveedorRepository->findOrFail($pagoproveedorId);
-            $estado = (string) $pago->estado;
-            if (! in_array($estado, ['CONFIRMADA', 'PAGADA'], true)) {
-                throw new Exception('La OP debe estar CONFIRMADA o PAGADA para conciliar con Interbanking.');
-            }
+            DB::transaction(function () use ($pagoproveedorId, $interbankingTransferenciaId) {
+                $pago = $this->pagoproveedorConLock($pagoproveedorId);
+                $estado = (string) $pago->estado;
+                if (! in_array($estado, ['CONFIRMADA', 'PAGADA'], true)) {
+                    throw new Exception('La OP debe estar CONFIRMADA o PAGADA para conciliar con Interbanking.');
+                }
 
-            $ya = Pagoproveedor::query()
-                ->where('interbanking_transferencia_id', $interbankingTransferenciaId)
-                ->where('id', '!=', $pagoproveedorId)
-                ->exists();
-            if ($ya) {
-                throw new Exception('La transferencia IB #'.$interbankingTransferenciaId.' ya está vinculada a otra OP.');
-            }
+                // Control dentro de la TX; el índice único de la columna es la garantía final.
+                $ya = Pagoproveedor::query()
+                    ->where('interbanking_transferencia_id', $interbankingTransferenciaId)
+                    ->where('id', '!=', $pagoproveedorId)
+                    ->exists();
+                if ($ya) {
+                    throw new Exception('La transferencia IB #'.$interbankingTransferenciaId.' ya está vinculada a otra OP.');
+                }
 
-            $upd = ['interbanking_transferencia_id' => $interbankingTransferenciaId];
-            if ($estado === 'CONFIRMADA') {
-                $upd['estado'] = 'PAGADA';
-                $this->pagoproveedorRepository->update($upd, $pagoproveedorId);
-                $this->registrarEstado($pago, 'PAGADA', 'Bridge IB: transferencia #'.$interbankingTransferenciaId);
-                $pago = $this->pagoproveedorRepository->findOrFail($pagoproveedorId);
-            } else {
-                $this->pagoproveedorRepository->update($upd, $pagoproveedorId);
-            }
+                if ($estado === 'CONFIRMADA') {
+                    $this->registrarEstado($pago, 'PAGADA', 'Bridge IB: transferencia #'.$interbankingTransferenciaId);
+                }
 
-            $this->pagoproveedorRepository->update(['estado' => 'CONCILIADA'], $pagoproveedorId);
-            $this->registrarEstado(
-                $pago,
-                'CONCILIADA',
-                'Bridge IB: conciliada con transferencia #'.$interbankingTransferenciaId
-            );
+                $this->pagoproveedorRepository->update([
+                    'interbanking_transferencia_id' => $interbankingTransferenciaId,
+                    'estado' => 'CONCILIADA',
+                ], $pagoproveedorId);
+
+                $this->registrarEstado(
+                    $pago,
+                    'CONCILIADA',
+                    'Bridge IB: conciliada con transferencia #'.$interbankingTransferenciaId
+                );
+            });
 
             return ['mensaje' => 'ok'];
         } catch (\Throwable $e) {
@@ -1280,39 +1297,41 @@ class PagoproveedorService
     public function vincularMovimientoInterbanking(int $pagoproveedorId, int $interbankingMovimientoId): array
     {
         try {
-            $pago = $this->pagoproveedorRepository->findOrFail($pagoproveedorId);
-            $estado = (string) $pago->estado;
-            if (! in_array($estado, ['CONFIRMADA', 'PAGADA'], true)) {
-                throw new Exception('La OP debe estar CONFIRMADA o PAGADA para conciliar con extracto.');
-            }
-            if (! \Illuminate\Support\Facades\Schema::hasColumn('pagoproveedor', 'interbanking_movimiento_id')) {
+            if (! Schema::hasColumn('pagoproveedor', 'interbanking_movimiento_id')) {
                 throw new Exception('Columna interbanking_movimiento_id no disponible.');
             }
 
-            $ya = Pagoproveedor::query()
-                ->where('interbanking_movimiento_id', $interbankingMovimientoId)
-                ->where('id', '!=', $pagoproveedorId)
-                ->exists();
-            if ($ya) {
-                throw new Exception('El movimiento IB #'.$interbankingMovimientoId.' ya está vinculado a otra OP.');
-            }
+            DB::transaction(function () use ($pagoproveedorId, $interbankingMovimientoId) {
+                $pago = $this->pagoproveedorConLock($pagoproveedorId);
+                $estado = (string) $pago->estado;
+                if (! in_array($estado, ['CONFIRMADA', 'PAGADA'], true)) {
+                    throw new Exception('La OP debe estar CONFIRMADA o PAGADA para conciliar con extracto.');
+                }
 
-            $upd = ['interbanking_movimiento_id' => $interbankingMovimientoId];
-            if ($estado === 'CONFIRMADA') {
-                $upd['estado'] = 'PAGADA';
-                $this->pagoproveedorRepository->update($upd, $pagoproveedorId);
-                $this->registrarEstado($pago, 'PAGADA', 'Clearing IB: movimiento #'.$interbankingMovimientoId);
-                $pago = $this->pagoproveedorRepository->findOrFail($pagoproveedorId);
-            } else {
-                $this->pagoproveedorRepository->update($upd, $pagoproveedorId);
-            }
+                // Control dentro de la TX; el índice único de la columna es la garantía final.
+                $ya = Pagoproveedor::query()
+                    ->where('interbanking_movimiento_id', $interbankingMovimientoId)
+                    ->where('id', '!=', $pagoproveedorId)
+                    ->exists();
+                if ($ya) {
+                    throw new Exception('El movimiento IB #'.$interbankingMovimientoId.' ya está vinculado a otra OP.');
+                }
 
-            $this->pagoproveedorRepository->update(['estado' => 'CONCILIADA'], $pagoproveedorId);
-            $this->registrarEstado(
-                $pago,
-                'CONCILIADA',
-                'Clearing IB: conciliada con movimiento extracto #'.$interbankingMovimientoId
-            );
+                if ($estado === 'CONFIRMADA') {
+                    $this->registrarEstado($pago, 'PAGADA', 'Clearing IB: movimiento #'.$interbankingMovimientoId);
+                }
+
+                $this->pagoproveedorRepository->update([
+                    'interbanking_movimiento_id' => $interbankingMovimientoId,
+                    'estado' => 'CONCILIADA',
+                ], $pagoproveedorId);
+
+                $this->registrarEstado(
+                    $pago,
+                    'CONCILIADA',
+                    'Clearing IB: conciliada con movimiento extracto #'.$interbankingMovimientoId
+                );
+            });
 
             return ['mensaje' => 'ok'];
         } catch (\Throwable $e) {
@@ -1322,6 +1341,10 @@ class PagoproveedorService
 
     /**
      * Alta de OP desde propuesta de pagos (por proveedor + forma de pago + aplicaciones).
+     *
+     * Graba con la misma integridad que una OP común: aplicaciones, retenciones, medio de
+     * pago y asiento contable balanceado, todo dentro de la misma transacción. Si el asiento
+     * no cierra, se cae toda la OP en lugar de quedar una OP confirmada sin contabilizar.
      *
      * @param  list<array{proveedor_cuentacorriente_id:int,montoaplicado:float,moneda_id?:int,cotizacion?:float}>  $aplicaciones
      * @return array{mensaje?:string,errores?:string,pagoproveedor_id?:int}
@@ -1342,6 +1365,7 @@ class PagoproveedorService
         ?string $observacionCuentacaja = null,
         ?int $chequeraId = null,
         ?string $nombreProveedorCheque = null,
+        ?float $cotizacion = null,
     ): array {
         $estado = ($confirmada ?? (bool) config('propuesta_pago.ejecutar_confirmada', true))
             ? 'CONFIRMADA'
@@ -1374,7 +1398,8 @@ class PagoproveedorService
                 $calcularRetenciones,
                 $observacionCuentacaja,
                 $chequeraId,
-                $nombreProveedorCheque
+                $nombreProveedorCheque,
+                $cotizacion
             ) {
                 $esOpa = ! $this->hayAplicacionConMonto($aplicaciones) && abs((float) $monto) > 0;
                 $tipoComprobante = PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante(
@@ -1383,6 +1408,13 @@ class PagoproveedorService
                 );
                 $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId, $tipoComprobante);
                 $sucursal = PagoproveedorAnitaNumeracionSupport::sucursalParaOp($empresaId);
+
+                // Misma TC que una OP común: fijar 1 dejaba las OP en ME al cambio 1.
+                $cotizacionPago = PagoproveedorAsientoArmadoSupport::cotizacionUnicaDelPago(
+                    $monedaId,
+                    NumeroDecimalLocalSupport::aFloat($cotizacion ?? 1, 1.0),
+                    $fecha
+                );
 
                 $chequera = null;
                 if ($chequeraId && $chequeraId > 0) {
@@ -1405,7 +1437,7 @@ class PagoproveedorService
                     'detalle' => $detalle ?: ('OP desde propuesta #'.$propuestaPagoId.' Nro. '.$numero),
                     'estado' => $estado,
                     'monto' => $monto,
-                    'cotizacion' => 1,
+                    'cotizacion' => $cotizacionPago,
                     'moneda_id' => $monedaId,
                     'modo_cotizacion' => (string) config('pagoproveedor.modo_cotizacion_default', 'factura'),
                     'usuario_id' => Auth::id(),
@@ -1419,94 +1451,161 @@ class PagoproveedorService
                         $pago,
                         abs((float) $monto),
                         (int) $monedaId,
-                        1.0,
+                        $cotizacionPago,
                     );
                     $this->marcarComoOpa($pago);
                 }
 
+                // Aplicaciones en el formato del formulario: lo consumen retenciones y asiento.
+                $data = [
+                    'empresa_id' => $empresaId,
+                    'caja_id' => $cajaId,
+                    'fecha' => $fecha,
+                    'monto' => $monto,
+                    'moneda_id' => $monedaId,
+                    'cotizacion' => $cotizacionPago,
+                    'idcuentacorrientes' => [],
+                    'montoaplicadocomprobantes' => [],
+                    'monedacomprobante_ids' => [],
+                    'cotizacioncomprobantes' => [],
+                    'cotizacion_aplicada_dia' => [],
+                    'diferencias_cambio' => [],
+                ];
+                foreach ($aplicaciones as $apl) {
+                    $cotApl = (float) ($apl['cotizacion'] ?? 0) ?: $cotizacionPago;
+                    $data['idcuentacorrientes'][] = (int) ($apl['proveedor_cuentacorriente_id'] ?? 0);
+                    $data['montoaplicadocomprobantes'][] = (float) ($apl['montoaplicado'] ?? 0);
+                    $data['monedacomprobante_ids'][] = (int) ($apl['moneda_id'] ?? 0) ?: $monedaId;
+                    $data['cotizacioncomprobantes'][] = $cotApl;
+                    $data['cotizacion_aplicada_dia'][] = (float) ($apl['cotizacion_aplicada'] ?? 0) ?: $cotApl;
+                    $data['diferencias_cambio'][] = 0;
+                }
+
                 if ($calcularRetenciones && (bool) config('propuesta_pago.calcular_retenciones_al_ejecutar', true)) {
-                    $payloadRet = [
-                        'monto' => $monto,
+                    $this->persistirRetenciones($pago, array_merge($data, [
                         'importe_neto_retencion' => $monto,
                         'importe_iva_retencion' => 0,
                         'calcular_ganancias' => true,
                         'calcular_iva' => true,
                         'calcular_suss' => true,
                         'calcular_iibb' => true,
-                        'idcuentacorrientes' => [],
-                        'montoaplicadocomprobantes' => [],
-                        'cotizacion_aplicada_dia' => [],
-                        'monedacomprobante_ids' => [],
-                    ];
-                    foreach ($aplicaciones as $apl) {
-                        $payloadRet['idcuentacorrientes'][] = (int) ($apl['proveedor_cuentacorriente_id'] ?? 0);
-                        $payloadRet['montoaplicadocomprobantes'][] = (float) ($apl['montoaplicado'] ?? 0);
-                        $payloadRet['cotizacion_aplicada_dia'][] = (float) ($apl['cotizacion_aplicada'] ?? $apl['cotizacion'] ?? 0);
-                        $payloadRet['monedacomprobante_ids'][] = (int) ($apl['moneda_id'] ?? 0);
-                    }
-                    $this->persistirRetenciones($pago, $payloadRet);
+                    ]));
                 }
 
-                $pago->load('pagoproveedor_retenciones');
-                $totalRet = (float) $pago->pagoproveedor_retenciones->sum('monto');
-                $neto = round(max(0, $monto - $totalRet), 4);
+                // Neto real al proveedor. La columna de retenciones es `importe`: pedir `monto`
+                // devolvía null y se giraba el bruto (la retención se le pagaba al proveedor).
+                $pago = $pago->fresh();
+                $neto = $pago->netoAPagar(4);
 
-                if ($cuentacajaId && $cuentacajaId > 0) {
-                    $obs = $observacionCuentacaja ?: ('Egreso OP propuesta #'.$propuestaPagoId);
-                    $cajaMovId = $this->persistirCajaMovimiento($pago, [
+                // Un solo medio por OP: con cheque no va línea de cuentacaja, si no el asiento
+                // acredita dos veces el mismo egreso y no cierra.
+                $pagaConCheque = $chequera !== null && $neto > 0;
+
+                if ($pagaConCheque) {
+                    $data = array_merge($data, [
+                        'numerocheque_emitidos' => [self::siguienteNumeroCheque((int) $chequera->id, $chequera)],
+                        'montocheque_emitidos' => [$neto],
+                        'chequera_emitido_ids' => [(int) $chequera->id],
+                        'cuentacaja_emitido_ids' => [$cuentacajaId],
+                        'fechapago_emitidos' => [$fecha],
+                        'moneda_emitido_ids' => [$monedaId],
+                        'cotizacioncheque_emitidos' => [
+                            PagoproveedorAsientoArmadoSupport::cotizacionParaLinea($monedaId, $cotizacionPago),
+                        ],
+                        'caracter_emitidos' => [ChequePropioInstrumentoSupport::caracterDefault()],
+                        'para_dep_emitidos' => [ChequePropioInstrumentoSupport::paraDepDefault()],
+                        'negociable_emitidos' => [ChequePropioInstrumentoSupport::negociableDesdeChequera(
+                            (string) ($chequera->tipochequera
+                                ?: ChequePropioInstrumentoSupport::negociableDefault())
+                        )],
+                        'anombrede_emitidos' => [$nombreProveedorCheque ?: ('Proveedor #'.$proveedorId)],
+                        'proveedor_emitido_ids' => [$proveedorId],
+                        'pagoproveedor_id' => $pago->id,
+                    ]);
+                } elseif ($cuentacajaId && $cuentacajaId > 0 && $neto > 0) {
+                    $data = array_merge($data, [
                         'cuentacaja_ids' => [$cuentacajaId],
                         'montos' => [$neto],
                         'moneda_ids' => [$monedaId],
-                        'cotizaciones' => [1],
-                        'observaciones' => [$obs],
-                    ], true);
+                        'cotizaciones' => [
+                            PagoproveedorAsientoArmadoSupport::cotizacionParaLinea($monedaId, $cotizacionPago),
+                        ],
+                        'observaciones' => [$observacionCuentacaja ?: ('Egreso OP propuesta #'.$propuestaPagoId)],
+                    ]);
+                }
 
-                    if ($chequera && $cajaMovId > 0 && $neto > 0) {
-                        $nroCheque = self::siguienteNumeroCheque((int) $chequera->id, $chequera);
-                        $this->chequeRepository->guardarChequeIngresoEgreso([
-                            'numerocheque_emitidos' => [$nroCheque],
-                            'montocheque_emitidos' => [$neto],
-                            'chequera_emitido_ids' => [(int) $chequera->id],
-                            'cuentacaja_emitido_ids' => [$cuentacajaId],
-                            'fechapago_emitidos' => [$fecha],
-                            'moneda_emitido_ids' => [$monedaId],
-                            'cotizacioncheque_emitidos' => [1],
-                            'caracter_emitidos' => [ChequePropioInstrumentoSupport::caracterDefault()],
-                            'para_dep_emitidos' => [ChequePropioInstrumentoSupport::paraDepDefault()],
-                            'negociable_emitidos' => [ChequePropioInstrumentoSupport::negociableDesdeChequera(
-                                (string) ($chequera->tipochequera
-                                    ?: ChequePropioInstrumentoSupport::negociableDefault())
-                            )],
-                            'anombrede_emitidos' => [$nombreProveedorCheque ?: ('Proveedor #'.$proveedorId)],
-                            'proveedor_emitido_ids' => [$proveedorId],
-                            'empresa_id' => $empresaId,
-                            'caja_id' => $cajaId,
-                            'pagoproveedor_id' => $pago->id,
-                        ], 'create', $cajaMovId);
+                $cajaMovId = $this->persistirCajaMovimiento($pago, $data, true);
+
+                if ($pagaConCheque && $cajaMovId > 0) {
+                    $this->chequeRepository->guardarChequeIngresoEgreso($data, 'create', $cajaMovId);
+                    Cheque::query()
+                        ->where('caja_movimiento_id', $cajaMovId)
+                        ->whereNull('pagoproveedor_id')
+                        ->update(['pagoproveedor_id' => $pago->id]);
+                }
+
+                // Asiento por la misma vía que una OP común (se rearma desde deuda/medios/retenciones).
+                if ((string) $pago->estado !== 'PRE CARGA') {
+                    $pago = $pago->fresh();
+                    $data = array_merge($data, $this->construirArraysAsientoDesdeOperacion($pago, $data));
+                    if (empty($data['cuentacontable_ids'])) {
+                        throw new Exception(
+                            'No se pudo armar el asiento contable de la OP de la propuesta #'
+                            .$propuestaPagoId.' (sin líneas).'
+                        );
                     }
+                    AsientoBalanceSupport::assertBalanceadoDesdePayload([
+                        'debes' => $data['debeasientos'] ?? [],
+                        'haberes' => $data['haberasientos'] ?? [],
+                    ], 'asiento de la OP de la propuesta #'.$propuestaPagoId);
+                    $this->persistirAsiento($pago, $data);
                 }
 
                 return $pago->fresh();
             });
 
-            $this->sincronizarAnitaTesoreria($pago->fresh(), false);
-
-            return [
+            $out = [
                 'mensaje' => 'ok',
                 'pagoproveedor_id' => (int) $pago->id,
             ];
+
+            try {
+                $this->sincronizarAnitaTesoreria($pago->fresh(), false);
+            } catch (\Throwable $eAnita) {
+                // La OP ya está commitida. Devolver error haría que la propuesta no marque
+                // sus líneas como ejecutadas y las mismas facturas se vuelvan a pagar.
+                Log::error('pagoproveedor.propuesta.anita.sync_post_commit.fallo', [
+                    'pagoproveedor_id' => $pago->id,
+                    'numero' => $pago->numerotransaccion,
+                    'propuesta_pago_id' => $propuestaPagoId,
+                    'mensaje' => $eAnita->getMessage(),
+                ]);
+                $out['aviso'] = 'OP grabada en ERP (#'.$pago->numerotransaccion
+                    .') pero falló la réplica Anita: '.$eAnita->getMessage()
+                    .'. No reejecute la propuesta; revise sincronización/auditoría.';
+            }
+
+            return $out;
         } catch (\Throwable $e) {
             return ['errores' => $e->getMessage()];
         }
     }
 
+    /**
+     * `numerocheque` es varchar: MAX() compara como texto ('9' gana a '10'), así que hay
+     * que castear. El lock de la chequera serializa dos propuestas que se ejecutan a la vez
+     * sobre la misma chequera y evita que saquen el mismo número.
+     */
     private static function siguienteNumeroCheque(int $chequeraId, \App\Models\Caja\Chequera $chequera): string
     {
+        \App\Models\Caja\Chequera::query()->whereKey($chequeraId)->lockForUpdate()->first();
+
         $desde = (int) ($chequera->desdenumerocheque ?: 1);
         $hasta = (int) ($chequera->hastanumerocheque ?: 99999999);
         $ultimo = (int) (\App\Models\Caja\Cheque::query()
             ->where('chequera_id', $chequeraId)
-            ->max('numerocheque') ?: ($desde - 1));
+            ->selectRaw('MAX(CAST(numerocheque AS UNSIGNED)) as ultimo')
+            ->value('ultimo') ?: ($desde - 1));
         $sig = max($desde, $ultimo + 1);
         if ($sig > $hasta) {
             throw new Exception('Chequera #'.$chequeraId.' sin números disponibles (rango '.$desde.'-'.$hasta.').');

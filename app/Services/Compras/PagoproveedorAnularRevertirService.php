@@ -64,7 +64,25 @@ class PagoproveedorAnularRevertirService
         );
 
         return DB::transaction(function () use ($pago) {
+            // Revalidar sobre la fila tomada: los chequeos previos corren sin lock.
+            $actual = Pagoproveedor::query()->whereKey((int) $pago->id)->lockForUpdate()->first();
+            if ($actual === null) {
+                throw new RuntimeException('La OP ya no existe.');
+            }
+            if ((int) ($actual->pagoproveedor_revertido_por_id ?? 0) > 0) {
+                throw new RuntimeException('La OP ya fue revertida; no se puede anular físicamente.');
+            }
+            if (in_array((string) $actual->estado, ['BAJA', 'REVERTIDA'], true)) {
+                throw new RuntimeException('La OP ya está anulada o revertida.');
+            }
+
             // Anita CC primero: necesita las aplicaciones ERP aún presentes.
+            //
+            // Deuda técnica aceptada: a diferencia de revertir(), acá los escritos a Anita quedan
+            // dentro de la TX local, así que un rollback posterior no los deshace. Se tolera porque
+            // todo este camino borra y los borrados en Anita son idempotentes: la recuperación es
+            // reejecutar la anulación. Runbook y condiciones para sacarlo de la TX en
+            // .cursor/rules/pagoproveedor-anulacion-reversion-anita.mdc
             $this->cuentacorrienteAnitaSyncService->revertirYEliminarPagoAnita($pago);
 
             PagoproveedorAplicacionCuentacorrienteSupport::revertirAplicacionesExistentes($pago);
@@ -126,7 +144,7 @@ class PagoproveedorAnularRevertirService
     }
 
     /**
-     * @return array{mensaje: string, pagoproveedor_id: int, pagoproveedor_reverso_id: int, numerotransaccion: string}
+     * @return array{mensaje: string, pagoproveedor_id: int, pagoproveedor_reverso_id: int, numerotransaccion: string, aviso?: string}
      */
     public function revertir(int $id, ?string $fecha = null): array
     {
@@ -152,7 +170,23 @@ class PagoproveedorAnularRevertirService
         $nroOrig = (string) ($pago->numerotransaccion ?? '');
         $leyenda = 'ANULA OPP '.$nroOrig;
 
-        return DB::transaction(function () use ($pago, $fechaOp, $leyenda, $nroOrig) {
+        // Todo lo local en una transacción; Anita recién después del commit. Un rollback de
+        // MySQL no revierte lo ya escrito en Anita: así quedaba la reversión espejada allá
+        // con la OP todavía viva acá.
+        $local = DB::transaction(function () use ($pago, $fechaOp, $leyenda, $nroOrig) {
+            // Revalidar sobre la fila tomada: los chequeos previos corren sin lock y dos
+            // reversiones simultáneas pasaban ambas.
+            $actual = Pagoproveedor::query()->whereKey((int) $pago->id)->lockForUpdate()->first();
+            if ($actual === null) {
+                throw new RuntimeException('La OP ya no existe.');
+            }
+            if ((int) ($actual->pagoproveedor_revertido_por_id ?? 0) > 0) {
+                throw new RuntimeException('La OP ya fue revertida.');
+            }
+            if (! in_array((string) $actual->estado, ['CONFIRMADA', 'PAGADA', 'CONCILIADA'], true)) {
+                throw new RuntimeException('Solo se pueden revertir OP confirmadas, pagadas o conciliadas.');
+            }
+
             // AOP: mismo comprobante con importes negativos y el número del original.
             $reverso = $this->pagoproveedorRepository->create([
                 'empresa_id' => (int) $pago->empresa_id,
@@ -196,12 +230,6 @@ class PagoproveedorAnularRevertirService
                 ->where('pagoproveedor_id', (int) $pago->id)
                 ->get();
 
-            PagoproveedorAnitaRetencionEscrituraSupport::grabarReversoDesdeRetenciones(
-                $pago,
-                $reverso,
-                $retencionesOrigen,
-            );
-
             $asientoOrig = Asiento::query()
                 ->with('asiento_movimientos')
                 ->where('pagoproveedor_id', (int) $pago->id)
@@ -233,19 +261,47 @@ class PagoproveedorAnularRevertirService
 
             $this->registrarEstado($pago, 'REVERTIDA', $leyenda.' (compensatorio OP '.$reverso->id.')');
 
-            $this->sincronizarAnulacionAnita($pago, $reverso, $cajaReverso);
-
-            EloquentAuditDeleteSupport::each(
-                Pagoproveedor_Retencion::query()->where('pagoproveedor_id', (int) $pago->id)
-            );
+            // Las retenciones de la OP original NO se borran: la tabla no tiene softdeletes
+            // ni auditoría, así que el borrado perdía sin rastro los certificados ya emitidos
+            // al proveedor. SICORE, IIBB y SUSS filtran por estado CONFIRMADA, de modo que al
+            // quedar la OP en REVERTIDA esas filas salen solas de las presentaciones.
 
             return [
-                'mensaje' => 'ok',
-                'pagoproveedor_id' => (int) $pago->id,
-                'pagoproveedor_reverso_id' => (int) $reverso->id,
-                'numerotransaccion' => (string) $reverso->numerotransaccion,
+                'reverso' => $reverso,
+                'caja_reverso' => $cajaReverso,
+                'retenciones_origen' => $retencionesOrigen,
             ];
         });
+
+        $reverso = $local['reverso'];
+        $salida = [
+            'mensaje' => 'ok',
+            'pagoproveedor_id' => (int) $pago->id,
+            'pagoproveedor_reverso_id' => (int) $reverso->id,
+            'numerotransaccion' => (string) $reverso->numerotransaccion,
+        ];
+
+        try {
+            PagoproveedorAnitaRetencionEscrituraSupport::grabarReversoDesdeRetenciones(
+                $pago,
+                $reverso,
+                $local['retenciones_origen'],
+            );
+            $this->sincronizarAnulacionAnita($pago, $reverso, $local['caja_reverso']);
+        } catch (\Throwable $eAnita) {
+            // La reversión ya está commitida: fallar acá haría que el operador reintente y
+            // se genere una segunda AOP, duplicando la compensación en cuenta corriente.
+            Log::error('pagoproveedor.reversion.anita.sync_post_commit.fallo', [
+                'pagoproveedor_id' => $pago->id,
+                'reverso_id' => $reverso->id,
+                'mensaje' => $eAnita->getMessage(),
+            ]);
+            $salida['aviso'] = 'Reversión grabada en ERP (AOP '.$reverso->numerotransaccion
+                .') pero falló la réplica Anita: '.$eAnita->getMessage()
+                .'. No reintente la reversión; revise sincronización/auditoría.';
+        }
+
+        return $salida;
     }
 
     /**

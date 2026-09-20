@@ -37,8 +37,42 @@ if ! grep -q 'name="DB_DATABASE" value=":memory:"' phpunit.xml; then
   die "phpunit.xml debe usar DB_DATABASE=:memory:. Abortado."
 fi
 
-if rg -n '^\s*use\s+.*RefreshDatabase|^\s*use\s+.*DatabaseMigrations' tests/ -g '*Test.php' -q 2>/dev/null; then
-  die "Hay tests con RefreshDatabase o DatabaseMigrations. Revisar antes de ejecutar."
+# El chequeo de RefreshDatabase mira SOLO los tests que se piden por argumento. Escanear todo
+# tests/ hacía que un único archivo ajeno (RecepcionProveedorMenuRolSupportTest, de Stock)
+# bloqueara la suite entera. Sin argumentos se sigue escaneando todo y bloqueando.
+if ! command -v rg >/dev/null 2>&1; then
+  # Antes el `2>/dev/null` hacía que sin rg el chequeo pasara en silencio: fallar cerrado.
+  die "Falta ripgrep (rg) para verificar RefreshDatabase. Instalar con: sudo apt install ripgrep"
+fi
+
+OBJETIVOS=()
+for arg in "$@"; do
+  case "$arg" in
+    -*) continue ;;
+  esac
+  if [[ -e "$arg" ]]; then
+    OBJETIVOS+=("$arg")
+  fi
+done
+
+# --filter=NombreTest: resolver a los archivos cuyo nombre coincide.
+for arg in "$@"; do
+  case "$arg" in
+    --filter=*)
+      patron="${arg#--filter=}"
+      while IFS= read -r encontrado; do
+        [[ -n "$encontrado" ]] && OBJETIVOS+=("$encontrado")
+      done < <(rg --files tests/ -g '*Test.php' 2>/dev/null | rg -i -- "$patron" || true)
+      ;;
+  esac
+done
+
+if [[ ${#OBJETIVOS[@]} -eq 0 ]]; then
+  OBJETIVOS=(tests/)
+fi
+
+if rg -n '^\s*use\s+.*RefreshDatabase|^\s*use\s+.*DatabaseMigrations' "${OBJETIVOS[@]}" -g '*Test.php' -q; then
+  die "Hay tests con RefreshDatabase o DatabaseMigrations en lo pedido. Revisar antes de ejecutar."
 fi
 
 if [[ "${ALLOW_TEST_EXECUTION:-}" != "1" ]]; then
