@@ -4,13 +4,16 @@ namespace App\Models\Stock;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
 /**
  * Cabecera de salida de bienes (evolución de préstamos).
  * Tabla física: prestamo.
  */
-class Prestamo extends Model
+class Prestamo extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     public const ESTADO_BORRADOR = 'BORRADOR';
 
     public const ESTADO_PENDIENTE_APROBACION = 'PENDIENTE_APROBACION';

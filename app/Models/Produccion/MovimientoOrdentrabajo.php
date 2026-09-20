@@ -3,6 +3,7 @@
 namespace App\Models\Produccion;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Models\Ventas\Ordentrabajo;
@@ -11,8 +12,9 @@ use App\Models\Produccion\Tarea;
 use App\Models\Produccion\Operacion;
 use App\Traits\Produccion\MovimientoOrdenTrabajoTrait;
 
-class MovimientoOrdentrabajo extends Model
+class MovimientoOrdentrabajo extends Model implements Auditable
 {
+	use \OwenIt\Auditing\Auditable;
 	use MovimientoOrdenTrabajoTrait;
 
     protected $fillable = ['ordentrabajo_id', 'ordentrabajo_tarea_id', 'tarea_id', 'operacion_id', 'empleado_id', 'fecha', 'estado', 'usuario_id'];

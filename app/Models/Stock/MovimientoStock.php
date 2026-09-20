@@ -3,6 +3,7 @@
 namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Models\Stock\Articulo_Movimiento;
@@ -10,8 +11,9 @@ use App\Models\Stock\Mventa;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Traits\Stock\MovimientoStockTrait;
 
-class MovimientoStock extends Model
+class MovimientoStock extends Model implements Auditable
 {
+	use \OwenIt\Auditing\Auditable;
 	use MovimientoStockTrait;
 
     protected $table = "movimientostock";

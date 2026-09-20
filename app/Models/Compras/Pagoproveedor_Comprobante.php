@@ -4,9 +4,11 @@ namespace App\Models\Compras;
 
 use App\Models\Configuracion\Moneda;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pagoproveedor_Comprobante extends Model
+class Pagoproveedor_Comprobante extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
 
     protected $table = 'pagoproveedor_comprobante';
 

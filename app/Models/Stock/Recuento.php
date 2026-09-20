@@ -5,9 +5,11 @@ namespace App\Models\Stock;
 use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Recuento extends Model
+class Recuento extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
 
     public const ESTADO_PENDIENTE = 'PENDIENTE';
 

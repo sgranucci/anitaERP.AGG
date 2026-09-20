@@ -3,6 +3,7 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 use Illuminate\Support\Facades\Storage;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -11,8 +12,9 @@ use App\Models\Ventas\Ordentrabajo_Tarea;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Traits\Ventas\OrdenTrabajoTrait;
 
-class Ordentrabajo extends Model
+class Ordentrabajo extends Model implements Auditable
 {
+	use \OwenIt\Auditing\Auditable;
 	use OrdenTrabajoTrait;
 
     protected $fillable = ['fecha', 'codigo', 'leyenda', 'estado', 'usuario_id'];

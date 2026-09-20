@@ -4,9 +4,11 @@ namespace App\Models\Compras;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ordencompra_Historia extends Model
+class Ordencompra_Historia extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
 
     protected $table = 'ordencompra_historia';
 
