@@ -10,6 +10,19 @@ use InvalidArgumentException;
  */
 final class WaitryPaymentPayloadSupport
 {
+    /**
+     * La abreviatura de `moneda` es el código ARCA (PES, DOL), no ISO 4217.
+     * Waitry espera ISO: con "PES" contesta 200 pero no registra el cobro.
+     *
+     * @var array<string, string>
+     */
+    private const ISO_POR_ABREVIATURA_ERP = [
+        'PES' => 'ARS',
+        'DOL' => 'USD',
+        'DCA' => 'USD',
+        'UDT' => 'USD',
+    ];
+
     public function __construct(
         private readonly WaitryPaymentTypeSupport $paymentTypeSupport,
         private readonly WaitryPaymentGatewaySupport $paymentGatewaySupport,
@@ -24,8 +37,12 @@ final class WaitryPaymentPayloadSupport
      *     payments?: list<array{gateway: string, amount: float}>
      * }
      */
-    public function armarBloquePayment(array $mediosPago, int $empresaId, bool $pagoOrdenExternaPush = false): array
-    {
+    public function armarBloquePayment(
+        array $mediosPago,
+        int $empresaId,
+        bool $pagoOrdenExternaPush = false,
+        bool $incluirPayments = false,
+    ): array {
         $monto = $this->paymentTypeSupport->montoTotalMedioPrincipal($mediosPago);
         if ($monto <= 0.) {
             throw new InvalidArgumentException('Waitry: el monto del pago debe ser mayor a cero.');
@@ -45,7 +62,7 @@ final class WaitryPaymentPayloadSupport
                 : $this->paymentTypeSupport->resolverDesdeMediosPago($mediosPago, $empresaId),
         ];
 
-        if ($pagoOrdenExternaPush) {
+        if ($pagoOrdenExternaPush || $incluirPayments) {
             $payments = $this->paymentGatewaySupport->armarPaymentsDesdeMediosPago($mediosPago, $empresaId);
             if ($payments !== []) {
                 $bloque['payments'] = $payments;
@@ -86,6 +103,10 @@ final class WaitryPaymentPayloadSupport
         $codigo = strtoupper(trim((string) ($abrev ?? '')));
         if ($codigo === '') {
             return 'ARS';
+        }
+
+        if (isset(self::ISO_POR_ABREVIATURA_ERP[$codigo])) {
+            return self::ISO_POR_ABREVIATURA_ERP[$codigo];
         }
 
         if (strlen($codigo) > 3) {

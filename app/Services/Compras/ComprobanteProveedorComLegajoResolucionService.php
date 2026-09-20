@@ -279,57 +279,47 @@ class ComprobanteProveedorComLegajoResolucionService
             })->values();
         }
 
-        if ($candidatas->isEmpty()) {
-            // Flujo simple: si hay una sola COM, asignarla igual (aviso); si hay varias, la más cercana.
-            if ($recepciones->count() === 1) {
-                /** @var Recepcion_Proveedor $unica */
-                $unica = $recepciones->first();
-                $prov = $provisionFactura($unica);
+        // Solo se asigna sola cuando no hay duda posible: una única candidata por importe.
+        // Antes elegía la primera entre varias, o la más cercana cuando ninguna coincidía,
+        // y avisaba; ese automatismo silencioso es el que ataba COM a la factura equivocada.
+        $etiquetarComs = static function (Collection $coms): string {
+            return $coms
+                ->map(static function (Recepcion_Proveedor $rec): string {
+                    $nro = trim((string) ($rec->numerorecepcion ?? ''));
 
-                return [
-                    'ids' => [(int) $unica->id],
-                    'auto' => true,
-                    'aviso' => sprintf(
-                        'COM #%s asignada automáticamente aunque el neto no coincide (factura %s vs provisión COM %s). Revise antes de contabilizar.',
-                        $unica->id,
-                        number_format($importe, 2, ',', '.'),
-                        number_format($prov, 2, ',', '.')
-                    ),
-                    'ordencompra_id' => (int) ($unica->ordencompra_id ?? 0) ?: (int) $ordencompra->id,
-                    'importe_comparacion' => $importe,
-                    'etiqueta' => $importeMeta['etiqueta'],
-                ];
-            }
+                    return $nro !== '' ? 'Nº '.$nro : '#'.$rec->id;
+                })
+                ->implode(', ');
+        };
 
-            $cercana = $recepciones->sortBy(function (Recepcion_Proveedor $rec) use ($importe, $provisionFactura) {
-                return abs($provisionFactura($rec) - $importe);
-            })->first();
-
-            if ($cercana) {
-                $prov = $provisionFactura($cercana);
-
-                return [
-                    'ids' => [(int) $cercana->id],
-                    'auto' => true,
-                    'aviso' => sprintf(
-                        'COM #%s asignada por aproximación (factura %s vs provisión COM %s). Hay más de una COM: confirme la correcta antes de contabilizar.',
-                        $cercana->id,
-                        number_format($importe, 2, ',', '.'),
-                        number_format($prov, 2, ',', '.')
-                    ),
-                    'ordencompra_id' => (int) ($cercana->ordencompra_id ?? 0) ?: (int) $ordencompra->id,
-                    'importe_comparacion' => $importe,
-                    'etiqueta' => $importeMeta['etiqueta'],
-                ];
-            }
-
+        if ($candidatas->count() > 1) {
             return [
                 'ids' => [],
                 'auto' => false,
                 'aviso' => sprintf(
-                    'No hay COM pendiente cuyo neto coincida con el %s de la factura (%s).',
+                    'Hay %d COM pendientes cuyo neto coincide con el %s de la factura (%s): %s. '
+                    .'Elija la COM correcta: el sistema no la asigna por usted cuando hay más de una opción.',
+                    $candidatas->count(),
                     $importeMeta['etiqueta'],
-                    number_format($importe, 2, ',', '.')
+                    number_format($importe, 2, ',', '.'),
+                    $etiquetarComs($candidatas),
+                ),
+                'ordencompra_id' => null,
+                'importe_comparacion' => $importe,
+                'etiqueta' => $importeMeta['etiqueta'],
+            ];
+        }
+
+        if ($candidatas->isEmpty()) {
+            return [
+                'ids' => [],
+                'auto' => false,
+                'aviso' => sprintf(
+                    'Ninguna COM pendiente coincide con el %s de la factura (%s). COM disponibles: %s. '
+                    .'Elija la COM manualmente o revise el importe de la factura.',
+                    $importeMeta['etiqueta'],
+                    number_format($importe, 2, ',', '.'),
+                    $recepciones->isNotEmpty() ? $etiquetarComs($recepciones) : 'ninguna',
                 ),
                 'ordencompra_id' => null,
                 'importe_comparacion' => $importe,
@@ -344,7 +334,7 @@ class ComprobanteProveedorComLegajoResolucionService
             'ids' => [(int) $elegida->id],
             'auto' => true,
             'aviso' => sprintf(
-                'COM #%s asignada automáticamente (primera pendiente con %s ≈ %s).',
+                'COM #%s asignada automáticamente (única pendiente con %s ≈ %s).',
                 $elegida->id,
                 $importeMeta['etiqueta'],
                 number_format($provisionFactura($elegida), 2, ',', '.')

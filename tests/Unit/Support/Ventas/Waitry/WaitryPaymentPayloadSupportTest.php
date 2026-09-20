@@ -53,6 +53,16 @@ final class WaitryPaymentPayloadSupportTest extends TestCase
         $this->assertArrayNotHasKey('payments', $bloque);
     }
 
+    public function test_armar_bloque_traduce_abreviatura_arca_a_iso_4217(): void
+    {
+        $bloque = $this->support()->armarBloquePayment(
+            [['cuentacaja_id' => 1, 'moneda_id' => 1, 'monto' => 4800.0]],
+            2,
+        );
+
+        $this->assertSame('ARS', $bloque['total_fee']['currency_code']);
+    }
+
     public function test_monto_total_pagado_suma_varios_medios(): void
     {
         $total = $this->support()->montoTotalPagado([

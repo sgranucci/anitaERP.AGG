@@ -976,6 +976,14 @@
                 alert('La misma COM quedó asignada a más de una factura. Corrija antes de guardar.');
                 return;
             }
+            // Doble clic = dos POST concurrentes que se pisaban y duplicaban la asignación.
+            if ($form.data('enviando')) {
+                return;
+            }
+            var $btnGuardar = $form.find('button[type="submit"]');
+            var textoOriginal = $btnGuardar.html();
+            $form.data('enviando', true);
+            $btnGuardar.prop('disabled', true).html('Guardando...');
             $.ajax({
                 url: $form.attr('action'),
                 method: 'POST',
@@ -998,6 +1006,8 @@
                     msg = Object.values(xhr.responseJSON.errors).join(' ');
                 }
                 alert(msg);
+                $form.data('enviando', false);
+                $btnGuardar.prop('disabled', false).html(textoOriginal);
             });
         });
     });

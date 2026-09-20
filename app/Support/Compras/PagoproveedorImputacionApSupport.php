@@ -68,6 +68,23 @@ final class PagoproveedorImputacionApSupport
     }
 
     /**
+     * Tesorería estilo I/E: asiento sin trío AP/anticipo y sin CC de proveedor.
+     * Sale de este control (canon 215010, gasto, etc.) y va al de Ingreso/Egreso.
+     */
+    public static function esPagoSinTrioAp(
+        bool $tieneCc,
+        bool $tieneAsiento,
+        float $asientoTrioArs,
+        float $tolerancia = self::TOLERANCIA,
+    ): bool {
+        if ($tieneCc || ! $tieneAsiento) {
+            return false;
+        }
+
+        return abs($asientoTrioArs) <= $tolerancia;
+    }
+
+    /**
      * @return array{
      *     ok: bool,
      *     alertas: list<string>,

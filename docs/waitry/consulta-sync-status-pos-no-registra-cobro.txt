@@ -1,0 +1,119 @@
+Asunto: syncStatusPOS responde ok pero la orden queda en $0 y payments vacío
+
+---
+
+Estimados,
+
+Somos el equipo de Anita ERP. Integramos Waitry con nuestro POS de gastronomía
+(BONUS Wilde placeId 11783, BONUS Avellaneda placeId 11782, BONUS Quilmes placeId 11784).
+
+Flujo: cuando un cliente pide en el kiosco y NO paga en el tótem, la orden queda impaga en
+Waitry. El cajero la importa a Anita, factura y cobra. Inmediatamente después llamamos a
+POST syncStatusPOS para informarles el cobro.
+
+Problema: el syncStatusPOS responde HTTP 200 / ok, pero la orden nunca queda registrada como
+pagada. Al consultarla (getOrdersPOS) sigue con payment.total_fee.amount = 0 y payments: [].
+Operativamente esto deja el pedido como "Pagado: NO" en su pantalla, cuando en realidad ya
+fue cobrado y facturado.
+
+Revisamos los últimos 10 syncStatusPOS enviados: los 10 presentan el mismo comportamiento.
+
+---
+
+Caso de ejemplo (19/09/2026)
+
+Factura Anita:         FAC B 00015-00253177 (CAE 86383892585472)
+orderId Waitry:        18883390
+external_reference_id: W-477621
+display_id / entrega:  198
+placeId:               11783
+Monto:                 $ 4.800 (efectivo en caja Anita)
+Ítems:                 2 x Empanada Carne (SKU V0291)
+
+Enviado a syncStatusPOS el 19/09/2026 23:25:58 (respuesta HTTP 200):
+
+{
+  "placeId": 11783,
+  "orderId": 18883390,
+  "event": "accepted",
+  "paid": true,
+  "totalPaid": 4800,
+  "payment": {
+    "total_fee": {
+      "amount": 4800,
+      "currency_code": "ARS",
+      "formatted_amount": "$4800.00"
+    },
+    "type": "cash"
+  }
+}
+
+Lo que devuelve Waitry al consultar la orden (getOrdersPOS, orderId 18883390):
+
+{
+  "current_state": "closed",
+  "payment": {
+    "total_fee": { "amount": 0, "currency_code": "ARS", "formatted_amount": "$0" },
+    "type": "cash",
+    "payments": []
+  },
+  "subtotal": [ { "amount": 4800, "currency_code": "ARS" } ],
+  "charges":  [ { "amount": 4800, "currency_code": "ARS" } ]
+}
+
+El subtotal y los charges quedaron bien en $4.800; lo único que no se registró es el cobro.
+
+---
+
+Observación que puede ser la clave
+
+Las órdenes cobradas en el kiosco sí quedan con el bloque payments[] poblado. Ejemplo real
+del mismo período (orderId 18880593, $11.200):
+
+{
+  "payment": {
+    "total_fee": { "amount": 11200, "currency_code": "ARS" },
+    "type": "KIOSK MP",
+    "payments": [
+      {
+        "orderPaymentId": 6357303,
+        "gateway": "KIOSK MP",
+        "paidId": "8d86ad7e-0086-4ae1-99f6-848f8989eeb4",
+        "amount": 11200,
+        "status": "finished",
+        "createdAt": { "date": "2026-09-19 16:58:09.000000" }
+      }
+    ]
+  }
+}
+
+La diferencia entre una orden que queda pagada y una que no es la presencia de payments[].
+Nuestro syncStatusPOS no lo envía, porque el ejemplo de request que nos pasaron tampoco lo
+incluye: solo placeId, orderId, event, paid, totalPaid y payment con total_fee + type.
+
+---
+
+Preguntas
+
+1. ¿El payload que enviamos es el correcto, o falta algún campo para que el cobro se persista?
+2. ¿Hay que enviar payment.payments[] con gateway y amount, como en pushExternalOrder? Si es
+   así, ¿qué valor de gateway corresponde para un cobro en efectivo hecho en un POS externo?
+3. ¿El valor de "event" debe ser otro? Estamos usando "accepted".
+4. ¿Pueden revisar del lado de ustedes los requests de los orderId 18883390 (19/09 23:25:58) y
+   18886944 (20/09 10:02:53) y confirmar qué recibieron y por qué no se registró el pago?
+
+Otros orderId con el mismo patrón, todos con respuesta 200 y cobro no registrado:
+18886440, 18885380, 18885293, 18884971, 18884835, 18884795, 18884490, 18884030, 18883932.
+
+---
+
+Impacto: los pedidos de kiosco cobrados en caja quedan figurando como impagos en Waitry, lo
+que confunde al personal en el KDS y nos distorsiona el total pagado del cuadro de cierre de
+jornada. El importe de la orden concilia bien; el problema es solo el estado de cobro.
+
+Quedamos atentos a su respuesta. Gracias.
+
+[Nombre]
+[Cargo — Anita ERP]
+[Email]
+[Teléfono opcional]

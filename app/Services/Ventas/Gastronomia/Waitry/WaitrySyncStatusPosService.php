@@ -458,7 +458,11 @@ final class WaitrySyncStatusPosService
      */
     private function armarPayloadSyncPago(int $waitryOrderId, array $mediosPago, int $empresaId, int $placeId): array
     {
-        $payment = $this->paymentPayloadSupport->armarBloquePayment($mediosPago, $empresaId);
+        $payment = $this->paymentPayloadSupport->armarBloquePayment(
+            $mediosPago,
+            $empresaId,
+            incluirPayments: (bool) config('waitry.sync_status_pos_enviar_payments', false),
+        );
 
         // Waitry (~sep 2026): placeId + orderId + event obligatorios (camelCase).
         return [

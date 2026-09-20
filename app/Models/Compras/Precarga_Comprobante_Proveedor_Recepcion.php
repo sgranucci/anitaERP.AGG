@@ -13,6 +13,7 @@ class Precarga_Comprobante_Proveedor_Recepcion extends Model
         'precarga_comprobante_proveedor_id',
         'recepcion_proveedor_id',
         'orden',
+        'user_id',
     ];
 
     public function precarga_comprobante_proveedores()

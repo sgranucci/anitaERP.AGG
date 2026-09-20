@@ -5,6 +5,7 @@ namespace App\Services\Caja;
 use App\Mail\Caja\IngresoEgresoImputacionDiaria;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Configuracion\Empresa;
+use App\Models\Contable\Asiento;
 use App\Support\Caja\IngresoEgresoImputacionDiariaAnitaReader;
 use App\Support\Caja\IngresoEgresoImputacionDiariaSupport as Ie;
 use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport;
@@ -54,6 +55,7 @@ final class IngresoEgresoImputacionDiariaService
                 'caja_movimiento_cuentacajas.cuentacajas:id,codigo,nombre,cuentacontable_id',
                 'cheques.cuentacajas:id,codigo,nombre',
                 'asientos.asiento_movimientos',
+                'pagoproveedores.asientos.asiento_movimientos',
             ])
             ->whereIn('empresa_id', $empresaIds)
             ->whereDate('fecha', '>=', $desde)
@@ -63,11 +65,9 @@ final class IngresoEgresoImputacionDiariaService
                 $q->whereHas('tipotransaccioncajas', function ($t) {
                     $t->whereIn(\DB::raw('UPPER(TRIM(abreviatura))'), Ie::TIPOS_IE);
                 })->orWhere(function ($q2) {
-                    $q2->where(function ($q3) {
-                        $q3->whereNull('pagoproveedor_id')->orWhere('pagoproveedor_id', '<=', 0);
-                    })->whereHas('tipotransaccioncajas', function ($t) {
+                    $q2->whereHas('tipotransaccioncajas', function ($t) {
                         $t->whereIn(\DB::raw('UPPER(TRIM(abreviatura))'), Ie::TIPOS_OPP_IE);
-                    });
+                    })->whereDoesntHave('pagoproveedores.proveedor_cuentacorrientes');
                 });
             })
             ->orderBy('fecha')
@@ -137,8 +137,8 @@ final class IngresoEgresoImputacionDiariaService
             'mail_destino' => null,
             'mail_error' => null,
             'notas' => [
-                'Incluye ING / EGR / TRA y OPP/OPA cargados en Ingreso/Egreso (sin pagoproveedor).',
-                'No incluye cobranzas ni las OP de Compras (esas van al control de CC / asiento).',
+                'Incluye ING / EGR / TRA y OPP/OPA de tesorería (sin CC de proveedor).',
+                'No incluye cobranzas ni las OP de proveedores con facturas/anticipo (esas van al control AP).',
                 'Caja + cheques ERP se cruza con tesmov Anita. El asiento ERP se cruza con ctamov.',
                 'En ING/EGR/TRA además se exige que caja+cheques cuadre con el total del asiento.',
                 'OPP/OPA de I/E no exigen caja = asiento (el asiento incluye AP/retenciones).',
@@ -176,7 +176,7 @@ final class IngresoEgresoImputacionDiariaService
                     'numero' => $nro,
                 ];
             }
-            $nroAsiento = (int) ($mov->asientos?->numeroasiento ?? 0);
+            $nroAsiento = (int) ($this->asientoDeMovimiento($mov)?->numeroasiento ?? 0);
             if ($empresaAnita > 0 && $nroAsiento > 0) {
                 $clavesCtamov[] = [
                     'empresa_anita' => $empresaAnita,
@@ -259,7 +259,7 @@ final class IngresoEgresoImputacionDiariaService
             }
             $chequesArs = round($chequesArs, 2);
 
-            $asiento = $mov->asientos;
+            $asiento = $this->asientoDeMovimiento($mov);
             $tieneAsiento = $asiento !== null && (int) ($asiento->id ?? 0) > 0;
             $balance = $tieneAsiento
                 ? PagoproveedorAnitaAuditoriaCompareSupport::balanceDesdeAsientoMovimientos($asiento->asiento_movimientos ?? [])
@@ -331,6 +331,21 @@ final class IngresoEgresoImputacionDiariaService
         }
 
         return $out;
+    }
+
+    private function asientoDeMovimiento(Caja_Movimiento $mov): ?Asiento
+    {
+        $asiento = $mov->asientos;
+        if ($asiento !== null && (int) ($asiento->id ?? 0) > 0) {
+            return $asiento;
+        }
+
+        $asientoPago = $mov->pagoproveedores?->asientos;
+        if ($asientoPago !== null && (int) ($asientoPago->id ?? 0) > 0) {
+            return $asientoPago;
+        }
+
+        return null;
     }
 
     /**

@@ -153,4 +153,32 @@ class PagoproveedorImputacionApSupportTest extends TestCase
         $this->assertFalse(PagoproveedorImputacionApSupport::esOrigenIngresoEgreso(null, 'OPP'));
         $this->assertFalse(PagoproveedorImputacionApSupport::esOrigenIngresoEgreso(0, 'OPP'));
     }
+
+    public function test_pago_tesoreria_sin_ap_sale_del_control_de_proveedores(): void
+    {
+        $this->assertTrue(PagoproveedorImputacionApSupport::esPagoSinTrioAp(false, true, 0.0));
+        $this->assertFalse(PagoproveedorImputacionApSupport::esPagoSinTrioAp(true, true, 0.0));
+        $this->assertFalse(PagoproveedorImputacionApSupport::esPagoSinTrioAp(false, true, -325219869.18));
+        $this->assertFalse(PagoproveedorImputacionApSupport::esPagoSinTrioAp(false, false, 0.0));
+    }
+
+    public function test_sin_cc_con_trio_ap_sigue_siendo_desvio(): void
+    {
+        $eval = PagoproveedorImputacionApSupport::evaluarCuatroPatas(
+            0.0,
+            -1500.0,
+            0.0,
+            -1500.0,
+            false,
+            true,
+            false,
+            true
+        );
+
+        $this->assertFalse($eval['ok']);
+        $this->assertContains('Sin CC', $eval['alertas']);
+        $this->assertContains('Sin promov Anita', $eval['alertas']);
+        $this->assertNotContains('Sin asiento', $eval['alertas']);
+        $this->assertNotContains('Sin ctamov Anita', $eval['alertas']);
+    }
 }

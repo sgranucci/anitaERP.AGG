@@ -154,6 +154,18 @@ class OrdencompraLegajoBandejaController extends Controller
             can('actualizar-ordencompra');
         }
 
+        // La referencia de factura es un id de precarga o el sintético "anita-N" / "cp-N".
+        $refFactura = ['nullable', 'regex:/^(\d+|anita-\d+|cp-\d+)$/i'];
+        $request->validate([
+            'asignaciones' => 'sometimes|array|max:200',
+            'asignaciones.*.precarga_id' => $refFactura,
+            'asignaciones.*.recepcion_ids' => 'nullable|array|max:200',
+            'asignaciones.*.recepcion_ids.*' => 'nullable|integer|min:0',
+            'precarga_id' => $refFactura,
+            'recepcion_ids' => 'sometimes|array|max:200',
+            'recepcion_ids.*' => 'nullable|integer|min:0',
+        ]);
+
         $oc = $this->paqueteService->encontrarOcVisible($id);
         $asignaciones = $request->input('asignaciones');
         if (is_array($asignaciones) && $asignaciones !== []) {

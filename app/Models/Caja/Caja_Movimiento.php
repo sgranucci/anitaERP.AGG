@@ -117,6 +117,11 @@ class Caja_Movimiento extends Model implements Auditable
         return $this->belongsTo(Conceptogasto::class, 'conceptogasto_id');
     }
 
+    public function pagoproveedores()
+    {
+        return $this->belongsTo(\App\Models\Compras\Pagoproveedor::class, 'pagoproveedor_id');
+    }
+
     public function comprobante_proveedores()
     {
         return $this->hasMany(Comprobante_Proveedor::class, 'caja_movimiento_id')

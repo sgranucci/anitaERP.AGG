@@ -127,6 +127,79 @@ final class ComprobanteProveedorReservaComLegajoSupport
     }
 
     /**
+     * La suma de las facturas asignadas a una COM no puede superar su provisión.
+     *
+     * Complementa la unicidad: cuando el legajo permite compartir COM (OC anticipada /
+     * contrato) este es el único freno, y cuando no la permite atrapa igual la COM
+     * equivocada (importe que no corresponde a esa recepción).
+     *
+     * Las facturas sin importe cargado (precarga de Anita con total 0) suman 0: no se
+     * pueden validar, pero tampoco deben bloquear al resto.
+     *
+     * @param  array<int|string, list<int>>  $asignacionesPorPrecarga  precarga_id|cp-N => recepcion_ids
+     * @param  array<int, float>  $provisionPorCom  recepcion_id => provisión (0/ausente = no validable)
+     * @param  array<int|string, float>  $importePorFactura  precarga_id|cp-N => importe de la factura
+     * @param  array<int, string>  $etiquetasCom  recepcion_id => etiqueta visible (opcional)
+     */
+    public static function mensajeExcesoProvisionPorCom(
+        array $asignacionesPorPrecarga,
+        array $provisionPorCom,
+        array $importePorFactura,
+        array $etiquetasCom = [],
+        float $toleranciaPct = 0.0,
+    ): ?string {
+        $asignadoPorCom = [];
+        foreach ($asignacionesPorPrecarga as $precargaId => $recepcionIds) {
+            $clave = is_numeric($precargaId) ? (int) $precargaId : trim((string) $precargaId);
+            if ($clave === 0 || $clave === '0' || $clave === '') {
+                continue;
+            }
+            $importe = abs((float) ($importePorFactura[$clave] ?? $importePorFactura[(string) $clave] ?? 0));
+            foreach ((array) $recepcionIds as $recepcionId) {
+                $rid = (int) $recepcionId;
+                if ($rid <= 0) {
+                    continue;
+                }
+                $asignadoPorCom[$rid] ??= ['importe' => 0.0, 'facturas' => 0];
+                $asignadoPorCom[$rid]['importe'] += $importe;
+                $asignadoPorCom[$rid]['facturas']++;
+            }
+        }
+
+        foreach ($asignadoPorCom as $rid => $acumulado) {
+            $provision = abs((float) ($provisionPorCom[$rid] ?? 0));
+            if ($provision <= 0.00001) {
+                // Sin provisión conocida (COM histórica sin asiento ni líneas): no validable.
+                continue;
+            }
+            $asignado = (float) $acumulado['importe'];
+            if ($asignado <= 0.00001) {
+                continue;
+            }
+            if ($asignado <= $provision) {
+                continue;
+            }
+            if (! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($asignado, $provision, $toleranciaPct)) {
+                continue;
+            }
+
+            $etiqueta = trim((string) ($etiquetasCom[$rid] ?? ''));
+            $comLabel = $etiqueta !== '' ? $etiqueta : '#'.$rid;
+
+            return sprintf(
+                'La COM %s tiene provisión de %s y le está asignando %s en %d factura(s). '
+                .'Revise si la factura corresponde a esta recepción.',
+                $comLabel,
+                number_format($provision, 2, ',', '.'),
+                number_format($asignado, 2, ',', '.'),
+                (int) $acumulado['facturas'],
+            );
+        }
+
+        return null;
+    }
+
+    /**
      * Una misma COM no puede quedar asignada a dos facturas del legajo.
      *
      * @param  array<int|string, list<int>>  $asignacionesPorPrecarga  precarga_id|cp-N => recepcion_ids

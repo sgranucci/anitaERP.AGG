@@ -247,6 +247,17 @@ return [
     'sync_status_pos_job_timeout' => max(60, (int) env('WAITRY_SYNC_STATUS_POS_JOB_TIMEOUT', 180)),
     'sync_status_pos_stale_minutos' => max(2, (int) env('WAITRY_SYNC_STATUS_POS_STALE_MINUTOS', 5)),
 
+    /**
+     * Agrega payment.payments[] al syncStatusPOS (el ejemplo de Waitry solo trae total_fee).
+     * Prueba sep 2026: con total_fee solo, Waitry responde ok pero deja la orden en $0 y
+     * payments vacío; las órdenes cobradas en kiosco sí traen payments[]. Pendiente de
+     * confirmación de Waitry, por eso queda apagado.
+     */
+    'sync_status_pos_enviar_payments' => filter_var(
+        env('WAITRY_SYNC_STATUS_POS_ENVIAR_PAYMENTS', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
     /** Ruta relativa en storage/app para cache del token OAuth. */
     'token_storage_path' => env('WAITRY_TOKEN_STORAGE_PATH', 'waitry/oauth_token.json'),
 ];

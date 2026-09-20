@@ -127,4 +127,111 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
         $this->assertNotNull($mensaje);
         $this->assertStringContainsString('166067', $mensaje);
     }
+
+    /** Caso real: COM 67291 con provisión 54.810 y la factura de 69.360 que no le corresponde. */
+    public function test_bloquea_factura_que_excede_la_provision_de_la_com(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [769 => [67291]],
+            [67291 => 54810.00],
+            [769 => 69360.00],
+            [67291 => 'Nº 167291'],
+            5.0,
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('167291', $mensaje);
+        $this->assertStringContainsString('54.810,00', $mensaje);
+        $this->assertStringContainsString('69.360,00', $mensaje);
+    }
+
+    public function test_permite_factura_que_coincide_con_la_provision(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [773 => [67291]],
+            [67291 => 54810.00],
+            [773 => 54810.00],
+            [],
+            5.0,
+        );
+
+        $this->assertNull($mensaje);
+    }
+
+    /** Anticipada / contrato: dos facturas parciales caben si la suma no excede la provisión. */
+    public function test_permite_dos_facturas_parciales_dentro_de_la_provision(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [
+                801 => [70001],
+                802 => [70001],
+            ],
+            [70001 => 100000.00],
+            [801 => 50000.00, 802 => 50000.00],
+            [],
+            5.0,
+        );
+
+        $this->assertNull($mensaje);
+    }
+
+    public function test_bloquea_dos_facturas_parciales_que_superan_la_provision(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [
+                801 => [70001],
+                802 => [70001],
+            ],
+            [70001 => 100000.00],
+            [801 => 80000.00, 802 => 80000.00],
+            [70001 => 'Nº 170001'],
+            5.0,
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('2 factura(s)', $mensaje);
+    }
+
+    public function test_respeta_la_tolerancia_configurada(): void
+    {
+        // 102.000 sobre 100.000 = 2% de exceso, dentro del 5% tolerado.
+        $this->assertNull(ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [801 => [70001]],
+            [70001 => 100000.00],
+            [801 => 102000.00],
+            [],
+            5.0,
+        ));
+    }
+
+    /** COM histórica sin asiento ni líneas: no se puede validar, no debe bloquear. */
+    public function test_no_bloquea_cuando_la_com_no_tiene_provision_conocida(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [769 => [67291]],
+            [67291 => 0.0],
+            [769 => 69360.00],
+            [],
+            5.0,
+        );
+
+        $this->assertNull($mensaje);
+    }
+
+    /** Precarga de scan Anita con total 0: suma 0 y no bloquea al resto del legajo. */
+    public function test_factura_sin_importe_no_bloquea(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [
+                404 => [65392],
+                927 => [65392],
+            ],
+            [65392 => 118404.00],
+            [404 => 0.0, 927 => 118404.00],
+            [],
+            5.0,
+        );
+
+        $this->assertNull($mensaje);
+    }
 }

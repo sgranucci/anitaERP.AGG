@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Ordencompra_Historia;
 use App\Models\Compras\Pagoproveedor_Comprobante;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
@@ -15,10 +16,12 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorReservaComLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
+use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
@@ -28,6 +31,7 @@ use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoComprobanteSupport;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -281,21 +285,43 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
 
-        $mapaEfectivo = $this->asignacionesActualesDelLegajo($oc);
-        foreach ($normalizadas as $precargaId => $ids) {
-            $mapaEfectivo[(int) $precargaId] = $ids;
-        }
-        $conflicto = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
-            $mapaEfectivo,
-            $etiquetasCom
-        );
-        if ($conflicto !== null) {
-            throw ValidationException::withMessages([
-                'recepcion_ids' => $conflicto,
-            ]);
-        }
+        // Validar y escribir bajo el mismo candado: dos submits simultáneos del mismo
+        // legajo se serializan y el segundo ve la asignación del primero.
+        DB::transaction(function () use ($oc, $normalizadas, $etiquetasCom) {
+            $this->bloquearLegajoParaAsignacion($oc);
 
-        DB::transaction(function () use ($normalizadas) {
+            $mapaEfectivo = $this->asignacionesActualesDelLegajo($oc);
+            foreach ($normalizadas as $precargaId => $ids) {
+                $mapaEfectivo[(int) $precargaId] = $ids;
+            }
+
+            if (! $this->permiteCompartirComEntreFacturas($oc)) {
+                $conflicto = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
+                    $mapaEfectivo,
+                    $etiquetasCom
+                );
+                if ($conflicto !== null) {
+                    throw ValidationException::withMessages([
+                        'recepcion_ids' => $conflicto,
+                    ]);
+                }
+            }
+
+            $exceso = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+                $mapaEfectivo,
+                $this->provisionPorCom($oc, $mapaEfectivo),
+                $this->importePorFacturaDelLegajo($oc),
+                $etiquetasCom,
+                ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc),
+            );
+            if ($exceso !== null) {
+                throw ValidationException::withMessages([
+                    'recepcion_ids' => $exceso,
+                ]);
+            }
+
+            $previas = $this->asignacionesPorPrecarga(array_map('intval', array_keys($normalizadas)));
+
             foreach ($normalizadas as $precargaId => $ids) {
                 Precarga_Comprobante_Proveedor_Recepcion::query()
                     ->where('precarga_comprobante_proveedor_id', $precargaId)
@@ -305,10 +331,187 @@ class OrdencompraLegajoBandejaPaqueteService
                         'precarga_comprobante_proveedor_id' => $precargaId,
                         'recepcion_proveedor_id' => $recepcionId,
                         'orden' => $orden + 1,
+                        'user_id' => Auth::id() ? (int) Auth::id() : null,
                     ]);
                 }
             }
+
+            $this->registrarHistoriaAsignacionCom($oc, $normalizadas, $previas, $etiquetasCom);
         });
+    }
+
+    /**
+     * OC anticipada (50/50) y contratos: la provisión de una COM puede repartirse entre
+     * varias facturas del legajo. El freno ahí es el importe, no la unicidad.
+     */
+    private function permiteCompartirComEntreFacturas(Ordencompra $oc): bool
+    {
+        if (ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc)) {
+            return true;
+        }
+
+        return (bool) ($oc->es_contrato ?? false);
+    }
+
+    /**
+     * Candado de escritura sobre las precargas del legajo (clave empresa + nº de OC).
+     * Si el legajo todavía no tiene precargas, cae al registro de la OC.
+     */
+    private function bloquearLegajoParaAsignacion(Ordencompra $oc): void
+    {
+        $numero = trim((string) $oc->numeroordencompra);
+        $empresaId = (int) $oc->empresa_id;
+
+        $bloqueadas = 0;
+        if ($numero !== '' && $empresaId > 0) {
+            $bloqueadas = count(
+                DB::table('precarga_comprobante_proveedor')
+                    ->where('empresa_id', $empresaId)
+                    ->where('numeroordencompra', $numero)
+                    ->lockForUpdate()
+                    ->pluck('id')
+                    ->all()
+            );
+        }
+
+        if ($bloqueadas === 0) {
+            DB::table('ordencompra')->where('id', (int) $oc->id)->lockForUpdate()->value('id');
+        }
+    }
+
+    /**
+     * Provisión contable de cada COM involucrada, en la moneda de la recepción.
+     *
+     * @param  array<int|string, list<int>>  $mapaEfectivo
+     * @return array<int, float>
+     */
+    private function provisionPorCom(Ordencompra $oc, array $mapaEfectivo): array
+    {
+        $ids = [];
+        foreach ($mapaEfectivo as $recepcionIds) {
+            foreach ((array) $recepcionIds as $recepcionId) {
+                $rid = (int) $recepcionId;
+                if ($rid > 0) {
+                    $ids[$rid] = true;
+                }
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+
+        $recepciones = Recepcion_Proveedor::query()
+            ->whereIn('id', array_keys($ids))
+            ->with(['recepcion_proveedor_articulos'])
+            ->get();
+        if ($recepciones->isEmpty()) {
+            return [];
+        }
+
+        $out = [];
+        foreach (
+            app(ComprobanteProveedorRecepcionesSupport::class)
+                ->enriquecerConImporteProvision($recepciones) as $recepcion
+        ) {
+            $out[(int) $recepcion->id] = round((float) ($recepcion->importe_provision_com ?? 0), 2);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Importe de cada factura del legajo, por clave de asignación (precarga_id / cp-N).
+     *
+     * @return array<int|string, float>
+     */
+    private function importePorFacturaDelLegajo(Ordencompra $oc): array
+    {
+        $numero = trim((string) $oc->numeroordencompra);
+        $empresaId = (int) $oc->empresa_id;
+        $out = [];
+
+        if ($numero !== '' && $empresaId > 0) {
+            foreach (
+                DB::table('precarga_comprobante_proveedor')
+                    ->where('empresa_id', $empresaId)
+                    ->where('numeroordencompra', $numero)
+                    ->get(['id', 'total']) as $precarga
+            ) {
+                $out[(int) $precarga->id] = round((float) ($precarga->total ?? 0), 2);
+            }
+        }
+
+        foreach ($this->comprobantesDelLegajo($oc, array_keys($out)) as $cp) {
+            $cpId = (int) ($cp['id'] ?? 0);
+            if ($cpId <= 0) {
+                continue;
+            }
+            $total = round((float) ($cp['total'] ?? 0), 2);
+            $out['cp-'.$cpId] = $total;
+            // El CP manda sobre la precarga: la precarga puede no tener importe (scan Anita).
+            $preId = (int) ($cp['precarga_id'] ?? 0);
+            if ($preId > 0 && $total > 0) {
+                $out[$preId] = $total;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Traza quién asignó/desasignó cada COM (la tabla pivote se reescribe por completo).
+     *
+     * @param  array<int, list<int>>  $normalizadas
+     * @param  array<int, list<int>>  $previas
+     * @param  array<int, string>  $etiquetasCom
+     */
+    private function registrarHistoriaAsignacionCom(
+        Ordencompra $oc,
+        array $normalizadas,
+        array $previas,
+        array $etiquetasCom,
+    ): void {
+        $lineas = [];
+        foreach ($normalizadas as $precargaId => $ids) {
+            $antes = array_map('intval', $previas[(int) $precargaId] ?? []);
+            $ahora = array_map('intval', $ids);
+            $agregadas = array_values(array_diff($ahora, $antes));
+            $quitadas = array_values(array_diff($antes, $ahora));
+            if ($agregadas === [] && $quitadas === []) {
+                continue;
+            }
+
+            $etiquetar = static function (array $comIds) use ($etiquetasCom): string {
+                return implode(', ', array_map(
+                    static fn (int $id) => trim((string) ($etiquetasCom[$id] ?? '')) !== ''
+                        ? (string) $etiquetasCom[$id]
+                        : '#'.$id,
+                    $comIds
+                ));
+            };
+
+            $partes = [];
+            if ($agregadas !== []) {
+                $partes[] = 'asignó COM '.$etiquetar($agregadas);
+            }
+            if ($quitadas !== []) {
+                $partes[] = 'quitó COM '.$etiquetar($quitadas);
+            }
+            $lineas[] = 'Factura #'.(int) $precargaId.': '.implode('; ', $partes).'.';
+        }
+
+        if ($lineas === []) {
+            return;
+        }
+
+        Ordencompra_Historia::query()->create([
+            'ordencompra_id' => (int) $oc->id,
+            'sector_legajocompra_id' => $oc->sector_legajocompra_id ? (int) $oc->sector_legajocompra_id : null,
+            'fecha' => now(),
+            'observacion' => 'Asignación de COM a facturas del legajo',
+            'leyenda' => implode(' ', $lineas),
+            'creousuario_id' => Auth::id() ? (int) Auth::id() : null,
+        ]);
     }
 
     public function assertPrecargaDelLegajo(Ordencompra $oc, int $precargaId): Precarga_Comprobante_Proveedor

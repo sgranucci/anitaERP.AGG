@@ -154,7 +154,7 @@ final class PagoproveedorImputacionApDiariaService
             'notas' => [
                 'Cada OP compara la CC ERP (valor libro de las facturas aplicadas) vs el trío AP/anticipo del asiento vs ctamov Anita.',
                 'Promov Anita se controla contra el total de la OP (cabecera), no contra el AP: en cruzada ME la DC va a P&L.',
-                'Solo OP de Compras del período. Excluye REVERTIDA/BAJA y las OP nacidas en Ingreso/Egreso (SP / ING / EGR / TRA).',
+                'Solo OP de proveedores (CC / trío AP). Excluye REVERTIDA/BAJA, I/E (SP / ING / EGR / TRA) y OPP de tesorería sin AP.',
                 'OPP/OPA son crédito (Haber−Debe negativo). AOP invierte el signo.',
                 'El residual a anticipo entra al trío. Se controla aparte vs ctamov.',
                 'Importes en $: CC al TC de la factura; promov al TC del pago. Haber suma, Debe resta.',
@@ -310,6 +310,10 @@ final class PagoproveedorImputacionApDiariaService
                 $fecha !== '' ? $fecha : null,
                 'OP #'.$pago->id
             );
+
+            if (PagoproveedorImputacionApSupport::esPagoSinTrioAp($tieneCc, $tieneAsiento, $asientoArs, $tolerancia)) {
+                continue;
+            }
 
             $eval = PagoproveedorImputacionApSupport::evaluarCuatroPatas(
                 $ccArs,
