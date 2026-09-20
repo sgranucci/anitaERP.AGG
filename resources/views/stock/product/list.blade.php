@@ -70,18 +70,12 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                     'limpiarUrl' => route('products.index', ['filtro_limpiar' => 1]),
                 ])
             </form>
-            <div class="card-body py-2 border-bottom bg-white d-flex flex-wrap align-items-center justify-content-between">
-                <div class="mb-1 mb-md-0">
-                    @include('includes.exportar-tabla-queryparams', [
-                        'ruta' => 'lista_producto_ferli',
-                        'queryparams' => $filtrosQuery ?? [],
-                    ])
-                </div>
-                <div class="mb-1 mb-md-0 ml-auto">
-                    @include('stock.product.partials.filtros_externos')
-                </div>
-            </div>
+            @include('stock.product.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
+                @include('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_producto_ferli',
+                    'queryparams' => $filtrosQuery ?? [],
+                ])
                 <table class="table table-striped table-bordered table-hover table-sm mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
@@ -90,7 +84,11 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                             <th>Categor&iacute;a</th>
                             <th>Marca</th>
                             <th>L&iacute;nea</th>
+                            @if (\App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva())
+                                <th>Canal</th>
+                            @endif
                             <th>Facturable</th>
+                            <th>Estado</th>
                             <th class="width80 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -102,7 +100,40 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
         						<td>{{ $articulo->stkm_agrupacion ?? '' }}</td>
         						<td>{{ $articulo->stkm_marca ?? '' }}</td>
         						<td>{{ $articulo->stkm_linea ?? '' }}</td>
+                                @if (\App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva())
+                                <td class="text-nowrap">
+                                    @php
+                                        $codigosCanal = $articulo->relationLoaded('canales')
+                                            ? $articulo->canales->pluck('codigo')->map(fn ($c) => strtoupper((string) $c))->all()
+                                            : [];
+                                        $tieneFab = in_array('FABRICA', $codigosCanal, true);
+                                        $tieneLoc = in_array('LOCAL', $codigosCanal, true);
+                                    @endphp
+                                    <span class="badge {{ $tieneFab ? 'badge-warning' : 'badge-light text-muted' }}" title="Canal fábrica">
+                                        Fábrica
+                                    </span>
+                                    <span class="badge {{ $tieneLoc ? 'badge-info' : 'badge-light text-muted' }}" title="Canal local">
+                                        Local
+                                    </span>
+                                </td>
+                                @endif
                                 <td>{{ $articulo->nofactura == '0' ? 'Facturable' : 'No facturable'}}</td>
+                                <td>
+                                    @if (\App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva())
+                                        @php
+                                            $ef = strtoupper((string) ($articulo->estado_fabrica ?? $articulo->estado ?? ''));
+                                            $el = strtoupper((string) ($articulo->estado_local ?? $articulo->estado ?? ''));
+                                        @endphp
+                                        <span class="badge {{ $ef === 'ACTIVO' ? 'badge-success' : 'badge-secondary' }}" title="Estado fábrica">
+                                            Fab {{ $ef === 'ACTIVO' ? 'A' : 'I' }}
+                                        </span>
+                                        <span class="badge {{ $el === 'ACTIVO' ? 'badge-info' : 'badge-secondary' }}" title="Estado local">
+                                            Loc {{ $el === 'ACTIVO' ? 'A' : 'I' }}
+                                        </span>
+                                    @else
+                                        {{ $articulo->estado ?? '' }}
+                                    @endif
+                                </td>
                             <td class="text-nowrap">
 								@if ($articulo->usoarticulo_id == 1)
                        				@if (can('editar-articulos-combinaciones', false))

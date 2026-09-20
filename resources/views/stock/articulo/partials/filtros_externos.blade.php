@@ -75,8 +75,7 @@
                     </a>
                 @endforeach
                 <a href="{{ $urlCanal(ArticuloListadoFiltros::CANAL_SIN) }}"
-                   class="btn {{ $canalActual === ArticuloListadoFiltros::CANAL_SIN ? 'btn-secondary' : 'btn-outline-secondary' }}"
-                   title="Art&iacute;culos sin canal asignado">
+                   class="btn {{ $canalActual === ArticuloListadoFiltros::CANAL_SIN ? 'btn-secondary' : 'btn-outline-secondary' }}">
                     Sin canal
                 </a>
                 <a href="{{ $urlCanal(ArticuloListadoFiltros::CANAL_TODOS) }}"

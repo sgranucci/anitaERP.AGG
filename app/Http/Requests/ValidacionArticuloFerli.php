@@ -22,6 +22,10 @@ class ValidacionArticuloFerli extends FormRequest
             'usoarticulo_id' => 'required|numeric',
             'linea_id' => 'required|numeric',
             'mventa_id' => 'required|numeric',
+            'canal_ids' => 'nullable|array',
+            'canal_ids.*' => 'integer',
+            'estado_fabrica' => 'nullable|in:ACTIVO,INACTIVO',
+            'estado_local' => 'nullable|in:ACTIVO,INACTIVO',
         ];
     }
 }

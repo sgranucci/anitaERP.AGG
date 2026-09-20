@@ -9,6 +9,7 @@ use App\Repositories\Ventas\Pedido_CombinacionRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Repositories\Produccion\MovimientoOrdentrabajoRepositoryInterface;
 use App\Repositories\Produccion\OperacionRepositoryInterface;
+use App\Support\Stock\OtTerminadaAltaStockFerliSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Config;
@@ -29,6 +30,7 @@ class MovimientoOrdentrabajoService
 	protected $articulo_costoRepository;
 	protected $pedido_combinacionRepository;
 	protected $clienteRepository;
+	protected $otTerminadaAltaStockFerliSupport;
 
     public function __construct(
 								OrdentrabajoRepositoryInterface $ordentrabajorepository,
@@ -38,7 +40,8 @@ class MovimientoOrdentrabajoService
 								Articulo_CostoRepositoryInterface $articulo_costorepository,
 								OperacionRepositoryInterface $operacionrepository,
 								Pedido_CombinacionRepositoryInterface $pedido_combinacionrepository,
-								ClienteRepositoryInterface $clienterepository
+								ClienteRepositoryInterface $clienterepository,
+								OtTerminadaAltaStockFerliSupport $otterminadaaltastockferlisupport
 								)
     {
         $this->ordentrabajoRepository = $ordentrabajorepository;
@@ -49,6 +52,7 @@ class MovimientoOrdentrabajoService
         $this->operacionRepository = $operacionrepository;
 		$this->pedido_combinacionRepository = $pedido_combinacionrepository;
 		$this->clienteRepository = $clienterepository;
+		$this->otTerminadaAltaStockFerliSupport = $otterminadaaltastockferlisupport;
     }
 
 	public function estadoEnum()
@@ -320,6 +324,11 @@ class MovimientoOrdentrabajoService
 					{
 						throw new ModelNotFoundException("No puede grabar movimiento tarea ya existente en OT");
 					}
+
+					if ((int) ($data['tarea_id'] ?? 0) === (int) config('consprod.TAREA_TERMINADA')) {
+						$this->otTerminadaAltaStockFerliSupport->alTerminar($ordentrabajo);
+					}
+
 					DB::commit();
 				} catch (\Exception $e) {
 					DB::rollback();

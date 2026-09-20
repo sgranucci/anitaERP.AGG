@@ -79,6 +79,7 @@ final class ArticuloCanalSyncService
         $aCrear = [];
         $yaAsignados = 0;
         $encontrados = 0;
+        $skusLocal = [];
 
         foreach ($filas as $fila) {
             $codigoAnita = trim((string) ($fila->stkm_articulo ?? ''));
@@ -86,6 +87,7 @@ final class ArticuloCanalSyncService
             if ($skuErp === '') {
                 continue;
             }
+            $skusLocal[$skuErp] = true;
 
             $articulo = $this->buscarArticuloErp($skuErp, $codigoAnita);
             if ($articulo) {
@@ -101,6 +103,30 @@ final class ArticuloCanalSyncService
             }
 
             $aCrear[] = $fila;
+        }
+
+        $canalFabrica = Canal::fabrica();
+        $aAsignarFabrica = [];
+        $yaFabrica = 0;
+        $extrasLocal = [];
+        if ($canalFabrica) {
+            $idsConLocal = array_flip(ArticuloCanalSupport::articuloIdsPorCanal(Canal::CODIGO_LOCAL));
+            $idsConFabrica = array_flip(ArticuloCanalSupport::articuloIdsPorCanal(Canal::CODIGO_FABRICA));
+            foreach (Articulo::query()->get(['id', 'sku']) as $artErp) {
+                $sku = trim((string) $artErp->sku);
+                $id = (int) $artErp->id;
+                if ($sku !== '' && isset($skusLocal[$sku])) {
+                    continue;
+                }
+                if (isset($idsConFabrica[$id])) {
+                    $yaFabrica++;
+                } else {
+                    $aAsignarFabrica[] = ['articulo_id' => $id, 'sku' => $sku];
+                }
+                if (isset($idsConLocal[$id])) {
+                    $extrasLocal[] = $sku !== '' ? $sku : '#'.$id;
+                }
+            }
         }
 
         $asignados = 0;
@@ -155,6 +181,17 @@ final class ArticuloCanalSyncService
                     $asignados++;
                 }
             }
+
+            $asignadosFabrica = 0;
+            if ($canalFabrica) {
+                foreach ($aAsignarFabrica as $row) {
+                    if (ArticuloCanalSupport::asignarCanal($row['articulo_id'], (int) $canalFabrica->id)) {
+                        $asignadosFabrica++;
+                    }
+                }
+            }
+        } else {
+            $asignadosFabrica = 0;
         }
 
         return [
@@ -180,6 +217,12 @@ final class ArticuloCanalSyncService
                     array_slice($aCrear, 0, 100)
                 ),
             'errores_muestra' => $erroresMuestra,
+            'ya_fabrica' => $yaFabrica,
+            'a_asignar_fabrica' => count($aAsignarFabrica),
+            'asignados_fabrica' => $asignadosFabrica,
+            'skus_a_asignar_fabrica' => array_slice(array_column($aAsignarFabrica, 'sku'), 0, 30),
+            'extras_local_n' => count($extrasLocal),
+            'extras_local' => array_slice($extrasLocal, 0, 30),
         ];
     }
 
@@ -506,6 +549,12 @@ final class ArticuloCanalSyncService
             'skus_a_crear' => [],
             'skus_sin_match' => [],
             'errores_muestra' => [],
+            'ya_fabrica' => 0,
+            'a_asignar_fabrica' => 0,
+            'asignados_fabrica' => 0,
+            'skus_a_asignar_fabrica' => [],
+            'extras_local_n' => 0,
+            'extras_local' => [],
             'error' => $error,
         ];
     }

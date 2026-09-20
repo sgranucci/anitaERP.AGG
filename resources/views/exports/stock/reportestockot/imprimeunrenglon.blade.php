@@ -1,4 +1,4 @@
-<tr>
+<tr @if(!empty($lote['en_produccion'])) style="color:#FF0000;" @endif>
 	@if ($imprimefoto == 'CON_FOTO')
 		{{-- Celda reservada: la foto se embebe como Drawing en StockOtExport@AfterSheet --}}
 		<td></td>

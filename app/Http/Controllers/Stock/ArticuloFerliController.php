@@ -33,11 +33,13 @@ use App\Models\Stock\Subcategoria;
 use App\Models\Stock\Tipocorte;
 use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Usoarticulo;
+use App\Models\Ventas\Canal;
 use App\Exports\Stock\ArticuloFerliListadoExport;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
 use App\Services\Stock\PrecioServiceFerli;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Stock\ArticuloEstadoCanalSupport;
 use App\Support\Stock\ArticuloFerliListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -119,6 +121,9 @@ class ArticuloFerliController extends Controller
         $articulos = $this->leeArticulosListado($filtros, true);
         $estadoComb = $filtros['estado_comb'] ?? ArticuloFerliListadoFiltros::ESTADO_COMB_ACTIVAS;
         $retornoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery);
+        $canalesFiltro = ArticuloEstadoCanalSupport::uiFerliActiva()
+            ? Canal::query()->where('activo', true)->orderBy('nombre')->get(['id', 'codigo', 'nombre'])
+            : collect();
 
         return view('stock.product.list', compact(
             'inactive',
@@ -127,7 +132,8 @@ class ArticuloFerliController extends Controller
             'filtros',
             'filtrosQuery',
             'estadoComb',
-            'retornoQuery'
+            'retornoQuery',
+            'canalesFiltro'
         ));
     }
 
@@ -180,23 +186,36 @@ class ArticuloFerliController extends Controller
      */
     private function leeArticulosListado(array $filtros, bool $paginar)
     {
+        $select = [
+            'articulo.id as id',
+            'articulo.sku as stkm_articulo',
+            'articulo.descripcion as stkm_desc',
+            'unidadmedida.nombre as stkm_unidad_medida',
+            'categoria.nombre as stkm_agrupacion',
+            'mventa.nombre as stkm_marca',
+            'linea.nombre as stkm_linea',
+            'articulo.usoarticulo_id',
+            'articulo.nofactura',
+            'articulo.estado',
+        ];
+        if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
+            $select[] = 'articulo.estado_fabrica';
+            $select[] = 'articulo.estado_local';
+        }
+
         $query = Articulo::query()
-            ->select(
-                'articulo.id as id',
-                'articulo.sku as stkm_articulo',
-                'articulo.descripcion as stkm_desc',
-                'unidadmedida.nombre as stkm_unidad_medida',
-                'categoria.nombre as stkm_agrupacion',
-                'mventa.nombre as stkm_marca',
-                'linea.nombre as stkm_linea',
-                'articulo.usoarticulo_id',
-                'articulo.nofactura'
-            )
+            ->select($select)
             ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
             ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
             ->leftJoin('mventa', 'articulo.mventa_id', '=', 'mventa.id')
             ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id')
             ->orderBy('articulo.sku');
+
+        if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
+            $query->with(['canales' => function ($q) {
+                $q->select('canal.id', 'canal.codigo', 'canal.nombre');
+            }]);
+        }
 
         ArticuloFerliListadoFiltros::aplicar($query, $filtros);
 
@@ -415,8 +434,16 @@ class ArticuloFerliController extends Controller
         $mventa = Mventa::where('id', $request->mventa_id)->first();
         $linea = Linea::where('id', $request->linea_id)->first();
 
+        $data = ArticuloEstadoCanalSupport::normalizarDataFormularioFerli($request->all());
+
         // Crea el articulo
-        $articulo = Articulo::create($request->all());
+        $articulo = Articulo::create($data);
+        if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
+            ArticuloEstadoCanalSupport::sincronizarCanales(
+                (int) $articulo->id,
+                $request->input('canal_ids', [])
+            );
+        }
 
         // Crea la Combinacion 1
         $combinacion = Combinacion::create([
@@ -489,6 +516,7 @@ class ArticuloFerliController extends Controller
             ->with('tipoproducciones')
             ->with('sectorsellados')
             ->with('tipoarticulos')
+            ->with('canales:id,codigo,nombre')
             ->where('id', $id)->get()->first();
         $categoria = Categoria::orderBy('nombre')->get();
         $subcategoria = Subcategoria::orderBy('nombre')->get();
@@ -541,7 +569,14 @@ class ArticuloFerliController extends Controller
     {
         can('actualizar-articulos-disenio');
 
-        Articulo::findOrFail($request->id)->update($request->all());
+        $data = ArticuloEstadoCanalSupport::normalizarDataFormularioFerli($request->all());
+        Articulo::findOrFail($request->id)->update($data);
+        if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
+            ArticuloEstadoCanalSupport::sincronizarCanales(
+                (int) $id,
+                $request->input('canal_ids', [])
+            );
+        }
 
         // Lee nuevo precio con relaciones para interface Anita
         $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')

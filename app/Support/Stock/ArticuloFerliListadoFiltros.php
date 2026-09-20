@@ -9,14 +9,24 @@ use Illuminate\Http\Request;
 
 /**
  * Filtros del listado Ferli de artículos (products.index).
- * Externo: estado de combinación (A/I/T). Panel: búsqueda inteligente.
- * No usa el módulo estándar ArticuloListadoFiltros.
+ * Externos: estado del artículo (ACTIVO/INACTIVO), canal de venta y estado de combinación (A/I/T).
+ * Panel: búsqueda inteligente.
  */
 class ArticuloFerliListadoFiltros
 {
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
+
+    public const ESTADO_ACTIVO = 'ACTIVO';
+
+    public const ESTADO_INACTIVO = 'INACTIVO';
+
+    /** Sin filtro de canal (todos los artículos). */
+    public const CANAL_TODOS = '';
+
+    /** Artículos sin ninguna fila en articulo_canal. */
+    public const CANAL_SIN = 'SIN';
 
     /** Combinaciones activas (default). */
     public const ESTADO_COMB_ACTIVAS = 'A';
@@ -57,10 +67,14 @@ class ArticuloFerliListadoFiltros
 
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
     {
+        $estado = self::resolverEstadoExterno($request);
+        $canal = self::resolverCanalExterno($request);
         $estadoComb = self::resolverEstadoCombExterno($request);
 
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
             return array_merge(self::filtrosVacios(), [
+                'estado' => $estado,
+                'canal' => $canal,
                 'estado_comb' => $estadoComb,
             ]);
         }
@@ -94,8 +108,47 @@ class ArticuloFerliListadoFiltros
             'valor' => $valor,
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
+            'estado' => $estado,
+            'canal' => $canal,
             'estado_comb' => $estadoComb,
         ];
+    }
+
+    /**
+     * Filtro externo: estado del artículo (default Activo).
+     * Marcador para expandir: filtro_estado=TODOS.
+     */
+    private static function resolverEstadoExterno(Request $request): string
+    {
+        $estadoInput = $request->input('filtro_estado', null);
+        if ($estadoInput === 'TODOS' || $request->boolean('estado_todos')) {
+            return '';
+        }
+        if (in_array($estadoInput, [self::ESTADO_ACTIVO, self::ESTADO_INACTIVO], true)) {
+            return (string) $estadoInput;
+        }
+
+        return self::ESTADO_ACTIVO;
+    }
+
+    /**
+     * Filtro externo: canal de venta (default todos).
+     * filtro_canal=TODOS | SIN | LOCAL | FABRICA.
+     */
+    private static function resolverCanalExterno(Request $request): string
+    {
+        $canalInput = strtoupper(trim((string) $request->input('filtro_canal', '')));
+        if ($canalInput === '' || $canalInput === 'TODOS' || $request->boolean('canal_todos')) {
+            return self::CANAL_TODOS;
+        }
+        if ($canalInput === self::CANAL_SIN) {
+            return self::CANAL_SIN;
+        }
+        if (preg_match('/^[A-Z0-9_-]{1,30}$/', $canalInput) === 1) {
+            return $canalInput;
+        }
+
+        return self::CANAL_TODOS;
     }
 
     private static function resolverEstadoCombExterno(Request $request): string
@@ -111,6 +164,14 @@ class ArticuloFerliListadoFiltros
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
         if (self::tieneCriteriosTexto($filtros)) {
+            return true;
+        }
+
+        if (($filtros['estado'] ?? self::ESTADO_ACTIVO) !== self::ESTADO_ACTIVO) {
+            return true;
+        }
+
+        if (($filtros['canal'] ?? self::CANAL_TODOS) !== self::CANAL_TODOS) {
             return true;
         }
 
@@ -139,7 +200,7 @@ class ArticuloFerliListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, busqueda: string, estado_comb: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, busqueda: string, estado: string, canal: string, estado_comb: string}
      */
     public static function filtrosVacios(): array
     {
@@ -149,6 +210,8 @@ class ArticuloFerliListadoFiltros
             'operador' => 'contiene',
             'valor' => '',
             'busqueda' => '',
+            'estado' => self::ESTADO_ACTIVO,
+            'canal' => self::CANAL_TODOS,
             'estado_comb' => self::ESTADO_COMB_ACTIVAS,
         ];
     }
@@ -171,6 +234,16 @@ class ArticuloFerliListadoFiltros
         if (! empty($filtros['valor'])) {
             $params['filtro_valor'] = $filtros['valor'];
         }
+        $estado = $filtros['estado'] ?? self::ESTADO_ACTIVO;
+        if ($estado === '') {
+            $params['filtro_estado'] = 'TODOS';
+        } elseif ($estado !== self::ESTADO_ACTIVO) {
+            $params['filtro_estado'] = $estado;
+        }
+        $canal = (string) ($filtros['canal'] ?? self::CANAL_TODOS);
+        if ($canal !== self::CANAL_TODOS) {
+            $params['filtro_canal'] = $canal;
+        }
         $estadoComb = $filtros['estado_comb'] ?? self::ESTADO_COMB_ACTIVAS;
         if ($estadoComb !== self::ESTADO_COMB_ACTIVAS) {
             $params['estado_comb'] = $estadoComb;
@@ -184,12 +257,24 @@ class ArticuloFerliListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        $estado = $filtros['estado'] ?? self::ESTADO_ACTIVO;
+        if ($estado !== '') {
+            ArticuloEstadoCanalSupport::aplicarFiltroEstadoListado(
+                $query,
+                $estado,
+                (string) ($filtros['canal'] ?? self::CANAL_TODOS)
+            );
+        }
+
+        self::aplicarCanalExterno($query, $filtros);
+
         $estadoComb = $filtros['estado_comb'] ?? self::ESTADO_COMB_ACTIVAS;
         if ($estadoComb === self::ESTADO_COMB_ACTIVAS || $estadoComb === self::ESTADO_COMB_INACTIVAS) {
             $query->whereExists(function ($q) use ($estadoComb) {
                 $q->selectRaw('1')
                     ->from('combinacion')
-                    ->whereRaw("combinacion.articulo_id = articulo.id and combinacion.estado = '".$estadoComb."'");
+                    ->whereColumn('combinacion.articulo_id', 'articulo.id')
+                    ->where('combinacion.estado', $estadoComb);
             });
         }
 
@@ -208,6 +293,36 @@ class ArticuloFerliListadoFiltros
         }
 
         self::aplicarBusquedaGlobal($query, $operador, $valor);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Stock\Articulo>  $query
+     */
+    private static function aplicarCanalExterno(Builder $query, array $filtros): void
+    {
+        $canal = (string) ($filtros['canal'] ?? self::CANAL_TODOS);
+        if ($canal === self::CANAL_TODOS) {
+            return;
+        }
+
+        if ($canal === self::CANAL_SIN) {
+            $query->whereNotExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('articulo_canal')
+                    ->whereColumn('articulo_canal.articulo_id', 'articulo.id');
+            });
+
+            return;
+        }
+
+        $query->whereExists(function ($q) use ($canal) {
+            $q->selectRaw('1')
+                ->from('articulo_canal')
+                ->join('canal', 'canal.id', '=', 'articulo_canal.canal_id')
+                ->whereColumn('articulo_canal.articulo_id', 'articulo.id')
+                ->where('canal.codigo', $canal)
+                ->where('canal.activo', true);
+        });
     }
 
     /**
