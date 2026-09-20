@@ -12,6 +12,9 @@ class Requisicion_Estado extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     use Requisicion_EstadoTrait;
 
+    // Historial de estados: la fila ya ES la traza (usuario_id + fecha).
+    protected $auditEvents = ['updated', 'deleted'];
+
     protected $fillable = ['requisicion_id', 'fecha', 'estado', 'observacion', 'usuario_id'];
     protected $table = 'requisicion_estado';
 

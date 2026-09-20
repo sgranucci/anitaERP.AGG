@@ -12,6 +12,10 @@ class Articulo_Cuentacontable extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
 	use Articulo_CuentacontableTrait;
+
+    // Imputación por artículo: el alta ya está en la fila (creousuario_id + created_at).
+    protected $auditEvents = ['updated', 'deleted'];
+
     protected $fillable = ['articulo_id', 'empresa_id', 'tipoimputacion', 'cuentacontable_id', 'creousuario_id'];
     protected $table = 'articulo_cuentacontable';
 

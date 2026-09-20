@@ -145,6 +145,13 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(60)
             ->when(fn () => (bool) config('bitacora_acceso.habilitado', false));
 
+        // Deshabilitada por defecto: activar con AUDITS_PURGA_HABILITADA=true.
+        $schedule->command('audits:purge')
+            ->dailyAt('03:50')
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/audits-purge.log'))
+            ->when(fn () => (bool) config('audits_purga.habilitada', false));
+
         $schedule->command('gastronomia:purge-anita-caches')
             ->dailyAt((string) config('gastronomia.anita_storage_cache_purge.hora', '03:40'))
             ->withoutOverlapping(60)

@@ -12,6 +12,9 @@ class Cobranza_Estado extends Model implements Auditable
 	use \OwenIt\Auditing\Auditable;
 	use Cobranza_EstadoTrait;
 
+    // Historial de estados: la fila ya ES la traza (usuario_id + fecha).
+    protected $auditEvents = ['updated', 'deleted'];
+
     protected $fillable = ['cobranza_id', 'fecha', 'estado', 'usuario_id', 'observacion'];
     protected $table = 'cobranza_estado';
 

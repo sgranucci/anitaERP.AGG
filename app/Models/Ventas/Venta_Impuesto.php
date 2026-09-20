@@ -10,6 +10,9 @@ class Venta_Impuesto extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
 
+    // Detalle inmutable de la venta: quién dio el alta queda en el audit de Venta.
+    protected $auditEvents = ['updated', 'deleted'];
+
     protected $fillable = ['venta_id', 'concepto', 'baseimponible', 'tasa', 'importe', 'provincia_id', 'impuesto_id'];
     protected $table = 'venta_impuesto';
 

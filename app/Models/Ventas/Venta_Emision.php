@@ -18,6 +18,9 @@ class Venta_Emision extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
 
+    // Renglones de la venta: quién dio el alta queda en el audit de Venta.
+    protected $auditEvents = ['updated', 'deleted'];
+
     protected $fillable = ['venta_id','numeroitem', 'pedido_combinacion_id', 'ordentrabajo_id', 'lotestock',
                         'articulo_id', 'concepto_venta_id', 'contrato_venta_id', 'concepto_ordenventa_id', 'combinacion_id', 'detalle', 'comentario_cocina', 'modulo_id', 'talle_id', 
                         'cantidad', 'pieza', 'caja',
