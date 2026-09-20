@@ -7,9 +7,15 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Seguridad\Usuario;
 use App\Traits\Compras\PropuestaPagoEstadoTrait;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class PropuestaPago extends Model
+/**
+ * Auditable: la migración 2026_08_18_153000 quitó los softdeletes con el criterio
+ * "baja física + audits" y esa segunda mitad faltaba en la familia de pagos.
+ */
+class PropuestaPago extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     use PropuestaPagoEstadoTrait;
 
     protected $table = 'propuesta_pago';

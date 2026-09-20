@@ -13,9 +13,16 @@ use App\Models\Seguridad\Usuario;
 use App\Traits\Compras\PagoproveedorEstadoTrait;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pagoproveedor extends Model
+/**
+ * Auditable: la anulación física borra la fila, así que sin audits el pago desaparecía
+ * sin rastro. La migración 2026_08_18_153000 quitó los softdeletes con el criterio
+ * "baja física + audits" y esa segunda mitad faltaba en la familia de pagos.
+ */
+class Pagoproveedor extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     use PagoproveedorEstadoTrait;
 
     protected $table = 'pagoproveedor';

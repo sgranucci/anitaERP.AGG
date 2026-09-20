@@ -5,9 +5,17 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use Illuminate\Database\Eloquent\Model;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Proveedor_Cuentacorriente extends Model
+/**
+ * Auditable: acá viven los saldos del proveedor y las aplicaciones se borran o compensan
+ * en reversiones y anulaciones. La migración 2026_08_18_153000 quitó los softdeletes con
+ * el criterio "baja física + audits" y esa segunda mitad faltaba.
+ */
+class Proveedor_Cuentacorriente extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $table = 'proveedor_cuentacorriente';
 
     protected $fillable = [
