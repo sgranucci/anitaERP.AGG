@@ -70,7 +70,22 @@ final class FerliExcelStockImportPlanner
         }
 
         $lotesInventados = array_values(array_filter($altap, fn ($a) => ! empty($a['lote_inventado'])));
-        $conot = self::planConot();
+        // Solo anular saldos de marcas que vienen en el Excel (evita borrar Boaonda si no hay planilla).
+        $articuloIdsAltap = array_values(array_unique(array_filter(array_map(
+            static fn (array $a) => (int) ($a['articulo_id'] ?? 0),
+            $altap
+        ))));
+        $mventaIdsAltap = $articuloIdsAltap === []
+            ? []
+            : Articulo::query()
+                ->whereIn('id', $articuloIdsAltap)
+                ->whereNotNull('mventa_id')
+                ->pluck('mventa_id')
+                ->map(static fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+        $conot = self::planConot($mventaIdsAltap);
 
         return [
             'filas_excel' => count($filas),
@@ -82,6 +97,7 @@ final class FerliExcelStockImportPlanner
             'altap_lotes' => count(array_unique(array_filter(array_column($altap, 'lote')))),
             'altap_ots' => count(array_unique(array_filter(array_column($altap, 'ordentrabajo_codigo')))),
             'altap_muestra' => array_slice($altap, 0, 20),
+            'altap_mventa_ids' => $mventaIdsAltap,
             'errores' => $errores,
             'conot' => $conot,
             'altap' => $altap,
@@ -407,12 +423,30 @@ final class FerliExcelStockImportPlanner
     }
 
     /**
+     * @param  list<int>  $mventaIds  Obligatorio: solo anula saldos de esas marcas. Vacío = no tocar nada.
      * @return array<string, mixed>
      */
-    private static function planConot(): array
+    private static function planConot(array $mventaIds = []): array
     {
+        if ($mventaIds === []) {
+            return [
+                'grupos' => [],
+                'grupos_count' => 0,
+                'pares' => 0.0,
+                'por_deposito' => [],
+                'muestra' => [],
+                'pares_lote_cero' => 0.0,
+                'pares_positivos' => 0.0,
+                'pares_negativos' => 0.0,
+                'grupos_conot' => 0,
+                'grupos_ajuste' => 0,
+            ];
+        }
+
         $rows = DB::table('articulo_movimiento as am')
+            ->join('articulo as a', 'a.id', '=', 'am.articulo_id')
             ->where('am.lote', '>', 0)
+            ->whereIn('a.mventa_id', $mventaIds)
             ->groupBy('am.lote', 'am.articulo_id', 'am.combinacion_id', 'am.deposito_id')
             ->havingRaw('ABS(SUM(am.cantidad)) > 0.0001')
             ->get([
@@ -428,7 +462,9 @@ final class FerliExcelStockImportPlanner
 
         $talleRows = DB::table('articulo_movimiento as am')
             ->join('articulo_movimiento_talle as amt', 'amt.articulo_movimiento_id', '=', 'am.id')
+            ->join('articulo as a', 'a.id', '=', 'am.articulo_id')
             ->where('am.lote', '>', 0)
+            ->whereIn('a.mventa_id', $mventaIds)
             ->groupBy('am.lote', 'am.articulo_id', 'am.combinacion_id', 'am.deposito_id', 'amt.talle_id')
             ->havingRaw('ABS(SUM(amt.cantidad)) > 0.0001')
             ->get([

@@ -41,6 +41,11 @@ class ImportarExcelStockFerliCommand extends Command
 
         $this->newLine();
         $this->info('Excel');
+        $mventaIds = $plan['altap_mventa_ids'] ?? [];
+        $marcasAltap = $mventaIds === []
+            ? '(ninguna)'
+            : implode(', ', \App\Models\Stock\Mventa::query()->whereIn('id', $mventaIds)->orderBy('id')->pluck('nombre')->all());
+
         $this->table(['Métrica', 'Valor'], [
             ['Filas leídas (SKU)', $plan['filas_excel']],
             ['Omitidas EN PRODUCCION / rojo', $plan['omitidas']['en_produccion']],
@@ -51,6 +56,7 @@ class ImportarExcelStockFerliCommand extends Command
             ['ALTAP pares', number_format($plan['altap_pares'], 0, ',', '.')],
             ['ALTAP lotes importados distintos', $plan['altap_lotes']],
             ['ALTAP OT distintas', $plan['altap_ots']],
+            ['Marcas en Excel (CONOT solo estas)', $marcasAltap],
         ]);
 
         $depRows = [];

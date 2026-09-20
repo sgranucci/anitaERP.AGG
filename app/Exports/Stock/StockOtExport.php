@@ -2,367 +2,366 @@
 
 namespace App\Exports\Stock;
 
-use App\Services\Stock\Articulo_MovimientoService;
-use App\Queries\Stock\ArticuloQueryInterface;
-use App\Models\Stock\Linea;
-use App\Models\Stock\Categoria;
 use App\Models\Stock\Mventa;
-use App\Models\Stock\Depmae;
+use App\Queries\Stock\ArticuloQueryInterface;
+use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use Illuminate\Contracts\View\View;
-use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\Exportable;
-use Maatwebsite\Excel\Concerns\WithHeadings;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
-use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
-use Maatwebsite\Excel\Concerns\WithColumnFormatting;
-use Maatwebsite\Excel\Concerns\WithMapping;
+use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
-use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
-use Maatwebsite\Excel\Events\AfterSheet;
+use Maatwebsite\Excel\Concerns\WithMapping;
+use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Color;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use Carbon\Carbon;
 
+/**
+ * Excel Stock por OT en formato artesanal Ferli/Tomahawk
+ * (título + cabecera compacta + talles usados + PS/QM/N/TT + situación/OT/depósito + TOTAL).
+ */
 class StockOtExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
 {
-	use Exportable;
-	private $desdearticulo_id, $hastaarticulo_id,
-			$desdelinea_id, $hastalinea_id,
-			$estado, $mventa_id, $desdelote, $hastalote, $imprimeFoto, $estadoOt, $apertura, $deposito_id;
+    use Exportable;
 
-	protected $dates = ['fecha'];
-    private $articulo_movimientoService;
+    private $desdearticulo_id;
 
-	/** @var list<array<string, mixed>> */
-	private array $filasDatos = [];
+    private $hastaarticulo_id;
 
-	private int $filaPrimeraDatosExcel = 8;
+    private $desdelinea_id;
+
+    private $hastalinea_id;
+
+    private $desdecategoria_id;
+
+    private $hastacategoria_id;
+
+    private $estado;
+
+    private $mventa_id;
+
+    private $desdelote;
+
+    private $hastalote;
+
+    private $imprimeFoto;
+
+    private $estadoOt;
+
+    private $apertura;
+
+    private $deposito_id;
+
+    private ArticuloQueryInterface $articuloQuery;
+
+    private Articulo_MovimientoService $articulo_movimientoService;
+
+    /** @var list<array<string, mixed>> */
+    private array $filasDatos = [];
+
+    /** @var list<int> */
+    private array $medidasColumnas = [];
+
+    private int $filaCabecerasExcel = 2;
+
+    private int $filaPrimeraDatosExcel = 3;
+
+    private int $totalColumnas = 14;
+
+    private string $colUltima = 'N';
+
+    private string $tituloHoja = 'Stock por OT';
 
     public function __construct(
-								ArticuloQueryInterface $articuloquery,
-                                Articulo_MovimientoService $articulo_movimientoservice
-								)
-    {
-		$this->articuloQuery = $articuloquery;
+        ArticuloQueryInterface $articuloquery,
+        Articulo_MovimientoService $articulo_movimientoservice
+    ) {
+        $this->articuloQuery = $articuloquery;
         $this->articulo_movimientoService = $articulo_movimientoservice;
     }
 
-	public function view(): View
-	{
-		// Prepara titulos de rangos
-		$ret = generaRangoArticulo($this->desdearticulo_id, $this->hastaarticulo_id, $this->articuloQuery);
-		
-		$desdeArticulo = $ret['desdearticulotitulo'];
-		$hastaArticulo = $ret['hastaarticulotitulo'];
-		$desdeArticuloRango = $ret['desdearticulorango'];
-		$hastaArticuloRango = $ret['hastaarticulorango'];
-		
-		if ($this->desdelinea_id == 0)
-			$desdeLinea = 'Primera';
-		else
-		{
-			$linea = Linea::find($this->desdelinea_id);
-			if ($linea)
-				$desdeLinea = $linea->nombre;
-			else	
-				$desdeLinea = '--';
-		}
-		
-		if ($this->hastalinea_id == 99999999)
-			$hastaLinea = 'Ultima';
-		else
-		{
-			$Linea = Linea::find($this->hastalinea_id);
-			if ($Linea)
-				$hastaLinea = $linea->nombre;
-			else	
-				$hastaLinea = '--';
-		}
-
-		if ($this->desdecategoria_id == 0)
-			$desdeCategoria = 'Primera';
-		else
-		{
-			$categoria = Categoria::find($this->desdecategoria_id);
-			if ($categoria)
-				$desdeCategoria = $categoria->nombre;
-			else	
-				$desdeCategoria = '--';
-		}
-		
-		if ($this->hastacategoria_id == 99999999)
-			$hastaCategoria = 'Ultima';
-		else
-		{
-			$categoria = Categoria::find($this->hastacategoria_id);
-			if ($categoria)
-				$hastaCategoria = $categoria->nombre;
-			else	
-				$hastaCategoria = '--';
-		}
-
-		$nombremarca = 'Todas las marcas';
-		if ($this->mventa_id != 0)
-		{
-			$marca = Mventa::find($this->mventa_id);
-			if ($marca)
-				$nombremarca = $marca->nombre;
-			else	
-				$nombremarca = '--';
-		}
-
-		// Lee informacion del listado
-		$data = $this->articulo_movimientoService->generaDatosRepStockOt($this->estado, $this->mventa_id,
-				$desdeArticuloRango, $hastaArticuloRango,
-				$this->desdelinea_id, $this->hastalinea_id,
-				$this->desdecategoria_id, $this->hastacategoria_id,
-				$this->desdelote, $this->hastalote,
-				$this->estadoOt, $this->apertura, $this->deposito_id);
-
-		if ($this->imprimeFoto === 'CON_FOTO') {
-			foreach ($data as &$fila) {
-				$fila['foto_path'] = ArticuloCombinacionFotoSupport::rutaAbsoluta(
-					$fila['foto'] ?? null,
-					$fila['sku'] ?? null,
-					$fila['codigo'] ?? null
-				);
-			}
-			unset($fila);
-		}
-		$this->filasDatos = is_array($data) ? $data : (method_exists($data, 'all') ? $data->all() : []);
-
-		if ($this->deposito_id != 0)
-		{
-			$deposito = Depmae::find($this->deposito_id);
-
-			if ($deposito)
-				$txtDeposito = "Deposito: ".$deposito->nombre;
-		}
-		else	
-			$txtDeposito = "Todos los depositos";
-
-		return view('exports.stock.reportestockot.reportestockot', 
-					['data' => $data, 
-					'estado' => $this->estado,
-					'nombremarca' => $nombremarca,
-					'desdearticulo' => $desdeArticulo, 'hastaarticulo' => $hastaArticulo, 
-					'desdelinea' => $desdeLinea, 'hastalinea' => $hastaLinea, 
-					'desdecategoria' => $desdeCategoria, 'hastacategoria' => $hastaCategoria,
-					'desdelote' => $this->desdelote, 'hastalote' => $this->hastalote,
-					'imprimefoto' => $this->imprimeFoto,
-					'estadoot' => $this->estadoOt,
-					'deposito' => $txtDeposito
-					]);
-	}
-
-	public function columnFormats(): array
+    public function view(): View
     {
-        return [
-            
-            ];
+        $ret = generaRangoArticulo($this->desdearticulo_id, $this->hastaarticulo_id, $this->articuloQuery);
+        $desdeArticuloRango = $ret['desdearticulorango'];
+        $hastaArticuloRango = $ret['hastaarticulorango'];
+
+        $nombremarca = 'Todas las marcas';
+        if ($this->mventa_id != 0) {
+            $marca = Mventa::find($this->mventa_id);
+            $nombremarca = $marca ? $marca->nombre : '--';
+        }
+
+        $data = $this->articulo_movimientoService->generaDatosRepStockOt(
+            $this->estado,
+            $this->mventa_id,
+            $desdeArticuloRango,
+            $hastaArticuloRango,
+            $this->desdelinea_id,
+            $this->hastalinea_id,
+            $this->desdecategoria_id,
+            $this->hastacategoria_id,
+            $this->desdelote,
+            $this->hastalote,
+            $this->estadoOt,
+            $this->apertura,
+            $this->deposito_id
+        );
+
+        if ($this->imprimeFoto === 'CON_FOTO') {
+            foreach ($data as &$fila) {
+                $fila['foto_path'] = ArticuloCombinacionFotoSupport::rutaAbsoluta(
+                    $fila['foto'] ?? null,
+                    $fila['sku'] ?? null,
+                    $fila['codigo'] ?? null
+                );
+            }
+            unset($fila);
+        }
+
+        $this->filasDatos = is_array($data) ? $data : (method_exists($data, 'all') ? $data->all() : []);
+        $this->medidasColumnas = $this->resolverMedidasColumnas($this->filasDatos);
+        $this->totalColumnas = ($this->imprimeFoto === 'CON_FOTO' ? 1 : 0)
+            + 3 // LINEA ART DESCRIPCION
+            + count($this->medidasColumnas)
+            + 7; // PS QM N TT PRECIO SITUACION OT DEPOSITO
+        $this->colUltima = $this->indiceAColumna($this->totalColumnas);
+        $this->filaCabecerasExcel = 2;
+        $this->filaPrimeraDatosExcel = 3;
+        $this->tituloHoja = 'Stock por OT — '.$nombremarca;
+
+        return view('exports.stock.reportestockot.reportestockot', [
+            'data' => $this->filasDatos,
+            'imprimefoto' => $this->imprimeFoto,
+            'titulo' => $this->tituloHoja,
+            'medidas_columnas' => $this->medidasColumnas,
+            'total_columnas' => $this->totalColumnas,
+        ]);
     }
 
-	public function map($row): array
+    public function columnFormats(): array
     {
-        return [
-        ];
+        return [];
+    }
+
+    public function map($row): array
+    {
+        return [];
     }
 
     public function styles(Worksheet $sheet)
     {
         return [
-            2   => ['font' => ['bold' => true,
-        						'color' => array('rgb' => '17202A'),
-        						'size'  => 12,
-        						'name'  => 'Arial'
-								],
-					],
-			3   => ['font' => ['bold' => true,
-						'color' => array('rgb' => '17202A'),
-						'size'  => 12,
-						'name'  => 'Arial'
-						],
-					],
-			4   => ['font' => ['bold' => true,
-						'color' => array('rgb' => '17202A'),
-						'size'  => 12,
-						'name'  => 'Arial'
-						],
-					],
-			5   => ['font' => ['bold' => true,
-					'color' => array('rgb' => '17202A'),
-					'size'  => 12,
-					'name'  => 'Arial'
-					],
-				],
-			6   => ['font' => ['bold' => true,
-				'color' => array('rgb' => '17202A'),
-				'size'  => 12,
-				'name'  => 'Arial'
-				],
-			],
-            7   => ['font' => ['bold' => true,
-        						'color' => array('rgb' => '17202A'),
-        						'size'  => 12,
-        						'name'  => 'Arial'
-								],
-					'fill' => [
-                    			'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
-        						'color' => array('rgb' => '85C1E9'),
-					]
-					],
-            'B' => ['font' => ['bold' => true]],
-            'D' => ['font' => ['bold' => true]],
+            1 => [
+                'font' => [
+                    'bold' => true,
+                    'color' => ['rgb' => '17202A'],
+                    'size' => 14,
+                    'name' => 'Arial',
+                ],
+            ],
+            $this->filaCabecerasExcel => [
+                'font' => [
+                    'bold' => true,
+                    'color' => ['rgb' => '17202A'],
+                    'size' => 10,
+                    'name' => 'Arial',
+                ],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'color' => ['rgb' => 'D5D8DC'],
+                ],
+            ],
         ];
     }
 
-	public function columnWidths(): array
+    public function columnWidths(): array
     {
-        return [
-            'A' => 20,
-			'G' => 4,
-			'H' => 4,
-			'I' => 4,
-			'J' => 4,
-			'K' => 4,
-			'L' => 4,
-			'M' => 4,
-			'N' => 4,
-			'O' => 4,
-			'P' => 4,
-			'Q' => 4,
-			'R' => 4,
-			'S' => 4,
-			'T' => 4,
-			'U' => 4,
-			'V' => 4,
-			'W' => 4,
-			'X' => 4,
-			'Y' => 4,
-			'Z' => 4,
-			'AA' => 4,
-			'AB' => 4,
-			'AC' => 4,
-			'AD' => 4,
-			'AE' => 4,
-			'AF' => 4,
-			'AG' => 4,
-			'AI' => 3,
-			'AK' => 4,
-			'AL' => 4,
-			'AM' => 4,
-			'AN' => 4,
-			'AO' => 4,
-			'AP' => 4,
-			'AQ' => 4,
-			'AR' => 4,
-			'AS' => 4,
-			'AT' => 4,
-			'AU' => 4,
-			'AV' => 4,
-			'AW' => 4,
-			'AX' => 4,
-			'AY' => 4,
-			'AZ' => 4,
-			'BA' => 4,
-			'BB' => 4,
-			'BC' => 4,
-			'BD' => 4,
-			'BE' => 4,
-			'BF' => 4,
-			'BG' => 4,
-			'BI' => 3,
-			'BK' => 4,
-		];
+        $widths = [];
+        $offset = 0;
+        if ($this->imprimeFoto === 'CON_FOTO') {
+            $widths['A'] = 12;
+            $offset = 1;
+        }
+        $widths[$this->indiceAColumna(1 + $offset)] = 16; // LINEA
+        $widths[$this->indiceAColumna(2 + $offset)] = 12; // ART
+        $widths[$this->indiceAColumna(3 + $offset)] = 22; // DESC
+        $col = 4 + $offset;
+        foreach ($this->medidasColumnas as $_) {
+            $widths[$this->indiceAColumna($col)] = 4;
+            $col++;
+        }
+        $widths[$this->indiceAColumna($col++)] = 6;  // PS
+        $widths[$this->indiceAColumna($col++)] = 5;  // QM
+        $widths[$this->indiceAColumna($col++)] = 4;  // N
+        $widths[$this->indiceAColumna($col++)] = 8;  // TT
+        $widths[$this->indiceAColumna($col++)] = 10; // PRECIO
+        $widths[$this->indiceAColumna($col++)] = 18; // SITUACION
+        $widths[$this->indiceAColumna($col++)] = 12; // OT
+        $widths[$this->indiceAColumna($col)] = 10;   // DEPOSITO
+
+        return $widths;
     }
 
-	public function registerEvents(): array
+    public function registerEvents(): array
     {
-		$filas = &$this->filasDatos;
-		$imprimeFoto = &$this->imprimeFoto;
-		$filaDatos = &$this->filaPrimeraDatosExcel;
+        $filas = &$this->filasDatos;
+        $imprimeFoto = &$this->imprimeFoto;
+        $filaDatos = &$this->filaPrimeraDatosExcel;
+        $colUltima = &$this->colUltima;
+        $filaCab = &$this->filaCabecerasExcel;
 
         return [
-            AfterSheet::class    => function(AfterSheet $event) use (&$filas, &$imprimeFoto, &$filaDatos) {
+            AfterSheet::class => function (AfterSheet $event) use (&$filas, &$imprimeFoto, &$filaDatos, &$colUltima, &$filaCab) {
+                $sheet = $event->sheet->getDelegate();
 
-				$sheet = $event->sheet->getDelegate();
-                $sheet->freezePane('A8');
-				$sheet->getStyle('A:AP')->getAlignment()->setVertical(\PhpOffice\PhpSpreadsheet\Style\Alignment::VERTICAL_CENTER);
+                $sheet->mergeCells('A1:'.$colUltima.'1');
+                $sheet->getRowDimension(1)->setRowHeight(22);
+                $sheet->getStyle('A1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
 
-				foreach ($filas as $idx => $fila) {
-					if (empty($fila['en_produccion'])) {
-						continue;
-					}
-					$excelRow = $filaDatos + $idx;
-					$sheet->getStyle('A'.$excelRow.':BK'.$excelRow)
-						->getFont()
-						->getColor()
-						->setARGB(Color::COLOR_RED);
-				}
+                $sheet->freezePane('A'.$filaDatos);
+                $sheet->getStyle('A:'.$colUltima)->getAlignment()
+                    ->setVertical(Alignment::VERTICAL_CENTER);
 
-				if ($imprimeFoto !== 'CON_FOTO' || $filas === []) {
-					return;
-				}
+                $ultimaFila = $sheet->getHighestRow();
+                // TOTAL en negrita
+                if ($ultimaFila >= $filaDatos) {
+                    $sheet->getStyle('A'.$ultimaFila.':'.$colUltima.$ultimaFila)->getFont()->setBold(true);
+                }
 
-				$sheet->getColumnDimension('A')->setWidth(14);
-				foreach ($filas as $idx => $fila) {
-					$excelRow = $filaDatos + $idx;
-					$path = $fila['foto_path'] ?? null;
-					if (! is_string($path) || $path === '' || ! is_file($path)) {
-						continue;
-					}
-					$sheet->getRowDimension($excelRow)->setRowHeight(78);
-					try {
-						$drawing = new Drawing;
-						$drawing->setName('foto-ot-'.$excelRow);
-						$drawing->setDescription((string) ($fila['sku'] ?? ''));
-						$drawing->setPath($path);
-						$drawing->setHeight(70);
-						$drawing->setCoordinates('A'.$excelRow);
-						$drawing->setOffsetX(4);
-						$drawing->setOffsetY(4);
-						$drawing->setWorksheet($sheet);
-					} catch (\Throwable $e) {
-						// sin foto si el archivo no es imagen válida
-					}
-				}
+                foreach ($filas as $idx => $fila) {
+                    if (empty($fila['en_produccion'])) {
+                        continue;
+                    }
+                    $excelRow = $filaDatos + $idx;
+                    $sheet->getStyle('A'.$excelRow.':'.$colUltima.$excelRow)
+                        ->getFont()
+                        ->getColor()
+                        ->setARGB(Color::COLOR_RED);
+                }
+
+                if ($imprimeFoto !== 'CON_FOTO' || $filas === []) {
+                    return;
+                }
+
+                $sheet->getColumnDimension('A')->setWidth(12);
+                foreach ($filas as $idx => $fila) {
+                    $excelRow = $filaDatos + $idx;
+                    $path = $fila['foto_path'] ?? null;
+                    if (! is_string($path) || $path === '' || ! is_file($path)) {
+                        continue;
+                    }
+                    $sheet->getRowDimension($excelRow)->setRowHeight(70);
+                    try {
+                        $drawing = new Drawing;
+                        $drawing->setName('foto-ot-'.$excelRow);
+                        $drawing->setDescription((string) ($fila['sku'] ?? ''));
+                        $drawing->setPath($path);
+                        $drawing->setHeight(62);
+                        $drawing->setCoordinates('A'.$excelRow);
+                        $drawing->setOffsetX(2);
+                        $drawing->setOffsetY(2);
+                        $drawing->setWorksheet($sheet);
+                    } catch (\Throwable $e) {
+                        // sin foto si el archivo no es imagen válida
+                    }
+                }
             },
         ];
     }
 
-	public function title(): string
+    public function title(): string
     {
-        return 'Reporte de Stock por OT';
+        return 'Stock por OT';
     }
 
-	public function parametros($estado, $mventa_id,
-							$desdearticulo_id, $hastaarticulo_id,
-							$desdelinea_id, $hastalinea_id,
-							$desdecategoria_id, $hastacategoria_id,
-							$desdelote, $hastalote,
-							$imprimefoto, $estadoot, $apertura,
-							$deposito_id)
-	{
-		$this->estado = $estado;
-		$this->mventa_id = $mventa_id;
-		$this->desdearticulo_id = $desdearticulo_id;
-		$this->hastaarticulo_id = $hastaarticulo_id;
-		$this->desdelinea_id = $desdelinea_id;
-		$this->hastalinea_id = $hastalinea_id;
-		$this->desdecategoria_id = $desdecategoria_id;
-		$this->hastacategoria_id = $hastacategoria_id;
-		$this->desdelote = $desdelote;
-		$this->hastalote = $hastalote;
-		$this->imprimeFoto = $imprimefoto;
-		$this->estadoOt = $estadoot;
-		$this->apertura = $apertura;
-		$this->deposito_id = $deposito_id;
-		
-		return $this;
-	}
+    public function parametros(
+        $estado,
+        $mventa_id,
+        $desdearticulo_id,
+        $hastaarticulo_id,
+        $desdelinea_id,
+        $hastalinea_id,
+        $desdecategoria_id,
+        $hastacategoria_id,
+        $desdelote,
+        $hastalote,
+        $imprimefoto,
+        $estadoot,
+        $apertura,
+        $deposito_id
+    ) {
+        $this->estado = $estado;
+        $this->mventa_id = $mventa_id;
+        $this->desdearticulo_id = $desdearticulo_id;
+        $this->hastaarticulo_id = $hastaarticulo_id;
+        $this->desdelinea_id = $desdelinea_id;
+        $this->hastalinea_id = $hastalinea_id;
+        $this->desdecategoria_id = $desdecategoria_id;
+        $this->hastacategoria_id = $hastacategoria_id;
+        $this->desdelote = $desdelote;
+        $this->hastalote = $hastalote;
+        $this->imprimeFoto = $imprimefoto;
+        $this->estadoOt = $estadoot;
+        $this->apertura = $apertura;
+        $this->deposito_id = $deposito_id;
+
+        return $this;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<int>
+     */
+    private function resolverMedidasColumnas(array $filas): array
+    {
+        $min = null;
+        $max = null;
+        foreach ($filas as $fila) {
+            foreach ([$fila['medidas'] ?? [], $fila['modulo'] ?? []] as $lista) {
+                foreach ($lista as $m) {
+                    $cant = (float) ($m['cantidad'] ?? 0);
+                    if (abs($cant) < 0.0001) {
+                        continue;
+                    }
+                    $medida = (int) ($m['medida'] ?? 0);
+                    if ($medida <= 0) {
+                        continue;
+                    }
+                    $min = $min === null ? $medida : min($min, $medida);
+                    $max = $max === null ? $medida : max($max, $medida);
+                }
+            }
+        }
+        if ($min === null || $max === null) {
+            $min = (int) config('consprod.DESDE_MEDIDA', 35);
+            $max = (int) config('consprod.HASTA_MEDIDA', 40);
+        }
+
+        $out = [];
+        for ($i = $min; $i <= $max; $i++) {
+            $out[] = $i;
+        }
+
+        return $out;
+    }
+
+    private function indiceAColumna(int $indice): string
+    {
+        $columna = '';
+        while ($indice > 0) {
+            $resto = ($indice - 1) % 26;
+            $columna = chr(65 + $resto).$columna;
+            $indice = intdiv($indice - 1, 26);
+        }
+
+        return $columna;
+    }
 }

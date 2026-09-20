@@ -311,15 +311,20 @@ class Articulo_MovimientoService
 			$data = $data->concat($extras);
 		}
 
+		// Incluir combinación, depósito e id: sin eso el corte por claveAgrupacion
+		// parte el mismo lote/depósito y aparecen filas negativas espurias.
 		$data = $data->sortBy(function ($row) {
 			return implode('|', [
 				(string) ($row['nombrelinea'] ?? ''),
 				(string) ($row['sku'] ?? ''),
+				sprintf('%05d', (int) ($row['codigocombinacion'] ?? 0)),
 				(string) ($row['nombrecombinacion'] ?? ''),
 				ReporteStockOtSituacionSupport::identificadorExcel(
 					$row['lote'] ?? 0,
 					$row['ordentrabajo_codigo'] ?? ''
 				),
+				sprintf('%010d', (int) ($row['deposito_id'] ?? 0)),
+				sprintf('%015d', (int) ($row['id'] ?? 0)),
 			]);
 		})->values();
 
@@ -357,12 +362,16 @@ class Articulo_MovimientoService
 		$modulo_id = 0;
 		$modulo = [];
 		$cantidadModulo = 0;
+		$depositoId = 0;
+		$depositoCodigo = '';
+		$depositoNombre = '';
 
 		foreach ($data as $movimiento)
 		{
 			$claveFila = ReporteStockOtSituacionSupport::claveAgrupacion(
 				$movimiento['lote'] ?? 0,
-				(int) ($movimiento['ordentrabajo_id'] ?? 0)
+				(int) ($movimiento['ordentrabajo_id'] ?? 0),
+				(int) ($movimiento['deposito_id'] ?? 0)
 			);
 			if ($apertura != 'MOVIMIENTOS' ?
 				($anterSku != $movimiento['sku'] ||
@@ -393,7 +402,10 @@ class Articulo_MovimientoService
 							$modulo,
 							$pedido,
 							$ordencompra,
-							$medidas
+							$medidas,
+							$depositoId,
+							$depositoCodigo,
+							$depositoNombre
 						);
 					}
 				}
@@ -417,6 +429,9 @@ class Articulo_MovimientoService
 				$precio = $movimiento['precio'];
 				$pedido = $movimiento['pedido'];
 				$ordencompra = $movimiento['ordentrabajo_codigo'] ?? '';
+				$depositoId = (int) ($movimiento['deposito_id'] ?? 0);
+				$depositoCodigo = (string) ($movimiento['depositocodigo'] ?? '');
+				$depositoNombre = (string) ($movimiento['depositonombre'] ?? '');
 
 				$modulo_id = $movimiento['modulo_id'];
 				$medidas = [];
@@ -462,7 +477,10 @@ class Articulo_MovimientoService
 					$modulo,
 					$pedido,
 					$ordencompra,
-					$medidas
+					$medidas,
+					$depositoId,
+					$depositoCodigo,
+					$depositoNombre
 				);
 			}
 		}
@@ -750,6 +768,16 @@ class Articulo_MovimientoService
 			];
 		}
 
+		// Stock ya en depósito (import Excel / estantería) = ENTREGA INMEDIATA,
+		// aunque la OT vinculada siga sin tarea de cierre (ej. identificador 8021).
+		$depositoId = (int) ($movimiento['deposito_id'] ?? 0);
+		if ($depositoId > 0) {
+			return [
+				'situacion' => ReporteStockOtSituacionSupport::ENTREGA_INMEDIATA,
+				'en_produccion' => false,
+			];
+		}
+
 		$otId = (int) ($movimiento['ordentrabajo_id'] ?? 0);
 		if ($otId > 0 && isset($situacionesPorOt[$otId])) {
 			return $situacionesPorOt[$otId];
@@ -811,14 +839,24 @@ class Articulo_MovimientoService
 		array $modulo,
 		$pedido,
 		$ordencompra,
-		array $medidas
+		array $medidas,
+		int $depositoId = 0,
+		string $depositoCodigo = '',
+		string $depositoNombre = ''
 	): array {
+		$totalPares = 0.0;
+		foreach ($medidas as $m) {
+			$totalPares += (float) ($m['cantidad'] ?? 0);
+		}
+
 		return [
 			'foto' => $foto,
 			'nombrelinea' => $nombreLinea,
 			'sku' => $sku,
+			'sku_excel' => ReporteStockOtSituacionSupport::skuConGuiones($sku),
 			'codigo' => $codigoCombinacion,
 			'nombrecombinacion' => $nombreCombinacion,
+			'descripcion_excel' => ReporteStockOtSituacionSupport::descripcionCombinacion($codigoCombinacion, $nombreCombinacion),
 			'lote' => $lote,
 			'precio' => $precio,
 			'situacion' => $situacion,
@@ -829,6 +867,10 @@ class Articulo_MovimientoService
 			'pedido' => $pedido,
 			'ordencompra' => $ordencompra,
 			'medidas' => $medidas,
+			'total_pares' => $totalPares,
+			'deposito_id' => $depositoId,
+			'deposito_codigo' => $depositoCodigo,
+			'deposito_nombre' => $depositoNombre,
 		];
 	}
 

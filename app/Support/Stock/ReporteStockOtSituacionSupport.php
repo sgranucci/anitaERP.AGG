@@ -93,12 +93,48 @@ final class ReporteStockOtSituacionSupport
     /**
      * Corte de filas: lote importado ≠ OT (no agrupar por el mismo número).
      */
-    public static function claveAgrupacion(mixed $lote, int $ordentrabajoId): string
+    public static function claveAgrupacion(mixed $lote, int $ordentrabajoId, int $depositoId = 0): string
     {
-        if (self::esLoteImportado($lote)) {
-            return 'L:'.trim((string) $lote);
+        $base = self::esLoteImportado($lote)
+            ? 'L:'.trim((string) $lote)
+            : 'OT:'.$ordentrabajoId;
+
+        return $base.'|D:'.$depositoId;
+    }
+
+    /**
+     * SKU artesanal del Excel original: 71603001 → 71-6030-01
+     */
+    public static function skuConGuiones(mixed $sku): string
+    {
+        $digitos = preg_replace('/\D+/', '', (string) $sku) ?? '';
+        if (preg_match('/^(\d{2})(\d{4})(\d{2})$/', $digitos, $m)) {
+            return $m[1].'-'.$m[2].'-'.$m[3];
+        }
+        if (preg_match('/^(\d{2})(\d{3})(\d{2})$/', $digitos, $m)) {
+            return $m[1].'-'.$m[2].'-'.$m[3];
         }
 
-        return 'OT:'.$ordentrabajoId;
+        return trim((string) $sku);
+    }
+
+    /**
+     * Descripción artesanal: "1-NEGRO"
+     */
+    public static function descripcionCombinacion(mixed $codigo, mixed $nombre): string
+    {
+        $cod = trim((string) $codigo);
+        $nom = trim((string) $nombre);
+        if ($cod === '') {
+            return $nom;
+        }
+        if ($nom === '') {
+            return $cod;
+        }
+        if (str_starts_with($nom, $cod.'-') || str_starts_with($nom, $cod.' ')) {
+            return $nom;
+        }
+
+        return $cod.'-'.$nom;
     }
 }

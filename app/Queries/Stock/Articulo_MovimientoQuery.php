@@ -45,7 +45,9 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                             'articulo_movimiento.id as id',
                             'articulo_movimiento_talle.id as idmov',
                             'articulo_movimiento_talle.cantidad as cantidad',
-                            'articulo_movimiento_talle.precio as precio')
+                            'articulo_movimiento_talle.precio as precio',
+                            'depmae.codigo as depositocodigo',
+                            'depmae.nombre as depositonombre')
                             ->join('articulo', 'articulo.id', 'articulo_movimiento.articulo_id')
                             ->join('combinacion', 'combinacion.id', 'articulo_movimiento.combinacion_id')
                             ->join('linea', 'linea.id', 'articulo.linea_id')
@@ -55,6 +57,7 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                             ->join('talle', 'talle.id', 'articulo_movimiento_talle.talle_id')
                             ->leftjoin('pedido_combinacion', 'pedido_combinacion.id', 'articulo_movimiento.pedido_combinacion_id')
                             ->leftJoin('ordentrabajo', 'ordentrabajo.id', 'articulo_movimiento.ordentrabajo_id')
+                            ->leftJoin('depmae', 'depmae.id', 'articulo_movimiento.deposito_id')
                             ->whereBetween('articulo.linea_id', [$desdelinea_id, $hastalinea_id])
                             ->whereBetween('articulo.categoria_id', [$desdecategoria_id, $hastacategoria_id])
                             ->where(function ($q) {
@@ -64,7 +67,10 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
         					->orderBy('nombrelinea','ASC')
                             ->orderBy('sku','ASC')
                             ->orderBy('nombrecombinacion', 'ASC')
-                            ->orderBy('lote','ASC');
+                            ->orderBy('lote','ASC')
+                            ->orderBy('articulo_movimiento.deposito_id', 'ASC')
+                            ->orderBy('combinacion.codigo', 'ASC')
+                            ->orderBy('articulo_movimiento.id', 'ASC');
 
         if ($desdearticulo != '' && $hastaarticulo != '')
             $articulo_query = $articulo_query->whereBetween('articulo.descripcion', [$desdearticulo, $hastaarticulo]);
@@ -195,6 +201,8 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                 'cantidad' => (float) $row->cantidad,
                 'precio' => $row->precio,
                 'en_produccion_forzada' => true,
+                'depositocodigo' => '',
+                'depositonombre' => '',
             ];
         });
     }
