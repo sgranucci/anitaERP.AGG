@@ -14,6 +14,7 @@ use App\Helpers\biblioteca;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\FacturaListadoSupport;
 use App\Support\Ventas\PedidoListadoSupport;
+use App\Support\Ventas\VentasListadoEtiquetasSupport;
 ?>
 
 @section('contenido')
@@ -27,6 +28,9 @@ use App\Support\Ventas\PedidoListadoSupport;
     $qsOrdenId = FacturaListadoFiltros::paraQueryString(
         FacturaListadoFiltros::conOrden($filtros ?? [], FacturaListadoFiltros::ORDEN_ID)
     );
+    $etiqTransporte = VentasListadoEtiquetasSupport::etiquetaTransporte();
+    $etiqCantidad = VentasListadoEtiquetasSupport::etiquetaCantidad();
+    $etiqTransporteLc = mb_strtolower($etiqTransporte);
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -38,8 +42,8 @@ use App\Support\Ventas\PedidoListadoSupport;
                     <div class="btn-group btn-group-sm mr-2 mb-1" role="group" aria-label="Orden del listado">
                         <a href="{{ route('factura', $qsOrdenReparto) }}"
                            class="btn {{ $ordenActual === FacturaListadoFiltros::ORDEN_REPARTO ? 'btn-warning' : 'btn-outline-light' }}"
-                           title="Agrupar por código de reparto (mayor a menor)">
-                            <i class="fa fa-truck"></i> Por reparto
+                           title="Agrupar por código de {{ $etiqTransporteLc }} (mayor a menor)">
+                            <i class="fa fa-truck"></i> {{ VentasListadoEtiquetasSupport::porTransporte() }}
                         </a>
                         <a href="{{ route('factura', $qsOrdenId) }}"
                            class="btn {{ $ordenActual === FacturaListadoFiltros::ORDEN_ID ? 'btn-warning' : 'btn-outline-light' }}"
@@ -63,7 +67,7 @@ use App\Support\Ventas\PedidoListadoSupport;
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => FacturaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('factura', FacturaListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
-                        'placeholder' => 'Búsqueda rápida (cliente, comprobante, empresa, reparto)…',
+                        'placeholder' => 'Búsqueda rápida (cliente, comprobante, empresa, '.$etiqTransporteLc.')…',
                         'toggleTarget' => '#panel-filtros-factura',
                         'toggleId' => 'btn-toggle-filtros-factura',
                         'inputId' => 'filtro_valor',
@@ -96,6 +100,12 @@ use App\Support\Ventas\PedidoListadoSupport;
                         color: #17202A;
                         font-weight: 700;
                     }
+                    #tabla-paginada tr.factura-total-rango,
+                    #tabla-paginada tr.factura-total-rango td {
+                        background-color: #D5F5E3 !important;
+                        color: #17202A;
+                        font-weight: 700;
+                    }
                 </style>
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_factura',
@@ -109,10 +119,8 @@ use App\Support\Ventas\PedidoListadoSupport;
 							<th>Comprobante</th>
 							<th>Cliente</th>
 							<th>Empresa</th>
-                            <th class="text-right">Cajas</th>
-                            <th class="text-right">Unidades</th>
-                            <th class="text-right">Kilos</th>
-                            <th>Reparto</th>
+                            @include('ventas.factura.partials.thead_cantidades', ['etiqCantidad' => $etiqCantidad])
+                            <th>{{ $etiqTransporte }}</th>
 							<th class="text-right">Total</th>
                             <th data-orderable="false">Acciones</th>
                         </tr>
@@ -130,9 +138,7 @@ use App\Support\Ventas\PedidoListadoSupport;
         						</td>
         						<td>{{ $comprobante->clientes->nombre ?? '' }}</td>
 								<td>{{ $comprobante->puntoventas->empresas->nombre ?? '' }}</td>
-                                <td class="text-right">{{ PedidoListadoSupport::formatearTotal($totales['caja']) }}</td>
-                                <td class="text-right">{{ PedidoListadoSupport::formatearTotal($totales['pieza']) }}</td>
-                                <td class="text-right">{{ PedidoListadoSupport::formatearTotal($totales['kilo']) }}</td>
+                                @include('ventas.factura.partials.celdas_cantidades', ['totales' => $totales])
                                 <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>
 								<td class="text-right">{{ number_format($comprobante->total, 2, ',', '.') }}</td>
         						<td>
@@ -178,10 +184,18 @@ use App\Support\Ventas\PedidoListadoSupport;
                             @endif
                         @empty
                             <tr>
-                                <td colspan="11" class="text-center text-muted py-3">No se encontraron comprobantes con los filtros aplicados.</td>
+                                <td colspan="{{ VentasListadoEtiquetasSupport::colspanTablaConAcciones() }}" class="text-center text-muted py-3">No se encontraron comprobantes con los filtros aplicados.</td>
                             </tr>
                         @endforelse
                     </tbody>
+                    @if (($ventas ?? collect())->count() > 0)
+                        <tfoot>
+                            @include('ventas.factura.partials.fila_total_rango', [
+                                'totalesRango' => $totalesRango ?? null,
+                                'conAcciones' => true,
+                            ])
+                        </tfoot>
+                    @endif
                 </table>
             </div>
         </div>

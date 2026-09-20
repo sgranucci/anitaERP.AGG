@@ -12,6 +12,7 @@ use App\Services\Configuracion\ImpuestoService;
 use App\Support\Ventas\PuntoventaEmpresaSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
+use App\Support\Ventas\PedidoPickingFerliSupport;
 use App\Models\Ventas\Cliente_Entrega;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Stock\PrecioServiceFerli;
@@ -117,45 +118,13 @@ class PedidoServiceFerli
             foreach($pedido->pedido_combinaciones as $item)
             {
                 $pares += $item->cantidad;
-                if ($item->ot_id == 0 || $item->ot_id == null)
-                    $qPendiente++;
-				else
-				{
-                    $qProduccion++;
-
-					$factura = $this->ordentrabajoService->buscaTareaOt($item->ot_id, config("consprod.TAREA_FACTURADA"));
-					if ($factura > 0)
-						$qFacturado++;
-				}
-				// Lee estado del pedido
-				$estadoPedido = $this->pedido_combinacion_estadoRepository->traeEstado($item->id);
-
-				if ($estadoPedido)
-				{
-					if($estadoPedido->estado == 'A')
-						$qAnulado++;
-				}
+				$conteo = $this->conteoEstadoLineaCombinacion($item);
+				$qPendiente += $conteo['pendiente'];
+				$qProduccion += $conteo['produccion'];
+				$qFacturado += $conteo['facturado'];
+				$qAnulado += $conteo['anulado'];
             }
-			// Determina el estado
-			$estadoPedido = "Pendiente";
-			if ($qPendiente > 0 && $qProduccion > 0)
-				$estadoPedido = "Pendiente/parcial en produccion";
-			if ($qPendiente == 0 && $qProduccion > 0)
-				$estadoPedido = "En produccion";
-			if ($qFacturado == $qProduccion && $qFacturado > 0)
-				$estadoPedido = "Facturado";
-			else
-			{
-				if ($qFacturado > 0)
-					$estadoPedido .= " y facturado parcial";
-			}
-			if ($qAnulado > 0)
-			{
-				if ($estadoPedido != "Pendiente")
-					$estadoPedido .= "/Anulado";
-				else
-					$estadoPedido = "Anulado";
-			}
+			$estadoPedido = $this->etiquetaEstadoDesdeConteo($qPendiente, $qProduccion, $qFacturado, $qAnulado);
 			if ($estado == 'P' ? $qPendiente > 0 || ($qProduccion > 0 && $qFacturado < $qProduccion) : 
 				($estado == 'E' ? $qProduccion > 0: ($estado == 'F' ? $qFacturado > 0 : 
 				($estado == 'A' ? $qAnulado > 0 : false))))
@@ -1374,49 +1343,79 @@ class PedidoServiceFerli
 		$qAnulado = 0;
 		foreach($pedido[0]->pedido_combinaciones as $item)
 		{
-			if ($item->ot_id == 0 || $item->ot_id == null)
-				$qPendiente++;
-			else
-			{
-				$qProduccion++;
-
-				$factura = $this->ordentrabajoService->buscaTareaOt($item->ot_id, config("consprod.TAREA_FACTURADA"));
-				if ($factura > 0)
-					$qFacturado++;
-			}
-			// Lee estado del pedido
-			$estadoPedido = $this->pedido_combinacion_estadoRepository->traeEstado($item->id);
-
-			if ($estadoPedido)
-			{
-				if($estadoPedido->estado == 'A')
-					$qAnulado++;
-			}
+			$conteo = $this->conteoEstadoLineaCombinacion($item);
+			$qPendiente += $conteo['pendiente'];
+			$qProduccion += $conteo['produccion'];
+			$qFacturado += $conteo['facturado'];
+			$qAnulado += $conteo['anulado'];
 		}
-		// Determina el estado
-		$estadoPedido = "Pendiente";
-		if ($qPendiente > 0 && $qProduccion > 0)
-			$estadoPedido = "Pendiente/parcial en produccion";
-		if ($qPendiente == 0 && $qProduccion > 0)
-			$estadoPedido = "En produccion";
-		if ($qFacturado == $qProduccion && $qFacturado > 0)
-			$estadoPedido = "Facturado";
-		else
-		{
-			if ($qFacturado > 0)
-				$estadoPedido .= " y facturado parcial";
-		}
-		if ($qAnulado > 0)
-		{
-			if ($estadoPedido != "Pendiente")
-				$estadoPedido .= "/Anulado";
-			else
-				$estadoPedido = "Anulado";
-		}
+		$estadoPedido = $this->etiquetaEstadoDesdeConteo($qPendiente, $qProduccion, $qFacturado, $qAnulado);
 
 		if ($funcion == "update")
 			$pedido = $this->pedidoRepository->update(['estadopedido' => $estadoPedido], $pedido_id);		
 
 		return $estadoPedido;
-	}	
+	}
+
+	/**
+	 * Clasifica una línea de pedido_combinacion para el estado de cabecera.
+	 * Facturado = tarea OT facturada o picking_facturado (circuito stock sin OT).
+	 *
+	 * @return array{pendiente: int, produccion: int, facturado: int, anulado: int}
+	 */
+	private function conteoEstadoLineaCombinacion($item): array
+	{
+		$conteo = ['pendiente' => 0, 'produccion' => 0, 'facturado' => 0, 'anulado' => 0];
+
+		$estadoItem = $this->pedido_combinacion_estadoRepository->traeEstado($item->id);
+		if ($estadoItem && $estadoItem->estado == 'A') {
+			$conteo['anulado'] = 1;
+		}
+
+		$tieneOt = $item->ot_id != 0 && $item->ot_id != null;
+		$facturadoPicking = ($item->picking_facturado ?? PedidoPickingFerliSupport::NO_MARCADO)
+			=== PedidoPickingFerliSupport::FACTURADO;
+		$facturadoOt = false;
+		if ($tieneOt) {
+			$factura = $this->ordentrabajoService->buscaTareaOt($item->ot_id, config('consprod.TAREA_FACTURADA'));
+			$facturadoOt = $factura > 0;
+		}
+
+		if ($facturadoPicking || $facturadoOt) {
+			// Entra en producción/facturación cerrada para que qFacturado == qProduccion → "Facturado"
+			$conteo['produccion'] = 1;
+			$conteo['facturado'] = 1;
+		} elseif ($tieneOt) {
+			$conteo['produccion'] = 1;
+		} else {
+			$conteo['pendiente'] = 1;
+		}
+
+		return $conteo;
+	}
+
+	private function etiquetaEstadoDesdeConteo(int $qPendiente, int $qProduccion, int $qFacturado, int $qAnulado): string
+	{
+		$estadoPedido = 'Pendiente';
+		if ($qPendiente > 0 && $qProduccion > 0) {
+			$estadoPedido = 'Pendiente/parcial en produccion';
+		}
+		if ($qPendiente == 0 && $qProduccion > 0) {
+			$estadoPedido = 'En produccion';
+		}
+		if ($qFacturado == $qProduccion && $qFacturado > 0) {
+			$estadoPedido = 'Facturado';
+		} elseif ($qFacturado > 0) {
+			$estadoPedido .= ' y facturado parcial';
+		}
+		if ($qAnulado > 0) {
+			if ($estadoPedido != 'Pendiente') {
+				$estadoPedido .= '/Anulado';
+			} else {
+				$estadoPedido = 'Anulado';
+			}
+		}
+
+		return $estadoPedido;
+	}
 }

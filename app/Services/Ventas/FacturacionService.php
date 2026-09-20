@@ -360,6 +360,11 @@ class FacturacionService
 		return $this->ventaRepository->totalesIndexPorReparto($filtros);
 	}
 
+	public function totalesIndexRango($filtros): object
+	{
+		return $this->ventaRepository->totalesIndexRango($filtros);
+	}
+
 	/**
 	 * @param  array<string, mixed>|string|null  $filtros
 	 * @return list<int>

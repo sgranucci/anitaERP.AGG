@@ -69,6 +69,9 @@ class RepStockOtController extends Controller
 
     public function crearReporteStockOt(Request $request)
     {
+        ini_set('memory_limit', '1024M');
+        set_time_limit(300);
+
         switch($request->extension)
 		{
 		case "Genera Reporte en Excel":

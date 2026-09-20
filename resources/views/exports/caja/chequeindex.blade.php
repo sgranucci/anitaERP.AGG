@@ -2,13 +2,13 @@
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="12" style="height: 52px;">&#160;</td>
+				<td colspan="13" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="12"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de cheques</h2></td>
+			<td colspan="13"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de cheques</h2></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -17,6 +17,7 @@
 			<th>N&uacute;mero</th>
 			<th>Int. Anita</th>
 			<th>Origen</th>
+			<th>Tipo</th>
 			<th>Estado</th>
 			<th>Fecha emisi&oacute;n</th>
 			<th>Fecha pago</th>
@@ -38,6 +39,7 @@
 				<td>{{ $data->numerocheque }}</td>
 				<td>{{ $data->nro_interno_anita }}</td>
 				<td>{{ $origenLabel['nombre'] ?? $data->origen }}</td>
+				<td>{{ \App\Support\Caja\ChequePropioInstrumentoSupport::etiquetaNegociable($data->negociable ?? null) }}</td>
 				<td>{{ $estadoLabel['nombre'] ?? $data->estado }}</td>
 				<td>{{ $data->fechaemision }}</td>
 				<td>{{ $data->fechapago }}</td>
@@ -52,6 +54,14 @@
 				<td>{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
 				<td>{{ $data->monedas->abreviatura ?? ($data->monedas->nombre ?? '') }}</td>
 				<td>{{ $data->entregado ?? $data->anombrede }}</td>
+			</tr>
+		@endforeach
+		@foreach ($totales ?? [] as $tot)
+			<tr>
+				<td colspan="10" style="text-align:right;font-weight:bold;">Total ({{ (int) ($tot['cantidad'] ?? 0) }})</td>
+				<td style="font-weight:bold;">{{ number_format((float) ($tot['monto'] ?? 0), 2, ',', '.') }}</td>
+				<td style="font-weight:bold;">{{ $tot['moneda'] ?? '' }}</td>
+				<td></td>
 			</tr>
 		@endforeach
 	</tbody>

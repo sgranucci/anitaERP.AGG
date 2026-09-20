@@ -6,6 +6,7 @@ use App\Models\Compras\ProgramaPago;
 use App\Models\Compras\ProgramaPagoAsignacion;
 use App\Models\Compras\ProgramaPagoLinea;
 use App\Repositories\Compras\ProgramaPagoRepositoryInterface;
+use App\Support\Caja\ProgramaPagoAsignarChequesSupport;
 use App\Support\Caja\ProgramaPagoChequesCarteraSupport;
 use App\Support\Compras\ProgramaPagoDeudaSupport;
 use App\Support\Compras\ProgramaPagoMesesSupport;
@@ -314,6 +315,22 @@ class ProgramaPagoService
     }
 
     /**
+     * Asigna CHT diferidos en cartera a los montos programados (±30%).
+     *
+     * @return array{
+     *   asignados: list<array<string, mixed>>,
+     *   discrepancias: list<array<string, mixed>>,
+     *   resumen: array{asignados: int, discrepancias: int, monto_asignado: float, monto_sin_cubrir: float}
+     * }
+     */
+    public function asignarChequesCartera(ProgramaPago $programa, ?int $lineaId = null): array
+    {
+        $this->assertEditable($programa);
+
+        return ProgramaPagoAsignarChequesSupport::asignar($programa, $lineaId);
+    }
+
+    /**
      * @return array{
      *   columnas: list<array{clave:string,etiqueta:string,anio_mes:?string}>,
      *   filas: list<array<string,mixed>>,
@@ -321,7 +338,8 @@ class ProgramaPagoService
      *   total_saldo: float,
      *   total_programa: float,
      *   cheques: array{por_clave: array<string,float>, total: float},
-     *   diferencia: array<string,float>
+     *   diferencia: array<string,float>,
+     *   cheques_asignados: list<array<string,mixed>>
      * }
      */
     public function armarVistaMatriz(ProgramaPago $programa): array
@@ -393,6 +411,7 @@ class ProgramaPagoService
             'total_programa' => round($totalPrograma, 2),
             'cheques' => $cheques,
             'diferencia' => $diferencia,
+            'cheques_asignados' => ProgramaPagoAsignarChequesSupport::listarAsignados($programa),
         ];
     }
 

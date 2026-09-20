@@ -9,6 +9,7 @@ interface VentaRepositoryInterface extends RepositoryInterface
     public function leePaginando($busqueda);
     public function leeSinPaginar($busqueda);
     public function totalesIndexPorReparto($filtros);
+    public function totalesIndexRango($filtros): object;
     public function idsIndexPorReparto($filtros, int $transporteId): array;
     public function findOrFail($id);
     public function find($id);

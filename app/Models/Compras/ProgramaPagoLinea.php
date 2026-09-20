@@ -37,4 +37,9 @@ class ProgramaPagoLinea extends Model
     {
         return $this->hasMany(ProgramaPagoAsignacion::class, 'programa_pago_linea_id');
     }
+
+    public function chequesAsignados(): HasMany
+    {
+        return $this->hasMany(ProgramaPagoCheque::class, 'programa_pago_linea_id');
+    }
 }

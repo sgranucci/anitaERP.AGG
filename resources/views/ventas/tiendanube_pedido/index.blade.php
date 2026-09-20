@@ -48,6 +48,27 @@
                     <div class="alert alert-warning">
                         Faltan credenciales: configure <code>TIENDANUBE_STORE_ID</code> y <code>TIENDANUBE_ACCESS_TOKEN</code> en <code>.env</code>.
                     </div>
+                @elseif (! ($apiHealth['auth_ok'] ?? true))
+                    <div class="alert alert-danger">
+                        <strong>API Tiendanube: token inválido.</strong>
+                        {{ $apiHealth['mensaje_ui'] ?? '' }}
+                        @if (! empty($apiHealth['checked_at']))
+                            <br><small>Última verificación: {{ \Carbon\Carbon::parse($apiHealth['checked_at'])->format('d/m/Y H:i') }}</small>
+                        @endif
+                    </div>
+                @elseif ($apiHealth['stale'] ?? false)
+                    <div class="alert alert-warning">
+                        <strong>Sincronización atrasada.</strong>
+                        {{ $apiHealth['mensaje_ui'] ?? '' }}
+                        El cron baja pedidos cada 2 h (07–23). También podés usar «Sincronizar».
+                    </div>
+                @elseif (! empty($apiHealth['last_sync_ok_at']))
+                    <div class="alert alert-success py-2 mb-2">
+                        <small>
+                            API OK · Último sync:
+                            {{ \Carbon\Carbon::parse($apiHealth['last_sync_ok_at'])->format('d/m/Y H:i') }}
+                        </small>
+                    </div>
                 @endif
 
                 <form method="get" action="{{ route('tiendanube_pedidos') }}" class="form-inline mb-2" id="form-tn-filtros">

@@ -6,6 +6,7 @@ use App\Services\Ventas\FacturacionService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Export\ExcelFormatoNumero;
 use App\Support\Ventas\FacturaListadoFiltros;
+use App\Support\Ventas\VentasListadoEtiquetasSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -24,8 +25,6 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
-
-    private const COL_ULTIMA = 'J';
 
     /** Congela también ID y Fecha (columnas A y B): el freeze arranca en C. */
     private const COL_FREEZE = 'C';
@@ -55,6 +54,12 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
         $this->facturacionService = $facturacionservice;
     }
 
+    private function colUltima(): string
+    {
+        // detalle = 10 cols (A–J); solo cantidad = 8 cols (A–H)
+        return VentasListadoEtiquetasSupport::muestraCajaUnidad() ? 'J' : 'H';
+    }
+
     public function view(): View
     {
         $filtros = is_array($this->filtros) ? $this->filtros : [];
@@ -62,6 +67,7 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
         $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
             ? $this->facturacionService->totalesIndexPorReparto($this->filtros)
             : collect();
+        $totalesRango = $this->facturacionService->totalesIndexRango($this->filtros);
 
         foreach ($ventas as $row) {
             $row->nombreempresa = $row->nombreempresa ?? ($row->puntoventas->empresas->nombre ?? '');
@@ -77,6 +83,7 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
         return view('exports.ventas.factura', [
             'ventas' => $ventas,
             'totalesPorReparto' => $totalesPorReparto,
+            'totalesRango' => $totalesRango,
             'filtros' => $filtros,
             'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
@@ -87,13 +94,22 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
     public function columnFormats(): array
     {
         $num = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+        $detalle = VentasListadoEtiquetasSupport::muestraCajaUnidad();
+
+        if ($detalle) {
+            return [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'F' => $num,
+                'G' => $num,
+                'H' => $num,
+                'J' => $num,
+            ];
+        }
 
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'F' => $num,
-            'G' => $num,
             'H' => $num,
-            'J' => $num,
         ];
     }
 
@@ -104,17 +120,27 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
 
     public function columnWidths(): array
     {
-        return [
+        $base = [
             'A' => 10,
             'B' => 12,
             'C' => 28,
             'D' => 28,
             'E' => 18,
             'F' => 12,
-            'G' => 12,
-            'H' => 12,
-            'I' => 18,
-            'J' => 14,
+        ];
+
+        if (VentasListadoEtiquetasSupport::muestraCajaUnidad()) {
+            return $base + [
+                'G' => 12,
+                'H' => 12,
+                'I' => 18,
+                'J' => 14,
+            ];
+        }
+
+        return $base + [
+            'G' => 18,
+            'H' => 14,
         ];
     }
 
@@ -123,7 +149,7 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                $col = self::COL_ULTIMA;
+                $col = $this->colUltima();
 
                 if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
                     $sheet->getRowDimension(1)->setRowHeight(54);

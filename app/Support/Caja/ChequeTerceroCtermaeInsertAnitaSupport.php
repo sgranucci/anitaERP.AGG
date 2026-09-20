@@ -82,7 +82,11 @@ final class ChequeTerceroCtermaeInsertAnitaSupport
             $fechaIngreso = $fechaPago;
         }
 
-        $camara = ((string) ($cheque->fechapago ?? '') > (string) ($cheque->fechaemision ?? date('Y-m-d'))) ? '2' : '1';
+        $camaraFecha = ((string) ($cheque->fechapago ?? '') > (string) ($cheque->fechaemision ?? date('Y-m-d'))) ? '2' : '1';
+        $camara = ChequeTerceroCtermaeAnitaMapper::interiorDesdeNegociable(
+            (string) ($cheque->negociable ?? ''),
+            $camaraFecha
+        );
 
         $codigoCliente = '000000';
         if ($cheque->clientes) {

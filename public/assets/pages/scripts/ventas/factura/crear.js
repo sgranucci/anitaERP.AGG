@@ -1268,6 +1268,7 @@
 		});
 
 		$('.cantidad').on('change', function (event) {
+			TotalCantidadFactura();
 			calculaFactura();
 		});
 

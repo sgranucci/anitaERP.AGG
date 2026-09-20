@@ -24,7 +24,7 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'L';
+    private const COL_ULTIMA = 'M';
 
     private ChequeRepositoryInterface $chequeRepository;
 
@@ -44,6 +44,9 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
+    /** @var list<int> */
+    private array $filasTotalExcel = [];
+
     public function __construct(ChequeRepositoryInterface $chequeRepository)
     {
         $this->chequeRepository = $chequeRepository;
@@ -55,14 +58,22 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
             $datas = $this->chequeRepository->leeCheque($this->filtros, false);
             self::enriquecerNombreEmpresa($datas);
 
+            $totales = self::totalesPorMoneda($datas);
+
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
             $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
             $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
             $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+            $this->filasTotalExcel = self::calcularFilasTotal(
+                $this->filaPrimeraDatosExcel,
+                $datas->count(),
+                count($totales)
+            );
 
             return view('exports.caja.chequeindex', [
                 'datas' => $datas,
+                'totales' => $totales,
                 'origen_enum' => Cheque::$enumOrigen,
                 'estado_enum' => Cheque::$enumEstado,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
@@ -74,9 +85,11 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
         $this->filaCabecerasExcel = 2;
         $this->filaPrimeraDatosExcel = 3;
         $this->rutasLogosExcel = [];
+        $this->filasTotalExcel = [];
 
         return view('exports.caja.chequeindex', [
             'datas' => collect(),
+            'totales' => [],
             'origen_enum' => Cheque::$enumOrigen,
             'estado_enum' => Cheque::$enumEstado,
             'reservarFilaLogoExcel' => false,
@@ -127,14 +140,15 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
                 'B' => 14,
                 'C' => 12,
                 'D' => 12,
-                'E' => 12,
+                'E' => 10,
                 'F' => 12,
                 'G' => 12,
-                'H' => 20,
-                'I' => 16,
-                'J' => 14,
-                'K' => 10,
-                'L' => 22,
+                'H' => 12,
+                'I' => 20,
+                'J' => 16,
+                'K' => 14,
+                'L' => 10,
+                'M' => 22,
             ];
         }
 
@@ -189,6 +203,16 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
                     ],
                 ]);
 
+                foreach ($this->filasTotalExcel as $filaTotal) {
+                    $sheet->getStyle('A'.$filaTotal.':'.self::COL_ULTIMA.$filaTotal)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'name' => 'Arial',
+                            'color' => ['rgb' => '17202A'],
+                        ],
+                    ]);
+                }
+
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];
@@ -218,5 +242,48 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
         foreach ($datas as $row) {
             $row->nombreempresa = $row->empresas->nombre ?? '';
         }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Cheque>|\Illuminate\Database\Eloquent\Collection<int, Cheque>  $datas
+     * @return list<array{moneda:string, monto:float, cantidad:int}>
+     */
+    private static function totalesPorMoneda($datas): array
+    {
+        $totalesMap = [];
+        foreach ($datas as $cheque) {
+            $moneda = trim((string) ($cheque->monedas->abreviatura ?? ''));
+            if ($moneda === '') {
+                $moneda = trim((string) ($cheque->monedas->nombre ?? ''));
+            }
+            if ($moneda === '') {
+                $moneda = '$';
+            }
+            if (! isset($totalesMap[$moneda])) {
+                $totalesMap[$moneda] = ['moneda' => $moneda, 'monto' => 0.0, 'cantidad' => 0];
+            }
+            $totalesMap[$moneda]['monto'] = round($totalesMap[$moneda]['monto'] + (float) $cheque->monto, 2);
+            $totalesMap[$moneda]['cantidad']++;
+        }
+
+        return array_values($totalesMap);
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function calcularFilasTotal(int $filaPrimeraDatos, int $cantidadDatos, int $cantidadTotales): array
+    {
+        if ($cantidadTotales <= 0) {
+            return [];
+        }
+
+        $filas = [];
+        $primeraTotal = $filaPrimeraDatos + $cantidadDatos;
+        for ($i = 0; $i < $cantidadTotales; $i++) {
+            $filas[] = $primeraTotal + $i;
+        }
+
+        return $filas;
     }
 }

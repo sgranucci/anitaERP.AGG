@@ -5,6 +5,7 @@ namespace App\Services\Ventas\Tiendanube;
 use App\Models\Ventas\TiendanubePedido;
 use App\Models\Ventas\TiendanubePedidoLinea;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Ventas\Tiendanube\TiendanubeApiHealthSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoSkuResolverSupport;
@@ -26,6 +27,7 @@ final class TiendanubePedidoSyncService
      * @return array{
      *   ok:bool,
      *   error?:string,
+     *   status?:int,
      *   creados:int,
      *   actualizados:int,
      *   omitidos:int,
@@ -54,9 +56,14 @@ final class TiendanubePedidoSyncService
         for ($page = 1; $page <= $maxPaginas; $page++) {
             $resp = $this->api->listarPedidos($filtros, $page);
             if (! $resp['ok']) {
+                $status = (int) ($resp['status'] ?? 0);
+                $error = (string) ($resp['error'] ?? 'Error al listar pedidos');
+                TiendanubeApiHealthSupport::marcarSyncError($error, $status);
+
                 return [
                     'ok' => false,
-                    'error' => $resp['error'] ?? 'Error al listar pedidos',
+                    'error' => $error,
+                    'status' => $status,
                     'creados' => $creados,
                     'actualizados' => $actualizados,
                     'omitidos' => $omitidos,
@@ -98,6 +105,7 @@ final class TiendanubePedidoSyncService
         Log::info('tiendanube.sync.ok', compact('creados', 'actualizados', 'omitidos', 'paginas', 'desdeYmd', 'hastaYmd'));
 
         $rematch = $this->rematchearSkusPendientes();
+        TiendanubeApiHealthSupport::marcarSyncOk();
 
         return [
             'ok' => true,

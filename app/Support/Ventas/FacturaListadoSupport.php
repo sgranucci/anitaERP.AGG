@@ -6,6 +6,7 @@ final class FacturaListadoSupport
 {
     /**
      * En El Bierzo, venta_emision.cantidad es kilos; pieza = unidades; caja = cajas.
+     * En Ferli, venta_emision.cantidad es pares (misma columna; etiqueta vía VentasListadoEtiquetasSupport).
      *
      * @return array{caja: float, pieza: float, kilo: float}
      */
@@ -75,11 +76,13 @@ final class FacturaListadoSupport
 
         $reparto = trim($codigo.' '.$nombre);
         if ($reparto === '') {
-            $reparto = 'Sin reparto';
+            $reparto = VentasListadoEtiquetasSupport::sinTransporte();
         }
 
         $compTxt = $cantidad === 1 ? '1 comprobante' : $cantidad.' comprobantes';
+        $etiqueta = VentasListadoEtiquetasSupport::etiquetaTransporte();
 
-        return 'Reparto '.$reparto.' — '.$compTxt.' — '.PedidoListadoSupport::formatearTotal($kilos).' kg';
+        return $etiqueta.' '.$reparto.' — '.$compTxt.' — '
+            .VentasListadoEtiquetasSupport::formatoCantidadConAbreviatura($kilos);
     }
 }

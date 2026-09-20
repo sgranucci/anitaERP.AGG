@@ -2,7 +2,6 @@
 
 namespace App\Support\Caja;
 
-use App\Models\Caja\Cheque;
 use Carbon\Carbon;
 
 /**
@@ -33,21 +32,8 @@ final class ProgramaPagoChequesCarteraSupport
         $desde = Carbon::createFromFormat('Y-m', $claves[0])->startOfMonth()->toDateString();
         $hasta = Carbon::createFromFormat('Y-m', $claves[count($claves) - 1])->endOfMonth()->toDateString();
 
-        $query = Cheque::query()
-            ->where('origen', 'R')
-            ->whereNull('pagoproveedor_id')
-            ->where(function ($e) {
-                $e->whereNull('estado')->orWhereIn('estado', [' ', 'N', '']);
-            })
-            ->where(function ($c) {
-                $c->whereNull('nro_caucion')->orWhere('nro_caucion', '')->orWhere('nro_caucion', '0');
-            })
-            ->whereNull('fecha_deposito')
+        $query = ProgramaPagoAsignarChequesSupport::queryCarteraDisponible($empresaId)
             ->whereBetween('fechapago', [$desde, $hasta]);
-
-        if ($empresaId > 0) {
-            $query->where('empresa_id', $empresaId);
-        }
 
         foreach ($query->get(['fechapago', 'monto']) as $cheque) {
             $clave = Carbon::parse((string) $cheque->fechapago)->format('Y-m');

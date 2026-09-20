@@ -107,6 +107,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                             <th>Número</th>
                             <th style="width:5rem;">Int.</th>
                             <th style="width:5.5rem;">Origen</th>
+                            <th style="width:4.5rem;" title="Físico / e-cheq">Tipo</th>
                             <th>Estado</th>
                             <th style="width:6.5rem;">Emisión</th>
                             <th style="width:6.5rem;">Pago</th>
@@ -176,6 +177,13 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                     <span class="badge badge-primary">{{ $origenLabel['nombre'] ?? 'Emitido' }}</span>
                                 @else
                                     <span class="badge badge-info">{{ $origenLabel['nombre'] ?? 'Recibido' }}</span>
+                                @endif
+                            </td>
+                            <td>
+                                @if (strtoupper(trim((string) ($data->negociable ?? ''))) === 'E')
+                                    <span class="badge badge-warning">e-cheq</span>
+                                @else
+                                    <span class="badge badge-secondary">Físico</span>
                                 @endif
                             </td>
                             <td>

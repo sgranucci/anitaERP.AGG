@@ -1088,6 +1088,7 @@ class CobranzaService
 			$codigobancos = $data['codigobancos'];
 			$nombrebancos = $data['nombrebancos'];
 			$numerocheques = $data['numerocheques'];
+			$negociables = $data['negociables'] ?? [];
 			$cotizacioncheques = $data['cotizacioncheques'];
 			$sucursalpagos = $data['sucursalpagos'];
 			$cuentalibradoras = $data['cuentalibradoras'];
@@ -1111,7 +1112,15 @@ class CobranzaService
 				$numeroInternoSecuencia++;
 
 				$fechaCheque = $fechapagos[$i] ?? ($data['fechapago'] ?? $fecha);
-				$camara = ((string) $fechaCheque > (string) $fecha) ? '2' : '1';
+				$camaraFecha = ((string) $fechaCheque > (string) $fecha) ? '2' : '1';
+				$negociable = \App\Support\Caja\ChequePropioInstrumentoSupport::negociable(
+					(string) ($negociables[$i] ?? ''),
+					'N'
+				);
+				$camara = \App\Support\Caja\ChequeTerceroCtermaeAnitaMapper::interiorDesdeNegociable(
+					$negociable,
+					$camaraFecha
+				);
 
 				$cterCtx = [
 					'numeroInterno' => $numeroInterno,
@@ -1124,6 +1133,10 @@ class CobranzaService
 					'nombreBanco' => $nombrebancos[$i] ?? '',
 					'entregadoPor' => $data['nombrecliente'] ?? '',
 					'camara' => $camara,
+					'nroEcheq' => \App\Support\Caja\ChequePropioInstrumentoSupport::nroEcheq(
+						$negociable,
+						(string) ($numerocheques[$i] ?? '')
+					),
 					'monedaId' => $monedacheque_ids[$i],
 					'cotizacion' => $cotizacioncheques[$i],
 					'sucursalBanco' => $sucursalpagos[$i] ?? '0',

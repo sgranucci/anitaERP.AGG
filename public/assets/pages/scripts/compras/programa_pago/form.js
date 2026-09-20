@@ -457,6 +457,48 @@
             setActivo(idxActivo + 1);
         });
 
+        function confirmarAsignarCheques(soloActivo) {
+            var msg = soloActivo
+                ? '¿Asignar cheques en cartera diferidos al proveedor activo?\n\nUsa los montos YA GUARDADOS (Guardá antes si hay cambios). Tolerancia ±30%.'
+                : '¿Asignar cheques en cartera diferidos a TODOS los proveedores programados?\n\nUsa los montos YA GUARDADOS. Tolerancia ±30%. Reemplaza asignaciones previas de esas líneas.';
+            if (!confirm(msg)) {
+                return;
+            }
+            var $form = $('#form-asignar-cheques-pp');
+            if (!$form.length) {
+                alert('No se puede asignar cheques en este momento.');
+                return;
+            }
+            if (soloActivo) {
+                var $tr = filaActiva();
+                if (!$tr) {
+                    alert('Seleccioná un proveedor.');
+                    return;
+                }
+                var lineaId = parseInt($tr.data('linea-id') || '0', 10);
+                if (!lineaId) {
+                    alert('Guardá el programa antes de asignar cheques a un proveedor nuevo.');
+                    return;
+                }
+                $('#pp-asignar-linea-id').val(String(lineaId));
+            } else {
+                $('#pp-asignar-linea-id').val('');
+            }
+            $form.trigger('submit');
+        }
+
+        $('#pp-btn-asignar-cheques-activo').on('click', function () {
+            confirmarAsignarCheques(true);
+        });
+
+        $('#pp-btn-asignar-cheques-todos').on('click', function () {
+            confirmarAsignarCheques(false);
+        });
+
+        if (cfg.mostrarResultadoAsignacion && $('#ppAsignacionChequesModal').length) {
+            $('#ppAsignacionChequesModal').modal('show');
+        }
+
         $('#form-agregar-proveedor-pp').on('submit', function (e) {
             var id = parseInt($('#proveedor_id').val() || '0', 10);
             if (!id) {

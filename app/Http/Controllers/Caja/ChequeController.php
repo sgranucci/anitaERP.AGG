@@ -10,6 +10,7 @@ use App\Exports\Caja\ChequeAgingExport;
 use App\Exports\Caja\ChequeDepositoConciliacionExport;
 use App\Exports\Caja\ChequeListadoExport;
 use App\Models\Caja\Cheque;
+use App\Models\Caja\Chequera;
 use App\Repositories\Caja\ChequeRepositoryInterface;
 use App\Repositories\Caja\ChequeraRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
@@ -26,6 +27,7 @@ use App\Support\Caja\ChequeCashflowSemanalSupport;
 use App\Support\Caja\ChequeDepositoComprobanteSupport;
 use App\Support\Caja\ChequeDepositoConciliacionFiltros;
 use App\Support\Caja\ChequeDepositoConciliacionSupport;
+use App\Support\Caja\ChequeConsultaChequeraSupport;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequeNdConfigSupport;
 use App\Support\Caja\Echeq\ChequeEcheqProviderResolver;
@@ -798,11 +800,14 @@ class ChequeController extends Controller
         $estado_enum = Cheque::$enumEstado;
         $chequera_query = $this->chequeraRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $tipodocumento_enum = config('enums.tipodocumento', []);
+        $disponible = '';
 
         return view('caja.cheque.crear', compact('cuentacaja_query',
                                                 'origen_enum', 'caracter_enum',
                                                 'para_dep_enum', 'negociable_enum',
-                                                'estado_enum', 'chequera_query', 'empresa_query'));
+                                                'estado_enum', 'chequera_query', 'empresa_query',
+                                                'tipodocumento_enum', 'disponible'));
     }
 
     /**
@@ -829,7 +834,7 @@ class ChequeController extends Controller
     {
         can('editar-cheque');
         $data = $this->repository->findOrFail($id);
-        
+
         $cuentacaja_query = $this->cuentacajaRepository->all();
         $origen_enum = Cheque::$enumOrigen;
         $caracter_enum = Cheque::$enumCaracter;
@@ -838,11 +843,14 @@ class ChequeController extends Controller
         $estado_enum = Cheque::$enumEstado;
         $chequera_query = $this->chequeraRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $tipodocumento_enum = config('enums.tipodocumento', []);
+        $disponible = $this->disponiblesDesdeChequera($data->chequeras);
 
         return view('caja.cheque.editar', compact('data', 'cuentacaja_query',
                                                 'origen_enum', 'caracter_enum',
                                                 'para_dep_enum', 'negociable_enum',
-                                                'estado_enum', 'chequera_query', 'empresa_query'));
+                                                'estado_enum', 'chequera_query', 'empresa_query',
+                                                'tipodocumento_enum', 'disponible'));
     }
 
     /**
@@ -894,5 +902,20 @@ class ChequeController extends Controller
             $busquedaRuta,
             $empresaDefault ? (int) $empresaDefault : null
         );
+    }
+
+    private function disponiblesDesdeChequera(?Chequera $chequera): string
+    {
+        if (! $chequera) {
+            return '';
+        }
+
+        $chequeraId = (int) $chequera->id;
+        $desde = (int) preg_replace('/\D/', '', (string) ($chequera->desdenumerocheque ?? ''));
+        $hasta = (int) preg_replace('/\D/', '', (string) ($chequera->hastanumerocheque ?? ''));
+        $ultimos = ChequeConsultaChequeraSupport::ultimosNumeros([$chequeraId]);
+        $disp = ChequeConsultaChequeraSupport::disponibles($ultimos[$chequeraId] ?? null, $desde, $hasta);
+
+        return $disp === null ? '' : (string) $disp;
     }
 }

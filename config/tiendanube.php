@@ -79,4 +79,37 @@ return [
         env('TIENDANUBE_ENVIAR_FACTURA_MAIL', true),
         FILTER_VALIDATE_BOOLEAN
     ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Salud API / sync automático (Ferli)
+    |--------------------------------------------------------------------------
+    | El access_token NO se renueva solo. Health check + sync cron detectan 401
+    | y avisan por mail / banner en pantalla.
+    */
+    'health_cron_habilitado' => filter_var(
+        env('TIENDANUBE_HEALTH_CRON_HABILITADO', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    'health_cache_segundos' => (int) env('TIENDANUBE_HEALTH_CACHE_SEGUNDOS', 300),
+
+    'sync_cron_habilitado' => filter_var(
+        env('TIENDANUBE_SYNC_CRON_HABILITADO', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    'sync_cron_dias' => (int) env('TIENDANUBE_SYNC_CRON_DIAS', 7),
+
+    // Banner si el último sync OK es más viejo que esto.
+    'sync_stale_horas' => (int) env('TIENDANUBE_SYNC_STALE_HORAS', 36),
+
+    'alerta_email_habilitado' => filter_var(
+        env('TIENDANUBE_ALERTA_EMAIL_HABILITADO', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
+    'alerta_email' => env('TIENDANUBE_ALERTA_EMAIL', 'sergiogranucci@gmail.com'),
+
+    'alerta_email_throttle_horas' => (int) env('TIENDANUBE_ALERTA_EMAIL_THROTTLE_HORAS', 6),
 ];

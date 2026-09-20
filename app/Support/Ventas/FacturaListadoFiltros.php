@@ -45,6 +45,20 @@ class FacturaListadoFiltros
         'reparto' => ['type' => 'texto', 'label' => 'Reparto (n&uacute;mero)'],
     ];
 
+    /**
+     * CAMPOS con etiqueta de transporte/reparto según instalación.
+     *
+     * @return array<string, array{type: string, label: string}>
+     */
+    public static function camposParaVista(): array
+    {
+        $campos = self::CAMPOS;
+        $etiqueta = VentasListadoEtiquetasSupport::etiquetaTransporte();
+        $campos['reparto']['label'] = e($etiqueta).' (n&uacute;mero)';
+
+        return $campos;
+    }
+
     /** @var array<string, string> */
     public const OPERADORES_TEXTO = [
         'contiene' => 'Contiene (en cualquier parte)',
@@ -347,21 +361,6 @@ class FacturaListadoFiltros
         return $desdeTxt.' — '.$hastaTxt;
     }
 
-    public static function formatearRepartoTexto(array $filtros): string
-    {
-        $reparto = trim((string) ($filtros['filtro_reparto'] ?? ''));
-        if ($reparto === '') {
-            return '';
-        }
-
-        [$desde, $hasta] = KiloPedidoListadoFiltros::normalizarRangoRepartos($reparto, '');
-
-        return KiloPedidoListadoFiltros::formatearRepartoTexto([
-            'reparto_desde' => $desde,
-            'reparto_hasta' => $hasta,
-        ]);
-    }
-
     public static function normalizarOrden(mixed $orden): string
     {
         return trim((string) $orden) === self::ORDEN_ID
@@ -381,9 +380,42 @@ class FacturaListadoFiltros
 
     public static function formatearOrdenTexto(array $filtros): string
     {
-        return self::esOrdenId($filtros)
-            ? 'ID (mayor a menor)'
-            : 'Reparto (código mayor a menor)';
+        if (self::esOrdenId($filtros)) {
+            return 'ID (mayor a menor)';
+        }
+
+        $etiqueta = VentasListadoEtiquetasSupport::etiquetaTransporte();
+
+        return $etiqueta.' (código mayor a menor)';
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function formatearRepartoTexto(array $filtros): string
+    {
+        $reparto = trim((string) ($filtros['filtro_reparto'] ?? ''));
+        if ($reparto === '') {
+            return '';
+        }
+
+        [$desde, $hasta] = KiloPedidoListadoFiltros::normalizarRangoRepartos($reparto, '');
+        $etiqueta = VentasListadoEtiquetasSupport::etiquetaTransporte();
+        $plural = VentasListadoEtiquetasSupport::etiquetaTransportePlural();
+
+        if ($desde === '' && $hasta === '') {
+            return '';
+        }
+
+        if (KiloPedidoListadoFiltros::esListaRepartos($desde)) {
+            return $plural.' '.implode(', ', KiloPedidoListadoFiltros::parseListaRepartos($desde));
+        }
+
+        if ($hasta !== '' && ! KiloPedidoListadoFiltros::esRepartoHastaAbierto($hasta)) {
+            return $etiqueta.' '.$desde.' al '.$hasta;
+        }
+
+        return $etiqueta.' '.$desde;
     }
 
     /**

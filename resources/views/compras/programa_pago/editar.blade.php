@@ -77,7 +77,9 @@
 <script>
 window.programaPagoCfg = {
     columnas: @json($ppColumnasJs),
-    tieneTransf: @json((bool) ($data->incluye_transf ?? true))
+    tieneTransf: @json((bool) ($data->incluye_transf ?? true)),
+    urlAsignarCheques: @json(route('asignar_cheques_programa_pago', $data->id)),
+    mostrarResultadoAsignacion: @json(session()->has('pp_asignacion_cheques'))
 };
 </script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}"></script>
@@ -91,6 +93,8 @@ window.programaPagoCfg = {
     $totales = $matriz['totales_asignacion'] ?? [];
     $cheques = $matriz['cheques']['por_clave'] ?? [];
     $diferencia = $matriz['diferencia'] ?? [];
+    $chequesAsignados = $matriz['cheques_asignados'] ?? [];
+    $resultadoAsignacion = session('pp_asignacion_cheques');
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -195,6 +199,18 @@ window.programaPagoCfg = {
                                 <button type="button" class="btn btn-sm btn-outline-secondary" id="pp-btn-asistente-saltar">
                                     Siguiente sin marcar
                                 </button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" id="pp-btn-asignar-cheques-activo"
+                                        title="Asigna CHT diferidos en cartera al proveedor activo (usa montos ya guardados, ±30%)">
+                                    <i class="fa fa-money-check"></i> Cheques (este)
+                                </button>
+                                <button type="button" class="btn btn-sm btn-dark" id="pp-btn-asignar-cheques-todos"
+                                        title="Asigna CHT diferidos a todos los proveedores ya programados (montos guardados, ±30%)">
+                                    <i class="fa fa-money-check-alt"></i> Cheques (todos programados)
+                                </button>
+                            </div>
+
+                            <div class="small text-muted mt-1">
+                                Asignar cheques usa los montos <strong>guardados</strong> (no los del formulario sin Guardar). Tolerancia ±30%.
                             </div>
 
                             <div class="d-flex flex-wrap align-items-center mt-2">
@@ -326,6 +342,10 @@ window.programaPagoCfg = {
                             <i class="fa fa-lock"></i> Cerrar
                         </button>
                     </form>
+                    <form id="form-asignar-cheques-pp" method="POST" action="{{ route('asignar_cheques_programa_pago', $data->id) }}" class="d-none">
+                        @csrf
+                        <input type="hidden" name="linea_id" id="pp-asignar-linea-id" value="">
+                    </form>
                 @elseif (can('actualizar-programa-pago', false) && $data->estado === 'CERRADO')
                     <form action="{{ route('reabrir_programa_pago', $data->id) }}" method="POST" class="d-inline mr-2">
                         @csrf
@@ -336,6 +356,46 @@ window.programaPagoCfg = {
                 @endif
             </div>
         </div>
+
+        @if (count($chequesAsignados) > 0)
+            <div class="card card-outline card-info mt-3">
+                <div class="card-header">
+                    <h3 class="card-title">Cheques asignados ({{ count($chequesAsignados) }})</h3>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead style="background:#85C1E9;color:#17202A;">
+                                <tr>
+                                    <th>Mes</th>
+                                    <th>Proveedor</th>
+                                    <th>Nº interno</th>
+                                    <th>Nº cheque</th>
+                                    <th>Fecha pago</th>
+                                    <th>Banco</th>
+                                    <th class="text-right">Monto cheque</th>
+                                    <th class="text-right">Programado</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($chequesAsignados as $asigCh)
+                                    <tr>
+                                        <td>{{ $asigCh['clave'] }}</td>
+                                        <td>{{ $asigCh['proveedor'] }}</td>
+                                        <td>{{ $asigCh['nro_interno_anita'] ?? '—' }}</td>
+                                        <td>{{ $asigCh['numerocheque'] }}</td>
+                                        <td>{{ $asigCh['fechapago'] ? \Carbon\Carbon::parse($asigCh['fechapago'])->format('d/m/Y') : '' }}</td>
+                                        <td>{{ $asigCh['banco'] }}</td>
+                                        <td class="text-right">{{ number_format($asigCh['monto'], 2, ',', '.') }}</td>
+                                        <td class="text-right">{{ number_format($asigCh['monto_programado'], 2, ',', '.') }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        @endif
 
         @if ($puedeEditar)
             <div class="card card-outline card-info mt-3">
@@ -377,4 +437,98 @@ window.programaPagoCfg = {
         @endif
     </div>
 </div>
+
+@if (is_array($resultadoAsignacion))
+    @php
+        $ppAsignados = $resultadoAsignacion['asignados'] ?? [];
+        $ppDiscrepancias = $resultadoAsignacion['discrepancias'] ?? [];
+        $ppResumen = $resultadoAsignacion['resumen'] ?? [];
+    @endphp
+    <div class="modal fade" id="ppAsignacionChequesModal" tabindex="-1" role="dialog" aria-labelledby="ppAsignacionChequesTitulo" aria-hidden="true">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="ppAsignacionChequesTitulo">Resultado asignación de cheques</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">
+                        Cheques asignados: <strong>{{ (int) ($ppResumen['asignados'] ?? 0) }}</strong>
+                        · Monto: <strong>{{ number_format((float) ($ppResumen['monto_asignado'] ?? 0), 2, ',', '.') }}</strong>
+                        · Discrepancias: <strong class="{{ ((int) ($ppResumen['discrepancias'] ?? 0)) > 0 ? 'text-danger' : '' }}">{{ (int) ($ppResumen['discrepancias'] ?? 0) }}</strong>
+                        @if ((float) ($ppResumen['monto_sin_cubrir'] ?? 0) > 0)
+                            · Sin cubrir: <strong class="text-danger">{{ number_format((float) $ppResumen['monto_sin_cubrir'], 2, ',', '.') }}</strong>
+                        @endif
+                    </p>
+                    <p class="small text-muted">Tolerancia permitida: ±30% entre programado y suma de cheques del mes.</p>
+
+                    @if (count($ppDiscrepancias) > 0)
+                        <h6 class="text-danger">Discrepancias</h6>
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm table-bordered">
+                                <thead style="background:#85C1E9;color:#17202A;">
+                                    <tr>
+                                        <th>Proveedor</th>
+                                        <th>Mes</th>
+                                        <th class="text-right">Programado</th>
+                                        <th class="text-right">Asignado</th>
+                                        <th>Detalle</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($ppDiscrepancias as $disc)
+                                        <tr>
+                                            <td>{{ $disc['proveedor'] ?? '' }}</td>
+                                            <td>{{ $disc['clave'] ?? '' }}</td>
+                                            <td class="text-right">{{ number_format((float) ($disc['monto_programado'] ?? 0), 2, ',', '.') }}</td>
+                                            <td class="text-right">{{ number_format((float) ($disc['monto_asignado'] ?? 0), 2, ',', '.') }}</td>
+                                            <td>{{ $disc['detalle'] ?? '' }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+
+                    @if (count($ppAsignados) > 0)
+                        <h6>Cheques asignados en esta corrida</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead style="background:#85C1E9;color:#17202A;">
+                                    <tr>
+                                        <th>Proveedor</th>
+                                        <th>Mes</th>
+                                        <th>Nº int.</th>
+                                        <th>Nº cheque</th>
+                                        <th>Fecha</th>
+                                        <th class="text-right">Monto</th>
+                                        <th class="text-right">Programado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($ppAsignados as $asig)
+                                        <tr>
+                                            <td>{{ $asig['proveedor'] ?? '' }}</td>
+                                            <td>{{ $asig['clave'] ?? '' }}</td>
+                                            <td>{{ $asig['nro_interno_anita'] ?? '—' }}</td>
+                                            <td>{{ $asig['numerocheque'] ?? '' }}</td>
+                                            <td>{{ ! empty($asig['fechapago']) ? \Carbon\Carbon::parse($asig['fechapago'])->format('d/m/Y') : '' }}</td>
+                                            <td class="text-right">{{ number_format((float) ($asig['monto'] ?? 0), 2, ',', '.') }}</td>
+                                            <td class="text-right">{{ number_format((float) ($asig['monto_programado'] ?? 0), 2, ',', '.') }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @endif
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+@endif
 @endsection

@@ -3,12 +3,15 @@
     use App\Support\Ventas\FacturaListadoFiltros;
     use App\Support\Ventas\FacturaListadoSupport;
     use App\Support\Ventas\PedidoListadoSupport;
+    use App\Support\Ventas\VentasListadoEtiquetasSupport;
 
     $esExcel = ! empty($esExcel);
     $reservarFilaLogoExcel = ! empty($reservarFilaLogoExcel);
     $ventas = $ventas ?? collect();
-    $colspan = 10;
-
+    $colspan = VentasListadoEtiquetasSupport::colspanTablaSinAcciones();
+    $etiqCantidad = VentasListadoEtiquetasSupport::etiquetaCantidad();
+    $etiqTransporte = VentasListadoEtiquetasSupport::etiquetaTransporte();
+    $totalesRango = $totalesRango ?? null;
     foreach ($ventas as $c) {
         $c->nombreempresa = $c->nombreempresa ?? ($c->puntoventas->empresas->nombre ?? '');
     }
@@ -93,10 +96,8 @@
             <th>Comprobante</th>
             <th>Cliente</th>
             <th>Empresa</th>
-            <th class="num">Cajas</th>
-            <th class="num">Unidades</th>
-            <th class="num">Kilos</th>
-            <th>Reparto</th>
+            @include('ventas.factura.partials.thead_cantidades', ['claseNum' => 'num', 'etiqCantidad' => $etiqCantidad])
+            <th>{{ $etiqTransporte }}</th>
             <th class="num">Total</th>
         </tr>
     </thead>
@@ -113,15 +114,19 @@
                 </td>
                 <td>{{ $comprobante->clientes->nombre ?? '' }}</td>
                 <td>{{ $comprobante->nombreempresa }}</td>
-                <td class="num">{{ $fmtMonto($totales['caja']) }}</td>
-                <td class="num">{{ $fmtMonto($totales['pieza']) }}</td>
-                <td class="num">{{ $fmtMonto($totales['kilo']) }}</td>
+                @include('ventas.factura.partials.celdas_cantidades', [
+                    'totales' => $totales,
+                    'claseNum' => 'num',
+                    'fmt' => $fmtMonto,
+                ])
                 <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>
                 <td class="num">{{ $fmtMonto($comprobante->total) }}</td>
             </tr>
             @if (FacturaListadoSupport::esCierreReparto($comprobante, $totalesPorReparto ?? []))
                 @include('ventas.factura.partials.fila_subtotal_reparto', [
                     'metaReparto' => FacturaListadoSupport::metaReparto($comprobante, $totalesPorReparto ?? []),
+                    'claseNum' => 'num',
+                    'fmt' => $fmtMonto,
                 ])
             @endif
         @empty
@@ -130,6 +135,17 @@
             </tr>
         @endforelse
     </tbody>
+    @if (is_countable($ventas) && count($ventas) > 0 && $totalesRango)
+        <tfoot>
+            @include('ventas.factura.partials.fila_total_rango', [
+                'totalesRango' => $totalesRango,
+                'conAcciones' => false,
+                'claseNum' => 'num',
+                'fmt' => $fmtMonto,
+                'fmtImporte' => $fmtMonto,
+            ])
+        </tfoot>
+    @endif
 </table>
 </body>
 </html>

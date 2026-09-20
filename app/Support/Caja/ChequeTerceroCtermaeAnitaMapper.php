@@ -34,6 +34,10 @@ final class ChequeTerceroCtermaeAnitaMapper
         $fechaCheque = self::fechaAYMD($row->cter_fecha_cheque ?? null);
         $fechaIngreso = self::fechaAYMD($row->cter_fecha_ingreso ?? null) ?: $fechaCheque;
 
+        $numerocheque = $nroCheque !== '' ? $nroCheque : (string) $nroInterno;
+        $negociable = self::negociableDesdeInterior($row->cter_interior ?? null);
+        $nroEcheq = self::nroEcheqDesdeFila($row, $negociable, $numerocheque);
+
         return [
             'origen' => 'R',
             'caracter' => 'R',
@@ -41,8 +45,10 @@ final class ChequeTerceroCtermaeAnitaMapper
             'fechaemision' => $fechaIngreso,
             'fechapago' => $fechaCheque,
             'empresa_id' => (int) $ids['empresa_id'],
-            'numerocheque' => $nroCheque !== '' ? $nroCheque : (string) $nroInterno,
+            'numerocheque' => $numerocheque,
             'nro_interno_anita' => $nroInterno > 0 ? $nroInterno : null,
+            'negociable' => $negociable,
+            'nro_echeq' => $nroEcheq,
             'moneda_id' => (int) ($row->cter_cod_mon ?? 1) ?: 1,
             'monto' => (float) ($row->cter_importe ?? 0),
             'cotizacion' => ChequePropioCpromaeAnitaMapper::cotizacion((float) ($row->cter_cotizacion ?? 0)),
@@ -56,6 +62,44 @@ final class ChequeTerceroCtermaeAnitaMapper
             'anombrede' => self::textoONull($row->cter_entregado_a ?? null),
             'nro_caucion' => self::nroCaucion($row->cter_nro_caucion ?? null),
         ];
+    }
+
+    /**
+     * Anita cter_interior: '3' = e-cheq; resto (0/1/2 cámara) = físico.
+     */
+    public static function negociableDesdeInterior($interior): string
+    {
+        return trim((string) ($interior ?? '')) === '3' ? 'E' : 'N';
+    }
+
+    /**
+     * Cámara Anita al grabar CHT: e-cheq fuerza '3'; si no, 1 al día / 2 diferido.
+     */
+    public static function interiorDesdeNegociable(string $negociable, string $camaraFallback): string
+    {
+        if (strtoupper(trim($negociable)) === 'E') {
+            return '3';
+        }
+
+        $fb = trim($camaraFallback);
+
+        return $fb !== '' ? $fb : '1';
+    }
+
+    private static function nroEcheqDesdeFila(object $row, string $negociable, string $numerocheque): ?string
+    {
+        if ($negociable !== 'E') {
+            return null;
+        }
+
+        $desdeAnita = self::textoONull($row->cter_nro_e_cheq ?? null);
+        if ($desdeAnita !== null) {
+            return mb_substr($desdeAnita, 0, 50);
+        }
+
+        $nro = trim($numerocheque);
+
+        return $nro !== '' ? mb_substr($nro, 0, 50) : null;
     }
 
     private static function nroCaucion($valor): ?string

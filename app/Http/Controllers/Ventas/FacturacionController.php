@@ -99,14 +99,16 @@ class FacturacionController extends Controller
         $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
             ? $this->facturacionService->totalesIndexPorReparto($filtros)
             : collect();
+        $totalesRango = $this->facturacionService->totalesIndexRango($filtros);
 
         $datas = [
             'ventas' => $ventas,
             'totalesPorReparto' => $totalesPorReparto,
+            'totalesRango' => $totalesRango,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
             'filtrosQuery' => FacturaListadoFiltros::paraQueryString($filtros),
-            'camposFiltro' => FacturaListadoFiltros::CAMPOS,
+            'camposFiltro' => FacturaListadoFiltros::camposParaVista(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
         ];
 
@@ -126,6 +128,7 @@ class FacturacionController extends Controller
         $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
             ? $this->facturacionService->totalesIndexPorReparto($filtros)
             : collect();
+        $totalesRango = $this->facturacionService->totalesIndexRango($filtros);
 
         switch($formato)
         {
@@ -134,6 +137,7 @@ class FacturacionController extends Controller
                         'ventas' => $ventas,
                         'filtros' => $filtros,
                         'totalesPorReparto' => $totalesPorReparto,
+                        'totalesRango' => $totalesRango,
                     ])->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_factura';

@@ -59,42 +59,7 @@ final class ChequeAnitaSyncSupport
     public static function listarCtermaeTodos(int $fechaDesdeYmd): array
     {
         $where = ' WHERE cter_fecha_baja = 0 AND cter_fecha_cheque >= '.$fechaDesdeYmd.' ';
-        $camposBase = '
-                    cter_nro_interno,
-                    cter_nro_cheque,
-                    cter_fecha_cheque,
-                    cter_fecha_ingreso,
-                    cter_fecha_dep,
-                    cter_fecha_acreed,
-                    cter_fecha_baja,
-                    cter_importe,
-                    cter_cliente,
-                    cter_proveedor,
-                    cter_entregado_a,
-                    cter_nro_recibo,
-                    cter_nro_op,
-                    cter_banco_emision,
-                    cter_cuenta,
-                    cter_entregado_por,
-                    cter_interior,
-                    cter_cod_mon,
-                    cter_cotizacion,
-                    cter_estado,
-                    cter_cedio_a,
-                    cter_sucursal_bco,
-                    cter_cta_libradora,
-                    cter_cod_banco,
-                    cter_cuit_emisor,
-                    cter_nro_boleta,
-                    cter_nro_caucion';
-        $camposExtendidos = $camposBase.',
-                    cter_empresa';
-
-        if (EntornoEmpresaSupport::esFerli()) {
-            return self::listarConFallbackCampos('ctermae', $camposBase, $camposBase, $where);
-        }
-
-        return self::listarConFallbackCampos('ctermae', $camposExtendidos, $camposBase, $where);
+        return self::listarCtermaeConCampos($where);
     }
 
     /**
@@ -105,6 +70,40 @@ final class ChequeAnitaSyncSupport
     public static function listarCtermaeEnCartera(int $fechaDesdeYmd): array
     {
         $where = " WHERE cter_fecha_baja = 0 AND cter_estado IN (' ', 'N') AND cter_fecha_cheque >= ".$fechaDesdeYmd.' ';
+
+        return self::listarCtermaeConCampos($where);
+    }
+
+    /**
+     * Solo nro interno + instrumento (backfill negociable / e-cheq).
+     *
+     * @return list<object>
+     */
+    public static function listarCtermaeInstrumentoEntre(int $nroDesde, int $nroHasta): array
+    {
+        if ($nroDesde <= 0 || $nroHasta < $nroDesde) {
+            return [];
+        }
+
+        $where = ' WHERE cter_nro_interno BETWEEN '.$nroDesde.' AND '.$nroHasta.' ';
+        $conEcheq = '
+                    cter_nro_interno,
+                    cter_nro_cheque,
+                    cter_interior,
+                    cter_nro_e_cheq';
+        $sinEcheq = '
+                    cter_nro_interno,
+                    cter_nro_cheque,
+                    cter_interior';
+
+        return self::listarConFallbackCampos('ctermae', $conEcheq, $sinEcheq, $where);
+    }
+
+    /**
+     * @return list<object>
+     */
+    private static function listarCtermaeConCampos(string $where): array
+    {
         $camposBase = '
                     cter_nro_interno,
                     cter_nro_cheque,
@@ -133,15 +132,24 @@ final class ChequeAnitaSyncSupport
                     cter_cuit_emisor,
                     cter_nro_boleta,
                     cter_nro_caucion';
-        $camposExtendidos = $camposBase.',
+        $conEcheq = $camposBase.',
+                    cter_nro_e_cheq';
+        $conEmpresa = $conEcheq.',
+                    cter_empresa';
+        $conEmpresaSinEcheq = $camposBase.',
                     cter_empresa';
 
-        // Ferli: schema sin cter_empresa — no intentar extendido (UNLOAD falla).
+        // Ferli: sin cter_empresa; intentar nro e-cheq y caer a base si el schema no lo tiene.
         if (EntornoEmpresaSupport::esFerli()) {
-            return self::listarConFallbackCampos('ctermae', $camposBase, $camposBase, $where);
+            return self::listarConFallbackCampos('ctermae', $conEcheq, $camposBase, $where);
         }
 
-        return self::listarConFallbackCampos('ctermae', $camposExtendidos, $camposBase, $where);
+        $filas = self::listarConFallbackCampos('ctermae', $conEmpresa, $conEmpresaSinEcheq, $where);
+        if ($filas !== []) {
+            return $filas;
+        }
+
+        return self::listarConFallbackCampos('ctermae', $conEcheq, $camposBase, $where);
     }
 
     /**

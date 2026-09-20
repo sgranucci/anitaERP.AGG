@@ -622,6 +622,24 @@ class Kernel extends ConsoleKernel
             ->runInBackground()
             ->withoutOverlapping(20)
             ->appendOutputTo(storage_path('logs/impresion-comprobante-reintento.log'));
+
+        // Ferli: Tiendanube — health del token (no se renueva solo) + sync pedidos.
+        $schedule->command('tiendanube:verificar-api --forzar')
+            ->hourly()
+            ->runInBackground()
+            ->withoutOverlapping(10)
+            ->appendOutputTo(storage_path('logs/tiendanube-health.log'))
+            ->when(fn () => EntornoEmpresaSupport::esFerli()
+                && (bool) config('tiendanube.health_cron_habilitado', true));
+
+        $schedule->command('tiendanube:sincronizar-pedidos')
+            ->everyTwoHours()
+            ->between('07:00', '23:00')
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/tiendanube-sync.log'))
+            ->when(fn () => EntornoEmpresaSupport::esFerli()
+                && (bool) config('tiendanube.sync_cron_habilitado', true));
     }
 
     /**

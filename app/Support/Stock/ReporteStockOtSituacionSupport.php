@@ -5,8 +5,12 @@ namespace App\Support\Stock;
 /**
  * Leyendas de la columna Situación del Excel Stock por OT (Ferli).
  *
- * OT abierta (sin tarea Terminada / Terminada stock / Facturada) → EN PRODUCCION.
+ * OT abierta con fabricación real (sin Terminada / Terminada stock / Facturada) → EN PRODUCCION.
  * Al terminar la OT → ENTREGA INMEDIATA (stock listo).
+ *
+ * OT de stock (tipoot S o tarea Terminada stock): ya no se usan; no entran al overlay EN PRODUCCION.
+ * OT solo con «Pendiente de fabricación» (sin avance de planta): tampoco — suelen ser
+ * importados / stock OT incompletas (ej. Fragola 22150).
  */
 final class ReporteStockOtSituacionSupport
 {
@@ -26,9 +30,27 @@ final class ReporteStockOtSituacionSupport
         ])));
     }
 
+    /**
+     * Tareas que no cuentan como avance de fabricación en planta.
+     *
+     * @return list<int>
+     */
+    public static function idsTareasSinAvanceFabricacion(): array
+    {
+        return array_values(array_unique(array_filter(array_merge(
+            [(int) config('consprod.TAREA_PENDIENTE_FABRICACION')],
+            self::idsTareasCierre()
+        ))));
+    }
+
     public static function esTareaCierre(int $tareaId): bool
     {
         return in_array($tareaId, self::idsTareasCierre(), true);
+    }
+
+    public static function esTipootStock(mixed $tipoot): bool
+    {
+        return strtoupper(trim((string) $tipoot)) === 'S';
     }
 
     /**

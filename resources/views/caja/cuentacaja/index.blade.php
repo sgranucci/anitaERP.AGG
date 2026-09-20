@@ -17,6 +17,30 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route('cuentacaja', CuentacajaListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
 @endphp
+<style>
+    /* Acciones siempre visibles al scrollear horizontal */
+    #tabla-paginada th.col-acciones,
+    #tabla-paginada td.col-acciones {
+        position: sticky;
+        right: 0;
+        z-index: 2;
+        background: #fff;
+        box-shadow: -4px 0 6px -4px rgba(0, 0, 0, 0.25);
+        white-space: nowrap;
+        width: 4.5rem;
+        min-width: 4.5rem;
+    }
+    #tabla-paginada thead th.col-acciones {
+        background: #85C1E9;
+        z-index: 3;
+    }
+    #tabla-paginada tbody tr:nth-of-type(odd) td.col-acciones {
+        background: #f2f2f2;
+    }
+    #tabla-paginada tbody tr:hover td.col-acciones {
+        background: #e8f4fc;
+    }
+</style>
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -49,47 +73,76 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                     'ruta' => 'lista_cuentacaja',
                     'queryparams' => $filtrosQuery ?? [],
                 ])
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                <table class="table table-sm table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
-                            <th class="width20">ID</th>
-                            <th>Nombre</th>
-                            <th>Desc. operaciones</th>
-                            <th>Código</th>
-                            <th>Orden</th>
-                            <th>Tipo cuenta</th>
-                            <th>Banco</th>
-                            <th>Empresa</th>
-                            <th>Cuenta contable</th>
-                            <th>Moneda</th>
-                            <th>CBU</th>
-                            <th>Cuenta Interbanking</th>
-                            <th>Usos</th>
-                            <th class="width80" data-orderable="false"></th>
+                            <th style="width:3.2rem;">ID</th>
+                            <th style="min-width:8rem;">Nombre</th>
+                            <th style="width:5rem;">Código</th>
+                            <th style="width:3.5rem;" title="Orden">Ord</th>
+                            <th style="width:5.5rem;">Tipo</th>
+                            <th style="min-width:6rem;">Banco</th>
+                            <th style="min-width:6rem;">Empresa</th>
+                            <th style="min-width:8rem;">Cta. contable</th>
+                            <th style="width:3.5rem;" title="Moneda">Mon</th>
+                            <th style="min-width:7rem;">CBU</th>
+                            <th style="min-width:6rem;" title="Cuenta Interbanking">Interb.</th>
+                            <th style="min-width:7rem;">Usos</th>
+                            <th class="col-acciones" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($datas as $data)
+                        @php
+                            $tipoNombre = '';
+                            foreach ($tipocuenta_enum as $tipocuenta) {
+                                if (($tipocuenta['valor'] ?? null) == $data->tipocuenta) {
+                                    $tipoNombre = (string) ($tipocuenta['nombre'] ?? '');
+                                    break;
+                                }
+                            }
+                            $cuentaContable = trim(
+                                (string) ($data->cuentacontables->codigo ?? '')
+                                .'-'
+                                .(string) ($data->cuentacontables->nombre ?? ''),
+                                '-'
+                            );
+                            $usos = $data->usocuentacajas->pluck('nombre')->implode(', ');
+                            $nombreTitle = trim((string) ($data->nombre ?? ''));
+                            if (trim((string) ($data->descripcion_operaciones ?? '')) !== '') {
+                                $nombreTitle .= ' — '.(string) $data->descripcion_operaciones;
+                            }
+                        @endphp
                         <tr>
-                            <td>{{$data->id}}</td>
-                            <td>{{$data->nombre}}</td>
-                            <td>{{ $data->descripcion_operaciones }}</td>
-                            <td>{{$data->codigo}}</td>
-                            <td>{{ $data->orden ?? 0 }}</td>
-                            <td>@foreach($tipocuenta_enum as $tipocuenta)
-									@if ($tipocuenta['valor'] == $data->tipocuenta)
-										{{ $tipocuenta['nombre'] }}
-									@endif
-								@endforeach
+                            <td>{{ $data->id }}</td>
+                            <td class="small" title="{{ $nombreTitle }}">
+                                {{ \Illuminate\Support\Str::limit((string) ($data->nombre ?? ''), 36) }}
                             </td>
-                            <td>{{$data->bancos->nombre ?? ''}}</td>
-                            <td>{{$data->empresas->nombre ?? ''}}</td>
-                            <td>{{$data->cuentacontables->codigo ?? ''}}-{{$data->cuentacontables->nombre??''}}</td>
-                            <td>{{$data->monedas->nombre ?? ''}}</td>
-                            <td>{{$data->cbu}}</td>
-                            <td>{{$data->cuenta_interbanking}}</td>
-                            <td><small>{{ $data->usocuentacajas->pluck('nombre')->implode(', ') }}</small></td>
-                            <td>
+                            <td>{{ $data->codigo }}</td>
+                            <td class="text-center">{{ $data->orden ?? 0 }}</td>
+                            <td class="small" title="{{ $tipoNombre }}">{{ \Illuminate\Support\Str::limit($tipoNombre, 14) }}</td>
+                            <td class="small" title="{{ $data->bancos->nombre ?? '' }}">
+                                {{ \Illuminate\Support\Str::limit((string) ($data->bancos->nombre ?? ''), 18) }}
+                            </td>
+                            <td class="small" title="{{ $data->empresas->nombre ?? '' }}">
+                                {{ \Illuminate\Support\Str::limit((string) ($data->empresas->nombre ?? ''), 16) }}
+                            </td>
+                            <td class="small" title="{{ $cuentaContable }}">
+                                {{ \Illuminate\Support\Str::limit($cuentaContable, 28) }}
+                            </td>
+                            <td class="text-center small" title="{{ $data->monedas->nombre ?? '' }}">
+                                {{ $data->monedas->abreviatura ?? \Illuminate\Support\Str::limit((string) ($data->monedas->nombre ?? ''), 4) }}
+                            </td>
+                            <td class="small" title="{{ $data->cbu }}">
+                                {{ \Illuminate\Support\Str::limit((string) ($data->cbu ?? ''), 14) }}
+                            </td>
+                            <td class="small" title="{{ $data->cuenta_interbanking }}">
+                                {{ \Illuminate\Support\Str::limit((string) ($data->cuenta_interbanking ?? ''), 12) }}
+                            </td>
+                            <td class="small" title="{{ $usos }}">
+                                {{ \Illuminate\Support\Str::limit($usos, 24) }}
+                            </td>
+                            <td class="col-acciones">
                        			@if (can('editar-cuentas-de-caja', false))
                                 	<a href="{{route('editar_cuentacaja', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>

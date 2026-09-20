@@ -96,6 +96,47 @@ class VentaRepository implements VentaRepositoryInterface
     }
 
     /**
+     * Totales del rango filtrado (todos los comprobantes del filtro, no solo la página).
+     *
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return object{cantidad_comprobantes: int, caja: float, pieza: float, kilo: float, total: float}
+     */
+    public function totalesIndexRango($filtros): object
+    {
+        $filtros = $this->normalizarFiltrosListado($filtros);
+
+        $selectEmision = [
+            DB::raw('COUNT(DISTINCT venta.id) as cantidad_comprobantes'),
+            DB::raw('COALESCE(SUM(venta_emision.cantidad), 0) as kilo'),
+        ];
+        if (VentaEmisionCajaPiezaSupport::columnasDisponibles()) {
+            $selectEmision[] = DB::raw('COALESCE(SUM(venta_emision.caja), 0) as caja');
+            $selectEmision[] = DB::raw('COALESCE(SUM(venta_emision.pieza), 0) as pieza');
+        } else {
+            $selectEmision[] = DB::raw('0 as caja');
+            $selectEmision[] = DB::raw('0 as pieza');
+        }
+
+        $totalesEmision = $this->queryListadoFiltrado($filtros)
+            ->leftJoin('venta_emision', 'venta_emision.venta_id', '=', 'venta.id')
+            ->select($selectEmision)
+            ->first();
+
+        // Sin join a líneas: SUM(venta.total) no se infla.
+        $totalImporte = (float) $this->queryListadoFiltrado($filtros)
+            ->select(DB::raw('COALESCE(SUM(venta.total), 0) as total'))
+            ->value('total');
+
+        return (object) [
+            'cantidad_comprobantes' => (int) ($totalesEmision->cantidad_comprobantes ?? 0),
+            'caja' => (float) ($totalesEmision->caja ?? 0),
+            'pieza' => (float) ($totalesEmision->pieza ?? 0),
+            'kilo' => (float) ($totalesEmision->kilo ?? 0),
+            'total' => $totalImporte,
+        ];
+    }
+
+    /**
      * IDs de comprobantes del listado para un reparto (mismos filtros que el index).
      *
      * @param  array<string, mixed>|string|null  $filtros

@@ -5,7 +5,7 @@ namespace App\Queries\Stock;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Support\Collection;
-use DB;
+use Illuminate\Support\Facades\DB;
 
 class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
 {
@@ -14,7 +14,7 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
     /**
      * PostRepository constructor.
      *
-     * @param Post $post
+     * @param  Articulo_Movimiento  $articulo_movimiento
      */
     public function __construct(Articulo_Movimiento $articulo_movimiento)
     {
@@ -25,80 +25,113 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                                             $desdearticulo, $hastaarticulo,
                                             $desdelinea_id, $hastalinea_id,
                                             $desdecategoria_id, $hastacategoria_id,
-                                            $desdelote, $hastalote, $deposito_id)
+                                            $desdelote, $hastalote, $deposito_id,
+                                            $apertura = 'TOTALIZADO')
     {
-        $articulo_query = $this->model->select('articulo_movimiento.ordentrabajo_id as ordentrabajo_id',
-                            'ordentrabajo.codigo as ordentrabajo_codigo',
-                            'articulo_movimiento.deposito_id as deposito_id',
-                            'combinacion.foto as foto', 
-                            'linea.nombre as nombrelinea',
-                            'articulo.sku as sku', 
-                            'combinacion.codigo as codigocombinacion',
-                            'combinacion.nombre as nombrecombinacion',
-                            'mventa.nombre as nombremarca',
-                            'combinacion.estado as estado',
-                            'articulo_movimiento.lote as lote',
-                            'articulo_movimiento.modulo_id as modulo_id',
-                            'articulo_movimiento_talle.talle_id as talle_id',
-                            'talle.nombre as nombretalle',
-							'pedido_combinacion.pedido_id as pedido',
-                            'articulo_movimiento.id as id',
-                            'articulo_movimiento_talle.id as idmov',
-                            'articulo_movimiento_talle.cantidad as cantidad',
-                            'articulo_movimiento_talle.precio as precio',
-                            'depmae.codigo as depositocodigo',
-                            'depmae.nombre as depositonombre')
-                            ->join('articulo', 'articulo.id', 'articulo_movimiento.articulo_id')
-                            ->join('combinacion', 'combinacion.id', 'articulo_movimiento.combinacion_id')
-                            ->join('linea', 'linea.id', 'articulo.linea_id')
-                            ->join('mventa', 'mventa.id', 'articulo.mventa_id')
-                            ->join('articulo_movimiento_talle', 'articulo_movimiento_talle.articulo_movimiento_id', 
-                                'articulo_movimiento.id')
-                            ->join('talle', 'talle.id', 'articulo_movimiento_talle.talle_id')
-                            ->leftjoin('pedido_combinacion', 'pedido_combinacion.id', 'articulo_movimiento.pedido_combinacion_id')
-                            ->leftJoin('ordentrabajo', 'ordentrabajo.id', 'articulo_movimiento.ordentrabajo_id')
-                            ->leftJoin('depmae', 'depmae.id', 'articulo_movimiento.deposito_id')
-                            ->whereBetween('articulo.linea_id', [$desdelinea_id, $hastalinea_id])
-                            ->whereBetween('articulo.categoria_id', [$desdecategoria_id, $hastacategoria_id])
-                            ->where(function ($q) {
-                                $q->where('articulo_movimiento.lote', '>', '0')
-                                    ->orWhere('articulo_movimiento.ordentrabajo_id', '>', 0);
-                            })
-        					->orderBy('nombrelinea','ASC')
-                            ->orderBy('sku','ASC')
-                            ->orderBy('nombrecombinacion', 'ASC')
-                            ->orderBy('lote','ASC')
-                            ->orderBy('articulo_movimiento.deposito_id', 'ASC')
-                            ->orderBy('combinacion.codigo', 'ASC')
-                            ->orderBy('articulo_movimiento.id', 'ASC');
+        $agrupaModulo = $apertura === 'MOVIMIENTOS';
 
-        if ($desdearticulo != '' && $hastaarticulo != '')
-            $articulo_query = $articulo_query->whereBetween('articulo.descripcion', [$desdearticulo, $hastaarticulo]);
-            
-        if ($mventa_id != 0)
-            $articulo_query = $articulo_query->where('articulo.mventa_id', $mventa_id);
-        
-        if ($deposito_id != 0)
-            $articulo_query = $articulo_query->where('deposito_id', $deposito_id);
-        
-        switch($estado)
-        {
-        case 'ACTIVAS':
-            $articulo_query = $articulo_query->where('combinacion.estado', 'A');
-            break;
-        case 'INACTIVAS':
-            $articulo_query = $articulo_query->where('combinacion.estado', 'I');
-            break;
+        $select = [
+            'articulo_movimiento.ordentrabajo_id as ordentrabajo_id',
+            'ordentrabajo.codigo as ordentrabajo_codigo',
+            'articulo_movimiento.deposito_id as deposito_id',
+            'combinacion.foto as foto',
+            'linea.nombre as nombrelinea',
+            'articulo.sku as sku',
+            'combinacion.codigo as codigocombinacion',
+            'combinacion.nombre as nombrecombinacion',
+            'mventa.nombre as nombremarca',
+            'combinacion.estado as estado',
+            'articulo_movimiento.lote as lote',
+            'articulo_movimiento_talle.talle_id as talle_id',
+            'talle.nombre as nombretalle',
+            'depmae.codigo as depositocodigo',
+            'depmae.nombre as depositonombre',
+            DB::raw('SUM(articulo_movimiento_talle.cantidad) as cantidad'),
+            DB::raw('MAX(articulo_movimiento_talle.precio) as precio'),
+            DB::raw('MAX(pedido_combinacion.pedido_id) as pedido'),
+            DB::raw('MAX(articulo_movimiento.id) as id'),
+            DB::raw('MAX(articulo_movimiento_talle.id) as idmov'),
+        ];
+
+        if ($agrupaModulo) {
+            $select[] = 'articulo_movimiento.modulo_id as modulo_id';
+        } else {
+            $select[] = DB::raw('MAX(articulo_movimiento.modulo_id) as modulo_id');
         }
 
-        if ($desdelote != '')
+        $articulo_query = $this->model->select($select)
+            ->join('articulo', 'articulo.id', 'articulo_movimiento.articulo_id')
+            ->join('combinacion', 'combinacion.id', 'articulo_movimiento.combinacion_id')
+            ->join('linea', 'linea.id', 'articulo.linea_id')
+            ->join('mventa', 'mventa.id', 'articulo.mventa_id')
+            ->join('articulo_movimiento_talle', 'articulo_movimiento_talle.articulo_movimiento_id',
+                'articulo_movimiento.id')
+            ->join('talle', 'talle.id', 'articulo_movimiento_talle.talle_id')
+            ->leftJoin('pedido_combinacion', 'pedido_combinacion.id', 'articulo_movimiento.pedido_combinacion_id')
+            ->leftJoin('ordentrabajo', 'ordentrabajo.id', 'articulo_movimiento.ordentrabajo_id')
+            ->leftJoin('depmae', 'depmae.id', 'articulo_movimiento.deposito_id')
+            ->whereBetween('articulo.linea_id', [$desdelinea_id, $hastalinea_id])
+            ->whereBetween('articulo.categoria_id', [$desdecategoria_id, $hastacategoria_id])
+            ->where(function ($q) {
+                $q->where('articulo_movimiento.lote', '>', '0')
+                    ->orWhere('articulo_movimiento.ordentrabajo_id', '>', 0);
+            });
+
+        if ($desdearticulo != '' && $hastaarticulo != '') {
+            $articulo_query = $articulo_query->whereBetween('articulo.descripcion', [$desdearticulo, $hastaarticulo]);
+        }
+
+        if ($mventa_id != 0) {
+            $articulo_query = $articulo_query->where('articulo.mventa_id', $mventa_id);
+        }
+
+        if ($deposito_id != 0) {
+            $articulo_query = $articulo_query->where('articulo_movimiento.deposito_id', $deposito_id);
+        }
+
+        switch ($estado) {
+            case 'ACTIVAS':
+                $articulo_query = $articulo_query->where('combinacion.estado', 'A');
+                break;
+            case 'INACTIVAS':
+                $articulo_query = $articulo_query->where('combinacion.estado', 'I');
+                break;
+        }
+
+        if ($desdelote != '') {
             $articulo_query = $articulo_query->where(function ($q) use ($desdelote, $hastalote) {
                 $q->whereBetween('articulo_movimiento.lote', [$desdelote, $hastalote])
                     ->orWhereBetween('ordentrabajo.codigo', [$desdelote, $hastalote]);
             });
+        }
 
-        $articulo_query = $articulo_query->get();
-		return $articulo_query;
+        $groupBy = [
+            'articulo_movimiento.ordentrabajo_id',
+            'ordentrabajo.codigo',
+            'articulo_movimiento.deposito_id',
+            'combinacion.foto',
+            'linea.nombre',
+            'articulo.sku',
+            'combinacion.codigo',
+            'combinacion.nombre',
+            'mventa.nombre',
+            'combinacion.estado',
+            'articulo_movimiento.lote',
+            'articulo_movimiento_talle.talle_id',
+            'talle.nombre',
+            'depmae.codigo',
+            'depmae.nombre',
+        ];
+        if ($agrupaModulo) {
+            $groupBy[] = 'articulo_movimiento.modulo_id';
+        }
+
+        return $articulo_query
+            ->groupBy($groupBy)
+            ->havingRaw('ABS(SUM(articulo_movimiento_talle.cantidad)) > 0.0001')
+            ->toBase()
+            ->get()
+            ->map(static fn ($row) => (array) $row);
     }
 
     public function generaDatosOtEnProduccion(
@@ -115,6 +148,7 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
         array $ordentrabajoIdsYaIncluidos
     ): Collection {
         $idsCierre = ReporteStockOtSituacionSupport::idsTareasCierre();
+        $idsSinAvance = ReporteStockOtSituacionSupport::idsTareasSinAvanceFabricacion();
 
         $query = DB::table('ordentrabajo as ot')
             ->select(
@@ -142,10 +176,13 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             ->join('combinacion', 'combinacion.id', '=', 'pc.combinacion_id')
             ->join('linea', 'linea.id', '=', 'articulo.linea_id')
             ->join('talle', 'talle.id', '=', 'pct.talle_id')
-            ->whereExists(function ($sub) {
+            // Solo fabricación real en planta (no tipoot stock, no solo «pendiente»).
+            ->whereRaw("UPPER(TRIM(COALESCE(ot.tipoot, ''))) <> 'S'")
+            ->whereExists(function ($sub) use ($idsSinAvance) {
                 $sub->select(DB::raw('1'))
                     ->from('ordentrabajo_tarea as ott')
-                    ->whereColumn('ott.ordentrabajo_id', 'ot.id');
+                    ->whereColumn('ott.ordentrabajo_id', 'ot.id')
+                    ->whereNotIn('ott.tarea_id', $idsSinAvance);
             })
             ->whereNotExists(function ($sub) use ($idsCierre) {
                 $sub->select(DB::raw('1'))
@@ -153,17 +190,15 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
                     ->whereColumn('ottc.ordentrabajo_id', 'ot.id')
                     ->whereIn('ottc.tarea_id', $idsCierre);
             })
+            // Ya tiene movimiento de stock (evita duplicar; sin IN gigante).
+            ->whereNotExists(function ($sub) {
+                $sub->select(DB::raw('1'))
+                    ->from('articulo_movimiento as am')
+                    ->whereColumn('am.ordentrabajo_id', 'ot.id');
+            })
             ->whereBetween('articulo.linea_id', [$desdelinea_id, $hastalinea_id])
-            ->whereBetween('articulo.categoria_id', [$desdecategoria_id, $hastacategoria_id])
-            ->orderBy('linea.nombre')
-            ->orderBy('articulo.sku')
-            ->orderBy('combinacion.nombre')
-            ->orderBy('ot.codigo');
+            ->whereBetween('articulo.categoria_id', [$desdecategoria_id, $hastacategoria_id]);
 
-        $otIds = array_values(array_filter(array_map('intval', $ordentrabajoIdsYaIncluidos)));
-        if ($otIds !== []) {
-            $query->whereNotIn('ot.id', $otIds);
-        }
         if ($desdearticulo != '' && $hastaarticulo != '') {
             $query->whereBetween('articulo.descripcion', [$desdearticulo, $hastaarticulo]);
         }
@@ -210,10 +245,10 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
     public function leeStockPorLote($lote, $articulo_id, $combinacion_id)
     {
         $articulo_query = $this->model->select('articulo_movimiento.ordentrabajo_id as ordentrabajo_id',
-            'articulo.sku as sku', 
+            'articulo.sku as sku',
             'combinacion.id as combinacion_id',
             'combinacion.codigo as codigocombinacion',
-            'combinacion.nombre as nombrecombinacion', 
+            'combinacion.nombre as nombrecombinacion',
             'mventa.nombre as nombremarca',
             'combinacion.estado as estado',
             'articulo_movimiento.lote as lote',
@@ -227,13 +262,12 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             ->join('articulo', 'articulo.id', 'articulo_movimiento.articulo_id')
             ->join('combinacion', 'combinacion.id', 'articulo_movimiento.combinacion_id')
             ->join('mventa', 'mventa.id', 'articulo.mventa_id')
-            //->join('articulo_movimiento', 'articulo_movimiento.combinacion_id', 'combinacion.id')
             ->join('articulo_movimiento_talle', 'articulo_movimiento_talle.articulo_movimiento_id', 'articulo_movimiento.id')
             ->join('talle', 'talle.id', 'articulo_movimiento_talle.talle_id')
             ->where('articulo_movimiento.lote', '=', $lote)
             ->where('articulo.id', '=', $articulo_id)
             ->where('combinacion.id', '=', $combinacion_id)
-            ->orderBy('lote','ASC')
+            ->orderBy('lote', 'ASC')
             ->get();
 
         return $articulo_query;
@@ -299,10 +333,9 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
         $articulo_movimiento = $this->model->select('articulo_movimiento.loteimportacion_id as loteimportacion_id')
             ->where('articulo_movimiento.lote', '=', $lotestock_id)
             ->where('articulo_movimiento.loteimportacion_id', '>', 0)
-            ->orderBy('articulo_movimiento.loteimportacion_id','ASC')
+            ->orderBy('articulo_movimiento.loteimportacion_id', 'ASC')
             ->get();
 
         return $articulo_movimiento;
     }
 }
-

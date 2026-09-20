@@ -299,6 +299,41 @@ class ProgramaPagoController extends Controller
             : Excel::download($export, $nombre.'.xlsx');
     }
 
+    public function asignarCheques(Request $request, int $id)
+    {
+        $this->assertFerli();
+        can('actualizar-programa-pago');
+
+        $programa = $this->programaPagoRepository->find($id);
+        if (! $this->empresaRepository->empresaIdPermitida((int) $programa->empresa_id)) {
+            abort(403);
+        }
+
+        $lineaId = (int) $request->input('linea_id', 0);
+        if ($lineaId <= 0) {
+            $lineaId = null;
+        }
+
+        try {
+            $resultado = $this->programaPagoService->asignarChequesCartera($programa, $lineaId);
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $resumen = $resultado['resumen'] ?? [];
+        $nAsig = (int) ($resumen['asignados'] ?? 0);
+        $nDisc = (int) ($resumen['discrepancias'] ?? 0);
+        $mensaje = "Asignación de cheques: {$nAsig} cheque(s).";
+        if ($nDisc > 0) {
+            $mensaje .= " Discrepancias: {$nDisc}.";
+        }
+
+        return redirect()
+            ->route('editar_programa_pago', $id)
+            ->with('mensaje', $mensaje)
+            ->with('pp_asignacion_cheques', $resultado);
+    }
+
     private function assertFerli(): void
     {
         if (! EntornoEmpresaSupport::esFerli()) {

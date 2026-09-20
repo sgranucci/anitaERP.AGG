@@ -73,6 +73,7 @@
 				<th style="width: 8%;">N&uacute;mero</th>
 				<th style="width: 6%;">Int. Anita</th>
 				<th style="width: 7%;">Origen</th>
+				<th style="width: 5%;">Tipo</th>
 				<th style="width: 8%;">Estado</th>
 				<th style="width: 7%;">Emisi&oacute;n</th>
 				<th style="width: 7%;">Pago</th>
@@ -94,6 +95,7 @@
 					<td>{{ $data->numerocheque }}</td>
 					<td>{{ $data->nro_interno_anita }}</td>
 					<td>{{ $origenLabel['nombre'] ?? $data->origen }}</td>
+					<td>{{ \App\Support\Caja\ChequePropioInstrumentoSupport::etiquetaNegociable($data->negociable ?? null) }}</td>
 					<td>{{ $estadoLabel['nombre'] ?? $data->estado }}</td>
 					<td>{{ $data->fechaemision }}</td>
 					<td>{{ $data->fechapago }}</td>

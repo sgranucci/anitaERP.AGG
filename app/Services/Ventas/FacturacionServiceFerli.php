@@ -10,6 +10,7 @@ use App\Models\Stock\Talle;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Queries\Ventas\PedidoQueryFerli;
 use App\Services\Stock\PrecioServiceFerli;
+use App\Support\Ventas\PedidoEstadoCabeceraSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
 use Auth;
 use Cache;
@@ -339,11 +340,13 @@ class FacturacionServiceFerli extends FacturacionService
             $tipoTransaccion_id,
             $pedidos_combinacion_id,
             $ordenestrabajo_id,
-            function ($vta) use ($lineasParaPost, $fechaFactura) {
+            function ($vta) use ($lineasParaPost, $fechaFactura, $pedido) {
                 foreach ($lineasParaPost as $linea) {
                     PedidoPickingFerliSupport::marcarFacturado((int) $linea->id, (int) $vta->id);
                     PedidoPickingFerliSupport::grabarConsumoStock($linea, (string) $fechaFactura, (int) $vta->id);
                 }
+                // marcarFacturado usa Query Builder (sin observer): refrescar cabecera
+                PedidoEstadoCabeceraSupport::refrescar((int) ($pedido->id ?? 0));
             }
         );
     }

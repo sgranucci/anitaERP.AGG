@@ -93,8 +93,10 @@ class ApiAnita
             return $resolved;
         }
 
-        $remoto = trim((string) config('anita.ifx_server', ''));
-        if ($resolved === '' || $resolved === $remoto || $resolved === 'bi7ncadmin') {
+        // Solo remapear el alias remoto AGG (bi7ncadmin) al sqlhosts del host Anita.
+        // En Ferli IFX_SERVER=fancadmin ya es el motor con datos; remapear a
+        // IFX_SERVER_LOCAL (luncadmin) devolvía ctermae vacío (count 0).
+        if ($resolved === '' || $resolved === 'bi7ncadmin') {
             return $local;
         }
 

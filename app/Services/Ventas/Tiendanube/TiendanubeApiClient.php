@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas\Tiendanube;
 
+use App\Support\Ventas\Tiendanube\TiendanubeApiHealthSupport;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -219,6 +220,11 @@ final class TiendanubeApiClient
             'status' => $status,
             'error' => mb_substr($msg, 0, 500),
         ]);
+
+        if (TiendanubeApiHealthSupport::esErrorAuth($status, $msg)) {
+            TiendanubeApiHealthSupport::marcarAuthInvalida($status, $msg);
+            $msg = TiendanubeApiHealthSupport::MENSAJE_TOKEN_INVALIDO;
+        }
 
         return [
             'ok' => false,

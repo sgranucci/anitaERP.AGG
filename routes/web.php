@@ -3691,6 +3691,7 @@ Route::post('compras/programa-pago/{id}/refrescar-saldos', 'Compras\ProgramaPago
 Route::post('compras/programa-pago/{id}/agregar-proveedor', 'Compras\ProgramaPagoController@agregarProveedor')->name('agregar_proveedor_programa_pago');
 Route::post('compras/programa-pago/{id}/cerrar', 'Compras\ProgramaPagoController@cerrar')->name('cerrar_programa_pago');
 Route::post('compras/programa-pago/{id}/reabrir', 'Compras\ProgramaPagoController@reabrir')->name('reabrir_programa_pago');
+Route::post('compras/programa-pago/{id}/asignar-cheques', 'Compras\ProgramaPagoController@asignarCheques')->name('asignar_cheques_programa_pago');
 Route::get('compras/programa-pago/{id}/exportar/{formato?}', 'Compras\ProgramaPagoController@exportarMatriz')->name('exportar_matriz_programa_pago');
 Route::post('compras/propuesta-pago/{id}/enviar-aprobacion', 'Compras\PropuestaPagoController@enviarAprobacion')->name('enviar_aprobacion_propuesta_pago');
 Route::post('compras/propuesta-pago/{id}/ejecutar', 'Compras\PropuestaPagoController@ejecutar')->name('ejecutar_propuesta_pago');

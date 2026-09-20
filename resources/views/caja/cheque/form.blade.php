@@ -37,7 +37,7 @@
 <div class="form-group row">
     <label for="disponible" class="col-lg-3 col-form-label requerido">Cheques disponibles</label>
     <div class="col-lg-8">
-    	<input type="text" name="disponible" id="disponible" class="form-control" value="{{old('disponible', $disponible)}}" readonly/>
+    	<input type="text" name="disponible" id="disponible" class="form-control" value="{{old('disponible', $disponible ?? '')}}" readonly/>
     </div>
 </div>
 <div class="col-sm-6">
@@ -127,7 +127,7 @@
 	<label for="tipodocumento" class="col-lg-3 col-form-label requerido">Tipo de documento</label>
 	<select id="tipodocumento_id" name="tipodocumento_id" class="col-lg-4 form-control">
     	<option value="">-- Elija tipo de documento del beneficiario --</option>
-       	@foreach($tipodocumento_enum as $tipodocumento)
+       	@foreach(($tipodocumento_enum ?? []) as $tipodocumento)
 			@if ($tipodocumento['valor'] == old('tipodocumento_id',$data->tipodocumento_id??''))
        			<option value="{{ $tipodocumento['valor'] }}" selected>{{ $tipodocumento['nombre'] }}</option>    
 			@else

@@ -17,8 +17,9 @@ use Illuminate\Support\Facades\DB;
 /**
  * Informe de cierre de caja diaria (Anita l-ciecaja.c) sobre ERP.
  *
- * Secciones: resumen por cuenta, cheques emitidos, depósitos, cheques recibidos,
- * rechazados y en caución; totales cobro/pago del período.
+ * Secciones: resumen por cuenta (incluye línea CHT «Cheques de terceros» como
+ * total_cter()), cheques emitidos, depósitos, cheques recibidos, rechazados y
+ * en caución; totales cobro/pago del período.
  */
 class CierreCajaReporteService
 {
@@ -40,6 +41,8 @@ class CierreCajaReporteService
 
         $cuentas = $this->cuentasAlcance($empresaIds, $cuentaFiltro);
         $saldos = $this->resumenCuentas($cuentas, $empresaIds, $desde, $hasta, $incluirSinMov);
+        // Anita lista_cuenta → total_cter(): línea sintética de cartera CHT.
+        $saldos = $this->incorporarChequesCarteraEnSaldos($saldos, $empresaIds, $desde, $hasta);
         $chequesEmitidos = $this->chequesEmitidos($empresaIds, $desde, $hasta, $cuentaFiltro);
         $depositos = $this->depositos($empresaIds, $desde, $hasta, $cuentaFiltro);
         $chequesRecibidos = $this->chequesRecibidos($empresaIds, $desde, $hasta, $cuentaFiltro);
@@ -179,6 +182,227 @@ class CierreCajaReporteService
         }
 
         return $filas;
+    }
+
+    /**
+     * Agrega la línea «Cheques de terceros» al resumen (Anita total_cter / un_mov_ctermae).
+     * No filtra por cuenta de caja: en Anita la CHT es una cuenta predefinida aparte.
+     *
+     * @param  list<array<string, mixed>>  $saldos
+     * @param  list<int>  $empresaIds
+     * @return list<array<string, mixed>>
+     */
+    private function incorporarChequesCarteraEnSaldos(
+        array $saldos,
+        array $empresaIds,
+        string $desde,
+        string $hasta
+    ): array {
+        $totales = $this->totalesChequesCartera($empresaIds, $desde, $hasta);
+        if ($totales === null) {
+            return $saldos;
+        }
+
+        $filaCht = [
+            'tipo_fila' => 'dato',
+            'seccion' => 'saldos',
+            'cuenta_id' => 0,
+            'codigo' => '',
+            'nombre' => 'Cheques de terceros',
+            'saldo_anterior' => $totales['saldo_anterior'],
+            'ingresos' => $totales['ingresos'],
+            'egresos' => $totales['egresos'],
+            'total_movimiento' => $totales['total_movimiento'],
+            'saldo_actual' => $totales['saldo_actual'],
+            'nombreempresa' => '',
+            'es_cheques_cartera' => true,
+        ];
+
+        $totalIdx = null;
+        foreach ($saldos as $i => $fila) {
+            if (($fila['tipo_fila'] ?? '') === 'total') {
+                $totalIdx = $i;
+                break;
+            }
+        }
+
+        if ($totalIdx === null) {
+            $saldos[] = $filaCht;
+            $saldos[] = [
+                'tipo_fila' => 'total',
+                'seccion' => 'saldos',
+                'codigo' => '',
+                'nombre' => 'Total cuentas',
+                'saldo_anterior' => $totales['saldo_anterior'],
+                'ingresos' => $totales['ingresos'],
+                'egresos' => $totales['egresos'],
+                'total_movimiento' => $totales['total_movimiento'],
+                'saldo_actual' => $totales['saldo_actual'],
+            ];
+
+            return $saldos;
+        }
+
+        $total = $saldos[$totalIdx];
+        $total['saldo_anterior'] = round((float) ($total['saldo_anterior'] ?? 0) + $totales['saldo_anterior'], 2);
+        $total['ingresos'] = round((float) ($total['ingresos'] ?? 0) + $totales['ingresos'], 2);
+        $total['egresos'] = round((float) ($total['egresos'] ?? 0) + $totales['egresos'], 2);
+        $total['total_movimiento'] = round(
+            (float) ($total['ingresos'] ?? 0) - (float) ($total['egresos'] ?? 0),
+            2
+        );
+        $total['saldo_actual'] = round((float) ($total['saldo_actual'] ?? 0) + $totales['saldo_actual'], 2);
+
+        array_splice($saldos, $totalIdx, 0, [$filaCht]);
+        $saldos[$totalIdx + 1] = $total;
+
+        return $saldos;
+    }
+
+    /**
+     * Stock de cheques de terceros (cartera) al estilo Anita un_mov_ctermae.
+     *
+     * - Ingreso: fechaemision en el período
+     * - Egreso: fecha de baja efectiva (depósito / rechazo / caución / entrega / OP) en el período
+     * - Saldo anterior: ingresados antes del desde y aún en cartera a esa fecha
+     *
+     * @param  list<int>  $empresaIds
+     * @return array{saldo_anterior: float, ingresos: float, egresos: float, total_movimiento: float, saldo_actual: float}|null
+     */
+    private function totalesChequesCartera(array $empresaIds, string $desde, string $hasta): ?array
+    {
+        $q = Cheque::query()
+            ->with(['pagoproveedores:id,fecha'])
+            ->where('origen', 'R')
+            ->whereNotNull('fechaemision')
+            ->whereDate('fechaemision', '<=', $hasta);
+        // Solo excluye anulados: depositados/rechazados deben entrar para el egreso.
+        ChequeOperacionActivaSupport::aplicarFiltroQuery($q, ['A']);
+        if ($empresaIds !== []) {
+            $q->whereIn('empresa_id', $empresaIds);
+        }
+
+        $cheques = $q->get([
+            'id',
+            'origen',
+            'estado',
+            'fechaemision',
+            'fecha_deposito',
+            'fecha_rechazo',
+            'fecha_caucion',
+            'fecha_entrega',
+            'pagoproveedor_id',
+            'monto',
+            'moneda_id',
+            'cotizacion',
+            'cobranza_id',
+            'caja_movimiento_id',
+        ]);
+
+        if ($cheques->isEmpty()) {
+            return null;
+        }
+
+        $saldoAnterior = 0.0;
+        $saldoActual = 0.0;
+        $ingresos = 0.0;
+        $egresos = 0.0;
+        $totalMovimiento = 0.0;
+
+        foreach ($cheques as $ch) {
+            $fechaIngreso = $this->fechaYmd($ch->fechaemision);
+            if ($fechaIngreso === null) {
+                continue;
+            }
+
+            $importe = $this->importeChequeMn($ch);
+            $fechaBaja = $this->fechaBajaChequeTercero($ch);
+
+            // Stock previo al rango (ingresó antes del desde).
+            $incluyoAnterior = false;
+            if ($fechaIngreso < $desde) {
+                $saldoActual += $importe;
+                $saldoAnterior += $importe;
+                $incluyoAnterior = true;
+            }
+
+            // Ya había salido antes del desde → no forma parte del saldo anterior.
+            if ($incluyoAnterior && $fechaBaja !== null && $fechaBaja < $desde) {
+                $saldoActual -= $importe;
+                $saldoAnterior -= $importe;
+            }
+
+            // Ingreso en el período.
+            if ($fechaIngreso >= $desde && $fechaIngreso <= $hasta) {
+                $totalMovimiento += $importe;
+                $saldoActual += $importe;
+                $ingresos += $importe;
+            }
+
+            // Egreso en el período (depósito, rechazo, caución, entrega / OP).
+            if ($fechaBaja !== null && $fechaBaja >= $desde && $fechaBaja <= $hasta) {
+                $totalMovimiento -= $importe;
+                $saldoActual -= $importe;
+                $egresos += $importe;
+            }
+        }
+
+        return [
+            'saldo_anterior' => round($saldoAnterior, 2),
+            'ingresos' => round($ingresos, 2),
+            'egresos' => round($egresos, 2),
+            'total_movimiento' => round($totalMovimiento, 2),
+            'saldo_actual' => round($saldoActual, 2),
+        ];
+    }
+
+    /**
+     * Fecha de baja efectiva (Anita: min(cter_fecha_baja, cter_fecha_deposito)).
+     */
+    private function fechaBajaChequeTercero(Cheque $ch): ?string
+    {
+        $candidatos = [];
+        foreach (['fecha_deposito', 'fecha_rechazo', 'fecha_caucion', 'fecha_entrega'] as $campo) {
+            $ymd = $this->fechaYmd($ch->{$campo} ?? null);
+            if ($ymd !== null) {
+                $candidatos[] = $ymd;
+            }
+        }
+
+        if ((int) ($ch->pagoproveedor_id ?? 0) > 0) {
+            $pagoFecha = $ch->pagoproveedores->fecha ?? null;
+            $ymd = $this->fechaYmd($pagoFecha);
+            if ($ymd !== null) {
+                $candidatos[] = $ymd;
+            }
+        }
+
+        if ($candidatos === []) {
+            return null;
+        }
+
+        sort($candidatos);
+
+        return $candidatos[0];
+    }
+
+    private function fechaYmd(mixed $fecha): ?string
+    {
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+        $s = trim((string) $fecha);
+        if ($s === '' || $s === '0000-00-00') {
+            return null;
+        }
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})/', $s, $m)) {
+            return $m[1].'-'.$m[2].'-'.$m[3];
+        }
+        if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})/', $s, $m)) {
+            return $m[3].'-'.$m[2].'-'.$m[1];
+        }
+
+        return null;
     }
 
     /**

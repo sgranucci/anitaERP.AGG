@@ -8,6 +8,7 @@ use App\Models\Ventas\Ordentrabajo_Tarea;
 use App\Models\Ventas\Venta;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Ventas\PedidoEstadoCabeceraSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
 use Illuminate\Support\Facades\Log;
 
@@ -67,6 +68,13 @@ final class NotaCreditoReabrePedidoOtFerliSupport
         );
 
         $pickingReabiertos = PedidoPickingFerliSupport::reabrirFacturadoPorVenta($ventaOrigenId);
+
+        if ($tareasBorradas > 0 || $pickingReabiertos > 0) {
+            $pedidoId = (int) ($ventaOrigen->pedido_id ?? 0);
+            if ($pedidoId > 0) {
+                PedidoEstadoCabeceraSupport::refrescar($pedidoId);
+            }
+        }
 
         try {
             Log::info('ferli.nc.reabre_pedido_ot', [

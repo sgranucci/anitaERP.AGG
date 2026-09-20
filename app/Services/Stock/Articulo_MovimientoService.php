@@ -291,10 +291,12 @@ class Articulo_MovimientoService
 				$desdearticulo, $hastaarticulo,
 				$desdelinea_id, $hastalinea_id,
 				$desdecategoria_id, $hastacategoria_id,
-				$desdelote, $hastalote, $deposito_id));
+				$desdelote, $hastalote, $deposito_id, $apertura));
 
-		if ((int) $deposito_id === 0) {
-			$otIds = $data->pluck('ordentrabajo_id')->all();
+		// Overlay EN PRODUCCION: solo si no filtramos depósito ni «Entrega inmediata».
+		$incluirExtrasProduccion = (int) $deposito_id === 0
+			&& (string) $estadoot !== 'ENTREGA';
+		if ($incluirExtrasProduccion) {
 			$extras = $this->articulo_movimientoQuery->generaDatosOtEnProduccion(
 				$estado,
 				$mventa_id,
@@ -306,30 +308,19 @@ class Articulo_MovimientoService
 				$hastacategoria_id,
 				$desdelote,
 				$hastalote,
-				$otIds
+				[]
 			);
 			$data = $data->concat($extras);
 		}
 
-		// Incluir combinación, depósito e id: sin eso el corte por claveAgrupacion
-		// parte el mismo lote/depósito y aparecen filas negativas espurias.
-		$data = $data->sortBy(function ($row) {
-			return implode('|', [
-				(string) ($row['nombrelinea'] ?? ''),
-				(string) ($row['sku'] ?? ''),
-				sprintf('%05d', (int) ($row['codigocombinacion'] ?? 0)),
-				(string) ($row['nombrecombinacion'] ?? ''),
-				ReporteStockOtSituacionSupport::identificadorExcel(
-					$row['lote'] ?? 0,
-					$row['ordentrabajo_codigo'] ?? ''
-				),
-				sprintf('%010d', (int) ($row['deposito_id'] ?? 0)),
-				sprintf('%015d', (int) ($row['id'] ?? 0)),
-			]);
-		})->values();
-
 		$otIdsSituacion = [];
 		foreach ($data as $row) {
+			if ((int) ($row['deposito_id'] ?? 0) > 0) {
+				continue;
+			}
+			if (! empty($row['en_produccion_forzada'])) {
+				continue;
+			}
 			$otId = (int) ($row['ordentrabajo_id'] ?? 0);
 			if ($otId > 0) {
 				$otIdsSituacion[] = $otId;
@@ -338,151 +329,121 @@ class Articulo_MovimientoService
 		$situacionesPorOt = $this->situacionesReporteStockOtPorIds($otIdsSituacion);
 		$modulosCache = [];
 
-		$datas = [];
-		$medidas = [];
-		$anterLote = '';
-		$anterSku = '';
-		$anterCodigoCombinacion = '';
-		$anterClave = '';
-		$anterModulo_Id = 0;
-		$anterOrdentrabajo_id = 0;
-		$anterId = 0;
-		$totalPares = 0;
-		$situacion = ReporteStockOtSituacionSupport::ENTREGA_INMEDIATA;
-		$enProduccion = false;
-		$foto = null;
-		$nombreLinea = '';
-		$sku = '';
-		$codigoCombinacion = '';
-		$nombreCombinacion = '';
-		$lote = '';
-		$precio = 0;
-		$pedido = null;
-		$ordencompra = 0;
-		$modulo_id = 0;
-		$modulo = [];
-		$cantidadModulo = 0;
-		$depositoId = 0;
-		$depositoCodigo = '';
-		$depositoNombre = '';
+		/** @var array<string, array<string, mixed>> $grupos */
+		$grupos = [];
+		$esMovimientos = $apertura === 'MOVIMIENTOS';
 
-		foreach ($data as $movimiento)
-		{
-			$claveFila = ReporteStockOtSituacionSupport::claveAgrupacion(
+		foreach ($data as $movimiento) {
+			$claveAgrupacion = ReporteStockOtSituacionSupport::claveAgrupacion(
 				$movimiento['lote'] ?? 0,
 				(int) ($movimiento['ordentrabajo_id'] ?? 0),
 				(int) ($movimiento['deposito_id'] ?? 0)
 			);
-			if ($apertura != 'MOVIMIENTOS' ?
-				($anterSku != $movimiento['sku'] ||
-				$anterCodigoCombinacion != $movimiento['codigocombinacion'] ||
-				$anterClave != $claveFila) :
-				($anterSku != $movimiento['sku'] ||
-				$anterCodigoCombinacion != $movimiento['codigocombinacion'] ||
-				$anterClave != $claveFila ||
-				$anterModulo_Id != $movimiento['modulo_id'] ||
-				($anterOrdentrabajo_id != 0 ? $anterOrdentrabajo_id != $movimiento['ordentrabajo_id'] : false) ||
-				$anterId != $movimiento['id']))
-			{
-				if ($anterSku != '' && $totalPares != 0)
-				{
-					if (ReporteStockOtSituacionSupport::pasaFiltroEstadoOt((string) $estadoot, $situacion, $enProduccion)) {
-						$datas[] = $this->filaReporteStockOt(
-							$foto,
-							$nombreLinea,
-							$sku,
-							$codigoCombinacion,
-							$nombreCombinacion,
-							$lote,
-							$precio,
-							$situacion,
-							$enProduccion,
-							$modulo_id,
-							$cantidadModulo,
-							$modulo,
-							$pedido,
-							$ordencompra,
-							$medidas,
-							$depositoId,
-							$depositoCodigo,
-							$depositoNombre
-						);
-					}
-				}
-				$anterSku = $movimiento['sku'];
-				$anterCodigoCombinacion = $movimiento['codigocombinacion'];
-				$anterLote = $movimiento['lote'];
-				$anterClave = $claveFila;
-				$anterModulo_Id = $movimiento['modulo_id'];
-				$anterOrdentrabajo_id = $movimiento['ordentrabajo_id'];
-				$anterId = $movimiento['id'];
+			$clave = implode('|', [
+				(string) ($movimiento['sku'] ?? ''),
+				(string) ($movimiento['codigocombinacion'] ?? ''),
+				$claveAgrupacion,
+			]);
+			if ($esMovimientos) {
+				$clave .= '|'.(int) ($movimiento['modulo_id'] ?? 0)
+					.'|'.(int) ($movimiento['ordentrabajo_id'] ?? 0)
+					.'|'.(int) ($movimiento['id'] ?? 0);
+			}
 
-				$foto = $movimiento['foto'];
-				$nombreLinea = $movimiento['nombrelinea'];
-				$sku = $movimiento['sku'];
-				$codigoCombinacion = $movimiento['codigocombinacion'];
-				$nombreCombinacion = $movimiento['nombrecombinacion'];
-				$lote = ReporteStockOtSituacionSupport::identificadorExcel(
-					$movimiento['lote'] ?? 0,
-					$movimiento['ordentrabajo_codigo'] ?? ''
-				);
-				$precio = $movimiento['precio'];
-				$pedido = $movimiento['pedido'];
-				$ordencompra = $movimiento['ordentrabajo_codigo'] ?? '';
-				$depositoId = (int) ($movimiento['deposito_id'] ?? 0);
-				$depositoCodigo = (string) ($movimiento['depositocodigo'] ?? '');
-				$depositoNombre = (string) ($movimiento['depositonombre'] ?? '');
-
-				$modulo_id = $movimiento['modulo_id'];
-				$medidas = [];
-				$totalPares = 0;
-				[$modulo, $cantidadModulo] = $this->curvaModuloReporteStockOt((int) $movimiento['modulo_id'], $modulosCache);
-
+			if (! isset($grupos[$clave])) {
 				$meta = $this->situacionFilaReporteStockOt($movimiento, $situacionesPorOt);
-				$situacion = $meta['situacion'];
-				$enProduccion = $meta['en_produccion'];
-			}
-			$flEncontro = false;
-			for ($ii = 0; $ii < count($medidas); $ii++)
-			{
-				if ($medidas[$ii]['medida'] == $movimiento['nombretalle'])
-				{
-					$flEncontro = true;
-					$medidas[$ii]['cantidad'] += $movimiento['cantidad'];
-
-					$totalPares += $movimiento['cantidad'];
-				}
-			}
-			if (!$flEncontro)
-			{
-				$medidas[] = ['medida' => $movimiento['nombretalle'], 'cantidad' => $movimiento['cantidad']];
-				$totalPares += $movimiento['cantidad'];
-			}
-		}
-		if ($anterSku != '' && $totalPares != 0)
-		{
-			if (ReporteStockOtSituacionSupport::pasaFiltroEstadoOt((string) $estadoot, $situacion, $enProduccion)) {
-				$datas[] = $this->filaReporteStockOt(
-					$foto,
-					$nombreLinea,
-					$sku,
-					$codigoCombinacion,
-					$nombreCombinacion,
-					$lote,
-					$precio,
-					$situacion,
-					$enProduccion,
-					$modulo_id,
-					$cantidadModulo,
-					$modulo,
-					$pedido,
-					$ordencompra,
-					$medidas,
-					$depositoId,
-					$depositoCodigo,
-					$depositoNombre
+				[$modulo, $cantidadModulo] = $this->curvaModuloReporteStockOt(
+					(int) ($movimiento['modulo_id'] ?? 0),
+					$modulosCache
 				);
+				$grupos[$clave] = [
+					'foto' => $movimiento['foto'] ?? null,
+					'nombrelinea' => $movimiento['nombrelinea'] ?? '',
+					'sku' => $movimiento['sku'] ?? '',
+					'codigocombinacion' => $movimiento['codigocombinacion'] ?? '',
+					'nombrecombinacion' => $movimiento['nombrecombinacion'] ?? '',
+					'lote' => ReporteStockOtSituacionSupport::identificadorExcel(
+						$movimiento['lote'] ?? 0,
+						$movimiento['ordentrabajo_codigo'] ?? ''
+					),
+					'precio' => $movimiento['precio'] ?? 0,
+					'situacion' => $meta['situacion'],
+					'en_produccion' => $meta['en_produccion'],
+					'modulo_id' => $movimiento['modulo_id'] ?? 0,
+					'cantidadmodulo' => $cantidadModulo,
+					'modulo' => $modulo,
+					'pedido' => $movimiento['pedido'] ?? null,
+					'ordencompra' => $movimiento['ordentrabajo_codigo'] ?? '',
+					'deposito_id' => (int) ($movimiento['deposito_id'] ?? 0),
+					'deposito_codigo' => (string) ($movimiento['depositocodigo'] ?? ''),
+					'deposito_nombre' => (string) ($movimiento['depositonombre'] ?? ''),
+					'medidas' => [],
+					'total_pares' => 0.0,
+					'_sort' => implode('|', [
+						(string) ($movimiento['nombrelinea'] ?? ''),
+						(string) ($movimiento['sku'] ?? ''),
+						sprintf('%05d', (int) ($movimiento['codigocombinacion'] ?? 0)),
+						ReporteStockOtSituacionSupport::identificadorExcel(
+							$movimiento['lote'] ?? 0,
+							$movimiento['ordentrabajo_codigo'] ?? ''
+						),
+						sprintf('%010d', (int) ($movimiento['deposito_id'] ?? 0)),
+					]),
+				];
 			}
+
+			$talle = (string) ($movimiento['nombretalle'] ?? '');
+			$cant = (float) ($movimiento['cantidad'] ?? 0);
+			if ($talle === '') {
+				continue;
+			}
+			if (! isset($grupos[$clave]['medidas'][$talle])) {
+				$grupos[$clave]['medidas'][$talle] = 0.0;
+			}
+			$grupos[$clave]['medidas'][$talle] += $cant;
+			$grupos[$clave]['total_pares'] += $cant;
+		}
+
+		$datas = [];
+		uasort($grupos, static fn ($a, $b) => strcmp((string) $a['_sort'], (string) $b['_sort']));
+		foreach ($grupos as $grupo) {
+			if (abs((float) $grupo['total_pares']) < 0.0001) {
+				continue;
+			}
+			if (! ReporteStockOtSituacionSupport::pasaFiltroEstadoOt(
+				(string) $estadoot,
+				(string) $grupo['situacion'],
+				(bool) $grupo['en_produccion']
+			)) {
+				continue;
+			}
+			$medidas = [];
+			foreach ($grupo['medidas'] as $medida => $cantidad) {
+				if (abs((float) $cantidad) < 0.0001) {
+					continue;
+				}
+				$medidas[] = ['medida' => $medida, 'cantidad' => $cantidad];
+			}
+			$datas[] = $this->filaReporteStockOt(
+				$grupo['foto'],
+				$grupo['nombrelinea'],
+				$grupo['sku'],
+				$grupo['codigocombinacion'],
+				$grupo['nombrecombinacion'],
+				$grupo['lote'],
+				$grupo['precio'],
+				(string) $grupo['situacion'],
+				(bool) $grupo['en_produccion'],
+				$grupo['modulo_id'],
+				$grupo['cantidadmodulo'],
+				$grupo['modulo'],
+				$grupo['pedido'],
+				$grupo['ordencompra'],
+				$medidas,
+				(int) $grupo['deposito_id'],
+				(string) $grupo['deposito_codigo'],
+				(string) $grupo['deposito_nombre']
+			);
 		}
 
 		return $datas;

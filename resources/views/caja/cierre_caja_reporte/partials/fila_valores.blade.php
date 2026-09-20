@@ -14,7 +14,14 @@
         @endif
     </td>
     <td>{{ $fila['nombre'] ?? '' }}</td>
-    <td>{{ $esTotal ? '' : 'Saldo / movimientos' }}</td>
+    <td>
+        @if ($esTotal)
+        @elseif (! empty($fila['es_cheques_cartera']))
+            Cartera
+        @else
+            Saldo / movimientos
+        @endif
+    </td>
     <td class="text-right">{{ number_format((float) ($fila['saldo_anterior'] ?? 0), 2, ',', '.') }}</td>
     <td class="text-right">{{ number_format((float) ($fila['ingresos'] ?? 0), 2, ',', '.') }}</td>
     <td class="text-right">{{ number_format((float) ($fila['egresos'] ?? 0), 2, ',', '.') }}</td>

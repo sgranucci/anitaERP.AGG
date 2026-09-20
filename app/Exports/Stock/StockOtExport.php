@@ -9,7 +9,6 @@ use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
@@ -27,7 +26,7 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
  * Excel Stock por OT en formato artesanal Ferli/Tomahawk
  * (título + cabecera compacta + talles usados + PS/QM/N/TT + situación/OT/depósito + TOTAL).
  */
-class StockOtExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
+class StockOtExport implements FromView, WithColumnFormatting, WithMapping, WithStyles, WithColumnWidths, WithEvents, WithTitle
 {
     use Exportable;
 

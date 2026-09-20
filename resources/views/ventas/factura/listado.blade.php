@@ -3,6 +3,7 @@
     use App\Support\Ventas\FacturaListadoFiltros;
     use App\Support\Ventas\FacturaListadoSupport;
     use App\Support\Ventas\PedidoListadoSupport;
+    use App\Support\Ventas\VentasListadoEtiquetasSupport;
 
     $ventas = $ventas ?? collect();
     foreach ($ventas as $c) {
@@ -11,6 +12,8 @@
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($ventas);
     $periodoTexto = FacturaListadoFiltros::formatearPeriodoTexto($filtros ?? []);
     $repartoTexto = FacturaListadoFiltros::formatearRepartoTexto($filtros ?? []);
+    $etiqCantidad = VentasListadoEtiquetasSupport::etiquetaCantidad();
+    $etiqTransporte = VentasListadoEtiquetasSupport::etiquetaTransporte();
     $totalGeneral = 0;
     foreach ($ventas as $c) {
         $totalGeneral += (float) ($c->total ?? 0);
@@ -30,6 +33,12 @@
         table.data tbody tr.factura-subtotal-reparto,
         table.data tbody tr.factura-subtotal-reparto td {
             background-color: #F9E79F;
+            font-weight: bold;
+            color: #17202A;
+        }
+        table.data tfoot tr.factura-total-rango,
+        table.data tfoot tr.factura-total-rango td {
+            background-color: #D5F5E3;
             font-weight: bold;
             color: #17202A;
         }
@@ -74,10 +83,8 @@
                 <th>Comprobante</th>
                 <th>Cliente</th>
                 <th>Empresa</th>
-                <th class="num">Cajas</th>
-                <th class="num">Unidades</th>
-                <th class="num">Kilos</th>
-                <th>Reparto</th>
+                @include('ventas.factura.partials.thead_cantidades', ['claseNum' => 'num', 'etiqCantidad' => $etiqCantidad])
+                <th>{{ $etiqTransporte }}</th>
                 <th class="num">Total</th>
             </tr>
         </thead>
@@ -94,29 +101,35 @@
                     </td>
                     <td>{{ $comprobante->clientes->nombre ?? '' }}</td>
                     <td>{{ $comprobante->nombreempresa }}</td>
-                    <td class="num">{{ PedidoListadoSupport::formatearTotal($totales['caja']) }}</td>
-                    <td class="num">{{ PedidoListadoSupport::formatearTotal($totales['pieza']) }}</td>
-                    <td class="num">{{ PedidoListadoSupport::formatearTotal($totales['kilo']) }}</td>
+                    @include('ventas.factura.partials.celdas_cantidades', ['totales' => $totales, 'claseNum' => 'num'])
                     <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>
                     <td class="num">{{ number_format((float) $comprobante->total, 2, ',', '.') }}</td>
                 </tr>
                 @if (FacturaListadoSupport::esCierreReparto($comprobante, $totalesPorReparto ?? []))
                     @include('ventas.factura.partials.fila_subtotal_reparto', [
                         'metaReparto' => FacturaListadoSupport::metaReparto($comprobante, $totalesPorReparto ?? []),
+                        'claseNum' => 'num',
                     ])
                 @endif
             @empty
                 <tr>
-                    <td colspan="10" style="text-align:center;">Sin registros</td>
+                    <td colspan="{{ VentasListadoEtiquetasSupport::colspanTablaSinAcciones() }}" style="text-align:center;">Sin registros</td>
                 </tr>
             @endforelse
         </tbody>
         @if (is_countable($ventas) && count($ventas) > 0)
             <tfoot>
-                <tr>
-                    <th colspan="9" class="num">Total general</th>
-                    <th class="num">{{ number_format($totalGeneral, 2, ',', '.') }}</th>
-                </tr>
+                @include('ventas.factura.partials.fila_total_rango', [
+                    'totalesRango' => $totalesRango ?? (object) [
+                        'cantidad_comprobantes' => count($ventas),
+                        'caja' => 0,
+                        'pieza' => 0,
+                        'kilo' => 0,
+                        'total' => $totalGeneral,
+                    ],
+                    'conAcciones' => false,
+                    'claseNum' => 'num',
+                ])
             </tfoot>
         @endif
     </table>

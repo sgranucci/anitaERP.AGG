@@ -1,15 +1,18 @@
 @php
     use App\Support\Ventas\FacturaListadoFiltros;
+    use App\Support\Ventas\VentasListadoEtiquetasSupport;
     $f = $filtros ?? [];
     $modo = $f['modo'] ?? FacturaListadoFiltros::MODO_TODOS;
     $campoActivo = $f['campo'] ?? 'cliente';
     $operadorActivo = $f['operador'] ?? 'contiene';
     $operadoresJson = [];
-    foreach (FacturaListadoFiltros::CAMPOS as $key => $meta) {
+    foreach (FacturaListadoFiltros::camposParaVista() as $key => $meta) {
         $operadoresJson[$key] = FacturaListadoFiltros::operadoresParaCampo($key);
     }
     $fScope = $f['empresa_scope'] ?? 'una';
     $fEmp = (int) ($f['empresa_id'] ?? 0);
+    $etiqTransporte = VentasListadoEtiquetasSupport::etiquetaTransporte();
+    $etiqTransporteLc = mb_strtolower($etiqTransporte);
 @endphp
 <div class="px-3 py-2 border-bottom bg-light text-body">
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
@@ -41,7 +44,7 @@
     <div class="card-body bg-light py-2 text-body">
         <div class="form-row align-items-end">
             <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="filtro_reparto">N&ordm; reparto</label>
+                <label class="small mb-1" for="filtro_reparto">N&ordm; {{ $etiqTransporteLc }}</label>
                 <input type="text"
                        name="filtro_reparto"
                        id="filtro_reparto"
@@ -49,7 +52,7 @@
                        value="{{ $f['filtro_reparto'] ?? '' }}"
                        placeholder="Ej: 101 &oacute; 10/20"
                        autocomplete="off"
-                       title="N&uacute;mero de reparto. Coma = lista (1,3,5); barra / = rango (10/20). Vac&iacute;o = todos.">
+                       title="N&uacute;mero de {{ $etiqTransporteLc }}. Coma = lista (1,3,5); barra / = rango (10/20). Vac&iacute;o = todos.">
             </div>
             <div class="form-group col-md-auto mb-2">
                 <div class="custom-control custom-checkbox mt-4">
@@ -76,7 +79,7 @@
             <div class="form-group col-md-2 col-sm-6 mb-2 filtro-campo-wrap" style="{{ $modo !== FacturaListadoFiltros::MODO_CAMPO ? 'display:none' : '' }}">
                 <label class="small mb-1" for="filtro_campo">Campo</label>
                 <select name="filtro_campo" id="filtro_campo" class="form-control form-control-sm">
-                    @foreach($camposFiltro ?? FacturaListadoFiltros::CAMPOS as $key => $meta)
+                    @foreach($camposFiltro ?? FacturaListadoFiltros::camposParaVista() as $key => $meta)
                         <option value="{{ $key }}" data-type="{{ $meta['type'] }}" {{ $campoActivo === $key ? 'selected' : '' }}>{!! $meta['label'] !!}</option>
                     @endforeach
                 </select>

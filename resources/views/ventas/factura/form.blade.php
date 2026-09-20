@@ -467,11 +467,11 @@
 			</div>
 		</div>
 		<div class="form-group row tm-transporte-campo">
-			<label for="codigotransporte" class="col-lg-3 control-label text-right pr-2">{{ config('app.empresa') == 'EL BIERZO' ? 'Reparto' : 'Transporte' }}</label>
+			<label for="codigotransporte" class="col-lg-3 control-label text-right pr-2">{{ \App\Support\Ventas\VentasListadoEtiquetasSupport::etiquetaTransporte() }}</label>
 			<div class="col-lg-8">
 				<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 					<input type="hidden" class="transporte_id" id="transporte_id" name="transporte_id" value="{{ $transporteIdFactura }}">
-					<button type="button" title="Consulta {{ config('app.empresa') == 'EL BIERZO' ? 'repartos' : 'transportes' }} (F1)" class="btn-accion-tabla consultatransporte tooltipsC flex-shrink-0 factura-carga-bloqueable">
+					<button type="button" title="Consulta {{ mb_strtolower(\App\Support\Ventas\VentasListadoEtiquetasSupport::etiquetaTransportePlural()) }} (F1)" class="btn-accion-tabla consultatransporte tooltipsC flex-shrink-0 factura-carga-bloqueable">
 						<i class="fa fa-search text-primary"></i>
 					</button>
 					<input type="text" class="form-control codigotransporte factura-carga-bloqueable flex-shrink-0" id="codigotransporte" name="codigotransporte"
@@ -849,6 +849,12 @@
             	</div>
 			</div>
 			<div class="col-sm-6">
+				@if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+					<div class="form-group mb-2 d-flex align-items-center justify-content-end">
+						<label for="TotalCantidadFactura" class="mb-0 mr-2 font-weight-bold">Total pares</label>
+						<input type="text" id="TotalCantidadFactura" name="TotalCantidadFactura" class="form-control form-control-sm text-right font-weight-bold" style="max-width:6rem;" readonly value="" />
+					</div>
+				@endif
 				<table class="table table-sm table-bordered" id="total-factura-table">
 					<thead style="background:#85C1E9;color:#17202A;">
 						<tr>

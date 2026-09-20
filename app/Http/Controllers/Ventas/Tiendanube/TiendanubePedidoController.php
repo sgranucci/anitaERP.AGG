@@ -9,6 +9,7 @@ use App\Services\Ventas\Tiendanube\TiendanubeApiClient;
 use App\Services\Ventas\Tiendanube\TiendanubePedidoEmisionService;
 use App\Services\Ventas\Tiendanube\TiendanubePedidoSyncService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\Tiendanube\TiendanubeApiHealthSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListadoFiltros;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListoSupport;
@@ -53,11 +54,22 @@ class TiendanubePedidoController extends Controller
             $listosPorId[(int) $p->id] = $puedeFacturar && TiendanubePedidoListoSupport::estaListo($p);
         }
 
+        $apiHealth = TiendanubeApiHealthSupport::estado();
+        if ($apiOk) {
+            $needsCheck = ($apiHealth['checked_at'] ?? null) === null
+                || ! ($apiHealth['auth_ok'] ?? false);
+            if ($needsCheck) {
+                app(TiendanubeApiHealthSupport::class)->verificar(false);
+                $apiHealth = TiendanubeApiHealthSupport::estado();
+            }
+        }
+
         return view('ventas.tiendanube_pedido.index', compact(
             'coleccion',
             'filtros',
             'filtrosQuery',
             'apiOk',
+            'apiHealth',
             'estados',
             'puedeFacturar',
             'listosPorId'

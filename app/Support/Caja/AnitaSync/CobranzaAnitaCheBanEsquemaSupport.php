@@ -487,7 +487,13 @@ final class CobranzaAnitaCheBanEsquemaSupport
             cter_cod_pos_bco,
             cter_cta_libradora,
             cter_cod_banco,
-            cter_cuit_emisor';
+            cter_cuit_emisor,
+            cter_nro_e_cheq';
+
+        $nroEcheq = trim((string) ($ctx['nroEcheq'] ?? ''));
+        if ($nroEcheq === '') {
+            $nroEcheq = ' ';
+        }
 
         $baseValores = "
             '".$ctx['numeroInterno']."',
@@ -519,7 +525,8 @@ final class CobranzaAnitaCheBanEsquemaSupport
             '0',
             '".($ctx['cuentaLibradora'] ?? '0')."',
             '".($ctx['codigoBanco'] ?? '0')."',
-            '".($ctx['cuit'] ?? '0')."'";
+            '".($ctx['cuit'] ?? '0')."',
+            '".addslashes($nroEcheq)."'";
 
         if (self::omitirEmpresaEnCtermae()) {
             return [

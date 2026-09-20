@@ -38,6 +38,12 @@ switch(config('app.empresa'))
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['fherber@interforming.com.ar'],
             'SINCRONIZA_CLIMA_ANITA' => false,
             'permitir_cuit_duplicado' => $permitirCuitDuplicado,
+            // Etiquetas listado factura (VentasListadoEtiquetasSupport)
+            'listado_etiqueta_transporte' => 'Transporte',
+            'listado_etiqueta_transporte_plural' => 'Transportes',
+            'listado_etiqueta_cantidad' => 'Cantidad',
+            'listado_abreviatura_cantidad' => '',
+            'listado_columnas_cantidad' => 'cantidad',
             ];
         break;
 
@@ -74,6 +80,13 @@ switch(config('app.empresa'))
             'permitir_cuit_duplicado' => filter_var(env('CLIENTE_PERMITIR_CUIT_DUPLICADO', true), FILTER_VALIDATE_BOOLEAN),
             // Coeficiente extra (clim_coef_extra). Solo lectura en ABM; se asigna en altas.
             'COEFICIENTE_EXTRA' => (float) env('CLIENTE_COEFICIENTE_EXTRA', 1.05),
+            // Etiquetas listado factura (VentasListadoEtiquetasSupport)
+            // detalle = Cajas + Unidades + Kilos
+            'listado_etiqueta_transporte' => 'Reparto',
+            'listado_etiqueta_transporte_plural' => 'Repartos',
+            'listado_etiqueta_cantidad' => 'Kilos',
+            'listado_abreviatura_cantidad' => 'kg',
+            'listado_columnas_cantidad' => 'detalle',
             ];
         break;
 
@@ -107,6 +120,12 @@ switch(config('app.empresa'))
             'DESTINATARIO_ALTA_CLIENTE_DEFINITIVO' => ['impuestosBSA@grupoagg.com'],
             'SINCRONIZA_CLIMA_ANITA' => true,
             'permitir_cuit_duplicado' => $permitirCuitDuplicado,
+            // Etiquetas listado factura (VentasListadoEtiquetasSupport)
+            'listado_etiqueta_transporte' => 'Transporte',
+            'listado_etiqueta_transporte_plural' => 'Transportes',
+            'listado_etiqueta_cantidad' => 'Cantidad',
+            'listado_abreviatura_cantidad' => '',
+            'listado_columnas_cantidad' => 'cantidad',
             ];        
     break;
 
@@ -144,5 +163,11 @@ switch(config('app.empresa'))
             ))),
             'SINCRONIZA_CLIMA_ANITA' => filter_var(env('CLIENTE_SINCRONIZA_CLIMA_ANITA', false), FILTER_VALIDATE_BOOLEAN),
             'permitir_cuit_duplicado' => $permitirCuitDuplicado,
+            // Etiquetas listado factura (VentasListadoEtiquetasSupport)
+            'listado_etiqueta_transporte' => 'Transporte',
+            'listado_etiqueta_transporte_plural' => 'Transportes',
+            'listado_etiqueta_cantidad' => 'Pares',
+            'listado_abreviatura_cantidad' => 'pares',
+            'listado_columnas_cantidad' => 'cantidad',
         ];
 }

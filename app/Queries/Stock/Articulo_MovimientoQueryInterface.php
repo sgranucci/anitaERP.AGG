@@ -8,7 +8,8 @@ interface Articulo_MovimientoQueryInterface
                                             $desdearticulo, $hastaarticulo,
                                             $desdelinea_id, $hastalinea_id,
                                             $desdecategoria_id, $hastacategoria_id,
-                                            $desdelote, $hastalote, $deposito_id);
+                                            $desdelote, $hastalote, $deposito_id,
+                                            $apertura = 'TOTALIZADO');
 
     /**
      * OT en planta (sin tarea de cierre) que aún no tienen movimiento de stock.
