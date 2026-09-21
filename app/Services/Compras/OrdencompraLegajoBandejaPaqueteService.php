@@ -17,6 +17,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ComprobanteProveedorReservaComLegajoSupport;
@@ -316,7 +317,7 @@ class OrdencompraLegajoBandejaPaqueteService
             $exceso = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
                 $mapaEfectivo,
                 $this->provisionPorCom($oc, $mapaEfectivo),
-                $this->importePorFacturaDelLegajo($oc),
+                $this->importePorFacturaDelLegajo($oc, $mapaEfectivo),
                 $etiquetasCom,
                 ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc),
             );
@@ -428,42 +429,165 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
-     * Importe de cada factura del legajo, por clave de asignación (precarga_id / cp-N).
+     * Importe comparable de cada factura (neto gravado en letra A; total en B/C o monotributo),
+     * por clave de asignación (precarga_id / cp-N). La provisión COM es ese mismo neto, no el total con IVA.
      *
+     * @param  array<int|string, list<int>>  $asignacionesPorFactura
      * @return array<int|string, float>
      */
-    private function importePorFacturaDelLegajo(Ordencompra $oc): array
+    private function importePorFacturaDelLegajo(Ordencompra $oc, array $asignacionesPorFactura = []): array
     {
         $numero = trim((string) $oc->numeroordencompra);
         $empresaId = (int) $oc->empresa_id;
         $out = [];
+        $iiPorCom = $this->impuestoInternoPorComAsignada($asignacionesPorFactura);
 
         if ($numero !== '' && $empresaId > 0) {
-            foreach (
-                DB::table('precarga_comprobante_proveedor')
-                    ->where('empresa_id', $empresaId)
-                    ->where('numeroordencompra', $numero)
-                    ->get(['id', 'total']) as $precarga
-            ) {
-                $out[(int) $precarga->id] = round((float) ($precarga->total ?? 0), 2);
+            $precargas = Precarga_Comprobante_Proveedor::query()
+                ->where('empresa_id', $empresaId)
+                ->where('numeroordencompra', $numero)
+                ->with([
+                    'proveedores:id,condicioniva_id',
+                    'precarga_comprobante_proveedor_conceptos.concepto_ivacompras',
+                ])
+                ->get(['id', 'letra', 'subtotal', 'total', 'proveedor_id']);
+            foreach ($precargas as $precarga) {
+                $preId = (int) $precarga->id;
+                $out[$preId] = $this->importeComparableConProvisionCom(
+                    (string) ($precarga->letra ?? ''),
+                    $this->condicionIvaId($precarga->proveedores->condicioniva_id ?? null),
+                    (float) ($precarga->total ?? 0),
+                    (float) ($precarga->subtotal ?? 0),
+                    $precarga->precarga_comprobante_proveedor_conceptos,
+                    $this->asignacionIncluyeImpuestoInterno($asignacionesPorFactura, $preId, $iiPorCom),
+                );
             }
         }
 
-        foreach ($this->comprobantesDelLegajo($oc, array_keys($out)) as $cp) {
-            $cpId = (int) ($cp['id'] ?? 0);
+        $precargaIds = array_values(array_filter(
+            array_map(static fn ($id) => is_int($id) || ctype_digit((string) $id) ? (int) $id : 0, array_keys($out)),
+            static fn (int $id) => $id > 0
+        ));
+        $cps = Comprobante_Proveedor::query()
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+            })
+            ->where(function ($q) use ($oc, $precargaIds) {
+                $q->where('ordencompra_id', $oc->id);
+                if ($precargaIds !== []) {
+                    $q->orWhereIn('precarga_comprobante_proveedor_id', $precargaIds);
+                }
+            })
+            ->with([
+                'proveedores:id,condicioniva_id',
+                'comprobante_proveedor_conceptos.concepto_ivacompras',
+            ])
+            ->get(['id', 'letra', 'subtotal', 'total', 'precarga_comprobante_proveedor_id', 'proveedor_id', 'estado']);
+
+        foreach ($cps as $cp) {
+            $cpId = (int) $cp->id;
             if ($cpId <= 0) {
                 continue;
             }
-            $total = round((float) ($cp['total'] ?? 0), 2);
-            $out['cp-'.$cpId] = $total;
-            // El CP manda sobre la precarga: la precarga puede no tener importe (scan Anita).
-            $preId = (int) ($cp['precarga_id'] ?? 0);
-            if ($preId > 0 && $total > 0) {
-                $out[$preId] = $total;
+            $preId = (int) ($cp->precarga_comprobante_proveedor_id ?? 0);
+            $claveAsignacion = $preId > 0 ? $preId : 'cp-'.$cpId;
+            $comparable = $this->importeComparableConProvisionCom(
+                (string) ($cp->letra ?? ''),
+                $this->condicionIvaId($cp->proveedores->condicioniva_id ?? null),
+                (float) ($cp->total ?? 0),
+                (float) ($cp->subtotal ?? 0),
+                $cp->comprobante_proveedor_conceptos,
+                $this->asignacionIncluyeImpuestoInterno($asignacionesPorFactura, $claveAsignacion, $iiPorCom),
+            );
+            $out['cp-'.$cpId] = $comparable;
+            // El CP manda sobre la precarga cuando ya tiene importe: el scan de Anita a veces llega en cero.
+            if ($preId > 0 && $comparable > 0.00001) {
+                $out[$preId] = $comparable;
             }
         }
 
         return $out;
+    }
+
+    /**
+     * @param  array<int|string, list<int>>  $asignacionesPorFactura
+     * @return array<int, float>
+     */
+    private function impuestoInternoPorComAsignada(array $asignacionesPorFactura): array
+    {
+        $ids = [];
+        foreach ($asignacionesPorFactura as $recepcionIds) {
+            foreach ((array) $recepcionIds as $recepcionId) {
+                $rid = (int) $recepcionId;
+                if ($rid > 0) {
+                    $ids[$rid] = true;
+                }
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach (
+            Recepcion_Proveedor::query()
+                ->whereIn('id', array_keys($ids))
+                ->get(['id', 'impuesto_interno']) as $recepcion
+        ) {
+            $out[(int) $recepcion->id] = (float) ($recepcion->impuesto_interno ?? 0);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int|string, list<int>>  $asignacionesPorFactura
+     * @param  array<int, float>  $iiPorCom
+     */
+    private function asignacionIncluyeImpuestoInterno(
+        array $asignacionesPorFactura,
+        int|string $claveFactura,
+        array $iiPorCom,
+    ): bool {
+        $ids = $asignacionesPorFactura[$claveFactura] ?? $asignacionesPorFactura[(string) $claveFactura] ?? [];
+        foreach ((array) $ids as $recepcionId) {
+            if ((float) ($iiPorCom[(int) $recepcionId] ?? 0) > 0.005) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function condicionIvaId(mixed $condicionIvaId): ?int
+    {
+        $id = (int) $condicionIvaId;
+        if ($id <= 0) {
+            return null;
+        }
+
+        return $id;
+    }
+
+    private function importeComparableConProvisionCom(
+        string $letra,
+        ?int $condicionIvaId,
+        float $total,
+        float $subtotal,
+        iterable $conceptos,
+        bool $incluirImpuestoInterno,
+    ): float {
+        $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
+            $letra,
+            $condicionIvaId,
+            $total,
+            $subtotal,
+            $conceptos,
+            $incluirImpuestoInterno,
+        );
+
+        return round(abs((float) $meta['importe']), 2);
     }
 
     /**

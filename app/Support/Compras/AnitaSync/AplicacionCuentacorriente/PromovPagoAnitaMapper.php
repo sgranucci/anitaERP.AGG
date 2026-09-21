@@ -85,12 +85,16 @@ final class PromovPagoAnitaMapper
      * Cabecera de OP en promov: un solo movimiento, monto = total del pago.
      * t_pagado queda en 0 (Anita nativo: el aplicado vive en aplmovp / t_pagado de las facturas).
      */
-    public static function valoresUpdateCabecera(float $monto): string
+    public static function valoresUpdateCabecera(float $monto, string $codMon, float $cotizacion): string
     {
         $monto = abs($monto);
+        $codMon = MonedaAnitaCodigoSupport::normalizar($codMon);
+        $cotizacion = $cotizacion > 0 ? $cotizacion : 1.0;
 
         return "
             prov_monto = '".AplicacionCuentacorrienteAnitaLadoSupport::decimal($monto)."',
+            prov_cod_mon = '".$codMon."',
+            prov_cotizacion = '".AplicacionCuentacorrienteAnitaLadoSupport::decimal($cotizacion)."',
             prov_t_pagado = '0',
             prov_fecha_pago = '0',
             prov_ref_tipo = '   ',

@@ -92,12 +92,35 @@ class AplicacionCuentacorrienteAnitaMapperTest extends TestCase
         $this->assertStringContainsString("prov_ref_nro = '0'", $valores);
     }
 
-    public function test_promov_cabecera_op_usa_monto_del_pago_y_t_pagado_cero(): void
+    public function test_promov_cabecera_op_usa_monto_moneda_y_cotizacion_del_pago(): void
     {
-        $valores = \App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagoAnitaMapper::valoresUpdateCabecera(146912851.56);
+        $valores = \App\Support\Compras\AnitaSync\AplicacionCuentacorriente\PromovPagoAnitaMapper::valoresUpdateCabecera(
+            146912851.56,
+            '1',
+            1530
+        );
         $this->assertStringContainsString("prov_monto = '146912851.5600'", $valores);
+        $this->assertStringContainsString("prov_cod_mon = '1'", $valores);
+        $this->assertStringContainsString("prov_cotizacion = '1530.0000'", $valores);
         $this->assertStringContainsString("prov_t_pagado = '0'", $valores);
         $this->assertStringContainsString("prov_ref_nro = '0'", $valores);
+    }
+
+    public function test_cabecera_op_en_pesos_no_hereda_moneda_dolar_de_la_cc(): void
+    {
+        $lado = AplicacionCuentacorrienteAnitaLadoSupport::armar('4217', 'OPP', ' ', 2, 57815, 0, 0, 2, '2', 1535);
+        $pago = new \App\Models\Compras\Pagoproveedor;
+        $pago->moneda_id = 1;
+        $pago->cotizacion = 1535;
+        $moneda = new \App\Models\Configuracion\Moneda;
+        $moneda->id = 1;
+        $moneda->codigo = '1';
+        $pago->setRelation('monedas', $moneda);
+
+        $alineado = AplicacionCuentacorrienteAnitaLadoSupport::alinearMonedaDesdePago($lado, $pago);
+
+        $this->assertSame('1', $alineado['cod_mon']);
+        $this->assertSame(1535.0, $alineado['cotizacion']);
     }
 
     public function test_promov_insert_op_respeta_cuota_cero(): void

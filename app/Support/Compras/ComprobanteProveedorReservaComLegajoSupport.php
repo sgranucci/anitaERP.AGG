@@ -133,8 +133,9 @@ final class ComprobanteProveedorReservaComLegajoSupport
      * contrato) este es el único freno, y cuando no la permite atrapa igual la COM
      * equivocada (importe que no corresponde a esa recepción).
      *
-     * Las facturas sin importe cargado (precarga de Anita con total 0) suman 0: no se
-     * pueden validar, pero tampoco deben bloquear al resto.
+     * El importe de cada factura es el comparable con la provisión (neto gravado en letra A,
+     * total en B/C o monotributo). Las facturas sin ese importe (precarga en cero) suman 0:
+     * no se pueden validar, pero tampoco deben bloquear al resto.
      *
      * @param  array<int|string, list<int>>  $asignacionesPorPrecarga  precarga_id|cp-N => recepcion_ids
      * @param  array<int, float>  $provisionPorCom  recepcion_id => provisión (0/ausente = no validable)

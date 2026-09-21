@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras\AnitaSync\AplicacionCuentacorriente;
 
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Configuracion\MonedaAnitaCodigoSupport;
@@ -141,6 +142,29 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
         $cot = (float) ($cc->comprobante_proveedores?->cotizacion ?? 0);
 
         return $cot > 0 ? $cot : 1.0;
+    }
+
+    /**
+     * La cabecera promov de la OP guarda el monto de la cabecera del pago.
+     * Moneda y cotización tienen que ser las de ese mismo comprobante: la primera
+     * CC puede estar en la moneda de la factura aplicada (dólares) y dejaría
+     * un importe en pesos con prov_cod_mon de dólar.
+     *
+     * @param  Lado  $lado
+     * @return Lado
+     */
+    public static function alinearMonedaDesdePago(array $lado, ?Pagoproveedor $pago): array
+    {
+        if ($pago === null) {
+            return $lado;
+        }
+
+        $monedaId = (int) ($pago->moneda_id ?: 1);
+        $lado['cod_mon'] = MonedaAnitaCodigoSupport::desdeMoneda($pago->monedas, $monedaId);
+        $cot = (float) ($pago->cotizacion ?? 0);
+        $lado['cotizacion'] = $cot > 0 ? $cot : 1.0;
+
+        return $lado;
     }
 
     public static function tPagadoDesdeSumaAplicaciones(float $suma): float

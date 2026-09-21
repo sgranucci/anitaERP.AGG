@@ -115,7 +115,10 @@ final class WaitrySyncStatusPosEnvioService
         $registro->kds_ok = true;
         $registro->ultimo_error = null;
         $registro->ultimo_http_code = 200;
-        $registro->respuesta_json = $respuesta;
+        // Sin respuesta propia no se pisa la que dejó marcarPasoOk: es la única traza de qué contestó Waitry.
+        if ($respuesta !== null) {
+            $registro->respuesta_json = $respuesta;
+        }
         $registro->proximo_reintento_at = null;
         $registro->enviado_at = now();
         $registro->save();

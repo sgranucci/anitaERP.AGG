@@ -27,7 +27,7 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         'empresas',
         'comprobante_proveedores.tipotransaccion_compras',
         'comprobante_proveedor_cuotas',
-        'pagoproveedores',
+        'pagoproveedores.monedas',
         'monedas',
         'comprobante_proveedores.monedas',
     ];
@@ -446,8 +446,9 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
     }
 
     /**
-     * Un solo promov de la OP (tipo OPP/OPA). Monto = total del pago, t_pagado = 0.
-     * No pisar con cada factura aplicada: eso dejaba monto de la primera y t_pagado de la última.
+     * Un solo promov de la OP (tipo OPP/OPA). Monto, moneda y cotización salen de la
+     * cabecera del pago (no de la primera CC, que puede ser la factura en dólares).
+     * t_pagado queda en 0. No pisar con cada factura aplicada.
      */
     private function sincronizarPromovCabeceraPago(int $pagoproveedorId): void
     {
@@ -464,12 +465,14 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         if ($lado === null || ! $this->esTipoPagoAnita((string) $lado['tipo'])) {
             return;
         }
-        if ((int) ($lado['nro_cuota'] ?? 0) <= 0) {
-            $lado['nro_cuota'] = 1;
-        }
 
         $monto = abs((float) ($ccPago->pagoproveedores?->monto ?? 0));
-        if ($monto < 0.0001) {
+        if ($monto >= 0.0001) {
+            $lado = AplicacionCuentacorrienteAnitaLadoSupport::alinearMonedaDesdePago(
+                $lado,
+                $ccPago->pagoproveedores
+            );
+        } else {
             $monto = abs((float) $ccPago->total);
         }
 
@@ -500,9 +503,23 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         }
 
         if ($parsed['filas'] === []) {
-            $this->insertarPromovPago($ccPago, $lado, $monto);
+            $cuotaCabecera = (int) ($lado['nro_cuota'] ?? 0);
+            $lado['nro_cuota'] = $cuotaCabecera === 0 ? 1 : 0;
+            $parsedOtraCuota = ApiAnita::parsearRespuestaLista($api->apiCall([
+                'acc' => 'list',
+                'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+                'tabla' => 'promov',
+                'campos' => 'prov_monto, prov_t_pagado',
+                'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
+            ]));
+            $encontroOtraCuota = $parsedOtraCuota['error_lectura'] === null
+                && $parsedOtraCuota['filas'] !== [];
+            if (! $encontroOtraCuota) {
+                $lado['nro_cuota'] = $cuotaCabecera;
+                $this->insertarPromovPago($ccPago, $lado, $monto);
 
-            return;
+                return;
+            }
         }
 
         try {
@@ -510,7 +527,11 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
                 'acc' => 'update',
                 'tabla' => 'promov',
                 'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
-                'valores' => PromovPagoAnitaMapper::valoresUpdateCabecera($monto),
+                'valores' => PromovPagoAnitaMapper::valoresUpdateCabecera(
+                    $monto,
+                    (string) $lado['cod_mon'],
+                    (float) $lado['cotizacion'],
+                ),
                 'whereArmado' => PromovPagadoAnitaMapper::whereCuota($lado),
             ], 'promov cabecera OP '.$lado['etiqueta']);
         } catch (RuntimeException $e) {
