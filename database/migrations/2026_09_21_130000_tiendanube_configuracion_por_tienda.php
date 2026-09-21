@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,9 @@ return new class extends Migration
             Schema::table($tabla, function (Blueprint $table) {
                 $table->string('store_id', 32)->nullable()->after('id');
             });
-            DB::table($tabla)->whereNull('store_id')->orWhere('store_id', '')->update([
+            DB::table($tabla)->where(function ($q) {
+                $q->whereNull('store_id')->orWhere('store_id', '');
+            })->update([
                 'store_id' => $storeFerli,
             ]);
         }
@@ -54,7 +57,7 @@ return new class extends Migration
         );
 
         if (Schema::hasTable('tiendanube_configuracion')
-            && ! $this->tieneIndice('tiendanube_configuracion', 'tiendanube_configuracion_store_id_unique')) {
+            && ! MigrationDialectSupport::tieneIndice('tiendanube_configuracion', 'tiendanube_configuracion_store_id_unique')) {
             Schema::table('tiendanube_configuracion', function (Blueprint $table) {
                 $table->unique('store_id');
             });
@@ -64,10 +67,11 @@ return new class extends Migration
     public function down(): void
     {
         if (Schema::hasTable('tiendanube_configuracion')
-            && $this->tieneIndice('tiendanube_configuracion', 'tiendanube_configuracion_store_id_unique')) {
-            Schema::table('tiendanube_configuracion', function (Blueprint $table) {
-                $table->dropUnique('tiendanube_configuracion_store_id_unique');
-            });
+            && MigrationDialectSupport::tieneIndice('tiendanube_configuracion', 'tiendanube_configuracion_store_id_unique')) {
+            MigrationDialectSupport::dropIndiceOUnique(
+                'tiendanube_configuracion',
+                'tiendanube_configuracion_store_id_unique'
+            );
         }
 
         $this->reemplazarUnico(
@@ -112,27 +116,20 @@ return new class extends Migration
         }
 
         if ($columnaIndiceFk && $indiceFk
-            && $this->tieneIndice($tabla, $indiceViejo)
-            && ! $this->tieneIndice($tabla, $indiceFk)) {
+            && MigrationDialectSupport::tieneIndice($tabla, $indiceViejo)
+            && ! MigrationDialectSupport::tieneIndice($tabla, $indiceFk)) {
             Schema::table($tabla, function (Blueprint $table) use ($columnaIndiceFk, $indiceFk) {
                 $table->index($columnaIndiceFk, $indiceFk);
             });
         }
 
-        Schema::table($tabla, function (Blueprint $table) use ($tabla, $indiceViejo, $columnasNuevas, $indiceNuevo) {
-            if ($this->tieneIndice($tabla, $indiceViejo)) {
-                $table->dropUnique($indiceViejo);
-            }
-            if (! $this->tieneIndice($tabla, $indiceNuevo)) {
+        // Crear el índice nuevo antes de dropear el viejo (FK que apoyaba en el unique viejo).
+        if (! MigrationDialectSupport::tieneIndice($tabla, $indiceNuevo)) {
+            Schema::table($tabla, function (Blueprint $table) use ($columnasNuevas, $indiceNuevo) {
                 $table->unique($columnasNuevas, $indiceNuevo);
-            }
-        });
-    }
+            });
+        }
 
-    private function tieneIndice(string $tabla, string $nombre): bool
-    {
-        $filas = DB::select('SHOW INDEX FROM `'.$tabla.'` WHERE Key_name = ?', [$nombre]);
-
-        return $filas !== [];
+        MigrationDialectSupport::dropIndiceOUnique($tabla, $indiceViejo);
     }
 };
