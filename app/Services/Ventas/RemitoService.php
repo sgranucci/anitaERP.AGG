@@ -732,6 +732,7 @@ class RemitoService
                 'letrafactura' => 'X',
                 'sucursalfactura' => '1',
                 'numerofactura' => $pedido->codigo,
+                'cliente_id' => (int) $cliente->id,
                 'codigocliente' => $cliente->codigo,
                 'codigotransporte' => $pedido->transportes->codigo ?? 0,
                 'codigovendedor' => $pedido->vendedores->codigo ?? 0,

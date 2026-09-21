@@ -222,9 +222,10 @@ final class RemitoKilosVillafrancaSupport
         $factor = 1.0 - ($porcentaje / 100.0);
         $out = [];
         foreach ($items as $row) {
-            $row['kilo'] = round((float) $row['kilo'] * $factor, 1);
-            $row['pieza'] = round((float) ($row['pieza'] ?? 0) * $factor, 1);
-            $row['caja'] = round((float) ($row['caja'] ?? 0) * $factor, 1);
+            // a-remito.c / a-comprob.c: Round(..., 1) al aplicar % Villafranca
+            $row['kilo'] = VillafrancaFacturacionSupport::redondearCantidadDivision((float) $row['kilo'] * $factor);
+            $row['pieza'] = VillafrancaFacturacionSupport::redondearCantidadDivision((float) ($row['pieza'] ?? 0) * $factor);
+            $row['caja'] = VillafrancaFacturacionSupport::redondearCantidadDivision((float) ($row['caja'] ?? 0) * $factor);
             if ($row['kilo'] == 0.0 && $row['pieza'] == 0.0) {
                 continue;
             }

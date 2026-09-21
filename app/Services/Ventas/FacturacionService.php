@@ -565,8 +565,7 @@ class FacturacionService
 
 				if ($this->flDivide)
 				{
-					$decimal = config('facturacion.DECIMAL_CANTIDAD');
-
+					// a-comprob.c Round(..., 1) al dividir; no DECIMAL_CANTIDAD (2).
 					$coeficienteDivision = $this->coeficienteCliente;
 
 					// Si el articulo no se divide cambia el coeficiente
@@ -579,17 +578,29 @@ class FacturacionService
 						if ($this->coeficienteExtraCliente != 0)
 							$precioUnitario = $pedido_articulo->precio * $this->coeficienteExtraCliente;
 
-						$kilo = round($pedido_articulo->pesada * $coeficienteDivision / 100., $decimal);
-						$pieza = round($pedido_articulo->pieza * $coeficienteDivision / 100., $decimal);
-						$caja = round($pedido_articulo->caja * $coeficienteDivision / 100., $decimal);
+						$kilo = VillafrancaFacturacionSupport::redondearCantidadDivision(
+							$pedido_articulo->pesada * $coeficienteDivision / 100.
+						);
+						$pieza = VillafrancaFacturacionSupport::redondearCantidadDivision(
+							$pedido_articulo->pieza * $coeficienteDivision / 100.
+						);
+						$caja = VillafrancaFacturacionSupport::redondearCantidadDivision(
+							$pedido_articulo->caja * $coeficienteDivision / 100.
+						);
 					}
 					else // Deja el resto para grabar en Bierzo
 					{
 						$coeficiente = ((100. - $coeficienteDivision)/100.);
 
-						$kilo = round($pedido_articulo->pesada * $coeficiente, $decimal);
-						$pieza = round($pedido_articulo->pieza * $coeficiente, $decimal);
-						$caja = round($pedido_articulo->caja * $coeficiente, $decimal);
+						$kilo = VillafrancaFacturacionSupport::redondearCantidadDivision(
+							$pedido_articulo->pesada * $coeficiente
+						);
+						$pieza = VillafrancaFacturacionSupport::redondearCantidadDivision(
+							$pedido_articulo->pieza * $coeficiente
+						);
+						$caja = VillafrancaFacturacionSupport::redondearCantidadDivision(
+							$pedido_articulo->caja * $coeficiente
+						);
 					}
 				}
 				else
@@ -1290,8 +1301,56 @@ class FacturacionService
 						),
 					];	
 
-					// Graba venta
-					$vta = $this->ventaRepository->create($venta);
+					// Graba venta (reintento si otra emisión concurrente tomó el mismo número CAEA/manual Bierzo)
+					$intentoCreateVenta = 0;
+					while (true) {
+						try {
+							$vta = $this->ventaRepository->create($venta);
+							break;
+						} catch (QueryException $e) {
+							$modoPv = (string) ($puntoventa->modofacturacion ?? '');
+							$puedeRenumerarErp = $modoPv === 'A'
+								|| ($modoPv === 'M' && EntornoEmpresaSupport::esElBierzo());
+							if (
+								$intentoCreateVenta > 0
+								|| ! $puedeRenumerarErp
+								|| ! VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e)
+							) {
+								throw $e;
+							}
+
+							$numero = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+								(int) $puntoventa->id,
+								$tipotransaccion->codigo,
+								$letra,
+								(int) ($puntoventa->empresa_id ?? 0) ?: null,
+								$cliente->modoFacturacion ?? null,
+								abs((float) $totalComprobante),
+							) + 1;
+
+							$venta['numerocomprobante'] = $numero;
+							$venta['codigo'] = $tipoAnita.' '.$letra.'-'
+								.str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), '0', STR_PAD_LEFT).'-'
+								.str_pad((string) $numero, config('facturacion.DIGITOS_COMPROBANTE'), '0', STR_PAD_LEFT);
+
+							if (isset($dataCAE) && is_array($dataCAE)) {
+								$dataCAE['numerocomprobante'] = $numero;
+							}
+
+							$detalleContable = trim($tipoAnita.' '.$numero.' '.$nombreClienteAsiento);
+
+							if ($this->flDivide && ! $this->flGrabaComprobanteDividido) {
+								$this->numeroComprobanteDivision = $numero;
+							}
+
+							$intentoCreateVenta++;
+							Log::warning('facturacion.pedido.numeracion_duplicada_reintento', [
+								'pedido_id' => $pedido_id ?? null,
+								'puntoventa_id' => $puntoventa->id,
+								'numerocomprobante' => $numero,
+							]);
+						}
+					}
 					PedidoFacturacionProfiler::etapa('graba_venta_ok');
 
 					$referenciaFactura = $vta->codigo;

@@ -21,6 +21,17 @@ final class VillafrancaFacturacionSupport
 {
     public const TIPOEXPRESO_REPARTO_101 = '4';
 
+    /**
+     * Decimales al aplicar coeficiente de división (Villafranca / Bierzo).
+     * Anita a-comprob.c: Round(cantidad|cant_kilo|pieza, 1) — no DECIMAL_CANTIDAD (2).
+     */
+    public const DECIMALES_CANTIDAD_DIVISION = 1;
+
+    public static function redondearCantidadDivision(float $valor): float
+    {
+        return round($valor, self::DECIMALES_CANTIDAD_DIVISION);
+    }
+
     public static function esReparto101($pedido): bool
     {
         $tipo = is_object($pedido)

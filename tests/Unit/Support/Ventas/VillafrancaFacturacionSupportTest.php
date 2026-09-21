@@ -113,6 +113,19 @@ class VillafrancaFacturacionSupportTest extends TestCase
         $this->assertSame(1.10, $montos['coeficiente']);
     }
 
+    /**
+     * a-comprob.c Round(cantidad, 1) al dividir. Con 2 decimales quedaba
+     * 4.95/1.15/0.45 (PV 8); Anita muestra 5.00/1.20/0.50.
+     */
+    public function test_redondeo_cantidad_division_como_anita(): void
+    {
+        $this->assertSame(1, VillafrancaFacturacionSupport::DECIMALES_CANTIDAD_DIVISION);
+        $this->assertSame(5.0, VillafrancaFacturacionSupport::redondearCantidadDivision(4.95));
+        $this->assertSame(1.2, VillafrancaFacturacionSupport::redondearCantidadDivision(1.15));
+        $this->assertSame(0.5, VillafrancaFacturacionSupport::redondearCantidadDivision(0.45));
+        $this->assertSame(12.5, VillafrancaFacturacionSupport::redondearCantidadDivision(12.50));
+    }
+
     public function test_montos_pedido_solo_con_factura_villafranca_101(): void
     {
         config()->set('facturacion.COEFICIENTE_EXTRA_REPARTO_101', 1.10);

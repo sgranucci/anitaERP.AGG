@@ -41,8 +41,9 @@ return new class extends Migration
         $this->agregarColumnaCuitVigente();
         $this->assertSinColisiones();
 
-        MigrationDialectSupport::dropIndiceOUnique(self::TABLA, self::INDICE_VIEJO);
-
+        // Crear el índice nuevo ANTES de dropear el viejo: en MySQL la FK
+        // fk_precarga_comprobante_proveedor_empresa usa el unique que empieza
+        // en empresa_id; sin otro índice que lo cubra, DROP INDEX falla (errno 1553).
         if (! MigrationDialectSupport::tieneIndice(self::TABLA, self::INDICE_NUEVO)) {
             Schema::table(self::TABLA, function (Blueprint $table) {
                 $table->unique([
@@ -55,6 +56,8 @@ return new class extends Migration
                 ], self::INDICE_NUEVO);
             });
         }
+
+        MigrationDialectSupport::dropIndiceOUnique(self::TABLA, self::INDICE_VIEJO);
     }
 
     public function down(): void

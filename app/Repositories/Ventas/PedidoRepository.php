@@ -495,19 +495,23 @@ class PedidoRepository implements PedidoRepositoryInterface
 		$fechahoy = $fecha->format('Ymd');
 		$horahoy = $fecha->format('His');
 
-       	$clientes = $this->clienteQuery->traeClienteporId($request['cliente_id']);
+		$clienteId = (int) ($request['cliente_id'] ?? 0);
+		$clientes = $clienteId > 0
+			? $this->clienteQuery->traeClienteporId($clienteId)
+			: null;
 
 		if ($clientes)
 		{
 			$cliente = $clientes->codigo;
-			$zonavta = $clientes->zonavtas->codigo;
-			$vendedor = $clientes->vendedores->codigo;
+			$zonavta = $clientes->zonavtas->codigo ?? 0;
+			$vendedor = $clientes->vendedores->codigo ?? 0;
 		}
 		else
 		{
-			$cliente = '';
-			$zonavta = 0;
-			$vendedor = 0;
+			// Remito/stock a veces solo trae código Anita (sin cliente_id ERP).
+			$cliente = (string) ($request['codigocliente'] ?? '');
+			$zonavta = (int) ($request['codigozona'] ?? 0);
+			$vendedor = (int) ($request['codigovendedor'] ?? 0);
 		}
 
 		$tra = $this->transporteRepository->find($request['transporte_id']);
