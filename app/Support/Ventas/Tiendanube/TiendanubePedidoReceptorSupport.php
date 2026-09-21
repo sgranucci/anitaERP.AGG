@@ -75,6 +75,8 @@ final class TiendanubePedidoReceptorSupport
             'numerodocumento' => $doc,
             'domicilio' => $domicilio,
             'email' => $email !== '' ? $email : null,
+            'telefono' => self::telefonoDesdePedido($pedido) ?: null,
+            'codigopostal' => self::codigopostalDesdePedido($pedido) ?: null,
         ];
         $arcaReceptor = [
             'tipodoc' => $tipodoc,
@@ -113,6 +115,45 @@ final class TiendanubePedidoReceptorSupport
         }
 
         return self::formatearDireccion(is_array($pedido->shipping_json) ? $pedido->shipping_json : []);
+    }
+
+    public static function telefonoDesdePedido(TiendanubePedido $pedido): string
+    {
+        $payload = is_array($pedido->payload_json) ? $pedido->payload_json : [];
+        $shipping = is_array($pedido->shipping_json) ? $pedido->shipping_json : [];
+        $customer = is_array($payload['customer'] ?? null) ? $payload['customer'] : [];
+        foreach ([
+            $shipping['phone'] ?? null,
+            $payload['billing_phone'] ?? null,
+            $payload['contact_phone'] ?? null,
+            $customer['phone'] ?? null,
+        ] as $tel) {
+            $tel = trim((string) $tel);
+            if ($tel !== '') {
+                return $tel;
+            }
+        }
+
+        return '';
+    }
+
+    public static function codigopostalDesdePedido(TiendanubePedido $pedido): string
+    {
+        $payload = is_array($pedido->payload_json) ? $pedido->payload_json : [];
+        $shipping = is_array($pedido->shipping_json) ? $pedido->shipping_json : [];
+        $billing = is_array($payload['billing_address'] ?? null) ? $payload['billing_address'] : [];
+        foreach ([
+            $shipping['zipcode'] ?? null,
+            $billing['zipcode'] ?? null,
+            $payload['billing_zipcode'] ?? null,
+        ] as $cp) {
+            $cp = trim((string) $cp);
+            if ($cp !== '') {
+                return $cp;
+            }
+        }
+
+        return '';
     }
 
     /**

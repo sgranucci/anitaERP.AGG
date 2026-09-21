@@ -56,7 +56,8 @@ function ocultar() {
 
 - **Formularios GET/POST que recargan**: `form.addEventListener('submit', ...)`; validar `form.checkValidity()` antes de mostrar (no tapar la pantalla si faltan campos requeridos).
 - **Exportaciones / links que navegan**: mostrar en el `click` del `<a href*="listar-...">`.
-- **Exportaciones por descarga (attachment)**: la página **no** navega; `pageshow` no alcanza. Además: subtítulo «Pulse Esc…», `keydown` Escape → ocultar, `focus` once → ocultar, y `pagehide`. Referencia: `recepcion_proveedor_reporte/filtro.js`, `ordencompra_reporte/filtro.js`.
+- **Exportaciones por descarga (attachment) — preferido**: `fetch` + blob + `ocultar()` **al terminar de generar** el archivo (no esperar a que el usuario abra Excel). Regla dedicada: **`export-overlay-fetch-blob.mdc`**. Referencias: `caja/cheque/reporte.js`, `ordencompra_reporte/filtro.js`.
+- **Exportaciones attachment (mínimo si aún no hay fetch)**: subtítulo «Pulse Esc…», Escape, `pagehide`; `focus` alone **no** alcanza (el banner queda hasta volver a la ventana).
 - **AJAX**: mostrar antes de la request; `ocultar()` en `finally` / error.
 - Siempre `window.addEventListener('pageshow', ocultar)` para que el botón «atrás» (bfcache) no deje el overlay pegado.
 

@@ -15,6 +15,9 @@ function empresaIdConsultaCuentacaja() {
     if (typeof window.ESTACIONAMIENTO !== 'undefined' && window.ESTACIONAMIENTO.empresaId) {
         return String(window.ESTACIONAMIENTO.empresaId);
     }
+    if (typeof window.FACTURACION_LOCAL !== 'undefined' && window.FACTURACION_LOCAL.empresaId) {
+        return String(window.FACTURACION_LOCAL.empresaId);
+    }
     if (!$emp.length) {
         return '';
     }

@@ -1,0 +1,37 @@
+---
+description: Excel de listados/reportes — importes numéricos, anchos y cortes (totales día) en negrita
+globs: app/Exports/**/*.php,resources/views/exports/**/*.blade.php
+alwaysApply: false
+---
+
+# Excel listados: importes numéricos y cortes en negrita
+
+Complementa `export-excel-encabezado-reporte.mdc`. Referencia: **`ChequeReporteExport`** + `exports/caja/chequereporteindex.blade.php`.
+
+## Importes (obligatorio)
+
+| Regla | Cómo |
+|---|---|
+| Celda | `number_format((float) $monto, 2, '.', '')` — **sin** miles ni coma decimal AR (Excel lo parsea mal) |
+| Formato columna | `#,##0.00` en `columnFormats()` + reaplicar en `AfterSheet` |
+| Tipo | `setValueExplicit((float), DataType::TYPE_NUMERIC)` en rango de datos |
+| Alineación | Derecha en la columna de importe |
+| Prohibido | `FORMAT_TEXT` en importes; `number_format(…, ',', '.')` (queda texto) |
+
+## Cortes / subtotales (Total día, Total general)
+
+1. Armar filas de corte en Support (ej. `filasConSubtotalesDiarios`).
+2. En `view()` del Export, registrar números de fila Excel de cada corte (`$filasCorteExcel`).
+3. En `AfterSheet`: negrita + fill `#D6EAF8` (día) / `#AED6F1` (general).
+4. Cantidad del corte **no** en la columna importe: texto aparte (ej. `N cheq.` en Cliente).
+
+## Anchos
+
+Definir `columnWidths()` explícitos (no confiar solo en `ShouldAutoSize`): Int./fechas/importe/cliente/banco legibles; cabeceras no truncadas (`Int.` ≠ `nt.`).
+
+## Comprobación rápida
+
+```bash
+rg 'FORMAT_TEXT|#,##0.00|filasCorteExcel|TYPE_NUMERIC' app/Exports/{Modulo}/{Recurso}*Export.php
+rg "number_format\\(.*'\\.'\\s*,\\s*''\\)" resources/views/exports/{modulo}/
+```

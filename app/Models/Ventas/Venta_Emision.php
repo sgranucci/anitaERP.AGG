@@ -22,7 +22,7 @@ class Venta_Emision extends Model implements Auditable
     protected $auditEvents = ['updated', 'deleted'];
 
     protected $fillable = ['venta_id','numeroitem', 'pedido_combinacion_id', 'ordentrabajo_id', 'lotestock',
-                        'articulo_id', 'concepto_venta_id', 'contrato_venta_id', 'concepto_ordenventa_id', 'combinacion_id', 'detalle', 'comentario_cocina', 'modulo_id', 'talle_id', 
+                        'articulo_id', 'concepto_venta_id', 'contrato_venta_id', 'concepto_ordenventa_id', 'combinacion_id', 'detalle', 'comentario_cocina', 'modulo_id', 'talle_id', 'color_id',
                         'cantidad', 'pieza', 'caja',
                         'precio', 
                         'impuesto_id', 'incluyeimpuesto', 
@@ -101,6 +101,11 @@ class Venta_Emision extends Model implements Auditable
     public function talles()
     {
         return $this->belongsTo(\App\Models\Stock\Talle::class, 'talle_id');
+    }
+
+    public function colores()
+    {
+        return $this->belongsTo(\App\Models\Stock\Color::class, 'color_id');
     }
 
 }

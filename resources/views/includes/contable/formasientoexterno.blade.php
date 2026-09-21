@@ -1,6 +1,7 @@
 @php
     // hasOne del comprobante: no usar Asiento::first() (eso toma el primer asiento de toda la tabla).
     // En altas (p. ej. OP) $data puede ser stdClass sin relación asientos: ?-> igual dispara el notice.
+    $moneda_query = $moneda_query ?? \App\Models\Configuracion\Moneda::query()->orderBy('nombre')->get();
     $asientoEdicion = (isset($data) && is_object($data) && isset($data->asientos))
         ? $data->asientos
         : null;

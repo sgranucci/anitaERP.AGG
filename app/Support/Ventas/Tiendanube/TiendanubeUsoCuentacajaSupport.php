@@ -14,11 +14,11 @@ final class TiendanubeUsoCuentacajaSupport
 {
     public const NOMBRE_DEFAULT = 'TIENDA NUBE';
 
-    public static function nombre(): string
+    public static function nombre(?string $storeId = null): string
     {
         if (class_exists(TiendanubeConfiguracionSupport::class)
             && TiendanubeConfiguracionSupport::tablasListas()) {
-            $desdeDb = trim(TiendanubeConfiguracionSupport::usocuentacajaNombre());
+            $desdeDb = trim(TiendanubeConfiguracionSupport::usocuentacajaNombre($storeId));
             if ($desdeDb !== '') {
                 return $desdeDb;
             }

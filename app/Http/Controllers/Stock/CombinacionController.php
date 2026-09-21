@@ -32,6 +32,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
+use App\Support\Stock\CombinacionEstadoCanalSupport;
 use LynX39\LaraPdfMerger\Facades\PdfMerger;
 use Carbon\Carbon;
 use App;
@@ -78,12 +79,18 @@ class CombinacionController extends Controller
     {
         $hay_combinacion = Combinacion::first();
 
+        $colsCombo = ['id', 'articulo_id', 'codigo', 'nombre', 'estado', 'foto'];
+        if (CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+            $colsCombo[] = 'estado_fabrica';
+            $colsCombo[] = 'estado_local';
+        }
+
         if( $articulo_id ){
-        	$combinaciones = Combinacion::select('id','articulo_id','codigo','nombre','estado','foto')->with('articulos:id,descripcion,sku')->
+        	$combinaciones = Combinacion::select($colsCombo)->with('articulos:id,descripcion,sku')->
             				where("articulo_id",$articulo_id)->get();
         	$articulo = Articulo::where("id",$articulo_id)->first();
         }else{
-        	$combinaciones = Combinacion::select('id','articulo_id','codigo','nombre','estado','foto')->with('articulos:id,descripcion,sku')->get();
+        	$combinaciones = Combinacion::select($colsCombo)->with('articulos:id,descripcion,sku')->get();
 			$articulo = '';
         }
 
@@ -110,10 +117,10 @@ class CombinacionController extends Controller
 		if (!$hay_combinacion)
 		{
         	if( $articulo_id ){
-        		$combinaciones = Combinacion::select('id','articulo_id','codigo','nombre','estado','foto')->with('articulos:id,descripcion,sku')->
+        		$combinaciones = Combinacion::select($colsCombo)->with('articulos:id,descripcion,sku')->
             					where("articulo_id",$articulo_id)->get();
         	}else{
-        		$combinaciones = Combinacion::select('id','articulo_id','codigo','nombre','estado','foto')->with('articulos:id,descripcion,sku')->get();
+        		$combinaciones = Combinacion::select($colsCombo)->with('articulos:id,descripcion,sku')->get();
         	}
 		}
 
@@ -122,7 +129,13 @@ class CombinacionController extends Controller
 
 	public function leerCombinacionesActivas($id)
     {
-        return Combinacion::select('id','codigo','nombre')->where('articulo_id',$id)->where('estado','A')->orderBy('codigo','asc')->get()->toArray();
+        $q = Combinacion::select('id', 'codigo', 'nombre')->where('articulo_id', $id);
+        CombinacionEstadoCanalSupport::scopeActivasEnAmbito(
+            $q,
+            CombinacionEstadoCanalSupport::AMBITO_FABRICA
+        );
+
+        return $q->orderBy('codigo', 'asc')->get()->toArray();
     }
 
 	public function leerCombinaciones($id)
@@ -164,14 +177,15 @@ class CombinacionController extends Controller
 				$serigrafia_id = $articuo->serigrafia_id;
 			}
 		}
-		if (!array_key_exists('plvista_16_26', $data))
+        if (!array_key_exists('plvista_16_26', $data))
 		{
 			$data['plvista_16_26'] = 0;
 			$data['plvista_27_33'] = 0;
 			$data['plvista_34_40'] = 0;
 			$data['plvista_41_47'] = 0;
 		}
-        $combinacion = Combinacion::create([
+		$data = CombinacionEstadoCanalSupport::normalizarDataFormulario($data);
+		$alta = [
             'articulo_id' => $data['articulo_id'],
             'codigo' => $data['codigo'],
             'nombre' => $data['nombre'],
@@ -185,7 +199,12 @@ class CombinacionController extends Controller
 			'plvista_27_33' => $data['plvista_27_33'],
 			'plvista_34_40' => $data['plvista_34_40'],
 			'plvista_41_47' => $data['plvista_41_47'],
-        ]);
+        ];
+		if (CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+			$alta['estado_fabrica'] = $data['estado_fabrica'];
+			$alta['estado_local'] = $data['estado_local'];
+		}
+        $combinacion = Combinacion::create($alta);
 
 		if ($primer_combinacion)
 		{
@@ -296,25 +315,27 @@ class CombinacionController extends Controller
 
     public function update(ValidacionCombinacion $request, $id)
     {
-        $data = $request->all();
+        $data = CombinacionEstadoCanalSupport::normalizarDataFormulario($request->all());
 
-		// Actualiza anita
+		// Actualiza anita (solo fábrica)
 		$Combinacion = new Combinacion();
-        $Combinacion->actualizarAnita($request, 'disenio');
+        $Combinacion->actualizarAnita((object) array_merge($data, [
+			'estado' => CombinacionEstadoCanalSupport::estadoParaAnita((object) $data),
+			'estado_fabrica' => $data['estado_fabrica'] ?? $data['estado'] ?? 'A',
+		]), 'disenio');
 
-        $combinacion = Combinacion::where('id', $data['id']);
-        $combinacion->update([
+		$update = [
             'articulo_id' => $data['articulo_id'],
             'codigo' => $data['codigo'],
             'nombre' => $data['nombre'],
             'observacion' => $data['observacion'],
             'estado' => $data['estado'],
-        ]);
-
-		// Actualiza anita
-        $combinacion = Combinacion::where('id', $request->id)->first();
-		$Combinacion = new Combinacion();
-        $Combinacion->actualizarAnita($combinacion, 'disenio');
+        ];
+		if (CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+			$update['estado_fabrica'] = $data['estado_fabrica'];
+			$update['estado_local'] = $data['estado_local'];
+		}
+        Combinacion::where('id', $data['id'])->update($update);
 
         return redirect()->route('combinacion.index',$data['articulo_id'])->with('status', 'Combinación editada');   
     }
@@ -435,29 +456,85 @@ class CombinacionController extends Controller
     }
 
     public function updateState(Request $request){
-        $combinacion = Combinacion::where("id", $request["id"]);
-        $combinacion->update([
-            'estado' => $request["estado"]
-        ]);
+        $row = Combinacion::where('id', $request['id'])->first();
+		if (! $row) {
+			echo json_encode(['error' => 'no encontrado']);
 
-		// Actualiza anita
-        $combinacion = Combinacion::where("id", $request["id"])->first();
-		$Combinacion = new Combinacion();
-        $Combinacion->actualizarAnita($combinacion, 'disenio');
+			return;
+		}
 
-        echo json_encode($request["estado"]);
+		$ambito = $request->input('ambito', CombinacionEstadoCanalSupport::AMBITO_AMBOS);
+		$payload = CombinacionEstadoCanalSupport::updateDesdeAmbito(
+			$row,
+			(string) $request['estado'],
+			(string) $ambito
+		);
+        $row->update($payload);
+
+		// Anita solo si cambió fábrica (o legado AMBOS)
+		$ambitoNorm = strtoupper(trim((string) $ambito));
+		$tocaFabrica = $ambitoNorm === ''
+			|| $ambitoNorm === CombinacionEstadoCanalSupport::AMBITO_AMBOS
+			|| $ambitoNorm === CombinacionEstadoCanalSupport::AMBITO_FABRICA;
+		if ($tocaFabrica) {
+			$Combinacion = new Combinacion();
+        	$Combinacion->actualizarAnita($row->fresh(), 'disenio');
+		}
+
+        echo json_encode([
+			'estado' => $payload['estado'] ?? $request['estado'],
+			'estado_fabrica' => $payload['estado_fabrica'] ?? null,
+			'estado_local' => $payload['estado_local'] ?? null,
+			'ambito' => $ambitoNorm ?: CombinacionEstadoCanalSupport::AMBITO_AMBOS,
+		]);
     }
 
     public function updateStateAll(Request $request){
-        $request = $request->all();
-        $combinaciones = Combinacion::where("articulo_id", "<>" , NULL)->update(array("estado" => $request["estado"]));
+        $estado = CombinacionEstadoCanalSupport::normalizarEstado((string) $request->input('estado', 'I'));
+		$ambito = strtoupper(trim((string) $request->input('ambito', CombinacionEstadoCanalSupport::AMBITO_FABRICA)));
 
-		// Actualiza anita
-		$Combinacion = new Combinacion();
-        $Combinacion->inactivarAnita();
+		// Por defecto solo fábrica: no apagar locales del POS.
+		if ($ambito === CombinacionEstadoCanalSupport::AMBITO_LOCAL) {
+			if (CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+				Combinacion::whereNotNull('articulo_id')->update(['estado_local' => $estado]);
+				$this->recalcularEstadoLegacyCombinaciones();
+			} else {
+				Combinacion::whereNotNull('articulo_id')->update(['estado' => $estado]);
+			}
+		} elseif ($ambito === CombinacionEstadoCanalSupport::AMBITO_AMBOS) {
+			Combinacion::whereNotNull('articulo_id')->update(
+				CombinacionEstadoCanalSupport::aplicarEstadoUnicoEnData([], $estado)
+			);
+			if ($estado === CombinacionEstadoCanalSupport::ESTADO_INACTIVO) {
+				(new Combinacion())->inactivarAnita();
+			}
+		} else {
+			if (CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+				Combinacion::whereNotNull('articulo_id')->update(['estado_fabrica' => $estado]);
+				$this->recalcularEstadoLegacyCombinaciones();
+			} else {
+				Combinacion::whereNotNull('articulo_id')->update(['estado' => $estado]);
+			}
+			if ($estado === CombinacionEstadoCanalSupport::ESTADO_INACTIVO) {
+				(new Combinacion())->inactivarAnita();
+			}
+		}
 
-        return json_encode(["ok"]);
+        return json_encode(['ok', 'ambito' => $ambito]);
     }
+
+	private function recalcularEstadoLegacyCombinaciones(): void
+	{
+		if (! CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+			return;
+		}
+
+		DB::table('combinacion')->whereNotNull('articulo_id')->update([
+			'estado' => DB::raw(
+				"CASE WHEN UPPER(COALESCE(estado_fabrica, '')) = 'A' OR UPPER(COALESCE(estado_local, '')) = 'A' THEN 'A' ELSE 'I' END"
+			),
+		]);
+	}
 
     public function delete(Request $request, $id){
         can('borrar-combinaciones');
@@ -562,7 +639,10 @@ class CombinacionController extends Controller
 						})
 						->orderBy('linea', 'asc')
 						->orderBy('articulo.sku', 'asc')
-						->where('combinacion.estado', 'A')
+						->where(
+							CombinacionEstadoCanalSupport::columnaPorAmbito(CombinacionEstadoCanalSupport::AMBITO_FABRICA),
+							CombinacionEstadoCanalSupport::ESTADO_ACTIVO
+						)
 						->whereBetween('articulo.linea_id', array($request->desde_linea_id, $request->hasta_linea_id))
 					  	->when($request->mventa_id, function($query) use ($request) {
      						$query->where('articulo.mventa_id', '=', $request->mventa_id); 

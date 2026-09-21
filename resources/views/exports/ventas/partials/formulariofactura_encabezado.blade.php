@@ -153,11 +153,23 @@
                     @php
                         $locSnap = $venta->localidades->nombre ?? '';
                         $provSnap = $venta->provincias->nombre ?? '';
+                        // Fallback si la relación no cargó pero hay provincia_id (p. ej. Tiendanube).
+                        if ($provSnap === '' && (int) ($venta->provincia_id ?? 0) > 0) {
+                            $provSnap = trim((string) (\App\Models\Configuracion\Provincia::query()
+                                ->whereKey((int) $venta->provincia_id)
+                                ->value('nombre') ?? ''));
+                        }
                     @endphp
-                    @if ($locSnap !== '' || $provSnap !== '')
-                        {{ $locSnap }}@if (! empty($venta->codigopostal)) ({{ $venta->codigopostal }})@endif
-                        @if ($provSnap !== '')
-                            <br>{{ $provSnap }}
+                    @if ($locSnap !== '' || $provSnap !== '' || ! empty($venta->codigopostal))
+                        @if ($locSnap !== '')
+                            {{ $locSnap }}@if (! empty($venta->codigopostal)) ({{ $venta->codigopostal }})@endif
+                            @if ($provSnap !== '')
+                                <br>{{ $provSnap }}
+                            @endif
+                        @elseif ($provSnap !== '')
+                            {{ $provSnap }}@if (! empty($venta->codigopostal)) ({{ $venta->codigopostal }})@endif
+                        @elseif (! empty($venta->codigopostal))
+                            CP {{ $venta->codigopostal }}
                         @endif
                         <br>
                     @endif

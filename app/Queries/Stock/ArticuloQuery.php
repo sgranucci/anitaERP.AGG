@@ -66,7 +66,7 @@ class ArticuloQuery implements ArticuloQueryInterface
                             {
                             	$query->select(DB::raw(1))
                             	->from("combinacion")
-                            	->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='A'");
+                            	->whereRaw('combinacion.articulo_id=articulo.id and '.\App\Support\Stock\CombinacionEstadoCanalSupport::sqlColumnaActiva());
                             });
 		if ($articulo_ids)
 		{
@@ -111,10 +111,20 @@ class ArticuloQuery implements ArticuloQueryInterface
         switch($estado)
         {
         case 'ACTIVAS':
-            $articulo_query = $articulo_query->where('combinacion.estado', 'A');
+            $articulo_query = $articulo_query->where(
+                \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                ),
+                'A'
+            );
             break;
         case 'INACTIVAS':
-            $articulo_query = $articulo_query->where('combinacion.estado', 'I');
+            $articulo_query = $articulo_query->where(
+                \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                ),
+                'I'
+            );
             break;
         }
 

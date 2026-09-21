@@ -274,7 +274,12 @@ class ArticuloFerliListadoFiltros
                 $q->selectRaw('1')
                     ->from('combinacion')
                     ->whereColumn('combinacion.articulo_id', 'articulo.id')
-                    ->where('combinacion.estado', $estadoComb);
+                    ->where(
+                        \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                            \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                        ),
+                        $estadoComb
+                    );
             });
         }
 

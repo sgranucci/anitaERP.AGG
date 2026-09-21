@@ -16,6 +16,7 @@ use App\Repositories\Caja\ChequeRepositoryInterface;
 use App\Repositories\Caja\ChequeraRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Caja\ChequeCaucionService;
 use App\Services\Caja\ChequeDepositoService;
 use App\Services\Caja\ChequeEcheqService;
@@ -33,6 +34,7 @@ use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequeNdConfigSupport;
 use App\Support\Caja\ChequeReporteFiltros;
 use App\Support\Caja\ChequeReporteSupport;
+use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Caja\Echeq\ChequeEcheqProviderResolver;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
@@ -44,6 +46,7 @@ class ChequeController extends Controller
     private $cuentacajaRepository;
     private $chequeraRepository;
     private $empresaRepository;
+    private $monedaRepository;
     private ChequeRechazadoNotaDebitoService $chequeRechazadoNdService;
     private ChequeDepositoService $chequeDepositoService;
     private ChequeIngresoMasivoService $chequeIngresoMasivoService;
@@ -54,6 +57,7 @@ class ChequeController extends Controller
                                 ChequeraRepositoryInterface $chequerarepository,
                                 CuentacajaRepositoryInterface $cuentacajarepository,
                                 EmpresaRepositoryInterface $empresarepository,
+                                MonedaRepositoryInterface $monedarepository,
                                 ChequeRechazadoNotaDebitoService $chequeRechazadoNdService,
                                 ChequeDepositoService $chequeDepositoService,
                                 ChequeIngresoMasivoService $chequeIngresoMasivoService,
@@ -64,6 +68,7 @@ class ChequeController extends Controller
         $this->cuentacajaRepository = $cuentacajarepository;
         $this->chequeraRepository = $chequerarepository;
         $this->empresaRepository = $empresarepository;
+        $this->monedaRepository = $monedarepository;
         $this->chequeRechazadoNdService = $chequeRechazadoNdService;
         $this->chequeDepositoService = $chequeDepositoService;
         $this->chequeIngresoMasivoService = $chequeIngresoMasivoService;
@@ -159,9 +164,11 @@ class ChequeController extends Controller
         $consultado = $request->boolean('consultar');
         $datas = null;
         $totales = collect();
+        $totalesPorDia = collect();
         if ($consultado) {
             $datas = ChequeReporteSupport::listar($filtros, $this->empresaRepository, true);
             $totales = ChequeReporteSupport::totales($filtros, $this->empresaRepository);
+            $totalesPorDia = ChequeReporteSupport::totalesPorDia($filtros, $this->empresaRepository);
         }
 
         return view('caja.cheque.reporte', [
@@ -170,6 +177,7 @@ class ChequeController extends Controller
             'consultado' => $consultado,
             'datas' => $datas,
             'totales' => $totales,
+            'totalesPorDia' => $totalesPorDia,
             'subtitulo' => $consultado ? ChequeReporteFiltros::subtitulo($filtros) : '',
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'estado_enum' => Cheque::$enumEstado,
@@ -197,22 +205,23 @@ class ChequeController extends Controller
             case 'PDF':
                 $datas = ChequeReporteSupport::listar($filtros, $this->empresaRepository, false);
                 $totales = ChequeReporteSupport::totales($filtros, $this->empresaRepository);
-                $view = \View::make('caja.cheque.reporte_listado', compact(
+                $filas = ChequeReporteSupport::filasConSubtotalesDiarios($datas, $filtros);
+                $tipoReporte = ($filtros['tipo'] ?? 'E') === 'R' ? 'R' : 'E';
+                $html = view('caja.cheque.reporte_listado', compact(
                     'datas',
+                    'filas',
                     'totales',
                     'titulo',
                     'subtitulo',
                     'estado_enum',
-                    'etiquetaFechaDoc'
+                    'etiquetaFechaDoc',
+                    'tipoReporte'
                 ))->render();
                 $path = storage_path('pdf/listados');
-                if (! is_dir($path)) {
-                    mkdir($path, 0755, true);
-                }
                 $nombre_pdf = 'reporte_cheque';
-                $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+                DompdfListadoSupport::guardarLegalLandscape($html, $path.'/'.$nombre_pdf.'.pdf', [
+                    'titulo_corto' => $titulo,
+                ]);
 
                 return response()->download($path.'/'.$nombre_pdf.'.pdf');
 
@@ -899,6 +908,7 @@ class ChequeController extends Controller
         $estado_enum = Cheque::$enumEstado;
         $chequera_query = $this->chequeraRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $moneda_query = $this->monedaRepository->all();
         $tipodocumento_enum = config('enums.tipodocumento', []);
         $disponible = '';
 
@@ -906,6 +916,7 @@ class ChequeController extends Controller
                                                 'origen_enum', 'caracter_enum',
                                                 'para_dep_enum', 'negociable_enum',
                                                 'estado_enum', 'chequera_query', 'empresa_query',
+                                                'moneda_query',
                                                 'tipodocumento_enum', 'disponible'));
     }
 
@@ -929,9 +940,17 @@ class ChequeController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        can('editar-cheque');
+        $soloConsulta = $request->query('origen') === 'modal_consulta'
+            || $request->query('vista') === 'consulta';
+        if ($soloConsulta) {
+            if (! can('editar-cheque', false) && ! can('listar-cheque', false)) {
+                abort(403);
+            }
+        } else {
+            can('editar-cheque');
+        }
         $data = $this->repository->findOrFail($id);
 
         $cuentacaja_query = $this->cuentacajaRepository->all();
@@ -942,14 +961,19 @@ class ChequeController extends Controller
         $estado_enum = Cheque::$enumEstado;
         $chequera_query = $this->chequeraRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $moneda_query = $this->monedaRepository->all();
         $tipodocumento_enum = config('enums.tipodocumento', []);
         $disponible = $this->disponiblesDesdeChequera($data->chequeras);
+        $ocultarVolver = $soloConsulta;
+        $puedeActualizarCheque = can('actualizar-cheque', false);
 
         return view('caja.cheque.editar', compact('data', 'cuentacaja_query',
                                                 'origen_enum', 'caracter_enum',
                                                 'para_dep_enum', 'negociable_enum',
                                                 'estado_enum', 'chequera_query', 'empresa_query',
-                                                'tipodocumento_enum', 'disponible'));
+                                                'moneda_query',
+                                                'tipodocumento_enum', 'disponible',
+                                                'soloConsulta', 'ocultarVolver', 'puedeActualizarCheque'));
     }
 
     /**
@@ -964,6 +988,16 @@ class ChequeController extends Controller
         can('actualizar-cheque');
 
         $this->repository->update($request->all(), $id);
+
+        if ($request->input('origen') === 'modal_consulta' || $request->input('vista') === 'consulta') {
+            return redirect()
+                ->route('editar_cheque', [
+                    'id' => $id,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ])
+                ->with('mensaje', 'Cheque actualizado con éxito');
+        }
 
         return redirect('caja/cheque')->with('mensaje', 'Cheque actualizado con éxito');
     }

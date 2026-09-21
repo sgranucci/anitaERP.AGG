@@ -126,6 +126,62 @@ final class TiendanubeApiClient
     }
 
     /**
+     * Primer fulfillment_order_id del pedido (para asociar la factura en el admin TN).
+     */
+    public function primerFulfillmentOrderId(int $orderId): ?string
+    {
+        $resp = $this->get('orders/'.$orderId, ['aggregates' => 'fulfillment_orders']);
+        if (! ($resp['ok'] ?? false) || ! is_array($resp['data'] ?? null)) {
+            return null;
+        }
+        $fulfillments = $resp['data']['fulfillments'] ?? [];
+        if (! is_array($fulfillments) || $fulfillments === []) {
+            return null;
+        }
+        $primero = $fulfillments[0];
+        if (is_string($primero) && $primero !== '') {
+            return $primero;
+        }
+        if (is_array($primero)) {
+            $id = trim((string) ($primero['id'] ?? ''));
+
+            return $id !== '' ? $id : null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Nota visible en el detalle del pedido del admin TN (no hay estado nativo «Facturado»).
+     *
+     * @return array{ok:bool,status:int,data?:mixed,error?:string}
+     */
+    public function marcarNotaFacturado(int $orderId, string $lineaFactura): array
+    {
+        $linea = trim($lineaFactura);
+        if ($linea === '') {
+            return ['ok' => false, 'status' => 0, 'error' => 'Nota de factura vacía'];
+        }
+
+        $actual = $this->get('orders/'.$orderId, ['fields' => 'id,owner_note']);
+        $notaPrevia = '';
+        if (($actual['ok'] ?? false) && is_array($actual['data'] ?? null)) {
+            $notaPrevia = trim((string) ($actual['data']['owner_note'] ?? ''));
+        }
+
+        $marca = 'Facturado ERP: '.$linea;
+        if ($notaPrevia !== '' && str_contains($notaPrevia, $marca)) {
+            return ['ok' => true, 'status' => 200, 'data' => $actual['data'] ?? null];
+        }
+
+        $nueva = $notaPrevia === '' ? $marca : ($notaPrevia."\n".$marca);
+
+        return $this->put('orders/'.$orderId, [
+            'owner_note' => mb_substr($nueva, 0, 1000),
+        ]);
+    }
+
+    /**
      * Publica factura en el pedido vía metafield oficial `nfe/list` (requiere write_orders).
      * Docs: GET/POST/PUT metafields — no existe /orders/{id}/invoices.
      *
@@ -139,12 +195,17 @@ final class TiendanubeApiClient
             return ['ok' => false, 'status' => 0, 'error' => 'Invoice sin key (CAE/número)'];
         }
 
+        $fulfillmentId = isset($invoice['fulfillment_order_id'])
+            ? trim((string) $invoice['fulfillment_order_id'])
+            : '';
+        if ($fulfillmentId === '') {
+            $fulfillmentId = (string) ($this->primerFulfillmentOrderId($orderId) ?? '');
+        }
+
         $entry = array_filter([
             'key' => $key,
             'link' => isset($invoice['link']) && $invoice['link'] !== '' ? (string) $invoice['link'] : null,
-            'fulfillment_order_id' => isset($invoice['fulfillment_order_id']) && $invoice['fulfillment_order_id'] !== ''
-                ? (string) $invoice['fulfillment_order_id']
-                : null,
+            'fulfillment_order_id' => $fulfillmentId !== '' ? $fulfillmentId : null,
         ], static fn ($v) => $v !== null);
 
         $existente = $this->get('metafields/orders', [

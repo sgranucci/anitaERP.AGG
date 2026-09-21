@@ -6,7 +6,10 @@ alwaysApply: false
 
 # Encabezado Excel en reportes exportados
 
-Referencia canónica: **`RequisicionSalaReporteExport`** + **`exports/sala/requisicion_sala_reporteindex.blade.php`**.
+Complementa `export-excel-encabezado-reporte.mdc`. Para **importes numéricos y filas de corte (Total día) en negrita**, ver también **`export-excel-importes-cortes.mdc`**.
+
+Referencia canónica encabezado: **`RequisicionSalaReporteExport`** + **`exports/sala/requisicion_sala_reporteindex.blade.php`**.
+Importes/cortes: **`ChequeReporteExport`**.
 
 ## Vista Excel (`exports/{modulo}/{recurso}index.blade.php`)
 

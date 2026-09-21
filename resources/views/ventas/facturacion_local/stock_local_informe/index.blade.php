@@ -15,13 +15,13 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Informe de stock del local</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center">
-                    <a href="{{ route('facturacion_local_informe_stock') }}" class="btn btn-outline-secondary btn-sm mr-1" title="Limpiar filtros">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">Informe de stock del local</h3>
+                <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
+                    <a href="{{ route('facturacion_local_informe_stock') }}" class="btn btn-outline-light btn-sm mr-1" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
-                    <a href="{{ route('facturacion_local_stock') }}" class="btn btn-outline-info btn-sm" title="Consulta por artículo">
+                    <a href="{{ route('facturacion_local_stock') }}" class="btn btn-outline-light btn-sm" title="Consulta por artículo">
                         <i class="fa fa-search"></i> Consulta stock
                     </a>
                 </div>

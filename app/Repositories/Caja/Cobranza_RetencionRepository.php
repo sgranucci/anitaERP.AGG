@@ -61,6 +61,11 @@ class Cobranza_RetencionRepository implements Cobranza_RetencionRepositoryInterf
 
 	private function guardarCobranza_Retencion($data, $funcion, $id = null)
 	{
+		// Sin filas nuevas (o todas con retención vacía) no se asigna en el loop;
+		// hay que inicializar para no devolver variable indefinida en create/update.
+		$cobranza_retencion = null;
+		$i = 0;
+
 		if ($funcion == 'update')
 		{
 			// Trae todos los id

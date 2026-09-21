@@ -5,11 +5,12 @@ namespace App\Support\Ventas\FacturacionLocal;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
+use App\Support\Stock\CombinacionEstadoCanalSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Decide color suelto vs combinación Ferli; talle siempre.
- * Combinaciones vendibles en POS Local: solo estado = A.
+ * Combinaciones vendibles en POS Local: estado_local = A (canal Local).
  */
 final class FacturacionLocalVarianteArticuloSupport
 {
@@ -25,15 +26,20 @@ final class FacturacionLocalVarianteArticuloSupport
      */
     public static function scopeCombinacionesActivas($query)
     {
-        return $query->where('combinacion.estado', self::COMBINACION_ACTIVA);
+        return CombinacionEstadoCanalSupport::scopeActivasEnAmbito(
+            $query,
+            CombinacionEstadoCanalSupport::AMBITO_LOCAL
+        );
     }
 
     public static function queryCombinacionesActivas(int $articuloId)
     {
-        return Combinacion::query()
-            ->where('articulo_id', $articuloId)
-            ->where('estado', self::COMBINACION_ACTIVA)
-            ->orderBy('codigo');
+        $q = Combinacion::query()->where('articulo_id', $articuloId);
+
+        return CombinacionEstadoCanalSupport::scopeActivasEnAmbito(
+            $q,
+            CombinacionEstadoCanalSupport::AMBITO_LOCAL
+        )->orderBy('codigo');
     }
 
     public static function tieneCombinacionesActivas(int $articuloId): bool
@@ -42,10 +48,12 @@ final class FacturacionLocalVarianteArticuloSupport
             return false;
         }
 
-        return Combinacion::query()
-            ->where('articulo_id', $articuloId)
-            ->where('estado', self::COMBINACION_ACTIVA)
-            ->exists();
+        $q = Combinacion::query()->where('articulo_id', $articuloId);
+
+        return CombinacionEstadoCanalSupport::scopeActivasEnAmbito(
+            $q,
+            CombinacionEstadoCanalSupport::AMBITO_LOCAL
+        )->exists();
     }
 
     public static function combinacionActiva(int $combinacionId, ?int $articuloId = null): bool
@@ -54,9 +62,11 @@ final class FacturacionLocalVarianteArticuloSupport
             return false;
         }
 
-        $q = Combinacion::query()
-            ->where('id', $combinacionId)
-            ->where('estado', self::COMBINACION_ACTIVA);
+        $q = Combinacion::query()->where('id', $combinacionId);
+        CombinacionEstadoCanalSupport::scopeActivasEnAmbito(
+            $q,
+            CombinacionEstadoCanalSupport::AMBITO_LOCAL
+        );
         if ($articuloId !== null && $articuloId > 0) {
             $q->where('articulo_id', $articuloId);
         }
@@ -91,19 +101,23 @@ final class FacturacionLocalVarianteArticuloSupport
      */
     public static function scopeArticulosConVarianteVendible($query)
     {
-        return $query->where(function ($w) {
-            $w->whereExists(function ($q) {
+        $colLocal = CombinacionEstadoCanalSupport::columnaPorAmbito(
+            CombinacionEstadoCanalSupport::AMBITO_LOCAL
+        );
+
+        return $query->where(function ($w) use ($colLocal) {
+            $w->whereExists(function ($q) use ($colLocal) {
                 $q->select(DB::raw(1))
                     ->from('combinacion')
                     ->whereColumn('combinacion.articulo_id', 'articulo.id')
-                    ->where('combinacion.estado', self::COMBINACION_ACTIVA);
-            })->orWhere(function ($q) {
+                    ->where($colLocal, self::COMBINACION_ACTIVA);
+            })->orWhere(function ($q) use ($colLocal) {
                 $q->where('articulo.maneja_stock_color_talle', true)
-                    ->whereNotExists(function ($sub) {
+                    ->whereNotExists(function ($sub) use ($colLocal) {
                         $sub->select(DB::raw(1))
                             ->from('combinacion')
                             ->whereColumn('combinacion.articulo_id', 'articulo.id')
-                            ->where('combinacion.estado', self::COMBINACION_ACTIVA);
+                            ->where($colLocal, self::COMBINACION_ACTIVA);
                     });
             });
         });

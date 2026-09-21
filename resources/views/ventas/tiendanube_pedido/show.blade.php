@@ -6,6 +6,26 @@
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/ventas/tiendanube_pedido/facturar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tiendanube_pedido/facturar.js')) ?: time() }}" type="text/javascript"></script>
+@if (session('tn_pdf_url'))
+<script>
+(function () {
+    var url = @json(session('tn_pdf_url'));
+    if (!url) {
+        return;
+    }
+    // 1) Intentar pestaña nueva. 2) Si el navegador bloquea el popup, ir al PDF en esta pestaña.
+    var ventana = null;
+    try {
+        ventana = window.open(url, 'tn_factura_pdf');
+    } catch (e) {
+        ventana = null;
+    }
+    if (!ventana) {
+        window.location.assign(url);
+    }
+})();
+</script>
+@endif
 @endsection
 
 @section('contenido')
@@ -22,11 +42,12 @@
         @include('includes.mensaje')
 
         <div class="mb-2">
-            <a href="{{ route('tiendanube_pedidos') }}" class="btn btn-outline-info btn-sm">
+            @php $retornoListadoQuery = $retornoListadoQuery ?? []; @endphp
+            <a href="{{ route('tiendanube_pedidos', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
                 <i class="fa fa-reply-all"></i> Volver al listado
             </a>
             @if (can('sincronizar-tiendanube-pedidos', false))
-                <form action="{{ route('tiendanube_pedido_refrescar', $pedido->id) }}" method="POST" class="d-inline">
+                <form action="{{ route('tiendanube_pedido_refrescar', array_merge(['id' => $pedido->id], $retornoListadoQuery)) }}" method="POST" class="d-inline">
                     @csrf
                     <button type="submit" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-sync"></i> Refrescar desde TN
@@ -35,10 +56,22 @@
             @endif
         </div>
 
-        <div class="card card-primary">
+        @php
+            $estadoErp = (string) $pedido->estado_erp;
+            $esFacturadoCompleto = $estadoErp === \App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport::FACTURADO
+                || $pedido->estaFacturado();
+            $esParcial = $estadoErp === \App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport::PARCIAL;
+            $lineasPendientes = $pedido->lineas->filter(
+                static fn ($linea) => ! $linea->estaCubierta() && abs((float) $linea->quantity) > 0.0001
+            )->count();
+            $etiquetaEstado = \App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport::etiqueta($estadoErp);
+            $badgeEstado = \App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport::badgeClass($estadoErp);
+        @endphp
+        <div class="card {{ $esFacturadoCompleto ? 'card-success' : ($esParcial ? 'card-warning' : 'card-primary') }}">
             <div class="card-header">
                 <h3 class="card-title">
                     Pedido #{{ $pedido->order_number }}
+                    <span class="badge {{ $badgeEstado }} ml-2" style="font-size:0.95rem;">{{ $etiquetaEstado }}</span>
                     <small class="ml-2">{{ \App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport::nombre($pedido->store_id) }} · ID {{ $pedido->tiendanube_order_id }}</small>
                 </h3>
             </div>
@@ -46,9 +79,14 @@
                 <div class="row mb-3">
                     <div class="col-md-4">
                         <strong>Estado ERP:</strong>
-                        <span class="badge {{ \App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport::badgeClass($pedido->estado_erp) }}">
-                            {{ \App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport::etiqueta($pedido->estado_erp) }}
+                        <span class="badge {{ $badgeEstado }}" style="font-size:1rem;">
+                            {{ $etiquetaEstado }}
                         </span>
+                        @if ($pedido->facturado_at)
+                            <div class="small text-muted mt-1">
+                                Última factura: {{ $pedido->facturado_at->format('d/m/Y H:i') }}
+                            </div>
+                        @endif
                     </div>
                     <div class="col-md-4">
                         <strong>Pago:</strong> {{ $pedido->payment_status }}
@@ -60,18 +98,63 @@
                         <strong>Total:</strong>
                         <span id="tn-total-cabecera">{{ number_format((float) $pedido->total, 2, ',', '.') }}</span>
                         {{ $pedido->currency }}
+                        @if ($esParcial)
+                            <div class="small text-warning font-weight-bold mt-1">
+                                Pendiente: {{ number_format($pedido->totalPendiente(), 2, ',', '.') }}
+                            </div>
+                        @endif
                     </div>
                 </div>
 
-                @if ($pedido->error_mensaje)
-                    <div class="alert alert-warning">{{ $pedido->error_mensaje }}</div>
-                @endif
-
-                @if ($pedido->comprobantes->isNotEmpty())
+                @if ($esFacturadoCompleto)
+                    <div class="alert alert-success">
+                        <strong><i class="fa fa-check-circle"></i> Pedido facturado completo.</strong>
+                        El estado ERP es <strong>Facturado</strong>; no se emiten más facturas sobre este pedido.
+                        @if ($pedido->comprobantes->isNotEmpty())
+                            <ul class="mb-0 mt-2">
+                                @foreach ($pedido->comprobantes as $comp)
+                                    <li>
+                                        Venta <strong>{{ $comp->venta->codigo ?? ('#'.$comp->venta_id) }}</strong>
+                                        @if ($comp->venta?->cae)
+                                            — CAE {{ $comp->venta->cae }}
+                                        @endif
+                                        — {{ number_format((float) $comp->total, 2, ',', '.') }}
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @elseif ($pedido->venta_id)
+                            <div class="mt-1">
+                                Venta <strong>{{ $pedido->venta->codigo ?? ('#'.$pedido->venta_id) }}</strong>
+                                @if ($pedido->venta?->cae)
+                                    — CAE {{ $pedido->venta->cae }}
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                @elseif ($esParcial)
+                    <div class="alert alert-warning">
+                        <strong><i class="fa fa-exclamation-triangle"></i> Facturado parcial — todavía no está en Facturado.</strong>
+                        Hay {{ $lineasPendientes }} línea(s) con cantidad pendiente.
+                        Emití el resto para que el estado pase a <strong>Facturado</strong>.
+                        @if ($pedido->comprobantes->isNotEmpty())
+                            <ul class="mb-0 mt-2">
+                                @foreach ($pedido->comprobantes as $comp)
+                                    <li>
+                                        Ya emitida: <strong>{{ $comp->venta->codigo ?? ('#'.$comp->venta_id) }}</strong>
+                                        @if ($comp->venta?->cae)
+                                            — CAE {{ $comp->venta->cae }}
+                                        @endif
+                                        — {{ number_format((float) $comp->total, 2, ',', '.') }}
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </div>
+                @elseif ($pedido->comprobantes->isNotEmpty() || $pedido->venta_id)
                     <div class="alert alert-info">
-                        <strong>Facturas de este pedido:</strong>
+                        <strong>Comprobantes vinculados:</strong>
                         <ul class="mb-0 mt-1">
-                            @foreach ($pedido->comprobantes as $comp)
+                            @forelse ($pedido->comprobantes as $comp)
                                 <li>
                                     Venta <strong>{{ $comp->venta->codigo ?? ('#'.$comp->venta_id) }}</strong>
                                     @if ($comp->venta?->cae)
@@ -79,27 +162,37 @@
                                     @endif
                                     — {{ number_format((float) $comp->total, 2, ',', '.') }}
                                 </li>
-                            @endforeach
+                            @empty
+                                @if ($pedido->venta_id)
+                                    <li>
+                                        Venta <strong>{{ $pedido->venta->codigo ?? ('#'.$pedido->venta_id) }}</strong>
+                                        @if ($pedido->venta?->cae)
+                                            — CAE {{ $pedido->venta->cae }}
+                                        @endif
+                                    </li>
+                                @endif
+                            @endforelse
                         </ul>
-                        @if ($pedido->estado_erp === 'parcial')
-                            <div class="mt-1">Todavía hay artículos pendientes.</div>
-                        @endif
-                    </div>
-                @elseif ($pedido->venta_id)
-                    <div class="alert alert-success">
-                        Facturado: venta
-                        <strong>{{ $pedido->venta->codigo ?? ('#'.$pedido->venta_id) }}</strong>
-                        @if ($pedido->venta?->cae)
-                            — CAE {{ $pedido->venta->cae }}
-                        @endif
                     </div>
                 @endif
 
+                @if ($pedido->error_mensaje && ! $esFacturadoCompleto)
+                    <div class="alert alert-warning">{{ $pedido->error_mensaje }}</div>
+                @elseif ($pedido->error_mensaje && $esFacturadoCompleto)
+                    <div class="alert alert-secondary small">{{ $pedido->error_mensaje }}</div>
+                @endif
+
                 <h5>Líneas</h5>
-                <p class="text-muted small mb-2">
-                    Tildá solo los artículos de esta factura. La cantidad no puede superar lo pendiente.
-                    Envío y descuento entran únicamente si quedan tildados.
-                </p>
+                @if ($puedeFacturar)
+                    <p class="text-muted small mb-2">
+                        Tildá solo los artículos de esta factura. La cantidad no puede superar lo pendiente.
+                        Envío y descuento entran únicamente si quedan tildados.
+                    </p>
+                @elseif ($esFacturadoCompleto)
+                    <p class="text-muted small mb-2">Pedido cerrado en ERP: todas las líneas quedaron facturadas o marcadas como tales.</p>
+                @elseif ($esParcial)
+                    <p class="text-muted small mb-2">Las filas en verde ya salieron en una factura; las demás siguen pendientes.</p>
+                @endif
                 <div class="table-responsive mb-4">
                     <table class="table table-sm table-bordered">
                         <thead style="background:#85C1E9;color:#17202A;">
@@ -124,9 +217,9 @@
                             @foreach ($pedido->lineas as $linea)
                                 @php
                                     $pendiente = $linea->cantidadPendiente();
-                                    $cubierta = $linea->estaCubierta();
+                                    $cubierta = $linea->estaCubierta() || $esFacturadoCompleto;
                                 @endphp
-                                <tr class="@if (! $linea->articulo_id && $linea->tipo === 'producto' && ! $cubierta) table-danger @elseif ($linea->tipo === 'producto' && ! $cubierta && (! $linea->combinacion_id || ! $linea->talle_id)) table-warning @elseif ($cubierta) table-success @endif">
+                                <tr class="@if ($cubierta) table-success @elseif (! $linea->articulo_id && $linea->tipo === 'producto') table-danger @elseif ($linea->tipo === 'producto' && (! $linea->combinacion_id || ! $linea->talle_id)) table-warning @endif">
                                     @if ($puedeFacturar)
                                         <td class="text-center">
                                             @if ($cubierta)
@@ -193,7 +286,7 @@
                 </div>
 
                 @if ($puedeFacturar)
-                    <form method="POST" action="{{ route('tiendanube_pedido_facturar', $pedido->id) }}"
+                    <form method="POST" action="{{ route('tiendanube_pedido_facturar', array_merge(['id' => $pedido->id], $retornoListadoQuery ?? [])) }}"
                           id="form-tn-facturar" class="form-horizontal">
                         @csrf
                         <input type="hidden" name="listaprecio_id" value="{{ $listaprecioId }}">

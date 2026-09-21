@@ -14,6 +14,8 @@
     $colLabel = $col_label ?? 'col-lg-2 control-label text-right pr-2';
     $colInput = $col_input ?? 'col-lg-4';
     $nextFocus = $next_focus ?? null;
+    $codigoName = $codigoName ?? null;
+    $codigoMaxlength = $codigoMaxlength ?? null;
     $help = $help ?? 'Vac&iacute;o = todos. F1 o lupa consulta; Enter resuelve por SKU.';
     $puedeConsultar = \App\Support\Stock\ArticuloConsultaDesdeModal::puedeConsultar();
     $editUrl = ((int) $articuloId > 0 && $puedeConsultar)
@@ -41,7 +43,9 @@
                 </a>
             @endif
             <input type="text" class="form-control codigoarticulo" id="{{ $inputId }}_codigo"
+                @if ($codigoName) name="{{ $codigoName }}" @endif
                 value="{{ $codigo }}" placeholder="SKU" autocomplete="off"
+                @if ($codigoMaxlength) maxlength="{{ (int) $codigoMaxlength }}" @endif
                 title="SKU. F1 = consulta, Enter = resolver"
                 style="width: 5.5rem; flex-shrink: 0;">
             <input type="text" class="form-control descripcionarticulo text-truncate" id="{{ $inputId }}_descripcion"

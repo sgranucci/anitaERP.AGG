@@ -11,22 +11,26 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class ChequeReporteExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class ChequeReporteExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'K';
+    private const COL_ULTIMA = 'M';
+
+    /** Columna Importe (numérica). */
+    private const COL_IMPORTE = 'D';
 
     private EmpresaRepositoryInterface $empresaRepository;
 
@@ -45,6 +49,10 @@ class ChequeReporteExport implements FromView, ShouldAutoSize, WithColumnFormatt
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
+
+    /** Filas de corte (Total dia / Total general) para negrita. */
+    /** @var list<int> */
+    private array $filasCorteExcel = [];
 
     public function __construct(EmpresaRepositoryInterface $empresaRepository)
     {
@@ -65,10 +73,11 @@ class ChequeReporteExport implements FromView, ShouldAutoSize, WithColumnFormatt
     public function view(): View
     {
         $datas = collect();
-        $totales = collect();
+        $filas = [];
+        $this->filasCorteExcel = [];
         if ($this->flDesdeIndex) {
             $datas = ChequeReporteSupport::listar($this->filtros, $this->empresaRepository, false);
-            $totales = ChequeReporteSupport::totales($this->filtros, $this->empresaRepository);
+            $filas = ChequeReporteSupport::filasConSubtotalesDiarios($datas, $this->filtros);
             self::enriquecerNombreEmpresa($datas);
         }
 
@@ -79,17 +88,24 @@ class ChequeReporteExport implements FromView, ShouldAutoSize, WithColumnFormatt
         $this->filaCabecerasExcel = $offset + 4;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
+        $filaExcel = $this->filaPrimeraDatosExcel;
+        foreach ($filas as $fila) {
+            $tipo = (string) ($fila['tipo'] ?? '');
+            if ($tipo === 'total_dia' || $tipo === 'total_general') {
+                $this->filasCorteExcel[] = $filaExcel;
+            }
+            $filaExcel++;
+        }
+
+        $tipo = ($this->filtros['tipo'] ?? 'E') === 'R' ? 'R' : 'E';
+
         return view('exports.caja.chequereporteindex', [
             'datas' => $datas,
-            'totales' => $totales,
+            'filas' => $filas,
+            'tipo' => $tipo,
             'subtitulo' => ChequeReporteFiltros::subtitulo($this->filtros),
-            'titulo' => (($this->filtros['tipo'] ?? 'E') === 'R')
-                ? 'Cheques recibidos'
-                : 'Cheques emitidos',
-            'origen_enum' => Cheque::$enumOrigen,
-            'estado_enum' => Cheque::$enumEstado,
+            'titulo' => $tipo === 'R' ? 'Cheques recibidos' : 'Cheques emitidos',
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
-            'etiquetaFechaDoc' => (($this->filtros['tipo'] ?? 'E') === 'R') ? 'Ingreso' : 'Emisión',
         ]);
     }
 
@@ -98,12 +114,22 @@ class ChequeReporteExport implements FromView, ShouldAutoSize, WithColumnFormatt
         if (! $this->flDesdeIndex) {
             return [];
         }
-        $cols = [];
-        foreach (range('A', self::COL_ULTIMA) as $c) {
-            $cols[$c] = NumberFormat::FORMAT_TEXT;
-        }
 
-        return $cols;
+        return [
+            'A' => NumberFormat::FORMAT_TEXT,
+            'B' => NumberFormat::FORMAT_TEXT,
+            'C' => NumberFormat::FORMAT_TEXT,
+            self::COL_IMPORTE => '#,##0.00',
+            'E' => NumberFormat::FORMAT_TEXT,
+            'F' => NumberFormat::FORMAT_TEXT,
+            'G' => NumberFormat::FORMAT_TEXT,
+            'H' => NumberFormat::FORMAT_TEXT,
+            'I' => NumberFormat::FORMAT_TEXT,
+            'J' => NumberFormat::FORMAT_TEXT,
+            'K' => NumberFormat::FORMAT_TEXT,
+            'L' => NumberFormat::FORMAT_TEXT,
+            'M' => NumberFormat::FORMAT_TEXT,
+        ];
     }
 
     public function styles(Worksheet $sheet)
@@ -121,7 +147,7 @@ class ChequeReporteExport implements FromView, ShouldAutoSize, WithColumnFormatt
                     'name' => 'Arial',
                 ],
                 'fill' => [
-                    'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                    'fillType' => Fill::FILL_SOLID,
                     'color' => ['rgb' => '85C1E9'],
                 ],
             ],
@@ -135,17 +161,19 @@ class ChequeReporteExport implements FromView, ShouldAutoSize, WithColumnFormatt
         }
 
         return [
-            'A' => 8,
-            'B' => 14,
-            'C' => 10,
-            'D' => 14,
-            'E' => 12,
-            'F' => 12,
-            'G' => 24,
-            'H' => 18,
-            'I' => 14,
+            'A' => 18,
+            'B' => 12,
+            'C' => 12,
+            'D' => 16,
+            'E' => 10,
+            'F' => 32,
+            'G' => 28,
+            'H' => 14,
+            'I' => 26,
             'J' => 8,
-            'K' => 28,
+            'K' => 14,
+            'L' => 10,
+            'M' => 16,
         ];
     }
 
@@ -194,6 +222,59 @@ class ChequeReporteExport implements FromView, ShouldAutoSize, WithColumnFormatt
                         'color' => ['rgb' => '17202A'],
                     ],
                 ]);
+                $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.self::COL_ULTIMA.$this->filaCabecerasExcel)->applyFromArray([
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '17202A'],
+                        'size' => 11,
+                        'name' => 'Arial',
+                    ],
+                    'fill' => [
+                        'fillType' => Fill::FILL_SOLID,
+                        'color' => ['rgb' => '85C1E9'],
+                    ],
+                ]);
+
+                $ultimaFila = max($this->filaPrimeraDatosExcel, (int) $sheet->getHighestRow());
+                if ($ultimaFila >= $this->filaPrimeraDatosExcel) {
+                    $rangoImporte = self::COL_IMPORTE.$this->filaPrimeraDatosExcel.':'.self::COL_IMPORTE.$ultimaFila;
+                    $sheet->getStyle($rangoImporte)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle($rangoImporte)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+                    // Forzar tipo numérico en Importe (FromView a veces deja string).
+                    for ($r = $this->filaPrimeraDatosExcel; $r <= $ultimaFila; $r++) {
+                        $cell = $sheet->getCell(self::COL_IMPORTE.$r);
+                        $raw = $cell->getValue();
+                        if ($raw === null || $raw === '') {
+                            continue;
+                        }
+                        if (is_numeric($raw)) {
+                            $cell->setValueExplicit((float) $raw, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
+                        }
+                    }
+                }
+
+                foreach ($this->filasCorteExcel as $filaCorte) {
+                    $rango = 'A'.$filaCorte.':'.self::COL_ULTIMA.$filaCorte;
+                    $esGeneral = str_starts_with(
+                        (string) $sheet->getCell('A'.$filaCorte)->getValue(),
+                        'Total general'
+                    );
+                    $sheet->getStyle($rango)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'name' => 'Arial',
+                            'size' => 10,
+                            'color' => ['rgb' => '17202A'],
+                        ],
+                        'fill' => [
+                            'fillType' => Fill::FILL_SOLID,
+                            'color' => ['rgb' => $esGeneral ? 'AED6F1' : 'D6EAF8'],
+                        ],
+                    ]);
+                    $sheet->getStyle(self::COL_IMPORTE.$filaCorte)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                }
+
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];

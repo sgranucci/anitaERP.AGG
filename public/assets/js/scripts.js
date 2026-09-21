@@ -24,6 +24,145 @@ $(document).ready(function () {
     menuParents.addClass('menu-open');
     menuParents.children('a').addClass('menu-parent-open');
     $('ul.nav-sidebar li.menu-open > .nav-treeview').css('display', 'block');
+
+    // Mantener scroll del aside / ítem activo visible tras navegación (MPA).
+    (function persistirScrollAside() {
+        var $body = $('body');
+        if ($body.hasClass('modo-consulta') || $body.hasClass('modo-embed')) {
+            return;
+        }
+
+        var $sidebar = $('.main-sidebar .sidebar');
+        if (!$sidebar.length) {
+            return;
+        }
+
+        var el = $sidebar[0];
+        var STORAGE_KEY = 'anita_sidebar_scrollTop';
+        var scrollTimer = null;
+
+        function guardarScroll() {
+            try {
+                sessionStorage.setItem(STORAGE_KEY, String(el.scrollTop | 0));
+            } catch (e) {
+                // sessionStorage puede fallar en modo privado estricto
+            }
+        }
+
+        function leerScrollGuardado() {
+            try {
+                var raw = sessionStorage.getItem(STORAGE_KEY);
+                if (raw === null || raw === '') {
+                    return null;
+                }
+                var top = parseInt(raw, 10);
+                return isNaN(top) || top < 0 ? null : top;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function enlaceActivo() {
+            var $leaf = $sidebar.find('a.nav-link.active:not(.menu-parent-open)').first();
+            if ($leaf.length) {
+                return $leaf[0];
+            }
+            var $any = $sidebar.find('a.nav-link.active').first();
+            return $any.length ? $any[0] : null;
+        }
+
+        function visibleEnAside(node) {
+            if (!node) {
+                return true;
+            }
+            var sRect = el.getBoundingClientRect();
+            var nRect = node.getBoundingClientRect();
+            return nRect.top >= sRect.top + 2 && nRect.bottom <= sRect.bottom - 2;
+        }
+
+        // scrollIntoView a veces scrollea la ventana; mover solo .sidebar.
+        function traerAlAside(node, modo) {
+            if (!node || el.scrollHeight <= el.clientHeight + 1) {
+                return;
+            }
+            var sRect = el.getBoundingClientRect();
+            var nRect = node.getBoundingClientRect();
+            var relTop = nRect.top - sRect.top + el.scrollTop;
+            var target;
+
+            if (modo === 'center') {
+                target = relTop - (el.clientHeight / 2) + (nRect.height / 2);
+            } else if (nRect.top < sRect.top) {
+                target = relTop - 8;
+            } else if (nRect.bottom > sRect.bottom) {
+                target = relTop + nRect.height - el.clientHeight + 8;
+            } else {
+                return;
+            }
+
+            el.scrollTop = Math.max(0, Math.min(target, el.scrollHeight - el.clientHeight));
+        }
+
+        function restaurarScrollAside() {
+            if (el.scrollHeight <= el.clientHeight + 1) {
+                return;
+            }
+
+            var guardado = leerScrollGuardado();
+            var activo = enlaceActivo();
+
+            if (guardado !== null) {
+                el.scrollTop = guardado;
+            }
+
+            if (activo) {
+                if (guardado === null) {
+                    traerAlAside(activo, 'center');
+                } else if (!visibleEnAside(activo)) {
+                    traerAlAside(activo, 'nearest');
+                }
+            }
+
+            guardarScroll();
+        }
+
+        $sidebar.on('scroll', function () {
+            clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(guardarScroll, 80);
+        });
+
+        // Captura: guardar antes de que la navegación descargue la página.
+        document.addEventListener('click', function (ev) {
+            var link = ev.target && ev.target.closest
+                ? ev.target.closest('.main-sidebar a.nav-link[href]')
+                : null;
+            if (!link) {
+                return;
+            }
+            var href = link.getAttribute('href') || '';
+            if (!href || href === '#' || href.indexOf('javascript:') === 0) {
+                return;
+            }
+            guardarScroll();
+        }, true);
+
+        function programarRestaurar() {
+            restaurarScrollAside();
+            setTimeout(restaurarScrollAside, 50);
+            setTimeout(restaurarScrollAside, 200);
+        }
+
+        if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(programarRestaurar);
+        } else {
+            programarRestaurar();
+        }
+
+        $(window).on('load', function () {
+            setTimeout(restaurarScrollAside, 0);
+        });
+    })();
+
     // Trabajo con Ventana de Roles.
     const modal = $('#modal-seleccionar-rol');
     if (modal.length && modal.data('rol-set') == 'NO') {

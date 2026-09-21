@@ -14,8 +14,9 @@ Todo **reporte nuevo** o migrado debe seguir el stack de consulta con exportaci�
 | Ventas gastronomía | `ventas/gastronomia/canjes/listado-marketing` | `CanjeMarketingListadoExport` | `ventas/gastronomia/canjes/listado_marketing/listado` |
 | Contable | `contable/mayor-concepto` | `MayorConceptoExport` | `contable/mayor_concepto/listado` |
 | Ventas pedidos | `ventas/repkilocategoria` | `KiloCategoriaListadoExport` | `ventas/repkilocategoria/listado` |
+| Caja cheques | `caja/cheque/reporte` | `ChequeReporteExport` | `caja/cheque/reporte_listado` + `DompdfListadoSupport` |
 
-Ver también `index-listado-paginado-export.mdc` (CRUD index), `listado-filtros-crud.mdc` (filtros inteligentes en ABM) y `reportes-pedidos-totalizacion.mdc` (kilos pedidos / kilos por categoría).
+Ver también `index-listado-paginado-export.mdc` (CRUD index), `listado-filtros-crud.mdc` (filtros inteligentes en ABM), `reportes-pedidos-totalizacion.mdc` (kilos pedidos / kilos por categoría), **`pdf-listado-encabezado-hojas.mdc`** (PDF multipágina), **`export-excel-importes-cortes.mdc`** (importes numéricos + cortes), **`export-overlay-fetch-blob.mdc`** (banner al exportar) y **`reportes-links-modo-consulta.mdc`** (detalle en solapa sin menú).
 
 ## UX obligatoria (pantalla)
 
@@ -26,8 +27,12 @@ Ver también `index-listado-paginado-export.mdc` (CRUD index), `listado-filtros-
 | Paginación | `LengthAwarePaginator` server-side; footer con `firstItem–lastItem` + `->appends($filtrosQuery)->links()` |
 | Export toolbar | `@include('includes.exportar-tabla-queryparams', ['ruta' => 'listar_{recurso}', 'queryparams' => $filtrosQuery])` |
 | Logos | `EmpresaLogoArchivo::logosCabeceraDesdeColeccion($filas)` sobre la tabla en pantalla |
-| Links azules | `class="text-primary"`, `target="_blank" rel="noopener"`, `origen=modal_consulta&vista=consulta` al ABM cuando hay permiso e ID |
+| Links azules | `class="text-primary"`, `target="_blank" rel="noopener"`, `origen=modal_consulta&vista=consulta` al ABM (regla `reportes-links-modo-consulta`) |
 | Totales | Resumen del filtro completo (no solo la página visible): contador + totales numéricos relevantes |
+| Totales por día | Si el negocio lo pide (ej. cheques): subtotales por fecha en pantalla/PDF/Excel |
+| Export PDF | `DompdfListadoSupport` + `pdf_thead_cabecera` (regla `pdf-listado-encabezado-hojas`) |
+| Export Excel | Importes `#,##0.00` numéricos; cortes en negrita (regla `export-excel-importes-cortes`) |
+| Overlay export | `fetch`+blob y ocultar al terminar (regla `export-overlay-fetch-blob`) |
 
 ## Backend
 

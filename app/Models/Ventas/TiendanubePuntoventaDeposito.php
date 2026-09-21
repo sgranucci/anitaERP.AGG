@@ -11,6 +11,7 @@ use OwenIt\Auditing\Contracts\Auditable;
  * Par punto de venta online ↔ depósito para emisión Tiendanube.
  *
  * @property int $id
+ * @property string|null $store_id
  * @property int $puntoventa_id
  * @property int $deposito_id
  * @property bool $es_default
@@ -23,6 +24,7 @@ class TiendanubePuntoventaDeposito extends Model implements Auditable
     protected $table = 'tiendanube_puntoventa_deposito';
 
     protected $fillable = [
+        'store_id',
         'puntoventa_id',
         'deposito_id',
         'es_default',

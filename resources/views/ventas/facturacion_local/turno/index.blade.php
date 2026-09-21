@@ -7,11 +7,11 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Cierres de turno</h3>
-                <div class="card-tools">
-                    <a href="{{ route('facturacion_local_turno') }}" class="btn btn-outline-secondary btn-sm">Turnos</a>
-                    <a href="{{ route('facturacion_local_pos') }}" class="btn btn-outline-info btn-sm">POS</a>
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">Cierres de turno</h3>
+                <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
+                    <a href="{{ route('facturacion_local_turno') }}" class="btn btn-outline-light btn-sm mr-1">Turnos</a>
+                    <a href="{{ route('facturacion_local_pos') }}" class="btn btn-outline-light btn-sm">POS</a>
                 </div>
             </div>
             <form method="get" class="p-3 mb-0">

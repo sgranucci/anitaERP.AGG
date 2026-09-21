@@ -22,6 +22,7 @@
     $listosPorId = $listosPorId ?? [];
     $puedeFacturar = $puedeFacturar ?? false;
     $cantListosPagina = collect($listosPorId)->filter()->count();
+    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
 @endphp
 
 <div class="row">
@@ -267,7 +268,7 @@
                                     </td>
                                     <td class="text-nowrap">
                                         <a class="btn-accion-tabla tooltipsC" title="Ver / facturar"
-                                           href="{{ route('tiendanube_pedido_show', $p->id) }}">
+                                           href="{{ route('tiendanube_pedido_show', array_merge(['id' => $p->id], $retornoListadoQuery)) }}">
                                             <i class="fa fa-edit"></i>
                                         </a>
                                     </td>

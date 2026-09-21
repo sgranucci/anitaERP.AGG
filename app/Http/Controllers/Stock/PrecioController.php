@@ -22,6 +22,7 @@ use App\Services\Stock\PrecioActualizacionCategoriaService;
 use App\Services\Stock\PrecioImportPreviewService;
 use App\Services\Stock\PrecioService;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Stock\ArticuloFerliListadoFiltros;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Stock\PrecioImportColumnasSupport;
 use App\Support\Stock\PrecioListadoFiltros;
@@ -956,7 +957,11 @@ class PrecioController extends Controller
 
         $fake = Request::create('/', 'GET', $parsed);
 
-        return QueryRetornoListado::desdeRequest($fake, ArticuloListadoFiltros::class);
+        $filtrosClass = MovimientoStockFerliSupport::esCalzadosFerli()
+            ? ArticuloFerliListadoFiltros::class
+            : ArticuloListadoFiltros::class;
+
+        return QueryRetornoListado::desdeRequest($fake, $filtrosClass);
     }
 
     /**
@@ -970,9 +975,13 @@ class PrecioController extends Controller
             'fecha_referencia' => $retorno['fecha_referencia'],
         ]);
 
-        $url = $retorno['origen'] === 'editar'
-            ? route('editar_articulo', ['id' => $retorno['articulo_id']])
-            : route('articulo');
+        if ($retorno['origen'] === 'editar') {
+            $url = route('editar_articulo', ['id' => $retorno['articulo_id']]);
+        } elseif (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            $url = route('products.index');
+        } else {
+            $url = route('articulo');
+        }
 
         return $url.'?'.http_build_query($params);
     }

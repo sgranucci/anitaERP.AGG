@@ -299,7 +299,7 @@ final class PrecioLocalAnitaSyncService
             $lista = Listaprecio::create([
                 'nombre' => $nombres[$codigo] ?? ('Lista '.$codigo),
                 'formula' => '0',
-                'incluyeimpuesto' => '2',
+                'incluyeimpuesto' => '1', // listas locales = precio final (IVA incluido)
                 'codigo' => (int) $codigo,
                 'tiponumeracion_id' => $tiponum,
                 'usuarioultcambio_id' => $usuarioId,
@@ -356,7 +356,11 @@ final class PrecioLocalAnitaSyncService
             return [];
         }
 
-        $where = ' WHERE stkp_fe_ult_act >= '.(int) $fechaDesdeAnita
+        // Incluir stkp_fe_ult_act = 0 / inválida: en Anita Local muchos precios
+        // de listas WEB/OFERTA/LUGANO quedan con fecha 0 y el filtro solo por
+        // >= desde los omitía (ej. SKU 63091523 lista 50 → ERP 13).
+        $where = ' WHERE (stkp_fe_ult_act >= '.(int) $fechaDesdeAnita
+            .' OR stkp_fe_ult_act IS NULL OR stkp_fe_ult_act < 19000000)'
             .' AND stkp_lista IN ('.implode(',', $inParts).') ';
 
         $payload = [

@@ -2,6 +2,7 @@
 
 namespace App\Services\Ventas\Tiendanube;
 
+use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Ventas\TiendanubePedido;
 use App\Models\Ventas\TiendanubePedidoLinea;
 use App\Models\Ventas\TiendanubePedidoVenta;
@@ -10,6 +11,7 @@ use App\Services\Caja\CobranzaService;
 use App\Services\Ventas\FacturaMailEnvioService;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
+use App\Support\Ventas\Tiendanube\TiendanubeConfiguracionSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
@@ -75,7 +77,7 @@ final class TiendanubePedidoEmisionService
         }
 
         try {
-            return DB::transaction(function () use ($pedido, $input, $seleccion) {
+            $resultadoTx = DB::transaction(function () use ($pedido, $input, $seleccion) {
                 $payload = $this->armarPayload($pedido, $input, $seleccion['lineas'], $seleccion['cubre_pendiente']);
                 $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
                 if (! is_array($resultado) || ! empty($resultado['error'])) {
@@ -103,9 +105,6 @@ final class TiendanubePedidoEmisionService
                 $pedido->facturado_por_usuario_id = Auth::id();
                 $pedido->save();
 
-                $this->intentarPublicarInvoice($pedido, $venta, $resultado);
-                $this->intentarEnviarMailCliente($pedido, $venta, $input);
-
                 Log::info('tiendanube.emision.ok', [
                     'tiendanube_order_id' => $pedido->tiendanube_order_id,
                     'venta_id' => $venta->id,
@@ -118,8 +117,19 @@ final class TiendanubePedidoEmisionService
                     'venta_id' => $venta->id,
                     'cae' => (string) ($resultado['cae'] ?? $venta->cae ?? ''),
                     'parcial' => ! $completo,
+                    'impresion_url' => (string) ($resultado['impresion_url'] ?? ''),
+                    'venta' => $venta,
+                    'resultado_emision' => $resultado,
                 ];
             });
+
+            // Mail / metafield fuera de la TX: un SMTP caído no debe demorar ni arriesgar el commit.
+            $venta = $resultadoTx['venta'];
+            unset($resultadoTx['venta'], $resultadoTx['resultado_emision']);
+            $this->intentarPublicarInvoice($pedido, $venta, $resultadoTx);
+            $resultadoTx['mail_aviso'] = $this->intentarEnviarMailCliente($pedido, $venta, $input);
+
+            return $resultadoTx;
         } catch (Throwable $e) {
             Log::error('tiendanube.emision.error', [
                 'tiendanube_order_id' => $pedido->tiendanube_order_id,
@@ -318,7 +328,6 @@ final class TiendanubePedidoEmisionService
         $articuloIds = [];
         $cantidades = [];
         $precios = [];
-        $descuentos = [];
         $descripciones = [];
         $combinacionIds = [];
         $talleIds = [];
@@ -343,7 +352,6 @@ final class TiendanubePedidoEmisionService
             $articuloIds[] = (int) $linea->articulo_id;
             $cantidades[] = $cant;
             $precios[] = $precio;
-            $descuentos[] = 0.;
             $descripciones[] = (string) ($linea->nombre ?? '');
             $combinacionIds[] = (int) ($linea->combinacion_id ?? 0);
             $talleIds[] = (int) ($linea->talle_id ?? 0);
@@ -369,14 +377,14 @@ final class TiendanubePedidoEmisionService
 
         $listaId = (int) ($input['listaprecio_id'] ?? 0);
         if ($listaId <= 0) {
-            $listaId = TiendanubePedidoMaestrosSupport::listaprecioIdDefault();
+            $listaId = TiendanubePedidoMaestrosSupport::listaprecioIdDefault($pedido->store_id);
         }
 
         $nroPedido = (string) ($pedido->order_number ?: $pedido->tiendanube_order_id);
         $marcaParcial = $cubrePendiente ? '' : ' (parcial)';
         $fecha = Carbon::now()->format('Y-m-d');
         $payload = [
-            'empresa_id' => (int) config('tiendanube.empresa_id', 1),
+            'empresa_id' => TiendanubeConfiguracionSupport::empresaId($pedido->store_id),
             'puntoventa_id' => (int) $input['puntoventa_id'],
             'tipotransaccion_id' => (int) config('tiendanube.tipotransaccion_fac_id', 1),
             'cliente_id' => $clienteId,
@@ -389,7 +397,11 @@ final class TiendanubePedidoEmisionService
             'articulo_ids' => $articuloIds,
             'cantidades' => $cantidades,
             'precios' => $precios,
-            'descuentolinea' => $descuentos,
+            // Escalar: un array no vacío se castea a 1 y aplica 1% de descuento.
+            'descuentolinea' => 0.,
+            // El precio de Tiendanube es el que paga el cliente (IVA incluido).
+            // La lista OFERTA WEB trae incluyeimpuesto 2 y le sumaría el IVA arriba.
+            'incluyeimpuestos' => array_fill(0, count($precios), '1'),
             'descripcionarticulos' => $descripciones,
             'combinacion_ids' => $combinacionIds,
             'talle_ids' => $talleIds,
@@ -424,14 +436,33 @@ final class TiendanubePedidoEmisionService
     }
 
     /**
+     * Cobranza de mostrador. El id 1 del .env no existe en Ferli; el tipo real es COB.
+     */
+    private function tipoTransaccionCajaCobranzaId(): int
+    {
+        $configurado = (int) config('tiendanube.tipotransaccion_caja_id', 0);
+        if ($configurado > 0 && Tipotransaccion_Caja::query()->whereKey($configurado)->exists()) {
+            return $configurado;
+        }
+
+        $porAbreviatura = (int) (Tipotransaccion_Caja::query()
+            ->where('abreviatura', 'COB')
+            ->where('signo', 1)
+            ->orderBy('id')
+            ->value('id') ?? 0);
+        if ($porAbreviatura > 0) {
+            return $porAbreviatura;
+        }
+
+        throw new InvalidArgumentException('No hay tipo de caja Cobranza (COB). Revisá TIENDANUBE_TIPO_CAJA_ID.');
+    }
+
+    /**
      * @param  list<array{cuentacaja_id:int,moneda_id?:int,monto:float,cotizacion?:float|null,observacion?:string|null}>  $mediosPago
      */
     private function registrarCobranza(Venta $venta, array $mediosPago): void
     {
-        $tipoCajaId = (int) config('tiendanube.tipotransaccion_caja_id', 1);
-        if ($tipoCajaId <= 0) {
-            throw new InvalidArgumentException('Configure TIENDANUBE_TIPO_CAJA_ID.');
-        }
+        $tipoCajaId = $this->tipoTransaccionCajaCobranzaId();
 
         $empresaId = (int) ($venta->empresa_id ?: config('tiendanube.empresa_id', 1));
         $lineas = [];
@@ -473,10 +504,10 @@ final class TiendanubePedidoEmisionService
     /**
      * @param  array<string,mixed>  $input
      */
-    private function intentarEnviarMailCliente(TiendanubePedido $pedido, Venta $venta, array $input): void
+    private function intentarEnviarMailCliente(TiendanubePedido $pedido, Venta $venta, array $input): string
     {
         if (! config('tiendanube.enviar_factura_mail', true)) {
-            return;
+            return '';
         }
 
         $email = trim((string) (
@@ -486,30 +517,35 @@ final class TiendanubePedidoEmisionService
             ?? ''
         ));
         if ($email === '') {
-            return;
+            return '';
         }
 
         try {
             $resp = app(FacturaMailEnvioService::class)->enviarDesdeTiendanube((int) $venta->id, $email);
             if (! ($resp['ok'] ?? false)) {
+                $aviso = trim((string) ($resp['mensaje'] ?? 'No se pudo enviar el mail'));
                 Log::warning('tiendanube.mail.fail', [
                     'order_id' => $pedido->tiendanube_order_id,
                     'venta_id' => $venta->id,
-                    'mensaje' => $resp['mensaje'] ?? '',
+                    'mensaje' => $aviso,
                 ]);
 
-                return;
+                return ' Mail: '.$aviso.'.';
             }
             Log::info('tiendanube.mail.ok', [
                 'order_id' => $pedido->tiendanube_order_id,
                 'venta_id' => $venta->id,
                 'destinatarios' => $resp['destinatarios'] ?? [],
             ]);
+
+            return ' Mail enviado a '.$email.'.';
         } catch (Throwable $e) {
             Log::warning('tiendanube.mail.exception', [
                 'order_id' => $pedido->tiendanube_order_id,
                 'error' => $e->getMessage(),
             ]);
+
+            return ' Mail: '.$e->getMessage().'.';
         }
     }
 
@@ -529,26 +565,42 @@ final class TiendanubePedidoEmisionService
             // Metafield nfe/list: key = CAE o número fiscal; link = PDF ERP
             $key = $cae !== '' ? $cae : ($numero !== '' && $numero !== '-' ? $numero : 'venta-'.$venta->id);
             $url = route('lista_una_factura_pdf', ['id' => $venta->id], true);
+            $cliente = TiendanubeApiClient::paraStoreId((string) $pedido->store_id);
+            $orderId = (int) $pedido->tiendanube_order_id;
 
-            $resp = TiendanubeApiClient::paraStoreId((string) $pedido->store_id)->crearInvoice((int) $pedido->tiendanube_order_id, [
+            $resp = $cliente->crearInvoice($orderId, [
                 'key' => $key,
                 'link' => $url,
             ]);
             if (! ($resp['ok'] ?? false)) {
                 Log::warning('tiendanube.invoice.publish_fail', [
-                    'order_id' => $pedido->tiendanube_order_id,
+                    'order_id' => $orderId,
                     'venta_id' => $venta->id,
                     'error' => $resp['error'] ?? '',
                     'status' => $resp['status'] ?? 0,
                 ]);
-
-                return;
+            } else {
+                Log::info('tiendanube.invoice.publish_ok', [
+                    'order_id' => $orderId,
+                    'venta_id' => $venta->id,
+                    'key' => $key,
+                ]);
             }
-            Log::info('tiendanube.invoice.publish_ok', [
-                'order_id' => $pedido->tiendanube_order_id,
-                'venta_id' => $venta->id,
-                'key' => $key,
-            ]);
+
+            // TN no tiene estado «Facturado»; la nota del dueño es lo visible en el admin.
+            $etiqueta = $numero !== '' && $numero !== '-' ? $numero : ('venta #'.$venta->id);
+            if ($cae !== '') {
+                $etiqueta .= ' CAE '.$cae;
+            }
+            $nota = $cliente->marcarNotaFacturado($orderId, $etiqueta);
+            if (! ($nota['ok'] ?? false)) {
+                Log::warning('tiendanube.invoice.nota_fail', [
+                    'order_id' => $orderId,
+                    'venta_id' => $venta->id,
+                    'error' => $nota['error'] ?? '',
+                    'status' => $nota['status'] ?? 0,
+                ]);
+            }
         } catch (Throwable $e) {
             Log::warning('tiendanube.invoice.publish_exception', [
                 'order_id' => $pedido->tiendanube_order_id,

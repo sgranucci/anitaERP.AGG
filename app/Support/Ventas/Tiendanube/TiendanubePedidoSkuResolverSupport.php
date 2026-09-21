@@ -135,7 +135,12 @@ final class TiendanubePedidoSkuResolverSupport
         $id = Combinacion::query()
             ->where('articulo_id', $articuloId)
             ->where('codigo', $codigo)
-            ->where('estado', 'A')
+            ->where(
+                \App\Support\Stock\CombinacionEstadoCanalSupport::columnaCortaPorAmbito(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                ),
+                'A'
+            )
             ->value('id');
         if ($id) {
             return (int) $id;

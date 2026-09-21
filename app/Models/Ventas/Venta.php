@@ -113,6 +113,16 @@ class Venta extends Model implements Auditable
         return $this->hasOne(\App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision::class, 'venta_id');
     }
 
+    public function facturacionLocalEmision()
+    {
+        return $this->hasOne(FacturacionLocalEmision::class, 'venta_id');
+    }
+
+    public function facturacionLocalEmisionComoNc()
+    {
+        return $this->hasOne(FacturacionLocalEmision::class, 'venta_nc_id');
+    }
+
     public function usuario()
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
@@ -192,6 +202,21 @@ class Venta extends Model implements Auditable
     public function condicionivas()
     {
         return $this->hasOne(\App\Models\Configuracion\Condicioniva::class, 'id', 'condicioniva_id');
+    }
+
+    public function localidades()
+    {
+        return $this->belongsTo(\App\Models\Configuracion\Localidad::class, 'localidad_id');
+    }
+
+    public function provincias()
+    {
+        return $this->belongsTo(\App\Models\Configuracion\Provincia::class, 'provincia_id');
+    }
+
+    public function paises()
+    {
+        return $this->belongsTo(\App\Models\Configuracion\Pais::class, 'pais_id');
     }
 
     protected static function boot()

@@ -28,7 +28,9 @@ class ValidacionCombinacion extends FormRequest
 			//'codigo' => ['unique_with:combinacion, articulo_id, codigo'],
             'nombre' => ['string','max:20'],
             'observacion' => ['string', 'nullable'],
-            'estado' => ['string','max:1'],
+            'estado' => ['nullable', 'string', 'max:1'],
+            'estado_fabrica' => ['nullable', 'string', 'max:1', 'in:A,I'],
+            'estado_local' => ['nullable', 'string', 'max:1', 'in:A,I'],
         ];
     }
 }

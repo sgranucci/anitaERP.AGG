@@ -43,6 +43,38 @@ final class ProveedorCuentacorrienteGrillaSupport
         return 'Movimiento #'.(int) $fila->id;
     }
 
+    /**
+     * Fecha de comprobante para grilla/PDF/export.
+     * Prioriza la del documento (factura/OP); `cc.fecha` a veces es la de carga/import.
+     */
+    public static function fechaComprobante(Proveedor_Cuentacorriente $fila): mixed
+    {
+        if ((int) ($fila->pagoproveedor_id ?? 0) > 0 && $fila->pagoproveedores?->fecha) {
+            return $fila->pagoproveedores->fecha;
+        }
+
+        $cp = $fila->comprobante_proveedores;
+        if ($cp && $cp->fechacomprobante) {
+            return $cp->fechacomprobante;
+        }
+
+        return $fila->fecha;
+    }
+
+    /**
+     * Fecha de vencimiento para grilla/PDF/export.
+     * Prioriza la del comprobante; cae a `cc.fechavencimiento`.
+     */
+    public static function fechaVencimiento(Proveedor_Cuentacorriente $fila): mixed
+    {
+        $cp = $fila->comprobante_proveedores;
+        if ($cp && $cp->fechavencimiento) {
+            return $cp->fechavencimiento;
+        }
+
+        return $fila->fechavencimiento;
+    }
+
     /** True si el comprobante linkeado es deuda (FDT/etc.), no crédito (CDT/NC). */
     private static function comprobanteEsDeudaFactura(Proveedor_Cuentacorriente $fila): bool
     {

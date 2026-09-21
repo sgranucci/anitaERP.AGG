@@ -23,8 +23,15 @@ return [
     ],
 
     'default_pais_id' => (int) env('PUNTOVENTA_SYNC_DEFAULT_PAIS_ID', 1),
+    /** Histórico AGG/otros; en Ferli el mapper usa default_provincia_id_ferli si queda en 3. */
     'default_provincia_id' => (int) env('PUNTOVENTA_SYNC_DEFAULT_PROVINCIA_ID', 3),
+    /** Histórico: id 108 = "CABRAL SARGENTO" (calle en maestro). Ferli: ver *_ferli. */
     'default_localidad_id' => (int) env('PUNTOVENTA_SYNC_DEFAULT_LOCALIDAD_ID', 108),
+
+    /** Calzados Ferli: casa central Villa Madero / Bs.As. (solo si EMPRESA=Calzados Ferli). */
+    'default_provincia_id_ferli' => (int) env('PUNTOVENTA_SYNC_DEFAULT_PROVINCIA_ID_FERLI', 2),
+    'default_localidad_id_ferli' => (int) env('PUNTOVENTA_SYNC_DEFAULT_LOCALIDAD_ID_FERLI', 4070),
+    'default_codigopostal_ferli' => (string) env('PUNTOVENTA_SYNC_DEFAULT_CODIGOPOSTAL_FERLI', '1768'),
 
     /**
      * Columnas del SELECT contra Informix (deben existir en la sucursal del cliente).

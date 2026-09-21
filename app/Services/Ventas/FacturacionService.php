@@ -2360,6 +2360,7 @@ class FacturacionService
 	{
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
 		VentaNotaCreditoPrecioLiteralSupport::aplicarPreciosFacturaOrigen($data);
+		\App\Support\Ventas\FacturacionLocal\FacturacionLocalNcPrecioSupport::normalizarPayloadNc($data);
 
 		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
@@ -2466,6 +2467,18 @@ class FacturacionService
 		$leyendasLineaInput = $data['leyendas_linea'] ?? [];
 		if (! is_array($leyendasLineaInput)) {
 			$leyendasLineaInput = [];
+		}
+		$combinacionIdsInput = $data['combinacion_ids'] ?? [];
+		if (! is_array($combinacionIdsInput)) {
+			$combinacionIdsInput = [];
+		}
+		$talleIdsInput = $data['talle_ids'] ?? [];
+		if (! is_array($talleIdsInput)) {
+			$talleIdsInput = [];
+		}
+		$colorIdsInput = $data['color_ids'] ?? [];
+		if (! is_array($colorIdsInput)) {
+			$colorIdsInput = [];
 		}
 		$incluyePorLista = [];
 
@@ -2768,6 +2781,10 @@ class FacturacionService
 				$detalleLinea = $leyendaLinea;
 			}
 
+			$combinacionIdLinea = (int) ($combinacionIdsInput[$offItem] ?? 0);
+			$talleIdLinea = (int) ($talleIdsInput[$offItem] ?? 0);
+			$colorIdLinea = (int) ($colorIdsInput[$offItem] ?? 0);
+
 			$dataFactura[] = ["cantidad" => $cantidadLinea,
 				"pieza" => $piezaLinea,
 				"caja" => $cajaLinea,
@@ -2799,6 +2816,9 @@ class FacturacionService
 				'codigo_mtx' => $codigoMtxLinea,
 				'unidades_mtx' => $unidadesMtxLinea,
 				'centrocosto_id' => $centrocostoConceptoId,
+				'combinacion_id' => $combinacionIdLinea > 0 ? $combinacionIdLinea : null,
+				'talle_id' => $talleIdLinea > 0 ? $talleIdLinea : null,
+				'color_id' => $colorIdLinea > 0 ? $colorIdLinea : null,
 			];
 			$totCantidad += $cantidad;
 		}
@@ -3035,7 +3055,7 @@ class FacturacionService
 			return $errorDespacho;
 		}
 
-		$clienteGraba = clone $cliente;
+        $clienteGraba = clone $cliente;
         if (! empty($data['venta_receptor']) && is_array($data['venta_receptor'])) {
 			$vr = $data['venta_receptor'];
 			if (isset($vr['nombre'])) {
@@ -3049,6 +3069,18 @@ class FacturacionService
 			}
 			if (! empty($vr['email'])) {
 				$clienteGraba->email = trim((string) $vr['email']);
+			}
+			if (! empty($vr['telefono'])) {
+				$clienteGraba->telefono = trim((string) $vr['telefono']);
+			}
+			if (! empty($vr['codigopostal'])) {
+				$clienteGraba->codigopostal = trim((string) $vr['codigopostal']);
+			}
+			if (! empty($vr['localidad_id'])) {
+				$clienteGraba->localidad_id = (int) $vr['localidad_id'];
+			}
+			if (! empty($vr['provincia_id'])) {
+				$clienteGraba->provincia_id = (int) $vr['provincia_id'];
 			}
 		}
 		$provinciaPedido = (int) ($data['provincia_id'] ?? 0);
@@ -3243,7 +3275,7 @@ class FacturacionService
 						$codigoMoneda = $moneda->abreviatura ?: 'PES';
 					}
 
-					$arcaTipodoc = $cliente->tipodocumentos->codigoexterno;
+					$arcaTipodoc = $cliente->tipodocumentos?->codigoexterno ?? 99;
 					$arcaNumerodoc = $cliente->numerodocumento;
 					$arcaNombre = $cliente->nombre;
 					$arcaDomicilio = $cliente->domicilio;
@@ -3312,6 +3344,9 @@ class FacturacionService
 							ArcaFceDatosAdicionalesSupport::opcionalAnulacion($fceAnulacionSn),
 						];
 					}
+				} else {
+					// Modo manual: no hay payload ARCA. Sin esto $dataCAE queda indefinida al grabar.
+					$dataCAE = [];
 				}
 				$opcionesEmision = $data['opciones_emision'] ?? [];
 				if (! is_array($opcionesEmision)) {
@@ -4411,7 +4446,7 @@ class FacturacionService
 				'codigopostal' => $cliente->codigopostal,
 				'email' => $cliente->email,
 				'telefono' => $cliente->telefono,
-				'numerodocumento' => $cliente->numerodocumento,
+				'nroinscripcion' => $cliente->numerodocumento ?? $cliente->nroinscripcion ?? null,
 				'condicioniva_id' => $cliente->condicioniva_id,
 				'puntoventaremito_id' => null,
 				'numeroremito' => 0,
@@ -4505,6 +4540,17 @@ class FacturacionService
 			if (! $omitirCuentaCorriente) {
 			foreach($cuentacorriente as $cuota)
 			{
+				// NC/ND sobre FAC sin CC (POS Local / recuperación ARCA con omitir_cuenta_corriente):
+				// la origen se cobró por caja, no hay deuda que aplicar. No inventar CC huérfana.
+				$ccOrigen = null;
+				if ($venta_id > 0) {
+					$ccsFac = $this->cliente_cuentacorrienteRepository->findPorVenta($venta_id);
+					$ccOrigen = $ccsFac->first();
+					if (! $ccOrigen) {
+						continue;
+					}
+				}
+
 				$data = [
 					'fecha' => $fechaFactura,
 					'fechavencimiento' => $cuota['fechavencimiento'],
@@ -4519,12 +4565,8 @@ class FacturacionService
 				$cliente_cuentacorriente = $this->cliente_cuentacorrienteRepository->create($data);
 
 				// Graba aplicacion del comprobante que esta generando
-				if ($venta_id > 0)
+				if ($venta_id > 0 && $ccOrigen)
 				{
-					// Graba aplicacion del comprobante al que aplica
-					// Busca cuentacorriente de factura aplicada
-					$cliente_cuentacorriente_venta = $this->cliente_cuentacorrienteRepository->findPorVenta($venta_id);
-
 					$data = [
 						'fecha' => $fechaFactura,
 						'cliente_cuentacorriente_id' => $cliente_cuentacorriente->id,
@@ -4535,30 +4577,25 @@ class FacturacionService
 						'comprobanteaplicado' => $referenciaFactura,
 						'cobranza_id' => null,
 						'empresa_id' => $puntoventa->empresa_id,
-						'cliente_cuentacorriente_aplicado_id' => $cliente_cuentacorriente_venta[0]->id // Apunta a factura que aplica
+						'cliente_cuentacorriente_aplicado_id' => $ccOrigen->id // Apunta a factura que aplica
 					];
 
 					$cliente_cuentacorriente_aplicacion = $this->cliente_cuentacorriente_aplicacionRepository->create($data);
 
 					// Graba aplicacion del comprobante al que aplica (factura)
-					if ($cliente_cuentacorriente_venta)
-					{
-						$data = [
-							'fecha' => $fechaFactura,
-							'cliente_cuentacorriente_id' => $cliente_cuentacorriente_venta[0]->id,
-							'total' => $cuota['total'] * $signo,
-							'moneda_id' => $moneda_id,
-							'cotizacion' => $cotizacion,
-							'ventaaplicado_id' => $vta->id,
-							'comprobanteaplicado' => $vta->codigo,
-							'cobranza_id' => null,
-							'empresa_id' => $puntoventa->empresa_id,
-							'cliente_cuentacorriente_aplicado_id' => $cliente_cuentacorriente->id // Apunta a nota de credito que aplica
-						];
-						$cliente_cuentacorriente_aplicacion = $this->cliente_cuentacorriente_aplicacionRepository->create($data);
-					}
-					else
-						throw new Exception('No pudo aplicar nota de crédito');
+					$data = [
+						'fecha' => $fechaFactura,
+						'cliente_cuentacorriente_id' => $ccOrigen->id,
+						'total' => $cuota['total'] * $signo,
+						'moneda_id' => $moneda_id,
+						'cotizacion' => $cotizacion,
+						'ventaaplicado_id' => $vta->id,
+						'comprobanteaplicado' => $vta->codigo,
+						'cobranza_id' => null,
+						'empresa_id' => $puntoventa->empresa_id,
+						'cliente_cuentacorriente_aplicado_id' => $cliente_cuentacorriente->id // Apunta a nota de credito que aplica
+					];
+					$cliente_cuentacorriente_aplicacion = $this->cliente_cuentacorriente_aplicacionRepository->create($data);
 				}
 			}
 			}
@@ -4581,6 +4618,8 @@ class FacturacionService
 						'combinacion_id' => $itemEmision['combinacion_id'] ?? null,
 						'codigocombinacion' => $itemEmision['codigocombinacion'] ?? null,
 						'modulo_id' => $itemEmision['modulo_id'] ?? null,
+						'talle_id' => $itemEmision['talle_id'] ?? null,
+						'color_id' => $itemEmision['color_id'] ?? null,
 						'concepto' => $tipotransaccion->nombre,
 						'cantidad' => $itemEmision['cantidad'],
 						'precio' => $itemEmision['precio'],
@@ -4629,6 +4668,7 @@ class FacturacionService
 				foreach ([
 					'combinacion_id',
 					'talle_id',
+					'color_id',
 					'pedido_combinacion_id',
 					'ordentrabajo_id',
 					'modulo_id',
@@ -4664,7 +4704,8 @@ class FacturacionService
 									substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
 									$puntoventa->modofacturacion ?? null,
 									isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null,
-									$omitirAnitaAsientoMostrador);
+									$omitirAnitaAsientoMostrador,
+									is_array($opcionesEmision) ? $opcionesEmision : null);
 			}
 
 			$ret = [
@@ -4792,6 +4833,29 @@ class FacturacionService
 					(int) $vta->id,
 					(string) $fechaFactura
 				);
+			}
+
+			// Tiendanube: NC total sobre FAC del staging → libera cantidades para refacturar
+			if ($tipotransaccion->esNotaCredito() && (int) $venta_id > 0) {
+				$opcionesNcTn = is_array($opcionesEmision) ? $opcionesEmision : [];
+				\App\Support\Ventas\Tiendanube\NotaCreditoReabreTiendanubePedidoSupport::alGrabarNc(
+					(int) $venta_id,
+					abs((float) $totalComprobante),
+					$tipotransaccion,
+					$opcionesNcTn,
+					(int) $vta->id
+				);
+			}
+
+			// Facturación Local: NC de mostrador sobre FAC del POS Local → devolución de cobranza.
+			// No-op si la FAC no es Local (AGG / El Bierzo / gastronomía / estacionamiento intactos).
+			if ($tipotransaccion->esNotaCredito() && (int) $venta_id > 0) {
+				app(\App\Services\Ventas\FacturacionLocal\FacturacionLocalCobranzaService::class)
+					->revertirCobranzaFacSiMostradorNc(
+						(int) $venta_id,
+						$vta,
+						is_array($opcionesEmision) ? $opcionesEmision : null
+					);
 			}
 
 			if (! $transaccionExterna) {
@@ -7900,7 +7964,7 @@ class FacturacionService
 	}
 
 	/**
-	 * POS gastronomía, estacionamiento o canje: no usa depósito ni transporte de reparto.
+	 * POS gastronomía, estacionamiento, canje o facturación local: no usa depósito ni transporte de reparto.
 	 *
 	 * @param  array<string, mixed>  $data
 	 * @param  array<string, mixed>|null  $opcionesEmision
@@ -7913,7 +7977,8 @@ class FacturacionService
 
 		return ! empty($op['omitir_movimiento_stock'])
 			|| ! empty($op['emision_pos_arca'])
-			|| ! empty($op['origen_estacionamiento']);
+			|| ! empty($op['origen_estacionamiento'])
+			|| ! empty($op['origen_facturacion_local']);
 	}
 
 	/**
@@ -7972,7 +8037,8 @@ class FacturacionService
 
 	private function grabaAsientoContable($asientocontable, $empresa_id, $fecha, $venta_id, $observacion, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $contrapartida_id, $tipo, $letra, $sucursal, $nro,
-											?string $modoFacturacionPv = null, ?string $fechaJornada = null, bool $omitirAnita = false)
+											?string $modoFacturacionPv = null, ?string $fechaJornada = null, bool $omitirAnita = false,
+											?array $opcionesEmision = null)
 	{
 		$opcionesCierre = ['modofacturacion_pv' => $modoFacturacionPv];
 		if ($fechaJornada !== null && trim($fechaJornada) !== '') {
@@ -8058,25 +8124,83 @@ class FacturacionService
 			$moneda_ids[] = $moneda_id;
 			$cotizaciones[] = $cotizacion;
 		}
-		// Agrega contrapartida
+		// Contrapartida: medios de pago (POS Local) o deudores / cuenta del cliente.
 		if (abs($totalMonto) > 0.009)
 		{
-			// Busca cuenta contable por ID
-			$cuentacontable = $this->cuentacontableRepository->find($contrapartida_id);
-		
-			// Con la empresa busca la cuenta real para tomar el id que corresponde hasta mejorar abm de clientes
-			if ($cuentacontable)
-			{
-				$cuentacontablereal = $this->cuentacontableRepository->findPorCodigo($cuentacontable->empresa_id, $cuentacontable->codigo);
-
-				$cuentacontable_ids[] = $cuentacontablereal->id;
+			$contrapartidasMedio = [];
+			if (is_array($opcionesEmision)
+				&& ! empty($opcionesEmision['asiento_medios_pago'])
+				&& is_array($opcionesEmision['asiento_medios_pago'])
+			) {
+				try {
+					$contrapartidasMedio = \App\Support\Ventas\FacturacionLocal\FacturacionLocalAsientoMedioSupport::contrapartidasDesdeMedios(
+						$opcionesEmision['asiento_medios_pago'],
+						abs($totalMonto),
+						(int) $empresa_id
+					);
+				} catch (\InvalidArgumentException $e) {
+					throw new Exception($e->getMessage(), 0, $e);
+				}
+			} elseif (is_array($opcionesEmision)
+				&& ! empty($opcionesEmision['asiento_contrapartidas_medio'])
+				&& is_array($opcionesEmision['asiento_contrapartidas_medio'])
+			) {
+				$contrapartidasMedio = $opcionesEmision['asiento_contrapartidas_medio'];
 			}
-			else
-			{
-				$cuentacontablereal = $this->cuentacontableRepository->findPorCodigo($empresa_id, config('cliente.DEUDORES_POR_VENTAS'));
 
-				$cuentacontable_ids[] = $cuentacontablereal->id;				
+			if ($contrapartidasMedio !== []) {
+				$sumaMedios = 0.;
+				foreach ($contrapartidasMedio as $medioCta) {
+					$ctaId = (int) ($medioCta['cuentacontable_id'] ?? 0);
+					$montoMedio = round(abs((float) ($medioCta['monto'] ?? 0)), 2);
+					if ($ctaId <= 0 || $montoMedio < 0.009) {
+						continue;
+					}
+					$cuentacontable_ids[] = $ctaId;
+					if ($totalMonto < 0) {
+						// FAC: Debe medio / Haber ventas
+						$debes[] = $montoMedio;
+						$haberes[] = '';
+					} else {
+						// NC sin asiento invertido: Haber medio
+						$debes[] = '';
+						$haberes[] = $montoMedio;
+					}
+					$centrocosto_ids[] = $centrocosto_id;
+					$observaciones[] = $observacion;
+					$moneda_ids[] = $moneda_id;
+					$cotizaciones[] = $cotizacion;
+					$sumaMedios += $montoMedio;
+				}
+				$diff = round(abs($totalMonto) - $sumaMedios, 2);
+				if (abs($diff) > 0.05) {
+					throw new Exception(
+						'Las contrapartidas de medios de pago ('.$sumaMedios.') no cierran con el asiento ('.abs($totalMonto).').'
+					);
+				}
+			} else {
+			$cuentacontablereal = null;
+			$contrapartidaId = (int) $contrapartida_id;
+			if ($contrapartidaId > 0) {
+				$cuentacontable = $this->cuentacontableRepository->findPorId($contrapartidaId);
+				if ($cuentacontable) {
+					$cuentacontablereal = $this->cuentacontableRepository->findPorCodigo(
+						$cuentacontable->empresa_id,
+						$cuentacontable->codigo
+					);
+				}
 			}
+			if (! $cuentacontablereal) {
+				$cuentacontablereal = $this->cuentacontableRepository->findPorCodigo(
+					$empresa_id,
+					config('cliente.DEUDORES_POR_VENTAS')
+				);
+			}
+			if (! $cuentacontablereal) {
+				throw new Exception('No existe la cuenta de deudores por ventas para imputar la factura.');
+			}
+
+			$cuentacontable_ids[] = $cuentacontablereal->id;
 
 			if ($totalMonto < 0)
 			{
@@ -8093,6 +8217,7 @@ class FacturacionService
 			$observaciones[] = $observacion;
 			$moneda_ids[] = $moneda_id;
 			$cotizaciones[] = $cotizacion;
+			}
 		}
 
 		// Carga en arrays de funcion de grabacion de Anita
@@ -8262,6 +8387,22 @@ class FacturacionService
 		return response()->download($ruta);
 	}
 
+	/**
+	 * PDF en el navegador (inline), sin pasar por la sesión de impresión.
+	 */
+	public function listaUnaFacturaInline($id)
+	{
+		$ruta = $this->generarPdfFacturaArchivo($id);
+		$nombre = 'factura-'.preg_replace('/[^\w\-]+/', '_', (string) $id).'.pdf';
+
+		return response()->file($ruta, [
+			'Content-Type' => 'application/pdf',
+			'Content-Disposition' => 'inline; filename="'.$nombre.'"',
+			'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+			'Pragma' => 'no-cache',
+		]);
+	}
+
 	public function generarPdfFacturaArchivo($id, string $copiaLeyenda = 'ORIGINAL', bool $facturaPdfOmitirHojaRemito = false, bool $facturaPdfSoloHojaRemito = false): string
 	{
 		$ctx = $this->prepararContextoPdfFactura((int) $id);
@@ -8293,6 +8434,9 @@ class FacturacionService
 			'puntoventas.empresas',
 			'puntoventas.localidades',
 			'puntoventas.provincias',
+			'localidades',
+			'provincias',
+			'paises',
 			'monedas',
 		]);
 
@@ -8657,8 +8801,10 @@ class FacturacionService
 	{
 	   	$data = Self::leeFactura($id);
 
-		if (isset($flGeneraNotaDeCredito))
+		if (isset($flGeneraNotaDeCredito)) {
 			$data->fecha = Carbon::now();
+			\App\Support\Ventas\FacturacionLocal\FacturacionLocalNcPrecioSupport::normalizarEmisionesVistaParaNc($data);
+		}
 
 		$this->armarTablasVista($deposito_query, $cliente_query,
                             $condicionventa_query, $vendedor_query, $transporte_query,

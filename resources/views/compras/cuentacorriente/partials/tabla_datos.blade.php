@@ -25,24 +25,29 @@
         return CuentacorrienteSaldosPorMoneda::formatearMonto((float) $valor, (string) $abreviatura);
     };
 @endphp
+@php
+    $paraPdf = ! empty($para_pdf);
+    $clsNowrap = $paraPdf ? 'col-nowrap' : '';
+    $clsTexto = $paraPdf ? 'col-texto' : '';
+@endphp
 <thead>
     <tr>
-        <th style="width: 5%;">ID</th>
-        <th style="width: 12%;">Empresa</th>
-        <th style="width: 9%;">Fecha</th>
-        <th style="width: 9%;">Vencimiento</th>
-        <th style="width: {{ $enPesos ? '20%' : '24%' }};">Comprobante</th>
-        <th style="width: {{ $enPesos ? '10%' : '6%' }};">Moneda</th>
+        <th class="{{ $clsNowrap }}" style="width: 5%;">ID</th>
+        <th class="{{ $clsTexto }}" style="width: 11%;">Empresa</th>
+        <th class="{{ $clsNowrap }}" style="width: 8%;">Fecha</th>
+        <th class="{{ $clsNowrap }}" style="width: 8%;">Vencimiento</th>
+        <th class="{{ $clsTexto }}" style="width: {{ $enPesos ? '18%' : '22%' }};">Comprobante</th>
+        <th class="{{ $clsNowrap }}" style="width: {{ $enPesos ? '8%' : '6%' }};">Moneda</th>
         @if ($modoDeuda)
-            <th style="width: 10%; text-align: right;">Importe</th>
-            <th style="width: 10%; text-align: right;">Aplicado</th>
-            <th style="width: 11%; text-align: right;">Saldo pendiente</th>
-            <th style="width: 12%; text-align: right;">{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoPendientePesos() }}</th>
+            <th class="text-right" style="width: 10%; text-align: right;">Importe</th>
+            <th class="text-right" style="width: 10%; text-align: right;">Aplicado</th>
+            <th class="text-right" style="width: 11%; text-align: right;">Saldo pendiente</th>
+            <th class="text-right" style="width: 11%; text-align: right;">{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoPendientePesos() }}</th>
         @else
-            <th style="width: 10%; text-align: right;">Debe</th>
-            <th style="width: 10%; text-align: right;">Haber</th>
-            <th style="width: 11%; text-align: right;">Saldo</th>
-            <th style="width: 12%; text-align: right;">{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoPesos() }}</th>
+            <th class="text-right" style="width: 10%; text-align: right;">Debe</th>
+            <th class="text-right" style="width: 10%; text-align: right;">Haber</th>
+            <th class="text-right" style="width: 11%; text-align: right;">Saldo</th>
+            <th class="text-right" style="width: 11%; text-align: right;">{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoPesos() }}</th>
         @endif
     </tr>
 </thead>
@@ -81,12 +86,16 @@
             }
         @endphp
         <tr>
-            <td>{{ $data->id }}</td>
-            <td>{{ $data->empresas->nombre ?? ($data->nombreempresa ?? '') }}</td>
-            <td>{{ date('d/m/Y', strtotime($data->fecha ?? '')) }}</td>
-            <td>{{ date('d/m/Y', strtotime($data->fechavencimiento ?? '')) }}</td>
-            <td>{{ $etiquetaComprobante }}</td>
-            <td>{{ $importes['etiqueta_moneda'] }}</td>
+            <td class="{{ $clsNowrap }}">{{ $data->id }}</td>
+            <td class="{{ $clsTexto }}">{{ $data->empresas->nombre ?? ($data->nombreempresa ?? '') }}</td>
+            @php
+                $fechaComp = ProveedorCuentacorrienteGrillaSupport::fechaComprobante($data);
+                $fechaVto = ProveedorCuentacorrienteGrillaSupport::fechaVencimiento($data);
+            @endphp
+            <td class="{{ $clsNowrap }}">{{ $fechaComp ? date('d/m/Y', strtotime((string) $fechaComp)) : '' }}</td>
+            <td class="{{ $clsNowrap }}">{{ $fechaVto ? date('d/m/Y', strtotime((string) $fechaVto)) : '' }}</td>
+            <td class="{{ $clsTexto }}">{{ $etiquetaComprobante }}</td>
+            <td class="{{ $clsNowrap }}">{{ $importes['etiqueta_moneda'] }}</td>
             @if ($modoDeuda)
                 <td class="text-right" style="text-align: right;">{{ $formatearMonto($totalMostrar, $abreviaturaFila) }}</td>
                 <td class="text-right" style="text-align: right;">

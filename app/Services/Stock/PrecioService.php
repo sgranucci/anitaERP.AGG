@@ -222,7 +222,13 @@ class PrecioService
 				{
 					$query->select(DB::raw(1))
 						->from("combinacion")
-						  ->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='".substr($estado,0,1)."'");
+						  ->whereRaw(
+						  	'combinacion.articulo_id=articulo.id and '
+						  	.\App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+						  		\App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+						  	)
+						  	."='".substr($estado,0,1)."'"
+						  );
 				});
 
 			$query = $query->get();

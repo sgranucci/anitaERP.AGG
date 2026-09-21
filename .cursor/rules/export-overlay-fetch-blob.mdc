@@ -1,0 +1,60 @@
+---
+description: Overlay amarillo en exportaciones PDF/Excel — cerrar al terminar la generación (fetch+blob)
+globs: resources/views/**/*reporte*/**,resources/views/**/reporte.blade.php,public/assets/pages/scripts/**/*reporte*.js,public/assets/pages/scripts/**/filtro.js
+alwaysApply: false
+---
+
+# Overlay al exportar PDF/Excel/CSV
+
+La descarga **attachment** no navega la página: `pageshow` **no** alcanza para ocultar el banner. El aviso debe cortarse **cuando termina de generarse el archivo**, no cuando el usuario abre Excel.
+
+Complementa `proceso-overlay-espera.mdc`.
+
+## Patrón obligatorio (reportes nuevos / al tocar export)
+
+`fetch(href)` → `blob` → link `download` → **`ocultar()` en el `then` / `finally`**.
+
+Referencias: `caja/cheque/reporte.js`, `compras/ordencompra_reporte/filtro.js`.
+
+```javascript
+a.addEventListener('click', function (e) {
+    e.preventDefault();
+    mostrar('Exportando…', 'Generando Excel… Pulse Esc para cerrar este aviso.');
+    fetch(a.href, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.blob().then(function (blob) {
+                return { blob: blob, filename: nombreDesdeDisposition(res.headers.get('Content-Disposition'), 'listado.xlsx') };
+            });
+        })
+        .then(function (pack) {
+            dispararDescargaBlob(pack.blob, pack.filename);
+            ocultar(); // ← al terminar la generación
+        })
+        .catch(function (err) {
+            ocultar();
+            alert(err.message || 'No se pudo exportar');
+        });
+});
+```
+
+## También
+
+| Evento | Acción |
+|---|---|
+| Escape | `abort()` del fetch + `ocultar()` |
+| `pageshow` / `pagehide` | `ocultar()` (atrás / bfcache) |
+| Timeout seguridad | opcional (~10 min), no sustituye el `ocultar` al completar |
+
+## Prohibido
+
+- Solo `click` → mostrar overlay y esperar `focus` (el banner queda hasta abrir el Excel).
+- Dejar el overlay pegado tras descarga exitosa.
+- Navegar con `<a href>` directo en exports pesados nuevos (usar fetch+blob).
+
+## Comprobación rápida
+
+```bash
+rg "fetch\\(.*listar|preventDefault|createObjectURL" public/assets/pages/scripts/{modulo}/
+rg "proceso_overlay_aviso" resources/views/{modulo}/
+```

@@ -7,32 +7,57 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 
 <script>
-function cambiarEstado(id, index){
+@php
+    $uiFerliComboJs = \App\Support\Stock\CombinacionEstadoCanalSupport::uiFerliActiva();
+@endphp
+var UI_FERLI_COMBO = @json($uiFerliComboJs);
+
+function cambiarEstado(id, index, ambito){
+  ambito = ambito || 'AMBOS';
+  var textoAmbito = (ambito === 'LOCAL') ? ' (local)' : ((ambito === 'FABRICA') ? ' (fábrica)' : '');
   var textoEstado = (index == 0 )?'desactivar':'activar';
-  var confirmar = confirm("¿Desea " + textoEstado + " combinación?");
+  var confirmar = confirm("¿Desea " + textoEstado + " combinación" + textoAmbito + "?");
   if(confirmar){
     var token = $('meta[name="csrf-token"]').attr('content');
     var estado = (index == 1)?'A':'I';
-    var data = "id=" + id + "&estado=" + estado + "&_token=" + token;
+    var data = "id=" + id + "&estado=" + estado + "&ambito=" + ambito + "&_token=" + token;
     $.ajax({
         type: "post",
         url: '/anitaERP/public/stock/combinacion/updateState',
         data: data,
         success: function(response){
-          $("#container-button-state"+id).html("");
-          var btn = '';
-          var estado = '';
-          if(index == 1){
-            btn = "<button type='button' class='btn-xs btn-danger ml-2' onclick='cambiarEstado("+id+", 0)'>Desactivar</button>";
-            estado = "A";
-          }else{
-            btn = "<button type='button' class='btn-xs btn-success ml-2' onclick='cambiarEstado("+id+", 1)'>Activar</button>";
-            estado = "I";
-          }
-          $("#container-button-state"+id).html(btn);
+          var parsed = {};
+          try { parsed = (typeof response === 'string') ? JSON.parse(response) : response; } catch (e) { parsed = {}; }
+          var fab = parsed.estado_fabrica || (ambito === 'FABRICA' || ambito === 'AMBOS' ? estado : null);
+          var loc = parsed.estado_local || (ambito === 'LOCAL' || ambito === 'AMBOS' ? estado : null);
+          var leg = parsed.estado || estado;
 
-          $("#container-estado"+id).html("");
-          $("#container-estado"+id).html(estado);
+          if (UI_FERLI_COMBO) {
+            if (fab) {
+              $("#container-estado-fab"+id).html(fab);
+              $("#container-button-fab"+id).html(
+                fab === 'A'
+                  ? "<button type='button' class='btn-xs btn-danger ml-1' onclick=\"cambiarEstado("+id+", 0, 'FABRICA')\">Fab. off</button>"
+                  : "<button type='button' class='btn-xs btn-success ml-1' onclick=\"cambiarEstado("+id+", 1, 'FABRICA')\">Fab. on</button>"
+              );
+            }
+            if (loc) {
+              $("#container-estado-loc"+id).html(loc);
+              $("#container-button-loc"+id).html(
+                loc === 'A'
+                  ? "<button type='button' class='btn-xs btn-danger ml-1' onclick=\"cambiarEstado("+id+", 0, 'LOCAL')\">Loc. off</button>"
+                  : "<button type='button' class='btn-xs btn-success ml-1' onclick=\"cambiarEstado("+id+", 1, 'LOCAL')\">Loc. on</button>"
+              );
+            }
+            $("#container-estado"+id).html(leg);
+          } else {
+            $("#container-button-state"+id).html(
+              index == 1
+                ? "<button type='button' class='btn-xs btn-danger ml-2' onclick='cambiarEstado("+id+", 0)'>Desactivar</button>"
+                : "<button type='button' class='btn-xs btn-success ml-2' onclick='cambiarEstado("+id+", 1)'>Activar</button>"
+            );
+            $("#container-estado"+id).html(leg);
+          }
         }
     });
   }
@@ -46,6 +71,9 @@ function cambiarEstado(id, index){
 
 @section('contenido')
 <meta name="csrf-token" content="{{ csrf_token() }}" />
+@php
+    $uiFerliCombo = \App\Support\Stock\CombinacionEstadoCanalSupport::uiFerliActiva();
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -72,13 +100,22 @@ function cambiarEstado(id, index){
                             <th class="width80">Combinaci&oacute;n</th>
                             <th>Nombre</th>
                             <th>Art&iacute;culo</th>
+                            @if ($uiFerliCombo)
+                            <th class="width20">Fab.</th>
+                            <th class="width20">Local</th>
+                            @else
                             <th class="width20">Estado</th>
+                            @endif
                             <th class="width80">Foto</th>
                             <th data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
 						@foreach($combinaciones as $combinacion)
+                            @php
+                                $fab = $combinacion->estado_fabrica ?? $combinacion->estado;
+                                $loc = $combinacion->estado_local ?? $combinacion->estado;
+                            @endphp
     						<tr data-entry-id="{{ $combinacion->id }}">
         						<td>
             						{{ $combinacion->id ?? '' }}
@@ -92,14 +129,39 @@ function cambiarEstado(id, index){
         						<td>
             						{{ $combinacion->articulos->sku ?? '' }} {{ $combinacion->articulos->descripcion ?? '' }}
         						</td>
-        						<td> 
+                                @if ($uiFerliCombo)
+        						<td>
+                        		<span id="container-estado-fab{{$combinacion->id}}">{{ $fab }}</span>
+        						</td>
+        						<td>
+                        		<span id="container-estado-loc{{$combinacion->id}}">{{ $loc }}</span>
+        						</td>
+                                @else
+        						<td>
                         		<span id="container-estado{{$combinacion->id}}">
             						{{ $combinacion->estado ?? '' }}
 								</span>
         						</td>
+                                @endif
                             	<td><img width=100px src="{{ isset($combinacion->foto) ? asset("storage/imagenes/fotos_articulos/$combinacion->foto") : asset("storage/imagenes/fotos_articulos/".$combinacion->articulos->sku."-".$combinacion->codigo.".jpg") }}"></td>
         						<td>
                        			@if (can('cambiar-estado-combinaciones', false))
+                                    @if ($uiFerliCombo)
+                        		<span id="container-button-fab{{$combinacion->id}}">
+									@if ($fab == 'A')
+            							<button type="button" class="btn-xs btn-danger ml-1" onclick="cambiarEstado({{$combinacion->id}}, 0, 'FABRICA')">Fab. off</button>
+									@else
+            							<button type="button" class="btn-xs btn-success ml-1" onclick="cambiarEstado({{$combinacion->id}}, 1, 'FABRICA')">Fab. on</button>
+									@endif
+                        		</span>
+                        		<span id="container-button-loc{{$combinacion->id}}">
+									@if ($loc == 'A')
+            							<button type="button" class="btn-xs btn-danger ml-1" onclick="cambiarEstado({{$combinacion->id}}, 0, 'LOCAL')">Loc. off</button>
+									@else
+            							<button type="button" class="btn-xs btn-success ml-1" onclick="cambiarEstado({{$combinacion->id}}, 1, 'LOCAL')">Loc. on</button>
+									@endif
+                        		</span>
+                                    @else
                         		<span id="container-button-state{{$combinacion->id}}">
 									@if ($combinacion->estado == 'A')
             							<button type="button" class="btn-xs btn-danger ml-2" onclick="cambiarEstado({{$combinacion->id}}, 0)">Desactivar</button>
@@ -107,6 +169,7 @@ function cambiarEstado(id, index){
             							<button type="button" class="btn-xs btn-success ml-2" onclick="cambiarEstado({{$combinacion->id}}, 1)">Activar</button>
 									@endif
                         		</span>
+                                    @endif
 								@endif
                        			@if (can('editar-combinaciones-disenio', false))
           							<a href="/anitaERP/public/stock/combinacion/edit/{{ $combinacion->id }}" type="button" class="btn-xs btn-primary ml-2">Dise&ntilde;o</a>

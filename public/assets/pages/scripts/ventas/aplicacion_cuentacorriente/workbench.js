@@ -18,7 +18,8 @@
         kpis: { creditos: 0, deudas: 0, nc: 0, pagos: 0, vencida: 0 },
         lineas: [],
         creditoActivo: 0,
-        autoActivo: true,
+        autoActivo: false,
+        fifoGlobal: false,
         omitidosDeuda: {},
         omitidosCredito: {},
         verOtrasEmpresas: false,
@@ -469,13 +470,27 @@
         return sugerirFifoLocal(creditosAdj, deudasAdj);
     }
 
+    // Auto solo con el crédito activo; fifoGlobal (Rehacer FIFO) usa todos.
+    function omitidosCreditoParaAuto() {
+        var omit = $.extend({}, state.omitidosCredito);
+        if (state.fifoGlobal || !state.creditoActivo) {
+            return omit;
+        }
+        state.creditos.forEach(function (c) {
+            if (Number(c.id) !== Number(state.creditoActivo)) {
+                omit[c.id] = true;
+            }
+        });
+        return omit;
+    }
+
     function recomponerAuto() {
         var manuals = state.lineas.filter(function (l) { return l.origen === 'manual'; });
         if (!state.autoActivo) {
             state.lineas = manuals;
             return;
         }
-        var autos = sugerirFifoRestanteLocal(manuals, state.omitidosDeuda, state.omitidosCredito).map(function (l) {
+        var autos = sugerirFifoRestanteLocal(manuals, state.omitidosDeuda, omitidosCreditoParaAuto()).map(function (l) {
             return enriquecerLinea({ credito_id: l.credito_id, deuda_id: l.deuda_id, monto: l.monto, origen: 'auto' });
         });
         state.lineas = manuals.concat(autos);
@@ -948,7 +963,13 @@
 
     function seleccionarCredito(id) {
         state.creditoActivo = Number(id) || 0;
+        // Al cambiar de crédito, las sugerencias auto de otros se descartan;
+        // las líneas manuales se conservan (fijadas a propósito).
+        state.lineas = state.lineas.filter(function (l) {
+            return l.origen === 'manual' || Number(l.credito_id) === state.creditoActivo;
+        });
         sincronizarCotLiq(creditoById(state.creditoActivo));
+        recomponerAuto();
         pintar();
     }
 
@@ -1154,8 +1175,12 @@
         state.omitidosCredito = {};
         state.lineas = [];
         state.autoActivo = true;
+        state.fifoGlobal = true;
         $('#acc-auto').prop('checked', true);
         recomponerAuto();
+        // Fijar el matching global: si no, el próximo auto (solo crédito activo) lo pisa.
+        state.lineas.forEach(function (l) { l.origen = 'manual'; });
+        state.fifoGlobal = false;
         pintar();
         toast(state.lineas.length ? (state.lineas.length + ' par(es) sugeridos') : 'No hay matching posible', state.lineas.length ? 'success' : 'info');
     });

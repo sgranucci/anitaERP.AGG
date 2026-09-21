@@ -4,56 +4,7 @@
 @endsection
 
 @section('scripts')
-<script>
-(function () {
-    var overlay = document.getElementById('cheque-reporte-overlay');
-    function mostrar(titulo, subtitulo) {
-        if (!overlay) return;
-        if (titulo) document.getElementById('cheque-reporte-titulo').textContent = titulo;
-        if (subtitulo) document.getElementById('cheque-reporte-subtitulo').textContent = subtitulo;
-        overlay.classList.remove('d-none');
-        overlay.style.display = 'flex';
-        overlay.setAttribute('aria-hidden', 'false');
-    }
-    function ocultar() {
-        if (!overlay) return;
-        overlay.classList.add('d-none');
-        overlay.style.display = '';
-        overlay.setAttribute('aria-hidden', 'true');
-    }
-    var form = document.getElementById('form-reporte-cheque');
-    if (form) {
-        form.addEventListener('submit', function () {
-            if (typeof form.checkValidity === 'function' && !form.checkValidity()) return;
-            mostrar('Consultando cheques…', 'Puede demorar según la cantidad de cheques. No cierre la página.');
-        });
-    }
-    document.querySelectorAll('a[href*="listareportecheque"]').forEach(function (a) {
-        a.addEventListener('click', function () {
-            mostrar('Exportando…', 'Pulse Esc para seguir en la pantalla si la descarga no navega.');
-        });
-    });
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') ocultar();
-    });
-    window.addEventListener('pageshow', ocultar);
-
-    function syncTipo() {
-        var marcado = document.querySelector('input[name="tipo"]:checked');
-        var tipo = marcado ? marcado.value : 'E';
-        var emitidos = document.getElementById('criterios-emitidos');
-        var recibidos = document.getElementById('criterios-recibidos');
-        var etiqueta = document.getElementById('etiqueta-fecha-doc');
-        if (emitidos) emitidos.style.display = tipo === 'E' ? '' : 'none';
-        if (recibidos) recibidos.style.display = tipo === 'R' ? '' : 'none';
-        if (etiqueta) etiqueta.textContent = tipo === 'R' ? 'Fecha de ingreso' : 'Fecha de emisión';
-    }
-    document.querySelectorAll('input[name="tipo"]').forEach(function (radio) {
-        radio.addEventListener('change', syncTipo);
-    });
-    syncTipo();
-})();
-</script>
+<script src="{{ asset('assets/pages/scripts/caja/cheque/reporte.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cheque/reporte.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -67,9 +18,12 @@
 @php
     use App\Support\Caja\ChequeDepositoComprobanteSupport;
     use App\Support\Caja\ChequeReporteFiltros;
+    use App\Support\Caja\ChequeReporteSupport;
     $f = $filtros ?? [];
     $tipo = ($f['tipo'] ?? 'E') === 'R' ? 'R' : 'E';
     $consultado = ! empty($consultado);
+    $multiEmpresa = ($empresa_query ?? collect())->count() > 1;
+    $colspan = $multiEmpresa ? 14 : 13;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -89,12 +43,12 @@
                     <div class="form-row align-items-end">
                         <div class="form-group col-md-3 mb-2">
                             <label class="small mb-1 d-block">Tipo</label>
-                            <div class="btn-group btn-group-sm btn-group-toggle" data-toggle="buttons">
-                                <label class="btn {{ $tipo === 'E' ? 'btn-primary active' : 'btn-outline-primary' }}">
-                                    <input type="radio" name="tipo" value="E" {{ $tipo === 'E' ? 'checked' : '' }}> Emitidos
+                            <div class="btn-group btn-group-sm btn-group-toggle" data-toggle="buttons" id="grp-tipo-cheque">
+                                <label class="btn btn-outline-primary {{ $tipo === 'E' ? 'active' : '' }}">
+                                    <input type="radio" name="tipo" value="E" autocomplete="off" {{ $tipo === 'E' ? 'checked' : '' }}> Emitidos
                                 </label>
-                                <label class="btn {{ $tipo === 'R' ? 'btn-info active' : 'btn-outline-info' }}">
-                                    <input type="radio" name="tipo" value="R" {{ $tipo === 'R' ? 'checked' : '' }}> Recibidos
+                                <label class="btn btn-outline-primary {{ $tipo === 'R' ? 'active' : '' }}">
+                                    <input type="radio" name="tipo" value="R" autocomplete="off" {{ $tipo === 'R' ? 'checked' : '' }}> Recibidos
                                 </label>
                             </div>
                         </div>
@@ -120,7 +74,7 @@
                         <div class="form-group col-md-2 mb-2">
                             <label class="small mb-1" for="orden_dir">Dirección</label>
                             <select name="orden_dir" id="orden_dir" class="form-control form-control-sm">
-                                <option value="asc" @selected(($f['orden_dir'] ?? 'asc') === 'asc')>Ascendente</option>
+                                <option value="asc" @selected(($f['orden_dir'] ?? 'asc') === 'asc')>Ascendente (viejo → nuevo)</option>
                                 <option value="desc" @selected(($f['orden_dir'] ?? 'asc') === 'desc')>Descendente</option>
                             </select>
                         </div>
@@ -163,9 +117,9 @@
                         </div>
                     </div>
                     <p class="small text-muted mb-0">
-                        Emitidos filtra por estado del cheque propio (diferido, debitado, anulado).
-                        Recibidos filtra por situación de cartera, depósito, acreditación, rechazo o caución.
-                        El orden se aplica en pantalla y en PDF / Excel.
+                        Rangos desde/hasta de ingreso o emisión y de fecha de cheque.
+                        El Excel/PDF incluyen suma por día (como Anita) e importe numérico.
+                        Clic en el ID o Int. abre el detalle del cheque.
                     </p>
                 </div>
             </form>
@@ -189,55 +143,77 @@
                         @endforeach
                     </p>
                 @endif
+                @if (($totalesPorDia ?? collect())->isNotEmpty())
+                    <div class="px-3 pb-2">
+                        <p class="small font-weight-bold mb-1">Totales por día (fecha de cheque)</p>
+                        <table class="table table-sm table-bordered mb-0" style="max-width: 420px;">
+                            <thead style="background:#85C1E9;color:#17202A;">
+                                <tr>
+                                    <th>Día</th>
+                                    <th class="text-right">Cant.</th>
+                                    <th class="text-right">Importe</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($totalesPorDia as $dia)
+                                    <tr>
+                                        <td>{{ $dia->fecha ? ChequeDepositoComprobanteSupport::fechaDmy($dia->fecha) : '(sin fecha)' }}</td>
+                                        <td class="text-right">{{ (int) $dia->cantidad }}</td>
+                                        <td class="text-right">{{ number_format((float) $dia->monto, 2, ',', '.') }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                @endif
                 <table class="table table-sm table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>ID</th>
-                            <th>Número</th>
                             <th>Int.</th>
-                            <th>Estado</th>
-                            <th>{{ $tipo === 'R' ? 'Ingreso' : 'Emisión' }}</th>
-                            <th>Fecha de cheque</th>
+                            <th>{{ $tipo === 'R' ? 'Fec.Ing.' : 'Fec.Emis.' }}</th>
+                            <th>Fec.Che.</th>
+                            <th class="text-right">Importe</th>
+                            <th>N.Cli.</th>
+                            <th>Cliente</th>
+                            <th>Destino</th>
+                            <th>Nro. cheque</th>
                             <th>{{ $tipo === 'E' ? 'Cuenta' : 'Banco' }}</th>
-                            @if (($empresa_query ?? collect())->count() > 1)
+                            <th>Suc</th>
+                            <th>Cta.libr.</th>
+                            <th>{{ $tipo === 'R' ? 'N.rec.' : 'N.OP' }}</th>
+                            @if ($multiEmpresa)
                             <th>Empresa</th>
                             @endif
-                            <th class="text-right">Monto</th>
-                            <th>Mon</th>
-                            <th>Beneficiario</th>
                         </tr>
                     </thead>
                     <tbody>
                         @forelse ($datas as $data)
-                        @php
-                            $estadoLabel = collect($estado_enum ?? [])->firstWhere('valor', $data->estado);
-                        @endphp
                         <tr>
                             <td>
-                                <a href="{{ route('editar_cheque', ['id' => $data->id]) }}" class="text-primary" target="_blank" rel="noopener">{{ $data->id }}</a>
+                                <a href="{{ route('editar_cheque', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="text-primary" target="_blank" rel="noopener" title="Detalle de cheque">{{ $data->id }}</a>
                             </td>
-                            <td>{{ $data->numerocheque }}</td>
-                            <td>{{ $data->nro_interno_anita }}</td>
-                            <td>{{ $estadoLabel['nombre'] ?? $data->estado }}</td>
+                            <td>
+                                <a href="{{ route('editar_cheque', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="text-primary" target="_blank" rel="noopener" title="Detalle de cheque">{{ $data->nro_interno_anita }}</a>
+                            </td>
                             <td>{{ ChequeDepositoComprobanteSupport::fechaDmy($data->fechaemision) }}</td>
                             <td>{{ ChequeDepositoComprobanteSupport::fechaDmy($data->fechapago) }}</td>
-                            <td>
-                                @if ($tipo === 'E')
-                                    {{ $data->cuentacajas->nombre ?? '' }}
-                                @else
-                                    {{ $data->bancos->nombre ?? '' }}
-                                @endif
-                            </td>
-                            @if (($empresa_query ?? collect())->count() > 1)
-                            <td>{{ $data->empresas->nombre ?? '' }}</td>
-                            @endif
                             <td class="text-right">{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
-                            <td class="text-center small">{{ $data->monedas->abreviatura ?? '' }}</td>
-                            <td class="small">{{ \Illuminate\Support\Str::limit($data->entregado ?? $data->anombrede, 28) }}</td>
+                            <td>{{ ChequeReporteSupport::codigoCliente($data) }}</td>
+                            <td class="small">{{ \Illuminate\Support\Str::limit(ChequeReporteSupport::nombreCliente($data), 28) }}</td>
+                            <td class="small">{{ \Illuminate\Support\Str::limit(ChequeReporteSupport::destino($data), 28) }}</td>
+                            <td>{{ $data->numerocheque }}</td>
+                            <td class="small">{{ \Illuminate\Support\Str::limit(ChequeReporteSupport::bancoOCuenta($data), 24) }}</td>
+                            <td>{{ $data->sucursalpago }}</td>
+                            <td class="small">{{ $data->cuentalibradora }}</td>
+                            <td>{{ ChequeReporteSupport::nroDocumentoOrigen($data) }}</td>
+                            @if ($multiEmpresa)
+                            <td class="small">{{ $data->empresas->nombre ?? '' }}</td>
+                            @endif
                         </tr>
                         @empty
                         <tr>
-                            <td colspan="11" class="text-center text-muted py-3">No hay cheques para esos criterios.</td>
+                            <td colspan="{{ $colspan }}" class="text-center text-muted py-3">No hay cheques para esos criterios.</td>
                         </tr>
                         @endforelse
                     </tbody>

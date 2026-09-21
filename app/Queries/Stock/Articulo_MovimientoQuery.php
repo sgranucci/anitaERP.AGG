@@ -91,10 +91,20 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
 
         switch ($estado) {
             case 'ACTIVAS':
-                $articulo_query = $articulo_query->where('combinacion.estado', 'A');
+                $articulo_query = $articulo_query->where(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                        \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                    ),
+                    'A'
+                );
                 break;
             case 'INACTIVAS':
-                $articulo_query = $articulo_query->where('combinacion.estado', 'I');
+                $articulo_query = $articulo_query->where(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                        \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                    ),
+                    'I'
+                );
                 break;
         }
 
@@ -207,10 +217,20 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
         }
         switch ($estado) {
             case 'ACTIVAS':
-                $query->where('combinacion.estado', 'A');
+                $query->where(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                        \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                    ),
+                    'A'
+                );
                 break;
             case 'INACTIVAS':
-                $query->where('combinacion.estado', 'I');
+                $query->where(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                        \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                    ),
+                    'I'
+                );
                 break;
         }
         if ($desdelote != '') {

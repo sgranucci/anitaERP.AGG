@@ -11,10 +11,10 @@
         @include('includes.form-error')
         @include('includes.mensaje')
         <div class="card card-primary">
-            <div class="card-header">
-                <h3 class="card-title">Editar turno #{{ $data->id }}</h3>
-                <div class="card-tools">
-                    <a href="{{ route('facturacion_local_turno') }}" class="btn btn-outline-info btn-sm">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">Editar turno #{{ $data->id }}</h3>
+                <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
+                    <a href="{{ route('facturacion_local_turno') }}" class="btn btn-outline-light btn-sm">
                         <i class="fa fa-reply-all"></i> Volver
                     </a>
                 </div>

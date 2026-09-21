@@ -9,6 +9,7 @@
     var cuentacajaxcodigo = null;
     var clientePos = null;
     var netoActual = 0;
+    var receptorManualModo = 'b';
 
     function $(id) { return document.getElementById(id); }
 
@@ -80,19 +81,23 @@
     }
 
     function htmlIconoMedio(cuenta) {
-        var icono = (cuenta && cuenta.icono) || 'fa fa-cash-register';
-        var color = (cuenta && cuenta.icono_color) || 'text-secondary';
-        if (icono === 'gastro-icon-mercadopago') {
-            return '<span class="gastro-icon-mercadopago" aria-hidden="true"></span>';
+        var icono = (cuenta && cuenta.icono) || 'fa fa-wallet';
+        if (icono === 'fl-icon-mercadopago' || icono === 'gastro-icon-mercadopago') {
+            return '<span class="fl-medio-icon fl-icon-mercadopago" aria-hidden="true"></span>';
         }
-        return '<i class="' + escapeHtml(icono) + ' ' + escapeHtml(color) + '" aria-hidden="true"></i>';
+        return '<span class="fl-medio-icon" aria-hidden="true"><i class="' + escapeHtml(icono) + '"></i></span>';
     }
 
-    function etiquetaCortaMedio(cuenta) {
+    function etiquetaMedio(cuenta) {
         if (cuenta && cuenta.etiqueta_boton) return cuenta.etiqueta_boton;
-        var codigo = String((cuenta && cuenta.codigo) || '').trim();
-        if (codigo) return codigo;
-        return String((cuenta && cuenta.nombre) || 'Medio');
+        var nombre = String((cuenta && cuenta.nombre) || '').trim();
+        if (nombre) return nombre;
+        return String((cuenta && cuenta.codigo) || 'Medio');
+    }
+
+    function temaMedio(cuenta) {
+        var tema = String((cuenta && cuenta.tema) || '').trim();
+        return tema !== '' ? tema : 'default';
     }
 
     /* ——— Carrito ——— */
@@ -148,10 +153,20 @@
             netoActual = Number(b.neto || 0);
             var el = $('fl-totales');
             if (el) {
-                el.childNodes[0].textContent = money(netoActual);
+                var mostrar = netoActual;
+                if (Math.abs(netoActual) < 0.009 && cart.length) {
+                    mostrar = 0.01;
+                }
+                el.childNodes[0].textContent = money(mostrar);
                 var det = $('fl-totales-detalle');
                 if (det) {
-                    det.textContent = 'FAC ' + money(b.neto_fac || 0) + ' · NC ' + money(b.neto_nc || 0);
+                    var extra = '';
+                    if (netoActual < -0.009) {
+                        extra = ' · Bloqueado (NC completa afuera)';
+                    } else if (Math.abs(netoActual) < 0.009 && (Number(b.neto_fac || 0) > 0 || Number(b.neto_nc || 0) > 0)) {
+                        extra = ' · Mín. ARCA $0,01';
+                    }
+                    det.textContent = 'FAC ' + money(b.neto_fac || 0) + ' · NC ' + money(b.neto_nc || 0) + extra;
                 }
             }
         }).catch(function () {});
@@ -190,11 +205,71 @@
         if (cod) cod.value = cuenta.codigo || '';
         if (nom) nom.value = cuenta.nombre || '';
         var monto = tr.querySelector('.monto');
-        if (monto && (!monto.value || Number(monto.value) === 0) && netoActual > 0) {
-            var ya = totalCobrado();
-            var resto = Math.max(0, netoActual - (ya - (parseFloat(monto.value) || 0)));
-            monto.value = resto.toFixed(2);
+        if (monto && (!monto.value || Number(monto.value) === 0)) {
+            var aCobrar = (Math.abs(netoActual) < 0.009 && cart.length) ? 0.01 : netoActual;
+            if (aCobrar > 0) {
+                var ya = totalCobrado();
+                var resto = Math.max(0, aCobrar - (ya - (parseFloat(monto.value) || 0)));
+                monto.value = resto.toFixed(2);
+            }
         }
+        actualizarCampoCupon(tr, cuenta);
+    }
+
+    function textoEsTarjeta(nombre, codigo) {
+        var texto = String(nombre || '') + ' ' + String(codigo || '');
+        texto = texto.toUpperCase()
+            .replace(/[ÁÉÍÓÚÜÑ]/g, function (c) {
+                return ({ Á: 'A', É: 'E', Í: 'I', Ó: 'O', Ú: 'U', Ü: 'U', Ñ: 'N' })[c] || c;
+            })
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!texto) return false;
+        var excluidos = ['CANJE', 'CTG', 'EFECTIVO', 'TRANSFER', 'MERCADO PAGO', 'MERCADOPAGO', 'CHEQUE', 'DOLAR', 'EURO'];
+        for (var i = 0; i < excluidos.length; i++) {
+            if (texto.indexOf(excluidos[i]) !== -1) return false;
+        }
+        var marcas = ['VISA', 'MASTER', 'MAESTRO', 'CABAL', 'AMEX', 'AMERICAN EXPRESS', 'NARANJA', 'FISERV', 'POSNET', 'GETNET', 'PAYWAY', 'FIRST DATA', 'TARJETA', 'CREDITO', 'DEBITO'];
+        for (var j = 0; j < marcas.length; j++) {
+            if (texto.indexOf(marcas[j]) !== -1) return true;
+        }
+        return false;
+    }
+
+    function cuentaPideCupon(cuenta) {
+        if (!cuenta) return false;
+        if (typeof cuenta.pide_cupon === 'boolean') return cuenta.pide_cupon;
+        var conocida = (CFG.cuentas || []).find(function (c) {
+            return String(c.id) === String(cuenta.id);
+        });
+        if (conocida && typeof conocida.pide_cupon === 'boolean') return conocida.pide_cupon;
+        return textoEsTarjeta(cuenta.nombre, cuenta.codigo);
+    }
+
+    function actualizarCampoCupon(tr, cuenta) {
+        if (!tr) return;
+        var cupon = tr.querySelector('.numerocupon');
+        if (!cupon) return;
+        if (cuentaPideCupon(cuenta)) {
+            cupon.classList.remove('d-none');
+            cupon.required = true;
+        } else {
+            cupon.classList.add('d-none');
+            cupon.required = false;
+            cupon.value = '';
+        }
+    }
+
+    function filaCuponPendiente() {
+        var filas = document.querySelectorAll('#tbody-fl-cuenta-table tr');
+        for (var i = 0; i < filas.length; i++) {
+            var cupon = filas[i].querySelector('.numerocupon');
+            var id = +(filas[i].querySelector('.cuentacaja_id').value || 0);
+            var monto = parseFloat(filas[i].querySelector('.monto').value) || 0;
+            if (!cupon || cupon.classList.contains('d-none') || id <= 0 || monto === 0) continue;
+            if (!String(cupon.value || '').trim()) return cupon;
+        }
+        return null;
     }
 
     function totalCobrado() {
@@ -218,12 +293,11 @@
         lista.forEach(function (cuenta) {
             var btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'btn btn-sm btn-outline-secondary fl-medio-rapido';
-            btn.title = (cuenta.codigo ? cuenta.codigo + ' — ' : '') + (cuenta.nombre || '');
+            btn.className = 'fl-medio-rapido fl-medio-tema-' + temaMedio(cuenta);
+            btn.title = (cuenta.codigo ? cuenta.codigo + ' — ' : '') + (cuenta.nombre || etiquetaMedio(cuenta));
             btn.dataset.cuentacajaId = String(cuenta.id);
             btn.innerHTML = htmlIconoMedio(cuenta)
-                + '<span class="fl-medio-cod">' + escapeHtml(cuenta.codigo || '') + '</span>'
-                + '<span>' + escapeHtml(etiquetaCortaMedio(cuenta)) + '</span>';
+                + '<span class="fl-medio-nombre">' + escapeHtml(etiquetaMedio(cuenta)) + '</span>';
             btn.addEventListener('click', function () {
                 seleccionarMedioRapido(cuenta);
             });
@@ -246,6 +320,11 @@
         }
         if (!tr) return;
         asignarCuentaEnFila(tr, cuenta);
+        var cupon = tr.querySelector('.numerocupon');
+        if (cupon && !cupon.classList.contains('d-none')) {
+            cupon.focus();
+            return;
+        }
         var monto = tr.querySelector('.monto');
         if (monto) monto.focus();
     }
@@ -256,7 +335,11 @@
             var id = +(row.querySelector('.cuentacaja_id').value || 0);
             var monto = parseFloat(row.querySelector('.monto').value) || 0;
             if (id > 0 && monto !== 0) {
-                out.push({ cuentacaja_id: id, moneda_id: 1, monto: monto });
+                var cuponInp = row.querySelector('.numerocupon');
+                var cupon = cuponInp && !cuponInp.classList.contains('d-none')
+                    ? String(cuponInp.value || '').trim()
+                    : '';
+                out.push({ cuentacaja_id: id, moneda_id: 1, monto: monto, numerocupon: cupon });
             }
         });
         return out;
@@ -341,6 +424,7 @@
         if (!codigo) {
             tr.querySelector('.cuentacaja_id').value = '';
             tr.querySelector('.nombre').value = '';
+            actualizarCampoCupon(tr, null);
             return;
         }
         var cuenta = (CFG.cuentas || []).find(function (c) {
@@ -353,6 +437,7 @@
         }
         tr.querySelector('.cuentacaja_id').value = '';
         tr.querySelector('.nombre').value = '';
+        actualizarCampoCupon(tr, null);
         if (avisar) {
             setTimeout(function () {
                 alert('Cuenta no habilitada en este local: ' + codigo);
@@ -848,6 +933,124 @@
         cargarClientePos({ id: +(($('cliente_id') && $('cliente_id').value) || 0) });
     };
 
+    function receptorManualActivo() {
+        var toggle = $('fl-receptor-manual-toggle');
+        return !!(toggle && toggle.checked);
+    }
+
+    function setReceptorManualModo(modo) {
+        receptorManualModo = modo === 'a' ? 'a' : 'b';
+        var btnB = $('fl-rec-modo-b');
+        var btnA = $('fl-rec-modo-a');
+        var camposB = $('fl-rec-campos-b');
+        var camposA = $('fl-rec-campos-a');
+        if (btnB) btnB.classList.toggle('active', receptorManualModo === 'b');
+        if (btnA) btnA.classList.toggle('active', receptorManualModo === 'a');
+        if (camposB) camposB.classList.toggle('d-none', receptorManualModo !== 'b');
+        if (camposA) camposA.classList.toggle('d-none', receptorManualModo !== 'a');
+        actualizarLetraDesdeReceptorManual();
+    }
+
+    function toggleReceptorManual(activo) {
+        var panel = $('fl-receptor-manual');
+        if (panel) panel.classList.toggle('d-none', !activo);
+        var campoCliente = document.querySelector('.fl-cliente-campo');
+        if (campoCliente) {
+            campoCliente.querySelectorAll('input, button').forEach(function (el) {
+                el.disabled = !!activo;
+            });
+        }
+        if (activo) {
+            if ($('cliente_id')) $('cliente_id').value = '';
+            if ($('codigocliente')) $('codigocliente').value = '';
+            if ($('nombrecliente')) $('nombrecliente').value = '';
+            clientePos = null;
+            setReceptorManualModo(receptorManualModo);
+        } else {
+            actualizarLetraBadge(null);
+        }
+    }
+
+    function actualizarLetraDesdeReceptorManual() {
+        if (!receptorManualActivo()) return;
+        var badge = $('fl-letra-badge');
+        var extra = $('fl-cliente-extra');
+        if (!badge) return;
+        if (receptorManualModo === 'a') {
+            badge.className = 'badge badge-danger';
+            badge.textContent = 'Factura A · eventual';
+            if (extra) extra.textContent = 'CUIT / domicilio / localidad (solo esta venta)';
+        } else {
+            badge.className = 'badge badge-info';
+            badge.textContent = 'Factura B/C · eventual';
+            if (extra) extra.textContent = 'Nombre y DNI (solo esta venta)';
+        }
+    }
+
+    function armarReceptorManual() {
+        if (!receptorManualActivo()) return null;
+        if (receptorManualModo === 'a') {
+            return {
+                modo: 'a',
+                nombre: (($('fl-rec-nombre-a') && $('fl-rec-nombre-a').value) || '').trim(),
+                cuit: (($('fl-rec-cuit') && $('fl-rec-cuit').value) || '').trim(),
+                domicilio: (($('fl-rec-domicilio-a') && $('fl-rec-domicilio-a').value) || '').trim(),
+                localidad_id: (function () {
+                    var el = document.querySelector('.fl-rec-localidad .localidad_id');
+                    return el ? (+el.value || null) : null;
+                })(),
+                provincia_id: (function () {
+                    var el = document.querySelector('.fl-rec-provincia .provincia_id');
+                    return el ? (+el.value || null) : null;
+                })()
+            };
+        }
+        return {
+            modo: 'b',
+            nombre: (($('fl-rec-nombre-b') && $('fl-rec-nombre-b').value) || '').trim(),
+            documento: (($('fl-rec-dni') && $('fl-rec-dni').value) || '').trim(),
+            domicilio: (($('fl-rec-domicilio-b') && $('fl-rec-domicilio-b').value) || '').trim()
+        };
+    }
+
+    function validarReceptorManualUi() {
+        var rec = armarReceptorManual();
+        if (!rec) return true;
+        if (rec.modo === 'a') {
+            if (!rec.nombre) { msg('Indicá la razón social del receptor (Factura A)', false); return false; }
+            var cuit = String(rec.cuit || '').replace(/\D/g, '');
+            if (cuit.length !== 11) { msg('Indicá un CUIT de 11 dígitos', false); ($('fl-rec-cuit') || {}).focus && $('fl-rec-cuit').focus(); return false; }
+            if (!rec.domicilio) { msg('Indicá el domicilio del receptor (Factura A)', false); return false; }
+            if (!rec.localidad_id) { msg('Indicá la localidad del receptor (Factura A)', false); return false; }
+            if (!rec.provincia_id) { msg('Indicá la provincia del receptor (Factura A)', false); return false; }
+            return true;
+        }
+        if (!rec.nombre) { msg('Indicá el nombre del receptor eventual', false); return false; }
+        if (!String(rec.documento || '').replace(/\D/g, '')) { msg('Indicá el DNI del receptor eventual', false); ($('fl-rec-dni') || {}).focus && $('fl-rec-dni').focus(); return false; }
+        return true;
+    }
+
+    function initReceptorManual() {
+        var toggle = $('fl-receptor-manual-toggle');
+        if (toggle) {
+            toggle.addEventListener('change', function () {
+                toggleReceptorManual(!!toggle.checked);
+            });
+        }
+        if ($('fl-rec-modo-b')) {
+            $('fl-rec-modo-b').addEventListener('click', function () { setReceptorManualModo('b'); });
+        }
+        if ($('fl-rec-modo-a')) {
+            $('fl-rec-modo-a').addEventListener('click', function () { setReceptorManualModo('a'); });
+        }
+        if (typeof window.activa_eventos_consultalocalidad === 'function') {
+            window.activa_eventos_consultalocalidad();
+        }
+        if (typeof window.activa_eventos_consultaprovincia === 'function') {
+            window.activa_eventos_consultaprovincia();
+        }
+    }
+
     function receptorDesdeCliente() {
         if (!clientePos) return {};
         return {
@@ -856,6 +1059,66 @@
             tipodoc: clientePos.tipodocumento || clientePos.tipodocumento_id || '',
             domicilio: clientePos.domicilio || ''
         };
+    }
+
+    function limpiarIframeImpresion() {
+        var iframe = $('fl-iframe-impresion');
+        if (!iframe) return;
+        if (iframe._flBlobUrl) {
+            try { URL.revokeObjectURL(iframe._flBlobUrl); } catch (e) { /* ignore */ }
+            iframe._flBlobUrl = null;
+        }
+        iframe.removeAttribute('src');
+    }
+
+    function imprimirUnPdf(url) {
+        var iframe = $('fl-iframe-impresion');
+        if (!iframe || !url) return Promise.resolve(false);
+        limpiarIframeImpresion();
+        return fetch(url, { credentials: 'same-origin' }).then(function (res) {
+            if (!res.ok) throw new Error('pdf');
+            return res.blob();
+        }).then(function (blob) {
+            var blobUrl = URL.createObjectURL(blob);
+            iframe._flBlobUrl = blobUrl;
+            return new Promise(function (resolve, reject) {
+                var onLoad = function () {
+                    iframe.removeEventListener('load', onLoad);
+                    iframe.removeEventListener('error', onError);
+                    resolve();
+                };
+                var onError = function () {
+                    iframe.removeEventListener('load', onLoad);
+                    iframe.removeEventListener('error', onError);
+                    reject(new Error('pdf'));
+                };
+                iframe.addEventListener('load', onLoad);
+                iframe.addEventListener('error', onError);
+                iframe.src = blobUrl;
+            });
+        }).then(function () {
+            var win = iframe.contentWindow;
+            if (win) {
+                win.focus();
+                win.print();
+            }
+            return true;
+        }).catch(function () {
+            limpiarIframeImpresion();
+            return false;
+        });
+    }
+
+    function imprimirPdfsFactura(urls) {
+        urls = (urls || []).filter(Boolean);
+        if (!urls.length) return Promise.resolve(true);
+        var cadena = Promise.resolve(true);
+        urls.forEach(function (url) {
+            cadena = cadena.then(function (prev) {
+                return imprimirUnPdf(url).then(function (ok) { return prev && ok; });
+            });
+        });
+        return cadena;
     }
 
     function emitir(esRegalo) {
@@ -869,21 +1132,41 @@
             msg('Carrito vacío', false);
             return;
         }
-        var clienteId = +(($('cliente_id') && $('cliente_id').value) || 0) || null;
-        if (clientePos && clientePos.letra === 'A' && !clienteId) {
+        if (netoActual < -0.009) {
+            msg('Saldo negativo no permitido. Emita una nota de crédito completa desde Facturas Local y luego facture de nuevo.', false);
+            return;
+        }
+        var clienteId = receptorManualActivo()
+            ? null
+            : (+(($('cliente_id') && $('cliente_id').value) || 0) || null);
+        if (!receptorManualActivo() && clientePos && clientePos.letra === 'A' && !clienteId) {
             msg('Para Factura A elegí un cliente con CUIT', false);
             return;
         }
+        if (!validarReceptorManualUi()) {
+            return;
+        }
+        var cuponPendiente = esRegalo ? null : filaCuponPendiente();
+        if (cuponPendiente) {
+            msg('Ingresá el número de cupón de la tarjeta', false);
+            cuponPendiente.focus();
+            return;
+        }
         overlay(true, esRegalo ? 'Ticket regalo…' : 'Emitiendo CAE…');
-        post(CFG.urls.emitir, {
+        var payloadEmitir = {
             local_id: CFG.localId,
             lineas: cart,
             medios_pago: esRegalo ? [] : mediosPago(),
             cliente_id: clienteId,
-            receptor: receptorDesdeCliente(),
+            receptor: receptorManualActivo() ? {} : receptorDesdeCliente(),
             excedente_accion: $('fl-excedente').value || null,
             es_ticket_regalo: !!esRegalo
-        }).then(function (res) {
+        };
+        var recManual = armarReceptorManual();
+        if (recManual) {
+            payloadEmitir.receptor_manual = recManual;
+        }
+        post(CFG.urls.emitir, payloadEmitir).then(function (res) {
             overlay(false);
             if (res.status >= 400 || !(res.body && res.body.ok)) {
                 var err = (res.body && (res.body.error || (res.body.errores && res.body.errores[0]))) || 'Error al emitir';
@@ -896,7 +1179,22 @@
             renderCart();
             var tbody = $('tbody-fl-cuenta-table');
             if (tbody) tbody.innerHTML = '';
+            if ($('fl-receptor-manual-toggle') && $('fl-receptor-manual-toggle').checked) {
+                $('fl-receptor-manual-toggle').checked = false;
+                toggleReceptorManual(false);
+                ['fl-rec-nombre-b', 'fl-rec-dni', 'fl-rec-domicilio-b', 'fl-rec-nombre-a', 'fl-rec-cuit', 'fl-rec-domicilio-a'].forEach(function (id) {
+                    if ($(id)) $(id).value = '';
+                });
+                document.querySelectorAll('.fl-rec-localidad .localidad_id, .fl-rec-localidad .codigolocalidad, .fl-rec-localidad .nombrelocalidad, .fl-rec-provincia .provincia_id, .fl-rec-provincia .codigoprovincia, .fl-rec-provincia .nombreprovincia').forEach(function (el) {
+                    el.value = '';
+                });
+            }
             refrescarContextoPos();
+            imprimirPdfsFactura(res.body.pdf_urls || []).then(function (okPdf) {
+                if (!okPdf) {
+                    msg('Factura emitida. No se pudo abrir el PDF para imprimir.', false);
+                }
+            });
         }).catch(function (e) {
             overlay(false);
             msg(e.message || 'Error de red', false);
@@ -1416,6 +1714,7 @@
         }
 
         initCobranza();
+        initReceptorManual();
         initCombinacionModal();
         initVarianteTeclado();
         actualizarLetraBadge(null);

@@ -51,6 +51,12 @@
     .fl-consulta-hero-actions {
         position: relative;
         z-index: 1;
+        margin-left: auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.35rem;
     }
 
     .fl-consulta-origen-row {

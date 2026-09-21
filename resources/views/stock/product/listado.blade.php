@@ -74,7 +74,7 @@
 					<td>{{ $data->stkm_agrupacion ?? '' }}</td>
 					<td>{{ $data->stkm_marca ?? '' }}</td>
 					<td>{{ $data->stkm_linea ?? '' }}</td>
-					<td>{{ ($data->nofactura ?? '') == '0' ? 'Facturable' : 'No facturable' }}</td>
+					<td>{{ \App\Support\Stock\ArticuloNofacturaSupport::etiqueta($data->nofactura ?? '') }}</td>
 				</tr>
 			@endforeach
 		</tbody>

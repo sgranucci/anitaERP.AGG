@@ -18,9 +18,9 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Locales de venta</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">Locales de venta</h3>
+                <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-local-venta',
                         'filtroValor' => $filtros['valor'] ?? '',

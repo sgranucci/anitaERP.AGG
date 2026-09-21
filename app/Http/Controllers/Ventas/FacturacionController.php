@@ -429,8 +429,18 @@ class FacturacionController extends Controller
 
     private function irASesionImpresionFactura($id, string $destino)
     {
-        $venta = Venta::query()->with(['gastronomiaEmision', 'estacionamientoEmision'])->find($id);
-        if ($venta && ($venta->gastronomiaEmision || $venta->estacionamientoEmision)) {
+        $venta = Venta::query()->with([
+            'gastronomiaEmision',
+            'estacionamientoEmision',
+            'facturacionLocalEmision',
+            'facturacionLocalEmisionComoNc',
+        ])->find($id);
+        if ($venta && (
+            $venta->gastronomiaEmision
+            || $venta->estacionamientoEmision
+            || $venta->facturacionLocalEmision
+            || $venta->facturacionLocalEmisionComoNc
+        )) {
             return $this->facturacionService->listaUnaFactura($id);
         }
 

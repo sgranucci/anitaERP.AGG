@@ -55,7 +55,12 @@ final class ArticuloKardexCombinacionSupport
         $combinaciones = Combinacion::query()
             ->select('id', 'codigo', 'nombre', 'estado')
             ->where('articulo_id', $articuloId)
-            ->where('estado', 'A')
+            ->where(
+                \App\Support\Stock\CombinacionEstadoCanalSupport::columnaCortaPorAmbito(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                ),
+                'A'
+            )
             ->orderBy('codigo')
             ->get()
             ->map(fn ($c) => [

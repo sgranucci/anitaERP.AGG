@@ -16,7 +16,8 @@ return [
     /*
     | Tiendas del canal. Ferli usa TIENDANUBE_STORE_ID / TIENDANUBE_ACCESS_TOKEN.
     | Cada tienda extra tiene su propio par; no pisa el token de Ferli.
-    | Facturación (PV, depósito, gateways) es la misma para todas.
+    | PV, depósito, lista, SKU y gateways se asignan por tienda en
+    | Ventas → Configuración Tiendanube. El .env de abajo es el fallback de Ferli.
     */
     'tiendas' => [
         [
@@ -56,7 +57,8 @@ return [
 
     'tipotransaccion_nc_id' => (int) env('TIENDANUBE_TIPO_NC_ID', 2),
 
-    'tipotransaccion_caja_id' => (int) env('TIENDANUBE_TIPO_CAJA_ID', 1),
+    // Cobranza al emitir. 0 o un id inexistente: se usa el tipo COB (ingreso).
+    'tipotransaccion_caja_id' => (int) env('TIENDANUBE_TIPO_CAJA_ID', 0),
 
     'moneda_id' => (int) env('TIENDANUBE_MONEDA_ID', 1),
 

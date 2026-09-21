@@ -237,8 +237,9 @@ var saldoFinalCobranza = 0;
 				}
 			});
 
-			// Valida que no tenga pago de menos
-			if (saldoFinalCobranza > 0)
+			// Recalcula y tolera 1 centavo (mismo criterio que pintarResumenLiquidacion / 0.009)
+			sumaCobranza();
+			if (saldoFinalCobranza > 0.009)
 			{
 				alert("No puede grabar una cobranza con faltante");
 				flError = true;
@@ -1865,6 +1866,14 @@ var saldoFinalCobranza = 0;
 		if (!Number.isFinite(totalFinalCobranza)) {
 			totalFinalCobranza = 0;
 		}
+		// Evita falso "faltante" por polvo de float (toFixed(2)=0.00 pero > 0)
+		saldoFinalCobranza = Math.round(saldoFinalCobranza * 100) / 100;
+		totalFinalCobranza = Math.round(totalFinalCobranza * 100) / 100;
+		idMoneda.forEach(function(moneda) {
+			if (Number.isFinite(totalMoneda[moneda])) {
+				totalMoneda[moneda] = Math.round(totalMoneda[moneda] * 100) / 100;
+			}
+		});
 
 		// Muestra totales por moneda
 		$(wrapper).empty();

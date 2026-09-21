@@ -16,12 +16,13 @@ use App\Services\Ventas\FacturacionLocal\FacturacionLocalValeService;
 use App\Services\Ventas\FacturacionLocal\StockLocalConsultaService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalMedioPresentacionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalUsoCuentacajaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
-use App\Support\Ventas\GastronomiaCuentacajaIconoSupport;
 use Illuminate\Http\Request;
 
 class FacturacionLocalProcesoController extends Controller
@@ -66,7 +67,7 @@ class FacturacionLocalProcesoController extends Controller
         }
 
         $cuentasPos = ($local?->cuentacajas ?? collect())->map(static function ($c) {
-            $presentacion = GastronomiaCuentacajaIconoSupport::presentacion(
+            $presentacion = FacturacionLocalMedioPresentacionSupport::presentacion(
                 (string) $c->nombre,
                 (string) $c->codigo
             );
@@ -76,8 +77,10 @@ class FacturacionLocalProcesoController extends Controller
                 'codigo' => (string) $c->codigo,
                 'nombre' => (string) $c->nombre,
                 'icono' => $presentacion['icono'],
-                'icono_color' => $presentacion['color'],
-                'etiqueta_boton' => $presentacion['etiqueta_boton'],
+                'icono_color' => $presentacion['icono_color'],
+                'tema' => $presentacion['tema'],
+                'etiqueta_boton' => $presentacion['etiqueta'],
+                'pide_cupon' => $presentacion['pide_cupon'],
             ];
         })->values()->all();
 
@@ -268,8 +271,14 @@ class FacturacionLocalProcesoController extends Controller
             $precio = 0.;
         }
 
+        // POS muestra/cobra precio final de lista (locales = IVA incluido siempre).
+        $flagLista = FacturacionLocalPrecioIvaSupport::flagLista($listaUsada > 0 ? $listaUsada : $listaId);
+        $precioMostrar = FacturacionLocalPrecioIvaSupport::precioParaPos($precio, $listaUsada > 0 ? $listaUsada : $listaId);
+
         return response()->json([
-            'precio' => $precio,
+            'precio' => $precioMostrar,
+            'precio_lista' => $precio,
+            'incluyeimpuesto_lista' => $flagLista,
             'listaprecio_id' => $listaUsada > 0 ? $listaUsada : ($local?->listaprecio_id),
         ]);
     }
@@ -285,6 +294,7 @@ class FacturacionLocalProcesoController extends Controller
             'medios_pago' => $request->input('medios_pago', []),
             'cliente_id' => $request->input('cliente_id'),
             'receptor' => $request->input('receptor', []),
+            'receptor_manual' => $request->input('receptor_manual', []),
             'descuentopie' => (float) $request->input('descuentopie', 0),
             'descuentoimportepie' => (float) $request->input('descuentoimportepie', 0),
             'excedente_accion' => $request->input('excedente_accion'),
@@ -296,6 +306,17 @@ class FacturacionLocalProcesoController extends Controller
 
         $resultado = $this->emisionService->emitir($local, $input);
         $status = ($resultado['ok'] ?? false) ? 200 : 422;
+        if ($status === 200) {
+            $pdfUrls = [];
+            if ((int) ($resultado['venta_id'] ?? 0) > 0) {
+                $pdfUrls[] = route('lista_una_factura_pdf', (int) $resultado['venta_id']);
+            }
+            if ((int) ($resultado['venta_nc_id'] ?? 0) > 0
+                && (int) $resultado['venta_nc_id'] !== (int) ($resultado['venta_id'] ?? 0)) {
+                $pdfUrls[] = route('lista_una_factura_pdf', (int) $resultado['venta_nc_id']);
+            }
+            $resultado['pdf_urls'] = $pdfUrls;
+        }
 
         return response()->json($resultado, $status);
     }

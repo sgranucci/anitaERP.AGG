@@ -7,8 +7,8 @@
     <div class="col-lg-10">
         @include('includes.mensaje')
         <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Sincronizar canal Local desde Anita stkmae</h3>
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">Sincronizar canal Local desde Anita stkmae</h3>
             </div>
             <div class="card-body">
                 <p>Lee <code>stkmae</code> del bridge Local (<code>LOCAL_IP</code> / <code>IFX_SERVER_LOCAL</code>) y asigna canal <strong>LOCAL</strong> a artículos ERP existentes. No modifica otros datos del maestro.</p>

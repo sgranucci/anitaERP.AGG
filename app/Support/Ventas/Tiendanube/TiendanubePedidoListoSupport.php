@@ -60,16 +60,17 @@ final class TiendanubePedidoListoSupport
             }
         }
 
-        $pvId = (int) ($pedido->puntoventa_id_sugerido
-            ?: TiendanubePedidoMaestrosSupport::puntoventaDefault()?->id
-            ?: 0);
+        $resuelto = TiendanubePedidoMaestrosSupport::resolverPuntoventaYDeposito(
+            $pedido->store_id,
+            $pedido->puntoventa_id_sugerido,
+            $pedido->deposito_id_sugerido,
+        );
+        $pvId = (int) $resuelto['puntoventa_id'];
         if ($pvId <= 0) {
             $motivos[] = 'Sin punto de venta default';
         }
 
-        $depId = (int) ($pedido->deposito_id_sugerido
-            ?: TiendanubePedidoMaestrosSupport::depositoDefault()?->id
-            ?: 0);
+        $depId = (int) $resuelto['deposito_id'];
         if ($depId <= 0) {
             $motivos[] = 'Sin depósito default';
         }
@@ -77,11 +78,12 @@ final class TiendanubePedidoListoSupport
         $cuentacajaId = TiendanubePedidoMaestrosSupport::sugerirCuentacajaId(
             $pedido->gateway,
             $pedido->gateway_name,
-            is_array($pedido->payment_json) ? $pedido->payment_json : null
+            is_array($pedido->payment_json) ? $pedido->payment_json : null,
+            $pedido->store_id,
         );
         if (! $cuentacajaId) {
             $motivos[] = 'Sin cuentas de caja con uso «'
-                .TiendanubeUsoCuentacajaSupport::nombre()
+                .TiendanubeUsoCuentacajaSupport::nombre($pedido->store_id)
                 .'». Asigná medios en el ABM de cuentas de caja.';
         }
 
@@ -101,7 +103,7 @@ final class TiendanubePedidoListoSupport
             return ['listo' => false, 'motivos' => array_values(array_unique($motivos))];
         }
 
-        $listaId = TiendanubePedidoMaestrosSupport::listaprecioIdDefault();
+        $listaId = TiendanubePedidoMaestrosSupport::listaprecioIdDefault($pedido->store_id);
 
         return [
             'listo' => true,

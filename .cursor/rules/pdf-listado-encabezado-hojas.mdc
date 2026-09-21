@@ -1,0 +1,71 @@
+---
+description: PDF de listados/reportes — encabezado repetido por hoja y numeración
+globs: resources/views/**/*listado*.blade.php,app/Support/Reportes/**/*.php,app/Http/Controllers/**/*Controller.php
+alwaysApply: false
+---
+
+# PDF listados: encabezado en cada hoja + numeración
+
+Todo **PDF de listado/reporte** de varias páginas debe repetir el encabezado y numerar las hojas. No dejar la 2.ª hoja sin título ni sin «Hoja N de M».
+
+Complementa `reportes-consulta-paginado-export.mdc` e `index-listado-paginado-export.mdc`.
+
+## Obligatorio
+
+| Elemento | Cómo |
+|---|---|
+| Encabezado (logos, título, subtítulo, contador) | Filas en `<thead>` vía `@include('includes.reportes.pdf_thead_cabecera', …)` **antes** de la fila de columnas |
+| Thead repetible | `table.data thead { display: table-header-group; }` y `tr { page-break-inside: avoid; }` |
+| Numeración | `App\Support\Reportes\DompdfListadoSupport::guardar…` (canvas `page_text` → `Hoja {PAGE_NUM} de {PAGE_COUNT}`) |
+| Papel reportes | `legal` + `landscape` salvo excepción documentada |
+
+## Correcto (controller)
+
+```php
+use App\Support\Reportes\DompdfListadoSupport;
+
+$html = view('caja.cheque.reporte_listado', $vars)->render();
+$ruta = storage_path('pdf/listados/reporte_cheque.pdf');
+DompdfListadoSupport::guardarLegalLandscape($html, $ruta, [
+    'titulo_corto' => 'Cheques recibidos', // opcional, esquina superior
+]);
+return response()->download($ruta);
+```
+
+## Correcto (vista PDF)
+
+```blade
+<table class="data">
+    <thead>
+        @include('includes.reportes.pdf_thead_cabecera', [
+            'titulo' => $titulo,
+            'subtitulo' => $subtitulo ?? '',
+            'colspan' => 13,
+            'logosCabecera' => $logosCabecera,
+            'totalFilas' => $totalFilas,
+        ])
+        <tr>
+            <th>…</th>
+        </tr>
+    </thead>
+    <tbody>…</tbody>
+</table>
+```
+
+## Prohibido
+
+- Envolver todo el listado largo en `table.marco-pdf` (DomPDF deja la 2.ª hoja con hueco en blanco).
+- Solo `loadHTML(…).save(…)` sin numeración en listados multipágina nuevos.
+- Encabezado (logos/título) **fuera** del `<thead>`: solo aparece en la hoja 1.
+
+## Overlay al exportar (pantalla)
+
+No alcanza con `pageshow`/`focus`: usar **`fetch`+blob** y `ocultar()` al completar. Ver regla **`export-overlay-fetch-blob.mdc`** (canónico: `caja/cheque/reporte.js`).
+
+## Comprobación rápida
+
+```bash
+rg 'DompdfListadoSupport|pdf_thead_cabecera' app resources/views
+rg 'marco-pdf' resources/views/{modulo}/{recurso}/*listado*
+php -l app/Support/Reportes/DompdfListadoSupport.php
+```

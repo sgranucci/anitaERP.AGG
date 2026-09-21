@@ -2,11 +2,14 @@
 
 namespace App\Services\Ventas\FacturacionLocal;
 
+use App\Models\Caja\Cuentacaja;
+use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Stock\Articulo;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\TurnoOperativoLocal;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalLimitesAfipSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalMedioTarjetaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 
 final class FacturacionLocalPreflightService
@@ -41,6 +44,15 @@ final class FacturacionLocalPreflightService
         }
         if ((int) $local->deposito_id <= 0) {
             $errores[] = 'Configure el depósito del local.';
+        }
+
+        $tipoCajaId = $local->tipoCajaId();
+        if ($tipoCajaId <= 0 || ! Tipotransaccion_Caja::query()->whereKey($tipoCajaId)->exists()) {
+            $errores[] = 'Configure un tipo de transacción de caja (Cobranza) válido en el local o en FACTURACION_LOCAL_TIPO_CAJA_ID.';
+        }
+        $tipoCajaDevId = $local->tipoCajaDevolucionId();
+        if ($tipoCajaDevId <= 0 || ! Tipotransaccion_Caja::query()->whereKey($tipoCajaDevId)->exists()) {
+            $errores[] = 'Configure un tipo de caja de devolución válido (FACTURACION_LOCAL_TIPO_CAJA_DEVOLUCION_ID).';
         }
 
         if (! $turno || ! $turno->estaAbierto()) {
@@ -94,6 +106,8 @@ final class FacturacionLocalPreflightService
             }
         }
 
+        $pagoConTarjeta = $pagoConTarjeta || $this->validarCuponesTarjeta($mediosPago, $errores);
+
         foreach (FacturacionLocalLimitesAfipSupport::erroresIdentificacion(
             max(0., $totalNeto),
             $tieneDatosCliente,
@@ -103,5 +117,45 @@ final class FacturacionLocalPreflightService
         }
 
         return $errores;
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $mediosPago
+     * @param  list<string>  $errores
+     */
+    private function validarCuponesTarjeta(array $mediosPago, array &$errores): bool
+    {
+        $ids = [];
+        foreach ($mediosPago as $medio) {
+            $id = (int) ($medio['cuentacaja_id'] ?? 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        if ($ids === []) {
+            return false;
+        }
+
+        $cuentas = Cuentacaja::query()
+            ->whereIn('id', array_values(array_unique($ids)))
+            ->get(['id', 'nombre', 'codigo'])
+            ->keyBy('id');
+
+        $hayTarjeta = false;
+        foreach ($mediosPago as $medio) {
+            $cuenta = $cuentas->get((int) ($medio['cuentacaja_id'] ?? 0));
+            if (! $cuenta) {
+                continue;
+            }
+            if (! FacturacionLocalMedioTarjetaSupport::pideCupon((string) $cuenta->nombre, (string) $cuenta->codigo)) {
+                continue;
+            }
+            $hayTarjeta = true;
+            if (trim((string) ($medio['numerocupon'] ?? '')) === '') {
+                $errores[] = 'Indique el número de cupón de '.$cuenta->nombre.'.';
+            }
+        }
+
+        return $hayTarjeta;
     }
 }

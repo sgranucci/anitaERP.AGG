@@ -18,7 +18,7 @@ class SincronizarPrecioLocalDesdeAnita extends Command
                             {--sin-limpiar-vigente : No elimina filas antiguas del mismo artículo+lista ERP}
                             {--ejecutar : Persiste listas faltantes + upsert precios (sin esto = dry-run)}';
 
-    protected $description = 'Importa precios stkpre del Anita Local al ERP remapeando listas (5→11, 6→12, 50→13). Dry-run por defecto.';
+    protected $description = 'Importa precios stkpre del Anita Local al ERP remapeando listas (5→11, 6→12, 50→13). Incluye stkp_fe_ult_act=0. Dry-run por defecto.';
 
     public function handle(PrecioLocalAnitaSyncService $sync): int
     {

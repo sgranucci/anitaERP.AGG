@@ -164,11 +164,11 @@ class FacturaMailEnvioService
         $cfg = FacturaMailConfiguracionSupport::paraEmpresa($empresaId);
         if (! $cfg->exists) {
             $cfg = FacturaMailConfiguracionSupport::defaults($empresaId);
-            $cfg->habilitado = true;
-            $cfg->envio_automatico = true;
-            $cfg->exigir_flag_cliente = false;
-            $cfg->incluir_remito = true;
         }
+        // TN siempre intenta enviar al mail del comprador (no depende del flag del cliente maestro CF).
+        $cfg->habilitado = true;
+        $cfg->envio_automatico = true;
+        $cfg->exigir_flag_cliente = false;
 
         try {
             $adjuntos = $this->armarAdjuntos($venta, (bool) $cfg->incluir_remito, (bool) $cfg->incluir_envio);

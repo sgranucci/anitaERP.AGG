@@ -1,47 +1,78 @@
+@php
+    use App\Support\Configuracion\EmpresaLogoArchivo;
+    $coleccionLogo = ! empty($resultado['nombreempresa'])
+        ? collect([(object) ['nombreempresa' => $resultado['nombreempresa']]])
+        : collect();
+    $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogo);
+    $tituloReporte = $titulo ?? 'Reportes Local — Ventas por artículo';
+    $subtituloReporte = $subtitulo ?? '';
+    $totalFilas = count($resultado['filas'] ?? []);
+    $abiertoTalle = $resultado['abierto_talle'] ?? true;
+    $incluirCosto = $resultado['incluir_costo'] ?? false;
+@endphp
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <meta charset="utf-8">
-    <title>Facturación Local</title>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>{{ $tituloReporte }}</title>
     <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 8px; }
-        h1 { font-size: 14px; }
-        table.data { width: 100%; border-collapse: collapse; }
-        table.data th { background: #85C1E9; color: #17202A; border: 1px solid #cccccc; padding: 4px; }
-        table.data td { border: 1px solid #cccccc; padding: 3px; }
-        table.data tr:nth-child(even) { background: #f5f5f5; }
+        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; line-height: 1.25; }
+        table.data {
+            border-collapse: collapse;
+            width: 100%;
+            table-layout: auto;
+        }
+        table.data td, table.data th {
+            border: 1px solid #cccccc;
+            text-align: left;
+            padding: 3px 4px;
+            vertical-align: top;
+            font-size: 8px;
+        }
+        table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
+        table.data thead tr { background-color: #85C1E9; }
+        table.data th { font-weight: bold; color: #17202A; }
+        table.data tfoot tr { background-color: #e8e8e8; font-weight: bold; }
+        table.data td.text-right,
+        table.data th.text-right { text-align: right; white-space: nowrap; }
+        .text-right { text-align: right; white-space: nowrap; }
+        .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 4px; }
+        .listado-header td { vertical-align: middle; border: none; }
+        .meta { font-size: 8px; color: #444; margin-top: 3px; }
     </style>
 </head>
 <body>
-    <h1>Facturación Local</h1>
-    <p>Generado {{ now()->format('d/m/Y H:i') }} · Período {{ $desde }} — {{ $hasta }} · {{ $filas->count() }} registros</p>
+    <table class="listado-header">
+        <tr>
+            <td style="width: 32%;">
+                @foreach ($logosCabecera as $logo)
+                    <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 48px; max-width: 140px; margin-right: 6px; vertical-align: middle;">
+                @endforeach
+            </td>
+            <td style="width: 46%; text-align: center;">
+                <h2 style="margin: 0; font-size: 14px; font-weight: bold;">{{ $tituloReporte }}</h2>
+                <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
+                @if ($subtituloReporte !== '')
+                    <div class="meta">{{ $subtituloReporte }}</div>
+                @endif
+            </td>
+            <td style="width: 22%; text-align: right; font-size: 8px;">
+                @if ($totalFilas > 0)
+                    Líneas: {{ $totalFilas }}
+                @endif
+            </td>
+        </tr>
+    </table>
+
     <table class="data">
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Fecha</th>
-                <th>Local</th>
-                <th>Venta</th>
-                <th>NC</th>
-                <th>Total</th>
-                <th>CAE</th>
-                <th>Regalo</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach ($filas as $e)
-            <tr>
-                <td>{{ $e->id }}</td>
-                <td>{{ optional($e->created_at)->format('d/m/Y H:i') }}</td>
-                <td>{{ $e->localVenta->codigo ?? '' }}</td>
-                <td>{{ $e->venta->codigo ?? '' }}</td>
-                <td>{{ $e->ventaNc->codigo ?? '' }}</td>
-                <td>{{ number_format((float) ($e->venta->total ?? 0), 2, ',', '.') }}</td>
-                <td>{{ $e->venta->cae ?? '' }}</td>
-                <td>{{ $e->es_ticket_regalo ? 'Sí' : '' }}</td>
-            </tr>
-            @endforeach
-        </tbody>
+        @include('ventas.facturacion_local.reportes.partials.tabla_datos', [
+            'filas' => $resultado['filas'] ?? [],
+            'totales' => $resultado['totales'] ?? [],
+            'abierto_talle' => $abiertoTalle,
+            'incluir_costo' => $incluirCosto,
+            'puede_ver_articulo' => false,
+        ])
     </table>
 </body>
 </html>

@@ -137,7 +137,7 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 									{{ $comprobante->clientes->condicionivas->letra ?? '' }}
 									{{ $comprobante->puntoventas->codigo ?? '' }}-{{ $comprobante->numerocomprobante }}
         						</td>
-        						<td>{{ $comprobante->clientes->nombre ?? '' }}</td>
+        						<td>{{ \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreReceptorFactura($comprobante) }}</td>
 								<td>{{ $comprobante->puntoventas->empresas->nombre ?? '' }}</td>
                                 @include('ventas.factura.partials.celdas_cantidades', ['totales' => $totales])
                                 <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>

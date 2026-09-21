@@ -63,7 +63,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
 </head>
 
-<body class="hold-transition sidebar-mini{{ $modoConsulta ? ' modo-consulta sidebar-collapse' : '' }}{{ $modoEmbed ? ' modo-embed' : '' }}">
+<body class="hold-transition sidebar-mini layout-fixed{{ $modoConsulta ? ' modo-consulta sidebar-collapse' : '' }}{{ $modoEmbed ? ' modo-embed' : '' }}">
     <!-- Site wrapper -->
     <div class="wrapper">
         @if ($modoEmbed)
@@ -216,7 +216,7 @@
     <script src="{{asset("assets/js/jquery-validation/localization/messages_es.min.js")}}"></script>
     <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
-    <script src="{{asset("assets/js/scripts.js")}}"></script>
+    <script src="{{ asset('assets/js/scripts.js') }}?v={{ @filemtime(public_path('assets/js/scripts.js')) ?: time() }}"></script>
     <script src="{{ asset('assets/js/funciones.js') }}?v={{ @filemtime(public_path('assets/js/funciones.js')) ?: time() }}"></script>
     <script src="{{ asset('assets/pages/scripts/ventas/cliente/politica-comercial.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/politica-comercial.js')) ?: time() }}"></script>
     <script src="{{asset('assets/js/modo-consulta.js')}}"></script>

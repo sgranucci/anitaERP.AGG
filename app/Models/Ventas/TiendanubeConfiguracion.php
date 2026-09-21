@@ -9,9 +9,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use OwenIt\Auditing\Contracts\Auditable;
 
 /**
- * Cabecera singleton de configuración del canal Tiendanube.
+ * Cabecera de configuración del canal Tiendanube, una por tienda (store_id).
  *
  * @property int $id
+ * @property string|null $store_id
  * @property int|null $empresa_id
  * @property int|null $puntoventa_id
  * @property int|null $deposito_id
@@ -27,6 +28,7 @@ class TiendanubeConfiguracion extends Model implements Auditable
     protected $table = 'tiendanube_configuracion';
 
     protected $fillable = [
+        'store_id',
         'empresa_id',
         'puntoventa_id',
         'deposito_id',

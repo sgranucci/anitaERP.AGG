@@ -17,13 +17,16 @@
                 </div>
 				<div class="form-group row">
     				<label for="cuentacontableventa_id" class="col-lg-4 col-form-label requerido">Cuenta contable venta</label>
+					@php
+						$cuentaVentaIdActual = (int) old('cuentacontableventa_id', $producto->cuentacontableventa_id ?? 0);
+					@endphp
 					<select id="cuentacontableventa_id" name="cuentacontableventa_id" class="col-lg-8 form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($ctamae as $key => $value)
-                            @if( isset($producto) && (int) $value->id == (int) old('cuentacontableventa_id', $producto->cuentacontableventa_id ?? ''))
-                                <option value="{{ $value->id }}" selected="select">{{$value->nombre}}{{-$value->codigo}}</option>    
+                            @if ($cuentaVentaIdActual > 0 && (int) $value->id === $cuentaVentaIdActual)
+                                <option value="{{ $value->id }}" selected="select">{{$value->nombre}}{{-$value->codigo}}</option>
                             @else
-                                <option value="{{ $value->id }}">{{$value->nombre}}{{-$value->codigo}}</option>    
+                                <option value="{{ $value->id }}">{{$value->nombre}}{{-$value->codigo}}</option>
                             @endif
                         @endforeach
                     </select>
@@ -32,13 +35,20 @@
             <div class="col-sm-6">
 				<div class="form-group row">
     				<label for="impuesto_id" class="col-lg-4 col-form-label requerido">Impuesto aplicado</label>
+					@php
+						$impuestoIdActual = (int) old('impuesto_id', $producto->impuesto_id ?? 0);
+						$nomencladorActual = old('nomenclador', $producto->nomenclador ?? '');
+						if (is_string($nomencladorActual) && strtoupper(trim($nomencladorActual)) === 'NULL') {
+							$nomencladorActual = '';
+						}
+					@endphp
 					<select id="impuesto_id" name="impuesto_id" class="col-lg-8 form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($codimp as $key => $value)
-                            @if( isset($producto) && (int) $value->id == (int) old('impuesto_id', $producto->impuesto_id ?? ''))
-                                <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+                            @if ($impuestoIdActual > 0 && (int) $value->id === $impuestoIdActual)
+                                <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
                             @else
-                                <option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+                                <option value="{{ $value->id }}">{{ $value->nombre }}</option>
                             @endif
                         @endforeach
                     </select>
@@ -46,18 +56,23 @@
                 <div class="form-group row">
     				<label for="nomenclador" class="col-lg-4 col-form-label requerido">Nomenclador</label>
     				<div class="col-lg-8">
-    					<input type="text" name="nomenclador" id="nomenclador" class="form-control" value="{{old('nomenclador', $producto->nomenclador ?? '')}}" required/>
+    					<input type="text" name="nomenclador" id="nomenclador" class="form-control" value="{{ is_array($nomencladorActual) ? '' : $nomencladorActual }}" required/>
                 	</div>
                 </div>
 				<div class="form-group row">
     				<label for="nofactura" class="col-lg-4 col-form-label requerido">Facturable</label>
+					@php
+						$nofacturaActual = \App\Support\Stock\ArticuloNofacturaSupport::normalizar(
+							old('nofactura', $producto->nofactura ?? '0')
+						);
+					@endphp
 					<select id="nofactura" name="nofactura" class="col-lg-8 form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($nofactura_enum as $key => $value)
-                            @if( isset($producto) && (int) $value['id'] == (int) old('nofactura', $producto->nofactura ?? ''))
-                                <option value="{{ $value['id'] }}" selected="select">{{ $value['nombre'] }}</option>    
+                            @if ((string) $value['id'] === $nofacturaActual)
+                                <option value="{{ $value['id'] }}" selected="select">{{ $value['nombre'] }}</option>
                             @else
-                                <option value="{{ $value['id'] }}">{{ $value['nombre'] }}</option>    
+                                <option value="{{ $value['id'] }}">{{ $value['nombre'] }}</option>
                             @endif
                         @endforeach
                     </select>
@@ -88,21 +103,30 @@
     		<tbody id="tbody-tabla">
 				@foreach (old('items', $producto->articulos_costo->count() > 0 ? $producto->articulos_costo : ['']) as $articulocosto)
     			<tr class="item-costo">
+                    @php
+                        $idxCosto = $loop->index;
+                        $tareaIdActual = old('tareas_id.'.$idxCosto, optional($articulocosto)->tarea_id);
+                        $costoActual = old('costos.'.$idxCosto, optional($articulocosto)->costo ?? '');
+                        $fechaVigenciaActual = old(
+                            'fechasvigencia.'.$idxCosto,
+                            substr((string) (optional($articulocosto)->fechavigencia ?? date('Y-m-d')), 0, 10)
+                        );
+                    @endphp
                     <td>
 						<select name="tareas_id[]" class="form-control tarea">
 							<option value="">-- Elija tarea --</option>
 								@foreach ($tarea_query as $tarea)
 									<option value="{{ $tarea->id }}"
-									@if (old('tareas.' . $loop->parent->index, optional($articulocosto)->tarea_id) == $tarea->id) selected @endif
+									@if ((string) $tareaIdActual === (string) $tarea->id) selected @endif
 									>{{ $tarea->nombre }}</option>
 								@endforeach
 						</select>
 					</td>
                     <td>
-                        <input type="number" name="costos[]" class="form-control costo" value="{{old('costos', $articulocosto->costo ?? '')}}"/>
+                        <input type="number" name="costos[]" class="form-control costo" value="{{ is_array($costoActual) ? '' : $costoActual }}"/>
                 	</td>
                     <td>
-                        <input type="date" name="fechasvigencia[]" class="form-control fecha" value="{{substr(optional($articulocosto)->fechavigencia ?? date('Y-m-d'),0,10)}}"/>
+                        <input type="date" name="fechasvigencia[]" class="form-control fecha" value="{{ is_array($fechaVigenciaActual) ? date('Y-m-d') : $fechaVigenciaActual }}"/>
                     </td>
                     <td>
 						<button type="button" title="Elimina esta linea" style="padding:0;" class="btn-accion-tabla eliminarCosto tooltipsC">

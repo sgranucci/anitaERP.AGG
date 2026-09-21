@@ -40,7 +40,7 @@
         <div class="d-flex justify-content-between align-items-start flex-wrap">
             <div>
                 <h1>Aplicar comprobantes de cuenta corriente</h1>
-                <p class="acc-sub">El matching FIFO se arma solo. Cambiá montos, destildá o fijá un crédito: lo que edites queda y el resto se vuelve a sugerir.</p>
+                <p class="acc-sub">Elegí un crédito a la izquierda (NC, OPA, etc.): la sugerencia automática y los tilde de facturas aplican solo ese crédito. Para cruzar todos a la vez usá Rehacer FIFO.</p>
             </div>
             <div class="acc-hero-tools">
                 @if (!empty($soloConsulta) && (int) ($volverProveedorId ?? 0) > 0)
@@ -93,8 +93,8 @@
                 <small class="text-muted" id="acc-cot-liq-hint">Para cruzar pesos ↔ dólares</small>
             </div>
             <div class="form-group col-md-12 mb-2 acc-toolbar-actions">
-                <label class="acc-switch mb-0 mr-2" title="Arma FIFO con el saldo que no fijaste">
-                    <input type="checkbox" id="acc-auto" checked>
+                <label class="acc-switch mb-0 mr-2" title="Sugiere FIFO solo con el crédito seleccionado (izquierda)">
+                    <input type="checkbox" id="acc-auto">
                     <span>Sugerir al instante</span>
                 </label>
                 <button type="button" id="btn-acc-fifo" class="btn btn-sm btn-outline-primary">Rehacer FIFO</button>

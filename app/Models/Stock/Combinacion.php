@@ -9,12 +9,14 @@ use Intervention\Image\Facades\Image;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Seguridad\Usuario;
+use App\Support\Stock\CombinacionEstadoCanalSupport;
 use Auth;
 
 class Combinacion extends Model
 {
     protected $fillable = [ 'articulo_id', 'codigo', 'nombre', 'observacion', 'forro_id', 'colorforro_id', 'plvista_id', 'plarmado_id',
-            'fondo_id', 'colorfondo_id', 'horma_id', 'serigrafia_id', 'estado', 'plvista_16_26', 'plvista_27_33', 'plvista_34_40', 'plvista_41_47',
+            'fondo_id', 'colorfondo_id', 'horma_id', 'serigrafia_id', 'estado', 'estado_fabrica', 'estado_local',
+            'plvista_16_26', 'plvista_27_33', 'plvista_34_40', 'plvista_41_47',
             'usuarioultcambio_id', 'foto' ];
     protected $table = 'combinacion';
     protected $tableAnita = ['combinacion', 'stkfich'];
@@ -239,7 +241,8 @@ class Combinacion extends Model
 			if ($color)
 				$colorfondo_id = $color->id;
 
-            Combinacion::create([
+			$estadoAnita = CombinacionEstadoCanalSupport::normalizarEstado((string) ($datac->comb_estado ?? 'A'));
+			$alta = [
     				"articulo_id" => $articulo_id,
 					"codigo" => $datac->comb_combinacion,
 					"nombre" => $datac->comb_desc,
@@ -252,13 +255,19 @@ class Combinacion extends Model
 					"colorfondo_id" => $colorfondo_id,
 					"horma_id" => ($datas->stkfi_horma == 0 ? NULL : $datas->stkfi_horma),
 					"serigrafia_id" => $serigrafia_id,
-					"estado" => $datac->comb_estado,
+					"estado" => $estadoAnita,
 					"plvista_16_26" => $datas->stkfi_plvi_16_26,
 					"plvista_17_33" => $datas->stkfi_plvi_27_33,
 					"plvista_34_40" => $datas->stkfi_plvi_34_40,
 					"plvista_41_45" => $datas->stkfi_plvi_41_45,
             		"usuarioultcambio_id" => $usuario_id,
-            ]);
+            ];
+			if (CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+				// Anita fábrica solo define el ámbito fábrica; local hereda el mismo valor en el alta.
+				$alta['estado_fabrica'] = $estadoAnita;
+				$alta['estado_local'] = $estadoAnita;
+			}
+            Combinacion::create($alta);
         }
     }
 
@@ -266,6 +275,7 @@ class Combinacion extends Model
         $apiAnita = new ApiAnita();
 
         $articulo = Articulo::select('id', 'sku', 'descripcion')->where('id', $request->articulo_id)->first();
+		$estadoAnita = CombinacionEstadoCanalSupport::estadoParaAnita($request);
 
 		// Graba combinacion
 		$data = array( 'tabla' => $this->tableAnita[0], 
@@ -284,7 +294,7 @@ class Combinacion extends Model
 				'".$request->codigo."',
 				'".$request->nombre."',
 				'".$request->observacion."',
-				'".$request->estado."' "
+				'".$estadoAnita."' "
         );
         $apiAnita->apiCallEscritura($data);
 
@@ -332,6 +342,7 @@ class Combinacion extends Model
         $apiAnita = new ApiAnita();
 
         $articulo = Articulo::select('id', 'sku', 'descripcion')->where('id', $request->articulo_id)->first();
+		$estadoAnita = CombinacionEstadoCanalSupport::estadoParaAnita($request);
 
 		// Lee combinacion 
         $datacombinacion = array( 
@@ -353,7 +364,7 @@ class Combinacion extends Model
 		  	self::guardarAnita($request);
 		}
 
-		// Actualiza combinacion
+		// Actualiza combinacion (Anita fábrica: solo estado_fabrica)
 		$data = array( 'acc' => 'update', 
 		  		'tabla' => $this->tableAnita[0], 
 				'valores' => " 
@@ -362,7 +373,7 @@ class Combinacion extends Model
 					comb_combinacion = '".$request->codigo."',
 					comb_desc = '".$request->nombre."',
 					comb_observacion = '".$request->observacion."',
-					comb_estado = '".$request->estado."' ",
+					comb_estado = '".$estadoAnita."' ",
 				'whereArmado' => " WHERE comb_articulo = '".str_pad($articulo->sku, 13, "0", STR_PAD_LEFT)."' AND comb_combinacion = '".$request->codigo."' ");
         $apiAnita->apiCallEscritura($data);
 
@@ -480,8 +491,24 @@ class Combinacion extends Model
 				{
 					$articulo_id = $articulo->id;
 
-        			$combinaciones = Combinacion::where("articulo_id", "=", $articulo_id)->where("codigo","=",$data->co2_combinacion)->
-								update(array("estado" => $data->co2_estado));
+					if (CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+						Combinacion::where('articulo_id', $articulo_id)
+							->where('codigo', $data->co2_combinacion)
+							->get()
+							->each(function (Combinacion $row) use ($data) {
+								$fab = CombinacionEstadoCanalSupport::normalizarEstado((string) $data->co2_estado);
+								$loc = CombinacionEstadoCanalSupport::normalizarEstado(
+									(string) ($row->estado_local ?? $row->estado ?? 'I')
+								);
+								$row->update([
+									'estado_fabrica' => $fab,
+									'estado' => CombinacionEstadoCanalSupport::derivarEstadoLegacy($fab, $loc),
+								]);
+							});
+					} else {
+						Combinacion::where('articulo_id', '=', $articulo_id)->where('codigo', '=', $data->co2_combinacion)
+							->update(['estado' => $data->co2_estado]);
+					}
 				}
 			}
 		}

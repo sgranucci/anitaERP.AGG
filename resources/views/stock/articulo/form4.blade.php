@@ -17,13 +17,18 @@
 				<div class="form-group row">
     				<label for="nofactura" class="col-lg-4 col-form-label text-right pr-2 requerido">Facturable</label>
 					<div class="col-lg-8">
+					@php
+						$nofacturaActual = \App\Support\Stock\ArticuloNofacturaSupport::normalizar(
+							old('nofactura', $producto->nofactura ?? '0')
+						);
+					@endphp
 					<select id="nofactura" name="nofactura" class="form-control">
                         <option value="">-- Seleccionar --</option>
                         @foreach($nofactura_enum as $key => $value)
-                            @if( isset($producto) && (int) $value['id'] == (int) old('nofactura', $producto->nofactura ?? ''))
-                                <option value="{{ $value['id'] }}" selected="select">{{ $value['nombre'] }}</option>    
+                            @if ((string) $value['id'] === $nofacturaActual)
+                                <option value="{{ $value['id'] }}" selected="select">{{ $value['nombre'] }}</option>
                             @else
-                                <option value="{{ $value['id'] }}">{{ $value['nombre'] }}</option>    
+                                <option value="{{ $value['id'] }}">{{ $value['nombre'] }}</option>
                             @endif
                         @endforeach
                     </select>

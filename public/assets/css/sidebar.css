@@ -48,6 +48,23 @@
     padding-bottom: 1rem;
 }
 
+/*
+ * Viewport propio del menú: sin layout-fixed el aside crece con la página
+ * y el scroll no queda en .sidebar (scrollTop siempre 0 → no se puede recordar).
+ */
+body.layout-fixed:not(.modo-consulta):not(.modo-embed) .main-sidebar.anita-sidebar {
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
+}
+
+body.layout-fixed:not(.modo-consulta):not(.modo-embed) .main-sidebar.anita-sidebar .sidebar {
+    height: calc(100vh - 3.5rem - 1px);
+    max-height: calc(100vh - 3.5rem - 1px);
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
 /* --- Enlaces base --- */
 .main-sidebar.anita-sidebar .nav-sidebar > .nav-item > .nav-link,
 .main-sidebar.anita-sidebar .nav-treeview > .nav-item > .nav-link {

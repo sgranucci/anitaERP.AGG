@@ -33,9 +33,9 @@ final class TiendanubePedidoMaestrosSupport
             ->first();
     }
 
-    public static function puntoventaDefault(): ?Puntoventa
+    public static function puntoventaDefault(?string $storeId = null): ?Puntoventa
     {
-        $id = TiendanubeConfiguracionSupport::puntoventaIdDefault();
+        $id = TiendanubeConfiguracionSupport::puntoventaIdDefault($storeId);
         if ($id && $id > 0) {
             $pv = Puntoventa::query()->find($id);
             if ($pv) {
@@ -43,15 +43,46 @@ final class TiendanubePedidoMaestrosSupport
             }
         }
 
+        if (TiendanubeConfiguracionSupport::storeIdEfectivo($storeId) !== TiendanubeConfiguracionSupport::storeIdFerli()) {
+            return null;
+        }
+
         return self::puntoventaPorCodigo((string) config('tiendanube.puntoventa_codigo_default'));
+    }
+
+    /**
+     * PV y depósito a usar en un pedido: el sugerido si pertenece a la tienda; si no, el default de esa tienda.
+     *
+     * @return array{puntoventa_id:int,deposito_id:int}
+     */
+    public static function resolverPuntoventaYDeposito(?string $storeId, ?int $pvSugerido, ?int $depSugerido): array
+    {
+        $online = self::puntoventasOnline($storeId);
+        $ids = $online->pluck('id')->map(static fn ($id) => (int) $id)->all();
+        $pvSugerido = (int) $pvSugerido;
+        $depSugerido = (int) $depSugerido;
+        $usaSugerido = $pvSugerido > 0 && ($ids === [] || in_array($pvSugerido, $ids, true));
+        $pvId = $usaSugerido
+            ? $pvSugerido
+            : (int) (self::puntoventaDefault($storeId)?->id ?? 0);
+        if ($usaSugerido && $depSugerido > 0) {
+            $depId = $depSugerido;
+        } else {
+            $depId = (int) (self::depositoDefault($pvId > 0 ? $pvId : null, $storeId)?->id ?? 0);
+        }
+
+        return [
+            'puntoventa_id' => $pvId,
+            'deposito_id' => $depId,
+        ];
     }
 
     /**
      * @return Collection<int, Puntoventa>
      */
-    public static function puntoventasOnline(): Collection
+    public static function puntoventasOnline(?string $storeId = null): Collection
     {
-        $pares = TiendanubeConfiguracionSupport::paresPuntoventaDeposito();
+        $pares = TiendanubeConfiguracionSupport::paresPuntoventaDeposito($storeId);
         if ($pares->isNotEmpty()) {
             $ids = $pares->pluck('puntoventa_id')->map(fn ($id) => (int) $id)->filter()->unique()->values()->all();
             if ($ids !== []) {
@@ -60,6 +91,11 @@ final class TiendanubePedidoMaestrosSupport
                     ->orderBy('codigo')
                     ->get();
             }
+        }
+
+        if (TiendanubeConfiguracionSupport::storeIdEfectivo($storeId) !== TiendanubeConfiguracionSupport::storeIdFerli()
+            && TiendanubeConfiguracionSupport::cabeceraPropia($storeId)) {
+            return collect();
         }
 
         $codigos = (array) config('tiendanube.puntoventa_codigos_online', []);
@@ -83,9 +119,9 @@ final class TiendanubePedidoMaestrosSupport
         return Depmae::query()->where('codigo', $codigo)->orderBy('id')->first();
     }
 
-    public static function depositoDefault(?int $puntoventaId = null): ?Depmae
+    public static function depositoDefault(?int $puntoventaId = null, ?string $storeId = null): ?Depmae
     {
-        $id = TiendanubeConfiguracionSupport::depositoIdDefault($puntoventaId);
+        $id = TiendanubeConfiguracionSupport::depositoIdDefault($puntoventaId, $storeId);
         if ($id && $id > 0) {
             $dep = Depmae::query()->find($id);
             if ($dep) {
@@ -93,14 +129,23 @@ final class TiendanubePedidoMaestrosSupport
             }
         }
 
+        if (TiendanubeConfiguracionSupport::storeIdEfectivo($storeId) !== TiendanubeConfiguracionSupport::storeIdFerli()) {
+            return null;
+        }
+
         return self::depositoPorCodigo((string) config('tiendanube.deposito_codigo_default'));
     }
 
-    public static function listaprecioIdDefault(): int
+    public static function listaprecioIdDefault(?string $storeId = null): int
     {
-        $cfg = TiendanubeConfiguracionSupport::cabecera();
+        $cfg = TiendanubeConfiguracionSupport::cabecera($storeId);
         if ($cfg && (int) $cfg->listaprecio_id > 0) {
             return (int) $cfg->listaprecio_id;
+        }
+
+        if (TiendanubeConfiguracionSupport::storeIdEfectivo($storeId) !== TiendanubeConfiguracionSupport::storeIdFerli()
+            && TiendanubeConfiguracionSupport::cabeceraPropia($storeId)) {
+            return 0;
         }
 
         $codigo = trim((string) config('tiendanube.listaprecio_codigo_default', ''));
@@ -123,14 +168,29 @@ final class TiendanubePedidoMaestrosSupport
         return ArticuloSkuMatchSupport::resolverCanonico($sku);
     }
 
-    public static function articuloEnvio(): ?Articulo
+    public static function articuloEnvio(?string $storeId = null): ?Articulo
     {
-        return self::resolverArticuloPorSku((string) config('tiendanube.articulo_envio_sku'));
+        return self::resolverArticuloPorSku(self::skuConfigurado('articulo_envio_sku', 'articulo_envio_sku', $storeId));
     }
 
-    public static function articuloDescuento(): ?Articulo
+    public static function articuloDescuento(?string $storeId = null): ?Articulo
     {
-        return self::resolverArticuloPorSku((string) config('tiendanube.articulo_descuento_sku'));
+        return self::resolverArticuloPorSku(self::skuConfigurado('articulo_descuento_sku', 'articulo_descuento_sku', $storeId));
+    }
+
+    private static function skuConfigurado(string $columna, string $configKey, ?string $storeId): string
+    {
+        $cfg = TiendanubeConfiguracionSupport::cabecera($storeId);
+        $sku = trim((string) ($cfg?->{$columna} ?? ''));
+        if ($sku !== '') {
+            return $sku;
+        }
+        if (TiendanubeConfiguracionSupport::storeIdEfectivo($storeId) !== TiendanubeConfiguracionSupport::storeIdFerli()
+            && TiendanubeConfiguracionSupport::cabeceraPropia($storeId)) {
+            return '';
+        }
+
+        return (string) config('tiendanube.'.$configKey);
     }
 
     /**
@@ -140,10 +200,14 @@ final class TiendanubePedidoMaestrosSupport
      * Claves útiles en mapa (.env TIENDANUBE_GATEWAY_CUENTACAJA):
      * pago-nube, offline, gocuotas, mercadopago, tarjeta_naranja, etc. → código o id.
      */
-    public static function sugerirCuentacajaId(?string $gateway, ?string $gatewayName = null, ?array $paymentJson = null): ?int
-    {
+    public static function sugerirCuentacajaId(
+        ?string $gateway,
+        ?string $gatewayName = null,
+        ?array $paymentJson = null,
+        ?string $storeId = null,
+    ): ?int {
         $paymentJson = is_array($paymentJson) ? $paymentJson : [];
-        $map = TiendanubeConfiguracionSupport::mapaGatewayCuentacaja();
+        $map = TiendanubeConfiguracionSupport::mapaGatewayCuentacaja($storeId);
         $keys = array_values(array_unique(array_filter([
             strtolower(trim((string) $gateway)),
             strtolower(trim((string) $gatewayName)),
@@ -177,7 +241,7 @@ final class TiendanubePedidoMaestrosSupport
             }
         }
 
-        $cuentas = self::cuentacajasOperativas();
+        $cuentas = self::cuentacajasOperativas($storeId);
         if ($cuentas->isEmpty()) {
             return null;
         }
@@ -254,10 +318,10 @@ final class TiendanubePedidoMaestrosSupport
      *
      * @return Collection<int, Cuentacaja>
      */
-    public static function cuentacajasOperativas(): Collection
+    public static function cuentacajasOperativas(?string $storeId = null): Collection
     {
-        $empresaId = (int) config('tiendanube.empresa_id', 1);
-        $usoNombre = TiendanubeUsoCuentacajaSupport::nombre();
+        $empresaId = TiendanubeConfiguracionSupport::empresaId($storeId);
+        $usoNombre = TiendanubeUsoCuentacajaSupport::nombre($storeId);
 
         $q = Cuentacaja::query()
             ->paraEmpresa($empresaId)

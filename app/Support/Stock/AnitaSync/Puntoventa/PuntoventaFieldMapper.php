@@ -187,11 +187,26 @@ final class PuntoventaFieldMapper
     private static function localidadIdDefaultSiExiste(): ?int
     {
         $locId = (int) config('puntoventa_anita.default_localidad_id', 108);
+        // Ferli: casa central Villa Madero (evita CABRAL SARGENTO / id 108 del maestro).
+        if (EntornoEmpresaSupport::esFerli() && $locId === 108) {
+            $locId = (int) config('puntoventa_anita.default_localidad_id_ferli', 4070);
+        }
         if ($locId <= 0 || ! Localidad::query()->whereKey($locId)->exists()) {
             return null;
         }
 
         return $locId;
+    }
+
+    private static function provinciaIdDefault(): int
+    {
+        $provId = (int) config('puntoventa_anita.default_provincia_id', 3);
+        // Ferli: Buenos Aires (no Catamarca id 3 del default histórico).
+        if (EntornoEmpresaSupport::esFerli() && $provId === 3) {
+            return (int) config('puntoventa_anita.default_provincia_id_ferli', 2);
+        }
+
+        return $provId;
     }
 
     /**
@@ -217,10 +232,14 @@ final class PuntoventaFieldMapper
             'codigo' => $codigo,
             'empresa_id' => self::mapEmpresaId($row),
             'domicilio' => $domicilio,
-            'provincia_id' => (int) config('puntoventa_anita.default_provincia_id', 3),
+            'provincia_id' => self::provinciaIdDefault(),
             'localidad_id' => self::localidadIdDefaultSiExiste(),
             'pais_id' => (int) config('puntoventa_anita.default_pais_id', 1),
-            'codigopostal' => $codPostal !== '' ? $codPostal : null,
+            'codigopostal' => $codPostal !== ''
+                ? $codPostal
+                : (EntornoEmpresaSupport::esFerli()
+                    ? (string) config('puntoventa_anita.default_codigopostal_ferli', '1768')
+                    : null),
             'telefono' => self::strProp($row, 'suc_telefono') ?: null,
             'email' => null,
             'leyenda' => self::strProp($row, 'suc_leyenda1') ?: null,

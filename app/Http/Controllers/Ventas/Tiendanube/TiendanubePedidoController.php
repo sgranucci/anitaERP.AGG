@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Ventas\Tiendanube;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Depmae;
 use App\Models\Ventas\TiendanubePedido;
+use App\Services\Ventas\FacturacionService;
 use App\Services\Ventas\Tiendanube\TiendanubeApiClient;
 use App\Services\Ventas\Tiendanube\TiendanubePedidoEmisionService;
 use App\Services\Ventas\Tiendanube\TiendanubePedidoSyncService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Ventas\Tiendanube\TiendanubeApiHealthSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListadoFiltros;
@@ -27,6 +29,7 @@ class TiendanubePedidoController extends Controller
         private readonly TiendanubePedidoSyncService $syncService,
         private readonly TiendanubePedidoEmisionService $emisionService,
         private readonly TiendanubeApiClient $api,
+        private readonly FacturacionService $facturacionService,
     ) {
     }
 
@@ -128,7 +131,7 @@ class TiendanubePedidoController extends Controller
             ->with('mensaje', $msg);
     }
 
-    public function show(int $id)
+    public function show(Request $request, int $id)
     {
         $this->assertFerli();
         can('listar-tiendanube-pedidos');
@@ -143,21 +146,23 @@ class TiendanubePedidoController extends Controller
             $pedido->load(['lineas.articulo', 'lineas.combinacion', 'lineas.talle']);
         }
 
-        $puntoventas = TiendanubePedidoMaestrosSupport::puntoventasOnline();
+        $puntoventas = TiendanubePedidoMaestrosSupport::puntoventasOnline($pedido->store_id);
         $depositos = Depmae::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']);
-        $cuentacajas = TiendanubePedidoMaestrosSupport::cuentacajasOperativas();
+        $cuentacajas = TiendanubePedidoMaestrosSupport::cuentacajasOperativas($pedido->store_id);
         $cuentacajaSugeridaId = TiendanubePedidoMaestrosSupport::sugerirCuentacajaId(
             $pedido->gateway,
             $pedido->gateway_name,
-            is_array($pedido->payment_json) ? $pedido->payment_json : null
+            is_array($pedido->payment_json) ? $pedido->payment_json : null,
+            $pedido->store_id,
         );
-        $pvDefaultId = (int) ($pedido->puntoventa_id_sugerido
-            ?: TiendanubePedidoMaestrosSupport::puntoventaDefault()?->id
-            ?: 0);
-        $depDefaultId = (int) ($pedido->deposito_id_sugerido
-            ?: TiendanubePedidoMaestrosSupport::depositoDefault()?->id
-            ?: 0);
-        $listaprecioId = TiendanubePedidoMaestrosSupport::listaprecioIdDefault();
+        $resuelto = TiendanubePedidoMaestrosSupport::resolverPuntoventaYDeposito(
+            $pedido->store_id,
+            $pedido->puntoventa_id_sugerido,
+            $pedido->deposito_id_sugerido,
+        );
+        $pvDefaultId = (int) $resuelto['puntoventa_id'];
+        $depDefaultId = (int) $resuelto['deposito_id'];
+        $listaprecioId = TiendanubePedidoMaestrosSupport::listaprecioIdDefault($pedido->store_id);
         $puedeFacturar = can('facturar-tiendanube-pedidos', false)
             && ! $pedido->estaFacturado()
             && $pedido->estaPagado();
@@ -173,6 +178,10 @@ class TiendanubePedidoController extends Controller
             'card' => is_array($pedido->payment_json) ? ($pedido->payment_json['credit_card_company'] ?? null) : null,
             'installments' => is_array($pedido->payment_json) ? ($pedido->payment_json['installments'] ?? null) : null,
         ];
+        $retornoListadoQuery = QueryRetornoListado::desdeRequestSiIndex(
+            $request,
+            TiendanubePedidoListadoFiltros::class
+        );
 
         return view('ventas.tiendanube_pedido.show', compact(
             'pedido',
@@ -189,26 +198,23 @@ class TiendanubePedidoController extends Controller
             'provinciaTexto',
             'provinciaId',
             'letraDefault',
-            'pagoDetalle'
+            'pagoDetalle',
+            'retornoListadoQuery',
         ));
     }
 
-    public function refrescar(int $id)
+    public function refrescar(Request $request, int $id)
     {
         $this->assertFerli();
         can('sincronizar-tiendanube-pedidos');
 
         $pedido = TiendanubePedido::query()->findOrFail($id);
         $r = $this->syncService->refrescarPedido($pedido);
-        if (! ($r['ok'] ?? false)) {
-            return redirect()
-                ->route('tiendanube_pedido_show', $id)
-                ->with('mensaje', 'No se pudo refrescar: '.($r['error'] ?? ''));
-        }
+        $retorno = QueryRetornoListado::desdeRequestSiIndex($request, TiendanubePedidoListadoFiltros::class);
 
         return redirect()
-            ->route('tiendanube_pedido_show', $id)
-            ->with('mensaje', 'Pedido actualizado desde Tiendanube.');
+            ->route('tiendanube_pedido_show', array_merge(['id' => $id], $retorno))
+            ->with('mensaje', ($r['ok'] ?? false) ? 'Pedido actualizado desde Tiendanube.' : ($r['error'] ?? 'No se pudo refrescar'));
     }
 
     public function facturar(Request $request, int $id)
@@ -288,6 +294,10 @@ class TiendanubePedidoController extends Controller
         $pedido->save();
 
         $resultado = $this->emisionService->emitir($pedido->fresh(['lineas']), $input);
+        $retornoShow = array_merge(
+            ['id' => $id],
+            QueryRetornoListado::desdeRequestSiIndex($request, TiendanubePedidoListadoFiltros::class)
+        );
         if (! ($resultado['ok'] ?? false)) {
             $msg = $resultado['error'] ?? 'No se pudo facturar';
             if (! empty($resultado['errores'])) {
@@ -295,19 +305,41 @@ class TiendanubePedidoController extends Controller
             }
 
             return redirect()
-                ->route('tiendanube_pedido_show', $id)
+                ->route('tiendanube_pedido_show', $retornoShow)
                 ->with('mensaje', $msg);
         }
 
-        $msg = 'Factura emitida OK. Venta #'.$resultado['venta_id']
-            .(! empty($resultado['cae']) ? ' CAE '.$resultado['cae'] : '');
         if (! empty($resultado['parcial'])) {
-            $msg .= ' Quedan artículos sin facturar: volvé a entrar al pedido para emitir el resto.';
+            $msg = 'Factura parcial emitida (venta #'.$resultado['venta_id']
+                .(! empty($resultado['cae']) ? ' CAE '.$resultado['cae'] : '')
+                .'). El pedido sigue en estado «Facturado parcial»: facturá el resto para pasarlo a «Facturado».';
+        } else {
+            $msg = 'Pedido facturado completo. Venta #'.$resultado['venta_id']
+                .(! empty($resultado['cae']) ? ' CAE '.$resultado['cae'] : '')
+                .'. Estado ERP: Facturado.';
         }
 
-        return redirect()
-            ->route('tiendanube_pedido_show', $id)
-            ->with('mensaje', $msg);
+        $mailAviso = trim((string) ($resultado['mail_aviso'] ?? ''));
+        // PDF inline directo (no sesión de impresión).
+        $pdfUrl = ! empty($resultado['venta_id'])
+            ? route('tiendanube_factura_pdf', ['ventaId' => $resultado['venta_id']])
+            : '';
+
+        $redirect = redirect()
+            ->route('tiendanube_pedido_show', $retornoShow)
+            ->with('mensaje', $msg)
+            ->with('tn_pdf_url', $pdfUrl);
+
+        if ($pdfUrl !== '') {
+            $redirect->with('imprimir_comprobante_url', $pdfUrl)
+                ->with('imprimir_comprobante_label', 'Ver factura PDF');
+        }
+
+        if ($mailAviso !== '') {
+            $redirect->with('mensaje_aviso', $mailAviso);
+        }
+
+        return $redirect;
     }
 
     public function facturarMasivo(Request $request)
@@ -355,6 +387,25 @@ class TiendanubePedidoController extends Controller
         return redirect()
             ->route('tiendanube_pedidos', $query)
             ->with('mensaje', $msg);
+    }
+
+    /**
+     * PDF de la factura recién emitida (inline en el navegador).
+     */
+    public function facturaPdf(int $ventaId)
+    {
+        $this->assertFerli();
+        can('listar-tiendanube-pedidos');
+
+        $vinculada = \App\Models\Ventas\TiendanubePedidoVenta::query()
+            ->where('venta_id', $ventaId)
+            ->exists()
+            || TiendanubePedido::query()->where('venta_id', $ventaId)->exists();
+        if (! $vinculada && ! can('listar-factura', false)) {
+            abort(404);
+        }
+
+        return $this->facturacionService->listaUnaFacturaInline($ventaId);
     }
 
     private function assertFerli(): void

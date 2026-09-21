@@ -1021,6 +1021,10 @@ class Articulo extends Model implements Auditable
 
                 case 'Calzados Ferli':
                 case 'CALZADOS FERLI':
+                    $nofacturaFerli = \App\Support\Stock\ArticuloNofacturaSupport::normalizar($data->stkm_fl_no_factura ?? '0');
+                    $estadoFerli = strtoupper(trim((string) ($data->stkm_fl_no_factura ?? ''))) === 'I'
+                        ? 'INACTIVO'
+                        : 'ACTIVO';
                     $arrayCampos = [
                         'descripcion' => $data->stkm_desc,
                         'sku' => ltrim($data->stkm_articulo, '0'),
@@ -1033,7 +1037,7 @@ class Articulo extends Model implements Auditable
                         'mventa_id' => $mventa_id,
                         'material_id' => $material_id ?? null,
                         'peso' => $data->stkm_peso_aprox,
-                        'nofactura' => $data->stkm_fl_no_factura,
+                        'nofactura' => $nofacturaFerli,
                         'impuesto_id' => $impuesto_id,
                         'formula' => $formulaErpId,
                         'foto' => $data->stkm_nombre_foto,
@@ -1046,7 +1050,7 @@ class Articulo extends Model implements Auditable
                         'usuario_id' => $usuario_id,
                         'fechaultimacompra' => $fechaultimacompra,
                         'usoarticulo_id' => $usoarticulo_id > 0 ? $usoarticulo_id : null,
-                        'estado' => 'ACTIVO',
+                        'estado' => $estadoFerli,
                     ];
                     break;
 

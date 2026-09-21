@@ -84,7 +84,9 @@ class ArticuloConsultaDesdeModal
             || can('editar-factura', false)
             || can('listar-factura', false)
             || can('facturar', false)
-            || can('generar-nota-de-credito', false);
+            || can('generar-nota-de-credito', false)
+            || can('editar-configuracion-tiendanube', false)
+            || can('actualizar-configuracion-tiendanube', false);
     }
 
     public static function urlEditar(int $id): string

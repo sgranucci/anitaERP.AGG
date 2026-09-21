@@ -41,6 +41,7 @@ use App\Services\Stock\PrecioServiceFerli;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloEstadoCanalSupport;
 use App\Support\Stock\ArticuloFerliListadoFiltros;
+use App\Support\Stock\ArticuloNofacturaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -289,7 +290,12 @@ class ArticuloFerliController extends Controller
             })
             ->orderBy('linea', 'asc')
             ->orderBy('articulo.sku', 'asc')
-            ->where('combinacion.estado', 'A')
+            ->where(
+                \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                ),
+                'A'
+            )
             ->where('articulo.sku', $sku)
             ->get();
 
@@ -446,13 +452,18 @@ class ArticuloFerliController extends Controller
         }
 
         // Crea la Combinacion 1
-        $combinacion = Combinacion::create([
+        $altaCombo = [
             'articulo_id' => $articulo->id,
             'codigo' => '1',
             'nombre' => $articulo->descripcion,
             'observacion' => ' ',
             'estado' => 'A',
-        ]);
+        ];
+        if (\App\Support\Stock\CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
+            $altaCombo['estado_fabrica'] = 'A';
+            $altaCombo['estado_local'] = 'A';
+        }
+        $combinacion = Combinacion::create($altaCombo);
 
         $producto = Articulo::with('categorias')
             ->with('subcategorias')
@@ -654,31 +665,49 @@ class ArticuloFerliController extends Controller
     {
         can('actualizar-articulos-contaduria');
 
+        $nomenclador = trim((string) $request->input('nomenclador', ''));
+        if (strtoupper($nomenclador) === 'NULL') {
+            $nomenclador = '';
+        }
+
+        $cuentaVentaId = (int) $request->input('cuentacontableventa_id', 0);
+        $impuestoId = (int) $request->input('impuesto_id', 0);
+
+        $datosContaduria = [
+            'nofactura' => ArticuloNofacturaSupport::normalizar($request->input('nofactura')),
+            'cuentacontableventa_id' => $cuentaVentaId > 0 ? $cuentaVentaId : null,
+            'impuesto_id' => $impuestoId > 0 ? $impuestoId : null,
+            'nomenclador' => $nomenclador !== '' ? $nomenclador : null,
+        ];
+
         DB::beginTransaction();
         try {
-            Articulo::findOrFail($request->id)->update($request->all());
+            Articulo::findOrFail($id)->update($datosContaduria);
 
             // Actualiza articulos costos
             $tareas_id = $request->input('tareas_id', []);
             $costos = $request->input('costos', []);
             $fechavigencia = $request->input('fechasvigencia', []);
 
-            $this->articulo_costoRepository->deletePorArticulo($request->id);
+            $this->articulo_costoRepository->deletePorArticulo($id);
             for ($i = 0; $i < count($tareas_id); $i++) {
                 if ($tareas_id[$i]) {
-                    $articulo_costo = $this->articulo_costoRepository->create(['articulo_id' => $id,
+                    $this->articulo_costoRepository->create([
+                        'articulo_id' => $id,
                         'tarea_id' => $tareas_id[$i],
-                        'costo' => $costos[$i],
-                        'fechavigencia' => $fechavigencia[$i],
+                        'costo' => $costos[$i] ?? 0,
+                        'fechavigencia' => $fechavigencia[$i] ?? date('Y-m-d'),
                     ]);
                 }
             }
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
-            dd($e->getMessage());
 
-            return $e->getMessage();
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('mensaje_error', 'No se pudo actualizar el artículo: '.$e->getMessage());
         }
 
         // Lee nuevo precio con relaciones para interface Anita
@@ -686,7 +715,7 @@ class ArticuloFerliController extends Controller
             ->with('unidadesdemedidas')->with('unidadesdemedidasalternativas')->with('cuentascontablesventas')
             ->with('cuentascontablescompras')->with('cuentascontablesimpinternos')->with('usoarticulos')
             ->with('materiales')->with('tipocortes')->with('punteras')->with('contrafuertes')
-            ->with('tipocorteforros')->with('forros')->with('compfondos')->where('id', $request->id)->get()->first();
+            ->with('tipocorteforros')->with('forros')->with('compfondos')->where('id', $id)->get()->first();
 
         // Actualiza anita
         $Articulo = new Articulo;
@@ -694,7 +723,7 @@ class ArticuloFerliController extends Controller
 
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
 
-        return redirect()->route('products.index', $filtrosQuery)->with('status', 'Articulo actualizado con exito');
+        return redirect()->route('products.index', $filtrosQuery)->with('mensaje', 'Articulo actualizado con exito');
     }
 
     public function delete(Request $request, $id)

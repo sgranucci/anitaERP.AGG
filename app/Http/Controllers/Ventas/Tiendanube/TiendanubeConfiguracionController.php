@@ -7,8 +7,11 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\TiendanubeConfiguracion;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Stock\ArticuloSkuMatchSupport;
 use App\Support\Ventas\Tiendanube\TiendanubeConfiguracionSupport;
+use App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 
@@ -18,21 +21,37 @@ class TiendanubeConfiguracionController extends Controller
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
-    public function editar()
+    public function editar(Request $request)
     {
         can('editar-configuracion-tiendanube');
 
-        $config = TiendanubeConfiguracionSupport::asegurarCabecera();
-        $config->load(['puntoventa', 'deposito']);
+        $tiendas = TiendanubeTiendasSupport::paraVista();
+        $storeId = trim((string) $request->query('store_id', ''));
+        $ids = array_column($tiendas, 'store_id');
+        if ($storeId === '' || ! in_array($storeId, $ids, true)) {
+            $storeId = $ids[0] ?? TiendanubeConfiguracionSupport::storeIdFerli();
+        }
+        $tiendaNombre = TiendanubeTiendasSupport::nombre($storeId);
+
+        $propia = TiendanubeConfiguracionSupport::cabeceraPropia($storeId);
+        $configPropia = $propia !== null;
+        if ($propia) {
+            $config = $propia;
+            $config->load(['puntoventa', 'deposito']);
+        } else {
+            $config = new TiendanubeConfiguracion([
+                'store_id' => $storeId,
+                'usocuentacaja_nombre' => 'TIENDA NUBE',
+            ]);
+        }
 
         $lista = null;
         if ((int) $config->listaprecio_id > 0) {
             $lista = Listaprecio::query()->find((int) $config->listaprecio_id);
         }
 
-        $gateways = TiendanubeConfiguracionSupport::gateways();
-        if ($gateways->isEmpty()) {
-            // Semilla visual desde config si aún no hay filas (migración sin seed).
+        $gateways = TiendanubeConfiguracionSupport::gateways($storeId, true);
+        if ($gateways->isEmpty() && $storeId === TiendanubeConfiguracionSupport::storeIdFerli()) {
             foreach ((array) config('tiendanube.gateway_cuentacaja', []) as $key => $codigo) {
                 $cuenta = Cuentacaja::query()->where('codigo', (string) $codigo)->first()
                     ?? (is_numeric($codigo) ? Cuentacaja::query()->find((int) $codigo) : null);
@@ -47,8 +66,10 @@ class TiendanubeConfiguracionController extends Controller
             }
         }
 
-        $pares = TiendanubeConfiguracionSupport::paresPuntoventaDeposito();
+        $pares = TiendanubeConfiguracionSupport::paresPuntoventaDeposito($storeId, true);
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $skuEnvio = (string) old('articulo_envio_sku', $config->articulo_envio_sku);
+        $skuDescuento = (string) old('articulo_descuento_sku', $config->articulo_descuento_sku);
 
         return view('ventas.tiendanube_configuracion.editar', [
             'config' => $config,
@@ -56,6 +77,14 @@ class TiendanubeConfiguracionController extends Controller
             'gateways' => $gateways,
             'pares' => $pares,
             'empresa_query' => $empresa_query,
+            'tiendas' => $tiendas,
+            'storeId' => $storeId,
+            'tiendaNombre' => $tiendaNombre,
+            'configPropia' => $configPropia,
+            'skuEnvio' => $skuEnvio,
+            'skuDescuento' => $skuDescuento,
+            'articuloEnvio' => ArticuloSkuMatchSupport::resolverCanonico($skuEnvio),
+            'articuloDescuento' => ArticuloSkuMatchSupport::resolverCanonico($skuDescuento),
         ]);
     }
 
@@ -64,6 +93,7 @@ class TiendanubeConfiguracionController extends Controller
         can('actualizar-configuracion-tiendanube');
 
         $data = $request->validate([
+            'store_id' => 'required|string|max:32',
             'empresa_id' => 'nullable|integer|exists:empresa,id',
             'puntoventa_id' => 'nullable|integer|exists:puntoventa,id',
             'deposito_id' => 'nullable|integer|exists:depmae,id',
@@ -142,18 +172,51 @@ class TiendanubeConfiguracionController extends Controller
             ]);
         }
 
+        $storeId = trim((string) ($data['store_id'] ?? ''));
+        $ids = array_column(TiendanubeTiendasSupport::definidas(), 'store_id');
+        if (! in_array($storeId, $ids, true)) {
+            throw ValidationException::withMessages([
+                'store_id' => 'La tienda no está configurada.',
+            ]);
+        }
+
         TiendanubeConfiguracionSupport::guardar([
             'empresa_id' => $data['empresa_id'] ?? null,
             'puntoventa_id' => $data['puntoventa_id'] ?? null,
             'deposito_id' => $data['deposito_id'] ?? null,
             'listaprecio_id' => $data['listaprecio_id'] ?? null,
-            'articulo_envio_sku' => $data['articulo_envio_sku'] ?? null,
-            'articulo_descuento_sku' => $data['articulo_descuento_sku'] ?? null,
+            'articulo_envio_sku' => $this->skuArticuloExistente(
+                $data['articulo_envio_sku'] ?? null,
+                'articulo_envio_sku',
+                'envío'
+            ),
+            'articulo_descuento_sku' => $this->skuArticuloExistente(
+                $data['articulo_descuento_sku'] ?? null,
+                'articulo_descuento_sku',
+                'descuento'
+            ),
             'usocuentacaja_nombre' => $data['usocuentacaja_nombre'] ?? 'TIENDA NUBE',
-        ], $gateways, $pares);
+        ], $gateways, $pares, $storeId);
 
         return redirect()
-            ->route('editar_configuracion_tiendanube')
-            ->with('mensaje', 'Configuración Tiendanube actualizada.');
+            ->route('editar_configuracion_tiendanube', ['store_id' => $storeId])
+            ->with('mensaje', 'Configuración de '.TiendanubeTiendasSupport::nombre($storeId).' actualizada.');
+    }
+
+    private function skuArticuloExistente(?string $sku, string $campo, string $etiqueta): ?string
+    {
+        $sku = trim((string) $sku);
+        if ($sku === '') {
+            return null;
+        }
+
+        $articulo = ArticuloSkuMatchSupport::resolverCanonico($sku);
+        if ($articulo === null) {
+            throw ValidationException::withMessages([
+                $campo => "No hay un artículo con el SKU de {$etiqueta}.",
+            ]);
+        }
+
+        return (string) $articulo->sku;
     }
 }

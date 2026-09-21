@@ -42,6 +42,15 @@ class QueryRetornoListado
             'estado_comb',
             'filtro_estado',
             'filtro_canal',
+            // Pedidos Tiendanube
+            'desde',
+            'hasta',
+            'estado_erp',
+            'status_tn',
+            'payment_status',
+            'store_id',
+            'buscar',
+            'consultar',
         ] as $key) {
             if ($request->query->has($key)) {
                 return true;

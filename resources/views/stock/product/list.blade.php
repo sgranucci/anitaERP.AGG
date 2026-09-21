@@ -6,6 +6,11 @@ Art&iacute;culos
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
+@if (can('listar-reporte-historial-precios-compra', false))
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta-historial-precios.js') }}" type="text/javascript"></script>
+@endif
 <script>
 function checkState(index){
   var confirmar = confirm("¿Desea inactivar combinaciones de forma masiva?");
@@ -117,7 +122,7 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                                     </span>
                                 </td>
                                 @endif
-                                <td>{{ $articulo->nofactura == '0' ? 'Facturable' : 'No facturable'}}</td>
+                                <td>{{ \App\Support\Stock\ArticuloNofacturaSupport::etiqueta($articulo->nofactura) }}</td>
                                 <td>
                                     @if (\App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva())
                                         @php
@@ -162,6 +167,24 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
                                    		<i class="fa fa-qrcode"></i>
 									</a>
 								@endif
+                       			@if (can('listar-precios', false) || can('listar-articulos', false))
+                                	<button type="button"
+                                	    class="btn-accion-tabla consultapreciosarticulo tooltipsC"
+                                	    title="Consultar precios en listas de venta"
+                                	    data-articulo-id="{{ $articulo->id }}"
+                                	    data-articulo-sku="{{ $articulo->stkm_articulo ?? '' }}"
+                                	    data-articulo-descripcion="{{ $articulo->stkm_desc ?? '' }}">
+                                        <i class="fas fa-dollar-sign text-success"></i>
+                                	</button>
+								@endif
+                       			@if (can('listar-reporte-historial-precios-compra', false))
+                                	<button type="button"
+                                	    class="btn-accion-tabla btn-historial-precios-articulo tooltipsC"
+                                	    title="Historial de precios de compra"
+                                	    data-articulo-id="{{ $articulo->id }}">
+                                        <i class="fa fa-chart-line text-success"></i>
+                                	</button>
+								@endif
                        			@if (can('borrar-articulos', false))
                                 <form action="{{route('product.delete', ['id' => $articulo->id])}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
@@ -191,5 +214,10 @@ use App\Support\Stock\ArticuloFerliListadoFiltros;
         </div>
     </div>
 </div>
+@include('includes.stock.modalconsultaprecioarticulo')
+@include('includes.stock.modalconsultalistaprecio')
+@if (can('listar-reporte-historial-precios-compra', false))
+<input type="hidden" id="historial-precios-articulo-url" value="{{ route('reporte_historial_precios_articulo') }}">
+@endif
 
 @endsection

@@ -10,6 +10,9 @@ use Illuminate\Support\Collection;
 
 /**
  * Consulta del reporte de cheques emitidos o recibidos.
+ *
+ * Columnas alineadas al listado Anita («LISTADO A SERGIO») y pedidos de Adriana:
+ * cliente, destino (proveedor), totales por día, orden cronológico, importe numérico en Excel.
  */
 class ChequeReporteSupport
 {
@@ -21,7 +24,16 @@ class ChequeReporteSupport
     {
         $query = self::consulta($filtros, $empresas)
             ->select('cheque.*')
-            ->with(['empresas', 'bancos', 'clientes', 'monedas', 'cuentacajas', 'proveedores']);
+            ->with([
+                'empresas',
+                'bancos',
+                'clientes:id,codigo,nombre',
+                'monedas',
+                'cuentacajas',
+                'proveedores:id,codigo,nombre',
+                'cobranzas:id,numerotransaccion',
+                'pagoproveedores:id,numerotransaccion',
+            ]);
 
         self::aplicarOrden($query, $filtros);
 
@@ -46,6 +58,179 @@ class ChequeReporteSupport
             ->groupBy('moneda.abreviatura')
             ->orderBy('moneda.abreviatura')
             ->get();
+    }
+
+    /**
+     * Suma de cheques por día (fecha del cheque), orden cronológico.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return Collection<int, object{fecha: ?string, cantidad: int, monto: float}>
+     */
+    public static function totalesPorDia(array $filtros, EmpresaRepositoryInterface $empresas): Collection
+    {
+        return self::consulta($filtros, $empresas)
+            ->selectRaw('cheque.fechapago as fecha, COUNT(*) as cantidad, SUM(cheque.monto) as monto')
+            ->groupBy('cheque.fechapago')
+            ->orderBy('cheque.fechapago', 'asc')
+            ->get()
+            ->map(static function ($row) {
+                $row->cantidad = (int) $row->cantidad;
+                $row->monto = (float) $row->monto;
+
+                return $row;
+            });
+    }
+
+    /**
+     * Filas para PDF/Excel: cheques + subtotal «Total dia» + total general.
+     * Los subtotales diarios se insertan cuando el orden es por fecha de cheque (default Anita).
+     *
+     * @param  Collection<int, Cheque>  $datas
+     * @return list<array{tipo: string, cheque?: Cheque, fecha?: ?string, cantidad?: int, monto?: float, etiqueta?: string}>
+     */
+    public static function filasConSubtotalesDiarios(Collection $datas, array $filtros): array
+    {
+        $orden = (string) ($filtros['orden'] ?? 'fechapago');
+        $filas = [];
+        $totalCantidad = 0;
+        $totalMonto = 0.0;
+
+        if ($orden !== 'fechapago' || $datas->isEmpty()) {
+            foreach ($datas as $cheque) {
+                $filas[] = ['tipo' => 'cheque', 'cheque' => $cheque];
+                $totalCantidad++;
+                $totalMonto += (float) $cheque->monto;
+            }
+            if ($totalCantidad > 0) {
+                $filas[] = [
+                    'tipo' => 'total_general',
+                    'cantidad' => $totalCantidad,
+                    'monto' => $totalMonto,
+                    'etiqueta' => 'Total general',
+                ];
+            }
+
+            return $filas;
+        }
+
+        $diaActual = null;
+        $cantDia = 0;
+        $montoDia = 0.0;
+
+        $flushDia = static function () use (&$filas, &$diaActual, &$cantDia, &$montoDia): void {
+            if ($diaActual === null || $cantDia === 0) {
+                return;
+            }
+            $filas[] = [
+                'tipo' => 'total_dia',
+                'fecha' => $diaActual,
+                'cantidad' => $cantDia,
+                'monto' => $montoDia,
+                'etiqueta' => 'Total dia '.ChequeDepositoComprobanteSupport::fechaDmy($diaActual),
+            ];
+            $cantDia = 0;
+            $montoDia = 0.0;
+        };
+
+        foreach ($datas as $cheque) {
+            $fecha = self::fechaYmd($cheque->fechapago);
+            if ($diaActual !== null && $fecha !== $diaActual) {
+                $flushDia();
+            }
+            $diaActual = $fecha;
+            $filas[] = ['tipo' => 'cheque', 'cheque' => $cheque];
+            $cantDia++;
+            $montoDia += (float) $cheque->monto;
+            $totalCantidad++;
+            $totalMonto += (float) $cheque->monto;
+        }
+        $flushDia();
+
+        if ($totalCantidad > 0) {
+            $filas[] = [
+                'tipo' => 'total_general',
+                'cantidad' => $totalCantidad,
+                'monto' => $totalMonto,
+                'etiqueta' => 'Total general',
+            ];
+        }
+
+        return $filas;
+    }
+
+    public static function codigoCliente(Cheque $cheque): string
+    {
+        $codigo = $cheque->clientes->codigo ?? null;
+        if ($codigo === null || $codigo === '') {
+            return '';
+        }
+
+        return (string) $codigo;
+    }
+
+    public static function nombreCliente(Cheque $cheque): string
+    {
+        return trim((string) ($cheque->clientes->nombre ?? ''));
+    }
+
+    /**
+     * Destino del valor: proveedor endosado / pago, o a quién se entregó (anombrede).
+     * No usa `entregado` en recibidos: en sync Anita suele caer el banco de emisión.
+     */
+    public static function destino(Cheque $cheque): string
+    {
+        $proveedor = $cheque->proveedores;
+        if ($proveedor) {
+            $codigo = trim((string) ($proveedor->codigo ?? ''));
+            $nombre = trim((string) ($proveedor->nombre ?? ''));
+            if ($codigo !== '' && $nombre !== '') {
+                return $codigo.' — '.$nombre;
+            }
+
+            return $nombre !== '' ? $nombre : $codigo;
+        }
+
+        $aNombre = trim((string) ($cheque->anombrede ?? ''));
+        if ($aNombre !== '') {
+            return $aNombre;
+        }
+
+        if (($cheque->origen ?? '') === 'E') {
+            return trim((string) ($cheque->entregado ?? ''));
+        }
+
+        return '';
+    }
+
+    public static function beneficiario(Cheque $cheque): string
+    {
+        return trim((string) ($cheque->anombrede ?? $cheque->entregado ?? ''));
+    }
+
+    public static function bancoOCuenta(Cheque $cheque): string
+    {
+        if (($cheque->origen ?? '') === 'E') {
+            return trim((string) ($cheque->cuentacajas->nombre ?? ''));
+        }
+
+        return trim((string) ($cheque->bancos->nombre ?? ''));
+    }
+
+    /**
+     * N.rec. (cobranza) o N.OP (pago proveedor).
+     */
+    public static function nroDocumentoOrigen(Cheque $cheque): string
+    {
+        $nroCob = $cheque->cobranzas->numerotransaccion ?? null;
+        if ($nroCob !== null && $nroCob !== '' && (int) $nroCob !== 0) {
+            return (string) $nroCob;
+        }
+        $nroOp = $cheque->pagoproveedores->numerotransaccion ?? null;
+        if ($nroOp !== null && $nroOp !== '' && (int) $nroOp !== 0) {
+            return (string) $nroOp;
+        }
+
+        return '';
     }
 
     /**
@@ -146,5 +331,21 @@ class ChequeReporteSupport
                 ->where('cheque.nro_caucion', '!=', '')
                 ->where('cheque.nro_caucion', '!=', '0');
         }
+    }
+
+    private static function fechaYmd(mixed $fecha): ?string
+    {
+        if ($fecha === null || $fecha === '') {
+            return null;
+        }
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+        $s = trim((string) $fecha);
+        if (preg_match('/^\d{4}-\d{2}-\d{2}/', $s, $m)) {
+            return substr($s, 0, 10);
+        }
+
+        return $s;
     }
 }

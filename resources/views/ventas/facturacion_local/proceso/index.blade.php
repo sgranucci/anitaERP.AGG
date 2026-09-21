@@ -43,6 +43,8 @@ window.FACTURACION_LOCAL = {
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/talle/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/talle/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/stock/color/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/color/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/configuracion/localidad/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/localidad/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/facturacion_local/pos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/facturacion_local/pos.js')) ?: time() }}"></script>
 @endsection
 
@@ -183,7 +185,7 @@ window.FACTURACION_LOCAL = {
                 <small id="fl-totales-detalle">FAC 0 · NC 0</small>
             </div>
             <p class="fl-keys">
-                Cantidad negativa = devolución (NC).
+                Cantidad negativa = devolución (NC). Neto 0 → $0,01 ARCA. Neto negativo → NC completa afuera.
                 <kbd>F1</kbd> consulta art. · <kbd>F2</kbd> cobrar · <kbd>F3</kbd> stock/precios · <kbd>F8</kbd> ticket regalo · <kbd>Esc</kbd> limpia
             </p>
         </div>
@@ -203,14 +205,64 @@ window.FACTURACION_LOCAL = {
                     <span id="fl-letra-badge" class="badge badge-secondary">Letra B/C · CF</span>
                     <span id="fl-cliente-extra" class="text-muted small ml-1"></span>
                 </div>
+                <div class="custom-control custom-checkbox mt-2">
+                    <input type="checkbox" class="custom-control-input" id="fl-receptor-manual-toggle" @if (! $turno) disabled @endif>
+                    <label class="custom-control-label small" for="fl-receptor-manual-toggle">
+                        Receptor eventual (no crea cliente; solo esta venta)
+                    </label>
+                </div>
+                <div id="fl-receptor-manual" class="fl-receptor-manual d-none mt-2">
+                    <div class="btn-group btn-group-sm mb-2" role="group" aria-label="Tipo de factura eventual">
+                        <button type="button" class="btn btn-outline-info active" id="fl-rec-modo-b" data-modo="b">Factura B/C</button>
+                        <button type="button" class="btn btn-outline-danger" id="fl-rec-modo-a" data-modo="a">Factura A</button>
+                    </div>
+                    <div id="fl-rec-campos-b" class="fl-rec-campos">
+                        <input type="text" class="form-control form-control-sm mb-1" id="fl-rec-nombre-b" placeholder="Nombre y apellido" autocomplete="off">
+                        <input type="text" class="form-control form-control-sm mb-1" id="fl-rec-dni" placeholder="DNI" inputmode="numeric" autocomplete="off">
+                        <input type="text" class="form-control form-control-sm" id="fl-rec-domicilio-b" placeholder="Domicilio (opcional)" autocomplete="off">
+                    </div>
+                    <div id="fl-rec-campos-a" class="fl-rec-campos d-none">
+                        <input type="text" class="form-control form-control-sm mb-1" id="fl-rec-nombre-a" placeholder="Razón social / nombre" autocomplete="off">
+                        <input type="text" class="form-control form-control-sm mb-1" id="fl-rec-cuit" placeholder="CUIT (11 dígitos)" inputmode="numeric" autocomplete="off">
+                        <input type="text" class="form-control form-control-sm mb-1" id="fl-rec-domicilio-a" placeholder="Domicilio" autocomplete="off">
+                        <label class="small mb-0 mt-1 d-block">Localidad</label>
+                        @include('configuracion.partials.campo_consulta_localidad', [
+                            'layout' => 'inline',
+                            'inputName' => 'fl_rec_localidad_id',
+                            'inputId' => 'fl_rec_localidad_id',
+                            'codigoId' => 'fl_rec_codigolocalidad',
+                            'nombreId' => 'fl_rec_nombrelocalidad',
+                            'codigoName' => 'fl_rec_codigolocalidad',
+                            'nombreName' => 'fl_rec_nombrelocalidad',
+                            'previaName' => 'fl_rec_localidad_id_previa',
+                            'descName' => 'fl_rec_desc_localidad',
+                            'extra_class' => 'fl-rec-localidad mb-1',
+                            'provinciaSource' => '.fl-rec-provincia .provincia_id',
+                        ])
+                        <label class="small mb-0 mt-1 d-block">Provincia</label>
+                        @include('configuracion.partials.campo_consulta_provincia', [
+                            'layout' => 'inline',
+                            'inputName' => 'fl_rec_provincia_id',
+                            'inputId' => 'fl_rec_provincia_id',
+                            'codigoId' => 'fl_rec_codigoprovincia',
+                            'nombreId' => 'fl_rec_nombreprovincia',
+                            'codigoName' => 'fl_rec_codigoprovincia',
+                            'nombreName' => 'fl_rec_nombreprovincia',
+                            'extra_class' => 'fl-rec-provincia',
+                            'mostrar_jurisdiccion' => false,
+                        ])
+                    </div>
+                    <small class="form-text text-muted">Los datos quedan solo en el comprobante; no se graban en el padrón de clientes.</small>
+                </div>
             </div>
 
             <div class="table-responsive fl-cobranza-scroll">
                 <table class="table table-sm table-bordered mb-0 bg-white" id="fl-cuenta-table">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
-                            <th style="width:55%;">Cuenta de caja</th>
-                            <th style="width:30%;">Monto</th>
+                            <th style="width:42%;">Cuenta de caja</th>
+                            <th style="width:22%;">Monto</th>
+                            <th style="width:21%;">Cupón</th>
                             <th style="width:15%;"></th>
                         </tr>
                     </thead>
@@ -223,12 +275,16 @@ window.FACTURACION_LOCAL = {
             </div>
 
             <div class="mt-2">
-                <label style="font-size:12px;color:#5d6d7e;">Si hay excedente / NC mayor</label>
+                <label style="font-size:12px;color:#5d6d7e;">Si hay excedente de medios</label>
                 <select id="fl-excedente" class="form-control" @if (! $turno) disabled @endif>
                     <option value="">—</option>
                     <option value="vale">Generar vale a cuenta</option>
                     <option value="reintegro">Reintegro (sin vale)</option>
                 </select>
+                <small class="text-muted d-block mt-1">
+                    Saldo negativo (devoluciones &gt; ventas): no permitido. Emita NC completa desde Facturas Local.
+                    Cambio equivalente (neto 0): se factura $0,01 (ARCA).
+                </small>
             </div>
             <div class="mt-3 d-flex flex-column" style="gap:8px;">
                 <button type="button" class="fl-btn fl-btn-ok" id="fl-emitir" @if (! $turno) disabled @endif>Cobrar (F2)</button>
@@ -239,6 +295,7 @@ window.FACTURACION_LOCAL = {
     </div>
     @endif
 </div>
+<iframe id="fl-iframe-impresion" title="Impresión factura" aria-hidden="true" style="position:fixed;left:0;top:0;width:0;height:0;border:0;opacity:0;"></iframe>
 <div id="fl-overlay"><div class="box"><i class="fa fa-spinner fa-spin"></i> <span id="fl-overlay-txt">Procesando…</span></div></div>
 
 <template id="fl-template-renglon-cuenta">
@@ -255,6 +312,9 @@ window.FACTURACION_LOCAL = {
         </td>
         <td>
             <input type="number" step="0.01" class="form-control form-control-sm fl-cc-monto monto" value="">
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm fl-cc-cupon numerocupon d-none" value="" placeholder="Nº cupón" autocomplete="off" inputmode="numeric">
         </td>
         <td class="text-center">
             <button type="button" title="Eliminar línea" class="btn-accion-tabla fl-eliminar-cuenta">
@@ -370,4 +430,6 @@ window.FACTURACION_LOCAL = {
 @include('includes.stock.modalconsultatalle')
 @include('includes.stock.modalconsultacolor')
 @include('includes.stock.modalconsultacombinacion')
+@include('includes.configuracion.modalconsultalocalidad')
+@include('includes.configuracion.modalconsultaprovincia')
 @endsection

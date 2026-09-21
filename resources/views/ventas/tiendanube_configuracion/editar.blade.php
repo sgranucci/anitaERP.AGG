@@ -34,7 +34,8 @@ Configuraci&oacute;n Tiendanube
     }
     #form-config-tiendanube .tm-puntoventa-campo .form-group,
     #form-config-tiendanube .tm-deposito-campo.form-group,
-    #form-config-tiendanube .tm-cuentacaja-campo.form-group {
+    #form-config-tiendanube .tm-cuentacaja-campo.form-group,
+    #form-config-tiendanube .tm-articulo-campo.form-group {
         margin-bottom: 0;
     }
 </style>
@@ -45,6 +46,7 @@ Configuraci&oacute;n Tiendanube
 <script src="{{ asset('assets/pages/scripts/ventas/puntoventa/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/tiendanube_configuracion/editar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tiendanube_configuracion/editar.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
@@ -63,9 +65,10 @@ Configuraci&oacute;n Tiendanube
                     </a>
                 </div>
             </div>
-            <form action="{{ route('actualizar_configuracion_tiendanube') }}" method="POST" id="form-config-tiendanube" class="form-horizontal" autocomplete="off">
+            <form action="{{ route('actualizar_configuracion_tiendanube', ['store_id' => $storeId]) }}" method="POST" id="form-config-tiendanube" class="form-horizontal" autocomplete="off">
                 @csrf
                 @method('PUT')
+                <input type="hidden" name="store_id" value="{{ $storeId }}">
                 <div class="card-body">
                     <div class="alert alert-light border mb-3 py-2">
                         <div class="d-flex flex-wrap align-items-center" style="gap:.5rem 1rem;">
@@ -77,12 +80,29 @@ Configuraci&oacute;n Tiendanube
                                 <span class="tn-cfg-kbd">Enter</span> en el buscador del modal = primera fila
                             </span>
                             <span class="tn-cfg-hint mb-0">
-                                Token API en <code>.env</code>:
-                                <code>TIENDANUBE_ACCESS_TOKEN</code> (Ferli) y
-                                <code>TIENDANUBE_BOAONDA_ACCESS_TOKEN</code> (Boaonda)
+                                El token de cada tienda sigue en <code>.env</code>. Ac&aacute; se asignan PV, dep&oacute;sito y cuentas de caja.
                             </span>
                         </div>
                     </div>
+
+                    <div class="mb-3">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Tienda">
+                            @foreach ($tiendas as $tienda)
+                                <a href="{{ route('editar_configuracion_tiendanube', ['store_id' => $tienda['store_id']]) }}"
+                                    class="btn {{ $storeId === $tienda['store_id'] ? 'btn-primary' : 'btn-outline-primary' }}">
+                                    {{ $tienda['nombre'] }}
+                                </a>
+                            @endforeach
+                        </div>
+                        <span class="tn-cfg-hint ml-2">Defaults de <strong>{{ $tiendaNombre }}</strong></span>
+                    </div>
+
+                    @if (! $configPropia)
+                        <div class="alert alert-warning">
+                            {{ $tiendaNombre }} todav&iacute;a no tiene defaults propios.
+                            Hasta que guardes esta pantalla, sus pedidos usan los de Ferli.
+                        </div>
+                    @endif
 
                     <div class="card card-outline card-secondary mb-3">
                         <div class="card-header py-2">
@@ -105,20 +125,36 @@ Configuraci&oacute;n Tiendanube
                                 'col_input' => 'col-lg-8',
                             ])
 
-                            <div class="form-group row">
-                                <label for="articulo_envio_sku" class="col-lg-3 control-label text-right pr-2">SKU env&iacute;o</label>
-                                <div class="col-lg-3">
-                                    <input type="text" name="articulo_envio_sku" id="articulo_envio_sku" class="form-control"
-                                        value="{{ old('articulo_envio_sku', $config->articulo_envio_sku) }}" maxlength="40"
-                                        placeholder="ej. FL">
-                                </div>
-                                <label for="articulo_descuento_sku" class="col-lg-2 control-label text-right pr-2">SKU descuento</label>
-                                <div class="col-lg-3">
-                                    <input type="text" name="articulo_descuento_sku" id="articulo_descuento_sku" class="form-control"
-                                        value="{{ old('articulo_descuento_sku', $config->articulo_descuento_sku) }}" maxlength="40"
-                                        placeholder="Vac&iacute;o = pie">
-                                </div>
-                            </div>
+                            @include('produccion.partials.campo_consulta_articulo', [
+                                'prefix' => 'tn_envio',
+                                'label' => 'SKU env&iacute;o',
+                                'inputName' => 'articulo_envio_id',
+                                'inputId' => 'tn_envio_articulo_id',
+                                'codigoName' => 'articulo_envio_sku',
+                                'codigoMaxlength' => 40,
+                                'articuloId' => $articuloEnvio->id ?? '',
+                                'codigo' => $skuEnvio,
+                                'descripcion' => $articuloEnvio->descripcion ?? '',
+                                'col_label' => 'col-lg-3 control-label text-right pr-2',
+                                'col_input' => 'col-lg-8',
+                                'next_focus' => '#tn_descuento_articulo_id_codigo',
+                                'help' => 'F1 o lupa consulta el art&iacute;culo. Enter resuelve el SKU. Vac&iacute;o = sin &iacute;tem de env&iacute;o.',
+                            ])
+                            @include('produccion.partials.campo_consulta_articulo', [
+                                'prefix' => 'tn_descuento',
+                                'label' => 'SKU descuento',
+                                'inputName' => 'articulo_descuento_id',
+                                'inputId' => 'tn_descuento_articulo_id',
+                                'codigoName' => 'articulo_descuento_sku',
+                                'codigoMaxlength' => 40,
+                                'articuloId' => $articuloDescuento->id ?? '',
+                                'codigo' => $skuDescuento,
+                                'descripcion' => $articuloDescuento->descripcion ?? '',
+                                'col_label' => 'col-lg-3 control-label text-right pr-2',
+                                'col_input' => 'col-lg-8',
+                                'next_focus' => '#usocuentacaja_nombre',
+                                'help' => 'F1 o lupa consulta el art&iacute;culo. Enter resuelve el SKU. Vac&iacute;o = descuento al pie.',
+                            ])
                             <div class="form-group row mb-0">
                                 <label for="usocuentacaja_nombre" class="col-lg-3 control-label text-right pr-2">Uso cuentas de caja</label>
                                 <div class="col-lg-4">
@@ -238,6 +274,7 @@ Configuraci&oacute;n Tiendanube
 @include('includes.ventas.modalconsultapuntoventa')
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.stock.modalconsultalistaprecio')
+@include('includes.stock.modalconsultaarticulo')
 
 <template id="tn-template-fila-pv-dep">
     @include('ventas.tiendanube_configuracion.partials.fila_pv_deposito', [

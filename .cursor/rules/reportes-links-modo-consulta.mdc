@@ -1,0 +1,42 @@
+---
+description: Links azules de reportes/listados abren el ABM en solapa sin menú (modo consulta)
+globs: resources/views/**/*reporte*/**,resources/views/**/reporte.blade.php,resources/views/**/index.blade.php,app/Http/Controllers/**/*.php,routes/web.php
+alwaysApply: false
+---
+
+# Reportes → ABM: solapa sin menú
+
+Todo link azul desde un **reporte o listado** hacia el detalle/ABM debe abrir en **otra solapa** sin menú lateral.
+
+## URL
+
+```php
+route('editar_{recurso}', [
+    'id' => $id,
+    'origen' => 'modal_consulta',
+    'vista' => 'consulta',
+])
+```
+
+Blade: `class="text-primary"`, `target="_blank"`, `rel="noopener"`.
+
+## Rutas y pantalla
+
+1. GET editar + PUT actualizar con middleware `modo.consulta`.
+2. Layout: `vista=consulta` → `body.modo-consulta` (sin menú).
+3. Vista editar: sin «Volver al listado»; botón **Cerrar solapa** (`window.close()`).
+4. Sin permiso `actualizar-*`: solo lectura (`pe-none`). Con permiso: editable + Actualizar + Cerrar solapa; redirect conserva `origen`/`vista`.
+
+Referencias: `caja/cheque/reporte` + `ChequeController@editar`, patrón `DepmaeController` / `navegacion-abm-desde-modales.mdc`.
+
+## Prohibido
+
+- Link al editar **sin** `vista=consulta` desde reporte (abre con menú completo).
+- `target="_self"` que reemplaza la consulta del reporte.
+
+## Comprobación rápida
+
+```bash
+rg "origen.*modal_consulta|vista.*consulta" resources/views/{modulo}/
+rg "modo.consulta" routes/web.php
+```

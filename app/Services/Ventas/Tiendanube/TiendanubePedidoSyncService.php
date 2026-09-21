@@ -223,8 +223,8 @@ final class TiendanubePedidoSyncService
         $doc = $this->extraerDocumento($customer, $billing, $order);
         $nombre = TiendanubePedidoReceptorSupport::nombreDesdeOrder($order);
 
-        $pvDefault = TiendanubePedidoMaestrosSupport::puntoventaDefault();
-        $depDefault = TiendanubePedidoMaestrosSupport::depositoDefault();
+        $pvDefault = TiendanubePedidoMaestrosSupport::puntoventaDefault($storeId);
+        $depDefault = TiendanubePedidoMaestrosSupport::depositoDefault(null, $storeId);
 
         $existente = TiendanubePedido::query()
             ->where('store_id', $storeId)
@@ -320,7 +320,7 @@ final class TiendanubePedidoSyncService
 
         $shippingCost = (float) ($order['shipping_cost_customer'] ?? $order['shipping']['cost'] ?? 0);
         if ($shippingCost > 0.0001) {
-            $artEnvio = TiendanubePedidoMaestrosSupport::articuloEnvio();
+            $artEnvio = TiendanubePedidoMaestrosSupport::articuloEnvio($storeId);
             TiendanubePedidoLinea::query()->create([
                 'tiendanube_pedido_id' => $pedido->id,
                 'tipo' => 'envio',
@@ -335,7 +335,7 @@ final class TiendanubePedidoSyncService
 
         $discount = (float) ($order['discount'] ?? $order['coupon'][0]['value'] ?? 0);
         if ($discount > 0.0001) {
-            $artDesc = TiendanubePedidoMaestrosSupport::articuloDescuento();
+            $artDesc = TiendanubePedidoMaestrosSupport::articuloDescuento($storeId);
             TiendanubePedidoLinea::query()->create([
                 'tiendanube_pedido_id' => $pedido->id,
                 'tipo' => 'descuento',

@@ -816,6 +816,48 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/facturacion-local/reportes', 'Ventas\FacturacionLocal\FacturacionLocalReporteController@index')->name('facturacion_local_reportes');
     Route::get('ventas/facturacion-local/listar-reportes/{formato}', 'Ventas\FacturacionLocal\FacturacionLocalReporteController@exportar')->name('listar_facturacion_local');
 
+    Route::get('ventas/facturacion-local/parametros', 'Ventas\FacturacionLocal\FacturacionLocalParametroController@index')->name('facturacion_local_parametros');
+    Route::put('ventas/facturacion-local/parametros', 'Ventas\FacturacionLocal\FacturacionLocalParametroController@actualizar')->name('actualizar_facturacion_local_parametros');
+
+    // Facturas Local (admin post-emisión)
+    Route::get('ventas/facturacion-local/facturas', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@index')->name('facturacion_local_facturas')->middleware('modo.consulta');
+    Route::get('ventas/facturacion-local/listar-facturas/{formato}', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@exportar')->name('listar_facturacion_local_facturas');
+    Route::get('ventas/facturacion-local/facturas/{ventaId}/ver', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@ver')->name('facturacion_local_facturas_ver')->middleware('modo.consulta');
+    Route::post('ventas/facturacion-local/facturas/{ventaId}/generar-nota-credito', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@generarNotaCredito')->name('facturacion_local_facturas_generar_nota_credito');
+    Route::post('ventas/facturacion-local/facturas/{ventaId}/reimprimir', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@reimprimir')->name('facturacion_local_facturas_reimprimir');
+    Route::get('ventas/facturacion-local/facturas/{ventaId}/medios-pago', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@apiMediosPagoCambio')->name('facturacion_local_facturas_medios_pago');
+    Route::get('ventas/facturacion-local/facturas/{ventaId}/cuentacaja-por-codigo/{codigo}', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@apiCuentacajaPorCodigo')->name('facturacion_local_facturas_cuentacaja_por_codigo');
+    Route::put('ventas/facturacion-local/facturas/{ventaId}/medios-pago', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@actualizarMediosPago')->name('facturacion_local_facturas_actualizar_medios_pago');
+
+    // Cambios / devoluciones marketplace (legajo RMA Ferli — no gastronomía AGG)
+    Route::get('ventas/facturacion-local/cambios-devolucion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@index')->name('facturacion_local_cambios_devolucion')->middleware('modo.consulta');
+    Route::get('ventas/facturacion-local/listar-cambios-devolucion/{formato}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@listar')->name('lista_cambio_devolucion_marketplace');
+    Route::get('ventas/facturacion-local/cambios-devolucion/crear', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@crear')->name('crear_cambio_devolucion_marketplace');
+    Route::get('ventas/facturacion-local/cambios-devolucion/api/buscar-venta', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@apiBuscarVenta')->name('api_buscar_venta_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@guardar')->name('guardar_cambio_devolucion_marketplace');
+    Route::get('ventas/facturacion-local/cambios-devolucion/{id}/editar', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@editar')->name('editar_cambio_devolucion_marketplace')->middleware('modo.consulta');
+    Route::put('ventas/facturacion-local/cambios-devolucion/{id}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@actualizar')->name('actualizar_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion/{id}/confirmar', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@confirmar')->name('confirmar_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion/{id}/emitir-fac', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@emitirFac')->name('emitir_fac_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion/{id}/registrar-recepcion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@registrarRecepcion')->name('registrar_recepcion_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion/{id}/emitir-nc', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@emitirNc')->name('emitir_nc_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion/{id}/registrar-compensacion', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@registrarCompensacion')->name('registrar_compensacion_cambio_devolucion_marketplace');
+    Route::post('ventas/facturacion-local/cambios-devolucion/{id}/anular', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@anular')->name('anular_cambio_devolucion_marketplace');
+    Route::get('ventas/facturacion-local/cambios-devolucion/{id}/archivo/{archivoId}', 'Ventas\FacturacionLocal\CambioDevolucionMarketplaceController@descargarArchivo')->name('descargar_archivo_cambio_devolucion_marketplace');
+
+    // Remitos internos (salida stock local)
+    Route::get('ventas/facturacion-local/remitos-internos', 'Ventas\FacturacionLocal\RemitoInternoController@index')->name('facturacion_local_remitos_internos')->middleware('modo.consulta');
+    Route::get('ventas/facturacion-local/listar-remitos-internos/{formato}', 'Ventas\FacturacionLocal\RemitoInternoController@listar')->name('lista_remito_interno');
+    Route::get('ventas/facturacion-local/remitos-internos/crear', 'Ventas\FacturacionLocal\RemitoInternoController@crear')->name('crear_remito_interno');
+    Route::get('ventas/facturacion-local/remitos-internos/api/buscar-articulo', 'Ventas\FacturacionLocal\RemitoInternoController@apiBuscarArticulo')->name('api_buscar_articulo_remito_interno');
+    Route::get('ventas/facturacion-local/remitos-internos/api/variantes/{articuloId}', 'Ventas\FacturacionLocal\RemitoInternoController@apiVariantesArticulo')->name('api_variantes_remito_interno');
+    Route::post('ventas/facturacion-local/remitos-internos', 'Ventas\FacturacionLocal\RemitoInternoController@guardar')->name('guardar_remito_interno');
+    Route::get('ventas/facturacion-local/remitos-internos/{id}/editar', 'Ventas\FacturacionLocal\RemitoInternoController@editar')->name('editar_remito_interno')->middleware('modo.consulta');
+    Route::put('ventas/facturacion-local/remitos-internos/{id}', 'Ventas\FacturacionLocal\RemitoInternoController@actualizar')->name('actualizar_remito_interno');
+    Route::post('ventas/facturacion-local/remitos-internos/{id}/confirmar', 'Ventas\FacturacionLocal\RemitoInternoController@confirmar')->name('confirmar_remito_interno');
+    Route::post('ventas/facturacion-local/remitos-internos/{id}/anular', 'Ventas\FacturacionLocal\RemitoInternoController@anular')->name('anular_remito_interno');
+    Route::get('ventas/facturacion-local/remitos-internos/{id}/pdf', 'Ventas\FacturacionLocal\RemitoInternoController@pdf')->name('pdf_remito_interno');
+
     // Consultas c-stocklocal / c-articulo
     Route::get('ventas/facturacion-local/stock', 'Ventas\FacturacionLocal\FacturacionLocalStockController@stockIndex')->name('facturacion_local_stock');
     Route::get('ventas/facturacion-local/stock/api', 'Ventas\FacturacionLocal\FacturacionLocalStockController@apiStock')->name('facturacion_local_api_stock');
@@ -833,6 +875,7 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/tiendanube-pedidos', 'Ventas\Tiendanube\TiendanubePedidoController@index')->name('tiendanube_pedidos');
     Route::post('ventas/tiendanube-pedidos/sincronizar', 'Ventas\Tiendanube\TiendanubePedidoController@sincronizar')->name('tiendanube_pedidos_sincronizar');
     Route::post('ventas/tiendanube-pedidos/facturar-masivo', 'Ventas\Tiendanube\TiendanubePedidoController@facturarMasivo')->name('tiendanube_pedidos_facturar_masivo');
+    Route::get('ventas/tiendanube-pedidos/factura-pdf/{ventaId}', 'Ventas\Tiendanube\TiendanubePedidoController@facturaPdf')->name('tiendanube_factura_pdf');
     Route::get('ventas/tiendanube-pedidos/{id}', 'Ventas\Tiendanube\TiendanubePedidoController@show')->name('tiendanube_pedido_show');
     Route::post('ventas/tiendanube-pedidos/{id}/refrescar', 'Ventas\Tiendanube\TiendanubePedidoController@refrescar')->name('tiendanube_pedido_refrescar');
     Route::post('ventas/tiendanube-pedidos/{id}/facturar', 'Ventas\Tiendanube\TiendanubePedidoController@facturar')->name('tiendanube_pedido_facturar');
@@ -2744,8 +2787,8 @@ Route::post('caja/cheque/{id}/depositar', 'Caja\ChequeController@depositar')->na
 Route::post('caja/cheque/{id}/acreditar', 'Caja\ChequeController@acreditar')->name('acreditar_cheque');
 Route::post('caja/cheque/{id}/caucionar', 'Caja\ChequeController@caucionar')->name('caucionar_cheque');
 Route::post('caja/cheque/{id}/liberar-caucion', 'Caja\ChequeController@liberarCaucion')->name('liberar_caucion_cheque');
-Route::get('caja/Cheque/{id}/editar', 'Caja\ChequeController@editar')->name('editar_cheque');
-Route::put('caja/cheque/{id}', 'Caja\ChequeController@actualizar')->name('actualizar_cheque');
+Route::get('caja/Cheque/{id}/editar', 'Caja\ChequeController@editar')->name('editar_cheque')->middleware('modo.consulta');
+Route::put('caja/cheque/{id}', 'Caja\ChequeController@actualizar')->name('actualizar_cheque')->middleware('modo.consulta');
 Route::delete('caja/cheque/{id}', 'Caja\ChequeController@eliminar')->name('eliminar_cheque');
 
 /*

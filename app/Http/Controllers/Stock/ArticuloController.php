@@ -438,7 +438,12 @@ class ArticuloController extends Controller
             })
             ->orderBy('linea', 'asc')
             ->orderBy('articulo.sku', 'asc')
-            ->where('combinacion.estado', 'A')
+            ->where(
+                \App\Support\Stock\CombinacionEstadoCanalSupport::columnaPorAmbito(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                ),
+                'A'
+            )
             ->where('articulo.sku', $sku)
             ->get();
 
@@ -1783,7 +1788,12 @@ class ArticuloController extends Controller
         $combinaciones = Combinacion::query()
             ->select('id', 'codigo', 'nombre')
             ->where('articulo_id', $articuloId)
-            ->where('estado', 'A')
+            ->where(
+                \App\Support\Stock\CombinacionEstadoCanalSupport::columnaCortaPorAmbito(
+                    \App\Support\Stock\CombinacionEstadoCanalSupport::AMBITO_FABRICA
+                ),
+                'A'
+            )
             ->orderBy('codigo')
             ->get();
 

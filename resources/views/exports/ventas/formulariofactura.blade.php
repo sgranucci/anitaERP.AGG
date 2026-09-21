@@ -34,8 +34,16 @@
     if ($facturaEsGastronomia) {
         $lineaClienteFactura = \App\Support\Ventas\GastronomiaVentaDisplaySupport::nombreClientePie($venta);
     } else {
-        $codigoClienteFactura = trim((string) ($venta->clientes?->codigo ?? ''));
-        $nombreClienteFactura = trim((string) ($venta->clientes?->nombre ?? $venta->nombre ?? ''));
+        $nombreSnapFactura = trim((string) ($venta->nombre ?? ''));
+        $nombreMaestroFactura = trim((string) ($venta->clientes?->nombre ?? ''));
+        $usaNombreReceptor = $nombreSnapFactura !== ''
+            && strcasecmp($nombreSnapFactura, $nombreMaestroFactura) !== 0;
+        $codigoClienteFactura = $usaNombreReceptor
+            ? ''
+            : trim((string) ($venta->clientes?->codigo ?? ''));
+        $nombreClienteFactura = $usaNombreReceptor
+            ? $nombreSnapFactura
+            : ($nombreMaestroFactura !== '' ? $nombreMaestroFactura : $nombreSnapFactura);
         $lineaClienteFactura = $codigoClienteFactura !== '' && $nombreClienteFactura !== ''
             ? $codigoClienteFactura.' - '.$nombreClienteFactura
             : ($nombreClienteFactura !== '' ? $nombreClienteFactura : $codigoClienteFactura);

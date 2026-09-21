@@ -723,7 +723,7 @@ class PedidoFerliController extends Controller
 									{
     									$query->select(DB::raw(1))
 											->from("combinacion")
-          									->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado = 'A'");
+          									->whereRaw('combinacion.articulo_id=articulo.id and '.\App\Support\Stock\CombinacionEstadoCanalSupport::sqlColumnaActiva());
 									})
 									->orWhereIn('id', $articulo_ids)
 									->get();
