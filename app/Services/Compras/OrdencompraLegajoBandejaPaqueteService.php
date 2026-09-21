@@ -636,13 +636,20 @@ class OrdencompraLegajoBandejaPaqueteService
             return;
         }
 
+        $usuarioId = Auth::id() ? (int) Auth::id() : (int) ($oc->creousuario_id ?? 0);
+        if ($usuarioId <= 0) {
+            // Sin usuario no se puede grabar historia (creousuario_id NOT NULL); la asignación
+            // de COM ya quedó persistida en el mismo transaction — no abortar por la traza.
+            return;
+        }
+
         Ordencompra_Historia::query()->create([
             'ordencompra_id' => (int) $oc->id,
             'sector_legajocompra_id' => $oc->sector_legajocompra_id ? (int) $oc->sector_legajocompra_id : null,
             'fecha' => now(),
             'observacion' => 'Asignación de COM a facturas del legajo',
             'leyenda' => implode(' ', $lineas),
-            'creousuario_id' => Auth::id() ? (int) Auth::id() : null,
+            'creousuario_id' => $usuarioId,
         ]);
     }
 

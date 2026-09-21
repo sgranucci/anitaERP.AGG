@@ -951,7 +951,8 @@ class PagoproveedorService
         if (! $esAlta && $pago->caja_movimiento_id) {
             $this->cajaMovimientoRepository->update($payload, $pago->caja_movimiento_id);
             $cajaMovimientoId = (int) $pago->caja_movimiento_id;
-            $this->cajaMovimientoCuentacajaRepository->create($payload, $cajaMovimientoId);
+            // Igual que Ingreso/Egreso: update sincroniza; create solo INSERTABA y duplicaba.
+            $this->cajaMovimientoCuentacajaRepository->update($payload, $cajaMovimientoId);
         } else {
             $cajaMovimiento = $this->cajaMovimientoRepository->create($payload);
             if (! $cajaMovimiento instanceof Caja_Movimiento) {
@@ -969,13 +970,16 @@ class PagoproveedorService
             }
         }
 
-        $estadoData = [
-            'fechas' => [Carbon::now()],
-            'estados' => [Caja_Movimiento_Estado::$enumEstado[0]['valor'] ?? 'ACTIVO'],
-            'observacionestados' => ['Movimiento de caja OP '.$pago->numerotransaccion],
-            'usuario_ids' => [Auth::id()],
-        ];
-        $this->cajaMovimientoEstadoRepository->create($estadoData, $cajaMovimientoId);
+        // Solo en alta: create en cada update apilaba estados ACTIVO.
+        if ($esAlta) {
+            $estadoData = [
+                'fechas' => [Carbon::now()],
+                'estados' => [Caja_Movimiento_Estado::$enumEstado[0]['valor'] ?? 'ACTIVO'],
+                'observacionestados' => ['Movimiento de caja OP '.$pago->numerotransaccion],
+                'usuario_ids' => [Auth::id()],
+            ];
+            $this->cajaMovimientoEstadoRepository->create($estadoData, $cajaMovimientoId);
+        }
 
         return $cajaMovimientoId;
     }
