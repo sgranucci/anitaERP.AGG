@@ -249,8 +249,14 @@
                                     <strong id="tn-total-pedido">{{ number_format((float) $pedido->total, 2, '.', '') }}</strong>
                                 </p>
                                 <p class="small text-muted mb-2">
-                                    Las cuentas listadas son las del uso <strong>TIENDA NUBE</strong> (ABM Cuentas de caja).
-                                    Mapa fijo opcional: <code>TIENDANUBE_GATEWAY_CUENTACAJA</code> en .env.
+                                    @if (can('editar-configuracion-tiendanube', false))
+                                        Mapa editable en
+                                        <a href="{{ route('editar_configuracion_tiendanube') }}">Configuraci&oacute;n Tiendanube</a>
+                                        (gateway&rarr;cuenta, PV&harr;dep&oacute;sito).
+                                    @else
+                                        Mapa gateway&rarr;cuenta / PV&harr;dep&oacute;sito en Configuraci&oacute;n Tiendanube.
+                                    @endif
+                                    Token API en <code>.env</code>.
                                 </p>
                                 <table class="table table-sm table-bordered" id="tabla-medios-tn">
                                     <thead style="background:#85C1E9;color:#17202A;">

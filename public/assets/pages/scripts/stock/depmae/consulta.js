@@ -327,9 +327,9 @@ $(document)
     });
 
 function activa_eventos_consultadeposito() {
-    $('.consultadeposito')
-        .off('click.consultaDeposito')
-        .on('click.consultaDeposito', function () {
+    $(document)
+        .off('click.consultaDeposito', '.consultadeposito')
+        .on('click.consultaDeposito', '.consultadeposito', function () {
             if (empresaRequeridaPendienteEnFormulario()) {
                 alert('Seleccione la empresa del formulario antes de consultar dep\u00f3sitos.');
                 enfocarEmpresaFormularioDeposito();

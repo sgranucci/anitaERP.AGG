@@ -44,7 +44,7 @@
                     id="{{ $inputId }}_nombre" value="{{ $nombre }}" readonly
                     style="min-width: 0; flex: 1 1 auto;">
             @else
-                <button type="button" title="Consulta cuentas de caja" class="btn-accion-tabla consultacuentacaja flex-shrink-0">
+                <button type="button" title="Consulta cuentas de caja (F1)" class="btn-accion-tabla consultacuentacaja flex-shrink-0">
                     <i class="fa fa-search text-primary"></i>
                 </button>
                 @if ($mostrarEditar && $puedeAbrirAbm)
@@ -56,7 +56,8 @@
                 @endif
                 <input type="text" class="form-control codigocuentacaja"
                     id="{{ $inputId }}_codigo" value="{{ $codigo }}"
-                    placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem; flex-shrink: 0;">
+                    placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off"
+                    style="width: 5.5rem; flex-shrink: 0;">
                 <input type="text" class="form-control descripcioncuentacaja text-truncate"
                     id="{{ $inputId }}_nombre" value="{{ $nombre }}"
                     placeholder="Descripci&oacute;n" readonly
@@ -69,33 +70,38 @@
     </div>
 </div>
 @else
-<div class="form-group col-12 mb-2 tm-cuentacaja-campo" id="tm_cuentacaja_{{ $prefix }}">
-    <label class="d-block {{ $required ? 'requerido' : '' }}">{{ $label }}</label>
-    <div class="d-flex flex-nowrap align-items-center tm-cuentacaja-campo-inputs w-100" style="gap: 6px;">
+{{-- inline / compact (tablas): sin label si $label === '' --}}
+<div class="tm-cuentacaja-campo d-flex flex-nowrap align-items-center w-100 {{ trim((string) $label) !== '' ? 'form-group col-12 mb-2 flex-column align-items-stretch' : '' }}"
+    id="tm_cuentacaja_{{ $prefix }}" style="gap: 4px;">
+    @if (trim((string) $label) !== '')
+        <label class="d-block mb-1 {{ $required ? 'requerido' : '' }}">{{ $label }}</label>
+    @endif
+    <div class="d-flex flex-nowrap align-items-center tm-cuentacaja-campo-inputs w-100" style="gap: 4px;">
         <input type="hidden" class="cuentacaja_id" id="{{ $inputId }}"
             name="{{ $inputName }}" value="{{ $cuentacajaId }}"
             @if ($required && ! $soloLectura) required @endif>
         @if (! $soloLectura)
-            <button type="button" title="Consulta cuentas de caja" class="btn btn-outline-secondary btn-sm consultacuentacaja flex-shrink-0">
-                <i class="fa fa-search"></i>
+            <button type="button" title="Consulta cuentas de caja (F1)" class="btn-accion-tabla consultacuentacaja flex-shrink-0">
+                <i class="fa fa-search text-primary"></i>
             </button>
             @if ($mostrarEditar && $puedeAbrirAbm)
                 <a href="{{ $editUrl }}" target="_blank" rel="noopener"
-                    class="btn btn-outline-secondary btn-sm btn-link-editar-cuentacaja flex-shrink-0 {{ (int) $cuentacajaId > 0 ? '' : 'd-none' }}"
+                    class="btn-accion-tabla btn-link-editar-cuentacaja flex-shrink-0 {{ (int) $cuentacajaId > 0 ? '' : 'd-none' }}"
                     title="Abrir cuenta de caja en ABM">
                     <i class="fa fa-edit"></i>
                 </a>
             @endif
-            <input type="text" class="form-control codigocuentacaja flex-shrink-0"
+            <input type="text" class="form-control form-control-sm codigocuentacaja flex-shrink-0"
                 id="{{ $inputId }}_codigo" value="{{ $codigo }}"
-                placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
-            <input type="text" class="form-control descripcioncuentacaja text-truncate"
+                placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off"
+                style="width: 5.5rem;">
+            <input type="text" class="form-control form-control-sm descripcioncuentacaja text-truncate"
                 id="{{ $inputId }}_nombre" value="{{ $nombre }}"
                 placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
         @else
-            <input type="text" class="form-control codigocuentacaja flex-shrink-0"
+            <input type="text" class="form-control form-control-sm codigocuentacaja flex-shrink-0"
                 value="{{ $codigo }}" readonly style="width: 5.5rem;">
-            <input type="text" class="form-control descripcioncuentacaja text-truncate"
+            <input type="text" class="form-control form-control-sm descripcioncuentacaja text-truncate"
                 value="{{ $nombre }}" readonly style="min-width: 0; flex: 1 1 auto;">
         @endif
     </div>

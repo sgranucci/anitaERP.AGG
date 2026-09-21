@@ -79,4 +79,24 @@
 
     actualizarContador();
     window.addEventListener('pageshow', ocultarOverlay);
+
+    var formFiltros = document.getElementById('form-tn-filtros');
+    if (formFiltros) {
+        formFiltros.addEventListener('click', function (e) {
+            var btn = e.target.closest('.tn-filtro-etiq');
+            if (!btn || !formFiltros.contains(btn)) {
+                return;
+            }
+            var campo = btn.getAttribute('data-campo');
+            var valor = btn.getAttribute('data-valor');
+            if (!campo) {
+                return;
+            }
+            var hidden = document.getElementById('filtro_' + campo);
+            if (hidden) {
+                hidden.value = valor === null ? '' : String(valor);
+            }
+            formFiltros.submit();
+        });
+    }
 })();

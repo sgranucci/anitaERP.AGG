@@ -45,7 +45,8 @@
                 @endif
                 <input type="text" class="form-control codigolistaprecio flex-shrink-0"
                     id="{{ $inputId }}_codigo" value="{{ $codigo }}"
-                    placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
+                    placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off"
+                    style="width: 5.5rem;">
                 <input type="text" class="form-control nombrelistaprecio text-truncate"
                     id="{{ $inputId }}_nombre" value="{{ $nombre }}"
                     placeholder="Descripci&oacute;n" readonly

@@ -35,6 +35,14 @@ final class TiendanubePedidoMaestrosSupport
 
     public static function puntoventaDefault(): ?Puntoventa
     {
+        $id = TiendanubeConfiguracionSupport::puntoventaIdDefault();
+        if ($id && $id > 0) {
+            $pv = Puntoventa::query()->find($id);
+            if ($pv) {
+                return $pv;
+            }
+        }
+
         return self::puntoventaPorCodigo((string) config('tiendanube.puntoventa_codigo_default'));
     }
 
@@ -43,6 +51,17 @@ final class TiendanubePedidoMaestrosSupport
      */
     public static function puntoventasOnline(): Collection
     {
+        $pares = TiendanubeConfiguracionSupport::paresPuntoventaDeposito();
+        if ($pares->isNotEmpty()) {
+            $ids = $pares->pluck('puntoventa_id')->map(fn ($id) => (int) $id)->filter()->unique()->values()->all();
+            if ($ids !== []) {
+                return Puntoventa::query()
+                    ->whereIn('id', $ids)
+                    ->orderBy('codigo')
+                    ->get();
+            }
+        }
+
         $codigos = (array) config('tiendanube.puntoventa_codigos_online', []);
         if ($codigos === []) {
             return collect();
@@ -64,13 +83,26 @@ final class TiendanubePedidoMaestrosSupport
         return Depmae::query()->where('codigo', $codigo)->orderBy('id')->first();
     }
 
-    public static function depositoDefault(): ?Depmae
+    public static function depositoDefault(?int $puntoventaId = null): ?Depmae
     {
+        $id = TiendanubeConfiguracionSupport::depositoIdDefault($puntoventaId);
+        if ($id && $id > 0) {
+            $dep = Depmae::query()->find($id);
+            if ($dep) {
+                return $dep;
+            }
+        }
+
         return self::depositoPorCodigo((string) config('tiendanube.deposito_codigo_default'));
     }
 
     public static function listaprecioIdDefault(): int
     {
+        $cfg = TiendanubeConfiguracionSupport::cabecera();
+        if ($cfg && (int) $cfg->listaprecio_id > 0) {
+            return (int) $cfg->listaprecio_id;
+        }
+
         $codigo = trim((string) config('tiendanube.listaprecio_codigo_default', ''));
         if ($codigo === '') {
             return 0;
@@ -104,16 +136,22 @@ final class TiendanubePedidoMaestrosSupport
     /**
      * Sugiere cuentacaja del uso «TIENDA NUBE» según gateway TN.
      * Prioridad: mapa explícito config → heurística por nombre → primera del uso.
+     *
+     * Claves útiles en mapa (.env TIENDANUBE_GATEWAY_CUENTACAJA):
+     * pago-nube, offline, gocuotas, mercadopago, tarjeta_naranja, etc. → código o id.
      */
     public static function sugerirCuentacajaId(?string $gateway, ?string $gatewayName = null, ?array $paymentJson = null): ?int
     {
-        $map = (array) config('tiendanube.gateway_cuentacaja', []);
-        $keys = array_filter([
+        $paymentJson = is_array($paymentJson) ? $paymentJson : [];
+        $map = TiendanubeConfiguracionSupport::mapaGatewayCuentacaja();
+        $keys = array_values(array_unique(array_filter([
             strtolower(trim((string) $gateway)),
             strtolower(trim((string) $gatewayName)),
+            strtolower(trim((string) ($paymentJson['gateway'] ?? ''))),
+            strtolower(trim((string) ($paymentJson['gateway_name'] ?? ''))),
             strtolower(trim((string) ($paymentJson['method'] ?? ''))),
             strtolower(trim((string) ($paymentJson['credit_card_company'] ?? ''))),
-        ]);
+        ])));
         foreach ($keys as $key) {
             if ($key === '' || ! array_key_exists($key, $map)) {
                 continue;
@@ -150,6 +188,8 @@ final class TiendanubePedidoMaestrosSupport
         $haystackGw = strtolower(trim(implode(' ', array_filter([
             (string) $gateway,
             (string) $gatewayName,
+            (string) ($paymentJson['gateway'] ?? ''),
+            (string) ($paymentJson['gateway_name'] ?? ''),
             (string) ($paymentJson['method'] ?? ''),
             (string) ($paymentJson['credit_card_company'] ?? ''),
         ]))));
@@ -183,14 +223,29 @@ final class TiendanubePedidoMaestrosSupport
      */
     private static function tokensBusquedaGateway(string $gateway): array
     {
+        $g = strtolower(trim($gateway));
+
         return match (true) {
-            $gateway === '' => [],
-            str_contains($gateway, 'naranja') => ['naranja', 'mercadopago', 'mep'],
-            str_contains($gateway, 'mercado') || str_contains($gateway, 'credit_card') => ['mercadopago', 'mep', 'mercado'],
-            str_contains($gateway, 'boa') => ['boa', 'nube'],
-            str_contains($gateway, 'custom') || str_contains($gateway, 'nube') || str_contains($gateway, 'offline') => ['pago nube', 'nube', '609'],
-            str_contains($gateway, 'libre') => ['mercadolibre', 'meli'],
-            default => array_values(array_filter(preg_split('/[\s_\-]+/', $gateway) ?: [])),
+            $g === '' => [],
+            str_contains($g, 'naranja') => ['naranja', 'tarjeta naranja'],
+            // Procesador Pago Nube (antes de mirar credit_card → no confundir con MP)
+            str_contains($g, 'pago-nube')
+                || str_contains($g, 'pago nube')
+                || str_contains($g, 'nuvempago') => ['pago nube', 'nube', '609'],
+            str_contains($g, 'offline')
+                || str_contains($g, 'transferencia')
+                || str_contains($g, 'depósito')
+                || str_contains($g, 'deposito')
+                || str_contains($g, 'custom') => ['frances', 'lugano', '4781', 'transferencia'],
+            str_contains($g, 'gocuotas') || str_contains($g, 'go cuotas') || str_contains($g, 'go-cuotas') => ['go cuotas', '610'],
+            str_contains($g, 'boa') => ['boa', 'nube', '11310112', '612'],
+            str_contains($g, 'libre') || str_contains($g, 'meli') => ['mercadolibre', 'meli', '608'],
+            str_contains($g, 'mercado') || str_contains($g, 'mercadopago') => ['mercadopago', 'mep', 'mercado', '1002', '611'],
+            // Método sin procesador conocido: preferir Pago Nube (canal TN Ferli)
+            str_contains($g, 'credit_card')
+                || str_contains($g, 'debit_card')
+                || str_contains($g, 'wallet') => ['pago nube', 'nube', '609'],
+            default => array_values(array_filter(preg_split('/[\s_\-]+/', $g) ?: [])),
         };
     }
 

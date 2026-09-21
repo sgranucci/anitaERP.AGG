@@ -14,6 +14,7 @@ use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListadoFiltros;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
+use App\Support\Ventas\Tiendanube\TiendanubePedidoStatusExternoSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -47,6 +48,7 @@ class TiendanubePedidoController extends Controller
 
         $apiOk = $this->api->configurado();
         $estados = TiendanubePedidoEstadoSupport::etiquetas();
+        $estadosExternos = TiendanubePedidoStatusExternoSupport::etiquetas();
         $puedeFacturar = can('facturar-tiendanube-pedidos', false);
 
         $listosPorId = [];
@@ -71,6 +73,7 @@ class TiendanubePedidoController extends Controller
             'apiOk',
             'apiHealth',
             'estados',
+            'estadosExternos',
             'puedeFacturar',
             'listosPorId'
         ));

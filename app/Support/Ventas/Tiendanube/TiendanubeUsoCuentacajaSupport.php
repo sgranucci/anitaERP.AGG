@@ -16,6 +16,14 @@ final class TiendanubeUsoCuentacajaSupport
 
     public static function nombre(): string
     {
+        if (class_exists(TiendanubeConfiguracionSupport::class)
+            && TiendanubeConfiguracionSupport::tablasListas()) {
+            $desdeDb = trim(TiendanubeConfiguracionSupport::usocuentacajaNombre());
+            if ($desdeDb !== '') {
+                return $desdeDb;
+            }
+        }
+
         return trim((string) config('tiendanube.usocuentacaja_nombre', self::NOMBRE_DEFAULT))
             ?: self::NOMBRE_DEFAULT;
     }

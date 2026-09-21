@@ -57,9 +57,52 @@ return [
     // Uso de cuentas de caja del canal (maestro usocuentacaja).
     'usocuentacaja_nombre' => env('TIENDANUBE_USO_CUENTACAJA', 'TIENDA NUBE'),
 
-    // Mapa opcional gateway/method → id o código cuentacaja (JSON). Vacío = heurística + uso.
-    // Ej: {"credit_card":"611","custom":"609","tarjeta_naranja":"611"}
-    'gateway_cuentacaja' => json_decode((string) env('TIENDANUBE_GATEWAY_CUENTACAJA', '{}'), true) ?: [],
+    /*
+    |--------------------------------------------------------------------------
+    | Gateway TN → cuenta de caja (Excel / Facturante Ferli)
+    |--------------------------------------------------------------------------
+    | Facturante: MEP→608, TN→609, GO→610, TR→4781/5, NBO→11310112.
+    | Claves = gateway API (pago-nube, offline, gocuotas…) o nombre visible.
+    */
+    'gateway_cuentacaja' => (static function (): array {
+        $raw = trim((string) env('TIENDANUBE_GATEWAY_CUENTACAJA', ''));
+        if ($raw === '') {
+            return [
+                'pago-nube' => '609',
+                'pago_nube' => '609',
+                'pago nube' => '609',
+                'offline' => '4781/5',
+                'custom' => '4781/5',
+                'transferencia' => '4781/5',
+                'gocuotas' => '610',
+                'go cuotas' => '610',
+                'go-cuotas' => '610',
+                'mercadolibre' => '608',
+                'meli' => '608',
+                'mercadopago' => '611',
+                'nube boa' => '11310112',
+                'boa' => '11310112',
+            ];
+        }
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded) && $decoded !== []) {
+            return $decoded;
+        }
+        // Formato legacy: clave:codigo,clave2:codigo2
+        $out = [];
+        foreach (explode(',', $raw) as $par) {
+            $par = trim($par);
+            if ($par === '' || ! str_contains($par, ':')) {
+                continue;
+            }
+            [$k, $v] = array_map('trim', explode(':', $par, 2));
+            if ($k !== '' && $v !== '') {
+                $out[strtolower($k)] = $v;
+            }
+        }
+
+        return $out;
+    })(),
 
     'genera_contabilidad_cobranza' => filter_var(
         env('TIENDANUBE_GENERA_CONTABILIDAD_COBRANZA', false),

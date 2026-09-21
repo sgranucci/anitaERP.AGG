@@ -31,6 +31,11 @@
             <div class="card-header">
                 <h3 class="card-title">Pedidos Tiendanube</h3>
                 <div class="card-tools">
+                    @if (can('editar-configuracion-tiendanube', false))
+                        <a href="{{ route('editar_configuracion_tiendanube') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="fa fa-cog"></i> Configuraci&oacute;n
+                        </a>
+                    @endif
                     @if (can('sincronizar-tiendanube-pedidos', false))
                         <form action="{{ route('tiendanube_pedidos_sincronizar') }}" method="POST" id="form-tn-sync" class="d-inline">
                             @csrf
@@ -71,44 +76,69 @@
                     </div>
                 @endif
 
-                <form method="get" action="{{ route('tiendanube_pedidos') }}" class="form-inline mb-2" id="form-tn-filtros">
+                @php
+                    $estadoErpActivo = (string) ($filtros['estado_erp'] ?? '');
+                    $statusTnActivo = (string) ($filtros['status_tn'] ?? '');
+                    $pagoActivo = array_key_exists('payment_status', $filtros)
+                        ? (string) ($filtros['payment_status'] ?? '')
+                        : 'paid';
+                @endphp
+                <form method="get" action="{{ route('tiendanube_pedidos') }}" class="mb-2" id="form-tn-filtros">
                     <input type="hidden" name="consultar" value="1">
-                    <div class="form-group mr-2 mb-2">
-                        <label class="mr-1">Desde</label>
-                        <input type="date" name="desde" id="filtro_desde" class="form-control form-control-sm"
-                               value="{{ $filtros['desde'] ?? '' }}">
+                    <input type="hidden" name="estado_erp" id="filtro_estado_erp" value="{{ $estadoErpActivo }}">
+                    <input type="hidden" name="status_tn" id="filtro_status_tn" value="{{ $statusTnActivo }}">
+                    <input type="hidden" name="payment_status" id="filtro_payment_status" value="{{ $pagoActivo }}">
+
+                    <div class="form-inline mb-2">
+                        <div class="form-group mr-2 mb-2">
+                            <label class="mr-1">Desde</label>
+                            <input type="date" name="desde" id="filtro_desde" class="form-control form-control-sm"
+                                   value="{{ $filtros['desde'] ?? '' }}">
+                        </div>
+                        <div class="form-group mr-2 mb-2">
+                            <label class="mr-1">Hasta</label>
+                            <input type="date" name="hasta" id="filtro_hasta" class="form-control form-control-sm"
+                                   value="{{ $filtros['hasta'] ?? '' }}">
+                        </div>
+                        <div class="form-group mr-2 mb-2">
+                            <input type="text" name="buscar" class="form-control form-control-sm"
+                                   placeholder="Nº / cliente / doc"
+                                   value="{{ $filtros['buscar'] ?? '' }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm mb-2" title="Filtra lo ya bajado a anitaERP">
+                            Consultar
+                        </button>
                     </div>
-                    <div class="form-group mr-2 mb-2">
-                        <label class="mr-1">Hasta</label>
-                        <input type="date" name="hasta" id="filtro_hasta" class="form-control form-control-sm"
-                               value="{{ $filtros['hasta'] ?? '' }}">
+
+                    <div class="mb-2 d-flex flex-wrap align-items-center" style="gap:6px;">
+                        <span class="text-muted small mr-1">Estado ERP</span>
+                        <button type="button" class="btn btn-sm tn-filtro-etiq {{ $estadoErpActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                data-campo="estado_erp" data-valor="" title="Todos los estados ERP">Todos</button>
+                        @foreach ($estados as $cod => $eti)
+                            <button type="button"
+                                    class="btn btn-sm tn-filtro-etiq {{ $estadoErpActivo === $cod ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                    data-campo="estado_erp" data-valor="{{ $cod }}">{{ $eti }}</button>
+                        @endforeach
                     </div>
-                    <div class="form-group mr-2 mb-2">
-                        <label class="mr-1">Estado</label>
-                        <select name="estado_erp" class="form-control form-control-sm">
-                            <option value="">Todos</option>
-                            @foreach ($estados as $cod => $eti)
-                                <option value="{{ $cod }}" @if (($filtros['estado_erp'] ?? '') === $cod) selected @endif>
-                                    {{ $eti }}
-                                </option>
-                            @endforeach
-                        </select>
+
+                    <div class="mb-2 d-flex flex-wrap align-items-center" style="gap:6px;">
+                        <span class="text-muted small mr-1">Estado TN</span>
+                        <button type="button" class="btn btn-sm tn-filtro-etiq {{ $statusTnActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                data-campo="status_tn" data-valor="" title="Todos los estados Tiendanube">Todos</button>
+                        @foreach (($estadosExternos ?? []) as $cod => $eti)
+                            <button type="button"
+                                    class="btn btn-sm tn-filtro-etiq {{ $statusTnActivo === $cod ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                    data-campo="status_tn" data-valor="{{ $cod }}">{{ $eti }}</button>
+                        @endforeach
                     </div>
-                    <div class="form-group mr-2 mb-2">
-                        <label class="mr-1">Pago</label>
-                        <select name="payment_status" class="form-control form-control-sm">
-                            <option value="paid" @if (($filtros['payment_status'] ?? '') === 'paid') selected @endif>Pagado</option>
-                            <option value="" @if (($filtros['payment_status'] ?? '') === '') selected @endif>Todos</option>
-                        </select>
+
+                    <div class="mb-2 d-flex flex-wrap align-items-center" style="gap:6px;">
+                        <span class="text-muted small mr-1">Pago</span>
+                        <button type="button" class="btn btn-sm tn-filtro-etiq {{ $pagoActivo === 'paid' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                data-campo="payment_status" data-valor="paid">Pagado</button>
+                        <button type="button" class="btn btn-sm tn-filtro-etiq {{ $pagoActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                data-campo="payment_status" data-valor="">Todos</button>
                     </div>
-                    <div class="form-group mr-2 mb-2">
-                        <input type="text" name="buscar" class="form-control form-control-sm"
-                               placeholder="Nº / cliente / doc"
-                               value="{{ $filtros['buscar'] ?? '' }}">
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-sm mb-2" title="Filtra lo ya bajado a anitaERP">
-                        Consultar
-                    </button>
                 </form>
                 <p class="text-muted small mb-3">
                     <strong>Consultar</strong> filtra pedidos ya guardados en anitaERP.
@@ -122,6 +152,7 @@
                         <input type="hidden" name="desde" value="{{ $filtros['desde'] ?? '' }}">
                         <input type="hidden" name="hasta" value="{{ $filtros['hasta'] ?? '' }}">
                         <input type="hidden" name="estado_erp" value="{{ $filtros['estado_erp'] ?? '' }}">
+                        <input type="hidden" name="status_tn" value="{{ $filtros['status_tn'] ?? '' }}">
                         <input type="hidden" name="payment_status" value="{{ $filtros['payment_status'] ?? 'paid' }}">
                         <input type="hidden" name="buscar" value="{{ $filtros['buscar'] ?? '' }}">
                         <div class="mb-2">
@@ -152,6 +183,7 @@
                                 <th>Doc</th>
                                 <th>Gateway</th>
                                 <th class="text-right">Total</th>
+                                <th>Estado TN</th>
                                 <th>Estado ERP</th>
                                 <th>Listo</th>
                                 <th>Venta</th>
@@ -163,6 +195,8 @@
                                 @php
                                     $badge = \App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport::badgeClass($p->estado_erp);
                                     $eti = \App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport::etiqueta($p->estado_erp);
+                                    $badgeTn = \App\Support\Ventas\Tiendanube\TiendanubePedidoStatusExternoSupport::badgeClass($p->status);
+                                    $etiTn = \App\Support\Ventas\Tiendanube\TiendanubePedidoStatusExternoSupport::etiqueta($p->status);
                                     $esListo = ! empty($listosPorId[(int) $p->id]);
                                 @endphp
                                 <tr class="@if ($esListo) table-success @endif">
@@ -179,8 +213,24 @@
                                     <td>{{ $p->paid_at?->format('d/m/Y H:i') }}</td>
                                     <td>{{ $p->customer_name }}</td>
                                     <td>{{ $p->customer_doc }}</td>
-                                    <td>{{ $p->gateway_name ?: $p->gateway }}</td>
+                                    <td>
+                                        @php
+                                            $gwLabel = $p->gateway_name ?: $p->gateway;
+                                            $pj = is_array($p->payment_json) ? $p->payment_json : [];
+                                            $method = $pj['method'] ?? null;
+                                            $card = $pj['credit_card_company'] ?? null;
+                                            $extra = trim(implode(' · ', array_filter([
+                                                $method && $method !== strtolower((string) ($p->gateway ?? '')) ? $method : null,
+                                                $card,
+                                            ])));
+                                        @endphp
+                                        {{ $gwLabel }}
+                                        @if ($extra !== '')
+                                            <br><small class="text-muted">{{ $extra }}</small>
+                                        @endif
+                                    </td>
                                     <td class="text-right">{{ number_format((float) $p->total, 2, ',', '.') }}</td>
+                                    <td><span class="badge {{ $badgeTn }}">{{ $etiTn }}</span></td>
                                     <td><span class="badge {{ $badge }}">{{ $eti }}</span></td>
                                     <td>
                                         @if ($esListo)
@@ -205,7 +255,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ $puedeFacturar ? 12 : 11 }}" class="text-center text-muted">
+                                    <td colspan="{{ $puedeFacturar ? 13 : 12 }}" class="text-center text-muted">
                                         Sin pedidos. Sincronice desde Tiendanube o amplíe el rango.
                                     </td>
                                 </tr>

@@ -836,6 +836,9 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/tiendanube-pedidos/{id}', 'Ventas\Tiendanube\TiendanubePedidoController@show')->name('tiendanube_pedido_show');
     Route::post('ventas/tiendanube-pedidos/{id}/refrescar', 'Ventas\Tiendanube\TiendanubePedidoController@refrescar')->name('tiendanube_pedido_refrescar');
     Route::post('ventas/tiendanube-pedidos/{id}/facturar', 'Ventas\Tiendanube\TiendanubePedidoController@facturar')->name('tiendanube_pedido_facturar');
+
+    Route::get('ventas/configuracion-tiendanube', 'Ventas\Tiendanube\TiendanubeConfiguracionController@editar')->name('editar_configuracion_tiendanube');
+    Route::put('ventas/configuracion-tiendanube', 'Ventas\Tiendanube\TiendanubeConfiguracionController@actualizar')->name('actualizar_configuracion_tiendanube');
 } else {
     Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeController@crearImportacion')->name('crear_importacion_tiendanube');
     Route::post('stock/importartiendanube', 'Stock\TiendaNubeController@importar')->name('importar_tiendanube');

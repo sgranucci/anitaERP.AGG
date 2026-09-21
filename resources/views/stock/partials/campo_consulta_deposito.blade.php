@@ -67,7 +67,8 @@
                     @endif
                     <input type="text" class="form-control codigodeposito{{ $codigoExtraClass !== '' ? ' '.$codigoExtraClass : '' }}"
                         id="{{ $inputId }}_codigo" value="{{ $codigo }}"
-                        placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem; flex-shrink: 0;">
+                        placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off"
+                        style="width: 5.5rem; flex-shrink: 0;">
                     <input type="text" class="form-control descripciondeposito text-truncate"
                         id="{{ $inputId }}_descripcion" value="{{ $descripcion }}"
                         placeholder="Descripci&oacute;n" readonly
@@ -79,33 +80,38 @@
     </div>
     @endif
 @else
-    <div class="form-group col-12 mb-2 tm-deposito-campo" id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}">
-        <label class="d-block">{{ $label }}</label>
-        <div class="d-flex flex-nowrap align-items-center tm-deposito-campo-inputs w-100" style="gap: 6px;">
+    {{-- inline / compact (tablas): sin label si $label === '' --}}
+    <div class="tm-deposito-campo d-flex flex-nowrap align-items-center w-100 {{ trim((string) $label) !== '' ? 'form-group col-12 mb-2 flex-column align-items-stretch' : '' }}"
+        id="tm_deposito_{{ $prefix }}" data-tipodeposito="{{ $tipodeposito }}" style="gap: 4px;">
+        @if (trim((string) $label) !== '')
+            <label class="d-block mb-1">{{ $label }}</label>
+        @endif
+        <div class="d-flex flex-nowrap align-items-center tm-deposito-campo-inputs w-100" style="gap: 4px;">
             <input type="hidden" class="deposito_id" id="{{ $inputId }}"
                 name="{{ $inputName }}" value="{{ $depositoId }}"
                 @if ($required && ! $soloLectura) required @endif>
             @if (! $soloLectura)
-                <button type="button" title="Consulta dep&oacute;sitos (F1)" class="btn btn-outline-secondary btn-sm consultadeposito flex-shrink-0">
-                    <i class="fa fa-search"></i>
+                <button type="button" title="Consulta dep&oacute;sitos (F1)" class="btn-accion-tabla consultadeposito flex-shrink-0">
+                    <i class="fa fa-search text-primary"></i>
                 </button>
                 @if ($mostrarEditar && $puedeAbrirAbmDeposito)
                     <a href="{{ $editUrl }}" target="_blank" rel="noopener"
-                        class="btn btn-outline-secondary btn-sm btn-link-editar-deposito flex-shrink-0 {{ (int) $depositoId > 0 ? '' : 'd-none' }}"
+                        class="btn-accion-tabla btn-link-editar-deposito flex-shrink-0 {{ (int) $depositoId > 0 ? '' : 'd-none' }}"
                         title="Abrir dep&oacute;sito en ABM">
                         <i class="fa fa-edit"></i>
                     </a>
                 @endif
-                <input type="text" class="form-control codigodeposito flex-shrink-0"
+                <input type="text" class="form-control form-control-sm codigodeposito flex-shrink-0"
                     id="{{ $inputId }}_codigo" value="{{ $codigo }}"
-                    placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
-                <input type="text" class="form-control descripciondeposito text-truncate"
+                    placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off"
+                    style="width: 5.5rem;">
+                <input type="text" class="form-control form-control-sm descripciondeposito text-truncate"
                     id="{{ $inputId }}_descripcion" value="{{ $descripcion }}"
                     placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
             @else
-                <input type="text" class="form-control codigodeposito flex-shrink-0"
+                <input type="text" class="form-control form-control-sm codigodeposito flex-shrink-0"
                     value="{{ $codigo }}" readonly style="width: 5.5rem;">
-                <input type="text" class="form-control descripciondeposito text-truncate"
+                <input type="text" class="form-control form-control-sm descripciondeposito text-truncate"
                     value="{{ $descripcion }}" readonly style="min-width: 0; flex: 1 1 auto;">
             @endif
         </div>

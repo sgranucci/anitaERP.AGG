@@ -361,33 +361,62 @@ final class TiendanubePedidoSyncService
     }
 
     /**
+     * Extrae procesador de pago TN (gateway) + detalle del medio (tarjeta/método).
+     * Importante: `payment_details.method` es credit_card/debit_card/wallet — NO es el gateway.
+     * El gateway real viene en `order.gateway` / `gateway_name` (pago-nube, offline, gocuotas…).
+     *
      * @param  array<string,mixed>  $order
      * @return array{gateway:?string,name:?string,raw:array<string,mixed>}
      */
-    private function extraerPago(array $order): array
+    public function extraerPago(array $order): array
     {
-        $gateway = null;
-        $name = null;
-        $raw = [];
+        $details = is_array($order['payment_details'] ?? null) ? $order['payment_details'] : [];
 
-        if (is_array($order['payment_details'] ?? null)) {
-            $raw = $order['payment_details'];
-            $gateway = $raw['method'] ?? $raw['gateway'] ?? null;
-            $name = $raw['gateway_name'] ?? $raw['method'] ?? null;
+        $gateway = null;
+        if (is_string($order['gateway'] ?? null) && trim((string) $order['gateway']) !== '') {
+            $gateway = strtolower(trim((string) $order['gateway']));
+        } elseif (is_array($order['gateway'] ?? null)) {
+            $fromObj = trim((string) ($order['gateway']['name'] ?? $order['gateway']['id'] ?? ''));
+            $gateway = $fromObj !== '' ? strtolower($fromObj) : null;
         }
-        if (is_array($order['gateway'] ?? null)) {
-            $raw = $order['gateway'];
-            $gateway = $gateway ?: ($raw['name'] ?? $raw['id'] ?? null);
-            $name = $name ?: ($raw['name'] ?? null);
+
+        $name = null;
+        if (is_string($order['gateway_name'] ?? null) && trim((string) $order['gateway_name']) !== '') {
+            $name = trim((string) $order['gateway_name']);
+        } elseif (is_array($order['gateway'] ?? null) && trim((string) ($order['gateway']['name'] ?? '')) !== '') {
+            $name = trim((string) $order['gateway']['name']);
         }
-        if (is_string($order['gateway'] ?? null)) {
-            $gateway = $gateway ?: $order['gateway'];
-            $name = $name ?: $order['gateway'];
+
+        // Sin gateway de orden: último recurso el método (pedidos viejos / incompletos)
+        if ($gateway === null || $gateway === '') {
+            $method = trim((string) ($details['method'] ?? ''));
+            $gateway = $method !== '' ? strtolower($method) : null;
+        }
+        if ($name === null || $name === '') {
+            $name = $gateway;
+        }
+
+        $raw = array_filter([
+            'gateway' => $gateway,
+            'gateway_name' => $name,
+            'gateway_id' => $order['gateway_id'] ?? null,
+            'method' => isset($details['method']) ? strtolower(trim((string) $details['method'])) : null,
+            'credit_card_company' => isset($details['credit_card_company'])
+                ? strtolower(trim((string) $details['credit_card_company']))
+                : null,
+            'installments' => $details['installments'] ?? null,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        // Conservar otros campos del payment_details (sin pisar claves canónicas)
+        foreach ($details as $k => $v) {
+            if (! array_key_exists($k, $raw)) {
+                $raw[$k] = $v;
+            }
         }
 
         return [
-            'gateway' => $gateway ? strtolower((string) $gateway) : null,
-            'name' => $name ? (string) $name : null,
+            'gateway' => $gateway,
+            'name' => $name,
             'raw' => $raw,
         ];
     }
