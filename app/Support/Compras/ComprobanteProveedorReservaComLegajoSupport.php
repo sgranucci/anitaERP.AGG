@@ -127,11 +127,14 @@ final class ComprobanteProveedorReservaComLegajoSupport
     }
 
     /**
-     * La suma de las facturas asignadas a una COM no puede superar su provisión.
+     * La suma asignada a cada COM no puede superar su provisión.
      *
-     * Complementa la unicidad: cuando el legajo permite compartir COM (OC anticipada /
-     * contrato) este es el único freno, y cuando no la permite atrapa igual la COM
-     * equivocada (importe que no corresponde a esa recepción).
+     * Dos sentidos que no se pueden mezclar a ciegas:
+     * - 1 COM ← N facturas (anticipo / contrato): se acumula el neto de cada factura
+     *   sobre esa recepción.
+     * - N COM ← 1 factura (varios remitos en un solo comprobante): el neto se reparte
+     *   entre las COM a prorrata de su provisión. Antes se cargaba el neto entero a cada
+     *   una y la COM chica disparaba un falso exceso (OC 223753).
      *
      * El importe de cada factura es el comparable con la provisión (neto gravado en letra A,
      * total en B/C o monotributo). Las facturas sin ese importe (precarga en cero) suman 0:
@@ -156,13 +159,70 @@ final class ComprobanteProveedorReservaComLegajoSupport
                 continue;
             }
             $importe = abs((float) ($importePorFactura[$clave] ?? $importePorFactura[(string) $clave] ?? 0));
+            if ($importe <= 0.00001) {
+                continue;
+            }
+
+            $rids = [];
             foreach ((array) $recepcionIds as $recepcionId) {
                 $rid = (int) $recepcionId;
-                if ($rid <= 0) {
-                    continue;
+                if ($rid > 0) {
+                    $rids[$rid] = $rid;
                 }
+            }
+            $rids = array_values($rids);
+            if ($rids === []) {
+                continue;
+            }
+
+            if (count($rids) === 1) {
+                $rid = $rids[0];
                 $asignadoPorCom[$rid] ??= ['importe' => 0.0, 'facturas' => 0];
                 $asignadoPorCom[$rid]['importe'] += $importe;
+                $asignadoPorCom[$rid]['facturas']++;
+
+                continue;
+            }
+
+            $provisiones = [];
+            $sumaProvision = 0.0;
+            foreach ($rids as $rid) {
+                $provision = abs((float) ($provisionPorCom[$rid] ?? 0));
+                $provisiones[$rid] = $provision;
+                $sumaProvision += $provision;
+            }
+            if ($sumaProvision <= 0.00001) {
+                // Ninguna COM con provisión conocida: no validable.
+                continue;
+            }
+
+            // Primer freno claro: el neto de la factura vs la suma de las COM elegidas.
+            if ($importe > $sumaProvision
+                && ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
+                    $importe,
+                    $sumaProvision,
+                    $toleranciaPct
+                )
+            ) {
+                return sprintf(
+                    'La factura tiene importe %s y las %d COM asignadas suman provisión %s. '
+                    .'Revise si corresponden a esta recepción.',
+                    number_format($importe, 2, ',', '.'),
+                    count($rids),
+                    number_format($sumaProvision, 2, ',', '.'),
+                );
+            }
+
+            // Reparto a prorrata para acumular si esa COM también recibe otras facturas.
+            $repartido = 0.0;
+            $ultimo = count($rids) - 1;
+            foreach ($rids as $i => $rid) {
+                $share = $i === $ultimo
+                    ? round($importe - $repartido, 2)
+                    : round($importe * ($provisiones[$rid] / $sumaProvision), 2);
+                $repartido = round($repartido + $share, 2);
+                $asignadoPorCom[$rid] ??= ['importe' => 0.0, 'facturas' => 0];
+                $asignadoPorCom[$rid]['importe'] += $share;
                 $asignadoPorCom[$rid]['facturas']++;
             }
         }

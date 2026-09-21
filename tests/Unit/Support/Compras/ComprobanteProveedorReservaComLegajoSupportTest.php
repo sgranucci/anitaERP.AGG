@@ -234,4 +234,62 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
 
         $this->assertNull($mensaje);
     }
+
+    /**
+     * Caso real OC 223753: una factura cubre dos remitos (COM 167738 + 167736).
+     * Antes se cargaba el neto entero a cada COM y la chica disparaba falso exceso.
+     */
+    public function test_permite_varias_com_cuya_suma_cubre_la_factura(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [986 => [67426, 67424]],
+            [
+                67426 => 10773.76,
+                67424 => 211731.35,
+            ],
+            [986 => 222505.11],
+            [
+                67426 => 'Nº 167738',
+                67424 => 'Nº 167736',
+            ],
+            5.0,
+        );
+
+        $this->assertNull($mensaje);
+    }
+
+    public function test_bloquea_varias_com_si_la_suma_no_alcanza_la_factura(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [986 => [67426, 67424]],
+            [
+                67426 => 10773.76,
+                67424 => 211731.35,
+            ],
+            [986 => 300000.00],
+            [],
+            5.0,
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('2 COM', $mensaje);
+        $this->assertStringContainsString('222.505,11', $mensaje);
+        $this->assertStringContainsString('300.000,00', $mensaje);
+    }
+
+    public function test_sigue_bloqueando_si_solo_se_asigna_la_com_chica(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [986 => [67426]],
+            [67426 => 10773.76],
+            [986 => 222505.11],
+            [67426 => 'Nº 167738'],
+            5.0,
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('167738', $mensaje);
+        $this->assertStringContainsString('10.773,76', $mensaje);
+        $this->assertStringContainsString('222.505,11', $mensaje);
+    }
 }
