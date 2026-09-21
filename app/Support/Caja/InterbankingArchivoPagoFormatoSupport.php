@@ -29,7 +29,8 @@ final class InterbankingArchivoPagoFormatoSupport
     ): string {
         $cbuOrigen = self::cbu22($cbuOrigen);
         $obs = self::pad($observacion, 61);
-        $fechaFmt = self::fechaDdMmYy($fechaSolicitudYmd);
+        // Layout Interbanking pos. 102-109: fecha del archivo MM/DD/YY (no DD/MM/YY).
+        $fechaFmt = self::fechaMmDdYy($fechaSolicitudYmd);
         $sec = sprintf('%08d', max(0, $secuencia));
 
         // Igual que Anita:
@@ -89,14 +90,24 @@ final class InterbankingArchivoPagoFormatoSupport
         return str_pad(substr($n, 0, 22), 22, ' ', STR_PAD_RIGHT);
     }
 
-    public static function fechaDdMmYy(int $ymd): string
+    /**
+     * Fecha del archivo Interbanking (posiciones 102-109): MM/DD/YY.
+     * DD/MM/YY hace fallar el upload (ej. 21/09/26 → mes 21).
+     */
+    public static function fechaMmDdYy(int $ymd): string
     {
         $s = sprintf('%08d', $ymd);
         if (strlen($s) !== 8) {
             return '00/00/00';
         }
 
-        return substr($s, 6, 2).'/'.substr($s, 4, 2).'/'.substr($s, 2, 2);
+        return substr($s, 4, 2).'/'.substr($s, 6, 2).'/'.substr($s, 2, 2);
+    }
+
+    /** @deprecated Usar fechaMmDdYy — Interbanking exige MM/DD/YY. */
+    public static function fechaDdMmYy(int $ymd): string
+    {
+        return self::fechaMmDdYy($ymd);
     }
 
     public static function ymdDesdeFecha(?string $fecha): int

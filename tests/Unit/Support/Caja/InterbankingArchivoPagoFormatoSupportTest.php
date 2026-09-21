@@ -46,7 +46,8 @@ class InterbankingArchivoPagoFormatoSupportTest extends TestCase
         $this->assertSame(str_pad(substr($obs, 0, 61), 61), substr($cab, 35, 61));
         $this->assertSame('000', substr($cab, 96, 3));
         $this->assertSame('00', substr($cab, 99, 2));
-        $this->assertSame('01/09/26', substr($cab, 101, 8));
+        // Interbanking: posiciones 102-109 = MM/DD/YY (20260901 → 09/01/26).
+        $this->assertSame('09/01/26', substr($cab, 101, 8));
         $this->assertSame('00000001', substr($cab, 109, 8));
         $this->assertSame(str_repeat(' ', 123), substr($cab, 117, 123));
 
@@ -80,5 +81,11 @@ class InterbankingArchivoPagoFormatoSupportTest extends TestCase
         );
         $this->assertSame('D', $ok[25]);
         $this->assertSame('N', $ok[34]);
+    }
+
+    public function test_fecha_archivo_es_mm_dd_yy(): void
+    {
+        $this->assertSame('09/21/26', InterbankingArchivoPagoFormatoSupport::fechaMmDdYy(20260921));
+        $this->assertSame('01/05/26', InterbankingArchivoPagoFormatoSupport::fechaMmDdYy(20260105));
     }
 }

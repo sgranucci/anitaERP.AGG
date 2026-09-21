@@ -67,10 +67,29 @@ class InterbankingArchivoPagoService
         $filas = [];
         $omitidas = [];
         $errores = [];
-        /** @var array<string, true> OP ya cubierta por Anita con CBU en auxpag */
-        $opsConCbuAnita = [];
 
-        // Anita primero: si auxpag trae CBU de transferencia, manda sobre ERP (formapago único).
+        // ERP primero: netoAPagar es la fuente confiable del importe.
+        // Anita completa OPs que no están en ERP (o sin CBU en formapago).
+        /** @var array<string, true> OP ya cubierta por ERP */
+        $opsConErp = [];
+
+        if ($incluirErp) {
+            [$filasErp, $omitErp] = $this->recolectarErp(
+                $empresaId,
+                $fechaDesde,
+                $fechaHasta,
+                $tipoOp,
+                $opDesde,
+                $opHasta
+            );
+            foreach ($filasErp as $f) {
+                $clave = $this->claveOp((string) $f['tipo'], (int) $f['numero'], (string) $f['cbu']);
+                $filas[$clave] = $f;
+                $opsConErp[$this->claveOp((string) $f['tipo'], (int) $f['numero'], '')] = true;
+            }
+            $omitidas = array_merge($omitidas, $omitErp);
+        }
+
         if ($incluirAnita) {
             $filasAnita = $this->recolectarAnita(
                 $empresaId,
@@ -83,6 +102,11 @@ class InterbankingArchivoPagoService
                 $errores
             );
             foreach ($filasAnita as $f) {
+                $claveSinCbu = $this->claveOp((string) $f['tipo'], (int) $f['numero'], '');
+                // Si ERP ya tiene la OP, no sumar Anita (evita triplicar GPB duplicados en auxpag).
+                if (isset($opsConErp[$claveSinCbu])) {
+                    continue;
+                }
                 $clave = $this->claveOp((string) $f['tipo'], (int) $f['numero'], (string) $f['cbu']);
                 if (isset($filas[$clave])) {
                     $filas[$clave]['importe'] = round(
@@ -92,44 +116,7 @@ class InterbankingArchivoPagoService
                 } else {
                     $filas[$clave] = $f;
                 }
-                if (! empty($f['cbu_desde_auxpag'])) {
-                    $opsConCbuAnita[$this->claveOp((string) $f['tipo'], (int) $f['numero'], '')] = true;
-                }
             }
-        }
-
-        if ($incluirErp) {
-            [$filasErp, $omitErp] = $this->recolectarErp(
-                $empresaId,
-                $fechaDesde,
-                $fechaHasta,
-                $tipoOp,
-                $opDesde,
-                $opHasta
-            );
-            foreach ($filasErp as $f) {
-                $claveSinCbu = $this->claveOp((string) $f['tipo'], (int) $f['numero'], '');
-                // Si Anita ya aportó la OP con CBU de auxpag, no pisar con ERP.
-                if (isset($opsConCbuAnita[$claveSinCbu])) {
-                    continue;
-                }
-                // Si ya hay fila Anita (aunque sea por propago), no duplicar misma OP.
-                $yaAnitaMismaOp = false;
-                foreach ($filas as $existente) {
-                    if ($this->claveOp((string) $existente['tipo'], (int) $existente['numero'], '') === $claveSinCbu
-                        && str_starts_with((string) ($existente['origen'] ?? ''), 'Anita')
-                    ) {
-                        $yaAnitaMismaOp = true;
-                        break;
-                    }
-                }
-                if ($yaAnitaMismaOp) {
-                    continue;
-                }
-                $clave = $this->claveOp((string) $f['tipo'], (int) $f['numero'], (string) $f['cbu']);
-                $filas[$clave] = $f;
-            }
-            $omitidas = array_merge($omitidas, $omitErp);
         }
 
         $filas = array_values($filas);
@@ -142,12 +129,13 @@ class InterbankingArchivoPagoService
             return strcmp((string) $a['cbu'], (string) $b['cbu']);
         });
 
+        // Máx. 61 chars en cabecera *U*; texto largo se truncaba y mezclaba con la fecha MM/DD/YY.
         $obs = sprintf(
-            'Desde OP: %d hasta %d Desde fecha: %s hasta %s',
+            'OP %d-%d F %s-%s',
             $opDesde,
             $opHasta,
-            date('d/m/Y', strtotime($fechaDesde)),
-            date('d/m/Y', strtotime($fechaHasta))
+            date('d/m/y', strtotime($fechaDesde)),
+            date('d/m/y', strtotime($fechaHasta))
         );
 
         $lineasArchivo = array_map(
@@ -564,6 +552,7 @@ class InterbankingArchivoPagoService
             $proCod = InterbankingArchivoPagoAnitaReader::padProveedor((string) ($pag->pag_pro ?? ''));
             $cbuPropago = $mapaCbu[$proCod] ?? '';
             $porCbu = [];
+            $seenLineas = [];
 
             foreach ($lineas as $axp) {
                 $cbuAux = CbuSupport::normalizar((string) ($axp->axp_cbu ?? ''));
@@ -578,6 +567,13 @@ class InterbankingArchivoPagoService
                     continue;
                 }
                 $cbuOk = $val['cbu'];
+                // Deduplicar GPB idénticos (mismo tipo/cbu/monto) — sync repetido de OP.
+                $tipoLin = strtoupper(substr(trim((string) ($axp->axp_tipo_ap ?? '')), 0, 3));
+                $dedupeKey = $tipoLin.'|'.$cbuOk.'|'.number_format($imp, 2, '.', '');
+                if (isset($seenLineas[$dedupeKey])) {
+                    continue;
+                }
+                $seenLineas[$dedupeKey] = true;
                 if (! isset($porCbu[$cbuOk])) {
                     $porCbu[$cbuOk] = ['importe' => 0.0, 'cbu_desde_auxpag' => false];
                 }
