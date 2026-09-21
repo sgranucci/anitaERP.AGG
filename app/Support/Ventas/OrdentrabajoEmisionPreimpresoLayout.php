@@ -27,10 +27,11 @@ final class OrdentrabajoEmisionPreimpresoLayout
 
     /**
      * El .ps posiciona con moveto = línea de base (Helvetica-Narrow-Bold 12 pt).
-     * CSS `top` es el borde superior: subir el ascendente (~0.73 em) para no
-     * correr medidas/OT hacia abajo ni recortar el último panel.
+     * El PDF usa DejaVu 9 pt (más angosta en el renglón, cabe el dato sin
+     * mover x/y). CSS `top` es el borde superior: restar el ascendente
+     * (~0.73 em de 9 pt) para que la línea de base siga en la misma marca.
      */
-    public const TEXTO_ASCENDENTE_MM = 3.1;
+    public const TEXTO_ASCENDENTE_MM = 2.3;
 
     /**
      * @return list<array{x:float,y:float,s:float}>

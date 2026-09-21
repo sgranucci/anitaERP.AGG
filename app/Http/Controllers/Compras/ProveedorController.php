@@ -12,6 +12,7 @@ use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\Moneda;
 use App\Support\Configuracion\CondicionivaLetraComprasSupport;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionProveedor;
 use App\Repositories\Compras\TiposuspensionproveedorRepositoryInterface;
@@ -459,6 +460,11 @@ class ProveedorController extends Controller
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
+
+            Log::warning('proveedor.actualizar.fallo', [
+                'proveedor_id' => $id,
+                'mensaje' => $e->getMessage(),
+            ]);
 
             return redirect()->back()->withInput()->withErrors(['errores' => $e->getMessage()]);
         }

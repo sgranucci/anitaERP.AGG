@@ -158,14 +158,21 @@ class ComprobanteImpresionSesionService
     /**
      * @return array<string, mixed>
      */
-    public function armarDesdeVenta(Venta $venta, string $modo = 'OPERATIVO', ?string $soloFormulario = null): array
+    public function armarDesdeVenta(Venta $venta, string $modo = 'OPERATIVO', ?string $soloFormulario = null, bool $planConEnvios = false): array
     {
         $venta->loadMissing(['puntoventas', 'puntoventaremito', 'pedidos', 'remitos']);
-        $contexto = ComprobanteImpresionResolverSupport::contextoDesdeVenta($venta);
+        $contexto = ComprobanteImpresionResolverSupport::contextoDesdeVenta($venta, $planConEnvios);
+        if ($planConEnvios && empty($contexto['programa'])) {
+            throw new \InvalidArgumentException(
+                'No hay un programa de impresión marcado como plan con envíos para esta empresa.'
+            );
+        }
         $docs = $this->documentosDesdeVenta($venta);
         $pack = $this->packDesdeContexto($contexto, $docs, $modo, $soloFormulario);
+        $payload = $this->payload($contexto, $pack, 'FACTURA', (int) $venta->id, $modo, $soloFormulario, $docs);
+        $payload['plan_con_envios'] = $planConEnvios;
 
-        return $this->payload($contexto, $pack, 'FACTURA', (int) $venta->id, $modo, $soloFormulario, $docs);
+        return $payload;
     }
 
     /**

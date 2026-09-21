@@ -51,6 +51,7 @@
 				<th>Reglas</th>
 				<th>Disparo al grabar</th>
 				<th>Auto impresora al facturar</th>
+				<th>Plan con envíos</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -64,6 +65,7 @@
 				<td>{{ $data->reglas_count ?? $data->reglas->count() }}</td>
 				<td>{{ $data->permite_disparo_al_grabar ? 'Sí' : 'No' }}</td>
 				<td>{{ ($data->enviar_automatico_al_facturar ?? true) ? 'Sí' : 'No' }}</td>
+				<td>{{ ($data->plan_con_envios ?? false) ? 'Sí' : 'No' }}</td>
 			</tr>
 			@endforeach
 		</tbody>

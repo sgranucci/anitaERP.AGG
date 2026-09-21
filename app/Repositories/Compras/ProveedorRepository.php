@@ -1191,6 +1191,36 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		return $datos;
 	}
 
+	/**
+	 * Arma el SQL de promae. En Ferli solo deja las 50 columnas que existen en Anita.
+	 *
+	 * @param  array<string, string>  $asignaciones  campo => literal SQL ya entrecomillado
+	 * @return array{campos: string, valores: string, update: string}
+	 */
+	private function payloadPromaeAnita(array $asignaciones): array
+	{
+		$permitidas = ProveedorAnitaEsquemaSupport::columnasPromaePermitidasEnEscritura();
+		$permitidasFlip = $permitidas === null ? null : array_flip($permitidas);
+		$campos = [];
+		$valores = [];
+		$updates = [];
+
+		foreach ($asignaciones as $campo => $literal) {
+			if ($permitidasFlip !== null && ! isset($permitidasFlip[$campo])) {
+				continue;
+			}
+			$campos[] = $campo;
+			$valores[] = $literal;
+			$updates[] = $campo.' = '.$literal;
+		}
+
+		return [
+			'campos' => implode(",\n", $campos),
+			'valores' => implode(",\n", $valores),
+			'update' => implode(",\n", $updates),
+		];
+	}
+
 	private function guardarAnita($request, bool $omitirChequeoExistencia = false) {
         $apiAnita = new ApiAnita();
 		$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) $request['codigo']);
@@ -1260,127 +1290,70 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				break;
 		}			
 
+        $payload = $this->payloadPromaeAnita([
+				'prom_proveedor' => "'".$codigoAnita."'",
+				'prom_nombre' => "'".$nombre."'",
+				'prom_contacto' => "'".$contacto."'",
+				'prom_direccion' => "'".$domicilio."'",
+				'prom_localidad' => "'".$request['desc_localidad']."'",
+				'prom_cod_postal' => "'".$request['codigopostal']."'",
+				'prom_provincia' => "'".$request['desc_provincia']."'",
+				'prom_telefono' => "'".$request['telefono']."'",
+				'prom_cuit' => "'".$request['nroinscripcion']."'",
+				'prom_cond_iva' => "'".$condicioniva."'",
+				'prom_letra' => "'".$request['letra']."'",
+				'prom_cond_pago' => "'".$condicionpago."'",
+				'prom_cta_contable' => "'".$cuentacontable."'",
+				'prom_credito' => "'0'",
+				'prom_dias_atraso' => "'0'",
+				'prom_nro_interno' => "'0'",
+				'prom_agente_ret' => "'".$retieneganancia."'",
+				'prom_cond_gan' => "'".$condicionganancia."'",
+				'prom_incl_impuesto' => "'N'",
+				'prom_cond_compra' => "'".$condicioncompra."'",
+				'prom_cond_entrega' => "'".$condicionentrega."'",
+				'prom_tipo_empresa' => "'".$tipoempresa."'",
+				'prom_prov_vario' => "'".$tiposervicio."'",
+				'prom_retiene_iva' => "'".$retieneiva."'",
+				'prom_cod_retgan' => "'".$retencionganancia."'",
+				'prom_cod_retiva' => "'".$retencioniva."'",
+				'prom_a_nombre_de' => "'".$nombre."'",
+				'prom_ret_suss' => "'".$retienesuss."'",
+				'prom_ret_ibr' => "'".$retieneiibb."'",
+				'prom_nro_ret_ibr' => "'".$request['nroIIBB']."'",
+				'prom_nro_reemp_ib' => "' '",
+				'prom_excl_retiva' => "'".$exclusionretiva."'",
+				'prom_pais' => "'".($request['pais_id']>0?$request['pais_id']:0)."'",
+				'prom_fecha_alta' => "'".$fecha."'",
+				'prom_estado_pro' => "'".$estado."'",
+				'prom_fantasia' => "'".$request['fantasia']."'",
+				'prom_regimen' => "'".$regimenfacturacion."'",
+				'prom_fecha_excl' => "'".$fechaexclusionretiva."'",
+				'prom_excl_retgan' => "'".$exclusionretgan."'",
+				'prom_fecha_exclrg' => "'".$fechaexclusionretgan."'",
+				'prom_cod_localidad' => "'".$codigolocalidad."'",
+				'prom_tipo_emp_alfa' => "'".$tipoempresaalfa."'",
+				'prom_e_mail' => "'".$request['email']."'",
+				'prom_fax' => "'0'",
+				'prom_fecha_boletin' => "'0'",
+				'prom_cod_ret_suss' => "'".$request['retencionsuss_id']."'",
+				'prom_cta_cont_me' => "'".$cuentacontableme."'",
+				'prom_cta_default' => "'".$cuentacontablecompra."'",
+				'prom_cc_default' => "'".$centrocostocompra."'",
+				'prom_concepto' => "'".$conceptogasto."'",
+				'prom_descuento' => "'0'",
+				'prom_fecha_exclib' => "'".$fechaexclusionretib."'",
+				'prom_excl_retib' => "'".$exclusionretib."'",
+				'prom_fe_ini_excl' => "'".$fechainicioexclusionretiva."'",
+				'prom_fe_ini_exclrg' => "'".$fechainicioexclusionretgan."'",
+				'prom_fe_ini_exclib' => "'".$fechainicioexclusionretib."'",
+				'prom_ag_perc_ib' => "'".$request['agentepercepcionIIBB']."'",
+				'prom_ag_perc_iva' => "'".$request['agentepercepcioniva']."'",
+        ]);
         $data = array( 'tabla' => $this->tableAnita[0], 'acc' => 'insert',
 			'sistema' => 'compras',
-            'campos' => ' 
-				prom_proveedor,
-				prom_nombre,
-				prom_contacto,
-				prom_direccion,
-				prom_localidad,
-				prom_cod_postal,
-				prom_provincia,
-				prom_telefono,
-				prom_cuit,
-				prom_cond_iva,
-				prom_letra,
-				prom_cond_pago,
-				prom_cta_contable,
-				prom_credito,
-				prom_dias_atraso,
-				prom_nro_interno,
-				prom_agente_ret,
-				prom_cond_gan,
-				prom_incl_impuesto,
-				prom_cond_compra,
-				prom_cond_entrega,
-				prom_tipo_empresa,
-				prom_prov_vario,
-				prom_retiene_iva,
-				prom_cod_retgan,
-				prom_cod_retiva,
-				prom_a_nombre_de,
-				prom_ret_suss,
-				prom_ret_ibr,
-				prom_nro_ret_ibr,
-				prom_nro_reemp_ib,
-				prom_excl_retiva,
-				prom_pais,
-				prom_fecha_alta,
-				prom_estado_pro,
-				prom_fantasia,
-				prom_regimen,
-				prom_fecha_excl,
-				prom_excl_retgan,
-				prom_fecha_exclrg,
-				prom_cod_localidad,
-				prom_tipo_emp_alfa,
-				prom_e_mail,
-				prom_fax,
-				prom_fecha_boletin,
-				prom_cod_ret_suss,
-				prom_cta_cont_me,
-				prom_cta_default,
-				prom_cc_default,
-				prom_concepto,
-				prom_descuento,
-				prom_fecha_exclib,
-				prom_excl_retib,
-				prom_fe_ini_excl,
-				prom_fe_ini_exclrg,
-				prom_fe_ini_exclib,
-				prom_ag_perc_ib,
-				prom_ag_perc_iva
-				',
-            'valores' => " 
-				'".$codigoAnita."', 
-				'".$nombre."',
-				'".$contacto."',
-				'".$domicilio."',
-				'".$request['desc_localidad']."',
-				'".$request['codigopostal']."',
-				'".$request['desc_provincia']."',
-				'".$request['telefono']."',
-				'".$request['nroinscripcion']."',
-				'".$condicioniva."',
-				'".$request['letra']."',
-				'".$condicionpago."',
-				'".$cuentacontable."',
-				'0',
-				'0',
-				'0',
-				'".$retieneganancia."',
-				'".$condicionganancia."',
-				'N',
-				'".$condicioncompra."',
-				'".$condicionentrega."',
-				'".$tipoempresa."',
-				'".$tiposervicio."',
-				'".$retieneiva."',
-				'".$retencionganancia."',
-				'".$retencioniva."',
-				'".$nombre."',
-				'".$retienesuss."',
-				'".$retieneiibb."',
-				'".$request['nroIIBB']."',
-				' ',
-				'".$exclusionretiva."',
-				'".($request['pais_id']>0?$request['pais_id']:0)."',
-				'".$fecha."',
-				'".$estado."',
-				'".$request['fantasia']."',
-				'".$regimenfacturacion."',
-				'".$fechaexclusionretiva."',
-				'".$exclusionretgan."',
-				'".$fechaexclusionretgan."',
-				'".$codigolocalidad."',
-				'".$tipoempresaalfa."',
-				'".$request['email']."',
-				'0',
-				'0',
-				'".$request['retencionsuss_id']."',
-				'".$cuentacontableme."',
-				'".$cuentacontablecompra."',
-				'".$centrocostocompra."',
-				'".$conceptogasto."',
-				'0',
-				'".$fechaexclusionretib."',
-				'".$exclusionretib."',
-				'".$fechainicioexclusionretiva."',
-				'".$fechainicioexclusionretgan."',
-				'".$fechainicioexclusionretib."',
-				'".$request['agentepercepcionIIBB']."',
-				'".$request['agentepercepcioniva']."' "
+            'campos' => $payload['campos'],
+            'valores' => $payload['valores'],
         );
         try {
 			$this->apiCallAnitaEscritura($apiAnita, $data, 'promae insert');
@@ -1417,6 +1390,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		];
 
 		foreach ($tablas as [$tabla, $campo, $contexto]) {
+			if (! ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg() && $tabla !== 'proley') {
+				continue;
+			}
 			$this->borrarDependienteAnitaVerificado($apiAnita, $tabla, $campo, $codigoAnita, $contexto);
 		}
 	}
@@ -1484,6 +1460,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 								'".$textoLeyenda."' ",
 			];
 			$this->apiCallAnitaEscritura($apiAnita, $data, 'proley insert');
+		}
+
+		if (! ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()) {
+			return;
 		}
 
 		$data = [
@@ -1579,58 +1559,59 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				break;
 		}			
 
+		$payload = $this->payloadPromaeAnita([
+					'prom_proveedor' => "'".str_pad($request['codigo'], 6, '0', STR_PAD_LEFT)."'",
+					'prom_nombre' => "'".$nombre."'",
+					'prom_contacto' => "'".$contacto."'",
+					'prom_direccion' => "'".$domicilio."'",
+					'prom_localidad' => "'".$request['desc_localidad']."'",
+					'prom_cod_postal' => "'".$request['codigopostal']."'",
+					'prom_provincia' => "'".$request['desc_provincia']."'",
+					'prom_telefono' => "'".$request['telefono']."'",
+					'prom_cuit' => "'".$request['nroinscripcion']."'",
+					'prom_cond_iva' => "'".$condicioniva."'",
+					'prom_letra' => "'".$request['letra']."'",
+					'prom_cond_pago' => "'".$condicionpago."'",
+					'prom_cta_contable' => "'".$cuentacontable."'",
+					'prom_agente_ret' => "'".$retieneganancia."'",
+					'prom_cond_gan' => "'".$condicionganancia."'",
+					'prom_cond_compra' => "'".$condicioncompra."'",
+					'prom_cond_entrega' => "'".$condicionentrega."'",
+					'prom_tipo_empresa' => "'".$tipoempresa."'",
+					'prom_retiene_iva' => "'".$retieneiva."'",
+					'prom_cod_retgan' => "'".$retencionganancia."'",
+					'prom_cod_retiva' => "'".$retencioniva."'",
+					'prom_ret_suss' => "'".$retienesuss."'",
+					'prom_ret_ibr' => "'".$retieneiibb."'",
+					'prom_nro_ret_ibr' => "'".$request['nroIIBB']."'",
+					'prom_excl_retiva' => "'".$exclusionretiva."'",
+					'prom_pais' => "'".($request['pais_id']>0?$request['pais_id']:0)."'",
+					'prom_estado_pro' => "'".$estado."'",
+					'prom_fantasia' => "'".$request['fantasia']."'",
+					'prom_fecha_excl' => "'".$fechaexclusionretiva."'",
+					'prom_excl_retgan' => "'".$exclusionretgan."'",
+					'prom_fecha_exclrg' => "'".$fechaexclusionretgan."'",
+					'prom_cod_localidad' => "'".$codigolocalidad."'",
+					'prom_tipo_emp_alfa' => "'".$tipoempresaalfa."'",
+					'prom_e_mail' => "'".$request['email']."'",
+					'prom_cod_ret_suss' => "'".$retencionsuss."'",
+					'prom_cta_cont_me' => "'".$cuentacontableme."'",
+					'prom_cta_default' => "'".$cuentacontablecompra."'",
+					'prom_cc_default' => "'".$centrocostocompra."'",
+					'prom_concepto' => "'".$conceptogasto."'",
+					'prom_fecha_exclib' => "'".$fechaexclusionretib."'",
+					'prom_excl_retib' => "'".$exclusionretib."'",
+					'prom_fe_ini_excl' => "'".$fechainicioexclusionretiva."'",
+					'prom_fe_ini_exclrg' => "'".$fechainicioexclusionretgan."'",
+					'prom_fe_ini_exclib' => "'".$fechainicioexclusionretib."'",
+					'prom_ag_perc_ib' => "'".$request['agentepercepcionIIBB']."'",
+					'prom_ag_perc_iva' => "'".$request['agentepercepcioniva']."'",
+					'prom_prov_vario' => "'".$tiposervicio."'",
+					'prom_regimen' => "'".$regimenfacturacion."'",
+		]);
 		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita[0], 
 				'sistema' => 'compras',
-				'valores' => " 
-					prom_proveedor 	  = '".str_pad($request['codigo'], 6, "0", STR_PAD_LEFT)."',
-					prom_nombre       = '".$nombre."',
-					prom_contacto     = '".$contacto."',
-					prom_direccion    = '".$domicilio."',
-					prom_localidad    = '".$request['desc_localidad']."',
-					prom_cod_postal   = '".$request['codigopostal']."',
-					prom_provincia    = '".$request['desc_provincia']."',
-					prom_telefono     = '".$request['telefono']."',
-					prom_cuit         =	'".$request['nroinscripcion']."',
-					prom_cond_iva     = '".$condicioniva."',
-					prom_letra        = '".$request['letra']."',
-					prom_cond_pago    = '".$condicionpago."',
-					prom_cta_contable = '".$cuentacontable."',
-					prom_agente_ret   = '".$retieneganancia."',
-					prom_cond_gan     = '".$condicionganancia."',
-					prom_cond_compra  = '".$condicioncompra."',
-					prom_cond_entrega = '".$condicionentrega."',
-					prom_tipo_empresa = '".$tipoempresa."',
-					prom_retiene_iva  = '".$retieneiva."',
-					prom_cod_retgan   = '".$retencionganancia."',
-					prom_cod_retiva   = '".$retencioniva."',
-					prom_ret_suss     = '".$retienesuss."',
-					prom_ret_ibr      = '".$retieneiibb."',
-					prom_nro_ret_ibr  = '".$request['nroIIBB']."',
-					prom_excl_retiva  = '".$exclusionretiva."',
-					prom_pais         = '".($request['pais_id']>0?$request['pais_id']:0)."',
-					prom_estado_pro   = '".$estado."',
-					prom_fantasia     = '".$request['fantasia']."',
-					prom_fecha_excl   = '".$fechaexclusionretiva."',
-					prom_excl_retgan  = '".$exclusionretgan."',
-					prom_fecha_exclrg = '".$fechaexclusionretgan."',
-					prom_cod_localidad= '".$codigolocalidad."',
-					prom_tipo_emp_alfa= '".$tipoempresaalfa."',
-					prom_e_mail       = '".$request['email']."',
-					prom_cod_ret_suss = '".$retencionsuss."',
-					prom_cta_cont_me  = '".$cuentacontableme."',
-					prom_cta_default  = '".$cuentacontablecompra."',
-					prom_cc_default   = '".$centrocostocompra."',
-					prom_concepto     = '".$conceptogasto."',
-					prom_fecha_exclib = '".$fechaexclusionretib."',
-					prom_excl_retib   = '".$exclusionretib."',
-					prom_fe_ini_excl  = '".$fechainicioexclusionretiva."',
-					prom_fe_ini_exclrg= '".$fechainicioexclusionretgan."',
-					prom_fe_ini_exclib= '".$fechainicioexclusionretib."',
-					prom_ag_perc_ib   = '".$request['agentepercepcionIIBB']."',
-					prom_ag_perc_iva  = '".$request['agentepercepcioniva']."',
-					prom_prov_vario   = '".$tiposervicio."',
-					prom_regimen  = '".$regimenfacturacion."' "
-					,
+				'valores' => $payload['update'],
 				'whereArmado' => " WHERE prom_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
 
         $this->apiCallAnitaEscritura($apiAnita, $data, 'promae update');
@@ -1841,6 +1822,10 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE prol_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
         $this->apiCallAnitaEscritura($apiAnita, $data, 'proley delete');
+
+		if (! ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg()) {
+			return;
+		}
 
 		// Borra exclusiones
 		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 

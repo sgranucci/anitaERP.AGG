@@ -322,6 +322,47 @@ class Comprobante_ProveedorController extends Controller
         $mensaje = 'Comprobante de proveedor actualizado.';
         $avisos = $this->persistenciaService->ultimosAvisosControles();
 
+        if ($request->input('accion') === 'contabilizar') {
+            can('contabilizar-comprobante-proveedor');
+            try {
+                $this->contabilizarService->contabilizar($id);
+            } catch (ComprobanteProveedorYaExistenteEnAnitaException $e) {
+                return $this->respuestaFacturaYaEnAnita(
+                    $request,
+                    $e,
+                    'El comprobante se guardó, pero no se pudo confirmar. No se generó asiento ni cuenta corriente',
+                    $id,
+                );
+            } catch (\Throwable $e) {
+                return $this->conAvisosControles(
+                    redirect()
+                        ->route(
+                            'editar_comprobante_proveedor',
+                            ['id' => $id]
+                                + $this->queryRetornoListado($request)
+                                + ComprobanteProveedorRetornoLegajoSupport::queryParams($request)
+                        )
+                        ->with('errores', [
+                            'El comprobante se guardó, pero no se pudo contabilizar. '
+                            .'El aviso permanece en esta pantalla hasta que se complete. Motivo: '.$e->getMessage(),
+                        ]),
+                    $avisos
+                );
+            }
+
+            $comprobante = $this->comprobanteRepository->find($id);
+
+            return $this->conAvisosControles(
+                $this->redirectTrasGuardarComprobante(
+                    $request,
+                    $comprobante,
+                    $this->mensajeContabilizadoConLegajo($comprobante),
+                    'index'
+                ),
+                $avisos
+            );
+        }
+
         return $this->conAvisosControles(
             $this->redirectTrasGuardarComprobante(
                 $request,

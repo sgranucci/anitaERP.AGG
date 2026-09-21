@@ -237,11 +237,11 @@
 								value="{{ (old('hastafechas.' . $loop->index) ?? optional($exclusion)->hastafecha) ?? '' }}" />
 						</td>
 						<td>
-							<select name="tiporetenciones[]" id="formpago_ids" data-placeholder="Forma de pago" class="form-control formapago" data-fouc>
+							<select name="tiporetenciones[]" class="form-control" data-fouc>
 								<option value="">-- Elija tipo de retención --</option>
 								@foreach ($tiporetencion_enum as $value => $tiporetencion)
 									<option value="{{ $value }}"
-										@if (old('tiporetenciones', $exclusion->tiporetencion ?? '') == $value) selected @endif
+										@if ((string) old('tiporetenciones.'.$loop->index, optional($exclusion)->tiporetencion ?? '') === (string) $value) selected @endif
 										>{{ $tiporetencion }}</option>
 								@endforeach
 							</select>

@@ -104,7 +104,7 @@ class Proveedor_ExclusionRepository implements Proveedor_ExclusionRepositoryInte
 					{
 						$proveedor_exclusion = $this->model->findOrFail($_id[$i])->update([
 									"proveedor_id" => $id,
-									"comentario" => $comentarios[$i],
+									"comentario" => (string) ($comentarios[$i] ?? ''),
 									"tiporetencion" => $tiporetenciones[$i],
 									"desdefecha" => $desdefechas[$i],
 									"hastafecha" => $hastafechas[$i],
@@ -125,7 +125,7 @@ class Proveedor_ExclusionRepository implements Proveedor_ExclusionRepositoryInte
 				{
 					$proveedor_exclusion = $this->model->create([
 									"proveedor_id" => $id,
-									"comentario" => $comentarios[$i_exclusion],
+									"comentario" => (string) ($comentarios[$i_exclusion] ?? ''),
 									"tiporetencion" => $tiporetenciones[$i_exclusion],
 									"desdefecha" => $desdefechas[$i_exclusion],
 									"hastafecha" => $hastafechas[$i_exclusion],

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Ventas\ComprobanteImpresionPrograma;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionReglaClave;
@@ -38,6 +39,7 @@ class ValidacionProgramaImpresion extends FormRequest
             'empresa_id' => 'nullable|integer|exists:empresa,id',
             'permite_disparo_al_grabar' => 'nullable|boolean',
             'enviar_automatico_al_facturar' => 'nullable|boolean',
+            'plan_con_envios' => 'nullable|boolean',
             'formularios' => 'required|array|min:1',
             'formularios.*.id' => 'nullable|integer',
             'formularios.*.orden' => 'nullable|integer|min:1',
@@ -82,6 +84,32 @@ class ValidacionProgramaImpresion extends FormRequest
             $empresaId = (int) $this->input('empresa_id', 0);
             if ($empresaId > 0 && ! app(EmpresaRepositoryInterface::class)->empresaIdPermitida($empresaId)) {
                 $validator->errors()->add('empresa_id', 'No tiene asignada esa empresa.');
+            }
+            if (! $this->boolean('plan_con_envios')) {
+                return;
+            }
+            $tieneEnvio = $tipos->contains(ComprobanteImpresionFormulario::ENVIO);
+            if (! $tieneEnvio) {
+                $validator->errors()->add(
+                    'plan_con_envios',
+                    'El plan con envíos tiene que incluir el comprobante Envío en la ruta.'
+                );
+            }
+            $id = $this->route('id');
+            $otro = ComprobanteImpresionPrograma::query()
+                ->where('plan_con_envios', true)
+                ->when($id, fn ($q) => $q->where('id', '!=', $id))
+                ->when(
+                    $empresaId > 0,
+                    fn ($q) => $q->where('empresa_id', $empresaId),
+                    fn ($q) => $q->whereNull('empresa_id')
+                )
+                ->exists();
+            if ($otro) {
+                $validator->errors()->add(
+                    'plan_con_envios',
+                    'Ya hay otro programa marcado como plan con envíos para esta empresa.'
+                );
             }
         });
     }

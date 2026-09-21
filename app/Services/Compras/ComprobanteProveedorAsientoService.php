@@ -14,6 +14,7 @@ use App\Support\Compras\ComprobanteProveedorAsientoCuadreSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoDescripcionSupport;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
+use App\Support\Compras\ComprobanteProveedorCuentaDebeNetoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
@@ -412,11 +413,8 @@ class ComprobanteProveedorAsientoService
                 $tipoConcepto,
                 $codigoConcepto
             );
-            // Sin OC/COM: cuenta del renglón o maestro; el neto se puede completar en la solapa asiento.
-            $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
-            if ($cuentaId <= 0) {
-                $cuentaId = (int) ($concepto?->cuentacontableDebeIdParaEmpresa($empresaId) ?? 0);
-            }
+            // Sin OC/COM: renglón, maestro, o la cuenta ya cargada en otro neto del mismo comprobante.
+            $cuentaId = ComprobanteProveedorCuentaDebeNetoSupport::resolverParaLinea($comprobante, $linea, $concepto);
             if ($cuentaId <= 0 && ! ($permitirCuentasPendientes && $esNetoSinReferencia)) {
                 throw new RuntimeException(
                     'Falta cuenta contable DEBE en concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'»'

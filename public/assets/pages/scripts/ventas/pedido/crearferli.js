@@ -1676,6 +1676,7 @@
 					incoterm_id: incoterm_id,
 					mercaderia: mercaderia,
 					leyendaexportacion: leyendaexportacion,
+					con_envios: $('#con_envios').is(':checked') ? 1 : 0,
 					_token: token
 				})
 				.done(function(data, status){
@@ -1687,12 +1688,22 @@
 							marcaItemFacturado();
 						}
 					} else {
-						alert("Factura Número: " + data.factura + "\nEstado: " + status);
+						var urlImpresion = (data && data.impresion_url) ? String(data.impresion_url).trim() : '';
+						var avisoImpresion = (data && data.aviso_impresion) ? String(data.aviso_impresion) : '';
+						if (avisoImpresion) {
+							alert("Factura Número: " + data.factura + "\n" + avisoImpresion);
+						} else if (!urlImpresion) {
+							alert("Factura Número: " + data.factura + "\nEstado: " + status);
+						}
 
 						$("#facturarOrdenTrabajoModal").modal('hide');
 
 						// Marca como facturados los items
 						marcaItemFacturado();
+						if (urlImpresion) {
+							window.location = urlImpresion;
+							return;
+						}
 					}
 				})
 				.fail(function(xhr){

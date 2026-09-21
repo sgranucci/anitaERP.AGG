@@ -62,6 +62,19 @@ window.impresionSesionFaltaImpresora = @json(! empty($sesion['faltante_impresora
                     @endif
                 </p>
                 <p class="text-muted small mb-3">{{ $sesion['motivo'] ?? '' }} — modo {{ $sesion['modo'] ?? 'OPERATIVO' }}</p>
+                @if (in_array($origenTipo, ['FACTURA', 'PEDIDO', 'REMITO'], true))
+                    <div class="form-check mb-3">
+                        <input type="checkbox" id="sesion_plan_con_envios" class="form-check-input" value="1"
+                            {{ ! empty($sesion['plan_con_envios']) ? 'checked' : '' }}>
+                        <label class="form-check-label" for="sesion_plan_con_envios">
+                            Imprimir con el plan de envíos
+                        </label>
+                        <p class="text-muted small mb-0">
+                            Tildado: esta reimpresión usa el programa marcado como plan con envíos.
+                            Destildado: usa el programa de las reglas.
+                        </p>
+                    </div>
+                @endif
                 @if (! empty($sesion['lote_venta_ids']))
                     @php
                         $loteSoloCopias = ! empty($sesion['solo_copias']);
@@ -112,6 +125,9 @@ window.impresionSesionFaltaImpresora = @json(! empty($sesion['faltante_impresora
                     <input type="hidden" name="modo" value="{{ $sesion['modo'] ?? 'OPERATIVO' }}">
                     <input type="hidden" name="solo_copia" id="input-solo-copia" value="0">
                     <input type="hidden" name="enviar_impresora" id="input-enviar-impresora" value="{{ ! empty($enviarImpresora) ? '1' : '0' }}">
+                    @if (! empty($sesion['plan_con_envios']))
+                        <input type="hidden" name="con_envios" value="1">
+                    @endif
                     @if (($sesion['origen_tipo'] ?? '') === 'COT' && ! empty($sesion['pack'][0]['remito_envio_id']))
                         <input type="hidden" name="remito_envio_id" value="{{ (int) $sesion['pack'][0]['remito_envio_id'] }}">
                     @endif

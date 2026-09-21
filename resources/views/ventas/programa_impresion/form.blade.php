@@ -57,6 +57,29 @@
     </div>
 </div>
 <div class="form-group row">
+    <label class="col-lg-3 control-label text-right pr-2">Plan con envíos</label>
+    <div class="col-lg-6">
+        <div class="form-check">
+            @php
+                $planConEnvios = (string) old(
+                    'plan_con_envios',
+                    ($data->plan_con_envios ?? false) ? '1' : '0'
+                ) === '1';
+            @endphp
+            <input type="hidden" name="plan_con_envios" value="0">
+            <input type="checkbox" name="plan_con_envios" id="plan_con_envios" class="form-check-input" value="1"
+                {{ $planConEnvios ? 'checked' : '' }}>
+            <label class="form-check-label" for="plan_con_envios">
+                Este es el plan con envíos
+            </label>
+        </div>
+        <p class="text-muted small mb-0">
+            Uno por empresa. La ruta tiene que incluir el comprobante Envío.
+            En la facturación, el tilde «Imprimir con el plan de envíos» usa este programa y no el de las reglas.
+        </p>
+    </div>
+</div>
+<div class="form-group row">
     <label class="col-lg-3 control-label text-right pr-2">Al facturar</label>
     <div class="col-lg-6">
         @php

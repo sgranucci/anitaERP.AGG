@@ -270,6 +270,7 @@
                 leyendaexportacion: leyendaexportacion,
                 transporte_id: transporte_id,
                 retorno_index: pathRetornoPicking(),
+                con_envios: $('#con_envios').is(':checked') ? 1 : 0,
                 _token: token
             })
                 .done(function (data, status) {
@@ -279,13 +280,17 @@
                         return;
                     }
                     var urlImpresion = extraerUrlImpresionSesion(data);
+                    var avisoImpresion = (data && data.aviso_impresion) ? String(data.aviso_impresion) : '';
                     if (urlImpresion) {
+                        if (avisoImpresion) {
+                            alert(avisoImpresion);
+                        }
                         mostrarOverlay('Abriendo programa de impresión…');
                         window.location = urlImpresion;
                         return;
                     }
                     ocultarOverlay();
-                    alert('Factura Número: ' + data.factura + '\nEstado: ' + status);
+                    alert((avisoImpresion ? avisoImpresion + '\n' : '') + 'Factura Número: ' + data.factura + '\nEstado: ' + status);
                     window.location.reload();
                 })
                 .fail(function (xhr) {

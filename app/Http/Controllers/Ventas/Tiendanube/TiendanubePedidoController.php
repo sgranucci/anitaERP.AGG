@@ -14,7 +14,9 @@ use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListadoFiltros;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
+use App\Support\Ventas\Tiendanube\TiendanubePedidoReceptorSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoStatusExternoSupport;
+use App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -46,7 +48,8 @@ class TiendanubePedidoController extends Controller
         TiendanubePedidoListadoFiltros::aplicar($query, $filtros);
         $coleccion = $query->orderByDesc('paid_at')->orderByDesc('id')->paginate(20);
 
-        $apiOk = $this->api->configurado();
+        $apiOk = TiendanubeTiendasSupport::configuradas() !== [];
+        $tiendas = TiendanubeTiendasSupport::paraVista();
         $estados = TiendanubePedidoEstadoSupport::etiquetas();
         $estadosExternos = TiendanubePedidoStatusExternoSupport::etiquetas();
         $puedeFacturar = can('facturar-tiendanube-pedidos', false);
@@ -75,7 +78,8 @@ class TiendanubePedidoController extends Controller
             'estados',
             'estadosExternos',
             'puedeFacturar',
-            'listosPorId'
+            'listosPorId',
+            'tiendas'
         ));
     }
 
@@ -110,6 +114,9 @@ class TiendanubePedidoController extends Controller
             (int) $resultado['paginas'],
             (int) ($resultado['skus_rematch'] ?? 0)
         );
+        if (! empty($resultado['advertencias'])) {
+            $msg .= ' Atención: '.$resultado['advertencias'];
+        }
 
         return redirect()
             ->route('tiendanube_pedidos', [
@@ -127,7 +134,7 @@ class TiendanubePedidoController extends Controller
         can('listar-tiendanube-pedidos');
 
         $pedido = TiendanubePedido::query()
-            ->with(['lineas.articulo', 'lineas.combinacion', 'lineas.talle', 'venta', 'cliente'])
+            ->with(['lineas.articulo', 'lineas.combinacion', 'lineas.talle', 'venta', 'cliente', 'comprobantes.venta'])
             ->findOrFail($id);
 
         // Reintento match SKU compuesto al abrir (pedidos stageados antes del fix)
@@ -154,7 +161,10 @@ class TiendanubePedidoController extends Controller
         $puedeFacturar = can('facturar-tiendanube-pedidos', false)
             && ! $pedido->estaFacturado()
             && $pedido->estaPagado();
-        $domicilioDefault = \App\Support\Ventas\Tiendanube\TiendanubePedidoReceptorSupport::domicilioDesdePedido($pedido);
+        $domicilioDefault = TiendanubePedidoReceptorSupport::domicilioDesdePedido($pedido);
+        $nombreCliente = TiendanubePedidoReceptorSupport::nombreDesdePedido($pedido);
+        $provinciaTexto = TiendanubePedidoReceptorSupport::provinciaTextoDesdePedido($pedido);
+        $provinciaId = TiendanubePedidoReceptorSupport::provinciaIdDesdePedido($pedido);
         $letraDefault = 'B';
         $pagoDetalle = [
             'gateway' => $pedido->gateway,
@@ -175,6 +185,9 @@ class TiendanubePedidoController extends Controller
             'listaprecioId',
             'puedeFacturar',
             'domicilioDefault',
+            'nombreCliente',
+            'provinciaTexto',
+            'provinciaId',
             'letraDefault',
             'pagoDetalle'
         ));
@@ -244,6 +257,21 @@ class TiendanubePedidoController extends Controller
             'forzar_cf' => (bool) $request->boolean('forzar_cf'),
             'descuentoimportepie' => (float) $request->input('descuentoimportepie', 0),
         ];
+        if ($request->exists('linea_incluir') || $request->exists('linea_cantidad')) {
+            $seleccion = [];
+            $incluir = $request->input('linea_incluir', []);
+            $cantidades = $request->input('linea_cantidad', []);
+            if (is_array($incluir)) {
+                foreach ($incluir as $lineaId => $marca) {
+                    if ($marca === null || $marca === '' || $marca === '0' || $marca === false) {
+                        continue;
+                    }
+                    $lineaId = (int) $lineaId;
+                    $seleccion[$lineaId] = (float) (is_array($cantidades) ? ($cantidades[$lineaId] ?? 0) : 0);
+                }
+            }
+            $input['lineas'] = $seleccion;
+        }
 
         // Persistir sugerencias elegidas
         $pedido->puntoventa_id_sugerido = $input['puntoventa_id'] ?: $pedido->puntoventa_id_sugerido;
@@ -271,10 +299,15 @@ class TiendanubePedidoController extends Controller
                 ->with('mensaje', $msg);
         }
 
+        $msg = 'Factura emitida OK. Venta #'.$resultado['venta_id']
+            .(! empty($resultado['cae']) ? ' CAE '.$resultado['cae'] : '');
+        if (! empty($resultado['parcial'])) {
+            $msg .= ' Quedan artículos sin facturar: volvé a entrar al pedido para emitir el resto.';
+        }
+
         return redirect()
             ->route('tiendanube_pedido_show', $id)
-            ->with('mensaje', 'Factura emitida OK. Venta #'.$resultado['venta_id']
-                .(! empty($resultado['cae']) ? ' CAE '.$resultado['cae'] : ''));
+            ->with('mensaje', $msg);
     }
 
     public function facturarMasivo(Request $request)
@@ -312,7 +345,9 @@ class TiendanubePedidoController extends Controller
             'desde' => $request->input('desde'),
             'hasta' => $request->input('hasta'),
             'estado_erp' => $request->input('estado_erp'),
+            'status_tn' => $request->input('status_tn'),
             'payment_status' => $request->input('payment_status', 'paid'),
+            'store_id' => $request->input('store_id'),
             'buscar' => $request->input('buscar'),
             'consultar' => 1,
         ], fn ($v) => $v !== null && $v !== '');

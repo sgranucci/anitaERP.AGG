@@ -13,6 +13,26 @@ return [
 
     'access_token' => env('TIENDANUBE_ACCESS_TOKEN', ''),
 
+    /*
+    | Tiendas del canal. Ferli usa TIENDANUBE_STORE_ID / TIENDANUBE_ACCESS_TOKEN.
+    | Cada tienda extra tiene su propio par; no pisa el token de Ferli.
+    | Facturación (PV, depósito, gateways) es la misma para todas.
+    */
+    'tiendas' => [
+        [
+            'clave' => 'ferli',
+            'nombre' => 'Ferli',
+            'store_id' => env('TIENDANUBE_STORE_ID', '3796054'),
+            'access_token' => env('TIENDANUBE_ACCESS_TOKEN', ''),
+        ],
+        [
+            'clave' => 'boaonda',
+            'nombre' => 'Boaonda',
+            'store_id' => env('TIENDANUBE_BOAONDA_STORE_ID', '6250382'),
+            'access_token' => env('TIENDANUBE_BOAONDA_ACCESS_TOKEN', ''),
+        ],
+    ],
+
     'user_agent' => env('TIENDANUBE_USER_AGENT', 'anitaERP Integracion Facturacion (sergiogranucci@gmail.com)'),
 
     'api_base' => env('TIENDANUBE_API_BASE', 'https://api.tiendanube.com/v1'),

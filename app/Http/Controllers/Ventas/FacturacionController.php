@@ -449,6 +449,9 @@ class FacturacionController extends Controller
         if ($retorno !== '') {
             $params['retorno'] = $retorno;
         }
+        if (request()->boolean('con_envios')) {
+            $params['con_envios'] = 1;
+        }
 
         return redirect()->route('sesion_impresion_factura', $params);
     }

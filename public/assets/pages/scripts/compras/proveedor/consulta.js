@@ -346,8 +346,8 @@ function leeUnProveedor(proveedorId, codigoproveedor) {
         return;
     }
 
-    limpiarProveedorEnPantallaManteniendoCodigo();
-
+    // No vaciar proveedor_id mientras dura el GET: el preview del asiento corre en paralelo
+    // y, con el id en blanco, avisa que falta la cuenta de proveedores hasta que vuelve la consulta.
     $.get(url).done(function (data) {
         if (data && data.id) {
             aplicarProveedorEnPantalla(data);

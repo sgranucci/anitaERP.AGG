@@ -147,6 +147,20 @@
             });
         }
 
+        var tildePlanEnvios = document.getElementById('sesion_plan_con_envios');
+        if (tildePlanEnvios) {
+            tildePlanEnvios.addEventListener('change', function () {
+                var url = new URL(window.location.href);
+                if (tildePlanEnvios.checked) {
+                    url.searchParams.set('con_envios', '1');
+                } else {
+                    url.searchParams.delete('con_envios');
+                }
+                url.searchParams.delete('auto');
+                window.location = url.toString();
+            });
+        }
+
         document.querySelectorAll('.link-descargar-pdf-sesion').forEach(function (link) {
             link.addEventListener('click', function (ev) {
                 var cajas = checks();

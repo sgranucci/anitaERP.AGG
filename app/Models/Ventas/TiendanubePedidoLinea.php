@@ -16,6 +16,7 @@ class TiendanubePedidoLinea extends Model
         'sku',
         'nombre',
         'quantity',
+        'cantidad_facturada',
         'price',
         'variant_id',
         'product_id',
@@ -28,6 +29,7 @@ class TiendanubePedidoLinea extends Model
 
     protected $casts = [
         'quantity' => 'float',
+        'cantidad_facturada' => 'float',
         'price' => 'float',
         'variant_id' => 'integer',
         'product_id' => 'integer',
@@ -61,5 +63,15 @@ class TiendanubePedidoLinea extends Model
     public function subtotal(): float
     {
         return round((float) $this->quantity * (float) $this->price, 4);
+    }
+
+    public function cantidadPendiente(): float
+    {
+        return round(max(0, (float) $this->quantity - (float) $this->cantidad_facturada), 4);
+    }
+
+    public function estaCubierta(): bool
+    {
+        return $this->cantidadPendiente() <= 0.0001;
     }
 }

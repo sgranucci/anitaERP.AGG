@@ -47,17 +47,11 @@
                 <div class="card-tools">
                     @if ($mostrarContabilizar && ($mostrarContabilizarAbono ?? true))
                         @if ($esEdicion)
-                        <form action="{{ $rutaContabilizar }}" method="POST" class="d-inline"
-                            onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
-                            @csrf
-                            @if (!empty($retornoLegajo['origen']))
-                                <input type="hidden" name="origen" value="{{ $retornoLegajo['origen'] }}">
-                                <input type="hidden" name="legajo_oc_id" value="{{ (int) ($data->ordencompra_id ?? 0) }}">
-                            @endif
-                            <button type="submit" class="btn btn-warning btn-sm js-cp-contabilizar">
-                                <i class="fa fa-check"></i> Contabilizar
-                            </button>
-                        </form>
+                        <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
+                            class="btn btn-warning btn-sm js-cp-contabilizar"
+                            onclick="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            <i class="fa fa-check"></i> Contabilizar
+                        </button>
                         @else
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
                             class="btn btn-warning btn-sm js-cp-contabilizar"
@@ -380,13 +374,11 @@
                             @endif
                         >Actualizar</button>
                         @if ($mostrarContabilizar)
-                        <form action="{{ $rutaContabilizar }}" method="POST" class="d-inline mb-1"
-                            onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
-                            @csrf
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fa fa-check"></i> Contabilizar
-                            </button>
-                        </form>
+                        <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
+                            class="btn btn-primary mb-1"
+                            onclick="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            <i class="fa fa-check"></i> Contabilizar
+                        </button>
                         @endif
                     </div>
                 </div>

@@ -125,6 +125,7 @@ class ComprobanteImpresionProgramaRepository implements ComprobanteImpresionProg
             'enviar_automatico_al_facturar' => array_key_exists('enviar_automatico_al_facturar', $data)
                 ? ! empty($data['enviar_automatico_al_facturar'])
                 : true,
+            'plan_con_envios' => ! empty($data['plan_con_envios']),
         ];
     }
 

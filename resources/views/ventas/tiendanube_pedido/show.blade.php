@@ -5,7 +5,7 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/pages/scripts/ventas/tiendanube_pedido/facturar.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/tiendanube_pedido/facturar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tiendanube_pedido/facturar.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -39,7 +39,7 @@
             <div class="card-header">
                 <h3 class="card-title">
                     Pedido #{{ $pedido->order_number }}
-                    <small class="ml-2">(ID {{ $pedido->tiendanube_order_id }})</small>
+                    <small class="ml-2">{{ \App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport::nombre($pedido->store_id) }} · ID {{ $pedido->tiendanube_order_id }}</small>
                 </h3>
             </div>
             <div class="card-body">
@@ -57,7 +57,9 @@
                         @endif
                     </div>
                     <div class="col-md-4">
-                        <strong>Total:</strong> {{ number_format((float) $pedido->total, 2, ',', '.') }} {{ $pedido->currency }}
+                        <strong>Total:</strong>
+                        <span id="tn-total-cabecera">{{ number_format((float) $pedido->total, 2, ',', '.') }}</span>
+                        {{ $pedido->currency }}
                     </div>
                 </div>
 
@@ -65,7 +67,25 @@
                     <div class="alert alert-warning">{{ $pedido->error_mensaje }}</div>
                 @endif
 
-                @if ($pedido->venta_id)
+                @if ($pedido->comprobantes->isNotEmpty())
+                    <div class="alert alert-info">
+                        <strong>Facturas de este pedido:</strong>
+                        <ul class="mb-0 mt-1">
+                            @foreach ($pedido->comprobantes as $comp)
+                                <li>
+                                    Venta <strong>{{ $comp->venta->codigo ?? ('#'.$comp->venta_id) }}</strong>
+                                    @if ($comp->venta?->cae)
+                                        — CAE {{ $comp->venta->cae }}
+                                    @endif
+                                    — {{ number_format((float) $comp->total, 2, ',', '.') }}
+                                </li>
+                            @endforeach
+                        </ul>
+                        @if ($pedido->estado_erp === 'parcial')
+                            <div class="mt-1">Todavía hay artículos pendientes.</div>
+                        @endif
+                    </div>
+                @elseif ($pedido->venta_id)
                     <div class="alert alert-success">
                         Facturado: venta
                         <strong>{{ $pedido->venta->codigo ?? ('#'.$pedido->venta_id) }}</strong>
@@ -76,14 +96,23 @@
                 @endif
 
                 <h5>Líneas</h5>
+                <p class="text-muted small mb-2">
+                    Tildá solo los artículos de esta factura. La cantidad no puede superar lo pendiente.
+                    Envío y descuento entran únicamente si quedan tildados.
+                </p>
                 <div class="table-responsive mb-4">
                     <table class="table table-sm table-bordered">
                         <thead style="background:#85C1E9;color:#17202A;">
                             <tr>
+                                @if ($puedeFacturar)
+                                    <th style="width:70px;">Incluir</th>
+                                    <th style="width:110px;" class="text-right">A facturar</th>
+                                @endif
                                 <th>Tipo</th>
                                 <th>SKU</th>
                                 <th>Descripción</th>
                                 <th class="text-right">Cant.</th>
+                                <th class="text-right">Ya fact.</th>
                                 <th class="text-right">Precio</th>
                                 <th class="text-right">Subtotal</th>
                                 <th>Artículo ERP</th>
@@ -93,13 +122,41 @@
                         </thead>
                         <tbody>
                             @foreach ($pedido->lineas as $linea)
-                                <tr class="@if (! $linea->articulo_id && $linea->tipo === 'producto') table-danger @elseif ($linea->tipo === 'producto' && (! $linea->combinacion_id || ! $linea->talle_id)) table-warning @endif">
+                                @php
+                                    $pendiente = $linea->cantidadPendiente();
+                                    $cubierta = $linea->estaCubierta();
+                                @endphp
+                                <tr class="@if (! $linea->articulo_id && $linea->tipo === 'producto' && ! $cubierta) table-danger @elseif ($linea->tipo === 'producto' && ! $cubierta && (! $linea->combinacion_id || ! $linea->talle_id)) table-warning @elseif ($cubierta) table-success @endif">
+                                    @if ($puedeFacturar)
+                                        <td class="text-center">
+                                            @if ($cubierta)
+                                                <span class="badge badge-success">Lista</span>
+                                            @else
+                                                <input type="checkbox" class="tn-linea-check"
+                                                       form="form-tn-facturar"
+                                                       name="linea_incluir[{{ $linea->id }}]" value="1" checked
+                                                       data-linea="{{ $linea->id }}"
+                                                       data-precio="{{ number_format((float) $linea->price, 4, '.', '') }}">
+                                            @endif
+                                        </td>
+                                        <td>
+                                            @if (! $cubierta)
+                                                <input type="number" class="form-control form-control-sm text-right tn-linea-cant"
+                                                       form="form-tn-facturar"
+                                                       name="linea_cantidad[{{ $linea->id }}]"
+                                                       data-linea="{{ $linea->id }}"
+                                                       value="{{ rtrim(rtrim(number_format($pendiente, 4, '.', ''), '0'), '.') }}"
+                                                       min="0.01" max="{{ $pendiente }}" step="0.01">
+                                            @endif
+                                        </td>
+                                    @endif
                                     <td>{{ $linea->tipo }}</td>
                                     <td>{{ $linea->sku }}</td>
                                     <td>{{ $linea->nombre }}</td>
                                     <td class="text-right">{{ number_format((float) $linea->quantity, 2, ',', '.') }}</td>
+                                    <td class="text-right">{{ number_format((float) $linea->cantidad_facturada, 2, ',', '.') }}</td>
                                     <td class="text-right">{{ number_format((float) $linea->price, 2, ',', '.') }}</td>
-                                    <td class="text-right">{{ number_format($linea->subtotal(), 2, ',', '.') }}</td>
+                                    <td class="text-right tn-linea-subtotal" data-linea="{{ $linea->id }}">{{ number_format($linea->subtotal(), 2, ',', '.') }}</td>
                                     <td>
                                         @if ($linea->articulo_id)
                                             {{ $linea->articulo->sku ?? $linea->articulo_id }}
@@ -192,7 +249,7 @@
                                     <label class="col-lg-3 control-label text-right pr-2">Nombre / Razón social</label>
                                     <div class="col-lg-6">
                                         <input type="text" name="receptor_nombre" class="form-control"
-                                               value="{{ old('receptor_nombre', $pedido->customer_name) }}">
+                                               value="{{ old('receptor_nombre', $nombreCliente ?? $pedido->customer_name) }}">
                                     </div>
                                 </div>
                                 <div class="form-group row">
@@ -208,6 +265,26 @@
                                         <input type="email" name="receptor_email" class="form-control"
                                                value="{{ old('receptor_email', $pedido->customer_email) }}">
                                         <small class="form-text text-muted">Se envía la factura automáticamente a este email al emitir.</small>
+                                    </div>
+                                </div>
+                                <div class="form-group row">
+                                    <label class="col-lg-3 control-label text-right pr-2">Provincia</label>
+                                    <div class="col-lg-4">
+                                        <input type="text" class="form-control" readonly
+                                               value="{{ $provinciaTexto ?? '' }}">
+                                        @if (! empty($provinciaId))
+                                            <small class="form-text text-muted">
+                                                Se usa en la percepción de ingresos brutos de la Factura A.
+                                            </small>
+                                        @elseif (($provinciaTexto ?? '') !== '')
+                                            <small class="form-text text-danger">
+                                                No coincide con una provincia del maestro. La percepción no puede tomarla.
+                                            </small>
+                                        @else
+                                            <small class="form-text text-danger">
+                                                Tiendanube no informó provincia. La percepción de ingresos brutos no tiene jurisdicción.
+                                            </small>
+                                        @endif
                                     </div>
                                 </div>
                                 <div class="form-group row">
@@ -246,7 +323,7 @@
                                         · cuotas {{ $pagoDetalle['installments'] }}
                                     @endif
                                     — total a cubrir:
-                                    <strong id="tn-total-pedido">{{ number_format((float) $pedido->total, 2, '.', '') }}</strong>
+                                    <strong id="tn-total-pedido">{{ number_format($pedido->totalPendiente(), 2, '.', '') }}</strong>
                                 </p>
                                 <p class="small text-muted mb-2">
                                     @if (can('editar-configuracion-tiendanube', false))
@@ -282,7 +359,7 @@
                                             <td>
                                                 <input type="number" step="0.01" min="0.01" name="montos[]"
                                                        class="form-control form-control-sm monto-medio"
-                                                       value="{{ number_format((float) $pedido->total, 2, '.', '') }}" required>
+                                                       value="{{ number_format($pedido->totalPendiente(), 2, '.', '') }}" required>
                                             </td>
                                             <td></td>
                                         </tr>
@@ -316,7 +393,7 @@
                         </div>
 
                         <button type="submit" class="btn btn-success" id="btn-tn-facturar">
-                            <i class="fa fa-file-invoice"></i> Facturar pedido
+                            <i class="fa fa-file-invoice"></i> Facturar selección
                         </button>
                     </form>
                 @elseif (! $pedido->estaFacturado())

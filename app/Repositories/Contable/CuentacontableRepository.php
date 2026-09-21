@@ -12,6 +12,7 @@ use App\Repositories\Caja\ConceptogastoRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Auth;
 use Exception;
 
@@ -367,23 +368,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             $ctamEmpresa = $data->ctam_empresa;
             $ctamCuenta = $data->ctam_cuenta;
 
-			// Anita ctam_tipo → ERP tipocuenta (igual que AGG):
-			// 0 título, 1 imputable, 2 totalizadora.
-			switch ((string) ($data->ctam_tipo ?? ''))
-			{
-			case '0':
-				$tipocuenta = '2'; // Título
-				break;
-			case '1':
-				$tipocuenta = '1'; // Imputable
-				break;
-			case '2':
-			case '3':
-				$tipocuenta = '3'; // Totalizadora
-				break;
-			default:
-				$tipocuenta = '3';
-		  	}
+			$tipocuenta = self::tipocuentaErpDesdeAnita((string) ($data->ctam_tipo ?? ''));
 
             // Lee el concepto de gasto        
             $apiAnitaConc = new ApiAnita();
@@ -663,18 +648,7 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 	public function cambia_para_grabar($request, &$codigo, &$tipocuenta, &$ajustable, 
                                         &$manejaccosto, &$cuenta, &$cuentacontable_difcambio)
 	{
-		// ERP tipocuenta → Anita ctam_tipo (espejo del import).
-		switch ((string) ($request['tipocuenta'] ?? ''))
-		{
-		case '1':
-			$tipocuenta = '1'; // Imputable
-			break;
-		case '2':
-			$tipocuenta = '0'; // Título
-			break;
-		default:
-			$tipocuenta = '2'; // Totalizadora
-		}
+		$tipocuenta = self::tipoAnitaDesdeErp((string) ($request['tipocuenta'] ?? ''));
 
 		$ajustable = $request['monetaria'];
         $manejaccosto = $request['manejaccosto'];
@@ -693,5 +667,50 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
             else
                 $cuentacontable_difcambio = '0';
         }
+	}
+
+	/**
+	 * Anita ctam_tipo → ERP tipocuenta.
+	 * Ferli: 0 Regular, 1 título, 2 totalizadora, 3 capítulo (título).
+	 * Resto: 0 título, 1 imputable, 2/3 totalizadora.
+	 */
+	public static function tipocuentaErpDesdeAnita(string $ctamTipo): string
+	{
+		if (EntornoEmpresaSupport::esFerli()) {
+			return match ($ctamTipo) {
+				'0' => '1',
+				'1', '3' => '2',
+				'2' => '3',
+				default => '3',
+			};
+		}
+
+		return match ($ctamTipo) {
+			'0' => '2',
+			'1' => '1',
+			'2', '3' => '3',
+			default => '3',
+		};
+	}
+
+	/**
+	 * ERP tipocuenta → Anita ctam_tipo. Espejo de tipocuentaErpDesdeAnita().
+	 * En Ferli un título del ERP vuelve como título intermedio (1); el capítulo (3) no se distingue.
+	 */
+	public static function tipoAnitaDesdeErp(string $tipocuenta): string
+	{
+		if (EntornoEmpresaSupport::esFerli()) {
+			return match ($tipocuenta) {
+				'1' => '0',
+				'2' => '1',
+				default => '2',
+			};
+		}
+
+		return match ($tipocuenta) {
+			'1' => '1',
+			'2' => '0',
+			default => '2',
+		};
 	}
 }

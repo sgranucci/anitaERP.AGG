@@ -63,5 +63,29 @@ class ProveedorAnitaEsquemaSupportTest extends TestCase
         $this->assertStringNotContainsString('prom_descuento', $campos);
         $this->assertStringNotContainsString('prom_ret_ibr_bsas', $campos);
         $this->assertStringNotContainsString('prom_fe_ini_excl', $campos);
+
+        $permitidas = ProveedorAnitaEsquemaSupport::columnasPromaePermitidasEnEscritura();
+        $this->assertCount(50, $permitidas);
+        $this->assertSame('prom_concepto', $permitidas[49]);
+        $this->assertNotContains('prom_fecha_exclib', $permitidas);
+        $this->assertNotContains('prom_excl_retib', $permitidas);
+        $this->assertNotContains('prom_fe_ini_excl', $permitidas);
+        $this->assertNotContains('prom_fe_ini_exclib', $permitidas);
+        $this->assertNotContains('prom_ag_perc_ib', $permitidas);
+        $this->assertNotContains('prom_ag_perc_iva', $permitidas);
+        $this->assertNotContains('prom_descuento', $permitidas);
+        $this->assertContains('prom_prov_vario', $permitidas);
+        $this->assertContains('prom_regimen', $permitidas);
+        $this->assertFalse(ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg());
+    }
+
+    public function test_agg_escribe_columnas_extendidas_de_promae(): void
+    {
+        config(['app.empresa' => EntornoEmpresaSupport::AGG]);
+        config(['proveedor.filtro_empresa' => false]);
+
+        $this->assertSame([], ProveedorAnitaEsquemaSupport::columnasPromaeOmitidasEnEscritura());
+        $this->assertNull(ProveedorAnitaEsquemaSupport::columnasPromaePermitidasEnEscritura());
+        $this->assertTrue(ProveedorAnitaEsquemaSupport::escribeTablasHijasAgg());
     }
 }

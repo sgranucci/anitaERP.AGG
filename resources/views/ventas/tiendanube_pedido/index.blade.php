@@ -51,7 +51,8 @@
             <div class="card-body">
                 @if (! $apiOk)
                     <div class="alert alert-warning">
-                        Faltan credenciales: configure <code>TIENDANUBE_STORE_ID</code> y <code>TIENDANUBE_ACCESS_TOKEN</code> en <code>.env</code>.
+                        Faltan credenciales de Tiendanube en <code>.env</code>
+                        (<code>TIENDANUBE_ACCESS_TOKEN</code> y, para Boaonda, <code>TIENDANUBE_BOAONDA_ACCESS_TOKEN</code>).
                     </div>
                 @elseif (! ($apiHealth['auth_ok'] ?? true))
                     <div class="alert alert-danger">
@@ -88,6 +89,7 @@
                     <input type="hidden" name="estado_erp" id="filtro_estado_erp" value="{{ $estadoErpActivo }}">
                     <input type="hidden" name="status_tn" id="filtro_status_tn" value="{{ $statusTnActivo }}">
                     <input type="hidden" name="payment_status" id="filtro_payment_status" value="{{ $pagoActivo }}">
+                    <input type="hidden" name="store_id" id="filtro_store_id" value="{{ $filtros['store_id'] ?? '' }}">
 
                     <div class="form-inline mb-2">
                         <div class="form-group mr-2 mb-2">
@@ -139,6 +141,20 @@
                         <button type="button" class="btn btn-sm tn-filtro-etiq {{ $pagoActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
                                 data-campo="payment_status" data-valor="">Todos</button>
                     </div>
+
+                    @php $storeActivo = (string) ($filtros['store_id'] ?? ''); @endphp
+                    @if (count($tiendas ?? []) > 1)
+                        <div class="mb-2 d-flex flex-wrap align-items-center" style="gap:6px;">
+                            <span class="text-muted small mr-1">Tienda</span>
+                            <button type="button" class="btn btn-sm tn-filtro-etiq {{ $storeActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                    data-campo="store_id" data-valor="">Todas</button>
+                            @foreach ($tiendas as $tienda)
+                                <button type="button"
+                                        class="btn btn-sm tn-filtro-etiq {{ $storeActivo === $tienda['store_id'] ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                        data-campo="store_id" data-valor="{{ $tienda['store_id'] }}">{{ $tienda['nombre'] }}</button>
+                            @endforeach
+                        </div>
+                    @endif
                 </form>
                 <p class="text-muted small mb-3">
                     <strong>Consultar</strong> filtra pedidos ya guardados en anitaERP.
@@ -154,6 +170,7 @@
                         <input type="hidden" name="estado_erp" value="{{ $filtros['estado_erp'] ?? '' }}">
                         <input type="hidden" name="status_tn" value="{{ $filtros['status_tn'] ?? '' }}">
                         <input type="hidden" name="payment_status" value="{{ $filtros['payment_status'] ?? 'paid' }}">
+                        <input type="hidden" name="store_id" value="{{ $filtros['store_id'] ?? '' }}">
                         <input type="hidden" name="buscar" value="{{ $filtros['buscar'] ?? '' }}">
                         <div class="mb-2">
                             <button type="submit" class="btn btn-warning btn-sm" id="btn-tn-masivo"
@@ -177,6 +194,7 @@
                                     </th>
                                 @endif
                                 <th>Nº TN</th>
+                                <th>Tienda</th>
                                 <th>ID interno</th>
                                 <th>Pagado</th>
                                 <th>Cliente</th>
@@ -209,9 +227,10 @@
                                         </td>
                                     @endif
                                     <td>{{ $p->order_number }}</td>
+                                    <td>{{ \App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport::nombre($p->store_id) }}</td>
                                     <td>{{ $p->tiendanube_order_id }}</td>
                                     <td>{{ $p->paid_at?->format('d/m/Y H:i') }}</td>
-                                    <td>{{ $p->customer_name }}</td>
+                                    <td>{{ \App\Support\Ventas\Tiendanube\TiendanubePedidoReceptorSupport::nombreDesdePedido($p) }}</td>
                                     <td>{{ $p->customer_doc }}</td>
                                     <td>
                                         @php
@@ -255,7 +274,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="{{ $puedeFacturar ? 13 : 12 }}" class="text-center text-muted">
+                                    <td colspan="{{ $puedeFacturar ? 14 : 13 }}" class="text-center text-muted">
                                         Sin pedidos. Sincronice desde Tiendanube o amplíe el rango.
                                     </td>
                                 </tr>

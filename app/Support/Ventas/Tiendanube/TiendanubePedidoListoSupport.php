@@ -37,9 +37,11 @@ final class TiendanubePedidoListoSupport
             return ['listo' => false, 'motivos' => ['No está pagado']];
         }
 
-        $productos = $pedido->lineas->where('tipo', 'producto');
-        if ($productos->isEmpty()) {
-            $motivos[] = 'Sin líneas de producto';
+        $productos = $pedido->lineas->where('tipo', 'producto')->filter(
+            static fn ($linea): bool => ! $linea->estaCubierta()
+        );
+        if ($productos->isEmpty() && $pedido->totalPendiente() <= 0.0001) {
+            $motivos[] = 'Sin cantidades pendientes';
         }
         foreach ($productos as $linea) {
             if (! $linea->articulo_id) {
@@ -50,6 +52,9 @@ final class TiendanubePedidoListoSupport
         }
 
         foreach ($pedido->lineas->where('tipo', 'envio') as $envio) {
+            if ($envio->estaCubierta()) {
+                continue;
+            }
             if (! $envio->articulo_id && (float) $envio->price > 0.0001) {
                 $motivos[] = 'Falta artículo de envío (TIENDANUBE_ARTICULO_ENVIO_SKU)';
             }
@@ -82,9 +87,10 @@ final class TiendanubePedidoListoSupport
 
         $doc = preg_replace('/\D+/', '', (string) ($pedido->customer_doc ?? '')) ?: '';
         $limite = (float) config('facturacion_local.limite_resto', 400000);
+        $totalPendiente = $pedido->totalPendiente();
         $forzarCf = false;
         if ($doc === '') {
-            if ((float) $pedido->total > $limite) {
+            if ($totalPendiente > $limite) {
                 $motivos[] = 'Faltan datos fiscales (CUIT/DNI) y el total supera el límite CF';
             } else {
                 $forzarCf = true;
@@ -107,7 +113,7 @@ final class TiendanubePedidoListoSupport
                 'cliente_id' => null,
                 'letra' => TiendanubePedidoReceptorSupport::LETRA_B,
                 'receptor' => [
-                    'nombre' => $pedido->customer_name,
+                    'nombre' => TiendanubePedidoReceptorSupport::nombreDesdePedido($pedido),
                     'numerodocumento' => $doc !== '' ? $doc : null,
                     'email' => $pedido->customer_email,
                     'domicilio' => TiendanubePedidoReceptorSupport::domicilioDesdePedido($pedido),
@@ -115,7 +121,7 @@ final class TiendanubePedidoListoSupport
                 'medios_pago' => [[
                     'cuentacaja_id' => (int) $cuentacajaId,
                     'moneda_id' => 1,
-                    'monto' => round((float) $pedido->total, 2),
+                    'monto' => round($totalPendiente, 2),
                 ]],
                 'forzar_cf' => $forzarCf,
                 'descuentoimportepie' => 0.,

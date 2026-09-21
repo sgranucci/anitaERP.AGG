@@ -35,11 +35,20 @@ class ComprobanteImpresionSesionController extends Controller
             return redirect()->route('lista_una_factura', $id);
         }
 
-        return $this->mostrar($request, $this->sesionService->armarDesdeVenta(
-            $venta,
-            $this->modo($request),
-            $request->query('solo_formulario')
-        ));
+        try {
+            $sesion = $this->sesionService->armarDesdeVenta(
+                $venta,
+                $this->modo($request),
+                $request->query('solo_formulario'),
+                $request->boolean('con_envios')
+            );
+        } catch (\InvalidArgumentException $e) {
+            return redirect()
+                ->route('factura')
+                ->with('errores', [$e->getMessage()]);
+        }
+
+        return $this->mostrar($request, $sesion);
     }
 
     public function pedido(Request $request, int $id)
@@ -511,6 +520,8 @@ class ComprobanteImpresionSesionController extends Controller
         }
 
         $pack = $request->boolean('pack') || $solo === null;
+        $planConEnvios = $request->boolean('con_envios')
+            || (is_array($sesionSesion) && ! empty($sesionSesion['plan_con_envios']));
         $sesion = match ($tipo) {
             'PEDIDO' => $this->sesionService->armarDesdePedido(
                 Pedido::query()->findOrFail($id),
@@ -528,6 +539,7 @@ class ComprobanteImpresionSesionController extends Controller
                 Venta::query()->with(['puntoventas', 'pedidos', 'remitos'])->findOrFail($id),
                 $modo,
                 $solo,
+                $planConEnvios,
             ),
         };
         $retorno = $this->resolverRetornoPath($request, is_array($sesionSesion) ? $sesionSesion : []);

@@ -9,6 +9,7 @@ use App\Http\Requests\ValidacionCheque;
 use App\Exports\Caja\ChequeAgingExport;
 use App\Exports\Caja\ChequeDepositoConciliacionExport;
 use App\Exports\Caja\ChequeListadoExport;
+use App\Exports\Caja\ChequeReporteExport;
 use App\Models\Caja\Cheque;
 use App\Models\Caja\Chequera;
 use App\Repositories\Caja\ChequeRepositoryInterface;
@@ -30,6 +31,8 @@ use App\Support\Caja\ChequeDepositoConciliacionSupport;
 use App\Support\Caja\ChequeConsultaChequeraSupport;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequeNdConfigSupport;
+use App\Support\Caja\ChequeReporteFiltros;
+use App\Support\Caja\ChequeReporteSupport;
 use App\Support\Caja\Echeq\ChequeEcheqProviderResolver;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
@@ -143,6 +146,102 @@ class ChequeController extends Controller
         }
 
         return redirect()->route('cheque', ChequeListadoFiltros::paraQueryString($filtros));
+    }
+
+    /**
+     * Reporte de cheques emitidos o recibidos, con criterios propios de cada origen.
+     */
+    public function reporte(Request $request)
+    {
+        can('listar-cheque');
+
+        $filtros = $this->filtrosReporte($request);
+        $consultado = $request->boolean('consultar');
+        $datas = null;
+        $totales = collect();
+        if ($consultado) {
+            $datas = ChequeReporteSupport::listar($filtros, $this->empresaRepository, true);
+            $totales = ChequeReporteSupport::totales($filtros, $this->empresaRepository);
+        }
+
+        return view('caja.cheque.reporte', [
+            'filtros' => $filtros,
+            'filtrosQuery' => $consultado ? ChequeReporteFiltros::paraQueryString($filtros) : [],
+            'consultado' => $consultado,
+            'datas' => $datas,
+            'totales' => $totales,
+            'subtitulo' => $consultado ? ChequeReporteFiltros::subtitulo($filtros) : '',
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'estado_enum' => Cheque::$enumEstado,
+        ]);
+    }
+
+    /**
+     * Export del reporte (PDF / Excel / CSV) con el mismo filtro y orden de la pantalla.
+     */
+    public function listarReporte(Request $request, $formato = null)
+    {
+        can('listar-cheque');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = $this->filtrosReporte($request);
+        $filtros['consultar'] = true;
+        $titulo = ($filtros['tipo'] ?? 'E') === 'R' ? 'Cheques recibidos' : 'Cheques emitidos';
+        $subtitulo = ChequeReporteFiltros::subtitulo($filtros);
+        $estado_enum = Cheque::$enumEstado;
+        $etiquetaFechaDoc = ($filtros['tipo'] ?? 'E') === 'R' ? 'Ingreso' : 'Emisión';
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = ChequeReporteSupport::listar($filtros, $this->empresaRepository, false);
+                $totales = ChequeReporteSupport::totales($filtros, $this->empresaRepository);
+                $view = \View::make('caja.cheque.reporte_listado', compact(
+                    'datas',
+                    'totales',
+                    'titulo',
+                    'subtitulo',
+                    'estado_enum',
+                    'etiquetaFechaDoc'
+                ))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombre_pdf = 'reporte_cheque';
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+
+            case 'EXCEL':
+                return (new ChequeReporteExport($this->empresaRepository))
+                    ->parametros($filtros)
+                    ->download('reporte_cheque.xlsx');
+
+            case 'CSV':
+                return (new ChequeReporteExport($this->empresaRepository))
+                    ->parametros($filtros)
+                    ->download('reporte_cheque.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('reporte_cheque', ChequeReporteFiltros::paraQueryString($filtros));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filtrosReporte(Request $request): array
+    {
+        $filtros = ChequeReporteFiltros::resolverDesdeRequest($request);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        if ($empresaId > 0 && ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            $filtros['empresa_id'] = null;
+        }
+
+        return $filtros;
     }
 
     /**

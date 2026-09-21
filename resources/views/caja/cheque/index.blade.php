@@ -45,6 +45,26 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route('cheque', ChequeListadoFiltros::paraQueryStringExternos($filtros ?? []));
+    $ordenActual = $filtros['orden'] ?? 'fechapago';
+    $ordenDir = $filtros['orden_dir'] ?? 'desc';
+    $urlOrden = function (string $col) use ($filtrosQuery, $ordenActual, $ordenDir) {
+        $q = $filtrosQuery ?? [];
+        $q['orden'] = $col;
+        if ($ordenActual === $col) {
+            $q['orden_dir'] = $ordenDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            $q['orden_dir'] = in_array($col, ['numerocheque'], true) ? 'asc' : 'desc';
+        }
+
+        return route('cheque', $q);
+    };
+    $marcaOrden = function (string $col) use ($ordenActual, $ordenDir) {
+        if ($ordenActual !== $col) {
+            return '';
+        }
+
+        return $ordenDir === 'asc' ? ' ↑' : ' ↓';
+    };
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -58,6 +78,9 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                         <i class="fa fa-upload"></i> Importar
                     </a>
                     @endif
+                    <a href="{{ route('reporte_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Emitidos y recibidos por separado">
+                        <i class="fa fa-list-alt"></i> Reporte
+                    </a>
                     <a href="{{ route('aging_cheque_cartera') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Aging cartera">
                         <i class="fa fa-hourglass-half"></i> Aging
                     </a>
@@ -103,19 +126,19 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                 <input type="checkbox" id="cheque-select-all" title="Seleccionar página" />
                             </th>
                             @endif
-                            <th style="width:3.5rem;">ID</th>
-                            <th>Número</th>
+                            <th style="width:3.5rem;"><a href="{{ $urlOrden('id') }}" class="text-dark">ID{{ $marcaOrden('id') }}</a></th>
+                            <th><a href="{{ $urlOrden('numerocheque') }}" class="text-dark">Número{{ $marcaOrden('numerocheque') }}</a></th>
                             <th style="width:5rem;">Int.</th>
                             <th style="width:5.5rem;">Origen</th>
                             <th style="width:4.5rem;" title="Físico / e-cheq">Tipo</th>
                             <th>Estado</th>
-                            <th style="width:6.5rem;">Emisión</th>
-                            <th style="width:6.5rem;">Pago</th>
+                            <th style="width:6.5rem;"><a href="{{ $urlOrden('fechaemision') }}" class="text-dark">Emisión{{ $marcaOrden('fechaemision') }}</a></th>
+                            <th style="width:6.5rem;"><a href="{{ $urlOrden('fechapago') }}" class="text-dark">Pago{{ $marcaOrden('fechapago') }}</a></th>
                             <th>Banco / Cta</th>
                             @if (($empresa_query ?? collect())->count() > 1)
                             <th>Empresa</th>
                             @endif
-                            <th class="text-right" style="width:6.5rem;">Monto</th>
+                            <th class="text-right" style="width:6.5rem;"><a href="{{ $urlOrden('monto') }}" class="text-dark">Monto{{ $marcaOrden('monto') }}</a></th>
                             <th style="width:2.8rem;" title="Moneda">Mon</th>
                             <th>Beneficiario</th>
                             <th style="width:6rem;" data-orderable="false"></th>
@@ -210,8 +233,8 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                     </a>
                                 @endif
                             </td>
-                            <td>{{$data->fechaemision}}</td>
-                            <td>{{$data->fechapago}}</td>
+                            <td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechaemision) }}</td>
+                            <td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechapago) }}</td>
                             <td>
                                 @if (($data->origen ?? '') === 'E')
                                     {{$data->cuentacajas->nombre ?? ''}}

@@ -20,11 +20,13 @@ class ComprobanteImpresionPrograma extends Model implements Auditable
         'empresa_id',
         'permite_disparo_al_grabar',
         'enviar_automatico_al_facturar',
+        'plan_con_envios',
     ];
 
     protected $casts = [
         'permite_disparo_al_grabar' => 'boolean',
         'enviar_automatico_al_facturar' => 'boolean',
+        'plan_con_envios' => 'boolean',
     ];
 
     public function empresa(): BelongsTo

@@ -19,6 +19,7 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
+use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
@@ -1179,6 +1180,7 @@ class PagoproveedorService
                 Pagoproveedor_Retencion::query()->where('pagoproveedor_id', $id)->get()
                     ->each(fn (Pagoproveedor_Retencion $r) => $r->delete());
 
+                ChequeOperacionActivaSupport::devolverTercerosACartera((int) $id);
                 Cheque::query()->where('pagoproveedor_id', $id)->get()
                     ->each(fn (Cheque $c) => $c->delete());
 

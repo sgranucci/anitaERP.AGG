@@ -12,7 +12,7 @@
             width: 210mm;
             height: 297mm;
             font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
-            font-size: 12pt;
+            font-size: 9pt;
             color: #000000;
         }
         .pagina {
@@ -30,9 +30,9 @@
             line-height: 1;
             font-weight: bold;
         }
-        .campo-titulo { font-size: 12pt; }
-        .campo-ot { font-size: 12pt; }
-        .campo-pares { font-size: 12pt; }
+        .campo-titulo { font-size: 9pt; }
+        .campo-ot { font-size: 9pt; }
+        .campo-pares { font-size: 9pt; }
         .qr {
             position: absolute;
             background: #ffffff;

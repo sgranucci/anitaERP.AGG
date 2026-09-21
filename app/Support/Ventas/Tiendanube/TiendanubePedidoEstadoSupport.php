@@ -15,6 +15,8 @@ final class TiendanubePedidoEstadoSupport
 
     public const FACTURADO = 'facturado';
 
+    public const PARCIAL = 'parcial';
+
     public const ERROR = 'error';
 
     public const OMITIDO = 'omitido';
@@ -27,6 +29,7 @@ final class TiendanubePedidoEstadoSupport
             self::LISTO => 'Listo para facturar',
             self::BLOQUEADO_FISCAL => 'Faltan datos fiscales',
             self::FACTURADO => 'Facturado',
+            self::PARCIAL => 'Facturado parcial',
             self::ERROR => 'Error',
             self::OMITIDO => 'Omitido',
         ];
@@ -41,6 +44,7 @@ final class TiendanubePedidoEstadoSupport
     {
         return match ($estado) {
             self::FACTURADO => 'badge-success',
+            self::PARCIAL => 'badge-warning',
             self::LISTO => 'badge-primary',
             self::BLOQUEADO_FISCAL => 'badge-warning',
             self::ERROR => 'badge-danger',

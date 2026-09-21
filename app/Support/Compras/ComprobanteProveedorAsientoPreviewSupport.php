@@ -427,10 +427,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
             $esNeto = ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipoConcepto, $codigoConcepto);
-            $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
-            if ($cuentaId <= 0) {
-                $cuentaId = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaId));
-            }
+            $cuentaId = ComprobanteProveedorCuentaDebeNetoSupport::resolverParaLinea($comprobante, $linea, $concepto);
             if ($cuentaId <= 0) {
                     $avisos[] = [
                         'tipo' => $esNeto ? 'neto_sin_cuenta_asiento' : 'concepto_sin_cuenta_debe',

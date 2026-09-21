@@ -97,6 +97,20 @@
                 <label for="recipient-name" class="col-lg-4 col-form-label">Mercader&iacute;a</label>
                 <input type="text" class="col-lg-5 form-control" id="mercaderia" name="marcaderia" value=""></input>
             </div>
+            @if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+            <div class="form-group row mb-0">
+                <div class="col-lg-8">
+                    <div class="form-check">
+                        <input type="checkbox" id="con_envios" class="form-check-input" value="1">
+                        <label class="form-check-label" for="con_envios">Imprimir con el plan de env&iacute;os</label>
+                    </div>
+                    <p class="text-muted small mb-0">
+                        Tildado: usa el programa marcado como plan con env&iacute;os (tiene que incluir el comprobante Env&iacute;o).
+                        Destildado: sigue el programa de las reglas.
+                    </p>
+                </div>
+            </div>
+            @endif
         </div>
         <div class="modal-footer">
             <button type="button" id="cierraFacturarOrdenTrabajoModal" class="btn btn-secondary" data-dismiss="modal">Cierra</button>

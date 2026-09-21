@@ -99,6 +99,7 @@ class ValidacionProveedor extends FormRequest
     {
         $validator->after(function (Validator $validator) {
             $this->validarRenglonesFormapago($validator);
+            $this->validarRenglonesExclusion($validator);
         });
     }
 
@@ -173,6 +174,78 @@ class ValidacionProveedor extends FormRequest
             }
             if (trim((string) ($monedaIds[$i] ?? '')) === '') {
                 $validator->errors()->add('moneda_ids.'.$i, "Formas de pago renglón {$nro}: la Moneda es obligatoria.");
+            }
+        }
+    }
+
+    /**
+     * Un renglón de exclusión con algún dato exige fechas, tipo y porcentaje.
+     * El comentario puede ir vacío. Un renglón en blanco no se valida.
+     */
+    private function validarRenglonesExclusion(Validator $validator): void
+    {
+        $desde = (array) $this->input('desdefechas', []);
+        $hasta = (array) $this->input('hastafechas', []);
+        $tipos = (array) $this->input('tiporetenciones', []);
+        $porcentajes = (array) $this->input('porcentajeexclusiones', []);
+        $comentarios = (array) $this->input('comentarios', []);
+
+        $max = max(
+            count($desde),
+            count($hasta),
+            count($tipos),
+            count($porcentajes),
+            count($comentarios)
+        );
+
+        $tiposValidos = ['G', 'I', 'S', 'B'];
+
+        for ($i = 0; $i < $max; $i++) {
+            $valores = [
+                $desde[$i] ?? '',
+                $hasta[$i] ?? '',
+                $tipos[$i] ?? '',
+                $porcentajes[$i] ?? '',
+                $comentarios[$i] ?? '',
+            ];
+
+            $tieneDatos = false;
+            foreach ($valores as $valor) {
+                if (trim((string) $valor) !== '') {
+                    $tieneDatos = true;
+                    break;
+                }
+            }
+
+            if (! $tieneDatos) {
+                continue;
+            }
+
+            $nro = $i + 1;
+            if (trim((string) ($desde[$i] ?? '')) === '') {
+                $validator->errors()->add(
+                    'desdefechas.'.$i,
+                    "Exclusiones, renglón {$nro}: la fecha desde es obligatoria."
+                );
+            }
+            if (trim((string) ($hasta[$i] ?? '')) === '') {
+                $validator->errors()->add(
+                    'hastafechas.'.$i,
+                    "Exclusiones, renglón {$nro}: la fecha hasta es obligatoria."
+                );
+            }
+            $tipo = trim((string) ($tipos[$i] ?? ''));
+            if (! in_array($tipo, $tiposValidos, true)) {
+                $validator->errors()->add(
+                    'tiporetenciones.'.$i,
+                    "Exclusiones, renglón {$nro}: el tipo de retención es obligatorio."
+                );
+            }
+            if (trim((string) ($porcentajes[$i] ?? '')) === '') {
+                $validator->errors()->add(
+                    'porcentajeexclusiones.'.$i,
+                    "Exclusiones, renglón {$nro}: el porcentaje de exclusión es obligatorio."
+                );
             }
         }
     }

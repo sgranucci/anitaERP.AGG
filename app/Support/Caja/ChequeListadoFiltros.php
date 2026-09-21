@@ -31,6 +31,15 @@ class ChequeListadoFiltros
         'anombrede' => ['column' => 'cheque.anombrede', 'type' => 'texto', 'label' => 'A nombre de'],
     ];
 
+    /** @var array<string, array{column: string, label: string}> */
+    public const ORDENES = [
+        'fechapago' => ['column' => 'cheque.fechapago', 'label' => 'Fecha de cheque'],
+        'fechaemision' => ['column' => 'cheque.fechaemision', 'label' => 'Fecha de emisión'],
+        'numerocheque' => ['column' => 'cheque.numerocheque', 'label' => 'Número'],
+        'monto' => ['column' => 'cheque.monto', 'label' => 'Monto'],
+        'id' => ['column' => 'cheque.id', 'label' => 'ID'],
+    ];
+
     /** @var list<string> */
     private const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
         'cheque.numerocheque',
@@ -107,6 +116,8 @@ class ChequeListadoFiltros
         if ($paraDepositar && $paraDepositarHasta === '') {
             $paraDepositarHasta = date('Y-m-d');
         }
+        [$orden, $ordenDir] = self::resolverOrden($request);
+
         $origen = strtoupper(trim((string) $request->input('origen', '')));
         if (! in_array($origen, ['E', 'R'], true)) {
             $origen = '';
@@ -137,7 +148,26 @@ class ChequeListadoFiltros
             'para_depositar_hasta' => $paraDepositarHasta,
             'origen' => $origen,
             'estado' => $estado,
+            'orden' => $orden,
+            'orden_dir' => $ordenDir,
         ];
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    public static function resolverOrden(Request $request): array
+    {
+        $orden = (string) $request->input('orden', 'fechapago');
+        if (! isset(self::ORDENES[$orden])) {
+            $orden = 'fechapago';
+        }
+        $dir = strtolower((string) $request->input('orden_dir', 'desc'));
+        if (! in_array($dir, ['asc', 'desc'], true)) {
+            $dir = 'desc';
+        }
+
+        return [$orden, $dir];
     }
 
     /**
@@ -226,7 +256,9 @@ class ChequeListadoFiltros
      *   cartera: bool,
      *   para_depositar: bool,
      *   origen: string,
-     *   estado: string
+     *   estado: string,
+     *   orden: string,
+     *   orden_dir: string
      * }
      */
     public static function filtrosVacios(): array
@@ -245,6 +277,8 @@ class ChequeListadoFiltros
             'para_depositar_hasta' => '',
             'origen' => '',
             'estado' => '',
+            'orden' => 'fechapago',
+            'orden_dir' => 'desc',
         ];
     }
 
@@ -271,6 +305,7 @@ class ChequeListadoFiltros
         if (array_key_exists('estado', $filtros) && $filtros['estado'] !== null && $filtros['estado'] !== '') {
             $params['estado'] = $filtros['estado'];
         }
+        $params = array_merge($params, self::paraQueryStringOrden($filtros));
 
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
@@ -333,8 +368,52 @@ class ChequeListadoFiltros
         if (array_key_exists('estado', $filtros) && $filtros['estado'] !== null && $filtros['estado'] !== '') {
             $params['estado'] = $filtros['estado'];
         }
+        $params = array_merge($params, self::paraQueryStringOrden($filtros));
 
         return $params;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function paraQueryStringOrden(array $filtros): array
+    {
+        $orden = (string) ($filtros['orden'] ?? 'fechapago');
+        $dir = (string) ($filtros['orden_dir'] ?? 'desc');
+        if (! isset(self::ORDENES[$orden])) {
+            $orden = 'fechapago';
+        }
+        if (! in_array($dir, ['asc', 'desc'], true)) {
+            $dir = 'desc';
+        }
+        if ($orden === 'fechapago' && $dir === 'desc') {
+            return [];
+        }
+
+        return [
+            'orden' => $orden,
+            'orden_dir' => $dir,
+        ];
+    }
+
+    /**
+     * @param  Builder<\App\Models\Caja\Cheque>  $query
+     */
+    public static function aplicarOrden(Builder $query, array $filtros): void
+    {
+        $orden = (string) ($filtros['orden'] ?? 'fechapago');
+        if (! isset(self::ORDENES[$orden])) {
+            $orden = 'fechapago';
+        }
+        $dir = (string) ($filtros['orden_dir'] ?? 'desc');
+        if (! in_array($dir, ['asc', 'desc'], true)) {
+            $dir = 'desc';
+        }
+
+        $query->orderBy(self::ORDENES[$orden]['column'], $dir);
+        if ($orden !== 'id') {
+            $query->orderBy('cheque.id', 'desc');
+        }
     }
 
     /**

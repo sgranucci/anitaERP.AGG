@@ -16,7 +16,7 @@ final class ComprobanteImpresionResolverSupport
     /**
      * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int}
      */
-    public static function contextoDesdeVenta(Venta $venta): array
+    public static function contextoDesdeVenta(Venta $venta, bool $planConEnvios = false): array
     {
         $venta->loadMissing(['puntoventas', 'transportes']);
         $empresaId = $venta->puntoventas->empresa_id ?? null;
@@ -25,7 +25,12 @@ final class ComprobanteImpresionResolverSupport
             $venta->cliente_entrega_id ? (int) $venta->cliente_entrega_id : null
         );
 
-        return self::resolver($empresaId ? (int) $empresaId : null, $transporteId, $provinciaId);
+        $contexto = self::resolver($empresaId ? (int) $empresaId : null, $transporteId, $provinciaId);
+        if ($planConEnvios) {
+            return self::aplicarPlanConEnvios($contexto);
+        }
+
+        return $contexto;
     }
 
     /**
@@ -194,6 +199,42 @@ final class ComprobanteImpresionResolverSupport
         $leyenda = strtoupper((string) $copia->leyenda);
 
         return $codigo === 'ORI' || $codigo === 'ORIGINAL' || $leyenda === 'ORIGINAL';
+    }
+
+    /**
+     * Programa marcado como plan con envíos de la empresa (o el de todas, si no hay uno propio).
+     * Tiene que incluir el comprobante Envío en la ruta.
+     */
+    public static function programaMarcadoConEnvios(?int $empresaId): ?ComprobanteImpresionPrograma
+    {
+        return ComprobanteImpresionPrograma::query()
+            ->with('formularios.copias.salida')
+            ->where('plan_con_envios', true)
+            ->get()
+            ->filter(fn (ComprobanteImpresionPrograma $p) => self::programaAplicaAEmpresa($p, $empresaId))
+            ->filter(function (ComprobanteImpresionPrograma $p) {
+                return $p->formularios->contains(
+                    fn ($form) => ($form->formulario ?? '') === ComprobanteImpresionFormulario::ENVIO
+                );
+            })
+            ->sortByDesc(fn (ComprobanteImpresionPrograma $p) => $p->empresa_id ? 1 : 0)
+            ->first();
+    }
+
+    /**
+     * @param  array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int}  $contexto
+     * @return array{programa: ?ComprobanteImpresionPrograma, motivo: string, empresa_id: ?int, transporte_id: ?int, provincia_entrega_id: ?int}
+     */
+    private static function aplicarPlanConEnvios(array $contexto): array
+    {
+        $empresaId = isset($contexto['empresa_id']) ? (int) $contexto['empresa_id'] : null;
+        $programa = self::programaMarcadoConEnvios($empresaId);
+        $contexto['programa'] = $programa;
+        $contexto['motivo'] = $programa
+            ? 'Plan con envíos ('.$programa->codigo.')'
+            : 'Sin plan con envíos marcado';
+
+        return $contexto;
     }
 
     private static function programaAplicaAEmpresa(?ComprobanteImpresionPrograma $programa, ?int $empresaId): bool

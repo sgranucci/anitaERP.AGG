@@ -15,6 +15,8 @@ use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
+use App\Support\Caja\ChequeOperacionActivaSupport;
+use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionEscrituraSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
@@ -91,6 +93,9 @@ class PagoproveedorAnularRevertirService
             foreach ($asientos as $asiento) {
                 $this->asientoRepository->delete((int) $asiento->id);
             }
+
+            $devueltos = ChequeOperacionActivaSupport::devolverTercerosACartera((int) $pago->id);
+            ChequeTerceroEndosoAnitaSupport::desmarcarEndosoColeccion($devueltos);
 
             EloquentAuditDeleteSupport::each(
                 Cheque::query()->where('pagoproveedor_id', (int) $pago->id)
@@ -217,6 +222,7 @@ class PagoproveedorAnularRevertirService
 
             $cajaReverso = $this->crearMovimientoCajaCompensatorio($pago, $reverso, $fechaOp, $leyenda);
 
+            $chequesDevueltos = ChequeOperacionActivaSupport::devolverTercerosACartera((int) $pago->id);
             foreach (Cheque::query()->where('pagoproveedor_id', (int) $pago->id)->get() as $cheque) {
                 if (strtoupper((string) $cheque->origen) !== 'E') {
                     continue;
@@ -270,6 +276,7 @@ class PagoproveedorAnularRevertirService
                 'reverso' => $reverso,
                 'caja_reverso' => $cajaReverso,
                 'retenciones_origen' => $retencionesOrigen,
+                'cheques_devueltos' => $chequesDevueltos,
             ];
         });
 
@@ -299,6 +306,14 @@ class PagoproveedorAnularRevertirService
             $salida['aviso'] = 'Reversión grabada en ERP (AOP '.$reverso->numerotransaccion
                 .') pero falló la réplica Anita: '.$eAnita->getMessage()
                 .'. No reintente la reversión; revise sincronización/auditoría.';
+        }
+
+        $devueltos = $local['cheques_devueltos'] ?? [];
+        $endosos = ChequeTerceroEndosoAnitaSupport::desmarcarEndosoColeccion($devueltos);
+        if ($devueltos !== [] && $endosos < count($devueltos)) {
+            $avisoEndoso = 'No se pudo quitar el endoso en Anita de '
+                .(count($devueltos) - $endosos).' cheque(s) de terceros.';
+            $salida['aviso'] = trim(($salida['aviso'] ?? '').' '.$avisoEndoso);
         }
 
         return $salida;

@@ -428,6 +428,7 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
                 incoterm_id: incoterm_id,
                 mercaderia: mercaderia,
                 leyendaexportacion: leyendaexportacion,
+                con_envios: $('#con_envios').is(':checked') ? 1 : 0,
                 _token: token
             },
             function(data, status){
@@ -439,10 +440,23 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
                         completarTareas(ordentrabajo_id);
                     }
                 } else {
-                    alert("Factura Número: " + data.factura + "\nEstado: " + status);
+                    var urlImpresion = '';
+                    var avisoImpresion = '';
+                    if (data && typeof data === 'object') {
+                        urlImpresion = data.impresion_url ? String(data.impresion_url).trim() : '';
+                        avisoImpresion = data.aviso_impresion ? String(data.aviso_impresion) : '';
+                    }
+                    if (avisoImpresion) {
+                        alert("Factura Número: " + data.factura + "\n" + avisoImpresion);
+                    } else if (!urlImpresion) {
+                        alert("Factura Número: " + data.factura + "\nEstado: " + status);
+                    }
                     $("#facturarOrdenTrabajoModal").modal('hide');
                     $(itemFacturar).parents("tr").find(".facturar").css( "color", "red");
                     completarTareas(ordentrabajo_id);
+                    if (urlImpresion) {
+                        window.location = urlImpresion;
+                    }
                 }
             });
 });

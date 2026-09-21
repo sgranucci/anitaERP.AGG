@@ -8,7 +8,9 @@ use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\Tiendanube\TiendanubeApiHealthSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
+use App\Support\Ventas\Tiendanube\TiendanubePedidoReceptorSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoSkuResolverSupport;
+use App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -31,13 +33,76 @@ final class TiendanubePedidoSyncService
      *   creados:int,
      *   actualizados:int,
      *   omitidos:int,
-     *   paginas:int
+     *   paginas:int,
+     *   advertencias:?string
      * }
      */
     public function sincronizarRango(?string $desdeYmd, ?string $hastaYmd, int $maxPaginas = 20): array
     {
-        $this->api->assertConfigurado();
+        $tiendas = TiendanubeTiendasSupport::configuradas();
+        if ($tiendas === []) {
+            $this->api->assertConfigurado();
+        }
 
+        $creados = 0;
+        $actualizados = 0;
+        $omitidos = 0;
+        $paginas = 0;
+        $fallos = [];
+        $okAlguna = false;
+
+        foreach ($tiendas as $tienda) {
+            $api = TiendanubeApiClient::paraStoreId($tienda['store_id']);
+            $r = $this->sincronizarTienda($api, $tienda['nombre'], $desdeYmd, $hastaYmd, $maxPaginas);
+            $creados += (int) $r['creados'];
+            $actualizados += (int) $r['actualizados'];
+            $omitidos += (int) $r['omitidos'];
+            $paginas += (int) $r['paginas'];
+            if ($r['ok']) {
+                $okAlguna = true;
+            } else {
+                $fallos[] = $tienda['nombre'].': '.($r['error'] ?? 'error');
+            }
+        }
+
+        if (! $okAlguna) {
+            return [
+                'ok' => false,
+                'error' => $fallos !== [] ? implode(' | ', $fallos) : 'Ninguna tienda configurada',
+                'creados' => $creados,
+                'actualizados' => $actualizados,
+                'omitidos' => $omitidos,
+                'paginas' => $paginas,
+                'advertencias' => null,
+            ];
+        }
+
+        Log::info('tiendanube.sync.ok', compact('creados', 'actualizados', 'omitidos', 'paginas', 'desdeYmd', 'hastaYmd'));
+
+        $rematch = $this->rematchearSkusPendientes();
+
+        return [
+            'ok' => true,
+            'creados' => $creados,
+            'actualizados' => $actualizados,
+            'omitidos' => $omitidos,
+            'paginas' => $paginas,
+            'skus_rematch' => $rematch['actualizadas'],
+            'skus_sin_match' => $rematch['sin_match'],
+            'advertencias' => $fallos !== [] ? implode(' | ', $fallos) : null,
+        ];
+    }
+
+    /**
+     * @return array{ok:bool,error?:string,status?:int,creados:int,actualizados:int,omitidos:int,paginas:int}
+     */
+    private function sincronizarTienda(
+        TiendanubeApiClient $api,
+        string $nombre,
+        ?string $desdeYmd,
+        ?string $hastaYmd,
+        int $maxPaginas,
+    ): array {
         $filtros = [
             'payment_status' => 'paid',
         ];
@@ -52,13 +117,14 @@ final class TiendanubePedidoSyncService
         $actualizados = 0;
         $omitidos = 0;
         $paginas = 0;
+        $storeId = $api->storeId();
 
         for ($page = 1; $page <= $maxPaginas; $page++) {
-            $resp = $this->api->listarPedidos($filtros, $page);
+            $resp = $api->listarPedidos($filtros, $page);
             if (! $resp['ok']) {
                 $status = (int) ($resp['status'] ?? 0);
                 $error = (string) ($resp['error'] ?? 'Error al listar pedidos');
-                TiendanubeApiHealthSupport::marcarSyncError($error, $status);
+                TiendanubeApiHealthSupport::marcarSyncError($nombre.': '.$error, $status, $storeId);
 
                 return [
                     'ok' => false,
@@ -76,7 +142,6 @@ final class TiendanubePedidoSyncService
                 break;
             }
 
-            // API a veces envuelve en 'orders'
             if (isset($data['orders']) && is_array($data['orders'])) {
                 $data = $data['orders'];
             }
@@ -87,7 +152,7 @@ final class TiendanubePedidoSyncService
                     $omitidos++;
                     continue;
                 }
-                $r = $this->upsertDesdeApi($order);
+                $r = $this->upsertDesdeApi($order, $storeId);
                 if ($r === 'created') {
                     $creados++;
                 } elseif ($r === 'updated') {
@@ -102,10 +167,7 @@ final class TiendanubePedidoSyncService
             }
         }
 
-        Log::info('tiendanube.sync.ok', compact('creados', 'actualizados', 'omitidos', 'paginas', 'desdeYmd', 'hastaYmd'));
-
-        $rematch = $this->rematchearSkusPendientes();
-        TiendanubeApiHealthSupport::marcarSyncOk();
+        TiendanubeApiHealthSupport::marcarSyncOk($storeId);
 
         return [
             'ok' => true,
@@ -113,8 +175,6 @@ final class TiendanubePedidoSyncService
             'actualizados' => $actualizados,
             'omitidos' => $omitidos,
             'paginas' => $paginas,
-            'skus_rematch' => $rematch['actualizadas'],
-            'skus_sin_match' => $rematch['sin_match'],
         ];
     }
 
@@ -125,11 +185,12 @@ final class TiendanubePedidoSyncService
      */
     public function refrescarPedido(TiendanubePedido $pedido): array
     {
-        $resp = $this->api->obtenerPedido((int) $pedido->tiendanube_order_id);
+        $api = TiendanubeApiClient::paraStoreId((string) $pedido->store_id);
+        $resp = $api->obtenerPedido((int) $pedido->tiendanube_order_id);
         if (! $resp['ok'] || ! is_array($resp['data'] ?? null)) {
             return ['ok' => false, 'error' => $resp['error'] ?? 'No se pudo leer el pedido'];
         }
-        $this->upsertDesdeApi($resp['data']);
+        $this->upsertDesdeApi($resp['data'], $api->storeId());
         $pedido->refresh();
         $this->rematchearSkusPendientes((int) $pedido->id);
 
@@ -140,7 +201,7 @@ final class TiendanubePedidoSyncService
      * @param  array<string,mixed>  $order
      * @return 'created'|'updated'|'skipped'
      */
-    public function upsertDesdeApi(array $order): string
+    public function upsertDesdeApi(array $order, ?string $storeId = null): string
     {
         $orderId = (int) ($order['id'] ?? 0);
         if ($orderId <= 0) {
@@ -153,18 +214,14 @@ final class TiendanubePedidoSyncService
             return 'skipped';
         }
 
-        $storeId = $this->api->storeId();
+        $storeId = trim((string) ($storeId ?: $this->api->storeId()));
         $customer = is_array($order['customer'] ?? null) ? $order['customer'] : [];
         $billing = is_array($order['billing_address'] ?? null) ? $order['billing_address'] : [];
         $shipping = is_array($order['shipping_address'] ?? null) ? $order['shipping_address'] : [];
         $payment = $this->extraerPago($order);
 
         $doc = $this->extraerDocumento($customer, $billing, $order);
-        $nombre = trim((string) (
-            $customer['name']
-            ?? trim(($billing['name'] ?? '').' '.($billing['last_name'] ?? ''))
-            ?? ($order['contact_name'] ?? '')
-        ));
+        $nombre = TiendanubePedidoReceptorSupport::nombreDesdeOrder($order);
 
         $pvDefault = TiendanubePedidoMaestrosSupport::puntoventaDefault();
         $depDefault = TiendanubePedidoMaestrosSupport::depositoDefault();
@@ -200,7 +257,7 @@ final class TiendanubePedidoSyncService
         ];
 
         return DB::transaction(function () use ($existente, $attrs, $order, $doc) {
-            if ($existente && $existente->estaFacturado()) {
+            if ($existente && $existente->preservaStagingFacturado()) {
                 // No pisar estado facturado; solo refresh de metadatos seguros
                 $existente->fill(array_diff_key($attrs, array_flip([
                     'estado_erp', 'venta_id', 'facturado_at', 'facturado_por_usuario_id', 'error_mensaje',
@@ -307,8 +364,7 @@ final class TiendanubePedidoSyncService
                     ->orWhereNull('talle_id');
             })
             ->whereHas('pedido', function ($p) {
-                $p->where('estado_erp', '!=', TiendanubePedidoEstadoSupport::FACTURADO)
-                    ->whereNull('venta_id');
+                $p->where('estado_erp', '!=', TiendanubePedidoEstadoSupport::FACTURADO);
             });
         if ($pedidoId !== null && $pedidoId > 0) {
             $q->where('tiendanube_pedido_id', $pedidoId);

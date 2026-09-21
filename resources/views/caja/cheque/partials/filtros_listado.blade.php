@@ -33,6 +33,10 @@
     @if ($fEstado !== '')
         <input type="hidden" name="estado" value="{{ $fEstado }}">
     @endif
+    @if (($f['orden'] ?? 'fechapago') !== 'fechapago' || ($f['orden_dir'] ?? 'desc') !== 'desc')
+        <input type="hidden" name="orden" value="{{ $f['orden'] ?? 'fechapago' }}">
+        <input type="hidden" name="orden_dir" value="{{ $f['orden_dir'] ?? 'desc' }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">

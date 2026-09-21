@@ -3,22 +3,60 @@
 namespace App\Services\Ventas\Tiendanube;
 
 use App\Support\Ventas\Tiendanube\TiendanubeApiHealthSupport;
+use App\Support\Ventas\Tiendanube\TiendanubeTiendasSupport;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
  * Cliente HTTP API Tiendanube / Nuvemshop v1.
+ * Sin argumentos usa la tienda Ferli. paraStoreId() ata otra tienda configurada.
  */
 final class TiendanubeApiClient
 {
+    private bool $registrarSalud = true;
+
+    public function __construct(
+        private readonly ?string $storeIdForzado = null,
+        private readonly ?string $tokenForzado = null,
+    ) {
+    }
+
+    public static function paraStoreId(string $storeId): self
+    {
+        $tienda = TiendanubeTiendasSupport::porStoreId($storeId);
+        if ($tienda === null) {
+            throw new RuntimeException(
+                'La tienda Tiendanube '.trim($storeId).' no tiene token en .env.'
+            );
+        }
+
+        return new self($tienda['store_id'], $tienda['access_token']);
+    }
+
+    /** Ping de health: no pisa el estado global de la otra tienda en cada request. */
+    public function sinRegistrarSalud(): self
+    {
+        $this->registrarSalud = false;
+
+        return $this;
+    }
+
     public function storeId(): string
     {
+        if ($this->storeIdForzado !== null && $this->storeIdForzado !== '') {
+            return $this->storeIdForzado;
+        }
+
         return trim((string) config('tiendanube.store_id', ''));
     }
 
     public function token(): string
     {
+        if ($this->tokenForzado !== null && $this->tokenForzado !== '') {
+            return $this->tokenForzado;
+        }
+
         return trim((string) config('tiendanube.access_token', ''));
     }
 
@@ -168,7 +206,7 @@ final class TiendanubeApiClient
             return [
                 'ok' => false,
                 'status' => 0,
-                'error' => 'Faltan TIENDANUBE_STORE_ID / TIENDANUBE_ACCESS_TOKEN en .env',
+                'error' => 'Faltan store_id / access_token de Tiendanube en .env',
             ];
         }
 
@@ -221,8 +259,8 @@ final class TiendanubeApiClient
             'error' => mb_substr($msg, 0, 500),
         ]);
 
-        if (TiendanubeApiHealthSupport::esErrorAuth($status, $msg)) {
-            TiendanubeApiHealthSupport::marcarAuthInvalida($status, $msg);
+        if ($this->registrarSalud && TiendanubeApiHealthSupport::esErrorAuth($status, $msg)) {
+            TiendanubeApiHealthSupport::marcarAuthInvalida($status, $msg, $this->storeId());
             $msg = TiendanubeApiHealthSupport::MENSAJE_TOKEN_INVALIDO;
         }
 
@@ -247,7 +285,7 @@ final class TiendanubeApiClient
     public function assertConfigurado(): void
     {
         if (! $this->configurado()) {
-            throw new RuntimeException('Configure TIENDANUBE_STORE_ID y TIENDANUBE_ACCESS_TOKEN en .env');
+            throw new RuntimeException('Configure el store_id y el access_token de Tiendanube en .env');
         }
     }
 }

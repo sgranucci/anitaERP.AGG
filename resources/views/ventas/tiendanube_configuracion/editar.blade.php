@@ -77,7 +77,9 @@ Configuraci&oacute;n Tiendanube
                                 <span class="tn-cfg-kbd">Enter</span> en el buscador del modal = primera fila
                             </span>
                             <span class="tn-cfg-hint mb-0">
-                                Token API: <code>TIENDANUBE_ACCESS_TOKEN</code> en <code>.env</code>
+                                Token API en <code>.env</code>:
+                                <code>TIENDANUBE_ACCESS_TOKEN</code> (Ferli) y
+                                <code>TIENDANUBE_BOAONDA_ACCESS_TOKEN</code> (Boaonda)
                             </span>
                         </div>
                     </div>

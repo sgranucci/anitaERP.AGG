@@ -2723,6 +2723,8 @@ Route::get('caja/listaconciliaciondepositocheque/{formato?}', 'Caja\ChequeContro
 Route::get('caja/cheque/aging-cartera', 'Caja\ChequeController@agingCartera')->name('aging_cheque_cartera');
 Route::get('caja/cheque/conciliacion-deposito', 'Caja\ChequeController@conciliacionDeposito')->name('conciliacion_deposito_cheque');
 Route::get('caja/cheque/cashflow-semanal', 'Caja\ChequeController@cashflowSemanal')->name('cashflow_cheque');
+Route::get('caja/cheque/reporte', 'Caja\ChequeController@reporte')->name('reporte_cheque');
+Route::get('caja/listareportecheque/{formato?}', 'Caja\ChequeController@listarReporte')->name('lista_reporte_cheque');
 Route::get('caja/cheque/echeq', 'Caja\ChequeController@echeqIndex')->name('echeq_cheque');
 Route::post('caja/cheque/{id}/echeq-sync', 'Caja\ChequeController@echeqSync')->name('echeq_sync_cheque');
 Route::get('caja/cheque/importar', 'Caja\ChequeController@formImportar')->name('importar_cheque');

@@ -1,4 +1,5 @@
 @php
+    use App\Support\Caja\ChequeDepositoComprobanteSupport;
     use App\Support\Configuracion\EmpresaLogoArchivo;
     foreach ($datas as $row) {
         $row->nombreempresa = $row->empresas->nombre ?? '';
@@ -11,7 +12,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-	<title>Cheques</title>
+	<title>{{ $titulo ?? 'Cheques' }}</title>
 	<style>
 		@include('includes.reportes.estilos_pdf_pagina', [
 			'pdf_size' => 'legal landscape',
@@ -56,8 +57,11 @@
 				@endforeach
 			</td>
 			<td style="width: 40%; text-align: center;">
-				<h2 style="margin: 0; font-size: 20px; font-weight: bold;">Listado de cheques</h2>
+				<h2 style="margin: 0; font-size: 18px; font-weight: bold;">{{ $titulo ?? 'Cheques' }}</h2>
 				<div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
+				@if (!empty($subtitulo))
+					<div class="meta">{{ $subtitulo }}</div>
+				@endif
 			</td>
 			<td style="width: 25%; text-align: right; font-size: 8px;">
 				@if ($totalFilas > 0)
@@ -69,36 +73,31 @@
 	<table class="data">
 		<thead>
 			<tr>
-				<th style="width: 4%;">ID</th>
-				<th style="width: 8%;">N&uacute;mero</th>
-				<th style="width: 6%;">Int. Anita</th>
-				<th style="width: 7%;">Origen</th>
-				<th style="width: 5%;">Tipo</th>
-				<th style="width: 8%;">Estado</th>
-				<th style="width: 7%;">Emisi&oacute;n</th>
-				<th style="width: 7%;">Pago</th>
-				<th style="width: 12%;">Cuenta / Banco</th>
-				<th style="width: 10%;">Empresa</th>
+				<th style="width: 5%;">ID</th>
+				<th style="width: 9%;">N&uacute;mero</th>
+				<th style="width: 6%;">Int.</th>
+				<th style="width: 10%;">Estado</th>
+				<th style="width: 8%;">{{ $etiquetaFechaDoc ?? 'Emisi&oacute;n' }}</th>
+				<th style="width: 8%;">Fecha cheque</th>
+				<th style="width: 14%;">Cuenta / Banco</th>
+				<th style="width: 12%;">Empresa</th>
 				<th style="width: 8%;">Monto</th>
-				<th style="width: 5%;">Moneda</th>
-				<th style="width: 18%;">Beneficiario</th>
+				<th style="width: 5%;">Mon</th>
+				<th style="width: 15%;">Beneficiario</th>
 			</tr>
 		</thead>
 		<tbody>
 			@foreach ($datas as $data)
 				@php
-					$origenLabel = collect($origen_enum ?? [])->firstWhere('valor', $data->origen);
 					$estadoLabel = collect($estado_enum ?? [])->firstWhere('valor', $data->estado);
 				@endphp
 				<tr>
 					<td>{{ $data->id }}</td>
 					<td>{{ $data->numerocheque }}</td>
 					<td>{{ $data->nro_interno_anita }}</td>
-					<td>{{ $origenLabel['nombre'] ?? $data->origen }}</td>
-					<td>{{ \App\Support\Caja\ChequePropioInstrumentoSupport::etiquetaNegociable($data->negociable ?? null) }}</td>
 					<td>{{ $estadoLabel['nombre'] ?? $data->estado }}</td>
-					<td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechaemision) }}</td>
-					<td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechapago) }}</td>
+					<td>{{ ChequeDepositoComprobanteSupport::fechaDmy($data->fechaemision) }}</td>
+					<td>{{ ChequeDepositoComprobanteSupport::fechaDmy($data->fechapago) }}</td>
 					<td>
 						@if (($data->origen ?? '') === 'E')
 							{{ $data->cuentacajas->nombre ?? '' }}
@@ -108,12 +107,20 @@
 					</td>
 					<td>{{ $data->empresas->nombre ?? '' }}</td>
 					<td class="text-right">{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
-					<td>{{ $data->monedas->abreviatura ?? ($data->monedas->nombre ?? '') }}</td>
+					<td>{{ $data->monedas->abreviatura ?? '' }}</td>
 					<td>{{ $data->entregado ?? $data->anombrede }}</td>
 				</tr>
 			@endforeach
 		</tbody>
 	</table>
+	@if (($totales ?? collect())->isNotEmpty())
+		<p class="meta">
+			@foreach ($totales as $tot)
+				Total {{ $tot->moneda ?? '' }}: {{ number_format((float) $tot->monto, 2, ',', '.') }} ({{ (int) $tot->cantidad }})
+				@if (! $loop->last) · @endif
+			@endforeach
+		</p>
+	@endif
 	</td>
 	<td class="marco-lat"></td>
 </tr></table>

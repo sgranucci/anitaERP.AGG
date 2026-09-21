@@ -127,9 +127,7 @@ class ChequeRepository implements ChequeRepositoryInterface
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cheque.empresa_id');
 
         ChequeListadoFiltros::aplicar($query, $filtros);
-
-        $query->orderByDesc('cheque.fechapago')
-            ->orderByDesc('cheque.id');
+        ChequeListadoFiltros::aplicarOrden($query, $filtros);
 
         if ($flPaginando) {
             return $query->paginate(15);

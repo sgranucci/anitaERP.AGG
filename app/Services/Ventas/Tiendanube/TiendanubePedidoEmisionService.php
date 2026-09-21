@@ -3,6 +3,8 @@
 namespace App\Services\Ventas\Tiendanube;
 
 use App\Models\Ventas\TiendanubePedido;
+use App\Models\Ventas\TiendanubePedidoLinea;
+use App\Models\Ventas\TiendanubePedidoVenta;
 use App\Models\Ventas\Venta;
 use App\Services\Caja\CobranzaService;
 use App\Services\Ventas\FacturaMailEnvioService;
@@ -29,7 +31,6 @@ final class TiendanubePedidoEmisionService
     public function __construct(
         private readonly FacturacionService $facturacionService,
         private readonly CobranzaService $cobranzaService,
-        private readonly TiendanubeApiClient $api,
     ) {
     }
 
@@ -42,9 +43,10 @@ final class TiendanubePedidoEmisionService
      *   medios_pago:list<array{cuentacaja_id:int,moneda_id?:int,monto:float}>,
      *   listaprecio_id?:int|null,
      *   descuentoimportepie?:float,
-     *   forzar_cf?:bool
+     *   forzar_cf?:bool,
+     *   lineas?:array<int,float>|null
      * }  $input
-     * @return array{ok:bool,error?:string,errores?:list<string>,venta_id?:int,cae?:string}
+     * @return array{ok:bool,error?:string,errores?:list<string>,venta_id?:int,cae?:string,parcial?:bool}
      */
     public function emitir(TiendanubePedido $pedido, array $input): array
     {
@@ -56,9 +58,16 @@ final class TiendanubePedidoEmisionService
         }
 
         $pedido->loadMissing('lineas');
-        $errores = $this->validarPreflight($pedido, $input);
+        $seleccion = $this->resolverSeleccion($pedido, $input);
+        if ($seleccion['error'] !== null) {
+            return ['ok' => false, 'error' => $seleccion['error']];
+        }
+
+        $errores = $this->validarPreflight($pedido, $input, $seleccion['lineas'], $seleccion['total']);
         if ($errores !== []) {
-            $pedido->estado_erp = TiendanubePedidoEstadoSupport::BLOQUEADO_FISCAL;
+            $pedido->estado_erp = $pedido->tieneAlgoFacturado()
+                ? TiendanubePedidoEstadoSupport::PARCIAL
+                : TiendanubePedidoEstadoSupport::BLOQUEADO_FISCAL;
             $pedido->error_mensaje = $errores[0];
             $pedido->save();
 
@@ -66,8 +75,8 @@ final class TiendanubePedidoEmisionService
         }
 
         try {
-            return DB::transaction(function () use ($pedido, $input) {
-                $payload = $this->armarPayload($pedido, $input);
+            return DB::transaction(function () use ($pedido, $input, $seleccion) {
+                $payload = $this->armarPayload($pedido, $input, $seleccion['lineas'], $seleccion['cubre_pendiente']);
                 $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
                 if (! is_array($resultado) || ! empty($resultado['error'])) {
                     $msg = trim((string) ($resultado['mensaje'] ?? $resultado['error'] ?? 'Error al emitir factura'));
@@ -81,10 +90,14 @@ final class TiendanubePedidoEmisionService
                 }
 
                 $this->registrarCobranza($venta, $input['medios_pago'] ?? []);
+                $this->registrarCantidadesFacturadas($pedido, $seleccion['lineas'], $venta, $seleccion['total']);
 
+                $completo = $pedido->cubiertoPorCompleto();
                 $pedido->venta_id = $venta->id;
-                $pedido->cliente_id = (int) ($venta->cliente_id ?: ($input['cliente_id'] ?? 0)) ?: null;
-                $pedido->estado_erp = TiendanubePedidoEstadoSupport::FACTURADO;
+                $pedido->cliente_id = (int) ($venta->cliente_id ?: ($input['cliente_id'] ?? 0)) ?: $pedido->cliente_id;
+                $pedido->estado_erp = $completo
+                    ? TiendanubePedidoEstadoSupport::FACTURADO
+                    : TiendanubePedidoEstadoSupport::PARCIAL;
                 $pedido->error_mensaje = null;
                 $pedido->facturado_at = now();
                 $pedido->facturado_por_usuario_id = Auth::id();
@@ -96,6 +109,7 @@ final class TiendanubePedidoEmisionService
                 Log::info('tiendanube.emision.ok', [
                     'tiendanube_order_id' => $pedido->tiendanube_order_id,
                     'venta_id' => $venta->id,
+                    'parcial' => ! $completo,
                     'cae' => $resultado['cae'] ?? $venta->cae ?? null,
                 ]);
 
@@ -103,6 +117,7 @@ final class TiendanubePedidoEmisionService
                     'ok' => true,
                     'venta_id' => $venta->id,
                     'cae' => (string) ($resultado['cae'] ?? $venta->cae ?? ''),
+                    'parcial' => ! $completo,
                 ];
             });
         } catch (Throwable $e) {
@@ -110,7 +125,11 @@ final class TiendanubePedidoEmisionService
                 'tiendanube_order_id' => $pedido->tiendanube_order_id,
                 'error' => $e->getMessage(),
             ]);
-            $pedido->estado_erp = TiendanubePedidoEstadoSupport::ERROR;
+            $pedido->refresh();
+            $pedido->load('lineas');
+            $pedido->estado_erp = $pedido->tieneAlgoFacturado() && ! $pedido->cubiertoPorCompleto()
+                ? TiendanubePedidoEstadoSupport::PARCIAL
+                : TiendanubePedidoEstadoSupport::ERROR;
             $pedido->error_mensaje = mb_substr($e->getMessage(), 0, 1000);
             $pedido->save();
 
@@ -119,10 +138,104 @@ final class TiendanubePedidoEmisionService
     }
 
     /**
+     * Sin clave `lineas` factura todo lo pendiente (masivo). Con clave, solo esas cantidades.
+     *
      * @param  array<string,mixed>  $input
+     * @return array{
+     *   lineas:list<array{linea:TiendanubePedidoLinea,cantidad:float}>,
+     *   total:float,
+     *   cubre_pendiente:bool,
+     *   error:?string
+     * }
+     */
+    private function resolverSeleccion(TiendanubePedido $pedido, array $input): array
+    {
+        $vacio = ['lineas' => [], 'total' => 0.0, 'cubre_pendiente' => false, 'error' => null];
+        $manual = array_key_exists('lineas', $input);
+        /** @var array<int,float> $mapa */
+        $mapa = $manual && is_array($input['lineas']) ? $input['lineas'] : [];
+
+        $elegidas = [];
+        foreach ($pedido->lineas as $linea) {
+            $pendiente = $linea->cantidadPendiente();
+            if ($pendiente <= 0.0001) {
+                continue;
+            }
+            if ($manual) {
+                if (! array_key_exists((int) $linea->id, $mapa) && ! array_key_exists((string) $linea->id, $mapa)) {
+                    continue;
+                }
+                $cant = (float) ($mapa[(int) $linea->id] ?? $mapa[(string) $linea->id] ?? 0);
+            } else {
+                $cant = $pendiente;
+            }
+            if ($cant <= 0.0001) {
+                continue;
+            }
+            if ($cant - $pendiente > 0.0001) {
+                $vacio['error'] = 'La cantidad de «'.($linea->nombre ?: $linea->sku).'» supera lo pendiente ('.$pendiente.').';
+
+                return $vacio;
+            }
+            $elegidas[] = ['linea' => $linea, 'cantidad' => round($cant, 4)];
+        }
+
+        if ($elegidas === []) {
+            $vacio['error'] = 'Elegí al menos un artículo con cantidad pendiente.';
+
+            return $vacio;
+        }
+
+        $total = 0.0;
+        $pendienteTotal = 0.0;
+        foreach ($pedido->lineas as $linea) {
+            $pendienteTotal += $linea->cantidadPendiente() * (float) $linea->price;
+        }
+        foreach ($elegidas as $item) {
+            $total += $item['cantidad'] * (float) $item['linea']->price;
+        }
+        $total = round($total, 2);
+        if ($total <= 0.0001) {
+            $vacio['error'] = 'El total a facturar debe ser mayor a cero.';
+
+            return $vacio;
+        }
+
+        return [
+            'lineas' => $elegidas,
+            'total' => $total,
+            'cubre_pendiente' => abs($total - round($pendienteTotal, 2)) <= 0.05
+                && count($elegidas) === $pedido->lineas->filter(
+                    static fn (TiendanubePedidoLinea $linea): bool => $linea->cantidadPendiente() > 0.0001
+                )->count(),
+            'error' => null,
+        ];
+    }
+
+    /**
+     * @param  list<array{linea:TiendanubePedidoLinea,cantidad:float}>  $lineas
+     */
+    private function registrarCantidadesFacturadas(TiendanubePedido $pedido, array $lineas, Venta $venta, float $total): void
+    {
+        foreach ($lineas as $item) {
+            $linea = $item['linea'];
+            $linea->cantidad_facturada = round((float) $linea->cantidad_facturada + $item['cantidad'], 4);
+            $linea->save();
+        }
+
+        TiendanubePedidoVenta::query()->create([
+            'tiendanube_pedido_id' => $pedido->id,
+            'venta_id' => $venta->id,
+            'total' => $total,
+        ]);
+    }
+
+    /**
+     * @param  array<string,mixed>  $input
+     * @param  list<array{linea:TiendanubePedidoLinea,cantidad:float}>  $lineas
      * @return list<string>
      */
-    private function validarPreflight(TiendanubePedido $pedido, array $input): array
+    private function validarPreflight(TiendanubePedido $pedido, array $input, array $lineas, float $totalFactura): array
     {
         $errores = [];
         $pvId = (int) ($input['puntoventa_id'] ?? 0);
@@ -145,28 +258,27 @@ final class TiendanubePedidoEmisionService
                 $errores[] = 'Cada medio debe tener cuenta de caja.';
             }
         }
-        if (abs($sumaMedios - (float) $pedido->total) > 0.05 && $medios !== []) {
+        if (abs($sumaMedios - $totalFactura) > 0.05 && $medios !== []) {
             $errores[] = sprintf(
-                'La suma de medios (%.2f) no coincide con el total del pedido (%.2f).',
+                'La suma de medios (%.2f) no coincide con el total a facturar (%.2f).',
                 $sumaMedios,
-                (float) $pedido->total
+                $totalFactura
             );
         }
 
-        $lineasProducto = $pedido->lineas->where('tipo', 'producto');
-        if ($lineasProducto->isEmpty()) {
-            $errores[] = 'El pedido no tiene líneas de producto.';
+        if ($lineas === []) {
+            $errores[] = 'Elegí al menos un artículo con cantidad pendiente.';
         }
-        foreach ($pedido->lineas as $linea) {
+        foreach ($lineas as $item) {
+            $linea = $item['linea'];
             if ($linea->tipo === 'descuento' && ! $linea->articulo_id) {
-                // se aplicará como descuento pie
                 continue;
             }
             if ($linea->tipo === 'envio' && ! $linea->articulo_id) {
                 $errores[] = 'Configure TIENDANUBE_ARTICULO_ENVIO_SKU o asocie un artículo a la línea de envío.';
                 continue;
             }
-            if ($linea->tipo === 'producto' && ! $linea->articulo_id) {
+            if (! $linea->articulo_id) {
                 $errores[] = 'SKU no encontrado en ERP: '.($linea->sku ?: $linea->nombre);
             }
         }
@@ -189,7 +301,7 @@ final class TiendanubePedidoEmisionService
             && $clienteId <= 1
             && $doc === ''
             && ! $forzarCf
-            && (float) $pedido->total > $limite) {
+            && $totalFactura > $limite) {
             $errores[] = 'Faltan datos fiscales del cliente (CUIT/DNI). Complete el receptor o asocie un cliente.';
         }
 
@@ -198,9 +310,10 @@ final class TiendanubePedidoEmisionService
 
     /**
      * @param  array<string,mixed>  $input
+     * @param  list<array{linea:TiendanubePedidoLinea,cantidad:float}>  $lineas
      * @return array<string,mixed>
      */
-    private function armarPayload(TiendanubePedido $pedido, array $input): array
+    private function armarPayload(TiendanubePedido $pedido, array $input, array $lineas, bool $cubrePendiente): array
     {
         $articuloIds = [];
         $cantidades = [];
@@ -212,18 +325,18 @@ final class TiendanubePedidoEmisionService
         $colorIds = [];
         $descuentoPieImporte = (float) ($input['descuentoimportepie'] ?? 0);
 
-        foreach ($pedido->lineas as $linea) {
+        foreach ($lineas as $item) {
+            $linea = $item['linea'];
+            $cant = (float) $item['cantidad'];
             if ($linea->tipo === 'descuento' && ! $linea->articulo_id) {
-                $descuentoPieImporte += abs((float) $linea->price) * max(1., (float) $linea->quantity);
+                $descuentoPieImporte += abs((float) $linea->price) * ($cant > 0 ? $cant : 1.);
                 continue;
             }
             if (! $linea->articulo_id) {
                 continue;
             }
-            $cant = (float) $linea->quantity;
             $precio = (float) $linea->price;
             if ($linea->tipo === 'descuento') {
-                // línea negativa
                 $cant = abs($cant) > 0 ? abs($cant) : 1.;
                 $precio = -1 * abs($precio);
             }
@@ -260,6 +373,7 @@ final class TiendanubePedidoEmisionService
         }
 
         $nroPedido = (string) ($pedido->order_number ?: $pedido->tiendanube_order_id);
+        $marcaParcial = $cubrePendiente ? '' : ' (parcial)';
         $fecha = Carbon::now()->format('Y-m-d');
         $payload = [
             'empresa_id' => (int) config('tiendanube.empresa_id', 1),
@@ -276,15 +390,15 @@ final class TiendanubePedidoEmisionService
             'cantidades' => $cantidades,
             'precios' => $precios,
             'descuentolinea' => $descuentos,
-            'descripciones' => $descripciones,
+            'descripcionarticulos' => $descripciones,
             'combinacion_ids' => $combinacionIds,
             'talle_ids' => $talleIds,
             'color_ids' => $colorIds,
             'descuentopie' => 0.,
             'descuentoimportepie' => $descuentoPieImporte,
             'vendedor_id' => Auth::id(),
-            'leyendafactura' => 'Tiendanube pedido #'.$nroPedido,
-            'observacion' => 'Tiendanube pedido #'.$nroPedido,
+            'leyendafactura' => 'Tiendanube pedido #'.$nroPedido.$marcaParcial,
+            'observacion' => 'Tiendanube pedido #'.$nroPedido.$marcaParcial,
             'venta_receptor' => $fiscal['venta_receptor'],
             'arca_receptor' => $fiscal['arca_receptor'],
             'opciones_emision' => [
@@ -299,6 +413,11 @@ final class TiendanubePedidoEmisionService
         // Factura B: se omiten IIBB/IVA perc. salvo reglas especiales.
         if ($fiscal['letra'] === TiendanubePedidoReceptorSupport::LETRA_B) {
             $payload['omitir_percepciones'] = true;
+        }
+
+        $provinciaId = TiendanubePedidoReceptorSupport::provinciaIdDesdePedido($pedido);
+        if ($provinciaId !== null) {
+            $payload['provincia_id'] = $provinciaId;
         }
 
         return $payload;
@@ -411,7 +530,7 @@ final class TiendanubePedidoEmisionService
             $key = $cae !== '' ? $cae : ($numero !== '' && $numero !== '-' ? $numero : 'venta-'.$venta->id);
             $url = route('lista_una_factura_pdf', ['id' => $venta->id], true);
 
-            $resp = $this->api->crearInvoice((int) $pedido->tiendanube_order_id, [
+            $resp = TiendanubeApiClient::paraStoreId((string) $pedido->store_id)->crearInvoice((int) $pedido->tiendanube_order_id, [
                 'key' => $key,
                 'link' => $url,
             ]);

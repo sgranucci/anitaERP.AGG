@@ -61,6 +61,11 @@ class TiendanubePedido extends Model
         return $this->hasMany(TiendanubePedidoLinea::class, 'tiendanube_pedido_id')->orderBy('orden');
     }
 
+    public function comprobantes(): HasMany
+    {
+        return $this->hasMany(TiendanubePedidoVenta::class, 'tiendanube_pedido_id')->orderBy('id');
+    }
+
     public function venta(): BelongsTo
     {
         return $this->belongsTo(Venta::class, 'venta_id');
@@ -88,7 +93,68 @@ class TiendanubePedido extends Model
 
     public function estaFacturado(): bool
     {
+        if ($this->estado_erp === 'parcial') {
+            return false;
+        }
+
         return $this->estado_erp === 'facturado' || (int) ($this->venta_id ?? 0) > 0;
+    }
+
+    /**
+     * Ya hay cantidad facturada o el pedido quedó a medio cubrir.
+     * El sync no debe borrar las líneas (perdería lo ya facturado).
+     */
+    public function preservaStagingFacturado(): bool
+    {
+        if ($this->estaFacturado() || $this->estado_erp === 'parcial') {
+            return true;
+        }
+        if ($this->relationLoaded('lineas')) {
+            return $this->lineas->contains(
+                static fn (TiendanubePedidoLinea $linea): bool => (float) $linea->cantidad_facturada > 0.0001
+            );
+        }
+
+        return $this->lineas()->where('cantidad_facturada', '>', 0)->exists();
+    }
+
+    public function tieneAlgoFacturado(): bool
+    {
+        if ($this->relationLoaded('lineas')) {
+            $porLinea = $this->lineas->contains(
+                static fn (TiendanubePedidoLinea $linea): bool => (float) $linea->cantidad_facturada > 0.0001
+            );
+        } else {
+            $porLinea = $this->lineas()->where('cantidad_facturada', '>', 0)->exists();
+        }
+
+        return $porLinea || (int) ($this->venta_id ?? 0) > 0;
+    }
+
+    public function totalPendiente(): float
+    {
+        $this->loadMissing('lineas');
+        $total = 0.0;
+        foreach ($this->lineas as $linea) {
+            $total += $linea->cantidadPendiente() * (float) $linea->price;
+        }
+
+        return round($total, 2);
+    }
+
+    public function cubiertoPorCompleto(): bool
+    {
+        $this->loadMissing('lineas');
+        $conCantidad = $this->lineas->filter(
+            static fn (TiendanubePedidoLinea $linea): bool => abs((float) $linea->quantity) > 0.0001
+        );
+        if ($conCantidad->isEmpty()) {
+            return false;
+        }
+
+        return $conCantidad->every(
+            static fn (TiendanubePedidoLinea $linea): bool => $linea->estaCubierta()
+        );
     }
 
     public function estaPagado(): bool

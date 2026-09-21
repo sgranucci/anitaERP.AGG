@@ -8,7 +8,7 @@ namespace App\Support\Ventas;
  */
 final class ComprobanteImpresionSesionUrlSupport
 {
-    public static function postFacturacion(?int $ventaId, ?int $remitoId, ?int $pedidoId, string $retornoPath = '', bool $autoEnviar = true): ?string
+    public static function postFacturacion(?int $ventaId, ?int $remitoId, ?int $pedidoId, string $retornoPath = '', bool $autoEnviar = true, bool $planConEnvios = false): ?string
     {
         $ventaId = (int) $ventaId;
         $remitoId = (int) $remitoId;
@@ -37,6 +37,11 @@ final class ComprobanteImpresionSesionUrlSupport
 
         if ($url === null) {
             return null;
+        }
+
+        if ($planConEnvios) {
+            $sep = str_contains($url, '?') ? '&' : '?';
+            $url .= $sep.'con_envios=1';
         }
 
         return self::anexarRetorno($url, $retornoPath);

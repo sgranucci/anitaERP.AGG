@@ -156,4 +156,46 @@ final class ChequeOperacionActivaSupport
 
         self::anularPorCobranza($cobranzaId);
     }
+
+    /**
+     * Devuelve a cartera los cheques de terceros que la OP había tomado.
+     * Siguen en cartera (estado espacio / N, con nro interno). Se suelta el vínculo
+     * con la OP y el movimiento de caja para que el modal y el aging los vuelvan a listar.
+     *
+     * @return list<Cheque>
+     */
+    public static function devolverTercerosACartera(int $pagoproveedorId): array
+    {
+        if ($pagoproveedorId <= 0) {
+            return [];
+        }
+
+        $devueltos = [];
+        $cheques = Cheque::query()
+            ->where('pagoproveedor_id', $pagoproveedorId)
+            ->where('origen', 'R')
+            ->whereNotNull('nro_interno_anita')
+            ->where('nro_interno_anita', '>', 0)
+            ->get();
+
+        foreach ($cheques as $cheque) {
+            if (! self::estadoSigueEnCartera((string) ($cheque->estado ?? ''))) {
+                continue;
+            }
+
+            $cheque->caja_movimiento_id = null;
+            $cheque->pagoproveedor_id = null;
+            $cheque->caja_id = null;
+            $cheque->proveedor_id = null;
+            $cheque->save();
+            $devueltos[] = $cheque;
+        }
+
+        return $devueltos;
+    }
+
+    private static function estadoSigueEnCartera(string $estado): bool
+    {
+        return trim($estado) === '' || $estado === 'N';
+    }
 }

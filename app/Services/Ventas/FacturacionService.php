@@ -1650,11 +1650,41 @@ class FacturacionService
 		}
 
 		$retornoIndex = is_array($dataOrigen) ? (string) ($dataOrigen['retorno_index'] ?? '') : '';
-		if (! ComprobanteImpresionResolverSupport::dispararProcesoImpresionAlFacturar($ventaId, $remitoId, $pedidoId)) {
-			return $retorno;
+		$conEnvios = is_array($dataOrigen) && filter_var($dataOrigen['con_envios'] ?? false, FILTER_VALIDATE_BOOLEAN);
+		if ($conEnvios) {
+			$venta = $ventaId > 0
+				? Venta::query()->with(['puntoventas', 'transportes'])->find($ventaId)
+				: null;
+			$programa = $venta
+				? (ComprobanteImpresionResolverSupport::contextoDesdeVenta($venta, true)['programa'] ?? null)
+				: null;
+			if (! $programa) {
+				foreach ($items as $i => $item) {
+					if (! is_array($item) || ! empty($item['error']) || ! empty($item['ocultar_mensaje'])) {
+						continue;
+					}
+					$items[$i]['aviso_impresion'] = 'La factura quedó grabada, pero no hay un programa marcado como plan con envíos (con el comprobante Envío en la ruta).';
+					break;
+				}
+
+				return array_is_list($retorno) ? $items : $items[0];
+			}
+			$autoEnviar = (bool) $programa->enviar_automatico_al_facturar;
+			$url = ComprobanteImpresionSesionUrlSupport::postFacturacion(
+				$ventaId,
+				$remitoId,
+				$pedidoId,
+				$retornoIndex,
+				$autoEnviar,
+				true
+			);
+		} else {
+			if (! ComprobanteImpresionResolverSupport::dispararProcesoImpresionAlFacturar($ventaId, $remitoId, $pedidoId)) {
+				return $retorno;
+			}
+			$autoEnviar = ComprobanteImpresionResolverSupport::enviarAutomaticoAlFacturar($ventaId, $remitoId, $pedidoId);
+			$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId, $retornoIndex, $autoEnviar);
 		}
-		$autoEnviar = ComprobanteImpresionResolverSupport::enviarAutomaticoAlFacturar($ventaId, $remitoId, $pedidoId);
-		$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId, $retornoIndex, $autoEnviar);
 		if ($url === null) {
 			return $retorno;
 		}
@@ -2424,7 +2454,7 @@ class FacturacionService
 			$articulos = [$articulos];
 		}
 		$codigosArticulo = $data['codigoarticulos'] ?? [];
-		$descripciones = $data['descripcionarticulos'];
+		$descripciones = $data['descripcionarticulos'] ?? [];
 		$cantidades = $data['cantidades'];
 		$precios = $data['precios'];
 		$cajasInput = $data['cajas'] ?? [];
@@ -2819,6 +2849,10 @@ class FacturacionService
 				? ($cliente->provincia_id ? (int) $cliente->provincia_id : null)
 				: ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente);
 		}
+		$provinciaPedido = (int) ($data['provincia_id'] ?? 0);
+		if ($provinciaPedido > 0 && empty($datosCliente['omitir_percepciones'])) {
+			$datosCliente['provincia'] = $provinciaPedido;
+		}
 		NotaCreditoPercepcionIibbSupport::anexarOrigenSiCorresponde(
 			$datosCliente,
 			$data,
@@ -3016,6 +3050,10 @@ class FacturacionService
 			if (! empty($vr['email'])) {
 				$clienteGraba->email = trim((string) $vr['email']);
 			}
+		}
+		$provinciaPedido = (int) ($data['provincia_id'] ?? 0);
+		if ($provinciaPedido > 0) {
+			$clienteGraba->provincia_id = $provinciaPedido;
 		}
 		
 		$this->cuentacontable_id = $cliente->cuentacontable_id;

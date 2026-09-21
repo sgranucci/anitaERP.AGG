@@ -134,6 +134,13 @@
                                         ? $concepto->cuentacontableDebeIdParaEmpresa($empresaIdForm ?: null)
                                         : (int) ($concepto->cuentacontabledebe_id ?? 0);
                                 }
+                                if ($cuentaDebeId <= 0 && isset($data) && $data && $concepto && ! $netoCubiertoPorRegla) {
+                                    $cuentaDebeId = \App\Support\Compras\ComprobanteProveedorCuentaDebeNetoSupport::resolverParaLinea(
+                                        $data,
+                                        $renglon,
+                                        $concepto
+                                    );
+                                }
                             @endphp
                             <tr class="item-concepto">
                                 <td>

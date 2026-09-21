@@ -452,6 +452,7 @@ $(function () {
         }
         $tab.find('.cp-badge-asiento-error').remove();
         if (tieneProblema) {
+            $tab.find('.badge-success').remove();
             $tab.append('<span class="badge badge-warning ml-1 cp-badge-asiento-error" title="Revise el cuadre antes de contabilizar">!</span>');
         }
     }
@@ -556,8 +557,14 @@ $(function () {
                 return;
             }
             if (esNeto) {
-                $aviso.addClass('text-muted').text('Asiento')
-                    .attr('title', 'Neto sin OC/COM: indique la cuenta en la solapa Asiento contable');
+                var cuentaNeto = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+                if (cuentaNeto > 0) {
+                    $aviso.addClass('text-success fa fa-check')
+                        .attr('title', 'Cuenta del neto cargada (se puede cambiar en Asiento contable)');
+                } else {
+                    $aviso.addClass('text-muted').text('Asiento')
+                        .attr('title', 'Neto sin OC/COM: indique la cuenta en la solapa Asiento contable');
+                }
                 return;
             }
             if (!conceptoRequiereCuentaDebe(meta.tipoconcepto)) {
@@ -920,7 +927,119 @@ $(function () {
         });
     }
 
+    function datosCuentaDesdeEditor($campo) {
+        return {
+            id: parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0,
+            codigo: String($campo.find('.codigocuentacontable').val() || ''),
+            nombre: String($campo.find('.nombrecuentacontable').val() || '')
+        };
+    }
+
+    function conceptoNetoSinCuentaMaestro(conceptoId) {
+        conceptoId = parseInt(conceptoId, 10) || 0;
+        if (conceptoId <= 0) {
+            return false;
+        }
+        var meta = conceptosMeta[conceptoId] || {};
+        var tipo = String(meta.tipoconcepto || '');
+        var codigo = String(meta.codigo || '');
+        if (TIPOS_NETO.indexOf(tipo) < 0 || esImpuestoInterno(tipo, codigo)) {
+            return false;
+        }
+        return cuentaDebeDesdeMeta(conceptoId).id <= 0;
+    }
+
+    function escribirCuentaEnEditorNeto($campo, datos) {
+        var id = parseInt((datos && datos.id) || '0', 10) || 0;
+        if (id <= 0) {
+            return;
+        }
+        $campo.find('.cuentacontable_id').val(String(id));
+        $campo.find('.codigocuentacontable').val(String((datos && datos.codigo) || ''));
+        $campo.find('.nombrecuentacontable').val(String((datos && datos.nombre) || ''));
+        if (typeof actualizarLinkEditarCuentaContable === 'function') {
+            actualizarLinkEditarCuentaContable($campo, id);
+        }
+    }
+
+    /**
+     * Un neto con cuenta (ej. exento) precarga los otros netos vacíos.
+     * No pisa un renglón que ya tiene otra cuenta, ni copia la cuenta de maestro del IVA.
+     */
+    function precargarCuentaEnNetosVacios() {
+        var fuente = null;
+
+        $('.cp-asiento-cuenta-editable').each(function () {
+            if (fuente) {
+                return;
+            }
+            var $campo = $(this);
+            var conceptoId = parseInt($campo.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+            if (!conceptoNetoSinCuentaMaestro(conceptoId)) {
+                return;
+            }
+            var datos = datosCuentaDesdeEditor($campo);
+            if (datos.id > 0) {
+                fuente = datos;
+            }
+        });
+
+        if (!fuente) {
+            $('#tbody-concepto-table tr.item-concepto').each(function () {
+                if (fuente) {
+                    return;
+                }
+                var $row = $(this);
+                var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+                if (!conceptoNetoSinCuentaMaestro(conceptoId)) {
+                    return;
+                }
+                var id = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+                if (id <= 0) {
+                    return;
+                }
+                fuente = {
+                    id: id,
+                    codigo: String($row.find('.cp-celda-cuenta-debe .codigocuentacontable').val() || ''),
+                    nombre: String($row.find('.cp-celda-cuenta-debe .nombrecuentacontable').val() || '')
+                };
+            });
+        }
+
+        if (!fuente || fuente.id <= 0) {
+            return;
+        }
+
+        $('.cp-asiento-cuenta-editable').each(function () {
+            var $campo = $(this);
+            var conceptoId = parseInt($campo.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+            if (!conceptoNetoSinCuentaMaestro(conceptoId)) {
+                return;
+            }
+            if ((parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0) > 0) {
+                return;
+            }
+            escribirCuentaEnEditorNeto($campo, fuente);
+            recordarCuentaAsientoManual(conceptoId, fuente);
+        });
+
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $row = $(this);
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+            if (!conceptoNetoSinCuentaMaestro(conceptoId)) {
+                return;
+            }
+            if ((parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0) > 0) {
+                return;
+            }
+            setCuentaDebeEnFila($row, fuente);
+            recordarCuentaAsientoManual(conceptoId, fuente);
+        });
+        marcarAvisosConceptosLocales();
+    }
+
     function sincronizarCuentasAsientoAConceptos() {
+        precargarCuentaEnNetosVacios();
         var porConcepto = {};
         $('.cp-asiento-cuenta-editable').each(function () {
             var $campo = $(this);
@@ -1030,6 +1149,14 @@ $(function () {
             if (!previewUrl && window.console && console.warn) {
                 console.warn('CP preview: falta data-preview-url en #form-comprobante-proveedor');
             }
+            return;
+        }
+
+        // Consulta de proveedor en curso (código escrito, id todavía vacío): no reemplazar el asiento
+        // con un error de cuenta que desaparece cuando vuelve el GET.
+        var proveedorIdActual = parseInt($('#proveedor_id').val() || '0', 10) || 0;
+        var codigoProveedorActual = String($('#codigoproveedor').val() || '').trim();
+        if (proveedorIdActual <= 0 && codigoProveedorActual !== '') {
             return;
         }
 

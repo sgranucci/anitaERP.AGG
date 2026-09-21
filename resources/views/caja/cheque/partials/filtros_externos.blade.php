@@ -112,6 +112,25 @@
         </div>
         @endif
     </div>
+    <form method="get" action="{{ route('cheque') }}" class="form-inline mt-2 mb-0">
+        @foreach ($baseQ as $k => $v)
+            @if (! in_array($k, ['orden', 'orden_dir'], true) && $v !== null && $v !== '')
+                <input type="hidden" name="{{ $k }}" value="{{ $v }}">
+            @endif
+        @endforeach
+        <label class="small text-muted mr-2 mb-0" for="orden-listado">Orden</label>
+        <select name="orden" id="orden-listado" class="form-control form-control-sm mr-2">
+            @foreach (\App\Support\Caja\ChequeListadoFiltros::ORDENES as $clave => $meta)
+                <option value="{{ $clave }}" @selected(($filtros['orden'] ?? 'fechapago') === $clave)>{{ $meta['label'] }}</option>
+            @endforeach
+        </select>
+        <select name="orden_dir" class="form-control form-control-sm mr-2" aria-label="Dirección del orden">
+            <option value="asc" @selected(($filtros['orden_dir'] ?? 'desc') === 'asc')>Ascendente</option>
+            <option value="desc" @selected(($filtros['orden_dir'] ?? 'desc') === 'desc')>Descendente</option>
+        </select>
+        <button type="submit" class="btn btn-outline-secondary btn-sm">Aplicar orden</button>
+        <span class="small text-muted ml-2">El PDF y el Excel salen con este orden.</span>
+    </form>
     @if ($paraDepositarActiva)
     <form method="get" action="{{ route('cheque') }}" class="form-inline mt-2 mb-0">
         @foreach ($baseQ as $k => $v)

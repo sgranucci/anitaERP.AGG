@@ -15,6 +15,7 @@ final class TiendanubePedidoListadoFiltros
      *   status_tn:?string,
      *   payment_status:?string,
      *   buscar:?string,
+     *   store_id:?string,
      *   consultar:bool
      * }
      */
@@ -26,14 +27,20 @@ final class TiendanubePedidoListadoFiltros
         $statusTn = strtolower(trim((string) $request->input('status_tn', '')));
         $payment = trim((string) $request->input('payment_status', 'paid'));
         $buscar = trim((string) $request->input('buscar', ''));
+        $storeId = trim((string) $request->input('store_id', ''));
         $consultar = (string) $request->input('consultar', '') === '1'
             || $request->has('desde')
             || $request->has('estado_erp')
-            || $request->has('status_tn');
+            || $request->has('status_tn')
+            || $request->has('store_id');
 
         $statusPermitidos = array_keys(TiendanubePedidoStatusExternoSupport::etiquetas());
         if ($statusTn !== '' && ! in_array($statusTn, $statusPermitidos, true)) {
             $statusTn = '';
+        }
+        $storesPermitidos = array_column(TiendanubeTiendasSupport::paraVista(), 'store_id');
+        if ($storeId !== '' && ! in_array($storeId, $storesPermitidos, true)) {
+            $storeId = '';
         }
 
         return [
@@ -43,6 +50,7 @@ final class TiendanubePedidoListadoFiltros
             'status_tn' => $statusTn !== '' ? $statusTn : null,
             'payment_status' => $payment !== '' ? $payment : null,
             'buscar' => $buscar !== '' ? $buscar : null,
+            'store_id' => $storeId !== '' ? $storeId : null,
             'consultar' => $consultar,
         ];
     }
@@ -54,7 +62,7 @@ final class TiendanubePedidoListadoFiltros
     public static function paraQueryString(array $filtros): array
     {
         $out = [];
-        foreach (['desde', 'hasta', 'estado_erp', 'status_tn', 'payment_status', 'buscar'] as $k) {
+        foreach (['desde', 'hasta', 'estado_erp', 'status_tn', 'payment_status', 'buscar', 'store_id'] as $k) {
             if (! empty($filtros[$k])) {
                 $out[$k] = (string) $filtros[$k];
             }
@@ -86,6 +94,9 @@ final class TiendanubePedidoListadoFiltros
         }
         if (! empty($filtros['payment_status'])) {
             $query->where('payment_status', $filtros['payment_status']);
+        }
+        if (! empty($filtros['store_id'])) {
+            $query->where('store_id', $filtros['store_id']);
         }
         if (! empty($filtros['buscar'])) {
             $b = $filtros['buscar'];

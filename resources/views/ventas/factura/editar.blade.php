@@ -113,6 +113,7 @@
                 <span class="ml-2">ID {{ $data->id }} — {{ $data->codigo }}</span>
                 <div class="card-tools">
                     @include('includes.ventas.link_mi_impresora')
+                    @include('ventas.factura.partials.tilde_reimpresion_plan_envios')
                     @if (can('listar-factura', false))
                         <a href="{{route('lista_una_factura', ['id' => $data->id])}}" class="btn btn-outline-light btn-sm" title="Listar el comprobante por impresora">
                             <i class="fa fa-print"></i> Impresora

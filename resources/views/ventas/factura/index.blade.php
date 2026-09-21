@@ -51,6 +51,7 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
                             <i class="fa fa-sort-numeric-down"></i> Por ID
                         </a>
                     </div>
+                    @include('ventas.factura.partials.tilde_reimpresion_plan_envios')
                     @include('includes.ventas.link_mi_impresora', ['claseBtnMiImpresora' => 'btn btn-outline-secondary btn-sm mr-1'])
                     @if (can('listar-asignacion-remito-factura', false))
                         <a href="{{ route('asignacion_remito_factura') }}" class="btn btn-outline-secondary btn-sm mr-1" style="color:#fff;">

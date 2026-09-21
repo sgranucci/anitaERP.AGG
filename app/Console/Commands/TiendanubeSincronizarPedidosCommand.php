@@ -19,7 +19,7 @@ class TiendanubeSincronizarPedidosCommand extends Command
                             {--hasta= : Fecha Y-m-d (override)}
                             {--sin-mail : No alerta mail si falla auth}';
 
-    protected $description = 'Sincroniza pedidos pagados de Tiendanube (Ferli).';
+    protected $description = 'Sincroniza pedidos pagados de Tiendanube (Ferli y Boaonda).';
 
     public function handle(
         TiendanubePedidoSyncService $sync,
@@ -75,6 +75,9 @@ class TiendanubeSincronizarPedidosCommand extends Command
             (int) $resultado['paginas'],
             (int) ($resultado['skus_rematch'] ?? 0)
         ));
+        if (! empty($resultado['advertencias'])) {
+            $this->warn((string) $resultado['advertencias']);
+        }
 
         return self::SUCCESS;
     }

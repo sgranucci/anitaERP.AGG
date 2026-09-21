@@ -98,6 +98,69 @@ final class ChequeTerceroEndosoAnitaSupport
         return $ok;
     }
 
+    /**
+     * Quita el endoso en ctermae cuando la OP se anula o se revierte y el cheque vuelve a cartera.
+     *
+     * @param  iterable<Cheque>  $cheques
+     */
+    public static function desmarcarEndosoColeccion(iterable $cheques): int
+    {
+        $ok = 0;
+        foreach ($cheques as $cheque) {
+            if (! $cheque instanceof Cheque) {
+                continue;
+            }
+            if ((string) ($cheque->origen ?? '') !== 'R') {
+                continue;
+            }
+            if (self::desmarcarEndoso($cheque)) {
+                $ok++;
+            }
+        }
+
+        return $ok;
+    }
+
+    public static function desmarcarEndoso(Cheque $cheque): bool
+    {
+        $nroInterno = (int) ($cheque->nro_interno_anita ?? 0);
+        if ($nroInterno <= 0) {
+            return false;
+        }
+
+        $entregadoA = self::recortar((string) ($cheque->anombrede ?? ''), 40);
+        $set = "
+            cter_fecha_acreed = '0',
+            cter_cedio_a = '0',
+            cter_nro_op = '0',
+            cter_entregado_a = '".addslashes($entregadoA)."'
+        ";
+
+        $data = [
+            'acc' => 'update',
+            'tabla' => 'ctermae',
+            'sistema' => 'che_ban',
+            'valores' => $set,
+            'whereArmado' => ' WHERE cter_nro_interno = '.$nroInterno.' ',
+        ];
+
+        try {
+            $api = new ApiAnita();
+            $api->apiCallEscritura($data);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::warning('Cheque CHT desmarcar endoso Anita falló', [
+                'nro_interno' => $nroInterno,
+                'cheque_id' => $cheque->id,
+                'ferli' => EntornoEmpresaSupport::esFerli(),
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
     private static function recortar(string $valor, int $max): string
     {
         $valor = trim($valor);
