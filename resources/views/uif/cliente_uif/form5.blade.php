@@ -4,6 +4,10 @@
 @endphp
 <div class="card form5" style="display: none">
     <div class="card-body" id="div-archivos-uif">
+        {{-- Solo perfiles que pueden gestionar archivos: sin este flag el backend no borra/recrea adjuntos. --}}
+        @unless($archivoClienteUifRestringido)
+            <input type="hidden" name="archivos_cliente_uif_sync" value="1">
+        @endunless
         @if ($tieneCliente)
             <p class="text-muted small mb-2">Archivos actuales</p>
             @include('uif.cliente_uif.partials.archivos_adjuntos', ['data' => $data, 'ocultarInputsConservar' => $archivoClienteUifRestringido])

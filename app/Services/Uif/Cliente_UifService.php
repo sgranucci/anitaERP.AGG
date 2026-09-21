@@ -224,8 +224,9 @@ class Cliente_UifService
 
 		$this->cliente_archivo_uifRepository->update($request, $id);
 
-		// El update de archivos borra y recrea desde el form; reimporta del montaje Anita
-		// para no perder NOSIS/DDJJ que existian en disco pero no estaban en el form.
+		// Si el form no envió la solapa de archivos, el update no toca adjuntos.
+		// Si sí sincronizó (pudo borrar filas), reimporta del montaje Anita para
+		// no perder NOSIS/DDJJ que existían en disco pero no estaban en el form.
 		if ($clienteExistente instanceof Cliente_Uif) {
 			$this->cliente_uifRepository->sincronizarArchivosAnitaSiCorresponde($clienteExistente);
 		}

@@ -292,4 +292,82 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
         $this->assertStringContainsString('10.773,76', $mensaje);
         $this->assertStringContainsString('222.505,11', $mensaje);
     }
+
+    /** Caso real OC 216191: malla Anita 10 FC × 16 COM no debe disparar exceso al guardar NC. */
+    public function test_ignora_malla_anita_con_demasiadas_com_por_factura(): void
+    {
+        $coms = range(65324, 65339);
+        $asignaciones = [];
+        $importes = [];
+        foreach ([965, 'cp-30976', 'cp-30977', 'cp-30982', 'cp-30984', 'cp-30985', 'cp-30987', 'cp-30993', 'cp-30998', 'cp-30999'] as $i => $clave) {
+            $asignaciones[$clave] = $coms;
+            $importes[$clave] = 16462.78;
+        }
+        $provision = [];
+        foreach ($coms as $rid) {
+            $provision[$rid] = 7128.0;
+        }
+
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            $asignaciones,
+            $provision,
+            $importes,
+            [65324 => '#65324'],
+            5.0,
+        );
+
+        $this->assertNull($mensaje);
+    }
+
+    public function test_sin_coms_tocadas_no_hay_asignaciones_relevantes(): void
+    {
+        $this->assertSame(
+            [],
+            ComprobanteProveedorReservaComLegajoSupport::asignacionesQueTocanComs(
+                [1030 => [], 965 => [65324, 65325]],
+                [],
+            )
+        );
+    }
+
+    public function test_filtra_asignaciones_que_tocan_las_com_del_guardado(): void
+    {
+        $out = ComprobanteProveedorReservaComLegajoSupport::asignacionesQueTocanComs(
+            [
+                1030 => [],
+                965 => [65324, 65325],
+                900 => [70001],
+            ],
+            [65324],
+        );
+
+        $this->assertArrayHasKey(965, $out);
+        $this->assertSame([65324, 65325], $out[965]);
+        $this->assertArrayNotHasKey(1030, $out);
+        $this->assertArrayNotHasKey(900, $out);
+    }
+
+    public function test_duplicada_solo_controla_coms_tocadas(): void
+    {
+        $this->assertNull(ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
+            [
+                'cp-1' => [65324],
+                'cp-2' => [65324],
+                1030 => [70001],
+            ],
+            [],
+            [70001],
+        ));
+
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
+            [
+                'cp-1' => [65324],
+                1030 => [65324],
+            ],
+            [65324 => '#65324'],
+            [65324],
+        );
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('65324', $mensaje);
+    }
 }

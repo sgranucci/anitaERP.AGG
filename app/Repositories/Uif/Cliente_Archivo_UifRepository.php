@@ -74,6 +74,26 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 
 	private function guardaCliente_Archivo_UifEnOrigen($request, $funcion, $id = null)
 	{
+		$nombrearchivos = $request->file('nombrearchivos');
+		$tieneNuevos = false;
+		if (is_array($nombrearchivos)) {
+			foreach ($nombrearchivos as $archivo) {
+				if ($archivo) {
+					$tieneNuevos = true;
+					break;
+				}
+			}
+		}
+		$nombresAnteriores = $request->input('nombresanteriores');
+		$tieneConservar = is_array($nombresAnteriores);
+		// Flag del form editable: permite quitar todos los adjuntos sin borrar por accidente
+		// cuando la solapa no envió inputs (p.ej. perfil solo visualización que igual puede guardar).
+		$syncExplicit = $request->has('archivos_cliente_uif_sync');
+
+		if ($funcion === 'update' && ! $syncExplicit && ! $tieneConservar && ! $tieneNuevos) {
+			return '1';
+		}
+
 		$fechasPrevias = [];
 		if ($funcion == 'update')
 		{
@@ -83,7 +103,6 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 			// Borra los registros antes de grabar nuevamente
        		$this->delete($id);
 		}
-		$nombrearchivos = $request->file('nombrearchivos');
 
 		// Recorre todos los files nuevos
 		if ($nombrearchivos ?? '')
@@ -110,9 +129,9 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 		}
 
 		// Recorre los files originales para agregarlos
-		if ($request->nombresanteriores ?? '')
+		if ($tieneConservar)
 		{
-			for ($i_archivo = 0; $i_archivo < count($request->nombresanteriores); $i_archivo++)
+			for ($i_archivo = 0; $i_archivo < count($nombresAnteriores); $i_archivo++)
 			{
 				// Busca en los files agregados si el archivo es uno nuevo
 				$fl_encontro = false;
@@ -125,15 +144,15 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 							// Guarda fisicamente el archivo
 							$file = $archivo->getClientOriginalName();
 		
-							if ($file == $request->nombresanteriores[$i_archivo])
+							if ($file == $nombresAnteriores[$i_archivo])
 								$fl_encontro = true;
 						}
 					}
 				}
 				// Agrega el archivo anterior no tocado
-				if (!$fl_encontro && $request->nombresanteriores[$i_archivo] != '')
+				if (!$fl_encontro && $nombresAnteriores[$i_archivo] != '')
 				{
-					$nombreAnterior = $request->nombresanteriores[$i_archivo];
+					$nombreAnterior = $nombresAnteriores[$i_archivo];
 					$cliente_archivo_uif = $this->model->create([
 									'cliente_uif_id' => $id,
 									'nombrearchivo' => $nombreAnterior,
@@ -242,10 +261,18 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 			}
 		}
 
-		$this->model->create([
+		$archivo = $this->model->create([
 			'cliente_uif_id' => $clienteUifId,
 			'nombrearchivo' => $destNombre,
 		]);
+
+		// Preferir mtime del origen para no marcar reimports Anita como "subidos hoy".
+		$mtime = @filemtime($origen);
+		if ($mtime !== false && $mtime > 0) {
+			$archivo->created_at = date('Y-m-d H:i:s', $mtime);
+			$archivo->updated_at = $archivo->created_at;
+			$archivo->save();
+		}
 	}
 
 }

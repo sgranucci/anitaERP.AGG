@@ -302,29 +302,51 @@ class OrdencompraLegajoBandejaPaqueteService
                 $mapaEfectivo[(int) $precargaId] = $ids;
             }
 
-            if (! $this->permiteCompartirComEntreFacturas($oc)) {
-                $conflicto = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
-                    $mapaEfectivo,
-                    $etiquetasCom
-                );
-                if ($conflicto !== null) {
-                    throw ValidationException::withMessages([
-                        'recepcion_ids' => $conflicto,
-                    ]);
+            $comsTocadas = [];
+            foreach ($normalizadas as $ids) {
+                foreach ($ids as $recepcionId) {
+                    $rid = (int) $recepcionId;
+                    if ($rid > 0) {
+                        $comsTocadas[$rid] = true;
+                    }
                 }
             }
+            $comsTocadasList = array_keys($comsTocadas);
 
-            $exceso = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
-                $mapaEfectivo,
-                $this->provisionPorCom($oc, $mapaEfectivo),
-                $this->importePorFacturaDelLegajo($oc, $mapaEfectivo),
-                $etiquetasCom,
-                ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc),
-            );
-            if ($exceso !== null) {
-                throw ValidationException::withMessages([
-                    'recepcion_ids' => $exceso,
-                ]);
+            // Sin COM tocadas (NC/ND o quitar asignación): no revalidar mallas históricas del legajo.
+            if ($comsTocadasList !== []) {
+                if (! $this->permiteCompartirComEntreFacturas($oc)) {
+                    $conflicto = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
+                        $mapaEfectivo,
+                        $etiquetasCom,
+                        $comsTocadasList,
+                    );
+                    if ($conflicto !== null) {
+                        throw ValidationException::withMessages([
+                            'recepcion_ids' => $conflicto,
+                        ]);
+                    }
+                }
+
+                $mapaProvision = ComprobanteProveedorReservaComLegajoSupport::asignacionesQueTocanComs(
+                    $mapaEfectivo,
+                    $comsTocadasList,
+                );
+                $importes = $this->importePorFacturaDelLegajo($oc, $mapaProvision);
+                $importes = $this->anularImportesQueNoExigenCom($oc, $importes);
+
+                $exceso = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+                    $mapaProvision,
+                    $this->provisionPorCom($oc, $mapaProvision),
+                    $importes,
+                    $etiquetasCom,
+                    ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc),
+                );
+                if ($exceso !== null) {
+                    throw ValidationException::withMessages([
+                        'recepcion_ids' => $exceso,
+                    ]);
+                }
             }
 
             $previas = $this->asignacionesPorPrecarga(array_map('intval', array_keys($normalizadas)));
@@ -508,6 +530,85 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         return $out;
+    }
+
+    /**
+     * NC/ND/REC no consumen provisión de COM aunque el import Anita las haya vinculado.
+     *
+     * @param  array<int|string, float>  $importes
+     * @return array<int|string, float>
+     */
+    private function anularImportesQueNoExigenCom(Ordencompra $oc, array $importes): array
+    {
+        if ($importes === []) {
+            return $importes;
+        }
+
+        $precargaIds = [];
+        $cpIds = [];
+        foreach (array_keys($importes) as $clave) {
+            if (is_int($clave) || ctype_digit((string) $clave)) {
+                $id = (int) $clave;
+                if ($id > 0) {
+                    $precargaIds[$id] = true;
+                }
+                continue;
+            }
+            $claveStr = (string) $clave;
+            if (preg_match('/^cp-(\d+)$/i', $claveStr, $m)) {
+                $cpIds[(int) $m[1]] = true;
+            }
+        }
+
+        $tiposPorPrecarga = [];
+        if ($precargaIds !== []) {
+            $pres = Precarga_Comprobante_Proveedor::query()
+                ->whereIn('id', array_keys($precargaIds))
+                ->with('tipotransaccion_compras:id,abreviatura,codigoafip,signo,nombre')
+                ->get(['id', 'tipotransaccion_compra_id']);
+            foreach ($pres as $pre) {
+                $tiposPorPrecarga[(int) $pre->id] = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($pre);
+            }
+        }
+
+        $tiposPorCp = [];
+        $cpIdsBuscar = array_keys($cpIds);
+        if ($cpIdsBuscar === [] && $precargaIds !== []) {
+            // Precargas ya convertidas: el tipo fino puede estar solo en el CP.
+            $cpIdsBuscar = Comprobante_Proveedor::query()
+                ->whereIn('precarga_comprobante_proveedor_id', array_keys($precargaIds))
+                ->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->all();
+        }
+        if ($cpIdsBuscar !== []) {
+            $cps = Comprobante_Proveedor::query()
+                ->whereIn('id', $cpIdsBuscar)
+                ->with('tipotransaccion_compras:id,abreviatura,codigoafip,signo,nombre')
+                ->get(['id', 'tipotransaccion_compra_id', 'precarga_comprobante_proveedor_id']);
+            foreach ($cps as $cp) {
+                $tipo = OrdencompraLegajoDocumentoTipoSupport::desdeComprobante($cp);
+                $tiposPorCp[(int) $cp->id] = $tipo;
+                $preId = (int) ($cp->precarga_comprobante_proveedor_id ?? 0);
+                if ($preId > 0) {
+                    $tiposPorPrecarga[$preId] = $tipo;
+                }
+            }
+        }
+
+        foreach ($importes as $clave => $importe) {
+            $tipo = 'FC';
+            if (is_int($clave) || ctype_digit((string) $clave)) {
+                $tipo = $tiposPorPrecarga[(int) $clave] ?? 'FC';
+            } elseif (preg_match('/^cp-(\d+)$/i', (string) $clave, $m)) {
+                $tipo = $tiposPorCp[(int) $m[1]] ?? 'FC';
+            }
+            if (! OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo)) {
+                $importes[$clave] = 0.0;
+            }
+        }
+
+        return $importes;
     }
 
     /**

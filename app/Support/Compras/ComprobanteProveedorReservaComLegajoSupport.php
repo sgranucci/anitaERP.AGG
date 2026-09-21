@@ -11,6 +11,12 @@ namespace App\Support\Compras;
 final class ComprobanteProveedorReservaComLegajoSupport
 {
     /**
+     * Más de esto por factura suele ser malla del import Anita (todas las COM del legajo),
+     * no una asignación operativa de varios remitos a un solo comprobante.
+     */
+    private const MAX_COM_POR_FACTURA_OPERATIVA = 3;
+
+    /**
      * Si hay más de una COM seleccionada y alguna sola ya cubre el importe de la factura,
      * no permitir el exceso (esas COM extras son para otras facturas).
      *
@@ -127,6 +133,49 @@ final class ComprobanteProveedorReservaComLegajoSupport
     }
 
     /**
+     * Asignaciones del legajo que comparten alguna de las COM tocadas en este guardado.
+     * Si no se toca ninguna COM (p.ej. NC/ND sin recepción), no hay nada que validar.
+     *
+     * @param  array<int|string, list<int>>  $asignaciones
+     * @param  list<int>  $comIdsTocadas
+     * @return array<int|string, list<int>>
+     */
+    public static function asignacionesQueTocanComs(array $asignaciones, array $comIdsTocadas): array
+    {
+        $tocadas = [];
+        foreach ($comIdsTocadas as $comId) {
+            $rid = (int) $comId;
+            if ($rid > 0) {
+                $tocadas[$rid] = true;
+            }
+        }
+        if ($tocadas === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($asignaciones as $clave => $recepcionIds) {
+            $rids = [];
+            $toca = false;
+            foreach ((array) $recepcionIds as $recepcionId) {
+                $rid = (int) $recepcionId;
+                if ($rid <= 0) {
+                    continue;
+                }
+                $rids[$rid] = $rid;
+                if (isset($tocadas[$rid])) {
+                    $toca = true;
+                }
+            }
+            if ($toca) {
+                $out[$clave] = array_values($rids);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * La suma asignada a cada COM no puede superar su provisión.
      *
      * Dos sentidos que no se pueden mezclar a ciegas:
@@ -139,6 +188,9 @@ final class ComprobanteProveedorReservaComLegajoSupport
      * El importe de cada factura es el comparable con la provisión (neto gravado en letra A,
      * total en B/C o monotributo). Las facturas sin ese importe (precarga en cero) suman 0:
      * no se pueden validar, pero tampoco deben bloquear al resto.
+     *
+     * Mallas N:M del import Anita (cada factura vinculada a docenas de COM del legajo)
+     * no son asignaciones operativas: se ignoran para no bloquear NC/altas nuevas.
      *
      * @param  array<int|string, list<int>>  $asignacionesPorPrecarga  precarga_id|cp-N => recepcion_ids
      * @param  array<int, float>  $provisionPorCom  recepcion_id => provisión (0/ausente = no validable)
@@ -172,6 +224,10 @@ final class ComprobanteProveedorReservaComLegajoSupport
             }
             $rids = array_values($rids);
             if ($rids === []) {
+                continue;
+            }
+            // Import Anita: factura↔todas las COM del legajo. No es un remito real.
+            if (count($rids) > self::MAX_COM_POR_FACTURA_OPERATIVA) {
                 continue;
             }
 
@@ -265,11 +321,27 @@ final class ComprobanteProveedorReservaComLegajoSupport
      *
      * @param  array<int|string, list<int>>  $asignacionesPorPrecarga  precarga_id|cp-N => recepcion_ids
      * @param  array<int, string>  $etiquetasCom  recepcion_id => etiqueta visible (opcional)
+     * @param  list<int>|null  $soloComIds  si se indica, solo se controlan esas COM (las tocadas ahora)
      */
     public static function mensajeComDuplicadaEntreFacturas(
         array $asignacionesPorPrecarga,
         array $etiquetasCom = [],
+        ?array $soloComIds = null,
     ): ?string {
+        $filtro = null;
+        if ($soloComIds !== null) {
+            $filtro = [];
+            foreach ($soloComIds as $comId) {
+                $rid = (int) $comId;
+                if ($rid > 0) {
+                    $filtro[$rid] = true;
+                }
+            }
+            if ($filtro === []) {
+                return null;
+            }
+        }
+
         $duenoPorCom = [];
         foreach ($asignacionesPorPrecarga as $precargaId => $recepcionIds) {
             $dueno = is_numeric($precargaId) ? (int) $precargaId : trim((string) $precargaId);
@@ -279,6 +351,9 @@ final class ComprobanteProveedorReservaComLegajoSupport
             foreach ((array) $recepcionIds as $recepcionId) {
                 $rid = (int) $recepcionId;
                 if ($rid <= 0) {
+                    continue;
+                }
+                if ($filtro !== null && ! isset($filtro[$rid])) {
                     continue;
                 }
                 if (isset($duenoPorCom[$rid]) && $duenoPorCom[$rid] !== $dueno) {
