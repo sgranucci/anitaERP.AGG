@@ -258,6 +258,10 @@ class ComprobanteProveedorAsientoService
                     static fn ($vinculo) => $vinculo->recepcion_proveedores ?? null
                 )
             );
+        $exentoIntegraTotal = ComprobanteProveedorImporteComparacionComSupport::exentoDeConceptosIntegraTotal(
+            (float) ($comprobante->total ?? 0),
+            $comprobante->comprobante_proveedor_conceptos ?? [],
+        );
 
         foreach ($comprobante->comprobante_proveedor_conceptos as $linea) {
             $concepto = $linea->concepto_ivacompras;
@@ -268,6 +272,10 @@ class ComprobanteProveedorAsientoService
 
             $tipoConcepto = (string) ($concepto?->tipoconcepto ?? '');
             $codigoConcepto = (string) ($concepto?->codigo ?? '');
+            // «No gravado» que no está en el total: duplicado del IVA, no mercadería.
+            if (strtoupper($tipoConcepto) === 'E' && ! $exentoIntegraTotal) {
+                continue;
+            }
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
 
             // Mercadería (y II solo si la COM ya lo provisionó) cierra FAR.

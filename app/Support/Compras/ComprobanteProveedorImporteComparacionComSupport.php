@@ -20,6 +20,12 @@ final class ComprobanteProveedorImporteComparacionComSupport
     private const TOLERANCIA = 0.05;
 
     /**
+     * El total del comprobante y la suma de conceptos pueden diferir en centavos
+     * de redondeo al abrir alícuotas. Por encima de esto el exento es otra cosa.
+     */
+    private const TOLERANCIA_EXENTO_EN_TOTAL = 1.0;
+
+    /**
      * @param  iterable<object{concepto_ivacompra_id: int, monto: mixed, concepto_ivacompras?: object|null}>  $conceptos
      *
      * @return array{importe: float, tipo: string, etiqueta: string}
@@ -45,7 +51,9 @@ final class ComprobanteProveedorImporteComparacionComSupport
         }
 
         $gravado = 0.0;
+        $exento = 0.0;
         $impuestoInterno = 0.0;
+        $sumaSinExento = 0.0;
         foreach ($conceptos as $linea) {
             $concepto = $linea->concepto_ivacompras ?? null;
             $tipo = (string) ($concepto?->tipoconcepto ?? '');
@@ -53,12 +61,26 @@ final class ComprobanteProveedorImporteComparacionComSupport
             $monto = (float) ($linea->monto ?? 0);
             if (ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno($tipo, $codigo)) {
                 $impuestoInterno += $monto;
+                $sumaSinExento += $monto;
+            } elseif (strtoupper($tipo) === 'E') {
+                // No gravado / exento. Si no está en el total, es un duplicado del IVA.
+                $exento += $monto;
             } elseif (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)) {
                 $gravado += $monto;
+                $sumaSinExento += $monto;
+            } else {
+                $sumaSinExento += $monto;
             }
         }
 
+        if (self::exentoIntegraComprobante($total, $sumaSinExento, $exento)) {
+            $gravado += $exento;
+        }
+
         if ($gravado <= 0 && $subtotal > 0) {
+            $gravado = $subtotal;
+        } elseif ($gravado > 0 && $subtotal > 0 && abs($subtotal - $gravado) <= self::TOLERANCIA_EXENTO_EN_TOTAL) {
+            // El neto de la factura es el que se muestra y el que provisionó la COM.
             $gravado = $subtotal;
         }
 
@@ -80,6 +102,56 @@ final class ComprobanteProveedorImporteComparacionComSupport
                 ? 'neto + impuesto interno (letra A, COM con II)'
                 : 'neto gravado (letra A)',
         ];
+    }
+
+    /**
+     * El exento / no gravado entra al neto solo si el total del comprobante lo necesita.
+     *
+     * Si la suma sin esa línea ya cierra con el total y al sumarla se abre, el agente
+     * duplicó el IVA en «No gravado» (tipo E). No es mercadería y no se compara con la COM.
+     */
+    public static function exentoIntegraComprobante(float $total, float $sumaSinExento, float $sumaExento): bool
+    {
+        if ($sumaExento <= 0.005) {
+            return false;
+        }
+        if ($total <= 0) {
+            return true;
+        }
+
+        $tol = self::TOLERANCIA_EXENTO_EN_TOTAL;
+        $cierraSinExento = abs($sumaSinExento - $total) <= $tol;
+        $cierraConExento = abs($sumaSinExento + $sumaExento - $total) <= $tol;
+
+        if ($cierraSinExento && ! $cierraConExento) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  iterable<object{monto?: mixed, concepto_ivacompras?: object|null}>  $conceptos
+     */
+    public static function exentoDeConceptosIntegraTotal(float $total, iterable $conceptos): bool
+    {
+        $sumaSinExento = 0.0;
+        $exento = 0.0;
+        foreach ($conceptos as $linea) {
+            if ($linea === null) {
+                continue;
+            }
+            $concepto = $linea->concepto_ivacompras ?? null;
+            $tipo = (string) ($concepto?->tipoconcepto ?? '');
+            $monto = (float) ($linea->monto ?? 0);
+            if (strtoupper($tipo) === 'E') {
+                $exento += $monto;
+            } else {
+                $sumaSinExento += $monto;
+            }
+        }
+
+        return self::exentoIntegraComprobante($total, $sumaSinExento, $exento);
     }
 
     /**

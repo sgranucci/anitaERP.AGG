@@ -83,6 +83,53 @@ class ComprobanteProveedorImporteComparacionComSupportTest extends TestCase
         $this->assertSame('neto gravado (letra A)', $meta['etiqueta']);
     }
 
+    public function test_letra_a_no_suma_no_gravado_que_no_esta_en_el_total(): void
+    {
+        // FGA A 00004-00079313 (Aquarine, OC 223977): el «No gravado» repite el IVA.
+        // El neto de la factura y la provisión COM son el subtotal.
+        $conceptos = [
+            $this->linea('E', 70266.09, '1'),
+            $this->linea('I', 67305.80, '503'),
+            $this->linea('I', 2960.29, '504'),
+            $this->linea('B', 20921.82, '140'),
+            $this->linea('G', 320503.81, '50'),
+            $this->linea('G', 28193.24, '6'),
+        ];
+
+        $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
+            'A',
+            1,
+            439885.02,
+            348697.11,
+            $conceptos,
+        );
+
+        $this->assertSame(348697.11, $meta['importe']);
+        $this->assertSame('gravado', $meta['tipo']);
+        $this->assertFalse(
+            ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(348697.11, 348697.11, 5.0)
+        );
+    }
+
+    public function test_letra_a_el_exento_real_sigue_en_el_neto_si_el_total_lo_incluye(): void
+    {
+        $conceptos = [
+            $this->linea('G', 1000.00, '50'),
+            $this->linea('E', 200.00, '1'),
+            $this->linea('I', 210.00, '503'),
+        ];
+
+        $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
+            'A',
+            1,
+            1410.00,
+            1200.00,
+            $conceptos,
+        );
+
+        $this->assertSame(1200.00, $meta['importe']);
+    }
+
     public function test_letra_b_compara_el_total(): void
     {
         $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(

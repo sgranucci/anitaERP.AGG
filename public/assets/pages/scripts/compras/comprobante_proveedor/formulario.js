@@ -657,9 +657,28 @@ $(function () {
         return $('.cp-asiento-preview-target');
     }
 
+    function exentoIntegraTotal(totalDoc, sumaSinExento, sumaExento) {
+        if (sumaExento <= 0.005) {
+            return false;
+        }
+        if (!(totalDoc > 0)) {
+            return true;
+        }
+        var tol = 1;
+        var cierraSin = Math.abs(sumaSinExento - totalDoc) <= tol;
+        var cierraCon = Math.abs(sumaSinExento + sumaExento - totalDoc) <= tol;
+        if (cierraSin && !cierraCon) {
+            return false;
+        }
+        return true;
+    }
+
     function sincronizarTotalesDesdeConceptos() {
         var total = 0;
         var subtotal = 0;
+        var sumaSinExento = 0;
+        var exento = 0;
+        var netoSinExento = 0;
         var hayLineas = false;
         $('#tbody-concepto-table tr.item-concepto').each(function () {
             var $row = $(this);
@@ -670,9 +689,17 @@ $(function () {
             }
             hayLineas = true;
             total += monto;
-            var tip = String((conceptosMeta[conceptoId] || {}).tipoconcepto || '');
+            var tip = String((conceptosMeta[conceptoId] || {}).tipoconcepto || '').toUpperCase();
+            if (tip === 'E') {
+                exento += monto;
+            } else {
+                sumaSinExento += monto;
+            }
             if (TIPOS_NETO.indexOf(tip) >= 0) {
                 subtotal += monto;
+                if (tip !== 'E') {
+                    netoSinExento += monto;
+                }
             }
         });
         if (!hayLineas) {
@@ -705,6 +732,16 @@ $(function () {
         };
         total = Math.round(total * 100) / 100;
         subtotal = Math.round(subtotal * 100) / 100;
+        sumaSinExento = Math.round(sumaSinExento * 100) / 100;
+        exento = Math.round(exento * 100) / 100;
+        netoSinExento = Math.round(netoSinExento * 100) / 100;
+        var totalDoc = parseMonto($('#total').val() || '0');
+        if (exento > 0.005 && !exentoIntegraTotal(totalDoc, sumaSinExento, exento)) {
+            total = (totalDoc > 0 && Math.abs(totalDoc - sumaSinExento) <= 1) ? totalDoc : sumaSinExento;
+            if (netoSinExento > 0) {
+                subtotal = netoSinExento;
+            }
+        }
         if ($('#total').length) {
             $('#total').val(fmt(total));
         }
@@ -1255,7 +1292,9 @@ $(function () {
         var letra = String($('#letra').val() || '').toUpperCase().trim();
         var total = 0;
         var gravado = 0;
+        var exento = 0;
         var impuestoInterno = 0;
+        var sumaSinExento = 0;
         var hayLineas = false;
         $('#tbody-concepto-table tr.item-concepto').each(function () {
             var $row = $(this);
@@ -1271,8 +1310,14 @@ $(function () {
             var codigo = String(meta.codigo || '');
             if (esImpuestoInterno(tip, codigo)) {
                 impuestoInterno += monto;
+                sumaSinExento += monto;
+            } else if (tip === 'E') {
+                exento += monto;
             } else if (TIPOS_NETO.indexOf(tip) >= 0) {
                 gravado += monto;
+                sumaSinExento += monto;
+            } else {
+                sumaSinExento += monto;
             }
         });
         if (!hayLineas) {
@@ -1281,10 +1326,19 @@ $(function () {
         if (letra !== '' && letra !== 'A') {
             return Math.round(total * 100) / 100;
         }
+        var totalDoc = parseMonto($('#total').val() || '0');
+        if (exentoIntegraTotal(totalDoc, sumaSinExento, exento)) {
+            gravado += exento;
+        }
         if (gravado <= 0) {
             var subtotal = parseMonto($('#subtotal').val() || '0');
             if (subtotal > 0) {
                 gravado = subtotal;
+            }
+        } else {
+            var subtotalNeto = parseMonto($('#subtotal').val() || '0');
+            if (subtotalNeto > 0 && Math.abs(subtotalNeto - gravado) <= 1) {
+                gravado = subtotalNeto;
             }
         }
         if (gravado <= 0) {

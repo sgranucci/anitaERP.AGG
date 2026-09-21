@@ -6,6 +6,7 @@ use App\Models\Caja\Caja_Movimiento;
 use App\Models\Contable\Centrocosto;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Alcance del listado y acceso a ingresos/egresos de caja (módulo finanzas / tesorería).
@@ -13,8 +14,10 @@ use Illuminate\Support\Facades\Auth;
  * Las cobranzas POS (gastronomía, estacionamiento, etc.) viven en caja/cobranza y se
  * excluyen siempre de este ABM aunque compartan tabla caja_movimiento.
  *
- * Jerarquía (como requisiciones):
+ * Jerarquía:
  * - listar-todos-ingresos-egresos-caja: sin restricción de alcance
+ * - usuario-ingresos-egresos-rol: movimientos cargados por usuarios de su rol
+ *   (más chico que el centro de costo; en Administración el CC lo comparten muchos roles)
  * - usuario-ingresos-egresos-centrocosto: movimientos cargados por usuarios de su CC
  * - solo listar: únicamente los propios
  */
@@ -22,11 +25,18 @@ final class IngresoEgresoVisibilidadSupport
 {
     public const PERMISO_VER_TODOS = 'listar-todos-ingresos-egresos-caja';
 
+    public const PERMISO_ROL = 'usuario-ingresos-egresos-rol';
+
     public const PERMISO_CENTROCOSTO = 'usuario-ingresos-egresos-centrocosto';
 
     public static function puedeVerTodos(): bool
     {
         return can(self::PERMISO_VER_TODOS, false);
+    }
+
+    public static function puedeVerRol(): bool
+    {
+        return can(self::PERMISO_ROL, false);
     }
 
     public static function puedeVerCentrocosto(): bool
@@ -64,6 +74,28 @@ final class IngresoEgresoVisibilidadSupport
     {
         if (! self::tieneRestriccionPorAlcance()) {
             return null;
+        }
+
+        if (self::puedeVerRol()) {
+            $rolIds = self::rolIdsFiltroUsuario();
+            if ($rolIds !== []) {
+                $nombres = DB::table('rol')
+                    ->whereIn('id', $rolIds)
+                    ->orderBy('nombre')
+                    ->pluck('nombre')
+                    ->map(fn ($nombre) => trim((string) $nombre))
+                    ->filter(fn (string $nombre) => $nombre !== '')
+                    ->values()
+                    ->all();
+
+                if ($nombres !== []) {
+                    return 'Movimientos de los usuarios del rol '.implode(', ', $nombres);
+                }
+
+                return 'Movimientos de los usuarios de su rol';
+            }
+
+            return 'Solo movimientos cargados por usted';
         }
 
         if (self::puedeVerCentrocosto()) {
@@ -107,6 +139,29 @@ final class IngresoEgresoVisibilidadSupport
             return;
         }
 
+        if (self::puedeVerRol()) {
+            $rolIds = self::rolIdsFiltroUsuario();
+            if ($rolIds !== []) {
+                $usuarioId = (int) (Auth::id() ?? 0);
+                $query->where(function ($q) use ($alias, $rolIds, $usuarioId) {
+                    $q->whereIn("{$alias}.usuario_id", function ($sub) use ($rolIds) {
+                        $sub->from('usuario_rol')
+                            ->whereIn('rol_id', $rolIds)
+                            ->select('usuario_id');
+                    });
+                    if ($usuarioId > 0) {
+                        $q->orWhere("{$alias}.usuario_id", $usuarioId);
+                    }
+                });
+
+                return;
+            }
+
+            self::restringirAlUsuarioActual($query, $alias);
+
+            return;
+        }
+
         if (self::puedeVerCentrocosto()) {
             $centrocostoId = self::centrocostoFiltroUsuario();
             if ($centrocostoId !== null) {
@@ -120,6 +175,54 @@ final class IngresoEgresoVisibilidadSupport
             }
         }
 
+        self::restringirAlUsuarioActual($query, $alias);
+    }
+
+    /**
+     * Rol activo de la sesión. Si todavía no eligió uno, los roles de la sesión o de su ficha.
+     *
+     * @return list<int>
+     */
+    public static function rolIdsFiltroUsuario(): array
+    {
+        if (self::puedeVerTodos() || ! self::puedeVerRol()) {
+            return [];
+        }
+
+        $sesion = (int) (session('rol_id') ?? 0);
+        if ($sesion > 0) {
+            return [$sesion];
+        }
+
+        $ids = [];
+        foreach ((array) session('roles', []) as $rol) {
+            $id = (int) (is_array($rol) ? ($rol['id'] ?? 0) : 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        if ($ids !== []) {
+            return array_values(array_unique($ids));
+        }
+
+        $usuario = Auth::user();
+        if ($usuario && method_exists($usuario, 'roles')) {
+            foreach ($usuario->roles()->pluck('rol.id') as $id) {
+                $id = (int) $id;
+                if ($id > 0) {
+                    $ids[] = $id;
+                }
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * @param  Builder<\App\Models\Caja\Caja_Movimiento>  $query
+     */
+    private static function restringirAlUsuarioActual(Builder $query, string $alias): void
+    {
         $usuarioId = (int) (Auth::id() ?? 0);
         if ($usuarioId > 0) {
             $query->where("{$alias}.usuario_id", $usuarioId);

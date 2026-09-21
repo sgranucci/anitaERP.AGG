@@ -261,12 +261,10 @@ final class IngresoEgresoAnitaTesmovSupport
             $cotizacion = self::cotizacionTesmov($monedaId, (float) ($linea->cotizacion ?: 1));
 
             if ($esTra) {
-                $lado = self::ladoTedTehDesdeImporte($signed);
+                $pierna = self::piernaTesmovTra((float) $linea->monto, (float) $ctx['factor']);
+                $lado = $pierna['tipo'];
                 $nroTedTeh = self::reservarNumeroTedTeh($lado);
-                // Alta: |importe| (signo → TED/TEH). Anulación: importe negativo
-                // (factor -1). Si forzamos abs, el doble flip (líneas ya invertidas
-                // + factor) deja el mismo TED/TEH positivo y no compensa.
-                $importe = round($importeAbs * (float) $ctx['factor'], 2);
+                $importe = $pierna['importe'];
                 $descTesmov = self::descripcionTesmovTedTeh($ctx);
                 self::insertAuxpagCuentaCaja(
                     $ctx,
@@ -276,7 +274,7 @@ final class IngresoEgresoAnitaTesmovSupport
                     $cotizacion,
                     false,
                     $nroTedTeh,
-                    $lado === self::TIPO_TESMOV_DEBE ? self::AXP_SUCURSAL_DEBE : self::AXP_SUCURSAL_HABER
+                    $pierna['sucursal']
                 );
                 self::insertTesmovComprobante(
                     $ctx,
@@ -1822,6 +1820,35 @@ final class IngresoEgresoAnitaTesmovSupport
     public static function esTransferenciaTipo(string $tipo): bool
     {
         return strtoupper(substr(trim($tipo), 0, 3)) === IngresoEgresoTransferenciaSupport::ABREV_TRA;
+    }
+
+    /**
+     * Pierna TED/TEH de una transferencia (a-tesmov.c).
+     *
+     * Alta (factor +1): el signo de la línea elige el lado y tesmov queda en
+     * valor absoluto. Entrada (+) → TED; salida (−) → TEH.
+     *
+     * Anulación (factor −1): el compensatorio ya trae las líneas invertidas.
+     * El doble cambio de signo deja el mismo TED/TEH, y el importe sale
+     * negativo para compensar. Si se graba el absoluto, la anulación repite
+     * el signo del original (TRA 2306 TEH +13.000.000 y TRA 2307 TEH
+     * +13.000.000 en la misma cuenta).
+     *
+     * @return array{tipo: string, importe: float, sucursal: int}
+     */
+    public static function piernaTesmovTra(float $montoLinea, float $factor): array
+    {
+        $factor = $factor < 0 ? -1.0 : 1.0;
+        $signed = round($montoLinea * $factor, 2);
+        $tipo = self::ladoTedTehDesdeImporte($signed);
+
+        return [
+            'tipo' => $tipo,
+            'importe' => round(abs($signed) * $factor, 2),
+            'sucursal' => $tipo === self::TIPO_TESMOV_DEBE
+                ? self::AXP_SUCURSAL_DEBE
+                : self::AXP_SUCURSAL_HABER,
+        ];
     }
 
     private static function ladoTedTehDesdeImporte(float $signed): string

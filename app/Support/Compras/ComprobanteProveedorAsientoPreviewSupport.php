@@ -102,8 +102,12 @@ final class ComprobanteProveedorAsientoPreviewSupport
             return;
         }
 
+        $totalPrevio = round(abs((float) ($comprobante->total ?? 0)), 2);
         $total = 0.0;
         $subtotal = 0.0;
+        $sumaSinExento = 0.0;
+        $exento = 0.0;
+        $netoSinExento = 0.0;
         foreach ($conceptos as $linea) {
             $monto = abs((float) ($linea->monto ?? 0));
             if ($monto < 0.0001) {
@@ -112,6 +116,15 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $total += $monto;
             $tipo = (string) ($linea->concepto_ivacompras?->tipoconcepto ?? '');
             $codigo = (string) ($linea->concepto_ivacompras?->codigo ?? '');
+            if (strtoupper($tipo) === 'E') {
+                $exento += $monto;
+            } else {
+                $sumaSinExento += $monto;
+            }
+            if (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)
+                && strtoupper($tipo) !== 'E') {
+                $netoSinExento += $monto;
+            }
             if (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)) {
                 $subtotal += $monto;
             }
@@ -119,6 +132,22 @@ final class ComprobanteProveedorAsientoPreviewSupport
 
         $total = round($total, 2);
         if ($total <= 0) {
+            return;
+        }
+
+        $exentoIntegra = ComprobanteProveedorImporteComparacionComSupport::exentoIntegraComprobante(
+            $totalPrevio,
+            $sumaSinExento,
+            $exento,
+        );
+        if (! $exentoIntegra && $exento > 0.005) {
+            if ($totalPrevio <= 0 || abs($totalPrevio - $sumaSinExento) > 1.0) {
+                $comprobante->total = round($sumaSinExento, 2);
+            }
+            if ($netoSinExento > 0) {
+                $comprobante->subtotal = round($netoSinExento, 2);
+            }
+
             return;
         }
 
