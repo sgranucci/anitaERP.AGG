@@ -58,6 +58,7 @@
                             <th>Módulo</th>
                             <th class="text-right">Último nro</th>
                             <th>Anita</th>
+                            <th>Origen</th>
                             <th>Activo</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -78,6 +79,7 @@
                                     —
                                 @endif
                             </td>
+                            <td>{{ $data->numera_en_erp ? 'ERP' : 'Anita' }}</td>
                             <td>{{ $data->activo ? 'Sí' : 'No' }}</td>
                             <td>
                                 @if (can('editar-sistema-numerador', false))

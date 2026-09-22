@@ -35,6 +35,7 @@ use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCargaManualSupport;
+use App\Support\Configuracion\SistemaNumeradorSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Carbon\Carbon;
@@ -135,7 +136,7 @@ class PagoproveedorService
             $this->assertNumeradoresAnitaAntesDeGrabar($empresaId, $data, $estado, $tipoComprobante);
 
             $pago = DB::transaction(function () use ($data, $request, $empresaId, $estado, $tipoComprobante) {
-                $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId, $tipoComprobante);
+                $numero = $this->siguienteNumeroComprobante($empresaId, $tipoComprobante);
                 $sucursal = PagoproveedorAnitaNumeracionSupport::sucursalParaOp($empresaId);
 
                 $cbuElegido = ProveedorCbuPagoSupport::resolverDesdeRequest(
@@ -396,18 +397,28 @@ class PagoproveedorService
         string $estado,
         ?string $tipoComprobante = null
     ): void {
-        if ($estado === 'PRE CARGA' || ! PagoproveedorAnitaNumeracionSupport::estaHabilitada()) {
+        if ($estado === 'PRE CARGA') {
             return;
         }
 
-        PagoproveedorAnitaNumeracionSupport::assertNumeradorDisponible($empresaId, $tipoComprobante);
+        $tipo = PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante($tipoComprobante);
+        $opEnErp = SistemaNumeradorSupport::numeraDocumentoCajaEnErp($empresaId, $tipo);
+        if (! $opEnErp && ! PagoproveedorAnitaNumeracionSupport::estaHabilitada()) {
+            return;
+        }
+        if (! $opEnErp) {
+            PagoproveedorAnitaNumeracionSupport::assertNumeradorDisponible($empresaId, $tipoComprobante);
+        }
+        if (! PagoproveedorAnitaNumeracionSupport::estaHabilitada()) {
+            return;
+        }
 
         $tipos = $this->tiposRetencionConImporteDesdeRequest($data);
         if ($tipos === []) {
             $tipos = $this->tiposRetencionPrevistosPorCalculo($empresaId, $data);
         }
-        foreach ($tipos as $tipo) {
-            PagoproveedorAnitaRetencionNumeracionSupport::assertNumeradorDisponible($tipo, $empresaId);
+        foreach ($tipos as $tipoRetencion) {
+            PagoproveedorAnitaRetencionNumeracionSupport::assertNumeradorDisponible($tipoRetencion, $empresaId);
         }
     }
 
@@ -764,6 +775,25 @@ class PagoproveedorService
         }
 
         return $anticipo > 0.01;
+    }
+
+    /**
+     * OPP/OPA: si la empresa tiene el numerador en el ERP, el correlativo sale de ahí.
+     * Si no, sigue el numerador de Anita (pago.c).
+     */
+    private function siguienteNumeroComprobante(int $empresaId, string $tipoComprobante): int
+    {
+        $tipo = PagoproveedorAnitaNumeracionSupport::normalizarTipoComprobante($tipoComprobante);
+        if (SistemaNumeradorSupport::numeraDocumentoCajaEnErp($empresaId, $tipo)) {
+            $tipoId = (int) $this->tipotransaccionCajaIdParaComprobante($tipo, null);
+            if ($tipoId <= 0) {
+                throw new Exception('No hay tipo de transacción de caja '.$tipo.' para numerar la orden de pago en el ERP.');
+            }
+
+            return (int) SistemaNumeradorSupport::reservarSiguienteCaja($empresaId, $tipoId, 0);
+        }
+
+        return PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId, $tipo);
     }
 
     private function tipotransaccionCajaIdParaComprobante(string $tipoComprobante, mixed $tipoCajaIdRequest): ?int
@@ -1645,7 +1675,7 @@ class PagoproveedorService
                 $cotizacion,
                 $tipoComprobante
             ) {
-                $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId, $tipoComprobante);
+                $numero = $this->siguienteNumeroComprobante($empresaId, $tipoComprobante);
                 $sucursal = PagoproveedorAnitaNumeracionSupport::sucursalParaOp($empresaId);
 
                 // Misma TC que una OP común: fijar 1 dejaba las OP en ME al cambio 1.

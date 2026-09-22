@@ -1828,6 +1828,10 @@ Route::get('ventas/cliente-cuentacorriente-reporte', 'Ventas\ClienteCuentacorrie
 Route::get('ventas/listar-cliente-cuentacorriente-reporte/{formato}', 'Ventas\ClienteCuentacorrienteReporteController@exportar')->name('listar_cliente_cuentacorriente_reporte');
 Route::get('ventas/ventas-por-concepto', 'Ventas\VentasPorConceptoReporteController@index')->name('ventas_por_concepto');
 Route::get('ventas/listar-ventas-por-concepto/{formato}', 'Ventas\VentasPorConceptoReporteController@exportar')->name('listar_ventas_por_concepto');
+Route::get('ventas/comision-vendedor-detalle', 'Ventas\ComisionVendedorReporteController@indexDetalle')->name('comision_vendedor_detalle');
+Route::get('ventas/listar-comision-vendedor-detalle/{formato}', 'Ventas\ComisionVendedorReporteController@exportarDetalle')->name('listar_comision_vendedor_detalle');
+Route::get('ventas/comision-vendedor', 'Ventas\ComisionVendedorReporteController@indexResumen')->name('comision_vendedor');
+Route::get('ventas/listar-comision-vendedor/{formato}', 'Ventas\ComisionVendedorReporteController@exportarResumen')->name('listar_comision_vendedor');
 Route::get('ventas/cot-electronico', 'Ventas\CotElectronicoController@index')->name('cot_electronico');
 Route::post('ventas/cot-electronico/probar-conexion', 'Ventas\CotElectronicoController@probarConexion')->name('cot_electronico_probar_conexion');
 Route::post('ventas/cot-electronico/guia/guardar', 'Ventas\CotElectronicoController@guardarGuia')->name('cot_electronico_guia_guardar');

@@ -62,7 +62,7 @@ final class ComprobanteProveedorImporteComparacionComSupport
             if (ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno($tipo, $codigo)) {
                 $impuestoInterno += $monto;
                 $sumaSinExento += $monto;
-            } elseif (strtoupper($tipo) === 'E') {
+            } elseif (ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
                 // No gravado / exento. Si no está en el total, es un duplicado del IVA.
                 $exento += $monto;
             } elseif (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)) {
@@ -144,8 +144,9 @@ final class ComprobanteProveedorImporteComparacionComSupport
             }
             $concepto = $linea->concepto_ivacompras ?? null;
             $tipo = (string) ($concepto?->tipoconcepto ?? '');
+            $codigo = (string) ($concepto?->codigo ?? '');
             $monto = (float) ($linea->monto ?? 0);
-            if (strtoupper($tipo) === 'E') {
+            if (ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
                 $exento += $monto;
             } else {
                 $sumaSinExento += $monto;

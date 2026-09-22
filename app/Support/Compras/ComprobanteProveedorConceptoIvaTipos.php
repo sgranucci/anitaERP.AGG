@@ -31,6 +31,13 @@ final class ComprobanteProveedorConceptoIvaTipos
      */
     public const CODIGOS_DESCUENTO = ['80', '81'];
 
+    /**
+     * Exento / no gravado Anita (conccomp código 1).
+     * En el maestro a menudo viene tipoconcepto N (no E); el asiento y totales
+     * deben tratarlo igual que tipo E.
+     */
+    public const CODIGOS_EXENTO_NO_GRAVADO = ['1'];
+
     /** Percepción IVA (enum valor P). */
     public const PERCEPCION_IVA = 'P';
 
@@ -69,7 +76,21 @@ final class ComprobanteProveedorConceptoIvaTipos
     }
 
     /**
-     * Exento (E) y descuentos 80/81: admiten monto negativo en compras.
+     * Exento / no gravado: tipoconcepto E o código Anita 1 (aunque el maestro lo tenga como N).
+     */
+    public static function esExento(?string $tipoconcepto, string|int|null $codigo = null): bool
+    {
+        if (strtoupper((string) $tipoconcepto) === 'E') {
+            return true;
+        }
+
+        $cod = trim((string) $codigo);
+
+        return $cod !== '' && in_array($cod, self::CODIGOS_EXENTO_NO_GRAVADO, true);
+    }
+
+    /**
+     * Exento (E / código 1) y descuentos 80/81: admiten monto negativo en compras.
      * El asiento los suma al neto (con signo); IVA Digital conserva el signo cargado.
      */
     public static function permiteMontoNegativo(?string $tipoconcepto, string|int|null $codigo = null): bool
@@ -78,7 +99,7 @@ final class ComprobanteProveedorConceptoIvaTipos
             return true;
         }
 
-        return strtoupper((string) $tipoconcepto) === 'E';
+        return self::esExento($tipoconcepto, $codigo);
     }
 
     /**

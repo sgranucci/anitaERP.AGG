@@ -23,7 +23,7 @@ class SistemaNumeradorListadoExport implements FromView, ShouldAutoSize, WithCol
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA = 'J';
 
     private SistemaNumeradorRepositoryInterface $repository;
 
@@ -96,6 +96,7 @@ class SistemaNumeradorListadoExport implements FromView, ShouldAutoSize, WithCol
             'G' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
             'I' => NumberFormat::FORMAT_TEXT,
+            'J' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -137,6 +138,7 @@ class SistemaNumeradorListadoExport implements FromView, ShouldAutoSize, WithCol
             'G' => 12,
             'H' => 12,
             'I' => 10,
+            'J' => 12,
         ];
     }
 

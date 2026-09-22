@@ -274,9 +274,12 @@
                 _token: token
             })
                 .done(function (data, status) {
-                    if (data.error != '') {
+                    var errMsg = (typeof data === 'string')
+                        ? data
+                        : (data && data.error != null ? String(data.error) : '');
+                    if (errMsg !== '') {
                         ocultarOverlay();
-                        alert(data.error);
+                        alert(errMsg);
                         return;
                     }
                     var urlImpresion = extraerUrlImpresionSesion(data);

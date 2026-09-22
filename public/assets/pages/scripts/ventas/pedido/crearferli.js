@@ -1680,10 +1680,14 @@
 					_token: token
 				})
 				.done(function(data, status){
-					if (data.error != '') {
-						alert(data.error);
+					// data.error == '' es éxito; string suelto o error ausente no debe alertar "undefined"
+					var errMsg = (typeof data === 'string')
+						? data
+						: (data && data.error != null ? String(data.error) : '');
+					if (errMsg !== '') {
+						alert(errMsg);
 						// ERP ya emitió CAE: marcar ítem facturado para no reintentar AFIP
-						if (data.anita_ok === false && data.factura) {
+						if (data && data.anita_ok === false && data.factura) {
 							$("#facturarOrdenTrabajoModal").modal('hide');
 							marcaItemFacturado();
 						}

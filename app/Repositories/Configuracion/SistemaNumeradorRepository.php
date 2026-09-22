@@ -89,6 +89,7 @@ class SistemaNumeradorRepository implements SistemaNumeradorRepositoryInterface
         $data['modulo'] = strtolower(trim((string) ($data['modulo'] ?? 'caja')));
         $data['ultimo_numero'] = max(0, (int) ($data['ultimo_numero'] ?? 0));
         $data['activo'] = filter_var($data['activo'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $data['numera_en_erp'] = filter_var($data['numera_en_erp'] ?? false, FILTER_VALIDATE_BOOLEAN);
         foreach (['anita_sistema', 'anita_fuente', 'anita_clave', 'observacion'] as $campo) {
             if (array_key_exists($campo, $data)) {
                 $v = trim((string) ($data[$campo] ?? ''));

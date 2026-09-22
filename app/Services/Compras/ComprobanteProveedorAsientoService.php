@@ -281,7 +281,8 @@ class ComprobanteProveedorAsientoService
             }
 
             // «No gravado» que no está en el total: duplicado del IVA, no mercadería.
-            if (strtoupper($tipoConcepto) === 'E' && ! $exentoIntegraTotal) {
+            if (ComprobanteProveedorConceptoIvaTipos::esExento($tipoConcepto, $codigoConcepto)
+                && ! $exentoIntegraTotal) {
                 continue;
             }
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.

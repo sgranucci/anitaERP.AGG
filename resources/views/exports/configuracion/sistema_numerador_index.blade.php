@@ -2,13 +2,13 @@
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="9" style="height: 52px;">&#160;</td>
+				<td colspan="10" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="9"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de numeradores del sistema</h2></td>
+			<td colspan="10"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de numeradores del sistema</h2></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -21,6 +21,7 @@
 			<th>Último nro</th>
 			<th>Anita sist.</th>
 			<th>Clave Anita</th>
+			<th>Origen</th>
 			<th>Activo</th>
 		</tr>
 	</thead>
@@ -35,6 +36,7 @@
 				<td>{{ $data->ultimo_numero }}</td>
 				<td>{{ $data->anita_sistema }}</td>
 				<td>{{ $data->anita_clave }}</td>
+				<td>{{ $data->numera_en_erp ? 'ERP' : 'Anita' }}</td>
 				<td>{{ $data->activo ? 'Sí' : 'No' }}</td>
 			</tr>
 		@endforeach

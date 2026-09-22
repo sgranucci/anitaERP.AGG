@@ -520,47 +520,48 @@ class OrdentrabajoService
 
 	public function borraOrdenTrabajo($id)
 	{
-		$pedido_combinacion_id = 0;
-		$ordentrabajo_combinacion_talle = $this->ordentrabajo_combinacion_talleRepository
-												->findPorOrdenTrabajoId($id);
-		if ($ordentrabajo_combinacion_talle)
-		{
-			// Busca pedido_combinacion_talle para traer el item del pedido
-			$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository
-											->find($ordentrabajo_combinacion_talle[0]->pedido_combinacion_talle_id);
-
-			if ($pedido_combinacion_talle)										
-			{
-				// Lee pedido_combinacion
-				$pedido_combinacion = $this->pedido_combinacionRepository
-											->find($pedido_combinacion_talle->pedido_combinacion_id);
-
-				$pedido_combinacion_id = $pedido_combinacion->id;
-			}
+		// El listado AJAX manda el código visible; delete espera el id interno.
+		$ot = \App\Models\Ventas\Ordentrabajo::query()
+			->where('id', $id)
+			->orWhere('codigo', $id)
+			->first();
+		if (! $ot) {
+			return false;
 		}
-		// Recorre cada id de linea de pedido
-		if ($pedido_combinacion_id > 0)
-		{
-			DB::beginTransaction();
-			try 
-			{
-				$this->pedido_combinacionRepository
-						->updatePorOtId($pedido_combinacion_talle->pedido_combinacion_id);
-				//$this->ordentrabajo_combinacion_talleRepository->deleteporordentrabajo($id);
-				//$this->ordentrabajo_tareaRepository->deleteporordentrabajo($id, 0);
-				$this->ordentrabajoRepository->delete($id);
+		$id = (int) $ot->id;
 
-				// Borra stock
-				$stock = $this->articulo_movimientoService
-								->deletePorOrdentrabajoId($id);
-			
-				DB::commit();
-			} catch (\Exception $e) {
-				DB::rollback();
-				dd($e->getMessage());
-				return $e->getMessage();
+		DB::beginTransaction();
+		try {
+			// Libera el vínculo en pedido_combinacion (puede haber más de una línea).
+			$pedidosCombinacion = \App\Models\Ventas\Pedido_Combinacion::query()
+				->where('ot_id', $id)
+				->get(['id']);
+			foreach ($pedidosCombinacion as $pedidoCombinacion) {
+				$this->pedido_combinacionRepository->updatePorOtId($pedidoCombinacion->id);
 			}
+
+			// Con foreign_key_checks=0 el ON DELETE CASCADE no limpia hijas.
+			$this->ordentrabajo_combinacion_talleRepository->deleteporordentrabajo($id);
+			$this->ordentrabajo_tareaRepository->deleteporordentrabajo($id, 0);
+			\App\Support\Database\EloquentAuditDeleteSupport::each(
+				\App\Models\Produccion\MovimientoOrdentrabajo::query()->where('ordentrabajo_id', $id)
+			);
+
+			$this->ordentrabajoRepository->delete($id);
+			// Redundante si el observer ya limpió; cubre llamadas sin observer.
+			$this->articulo_movimientoService->deletePorOrdentrabajoId($id);
+
+			DB::commit();
+		} catch (\Exception $e) {
+			DB::rollback();
+			\Log::error('borraOrdenTrabajo falló', [
+				'ordentrabajo_id' => $id,
+				'mensaje' => $e->getMessage(),
+			]);
+
+			return false;
 		}
+
 		return true;
 	}
 

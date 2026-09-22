@@ -9,7 +9,8 @@ class OrdentrabajoObserver
 {
     public function deleting(Ordentrabajo $ordentrabajo): void
     {
-        if ($ordentrabajo->isForceDeleting()) {
+        // Ordentrabajo no usa SoftDeletes: isForceDeleting() no existe y abortaba el borrado.
+        if (! method_exists($ordentrabajo, 'isForceDeleting') || $ordentrabajo->isForceDeleting()) {
             ArticuloMovimientoEliminacionSupport::eliminarPorOrdentrabajoId((int) $ordentrabajo->id);
         }
     }

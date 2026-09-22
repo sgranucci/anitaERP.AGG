@@ -29,7 +29,17 @@
     <label for="ultimo_numero" class="col-lg-3 control-label text-right pr-2 requerido">&Uacute;ltimo n&uacute;mero</label>
     <div class="col-lg-4">
         <input type="number" name="ultimo_numero" id="ultimo_numero" class="form-control" value="{{ old('ultimo_numero', $data->ultimo_numero ?? 0) }}" required min="0" step="1"/>
-        <small class="form-text text-muted">El pr&oacute;ximo documento usar&aacute; este valor + 1 (salvo que Anita o el MAX ERP sea mayor).</small>
+        <small class="form-text text-muted">Con &laquo;Numerar en el ERP&raquo;, el pr&oacute;ximo documento es este valor + 1. Si no, tambi&eacute;n se toma el &uacute;ltimo de Anita y el m&aacute;ximo ya grabado de ese tipo.</small>
+    </div>
+</div>
+<div class="form-group row">
+    <label class="col-lg-3 control-label text-right pr-2">Numeraci&oacute;n</label>
+    <div class="col-lg-8">
+        <div class="custom-control custom-checkbox">
+            <input type="checkbox" class="custom-control-input" id="numera_en_erp" name="numera_en_erp" value="1" {{ old('numera_en_erp', $data->numera_en_erp ?? false) ? 'checked' : '' }}>
+            <label class="custom-control-label" for="numera_en_erp">Numerar en el ERP</label>
+        </div>
+        <small class="form-text text-muted">El correlativo lo asigna anitaERP para esta empresa. No consulta el numerador de Anita ni salta al n&uacute;mero m&aacute;s alto ya grabado. El comprobante se sigue replicando en Anita con ese n&uacute;mero.</small>
     </div>
 </div>
 <div class="form-group row">

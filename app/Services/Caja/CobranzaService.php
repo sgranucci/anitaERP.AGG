@@ -1824,6 +1824,9 @@ class CobranzaService
 	 * Si los medios superan lo aplicado (pago de más), deja un crédito en CC
 	 * (sin venta) para la próxima cobranza. totalcobranzas = aplicado − medios.
 	 *
+	 * El formulario repite el mismo saldo en cada solapa (comprobantes, cuentas,
+	 * cheques y retenciones). Un crédito por moneda: si llega repetido, se toma una vez.
+	 *
 	 * @param  array<string, mixed>  $data
 	 */
 	private function persistirAnticiposPagoDeMas(array $data, $cobranzaId): void
@@ -1837,18 +1840,26 @@ class CobranzaService
 			$monedaCobranzaIds = ($monedaCobranzaIds !== null && $monedaCobranzaIds !== '') ? [$monedaCobranzaIds] : [];
 		}
 
+		$excedentePorMoneda = [];
 		foreach ($totalCobranzas as $i => $saldoMoneda) {
 			$excedente = (float) $saldoMoneda;
 			if ($excedente > -0.009) {
 				continue;
 			}
 
+			$monedaId = (int) ($monedaCobranzaIds[$i] ?? ($data['moneda_id'] ?? 1));
+			if (! array_key_exists($monedaId, $excedentePorMoneda)) {
+				$excedentePorMoneda[$monedaId] = $excedente;
+			}
+		}
+
+		foreach ($excedentePorMoneda as $monedaId => $excedente) {
 			$this->cliente_cuentacorrienteRepository->create([
 				'fecha' => $data['fecha'],
 				'fechavencimiento' => $data['fecha'],
 				'cliente_id' => $data['cliente_id'],
 				'total' => $excedente,
-				'moneda_id' => $monedaCobranzaIds[$i] ?? ($data['moneda_id'] ?? 1),
+				'moneda_id' => $monedaId,
 				'cotizacion' => $data['cotizacion_cobranza'] ?? 1,
 				'cobranza_id' => $cobranzaId,
 				'empresa_id' => $data['empresa_id'],

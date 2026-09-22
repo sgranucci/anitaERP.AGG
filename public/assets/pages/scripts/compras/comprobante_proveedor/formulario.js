@@ -31,6 +31,16 @@ $(function () {
     var TIPOS_NETO = ['N', 'G', 'E'];
     var TIPO_IMPUESTO_INTERNO = 'T';
     var CODIGOS_IMPUESTO_INTERNO = ['5', '510'];
+    var CODIGOS_EXENTO_NO_GRAVADO = ['1'];
+    var CODIGOS_DESCUENTO = ['80', '81'];
+
+    function esExento(tipoconcepto, codigo) {
+        if (String(tipoconcepto || '').toUpperCase() === 'E') {
+            return true;
+        }
+        var cod = String(codigo == null ? '' : codigo).trim();
+        return cod !== '' && CODIGOS_EXENTO_NO_GRAVADO.indexOf(cod) >= 0;
+    }
 
     function parseMonto(val) {
         if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.parseDecimal === 'function') {
@@ -697,14 +707,15 @@ $(function () {
             hayLineas = true;
             total += monto;
             var tip = String((conceptosMeta[conceptoId] || {}).tipoconcepto || '').toUpperCase();
-            if (tip === 'E') {
+            var codigo = String((conceptosMeta[conceptoId] || {}).codigo || '');
+            if (esExento(tip, codigo)) {
                 exento += monto;
             } else {
                 sumaSinExento += monto;
             }
             if (TIPOS_NETO.indexOf(tip) >= 0) {
                 subtotal += monto;
-                if (tip !== 'E') {
+                if (!esExento(tip, codigo)) {
                     netoSinExento += monto;
                 }
             }
@@ -1438,7 +1449,7 @@ $(function () {
             if (esImpuestoInterno(tip, codigo)) {
                 impuestoInterno += monto;
                 sumaSinExento += monto;
-            } else if (tip === 'E') {
+            } else if (esExento(tip, codigo)) {
                 exento += monto;
             } else if (TIPOS_NETO.indexOf(tip) >= 0) {
                 gravado += monto;

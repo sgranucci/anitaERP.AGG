@@ -16,6 +16,7 @@ class SistemaNumerador extends Model
         'empresa_id',
         'modulo',
         'ultimo_numero',
+        'numera_en_erp',
         'anita_sistema',
         'anita_fuente',
         'anita_clave',
@@ -26,6 +27,7 @@ class SistemaNumerador extends Model
     protected $casts = [
         'empresa_id' => 'integer',
         'ultimo_numero' => 'integer',
+        'numera_en_erp' => 'boolean',
         'activo' => 'boolean',
     ];
 

@@ -14,22 +14,31 @@ $(function () {
 });
 
 function borraOt() {
-    var ordentrabajo_id = $(this).parents('tr').find('.codigo').html();
-    var ptr = this;
-    if (!confirm('Esta por borrar la OT ' + ordentrabajo_id)) {
+    var $tr = $(this).closest('tr');
+    var codigo = $.trim($tr.find('.codigo').text());
+    var ordentrabajo_id = $(this).data('id') || codigo;
+    if (!confirm('Esta por borrar la OT ' + codigo)) {
         return;
     }
     var token = $("meta[name='csrf-token']").attr("content") || $('#csrf_token').val();
     $.post("{{ url('ventas/ordenestrabajo/borrarOt') }}", {
         ordentrabajo_id: ordentrabajo_id,
         _token: token
-    }, function (data) {
-        if (data.mensaje != 'ok') {
-            alert(data.mensaje);
-        } else {
-            alert("Orden de trabajo Número: " + ordentrabajo_id + "\nBorrada: " + data.mensaje);
-            $(ptr).parents('tr').remove();
+    })
+    .done(function (data) {
+        if (!data || data.mensaje != 'ok') {
+            alert((data && data.mensaje) ? data.mensaje : 'No se pudo borrar la OT ' + codigo);
+            return;
         }
+        alert('Orden de trabajo Número: ' + codigo + '\nBorrada correctamente.');
+        $tr.remove();
+    })
+    .fail(function (xhr) {
+        var msg = 'No se pudo borrar la OT ' + codigo;
+        if (xhr.responseJSON && xhr.responseJSON.mensaje) {
+            msg = xhr.responseJSON.mensaje;
+        }
+        alert(msg);
     });
 }
 </script>
@@ -143,7 +152,7 @@ function borraOt() {
                                     </a>
                                 @endif
                                 @if (can('borrar-ordenes-de-trabajo', false))
-                                    <button type="button" class="btn-accion-tabla borraot tooltipsC" title="Eliminar este registro">
+                                    <button type="button" class="btn-accion-tabla borraot tooltipsC" title="Eliminar este registro" data-id="{{ $data->id }}">
                                         <i class="fa fa-times-circle text-danger"></i>
                                     </button>
                                 @endif

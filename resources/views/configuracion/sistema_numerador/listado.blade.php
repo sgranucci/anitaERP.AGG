@@ -68,7 +68,8 @@
 				<th style="width: 8%;">Módulo</th>
 				<th style="width: 10%;">Último nro</th>
 				<th style="width: 10%;">Anita sist.</th>
-				<th style="width: 10%;">Clave Anita</th>
+				<th style="width: 8%;">Clave Anita</th>
+				<th style="width: 8%;">Origen</th>
 				<th style="width: 6%;">Activo</th>
 				<th style="width: 6%;">Obs.</th>
 			</tr>
@@ -84,6 +85,7 @@
 					<td>{{ $data->ultimo_numero }}</td>
 					<td>{{ $data->anita_sistema }}</td>
 					<td>{{ $data->anita_clave }}</td>
+					<td>{{ $data->numera_en_erp ? 'ERP' : 'Anita' }}</td>
 					<td>{{ $data->activo ? 'Sí' : 'No' }}</td>
 					<td>{{ $data->observacion }}</td>
 				</tr>

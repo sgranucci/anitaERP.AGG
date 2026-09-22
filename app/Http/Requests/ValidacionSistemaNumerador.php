@@ -28,6 +28,7 @@ class ValidacionSistemaNumerador extends FormRequest
             'empresa_id' => 'required|integer|exists:empresa,id',
             'modulo' => 'required|max:40',
             'ultimo_numero' => 'required|integer|min:0',
+            'numera_en_erp' => 'nullable|boolean',
             'anita_sistema' => 'nullable|max:30',
             'anita_fuente' => 'nullable|max:20',
             'anita_clave' => 'nullable|max:40',
@@ -40,6 +41,7 @@ class ValidacionSistemaNumerador extends FormRequest
     {
         $this->merge([
             'activo' => $this->boolean('activo'),
+            'numera_en_erp' => $this->boolean('numera_en_erp'),
         ]);
     }
 }

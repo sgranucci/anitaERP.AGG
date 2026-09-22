@@ -3,6 +3,9 @@
 namespace App\Support\Configuracion;
 
 use App\ApiAnita;
+use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\Tipotransaccion_Caja;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\SistemaNumerador;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
@@ -60,7 +63,81 @@ final class SistemaNumeradorSupport
         $codigo = self::codigoCaja($abrev);
         $row = self::asegurarFilaCaja($codigo, $abrev, $empresaId, $tipotransaccionCajaId);
 
+        if ($row->numera_en_erp) {
+            return (string) self::reservarSoloErp($row->id);
+        }
+
         return (string) self::reservarSiguiente($row->id, $pisoErp);
+    }
+
+    /**
+     * La empresa numera este tipo de caja en el ERP (último + 1), sin Anita ni el máximo grabado.
+     */
+    public static function numeraDocumentoCajaEnErp(int $empresaId, string $abreviatura): bool
+    {
+        $abrev = strtoupper(substr(trim($abreviatura), 0, 3));
+        if ($empresaId <= 0 || $abrev === '') {
+            return false;
+        }
+
+        return SistemaNumerador::query()
+            ->where('codigo', self::codigoCaja($abrev))
+            ->where('empresa_id', $empresaId)
+            ->where('activo', true)
+            ->where('numera_en_erp', true)
+            ->exists();
+    }
+
+    /**
+     * Siguiente número = último del ERP + 1. No consulta Anita ni salta al máximo de comprobantes.
+     */
+    public static function reservarSoloErp(int $sistemaNumeradorId): int
+    {
+        return (int) DB::transaction(function () use ($sistemaNumeradorId): int {
+            /** @var SistemaNumerador $row */
+            $row = SistemaNumerador::query()
+                ->whereKey($sistemaNumeradorId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            if (! $row->activo) {
+                throw new \RuntimeException(
+                    'El numerador '.$row->codigo.' (empresa '.$row->empresa_id.') está inactivo.'
+                );
+            }
+
+            $abrev = '';
+            $codigo = (string) $row->codigo;
+            if (str_starts_with($codigo, 'caja.')) {
+                $abrev = strtoupper(substr($codigo, 5, 3));
+            }
+
+            $siguiente = (int) $row->ultimo_numero;
+            $saltos = 0;
+            do {
+                $siguiente++;
+                $saltos++;
+                if ($saltos > 50) {
+                    throw new \RuntimeException(
+                        'No hay número libre en el numerador '.$row->codigo.' (empresa '.$row->empresa_id.').'
+                    );
+                }
+            } while ($abrev !== '' && self::numeroCajaOcupado((int) $row->empresa_id, $abrev, $siguiente));
+
+            $row->ultimo_numero = $siguiente;
+            $row->save();
+
+            Log::info('sistema_numerador.reservado', [
+                'id' => $row->id,
+                'codigo' => $row->codigo,
+                'empresa_id' => $row->empresa_id,
+                'asignado' => $siguiente,
+                'sync_anita' => false,
+                'numera_en_erp' => true,
+            ]);
+
+            return $siguiente;
+        });
     }
 
     /**
@@ -221,6 +298,10 @@ final class SistemaNumeradorSupport
             ->where('empresa_id', $empresaId)
             ->first();
 
+        if ($existente !== null && $existente->numera_en_erp) {
+            return $existente;
+        }
+
         $clave = null;
         $sinPuenteDocumento = EntornoEmpresaSupport::esFerli()
             && strtoupper($abrev) === IngresoEgresoTransferenciaSupport::ABREV_TRA;
@@ -313,6 +394,32 @@ final class SistemaNumeradorSupport
         }
 
         return (int) (Empresa::query()->orderBy('id')->value('id') ?: 1);
+    }
+
+    private static function numeroCajaOcupado(int $empresaId, string $abreviatura, int $numero): bool
+    {
+        if ($numero <= 0) {
+            return true;
+        }
+
+        $nro = (string) $numero;
+        $tipoId = (int) Tipotransaccion_Caja::query()
+            ->where('abreviatura', $abreviatura)
+            ->value('id');
+
+        if ($tipoId > 0 && Caja_Movimiento::query()
+            ->where('empresa_id', $empresaId)
+            ->where('tipotransaccion_caja_id', $tipoId)
+            ->where('numerotransaccion', $nro)
+            ->exists()) {
+            return true;
+        }
+
+        return Pagoproveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->where('tipocomprobante', $abreviatura)
+            ->where('numerotransaccion', $nro)
+            ->exists();
     }
 
     private static function escSqlLiteral(string $valor): string

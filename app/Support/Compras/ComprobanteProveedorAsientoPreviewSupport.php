@@ -116,13 +116,13 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $total += $monto;
             $tipo = (string) ($linea->concepto_ivacompras?->tipoconcepto ?? '');
             $codigo = (string) ($linea->concepto_ivacompras?->codigo ?? '');
-            if (strtoupper($tipo) === 'E') {
+            if (ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
                 $exento += $monto;
             } else {
                 $sumaSinExento += $monto;
             }
             if (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)
-                && strtoupper($tipo) !== 'E') {
+                && ! ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
                 $netoSinExento += $monto;
             }
             if (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)) {

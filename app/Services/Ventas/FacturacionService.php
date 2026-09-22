@@ -2349,8 +2349,9 @@ class FacturacionService
 				}
 			}
 		}
-		else
-			return 'Error con punto de venta asignado';
+		else {
+			return ['error' => 'Error con punto de venta asignado. Verifique punto de venta y, si aplica, el de remito.'];
+		}
 	}
 
 	/**
@@ -3782,57 +3783,71 @@ class FacturacionService
 														$totalComprobante, 
 														$pedido->condicionventa_id);
 		$cuentacorriente = $this->aplicarVencimientosFacturaOt($cuentacorriente, $fechaFactura, $puntoventa);
-		// Lee punto de venta del remito
+		// Lee punto de venta del remito (solo obligatorio si el tipo emite remito y el PV no es manual)
 		$puntoventaremito = null;
-		if ($this->puntoventaremito_id >= 1)
+		if ($this->puntoventaremito_id >= 1) {
 			$puntoventaremito = $this->puntoventaRepository->find($this->puntoventaremito_id);
-		if ($puntoventa && ($puntoventa->modofacturacion != 'M' ? $puntoventaremito : true))
+		}
+
+		if (! $puntoventa) {
+			return ['error' => 'Debe elegir un punto de venta válido.'];
+		}
+
+		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
+		if (! $tipotransaccion) {
+			return ['error' => 'Tipo de transacción inexistente'];
+		}
+
+		$requierePvRemito = (string) ($puntoventa->modofacturacion ?? '') !== 'M'
+			&& $this->tipoEmiteRemito($tipotransaccion);
+		if ($requierePvRemito && ! $puntoventaremito) {
+			return ['error' => 'Debe elegir el punto de venta de remito para este punto de venta (CAEA/electrónico).'];
+		}
+
+		// Lee empresa
+		$empresa = Empresa::find($puntoventa->empresa_id);
+
+		// Pide numero de factura
+		$codigoTipoTransaccion = $tipotransaccion->codigo;
+		$this->nombreTipoTransaccion = $tipotransaccion->nombre;
+		$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
+		$emiteRemito = $this->tipoEmiteRemito($tipotransaccion);
+		// Numera factura con web service si es factura electronica
+		if ($puntoventa->modofacturacion != 'M')
 		{
-			// Lee empresa
-			$empresa = Empresa::find($puntoventa->empresa_id);
+			$modoClienteFce = $this->hidratarContextoFceCliente($data, $cliente, $totalComprobante);
+			$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
+																	$puntoventa, $totalComprobante);
 
-			// Lee el tipo de transaccion
-			$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
+			$numero = $this->facturaelectronicaService
+						->traeUltimoNumeroComprobante($empresa->nroinscripcion,
+														$codigoTipoTransaccion,
+														$puntoventa);
 
-			// Pide numero de factura
-			$codigoTipoTransaccion = $tipotransaccion->codigo;
-			$this->nombreTipoTransaccion = $tipotransaccion->nombre;
-			$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
-			$emiteRemito = $this->tipoEmiteRemito($tipotransaccion);
-			// Numera factura con web service si es factura electronica
-			if ($puntoventa->modofacturacion != 'M')
-			{
-				$modoClienteFce = $this->hidratarContextoFceCliente($data, $cliente, $totalComprobante);
-				$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
-																		$puntoventa, $totalComprobante);
+			//$numero = 74405;
+		}
+		else // Numera manualmente: max+1 por tipo, letra y punto de venta
+		{
+			$numero = $this->ultimoNumeroBaseModoManual(
+				$puntoventa,
+				$tipotransaccion,
+				$letra,
+				$cliente,
+				$totalComprobante,
+			);
+		}
 
-				$numero = $this->facturaelectronicaService
-							->traeUltimoNumeroComprobante($empresa->nroinscripcion,
-															$codigoTipoTransaccion,
-															$puntoventa);
+		if ($numero == -1) {
+			return ['error' => 'No se pudo obtener el número de comprobante para el punto de venta.'];
+		}
 
-				//$numero = 74405;
-			}
-			else // Numera manualmente: max+1 por tipo, letra y punto de venta
-			{
-				$numero = $this->ultimoNumeroBaseModoManual(
-					$puntoventa,
-					$tipotransaccion,
-					$letra,
-					$cliente,
-					$totalComprobante,
-				);
-			}
+		$numero++;
 
-			if ($numero != -1)
-			{
-				$numero++;
-
-				// Remito solo con FAC/FCE
-				if ($emiteRemito && $puntoventaremito && $puntoventa->modofacturacion != 'M')
-					$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito('REM','R',$puntoventaremito->codigo);
-				else	
-					$numeroremito = 0;
+		// Remito solo con FAC/FCE
+		if ($emiteRemito && $puntoventaremito && $puntoventa->modofacturacion != 'M')
+			$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito('REM','R',$puntoventaremito->codigo);
+		else	
+			$numeroremito = 0;
 
 				// Ferli: remito con el mismo número que la factura (política L8).
 				$numeroremito = $this->aplicarPoliticaNumeroRemitoFerli($emiteRemito, $numero, $numeroremito);
@@ -4360,10 +4375,6 @@ class FacturacionService
 					'pedido_id' => (int) ($pedido->id ?? 0),
 					'anita_ok' => true,
 				], $data);
-			}
-		}
-		else
-			return 'Error con punto de venta asignado';
 	}
 
 

@@ -1875,7 +1875,9 @@ var saldoFinalCobranza = 0;
 			}
 		});
 
-		// Muestra totales por moneda
+		// Muestra totales por moneda. El name se pone solo en la primera solapa:
+		// las otras (cuentas, cheques, retenciones) son copia visual. Si se
+		// envían las cuatro, el anticipo de pago de más se graba cuatro veces.
 		$(wrapper).empty();
 
 		idMoneda.forEach(function(moneda, indice, array) {
@@ -1883,13 +1885,19 @@ var saldoFinalCobranza = 0;
 
 			if (flMovimientoMoneda[moneda])
 			{
-				$(wrapper).append('<label class="col-lg-2 col-form-label">'+detalleLabel+'</label>');
-
-				$(wrapper).append('<input type="hidden" name="moneda_cobranza_ids[]" class="form-control col-lg-1" readonly value="'+moneda+'" />');
-				if (totalMoneda[moneda] == 0)
-					$(wrapper).append('<input type="text" name="totalcobranzas[]" class="form-control col-lg-1 totalcobranza" readonly value="" />');
-				else
-					$(wrapper).append('<input type="text" name="totalcobranzas[]" class="form-control col-lg-1 totalcobranza" readonly value="'+Number(totalMoneda[moneda] || 0).toFixed(2)+'" />');
+				var valorSaldo = (totalMoneda[moneda] == 0)
+					? ''
+					: Number(totalMoneda[moneda] || 0).toFixed(2);
+				wrapper.each(function (idx) {
+					var $solapa = $(this);
+					$solapa.append('<label class="col-lg-2 col-form-label">'+detalleLabel+'</label>');
+					if (idx === 0) {
+						$solapa.append('<input type="hidden" name="moneda_cobranza_ids[]" value="'+moneda+'" />');
+						$solapa.append('<input type="text" name="totalcobranzas[]" class="form-control col-lg-1 totalcobranza" readonly value="'+valorSaldo+'" />');
+					} else {
+						$solapa.append('<input type="text" class="form-control col-lg-1 totalcobranza" readonly value="'+valorSaldo+'" />');
+					}
+				});
 			}
 		});
 
@@ -1897,15 +1905,23 @@ var saldoFinalCobranza = 0;
 		if (monedaDefault != null && monedaDefault !== '')
 		{
 			var etiquetaMoneda = descripcionMoneda[monedaDefault] || '';
-			detalleLabel = 'Saldo final cobranza '+etiquetaMoneda;
-			$(wrapper).append('<label class="col-lg-2 col-form-label">'+detalleLabel+'</label>');
-			$(wrapper).append('<input type="text" name="saldofinalcobranzas[]" class="form-control col-lg-1 totalfinalcobranza" readonly value="'+saldoFinalCobranza.toFixed(2)+'" />');
-		
-			// Agrega total final en moneda de la cobranza
-			detalleLabel = 'Total final cobranza '+etiquetaMoneda;
-			$(wrapper).append('<label class="col-lg-2 col-form-label">'+detalleLabel+'</label>');
-			$(wrapper).append('<input type="hidden" name="monedafinalcobranza_id" class="form-control col-lg-1" readonly value="'+monedaDefault+'" />');
-			$(wrapper).append('<input type="text" name="totalfinalcobranza" class="form-control col-lg-1 totalfinalcobranza" readonly value="'+totalFinalCobranza.toFixed(2)+'" />');		
+			wrapper.each(function (idx) {
+				var $solapa = $(this);
+				$solapa.append('<label class="col-lg-2 col-form-label">Saldo final cobranza '+etiquetaMoneda+'</label>');
+				if (idx === 0) {
+					$solapa.append('<input type="text" name="saldofinalcobranzas[]" class="form-control col-lg-1 totalfinalcobranza" readonly value="'+saldoFinalCobranza.toFixed(2)+'" />');
+				} else {
+					$solapa.append('<input type="text" class="form-control col-lg-1 totalfinalcobranza" readonly value="'+saldoFinalCobranza.toFixed(2)+'" />');
+				}
+
+				$solapa.append('<label class="col-lg-2 col-form-label">Total final cobranza '+etiquetaMoneda+'</label>');
+				if (idx === 0) {
+					$solapa.append('<input type="hidden" name="monedafinalcobranza_id" value="'+monedaDefault+'" />');
+					$solapa.append('<input type="text" name="totalfinalcobranza" class="form-control col-lg-1 totalfinalcobranza" readonly value="'+totalFinalCobranza.toFixed(2)+'" />');
+				} else {
+					$solapa.append('<input type="text" class="form-control col-lg-1 totalfinalcobranza" readonly value="'+totalFinalCobranza.toFixed(2)+'" />');
+				}
+			});
 		}
 
 		pintarResumenLiquidacion();

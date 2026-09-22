@@ -432,9 +432,12 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
                 _token: token
             },
             function(data, status){
-                if (data.error != '') {
-                    alert(data.error);
-                    if (data.anita_ok === false && data.factura) {
+                var errMsg = (typeof data === 'string')
+                    ? data
+                    : (data && data.error != null ? String(data.error) : '');
+                if (errMsg !== '') {
+                    alert(errMsg);
+                    if (data && data.anita_ok === false && data.factura) {
                         $("#facturarOrdenTrabajoModal").modal('hide');
                         $(itemFacturar).parents("tr").find(".facturar").css( "color", "red");
                         completarTareas(ordentrabajo_id);
