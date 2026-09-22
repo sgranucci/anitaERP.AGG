@@ -51,7 +51,7 @@
     }
 
     $itemsOrigen = array_values(is_array($tblItem) ? $tblItem : []);
-    // Factura Ferli: agrupa por SKU+precio (sin talles). Remito usa el origen con medidas.
+    // Factura Ferli: agrupa por SKU+combinación/color+precio (sin talles). Remito usa medidas.
     $itemsFactura = $facturaPdfEsFerli
         ? RemitoPdfAgrupacionFerliSupport::agruparItemsFacturaPorSkuPrecio($itemsOrigen)
         : $itemsOrigen;

@@ -84,7 +84,9 @@ final class RemitoPdfAgrupacionFerliSupport
     }
 
     /**
-     * Factura PDF Ferli: una fila por SKU + precio (los talles no se listan).
+     * Factura PDF Ferli: una fila por SKU + combinación/color + precio (los talles no se listan).
+     * Sin combinación en la clave, colores distintos del mismo artículo al mismo precio
+     * se fusionaban en una sola línea (ej. NEGRO+VISON → NEGRO con la suma).
      *
      * @param  list<array<string, mixed>>  $items
      * @return list<array<string, mixed>>
@@ -94,11 +96,18 @@ final class RemitoPdfAgrupacionFerliSupport
         $grupos = [];
         foreach ($items as $item) {
             $sku = (string) ($item['sku'] ?? '');
+            $combinacionId = (int) ($item['combinacion_id'] ?? 0);
+            $colorKey = $combinacionId > 0
+                ? (string) $combinacionId
+                : mb_strtoupper(trim((string) ($item['color'] ?? $item['detalle'] ?? '')));
             $precio = round((float) ($item['precio'] ?? 0), 2);
             $precioSin = array_key_exists('preciosindescuento', $item)
                 ? round((float) $item['preciosindescuento'], 2)
                 : $precio;
-            $key = $sku.'|'.number_format($precio, 2, '.', '').'|'.number_format($precioSin, 2, '.', '');
+            $key = $sku.'|'
+                .$colorKey.'|'
+                .number_format($precio, 2, '.', '').'|'
+                .number_format($precioSin, 2, '.', '');
 
             if (! isset($grupos[$key])) {
                 $grupos[$key] = $item;
