@@ -8,8 +8,8 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
 use App\ApiAnita;
-use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Services\Caja\CobranzaAnularRevertirService;
 use Carbon\Carbon;
 use Auth;
 use DB;
@@ -84,26 +84,11 @@ class CobranzaRepository implements CobranzaRepositoryInterface
 
     public function delete($id)
     {
-		$cobranza = $this->model->findOrFail($id);
+		// Cascada completa (CC, aplicaciones, asiento, caja, Anita): no borrar solo cabecera.
+		app(CobranzaAnularRevertirService::class)
+			->anularFisicamente((int) $id);
 
-		// Elimina anita
-		if ($cobranza)
-		{
-			ChequeOperacionActivaSupport::anularPorCobranza((int) $cobranza->id);
-			$empresa = $this->empresaRepository->findPorId($cobranza->empresa_id);
-			if ($empresa)
-				$codigoEmpresa = $empresa->codigo;
-			else
-				$codigoEmpresa = 1;
-						
-			$anita = self::eliminarAnita($codigoEmpresa, $cobranza->tipotransaccion_caja_id,
-										$cobranza->numerotransaccion);
-
-
-        	$cobranza = $this->model->destroy($id);
-		}
-
-		return $cobranza;
+		return true;
     }
 
     public function find($id)

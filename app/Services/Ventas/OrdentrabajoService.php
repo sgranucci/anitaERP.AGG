@@ -1052,7 +1052,7 @@ class OrdentrabajoService
 
 	/**
 	 * Envía el archivo de etiqueta (ZPL/EPL) a la impresora del seteo del usuario.
-	 * Programa: ventas_repetiquetaot_{tipo} con fallback a ventas_repetiquetaot.
+	 * Programa: ventas_repetiquetaot_{tipo} (CUIT / CAJA / CAJA FOTO, cada uno con su seteo).
 	 *
 	 * @param  array<string, mixed>  $data
 	 * @return \Illuminate\Http\RedirectResponse
@@ -1073,8 +1073,13 @@ class OrdentrabajoService
 			$seteo = $this->seteoSalidaRepository->buscaSeteoEtiquetaOt($usuarioId, $tipoEtiqueta);
 
 			if (! $seteo || ! $seteo->salidas) {
+				$tipoMsg = $tipoEtiqueta !== null && $tipoEtiqueta !== ''
+					? ' (tipo «'.$tipoEtiqueta.'»)'
+					: '';
+
 				return redirect()->back()->with('errores', [
-					'No hay impresora configurada para etiquetas de OT. Use «Configura salida».',
+					'No hay impresora configurada para etiquetas de OT'.$tipoMsg.'. '
+					.'Elija el tipo de etiqueta y use «Configura salida».',
 				]);
 			}
 

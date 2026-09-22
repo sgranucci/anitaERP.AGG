@@ -14,6 +14,7 @@ use App\Repositories\Caja\ConceptogastoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\Retencion_CobranzaRepositoryInterface;
+use App\Services\Caja\CobranzaAnularRevertirService;
 use App\Services\Caja\CobranzaService;
 use App\Queries\Caja\CobranzaQueryInterface;
 use App\Exports\Caja\CobranzaExport;
@@ -21,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use Exception;
+use RuntimeException;
 use DB;
 
 class CobranzaController extends Controller
@@ -43,6 +45,7 @@ class CobranzaController extends Controller
     private $cobranza_estadoRepository;
     private $cobranza_archivoRepository;
     private $cobranza_comprobanteRepository;
+    private $cobranzaAnularRevertirService;
 
 	public function __construct(CobranzaRepositoryInterface $cobranzarepository,
                                 Retencion_CobranzaRepositoryInterface $retencion_cobranzaRepository,
@@ -54,7 +57,8 @@ class CobranzaController extends Controller
                                 CentroCostoRepositoryInterface $centrocostorepository,
                                 CobranzaQueryInterface $cobranzaquery,
                                 CobranzaService $cobranzaservice,
-                                CajaRepositoryInterface $cajarepository
+                                CajaRepositoryInterface $cajarepository,
+                                CobranzaAnularRevertirService $cobranzaAnularRevertirService,
                                 )
     {
         $this->cobranzaRepository = $cobranzarepository;
@@ -68,6 +72,7 @@ class CobranzaController extends Controller
         $this->cobranzaQuery = $cobranzaquery;
         $this->cobranzaService = $cobranzaservice;
         $this->cajaRepository = $cajarepository;
+        $this->cobranzaAnularRevertirService = $cobranzaAnularRevertirService;
     }
 
     /**
@@ -304,28 +309,37 @@ class CobranzaController extends Controller
     {
         can('borrar-cobranza');
 
-        if ($request->ajax()) 
-		{
-			$fl_borro = false;
-			if ($this->cobranzaRepository->delete($id))
-				$fl_borro = true;
-
-            if ($fl_borro) {
-                return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
+        try {
+            $this->cobranzaAnularRevertirService->anularFisicamente((int) $id);
+        } catch (RuntimeException $e) {
+            if ($request->ajax()) {
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'errores' => $e->getMessage(),
+                ], 422);
             }
-        } else {
-            if ($this->cobranzaRepository->delete($id))
-                $mensaje = 'Ingreso Egreso borrado con éxito';
-            else 	
-                $mensaje = 'error';
 
-            if ($origen == 'movimientocaja')
-                return redirect('caja/movimientocaja')->with('mensaje', $mensaje);
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json([
+                    'mensaje' => 'ng',
+                    'errores' => 'No se pudo anular la cobranza: '.$e->getMessage(),
+                ], 500);
+            }
 
-            return redirect('caja/cobranza')->with('mensaje', $mensaje);
+            return redirect()->back()->with('mensaje', 'No se pudo anular la cobranza: '.$e->getMessage());
         }
+
+        if ($request->ajax()) {
+            return response()->json(['mensaje' => 'ok']);
+        }
+
+        if ($origen == 'movimientocaja') {
+            return redirect('caja/movimientocaja')->with('mensaje', 'Cobranza anulada con éxito');
+        }
+
+        return redirect('caja/cobranza')->with('mensaje', 'Cobranza anulada con éxito');
     }
 
     public function generaAsientoContable(Request $request)
