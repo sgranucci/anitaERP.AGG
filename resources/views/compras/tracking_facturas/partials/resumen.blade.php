@@ -20,7 +20,9 @@
     $resueltos = $conPdf + $sinPdf;
     $coberturaPdf = $resueltos > 0 ? round(100 * $conPdf / $resueltos) : null;
 
-    $mostrarAlertas = $sinPdfExternos > 0 || $deuda90 > 0 || (int) ($r['sin_contabilizar'] ?? 0) > 0;
+    $mostrarAlertas = $sinPdfExternos > 0 || $deuda90 > 0
+        || (int) ($r['sin_contabilizar'] ?? 0) > 0
+        || (int) ($r['precargas_pendientes'] ?? 0) > 0;
 
     $urlTramo = function (string $tramo) use ($filtrosQuery) {
         $q = $filtrosQuery ?? [];
@@ -61,6 +63,13 @@
         <div class="tf-valor {{ (int) ($r['sin_contabilizar'] ?? 0) > 0 ? 'tf-malo' : 'tf-bueno' }}">
             {{ number_format((int) ($r['sin_contabilizar'] ?? 0), 0, ',', '.') }}
         </div>
+    </div>
+    <div class="tf-item">
+        <div class="tf-label">Precargas pendientes</div>
+        <div class="tf-valor {{ (int) ($r['precargas_pendientes'] ?? 0) > 0 ? 'tf-malo' : 'tf-bueno' }}">
+            {{ number_format((int) ($r['precargas_pendientes'] ?? 0), 0, ',', '.') }}
+        </div>
+        <div class="tf-nota">PDF sin cargar al ERP</div>
     </div>
     <div class="tf-item">
         <div class="tf-label">Cobertura de PDF</div>
@@ -121,6 +130,13 @@
                 <strong>{{ number_format($deuda90, 0, ',', '.') }}</strong>
                 · $ {{ number_format((float) ($r['saldo_90_mas'] ?? 0), 0, ',', '.') }}
                 con más de 90 días de atraso
+            </a>
+        @endif
+        @if ((int) ($r['precargas_pendientes'] ?? 0) > 0)
+            <a class="tf-alerta-item"
+               href="{{ route('tracking_facturas', array_merge($filtrosQuery ?? [], ['segmento' => 'precarga_pendiente', 'page' => null])) }}">
+                <i class="fa fa-inbox"></i>
+                <strong>{{ number_format((int) $r['precargas_pendientes'], 0, ',', '.') }}</strong> precargas pendientes de carga
             </a>
         @endif
         @if ((int) ($r['sin_contabilizar'] ?? 0) > 0)

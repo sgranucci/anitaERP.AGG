@@ -4,6 +4,9 @@
 
     $puedeVerPdf = can('ver-pdf-tracking-facturas', false);
     $puedeAbrirComprobante = can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false);
+    $puedeAbrirPrecarga = can('editar-precarga-comprobante-proveedor', false)
+        || can('listar-precarga-comprobante-proveedor', false)
+        || $puedeAbrirComprobante;
     $puedeVerOrdencompra = can('editar-ordencompra', false) || can('listar-ordencompra', false);
     $puedeVerPago = can('editar-pagoproveedor', false) || can('listar-pagoproveedor', false);
 @endphp
@@ -30,10 +33,17 @@
         @forelse ($datas as $data)
             @php
                 $fila = TrackingFacturaFila::de($data);
+                $esPrecarga = $fila->esPrecargaPendiente();
                 $estado = $fila->estadoContable();
                 $pago = $fila->estadoPago();
+                $urlPdf = $esPrecarga
+                    ? route('precarga_comprobante_proveedor_factura_pdf', ['id' => $fila->id()])
+                    : route('tracking_facturas_pdf', ['id' => $fila->id()]);
+                $urlEditar = $esPrecarga
+                    ? route('editar_precarga_comprobante_proveedor', ['id' => $fila->id()])
+                    : route('editar_comprobante_proveedor', ['id' => $fila->id()]);
             @endphp
-            <tr data-tf-id="{{ $fila->id() }}">
+            <tr data-tf-id="{{ $fila->id() }}" @if ($esPrecarga) data-tf-precarga="1" @endif>
                 <td>
                     <span class="tf-tag {{ $fila->familia() === TrackingComprobanteFamilia::FACTURA ? '' : 'tf-tag-neutro' }}"
                           title="{{ $fila->tipoNombre() }}">
@@ -75,7 +85,7 @@
                 </td>
                 <td>
                     @if ($fila->numeroOrdencompra() !== '')
-                        @if ($puedeVerOrdencompra)
+                        @if ($puedeVerOrdencompra && $fila->ordencompraId() > 0)
                             <a href="{{ route('editar_ordencompra', ['id' => $fila->ordencompraId()]) }}"
                                class="text-primary" target="_blank" rel="noopener noreferrer"
                                title="Abrir la orden de compra">
@@ -116,7 +126,7 @@
                                    data-ws-meta="Aplicado a {{ $fila->familia() }} {{ $fila->numero() }}"
                                    data-ws-edit="{{ route('editar_pagoproveedor', ['id' => $fila->ordenPagoId()]) }}"
                                    @if ($puedeVerPdf && $fila->puedeVerPdf())
-                                       data-ws-pdf="{{ route('tracking_facturas_pdf', ['id' => $fila->id()]) }}"
+                                       data-ws-pdf="{{ $urlPdf }}"
                                    @endif
                                    title="Ver la orden de pago en solapa (sin menú)">{{ $fila->ordenPago() }}</a>
                             @else
@@ -132,7 +142,7 @@
                                 </span>
                             @endif
                         </small>
-                    @elseif ($fila->estadoPago()['etiqueta'] !== 'Sin resolver' && $fila->estadoPago()['etiqueta'] !== 'Sin datos')
+                    @elseif (! $esPrecarga && $fila->estadoPago()['etiqueta'] !== 'Sin resolver' && $fila->estadoPago()['etiqueta'] !== 'Sin datos')
                         <small class="text-muted d-block" title="Estado de pago del índice; sin OP vinculada en el ERP">
                             Sin OP enlazada
                         </small>
@@ -151,7 +161,7 @@
                 </td>
                 <td class="text-nowrap">
                     @if ($puedeVerPdf && $fila->puedeVerPdf())
-                        <a href="{{ route('tracking_facturas_pdf', ['id' => $fila->id()]) }}"
+                        <a href="{{ $urlPdf }}"
                            class="tf-icon-btn"
                            target="_blank"
                            rel="noopener noreferrer"
@@ -164,16 +174,22 @@
                             <i class="fa fa-file-o"></i>
                         </span>
                     @endif
-                    @if ($puedeAbrirComprobante)
-                        <a href="{{ route('editar_comprobante_proveedor', ['id' => $fila->id()]) }}"
+                    @if ($esPrecarga && $puedeAbrirPrecarga)
+                        <a href="{{ $urlEditar }}"
+                           class="tf-icon-btn"
+                           title="Abrir precarga para cargar el comprobante">
+                            <i class="fa fa-upload"></i>
+                        </a>
+                    @elseif (! $esPrecarga && $puedeAbrirComprobante)
+                        <a href="{{ $urlEditar }}"
                            class="tf-icon-btn js-erp-workspace"
                            data-ws-modo="edit"
                            data-ws-id="{{ $fila->id() }}"
                            data-ws-titulo="Editar {{ $fila->familia() }} {{ $fila->numero() }}"
                            data-ws-meta="{{ $fila->proveedor() }}"
-                           data-ws-edit="{{ route('editar_comprobante_proveedor', ['id' => $fila->id()]) }}"
+                           data-ws-edit="{{ $urlEditar }}"
                            @if ($puedeVerPdf && $fila->puedeVerPdf())
-                               data-ws-pdf="{{ route('tracking_facturas_pdf', ['id' => $fila->id()]) }}"
+                               data-ws-pdf="{{ $urlPdf }}"
                            @endif
                            title="Editar en solapa (sin menú)">
                             <i class="fa fa-pencil"></i>
@@ -186,7 +202,7 @@
                 <td colspan="14">
                     <div class="tf-vacio">
                         <i class="fa fa-search"></i>
-                        <div class="tf-vacio-titulo">No hay comprobantes con estos criterios</div>
+                        <div class="tf-vacio-titulo">No hay resultados con estos criterios</div>
                         <div>Probá ampliar el rango de fechas o cambiar la búsqueda.</div>
                     </div>
                 </td>

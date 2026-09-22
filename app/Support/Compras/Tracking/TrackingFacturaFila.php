@@ -170,8 +170,18 @@ final class TrackingFacturaFila
         return TrackingIndiceSyncService::etiquetasOrigenFecha()[$origen] ?? '';
     }
 
+    public function esPrecargaPendiente(): bool
+    {
+        return (int) ($this->fila->es_precarga ?? 0) === 1
+            || (string) ($this->fila->estado ?? '') === 'PRECARGA_PENDIENTE';
+    }
+
     public function contabilizado(): bool
     {
+        if ($this->esPrecargaPendiente()) {
+            return false;
+        }
+
         // El estado CONTABILIZADO basta: el histórico importado desde Anita
         // llega marcado así aunque todavía falte el FK de asiento ERP. Exigir
         // asiento_id los mostraba mal como "Sin contabilizar" (p. ej. ya pagados).
@@ -188,6 +198,10 @@ final class TrackingFacturaFila
      */
     public function estadoContable(): array
     {
+        if ($this->esPrecargaPendiente()) {
+            return ['clase' => 'tf-pendiente', 'etiqueta' => 'Pendiente de carga'];
+        }
+
         if ($this->anulado()) {
             return ['clase' => 'tf-neutro', 'etiqueta' => 'Anulado'];
         }
@@ -204,6 +218,10 @@ final class TrackingFacturaFila
      */
     public function estadoPago(): array
     {
+        if ($this->esPrecargaPendiente()) {
+            return ['clase' => 'tf-neutro', 'etiqueta' => '—'];
+        }
+
         $estado = trim((string) ($this->fila->pago_estado ?? ''));
         if ($estado === '') {
             return ['clase' => 'tf-neutro', 'etiqueta' => 'Sin resolver'];

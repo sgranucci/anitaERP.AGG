@@ -10,6 +10,7 @@ use App\Support\Compras\Tracking\TrackingAntiguedadDeuda;
 use App\Support\Compras\Tracking\TrackingComprobanteFamilia;
 use App\Support\Compras\Tracking\TrackingFacturasListadoFiltros;
 use App\Support\Compras\Tracking\TrackingPagoEstado;
+use App\Support\Compras\Tracking\TrackingPrecargaPendienteSupport;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -37,6 +38,10 @@ class TrackingFacturasRepository
      */
     public function leeTrackingFacturas(array $filtros, bool $paginando = true)
     {
+        if (TrackingFacturasListadoFiltros::esSegmentoPrecargaPendiente($filtros)) {
+            return $this->leePrecargasPendientes($filtros, $paginando);
+        }
+
         $query = $this->consultaBase();
 
         TrackingFacturasListadoFiltros::aplicar($query, $filtros);
@@ -44,6 +49,40 @@ class TrackingFacturasRepository
         $this->ordenar($query, $filtros);
 
         return $paginando ? $query->paginate(self::REGISTROS_POR_PAGINA) : $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator<\App\Models\Compras\Precarga_Comprobante_Proveedor>|\Illuminate\Database\Eloquent\Collection<int, \App\Models\Compras\Precarga_Comprobante_Proveedor>
+     */
+    private function leePrecargasPendientes(array $filtros, bool $paginando = true)
+    {
+        $query = TrackingPrecargaPendienteSupport::consultaBase($this->empresaRepository);
+        TrackingPrecargaPendienteSupport::aplicarFiltros($query, $filtros);
+
+        $eje = (string) ($filtros['eje_fecha'] ?? TrackingFacturasListadoFiltros::EJE_FECHA_COMPROBANTE);
+        if ($eje === TrackingFacturasListadoFiltros::EJE_FECHA_CARGA) {
+            $query->orderByDesc(\Illuminate\Support\Facades\DB::raw('COALESCE(pcp.fecharecepcionemail, pcp.created_at)'));
+        } else {
+            $query->orderByDesc('pcp.fechafactura');
+        }
+        $query->orderByDesc('pcp.id');
+
+        return $paginando ? $query->paginate(self::REGISTROS_POR_PAGINA) : $query->get();
+    }
+
+    /**
+     * Cantidad de precargas pendientes de carga (misma regla que la bandeja CxP),
+     * con los filtros externos de empresa / fechas / proveedor / familia.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public function contarPrecargasPendientes(array $filtros): int
+    {
+        $query = TrackingPrecargaPendienteSupport::consultaBase($this->empresaRepository);
+        TrackingPrecargaPendienteSupport::aplicarFiltros($query, $filtros);
+
+        return (int) $query->reorder()->count('pcp.id');
     }
 
     /**
@@ -59,6 +98,40 @@ class TrackingFacturasRepository
      */
     public function resumen(array $filtros): array
     {
+        $precargasPendientes = $this->contarPrecargasPendientes($filtros);
+
+        if (TrackingFacturasListadoFiltros::esSegmentoPrecargaPendiente($filtros)) {
+            $query = TrackingPrecargaPendienteSupport::consultaBase($this->empresaRepository);
+            TrackingPrecargaPendienteSupport::aplicarFiltros($query, $filtros);
+            $fila = $query->reorder()
+                ->selectRaw('count(*) as registros')
+                ->selectRaw('coalesce(sum(pcp.total), 0) as total')
+                ->first();
+
+            return [
+                'registros' => (int) ($fila->registros ?? 0),
+                'total' => (float) ($fila->total ?? 0),
+                'saldo' => 0.0,
+                'con_pdf' => (int) ($fila->registros ?? 0),
+                'sin_pdf' => 0,
+                'sin_pdf_externos' => 0,
+                'sin_resolver' => 0,
+                'sin_contabilizar' => 0,
+                'precargas_pendientes' => $precargasPendientes,
+                'con_deuda' => 0,
+                'deuda_corriente' => 0,
+                'deuda_0_30' => 0,
+                'deuda_31_60' => 0,
+                'deuda_61_90' => 0,
+                'deuda_90_mas' => 0,
+                'saldo_corriente' => 0.0,
+                'saldo_0_30' => 0.0,
+                'saldo_31_60' => 0.0,
+                'saldo_61_90' => 0.0,
+                'saldo_90_mas' => 0.0,
+            ];
+        }
+
         $query = $this->consultaBase();
         TrackingFacturasListadoFiltros::aplicar($query, $filtros);
 
@@ -150,6 +223,7 @@ class TrackingFacturasRepository
             'sin_pdf_externos' => (int) ($fila->sin_pdf_externos ?? 0),
             'sin_resolver' => (int) ($fila->sin_resolver ?? 0),
             'sin_contabilizar' => (int) ($fila->sin_contabilizar ?? 0),
+            'precargas_pendientes' => $precargasPendientes,
             'con_deuda' => (int) ($fila->con_deuda ?? 0),
             'deuda_corriente' => (int) ($fila->deuda_corriente ?? 0),
             'deuda_0_30' => (int) ($fila->deuda_0_30 ?? 0),

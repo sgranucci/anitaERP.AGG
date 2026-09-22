@@ -46,10 +46,12 @@
                         <input type="hidden" name="{{ $clave }}" value="{{ $valor }}">
                     @endforeach
                     <input type="hidden" name="page" value="{{ $datas->currentPage() }}">
-                    <button type="submit" class="tf-ghost-btn"
-                            title="Vuelve a resolver PDF y saldo de los comprobantes de esta página consultando el Anita">
-                        <i class="fa fa-refresh"></i> Actualizar esta página
-                    </button>
+                    @if (! TrackingFacturasListadoFiltros::esSegmentoPrecargaPendiente($filtros ?? []))
+                        <button type="submit" class="tf-ghost-btn"
+                                title="Vuelve a resolver PDF y saldo de los comprobantes de esta página consultando el Anita">
+                            <i class="fa fa-refresh"></i> Actualizar esta página
+                        </button>
+                    @endif
                 </form>
             </div>
         </div>

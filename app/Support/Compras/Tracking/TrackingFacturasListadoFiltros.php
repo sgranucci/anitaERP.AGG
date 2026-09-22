@@ -40,6 +40,9 @@ class TrackingFacturasListadoFiltros
     /** Deuda con más de 90 días desde la fecha del comprobante. */
     public const SEGMENTO_DEUDA_ANTIGUA = 'deuda_antigua';
 
+    /** Precargas con PDF aún sin generar comprobante ERP (pendientes de CxP). */
+    public const SEGMENTO_PRECARGA_PENDIENTE = 'precarga_pendiente';
+
     // --- Ejes de fecha ---
 
     /** Fecha que trae el comprobante impreso. */
@@ -121,8 +124,13 @@ class TrackingFacturasListadoFiltros
             ],
             self::SEGMENTO_SIN_CONTABILIZAR => [
                 'label' => 'Sin contabilizar',
-                'ayuda' => 'Cargados pero sin asiento contable',
+                'ayuda' => 'Comprobantes en borrador u otro estado pendiente de contabilizar',
                 'icono' => 'fa-hourglass-half',
+            ],
+            self::SEGMENTO_PRECARGA_PENDIENTE => [
+                'label' => 'Precargas pendientes',
+                'ayuda' => 'PDF recibido, todavía no cargado como comprobante en el ERP',
+                'icono' => 'fa-inbox',
             ],
             self::SEGMENTO_CARGADOS_ENTRE_FECHAS => [
                 'label' => 'Cargados entre fechas',
@@ -145,6 +153,11 @@ class TrackingFacturasListadoFiltros
                 'icono' => 'fa-clock-o',
             ],
         ];
+    }
+
+    public static function esSegmentoPrecargaPendiente(array $filtros): bool
+    {
+        return (string) ($filtros['segmento'] ?? self::SEGMENTO_TODOS) === self::SEGMENTO_PRECARGA_PENDIENTE;
     }
 
     /**

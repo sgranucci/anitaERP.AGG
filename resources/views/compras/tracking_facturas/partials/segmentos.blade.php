@@ -29,6 +29,7 @@
 
     $conteos = [
         TrackingFacturasListadoFiltros::SEGMENTO_SIN_CONTABILIZAR => $resumen['sin_contabilizar'] ?? null,
+        TrackingFacturasListadoFiltros::SEGMENTO_PRECARGA_PENDIENTE => $resumen['precargas_pendientes'] ?? null,
         TrackingFacturasListadoFiltros::SEGMENTO_SIN_PAGAR => $resumen['con_deuda'] ?? null,
         TrackingFacturasListadoFiltros::SEGMENTO_SIN_PDF => $resumen['sin_pdf'] ?? null,
         TrackingFacturasListadoFiltros::SEGMENTO_DEUDA_ANTIGUA => $resumen['deuda_90_mas'] ?? null,
