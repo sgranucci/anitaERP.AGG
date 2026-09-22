@@ -926,7 +926,7 @@ class ChequeController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function guardar(Validacioncheque $request)
+    public function guardar(ValidacionCheque $request)
     {
 		$this->repository->create($request->all());
 
@@ -983,7 +983,7 @@ class ChequeController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function actualizar(Validacioncheque $request, $id)
+    public function actualizar(ValidacionCheque $request, $id)
     {
         can('actualizar-cheque');
 

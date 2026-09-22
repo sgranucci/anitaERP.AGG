@@ -68,7 +68,8 @@
                     </a>
             	</div>
             </div>
-            <form action="{{route('crear_repetiquetaot')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('crear_repetiquetaot')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off"
+                  data-mensaje-grabacion="Imprimiendo etiquetas…">
                 @csrf @method("post")
                 <div class="card-body">
                     @include('ventas.repetiquetaot.form')

@@ -726,16 +726,8 @@ class OrdentrabajoService
 			}
 		}
 		Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
-		$path = Storage::path($nombreEtiqueta);
 
-		// Busca configuracion
-		$usuario_id = Auth::user()->id;
-
-		system("lp -dzebra2 ".$path);
-
-		Storage::disk('local')->delete($nombreEtiqueta);
-
-        return redirect()->back()->with('status','Las ordenes seleccionadas no existen');
+		return $this->enviarEtiquetaOtPorSeteo($nombreEtiqueta, $data, trim($etiqueta) !== '');
     }
 
 	public function listaEtiquetaCaja(array $data)
@@ -848,13 +840,8 @@ class OrdentrabajoService
 			}
 		}
 		Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
-		$path = Storage::path($nombreEtiqueta);
 
-		system("lp -dzebra1 ".$path);
-
-		Storage::disk('local')->delete($nombreEtiqueta);
-
-        return redirect()->back()->with('status','Las ordenes seleccionadas no existen');
+		return $this->enviarEtiquetaOtPorSeteo($nombreEtiqueta, $data, trim($etiqueta) !== '');
     }
 
 	public function listaEtiquetaCajaZPL(array $data)
@@ -936,7 +923,7 @@ class OrdentrabajoService
         					$buff[] = "^FO40,30^FDART: ".$cod_art_red."^FS".chr(13).chr(10);
 							$buff[] = "^CF0,30".chr(13).chr(10);
         					$buff[] = "^FO40,85^FD".$combinacion->nombre."^FS".chr(13).chr(10);
-        					$buff[] = "^FO40,125^FDLinea: ".$linea->nombre."^FS".chr(13).chr(10);
+        					$buff[] = "^FO40,125^FDLinea: ".($linea->nombre ?? '')."^FS".chr(13).chr(10);
         					$buff[] = "^FO40,175^FDNRO.: ^FS".chr(13).chr(10);
 
         					$buff[] = "^FO15,240^GB700,3,3^FS".chr(13).chr(10);
@@ -963,13 +950,8 @@ class OrdentrabajoService
 			}
 		}
 		Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
-		$path = Storage::path($nombreEtiqueta);
 
-		system("lp -dzebra1 ".$path);
-
-		Storage::disk('local')->delete($nombreEtiqueta);
-
-        return redirect()->back()->with('status','Las ordenes seleccionadas no existen');
+		return $this->enviarEtiquetaOtPorSeteo($nombreEtiqueta, $data, trim($etiqueta) !== '');
     }
 
 	public function listaEtiquetaPruebaCajaZPL(array $data)
@@ -1064,17 +1046,75 @@ class OrdentrabajoService
 			$etiqueta .= "^XZ\n";
 		}
 		Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
-		$path = Storage::path($nombreEtiqueta);
-		$usuario_id = Auth::user()->id;
-        $seteosalida = $this->seteoSalidaRepository->buscaSeteo($usuario_id, SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT);
 
-		$comando = sprintf($seteosalida->salidas->comando, $path);
-		system($comando);
-
-		Storage::disk('local')->delete($nombreEtiqueta);
-
-        return redirect()->back()->with('status','El articulo seleccionado no existen');
+		return $this->enviarEtiquetaOtPorSeteo($nombreEtiqueta, $data, trim($etiqueta) !== '');
     }
+
+	/**
+	 * Envía el archivo de etiqueta (ZPL/EPL) a la impresora del seteo del usuario.
+	 * Programa: ventas_repetiquetaot_{tipo} con fallback a ventas_repetiquetaot.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return \Illuminate\Http\RedirectResponse
+	 */
+	private function enviarEtiquetaOtPorSeteo(string $nombreRelativo, array $data, bool $huboContenido)
+	{
+		$path = Storage::path($nombreRelativo);
+
+		try {
+			if (! $huboContenido) {
+				return redirect()->back()->with('errores', [
+					'No se generó contenido de etiqueta. Verifique el número de OT y el origen (ERP / Anita).',
+				]);
+			}
+
+			$usuarioId = (int) Auth::id();
+			$programa = SeteoSalidaProgramaSupport::codigoRepetiquetaOt(
+				isset($data['tipoetiqueta']) ? (string) $data['tipoetiqueta'] : null
+			);
+			$seteo = $this->seteoSalidaRepository->buscaSeteo($usuarioId, $programa);
+
+			if ((! $seteo || ! $seteo->salidas)
+				&& $programa !== SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT
+			) {
+				$seteo = $this->seteoSalidaRepository->buscaSeteo(
+					$usuarioId,
+					SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT
+				);
+			}
+
+			if (! $seteo || ! $seteo->salidas) {
+				return redirect()->back()->with('errores', [
+					'No hay impresora configurada para etiquetas de OT. Use «Configura salida».',
+				]);
+			}
+
+			$salida = $seteo->salidas;
+			if (! SalidaImpresionFallbackSupport::comandoImpresionValido($salida)) {
+				return redirect()->back()->with('errores', [
+					'La salida «'.$salida->nombre.'» debe incluir un %s (ruta del archivo). '
+					.'Ej.: '.base_path('bin/imprimir-etiqueta-zebra.sh').' "%s" 160.132.0.230',
+				]);
+			}
+
+			$exitCode = 0;
+			passthru(sprintf(trim((string) $salida->comando), $path), $exitCode);
+
+			if ($exitCode !== 0) {
+				return redirect()->back()->with('errores', [
+					'No se pudo enviar a la impresora «'.$salida->nombre.'». '
+					.'Verifique red (puerto 9100) y el comando de la salida.',
+				]);
+			}
+
+			return redirect()->back()->with(
+				'mensaje',
+				'Etiquetas enviadas a «'.$salida->nombre.'».'
+			);
+		} finally {
+			Storage::disk('local')->delete($nombreRelativo);
+		}
+	}
 
 	/**
 	 * Emisión OT vía DomPDF (impresora o descarga), sin IFPU/servidores externos.

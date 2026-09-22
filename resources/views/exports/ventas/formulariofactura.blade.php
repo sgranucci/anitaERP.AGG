@@ -10,6 +10,7 @@
 @endif
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Ventas\FacturaPdfHojaRemitoSupport;
     use App\Support\Ventas\FacturaPdfPaginacionSupport;
     use App\Support\Ventas\RemitoPdfAgrupacionFerliSupport;
 
@@ -89,8 +90,13 @@
         $facturaPdfEsFerli ? 'remito_ferli' : 'remito'
     );
     $mostrarHojaFactura = ! ($facturaPdfSoloHojaRemito ?? false);
-    $mostrarHojaRemito = (($facturaPdfEsElBierzo || $facturaPdfEsFerli) && ! ($facturaPdfOmitirHojaRemito ?? false))
-        || ($facturaPdfSoloHojaRemito ?? false);
+    $mostrarHojaRemito = FacturaPdfHojaRemitoSupport::mostrarParaVenta(
+        $venta,
+        (bool) ($facturaPdfOmitirHojaRemito ?? false),
+        (bool) ($facturaPdfSoloHojaRemito ?? false),
+        $facturaPdfEsElBierzo,
+        $facturaPdfEsFerli
+    );
     $valorAsegurado = \App\Support\Ventas\RemitoValorAseguradoSupport::desdeRemitoOItemsFactura(
         $venta->remitos?->remito_articulos,
         $itemsOrigen
