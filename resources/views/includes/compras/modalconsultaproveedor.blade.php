@@ -13,7 +13,9 @@
           <label for="consultaproveedor" class="col-form-label col-auto pr-2 mb-0">Buscar:</label>
           <div class="col">
             <input type="text" name="consultaproveedor" id="consultaproveedor" class="form-control form-control-sm" autofocus
-              placeholder="Código, nombre, domicilio…">
+              autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"
+              placeholder="Código, nombre, domicilio…"
+              role="searchbox" data-lpignore="true" data-1p-ignore="true">
           </div>
         </div>
         <div id="consultaproveedor-aviso" class="small text-muted mb-2 d-none"></div>
