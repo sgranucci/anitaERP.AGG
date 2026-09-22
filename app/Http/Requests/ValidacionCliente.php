@@ -8,6 +8,7 @@ use App\Rules\Ventas\RuleClienteDocumentoUnico;
 use App\Models\Ventas\Cliente;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
+use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
 
 class ValidacionCliente extends FormRequest
 {
@@ -98,6 +99,15 @@ class ValidacionCliente extends FormRequest
         $provinciaIibb = $this->input('provincia_iibb_id');
         if ($provinciaIibb === '' || $provinciaIibb === null || (int) $provinciaIibb <= 0) {
             $this->merge(['provincia_iibb_id' => null]);
+        }
+
+        $clienteId = $this->route('id') ? (int) $this->route('id') : null;
+        $cuentaId = ClienteCuentacontableDefaultSupport::idParaGrabadoAbm(
+            $clienteId,
+            $this->input('cuentacontable_id')
+        );
+        if ($cuentaId !== null) {
+            $this->merge(['cuentacontable_id' => $cuentaId]);
         }
     }
 }

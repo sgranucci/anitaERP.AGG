@@ -181,10 +181,12 @@
 
     function cotPagoODia(monedaDeuda, cotDeuda) {
         var modo = modoCot();
-        if (modo !== 'dia' && monedaPagoId() === Number(monedaDeuda)) {
+        // Cotización de la factura: siempre la cot de la fila (misma moneda o cruzada).
+        // Alineado a PagoproveedorLiquidacionSupport::cotizacionAplicadaDefault.
+        if (modo !== 'dia') {
             return cotNorm(cotDeuda);
         }
-        // Misma MN: para modo día usamos DOL de referencia (header / cot del día).
+        // Modo día: header / cot del día (MN→MN usa DOL de referencia).
         var midMe;
         if (esLocal(monedaDeuda) && esLocal(monedaPagoId())) {
             midMe = monedaRefMeId;

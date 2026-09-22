@@ -95,7 +95,11 @@ class OrdencompraLegajoBandejaService
             ->orderByDesc('ordencompra.id');
 
         app(EmpresaRepository::class)->aplicarFiltroEmpresasAsignadas($query, 'ordencompra.empresa_id');
-        OrdencompraSectorVisibilidadSupport::aplicarFiltro($query);
+        $atajoEarly = (string) ($filtros['atajo'] ?? '');
+        // Compras necesita ver legajos con FC retenidas aunque estén en CxP/Pagos.
+        if ($atajoEarly !== OrdencompraLegajoBandejaFiltros::ATAJO_PENDIENTE_ENTREGA) {
+            OrdencompraSectorVisibilidadSupport::aplicarFiltro($query);
+        }
         $this->aplicarFiltrosBusqueda($query, $filtros);
         $this->aplicarFiltrosDocumento($query, $filtros);
 
@@ -241,7 +245,12 @@ class OrdencompraLegajoBandejaService
             $comList = $coms[$id] ?? [];
             $tieneFactura = $facs !== [];
             $tieneCom = $comList !== [];
-            $exigeCom = OrdencompraEnvioCuentasAPagarGateSupport::exigeRecepcionCom($oc, $tieneCom);
+            $politicaCom = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($oc, $tieneCom);
+            $exigeCom = OrdencompraEnvioCuentasAPagarGateSupport::exigeRecepcionComSegunPoliticaYAnticipada(
+                $politicaCom,
+                (bool) ($politicaCom['es_anticipada'] ?? false),
+                $tieneCom
+            );
             $decision = $decisiones[$id] ?? null;
             $esGastro = OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc);
             $primeraFac = $facs[0] ?? null;
@@ -297,6 +306,13 @@ class OrdencompraLegajoBandejaService
             $comAsignadaOk = ! $exigeCom || $faltanComDocs === [];
             $tieneAlgunaFcCargada = $primeraCp !== null;
             $todasCargadas = $tieneAlgunaFcCargada && $pendientes === [];
+            $tienePendienteEntrega = false;
+            foreach ($facs as $facCheck) {
+                if (PrecargaComprobanteEstados::esPendienteEntrega($facCheck['estado_precarga'] ?? null)) {
+                    $tienePendienteEntrega = true;
+                    break;
+                }
+            }
 
             return [
                 'id' => $id,
@@ -315,10 +331,19 @@ class OrdencompraLegajoBandejaService
                 'tiene_com_asignada' => $comAsignadaOk,
                 'tiene_comprobante' => $todasCargadas,
                 'tiene_comprobante_parcial' => $tieneAlgunaFcCargada && ! $todasCargadas,
+                'tiene_pendiente_entrega' => $tienePendienteEntrega,
                 'tiene_pago' => $pago !== null,
                 'exige_com' => $exigeCom,
                 'paquete_ok' => $tieneFactura && (! $exigeCom || ($tieneCom && $comAsignadaOk)),
-                'es_anticipada' => ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc),
+                'paquete_etiqueta' => ComprobanteProveedorFlujoOcComFacSupport::etiquetaPaqueteOkBandeja(
+                    $politicaCom,
+                    $exigeCom
+                ),
+                'paquete_titulo' => ComprobanteProveedorFlujoOcComFacSupport::tituloPaqueteOkBandeja(
+                    $politicaCom,
+                    $exigeCom
+                ),
+                'es_anticipada' => (bool) ($politicaCom['es_anticipada'] ?? false),
                 'es_gastronomia' => $esGastro,
                 'nota_legajo' => $notaLegajo,
                 'tiene_nota' => $notaLegajo !== '',
@@ -456,6 +481,9 @@ class OrdencompraLegajoBandejaService
             if (! empty($fac['cargada_anita']) || PrecargaComprobanteEstados::esCargadaAnita($fac['estado_precarga'] ?? null)) {
                 continue;
             }
+            if (PrecargaComprobanteEstados::esPendienteEntrega($fac['estado_precarga'] ?? null)) {
+                continue;
+            }
             $etiqueta = trim((string) ($fac['etiqueta'] ?? $fac['numero'] ?? ''));
             $clave = $this->claveFacturaEtiqueta($etiqueta);
             if ($clave !== '' && isset($cargadas[$clave])) {
@@ -539,6 +567,9 @@ class OrdencompraLegajoBandejaService
                 continue;
             }
             if (! empty($fac['cargada_anita']) || PrecargaComprobanteEstados::esCargadaAnita($fac['estado_precarga'] ?? null)) {
+                continue;
+            }
+            if (PrecargaComprobanteEstados::esPendienteEntrega($fac['estado_precarga'] ?? null)) {
                 continue;
             }
             $etiqueta = trim((string) ($fac['etiqueta'] ?? $fac['numero'] ?? ''));
@@ -855,6 +886,13 @@ class OrdencompraLegajoBandejaService
 
             return;
         }
+        if ($atajo === OrdencompraLegajoBandejaFiltros::ATAJO_PENDIENTE_ENTREGA) {
+            $query->where(function ($q) {
+                $this->whereExistePrecargaPendienteEntrega($q, false);
+            });
+
+            return;
+        }
         if ($atajo === OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR) {
             // Al menos una precarga con PDF aún no cargada (OC anual: otras FC ya
             // contabilizadas no sacan el legajo de esta bandeja).
@@ -922,8 +960,12 @@ class OrdencompraLegajoBandejaService
                 ->where(function ($w) {
                     $w->whereNull('pcp.estado')
                         ->orWhereRaw(
-                            'UPPER(TRIM(pcp.estado)) NOT IN (?, ?)',
-                            ['ANULADA', PrecargaComprobanteEstados::CARGADA_ANITA]
+                            'UPPER(TRIM(pcp.estado)) NOT IN (?, ?, ?)',
+                            [
+                                'ANULADA',
+                                PrecargaComprobanteEstados::CARGADA_ANITA,
+                                PrecargaComprobanteEstados::PENDIENTE_ENTREGA,
+                            ]
                         );
                 })
                 ->whereNotExists(function ($cp) {
@@ -943,6 +985,25 @@ class OrdencompraLegajoBandejaService
                                 ->orWhereRaw('UPPER(TRIM(cp.estado)) != ?', ['ANULADA']);
                         });
                 });
+        });
+    }
+
+    /**
+     * Precarga retenida por mercadería pendiente de entrega.
+     *
+     * @param  Builder<\App\Models\Compras\Ordencompra>  $q
+     */
+    private function whereExistePrecargaPendienteEntrega(Builder $q, bool $not = false): void
+    {
+        $method = $not ? 'whereNotExists' : 'whereExists';
+        $q->{$method}(function ($e) {
+            $e->selectRaw('1')
+                ->from('precarga_comprobante_proveedor as pcp')
+                ->whereColumn('pcp.empresa_id', 'ordencompra.empresa_id')
+                ->whereColumn('pcp.numeroordencompra', 'ordencompra.numeroordencompra')
+                ->whereNotNull('pcp.rutaalmacenamiento')
+                ->where('pcp.rutaalmacenamiento', '!=', '')
+                ->whereRaw('UPPER(TRIM(pcp.estado)) = ?', [PrecargaComprobanteEstados::PENDIENTE_ENTREGA]);
         });
     }
 
@@ -1447,12 +1508,15 @@ class OrdencompraLegajoBandejaService
             $tipo = (string) ($fac['tipo'] ?? 'FC');
             $cargadaAnita = ! empty($fac['cargada_anita'])
                 || PrecargaComprobanteEstados::esCargadaAnita($fac['estado_precarga'] ?? null);
+            $pendienteEntrega = PrecargaComprobanteEstados::esPendienteEntrega($fac['estado_precarga'] ?? null);
             $out[] = [
                 'numero' => $numero,
                 'origen' => $origen,
                 'tipo' => $tipo,
                 'tipo_label' => OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
-                'estado' => $cargadaAnita ? 'en_anita' : 'pendiente',
+                'estado' => $cargadaAnita
+                    ? 'en_anita'
+                    : ($pendienteEntrega ? 'pendiente_entrega' : 'pendiente'),
                 'capa' => $capaOrigen === 'anita' ? 'anita' : 'precarga',
                 'url_pdf' => (string) ($fac['url_pdf'] ?? ''),
             ];

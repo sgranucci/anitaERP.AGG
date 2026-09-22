@@ -130,6 +130,52 @@ class ComprobanteProveedorImporteComparacionComSupportTest extends TestCase
         $this->assertSame(1200.00, $meta['importe']);
     }
 
+    public function test_exento_negativo_integra_al_neto_si_el_total_lo_exige(): void
+    {
+        $this->assertTrue(
+            ComprobanteProveedorImporteComparacionComSupport::exentoIntegraComprobante(
+                1089.0,
+                1189.0,
+                -100.0,
+            )
+        );
+
+        $conceptos = [
+            $this->linea('G', 1000.00, '50'),
+            $this->linea('E', -100.00, '81'),
+            $this->linea('I', 189.00, '503'),
+        ];
+
+        $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
+            'A',
+            1,
+            1089.00,
+            900.00,
+            $conceptos,
+        );
+
+        $this->assertEqualsWithDelta(900.0, $meta['importe'], 0.001);
+    }
+
+    public function test_descuento_gravado_80_resta_del_neto_comparable(): void
+    {
+        $conceptos = [
+            $this->linea('G', 1000.00, '50'),
+            $this->linea('G', -80.00, '80'),
+            $this->linea('I', 193.20, '503'),
+        ];
+
+        $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
+            'A',
+            1,
+            1113.20,
+            920.00,
+            $conceptos,
+        );
+
+        $this->assertEqualsWithDelta(920.0, $meta['importe'], 0.001);
+    }
+
     public function test_letra_b_compara_el_total(): void
     {
         $meta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(

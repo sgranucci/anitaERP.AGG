@@ -8,11 +8,12 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Comprobante;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
 use Carbon\Carbon;
 
 /**
- * Arma el plan de cuotas del comprobante desde la OC (comprobante a venir)
- * o, si ya se usó, repitiendo el plan de la factura anterior del mismo legajo.
+ * Arma el plan de cuotas del comprobante desde la OC (montos / forma de pago)
+ * y aplica vencimientos desde la condición de pago (F.Comp. + plazo en días).
  */
 class ComprobanteProveedorCondicionPagoDesdeOcService
 {
@@ -64,12 +65,18 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
         }
 
         if ($ocComprobante && ! $ocComprobante->ordencompra_comprobante_cuotas->isEmpty()) {
-            return $this->desdeCuotasOc(
-                $ocComprobante,
+            return $this->conVencimientosDesdeCondicion(
+                $this->desdeCuotasOc(
+                    $ocComprobante,
+                    $totalComprobante,
+                    $monedaFacturaId,
+                    $cotizacionFactura,
+                    vincularOcc: true,
+                ),
+                $fechaBase,
                 $totalComprobante,
                 $monedaFacturaId,
                 $cotizacionFactura,
-                vincularOcc: true,
             );
         }
 
@@ -83,7 +90,13 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
             $cotizacionFactura,
         );
         if ($desdeAnterior['cuotas'] !== []) {
-            return $desdeAnterior;
+            return $this->conVencimientosDesdeCondicion(
+                $desdeAnterior,
+                $fechaBase,
+                $totalComprobante,
+                $monedaFacturaId,
+                $cotizacionFactura,
+            );
         }
 
         // Último recurso: OCC del legajo aunque ya esté facturado (solo plantilla, sin re-vincular).
@@ -107,18 +120,86 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
                 $meta['condicionpago_id'] = $ocComprobante->condicionpago_id ?: $meta['condicionpago_id'];
             }
 
+            return $this->conVencimientosDesdeCondicion(
+                $meta,
+                $fechaBase,
+                $totalComprobante,
+                $monedaFacturaId,
+                $cotizacionFactura,
+            );
+        }
+
+        $condicionId = $vinculoExplicito
+            ? ($ocComprobante?->condicionpago_id ?: $ordencompra->condicionpago_id)
+            : $ordencompra->condicionpago_id;
+
+        return $this->conVencimientosDesdeCondicion(
+            [
+                'condicionpago_id' => $condicionId,
+                'ordencompra_comprobante_id' => $vinculoExplicito ? $ocComprobante?->id : null,
+                'cuotas' => [],
+                'cuotas_escaladas' => false,
+                'permite_edicion_cuotas' => true,
+            ],
+            $fechaBase,
+            $totalComprobante,
+            $monedaFacturaId,
+            $cotizacionFactura,
+        );
+    }
+
+    /**
+     * Aplica F.Comp. + plazo de la condición; si no hay cuotas, las arma desde la plantilla.
+     *
+     * @param  array{
+     *     condicionpago_id: int|null,
+     *     ordencompra_comprobante_id: int|null,
+     *     cuotas: list<array<string, mixed>>,
+     *     cuotas_escaladas: bool,
+     *     permite_edicion_cuotas: bool
+     * }  $meta
+     * @return array{
+     *     condicionpago_id: int|null,
+     *     ordencompra_comprobante_id: int|null,
+     *     cuotas: list<array<string, mixed>>,
+     *     cuotas_escaladas: bool,
+     *     permite_edicion_cuotas: bool
+     * }
+     */
+    public function conVencimientosDesdeCondicion(
+        array $meta,
+        string $fechaBase,
+        float $totalComprobante = 0.0,
+        ?int $monedaFacturaId = null,
+        ?float $cotizacionFactura = null,
+    ): array {
+        $condicionId = isset($meta['condicionpago_id']) ? (int) $meta['condicionpago_id'] : 0;
+        $condicionId = $condicionId > 0 ? $condicionId : null;
+        $cuotas = $meta['cuotas'] ?? [];
+
+        if ($cuotas === [] && $condicionId && abs($totalComprobante) >= 0.0001) {
+            $cuotas = ComprobanteProveedorVencimientoCondicionSupport::armarCuotasDesdeCondicion(
+                $condicionId,
+                $fechaBase,
+                $totalComprobante,
+                (int) ($monedaFacturaId ?: 1),
+                (float) ($cotizacionFactura ?? 1),
+            );
+            if ($cuotas !== []) {
+                $meta['cuotas'] = $cuotas;
+                $meta['cuotas_escaladas'] = false;
+            }
+
             return $meta;
         }
 
-        return [
-            'condicionpago_id' => $vinculoExplicito
-                ? ($ocComprobante?->condicionpago_id ?: $ordencompra->condicionpago_id)
-                : $ordencompra->condicionpago_id,
-            'ordencompra_comprobante_id' => $vinculoExplicito ? $ocComprobante?->id : null,
-            'cuotas' => [],
-            'cuotas_escaladas' => false,
-            'permite_edicion_cuotas' => true,
-        ];
+        $meta['cuotas'] = ComprobanteProveedorVencimientoCondicionSupport::aplicarACuotas(
+            $cuotas,
+            $condicionId,
+            $fechaBase,
+        );
+
+        return $meta;
     }
 
     /**
@@ -217,8 +298,8 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
     }
 
     /**
-     * Repite vencimientos / forma de pago / detalle de la última factura del legajo,
-     * reescalando montos al total de la nueva factura. No inventa desde condicionpago.
+     * Repite montos / forma de pago / detalle de la última factura del legajo,
+     * reescalando al total. Los vencimientos se recalculan luego desde la condición.
      *
      * @return array{
      *     condicionpago_id: int|null,

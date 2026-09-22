@@ -579,6 +579,9 @@ Bandeja de legajos
         if ($atajo !== $nuevo && $nuevo === OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR) {
             $extra['vista'] = OrdencompraLegajoBandejaFiltros::VISTA_CXP;
         }
+        if ($atajo !== $nuevo && $nuevo === OrdencompraLegajoBandejaFiltros::ATAJO_PENDIENTE_ENTREGA) {
+            $extra['vista'] = OrdencompraLegajoBandejaFiltros::VISTA_ESTADOS;
+        }
 
         return route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString(array_merge($filtros, $extra)));
     };
@@ -602,6 +605,7 @@ Bandeja de legajos
         OrdencompraLegajoBandejaFiltros::ATAJO_SIN_FACTURA => 'Sin factura',
         OrdencompraLegajoBandejaFiltros::ATAJO_SIN_COM => 'Sin COM',
         OrdencompraLegajoBandejaFiltros::ATAJO_COM_SIN_ASIGNAR => 'COM sin asignar',
+        OrdencompraLegajoBandejaFiltros::ATAJO_PENDIENTE_ENTREGA => 'Pendiente entrega',
         OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR => 'Listo para cargar',
         OrdencompraLegajoBandejaFiltros::ATAJO_FC_CARGADA => 'FC cargada',
         OrdencompraLegajoBandejaFiltros::ATAJO_CON_PAGO => 'Con orden de pago',
@@ -672,6 +676,30 @@ Bandeja de legajos
                     <button type="submit" class="btn btn-primary">Enviar a Cuentas a pagar</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="modalBandejaPendienteEntrega" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Facturas sin COM</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">
+                    Para enviar a Cuentas a pagar, cada factura que exige COM debe tener recepción asignada
+                    <strong>o</strong> quedar marcada como pendiente de entrega (mercadería que llega después).
+                    Las retenidas no se cargan en CxP y no bloquean el envío a Pagos del resto.
+                </p>
+                <div id="bandejaPendienteEntregaLista"></div>
+                <p class="small text-muted mb-0 mt-2" id="bandejaPendienteEntregaHint"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-outline-primary" id="btnBandejaAbrirAsignarCom">Asignar COM…</button>
+                <button type="button" class="btn btn-warning" id="btnBandejaMarcarPendienteEntrega">Marcar seleccionadas y continuar</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1098,7 +1126,7 @@ Bandeja de legajos
                                 </td>
                                 <td>
                                     @if (!empty($row['paquete_ok']))
-                                        <span class="badge badge-success">{{ !empty($row['exige_com']) || !array_key_exists('exige_com', $row) ? 'FC + COM' : 'FC (contrato sin COM)' }}</span>
+                                        <span class="badge badge-success" title="{{ $row['paquete_titulo'] ?? '' }}">{{ $row['paquete_etiqueta'] ?? ((!empty($row['exige_com']) || !array_key_exists('exige_com', $row)) ? 'FC + COM' : 'FC (contrato sin COM)') }}</span>
                                     @else
                                         @if (!empty($row['tiene_factura']))
                                             <span class="badge badge-secondary">FC</span>
@@ -1118,6 +1146,9 @@ Bandeja de legajos
                                     @elseif (!empty($row['tiene_comprobante_parcial']))
                                         <span class="badge badge-warning" title="Hay comprobantes en CxP, pero quedan documentos pendientes">parcial</span>
                                     @endif
+                                    @if (!empty($row['tiene_pendiente_entrega']))
+                                        <span class="badge badge-secondary" title="Hay facturas retenidas hasta que llegue la mercadería">pend. entrega</span>
+                                    @endif
                                     @if (!empty($row['tiene_pago']))
                                         <span class="badge badge-success" title="Orden de pago">{{ !empty($row['etiqueta_pago']) ? $row['etiqueta_pago'] : 'OP' }}</span>
                                     @endif
@@ -1135,8 +1166,16 @@ Bandeja de legajos
                                                 @if (!empty($facLeg['estado']))
                                                     @php
                                                         $estadoFac = (string) ($facLeg['estado'] ?? '');
-                                                        $badgeFac = $estadoFac === 'en_anita' ? 'badge-success' : 'badge-warning';
-                                                        $textoFac = $estadoFac === 'en_anita' ? 'en Anita' : 'pendiente';
+                                                        if ($estadoFac === 'en_anita') {
+                                                            $badgeFac = 'badge-success';
+                                                            $textoFac = 'en Anita';
+                                                        } elseif ($estadoFac === 'pendiente_entrega') {
+                                                            $badgeFac = 'badge-secondary';
+                                                            $textoFac = 'pend. entrega';
+                                                        } else {
+                                                            $badgeFac = 'badge-warning';
+                                                            $textoFac = 'pendiente';
+                                                        }
                                                     @endphp
                                                     <span class="badge {{ $badgeFac }}">
                                                         {{ $textoFac }}
@@ -1240,12 +1279,12 @@ Bandeja de legajos
                                             title="{{ !empty($row['tiene_nota']) ? ('Nota: '.$row['nota_legajo']) : 'Agregar nota al legajo' }}">
                                         <i class="fa fa-sticky-note{{ !empty($row['tiene_nota']) ? '' : '-o' }}"></i>
                                     </button>
-                                    @if (! $esSectorCxp && !empty($puede_asignar_com) && !empty($row['tiene_factura']) && !empty($row['tiene_com']))
+                                    @if (! $esSectorCxp && !empty($puede_asignar_com) && !empty($row['tiene_factura']) && (!empty($row['tiene_com']) || !empty($row['tiene_pendiente_entrega'])))
                                         <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-asignar-com"
                                                 data-url-asignar="{{ $row['url_asignar_com'] }}"
                                                 data-url-paquete="{{ $row['url_paquete'] }}"
                                                 data-numero="{{ $row['numero'] }}"
-                                                title="Asignar COM a la factura">
+                                                title="{{ !empty($row['tiene_pendiente_entrega']) && empty($row['tiene_com']) ? 'Gestionar facturas pendientes de entrega' : 'Asignar COM a la factura' }}">
                                             <i class="fa fa-link"></i>
                                         </button>
                                     @endif
@@ -1287,6 +1326,9 @@ Bandeja de legajos
                                         <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-enviar-cxp"
                                                 data-url="{{ $row['url_enviar_cxp'] }}"
                                                 data-ordencompra-id="{{ $row['id'] }}"
+                                                data-url-paquete="{{ $row['url_paquete'] }}"
+                                                data-url-asignar="{{ $row['url_asignar_com'] }}"
+                                                data-numero="{{ $row['numero'] }}"
                                                 title="{{ ((int) ($row['pendientes_carga'] ?? 0) > 0 && (int) ($row['sector_id'] ?? 0) > 0) ? 'Enviar FC/NC pendientes a Cuentas a pagar' : 'Enviar a Cuentas a pagar' }}">
                                             <i class="fa fa-share"></i>
                                         </button>

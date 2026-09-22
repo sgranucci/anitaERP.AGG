@@ -1005,7 +1005,7 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
         }
         if (! OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($oc)) {
-            return ['mensaje' => 'error', 'errores' => 'Solo se puede devolver a Compras un legajo que está en Cuentas a pagar.'];
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede devolver a Compras un legajo en Cuentas a pagar, o en Pagos si tiene facturas pendientes de entrega.'];
         }
         $obs = trim($observacion);
         if ($obs === '') {

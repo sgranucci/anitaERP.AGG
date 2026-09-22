@@ -97,6 +97,9 @@
         if (!exige) {
             return '<span class="badge badge-light border text-muted">no exige</span>';
         }
+        if (f && f.pendiente_entrega) {
+            return '<span class="badge badge-secondary" title="Mercadería pendiente de entrega">pend. entrega</span>';
+        }
         return '<span class="badge badge-warning">sin COM</span>';
     }
 
@@ -199,7 +202,9 @@
             var origen = f.origen_label || ((f.origen === 'anita') ? 'Scan Anita (manual, no IA)' : (f.estado || 'Precarga'));
             var estadoHtml = f.cargado_cxp
                 ? '<span class="badge badge-info">cargada</span>'
-                : '<span class="badge badge-warning">pendiente</span>';
+                : (f.pendiente_entrega
+                    ? '<span class="badge badge-secondary" title="Retenida hasta que llegue la mercadería">pend. entrega</span>'
+                    : '<span class="badge badge-warning">pendiente</span>');
             if (f.cargado_cxp_fuera_legajo) {
                 estadoHtml = '<span class="badge badge-danger" title="' + esc(f.cargado_cxp_detalle || '')
                     + '">cargada fuera de este legajo</span>';
@@ -446,7 +451,9 @@
         coms: [],
         facs: [],
         urlCorregirTipo: '',
-        tiposOpciones: []
+        tiposOpciones: [],
+        permiteAsignarCom: true,
+        mensajeBloqueaCom: ''
     };
 
     function badgeComDoc(fac) {
@@ -465,6 +472,9 @@
         }
         if (fac.com_sugerida && fac.com_sugerida.id) {
             return '<span class="badge bandeja-asig-badge-sug">sugerida</span>';
+        }
+        if (fac.pendiente_entrega) {
+            return '<span class="badge badge-secondary">pend. entrega</span>';
         }
         return '<span class="badge bandeja-asig-badge-sin">sin COM</span>';
     }
@@ -509,11 +519,27 @@
         if (fac && fac.cargado_cxp) {
             $head.append('<p class="text-success small mb-2 mb-md-1">Ya está cargado en CxP.</p>');
         }
+        if (fac && fac.pendiente_entrega) {
+            $head.append(
+                '<p class="text-muted small mb-2">' +
+                'Retenida por mercadería pendiente. Liberála para asignar COM y enviarla a CxP.' +
+                '</p>' +
+                '<button type="button" class="btn btn-sm btn-outline-warning mb-2 js-bandeja-liberar-pendiente-entrega" data-precarga-id="' +
+                esc(String(fac.id)) + '">Liberar pendiente de entrega</button>'
+            );
+        }
         var tipoFac = String((fac && fac.tipo) || 'FC').toUpperCase();
         var exige = !fac || (fac.exige_com !== false && tipoFac !== 'NC' && tipoFac !== 'ND');
         if (!exige) {
             var textoTipo = tipoFac === 'ND' ? 'nota de débito' : (tipoFac === 'NC' ? 'nota de crédito' : 'este tipo');
             $head.append('<p class="text-muted mb-1 small">Es ' + textoTipo + ': no exige COM.</p>');
+        }
+        if (asignarEstado.permiteAsignarCom === false && asignarEstado.mensajeBloqueaCom) {
+            $head.append(
+                '<div class="alert alert-warning py-2 small mb-2">' +
+                esc(asignarEstado.mensajeBloqueaCom) +
+                '</div>'
+            );
         }
         if (fac && (fac.subtotal != null || fac.total != null)) {
             var imp = '<div class="bandeja-asig-importes">';
@@ -549,9 +575,18 @@
                 && String(c.sugerida_para.id) !== String(activo)
                 ? c.sugerida_para.etiqueta
                 : '';
-            var bloqueada = !!(!checked && (ocupada || c.facturada_en_cxp));
+            var bloqueadaAnticipada = asignarEstado.permiteAsignarCom === false;
+            var bloqueada = !!(!checked && (ocupada || c.facturada_en_cxp)) || bloqueadaAnticipada;
             var orden = checked ? 0 : (esSugerida ? 1 : (bloqueada ? 3 : 2));
-            return { c: c, checked: checked, ocupada: ocupada, esSugerida: esSugerida, sugeridaOtra: sugeridaOtra, bloqueada: bloqueada, orden: orden };
+            return {
+                c: c,
+                checked: checked && !bloqueadaAnticipada,
+                ocupada: ocupada,
+                esSugerida: esSugerida && !bloqueadaAnticipada,
+                sugeridaOtra: sugeridaOtra,
+                bloqueada: bloqueada,
+                orden: orden
+            };
         });
         filas.sort(function (a, b) { return a.orden - b.orden; });
 
@@ -818,6 +853,8 @@
         asignarEstado.facs = facs;
         asignarEstado.coms = coms;
         asignarEstado.tiposOpciones = (paquete && paquete.tipos_opciones) || [];
+        asignarEstado.permiteAsignarCom = paquete ? paquete.permite_asignar_com !== false : true;
+        asignarEstado.mensajeBloqueaCom = (paquete && paquete.mensaje_bloquea_com_anticipada) || '';
         asignarEstado.mapa = {};
         // Incluir también asignaciones de facturas ya en CxP / no editables:
         // si no, esas COM aparecen libres y el guardado falla en servidor.
@@ -831,6 +868,10 @@
             var key = String(f.id);
             if (!Object.prototype.hasOwnProperty.call(asignarEstado.mapa, key)) {
                 asignarEstado.mapa[key] = idsRecepcionAsignadas(asignadas[key] || asignadas[f.id]);
+            }
+            // Anticipada 1ª factura: no pre-tildar COM (debe ir como anticipo).
+            if (!asignarEstado.permiteAsignarCom) {
+                return;
             }
             // Si todavía no hay asignación guardada, pre-tildar la sugerencia (número/neto).
             // El operador puede destildar antes de guardar.
@@ -855,6 +896,15 @@
                 }
             }
         });
+        // 1ª factura anticipada: limpiar tildes locales (la asignación incorrecta se rechaza al guardar).
+        if (!asignarEstado.permiteAsignarCom) {
+            facs.forEach(function (f) {
+                if (!esFacturaEditableAsignacion(f)) {
+                    return;
+                }
+                asignarEstado.mapa[String(f.id)] = [];
+            });
+        }
         var pendientes = facs.filter(function (f) { return !f.cargado_cxp; });
         var prefer = pendientes.find(function (f) {
             var tipo = String(f.tipo || 'FC').toUpperCase();
@@ -1009,6 +1059,9 @@
             var $form = $('#formBandejaEnviarCxp');
             var opts = { forzarPaquete: true, forzarCxp: true };
             var base = (typeof window.carpetaBase !== 'undefined' && window.carpetaBase) ? window.carpetaBase : '';
+            var urlPaquete = $btn.data('url-paquete') || '';
+            var urlAsignar = $btn.data('url-asignar') || '';
+            var numero = $btn.data('numero') || '';
 
             $form.attr('action', $btn.data('url'));
             $form.find('input[name=observacion]').val('');
@@ -1028,16 +1081,28 @@
             $.getJSON(base + '/compras/ordencompra/' + ocId + '/gate-cuentas-a-pagar?preflight=1')
                 .done(function (gate) {
                     if (!gate || !gate.ok) {
+                        var faltan = (gate && gate.faltan_com) || [];
+                        var retenibles = faltan.filter(function (d) { return d && d.puede_retener && d.precarga_id; });
+                        if (retenibles.length) {
+                            mostrarModalPendienteEntrega({
+                                ocId: ocId,
+                                numero: numero,
+                                urlPaquete: urlPaquete,
+                                urlAsignar: urlAsignar,
+                                faltan: faltan,
+                                gate: gate,
+                                $btnEnviar: $btn,
+                                opts: opts
+                            });
+                            return;
+                        }
                         var errs = (gate && gate.errores && gate.errores.length)
                             ? gate.errores.join('\n')
                             : 'El legajo no cumple los requisitos para enviar a Cuentas a pagar.';
                         alert(errs);
                         return;
                     }
-                    if (window.OcCambiarSectorLegajo) {
-                        window.OcCambiarSectorLegajo.setOrdencompraId($form, ocId, opts);
-                    }
-                    $('#modalBandejaEnviarCxp').modal('show');
+                    abrirModalEnviarCxp($form, ocId, opts);
                 })
                 .fail(function () {
                     alert('No se pudo validar el legajo antes del envío.');
@@ -1045,6 +1110,153 @@
                 .always(function () {
                     $btn.prop('disabled', false);
                 });
+        });
+
+        var pendienteEntregaEstado = {};
+
+        function abrirModalEnviarCxp($form, ocId, opts) {
+            if (window.OcCambiarSectorLegajo) {
+                window.OcCambiarSectorLegajo.setOrdencompraId($form, ocId, opts);
+            }
+            $('#modalBandejaEnviarCxp').modal('show');
+        }
+
+        function mostrarModalPendienteEntrega(ctx) {
+            pendienteEntregaEstado = ctx || {};
+            var $lista = $('#bandejaPendienteEntregaLista').empty();
+            var faltan = ctx.faltan || [];
+            var retenibles = 0;
+            faltan.forEach(function (d) {
+                var id = d.precarga_id ? Number(d.precarga_id) : 0;
+                var puede = !!(d.puede_retener && id > 0);
+                if (puede) {
+                    retenibles += 1;
+                }
+                var $row = $('<div class="custom-control custom-checkbox mb-1"></div>');
+                var cid = 'pe_fac_' + (id || ('a' + String(d.anita_id || Math.random()).replace(/\W/g, '')));
+                $row.append(
+                    '<input type="checkbox" class="custom-control-input js-bandeja-pe-check" id="' + cid + '"' +
+                    ' data-precarga-id="' + esc(String(id)) + '"' +
+                    (puede ? ' checked' : ' disabled') + '>' +
+                    '<label class="custom-control-label" for="' + cid + '">' +
+                    esc(d.etiqueta || ('#' + id)) +
+                    (puede ? '' : ' <span class="text-muted">(sin precarga: asigná COM o materializá el PDF)</span>') +
+                    '</label>'
+                );
+                $lista.append($row);
+            });
+            $('#bandejaPendienteEntregaHint').text(
+                retenibles
+                    ? 'Marcá las que aún no tienen mercadería y continuá. El resto debe tener COM asignada.'
+                    : 'Ninguna se puede retener automáticamente. Asigná COM a las facturas listadas.'
+            );
+            $('#btnBandejaMarcarPendienteEntrega').prop('disabled', retenibles === 0);
+            $('#modalBandejaPendienteEntrega .modal-title').text('Facturas sin COM — OC ' + (ctx.numero || ''));
+            $('#modalBandejaPendienteEntrega').modal('show');
+        }
+
+        $('#btnBandejaAbrirAsignarCom').on('click', function () {
+            var ctx = pendienteEntregaEstado;
+            $('#modalBandejaPendienteEntrega').modal('hide');
+            if (!ctx.urlAsignar && !ctx.urlPaquete) {
+                alert('Abrí Asignar COM desde la fila del legajo.');
+                return;
+            }
+            var $fake = $('<button type="button" class="js-bandeja-asignar-com"></button>');
+            $fake.attr('data-url-asignar', ctx.urlAsignar || String(ctx.urlPaquete).replace(/\/paquete\/?(\?.*)?$/, '/asignar-com'));
+            $fake.attr('data-url-paquete', ctx.urlPaquete || '');
+            $fake.attr('data-numero', ctx.numero || '');
+            $fake.trigger('click');
+        });
+
+        $('#btnBandejaMarcarPendienteEntrega').on('click', function () {
+            var ctx = pendienteEntregaEstado;
+            var ids = [];
+            $('#bandejaPendienteEntregaLista .js-bandeja-pe-check:checked').each(function () {
+                var id = parseInt($(this).data('precarga-id'), 10) || 0;
+                if (id > 0) {
+                    ids.push(id);
+                }
+            });
+            if (!ids.length) {
+                alert('Seleccioná al menos una factura para marcar como pendiente de entrega.');
+                return;
+            }
+            var url = (ctx.urlPaquete || '').replace(/\/paquete\/?(\?.*)?$/, '/marcar-pendiente-entrega');
+            if (!url) {
+                alert('No se pudo armar la URL de retención.');
+                return;
+            }
+            var $btn = $(this).prop('disabled', true);
+            $.ajax({
+                url: url,
+                method: 'POST',
+                data: { precarga_ids: ids },
+                headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' }
+            }).done(function (resp) {
+                $('#modalBandejaPendienteEntrega').modal('hide');
+                var gate = resp && resp.gate;
+                if (gate && gate.ok) {
+                    var $form = $('#formBandejaEnviarCxp');
+                    abrirModalEnviarCxp($form, ctx.ocId, ctx.opts || { forzarPaquete: true, forzarCxp: true });
+                    return;
+                }
+                var faltan = (gate && gate.faltan_com) || [];
+                if (faltan.length) {
+                    alert((gate.errores && gate.errores.join('\n')) || 'Todavía faltan COM. Asigná las que no retuviste.');
+                    mostrarModalPendienteEntrega($.extend({}, ctx, { faltan: faltan, gate: gate }));
+                    return;
+                }
+                alert((resp && resp.mensaje) || 'Facturas retenidas.');
+            }).fail(function (xhr) {
+                var msg = 'No se pudo marcar como pendiente de entrega.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                } else if (xhr.responseJSON && xhr.responseJSON.errors) {
+                    msg = $.map(xhr.responseJSON.errors, function (v) {
+                        return $.isArray(v) ? v.join(' ') : String(v);
+                    }).join(' ');
+                }
+                alert(msg);
+            }).always(function () {
+                $btn.prop('disabled', false);
+            });
+        });
+
+        $(document).on('click', '.js-bandeja-liberar-pendiente-entrega', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var precargaId = parseInt($(this).data('precarga-id'), 10) || 0;
+            if (!precargaId || !asignarEstado.urlPaquete) {
+                return;
+            }
+            var url = String(asignarEstado.urlPaquete).replace(/\/paquete\/?(\?.*)?$/, '/liberar-pendiente-entrega');
+            var $btn = $(this).prop('disabled', true);
+            $.ajax({
+                url: url,
+                method: 'POST',
+                data: { precarga_ids: [precargaId] },
+                headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json' }
+            }).done(function (resp) {
+                if (resp && resp.paquete) {
+                    renderAsignar(resp.paquete);
+                }
+                if (resp && resp.mensaje) {
+                    alert(resp.mensaje);
+                }
+            }).fail(function (xhr) {
+                var msg = 'No se pudo liberar la factura.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                } else if (xhr.responseJSON && xhr.responseJSON.errors) {
+                    msg = $.map(xhr.responseJSON.errors, function (v) {
+                        return $.isArray(v) ? v.join(' ') : String(v);
+                    }).join(' ');
+                }
+                alert(msg);
+            }).always(function () {
+                $btn.prop('disabled', false);
+            });
         });
 
         $('.js-bandeja-historia').on('click', function () {

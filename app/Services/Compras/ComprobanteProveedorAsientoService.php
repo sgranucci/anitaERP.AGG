@@ -263,21 +263,35 @@ class ComprobanteProveedorAsientoService
             (float) ($comprobante->total ?? 0),
             $comprobante->comprobante_proveedor_conceptos ?? [],
         );
+        $ajusteDescuentoNeto = 0.0;
 
         foreach ($comprobante->comprobante_proveedor_conceptos as $linea) {
             $concepto = $linea->concepto_ivacompras;
-            $monto = round(abs((float) $linea->monto), 2);
-            if ($monto <= 0) {
+            $tipoConcepto = (string) ($concepto?->tipoconcepto ?? '');
+            $codigoConcepto = (string) ($concepto?->codigo ?? '');
+            $montoRaw = round((float) $linea->monto, 2);
+            $permiteNegativo = ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo(
+                $tipoConcepto,
+                $codigoConcepto
+            );
+            // E y descuentos 80/81 conservan signo; el resto del asiento opera en absoluto.
+            $monto = $permiteNegativo ? $montoRaw : round(abs($montoRaw), 2);
+            if (abs($monto) < 0.0001) {
                 continue;
             }
 
-            $tipoConcepto = (string) ($concepto?->tipoconcepto ?? '');
-            $codigoConcepto = (string) ($concepto?->codigo ?? '');
             // «No gravado» que no está en el total: duplicado del IVA, no mercadería.
             if (strtoupper($tipoConcepto) === 'E' && ! $exentoIntegraTotal) {
                 continue;
             }
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
+
+            // Negativo permitido: se netea al neto (no se postea Debe/Haber aparte).
+            if ($monto < 0) {
+                $ajusteDescuentoNeto = round($ajusteDescuentoNeto + $monto, 2);
+
+                continue;
+            }
 
             // Mercadería (y II solo si la COM ya lo provisionó) cierra FAR.
             if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom(
@@ -436,6 +450,12 @@ class ComprobanteProveedorAsientoService
             ];
         }
 
+        // Descuentos E/80/81: contra COM u OC se restan del neto agregado; si no, del Debe de neto.
+        if (abs($ajusteDescuentoNeto) > 0.0001 && ($usaProvisionCom || $netoDesdeArticulosOc)) {
+            $totalNetoConceptos = round($totalNetoConceptos + $ajusteDescuentoNeto, 2);
+            $ajusteDescuentoNeto = 0.0;
+        }
+
         if ($netoDesdeArticulosOc && $totalNetoConceptos > 0) {
             $oc = $comprobante->ordencompras;
             if (! $oc) {
@@ -581,6 +601,13 @@ class ComprobanteProveedorAsientoService
                     $lineasHaberExtra = $lineasDiff;
                 }
             }
+        }
+
+        if ($ajusteDescuentoNeto < -0.0001) {
+            $lineasDebe = ComprobanteProveedorAsientoCuadreSupport::aplicarDescuentoNetoEnDebe(
+                $lineasDebe,
+                $ajusteDescuentoNeto
+            );
         }
 
         if ($lineasDebe === []) {

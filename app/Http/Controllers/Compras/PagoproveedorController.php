@@ -327,7 +327,11 @@ class PagoproveedorController extends Controller
             $filasTodas = $filasTodas->reject($esDeEstaOp)->values();
             $creditos = $creditos->reject($esDeEstaOp)->values();
         }
-        $filas = $filasTodas->where('empresa_id', $empresaId)->concat($creditos)->unique('id')->values();
+        $filas = $filasTodas->where('empresa_id', $empresaId)
+            ->concat($creditos)
+            ->unique('id')
+            ->filter(static fn ($cc) => PagoproveedorAplicacionLadoSupport::esAplicableEnOrdenDePago($cc))
+            ->values();
         $aviso = null;
         if ($filas->isEmpty() && $filasTodas->isNotEmpty()) {
             $nombres = $filasTodas

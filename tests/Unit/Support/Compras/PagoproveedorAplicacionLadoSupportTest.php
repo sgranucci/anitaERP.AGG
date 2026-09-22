@@ -39,6 +39,32 @@ class PagoproveedorAplicacionLadoSupportTest extends TestCase
         $this->assertFalse(PagoproveedorAplicacionLadoSupport::afectaRetenciones($cc));
     }
 
+    public function test_comprobantes_a_pagar_acepta_factura_nc_y_opa(): void
+    {
+        $this->assertTrue(PagoproveedorAplicacionLadoSupport::esAplicableEnOrdenDePago(
+            $this->cc(1000.0, null, 10)
+        ));
+        $this->assertTrue(PagoproveedorAplicacionLadoSupport::esAplicableEnOrdenDePago(
+            $this->cc(-500.0, null, 20)
+        ));
+        $this->assertTrue(PagoproveedorAplicacionLadoSupport::esAplicableEnOrdenDePago(
+            $this->ccConTipoPago(-800.0, 88, 'OPA')
+        ));
+    }
+
+    public function test_comprobantes_a_pagar_rechaza_residual_opp_y_aop(): void
+    {
+        $this->assertFalse(PagoproveedorAplicacionLadoSupport::esAplicableEnOrdenDePago(
+            $this->ccConTipoPago(-800.0, 88, 'OPP')
+        ));
+        $this->assertFalse(PagoproveedorAplicacionLadoSupport::esAplicableEnOrdenDePago(
+            $this->ccConTipoPago(-800.0, 88, 'AOP')
+        ));
+        $this->assertFalse(PagoproveedorAplicacionLadoSupport::esAplicableEnOrdenDePago(
+            $this->ccConTipoPago(-800.0, 88, '')
+        ));
+    }
+
     public function test_factura_op_abre_debe_y_cancela_deuda(): void
     {
         $cc = $this->cc(40301509.68, null, 100);
@@ -101,6 +127,16 @@ class PagoproveedorAplicacionLadoSupportTest extends TestCase
         $cc->total = $total;
         $cc->pagoproveedor_id = $pagoId;
         $cc->comprobante_proveedor_id = $comprobanteId;
+
+        return $cc;
+    }
+
+    private function ccConTipoPago(float $total, int $pagoId, string $tipocomprobante): Proveedor_Cuentacorriente
+    {
+        $cc = $this->cc($total, $pagoId, null);
+        $pago = new \App\Models\Compras\Pagoproveedor;
+        $pago->tipocomprobante = $tipocomprobante;
+        $cc->setRelation('pagoproveedores', $pago);
 
         return $cc;
     }

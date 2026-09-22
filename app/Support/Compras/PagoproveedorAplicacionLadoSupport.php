@@ -30,6 +30,26 @@ final class PagoproveedorAplicacionLadoSupport
     }
 
     /**
+     * Filas de «Comprobantes a pagar»: facturas/ND/NC y solo OPA impagas.
+     * Residual de OPP/AOP no se reaplica desde otra orden de pago.
+     */
+    public static function esAplicableEnOrdenDePago(Proveedor_Cuentacorriente $cc): bool
+    {
+        if ((int) ($cc->comprobante_proveedor_id ?? 0) > 0) {
+            return true;
+        }
+        if ((int) ($cc->pagoproveedor_id ?? 0) <= 0 || (float) $cc->total >= 0) {
+            return false;
+        }
+        $tipo = strtoupper(substr(trim((string) ($cc->pagoproveedores?->tipocomprobante ?? '')), 0, 3));
+        if ($tipo === '') {
+            $tipo = PagoproveedorImputacionApSupport::TIPO_OPP;
+        }
+
+        return $tipo === PagoproveedorImputacionApSupport::TIPO_OPA;
+    }
+
+    /**
      * Las OPA no vuelven a calcular Ganancias / IVA / SUSS / IIBB.
      */
     public static function afectaRetenciones(Proveedor_Cuentacorriente $cc): bool

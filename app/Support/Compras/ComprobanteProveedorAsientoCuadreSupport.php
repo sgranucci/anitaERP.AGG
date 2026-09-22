@@ -46,6 +46,77 @@ final class ComprobanteProveedorAsientoCuadreSupport
     }
 
     /**
+     * Netea descuentos negativos (exento E / códigos 80-81) contra líneas DEBE de neto.
+     * No crea Haber ni importes negativos: el descuento reduce el Debe de mercadería.
+     *
+     * @param  list<array<string, mixed>>  $lineasDebe
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarDescuentoNetoEnDebe(array $lineasDebe, float $descuentoNegativo): array
+    {
+        $resto = round($descuentoNegativo, 2);
+        if ($resto >= -0.0001 || $lineasDebe === []) {
+            return $lineasDebe;
+        }
+
+        $origenesPreferidos = [
+            'neto_manual',
+            'anticipo',
+            'contrato_manual',
+            'oc_articulo',
+            'oc_articulo_override',
+            'far_diferencia',
+        ];
+        $indices = [];
+        foreach ($lineasDebe as $i => $linea) {
+            $origen = (string) ($linea['origen'] ?? '');
+            if (in_array($origen, $origenesPreferidos, true)) {
+                $indices[] = $i;
+            }
+        }
+        if ($indices === []) {
+            foreach ($lineasDebe as $i => $linea) {
+                $origen = (string) ($linea['origen'] ?? '');
+                if (! in_array($origen, ['impuesto', 'impuesto_interno', 'proveedor', 'far'], true)) {
+                    $indices[] = $i;
+                }
+            }
+        }
+        if ($indices === []) {
+            $indices = array_keys($lineasDebe);
+        }
+
+        usort(
+            $indices,
+            static fn (int $a, int $b): int => ((float) ($lineasDebe[$b]['importe'] ?? 0))
+                <=> ((float) ($lineasDebe[$a]['importe'] ?? 0))
+        );
+
+        foreach ($indices as $i) {
+            if ($resto >= -0.0001) {
+                break;
+            }
+            $importe = round((float) ($lineasDebe[$i]['importe'] ?? 0), 2);
+            if ($importe <= 0) {
+                continue;
+            }
+            $nuevo = round($importe + $resto, 2);
+            if ($nuevo >= 0.005) {
+                $lineasDebe[$i]['importe'] = $nuevo;
+                $resto = 0.0;
+            } else {
+                $resto = round($resto + $importe, 2);
+                $lineasDebe[$i]['importe'] = 0.0;
+            }
+        }
+
+        return array_values(array_filter(
+            $lineasDebe,
+            static fn (array $linea): bool => abs((float) ($linea['importe'] ?? 0)) >= 0.005
+        ));
+    }
+
+    /**
      * Suma $ajuste a una línea DEBE. Evita la cuenta excluida (provisión FAR)
      * para no dejar saldo residual contra el asiento de la COM.
      *

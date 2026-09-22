@@ -254,7 +254,7 @@
                             \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
                             \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC,
                         ], true)) {
-                        $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+                        $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC;
                     }
                 @endphp
                 @if ($sinComPorTipo)
@@ -291,18 +291,22 @@
                     <input type="text" class="form-control" readonly
                         value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC) }}">
                     <small class="form-text text-muted">
-                        OC anticipada sin COM todavía → factura anticipada. Puede haber varias en el mismo legajo.
+                        @if (!empty($comPolitica['tiene_com']))
+                            Legajo anticipado: la primera factura va sin COM (anticipo). La recepción queda para una factura posterior.
+                        @else
+                            OC anticipada sin COM todavía → factura anticipada. Puede haber varias en el mismo legajo.
+                        @endif
                     </small>
                 @elseif ($anticipadaEligeModo)
                     <select name="modo_carga" id="modo_carga" class="form-control">
-                        <option value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION }}"
-                            @if ($modoActual === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) selected @endif>
-                            {{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) }}
-                        </option>
                         <option value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC }}"
                             @if ($modoActual === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC) selected @endif>
                             {{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC) }}
                             (seguir anticipada)
+                        </option>
+                        <option value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION }}"
+                            @if ($modoActual === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) selected @endif>
+                            {{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) }}
                         </option>
                     </select>
                     <small class="form-text text-muted">

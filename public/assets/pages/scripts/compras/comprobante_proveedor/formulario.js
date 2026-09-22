@@ -665,7 +665,7 @@ $(function () {
     }
 
     function exentoIntegraTotal(totalDoc, sumaSinExento, sumaExento) {
-        if (sumaExento <= 0.005) {
+        if (Math.abs(sumaExento) <= 0.005) {
             return false;
         }
         if (!(totalDoc > 0)) {
@@ -743,16 +743,16 @@ $(function () {
         exento = Math.round(exento * 100) / 100;
         netoSinExento = Math.round(netoSinExento * 100) / 100;
         var totalDoc = parseMonto($('#total').val() || '0');
-        if (exento > 0.005 && !exentoIntegraTotal(totalDoc, sumaSinExento, exento)) {
+        if (Math.abs(exento) > 0.005 && !exentoIntegraTotal(totalDoc, sumaSinExento, exento)) {
             total = (totalDoc > 0 && Math.abs(totalDoc - sumaSinExento) <= 1) ? totalDoc : sumaSinExento;
-            if (netoSinExento > 0) {
+            if (Math.abs(netoSinExento) > 0.0001) {
                 subtotal = netoSinExento;
             }
         }
         if ($('#total').length) {
             $('#total').val(fmt(total));
         }
-        if ($('#subtotal').length && subtotal > 0) {
+        if ($('#subtotal').length && Math.abs(subtotal) > 0.0001) {
             $('#subtotal').val(fmt(subtotal));
         }
         sincronizarCuotasDesdeTotal(total);

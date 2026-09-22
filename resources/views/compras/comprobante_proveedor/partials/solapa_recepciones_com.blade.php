@@ -297,9 +297,15 @@
 @elseif (($com_politica['permite_factura_anticipada'] ?? false))
 <div class="alert alert-info mt-3" id="cp-bloque-factura-anticipada">
     <i class="fa fa-info-circle"></i>
-    <strong>Factura anticipada:</strong> la OC es anticipada y todavía no hay COM con provisión.
-    El neto irá a la cuenta de anticipo. Puede cargar más de una factura anticipada en este legajo.
-    Cuando exista recepción, podrá aplicar a la COM o seguir anticipada; contra COM se descuenta lo ya facturado.
+    @if (!empty($com_politica['tiene_com']))
+        <strong>Factura anticipada (1ª del legajo):</strong> aunque haya COM, la primera factura
+        debe cargarse como anticipo (sin recepción). El neto irá a la cuenta de anticipo.
+        Después de contabilizarla podrá asignar la COM a una factura posterior.
+    @else
+        <strong>Factura anticipada:</strong> la OC es anticipada y todavía no hay COM con provisión.
+        El neto irá a la cuenta de anticipo. Puede cargar más de una factura anticipada en este legajo.
+        Cuando exista recepción, podrá aplicar a la COM o seguir anticipada; contra COM se descuenta lo ya facturado.
+    @endif
 </div>
 @elseif (($com_politica['anticipada_elige_modo'] ?? false))
 <div class="alert alert-info mt-3" id="cp-bloque-factura-anticipada">

@@ -351,6 +351,7 @@
 					<label for="cuentacontable_id" class="col-lg-4 control-label text-right pr-2">Cuenta contable</label>
 				@endif
 				@php
+					$puedeModificarCuentaContable = \App\Support\Ventas\ClienteCuentacontableDefaultSupport::puedeModificarEnAbm();
 					$cuentaContableId = old('cuentacontable_id', $data->cuentacontable_id ?? '');
 					$cuentaContableCodigo = old('codigocuentacontable', optional($data->cuentascontables ?? null)->codigo ?? '');
 					$cuentaContableNombre = old('nombrecuentacontable', optional($data->cuentascontables ?? null)->nombre ?? '');
@@ -368,9 +369,11 @@
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<input type="hidden" class="cuentacontable_id" name="cuentacontable_id" id="cuentacontable_id"
 							value="{{ $cuentaContableId }}" @if ($tipoalta != 'P') required @endif>
-						<button type="button" title="Consulta cuentas contables (F1)" class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
-							<i class="fa fa-search text-primary"></i>
-						</button>
+						@if ($puedeModificarCuentaContable)
+							<button type="button" title="Consulta cuentas contables (F1)" class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
+								<i class="fa fa-search text-primary"></i>
+							</button>
+						@endif
 						@if (can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false))
 							<a href="{{ ((int) $cuentaContableId > 0) ? route('editar_cuentacontable', ['id' => (int) $cuentaContableId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
 								target="_blank" rel="noopener"
@@ -382,7 +385,8 @@
 						<input type="text" class="form-control codigocuentacontable flex-shrink-0" id="codigocuentacontable"
 							value="{{ $cuentaContableCodigo }}"
 							placeholder="C&oacute;d." autocomplete="off"
-							style="flex: 0 0 6.85rem; width: 6.85rem; min-width: 6.85rem; max-width: 6.85rem;">
+							style="flex: 0 0 6.85rem; width: 6.85rem; min-width: 6.85rem; max-width: 6.85rem;"
+							@if (! $puedeModificarCuentaContable) readonly @endif>
 						<input type="text" class="form-control nombrecuentacontable" id="nombrecuentacontable"
 							value="{{ $cuentaContableNombre }}"
 							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">

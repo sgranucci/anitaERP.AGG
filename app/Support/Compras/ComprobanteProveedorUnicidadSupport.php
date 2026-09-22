@@ -392,10 +392,11 @@ final class ComprobanteProveedorUnicidadSupport
 
     public static function esViolacionUnicidadFiscal(\Throwable $e): bool
     {
+        // Solo el índice fiscal: no usar la tabla como pista (cualquier UNIQUE de
+        // comprobante_proveedor —p.ej. precarga_id— también contiene ese nombre).
         return DbContencionSupport::esViolacionUnicidad(
             $e,
             'uq_comprobante_proveedor_por_cuit',
-            'comprobante_proveedor',
         );
     }
 
@@ -404,7 +405,6 @@ final class ComprobanteProveedorUnicidadSupport
         return DbContencionSupport::esViolacionUnicidad(
             $e,
             'uq_precarga_comprobante_proveedor_por_afip',
-            'precarga_comprobante_proveedor',
         );
     }
 
@@ -688,5 +688,34 @@ final class ComprobanteProveedorUnicidadSupport
         }
 
         return substr($cuitDigitos, 0, 2).'-'.substr($cuitDigitos, 2, 8).'-'.substr($cuitDigitos, 10, 1);
+    }
+
+    /**
+     * Mensaje de UI al fallar el alta/edición. Solo habla de identificación fiscal
+     * cuando el índice único fiscal (o el equivalente de precarga por AFIP) es el que falló;
+     * no enmascara otros SQLSTATE/Duplicate entry.
+     */
+    public static function mensajeParaErrorPersistencia(string $prefijo, \Throwable $e): string
+    {
+        if (self::esViolacionUnicidadFiscal($e)) {
+            return $prefijo.'. Ya existe un comprobante con la misma identificación fiscal '
+                .'(empresa, tipo, letra, sucursal, número y CUIT). Buscalo en el listado de Cuentas a pagar.';
+        }
+
+        if (DbContencionSupport::esViolacionUnicidad(
+            $e,
+            'uq_comprobante_proveedor_precarga',
+            'precarga_comprobante_proveedor_id',
+        )) {
+            return $prefijo.'. Ya existe un comprobante vinculado a esta precarga. '
+                .'Abrí ese registro en el listado de Cuentas a pagar.';
+        }
+
+        if (self::esViolacionUnicidadPrecarga($e)) {
+            return $prefijo.'. Ya existe una precarga con la misma identificación fiscal '
+                .'(empresa, tipo AFIP, letra, sucursal, número y CUIT).';
+        }
+
+        return $prefijo.': '.$e->getMessage();
     }
 }

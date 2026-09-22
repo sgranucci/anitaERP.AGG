@@ -9,6 +9,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
+use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -20,6 +21,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Compras\PrecargaComprobanteEstados;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -113,6 +115,10 @@ class ComprobanteProveedorPrefillService
                 'provinciaDestino',
             ])
             ->findOrFail($precargaId);
+
+        if (PrecargaComprobanteEstados::esPendienteEntrega($precarga->estado ?? null)) {
+            abort(422, 'Esta factura está marcada como pendiente de entrega. Compras debe liberarla y asignar COM antes de cargarla en Cuentas a pagar.');
+        }
 
         $ordencompra = $this->resolverOrdencompraDesdePrecarga($precarga);
         if ($ordencompra) {
@@ -335,6 +341,13 @@ class ComprobanteProveedorPrefillService
             (float) ($prefill['data']->cotizacion ?: $cotizacion),
         );
 
+        // Condición de pago manda sobre OCR/OC: F.Comp. + plazo.
+        $prefill['cuotas'] = ComprobanteProveedorVencimientoCondicionSupport::aplicarACuotas(
+            $prefill['cuotas'] ?? [],
+            isset($prefill['data']->condicionpago_id) ? (int) $prefill['data']->condicionpago_id : null,
+            $fechacomprobante,
+        );
+
         return $prefill;
     }
 
@@ -484,16 +497,24 @@ class ComprobanteProveedorPrefillService
             $monedaId
         );
 
+        $tieneCom = OrdencompraEnvioCuentasAPagarGateSupport::tieneComDisponible((int) $ordencompra->id);
+        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+            $ordencompra,
+            $tieneCom,
+            $fecha
+        );
+        $modoCarga = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
+            $politica,
+            ComprobanteProveedorModoCarga::ASIGNA_OC
+        );
+
         $data = new Comprobante_Proveedor([
             'empresa_id' => $ordencompra->empresa_id,
             'proveedor_id' => $ordencompra->proveedor_id,
             'ordencompra_id' => $ordencompra->id,
             'fechacomprobante' => $fecha,
             'fechaiva' => $this->fechaIvaDefaultAlta(),
-            'modo_carga' => ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
-                ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($ordencompra, false, $fecha),
-                ComprobanteProveedorModoCarga::ASIGNA_OC
-            ),
+            'modo_carga' => $modoCarga,
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'subtotal' => 0,
             'total' => 0,
@@ -534,7 +555,7 @@ class ComprobanteProveedorPrefillService
             $cotizacion
         );
 
-        return [
+        $prefill = [
             'data' => $data,
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::ORDENCOMPRA,
             'conceptos' => collect(),
@@ -544,6 +565,22 @@ class ComprobanteProveedorPrefillService
             'permite_edicion_cuotas' => (bool) ($cuotasMeta['permite_edicion_cuotas'] ?? true),
             'ruta_factura_pdf' => null,
         ];
+
+        // Misma regla que precarga/bandeja: 1ª factura anticipada sin COM aplicada.
+        if (ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($ordencompra)
+            && ! ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($ordencompra)) {
+            $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_OC;
+            $prefill['recepciones_seleccionadas'] = [];
+            $prefill['com_resolucion'] = [
+                'ambigua' => false,
+                'mensaje' => ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaComPrimeraAnticipada(),
+                'importe_comparacion' => 0.0,
+                'importe_comparacion_etiqueta' => '',
+                'ordencompra_id' => (int) $ordencompra->id,
+            ];
+        }
+
+        return $prefill;
     }
 
     /** @return array<string, mixed> */

@@ -93,12 +93,12 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$data['emitecertificado'] = Cliente::normalizarEmiteCertificado($data['emitecertificado'] ?? 'N');
 		}
 
-		$cuentaIdAlta = $data['cuentacontable_id'] ?? null;
-		if ($cuentaIdAlta === '' || $cuentaIdAlta === null || (int) $cuentaIdAlta === 0) {
-			$cuentaDefault = ClienteCuentacontableDefaultSupport::find();
-			if ($cuentaDefault) {
-				$data['cuentacontable_id'] = $cuentaDefault->id;
-			}
+		$cuentaIdAlta = ClienteCuentacontableDefaultSupport::idParaGrabadoAbm(
+			null,
+			$data['cuentacontable_id'] ?? null
+		);
+		if ($cuentaIdAlta !== null) {
+			$data['cuentacontable_id'] = $cuentaIdAlta;
 		}
 
 		if ($data['retieneiva'] == null)
@@ -141,6 +141,23 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$data['coeficienteextra'] = ClienteCoeficienteExtraSupport::valorParaGrabar(
 				isset($data['coeficienteextra']) ? (float) $data['coeficienteextra'] : null
 			);
+		}
+
+		if (auth()->check() && ! ClienteCuentacontableDefaultSupport::puedeModificarEnAbm()) {
+			$cuentaId = ClienteCuentacontableDefaultSupport::idParaGrabadoAbm((int) $id, null);
+			if ($cuentaId !== null) {
+				$data['cuentacontable_id'] = $cuentaId;
+			} else {
+				unset($data['cuentacontable_id']);
+			}
+		} elseif (array_key_exists('cuentacontable_id', $data)) {
+			$cuentaId = ClienteCuentacontableDefaultSupport::idParaGrabadoAbm(
+				(int) $id,
+				$data['cuentacontable_id']
+			);
+			if ($cuentaId !== null) {
+				$data['cuentacontable_id'] = $cuentaId;
+			}
 		}
 
         $cliente = $this->model->findOrFail($id)

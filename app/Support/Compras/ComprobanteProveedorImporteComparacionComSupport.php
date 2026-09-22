@@ -112,7 +112,8 @@ final class ComprobanteProveedorImporteComparacionComSupport
      */
     public static function exentoIntegraComprobante(float $total, float $sumaSinExento, float $sumaExento): bool
     {
-        if ($sumaExento <= 0.005) {
+        // Incluye exento negativo (descuento 81 / E): debe netearse al neto si el total lo exige.
+        if (abs($sumaExento) <= 0.005) {
             return false;
         }
         if ($total <= 0) {

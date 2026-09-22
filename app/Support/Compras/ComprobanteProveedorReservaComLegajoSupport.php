@@ -176,6 +176,93 @@ final class ComprobanteProveedorReservaComLegajoSupport
     }
 
     /**
+     * Detecta factura declarada en ME con importes que parecen moneda local
+     * (importe ≈ provisión_ME × cotización), típico de heredar moneda de la OC
+     * cuando el PDF vino en pesos.
+     *
+     * @param  array<int|string, list<int>>  $asignacionesPorPrecarga
+     * @param  array<int, float>  $provisionPorCom  ya en moneda de la factura (o ME si misma moneda)
+     * @param  array<int|string, float>  $importePorFactura
+     * @param  array<int|string, array{moneda_id: int, cotizacion: float, fecha?: mixed}>  $contextoMoneda
+     * @param  array<int, string>  $etiquetasCom
+     */
+    public static function mensajeMonedaIncoherenteFacturaVsCom(
+        array $asignacionesPorPrecarga,
+        array $provisionPorCom,
+        array $importePorFactura,
+        array $contextoMoneda,
+        array $etiquetasCom = [],
+    ): ?string {
+        foreach ($asignacionesPorPrecarga as $precargaId => $recepcionIds) {
+            $clave = is_numeric($precargaId) ? (int) $precargaId : trim((string) $precargaId);
+            if ($clave === 0 || $clave === '0' || $clave === '') {
+                continue;
+            }
+            $importe = abs((float) ($importePorFactura[$clave] ?? $importePorFactura[(string) $clave] ?? 0));
+            if ($importe <= 0.00001) {
+                continue;
+            }
+
+            $ctx = $contextoMoneda[$clave] ?? $contextoMoneda[(string) $clave] ?? null;
+            if ($ctx === null) {
+                continue;
+            }
+            $monedaId = (int) ($ctx['moneda_id'] ?? 1);
+            // Sin MonedaMotor aquí: este support se testea sin bootstrap Laravel (config()).
+            $cotizacion = (float) ($ctx['cotizacion'] ?? 0);
+            if ($monedaId <= 1 || $cotizacion < 1.0001) {
+                continue;
+            }
+
+            $rids = [];
+            foreach ((array) $recepcionIds as $recepcionId) {
+                $rid = (int) $recepcionId;
+                if ($rid > 0) {
+                    $rids[] = $rid;
+                }
+            }
+            if ($rids === [] || count($rids) > self::MAX_COM_POR_FACTURA_OPERATIVA) {
+                continue;
+            }
+
+            $sumaProvision = 0.0;
+            foreach ($rids as $rid) {
+                $sumaProvision += abs((float) ($provisionPorCom[$rid] ?? 0));
+            }
+            if ($sumaProvision <= 0.00001) {
+                continue;
+            }
+
+            // Misma moneda ME: la provisión no se convirtió; el importe en "ME" ≈ provisión × cotización.
+            $factor = $importe / $sumaProvision;
+            $umbral = $cotizacion / 2;
+            if ($factor < $umbral) {
+                continue;
+            }
+
+            $etiqueta = trim((string) ($etiquetasCom[$rids[0]] ?? ''));
+            $comLabel = $etiqueta !== '' ? $etiqueta : '#'.$rids[0];
+            $provisionEnPesos = round($sumaProvision * $cotizacion, 2);
+
+            return sprintf(
+                'La factura está declarada en moneda extranjera (cotización %s) con importe %s, '
+                .'pero la COM %s provisionó %s en esa moneda (≈ %s en pesos = provisión × cotización). '
+                .'Si la factura está en pesos, cambie la moneda a pesos antes de asignar la COM; '
+                .'si está en dólares, el neto debería ser %s (no %s).',
+                number_format($cotizacion, 2, ',', '.'),
+                number_format($importe, 2, ',', '.'),
+                $comLabel,
+                number_format($sumaProvision, 2, ',', '.'),
+                number_format($provisionEnPesos, 2, ',', '.'),
+                number_format($sumaProvision, 2, ',', '.'),
+                number_format($importe, 2, ',', '.'),
+            );
+        }
+
+        return null;
+    }
+
+    /**
      * La suma asignada a cada COM no puede superar su provisión.
      *
      * Dos sentidos que no se pueden mezclar a ciegas:

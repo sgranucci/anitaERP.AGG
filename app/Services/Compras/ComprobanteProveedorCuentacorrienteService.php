@@ -7,6 +7,7 @@ use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
+use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
 use RuntimeException;
 
 class ComprobanteProveedorCuentacorrienteService
@@ -99,16 +100,33 @@ class ComprobanteProveedorCuentacorrienteService
             }
         }
 
-        // Sin OC o sin plan usable: una cuota al total (permite contabilizar / CC / promov).
+        // Sin OC o sin plan usable: armar desde condición de pago, o una cuota al total.
         if ($cuotas === [] && abs((float) ($comprobante->total ?? 0)) >= 0.0001) {
-            $cuotas[] = [
-                'numero_cuota' => 1,
-                'fechavencimiento' => $fechaBase,
-                'monto' => round((float) $comprobante->total, 2),
-                'formapago_id' => 1,
-                'detalle' => null,
-                'ordencompra_comprobante_cuota_id' => null,
-            ];
+            if ($comprobante->condicionpago_id) {
+                $cuotas = ComprobanteProveedorVencimientoCondicionSupport::armarCuotasDesdeCondicion(
+                    (int) $comprobante->condicionpago_id,
+                    $fechaBase,
+                    (float) $comprobante->total,
+                    $monedaFacturaId,
+                    $cotizacionFactura,
+                );
+            }
+            if ($cuotas === []) {
+                $cuotas[] = [
+                    'numero_cuota' => 1,
+                    'fechavencimiento' => $fechaBase,
+                    'monto' => round((float) $comprobante->total, 2),
+                    'formapago_id' => 1,
+                    'detalle' => null,
+                    'ordencompra_comprobante_cuota_id' => null,
+                ];
+            }
+        } else {
+            $cuotas = ComprobanteProveedorVencimientoCondicionSupport::aplicarACuotas(
+                $cuotas,
+                $comprobante->condicionpago_id ? (int) $comprobante->condicionpago_id : null,
+                $fechaBase,
+            );
         }
 
         $cuotas = ComprobanteProveedorCuotasTotalSupport::alinearConTotalSiHaceFalta(

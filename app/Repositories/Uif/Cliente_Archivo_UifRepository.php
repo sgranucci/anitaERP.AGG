@@ -78,7 +78,7 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 		$tieneNuevos = false;
 		if (is_array($nombrearchivos)) {
 			foreach ($nombrearchivos as $archivo) {
-				if ($archivo) {
+				if ($archivo && $archivo->isValid()) {
 					$tieneNuevos = true;
 					break;
 				}
@@ -92,6 +92,13 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 
 		if ($funcion === 'update' && ! $syncExplicit && ! $tieneConservar && ! $tieneNuevos) {
 			return '1';
+		}
+
+		// Prefijo Anita (inroclienteid); fallback al id local si aún no tiene nro Anita.
+		$clienteUif = \App\Models\Uif\Cliente_Uif::query()->find($id);
+		$prefijoArchivo = (int) ($clienteUif->inroclienteid ?? 0);
+		if ($prefijoArchivo <= 0) {
+			$prefijoArchivo = (int) $id;
 		}
 
 		$fechasPrevias = [];
@@ -109,21 +116,27 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 		{
 			foreach ($nombrearchivos as $archivo)
 			{
-		  		if ($archivo)
+		  		if ($archivo && $archivo->isValid())
 				{
 					$destDir = ClienteUifArchivoStorage::dirClientes();
 					if (! ClienteUifArchivoStorage::ensureDir($destDir)) {
-						continue;
+						throw new \RuntimeException('No se pudo preparar el directorio de archivos del cliente UIF.');
 					}
     				$file = $archivo->getClientOriginalName();
-    				$destName = $id.'-'.$file;
+    				$destName = $prefijoArchivo.'-'.$file;
 
-    				$archivo->move($destDir, $destName);
+    				if (! $archivo->move($destDir, $destName)) {
+						throw new \RuntimeException('No se pudo guardar el archivo: '.$file);
+					}
 
 					$cliente_archivo_uif = $this->model->create([
 									'cliente_uif_id' => $id,
 									'nombrearchivo' => $destName,
 									]);
+				} elseif ($archivo && ! $archivo->isValid()) {
+					throw new \RuntimeException(
+						'Error al subir archivo: '.$archivo->getErrorMessage()
+					);
 				}
 			}
 		}
@@ -139,7 +152,7 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 				{
 					foreach($nombrearchivos as $archivo)
 					{
-						if ($archivo)
+						if ($archivo && $archivo->isValid())
 						{
 							// Guarda fisicamente el archivo
 							$file = $archivo->getClientOriginalName();

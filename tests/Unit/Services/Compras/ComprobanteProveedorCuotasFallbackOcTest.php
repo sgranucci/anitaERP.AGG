@@ -9,24 +9,25 @@ use ReflectionClass;
 
 class ComprobanteProveedorCuotasFallbackOcTest extends TestCase
 {
-    public function test_resolver_repite_cuota_anterior_si_no_hay_occ_pendiente(): void
+    public function test_resolver_aplica_vencimientos_desde_condicionpago(): void
     {
         $src = (string) file_get_contents(
             (new ReflectionClass(ComprobanteProveedorCondicionPagoDesdeOcService::class))->getFileName()
         );
 
         $this->assertStringContainsString('fallbackDesdeCuotaAnterior', $src);
-        $this->assertStringNotContainsString('sugerirCuotasDesdeCondicionpago', $src);
-        $this->assertStringContainsString('No inventa desde condicionpago', $src);
+        $this->assertStringContainsString('conVencimientosDesdeCondicion', $src);
+        $this->assertStringContainsString('ComprobanteProveedorVencimientoCondicionSupport', $src);
     }
 
-    public function test_cuentacorriente_autogenera_cuota_unica_si_falta_plan(): void
+    public function test_cuentacorriente_autogenera_desde_condicion_o_cuota_unica(): void
     {
         $src = (string) file_get_contents(
             (new ReflectionClass(ComprobanteProveedorCuentacorrienteService::class))->getFileName()
         );
 
-        $this->assertStringContainsString('Sin OC o sin plan usable: una cuota al total', $src);
+        $this->assertStringContainsString('armarCuotasDesdeCondicion', $src);
         $this->assertStringContainsString('autogenerarCuotasSiFaltan', $src);
+        $this->assertStringContainsString('ComprobanteProveedorVencimientoCondicionSupport', $src);
     }
 }

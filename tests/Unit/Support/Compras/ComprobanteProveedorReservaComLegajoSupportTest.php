@@ -319,6 +319,34 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
         $this->assertNull($mensaje);
     }
 
+    /** OC 216515: factura marcada en dólares con importes en pesos (= provisión × cotización). */
+    public function test_detecta_factura_en_me_con_importes_que_parecen_pesos(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeMonedaIncoherenteFacturaVsCom(
+            [814 => [67355]],
+            [67355 => 266.0],
+            [814 => 406980.0],
+            [814 => ['moneda_id' => 2, 'cotizacion' => 1530.0]],
+            [67355 => 'Nº 167669'],
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('pesos', $mensaje);
+        $this->assertStringContainsString('167669', $mensaje);
+        $this->assertStringContainsString('266,00', $mensaje);
+        $this->assertStringContainsString('406.980,00', $mensaje);
+    }
+
+    public function test_no_alerta_moneda_cuando_importe_coincide_con_provision_en_me(): void
+    {
+        $this->assertNull(ComprobanteProveedorReservaComLegajoSupport::mensajeMonedaIncoherenteFacturaVsCom(
+            [814 => [67355]],
+            [67355 => 266.0],
+            [814 => 266.0],
+            [814 => ['moneda_id' => 2, 'cotizacion' => 1530.0]],
+        ));
+    }
+
     public function test_sin_coms_tocadas_no_hay_asignaciones_relevantes(): void
     {
         $this->assertSame(

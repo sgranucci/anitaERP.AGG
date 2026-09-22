@@ -21,6 +21,8 @@ class PrecargaComprobanteEstadosTest extends TestCase
         $this->assertFalse(PrecargaComprobanteEstados::puedeGenerarComprobante(PrecargaComprobanteEstados::CARGADA_ANITA));
         $this->assertFalse(PrecargaComprobanteEstados::puedeMarcarCargadaAnita(PrecargaComprobanteEstados::GENERADA));
         $this->assertFalse(PrecargaComprobanteEstados::puedeMarcarCargadaAnita(PrecargaComprobanteEstados::CARGADA_ANITA));
+        $this->assertFalse(PrecargaComprobanteEstados::puedeGenerarComprobante(PrecargaComprobanteEstados::PENDIENTE_ENTREGA));
+        $this->assertFalse(PrecargaComprobanteEstados::puedeMarcarCargadaAnita(PrecargaComprobanteEstados::PENDIENTE_ENTREGA));
     }
 
     public function test_cargada_anita_no_pendiente_carga_cxp(): void
@@ -34,5 +36,21 @@ class PrecargaComprobanteEstadosTest extends TestCase
         $this->assertTrue(PrecargaComprobanteEstados::pendienteCargaEnCxp(PrecargaComprobanteEstados::GENERADA));
         $this->assertFalse(PrecargaComprobanteEstados::pendienteCargaEnCxp(PrecargaComprobanteEstados::CARGADA_ANITA));
         $this->assertFalse(PrecargaComprobanteEstados::pendienteCargaEnCxp('ANULADA'));
+        $this->assertFalse(PrecargaComprobanteEstados::pendienteCargaEnCxp(PrecargaComprobanteEstados::PENDIENTE_ENTREGA));
+    }
+
+    public function test_pendiente_entrega(): void
+    {
+        $this->assertTrue(PrecargaComprobanteEstados::esPendienteEntrega(PrecargaComprobanteEstados::PENDIENTE_ENTREGA));
+        $this->assertTrue(PrecargaComprobanteEstados::esPendienteEntrega('pendiente_entrega'));
+        $this->assertFalse(PrecargaComprobanteEstados::esPendienteEntrega(PrecargaComprobanteEstados::PENDIENTE));
+
+        $this->assertTrue(PrecargaComprobanteEstados::puedeMarcarPendienteEntrega(PrecargaComprobanteEstados::PENDIENTE));
+        $this->assertTrue(PrecargaComprobanteEstados::puedeMarcarPendienteEntrega(null));
+        $this->assertTrue(PrecargaComprobanteEstados::puedeMarcarPendienteEntrega(PrecargaComprobanteEstados::GENERADA));
+        $this->assertFalse(PrecargaComprobanteEstados::puedeMarcarPendienteEntrega(PrecargaComprobanteEstados::CARGADA_ANITA));
+        $this->assertFalse(PrecargaComprobanteEstados::puedeMarcarPendienteEntrega(PrecargaComprobanteEstados::ANULADA));
+
+        $this->assertSame('Pendiente de entrega', PrecargaComprobanteEstados::etiqueta(PrecargaComprobanteEstados::PENDIENTE_ENTREGA));
     }
 }

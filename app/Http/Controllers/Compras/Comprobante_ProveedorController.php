@@ -33,6 +33,7 @@ use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorDuplicadoException;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\ComprobanteProveedorYaExistenteEnAnitaException;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -57,6 +58,7 @@ use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
 use App\Support\Compras\ProveedorFacturasApocrifasSupport;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -988,12 +990,13 @@ class Comprobante_ProveedorController extends Controller
 
     private function mensajeErrorPersistencia(string $prefijo, \Throwable $e): string
     {
-        if (str_contains($e->getMessage(), 'SQLSTATE') || str_contains($e->getMessage(), 'Duplicate entry')) {
-            return $prefijo.'. Ya existe un comprobante con la misma identificación fiscal '
-                .'(empresa, tipo, letra, sucursal, número y CUIT). Buscalo en el listado de Cuentas a pagar.';
-        }
+        Log::warning('comprobante_proveedor.persistencia_error', [
+            'prefijo' => $prefijo,
+            'clase' => $e::class,
+            'error' => $e->getMessage(),
+        ]);
 
-        return $prefijo.': '.$e->getMessage();
+        return ComprobanteProveedorUnicidadSupport::mensajeParaErrorPersistencia($prefijo, $e);
     }
 
     private function datosFormulario(array $prefill): array
@@ -1127,6 +1130,27 @@ class Comprobante_ProveedorController extends Controller
             );
             $comObligatoria = (bool) ($comPolitica['debe_asignar_com'] ?? false);
 
+            $excluirCpId = (int) ($data->id ?? 0) ?: null;
+            $primeraAnticipadaSinCom = ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc)
+                && ! ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc, $excluirCpId);
+
+            // Alta por OC / precarga / edición: 1ª factura anticipada siempre sin COM.
+            if ($primeraAnticipadaSinCom && ! $contabilizado) {
+                $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_OC;
+                $recepcionesSeleccionadas = [];
+                $comPolitica['permite_factura_anticipada'] = true;
+                $comPolitica['anticipada_elige_modo'] = false;
+                $comPolitica['debe_asignar_com'] = false;
+                $comObligatoria = false;
+                $prefill['com_resolucion'] = [
+                    'ambigua' => false,
+                    'mensaje' => ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaComPrimeraAnticipada(),
+                    'importe_comparacion' => (float) (($prefill['com_resolucion']['importe_comparacion'] ?? 0)),
+                    'importe_comparacion_etiqueta' => (string) ($prefill['com_resolucion']['importe_comparacion_etiqueta'] ?? ''),
+                    'ordencompra_id' => (int) $oc->id,
+                ];
+            }
+
             $modoSugerido = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
                 $comPolitica,
                 (string) ($data->modo_carga ?? '')
@@ -1134,7 +1158,8 @@ class Comprobante_ProveedorController extends Controller
             if ($comObligatoria
                 || ($comPolitica['permite_factura_anticipada'] ?? false)
                 || ($comPolitica['contrato_vigente'] ?? false)
-                || ($comPolitica['sin_com_por_tipo'] ?? false)) {
+                || ($comPolitica['sin_com_por_tipo'] ?? false)
+                || $primeraAnticipadaSinCom) {
                 $data->modo_carga = $modoSugerido;
             }
         }

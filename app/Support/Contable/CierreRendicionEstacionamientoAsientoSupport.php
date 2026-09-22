@@ -265,7 +265,8 @@ final class CierreRendicionEstacionamientoAsientoSupport
             'centrocosto_ids' => $centrocostoIds,
             'cotizaciones' => $cotizaciones,
             'observaciones' => $observaciones,
-            'path_sistema' => 'V',
+            // No setear path_sistema: una letra (ej. "V") pisa ANITA_BDD_PATH
+            // (/usr2/biyemas) y Informix responde 329 (database not found).
         ];
     }
 

@@ -22,6 +22,7 @@ use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
+use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
@@ -850,11 +851,23 @@ class ComprobanteProveedorPersistenciaService
             (float) ($comprobante->total ?? 0),
         );
 
+        // Vencimientos desde condición de pago (F.Comp. + plazo), no fechas absolutas de la OC.
+        $cuotasNormalizadas = ComprobanteProveedorVencimientoCondicionSupport::aplicarACuotas(
+            $cuotasNormalizadas,
+            isset($comprobante->condicionpago_id) ? (int) $comprobante->condicionpago_id : null,
+            $fechaFactura,
+        );
+
         // Candado final: no persistir cuotas desalineadas del total (CC/promov ≠ asiento/compra).
         ComprobanteProveedorCuotasTotalSupport::assertCuadraConTotal(
             (float) ($comprobante->total ?? 0),
             $cuotasNormalizadas,
         );
+
+        $primerVto = $cuotasNormalizadas[0]['fechavencimiento'] ?? null;
+        if ($primerVto) {
+            $comprobante->forceFill(['fechavencimiento' => $primerVto])->save();
+        }
 
         foreach ($cuotasNormalizadas as $cuota) {
             Comprobante_Proveedor_Cuota::query()->create([

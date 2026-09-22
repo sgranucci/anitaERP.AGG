@@ -1611,6 +1611,16 @@ Route::post('stock/transferencia-mercaderia/{id}/rechazar', 'Stock\Transferencia
 Route::get('stock/transferencia-mercaderia/publico/{token}/aprobar', 'Stock\TransferenciaMercaderiaController@aprobarPublico')->name('transferencia_mercaderia_aprobar_publico');
 Route::match(['get', 'post'], 'stock/transferencia-mercaderia/publico/{token}/rechazar', 'Stock\TransferenciaMercaderiaController@rechazarPublico')->name('transferencia_mercaderia_rechazar_publico');
 Route::get('stock/transferencia-mercaderia/publico/{token}/ver', 'Stock\TransferenciaMercaderiaController@verPublico')->name('transferencia_mercaderia_ver_publico');
+
+/*
+ * Asignación de código de barras (cámara) — artículos sin barra con saldo en depósito
+ */
+Route::get('stock/asignacion-codigobarra', 'Stock\AsignacionCodigobarraController@index')->name('asignacion_codigobarra');
+Route::get('stock/asignacion-codigobarra/pendientes', 'Stock\AsignacionCodigobarraController@pendientes')->name('asignacion_codigobarra_pendientes');
+Route::get('stock/asignacion-codigobarra/proveedores', 'Stock\AsignacionCodigobarraController@proveedores')->name('asignacion_codigobarra_proveedores');
+Route::post('stock/asignacion-codigobarra/guardar', 'Stock\AsignacionCodigobarraController@guardar')->name('asignacion_codigobarra_guardar');
+Route::post('stock/asignacion-codigobarra/decodificar-foto', 'Stock\AsignacionCodigobarraController@decodificarFoto')->name('asignacion_codigobarra_decodificar_foto');
+
 Route::get('stock/reporte-movimientos-bien-uso', 'Stock\BienUsoMovimientoReporteController@index')->name('reporte_movimientos_bien_uso');
 Route::get('stock/listar-reporte-movimientos-bien-uso/{formato?}', 'Stock\BienUsoMovimientoReporteController@exportar')->name('listar_reporte_movimientos_bien_uso');
 Route::get('stock/reporte-baja-npu', 'Stock\ParteUnicaBajaReporteController@index')->name('reporte_baja_npu');
@@ -3975,6 +3985,8 @@ Route::get('compras/legajos/{id}/historia', 'Compras\OrdencompraLegajoBandejaCon
 Route::get('compras/legajos/{id}/paquete', 'Compras\OrdencompraLegajoBandejaController@paquete')->name('ordencompra_legajo_bandeja_paquete');
 Route::post('compras/legajos/{id}/nota', 'Compras\OrdencompraLegajoBandejaController@guardarNota')->name('ordencompra_legajo_bandeja_nota');
 Route::post('compras/legajos/{id}/asignar-com', 'Compras\OrdencompraLegajoBandejaController@asignarCom')->name('ordencompra_legajo_bandeja_asignar_com');
+Route::post('compras/legajos/{id}/marcar-pendiente-entrega', 'Compras\OrdencompraLegajoBandejaController@marcarPendienteEntrega')->name('ordencompra_legajo_bandeja_marcar_pendiente_entrega');
+Route::post('compras/legajos/{id}/liberar-pendiente-entrega', 'Compras\OrdencompraLegajoBandejaController@liberarPendienteEntrega')->name('ordencompra_legajo_bandeja_liberar_pendiente_entrega');
 Route::post('compras/legajos/{id}/corregir-tipo-documento', 'Compras\OrdencompraLegajoBandejaController@corregirTipoDocumento')->name('ordencompra_legajo_bandeja_corregir_tipo');
 Route::post('compras/legajos/{id}/descartar-scan-anita', 'Compras\OrdencompraLegajoBandejaController@descartarScanAnita')->name('ordencompra_legajo_bandeja_descartar_scan');
 Route::post('compras/legajos/{id}/revertir-descarte-scan-anita', 'Compras\OrdencompraLegajoBandejaController@revertirDescarteScanAnita')->name('ordencompra_legajo_bandeja_revertir_descarte_scan');

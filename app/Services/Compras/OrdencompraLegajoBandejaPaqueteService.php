@@ -104,7 +104,7 @@ class OrdencompraLegajoBandejaPaqueteService
         $facturas = $this->marcarDuplicadosFiscalesFueraDelLegajo($facturas);
         $facturas = $this->fusionarComprobantesEnFacturas($facturas, $comprobantes);
         $facturas = $this->adjuntarScansAnitaAFacturas($oc, $facturas);
-        [$facturas, $coms] = $this->adjuntarAsignacionesYSugerenciasCom($facturas, $coms, $asignadas);
+        [$facturas, $coms] = $this->adjuntarAsignacionesYSugerenciasCom($oc, $facturas, $coms, $asignadas);
         $detallePagos = $this->resolverPagosDeComprobantes(
             array_map(static fn (array $c) => (int) $c['id'], $comprobantes)
         );
@@ -139,6 +139,10 @@ class OrdencompraLegajoBandejaPaqueteService
             'ordencompra_id' => (int) $oc->id,
             'numero' => (string) $oc->numeroordencompra,
             'es_anticipada' => \App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc),
+            'permite_asignar_com' => ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc),
+            'mensaje_bloquea_com_anticipada' => ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc)
+                ? null
+                : ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaComPrimeraAnticipada(),
             'tratamiento' => (string) ($oc->tratamiento ?? ''),
             'facturas' => $facturas,
             'tipos_opciones' => $tiposOpciones,
@@ -315,6 +319,12 @@ class OrdencompraLegajoBandejaPaqueteService
 
             // Sin COM tocadas (NC/ND o quitar asignación): no revalidar mallas históricas del legajo.
             if ($comsTocadasList !== []) {
+                if (! ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc)) {
+                    throw ValidationException::withMessages([
+                        'recepcion_ids' => ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaComPrimeraAnticipada(),
+                    ]);
+                }
+
                 if (! $this->permiteCompartirComEntreFacturas($oc)) {
                     $conflicto = ComprobanteProveedorReservaComLegajoSupport::mensajeComDuplicadaEntreFacturas(
                         $mapaEfectivo,
@@ -334,10 +344,28 @@ class OrdencompraLegajoBandejaPaqueteService
                 );
                 $importes = $this->importePorFacturaDelLegajo($oc, $mapaProvision);
                 $importes = $this->anularImportesQueNoExigenCom($oc, $importes);
+                $contextoMoneda = $this->contextoMonedaPorFactura($oc, $mapaProvision);
+                $provisionPorCom = $this->provisionPorComEnMonedaFactura(
+                    $mapaProvision,
+                    $contextoMoneda,
+                );
+
+                $monedaIncoherente = ComprobanteProveedorReservaComLegajoSupport::mensajeMonedaIncoherenteFacturaVsCom(
+                    $mapaProvision,
+                    $provisionPorCom,
+                    $importes,
+                    $contextoMoneda,
+                    $etiquetasCom,
+                );
+                if ($monedaIncoherente !== null) {
+                    throw ValidationException::withMessages([
+                        'recepcion_ids' => $monedaIncoherente,
+                    ]);
+                }
 
                 $exceso = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
                     $mapaProvision,
-                    $this->provisionPorCom($oc, $mapaProvision),
+                    $provisionPorCom,
                     $importes,
                     $etiquetasCom,
                     ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc),
@@ -365,10 +393,198 @@ class OrdencompraLegajoBandejaPaqueteService
                         'user_id' => Auth::id() ? (int) Auth::id() : null,
                     ]);
                 }
+                // Si habían retenido la FC por falta de entrega y ahora hay COM, vuelve a pendiente de carga.
+                if ($ids !== []) {
+                    $this->liberarPendienteEntregaSiCorresponde($precargaId);
+                }
             }
 
             $this->registrarHistoriaAsignacionCom($oc, $normalizadas, $previas, $etiquetasCom);
         });
+    }
+
+    /**
+     * Marca facturas del legajo como pendiente de entrega (retenidas hasta que llegue la mercadería).
+     *
+     * @param  list<int>  $precargaIds
+     */
+    public function marcarPendienteEntrega(Ordencompra $oc, array $precargaIds): void
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn ($id) => (int) $id, $precargaIds),
+            static fn (int $id) => $id > 0
+        )));
+        if ($ids === []) {
+            throw ValidationException::withMessages([
+                'precarga_ids' => 'Indicá al menos una factura para marcar como pendiente de entrega.',
+            ]);
+        }
+
+        DB::transaction(function () use ($oc, $ids) {
+            $this->bloquearLegajoParaAsignacion($oc);
+            $precargas = $this->precargasDelLegajoPorIds($oc, $ids);
+            if (count($precargas) !== count($ids)) {
+                throw ValidationException::withMessages([
+                    'precarga_ids' => 'Hay facturas que no pertenecen a este legajo.',
+                ]);
+            }
+            foreach ($precargas as $pre) {
+                $estado = (string) ($pre->estado ?? '');
+                if (PrecargaComprobanteEstados::esPendienteEntrega($estado)) {
+                    continue;
+                }
+                if (! PrecargaComprobanteEstados::puedeMarcarPendienteEntrega($estado)) {
+                    throw ValidationException::withMessages([
+                        'precarga_ids' => 'La factura '
+                            .$this->etiquetaCortaPrecarga($pre)
+                            .' no se puede marcar como pendiente de entrega (estado '.$estado.').',
+                    ]);
+                }
+                if ($this->precargaYaCargadaEnCxp($oc, $pre)) {
+                    throw ValidationException::withMessages([
+                        'precarga_ids' => 'La factura '
+                            .$this->etiquetaCortaPrecarga($pre)
+                            .' ya está cargada en Cuentas a pagar.',
+                    ]);
+                }
+                $tipo = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($pre);
+                if (! OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo)) {
+                    throw ValidationException::withMessages([
+                        'precarga_ids' => 'Solo se retienen facturas que exigen COM.',
+                    ]);
+                }
+                $pre->estado = PrecargaComprobanteEstados::PENDIENTE_ENTREGA;
+                $pre->save();
+            }
+            $this->registrarHistoriaPendienteEntrega($oc, $precargas, true);
+        });
+    }
+
+    /**
+     * Libera facturas retenidas: vuelven a PENDIENTE para asignar COM y cargar en CxP.
+     *
+     * @param  list<int>  $precargaIds
+     */
+    public function liberarPendienteEntrega(Ordencompra $oc, array $precargaIds): void
+    {
+        $ids = array_values(array_unique(array_filter(
+            array_map(static fn ($id) => (int) $id, $precargaIds),
+            static fn (int $id) => $id > 0
+        )));
+        if ($ids === []) {
+            throw ValidationException::withMessages([
+                'precarga_ids' => 'Indicá al menos una factura para liberar.',
+            ]);
+        }
+
+        DB::transaction(function () use ($oc, $ids) {
+            $this->bloquearLegajoParaAsignacion($oc);
+            $precargas = $this->precargasDelLegajoPorIds($oc, $ids);
+            if (count($precargas) !== count($ids)) {
+                throw ValidationException::withMessages([
+                    'precarga_ids' => 'Hay facturas que no pertenecen a este legajo.',
+                ]);
+            }
+            $liberadas = [];
+            foreach ($precargas as $pre) {
+                if (! PrecargaComprobanteEstados::esPendienteEntrega($pre->estado ?? null)) {
+                    continue;
+                }
+                $pre->estado = PrecargaComprobanteEstados::PENDIENTE;
+                $pre->save();
+                $liberadas[] = $pre;
+            }
+            if ($liberadas !== []) {
+                $this->registrarHistoriaPendienteEntrega($oc, $liberadas, false);
+            }
+        });
+    }
+
+    private function liberarPendienteEntregaSiCorresponde(int $precargaId): void
+    {
+        $pre = Precarga_Comprobante_Proveedor::query()->find($precargaId);
+        if (! $pre || ! PrecargaComprobanteEstados::esPendienteEntrega($pre->estado ?? null)) {
+            return;
+        }
+        $pre->estado = PrecargaComprobanteEstados::PENDIENTE;
+        $pre->save();
+    }
+
+    /**
+     * @param  list<int>  $ids
+     * @return \Illuminate\Support\Collection<int, Precarga_Comprobante_Proveedor>
+     */
+    private function precargasDelLegajoPorIds(Ordencompra $oc, array $ids)
+    {
+        $numero = trim((string) $oc->numeroordencompra);
+        $empresaId = (int) $oc->empresa_id;
+
+        return Precarga_Comprobante_Proveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->where('numeroordencompra', $numero)
+            ->whereIn('id', $ids)
+            ->with('tipotransaccion_compras:id,abreviatura,codigoafip')
+            ->get();
+    }
+
+    private function precargaYaCargadaEnCxp(Ordencompra $oc, Precarga_Comprobante_Proveedor $pre): bool
+    {
+        return Comprobante_Proveedor::query()
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+            })
+            ->where(function ($q) use ($oc, $pre) {
+                $q->where('precarga_comprobante_proveedor_id', (int) $pre->id)
+                    ->orWhere(function ($w) use ($oc, $pre) {
+                        $w->where('ordencompra_id', (int) $oc->id)
+                            ->where('letra', (string) ($pre->letra ?? ''))
+                            ->where('sucursal', (int) ($pre->sucursal ?? 0))
+                            ->where('numerocomprobante', (int) ($pre->numerocomprobante ?? 0));
+                    });
+            })
+            ->exists();
+    }
+
+    private function etiquetaCortaPrecarga(Precarga_Comprobante_Proveedor $pre): string
+    {
+        $tipo = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($pre);
+        $numero = trim(sprintf(
+            '%s %04d-%08d',
+            $pre->letra ?: 'FC',
+            (int) $pre->sucursal,
+            (int) $pre->numerocomprobante
+        ));
+
+        return OrdencompraLegajoDocumentoTipoSupport::numeroConTipo($tipo, $numero);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Precarga_Comprobante_Proveedor>|list<Precarga_Comprobante_Proveedor>  $precargas
+     */
+    private function registrarHistoriaPendienteEntrega(Ordencompra $oc, $precargas, bool $reteniendo): void
+    {
+        $etiquetas = [];
+        foreach ($precargas as $pre) {
+            $etiquetas[] = $this->etiquetaCortaPrecarga($pre);
+        }
+        if ($etiquetas === []) {
+            return;
+        }
+        $accion = $reteniendo ? 'Pendiente de entrega' : 'Liberar pendiente de entrega';
+        $detalle = ($reteniendo
+            ? 'Facturas retenidas hasta recepción de mercadería: '
+            : 'Facturas liberadas para asignar COM / cargar en CxP: '
+        ).implode(', ', $etiquetas);
+
+        Ordencompra_Historia::query()->create([
+            'ordencompra_id' => (int) $oc->id,
+            'sector_legajocompra_id' => $oc->sector_legajocompra_id ? (int) $oc->sector_legajocompra_id : null,
+            'fecha' => now(),
+            'observacion' => $accion,
+            'leyenda' => $detalle,
+            'creousuario_id' => Auth::id() ? (int) Auth::id() : null,
+        ]);
     }
 
     /**
@@ -411,13 +627,79 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
-     * Provisión contable de cada COM involucrada, en la moneda de la recepción.
+     * Moneda/cotización/fecha de cada factura del mapa (precarga_id o cp-N).
+     * Manda la moneda de la factura: la comparación con la COM se hace en esa moneda.
      *
      * @param  array<int|string, list<int>>  $mapaEfectivo
+     * @return array<int|string, array{moneda_id: int, cotizacion: float, fecha: mixed}>
+     */
+    private function contextoMonedaPorFactura(Ordencompra $oc, array $mapaEfectivo): array
+    {
+        $precargaIds = [];
+        $cpIds = [];
+        foreach (array_keys($mapaEfectivo) as $clave) {
+            if (is_int($clave) || ctype_digit((string) $clave)) {
+                $id = (int) $clave;
+                if ($id > 0) {
+                    $precargaIds[$id] = true;
+                }
+                continue;
+            }
+            if (preg_match('/^cp-(\d+)$/i', (string) $clave, $m)) {
+                $cpIds[(int) $m[1]] = true;
+            }
+        }
+
+        $out = [];
+        if ($precargaIds !== []) {
+            $pres = Precarga_Comprobante_Proveedor::query()
+                ->whereIn('id', array_keys($precargaIds))
+                ->get(['id', 'moneda_id', 'cotizacion', 'fechafactura']);
+            foreach ($pres as $pre) {
+                $out[(int) $pre->id] = [
+                    'moneda_id' => max(1, (int) ($pre->moneda_id ?: 1)),
+                    'cotizacion' => (float) ($pre->cotizacion ?? 0),
+                    'fecha' => $pre->fechafactura,
+                ];
+            }
+        }
+
+        if ($cpIds !== []) {
+            $cps = Comprobante_Proveedor::query()
+                ->whereIn('id', array_keys($cpIds))
+                ->get(['id', 'moneda_id', 'cotizacion', 'fechacomprobante', 'precarga_comprobante_proveedor_id']);
+            foreach ($cps as $cp) {
+                $cpId = (int) $cp->id;
+                $ctx = [
+                    'moneda_id' => max(1, (int) ($cp->moneda_id ?: 1)),
+                    'cotizacion' => (float) ($cp->cotizacion ?? 0),
+                    'fecha' => $cp->fechacomprobante,
+                ];
+                $out['cp-'.$cpId] = $ctx;
+                $preId = (int) ($cp->precarga_comprobante_proveedor_id ?? 0);
+                // El CP manda sobre la precarga (scan Anita a veces deja moneda de la OC).
+                if ($preId > 0) {
+                    $out[$preId] = $ctx;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Provisión contable de cada COM, convertida a la moneda de la factura que la usa.
+     * Sin conversión (solo moneda de la recepción) un FC en pesos vs COM en USD dispara
+     * falso exceso (ej. OC 216515: 266 USD vs 406.980 ARS = 266 × 1530).
+     *
+     * @param  array<int|string, list<int>>  $mapaEfectivo
+     * @param  array<int|string, array{moneda_id: int, cotizacion: float, fecha: mixed}>  $contextoMoneda
      * @return array<int, float>
      */
-    private function provisionPorCom(Ordencompra $oc, array $mapaEfectivo): array
-    {
+    private function provisionPorComEnMonedaFactura(
+        array $mapaEfectivo,
+        array $contextoMoneda,
+    ): array {
         $ids = [];
         foreach ($mapaEfectivo as $recepcionIds) {
             foreach ((array) $recepcionIds as $recepcionId) {
@@ -439,12 +721,44 @@ class OrdencompraLegajoBandejaPaqueteService
             return [];
         }
 
+        $support = app(ComprobanteProveedorRecepcionesSupport::class);
+        $recepciones = $support->enriquecerConImporteProvision($recepciones);
+
+        $ctxPorCom = [];
+        foreach ($mapaEfectivo as $clave => $recepcionIds) {
+            $ctx = $contextoMoneda[$clave] ?? $contextoMoneda[(string) $clave] ?? null;
+            if ($ctx === null) {
+                continue;
+            }
+            foreach ((array) $recepcionIds as $recepcionId) {
+                $rid = (int) $recepcionId;
+                if ($rid <= 0) {
+                    continue;
+                }
+                // Una COM tocada por varias facturas: la primera con contexto define la moneda
+                // de comparación (en anticipada suelen compartir moneda).
+                $ctxPorCom[$rid] ??= $ctx;
+            }
+        }
+
         $out = [];
-        foreach (
-            app(ComprobanteProveedorRecepcionesSupport::class)
-                ->enriquecerConImporteProvision($recepciones) as $recepcion
-        ) {
-            $out[(int) $recepcion->id] = round((float) ($recepcion->importe_provision_com ?? 0), 2);
+        foreach ($recepciones as $recepcion) {
+            $rid = (int) $recepcion->id;
+            $me = (float) ($recepcion->importe_provision_com ?? 0);
+            $ctx = $ctxPorCom[$rid] ?? null;
+            if ($ctx === null || $me <= 0.00001) {
+                $out[$rid] = round($me, 2);
+                continue;
+            }
+            $out[$rid] = ComprobanteProveedorImporteComparacionComSupport::desdeRecepcionAFacturaTolerante(
+                $me,
+                (int) ($recepcion->moneda_id ?: 1),
+                (float) ($recepcion->cotizacion ?: 0),
+                (int) $ctx['moneda_id'],
+                (float) $ctx['cotizacion'],
+                $recepcion->fecha ?? null,
+                $ctx['fecha'] ?? null,
+            );
         }
 
         return $out;
@@ -830,6 +1144,7 @@ class OrdencompraLegajoBandejaPaqueteService
                 (int) $pre->numerocomprobante
             ));
             $base = $abrev !== '' ? $abrev.' '.$numero : $numero;
+            $pendienteEntrega = PrecargaComprobanteEstados::esPendienteEntrega($pre->estado ?? null);
             $out[] = [
                 'id' => $id,
                 'origen' => 'precarga',
@@ -846,16 +1161,21 @@ class OrdencompraLegajoBandejaPaqueteService
                 'subtotal' => $pre->subtotal !== null ? (float) $pre->subtotal : null,
                 'total' => $pre->total !== null ? (float) $pre->total : null,
                 'estado' => (string) ($pre->estado ?? ''),
+                'pendiente_entrega' => $pendienteEntrega,
+                'puede_marcar_pendiente_entrega' => PrecargaComprobanteEstados::puedeMarcarPendienteEntrega($pre->estado ?? null)
+                    && OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo),
                 'url_pdf' => route('ordencompra_legajo_bandeja_factura_pdf', [
                     'id' => (int) $oc->id,
                     'precarga' => $id,
                     'inline' => 1,
                 ]),
-                'url_cargar_cxp' => route('crear_comprobante_proveedor', [
-                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
-                    'ordencompra_id' => (int) $oc->id,
-                    'precarga_id' => $id,
-                ]),
+                'url_cargar_cxp' => $pendienteEntrega
+                    ? null
+                    : route('crear_comprobante_proveedor', [
+                        'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+                        'ordencompra_id' => (int) $oc->id,
+                        'precarga_id' => $id,
+                    ]),
             ];
         }
 
@@ -974,8 +1294,12 @@ class OrdencompraLegajoBandejaPaqueteService
      * @param  array<int|string, list<int>>  $asignadas
      * @return array{0: list<array<string, mixed>>, 1: list<array<string, mixed>>}
      */
-    private function adjuntarAsignacionesYSugerenciasCom(array $facturas, array $coms, array $asignadas): array
-    {
+    private function adjuntarAsignacionesYSugerenciasCom(
+        Ordencompra $oc,
+        array $facturas,
+        array $coms,
+        array $asignadas,
+    ): array {
         $comsPorId = [];
         foreach ($coms as $com) {
             $comsPorId[(int) ($com['id'] ?? 0)] = $com;
@@ -996,7 +1320,10 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
 
-        $sugeridaFacACom = $this->sugerirComPorFactura($facturas, $coms, $asignadaComAFac);
+        $puedeSugerirCom = ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado($oc);
+        $sugeridaFacACom = $puedeSugerirCom
+            ? $this->sugerirComPorFactura($facturas, $coms, $asignadaComAFac)
+            : [];
         $sugeridaComAFac = [];
         foreach ($sugeridaFacACom as $facKey => $info) {
             $rid = (int) ($info['com_id'] ?? 0);

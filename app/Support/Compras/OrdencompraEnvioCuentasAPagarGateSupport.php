@@ -80,11 +80,16 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         if (! $tieneFactura) {
             $errores[] = 'Debe asignar una factura (precarga o PDF escaneado) al legajo antes de enviarlo a Cuentas a pagar.';
         }
+        $faltanComDetalle = [];
         $faltanCom = [];
         if ($exigeCom) {
-            $faltanCom = self::documentosQueExigenComSinAsignar($oc);
+            $faltanComDetalle = self::documentosQueExigenComSinAsignarDetalle($oc);
+            $faltanCom = array_map(
+                static fn (array $d) => (string) ($d['etiqueta'] ?? ''),
+                $faltanComDetalle
+            );
             if ($faltanCom !== []) {
-                $errores[] = 'Falta asignar COM a: '.implode(', ', $faltanCom).'.';
+                $errores[] = self::mensajeFaltanComConRetencion($faltanCom);
             } elseif (! $tieneCom && self::documentosQueExigenCom($oc) !== []) {
                 $errores[] = self::mensajeFaltaCom($politica);
             }
@@ -97,6 +102,11 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         }
 
         $pendientes = self::documentosPendientesCarga($oc);
+        $retenidos = self::documentosPendienteEntrega($oc);
+        if ($pendientes === [] && $retenidos !== [] && self::clavesComprobantesCargados($oc) === []) {
+            $errores[] = 'Todas las facturas del legajo están pendientes de entrega. '
+                .'Liberá al menos una (o asigná COM) para enviar algo a Cuentas a pagar.';
+        }
         $tieneComAsignadaDocs = $exigeCom
             ? $faltanCom === []
             : $tieneComAsignada;
@@ -114,6 +124,8 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             'precarga_id' => $facturaPdf?->id ?? $precarga?->id,
             'pendientes_carga' => count($pendientes),
             'siguiente_pendiente' => $pendientes[0]['etiqueta'] ?? null,
+            'faltan_com' => $faltanComDetalle,
+            'documentos_pendiente_entrega' => $retenidos,
         ];
     }
 
@@ -210,6 +222,15 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         }
 
         return self::exigeRecepcionSegunPolitica($politica);
+    }
+
+    /**
+     * @param  list<string>  $faltanCom
+     */
+    private static function mensajeFaltanComConRetencion(array $faltanCom): string
+    {
+        return 'Falta asignar COM a: '.implode(', ', $faltanCom)
+            .'. Asigná la COM o marcá la factura como pendiente de entrega.';
     }
 
     /** @param  array<string, mixed>  $politica */
@@ -358,9 +379,32 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
      */
     public static function documentosQueExigenComSinAsignar(Ordencompra $oc, bool $incluirAnita = true): array
     {
+        return array_values(array_map(
+            static fn (array $d) => (string) ($d['etiqueta'] ?? ''),
+            self::documentosQueExigenComSinAsignarDetalle($oc, $incluirAnita)
+        ));
+    }
+
+    /**
+     * Documentos que exigen COM y aún no la tienen (excluye retenidas / ya cargadas).
+     *
+     * @return list<array{precarga_id: int|null, anita_id: string|null, etiqueta: string, puede_retener: bool}>
+     */
+    public static function documentosQueExigenComSinAsignarDetalle(Ordencompra $oc, bool $incluirAnita = true): array
+    {
         $cargadas = self::clavesComprobantesCargados($oc);
         if (! Schema::hasTable('precarga_comprobante_proveedor_recepcion')) {
-            return self::documentosQueExigenCom($oc);
+            $out = [];
+            foreach (self::documentosQueExigenCom($oc) as $etiqueta) {
+                $out[] = [
+                    'precarga_id' => null,
+                    'anita_id' => null,
+                    'etiqueta' => $etiqueta,
+                    'puede_retener' => false,
+                ];
+            }
+
+            return $out;
         }
         $out = [];
         // Incluye CARGADA_ANITA / no pendientes: el scan Anita gemelo no debe exigir COM de nuevo.
@@ -393,7 +437,12 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
                 ->where('precarga_comprobante_proveedor_id', (int) $pre->id)
                 ->exists();
             if (! $tiene) {
-                $out[] = self::etiquetaPrecargaCorta($pre, $tipo);
+                $out[] = [
+                    'precarga_id' => (int) $pre->id,
+                    'anita_id' => null,
+                    'etiqueta' => self::etiquetaPrecargaCorta($pre, $tipo),
+                    'puede_retener' => PrecargaComprobanteEstados::puedeMarcarPendienteEntrega($pre->estado ?? null),
+                ];
             }
         }
 
@@ -414,10 +463,42 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             if (! $exige) {
                 continue;
             }
-            $out[] = OrdencompraLegajoDocumentoTipoSupport::numeroConTipo(
-                $tipo,
-                trim((string) ($scan['numero'] ?? $scan['etiqueta'] ?? 'scan Anita'))
-            );
+            $out[] = [
+                'precarga_id' => null,
+                'anita_id' => (string) ($scan['id'] ?? ''),
+                'etiqueta' => OrdencompraLegajoDocumentoTipoSupport::numeroConTipo(
+                    $tipo,
+                    trim((string) ($scan['numero'] ?? $scan['etiqueta'] ?? 'scan Anita'))
+                ),
+                // Sin precarga materializada no se puede retener: hay que materializar o asignar COM.
+                'puede_retener' => false,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Facturas retenidas por mercadería pendiente de entrega.
+     *
+     * @return list<array{precarga_id: int, etiqueta: string}>
+     */
+    public static function documentosPendienteEntrega(Ordencompra $oc): array
+    {
+        $out = [];
+        foreach (self::queryPrecargaDelLegajo($oc)
+            ->with('tipotransaccion_compras:id,abreviatura,codigoafip')
+            ->whereNotNull('rutaalmacenamiento')
+            ->where('rutaalmacenamiento', '!=', '')
+            ->get() as $pre) {
+            if (! PrecargaComprobanteEstados::esPendienteEntrega($pre->estado ?? null)) {
+                continue;
+            }
+            $tipo = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($pre);
+            $out[] = [
+                'precarga_id' => (int) $pre->id,
+                'etiqueta' => self::etiquetaPrecargaCorta($pre, $tipo),
+            ];
         }
 
         return $out;
@@ -460,11 +541,16 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         if (! $tieneFactura) {
             $errores[] = 'Debe asignar una factura (precarga o PDF escaneado) al legajo antes de enviarlo a Cuentas a pagar.';
         }
+        $faltanComDetalle = [];
         $faltanCom = [];
         if ($exigeCom) {
-            $faltanCom = self::documentosQueExigenComSinAsignar($oc, false);
+            $faltanComDetalle = self::documentosQueExigenComSinAsignarDetalle($oc, false);
+            $faltanCom = array_map(
+                static fn (array $d) => (string) ($d['etiqueta'] ?? ''),
+                $faltanComDetalle
+            );
             if ($faltanCom !== []) {
-                $errores[] = 'Falta asignar COM a: '.implode(', ', $faltanCom).'.';
+                $errores[] = self::mensajeFaltanComConRetencion($faltanCom);
             } elseif (! $tieneCom && self::documentosQueExigenCom($oc) !== []) {
                 $errores[] = self::mensajeFaltaCom($politica);
             }
@@ -474,6 +560,13 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             ->erroresEnvioCuentasAPagar($oc);
         foreach ($erroresContrato as $errorContrato) {
             $errores[] = $errorContrato;
+        }
+
+        $retenidos = self::documentosPendienteEntrega($oc);
+        $pendientesCarga = self::documentosPendientesCarga($oc);
+        if ($pendientesCarga === [] && $retenidos !== [] && self::clavesComprobantesCargados($oc) === []) {
+            $errores[] = 'Todas las facturas del legajo están pendientes de entrega. '
+                .'Liberá al menos una (o asigná COM) para enviar algo a Cuentas a pagar.';
         }
 
         $paqueteErrores = $errores;
@@ -502,6 +595,8 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             'requiere_gastronomia' => OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc),
             'paquete_ok' => $paqueteOk,
             'paquete_errores' => $paqueteErrores,
+            'faltan_com' => $faltanComDetalle,
+            'documentos_pendiente_entrega' => $retenidos,
         ];
     }
 

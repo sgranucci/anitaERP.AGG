@@ -24,6 +24,13 @@ final class ComprobanteProveedorConceptoIvaTipos
      */
     public const CODIGOS_IMPUESTO_INTERNO = ['5', '510'];
 
+    /**
+     * Descuentos Anita (conccomp): 80 gravado, 81 exento.
+     * Pueden cargarse en negativo; en el asiento se netean al neto y en IVA Digital
+     * se informan con el signo cargado (vía neteo / importeNeteado).
+     */
+    public const CODIGOS_DESCUENTO = ['80', '81'];
+
     /** Percepción IVA (enum valor P). */
     public const PERCEPCION_IVA = 'P';
 
@@ -52,6 +59,26 @@ final class ComprobanteProveedorConceptoIvaTipos
         $cod = trim((string) $codigo);
 
         return $cod !== '' && in_array($cod, self::CODIGOS_IMPUESTO_INTERNO, true);
+    }
+
+    public static function esDescuento(string|int|null $codigo = null): bool
+    {
+        $cod = trim((string) $codigo);
+
+        return $cod !== '' && in_array($cod, self::CODIGOS_DESCUENTO, true);
+    }
+
+    /**
+     * Exento (E) y descuentos 80/81: admiten monto negativo en compras.
+     * El asiento los suma al neto (con signo); IVA Digital conserva el signo cargado.
+     */
+    public static function permiteMontoNegativo(?string $tipoconcepto, string|int|null $codigo = null): bool
+    {
+        if (self::esDescuento($codigo)) {
+            return true;
+        }
+
+        return strtoupper((string) $tipoconcepto) === 'E';
     }
 
     /**

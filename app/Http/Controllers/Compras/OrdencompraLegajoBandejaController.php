@@ -168,7 +168,7 @@ class OrdencompraLegajoBandejaController extends Controller
             'recepcion_ids.*' => 'nullable|integer|min:0',
         ]);
 
-        $oc = $this->paqueteService->encontrarOcVisible($id);
+        $oc = $this->paqueteService->encontrarOcConsulta($id);
         $asignaciones = $request->input('asignaciones');
         if (is_array($asignaciones) && $asignaciones !== []) {
             $this->paqueteService->asignarMultiples($oc, $asignaciones);
@@ -187,6 +187,68 @@ class OrdencompraLegajoBandejaController extends Controller
                 'ok' => true,
                 'mensaje' => $mensaje,
                 'paquete' => $this->paqueteService->paquete($oc),
+            ]);
+        }
+
+        return redirect()
+            ->route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString($this->filtrosDesdeRequest($request)))
+            ->with('mensaje', $mensaje);
+    }
+
+    public function marcarPendienteEntrega(Request $request, int $id)
+    {
+        $this->autorizar();
+        if (! $this->puedeAsignarCom()) {
+            can('actualizar-ordencompra');
+        }
+
+        $validated = $request->validate([
+            'precarga_ids' => 'required|array|min:1|max:50',
+            'precarga_ids.*' => 'integer|min:1',
+        ]);
+
+        $oc = $this->paqueteService->encontrarOcConsulta($id);
+        $this->paqueteService->marcarPendienteEntrega($oc, $validated['precarga_ids']);
+
+        $mensaje = 'Factura(s) marcadas como pendiente de entrega. Cuentas a pagar las omitirá hasta que se liberen.';
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'ok' => true,
+                'mensaje' => $mensaje,
+                'paquete' => $this->paqueteService->paquete($oc),
+                'gate' => OrdencompraEnvioCuentasAPagarGateSupport::preflightCuentasAPagar($oc),
+            ]);
+        }
+
+        return redirect()
+            ->route('consultar_legajo_compra', OrdencompraLegajoBandejaFiltros::paraQueryString($this->filtrosDesdeRequest($request)))
+            ->with('mensaje', $mensaje);
+    }
+
+    public function liberarPendienteEntrega(Request $request, int $id)
+    {
+        $this->autorizar();
+        if (! $this->puedeAsignarCom()) {
+            can('actualizar-ordencompra');
+        }
+
+        $validated = $request->validate([
+            'precarga_ids' => 'required|array|min:1|max:50',
+            'precarga_ids.*' => 'integer|min:1',
+        ]);
+
+        $oc = $this->paqueteService->encontrarOcConsulta($id);
+        $this->paqueteService->liberarPendienteEntrega($oc, $validated['precarga_ids']);
+
+        $mensaje = 'Factura(s) liberadas. Asigná la COM y volvé a enviar el legajo a Cuentas a pagar.';
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'ok' => true,
+                'mensaje' => $mensaje,
+                'paquete' => $this->paqueteService->paquete($oc),
+                'gate' => OrdencompraEnvioCuentasAPagarGateSupport::preflightCuentasAPagar($oc),
             ]);
         }
 

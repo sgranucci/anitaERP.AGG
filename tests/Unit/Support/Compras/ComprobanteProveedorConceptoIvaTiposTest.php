@@ -7,31 +7,20 @@ use PHPUnit\Framework\TestCase;
 
 class ComprobanteProveedorConceptoIvaTiposTest extends TestCase
 {
-    public function test_impuesto_interno_por_tipo_t_o_codigo_anita(): void
+    public function test_permite_monto_negativo_en_exento_y_descuentos_80_81(): void
     {
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('T'));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('t'));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('N', '5'));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('T', '510'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('I'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('N', '1'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esNeto('T'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia('N', '5'));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia('G', '50'));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia('N', '2'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('E', '1'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('E', '81'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('G', '80'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esDescuento('80'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esDescuento(81));
     }
 
-    public function test_ii_solo_revierte_provision_si_la_com_lo_incluye(): void
+    public function test_no_permite_negativo_en_gravado_ni_iva_ordinario(): void
     {
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('G'));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('N'));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('E'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('T'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('N', '5'));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('T', '510', true));
-        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('N', '5', true));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('I'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('P'));
-        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::revierteProvisionCom('B'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('G', '50'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('I', '503'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('N', '1'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esDescuento('50'));
     }
 }

@@ -118,7 +118,10 @@ class ComprobanteProveedorComLegajoResolucionService
     }
 
     /**
-     * Aplica modo ASIGNA_RECEPCION y OC vinculada cuando hay COM en el legajo.
+     * Aplica modo y OC vinculada cuando hay COM en el legajo.
+     *
+     * OC anticipada: no fuerza COM. Default = factura anticipada (ASIGNA_OC); solo aplica
+     * recepción si Compras la asignó en la bandeja. El operador puede cambiar a COM.
      *
      * @param  array<string, mixed>  $prefill
      *
@@ -149,7 +152,6 @@ class ComprobanteProveedorComLegajoResolucionService
 
         /** @var \App\Models\Compras\Comprobante_Proveedor $data */
         $data = $prefill['data'];
-        $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
 
         // La OC de la precarga manda: una COM de otra OC del mismo proveedor no la reemplaza.
         $ordencompraId = $ordencompra?->id
@@ -164,11 +166,90 @@ class ComprobanteProveedorComLegajoResolucionService
             $data->setRelation('ordencompras', $ordencompra);
         }
 
+        $idsBandeja = $this->idsComAsignadasBandeja($precarga, $resolucion['recepciones_disponibles']);
+        $esAnticipada = ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($ordencompra);
+        $permiteComAnticipada = ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado(
+            $ordencompra,
+            (int) ($data->id ?? 0) ?: null
+        );
+
+        // Anticipada 50/50: 1ª factura siempre sin COM (aunque bandeja tenga asignación errónea).
+        if ($esAnticipada && ! $permiteComAnticipada) {
+            $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_OC;
+
+            return array_merge($prefill, [
+                'recepciones_disponibles' => $resolucion['recepciones_disponibles'],
+                'recepciones_seleccionadas' => [],
+                'com_resolucion' => [
+                    'ambigua' => false,
+                    'mensaje' => ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaComPrimeraAnticipada(),
+                    'importe_comparacion' => (float) ($resolucion['com_resolucion']['importe_comparacion'] ?? 0),
+                    'importe_comparacion_etiqueta' => (string) ($resolucion['com_resolucion']['importe_comparacion_etiqueta'] ?? ''),
+                    'ordencompra_id' => $ordencompraId > 0 ? $ordencompraId : null,
+                ],
+            ]);
+        }
+
+        // Anticipada con COM ya habilitada: no pre-marcar recepción salvo asignación en bandeja.
+        if ($esAnticipada && $idsBandeja === []) {
+            $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_OC;
+
+            return array_merge($prefill, [
+                'recepciones_disponibles' => $resolucion['recepciones_disponibles'],
+                'recepciones_seleccionadas' => [],
+                'com_resolucion' => [
+                    'ambigua' => false,
+                    'mensaje' => 'OC anticipada con COM disponible: se carga como factura anticipada. '
+                        .'Si corresponde, cambie el modo y asigne la recepción.',
+                    'importe_comparacion' => (float) ($resolucion['com_resolucion']['importe_comparacion'] ?? 0),
+                    'importe_comparacion_etiqueta' => (string) ($resolucion['com_resolucion']['importe_comparacion_etiqueta'] ?? ''),
+                    'ordencompra_id' => $ordencompraId > 0 ? $ordencompraId : null,
+                ],
+            ]);
+        }
+
+        $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+        $seleccionadas = $idsBandeja !== []
+            ? $idsBandeja
+            : $resolucion['recepciones_seleccionadas'];
+
         return array_merge($prefill, [
             'recepciones_disponibles' => $resolucion['recepciones_disponibles'],
-            'recepciones_seleccionadas' => $resolucion['recepciones_seleccionadas'],
+            'recepciones_seleccionadas' => $seleccionadas,
             'com_resolucion' => $resolucion['com_resolucion'],
         ]);
+    }
+
+    /**
+     * @param  Collection<int, Recepcion_Proveedor>  $recepciones
+     * @return list<int>
+     */
+    private function idsComAsignadasBandeja(Precarga_Comprobante_Proveedor $precarga, Collection $recepciones): array
+    {
+        if ($recepciones->isEmpty()) {
+            return [];
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('precarga_comprobante_proveedor_recepcion')) {
+            return [];
+        }
+
+        $asignadas = Precarga_Comprobante_Proveedor_Recepcion::query()
+            ->where('precarga_comprobante_proveedor_id', $precarga->id)
+            ->orderBy('orden')
+            ->orderBy('id')
+            ->pluck('recepcion_proveedor_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+        if ($asignadas === []) {
+            return [];
+        }
+
+        $disponibles = $recepciones->pluck('id')->map(static fn ($id) => (int) $id)->all();
+
+        return array_values(array_intersect($asignadas, $disponibles));
     }
 
     /**
@@ -395,29 +476,7 @@ class ComprobanteProveedorComLegajoResolucionService
         float $importeFactura,
         string $etiqueta,
     ): ?array {
-        if ($recepciones->isEmpty()) {
-            return null;
-        }
-
-        if (! \Illuminate\Support\Facades\Schema::hasTable('precarga_comprobante_proveedor_recepcion')) {
-            return null;
-        }
-
-        $asignadas = Precarga_Comprobante_Proveedor_Recepcion::query()
-            ->where('precarga_comprobante_proveedor_id', $precarga->id)
-            ->orderBy('orden')
-            ->orderBy('id')
-            ->pluck('recepcion_proveedor_id')
-            ->map(static fn ($id) => (int) $id)
-            ->filter(static fn (int $id) => $id > 0)
-            ->values()
-            ->all();
-        if ($asignadas === []) {
-            return null;
-        }
-
-        $disponibles = $recepciones->pluck('id')->map(static fn ($id) => (int) $id)->all();
-        $ids = array_values(array_intersect($asignadas, $disponibles));
+        $ids = $this->idsComAsignadasBandeja($precarga, $recepciones);
         if ($ids === []) {
             return null;
         }

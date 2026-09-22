@@ -87,4 +87,23 @@ class CierreRendicionEstacionamientoAsientoSupportTest extends TestCase
 
         $this->assertSame(0.03, $importe);
     }
+
+    public function test_payload_asiento_no_incluye_path_sistema(): void
+    {
+        $payload = CierreRendicionEstacionamientoAsientoSupport::armarPayloadAsiento(
+            [
+                ['cuenta_id' => 10, 'debe' => 100.0, 'haber' => 0.0, 'concepto' => 'Debe'],
+                ['cuenta_id' => 20, 'debe' => 0.0, 'haber' => 100.0, 'concepto' => 'Haber'],
+            ],
+            1,
+            [
+                'cuenta_ventas_id' => 10,
+                'cuenta_iva_debito_id' => 20,
+            ],
+            '2026-09-18',
+        );
+
+        $this->assertArrayNotHasKey('path_sistema', $payload);
+        $this->assertSame([10, 20], $payload['cuentacontable_ids']);
+    }
 }

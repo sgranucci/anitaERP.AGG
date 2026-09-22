@@ -60,4 +60,93 @@ final class ComprobanteProveedorFlujoOcComFacSupportTest extends TestCase
             ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica)
         );
     }
+
+    public function test_badge_bandeja_anticipada_con_com_no_dice_contrato_sin_com(): void
+    {
+        $politica = [
+            'es_anticipada' => true,
+            'tiene_com' => true,
+            'contrato_vigente' => false,
+            'contrato_requiere_recepcion' => null,
+        ];
+
+        $this->assertSame(
+            'FC + COM (opc.)',
+            ComprobanteProveedorFlujoOcComFacSupport::etiquetaPaqueteOkBandeja($politica, false)
+        );
+        $this->assertStringContainsString(
+            'anticipado',
+            strtolower(ComprobanteProveedorFlujoOcComFacSupport::tituloPaqueteOkBandeja($politica, false))
+        );
+    }
+
+    public function test_badge_bandeja_anticipada_sin_com(): void
+    {
+        $politica = [
+            'es_anticipada' => true,
+            'tiene_com' => false,
+            'contrato_vigente' => false,
+            'contrato_requiere_recepcion' => null,
+        ];
+
+        $this->assertSame(
+            'FC anticipada',
+            ComprobanteProveedorFlujoOcComFacSupport::etiquetaPaqueteOkBandeja($politica, false)
+        );
+    }
+
+    public function test_badge_bandeja_contrato_sin_recepcion(): void
+    {
+        $politica = [
+            'es_anticipada' => false,
+            'tiene_com' => false,
+            'contrato_vigente' => true,
+            'contrato_requiere_recepcion' => false,
+        ];
+
+        $this->assertSame(
+            'FC (contrato sin COM)',
+            ComprobanteProveedorFlujoOcComFacSupport::etiquetaPaqueteOkBandeja($politica, false)
+        );
+    }
+
+    public function test_badge_bandeja_exige_com(): void
+    {
+        $this->assertSame(
+            'FC + COM',
+            ComprobanteProveedorFlujoOcComFacSupport::etiquetaPaqueteOkBandeja([], true)
+        );
+    }
+
+    public function test_modo_sugerido_anticipada_con_com_default_asigna_oc(): void
+    {
+        $politica = [
+            'anticipada_elige_modo' => true,
+            'es_anticipada' => true,
+            'tiene_com' => true,
+            'debe_asignar_com' => false,
+            'permite_factura_anticipada' => false,
+            'contrato_vigente' => false,
+            'sin_com_por_tipo' => false,
+        ];
+
+        $this->assertSame(
+            ComprobanteProveedorModoCarga::ASIGNA_OC,
+            ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica)
+        );
+        $this->assertSame(
+            ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
+            ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
+                $politica,
+                ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
+            )
+        );
+    }
+
+    public function test_mensaje_bloquea_primera_anticipada(): void
+    {
+        $msg = ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaComPrimeraAnticipada();
+        $this->assertStringContainsString('primera factura', strtolower($msg));
+        $this->assertStringContainsString('sin com', strtolower($msg));
+    }
 }

@@ -33,6 +33,8 @@ final class OrdencompraLegajoBandejaFiltros
 
     public const ATAJO_COM_SIN_ASIGNAR = 'com_sin_asignar';
 
+    public const ATAJO_PENDIENTE_ENTREGA = 'pendiente_entrega';
+
     public const ATAJO_LISTO_CARGAR = 'listo_cargar';
 
     public const ATAJO_FC_CARGADA = 'fc_cargada';
@@ -54,6 +56,7 @@ final class OrdencompraLegajoBandejaFiltros
         self::ATAJO_SIN_FACTURA,
         self::ATAJO_SIN_COM,
         self::ATAJO_COM_SIN_ASIGNAR,
+        self::ATAJO_PENDIENTE_ENTREGA,
         self::ATAJO_LISTO_CARGAR,
         self::ATAJO_FC_CARGADA,
         self::ATAJO_CON_PAGO,
@@ -139,6 +142,10 @@ final class OrdencompraLegajoBandejaFiltros
         // vacía la grilla: el envío ya sacó el legajo de COMPRAS.
         if ($atajo === self::ATAJO_LISTO_CARGAR && $vista === self::VISTA_PENDIENTES) {
             $vista = self::VISTA_CXP;
+        }
+        // Pendiente de entrega: el legajo puede estar en CxP o Pagos; mirar el circuito activo.
+        if ($atajo === self::ATAJO_PENDIENTE_ENTREGA && $vista === self::VISTA_PENDIENTES) {
+            $vista = self::VISTA_ESTADOS;
         }
 
         $listado = OrdencompraListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault);

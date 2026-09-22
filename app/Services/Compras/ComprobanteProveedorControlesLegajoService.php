@@ -22,6 +22,7 @@ use App\Support\Compras\ComprobanteProveedorReservaComLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
+use App\Support\Compras\PrecargaComprobanteEstados;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -92,6 +93,18 @@ class ComprobanteProveedorControlesLegajoService
             return $resultado;
         }
 
+        if ($precargaIdActual !== null && $precargaIdActual > 0) {
+            $estadoPre = \App\Models\Compras\Precarga_Comprobante_Proveedor::query()
+                ->whereKey($precargaIdActual)
+                ->value('estado');
+            if (PrecargaComprobanteEstados::esPendienteEntrega($estadoPre)) {
+                $resultado['ok'] = false;
+                $resultado['errores'][] = 'La factura está marcada como pendiente de entrega. Compras debe liberarla y asignar COM antes de contabilizarla.';
+
+                return $resultado;
+            }
+        }
+
         $cfgControles = ComprobanteProveedorControlesConfigSupport::paraEmpresa((int) $ordencompra->empresa_id);
         if (! $cfgControles['activo']) {
             // Controles de legajo desactivados en configuración de la empresa.
@@ -144,6 +157,18 @@ class ComprobanteProveedorControlesLegajoService
             return $resultado;
         }
 
+        if (($politica['es_anticipada'] ?? false)
+            && $modoCarga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
+            && ! ComprobanteProveedorFlujoOcComFacSupport::permiteAsignarComEnLegajoAnticipado(
+                $ordencompra,
+                $excluirComprobanteId
+            )) {
+            $resultado['ok'] = false;
+            $resultado['errores'][] = ComprobanteProveedorFlujoOcComFacSupport::mensajeBloqueaComPrimeraAnticipada();
+
+            return $resultado;
+        }
+
         if ($modoCarga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
             $this->validarImputacionContratoSinRecepcion($resultado, $politica, $ordencompra, $conceptos);
 
@@ -156,7 +181,9 @@ class ComprobanteProveedorControlesLegajoService
             ->unique()
             ->values();
 
-        if ($ids->isEmpty() && ($politica['debe_asignar_com'] || $tieneComDisponibles)) {
+        // Solo auto-asignar si el circuito exige COM. En anticipada_elige_modo
+        // (debe_asignar_com=false) el operador elige: no marcar COM por importe.
+        if ($ids->isEmpty() && ($politica['debe_asignar_com'] ?? false)) {
             $auto = $this->comLegajoResolucion->autoAsignarPrimeraPorImporteNeto(
                 $ordencompra,
                 $letra,

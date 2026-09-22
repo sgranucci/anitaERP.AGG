@@ -234,11 +234,21 @@ final class OrdencompraLegajoGastronomiaSupport
             return false;
         }
         $sectorId = (int) ($oc->sector_legajocompra_id ?? 0);
+        $sectorComprasOk = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_COMPRAS
+        ) > 0;
+        if (! $sectorComprasOk) {
+            return false;
+        }
+        if (OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorId)) {
+            return true;
+        }
+        // Desde Pagos: solo si hay FC retenidas (mercadería pendiente) para que Compras las retome.
+        if (self::esSectorPagos($sectorId)) {
+            return OrdencompraEnvioCuentasAPagarGateSupport::documentosPendienteEntrega($oc) !== [];
+        }
 
-        return OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorId)
-            && OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
-                OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_COMPRAS
-            ) > 0;
+        return false;
     }
 
     public static function puedeFinalizar(?Ordencompra $oc): bool

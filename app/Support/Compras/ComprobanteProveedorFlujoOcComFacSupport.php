@@ -93,7 +93,13 @@ final class ComprobanteProveedorFlujoOcComFacSupport
                 $debeAsignarCom = false;
             } elseif ($anticipada && $tieneComDisponibles) {
                 // a-compprov.c: pregunta si aplicar a OC anticipada con recepciones.
-                $anticipadaEligeModo = true;
+                // Excepción 50/50: la 1ª factura siempre anticipada (sin COM) hasta que
+                // exista al menos un anticipo contabilizado en el legajo.
+                if (self::permiteAsignarComEnLegajoAnticipado($oc)) {
+                    $anticipadaEligeModo = true;
+                } else {
+                    $permiteAnticipada = true;
+                }
                 $debeAsignarCom = false;
             } elseif (! $tieneComDisponibles) {
                 $bloqueaSinCom = true;
@@ -103,6 +109,16 @@ final class ComprobanteProveedorFlujoOcComFacSupport
             }
         } else {
             $debeAsignarCom = $tieneComDisponibles;
+            if ($anticipada && $tieneComDisponibles && ! self::permiteAsignarComEnLegajoAnticipado($oc)) {
+                $debeAsignarCom = false;
+                $permiteAnticipada = true;
+            } elseif ($anticipada && $tieneComDisponibles) {
+                $debeAsignarCom = false;
+                $anticipadaEligeModo = true;
+            } elseif ($anticipada && ! $tieneComDisponibles) {
+                $debeAsignarCom = false;
+                $permiteAnticipada = true;
+            }
         }
 
         $contrato = OrdencompraContratoRutaFacturaSupport::resolver($oc, $fechaYmd);
@@ -172,7 +188,7 @@ final class ComprobanteProveedorFlujoOcComFacSupport
             return ComprobanteProveedorModoCarga::ASIGNA_OC;
         }
 
-        // Anticipada con COM: Anita pregunta; sugerimos COM y dejamos el modo editable.
+        // Anticipada con COM: Anita pregunta; default = seguir anticipada (sin COM aplicada).
         if (($politica['anticipada_elige_modo'] ?? false)
             || (($politica['es_anticipada'] ?? false) && ($politica['tiene_com'] ?? false))) {
             $modo = (string) ($modoActual ?? '');
@@ -183,7 +199,7 @@ final class ComprobanteProveedorFlujoOcComFacSupport
                 return $modo;
             }
 
-            return ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+            return ComprobanteProveedorModoCarga::ASIGNA_OC;
         }
 
         $modo = (string) ($modoActual ?? '');
@@ -218,5 +234,89 @@ final class ComprobanteProveedorFlujoOcComFacSupport
         }
 
         return 'Hay recepción COM disponible en el legajo: debe asignarla a la factura. No se puede guardar sin COM.';
+    }
+
+    /**
+     * Anticipada 50/50: la 1ª factura va sin COM; la COM recién se aplica a facturas
+     * posteriores cuando ya hay al menos una anticipada contabilizada sin recepción.
+     */
+    public static function permiteAsignarComEnLegajoAnticipado(
+        ?Ordencompra $oc,
+        ?int $excluirComprobanteId = null,
+    ): bool {
+        if (! self::esOcAnticipada($oc)) {
+            return true;
+        }
+
+        $ocId = (int) ($oc->id ?? 0);
+        if ($ocId <= 0) {
+            return true;
+        }
+
+        $previas = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableAnticipadasSinCom(
+            $ocId,
+            $excluirComprobanteId
+        );
+
+        return ((int) ($previas['cantidad'] ?? 0)) > 0;
+    }
+
+    public static function mensajeBloqueaComPrimeraAnticipada(): string
+    {
+        return 'Legajo anticipado: la primera factura debe cargarse sin COM (factura anticipada / anticipo). '
+            .'Asigne la COM solo a una factura posterior, cuando ya exista el anticipo contabilizado.';
+    }
+
+    /**
+     * Texto del badge «paquete completo» en la bandeja de legajos.
+     * No usar «contrato sin COM» salvo que la política sea efectivamente contrato vigente sin recepción.
+     *
+     * @param  array<string, mixed>  $politica
+     */
+    public static function etiquetaPaqueteOkBandeja(array $politica, bool $exigeCom): string
+    {
+        if ($exigeCom) {
+            return 'FC + COM';
+        }
+
+        if (! empty($politica['contrato_vigente']) && ! ($politica['contrato_requiere_recepcion'] ?? true)) {
+            return 'FC (contrato sin COM)';
+        }
+
+        if (! empty($politica['es_anticipada'])) {
+            if (! empty($politica['tiene_com'])) {
+                return 'FC + COM (opc.)';
+            }
+
+            return 'FC anticipada';
+        }
+
+        return 'FC';
+    }
+
+    /**
+     * Tooltip del badge de paquete completo (bandeja).
+     *
+     * @param  array<string, mixed>  $politica
+     */
+    public static function tituloPaqueteOkBandeja(array $politica, bool $exigeCom): string
+    {
+        if ($exigeCom) {
+            return 'Factura y COM asociadas';
+        }
+
+        if (! empty($politica['contrato_vigente']) && ! ($politica['contrato_requiere_recepcion'] ?? true)) {
+            return 'Contrato vigente: la factura no exige recepción COM';
+        }
+
+        if (! empty($politica['es_anticipada'])) {
+            if (! empty($politica['tiene_com'])) {
+                return 'Legajo anticipado con COM: puede aplicar a la recepción o cargar factura anticipada';
+            }
+
+            return 'Legajo anticipado sin COM: factura antes de la recepción';
+        }
+
+        return 'Factura cargada; COM no obligatoria según política de la empresa';
     }
 }

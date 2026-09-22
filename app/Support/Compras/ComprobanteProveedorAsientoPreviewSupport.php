@@ -109,8 +109,8 @@ final class ComprobanteProveedorAsientoPreviewSupport
         $exento = 0.0;
         $netoSinExento = 0.0;
         foreach ($conceptos as $linea) {
-            $monto = abs((float) ($linea->monto ?? 0));
-            if ($monto < 0.0001) {
+            $monto = (float) ($linea->monto ?? 0);
+            if (abs($monto) < 0.0001) {
                 continue;
             }
             $total += $monto;
@@ -131,7 +131,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
         }
 
         $total = round($total, 2);
-        if ($total <= 0) {
+        if (abs($total) < 0.0001) {
             return;
         }
 
@@ -140,11 +140,11 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $sumaSinExento,
             $exento,
         );
-        if (! $exentoIntegra && $exento > 0.005) {
+        if (! $exentoIntegra && abs($exento) > 0.005) {
             if ($totalPrevio <= 0 || abs($totalPrevio - $sumaSinExento) > 1.0) {
                 $comprobante->total = round($sumaSinExento, 2);
             }
-            if ($netoSinExento > 0) {
+            if (abs($netoSinExento) > 0.0001) {
                 $comprobante->subtotal = round($netoSinExento, 2);
             }
 
@@ -152,7 +152,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
         }
 
         $comprobante->total = $total;
-        if ($subtotal > 0) {
+        if (abs($subtotal) > 0.0001) {
             $comprobante->subtotal = round($subtotal, 2);
         }
     }
