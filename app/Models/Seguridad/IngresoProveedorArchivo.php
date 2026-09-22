@@ -3,7 +3,6 @@
 namespace App\Models\Seguridad;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class IngresoProveedorArchivo extends Model implements Auditable
@@ -18,6 +17,11 @@ class IngresoProveedorArchivo extends Model implements Auditable
 
     protected $fillable = [
         'ingreso_proveedor_id', 'nombre_original', 'nombre_archivo', 'mime', 'tamanio',
+        'tipo', 'vencimiento',
+    ];
+
+    protected $casts = [
+        'vencimiento' => 'date',
     ];
 
     public function ingreso(): \Illuminate\Database\Eloquent\Relations\BelongsTo
@@ -32,11 +36,6 @@ class IngresoProveedorArchivo extends Model implements Auditable
 
     public function urlPublica(): string
     {
-        $url = Storage::disk(self::DISCO)->url($this->rutaRelativa());
-
-        return \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion(
-            $url,
-            Storage::disk(self::DISCO)->path($this->rutaRelativa())
-        );
+        return \App\Support\Archivos\ArchivoAdjuntoCacheSupport::urlStoragePublico($this->rutaRelativa());
     }
 }

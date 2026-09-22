@@ -182,8 +182,8 @@
         </div>
         <div class="card-body py-3">
             <p class="text-muted small mb-2">
-                Un archivo por rengl&oacute;n (ART, seguro de vida, DNI, etc.).
-                Use <strong>+ Agrega rengl&oacute;n</strong> para sumar m&aacute;s.
+                Los tres primeros son <strong>ART</strong> (con vencimiento), <strong>931 PAGO</strong> y <strong>Seguro de vida obligatorio</strong>.
+                Use <strong>+ Agrega rengl&oacute;n</strong> para sumar archivos libres.
             </p>
             @if ($data && $data->id && ($data->archivos?->count() ?? 0) > 0)
                 <div class="mb-3">
@@ -197,21 +197,18 @@
                 <table class="table table-sm table-bordered mb-2" id="ingreso-modal-archivo-table">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
-                            <th>Archivo nuevo</th>
+                            <th>Documento</th>
                             <th style="width: 90px;" class="text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="ingreso-modal-tbody-archivo">
-                        <tr class="item-archivo-ingreso">
-                            <td>
-                                <input type="file" name="nombrearchivos[]" class="form-control ingreso-nombrearchivos">
-                            </td>
-                            <td class="text-center align-middle">
-                                <button type="button" title="Quitar este rengl&oacute;n" class="btn-accion-tabla js-ingreso-modal-eliminar-archivo tooltipsC">
-                                    <i class="fa fa-times-circle text-danger"></i>
-                                </button>
-                            </td>
-                        </tr>
+                        @foreach (\App\Support\Seguridad\IngresoProveedorArchivoTipos::slotsPendientes($data->archivos ?? []) as $indice => $slot)
+                            @include('seguridad.ingreso_proveedor.partials.renglon_archivo_nuevo', [
+                                'slot' => $slot,
+                                'indice' => $indice,
+                                'claseEliminar' => 'js-ingreso-modal-eliminar-archivo',
+                            ])
+                        @endforeach
                     </tbody>
                 </table>
             </div>
@@ -244,7 +241,9 @@
 <template id="ingreso-modal-template-archivo">
     <tr class="item-archivo-ingreso">
         <td>
+            <input type="hidden" name="archivo_tipo[]" value="">
             <input type="file" name="nombrearchivos[]" class="form-control ingreso-nombrearchivos">
+            <input type="hidden" name="archivo_vencimiento[]" value="">
         </td>
         <td class="text-center align-middle">
             <button type="button" title="Quitar este rengl&oacute;n" class="btn-accion-tabla js-ingreso-modal-eliminar-archivo tooltipsC">

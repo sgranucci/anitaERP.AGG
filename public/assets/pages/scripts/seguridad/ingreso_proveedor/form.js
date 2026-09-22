@@ -157,13 +157,22 @@
             agregarArchivo();
         });
 
-        $(document).on('click', '.ingreso-eliminararchivo', function () {
-            var $filas = $('#ingreso-tbody-tabla-archivo tr.item-archivo-ingreso');
-            if ($filas.length <= 1) {
-                $filas.find('input[type=file]').val('');
+        $(document).on('change', '.ingreso-nombrearchivos', function () {
+            var $vence = $(this).closest('tr').find('.ingreso-archivo-vencimiento');
+            if (!$vence.length) {
                 return;
             }
-            $(this).closest('tr').remove();
+            $vence.prop('required', !!(this.files && this.files.length));
+        });
+
+        $(document).on('click', '.ingreso-eliminararchivo', function () {
+            var $tr = $(this).closest('tr');
+            if ($tr.attr('data-archivo-fijo') === '1') {
+                $tr.find('input[type=file]').val('');
+                $tr.find('.ingreso-archivo-vencimiento').val('').prop('required', false);
+                return;
+            }
+            $tr.remove();
         });
 
         $(document).on('click', '.ingreso-quitar-archivo', function () {

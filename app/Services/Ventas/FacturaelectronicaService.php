@@ -8,6 +8,7 @@ use App\Services\Configuracion\ImpuestoService;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use App\ApiAnita;
@@ -122,6 +123,18 @@ class FacturaElectronicaService
 						);
 					}
 
+					// CbteNro 0: ese tipo/PV nunca tuvo comprobante. El llamador suma 1 y pide el CAE.
+					if ($n === 0) {
+						Log::info('arca.ultimo_numero.cero', [
+							'empresa_id' => $empresaId,
+							'pto_vta' => (int) $puntoventa->codigo,
+							'cbte_tipo' => (int) $tipotransaccion,
+							'webservice' => $webservice,
+						]);
+
+						return '0';
+					}
+
 					return $n > 0 ? (string) $n : -1;
 				} catch (\Throwable $e) {
 					$mensaje = $e->getMessage();
@@ -136,6 +149,14 @@ class FacturaElectronicaService
 
 						throw $e;
 					}
+
+					Log::warning('arca.ultimo_numero.rechazado', [
+						'empresa_id' => $empresaId,
+						'pto_vta' => (int) $puntoventa->codigo,
+						'cbte_tipo' => (int) $tipotransaccion,
+						'webservice' => $webservice,
+						'msg' => $mensaje,
+					]);
 
 					return -1;
 				}

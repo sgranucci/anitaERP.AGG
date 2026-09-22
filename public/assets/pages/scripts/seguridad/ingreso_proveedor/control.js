@@ -99,7 +99,6 @@
                 '<td>' + (p.proveedor || '') + '</td>' +
                 '<td>' + (p.motivo || '') + '</td>' +
                 '<td>' + (p.punto || '') + '</td>' +
-                '<td>' + (p.sector || '') + '</td>' +
                 '<td><span class="badge badge-' + badgeClase(p.estado_codigo) + '">' + (p.estado || '') + '</span></td>' +
                 '<td>' + (p.hora_ingreso || '') + '</td>' +
                 '<td>' + (p.hora_egreso || '') + '</td>' +
@@ -140,6 +139,15 @@
         $vacio.addClass('d-none');
         archivos.forEach(function (a) {
             var nombre = esc(a.nombre_original || 'archivo');
+            var etiqueta = esc(a.tipo_etiqueta || '');
+            var vence = a.vencimiento ? esc(a.vencimiento) : '';
+            var tituloDoc = etiqueta
+                ? '<div class="font-weight-bold mb-1">' + etiqueta +
+                    (vence
+                        ? ' <span class="badge badge-' + (a.vencido ? 'danger' : 'secondary') + '">Vence ' + vence + '</span>'
+                        : '') +
+                    '</div>'
+                : '';
             var urlAbrir = a.url_abrir || '#';
             var urlDesc = a.url_descargar || urlAbrir;
             var preview;
@@ -161,6 +169,7 @@
                 '<div class="col-md-6 mb-3">' +
                 '<div class="card card-outline card-secondary h-100 mb-0">' +
                 '<div class="card-body p-2 d-flex flex-column">' +
+                tituloDoc +
                 '<div class="small text-truncate mb-2" title="' + nombre + '">' +
                 '<i class="fa fa-paperclip text-muted mr-1"></i>' + nombre + '</div>' +
                 preview +

@@ -142,9 +142,9 @@
                         <th>Motivo</th>
                         <th>Punto</th>
                         <th>Estado</th>
-                        <th>Entr&oacute;</th>
-                        <th>Sali&oacute;</th>
-                        <th>Min</th>
+                        <th class="text-nowrap">Entr&oacute;</th>
+                        <th class="text-nowrap">Sali&oacute;</th>
+                        <th class="text-nowrap">Minutos</th>
                     </tr>
                 </thead>
                 <tbody id="porteria-tbody">

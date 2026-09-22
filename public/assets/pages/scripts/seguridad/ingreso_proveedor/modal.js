@@ -62,14 +62,24 @@
             $('#ingreso-modal-tbody-archivo').append(tpl.content.cloneNode(true));
         });
 
-        $(document).off('click.ingresoModalArchivoDel', '.js-ingreso-modal-eliminar-archivo');
-        $(document).on('click.ingresoModalArchivoDel', '.js-ingreso-modal-eliminar-archivo', function () {
-            var $filas = $('#ingreso-modal-tbody-archivo tr.item-archivo-ingreso');
-            if ($filas.length <= 1) {
-                $filas.find('input[type=file]').val('');
+        $(document).off('change.ingresoModalArchivoVence', '#ingreso-modal-tbody-archivo .ingreso-nombrearchivos');
+        $(document).on('change.ingresoModalArchivoVence', '#ingreso-modal-tbody-archivo .ingreso-nombrearchivos', function () {
+            var $vence = $(this).closest('tr').find('.ingreso-archivo-vencimiento');
+            if (!$vence.length) {
                 return;
             }
-            $(this).closest('tr').remove();
+            $vence.prop('required', !!(this.files && this.files.length));
+        });
+
+        $(document).off('click.ingresoModalArchivoDel', '.js-ingreso-modal-eliminar-archivo');
+        $(document).on('click.ingresoModalArchivoDel', '.js-ingreso-modal-eliminar-archivo', function () {
+            var $tr = $(this).closest('tr');
+            if ($tr.attr('data-archivo-fijo') === '1') {
+                $tr.find('input[type=file]').val('');
+                $tr.find('.ingreso-archivo-vencimiento').val('').prop('required', false);
+                return;
+            }
+            $tr.remove();
         });
 
         $(document).off('click.ingresoModalArchivoQuitar', '#form-ingreso-proveedor-modal .ingreso-quitar-archivo');

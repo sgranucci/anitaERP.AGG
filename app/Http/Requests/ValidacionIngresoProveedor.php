@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Seguridad\IngresoProveedor;
 use App\Models\Seguridad\IngresoProveedorMotivo;
 use App\Repositories\Configuracion\EmpresaRepository;
+use App\Support\Seguridad\IngresoProveedorArchivoTipos;
 use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -41,6 +42,12 @@ class ValidacionIngresoProveedor extends FormRequest
             'persona_documentos.*' => 'nullable|string|max:20',
             'nombrearchivos' => 'nullable|array',
             'nombrearchivos.*' => 'nullable|file|max:10240',
+            'archivo_tipo' => 'nullable|array',
+            'archivo_tipo.*' => 'nullable|string|max:40',
+            'archivo_vencimiento' => 'nullable|array',
+            'archivo_vencimiento.*' => 'nullable|date',
+            'archivo_vencimiento_id' => 'nullable|array',
+            'archivo_vencimiento_id.*' => 'nullable|date',
             'nombresanteriores' => 'nullable|array',
             'nombresanteriores.*' => 'nullable|integer',
         ];
@@ -79,6 +86,19 @@ class ValidacionIngresoProveedor extends FormRequest
                 $codigo = strtoupper((string) (IngresoProveedorMotivo::query()->whereKey($motivoId)->value('codigo') ?? ''));
                 if ($codigo === 'OTRO' && trim((string) $this->input('motivo_otro', '')) === '') {
                     $v->errors()->add('motivo_otro', 'Indique el motivo cuando elige Otro.');
+                }
+            }
+
+            $tipos = (array) $this->input('archivo_tipo', []);
+            $vencimientos = (array) $this->input('archivo_vencimiento', []);
+            foreach ((array) $this->file('nombrearchivos', []) as $i => $file) {
+                if (! $file || ! $file->isValid()) {
+                    continue;
+                }
+                $tipo = IngresoProveedorArchivoTipos::normalizar(isset($tipos[$i]) ? (string) $tipos[$i] : null);
+                if (IngresoProveedorArchivoTipos::pideVencimiento($tipo)
+                    && trim((string) ($vencimientos[$i] ?? '')) === '') {
+                    $v->errors()->add('archivo_vencimiento.'.$i, 'Indique el vencimiento de la ART.');
                 }
             }
 

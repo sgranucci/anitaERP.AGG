@@ -7,6 +7,7 @@ use App\Models\Seguridad\IngresoProveedorArchivo;
 use App\Models\Seguridad\IngresoProveedorPersona;
 use App\Repositories\Configuracion\EmpresaRepository;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Seguridad\IngresoProveedorArchivoTipos;
 use App\Support\Seguridad\IngresoProveedorControlSupport;
 use App\Support\Seguridad\IngresoProveedorEstados;
 use App\Support\Seguridad\IngresoProveedorListadoFiltros;
@@ -71,7 +72,17 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
         $ticket = DB::transaction(function () use ($data) {
             $personas = $this->extraerPersonas($data);
             $archivos = $data['nombrearchivos'] ?? [];
-            unset($data['nombrearchivos'], $data['nombresanteriores'], $data['persona_nombres'], $data['persona_documentos']);
+            $tipos = $data['archivo_tipo'] ?? [];
+            $vencimientos = $data['archivo_vencimiento'] ?? [];
+            unset(
+                $data['nombrearchivos'],
+                $data['nombresanteriores'],
+                $data['archivo_tipo'],
+                $data['archivo_vencimiento'],
+                $data['archivo_vencimiento_id'],
+                $data['persona_nombres'],
+                $data['persona_documentos']
+            );
 
             $data = IngresoProveedorVisitanteSupport::normalizarAlGuardar($data);
             $data['estado'] = IngresoProveedorEstados::PENDIENTE;
@@ -86,7 +97,7 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
 
             $ticket = $this->model->create($this->soloFillable($data));
             $this->sincronizarPersonas($ticket, $personas);
-            $this->guardarArchivosNuevos($ticket, $archivos);
+            $this->guardarArchivosNuevos($ticket, $archivos, $tipos, $vencimientos);
 
             return $ticket->fresh(['personas', 'archivos', 'proveedores']);
         });
@@ -106,8 +117,19 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
             $ticket = $this->findOrFail($id);
             $personas = $this->extraerPersonas($data);
             $archivosNuevos = $data['nombrearchivos'] ?? [];
+            $tipos = $data['archivo_tipo'] ?? [];
+            $vencimientos = $data['archivo_vencimiento'] ?? [];
+            $vencimientosExistentes = $data['archivo_vencimiento_id'] ?? [];
             $conservar = $data['nombresanteriores'] ?? null;
-            unset($data['nombrearchivos'], $data['nombresanteriores'], $data['persona_nombres'], $data['persona_documentos']);
+            unset(
+                $data['nombrearchivos'],
+                $data['nombresanteriores'],
+                $data['archivo_tipo'],
+                $data['archivo_vencimiento'],
+                $data['archivo_vencimiento_id'],
+                $data['persona_nombres'],
+                $data['persona_documentos']
+            );
             $data = IngresoProveedorVisitanteSupport::normalizarAlGuardar($data);
 
             unset($data['estado'], $data['usuario_id'], $data['fecha'], $data['fecha_ingreso'], $data['hora_ingreso'], $data['fecha_egreso'], $data['hora_egreso'], $data['minutos_en_planta']);
@@ -117,7 +139,8 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
             if (is_array($conservar)) {
                 $this->sincronizarArchivosConservados($ticket, $conservar);
             }
-            $this->guardarArchivosNuevos($ticket, $archivosNuevos);
+            $this->actualizarVencimientos($ticket, is_array($vencimientosExistentes) ? $vencimientosExistentes : []);
+            $this->guardarArchivosNuevos($ticket, $archivosNuevos, $tipos, $vencimientos);
 
             return $ticket->fresh(['personas', 'archivos', 'proveedores']);
         });
@@ -192,13 +215,21 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
     }
 
     /**
-     * @param  list<mixed>  $archivos
+     * @param  array<int|string, mixed>  $archivos
+     * @param  array<int|string, mixed>  $tipos
+     * @param  array<int|string, mixed>  $vencimientos
      */
-    private function guardarArchivosNuevos(IngresoProveedor $ticket, array $archivos): void
+    private function guardarArchivosNuevos(IngresoProveedor $ticket, array $archivos, array $tipos, array $vencimientos): void
     {
-        foreach ($archivos as $file) {
+        foreach ($archivos as $i => $file) {
             if (! $file instanceof UploadedFile || ! $file->isValid()) {
                 continue;
+            }
+            $tipo = IngresoProveedorArchivoTipos::normalizar(isset($tipos[$i]) ? (string) $tipos[$i] : null);
+            $vencimiento = null;
+            if (IngresoProveedorArchivoTipos::pideVencimiento($tipo)) {
+                $raw = trim((string) ($vencimientos[$i] ?? ''));
+                $vencimiento = $raw !== '' ? $raw : null;
             }
             $nombre = Str::uuid()->toString().'.'.$file->getClientOriginalExtension();
             $file->storeAs(IngresoProveedorArchivo::CARPETA, $nombre, IngresoProveedorArchivo::DISCO);
@@ -208,7 +239,32 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
                 'nombre_archivo' => $nombre,
                 'mime' => $file->getClientMimeType(),
                 'tamanio' => $file->getSize(),
+                'tipo' => $tipo,
+                'vencimiento' => $vencimiento,
             ]);
+        }
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $porId
+     */
+    private function actualizarVencimientos(IngresoProveedor $ticket, array $porId): void
+    {
+        foreach ($porId as $id => $fecha) {
+            $id = (int) $id;
+            if ($id <= 0) {
+                continue;
+            }
+            $arch = IngresoProveedorArchivo::query()
+                ->where('ingreso_proveedor_id', $ticket->id)
+                ->whereKey($id)
+                ->first();
+            if (! $arch || ! IngresoProveedorArchivoTipos::pideVencimiento($arch->tipo)) {
+                continue;
+            }
+            $raw = trim((string) $fecha);
+            $arch->vencimiento = $raw !== '' ? $raw : null;
+            $arch->save();
         }
     }
 

@@ -143,7 +143,9 @@
 .porteria-btn-salio { background: #c0392b; }
 .porteria-btn-salio:hover:not(:disabled) { background: #922b21; }
 .porteria-reloj { text-align: center; margin: 0.75rem 0 0; color: #5d6d7e; font-weight: 600; }
-.porteria-grilla { border-radius: 12px; overflow: hidden; }
+.porteria-grilla { border-radius: 12px; }
+.porteria-grilla th,
+.porteria-grilla td { white-space: nowrap; }
 .porteria-fila-en-planta { background: #e8f8f5 !important; }
 @media (max-width: 767px) {
     .porteria-dni-row { flex-direction: column; }

@@ -54,7 +54,7 @@
                 <th>Estado</th>
                 <th>Entró</th>
                 <th>Salió</th>
-                <th>Min</th>
+                <th>Minutos</th>
             </tr>
         </thead>
         <tbody>

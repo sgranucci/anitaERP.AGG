@@ -427,9 +427,13 @@ final class IngresoProveedorControlSupport
         foreach ($ticket->archivos as $arch) {
             $ext = strtolower(pathinfo((string) $arch->nombre_archivo, PATHINFO_EXTENSION));
             $url = $arch->urlPublica();
+            $vence = $arch->vencimiento;
             $archivos[] = [
                 'id' => (int) $arch->id,
                 'nombre_original' => (string) $arch->nombre_original,
+                'tipo_etiqueta' => IngresoProveedorArchivoTipos::etiqueta($arch->tipo),
+                'vencimiento' => $vence ? $vence->format('d/m/Y') : null,
+                'vencido' => $vence ? $vence->copy()->endOfDay()->isPast() : false,
                 'mime' => (string) ($arch->mime ?? ''),
                 'url_abrir' => $url,
                 'url_descargar' => $url,

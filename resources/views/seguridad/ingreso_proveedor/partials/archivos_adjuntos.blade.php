@@ -31,6 +31,10 @@
                 }
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
+                $etiquetaTipo = \App\Support\Seguridad\IngresoProveedorArchivoTipos::etiqueta($arch->tipo ?? null);
+                $pideVencimiento = \App\Support\Seguridad\IngresoProveedorArchivoTipos::pideVencimiento($arch->tipo ?? null);
+                $fechaVence = $arch->vencimiento ?? null;
+                $vencido = $fechaVence && \Illuminate\Support\Carbon::parse($fechaVence)->endOfDay()->isPast();
                 $pathAdjunto = \Illuminate\Support\Facades\Storage::disk(\App\Models\Seguridad\IngresoProveedorArchivo::DISCO)
                     ->path($arch->rutaRelativa());
                 $urlInline = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion($urlInline, $pathAdjunto);
@@ -38,9 +42,24 @@
             <div class="col-md-6 col-lg-4 mb-3 ingreso-archivo-item">
                 <div class="card card-outline card-secondary h-100 mb-0">
                     <div class="card-body p-2 d-flex flex-column">
+                        @if ($etiquetaTipo !== '')
+                            <div class="font-weight-bold mb-1">{{ $etiquetaTipo }}</div>
+                        @endif
                         <div class="small text-truncate mb-2" title="{{ $safeName }}">
                             <i class="fa fa-paperclip text-muted mr-1"></i>{{ $safeName }}
                         </div>
+                        @if ($pideVencimiento)
+                            @if (! $ocultarInputsConservar)
+                                <label class="small mb-0">Vencimiento</label>
+                                <input type="date" name="archivo_vencimiento_id[{{ $arch->id }}]"
+                                       class="form-control form-control-sm mb-2"
+                                       value="{{ old('archivo_vencimiento_id.'.$arch->id, $fechaVence ? \Illuminate\Support\Carbon::parse($fechaVence)->format('Y-m-d') : '') }}">
+                            @elseif ($fechaVence)
+                                <div class="small mb-2 {{ $vencido ? 'text-danger' : 'text-muted' }}">
+                                    Vence {{ \Illuminate\Support\Carbon::parse($fechaVence)->format('d/m/Y') }}
+                                </div>
+                            @endif
+                        @endif
                         @if ($esImagen)
                             <div class="text-center bg-light rounded mb-2" style="min-height: 120px;">
                                 <a href="{{ $urlInline }}" target="_blank" rel="noopener noreferrer" title="Abrir imagen">
