@@ -9,6 +9,7 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
+use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -117,6 +118,13 @@ class ComprobanteProveedorContabilizarService
         }
 
         $comprobante->loadMissing('comprobante_proveedor_cuotas');
+        ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
+            (int) ($comprobante->tipotransaccion_compra_id ?? 0),
+            isset($comprobante->condicionpago_id) ? (int) $comprobante->condicionpago_id : null,
+            ComprobanteProveedorCondicionPagoNcNdSupport::cantidadCuotasPlan(
+                $comprobante->comprobante_proveedor_cuotas
+            ),
+        );
         ComprobanteProveedorCuotasTotalSupport::assertCuadraConTotal(
             (float) ($comprobante->total ?? 0),
             $comprobante->comprobante_proveedor_cuotas,

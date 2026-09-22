@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
+use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 use RuntimeException;
@@ -44,6 +45,7 @@ class ValidacionComprobante_Proveedor extends FormRequest
             'numerocae' => 'nullable|string|max:30',
             'tipo_autorizacion' => 'nullable|string|in:'.implode(',', ComprobanteProveedorTipoAutorizacion::todos()),
             'modo_carga' => 'nullable|string|in:'.implode(',', ComprobanteProveedorModoCarga::todos()),
+            'condicionpago_id' => 'nullable|integer|min:1',
             'provincia_destino_id' => 'nullable|integer|min:1',
             'recepcion_proveedor_ids' => 'nullable|array',
             'recepcion_proveedor_ids.*' => 'integer|min:1',
@@ -78,6 +80,32 @@ class ValidacionComprobante_Proveedor extends FormRequest
                 );
             } catch (RuntimeException $e) {
                 $validator->errors()->add('fechacomprobante', $e->getMessage());
+            }
+
+            if ($validator->errors()->has('tipotransaccion_compra_id')
+                || $validator->errors()->has('condicionpago_id')
+            ) {
+                return;
+            }
+
+            $vencimientos = $this->input('cuota_fechavencimiento', []);
+            $nCuotas = 0;
+            if (is_array($vencimientos)) {
+                foreach ($vencimientos as $vto) {
+                    if (trim((string) $vto) !== '') {
+                        $nCuotas++;
+                    }
+                }
+            }
+
+            try {
+                ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
+                    (int) $this->input('tipotransaccion_compra_id', 0),
+                    (int) $this->input('condicionpago_id', 0) ?: null,
+                    $nCuotas,
+                );
+            } catch (RuntimeException $e) {
+                $validator->errors()->add('condicionpago_id', $e->getMessage());
             }
         });
     }

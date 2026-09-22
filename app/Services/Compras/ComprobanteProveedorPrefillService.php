@@ -8,6 +8,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
+use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -260,9 +261,17 @@ class ComprobanteProveedorPrefillService
                 'cuotas_escaladas' => false,
                 'permite_edicion_cuotas' => true,
             ];
+        $cuotasMeta = $this->sanitizarCuotasMetaNcNd(
+            (int) ($data->tipotransaccion_compra_id ?? $precarga->tipotransaccion_compra_id ?? 0),
+            $cuotasMeta,
+        );
 
         if ($cuotasMeta['condicionpago_id']) {
             $data->condicionpago_id = $cuotasMeta['condicionpago_id'];
+        } elseif (ComprobanteProveedorCondicionPagoNcNdSupport::esNotaCreditoODebitoPorTipoId(
+            (int) ($data->tipotransaccion_compra_id ?? $precarga->tipotransaccion_compra_id ?? 0)
+        )) {
+            $data->condicionpago_id = null;
         }
         if ($cuotasMeta['ordencompra_comprobante_id']) {
             $data->ordencompra_comprobante_id = $cuotasMeta['ordencompra_comprobante_id'];
@@ -297,8 +306,14 @@ class ComprobanteProveedorPrefillService
                 (int) ($prefill['data']->moneda_id ?: $monedaId),
                 (float) ($prefill['data']->cotizacion ?: $cotizacion),
             );
+            $cuotasMeta = $this->sanitizarCuotasMetaNcNd(
+                (int) ($prefill['data']->tipotransaccion_compra_id ?? $precarga->tipotransaccion_compra_id ?? 0),
+                $cuotasMeta,
+            );
             if ($cuotasMeta['condicionpago_id']) {
                 $prefill['data']->condicionpago_id = $cuotasMeta['condicionpago_id'];
+            } else {
+                $prefill['data']->condicionpago_id = null;
             }
             if ($cuotasMeta['ordencompra_comprobante_id']) {
                 $prefill['data']->ordencompra_comprobante_id = $cuotasMeta['ordencompra_comprobante_id'];
@@ -309,6 +324,7 @@ class ComprobanteProveedorPrefillService
                 (float) ($prefill['data']->cotizacion ?: $cotizacion)
             );
             $prefill['cuotas_escaladas'] = (bool) ($cuotasMeta['cuotas_escaladas'] ?? false);
+            $prefill['permite_edicion_cuotas'] = (bool) ($cuotasMeta['permite_edicion_cuotas'] ?? true);
         }
 
         $prefill['cuotas'] = $this->aplicarVencimientoFacturaACuotas(
@@ -499,6 +515,10 @@ class ComprobanteProveedorPrefillService
             $fecha,
             $monedaId,
             $cotizacion,
+        );
+        $cuotasMeta = $this->sanitizarCuotasMetaNcNd(
+            (int) ($data->tipotransaccion_compra_id ?? 0),
+            $cuotasMeta,
         );
 
         if ($cuotasMeta['condicionpago_id']) {
@@ -809,5 +829,17 @@ class ComprobanteProveedorPrefillService
         $cuotas[0]['fechavencimiento'] = $fechaVencimientoYmd;
 
         return $cuotas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     * @return array<string, mixed>
+     */
+    private function sanitizarCuotasMetaNcNd(int $tipotransaccionCompraId, array $meta): array
+    {
+        return ComprobanteProveedorCondicionPagoNcNdSupport::sanitizarMetaCuotasParaNcNd(
+            $tipotransaccionCompraId,
+            $meta,
+        );
     }
 }

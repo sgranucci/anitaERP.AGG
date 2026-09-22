@@ -16,6 +16,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOpaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOrigenSupport;
 use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportBridgeReader;
+use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportCcGuardSupport;
 use App\Support\Compras\AnitaImport\ProveedorCuentacorrienteAnitaImportFormatoSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -26,7 +27,6 @@ use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Database\DbContencionSupport;
-use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -38,6 +38,8 @@ use Throwable;
  * - Altas solo-Anita: CP+CC con monto original + aplicaciones aplmovp.
  * - Facturas nativas (origen ≠ ANITA_IMPORT): no se pisan; solo se traen apps faltantes.
  * - OPA pendientes: pagoproveedor + CC negativa.
+ * - Nunca alinea ni borra apps de CC con pagoproveedor_id (crédito OP/OPA ERP).
+ * - Al alinear deuda documento solo borra apps sintéticas (sin pagoproveedor_id).
  * No escribe Anita.
  */
 class ProveedorCuentacorrienteImportarDesdeAnitaService
@@ -670,8 +672,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
         $cc = null;
         if ($cp) {
-            $ccs = Proveedor_Cuentacorriente::query()
-                ->where('comprobante_proveedor_id', $cp->id)
+            $ccs = ProveedorCuentacorrienteAnitaImportCcGuardSupport::soloDeudaDocumento(
+                Proveedor_Cuentacorriente::query()
+                    ->where('comprobante_proveedor_id', $cp->id)
+            )
                 ->orderBy('id')
                 ->get();
             $cc = $ccs->count() === 1
@@ -727,7 +731,14 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     // Ferli-style residual ya refleja deuda Anita: al día.
                     return ['estado' => 'ok_al_dia'];
                 }
-                if (! $ccEsMonto || abs($saldoErp - $pendienteFirmado) > $tol) {
+                if (ProveedorCuentacorrienteAnitaImportCcGuardSupport::tieneAplicacionOperativa((int) $cc->id)) {
+                    // Ya aplicada por OP ERP: no alinear ni colapsar apps.
+                    if ($pagado > abs($aplicadoErpFirmado) + $tol) {
+                        $accionApl = 'importar';
+                    } else {
+                        return ['estado' => 'ok_al_dia'];
+                    }
+                } elseif (! $ccEsMonto || abs($saldoErp - $pendienteFirmado) > $tol) {
                     // Piso residual = pendiente Anita (aplmovp incompleto o apps de más).
                     $accionSaldo = 'alinear';
                     $accionApl = 'omitir';
@@ -1011,8 +1022,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         if ($item['accion_cc'] === 'crear') {
             $ccExistente = null;
             if ($cpId) {
-                $ccExistente = Proveedor_Cuentacorriente::query()
-                    ->where('comprobante_proveedor_id', $cpId)
+                $ccExistente = ProveedorCuentacorrienteAnitaImportCcGuardSupport::soloDeudaDocumento(
+                    Proveedor_Cuentacorriente::query()
+                        ->where('comprobante_proveedor_id', $cpId)
+                )
                     ->orderBy('id')
                     ->first();
             }
@@ -1041,20 +1054,13 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         } elseif ($ccId && ($item['accion_saldo'] ?? '') === 'alinear' && ! $esNativo) {
             $cc = Proveedor_Cuentacorriente::query()->find($ccId);
             if ($cc) {
-                // Residual Anita (no el monto bruto): listado deuda = promov pendiente.
+                // Residual Anita (no el monto bruto). Guard: no tocar OP ni apps operativas.
                 $objetivo = array_key_exists('pendiente_anita', $item)
                     ? (float) $item['pendiente_anita']
                     : (float) $item['total'];
-                $cc->total = round($objetivo, 4);
-                $cc->save();
-                EloquentAuditDeleteSupport::each(
-                    Proveedor_Cuentacorriente_Aplicacion::query()
-                        ->where(function ($q) use ($ccId) {
-                            $q->where('proveedor_cuentacorriente_id', $ccId)
-                                ->orWhere('proveedor_cuentacorriente_aplicado_id', $ccId);
-                        })
-                );
-                $out['saldo_alineado'] = true;
+                if (ProveedorCuentacorrienteAnitaImportCcGuardSupport::alinearTotalDeudaDocumento($cc, $objetivo)) {
+                    $out['saldo_alineado'] = true;
+                }
             }
         }
 
@@ -1114,6 +1120,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
     /**
      * Tras aplmovp: si el residual ERP ≠ pendiente Anita en docs ANITA_IMPORT, pisar a residual.
+     * Nunca toca CC de pago ni deudas con apps de OP ERP.
      *
      * @param  list<array<string, mixed>>  $plan
      */
@@ -1151,8 +1158,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                         ->value('id') ?: 0);
                 }
                 if ($cpId > 0) {
-                    $cc = Proveedor_Cuentacorriente::query()
-                        ->where('comprobante_proveedor_id', $cpId)
+                    $cc = ProveedorCuentacorrienteAnitaImportCcGuardSupport::soloDeudaDocumento(
+                        Proveedor_Cuentacorriente::query()
+                            ->where('comprobante_proveedor_id', $cpId)
+                    )
                         ->orderBy('id')
                         ->first();
                 }
@@ -1169,16 +1178,9 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             if (abs($residual - $objetivo) <= $tol) {
                 continue;
             }
-            $cc->total = $objetivo;
-            $cc->save();
-            EloquentAuditDeleteSupport::each(
-                Proveedor_Cuentacorriente_Aplicacion::query()
-                    ->where(function ($q) use ($cc) {
-                        $q->where('proveedor_cuentacorriente_id', $cc->id)
-                            ->orWhere('proveedor_cuentacorriente_aplicado_id', $cc->id);
-                    })
-            );
-            $alineados++;
+            if (ProveedorCuentacorrienteAnitaImportCcGuardSupport::alinearTotalDeudaDocumento($cc, $objetivo)) {
+                $alineados++;
+            }
         }
 
         return $alineados;
@@ -1243,16 +1245,11 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
         if (($item['accion_saldo'] ?? '') === 'alinear' && $out['cc_id']) {
             $cc = Proveedor_Cuentacorriente::query()->find((int) $out['cc_id']);
-            if ($cc) {
+            // OPA: la CC tiene pagoproveedor_id a propósito. Solo ajusta el residual;
+            // nunca borra apps (pueden vincular la OPA a facturas ERP).
+            if ($cc !== null) {
                 $cc->total = round(-$pendiente, 4);
                 $cc->save();
-                EloquentAuditDeleteSupport::each(
-                    Proveedor_Cuentacorriente_Aplicacion::query()
-                        ->where(function ($q) use ($cc) {
-                            $q->where('proveedor_cuentacorriente_id', $cc->id)
-                                ->orWhere('proveedor_cuentacorriente_aplicado_id', $cc->id);
-                        })
-                );
             }
 
             return $out;
@@ -1313,8 +1310,10 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     ->where('numerocomprobante', (int) $nro)
                     ->first();
                 if ($cp) {
-                    $ccs = Proveedor_Cuentacorriente::query()
-                        ->where('comprobante_proveedor_id', $cp->id)
+                    $ccs = ProveedorCuentacorrienteAnitaImportCcGuardSupport::soloDeudaDocumento(
+                        Proveedor_Cuentacorriente::query()
+                            ->where('comprobante_proveedor_id', $cp->id)
+                    )
                         ->orderBy('id')
                         ->get();
                     foreach ($ccs as $cc) {

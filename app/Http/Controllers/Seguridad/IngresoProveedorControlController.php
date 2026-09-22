@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Seguridad;
 use App\Exports\Seguridad\IngresoProveedorControlListadoExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Seguridad\IngresoProveedorAutorizacionSupport;
 use App\Support\Seguridad\IngresoProveedorControlSupport;
 use App\Support\Seguridad\IngresoProveedorListadoFiltros;
 use Illuminate\Http\JsonResponse;
@@ -33,6 +34,7 @@ class IngresoProveedorControlController extends Controller
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'empresaFiltroId' => (int) ($filtros['empresa_id'] ?? 0),
             'puedeRegistrarIngresoEgreso' => can('autorizar-ingreso-proveedor', false),
+            'puedeAutorizarPuerta' => can('autorizar-puerta-ingreso-proveedor', false),
         ]);
     }
 
@@ -108,6 +110,124 @@ class IngresoProveedorControlController extends Controller
         ]);
     }
 
+    public function detallePendiente(Request $request): JsonResponse
+    {
+        can('autorizar-puerta-ingreso-proveedor');
+        $personaId = (int) $request->input('persona_id');
+        if ($personaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Falta la persona del ticket.'], 422);
+        }
+
+        try {
+            $detalle = IngresoProveedorControlSupport::detallePendiente($personaId);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'detalle' => $detalle,
+        ]);
+    }
+
+    public function autorizarPuerta(Request $request): JsonResponse
+    {
+        can('autorizar-puerta-ingreso-proveedor');
+        $personaId = (int) $request->input('persona_id');
+        if ($personaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Falta la persona del ticket.'], 422);
+        }
+
+        try {
+            $persona = IngresoProveedorControlSupport::personaConRelaciones($personaId);
+            $ticketId = (int) $persona->ingreso_proveedor_id;
+            IngresoProveedorAutorizacionSupport::autorizar($ticketId);
+            $persona = IngresoProveedorControlSupport::personaConRelaciones($personaId);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        $filtros = $this->resolverFiltros($request);
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => 'Ticket #'.$persona->ingreso_proveedor_id.' autorizado. Ya puede registrar ENTRO.',
+            'persona' => IngresoProveedorControlSupport::payloadPersona($persona),
+            'filas' => $this->filasJson($filtros),
+        ]);
+    }
+
+    public function autorizarPuertaEIngresar(Request $request): JsonResponse
+    {
+        can('autorizar-puerta-ingreso-proveedor');
+        $personaId = (int) $request->input('persona_id');
+        if ($personaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Falta la persona del ticket.'], 422);
+        }
+
+        $ticketId = 0;
+        try {
+            $persona = IngresoProveedorControlSupport::personaConRelaciones($personaId);
+            $ticketId = (int) $persona->ingreso_proveedor_id;
+            IngresoProveedorAutorizacionSupport::autorizar($ticketId);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        try {
+            $persona = IngresoProveedorControlSupport::marcarEntro($personaId);
+            $persona = IngresoProveedorControlSupport::personaConRelaciones($personaId);
+        } catch (RuntimeException $e) {
+            $persona = IngresoProveedorControlSupport::personaConRelaciones($personaId);
+            $filtros = $this->resolverFiltros($request);
+
+            return response()->json([
+                'ok' => false,
+                'autorizado' => true,
+                'mensaje' => 'Ticket #'.$ticketId.' autorizado, pero no se pudo registrar el ingreso: '.$e->getMessage(),
+                'persona' => IngresoProveedorControlSupport::payloadPersona($persona),
+                'filas' => $this->filasJson($filtros),
+            ], 422);
+        }
+
+        $filtros = $this->resolverFiltros($request);
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => 'Ticket #'.$ticketId.' autorizado e ingreso registrado.',
+            'persona' => IngresoProveedorControlSupport::payloadPersona($persona),
+            'filas' => $this->filasJson($filtros),
+        ]);
+    }
+
+    public function rechazarPuerta(Request $request): JsonResponse
+    {
+        can('autorizar-puerta-ingreso-proveedor');
+        $personaId = (int) $request->input('persona_id');
+        $motivo = trim((string) $request->input('motivo_rechazo', ''));
+        if ($personaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Falta la persona del ticket.'], 422);
+        }
+
+        try {
+            $persona = IngresoProveedorControlSupport::personaConRelaciones($personaId);
+            $ticketId = (int) $persona->ingreso_proveedor_id;
+            IngresoProveedorAutorizacionSupport::rechazar($ticketId, $motivo);
+            $persona = IngresoProveedorControlSupport::personaConRelaciones($personaId);
+        } catch (RuntimeException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        $filtros = $this->resolverFiltros($request);
+
+        return response()->json([
+            'ok' => true,
+            'mensaje' => 'Ticket #'.$persona->ingreso_proveedor_id.' rechazado.',
+            'persona' => IngresoProveedorControlSupport::payloadPersona($persona),
+            'filas' => $this->filasJson($filtros),
+        ]);
+    }
+
     public function marcarEntro(Request $request): JsonResponse
     {
         return $this->marcar($request, 'entro');
@@ -130,6 +250,7 @@ class IngresoProveedorControlController extends Controller
             $persona = $accion === 'entro'
                 ? IngresoProveedorControlSupport::marcarEntro($personaId)
                 : IngresoProveedorControlSupport::marcarSalio($personaId);
+            $persona = IngresoProveedorControlSupport::personaConRelaciones($personaId);
         } catch (RuntimeException $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
         }

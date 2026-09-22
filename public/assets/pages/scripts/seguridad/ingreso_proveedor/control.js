@@ -18,9 +18,25 @@
         $el.text(valor || '—');
     }
 
+    function esc(texto) {
+        return $('<div>').text(texto == null ? '' : String(texto)).html();
+    }
+
+    function badgeClase(codigo) {
+        var map = {
+            PENDIENTE: 'warning',
+            AUTORIZADO: 'success',
+            INGRESADO: 'info',
+            FINALIZADO: 'secondary',
+            RECHAZADO: 'danger'
+        };
+        return map[codigo] || 'light';
+    }
+
     function pintarTicket(p) {
         if (!p) {
             $('#porteria-ticket').removeClass('is-rechazado is-pendiente').prop('hidden', true);
+            $('#porteria-acciones-autorizar').prop('hidden', true);
             return;
         }
         $('#porteria-ticket').prop('hidden', false);
@@ -47,6 +63,8 @@
         $('#porteria-comentario').text(p.comentario || '');
         $('#porteria-btn-entro').prop('disabled', !p.puede_entro);
         $('#porteria-btn-salio').prop('disabled', !p.puede_salio);
+        var puedeRevisar = !!p.puede_autorizar_puerta;
+        $('#porteria-acciones-autorizar').prop('hidden', !puedeRevisar);
         if (p.mensaje_bloqueo && !p.puede_entro) {
             alerta(p.mensaje_bloqueo, false);
         }
@@ -61,17 +79,6 @@
             reloj.push(p.minutos_en_planta + ' min en planta');
         }
         $('#porteria-reloj').text(reloj.join(' · '));
-    }
-
-    function badgeClase(codigo) {
-        var map = {
-            PENDIENTE: 'warning',
-            AUTORIZADO: 'success',
-            INGRESADO: 'info',
-            FINALIZADO: 'secondary',
-            RECHAZADO: 'danger'
-        };
-        return map[codigo] || 'light';
     }
 
     function pintarGrilla(filas) {
@@ -123,6 +130,100 @@
         });
     }
 
+    function pintarArchivosModal(archivos) {
+        var $wrap = $('#porteria-auth-archivos').empty();
+        var $vacio = $('#porteria-auth-sin-archivos');
+        if (!$.isArray(archivos) || !archivos.length) {
+            $vacio.removeClass('d-none');
+            return;
+        }
+        $vacio.addClass('d-none');
+        archivos.forEach(function (a) {
+            var nombre = esc(a.nombre_original || 'archivo');
+            var urlAbrir = a.url_abrir || '#';
+            var urlDesc = a.url_descargar || urlAbrir;
+            var preview;
+            if (a.es_imagen) {
+                preview = '<div class="text-center bg-light rounded mb-2" style="min-height:120px;">' +
+                    '<a href="' + esc(urlAbrir) + '" target="_blank" rel="noopener noreferrer">' +
+                    '<img src="' + esc(urlAbrir) + '" alt="" class="img-fluid rounded" style="max-height:160px;object-fit:contain;">' +
+                    '</a></div>';
+            } else if (a.es_pdf) {
+                preview = '<div class="mb-2" style="min-height:180px;">' +
+                    '<iframe src="' + esc(urlAbrir) + '" class="w-100 rounded border-0 bg-secondary" style="height:180px;" title="Vista previa PDF"></iframe>' +
+                    '</div>';
+            } else {
+                preview = '<div class="text-center text-muted py-4 mb-2 bg-light rounded">' +
+                    '<i class="fa fa-file-o fa-3x"></i>' +
+                    '<div class="small mt-2">Vista previa no disponible</div></div>';
+            }
+            $wrap.append(
+                '<div class="col-md-6 mb-3">' +
+                '<div class="card card-outline card-secondary h-100 mb-0">' +
+                '<div class="card-body p-2 d-flex flex-column">' +
+                '<div class="small text-truncate mb-2" title="' + nombre + '">' +
+                '<i class="fa fa-paperclip text-muted mr-1"></i>' + nombre + '</div>' +
+                preview +
+                '<div class="mt-auto pt-1">' +
+                '<a href="' + esc(urlDesc) + '" class="btn btn-sm btn-outline-primary" download="' + nombre + '">' +
+                '<i class="fa fa-download"></i> Descargar</a> ' +
+                '<a href="' + esc(urlAbrir) + '" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener noreferrer">' +
+                '<i class="fa fa-external-link-alt"></i> Abrir</a>' +
+                '</div></div></div></div>'
+            );
+        });
+    }
+
+    function pintarDetalleModal(d) {
+        setTexto($('#porteria-auth-ticket-id'), '#' + (d.ticket_id || '—'));
+        setTexto($('#porteria-auth-nombre'), d.nombre);
+        setTexto($('#porteria-auth-doc'), d.documento);
+        setTexto($('#porteria-auth-empresa'), d.empresa);
+        setTexto($('#porteria-auth-proveedor'), d.proveedor);
+        setTexto($('#porteria-auth-solicitante'), d.generado_por);
+        setTexto($('#porteria-auth-fecha'), d.fecha);
+        setTexto($('#porteria-auth-motivo'), d.motivo);
+        setTexto($('#porteria-auth-punto'), d.punto);
+        setTexto($('#porteria-auth-sector'), d.sector);
+        setTexto($('#porteria-auth-area'), d.area);
+        setTexto($('#porteria-auth-patente'), d.patente);
+        setTexto($('#porteria-auth-titulo'), d.titulo);
+        setTexto($('#porteria-auth-comentario'), d.comentario);
+        pintarArchivosModal(d.archivos || []);
+    }
+
+    function mostrarVistaDatos() {
+        $('#porteria-auth-vista-datos').removeClass('d-none');
+        $('#porteria-auth-vista-rechazo').addClass('d-none');
+        $('#porteria-auth-footer-acciones').removeClass('d-none');
+        $('#porteria-auth-footer-rechazo').addClass('d-none');
+        $('#porteria-auth-error').addClass('d-none').text('');
+        $('#porteria-auth-motivo-rechazo').val('');
+    }
+
+    function mostrarVistaRechazo() {
+        $('#porteria-auth-vista-datos').addClass('d-none');
+        $('#porteria-auth-vista-rechazo').removeClass('d-none');
+        $('#porteria-auth-footer-acciones').addClass('d-none');
+        $('#porteria-auth-footer-rechazo').removeClass('d-none');
+        $('#porteria-auth-error').addClass('d-none').text('');
+        $('#porteria-auth-motivo-rechazo').trigger('focus');
+    }
+
+    function errorModal(texto) {
+        var $el = $('#porteria-auth-error');
+        if (!texto) {
+            $el.addClass('d-none').text('');
+            return;
+        }
+        $el.removeClass('d-none').text(texto);
+    }
+
+    function setBotonesModalDisabled(disabled) {
+        $('#porteria-auth-btn-autorizar, #porteria-auth-btn-autorizar-ingresar, #porteria-auth-btn-rechazar, #porteria-auth-btn-confirmar-rechazo')
+            .prop('disabled', !!disabled);
+    }
+
     $(function () {
         var $root = $('.porteria');
         if (!$root.length) {
@@ -132,12 +233,50 @@
         var urlBuscar = $root.data('url-buscar');
         var urlEntro = $root.data('url-entro');
         var urlSalio = $root.data('url-salio');
+        var urlDetalle = $root.data('url-detalle-pendiente');
+        var urlAutorizar = $root.data('url-autorizar-puerta');
+        var urlAutorizarIngresar = $root.data('url-autorizar-e-ingresar');
+        var urlRechazar = $root.data('url-rechazar-puerta');
+        var puedeAutorizarPuerta = $root.data('puede-autorizar-puerta') == '1'
+            || $root.data('puede-autorizar-puerta') === 1;
+        var abriendoModal = false;
 
         function contarEnPlantaInicial() {
             var n = $('#porteria-tbody tr.porteria-fila-en-planta').length;
             $('#porteria-en-planta-count').text(n + ' en planta');
         }
         contarEnPlantaInicial();
+
+        function abrirModalAutorizacion(personaId, autoAbrir) {
+            if (!puedeAutorizarPuerta || !personaId || !urlDetalle) {
+                return;
+            }
+            if (abriendoModal) {
+                return;
+            }
+            abriendoModal = true;
+            mostrarVistaDatos();
+            errorModal('');
+            setBotonesModalDisabled(true);
+            postJson(urlDetalle, { persona_id: personaId })
+                .done(function (res) {
+                    pintarDetalleModal(res.detalle || {});
+                    setBotonesModalDisabled(false);
+                    $('#porteriaAutorizacionModal').modal('show');
+                })
+                .fail(function (xhr) {
+                    var msg = (xhr.responseJSON && xhr.responseJSON.mensaje)
+                        || 'No se pudo cargar el detalle del ticket.';
+                    if (autoAbrir) {
+                        alerta(msg, false);
+                    } else {
+                        alert(msg);
+                    }
+                })
+                .always(function () {
+                    abriendoModal = false;
+                });
+        }
 
         $('#porteria-form-dni').on('submit', function (e) {
             e.preventDefault();
@@ -149,6 +288,9 @@
                         alerta('');
                     }
                     $('#porteria-dni').trigger('select');
+                    if (res.persona && res.persona.puede_autorizar_puerta) {
+                        abrirModalAutorizacion(res.persona.persona_id, true);
+                    }
                 })
                 .fail(function (xhr) {
                     pintarTicket(null);
@@ -181,6 +323,96 @@
         });
         $('#porteria-btn-salio').on('click', function () {
             marcar(urlSalio);
+        });
+
+        $('#porteria-btn-revisar').on('click', function () {
+            var id = $('#porteria-persona-id').val();
+            abrirModalAutorizacion(id, false);
+        });
+
+        $('#porteria-auth-btn-rechazar').on('click', function () {
+            mostrarVistaRechazo();
+        });
+        $('#porteria-auth-btn-volver').on('click', function () {
+            mostrarVistaDatos();
+        });
+
+        function aplicarResultadoPuerta(res, ok) {
+            if (res.persona) {
+                pintarTicket(res.persona);
+            }
+            if (res.filas) {
+                pintarGrilla(res.filas);
+            }
+            $('#porteriaAutorizacionModal').modal('hide');
+            alerta(res.mensaje || (ok ? 'Listo.' : 'No se pudo completar.'), !!ok);
+            if (ok && res.persona && res.persona.en_planta) {
+                $('#porteria-dni').val('').trigger('focus');
+            }
+        }
+
+        $('#porteria-auth-btn-autorizar').on('click', function () {
+            var id = $('#porteria-persona-id').val();
+            if (!id) {
+                return;
+            }
+            errorModal('');
+            setBotonesModalDisabled(true);
+            postJson(urlAutorizar, { persona_id: id })
+                .done(function (res) {
+                    aplicarResultadoPuerta(res, true);
+                })
+                .fail(function (xhr) {
+                    errorModal((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo autorizar.');
+                    setBotonesModalDisabled(false);
+                });
+        });
+
+        $('#porteria-auth-btn-autorizar-ingresar').on('click', function () {
+            var id = $('#porteria-persona-id').val();
+            if (!id) {
+                return;
+            }
+            errorModal('');
+            setBotonesModalDisabled(true);
+            postJson(urlAutorizarIngresar, { persona_id: id })
+                .done(function (res) {
+                    aplicarResultadoPuerta(res, true);
+                })
+                .fail(function (xhr) {
+                    var body = xhr.responseJSON || {};
+                    if (body.autorizado && body.persona) {
+                        aplicarResultadoPuerta(body, false);
+                        return;
+                    }
+                    errorModal(body.mensaje || 'No se pudo autorizar e ingresar.');
+                    setBotonesModalDisabled(false);
+                });
+        });
+
+        $('#porteria-auth-btn-confirmar-rechazo').on('click', function () {
+            var id = $('#porteria-persona-id').val();
+            var motivo = $.trim($('#porteria-auth-motivo-rechazo').val() || '');
+            if (!motivo) {
+                errorModal('Indique el motivo del rechazo.');
+                $('#porteria-auth-motivo-rechazo').trigger('focus');
+                return;
+            }
+            errorModal('');
+            setBotonesModalDisabled(true);
+            postJson(urlRechazar, { persona_id: id, motivo_rechazo: motivo })
+                .done(function (res) {
+                    aplicarResultadoPuerta(res, true);
+                })
+                .fail(function (xhr) {
+                    errorModal((xhr.responseJSON && xhr.responseJSON.mensaje) || 'No se pudo rechazar.');
+                    setBotonesModalDisabled(false);
+                });
+        });
+
+        $('#porteriaAutorizacionModal').on('hidden.bs.modal', function () {
+            mostrarVistaDatos();
+            setBotonesModalDisabled(false);
         });
     });
 })(jQuery);

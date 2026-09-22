@@ -105,6 +105,22 @@
 }
 .porteria-grid-datos strong { color: #17202A; }
 .porteria-comentario { margin: 0.9rem 0 0; color: #5d6d7e; }
+.porteria-acciones-autorizar {
+    margin-top: 1rem;
+}
+.porteria-btn-revisar {
+    width: 100%;
+    height: 4.2rem;
+    border: 0;
+    border-radius: 16px;
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #17202A;
+    background: #f4d03f;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+}
+.porteria-btn-revisar:hover { background: #d4ac0d; color: #17202A; }
 .porteria-acciones {
     display: grid;
     grid-template-columns: 1fr 1fr;

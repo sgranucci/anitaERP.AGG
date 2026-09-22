@@ -23,9 +23,14 @@
      data-url-buscar="{{ route('control_ingreso_buscar_dni') }}"
      data-url-entro="{{ route('control_ingreso_entro') }}"
      data-url-salio="{{ route('control_ingreso_salio') }}"
+     data-url-detalle-pendiente="{{ route('control_ingreso_detalle_pendiente') }}"
+     data-url-autorizar-puerta="{{ route('control_ingreso_autorizar_puerta') }}"
+     data-url-autorizar-e-ingresar="{{ route('control_ingreso_autorizar_puerta_e_ingresar') }}"
+     data-url-rechazar-puerta="{{ route('control_ingreso_rechazar_puerta') }}"
      data-empresa-id="{{ ($filtros['empresa_scope'] ?? '') === 'todas' ? '' : (int) ($filtros['empresa_id'] ?? 0) }}"
      data-empresa-todas="{{ ($filtros['empresa_scope'] ?? '') === 'todas' ? '1' : '0' }}"
-     data-puede-registrar="{{ !empty($puedeRegistrarIngresoEgreso) ? '1' : '0' }}">
+     data-puede-registrar="{{ !empty($puedeRegistrarIngresoEgreso) ? '1' : '0' }}"
+     data-puede-autorizar-puerta="{{ !empty($puedeAutorizarPuerta) ? '1' : '0' }}">
 
     <div class="porteria-hero">
         <div class="porteria-hero-copy">
@@ -76,6 +81,11 @@
             <div><span>T&iacute;tulo</span><strong id="porteria-titulo">—</strong></div>
         </div>
         <p class="porteria-comentario" id="porteria-comentario"></p>
+        <div id="porteria-acciones-autorizar" class="porteria-acciones-autorizar" hidden>
+            <button type="button" id="porteria-btn-revisar" class="porteria-btn porteria-btn-revisar">
+                Revisar y autorizar
+            </button>
+        </div>
         @if (!empty($puedeRegistrarIngresoEgreso))
         <div class="porteria-acciones">
             <input type="hidden" id="porteria-persona-id" value="">
@@ -88,6 +98,8 @@
         @endif
         <p class="porteria-reloj" id="porteria-reloj"></p>
     </div>
+
+    @include('seguridad.ingreso_proveedor.partials.modal_autorizacion_puerta')
 
     <div class="card card-info porteria-grilla">
         <div class="card-header">

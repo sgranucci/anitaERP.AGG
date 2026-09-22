@@ -5629,6 +5629,10 @@ Route::get('produccion/listaordenproduccion/{formato?}/{busqueda?}', 'Produccion
 Route::get('seguridad/control-ingreso', 'Seguridad\IngresoProveedorControlController@index')->name('control_ingreso_proveedor');
 Route::get('seguridad/lista-control-ingreso/{formato?}', 'Seguridad\IngresoProveedorControlController@listar')->name('lista_control_ingreso_proveedor');
 Route::post('seguridad/control-ingreso/buscar-dni', 'Seguridad\IngresoProveedorControlController@buscarDni')->name('control_ingreso_buscar_dni');
+Route::post('seguridad/control-ingreso/detalle-pendiente', 'Seguridad\IngresoProveedorControlController@detallePendiente')->name('control_ingreso_detalle_pendiente');
+Route::post('seguridad/control-ingreso/autorizar-puerta', 'Seguridad\IngresoProveedorControlController@autorizarPuerta')->name('control_ingreso_autorizar_puerta');
+Route::post('seguridad/control-ingreso/autorizar-puerta-e-ingresar', 'Seguridad\IngresoProveedorControlController@autorizarPuertaEIngresar')->name('control_ingreso_autorizar_puerta_e_ingresar');
+Route::post('seguridad/control-ingreso/rechazar-puerta', 'Seguridad\IngresoProveedorControlController@rechazarPuerta')->name('control_ingreso_rechazar_puerta');
 Route::post('seguridad/control-ingreso/entro', 'Seguridad\IngresoProveedorControlController@marcarEntro')->name('control_ingreso_entro');
 Route::post('seguridad/control-ingreso/salio', 'Seguridad\IngresoProveedorControlController@marcarSalio')->name('control_ingreso_salio');
 

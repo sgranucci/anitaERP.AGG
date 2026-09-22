@@ -334,6 +334,9 @@ final class IngresoProveedorControlSupport
         $finalizada = (bool) ($persona->fecha_ingreso && $persona->fecha_egreso);
         $estadoCodigo = (string) ($ticket?->estado ?? '');
         $puedeEntro = ! $enPlanta && ! $finalizada && IngresoProveedorEstados::permiteEntro($estadoCodigo);
+        $puedeAutorizarPuerta = ! $enPlanta && ! $finalizada
+            && $estadoCodigo === IngresoProveedorEstados::PENDIENTE
+            && can('autorizar-puerta-ingreso-proveedor', false);
         $mensajeBloqueo = null;
         if ($finalizada) {
             $horaSalida = $persona->hora_egreso ? substr((string) $persona->hora_egreso, 0, 5) : null;
@@ -343,10 +346,16 @@ final class IngresoProveedorControlSupport
         } elseif (! $puedeEntro && ! $enPlanta && $estadoCodigo === IngresoProveedorEstados::PENDIENTE) {
             $ticketId = (int) $persona->ingreso_proveedor_id;
             $generado = trim((string) (optional($ticket?->usuarios)->nombre ?? ''));
-            $mensajeBloqueo = 'Sin permiso de ingreso: el ticket #'.$ticketId
-                .' está Pendiente de autorización de Seguridad'
-                .($generado !== '' ? ' (solicitó: '.$generado.')' : '')
-                .'. No puede entrar hasta que Seguridad lo autorice.';
+            if ($puedeAutorizarPuerta) {
+                $mensajeBloqueo = 'Ticket #'.$ticketId.' pendiente de autorización'
+                    .($generado !== '' ? ' (solicitó: '.$generado.')' : '')
+                    .'. Revisá los datos y archivos, y autorizá o rechazá en el momento.';
+            } else {
+                $mensajeBloqueo = 'Sin permiso de ingreso: el ticket #'.$ticketId
+                    .' está Pendiente de autorización de Seguridad'
+                    .($generado !== '' ? ' (solicitó: '.$generado.')' : '')
+                    .'. No puede entrar hasta que Seguridad lo autorice.';
+            }
         } elseif ($estadoCodigo === IngresoProveedorEstados::RECHAZADO) {
             $mensajeBloqueo = self::mensajeRechazo($ticket);
         }
@@ -375,9 +384,81 @@ final class IngresoProveedorControlSupport
             'minutos_en_planta' => $persona->minutos_en_planta,
             'puede_entro' => $puedeEntro,
             'puede_salio' => $enPlanta,
+            'puede_autorizar_puerta' => $puedeAutorizarPuerta,
             'mensaje_bloqueo' => $mensajeBloqueo,
             'en_planta' => $enPlanta,
         ];
+    }
+
+    /**
+     * Detalle para el modal de autorización en puerta (datos + adjuntos).
+     *
+     * @return array<string, mixed>
+     */
+    public static function detallePendiente(int $personaId): array
+    {
+        $persona = IngresoProveedorPersona::query()
+            ->with([
+                'ingreso.proveedores:id,codigo,nombre',
+                'ingreso.motivos:id,nombre',
+                'ingreso.puntos:id,nombre',
+                'ingreso.areas:id,nombre',
+                'ingreso.sectores:id,nombre',
+                'ingreso.empresas:id,nombre',
+                'ingreso.usuarios:id,nombre',
+                'ingreso.usuarioAutorizo:id,nombre',
+                'ingreso.archivos',
+            ])
+            ->findOrFail($personaId);
+
+        $ticket = $persona->ingreso;
+        if (! $ticket) {
+            throw new RuntimeException('El ticket de ingreso no existe.');
+        }
+        if ((string) $ticket->estado !== IngresoProveedorEstados::PENDIENTE) {
+            throw new RuntimeException(
+                'Solo se puede revisar en puerta un ticket Pendiente. Estado actual: '
+                .IngresoProveedorEstados::etiqueta((string) $ticket->estado).'.'
+            );
+        }
+
+        $payload = self::payloadPersona($persona);
+        $archivos = [];
+        foreach ($ticket->archivos as $arch) {
+            $ext = strtolower(pathinfo((string) $arch->nombre_archivo, PATHINFO_EXTENSION));
+            $url = $arch->urlPublica();
+            $archivos[] = [
+                'id' => (int) $arch->id,
+                'nombre_original' => (string) $arch->nombre_original,
+                'mime' => (string) ($arch->mime ?? ''),
+                'url_abrir' => $url,
+                'url_descargar' => $url,
+                'es_imagen' => in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true),
+                'es_pdf' => $ext === 'pdf',
+            ];
+        }
+        $payload['archivos'] = $archivos;
+
+        return $payload;
+    }
+
+    /**
+     * Recarga la persona con relaciones para el payload de portería.
+     */
+    public static function personaConRelaciones(int $personaId): IngresoProveedorPersona
+    {
+        return IngresoProveedorPersona::query()
+            ->with([
+                'ingreso.proveedores:id,codigo,nombre',
+                'ingreso.motivos:id,nombre',
+                'ingreso.puntos:id,nombre',
+                'ingreso.areas:id,nombre',
+                'ingreso.sectores:id,nombre',
+                'ingreso.empresas:id,nombre',
+                'ingreso.usuarios:id,nombre',
+                'ingreso.usuarioAutorizo:id,nombre',
+            ])
+            ->findOrFail($personaId);
     }
 
     private static function mensajeRechazo(?IngresoProveedor $ticket): string

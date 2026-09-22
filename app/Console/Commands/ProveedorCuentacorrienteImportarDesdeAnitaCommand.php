@@ -19,7 +19,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
-    protected $description = 'Alinea deuda proveedores Anita→ERP (monto+aplmovp; nativas solo apps; OPA pendientes)';
+    protected $description = 'Alinea deuda Anita→ERP (no toca CC/apps de OP ERP; nativas solo apps; OPA pendientes)';
 
     public function handle(ProveedorCuentacorrienteImportarDesdeAnitaService $service): int
     {

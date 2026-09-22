@@ -20,6 +20,7 @@ use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
+use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
@@ -93,6 +94,23 @@ class ComprobanteProveedorPersistenciaService
         );
     }
 
+    private static function contarCuotasVencimientoRequest(Request $request): int
+    {
+        $vencimientos = $request->input('cuota_fechavencimiento', []);
+        if (! is_array($vencimientos)) {
+            return 0;
+        }
+
+        $n = 0;
+        foreach ($vencimientos as $vto) {
+            if (trim((string) $vto) !== '') {
+                $n++;
+            }
+        }
+
+        return $n;
+    }
+
     public function crearDesdeRequest(Request $request): Comprobante_Proveedor
     {
         $payload = $this->armarPayloadCabecera($request);
@@ -102,6 +120,12 @@ class ComprobanteProveedorPersistenciaService
 
         $this->assertPeriodoContablePermitido($payload);
         $this->assertFechaComprobanteCarga($payload);
+
+        ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
+            (int) ($payload['tipotransaccion_compra_id'] ?? 0),
+            isset($payload['condicionpago_id']) ? (int) $payload['condicionpago_id'] : null,
+            self::contarCuotasVencimientoRequest($request),
+        );
 
         $precargaIdRequest = (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0);
         if ($precargaIdRequest > 0) {
@@ -218,6 +242,12 @@ class ComprobanteProveedorPersistenciaService
         $payloadPeriodo['fechaiva'] = ComprobanteProveedorFechaContableSupport::inmodificableEnCarga($comprobante);
         $this->assertPeriodoContablePermitido($payloadPeriodo);
         $this->assertFechaComprobanteCarga($payloadPeriodo);
+
+        ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
+            (int) ($payloadPeriodo['tipotransaccion_compra_id'] ?? 0),
+            isset($payloadPeriodo['condicionpago_id']) ? (int) $payloadPeriodo['condicionpago_id'] : null,
+            self::contarCuotasVencimientoRequest($request),
+        );
 
         $estadosEditables = [
             ComprobanteProveedorEstados::BORRADOR,
@@ -370,6 +400,12 @@ class ComprobanteProveedorPersistenciaService
 
         $this->assertPeriodoContablePermitido($payload);
         $this->assertFechaComprobanteCarga($payload);
+
+        ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
+            (int) ($payload['tipotransaccion_compra_id'] ?? 0),
+            isset($payload['condicionpago_id']) ? (int) $payload['condicionpago_id'] : null,
+            ComprobanteProveedorCondicionPagoNcNdSupport::cantidadCuotasPlan($prefill['cuotas'] ?? []),
+        );
 
         ComprobanteProveedorUnicidadSupport::assertUnico(
             (int) $payload['empresa_id'],
@@ -755,6 +791,10 @@ class ComprobanteProveedorPersistenciaService
                     (int) ($comprobante->moneda_id ?: 1),
                     (float) ($comprobante->cotizacion ?: 1),
                 );
+                $meta = ComprobanteProveedorCondicionPagoNcNdSupport::sanitizarMetaCuotasParaNcNd(
+                    (int) ($comprobante->tipotransaccion_compra_id ?? 0),
+                    $meta,
+                );
                 $cuotas = $meta['cuotas'];
             }
         }
@@ -765,6 +805,12 @@ class ComprobanteProveedorPersistenciaService
     /** @param list<array<string, mixed>> $cuotas */
     private function persistirCuotasDesdeArray(Comprobante_Proveedor $comprobante, array $cuotas): void
     {
+        ComprobanteProveedorCondicionPagoNcNdSupport::assertPermitida(
+            (int) ($comprobante->tipotransaccion_compra_id ?? 0),
+            isset($comprobante->condicionpago_id) ? (int) $comprobante->condicionpago_id : null,
+            ComprobanteProveedorCondicionPagoNcNdSupport::cantidadCuotasPlan($cuotas),
+        );
+
         $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
         $fechaFactura = $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d');
         $cotizacionFactura = ComprobanteProveedorMonedaMotor::cotizacionValida(
