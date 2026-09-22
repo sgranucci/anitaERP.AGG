@@ -332,6 +332,8 @@ class ProveedorCuentacorrienteReporteService
             ->with([
                 'proveedores:id,codigo,nombre',
                 'comprobante_proveedores.tipotransaccion_compras',
+                'comprobante_proveedores.comprobante_proveedor_cuotas',
+                'comprobante_proveedor_cuotas',
                 'pagoproveedores',
                 'monedas:id,abreviatura',
                 'empresas:id,nombre',
@@ -365,6 +367,8 @@ class ProveedorCuentacorrienteReporteService
             ->with([
                 'proveedores:id,codigo,nombre',
                 'comprobante_proveedores.tipotransaccion_compras',
+                'comprobante_proveedores.comprobante_proveedor_cuotas',
+                'comprobante_proveedor_cuotas',
                 'pagoproveedores',
                 'monedas:id,abreviatura',
                 'empresas:id,nombre',

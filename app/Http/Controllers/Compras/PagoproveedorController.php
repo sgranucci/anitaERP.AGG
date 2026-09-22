@@ -26,6 +26,7 @@ use App\Services\Compras\RetencionesPagoCalculator;
 use App\Services\Compras\RetencionesPagoContextoBuilder;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 use App\Support\Compras\PagoproveedorListadoFiltros;
+use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Compras\PropuestaPagoModoSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -357,7 +358,6 @@ class PagoproveedorController extends Controller
             $pagoOrigenId = (int) ($cc->pagoproveedor_id ?? 0);
             $esOpa = PagoproveedorAplicacionLadoSupport::esOpa($cc);
             $signo = PagoproveedorAplicacionLadoSupport::signo($cc);
-            $etiquetaPago = $cc->pagoproveedores?->etiquetaComprobante();
 
             $comprobanteUrl = null;
             if ($compId > 0 && $puedeVerComprobante) {
@@ -378,15 +378,7 @@ class PagoproveedorController extends Controller
                 'id' => (int) $cc->id,
                 'fecha' => optional($cc->fecha)->format('Y-m-d'),
                 'vencimiento' => optional($cc->fechavencimiento)->format('Y-m-d'),
-                'comprobante' => $comp
-                    ? sprintf(
-                        '%s %s-%04d-%s',
-                        $comp->tipotransaccion_compras?->abreviatura ?? 'FAC',
-                        $comp->letra,
-                        (int) $comp->sucursal,
-                        $comp->numerocomprobante
-                    )
-                    : (string) ($etiquetaPago ?: ('CC#'.$cc->id)),
+                'comprobante' => ProveedorCuentacorrienteGrillaSupport::etiquetaComprobanteAbreviado($cc),
                 'comprobante_proveedor_id' => $compId > 0 ? $compId : null,
                 'comprobante_url' => $comprobanteUrl,
                 'moneda_id' => (int) $cc->moneda_id,
@@ -413,6 +405,8 @@ class PagoproveedorController extends Controller
             $aplicaciones = Pagoproveedor_Comprobante::query()
                 ->with([
                     'proveedor_cuentacorrientes.comprobante_proveedores.tipotransaccion_compras',
+                    'proveedor_cuentacorrientes.comprobante_proveedores.comprobante_proveedor_cuotas',
+                    'proveedor_cuentacorrientes.comprobante_proveedor_cuotas',
                     'proveedor_cuentacorrientes.pagoproveedores',
                     'proveedor_cuentacorrientes.monedas',
                     'proveedor_cuentacorrientes.empresas',

@@ -85,9 +85,9 @@ class TrackingFacturasRepository
             )
             ->selectRaw('sum(case when '.$indexado.' then 0 else 1 end) as sin_resolver')
             ->selectRaw(
-                'sum(case when comprobante_proveedor.estado <> ? or comprobante_proveedor.asiento_id is null'
+                'sum(case when comprobante_proveedor.estado <> ? and comprobante_proveedor.estado <> ?'
                 .' then 1 else 0 end) as sin_contabilizar',
-                [ComprobanteProveedorEstados::CONTABILIZADO]
+                [ComprobanteProveedorEstados::CONTABILIZADO, ComprobanteProveedorEstados::ANULADO]
             )
             ->selectRaw(
                 'sum(case when '.$conDeuda.' then 1 else 0 end) as con_deuda',

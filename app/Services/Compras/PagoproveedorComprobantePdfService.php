@@ -9,6 +9,7 @@ use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 use App\Support\Compras\PagoproveedorFirmaAgenteRetencionSupport;
 use App\Support\Compras\PagoproveedorRetencionCertificadoLineasSupport;
+use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Compras\Retencion\RetencionesPagoBasesDesdeConceptosSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Sueldos\NumeroALetrasEs;
@@ -260,6 +261,9 @@ class PagoproveedorComprobantePdfService
                     ? sprintf('%s %s%04d-%08d', $tipo, $letra, $suc, (int) $nro)
                     : sprintf('%s %s', $tipo, $nro))
                 : (string) (optional($pcc?->pagoproveedores)->etiquetaComprobante() ?: ('CC#'.(int) (optional($pcc)->id ?? 0)));
+            if ($pcc && $cp) {
+                $nroFmt .= ProveedorCuentacorrienteGrillaSupport::sufijoCuota($pcc);
+            }
 
             $signo = $pcc ? PagoproveedorAplicacionLadoSupport::signo($pcc) : 1;
             $montoDoc = abs((float) (optional($cp)->total ?? optional($pcc)->total ?? $apl->montoaplicado));

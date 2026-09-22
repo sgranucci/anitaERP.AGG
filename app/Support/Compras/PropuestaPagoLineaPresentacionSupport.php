@@ -149,6 +149,9 @@ class PropuestaPagoLineaPresentacionSupport
                 (int) ($comp->sucursal ?? 0),
                 $comp->numerocomprobante ?? ''
             );
+            if ($linea->proveedor_cuentacorrientes) {
+                $comprobante .= ProveedorCuentacorrienteGrillaSupport::sufijoCuota($linea->proveedor_cuentacorrientes);
+            }
         }
 
         $medio = '';

@@ -17,6 +17,7 @@ use App\Support\Compras\ApiPrecargaProveedorLogger;
 use App\Support\Compras\ComprobanteProveedorConceptosIibbPadronCotejoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCentrocostoDestinoSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCuitCoincidenciaSupport;
@@ -345,6 +346,19 @@ class ApiController extends Controller
 
         $tipotransaccion_compra_id = $comprobante->id;
         $tipoAbreviatura = $comprobante->abreviatura ?? $request->tipo;
+
+        // Si hay OC, alinear tipo fino al cableado listaConcepto (CC destino + artículos).
+        // No pisa tipos especiales (p. ej. NCC crédito x dif. cambio): solo finos F**/C**/D**.
+        if ($numeroOc !== '') {
+            $corregido = $this->alinearTipoFinoConOrdencompra(
+                (string) $tipoAbreviatura,
+                (int) $tipotransaccion_compra_id,
+                $numeroOc,
+                $log,
+            );
+            $tipoAbreviatura = $corregido['abreviatura'];
+            $tipotransaccion_compra_id = $corregido['tipo_id'];
+        }
 
         $log->info('recibe_comprobante.tipo_comprobante_ok', [
             'tipo_solicitado' => $request->tipo,
@@ -807,6 +821,67 @@ class ApiController extends Controller
         $texto = trim((string) $valor);
 
         return $texto === '' ? null : $texto;
+    }
+
+    /**
+     * Alinea abreviatura fina del agente con CC destino + artículos de la OC
+     * (mismo criterio que listaConcepto). No pisa tipos especiales (NCC, etc.).
+     *
+     * @return array{abreviatura: string, tipo_id: int}
+     */
+    private function alinearTipoFinoConOrdencompra(
+        string $abreviaturaAgente,
+        int $tipoIdAgente,
+        string $numeroOc,
+        ApiPrecargaProveedorLogger $log,
+    ): array {
+        $abrevAgente = strtoupper(trim($abreviaturaAgente));
+        if ($abrevAgente === '' || ! preg_match('/^[FCD][A-Z]{2}$/', $abrevAgente)) {
+            return ['abreviatura' => $abreviaturaAgente, 'tipo_id' => $tipoIdAgente];
+        }
+
+        $oc = \App\Models\Compras\Ordencompra::query()
+            ->where('numeroordencompra', $numeroOc)
+            ->orWhere('numeroordencompra', ltrim($numeroOc, '0'))
+            ->first();
+        if (! $oc) {
+            return ['abreviatura' => $abreviaturaAgente, 'tipo_id' => $tipoIdAgente];
+        }
+
+        $familia = match (substr($abrevAgente, 0, 1)) {
+            'C' => 'NC',
+            'D' => 'ND',
+            default => 'FC',
+        };
+
+        try {
+            $esperado = PrecargaProveedorAbreviaturaTipoSupport::abreviaturaDesdeOrdencompra($oc, $familia);
+        } catch (\Throwable) {
+            return ['abreviatura' => $abreviaturaAgente, 'tipo_id' => $tipoIdAgente];
+        }
+
+        if ($esperado === null || $esperado === '' || $esperado === $abrevAgente) {
+            return ['abreviatura' => $abreviaturaAgente, 'tipo_id' => $tipoIdAgente];
+        }
+        if (! preg_match('/^[FCD][A-Z]{2}$/', $esperado)) {
+            return ['abreviatura' => $abreviaturaAgente, 'tipo_id' => $tipoIdAgente];
+        }
+
+        $comprobanteEsperado = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($esperado);
+        if (! $comprobanteEsperado) {
+            return ['abreviatura' => $abreviaturaAgente, 'tipo_id' => $tipoIdAgente];
+        }
+
+        $log->info('recibe_comprobante.tipo_alineado_oc', [
+            'numero_oc' => $numeroOc,
+            'tipo_agente' => $abrevAgente,
+            'tipo_oc' => $esperado,
+        ]);
+
+        return [
+            'abreviatura' => (string) ($comprobanteEsperado->abreviatura ?? $esperado),
+            'tipo_id' => (int) $comprobanteEsperado->id,
+        ];
     }
 
     /**

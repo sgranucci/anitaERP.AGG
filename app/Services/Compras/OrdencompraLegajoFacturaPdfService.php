@@ -67,7 +67,17 @@ class OrdencompraLegajoFacturaPdfService
             throw new RuntimeException('Proveedor de la orden de compra inexistente.');
         }
 
-        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdPorCodigoAfip($codigoAfipMaestro);
+        // Mismo cableado que adjuntarPdfAlLegajo / paquete CxP: abreviatura fina por
+        // CC destino + tipo de artículos de la OC (FGA solo si CC 85). El código AFIP
+        // solo define la familia (FC/ND/NC); no debe imponer FGA.
+        $tipoGenerico = OrdencompraEnvioCuentasAPagarGateSupport::tipoComprobanteGenericoDesdeCodigoAfip(
+            $codigoAfipMaestro
+        );
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdPorCodigoAfip(
+            $codigoAfipMaestro,
+            $oc,
+            $tipoGenerico,
+        );
         if ($tipoId <= 0) {
             throw new RuntimeException(
                 'No hay tipo de transacción de compra con código ARCA '.$codigoAfipMaestro.'. Cárguelo en tipos de transacción de compra.'

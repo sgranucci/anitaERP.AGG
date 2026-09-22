@@ -85,6 +85,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                 'comprobante_proveedores.precarga_comprobante_proveedores',
                 'comprobante_proveedores.comprobante_proveedor_archivos',
                 'comprobante_proveedores.tracking_indice',
+                'comprobante_proveedores.comprobante_proveedor_cuotas',
+                'comprobante_proveedor_cuotas',
                 'pagoproveedores',
                 'proveedor_cuentacorriente_aplicaciones',
                 'monedas',
@@ -114,6 +116,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                 'comprobante_proveedores.comprobante_proveedor_archivos',
                 'comprobante_proveedores.tracking_indice',
                 'comprobante_proveedores.ordencompras.ordencompra_articulos',
+                'comprobante_proveedores.comprobante_proveedor_cuotas',
+                'comprobante_proveedor_cuotas',
                 'pagoproveedores',
                 'monedas',
                 'empresas',
@@ -441,6 +445,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         $query = $this->model->query()
             ->with([
                 'comprobante_proveedores.tipotransaccion_compras',
+                'comprobante_proveedores.comprobante_proveedor_cuotas',
+                'comprobante_proveedor_cuotas',
                 'pagoproveedores',
                 'monedas',
                 'empresas',

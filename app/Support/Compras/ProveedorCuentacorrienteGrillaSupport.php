@@ -31,8 +31,9 @@ final class ProveedorCuentacorrienteGrillaSupport
         if ((int) ($fila->comprobante_proveedor_id ?? 0) > 0 && $fila->comprobante_proveedores) {
             $comprobante = $fila->comprobante_proveedores;
             $tipo = $comprobante->tipotransaccion_compras->nombre ?? 'Comprobante';
+            $base = trim($tipo.' '.$comprobante->letra.$comprobante->sucursal.'-'.$comprobante->numerocomprobante);
 
-            return trim($tipo.' '.$comprobante->letra.$comprobante->sucursal.'-'.$comprobante->numerocomprobante);
+            return $base.self::sufijoCuota($fila);
         }
 
         $etiquetaOp = self::etiquetaCreditoDesdeAplicacion($fila);
@@ -41,6 +42,65 @@ final class ProveedorCuentacorrienteGrillaSupport
         }
 
         return 'Movimiento #'.(int) $fila->id;
+    }
+
+    /**
+     * Etiqueta corta tipo OP / API deuda: "FNB A-0001-457" (+ cuota si hay más de una).
+     */
+    public static function etiquetaComprobanteAbreviado(Proveedor_Cuentacorriente $fila): string
+    {
+        $comp = $fila->comprobante_proveedores;
+        if ($comp === null) {
+            $etiquetaPago = $fila->pagoproveedores?->etiquetaComprobante();
+
+            return $etiquetaPago !== null && $etiquetaPago !== ''
+                ? $etiquetaPago
+                : 'CC#'.(int) $fila->id;
+        }
+
+        $base = sprintf(
+            '%s %s-%04d-%s',
+            $comp->tipotransaccion_compras?->abreviatura ?? 'FAC',
+            $comp->letra,
+            (int) $comp->sucursal,
+            $comp->numerocomprobante
+        );
+
+        return $base.self::sufijoCuota($fila);
+    }
+
+    /**
+     * Sufijo "(n/m)" cuando el movimiento es una cuota de un plan con más de una.
+     * Vacío si no hay cuota linkeada o el comprobante tiene una sola cuota.
+     */
+    public static function sufijoCuota(Proveedor_Cuentacorriente $fila): string
+    {
+        if ((int) ($fila->comprobante_proveedor_cuota_id ?? 0) <= 0) {
+            return '';
+        }
+
+        $fila->loadMissing([
+            'comprobante_proveedor_cuotas',
+            'comprobante_proveedores.comprobante_proveedor_cuotas',
+        ]);
+
+        $cuota = $fila->comprobante_proveedor_cuotas;
+        if ($cuota === null) {
+            return '';
+        }
+
+        $cantidad = (int) ($fila->comprobante_proveedores?->comprobante_proveedor_cuotas?->count() ?? 0);
+
+        return self::formatearSufijoCuota((int) ($cuota->numero_cuota ?? 0), $cantidad);
+    }
+
+    public static function formatearSufijoCuota(int $numeroCuota, int $cantidadCuotas): string
+    {
+        if ($cantidadCuotas <= 1 || $numeroCuota <= 0) {
+            return '';
+        }
+
+        return ' ('.$numeroCuota.'/'.$cantidadCuotas.')';
     }
 
     /**

@@ -794,12 +794,88 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         return self::tipotransaccionCompraDefaultId();
     }
 
-    public static function tipotransaccionCompraIdPorCodigoAfip(string $codigoAfip): int
+    /**
+     * Tipo AFIP genérico (01/02/03) → FC / ND / NC para abreviatura fina por CC.
+     */
+    public static function tipoComprobanteGenericoDesdeCodigoAfip(string $codigoAfip): string
     {
+        $n = (int) ComprobanteProveedorUnicidadSupport::normalizarCodigoAfip($codigoAfip);
+
+        return match ($n) {
+            2 => 'ND',
+            3 => 'NC',
+            default => 'FC',
+        };
+    }
+
+    /**
+     * Resuelve tipo por código AFIP + (si hay OC) abreviatura fina del cableado
+     * PrecargaProveedorAbreviaturaTipoSupport (CC destino + artículos).
+     *
+     * Con OC: NUNCA fuerza FGA; FGA sale solo si el CC destino es 85.
+     * Sin OC: conserva la preferencia histórica (FGA primero) por compatibilidad.
+     *
+     * @param  'FC'|'ND'|'NC'|null  $tipoGenerico  Si null, se deduce del código AFIP.
+     */
+    public static function tipotransaccionCompraIdPorCodigoAfip(
+        string $codigoAfip,
+        ?Ordencompra $oc = null,
+        ?string $tipoGenerico = null,
+    ): int {
         $norm = ComprobanteProveedorUnicidadSupport::normalizarCodigoAfip($codigoAfip);
         $ids = ComprobanteProveedorUnicidadSupport::tipotransaccionIdsPorCodigoAfip($norm);
         if ($ids === []) {
             return 0;
+        }
+
+        if ($oc !== null) {
+            $tipoGenerico = $tipoGenerico
+                ?: self::tipoComprobanteGenericoDesdeCodigoAfip($norm);
+
+            // 1) Cableado canónico: CC destino + ítem (bienes/servicios) de la OC.
+            $idOc = PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport::tipotransaccionIdDesdeOrdencompra(
+                $oc,
+                $tipoGenerico
+            );
+            if ($idOc > 0 && in_array($idOc, $ids, true)) {
+                return $idOc;
+            }
+
+            $abrevOc = PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport::abreviaturaDesdeOrdencompra(
+                $oc,
+                $tipoGenerico
+            );
+            if ($abrevOc !== null && $abrevOc !== '') {
+                $matchAbrev = (int) (DB::table('tipotransaccion_compra')
+                    ->whereIn('id', $ids)
+                    ->where('abreviatura', $abrevOc)
+                    ->value('id') ?? 0);
+                if ($matchAbrev > 0) {
+                    return $matchAbrev;
+                }
+            }
+
+            // 2) OC presente pero sin match: cualquier maestro AFIP.
+            //    Sin CC 85 no se elige gastronomía (xGA); con CC 85 sí puede.
+            $permiteGastro = false;
+            foreach (PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport::centrocostosDestinoTodosDesdeOrdencompra($oc) as $cc) {
+                $codigoCc = (int) preg_replace('/\D+/', '', (string) ($cc->codigo ?? ''));
+                if ($codigoCc === 85) {
+                    $permiteGastro = true;
+                    break;
+                }
+            }
+
+            $fallbackQuery = DB::table('tipotransaccion_compra')->whereIn('id', $ids);
+            if (! $permiteGastro) {
+                $fallbackQuery->where('abreviatura', 'not like', '%GA');
+            }
+            $fallback = (int) ($fallbackQuery->orderBy('id')->value('id') ?? 0);
+            if ($fallback > 0) {
+                return $fallback;
+            }
+
+            return (int) $ids[0];
         }
 
         $prefer = (int) (DB::table('tipotransaccion_compra')

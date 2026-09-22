@@ -1024,7 +1024,13 @@ class Comprobante_ProveedorController extends Controller
             : false;
         $bloqueadoEdicion = $tienePagos
             || ($data->estado ?? '') === ComprobanteProveedorEstados::ANULADO;
-        $puedeActualizar = (bool) $comprobanteId && ! $bloqueadoEdicion;
+        // Consulta (Control de Gestión, etc.): listar/editar sin actualizar → formulario solo lectura.
+        if ($comprobanteId && ! can('actualizar-comprobante-proveedor', false)) {
+            $bloqueadoEdicion = true;
+        }
+        $puedeActualizar = (bool) $comprobanteId
+            && ! $bloqueadoEdicion
+            && can('actualizar-comprobante-proveedor', false);
         $asientoPreview = ['activo' => ! $bloqueadoEdicion, 'es_preview' => true, 'lineas' => []];
 
         $monedaFacturaId = (int) ($data->moneda_id ?? 1);

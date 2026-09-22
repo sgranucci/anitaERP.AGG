@@ -325,15 +325,6 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
 
     private static function codigoComprobante(Proveedor_Cuentacorriente $deuda): string
     {
-        $c = $deuda->comprobante_proveedores;
-        if ($c === null) {
-            $etiquetaPago = $deuda->pagoproveedores?->etiquetaComprobante();
-
-            return $etiquetaPago !== null && $etiquetaPago !== '' ? $etiquetaPago : 'CC#'.$deuda->id;
-        }
-
-        $tipo = (string) ($c->tipotransaccion_compras?->abreviatura ?? 'FAC');
-
-        return sprintf('%s %s-%04d-%s', $tipo, $c->letra, (int) $c->sucursal, $c->numerocomprobante);
+        return ProveedorCuentacorrienteGrillaSupport::etiquetaComprobanteAbreviado($deuda);
     }
 }

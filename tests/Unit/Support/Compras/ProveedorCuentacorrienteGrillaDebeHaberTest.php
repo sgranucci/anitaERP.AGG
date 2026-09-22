@@ -15,6 +15,15 @@ class ProveedorCuentacorrienteGrillaDebeHaberTest extends TestCase
         $this->assertEqualsWithDelta(1500.50, $dh['haber'], 0.0001);
     }
 
+    public function test_sufijo_cuota_solo_si_hay_mas_de_una(): void
+    {
+        $this->assertSame(' (1/2)', ProveedorCuentacorrienteGrillaSupport::formatearSufijoCuota(1, 2));
+        $this->assertSame(' (2/2)', ProveedorCuentacorrienteGrillaSupport::formatearSufijoCuota(2, 2));
+        $this->assertSame('', ProveedorCuentacorrienteGrillaSupport::formatearSufijoCuota(1, 1));
+        $this->assertSame('', ProveedorCuentacorrienteGrillaSupport::formatearSufijoCuota(0, 2));
+        $this->assertSame('', ProveedorCuentacorrienteGrillaSupport::formatearSufijoCuota(1, 0));
+    }
+
     public function test_opp_y_nc_van_al_debe(): void
     {
         $opp = ProveedorCuentacorrienteGrillaSupport::debeHaberDesdeTotal(-800.0);

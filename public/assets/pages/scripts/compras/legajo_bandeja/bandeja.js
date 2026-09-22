@@ -1006,27 +1006,67 @@
         }
 
         $('.js-bandeja-enviar-gastro').on('click', function () {
+            var $btn = $(this);
             var $form = $('#formBandejaEnviarGastro');
-            var ocId = $(this).data('ordencompra-id') || '';
-            $form.attr('action', $(this).data('url'));
+            var ocId = $btn.data('ordencompra-id') || '';
+            var opts = { forzarPaquete: true };
+            var base = (typeof window.carpetaBase !== 'undefined' && window.carpetaBase) ? window.carpetaBase : '';
+            var urlPaquete = $btn.data('url-paquete') || '';
+            var urlAsignar = $btn.data('url-asignar') || '';
+            var numero = $btn.data('numero') || '';
+            var urlEnviar = $btn.data('url') || '';
+
+            $form.attr('action', urlEnviar);
             $form.find('input[name=observacion]').val('');
             $form.find('textarea[name=leyenda]').val('');
             $form.find('input[type=file]').val('');
             $form.find('input[name=destinatario_usuario_id]').val('');
             $form.data('ordencompra-id', ocId);
             $form.attr('data-ordencompra-id', ocId);
-            if (window.OcCambiarSectorLegajo) {
-                window.OcCambiarSectorLegajo.initForm($form, { forzarPaquete: true });
+
+            if (!ocId) {
+                alert('No se pudo identificar el legajo.');
+                return;
             }
-            if (window.OcEnviarGastronomiaFirmante) {
-                var base = (typeof window.carpetaBase !== 'undefined' && window.carpetaBase) ? window.carpetaBase : '';
-                window.OcEnviarGastronomiaFirmante.setOrdencompraId(
-                    $form,
-                    ocId,
-                    ocId ? (base + '/compras/ordencompra/' + ocId + '/firmantes-gastronomia-arbol') : ''
-                );
-            }
-            $('#modalBandejaEnviarGastro').modal('show');
+
+            $btn.prop('disabled', true);
+            $.getJSON(base + '/compras/ordencompra/' + ocId + '/gate-cuentas-a-pagar?preflight=1')
+                .done(function (gate) {
+                    // Gastronomía valida el paquete FC/COM (paquete_ok), no el ok de CxP
+                    // (ese incluye “falta autorización Gastronomía” y sería un catch-22).
+                    var paqueteOk = gate && (typeof gate.paquete_ok === 'boolean' ? gate.paquete_ok : !!gate.ok);
+                    if (!paqueteOk) {
+                        var faltan = (gate && gate.faltan_com) || [];
+                        var retenibles = faltan.filter(function (d) { return d && d.puede_retener && d.precarga_id; });
+                        if (retenibles.length) {
+                            mostrarModalPendienteEntrega({
+                                destino: 'gastro',
+                                ocId: ocId,
+                                numero: numero,
+                                urlPaquete: urlPaquete,
+                                urlAsignar: urlAsignar,
+                                urlEnviar: urlEnviar,
+                                faltan: faltan,
+                                gate: gate,
+                                $btnEnviar: $btn,
+                                opts: opts
+                            });
+                            return;
+                        }
+                        var errs = (gate && (gate.paquete_errores || gate.errores) && (gate.paquete_errores || gate.errores).length)
+                            ? (gate.paquete_errores || gate.errores).join('\n')
+                            : 'El legajo no cumple los requisitos para enviar a Gastronomía.';
+                        alert(errs);
+                        return;
+                    }
+                    abrirModalEnviarGastro($form, ocId, opts, urlEnviar);
+                })
+                .fail(function () {
+                    alert('No se pudo validar el legajo antes del envío.');
+                })
+                .always(function () {
+                    $btn.prop('disabled', false);
+                });
         });
 
         $('.js-bandeja-enviar-pagos').on('click', function () {
@@ -1085,6 +1125,7 @@
                         var retenibles = faltan.filter(function (d) { return d && d.puede_retener && d.precarga_id; });
                         if (retenibles.length) {
                             mostrarModalPendienteEntrega({
+                                destino: 'cxp',
                                 ocId: ocId,
                                 numero: numero,
                                 urlPaquete: urlPaquete,
@@ -1121,6 +1162,61 @@
             $('#modalBandejaEnviarCxp').modal('show');
         }
 
+        function abrirModalEnviarGastro($form, ocId, opts, urlEnviar) {
+            if (urlEnviar) {
+                $form.attr('action', urlEnviar);
+            }
+            $form.data('ordencompra-id', ocId);
+            $form.attr('data-ordencompra-id', ocId);
+            if (window.OcCambiarSectorLegajo) {
+                window.OcCambiarSectorLegajo.initForm($form, opts || { forzarPaquete: true });
+                window.OcCambiarSectorLegajo.setOrdencompraId($form, ocId, opts || { forzarPaquete: true });
+            }
+            if (window.OcEnviarGastronomiaFirmante) {
+                var base = (typeof window.carpetaBase !== 'undefined' && window.carpetaBase) ? window.carpetaBase : '';
+                window.OcEnviarGastronomiaFirmante.setOrdencompraId(
+                    $form,
+                    ocId,
+                    ocId ? (base + '/compras/ordencompra/' + ocId + '/firmantes-gastronomia-arbol') : ''
+                );
+            }
+            $('#modalBandejaEnviarGastro').modal('show');
+        }
+
+        function gatePaqueteOk(gate) {
+            if (!gate) {
+                return false;
+            }
+            if (typeof gate.paquete_ok === 'boolean') {
+                return gate.paquete_ok;
+            }
+            return !!gate.ok;
+        }
+
+        function continuarEnvioTrasRetencion(ctx, gate) {
+            if (ctx.destino === 'gastro') {
+                if (!gatePaqueteOk(gate)) {
+                    return false;
+                }
+                abrirModalEnviarGastro(
+                    $('#formBandejaEnviarGastro'),
+                    ctx.ocId,
+                    ctx.opts || { forzarPaquete: true },
+                    ctx.urlEnviar || ''
+                );
+                return true;
+            }
+            if (!gate || !gate.ok) {
+                return false;
+            }
+            abrirModalEnviarCxp(
+                $('#formBandejaEnviarCxp'),
+                ctx.ocId,
+                ctx.opts || { forzarPaquete: true, forzarCxp: true }
+            );
+            return true;
+        }
+
         function mostrarModalPendienteEntrega(ctx) {
             pendienteEntregaEstado = ctx || {};
             var $lista = $('#bandejaPendienteEntregaLista').empty();
@@ -1145,9 +1241,10 @@
                 );
                 $lista.append($row);
             });
+            var destinoLabel = ctx.destino === 'gastro' ? 'Gastronomía' : 'Cuentas a pagar';
             $('#bandejaPendienteEntregaHint').text(
                 retenibles
-                    ? 'Marcá las que aún no tienen mercadería y continuá. El resto debe tener COM asignada.'
+                    ? 'Marcá las que aún no tienen mercadería y continuá hacia ' + destinoLabel + '. El resto debe tener COM asignada.'
                     : 'Ninguna se puede retener automáticamente. Asigná COM a las facturas listadas.'
             );
             $('#btnBandejaMarcarPendienteEntrega').prop('disabled', retenibles === 0);
@@ -1196,9 +1293,7 @@
             }).done(function (resp) {
                 $('#modalBandejaPendienteEntrega').modal('hide');
                 var gate = resp && resp.gate;
-                if (gate && gate.ok) {
-                    var $form = $('#formBandejaEnviarCxp');
-                    abrirModalEnviarCxp($form, ctx.ocId, ctx.opts || { forzarPaquete: true, forzarCxp: true });
+                if (continuarEnvioTrasRetencion(ctx, gate)) {
                     return;
                 }
                 var faltan = (gate && gate.faltan_com) || [];

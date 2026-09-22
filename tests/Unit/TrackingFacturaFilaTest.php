@@ -33,15 +33,16 @@ class TrackingFacturaFilaTest extends TestCase
     }
 
     /**
-     * Contabilizado es estado y asiento a la vez: si falta el asiento, el
-     * comprobante todavía no llegó a la contabilidad aunque diga que sí.
+     * Contabilizado es el estado del comprobante. El asiento ERP puede faltar
+     * en el histórico Anita (FK pendiente de backfill) sin que deje de estar
+     * contabilizado en origen; F. contab. queda vacía hasta vincular el asiento.
      */
-    public function test_sin_asiento_no_esta_contabilizado(): void
+    public function test_contabilizado_por_estado_aunque_falte_asiento(): void
     {
         $this->assertTrue($this->fila()->contabilizado());
-        $this->assertFalse($this->fila(['asiento_id' => null])->contabilizado());
+        $this->assertTrue($this->fila(['asiento_id' => null])->contabilizado());
         $this->assertSame(
-            'Sin contabilizar',
+            'Contabilizado',
             $this->fila(['asiento_id' => null])->estadoContable()['etiqueta']
         );
     }

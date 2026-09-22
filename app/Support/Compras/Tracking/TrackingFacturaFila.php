@@ -172,8 +172,10 @@ final class TrackingFacturaFila
 
     public function contabilizado(): bool
     {
-        return (string) ($this->fila->estado ?? '') === ComprobanteProveedorEstados::CONTABILIZADO
-            && (int) ($this->fila->asiento_id ?? 0) > 0;
+        // El estado CONTABILIZADO basta: el histórico importado desde Anita
+        // llega marcado así aunque todavía falte el FK de asiento ERP. Exigir
+        // asiento_id los mostraba mal como "Sin contabilizar" (p. ej. ya pagados).
+        return (string) ($this->fila->estado ?? '') === ComprobanteProveedorEstados::CONTABILIZADO;
     }
 
     public function anulado(): bool

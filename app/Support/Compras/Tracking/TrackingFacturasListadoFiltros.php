@@ -495,12 +495,10 @@ class TrackingFacturasListadoFiltros
     {
         switch ($segmento) {
             case self::SEGMENTO_SIN_CONTABILIZAR:
-                // Contabilizado es estado y asiento a la vez: un comprobante con
-                // estado CONTABILIZADO pero sin asiento sigue estando pendiente.
-                $query->where(function ($q) {
-                    $q->where('comprobante_proveedor.estado', '!=', ComprobanteProveedorEstados::CONTABILIZADO)
-                        ->orWhereNull('comprobante_proveedor.asiento_id');
-                })->where('comprobante_proveedor.estado', '!=', ComprobanteProveedorEstados::ANULADO);
+                // Solo el estado: CONTABILIZADO sin asiento_id (histórico Anita)
+                // ya está contabilizado en origen; no debe entrar en este segmento.
+                $query->where('comprobante_proveedor.estado', '!=', ComprobanteProveedorEstados::CONTABILIZADO)
+                    ->where('comprobante_proveedor.estado', '!=', ComprobanteProveedorEstados::ANULADO);
                 break;
 
             case self::SEGMENTO_SIN_PAGAR:

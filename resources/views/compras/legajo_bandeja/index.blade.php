@@ -688,7 +688,7 @@ Bandeja de legajos
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-2">
-                    Para enviar a Cuentas a pagar, cada factura que exige COM debe tener recepción asignada
+                    Para enviar el legajo (Gastronomía o Cuentas a pagar), cada factura que exige COM debe tener recepción asignada
                     <strong>o</strong> quedar marcada como pendiente de entrega (mercadería que llega después).
                     Las retenidas no se cargan en CxP y no bloquean el envío a Pagos del resto.
                 </p>
@@ -1318,6 +1318,9 @@ Bandeja de legajos
                                         <button type="button" class="btn btn-xs btn-outline-primary js-bandeja-enviar-gastro"
                                                 data-url="{{ $row['url_enviar'] }}"
                                                 data-ordencompra-id="{{ $row['id'] }}"
+                                                data-url-paquete="{{ $row['url_paquete'] }}"
+                                                data-url-asignar="{{ $row['url_asignar_com'] }}"
+                                                data-numero="{{ $row['numero'] }}"
                                                 title="Enviar a Gastronomía">
                                             <i class="fa fa-cutlery"></i>
                                         </button>
