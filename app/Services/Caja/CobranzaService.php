@@ -1206,11 +1206,9 @@ class CobranzaService
 				}
 
 				$retencion_cobranza = $this->retencion_cobranzaRepository->find($retencion_cobranza_ids[$i]);
-				$jurisdiccion = '902';
-				if ($retencion_cobranza) {
-					$jurisdiccion = $retencion_cobranza->provincias->jurisdiccion;
-				}
-				$tipoComprobante = 'R'.substr($jurisdiccion, 1, 2);
+				// Ganancias / IVA / SUSS no tienen provincia; IIBB sí. Fallback 902 (misma lógica previa).
+				$jurisdiccion = $retencion_cobranza?->provincias?->jurisdiccion ?? '902';
+				$tipoComprobante = 'R'.substr((string) $jurisdiccion, 1, 2);
 
 				$auxCtx = array_merge($ctxBase, [
 					'nro' => '0',

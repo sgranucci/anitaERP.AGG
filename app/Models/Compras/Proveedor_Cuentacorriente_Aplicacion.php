@@ -36,6 +36,11 @@ class Proveedor_Cuentacorriente_Aplicacion extends Model
         return $this->belongsTo(Comprobante_Proveedor::class, 'comprobante_proveedor_aplicado_id');
     }
 
+    public function pagoproveedores()
+    {
+        return $this->belongsTo(Pagoproveedor::class, 'pagoproveedor_id');
+    }
+
     public function monedas()
     {
         return $this->belongsTo(Moneda::class, 'moneda_id');

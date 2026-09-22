@@ -185,6 +185,52 @@ class SeteoSalidaProgramaSupport
             : self::VENTAS_REPETIQUETAOT.'_'.$tipo;
     }
 
+    /**
+     * Clave canónica o legacy de etiquetas OT (cualquier tipo: CUIT, CAJA FOTO, etc.).
+     */
+    public static function esProgramaEtiquetaOt(?string $programa): bool
+    {
+        $raw = strtolower(trim((string) $programa));
+        if ($raw === '') {
+            return false;
+        }
+
+        $canonico = self::resolver($programa);
+
+        return $canonico === self::VENTAS_REPETIQUETAOT
+            || Str::startsWith($canonico, self::VENTAS_REPETIQUETAOT.'_')
+            || Str::contains($raw, 'repetiquetaot');
+    }
+
+    /**
+     * Sufijo de tipo (cuit, caja_foto, …) desde la clave de programa; null = genérico.
+     */
+    public static function tipoDesdeProgramaEtiquetaOt(?string $programa): ?string
+    {
+        if (! self::esProgramaEtiquetaOt($programa)) {
+            return null;
+        }
+
+        $canonico = self::resolver($programa);
+        if ($canonico === self::VENTAS_REPETIQUETAOT) {
+            return null;
+        }
+        if (Str::startsWith($canonico, self::VENTAS_REPETIQUETAOT.'_')) {
+            $tipo = Str::after($canonico, self::VENTAS_REPETIQUETAOT.'_');
+
+            return $tipo !== '' ? $tipo : null;
+        }
+
+        $raw = strtolower((string) $programa);
+        if (Str::contains($raw, 'repetiquetaot_')) {
+            $tipo = Str::afterLast($raw, 'repetiquetaot_');
+
+            return $tipo !== '' ? $tipo : null;
+        }
+
+        return null;
+    }
+
     private static function normalizarEntrada(?string $opcion): ?string
     {
         if ($opcion === null) {

@@ -110,7 +110,7 @@
 </div>
 <div class="form-group row">
 	<label for="moneda" class="col-lg-3 col-form-label">Moneda</label>
-	<input type="text" name="moneda_id" id="moneda_id" data-placeholder="Moneda" class="col-lg-3 form-control" readonly>
+	<input type="text" name="moneda_id" id="moneda_id" data-placeholder="Moneda" class="col-lg-3 form-control" value="{{ old('moneda_id', $data->moneda_id ?? '') }}" readonly>
 	<input type="text" name="nombremoneda" id="nombremoneda" class="form-control" value="{{old('nombremoneda', $data->monedas->nombre ?? '')}}"  readonly>
 </div>
 <h4>Datos Beneficiario</h4>

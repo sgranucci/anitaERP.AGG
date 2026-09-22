@@ -166,13 +166,88 @@ class ChequeRepository implements ChequeRepositoryInterface
 
     public function update(array $data, $id)
     {
-        $cheque = $this->model->findOrFail($id)->update($data);
+        $cheque = $this->model->findOrFail($id);
 
-        // Actualiza anita
-        $anita = self::actualizarAnita($data, $data['codigo']);
+        // Flags de navegación (modo consulta) no deben pisar origen E/R del cheque.
+        if (isset($data['origen']) && ! in_array((string) $data['origen'], ['E', 'R'], true)) {
+            unset($data['origen']);
+        }
 
+        $payload = array_intersect_key($data, array_flip($cheque->getFillable()));
 
-        return($cheque);
+        // Inputs vacíos del form no deben blanquear FKs ya grabadas.
+        foreach (['moneda_id', 'cuentacaja_id', 'chequera_id', 'proveedor_id', 'cliente_id', 'empresa_id', 'banco_id'] as $fk) {
+            if (array_key_exists($fk, $payload) && ($payload[$fk] === '' || $payload[$fk] === null)) {
+                unset($payload[$fk]);
+            }
+        }
+
+        $cheque->update($payload);
+        $cheque = $cheque->fresh(['cuentacajas']);
+
+        // Sync Anita: el form ABM no manda "codigo"; actualizar solo la fecha de cheque.
+        $this->actualizarFechaChequeAnita($cheque);
+
+        return true;
+    }
+
+    /**
+     * Actualiza la fecha de pago/cheque en Anita (ctermae CHT / cpromae CHP).
+     */
+    private function actualizarFechaChequeAnita(Cheque $cheque): void
+    {
+        $fechaYmd = ChequePropioCpromaeAnitaMapper::ymd((string) ($cheque->fechapago ?? ''));
+        if ($fechaYmd === '0' || $fechaYmd === '') {
+            return;
+        }
+
+        $origen = (string) ($cheque->origen ?? '');
+
+        try {
+            $api = new ApiAnita();
+
+            if ($origen === 'R') {
+                $nroInterno = (int) ($cheque->nro_interno_anita ?? 0);
+                if ($nroInterno <= 0) {
+                    return;
+                }
+
+                $api->apiCallEscritura([
+                    'acc' => 'update',
+                    'tabla' => 'ctermae',
+                    'sistema' => 'che_ban',
+                    'valores' => "cter_fecha_cheque = '".$fechaYmd."'",
+                    'whereArmado' => ' WHERE cter_nro_interno = '.$nroInterno.' ',
+                ]);
+
+                return;
+            }
+
+            if ($origen === 'E') {
+                $cuenta = trim((string) optional($cheque->cuentacajas)->codigo);
+                $nroCheque = trim((string) ($cheque->numerocheque ?? ''));
+                if ($cuenta === '' || $nroCheque === '') {
+                    return;
+                }
+
+                $api->apiCallEscritura([
+                    'acc' => 'update',
+                    'tabla' => 'cpromae',
+                    'sistema' => 'che_ban',
+                    'valores' => "cpro_fecha_cheque = '".$fechaYmd."'",
+                    'whereArmado' => " WHERE cpro_cuenta = '".str_pad($cuenta, 8, '0', STR_PAD_LEFT)
+                        ."' AND cpro_nro_cheque = '".addslashes($nroCheque)."'",
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Cheque update: no se pudo actualizar fecha en Anita', [
+                'cheque_id' => $cheque->id,
+                'origen' => $origen,
+                'fechapago' => $cheque->fechapago,
+                'error' => $e->getMessage(),
+            ]);
+            report($e);
+        }
     }
 
     public function delete($id)

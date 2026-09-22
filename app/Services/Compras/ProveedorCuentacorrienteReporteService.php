@@ -236,7 +236,9 @@ class ProveedorCuentacorrienteReporteService
                         'proveedor_codigo' => $proveedorCodigo,
                         'proveedor_nombre' => $proveedorNombre,
                         'nombreempresa' => $nombreEmpresaMov,
-                        'fecha' => $this->fmtFecha($apl->fecha ?? null),
+                        'fecha' => $this->fmtFecha(
+                            ProveedorCuentacorrienteGrillaSupport::fechaComprobanteAplicacion($apl)
+                        ),
                         'fechavencimiento' => '',
                         'comprobante' => '↳ Aplicación: '.(string) ($apl->comprobanteaplicado ?? ('#'.$apl->id)),
                         'comprobante_proveedor_id' => (int) ($apl->comprobante_proveedor_aplicado_id ?? 0),
@@ -418,7 +420,13 @@ class ProveedorCuentacorrienteReporteService
         }
 
         $rows = Proveedor_Cuentacorriente_Aplicacion::query()
-            ->with(['monedas:id,abreviatura'])
+            ->with([
+                'monedas:id,abreviatura',
+                'pagoproveedores:id,fecha',
+                'comprobante_proveedor_aplicados:id,fechacomprobante',
+                'proveedor_cuentacorriente_aplicados.pagoproveedores:id,fecha',
+                'proveedor_cuentacorriente_aplicados.comprobante_proveedores:id,fechacomprobante',
+            ])
             ->whereIn('proveedor_cuentacorriente_id', $ccIds)
             ->orderBy('fecha')
             ->orderBy('id')

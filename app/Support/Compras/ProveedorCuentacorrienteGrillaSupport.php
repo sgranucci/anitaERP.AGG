@@ -62,6 +62,29 @@ final class ProveedorCuentacorrienteGrillaSupport
     }
 
     /**
+     * Fecha del documento que cancela (OPA/NC) para filas "↳ Aplicación" del reporte.
+     * `aplicacion.fecha` es la de aplicación/import (aplvp); no la del comprobante.
+     */
+    public static function fechaComprobanteAplicacion(Proveedor_Cuentacorriente_Aplicacion $apl): mixed
+    {
+        if ((int) ($apl->pagoproveedor_id ?? 0) > 0 && $apl->pagoproveedores?->fecha) {
+            return $apl->pagoproveedores->fecha;
+        }
+
+        $cp = $apl->comprobante_proveedor_aplicados;
+        if ($cp && $cp->fechacomprobante) {
+            return $cp->fechacomprobante;
+        }
+
+        $ccApl = $apl->proveedor_cuentacorriente_aplicados;
+        if ($ccApl) {
+            return self::fechaComprobante($ccApl);
+        }
+
+        return $apl->fecha;
+    }
+
+    /**
      * Fecha de vencimiento para grilla/PDF/export.
      * Prioriza la del comprobante; cae a `cc.fechavencimiento`.
      */

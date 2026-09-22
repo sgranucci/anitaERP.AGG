@@ -47,11 +47,10 @@
                 @csrf @method("put")
                 <input type="hidden" class="caja_id" id="caja_id" name="caja_id" value="{{$data->caja_id ?? ''}}" >
                 @if ($soloConsulta)
-                    <input type="hidden" name="origen" value="modal_consulta">
+                    {{-- vista=consulta activa PreservarModoConsulta; no enviar origen=modal_consulta (pisa cheque.origen E/R) --}}
                     <input type="hidden" name="vista" value="consulta">
-                @else
-                    <input type="hidden" class="origen" id="origen" name="origen" value="{{$origen ?? ''}}" >
                 @endif
+                <input type="hidden" class="origen" id="origen" name="origen" value="{{ old('origen', $data->origen ?? '') }}">
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">
                         <i class="fa fa-user"></i> Datos principales

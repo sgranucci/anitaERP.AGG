@@ -124,7 +124,12 @@ class SalidaController extends Controller
 
         $usuario_id = $request->session()->get('usuario_id');
 
-        $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, $opcion);
+        $seteosalida = SeteoSalidaProgramaSupport::esProgramaEtiquetaOt($programa)
+            ? $this->seteosalidaRepository->buscaSeteoEtiquetaOt(
+                $usuario_id,
+                SeteoSalidaProgramaSupport::tipoDesdeProgramaEtiquetaOt($programa)
+            )
+            : $this->seteosalidaRepository->buscaSeteo($usuario_id, $opcion);
 
         $datas['salida_id'] = $seteosalida?->salida_id ?? '';
         $datas['disparar_al_grabar'] = (bool) ($seteosalida?->disparar_al_grabar ?? false);
@@ -169,6 +174,13 @@ class SalidaController extends Controller
             $seteosalida = $this->seteosalidaRepository->create($payload);
         }
 
+        // Una Zebra para todos los tipos de etiqueta OT (CUIT / CAJA / CAJA FOTO).
+        if (SeteoSalidaProgramaSupport::esProgramaEtiquetaOt($programa)
+            && $programa !== SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT
+        ) {
+            $this->sincronizarSeteoEtiquetaOtGenerico($usuario_id, (int) $salida_id, $request);
+        }
+
         return ['retorno' => $seteosalida];
     }
 
@@ -176,7 +188,13 @@ class SalidaController extends Controller
     {
         $usuario_id = $request->session()->get('usuario_id');
 
-        $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, $opcion);
+        $programa = $this->seteosalidaRepository->armaNombrePrograma($opcion);
+        $seteosalida = SeteoSalidaProgramaSupport::esProgramaEtiquetaOt($programa)
+            ? $this->seteosalidaRepository->buscaSeteoEtiquetaOt(
+                $usuario_id,
+                SeteoSalidaProgramaSupport::tipoDesdeProgramaEtiquetaOt($programa)
+            )
+            : $this->seteosalidaRepository->buscaSeteo($usuario_id, $opcion);
 
         $vendedor = Auth::user()->vendedor_id;
         if ($vendedor && ! $seteosalida) {
@@ -211,6 +229,30 @@ class SalidaController extends Controller
             }
         } else {
             abort(404);
+        }
+    }
+
+    /**
+     * Al setear un tipo concreto (CUIT, CAJA FOTO, …) deja también el genérico
+     * ventas_repetiquetaot con la misma salida.
+     */
+    private function sincronizarSeteoEtiquetaOtGenerico($usuarioId, int $salidaId, Request $request): void
+    {
+        $programa = SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT;
+        $existente = $this->seteosalidaRepository->leeSeteo($usuarioId, $programa);
+        $payload = [
+            'usuario_id' => $usuarioId,
+            'salida_id' => $salidaId,
+            'programa' => $programa,
+        ];
+        if ($request->has('disparar_al_grabar')) {
+            $payload['disparar_al_grabar'] = $request->boolean('disparar_al_grabar');
+        }
+
+        if ($existente) {
+            $this->seteosalidaRepository->update($payload, $existente->id);
+        } else {
+            $this->seteosalidaRepository->create($payload);
         }
     }
 

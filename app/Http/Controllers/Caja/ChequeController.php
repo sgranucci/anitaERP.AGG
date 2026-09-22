@@ -987,9 +987,17 @@ class ChequeController extends Controller
     {
         can('actualizar-cheque');
 
-        $this->repository->update($request->all(), $id);
+        // Solo columnas del cheque; no pasar flags de UI (_token, vista, origen=modal_consulta, etc.).
+        $data = $request->only((new Cheque())->getFillable());
+        if (isset($data['origen']) && ! in_array((string) $data['origen'], ['E', 'R'], true)) {
+            unset($data['origen']);
+        }
 
-        if ($request->input('origen') === 'modal_consulta' || $request->input('vista') === 'consulta') {
+        $this->repository->update($data, $id);
+
+        if ($request->input('vista') === 'consulta'
+            || $request->query('origen') === 'modal_consulta'
+            || $request->input('origen') === 'modal_consulta') {
             return redirect()
                 ->route('editar_cheque', [
                     'id' => $id,

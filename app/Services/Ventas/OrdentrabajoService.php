@@ -1069,19 +1069,8 @@ class OrdentrabajoService
 			}
 
 			$usuarioId = (int) Auth::id();
-			$programa = SeteoSalidaProgramaSupport::codigoRepetiquetaOt(
-				isset($data['tipoetiqueta']) ? (string) $data['tipoetiqueta'] : null
-			);
-			$seteo = $this->seteoSalidaRepository->buscaSeteo($usuarioId, $programa);
-
-			if ((! $seteo || ! $seteo->salidas)
-				&& $programa !== SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT
-			) {
-				$seteo = $this->seteoSalidaRepository->buscaSeteo(
-					$usuarioId,
-					SeteoSalidaProgramaSupport::VENTAS_REPETIQUETAOT
-				);
-			}
+			$tipoEtiqueta = isset($data['tipoetiqueta']) ? (string) $data['tipoetiqueta'] : null;
+			$seteo = $this->seteoSalidaRepository->buscaSeteoEtiquetaOt($usuarioId, $tipoEtiqueta);
 
 			if (! $seteo || ! $seteo->salidas) {
 				return redirect()->back()->with('errores', [
