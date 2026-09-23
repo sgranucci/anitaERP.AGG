@@ -10,6 +10,7 @@ use App\Models\Ventas\TiendanubePedidoVenta;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * NC total sobre una FAC emitida desde Tiendanube: libera cantidades del staging
@@ -49,9 +50,15 @@ final class NotaCreditoReabreTiendanubePedidoSupport
             return $vacio + ['motivo' => 'no_nc'];
         }
 
-        $pivots = TiendanubePedidoVenta::query()
-            ->where('venta_id', $ventaOrigenId)
-            ->get();
+        // Staging TN solo existe en Ferli (migración gated). En AGG/estacionamiento/etc.
+        // las tablas no están: no tumbar la NC por un SELECT a tabla inexistente.
+        if (! Schema::hasTable('tiendanube_pedido')) {
+            return $vacio + ['motivo' => 'sin_tablas_tiendanube'];
+        }
+
+        $pivots = Schema::hasTable('tiendanube_pedido_venta')
+            ? TiendanubePedidoVenta::query()->where('venta_id', $ventaOrigenId)->get()
+            : collect();
         if ($pivots->isEmpty()) {
             // FAC sin staging TN (factura común) o solo cabecera.venta_id legacy.
             $pedidoLegacy = TiendanubePedido::query()->where('venta_id', $ventaOrigenId)->first();
@@ -141,10 +148,13 @@ final class NotaCreditoReabreTiendanubePedidoSupport
                 }
             }
 
-            $borrados = TiendanubePedidoVenta::query()
-                ->where('tiendanube_pedido_id', $pedido->id)
-                ->where('venta_id', $ventaOrigenId)
-                ->delete();
+            $borrados = 0;
+            if (Schema::hasTable('tiendanube_pedido_venta')) {
+                $borrados = TiendanubePedidoVenta::query()
+                    ->where('tiendanube_pedido_id', $pedido->id)
+                    ->where('venta_id', $ventaOrigenId)
+                    ->delete();
+            }
             $pivotsBorrados += (int) $borrados;
 
             self::refrescarCabecera($pedido);
@@ -230,10 +240,13 @@ final class NotaCreditoReabreTiendanubePedidoSupport
         $pedido->refresh();
         $pedido->load('lineas');
 
-        $otraFacId = (int) (TiendanubePedidoVenta::query()
-            ->where('tiendanube_pedido_id', $pedido->id)
-            ->orderByDesc('id')
-            ->value('venta_id') ?? 0);
+        $otraFacId = 0;
+        if (Schema::hasTable('tiendanube_pedido_venta')) {
+            $otraFacId = (int) (TiendanubePedidoVenta::query()
+                ->where('tiendanube_pedido_id', $pedido->id)
+                ->orderByDesc('id')
+                ->value('venta_id') ?? 0);
+        }
 
         $tieneCantidadFacturada = $pedido->lineas->contains(
             static fn (TiendanubePedidoLinea $linea): bool => (float) $linea->cantidad_facturada > 0.0001
