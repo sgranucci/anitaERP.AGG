@@ -247,6 +247,68 @@
     </div>
 </div>
 
+<div class="card card-outline card-info mt-3 mb-3">
+    <div class="card-header py-2">
+        <strong><i class="fa fa-file-text-o"></i> Membrete PDF (solo facturación del local)</strong>
+    </div>
+    <div class="card-body py-3">
+        <p class="text-muted small mb-3">
+            Domicilio y teléfono salen del <strong>punto de venta</strong> del local.
+            Estos textos van en la factura del POS; no afectan facturas de fábrica.
+            Vacío = no se imprime esa línea (no hereda fábrica).
+        </p>
+        <div class="form-group row">
+            <label for="pdf_web" class="col-lg-4 control-label text-right pr-2">Web / email PDF</label>
+            <div class="col-lg-7">
+                <input type="text" name="pdf_web" id="pdf_web" class="form-control" maxlength="500"
+                    value="{{ old('pdf_web', $data->pdf_web ?? '') }}"
+                    placeholder="Ej. www.ferli.com.ar - chilavert@ferli.com.ar">
+                <small class="form-text text-muted">Si vacío, usa el email del punto de venta.</small>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="pdf_lugar" class="col-lg-4 control-label text-right pr-2">Lugar de emisión</label>
+            <div class="col-lg-4">
+                <input type="text" name="pdf_lugar" id="pdf_lugar" class="form-control" maxlength="80"
+                    value="{{ old('pdf_lugar', $data->pdf_lugar ?? '') }}"
+                    placeholder="Ej. Bs.As.">
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="pdf_inicio_actividad" class="col-lg-4 control-label text-right pr-2">Inicio de actividades</label>
+            <div class="col-lg-4">
+                <input type="text" name="pdf_inicio_actividad" id="pdf_inicio_actividad" class="form-control" maxlength="40"
+                    value="{{ old('pdf_inicio_actividad', $data->pdf_inicio_actividad ?? '') }}"
+                    placeholder="Ej. 12/02/92">
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="pdf_seguridad_higiene" class="col-lg-4 control-label text-right pr-2">Seguridad e higiene</label>
+            <div class="col-lg-7">
+                <input type="text" name="pdf_seguridad_higiene" id="pdf_seguridad_higiene" class="form-control" maxlength="200"
+                    value="{{ old('pdf_seguridad_higiene', $data->pdf_seguridad_higiene ?? '') }}"
+                    placeholder="Ej. Partida Municipal …">
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="pdf_habilitacion" class="col-lg-4 control-label text-right pr-2">Habilitación</label>
+            <div class="col-lg-7">
+                <input type="text" name="pdf_habilitacion" id="pdf_habilitacion" class="form-control" maxlength="200"
+                    value="{{ old('pdf_habilitacion', $data->pdf_habilitacion ?? '') }}"
+                    placeholder="Ej. 44537-92ADM">
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="pdf_imp_internos" class="col-lg-4 control-label text-right pr-2">Impuestos internos</label>
+            <div class="col-lg-7">
+                <input type="text" name="pdf_imp_internos" id="pdf_imp_internos" class="form-control" maxlength="200"
+                    value="{{ old('pdf_imp_internos', $data->pdf_imp_internos ?? '') }}"
+                    placeholder="Ej. No responsable">
+            </div>
+        </div>
+    </div>
+</div>
+
 <template id="template-local-pv-row">
     <tr class="local-pv-row">
         <td class="text-center align-middle">

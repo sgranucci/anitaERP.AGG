@@ -146,10 +146,15 @@ final class ProveedorCuentacorrienteGrillaSupport
 
     /**
      * Fecha de vencimiento para grilla/PDF/export.
-     * Prioriza la del comprobante; cae a `cc.fechavencimiento`.
+     * Prioriza la cuota del movimiento (plan de pagos); luego el comprobante; cae a `cc.fechavencimiento`.
      */
     public static function fechaVencimiento(Proveedor_Cuentacorriente $fila): mixed
     {
+        $cuota = $fila->comprobante_proveedor_cuotas;
+        if ($cuota && $cuota->fechavencimiento) {
+            return $cuota->fechavencimiento;
+        }
+
         $cp = $fila->comprobante_proveedores;
         if ($cp && $cp->fechavencimiento) {
             return $cp->fechavencimiento;

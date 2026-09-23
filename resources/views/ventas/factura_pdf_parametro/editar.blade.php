@@ -21,9 +21,11 @@
                 @method('PUT')
                 <div class="card-body">
                     <div class="alert alert-info py-2 mb-3">
-                        Textos de membrete y pie del PDF (FAC/REM). Prioridad:
+                        Textos de membrete y pie del PDF (FAC/REM) de <strong>fábrica / mayorista</strong>. Prioridad:
                         <strong>empresa</strong> → <strong>global</strong> → <code>.env</code>.
-                        No viven en el punto de venta: el PV aporta domicilio/teléfono/CUIT de emisión.
+                        El PV aporta domicilio/teléfono. Para <strong>facturación del local</strong>,
+                        configurá el membrete en cada local
+                        (<a href="{{ route('facturacion_local_locales') }}">Facturación local → Locales</a>).
                     </div>
 
                     <div class="form-group row">

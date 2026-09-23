@@ -196,8 +196,12 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                 <tr>
                                     <td class="cuentacorriente_id">{{ $data->id }}</td>
                                     <td>{{ $data->empresas->nombre ?? '' }}</td>
-                                    <td>{{ date('d/m/Y', strtotime($data->fecha ?? '')) }}</td>
-                                    <td>{{ date('d/m/Y', strtotime($data->fechavencimiento ?? '')) }}</td>
+                                    @php
+                                        $fechaComp = ProveedorCuentacorrienteGrillaSupport::fechaComprobante($data);
+                                        $fechaVto = ProveedorCuentacorrienteGrillaSupport::fechaVencimiento($data);
+                                    @endphp
+                                    <td>{{ $fechaComp ? date('d/m/Y', strtotime((string) $fechaComp)) : '' }}</td>
+                                    <td>{{ $fechaVto ? date('d/m/Y', strtotime((string) $fechaVto)) : '' }}</td>
                                     <td class="comprobante">
                                         @include('compras.cuentacorriente.partials.comprobante_grilla', [
                                             'data' => $data,

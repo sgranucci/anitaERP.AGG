@@ -332,6 +332,96 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         return $ret;
     }
 
+    /**
+     * Resincroniza tipocuenta de cuentas existentes desde Anita ctamae.ctam_tipo.
+     *
+     * @param  list<string>|null  $empresasCodigo
+     * @return array{en_anita:int,actualizados:int,iguales:int,sin_cuenta:int,errores:list<string>}
+     */
+    public function sincronizarTipocuentaDesdeAnita(bool $dryRun = false, ?array $empresasCodigo = null): array
+    {
+        ini_set('max_execution_time', '600');
+
+        $ret = [
+            'en_anita' => 0,
+            'actualizados' => 0,
+            'iguales' => 0,
+            'sin_cuenta' => 0,
+            'errores' => [],
+        ];
+
+        $apiAnita = new ApiAnita();
+        $payload = [
+            'acc' => 'list',
+            'sistema' => 'contab',
+            'tabla' => $this->tableAnita[0],
+            'campos' => 'ctam_empresa,ctam_cuenta,ctam_tipo',
+            'orderBy' => 'ctam_empresa,ctam_cuenta',
+        ];
+        if ($empresasCodigo !== null && $empresasCodigo !== []) {
+            $lista = implode(',', array_map(
+                static fn ($c) => "'".str_replace("'", '', (string) $c)."'",
+                $empresasCodigo
+            ));
+            $payload['whereArmado'] = " WHERE ctam_empresa IN ({$lista}) ";
+        }
+
+        $dataAnita = json_decode($apiAnita->apiCall($payload));
+        if (! is_array($dataAnita)) {
+            $ret['errores'][] = 'Anita no devolvió un listado válido de ctamae.';
+
+            return $ret;
+        }
+
+        $ret['en_anita'] = count($dataAnita);
+
+        $empresaPorCodigo = Empresa::query()->pluck('id', 'codigo');
+        $cuentaPorEmpresaCodigo = [];
+        foreach ($this->model->newQuery()->get(['id', 'empresa_id', 'codigo', 'tipocuenta']) as $cta) {
+            $cuentaPorEmpresaCodigo[(int) $cta->empresa_id.'|'.$cta->codigo] = $cta;
+        }
+
+        foreach ($dataAnita as $row) {
+            $empresaCodigo = (string) ($row->ctam_empresa ?? '');
+            $cuentaCodigo = (string) ($row->ctam_cuenta ?? '');
+            $empresaId = $empresaPorCodigo[$empresaCodigo] ?? null;
+            if (! $empresaId) {
+                $ret['sin_cuenta']++;
+                continue;
+            }
+
+            $clave = (int) $empresaId.'|'.$cuentaCodigo;
+            $cuenta = $cuentaPorEmpresaCodigo[$clave] ?? null;
+            if (! $cuenta) {
+                $ret['sin_cuenta']++;
+                continue;
+            }
+
+            $nuevoTipo = self::tipocuentaErpDesdeAnita((string) ($row->ctam_tipo ?? ''));
+            if ((string) $cuenta->tipocuenta === $nuevoTipo) {
+                $ret['iguales']++;
+                continue;
+            }
+
+            if ($dryRun) {
+                $ret['actualizados']++;
+                continue;
+            }
+
+            try {
+                $this->model->newQuery()
+                    ->whereKey($cuenta->id)
+                    ->update(['tipocuenta' => $nuevoTipo]);
+                $cuenta->tipocuenta = $nuevoTipo;
+                $ret['actualizados']++;
+            } catch (Exception $e) {
+                $ret['errores'][] = "emp {$empresaCodigo} cta {$cuentaCodigo}: ".$e->getMessage();
+            }
+        }
+
+        return $ret;
+    }
+
     public function traerRegistroDeAnita($empresa, $key){
         $apiAnita = new ApiAnita();
         $data = array( 
@@ -671,7 +761,9 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
 	/**
 	 * Anita ctam_tipo → ERP tipocuenta.
-	 * Ferli: 0 Regular, 1 título, 2 totalizadora, 3 capítulo (título).
+	 * Canónico ERP: 1 imputable, 2 título/encabezado, 3 totalizadora
+	 * (CuentacontableTipocuentaNormalizacionSupport).
+	 * Ferli Anita: 0 Regular, 1 título, 2 totalizadora, 3 capítulo (título).
 	 * Resto: 0 título, 1 imputable, 2/3 totalizadora.
 	 */
 	public static function tipocuentaErpDesdeAnita(string $ctamTipo): string

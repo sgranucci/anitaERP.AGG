@@ -179,6 +179,21 @@
             $('.check-picking-linea:not(:disabled)').prop('checked', $(this).is(':checked'));
         });
 
+        $('#btn-excel-picking').on('click', function (e) {
+            e.preventDefault();
+            var ids = idsSeleccionados();
+            if (!ids.length) {
+                alert('Seleccione al menos una línea para el Excel');
+                return;
+            }
+            var base = $(this).attr('href') || '';
+            var sep = base.indexOf('?') >= 0 ? '&' : '?';
+            var qs = ids.map(function (id) {
+                return 'pedido_combinacion_id[]=' + encodeURIComponent(id);
+            }).join('&');
+            window.location = base + sep + qs;
+        });
+
         $('#btn-facturar-picking').on('click', function () {
             var ids = idsSeleccionados();
             if (!ids.length) {

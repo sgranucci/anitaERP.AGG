@@ -15,6 +15,14 @@ interface CuentacontableRepositoryInterface extends RepositoryInterface
      * @return array{en_anita:int,actualizados:int,iguales:int,sin_cuenta:int,sin_concepto:int,errores:list<string>}
      */
     public function sincronizarConceptosDesdeAnita(bool $dryRun = false, ?array $empresasCodigo = null): array;
+    /**
+     * Actualiza cuentacontable.tipocuenta desde Anita ctamae.ctam_tipo
+     * (mapeo tipocuentaErpDesdeAnita por entorno).
+     *
+     * @param  list<string>|null  $empresasCodigo
+     * @return array{en_anita:int,actualizados:int,iguales:int,sin_cuenta:int,errores:list<string>}
+     */
+    public function sincronizarTipocuentaDesdeAnita(bool $dryRun = false, ?array $empresasCodigo = null): array;
     public function traerRegistroDeAnita($empresa, $key);
 	public function guardarAnita($request);
 	public function actualizarAnita($request, $codigo);

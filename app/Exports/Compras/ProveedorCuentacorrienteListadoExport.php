@@ -88,15 +88,24 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($filas);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
         $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+
+        $modoDeuda = $this->modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA;
+        $etiquetaProveedor = trim(
+            ($this->codigoProveedor !== '' ? $this->codigoProveedor.' — ' : '').$this->nombreProveedor
+        );
+        $tituloBase = $modoDeuda
+            ? 'Deuda de proveedores (facturas, NC y adelantos)'
+            : 'Cuenta corriente de proveedores';
+        $titulo = $etiquetaProveedor !== ''
+            ? $tituloBase.': '.$etiquetaProveedor
+            : $tituloBase;
+        $subtitulo = '';
+
+        // titulo + Generado + Saldo/Deuda (+ Registros si hay filas)
+        $this->filasMetaEncabezado = 3 + ($filas->count() > 0 ? 1 : 0);
         $this->filaInicioMeta = $offsetLogo + 1;
         $this->filaCabecerasExcel = $offsetLogo + $this->filasMetaEncabezado + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
-
-        $modoDeuda = $this->modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA;
-        $titulo = $modoDeuda
-            ? 'Deuda de proveedores (facturas impagas)'
-            : 'Cuenta corriente de proveedores';
-        $subtitulo = 'Proveedor: '.trim(($this->codigoProveedor !== '' ? $this->codigoProveedor.' — ' : '').$this->nombreProveedor);
 
         return view('exports.compras.cuentacorrienteproveedorindex', [
             'filas' => $filas,

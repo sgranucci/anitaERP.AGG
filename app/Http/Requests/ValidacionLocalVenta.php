@@ -38,6 +38,12 @@ class ValidacionLocalVenta extends FormRequest
             'anita_ifx_server' => 'nullable|string|max:40',
             'anita_deposito' => 'nullable|integer',
             'observacion' => 'nullable|string',
+            'pdf_web' => 'nullable|string|max:500',
+            'pdf_imp_internos' => 'nullable|string|max:200',
+            'pdf_seguridad_higiene' => 'nullable|string|max:200',
+            'pdf_habilitacion' => 'nullable|string|max:200',
+            'pdf_lugar' => 'nullable|string|max:80',
+            'pdf_inicio_actividad' => 'nullable|string|max:40',
             'cuentacaja_ids' => 'nullable|array',
             'cuentacaja_ids.*' => 'integer|exists:cuentacaja,id',
         ];

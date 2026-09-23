@@ -72,6 +72,30 @@ class CuentacontableArbolSupportTest extends TestCase
         $this->assertContains('CAJA', $hijosCajaBancos);
     }
 
+    public function test_hoja_010_no_adopta_hermanas_011_por_prefijo(): void
+    {
+        $filas = [
+            ['id' => 1, 'codigo' => '113101000', 'nombre' => 'L- TARJETAS', 'nivel' => 5, 'tipocuenta' => '2'],
+            ['id' => 2, 'codigo' => '113101010', 'nombre' => 'L-GO CUOTAS', 'nivel' => 5, 'tipocuenta' => '1'],
+            ['id' => 3, 'codigo' => '113101011', 'nombre' => 'L-PAGO NUBE', 'nivel' => 5, 'tipocuenta' => '1'],
+            ['id' => 4, 'codigo' => '113101012', 'nombre' => 'L-NUBE BOA', 'nivel' => 5, 'tipocuenta' => '1'],
+        ];
+        $cuentas = collect(array_map(static function (array $f) {
+            return (object) array_merge($f, [
+                'empresa_id' => 1,
+                'manejaccosto' => 'N',
+                'rubrocontables' => (object) ['nombre' => 'Activo'],
+                'conceptogastos' => null,
+            ]);
+        }, $filas));
+
+        $arbol = CuentacontableArbolSupport::armar($cuentas, false);
+        $this->assertCount(1, $arbol);
+        $hijos = array_column($arbol[0]['hijos'], 'nombre');
+        $this->assertSame(['L-GO CUOTAS', 'L-PAGO NUBE', 'L-NUBE BOA'], $hijos);
+        $this->assertSame([], $arbol[0]['hijos'][0]['hijos']);
+    }
+
     public function test_aplanar_trae_ancestros_y_hijos_para_el_preview(): void
     {
         $plano = CuentacontableArbolSupport::aplanar(

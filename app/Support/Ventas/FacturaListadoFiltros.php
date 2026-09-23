@@ -492,6 +492,7 @@ class FacturaListadoFiltros
             }
 
             $q->orWhere('venta.numerocomprobante', 'like', $like);
+            $q->orWhere('venta.codigo', 'like', $like);
 
             $q->orWhereHas('clientes', function ($c) use ($operador, $valor, $like) {
                 $c->where('nombre', 'like', $like);
@@ -500,8 +501,10 @@ class FacturaListadoFiltros
                 }
             });
 
+            // Nombre ("REMITO INTERNO") y abreviatura ("RIN"): buscar "rin" debe encontrar RIN.
             $q->orWhereHas('tipotransacciones', function ($t) use ($like) {
-                $t->where('nombre', 'like', $like);
+                $t->where('nombre', 'like', $like)
+                    ->orWhere('abreviatura', 'like', $like);
             });
 
             $q->orWhereHas('puntoventas', function ($p) use ($operador, $valor, $like) {
@@ -545,7 +548,13 @@ class FacturaListadoFiltros
                 break;
             case 'tipotransaccion':
                 $query->whereHas('tipotransacciones', function ($t) use ($operador, $valor) {
-                    self::aplicarTexto($t, 'nombre', $operador, $valor);
+                    $t->where(function ($inner) use ($operador, $valor) {
+                        self::aplicarTexto($inner, 'nombre', $operador, $valor);
+                        // Reaplicar como OR sobre abreviatura (FAC, RIN, NCD, …).
+                        $inner->orWhere(function ($abrev) use ($operador, $valor) {
+                            self::aplicarTexto($abrev, 'abreviatura', $operador, $valor);
+                        });
+                    });
                 });
                 break;
             case 'puntoventa':

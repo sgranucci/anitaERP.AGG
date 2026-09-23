@@ -8500,6 +8500,8 @@ class FacturacionService
 		$venta = $this->ventaRepository->find($id);
 		$venta->loadMissing([
 			'gastronomiaEmision',
+			'facturacionLocalEmision.localVenta',
+			'facturacionLocalEmisionComoNc.localVenta',
 			'venta_emisiones.articulos',
 			'venta_emisiones.conceptoVenta',
 			'venta_emisiones.combinaciones.coloresfondos',

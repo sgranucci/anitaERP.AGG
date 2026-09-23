@@ -7,6 +7,9 @@ use Illuminate\Support\Collection;
 
 /**
  * Árbol del plan: padre explícito (ERP) o, si no hay, prefijo del código Anita.
+ *
+ * Padre por código = primera candidata de tipo Título / Encabezado (tipocuenta=2).
+ * tipocuenta canónico: ver CuentacontableTipocuentaNormalizacionSupport.
  */
 class CuentacontableArbolSupport
 {
@@ -23,7 +26,7 @@ class CuentacontableArbolSupport
     {
         return [
             self::TIPO_IMPUTABLE => 'Imputable',
-            self::TIPO_TITULO => 'Título',
+            self::TIPO_TITULO => 'Título / Encabezado',
             self::TIPO_TOTALIZADORA => 'Totalizadora',
         ];
     }
@@ -364,9 +367,15 @@ class CuentacontableArbolSupport
     private static function resolverPadreCodigo(string $codigo9, array $nodos): ?string
     {
         foreach (self::candidatosPadre($codigo9) as $cand) {
-            if (isset($nodos[$cand])) {
-                return $cand;
+            if (! isset($nodos[$cand])) {
+                continue;
             }
+            // Solo Título / Encabezado (tipocuenta canónico = 2).
+            if (! self::esGrupo($nodos[$cand]['tipocuenta'] ?? null)) {
+                continue;
+            }
+
+            return $cand;
         }
 
         return null;

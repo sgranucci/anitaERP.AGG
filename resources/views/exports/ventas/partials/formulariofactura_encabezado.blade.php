@@ -15,18 +15,35 @@
     );
     $empresaPv = $venta->puntoventas->empresas ?? null;
     $empresaPdfId = (int) ($empresaPv->id ?? $venta->puntoventas->empresa_id ?? 0);
-    $membretePdf = \App\Support\Ventas\FacturaPdfMembreteSupport::paraEmpresa($empresaPdfId > 0 ? $empresaPdfId : null);
+    $facturaPdfEsLocal = \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::esVentaLocal($venta ?? null);
+    $membretePdf = \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::membreteParaVenta(
+        $venta ?? null,
+        $empresaPdfId > 0 ? $empresaPdfId : null
+    );
     $ferliImpInternos = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_IMP_INTERNOS] ?? '');
     $ferliSegHigiene = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_SEGURIDAD_HIGIENE] ?? '');
     $ferliHabilitacion = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_HABILITACION] ?? '');
-    $ferliWeb = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_WEB] ?? '');
+    $ferliWebBase = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_WEB] ?? '');
+    $ferliWeb = \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::lineaContacto(
+        $venta ?? null,
+        $ferliWebBase,
+        $venta->puntoventas->email ?? null
+    );
     $pdfLugar = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_LUGAR] ?? '');
     $pdfLeyendaIva = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_LEYENDA_IVA] ?? 'I.V.A. RESPONSABLE INSCRIPTO');
     $pdfInicioFallback = (string) ($membretePdf[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_INICIO_FALLBACK] ?? '');
-    $inicioAct = $empresaPv->fechainicioactividad ?? null;
-    $inicioActFmt = ($inicioAct && (string) $inicioAct !== '0000-00-00')
-        ? date('d/m/Y', strtotime((string) $inicioAct))
-        : $pdfInicioFallback;
+    if ($facturaPdfEsLocal) {
+        // Local: no usar fechainicioactividad de la empresa (fábrica); solo el del local / fallback membrete.
+        $inicioActFmt = \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::inicioActividadesFmt(
+            $venta,
+            $pdfInicioFallback
+        );
+    } else {
+        $inicioAct = $empresaPv->fechainicioactividad ?? null;
+        $inicioActFmt = ($inicioAct && (string) $inicioAct !== '0000-00-00')
+            ? date('d/m/Y', strtotime((string) $inicioAct))
+            : $pdfInicioFallback;
+    }
 @endphp
 <table class="table borderless factura-cabecera {{ $facturaPdfRemitoDebajoCliente && ! $esRemitoHoja ? 'factura-cabecera-admin' : '' }}">
     <tr>

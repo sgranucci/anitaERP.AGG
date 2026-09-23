@@ -16,11 +16,16 @@
     $expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion ?? null);
     $enPesos = CuentacorrienteSaldosPorMoneda::esExpresionPesos($expresion);
     $abrevLocal = CuentacorrienteSaldosPorMoneda::abreviaturaLocal();
-    $tituloReporte = $modoDeuda
+    $etiquetaProveedor = trim(
+        (($codigoproveedor ?? '') !== '' ? $codigoproveedor.' — ' : '').($nombreproveedor ?? '')
+    );
+    $tituloBase = $modoDeuda
         ? 'Deuda de proveedores (facturas, NC y adelantos)'
         : 'Cuenta corriente de proveedores';
-    $subtitulo = 'Proveedor: '.trim((($codigoproveedor ?? '') !== '' ? $codigoproveedor.' — ' : '').($nombreproveedor ?? ''))
-        .' · Saldo: '.CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'saldo_cc')
+    $tituloReporte = $etiquetaProveedor !== ''
+        ? $tituloBase.': '.$etiquetaProveedor
+        : $tituloBase;
+    $subtitulo = 'Saldo: '.CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'saldo_cc')
         .' · Deuda: '.CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'deuda')
         .' · Equiv. '.$abrevLocal.' (TC compr.): '.CuentacorrienteSaldosPorMoneda::formatearMonto((float) ($equivalentePesos['saldo_cc'] ?? 0), $abrevLocal);
     if ($enPesos) {

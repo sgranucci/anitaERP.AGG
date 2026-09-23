@@ -93,8 +93,11 @@
                         <i class="fa fa-search"></i> Consultar
                     </button>
                     @if ($consultar)
-                        <a href="{{ route('exportar_picking_pedido', request()->query()) }}" class="btn btn-success btn-sm mr-2" id="btn-excel-picking">
-                            <i class="fa fa-file-excel"></i> Excel
+                        <a href="{{ route('exportar_picking_pedido', request()->query()) }}"
+                           class="btn btn-success btn-sm mr-2"
+                           id="btn-excel-picking"
+                           title="Exporta solo las l&iacute;neas tildadas">
+                            <i class="fa fa-file-excel"></i> Excel seleccionados
                         </a>
                         @if ($puede_facturar)
                             <button type="button" class="btn btn-warning btn-sm" id="btn-facturar-picking">

@@ -6,6 +6,7 @@
     $esRemitoHojaItems = (bool) ($esRemitoHoja ?? false);
     $remitoAgrupadoFerli = (bool) ($remitoAgrupadoFerli ?? false);
     $facturaPdfEsFerli = (bool) ($facturaPdfEsFerli ?? \App\Support\Configuracion\EntornoEmpresaSupport::esFerli());
+    $facturaPdfEsLocal = (bool) ($facturaPdfEsLocal ?? \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::esVentaLocal($venta ?? null));
     $totalCantidad = 0;
     $totalKiloDescuento = 0;
     $totalPiezasPagina = 0;
@@ -90,6 +91,12 @@
                 $detalleFerli .= ' '.$colorFerli;
             } elseif ($detalleFerli === '' && $colorFerli !== '') {
                 $detalleFerli = $colorFerli;
+            }
+            if ($facturaPdfEsLocal) {
+                $talleFerli = trim((string) ($item['medida'] ?? $item['talle_nombre'] ?? $item['talle_codigo'] ?? ''));
+                if ($talleFerli !== '' && ! str_contains(mb_strtoupper($detalleFerli), mb_strtoupper('TALLE '.$talleFerli))) {
+                    $detalleFerli = trim($detalleFerli.' Talle '.$talleFerli);
+                }
             }
             $importeBruto = round((float) ($item['preciosindescuento'] ?? $item['precio'] ?? 0), 2)
                 * round((float) ($item['cantidad'] ?? 0), 2);

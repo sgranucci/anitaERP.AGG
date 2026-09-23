@@ -101,17 +101,25 @@
                     @if ($facturaPdfEsFerli ?? \App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
                         @php
                             $empPieId = (int) ($venta->puntoventas->empresa_id ?? $venta->puntoventas->empresas->id ?? 0);
-                            $membretePie = \App\Support\Ventas\FacturaPdfMembreteSupport::paraEmpresa($empPieId > 0 ? $empPieId : null);
+                            $facturaPdfEsLocalPie = \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::esVentaLocal($venta ?? null);
+                            $membretePie = \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::membreteParaVenta(
+                                $venta ?? null,
+                                $empPieId > 0 ? $empPieId : null
+                            );
                             $leyMerc = trim((string) ($membretePie[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_LEYENDA_MERCADERIA] ?? ''));
                             $leyCheq = trim((string) ($membretePie[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_LEYENDA_CHEQUES] ?? ''));
                             $chequesOrden = trim((string) ($membretePie[\App\Support\Ventas\FacturaPdfMembreteSupport::CLAVE_CHEQUES] ?? ''));
                         @endphp
                         @if ($letra == 'B' || $facturaPdfEsElBierzo)<br>@endif
-                        @if ($leyMerc !== '')
-                            {{ $leyMerc }}<br>
-                        @endif
-                        @if ($leyCheq !== '' || $chequesOrden !== '')
-                            {{ $leyCheq }} {{ $chequesOrden }}
+                        @if ($facturaPdfEsLocalPie)
+                            {{ \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::TEXTO_DEFENSA_CONSUMIDOR }}
+                        @else
+                            @if ($leyMerc !== '')
+                                {{ $leyMerc }}<br>
+                            @endif
+                            @if ($leyCheq !== '' || $chequesOrden !== '')
+                                {{ $leyCheq }} {{ $chequesOrden }}
+                            @endif
                         @endif
                     @endif
                 @endif

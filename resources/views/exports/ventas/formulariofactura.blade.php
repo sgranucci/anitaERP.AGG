@@ -52,8 +52,10 @@
     }
 
     $itemsOrigen = array_values(is_array($tblItem) ? $tblItem : []);
-    // Factura Ferli: agrupa por SKU+combinación/color+precio (sin talles). Remito usa medidas.
-    $itemsFactura = $facturaPdfEsFerli
+    $facturaPdfEsLocal = \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfSupport::esVentaLocal($venta ?? null);
+    // Factura Ferli mayorista: agrupa por SKU+combinación/color+precio (sin talles).
+    // Facturación Local: una línea por ítem con talle visible.
+    $itemsFactura = ($facturaPdfEsFerli && ! $facturaPdfEsLocal)
         ? RemitoPdfAgrupacionFerliSupport::agruparItemsFacturaPorSkuPrecio($itemsOrigen)
         : $itemsOrigen;
     $totalesDocumento = [
@@ -133,6 +135,7 @@
                     'mostrarBonificacion' => $facturaPdfEsElBierzo,
                     'mostrarTotalesFila' => $esUltima,
                     'totalesDocumento' => $totalesDocumento,
+                    'facturaPdfEsLocal' => $facturaPdfEsLocal,
                 ])
                 @if ($esUltima)
                     @include('exports.ventas.partials.formulariofactura_pie')

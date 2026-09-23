@@ -121,6 +121,22 @@ class PickingPedidoFerliController extends Controller
             $tienePicking,
         );
 
+        $idsSeleccion = array_values(array_filter(
+            array_map('intval', (array) $request->input('pedido_combinacion_id', [])),
+            static fn (int $id) => $id > 0
+        ));
+        if ($idsSeleccion !== []) {
+            $idsFlip = array_flip($idsSeleccion);
+            $lineas = $lineas
+                ->filter(static fn ($linea) => isset($idsFlip[(int) $linea->id]))
+                ->values();
+            if ($lineas->isEmpty()) {
+                return redirect()
+                    ->route('picking_pedido', $request->except('pedido_combinacion_id'))
+                    ->with('error', 'Ninguna de las líneas seleccionadas está disponible para exportar.');
+            }
+        }
+
         $picking = PedidoPickingFerliSupport::findPicking(
             $pickingId > 0 ? $pickingId : null,
             $pickingCodigo > 0 ? $pickingCodigo : null,

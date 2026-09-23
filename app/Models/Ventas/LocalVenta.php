@@ -37,6 +37,12 @@ class LocalVenta extends Model implements Auditable
         'anita_ifx_server',
         'anita_deposito',
         'observacion',
+        'pdf_web',
+        'pdf_imp_internos',
+        'pdf_seguridad_higiene',
+        'pdf_habilitacion',
+        'pdf_lugar',
+        'pdf_inicio_actividad',
     ];
 
     protected $casts = [
