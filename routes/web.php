@@ -1687,6 +1687,7 @@ Route::get('stock/recepcion-proveedor/api/cotizacion-moneda-fecha', 'Stock\Recep
 Route::get('stock/recepcion-proveedor/api/buscar-oc-pendientes', 'Stock\RecepcionProveedorController@apiBuscarOcPendientes')->name('recepcion_proveedor_buscar_oc_pendientes');
 Route::get('stock/listarecepcionproveedor/{formato?}/{busqueda?}', 'Stock\RecepcionProveedorController@listar')->name('lista_recepcion_proveedor');
 Route::get('stock/recepcion-proveedor/{id}/com-pdf', 'Stock\RecepcionProveedorController@imprimirCom')->name('recepcion_proveedor_com_pdf');
+Route::get('stock/recepcion-proveedor/{id}/documentos-relacionados', 'Stock\RecepcionProveedorController@documentosRelacionados')->name('recepcion_proveedor_documentos_relacionados');
 Route::get('stock/recepcion-proveedor/{id}/devolucion', 'Stock\RecepcionProveedorController@crearDevolucion')->name('crear_devolucion_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/devolucion', 'Stock\RecepcionProveedorController@guardarDevolucion')->name('guardar_devolucion_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/anular', 'Stock\RecepcionProveedorController@anular')->name('anular_recepcion_proveedor');
@@ -3384,6 +3385,7 @@ Route::post('caja/ingresoegreso/comprobante-iva/pdf-ia-preview', 'Caja\IngresoEg
 Route::post('caja/ingresoegreso/comprobante-iva/validar-totales', 'Caja\IngresoEgresoController@validarTotalesComprobantesIva')->name('ingresoegreso_comprobante_iva_validar_totales');
 Route::post('caja/ingresoegreso/comprobante-iva/validar-duplicado', 'Caja\IngresoEgresoController@validarDuplicadoComprobanteIva')->name('ingresoegreso_comprobante_iva_validar_duplicado');
 Route::post('caja/ingresoegreso/buscar-cheque', 'Caja\IngresoEgresoController@buscarCheque')->name('ingresoegreso_buscar_cheque');
+Route::post('caja/ingresoegreso/sugerir-detalle-canje-cheque', 'Caja\IngresoEgresoController@sugerirDetalleCanjeCheque')->name('ingresoegreso_sugerir_detalle_canje_cheque');
 
 /*
  * Cobranzas
@@ -3705,6 +3707,7 @@ Route::post('compras/comprobante-proveedor/{id}/validacion-abono', 'Compras\Cont
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca', 'Compras\Comprobante_ProveedorController@validarProveedorArcaPadron')->name('comprobante_proveedor_validar_proveedor_arca');
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca-apoc', 'Compras\Comprobante_ProveedorController@validarProveedorArcaApoc')->name('comprobante_proveedor_validar_proveedor_arca_apoc');
 Route::get('compras/comprobante-proveedor/{id}/factura-pdf', 'Compras\Comprobante_ProveedorController@verFacturaPdf')->name('comprobante_proveedor_factura_pdf');
+Route::get('compras/comprobante-proveedor/{id}/documentos-relacionados', 'Compras\Comprobante_ProveedorController@documentosRelacionados')->name('comprobante_proveedor_documentos_relacionados');
 Route::get('compras/comprobante-proveedor/{id}/archivo/{archivo}', 'Compras\Comprobante_ProveedorController@descargarArchivo')->name('comprobante_proveedor_archivo');
 
 Route::get('compras/configuracion-comprobante-proveedor', 'Compras\ConfiguracionComprobanteProveedorController@index')->name('configuracion_comprobante_proveedor');
@@ -3728,6 +3731,7 @@ Route::post('compras/pagoproveedor/api/importar-deuda-anita', 'Compras\Pagoprove
 Route::post('compras/pagoproveedor/api/calcular-retenciones', 'Compras\PagoproveedorController@apiCalcularRetenciones')->name('api_calcular_retenciones_pagoproveedor');
 Route::post('compras/pagoproveedor/api/genera-asiento', 'Compras\PagoproveedorController@generaAsientoContable')->name('api_genera_asiento_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/imprimir', 'Compras\PagoproveedorController@imprimir')->name('imprimir_pagoproveedor');
+Route::get('compras/pagoproveedor/{id}/documentos-relacionados', 'Compras\PagoproveedorController@documentosRelacionados')->name('pagoproveedor_documentos_relacionados');
 Route::get('compras/pagoproveedor/{id}/retencion/{retencionId}/imprimir', 'Compras\PagoproveedorController@imprimirRetencion')->name('imprimir_retencion_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/datos-envio-proveedor', 'Compras\PagoproveedorController@datosEnvioProveedor')->name('pagoproveedor_datos_envio_proveedor');
 Route::post('compras/pagoproveedor/{id}/enviar-proveedor', 'Compras\PagoproveedorController@enviarProveedor')->name('pagoproveedor_enviar_proveedor');
@@ -3815,6 +3819,7 @@ Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->nam
 Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion')->middleware('modo.consulta');
 Route::get('compras/requisicion/{id}/imprimir-pdf', 'Compras\RequisicionController@imprimirPdf')->name('imprimir_pdf_requisicion');
 Route::get('compras/requisicion/{id}/comprobantes-asociados', 'Compras\RequisicionController@comprobantesAsociados')->name('requisicion_comprobantes_asociados');
+Route::get('compras/requisicion/{id}/documentos-relacionados', 'Compras\RequisicionController@documentosRelacionados')->name('requisicion_documentos_relacionados');
 Route::get('compras/requisicion/{id}/archivo/{archivo}', 'Compras\RequisicionController@descargarArchivo')->name('requisicion_archivo');
 Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/pdf', 'Compras\RequisicionPresupuestoController@pdfPresupuesto')->name('requisicion_presupuesto_pdf');
 Route::get('compras/requisicion/{requisicion}/presupuestos/{presupuesto}/imprimir', 'Compras\RequisicionPresupuestoController@formularioImpresionPresupuesto')->name('requisicion_presupuesto_impresion');
@@ -3967,6 +3972,7 @@ Route::get('compras/ordencompra/{id}/historia-legajo', 'Compras\OrdencompraContr
 Route::get('compras/ordencompra/{id}/historia-estados', 'Compras\OrdencompraController@leerHistoriaEstados')->name('ordencompra_historia_estados');
 Route::get('compras/ordencompra/{id}/historia-precios', 'Compras\OrdencompraController@leerHistoriaPrecios')->name('ordencompra_historia_precios');
 Route::get('compras/ordencompra/{id}/recepciones', 'Compras\OrdencompraController@leerRecepciones')->name('ordencompra_recepciones');
+Route::get('compras/ordencompra/{id}/documentos-relacionados', 'Compras\OrdencompraController@documentosRelacionados')->name('ordencompra_documentos_relacionados');
 Route::get('compras/ordencompra-articulo/{id}/entregas-semanales', 'Compras\OrdencompraController@leerEntregasSemanalLinea')->name('ordencompra_articulo_entregas_semanales');
 Route::get('compras/ordencompra/{id}/entregas-semanales', 'Compras\OrdencompraController@leerEntregasSemanalOrden')->name('ordencompra_entregas_semanales');
 Route::post('compras/ordencompra/{id}/aplicar-precios-recepcion/{recepcion_id}', 'Compras\OrdencompraController@aplicarPreciosRecepcion')->name('ordencompra_aplicar_precios_recepcion');
@@ -4582,6 +4588,7 @@ Route::middleware('uif.pc_configurada')->group(function () {
     Route::post('uif/cliente_uif', 'Uif\Cliente_UifController@guardar')->name('guarda_cliente_uif');
     Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif')->middleware('modo.consulta');
     Route::get('uif/cliente_uif/{id}/listar-premios/{formato?}', 'Uif\Cliente_UifController@listarPremiosCliente')->name('lista_premios_cliente_uif');
+    Route::get('uif/cliente_uif/{id}/premios-ficha', 'Uif\Cliente_UifController@premiosFichaPagina')->name('premios_ficha_cliente_uif');
     Route::get('uif/cliente_uif/{id}/explicacion-matriz-riesgo/{formato?}', 'Uif\Cliente_UifController@exportarMatrizRiesgoExplicacion')->name('explicacion_matriz_riesgo_cliente_uif');
     Route::get('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@mostrarFotodocumento')->name('cliente_uif_fotodocumento');
     Route::get('uif/cliente_uif/{id}/archivo/{archivo}', 'Uif\Cliente_UifController@mostrarArchivo')->name('cliente_uif_archivo')->where('archivo', '.*');

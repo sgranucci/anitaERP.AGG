@@ -86,11 +86,22 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 		}
 		$nombresAnteriores = $request->input('nombresanteriores');
 		$tieneConservar = is_array($nombresAnteriores);
-		// Flag del form editable: permite quitar todos los adjuntos sin borrar por accidente
-		// cuando la solapa no envió inputs (p.ej. perfil solo visualización que igual puede guardar).
+		$archivosQuitar = $request->input('archivos_quitar');
+		$nombresQuitar = [];
+		if (is_array($archivosQuitar)) {
+			foreach ($archivosQuitar as $nombre) {
+				$nombre = is_string($nombre) ? trim($nombre) : '';
+				if ($nombre !== '') {
+					$nombresQuitar[$nombre] = true;
+				}
+			}
+		}
+		$tieneQuitar = $nombresQuitar !== [];
+		// Flag del form editable (perfil puede gestionar). Solo con quitar/nuevos se tocan filas.
 		$syncExplicit = $request->has('archivos_cliente_uif_sync');
 
-		if ($funcion === 'update' && ! $syncExplicit && ! $tieneConservar && ! $tieneNuevos) {
+		if ($funcion === 'update' && ! $tieneNuevos && ! $tieneQuitar && ! $tieneConservar) {
+			// syncExplicit solo ya no regraba: Actualizar cliente no toca adjuntos intactos.
 			return '1';
 		}
 
@@ -101,84 +112,84 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 			$prefijoArchivo = (int) $id;
 		}
 
-		$fechasPrevias = [];
-		if ($funcion == 'update')
-		{
-			$fechasPrevias = $this->model->where('cliente_uif_id', $id)
-				->pluck('created_at', 'nombrearchivo')
-				->all();
-			// Borra los registros antes de grabar nuevamente
-       		$this->delete($id);
-		}
-
-		// Recorre todos los files nuevos
-		if ($nombrearchivos ?? '')
-		{
-			foreach ($nombrearchivos as $archivo)
-			{
-		  		if ($archivo && $archivo->isValid())
-				{
-					$destDir = ClienteUifArchivoStorage::dirClientes();
-					if (! ClienteUifArchivoStorage::ensureDir($destDir)) {
-						throw new \RuntimeException('No se pudo preparar el directorio de archivos del cliente UIF.');
-					}
-    				$file = $archivo->getClientOriginalName();
-    				$destName = $prefijoArchivo.'-'.$file;
-
-    				if (! $archivo->move($destDir, $destName)) {
-						throw new \RuntimeException('No se pudo guardar el archivo: '.$file);
-					}
-
-					$cliente_archivo_uif = $this->model->create([
-									'cliente_uif_id' => $id,
-									'nombrearchivo' => $destName,
-									]);
-				} elseif ($archivo && ! $archivo->isValid()) {
-					throw new \RuntimeException(
-						'Error al subir archivo: '.$archivo->getErrorMessage()
-					);
-				}
-			}
-		}
-
-		// Recorre los files originales para agregarlos
-		if ($tieneConservar)
-		{
-			for ($i_archivo = 0; $i_archivo < count($nombresAnteriores); $i_archivo++)
-			{
-				// Busca en los files agregados si el archivo es uno nuevo
-				$fl_encontro = false;
-				if ($nombrearchivos)
-				{
-					foreach($nombrearchivos as $archivo)
-					{
-						if ($archivo && $archivo->isValid())
-						{
-							// Guarda fisicamente el archivo
-							$file = $archivo->getClientOriginalName();
-		
-							if ($file == $nombresAnteriores[$i_archivo])
-								$fl_encontro = true;
-						}
+		if ($funcion === 'update') {
+			// Preferido: solo borrar los marcados con Quitar (archivos_quitar[]).
+			if ($tieneQuitar) {
+				$this->model->newQuery()
+					->where('cliente_uif_id', $id)
+					->whereIn('nombrearchivo', array_keys($nombresQuitar))
+					->get()
+					->each(function ($row) {
+						$row->delete();
+					});
+			} elseif ($syncExplicit && $tieneConservar) {
+				// Compat: formularios viejos que aún envían nombresanteriores[] (keep-list).
+				$nombresConservar = [];
+				foreach ($nombresAnteriores as $nombre) {
+					$nombre = is_string($nombre) ? trim($nombre) : '';
+					if ($nombre !== '') {
+						$nombresConservar[$nombre] = true;
 					}
 				}
-				// Agrega el archivo anterior no tocado
-				if (!$fl_encontro && $nombresAnteriores[$i_archivo] != '')
-				{
-					$nombreAnterior = $nombresAnteriores[$i_archivo];
-					$cliente_archivo_uif = $this->model->create([
-									'cliente_uif_id' => $id,
-									'nombrearchivo' => $nombreAnterior,
-									]);
-					if (! empty($fechasPrevias[$nombreAnterior])) {
-						$cliente_archivo_uif->created_at = $fechasPrevias[$nombreAnterior];
-						$cliente_archivo_uif->save();
+				$existentes = $this->model->where('cliente_uif_id', $id)->get(['id', 'nombrearchivo']);
+				foreach ($existentes as $existente) {
+					if (! isset($nombresConservar[$existente->nombrearchivo])) {
+						$existente->delete();
 					}
 				}
 			}
+
+			$cliente_archivo_uif = $this->moverYRegistrarArchivosNuevos($nombrearchivos, (int) $id, $prefijoArchivo);
+
+			return $cliente_archivo_uif ?? '1';
 		}
-		$retorno = $cliente_archivo_uif ?? '1';
-		return $retorno;
+
+		$cliente_archivo_uif = $this->moverYRegistrarArchivosNuevos($nombrearchivos, (int) $id, $prefijoArchivo);
+
+		return $cliente_archivo_uif ?? '1';
+	}
+
+	/**
+	 * @param  array<int, \Illuminate\Http\UploadedFile|null>|null  $nombrearchivos
+	 * @return \App\Models\Uif\Cliente_Archivo_Uif|null
+	 */
+	private function moverYRegistrarArchivosNuevos($nombrearchivos, int $clienteUifId, int $prefijoArchivo)
+	{
+		$ultimo = null;
+		if (! is_array($nombrearchivos)) {
+			return null;
+		}
+		foreach ($nombrearchivos as $archivo) {
+			if ($archivo && $archivo->isValid()) {
+				$destDir = ClienteUifArchivoStorage::dirClientes();
+				if (! ClienteUifArchivoStorage::ensureDir($destDir)) {
+					throw new \RuntimeException('No se pudo preparar el directorio de archivos del cliente UIF.');
+				}
+				$file = $archivo->getClientOriginalName();
+				$destName = $prefijoArchivo.'-'.$file;
+
+				if (! $archivo->move($destDir, $destName)) {
+					throw new \RuntimeException('No se pudo guardar el archivo: '.$file);
+				}
+
+				$ya = $this->model->newQuery()
+					->where('cliente_uif_id', $clienteUifId)
+					->where('nombrearchivo', $destName)
+					->exists();
+				if (! $ya) {
+					$ultimo = $this->model->create([
+						'cliente_uif_id' => $clienteUifId,
+						'nombrearchivo' => $destName,
+					]);
+				}
+			} elseif ($archivo && ! $archivo->isValid()) {
+				throw new \RuntimeException(
+					'Error al subir archivo: '.$archivo->getErrorMessage()
+				);
+			}
+		}
+
+		return $ultimo;
 	}
 
 	public function traerArchivosDeAnita(int $clienteUifId, $inroclienteid): void

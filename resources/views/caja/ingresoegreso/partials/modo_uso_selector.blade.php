@@ -62,9 +62,10 @@
                     </div>
                 </div>
                 <ul class="cp-flujo-card__bullets text-left mb-0">
+                    <li>Tipo de transacción: Canje de cheques</li>
                     <li>Requiere empresa en Datos principales</li>
                     <li>Abre Cheques → Anulación / reemplazo</li>
-                    <li>Reemplazo editable (otra chequera / cuenta)</li>
+                    <li>Detalle precargado con lo canjeado</li>
                 </ul>
             </button>
         </div>

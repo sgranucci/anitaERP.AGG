@@ -12,6 +12,7 @@ var flCrear;
 var flModificaAsiento;
 var ingresoEgresoAbrevTipo = '';
 var ABREV_TRANSFERENCIA_IE = 'TRA';
+var ABREV_CANJE_CHEQUE_IE = 'CANJE';
 var montoPendienteSp = 0;
    
     $(function () {
@@ -1531,7 +1532,7 @@ var montoPendienteSp = 0;
 				ingresoEgresoAbrevTipo = String(data.abreviatura || '').toUpperCase();
 				actualizarAvisoTransferenciaIe();
 
-				if (data.signo == 'E' && !esTransferenciaIngresoEgreso())
+				if (data.signo == 'E' && !esTransferenciaIngresoEgreso() && !esCanjeChequesIngresoEgreso())
 				{
 					$("#div-ordenservicio").show();
 					$("#div-conceptogasto").show();
@@ -1544,7 +1545,7 @@ var montoPendienteSp = 0;
 					$("#div-conceptogasto").hide();
 					$("#div-proveedor").hide();
 					$("#div-cbu-pago-ie").hide();
-					if (esTransferenciaIngresoEgreso()) {
+					if (esTransferenciaIngresoEgreso() || esCanjeChequesIngresoEgreso()) {
 						$('#ordenservicio_id').val('');
 						$('#conceptogasto_id').val('');
 						if (typeof limpiarProveedorEnPantalla === 'function') {
@@ -1575,6 +1576,17 @@ var montoPendienteSp = 0;
 		}
 		var op = $('#tipotransaccion_caja_id option:selected').data('operacion');
 		return String(op || '').toUpperCase() === 'T';
+	}
+
+	function esCanjeChequesIngresoEgreso()
+	{
+		if (ingresoEgresoAbrevTipo === ABREV_CANJE_CHEQUE_IE) {
+			return true;
+		}
+		var $opt = $('#tipotransaccion_caja_id option:selected');
+		var abr = String($opt.data('abreviatura') || '').toUpperCase();
+		var op = String($opt.data('operacion') || '').toUpperCase();
+		return abr === ABREV_CANJE_CHEQUE_IE || op === 'J';
 	}
 
 	function esPagoSolicitudPagoIe()
@@ -1825,15 +1837,31 @@ var montoPendienteSp = 0;
 				if (modo === 'transferencia') {
 					ok = abr === 'TRA' || op === 'T';
 				} else if (modo === 'canje_cheques') {
-					ok = op === 'E' || op === 'P' || abr === 'EGR' || abr === 'OPP';
+					ok = abr === ABREV_CANJE_CHEQUE_IE || op === 'J';
 				} else {
-					ok = op !== 'T' && abr !== 'TRA';
+					ok = op !== 'T' && abr !== 'TRA' && op !== 'J' && abr !== ABREV_CANJE_CHEQUE_IE;
 				}
 				if (ok) {
 					$select.append($opt);
 				}
 			});
-			if ($select.find('option[value="' + valorActual + '"]').length) {
+			if (modo === 'canje_cheques') {
+				var $canje = $select.find('option').filter(function () {
+					var a = String($(this).attr('data-abreviatura') || '').toUpperCase();
+					var o = String($(this).attr('data-operacion') || '').toUpperCase();
+					return a === ABREV_CANJE_CHEQUE_IE || o === 'J';
+				}).first();
+				if ($canje.length) {
+					$select.val($canje.attr('value'));
+				} else if ($select.find('option[value="' + valorActual + '"]').length) {
+					$select.val(valorActual);
+				} else {
+					var $firstCanje = $select.find('option[value!=""]').first();
+					if ($firstCanje.length) {
+						$select.val($firstCanje.attr('value'));
+					}
+				}
+			} else if ($select.find('option[value="' + valorActual + '"]').length) {
 				$select.val(valorActual);
 			} else {
 				var $first = $select.find('option[value!=""]').first();

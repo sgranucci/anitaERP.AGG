@@ -21,7 +21,7 @@ Requisiciones
 <script src="{{ asset('assets/pages/scripts/includes/erp-workspace-panel.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/erp-workspace-panel.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_confirmando_styles')
 @include('compras.requisicion.partials.banner_enviando_arbol_styles')
-@include('compras.requisicion.partials.comprobantes_asociados_script')
+@include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
 <?php use App\Support\Compras\RequisicionListadoFiltros; ?>
@@ -30,7 +30,7 @@ Requisiciones
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
 @endphp
-@include('compras.requisicion.partials.comprobantes_asociados_modal')
+@include('compras.partials.documentos_relacionados_circuito_modal')
 @include('compras.requisicion.partials.modal_firmante_retome_arbol')
 @include('compras.requisicion.partials.modal_confirmar_envio_arbol')
 @include('compras.requisicion.partials.modal_centrocosto_retome_arbol')

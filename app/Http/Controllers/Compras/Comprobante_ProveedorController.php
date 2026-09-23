@@ -27,6 +27,7 @@ use App\Services\Compras\ComprobanteProveedorInternoPdfService;
 use App\Services\Compras\Tracking\TrackingPdfResolverService;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
+use App\Support\Compras\CircuitoComprasDocumentosRelacionadosSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
@@ -302,6 +303,22 @@ class Comprobante_ProveedorController extends Controller
                 (int) ($comprobante->ordencompra_id ?? 0)
             ),
         ]);
+    }
+
+    public function documentosRelacionados(int $id)
+    {
+        if (! can('listar-comprobante-proveedor', false) && ! can('editar-comprobante-proveedor', false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $comprobante = $this->comprobanteRepository->find($id);
+        if (! $comprobante) {
+            return response()->json(['message' => 'Comprobante no encontrado.'], 404);
+        }
+
+        return response()->json(
+            CircuitoComprasDocumentosRelacionadosSupport::armarDesdeComprobanteProveedor($comprobante)
+        );
     }
 
     public function actualizar(ValidacionComprobante_Proveedor $request, int $id)

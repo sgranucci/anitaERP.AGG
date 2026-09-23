@@ -5,9 +5,11 @@ namespace App\Services\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Historia;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
@@ -21,6 +23,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Support\Compras\PagoproveedorEtiquetaAnitaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use Carbon\Carbon;
@@ -1102,7 +1105,28 @@ class OrdencompraLegajoBandejaService
             $e->selectRaw('1')
                 ->from('proveedor_cuentacorriente as pcc')
                 ->join('comprobante_proveedor as cp', 'cp.id', '=', 'pcc.comprobante_proveedor_id')
-                ->where('pcc.pagoproveedor_id', '>', 0)
+                ->where(function ($pago) {
+                    // Camino nativo ERP / crédito stampado en deuda.
+                    $pago->where('pcc.pagoproveedor_id', '>', 0)
+                        // Backfill `pagoproveedor_comprobante`.
+                        ->orWhereExists(function ($ppc) {
+                            $ppc->selectRaw('1')
+                                ->from('pagoproveedor_comprobante as ppc')
+                                ->whereColumn('ppc.proveedor_cuentacorriente_id', 'pcc.id');
+                        })
+                        // Apps Anita: FK o etiqueta OPP/OPA en comprobanteaplicado.
+                        ->orWhereExists(function ($app) {
+                            $app->selectRaw('1')
+                                ->from('proveedor_cuentacorriente_aplicacion as app')
+                                ->whereColumn('app.proveedor_cuentacorriente_id', 'pcc.id')
+                                ->where(function ($w) {
+                                    $w->where('app.pagoproveedor_id', '>', 0)
+                                        ->orWhere('app.comprobanteaplicado', 'like', 'OPP%')
+                                        ->orWhere('app.comprobanteaplicado', 'like', 'OPA%')
+                                        ->orWhere('app.comprobanteaplicado', 'like', 'AOP%');
+                                });
+                        });
+                })
                 ->where(function ($w) {
                     $w->whereColumn('cp.ordencompra_id', 'ordencompra.id')
                         ->orWhereExists(function ($pre) {
@@ -1196,20 +1220,56 @@ class OrdencompraLegajoBandejaService
     private function whereExistePagoNumero(Builder $q, string $valor): void
     {
         $like = '%'.addcslashes($valor, '%_\\').'%';
-        $q->whereExists(function ($e) use ($like, $valor) {
-            $e->selectRaw('1')
-                ->from('proveedor_cuentacorriente as pcc')
-                ->join('comprobante_proveedor as cp', 'cp.id', '=', 'pcc.comprobante_proveedor_id')
-                ->join('pagoproveedor as pp', 'pp.id', '=', 'pcc.pagoproveedor_id')
-                ->where('pcc.pagoproveedor_id', '>', 0)
-                ->whereColumn('cp.ordencompra_id', 'ordencompra.id')
-                ->where(function ($w) use ($like, $valor) {
-                    $w->where('pp.numerotransaccion', 'like', $like);
-                    if (ctype_digit($valor)) {
-                        $w->orWhere('pp.id', (int) $valor)
-                            ->orWhere('pp.numerotransaccion', (int) $valor);
-                    }
-                });
+        $matchPago = function ($w) use ($like, $valor) {
+            $w->where('pp.numerotransaccion', 'like', $like);
+            if (ctype_digit($valor)) {
+                $w->orWhere('pp.id', (int) $valor)
+                    ->orWhere('pp.numerotransaccion', (int) $valor)
+                    ->orWhere('pp.numerotransaccion', (string) ((int) $valor));
+            }
+        };
+        $q->where(function ($outer) use ($like, $valor, $matchPago) {
+            $outer->whereExists(function ($e) use ($matchPago) {
+                $e->selectRaw('1')
+                    ->from('proveedor_cuentacorriente as pcc')
+                    ->join('comprobante_proveedor as cp', 'cp.id', '=', 'pcc.comprobante_proveedor_id')
+                    ->join('pagoproveedor as pp', 'pp.id', '=', 'pcc.pagoproveedor_id')
+                    ->where('pcc.pagoproveedor_id', '>', 0)
+                    ->whereColumn('cp.ordencompra_id', 'ordencompra.id')
+                    ->where($matchPago);
+            })->orWhereExists(function ($e) use ($matchPago) {
+                $e->selectRaw('1')
+                    ->from('proveedor_cuentacorriente as pcc')
+                    ->join('comprobante_proveedor as cp', 'cp.id', '=', 'pcc.comprobante_proveedor_id')
+                    ->join('pagoproveedor_comprobante as ppc', 'ppc.proveedor_cuentacorriente_id', '=', 'pcc.id')
+                    ->join('pagoproveedor as pp', 'pp.id', '=', 'ppc.pagoproveedor_id')
+                    ->whereColumn('cp.ordencompra_id', 'ordencompra.id')
+                    ->where($matchPago);
+            })->orWhereExists(function ($e) use ($like, $valor, $matchPago) {
+                $e->selectRaw('1')
+                    ->from('proveedor_cuentacorriente as pcc')
+                    ->join('comprobante_proveedor as cp', 'cp.id', '=', 'pcc.comprobante_proveedor_id')
+                    ->join('proveedor_cuentacorriente_aplicacion as app', 'app.proveedor_cuentacorriente_id', '=', 'pcc.id')
+                    ->whereColumn('cp.ordencompra_id', 'ordencompra.id')
+                    ->where(function ($w) use ($like, $valor, $matchPago) {
+                        $w->where(function ($a) use ($like, $valor) {
+                            $a->where('app.comprobanteaplicado', 'like', $like);
+                            if (ctype_digit($valor)) {
+                                $a->orWhere('app.comprobanteaplicado', 'like', '%-'.$valor)
+                                    ->orWhere('app.comprobanteaplicado', 'like', '%-0'.$valor)
+                                    ->orWhere('app.comprobanteaplicado', 'like', '%-00'.$valor);
+                            }
+                        })->orWhere(function ($a) use ($matchPago) {
+                            $a->where('app.pagoproveedor_id', '>', 0)
+                                ->whereExists(function ($pp) use ($matchPago) {
+                                    $pp->selectRaw('1')
+                                        ->from('pagoproveedor as pp')
+                                        ->whereColumn('pp.id', 'app.pagoproveedor_id')
+                                        ->where($matchPago);
+                                });
+                        });
+                    });
+            });
         });
     }
 
@@ -1682,6 +1742,81 @@ class OrdencompraLegajoBandejaService
                 'id' => $pagoId,
                 'url' => route('editar_pagoproveedor', ['id' => $pagoId]),
                 'etiqueta' => $pago ? $pago->etiquetaComprobante() : ('OP #'.$pagoId),
+            ];
+        }
+
+        $faltantes = array_values(array_filter(
+            $comprobanteIds,
+            static fn ($id) => ! isset($out[(int) $id]),
+        ));
+        if ($faltantes === []) {
+            return $out;
+        }
+
+        $deudas = Proveedor_Cuentacorriente::query()
+            ->whereIn('comprobante_proveedor_id', $faltantes)
+            ->where('total', '>', 0)
+            ->get(['id', 'comprobante_proveedor_id']);
+        if ($deudas->isEmpty()) {
+            return $out;
+        }
+        $ctACp = [];
+        foreach ($deudas as $deuda) {
+            $ctACp[(int) $deuda->id] = (int) $deuda->comprobante_proveedor_id;
+        }
+
+        $apps = Proveedor_Cuentacorriente_Aplicacion::query()
+            ->with([
+                'pagoproveedores:id,tipocomprobante,letra,sucursal,numerotransaccion',
+                'proveedor_cuentacorriente_aplicados.pagoproveedores:id,tipocomprobante,letra,sucursal,numerotransaccion',
+            ])
+            ->whereIn('proveedor_cuentacorriente_id', array_keys($ctACp))
+            ->orderByDesc('id')
+            ->get();
+
+        $etiquetas = [];
+        foreach ($apps as $app) {
+            if ($app->pagoproveedores !== null
+                || $app->proveedor_cuentacorriente_aplicados?->pagoproveedores !== null) {
+                continue;
+            }
+            $eti = trim((string) ($app->comprobanteaplicado ?? ''));
+            if ($eti !== '' && PagoproveedorEtiquetaAnitaSupport::esEtiquetaOp($eti)) {
+                $etiquetas[] = $eti;
+            }
+        }
+        $idsPorEtiqueta = PagoproveedorEtiquetaAnitaSupport::mapaIdsPorEtiquetas($etiquetas);
+        $modelosPorId = [];
+        if ($idsPorEtiqueta !== []) {
+            $modelosPorId = Pagoproveedor::query()
+                ->whereIn('id', array_values(array_unique($idsPorEtiqueta)))
+                ->get(['id', 'tipocomprobante', 'letra', 'sucursal', 'numerotransaccion'])
+                ->keyBy('id');
+        }
+
+        foreach ($apps as $app) {
+            $cpId = (int) ($ctACp[(int) $app->proveedor_cuentacorriente_id] ?? 0);
+            if ($cpId <= 0 || isset($out[$cpId])) {
+                continue;
+            }
+            $pago = $app->pagoproveedores
+                ?? $app->proveedor_cuentacorriente_aplicados?->pagoproveedores;
+            if ($pago === null) {
+                $eti = trim((string) ($app->comprobanteaplicado ?? ''));
+                $pagoId = (int) ($idsPorEtiqueta[$eti] ?? 0);
+                $pago = $pagoId > 0 ? ($modelosPorId[$pagoId] ?? null) : null;
+            }
+            if ($pago === null) {
+                continue;
+            }
+            $pagoId = (int) $pago->id;
+            if ($pagoId <= 0) {
+                continue;
+            }
+            $out[$cpId] = [
+                'id' => $pagoId,
+                'url' => route('editar_pagoproveedor', ['id' => $pagoId]),
+                'etiqueta' => $pago->etiquetaComprobante(),
             ];
         }
 

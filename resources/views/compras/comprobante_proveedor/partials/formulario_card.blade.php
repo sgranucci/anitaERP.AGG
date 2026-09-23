@@ -79,6 +79,15 @@
                         <i class="fa fa-file-pdf-o"></i> Ver PDF
                     </a>
                     @endif
+                    @if ($esEdicion && (can('listar-comprobante-proveedor', false) || can('editar-comprobante-proveedor', false)))
+                    <button type="button"
+                            class="btn btn-outline-info btn-sm js-circuito-documentos-relacionados"
+                            title="Documentos relacionados (RQ, OC, COM, OP)"
+                            data-url="{{ route('comprobante_proveedor_documentos_relacionados', ['id' => $data->id]) }}"
+                            data-numero="{{ trim(($data->tipotransaccion_compras->abreviatura ?? 'FAC').' '.($data->letra ?? '').'-'.str_pad((string) ($data->sucursal ?? 0), 4, '0', STR_PAD_LEFT).'-'.($data->numerocomprobante ?? '')) }}">
+                        <i class="fa fa-sitemap"></i> Documentos
+                    </button>
+                    @endif
                     @if ($esEdicion && ! ($tiene_pagos ?? false) && can('borrar-comprobante-proveedor', false))
                     @php
                         $huellaAnitaBorrar = \App\Support\Compras\ComprobanteProveedorEstados::tieneHuellaAnita($data);

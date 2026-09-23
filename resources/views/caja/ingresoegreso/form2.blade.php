@@ -104,7 +104,9 @@
                 <p class="text-muted small mb-2">
                     Anula un cheque existente y registra el reemplazo (emitido o recibido).
                     La empresa se toma de <strong>Datos principales</strong>.
-                    Tras Buscar, todos los datos del reemplazo son editables (cuenta, chequera distinta, banco, sucursal, montos, etc.).
+                    Tras Buscar, el <strong>Nro. nuevo</strong> se propone desde la chequera
+                    (mismo criterio que OP / cheques emitidos) y el resto queda editable
+                    (cuenta, chequera distinta, banco, sucursal, montos, etc.).
                 </p>
                 <div class="alert alert-warning py-2 px-3 small d-none" id="ie-reemplazo-aviso-empresa-banner" role="alert">
                     Seleccione la <strong>empresa</strong> en Datos principales antes de buscar el cheque a anular.

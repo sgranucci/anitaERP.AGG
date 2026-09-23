@@ -22,6 +22,7 @@ use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorService;
 use App\Services\Compras\ContratoValidacionAbonoService;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
+use App\Support\Compras\CircuitoComprasDocumentosRelacionadosSupport;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
@@ -195,6 +196,22 @@ class RecepcionProveedorController extends Controller
             'mostrar_solapa_validacion', 'ingresosValidacionVivos',
             'mostrar_solapa_ingresos', 'tickets_ingreso', 'url_nuevo_ticket_ingreso',
         ));
+    }
+
+    public function documentosRelacionados(int $id)
+    {
+        if (! can('listar-recepcion-proveedor', false) && ! can('editar-recepcion-proveedor', false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $recepcion = Recepcion_Proveedor::query()->find($id);
+        if ($recepcion === null) {
+            return response()->json(['message' => 'Recepción no encontrada.'], 404);
+        }
+
+        return response()->json(
+            CircuitoComprasDocumentosRelacionadosSupport::armarDesdeRecepcion($recepcion)
+        );
     }
 
     public function actualizar(ValidacionRecepcionProveedor $request, int $id)

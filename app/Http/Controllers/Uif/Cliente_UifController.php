@@ -273,6 +273,8 @@ class Cliente_UifController extends Controller
 		$data = $this->cliente_uifRepository->find($id);
         $this->cliente_uifRepository->sincronizarArchivosAnitaSiCorresponde($data);
         $data->load('cliente_archivos_uif');
+        // Premios: solo recientes en solapa (no se envían ni regraban al Actualizar).
+        $this->cliente_uifRepository->cargarPremiosParaFicha($data);
         try {
             ClienteUifOrigenPcSupport::assertClienteOperableEnPc($data, $request);
         } catch (\RuntimeException $e) {
@@ -541,6 +543,51 @@ class Cliente_UifController extends Controller
         }
 
         return redirect()->route('edita_cliente_uif', ['id' => $id, 'uif_tab' => 3]);
+    }
+
+    /**
+     * HTML de filas de premios (paginado) para «Cargar más anteriores» en la ficha.
+     * No forma parte del POST de Actualizar.
+     */
+    public function premiosFichaPagina(Request $request, $id)
+    {
+        if (! can('editar-cliente-uif', false) && ! can('listar-cliente-uif', false)) {
+            abort(403);
+        }
+
+        $clienteId = (int) $id;
+        $offset = max(0, (int) $request->query('offset', 0));
+        $limite = (int) $request->query('limit', \App\Repositories\Uif\Cliente_UifRepository::PREMIOS_EN_FICHA_LIMITE);
+        $limite = max(1, min(100, $limite));
+
+        $cliente = $this->cliente_uifRepository->find($clienteId);
+        $total = (int) ($cliente->cliente_premios_uif_count ?? $cliente->cliente_premios_uif()->count());
+        $premios = $this->cliente_uifRepository->leePremiosFichaPagina($clienteId, $offset, $limite);
+
+        $consultaPremiosCliente = $request->query('origen') === 'modal_consulta';
+        $suffixConsultaPremios = $consultaPremiosCliente ? '&origen=modal_consulta&vista=consulta' : '';
+        $detalleClienteUifRestringido = esSoloVisualizacionClienteUif();
+
+        $html = '';
+        foreach ($premios as $i => $premio) {
+            $html .= view('uif.cliente_uif.partials.premio_renglon_ficha', [
+                'premio' => $premio,
+                'indice' => $offset + $i + 1,
+                'detalleClienteUifRestringido' => $detalleClienteUifRestringido,
+                'suffixConsultaPremios' => $suffixConsultaPremios,
+            ])->render();
+        }
+
+        $nextOffset = $offset + $premios->count();
+
+        return response()->json([
+            'html' => $html,
+            'offset' => $offset,
+            'next_offset' => $nextOffset,
+            'loaded' => $premios->count(),
+            'total' => $total,
+            'has_more' => $nextOffset < $total,
+        ]);
     }
 
     public function exportarMatrizRiesgoExplicacion(Request $request, $id, $formato = null)

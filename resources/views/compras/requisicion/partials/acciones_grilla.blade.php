@@ -75,9 +75,13 @@
         'claseBoton' => 'btn-accion-tabla tooltipsC text-secondary',
         'soloIcono' => true,
     ])
-    @if ((int) ($data->ordencompra_vinculadas_count ?? 0) > 0 && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-        <button type="button" class="btn-accion-tabla tooltipsC text-warning js-requisicion-comprobantes" title="Ver órdenes de compra vinculadas" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
-            <i class="fa fa-link"></i>
+    @if ((can('editar-requisicion', false) || can('listar-requisicion', false)))
+        <button type="button"
+                class="btn-accion-tabla tooltipsC text-info js-circuito-documentos-relacionados"
+                title="Documentos relacionados (OC, COM, factura, OP)"
+                data-url="{{ route('requisicion_documentos_relacionados', ['id' => $data->id]) }}"
+                data-numero="REQ {{ $data->numerorequisicion }}">
+            <i class="fa fa-sitemap"></i>
         </button>
     @endif
     @if (can('borrar-requisicion', false)

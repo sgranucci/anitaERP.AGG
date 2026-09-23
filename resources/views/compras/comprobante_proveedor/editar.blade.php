@@ -16,8 +16,10 @@
 <script src="{{ asset('assets/pages/scripts/compras/conceptos_ivacompra_coherencia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/formulario.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/comprobante_proveedor/formulario.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
+@include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
 @section('contenido')
+@include('compras.partials.documentos_relacionados_circuito_modal')
 @include('compras.comprobante_proveedor.partials.formulario_card', ['esEdicion' => true])
 @endsection

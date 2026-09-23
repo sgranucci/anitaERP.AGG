@@ -97,9 +97,10 @@
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('uif.cliente_uif.form1')
                     @include('uif.cliente_uif.form2')
+                    {{-- Archivos antes que premios/riesgo: con muchos premios PHP corta el POST en max_input_vars y si los file van al final nunca llegan. --}}
+                    @include('uif.cliente_uif.form5')
                     @include('uif.cliente_uif.form3')
                     @include('uif.cliente_uif.form4')
-                    @include('uif.cliente_uif.form5')
                 </div>
                 <div class="card-footer" style="padding-top: 0">
                 	@if (empty($soloSolapaPremios))

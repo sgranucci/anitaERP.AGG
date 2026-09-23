@@ -1,16 +1,18 @@
 @php
+    $puedeActualizar = can('actualizar-ordencompra', false);
+    $puedeConsultar = can('listar-ordencompra', false) || can('editar-ordencompra', false);
     $esSuspendidaFila = ($row->estadoordencompra ?? '') === \App\Support\Compras\OrdencompraEstados::SUSPENDIDA;
     $urlEditar = route('editar_ordencompra', ['id' => $row->id] + $retornoListadoQuery);
     $urlConsulta = route('solo_consulta_ordencompra', ['id' => $row->id]);
     $urlPdf = route('imprimir_pdf_ordencompra', ['id' => $row->id]);
 @endphp
 <div class="oc-acciones">
-    @if (can('editar-ordencompra', false))
+    @if (can('editar-ordencompra', false) && $puedeActualizar)
         <a href="{{ $urlEditar }}" class="btn-accion-tabla tooltipsC" title="Editar">
             <i class="fa fa-edit"></i>
         </a>
     @endif
-    @if (can('listar-ordencompra', false))
+    @if ($puedeConsultar)
         <a href="{{ $urlConsulta }}"
            class="btn-accion-tabla tooltipsC js-erp-workspace"
            title="Solo consulta"
@@ -22,7 +24,7 @@
             <i class="fa fa-eye"></i>
         </a>
     @endif
-    @if (can('listar-ordencompra', false) || can('editar-ordencompra', false))
+    @if ($puedeConsultar)
         <a href="{{ $urlPdf }}" class="btn-accion-tabla tooltipsC" title="Imprimir orden (PDF vertical)" target="_blank" rel="noopener noreferrer">
             <i class="fa fa-print"></i>
         </a>
@@ -30,17 +32,21 @@
             <i class="fa fa-arrows-alt-h"></i>
         </a>
     @endif
-    @if (can('editar-ordencompra', false) && !empty($row->proveedor_id))
+    @if ($puedeConsultar)
+        <button type="button"
+                class="btn-accion-tabla tooltipsC text-info js-circuito-documentos-relacionados"
+                title="Documentos relacionados (RQ, COM, factura, OP)"
+                data-url="{{ route('ordencompra_documentos_relacionados', ['id' => $row->id]) }}"
+                data-numero="OC {{ $row->numeroordencompra }}">
+            <i class="fa fa-sitemap"></i>
+        </button>
+    @endif
+    @if ($puedeActualizar && can('editar-ordencompra', false) && !empty($row->proveedor_id))
         <button type="button" class="btn-accion-tabla tooltipsC js-oc-enviar-proveedor text-success" title="Enviar OC al proveedor por email" data-ordencompra-id="{{ $row->id }}">
             <i class="fa fa-envelope"></i>
         </button>
     @endif
-    @if (!empty($row->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-        <a href="{{ route('editar_requisicion', ['id' => $row->requisicion_id]) }}" class="btn-accion-tabla tooltipsC text-warning" title="Ver requisición" target="_blank" rel="noopener noreferrer">
-            <i class="fa fa-link"></i>
-        </a>
-    @endif
-    @if (can('actualizar-ordencompra', false) && !empty($row->proveedor_id))
+    @if ($puedeActualizar && !empty($row->proveedor_id))
         <button type="button" class="btn-accion-tabla tooltipsC js-oc-asignar-factura btn-oc-asignar-factura"
                 title="Asignar PDF de factura al legajo"
                 data-url="{{ route('ordencompra_asignar_factura_pdf', ['id' => $row->id]) }}"
@@ -49,7 +55,7 @@
             <i class="fa fa-file-pdf-o"></i>
         </button>
     @endif
-    @if (can('actualizar-ordencompra', false))
+    @if ($puedeActualizar)
         <button type="button" class="btn-accion-tabla tooltipsC js-oc-index-abrir-estado text-dark" title="Cambiar estado"
             data-url="{{ route('ordencompra_cambiar_estado', ['id' => $row->id]) }}"
             data-estado-actual="{{ $row->estadoordencompra }}">
@@ -62,7 +68,7 @@
             <i class="fa fa-folder-open"></i>
         </button>
     @endif
-    @if ($esSuspendidaFila && can('actualizar-ordencompra', false))
+    @if ($esSuspendidaFila && $puedeActualizar)
         <form action="{{ route('ordencompra_reactivar', ['id' => $row->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Reactivar a PENDIENTE?');">
             @csrf
             <button type="submit" class="btn-accion-tabla tooltipsC text-warning" title="Reactivar">

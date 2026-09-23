@@ -22,12 +22,14 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
 @endif
 <script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/autorizar.js') }}" type="text/javascript"></script>
+@include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
 @section('contenido')
 @php
     $volverListadoUrl = route('recepcion_proveedor', $filtrosQuery ?? []);
 @endphp
+@include('compras.partials.documentos_relacionados_circuito_modal')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -57,6 +59,15 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                         'recepcionId' => $recepcion->id,
                         'clase' => 'btn btn-danger btn-sm mr-2',
                     ])
+                    @if (can('listar-recepcion-proveedor', false) || can('editar-recepcion-proveedor', false))
+                    <button type="button"
+                            class="btn btn-outline-info btn-sm mr-2 js-circuito-documentos-relacionados"
+                            title="Documentos relacionados (RQ, OC, factura, OP)"
+                            data-url="{{ route('recepcion_proveedor_documentos_relacionados', ['id' => $recepcion->id]) }}"
+                            data-numero="COM {{ $recepcion->numerorecepcion }}">
+                        <i class="fa fa-sitemap"></i> Documentos
+                    </button>
+                    @endif
                     @if($recepcion->estado === 'BORRADOR' && empty($soloConsulta) && can('confirmar-recepcion-proveedor', false) && ($validacionAbonoCompleta ?? true))
                     <button type="submit" class="btn btn-success btn-sm mr-2" form="form-recepcion-confirmar"
                             id="btn-confirmar-recepcion-proveedor">

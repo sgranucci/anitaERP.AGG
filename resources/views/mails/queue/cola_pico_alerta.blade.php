@@ -12,7 +12,15 @@
     <p style="margin:0 0 8px 0;">
         <strong>Fecha:</strong> {{ $informe['timestamp'] ?? '' }}<br>
         <strong>QUEUE_CONNECTION:</strong> {{ $informe['queue_connection'] ?? '?' }}<br>
-        <strong>Workers activos:</strong> {{ $informe['worker_count'] ?? 0 }}<br>
+        <strong>Workers activos:</strong> {{ $informe['worker_count'] ?? 0 }}
+        @if (! empty($informe['worker_pools']))
+            @php $pools = $informe['worker_pools']; @endphp
+            (default {{ $pools['default']['count'] ?? '?' }}/{{ $pools['default']['expected'] ?? '?' }},
+            reports {{ $pools['reports']['count'] ?? '?' }}/{{ $pools['reports']['expected'] ?? '?' }},
+            mail {{ $pools['reports_mail']['count'] ?? '?' }}/{{ $pools['reports_mail']['expected'] ?? '?' }},
+            padrones {{ $pools['padrones']['count'] ?? '?' }}/{{ $pools['padrones']['expected'] ?? '?' }})
+        @endif
+        <br>
         <strong>Supervisor:</strong> {{ $informe['supervisor_state'] ?? '?' }}
     </p>
 

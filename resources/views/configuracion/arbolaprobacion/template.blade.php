@@ -55,7 +55,8 @@
         </td>
         <td class="text-center col-doble-aprobacion">
             <input type="hidden" name="doble_aprobacions[]" class="doble_aprobacion_valor" value="N">
-            <input type="checkbox" class="doble_aprobacion_check" value="S" title="Doble aprobación para este CC">
+            <input type="checkbox" class="doble_aprobacion_check" value="S"
+                title="2ª firma: montos altos pasan por el área y después por el firmante de umbral (ej. ≥ 5M)">
         </td>
         <td>
             <button type="button" title="Eliminar línea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">

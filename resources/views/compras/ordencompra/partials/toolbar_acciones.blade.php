@@ -12,7 +12,6 @@
         can('crear-comprobante-proveedor', false)
         || (can('crear-ingreso-proveedor', false) && !empty($mostrar_solapa_ingresos))
         || (empty($visualizar) && can('actualizar-ordencompra', false) && !empty($data->proveedor_id))
-        || (!empty($data->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
     );
 @endphp
 <div class="card-tools oc-form-toolbar d-flex flex-wrap align-items-center justify-content-end">
@@ -28,8 +27,15 @@
         <a href="{{ route('imprimir_pdf_ordencompra', ['id' => $data->id, 'formato' => 'apaisado']) }}" class="btn btn-outline-light btn-sm mr-1" title="PDF en Legal apaisado" target="_blank" rel="noopener noreferrer">
             <i class="fas fa-file-pdf"></i> Apaisado
         </a>
+        <button type="button"
+                class="btn btn-outline-info btn-sm mr-1 js-circuito-documentos-relacionados"
+                title="Documentos relacionados (RQ, COM, factura, OP)"
+                data-url="{{ route('ordencompra_documentos_relacionados', ['id' => $data->id]) }}"
+                data-numero="OC {{ $data->numeroordencompra }}">
+            <i class="fa fa-sitemap"></i> Documentos
+        </button>
     @endif
-    @if (isset($data) && $data && can('editar-ordencompra', false) && !empty($oc_datos_envio_proveedor['puede_enviar']))
+    @if (isset($data) && $data && can('actualizar-ordencompra', false) && can('editar-ordencompra', false) && !empty($oc_datos_envio_proveedor['puede_enviar']))
         <button type="button" class="btn btn-success btn-sm mr-1 js-oc-enviar-proveedor" data-ordencompra-id="{{ $data->id }}" title="Enviar PDF de la OC al email del proveedor">
             <i class="fa fa-envelope"></i> Enviar al proveedor
         </button>
@@ -127,11 +133,6 @@
                             data-proveedor="{{ $data->proveedores->nombre ?? '' }}">
                         <i class="fa fa-file-pdf-o"></i> Asignar factura PDF
                     </button>
-                @endif
-                @if (!empty($data->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-                    <a href="{{ route('editar_requisicion', ['id' => $data->requisicion_id]) }}" class="dropdown-item" target="_blank" rel="noopener noreferrer" title="Abre la requisición que originó esta OC">
-                        <i class="fa fa-link"></i> Ver requisición
-                    </a>
                 @endif
             </div>
         </div>

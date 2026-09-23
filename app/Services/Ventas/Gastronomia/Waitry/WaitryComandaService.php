@@ -248,6 +248,18 @@ final class WaitryComandaService
         $displayId = WaitryDisplayIdSupport::extraerDesdeRespuestaPush($data);
         $this->envioService->marcarExito($envio, $orderId, $data, $displayId !== '' ? $displayId : null);
 
+        $warningWaitry = $this->extraerWarningRespuestaPush($data);
+        if ($warningWaitry !== '') {
+            // Waitry: artículo no en catálogo / cocina → warning (no error). No reintentar.
+            Log::warning('waitry.comanda.warning', [
+                'venta_id' => $ventaId,
+                'external_id' => $externalId,
+                'waitry_order_id' => $orderId,
+                'place_id' => $placeId,
+                'warning' => $warningWaitry,
+            ]);
+        }
+
         Log::info('waitry.comanda.ok', [
             'venta_id' => $ventaId,
             'external_id' => $externalId,
@@ -255,6 +267,7 @@ final class WaitryComandaService
             'waitry_display_id' => $displayId !== '' ? $displayId : null,
             'place_id' => $placeId,
             'payment_type' => $payload['payment']['type'] ?? null,
+            'warning' => $warningWaitry !== '' ? $warningWaitry : null,
         ]);
 
         return [
@@ -262,6 +275,21 @@ final class WaitryComandaService
             'waitry_order_id' => $orderId,
             'waitry_display_id' => $displayId !== '' ? $displayId : null,
         ];
+    }
+
+    /**
+     * Aviso no bloqueante de Waitry (ej. ítems no agregados al catálogo del place).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function extraerWarningRespuestaPush(array $data): string
+    {
+        $response = $data['response'] ?? null;
+        if (! is_array($response)) {
+            return '';
+        }
+
+        return trim((string) ($response['warning'] ?? ''));
     }
 
     private function externalIdDesdeVenta(int $ventaId): string

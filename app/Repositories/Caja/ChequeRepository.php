@@ -799,7 +799,49 @@ class ChequeRepository implements ChequeRepositoryInterface
             $ids[] = (int) $cheque->id;
         }
 
+        $this->actualizarNumeradorAnitaDesdeReemplazos($data);
+
         return $ids;
+    }
+
+    /**
+     * Empuja al numerador Anita los Nros. de reemplazo emitidos (mismo criterio que emitidos).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function actualizarNumeradorAnitaDesdeReemplazos(array $data): void
+    {
+        $origenes = $data['origen_reemplazo'] ?? [];
+        $numeros = $data['numerocheque_reemplazo'] ?? [];
+        $montos = $data['montocheque_reemplazo'] ?? [];
+        $cuentas = $data['cuentacaja_reemplazo_ids'] ?? [];
+        $fechas = $data['fechapago_reemplazo'] ?? [];
+
+        $mapped = [
+            'fecha' => $data['fecha'] ?? '',
+            'numerocheque_emitidos' => [],
+            'montocheque_emitidos' => [],
+            'cuentacaja_emitido_ids' => [],
+            'fechapago_emitidos' => [],
+            'tctes_numero_emitidos' => [],
+        ];
+
+        foreach ($numeros as $i => $numero) {
+            if (strtoupper((string) ($origenes[$i] ?? 'E')) !== 'E') {
+                continue;
+            }
+            $mapped['numerocheque_emitidos'][] = $numero;
+            $mapped['montocheque_emitidos'][] = $montos[$i] ?? 0;
+            $mapped['cuentacaja_emitido_ids'][] = $cuentas[$i] ?? 0;
+            $mapped['fechapago_emitidos'][] = $fechas[$i] ?? '';
+            $mapped['tctes_numero_emitidos'][] = 0;
+        }
+
+        if ($mapped['numerocheque_emitidos'] === []) {
+            return;
+        }
+
+        ChequePropioAnitaNumeracionSupport::actualizarDesdeFilasEmitidas($mapped);
     }
 
     public function sincronizarConAnita()
@@ -808,22 +850,71 @@ class ChequeRepository implements ChequeRepositoryInterface
         $this->sincronizarCtermaeConAnita();
     }
 
-    public function sincronizarCpromaeConAnita(): void
+    /**
+     * Importa CHP desde Anita cpromae que aún no estén en ERP.
+     *
+     * @param  list<string>|null  $estados  null = abiertos (espacio/N)
+     * @return array{leidos: int, creados: int, existentes: int, omitidos: int}
+     */
+    public function sincronizarCpromaeConAnita(?int $fechaDesdeYmd = null, ?array $estados = null): array
     {
-        ini_set('max_execution_time', '300');
-        $fechaDesde = ChequeAnitaSyncSupport::fechaDesdeSyncAnios(2);
-        foreach (ChequeAnitaSyncSupport::listarCpromaeAbiertos($fechaDesde) as $fila) {
+        ini_set('max_execution_time', '0');
+        if ($fechaDesdeYmd === null || $fechaDesdeYmd <= 0) {
+            $anios = (int) config('cheque.sync_anios', 5);
+            $fechaDesdeYmd = ChequeAnitaSyncSupport::fechaDesdeSyncAnios($anios);
+        }
+        $estados = $estados ?? [' ', 'N'];
+        $fechaDesdeSql = substr((string) $fechaDesdeYmd, 0, 4).'-'
+            .substr((string) $fechaDesdeYmd, 4, 2).'-'
+            .substr((string) $fechaDesdeYmd, 6, 2);
+
+        $existentes = [];
+        foreach ($this->model->newQuery()
+            ->select(['cuentacaja_id', 'numerocheque', 'fechapago'])
+            ->where('origen', 'E')
+            ->whereDate('fechapago', '>=', $fechaDesdeSql)
+            ->cursor() as $ch) {
+            $existentes[$this->claveCpromaeExistente(
+                $ch->cuentacaja_id,
+                $ch->numerocheque,
+                $ch->fechapago ? (string) $ch->fechapago : null
+            )] = true;
+        }
+
+        $stats = ['leidos' => 0, 'creados' => 0, 'existentes' => 0, 'omitidos' => 0];
+        foreach (ChequeAnitaSyncSupport::listarCpromaePorEstados($fechaDesdeYmd, $estados) as $fila) {
+            $stats['leidos']++;
             try {
-                $this->importarFilaCpromae($fila);
+                $resultado = $this->importarFilaCpromae($fila, $existentes);
+                if ($resultado === 'created') {
+                    $stats['creados']++;
+                } else {
+                    $stats['existentes']++;
+                }
             } catch (\Throwable $e) {
+                $stats['omitidos']++;
                 $this->logSyncOmitida('Cheque sync cpromae: fila omitida', [
                     'cuenta' => $fila->cpro_cuenta ?? null,
                     'nro' => $fila->cpro_nro_cheque ?? null,
                     'fecha' => $fila->cpro_fecha_cheque ?? null,
+                    'estado' => $fila->cpro_estado ?? null,
                     'error' => $e->getMessage(),
                 ]);
             }
         }
+
+        return $stats;
+    }
+
+    /**
+     * @param  mixed  $cuentacajaId
+     * @param  mixed  $numeroCheque
+     */
+    private function claveCpromaeExistente($cuentacajaId, $numeroCheque, ?string $fechaPago): string
+    {
+        $fecha = $fechaPago ? substr($fechaPago, 0, 10) : '';
+
+        return (string) (int) $cuentacajaId.'|'.(string) $numeroCheque.'|'.$fecha;
     }
 
     public function sincronizarCtermaeConAnita(bool $soloCartera = false): void
@@ -919,8 +1010,10 @@ class ChequeRepository implements ChequeRepositoryInterface
 
     /**
      * @param  object  $data
+     * @param  array<string, true>|null  $existentes  Mapa mutable clave → true (evita N+1 en sync masivo)
+     * @return 'created'|'exists'
      */
-    private function importarFilaCpromae($data): void
+    private function importarFilaCpromae($data, ?array &$existentes = null): string
     {
         $estado = null;
         $fechaEmision = null;
@@ -957,14 +1050,25 @@ class ChequeRepository implements ChequeRepositoryInterface
             );
         }
 
-        $yaExiste = $this->model->newQuery()
-            ->where('origen', 'E')
-            ->where('numerocheque', $data->cpro_nro_cheque ?? null)
-            ->where('cuentacaja_id', $cuentacaja_id)
-            ->when($fechaCheque, fn ($q) => $q->whereDate('fechapago', $fechaCheque))
-            ->exists();
-        if ($yaExiste) {
-            return;
+        $clave = $this->claveCpromaeExistente(
+            $cuentacaja_id,
+            $data->cpro_nro_cheque ?? null,
+            $fechaCheque
+        );
+        if ($existentes !== null) {
+            if (isset($existentes[$clave])) {
+                return 'exists';
+            }
+        } else {
+            $yaExiste = $this->model->newQuery()
+                ->where('origen', 'E')
+                ->where('numerocheque', $data->cpro_nro_cheque ?? null)
+                ->where('cuentacaja_id', $cuentacaja_id)
+                ->when($fechaCheque, fn ($q) => $q->whereDate('fechapago', $fechaCheque))
+                ->exists();
+            if ($yaExiste) {
+                return 'exists';
+            }
         }
 
         $fechaEntregaYmd = ChequePropioCpromaeAnitaMapper::ymd((string) ($data->cpro_fecha_entrega ?? ''));
@@ -1003,6 +1107,12 @@ class ChequeRepository implements ChequeRepositoryInterface
             'banco_id' => $banco_id,
             'cuentalibradora' => null,
         ]);
+
+        if ($existentes !== null) {
+            $existentes[$clave] = true;
+        }
+
+        return 'created';
     }
 
     /**

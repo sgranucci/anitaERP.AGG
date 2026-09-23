@@ -21,6 +21,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Caja\ChequeOperacionActivaSupport;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
+use App\Support\Caja\ChequeConsultaChequeraSupport;
 use App\Support\Caja\ChequeTerceroEndosoAnitaSupport;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
@@ -1814,7 +1815,11 @@ class PagoproveedorService
 
                 if ($pagaConCheque) {
                     $data = array_merge($data, [
-                        'numerocheque_emitidos' => [self::siguienteNumeroCheque((int) $chequera->id, $chequera)],
+                        'numerocheque_emitidos' => [ChequeConsultaChequeraSupport::siguienteNumero(
+                            (int) $chequera->id,
+                            $chequera,
+                            true
+                        )],
                         'montocheque_emitidos' => [$neto],
                         'chequera_emitido_ids' => [(int) $chequera->id],
                         'cuentacaja_emitido_ids' => [$cuentacajaId],
@@ -1906,28 +1911,5 @@ class PagoproveedorService
         } catch (\Throwable $e) {
             return ['errores' => $e->getMessage()];
         }
-    }
-
-    /**
-     * `numerocheque` es varchar: MAX() compara como texto ('9' gana a '10'), así que hay
-     * que castear. El lock de la chequera serializa dos propuestas que se ejecutan a la vez
-     * sobre la misma chequera y evita que saquen el mismo número.
-     */
-    private static function siguienteNumeroCheque(int $chequeraId, \App\Models\Caja\Chequera $chequera): string
-    {
-        \App\Models\Caja\Chequera::query()->whereKey($chequeraId)->lockForUpdate()->first();
-
-        $desde = (int) ($chequera->desdenumerocheque ?: 1);
-        $hasta = (int) ($chequera->hastanumerocheque ?: 99999999);
-        $ultimo = (int) (\App\Models\Caja\Cheque::query()
-            ->where('chequera_id', $chequeraId)
-            ->selectRaw('MAX(CAST(numerocheque AS UNSIGNED)) as ultimo')
-            ->value('ultimo') ?: ($desde - 1));
-        $sig = max($desde, $ultimo + 1);
-        if ($sig > $hasta) {
-            throw new Exception('Chequera #'.$chequeraId.' sin números disponibles (rango '.$desde.'-'.$hasta.').');
-        }
-
-        return (string) $sig;
     }
 }

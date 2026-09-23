@@ -37,6 +37,8 @@ use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Configuracion\ArbolAprobacionCanalSupport;
 use App\Support\Configuracion\ArbolAprobacionContextoSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
+use App\Support\Configuracion\ArbolMontoHomogeneoSupport;
+use App\Support\Configuracion\ArbolRequisicionEstadoTrasNivelSupport;
 use App\Support\Configuracion\OcArbolTriggerCatalog;
 use App\Support\Configuracion\OcArbolTriggerEvaluators\OcArbolTriggerEvaluatorRegistry;
 use App\Support\Configuracion\ReArbolRamaCatalog;
@@ -389,7 +391,17 @@ class ArbolaprobacionService
             $linkVisualizar = ArbolAprobacionEnlaceSupport::enlaceVisualizar($ip, 'compras/requisicion/visualizar', (int) $comprobante_id, $hashVisualizar);
 
             $observacionEnvio = $this->normalizarObservacionEnvio($opciones['observacion_envio'] ?? null);
-            $mailExtras = $this->armaExtrasMailRequisicion($requisicion, $proximoNivel['documento_estado_al_aprobar'], $observacionEnvio);
+            $estadoTrasAprobarMail = $this->resolverEstadoDocumentoTrasAprobarNivelRe(
+                $arbol,
+                $centrocostoArbol,
+                (int) $proximoNivel['proximonivel'],
+                $requisicion->fecha,
+                (float) $totalesReq['monto'],
+                $totalesReq['moneda_id'],
+                $proximoNivel['documento_estado_al_aprobar'] ?? null,
+                $circuitoRe
+            );
+            $mailExtras = $this->armaExtrasMailRequisicion($requisicion, $estadoTrasAprobarMail, $observacionEnvio);
             $envioUid = Auth::check() ? Auth::user()->id : $requisicion->creousuario_id;
             $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
 
@@ -753,16 +765,12 @@ class ArbolaprobacionService
 
         $candidatos = [];
         foreach ($nivelesCc as $nivel) {
-            $coeficienteConversion = 1.;
-            if ($nivel->moneda_id != $moneda_id) {
-                $cotizacion = $this->cotizacionService->leeCotizacionDiaria($fecha, $moneda_id);
-                $coeficienteConversion = (float) calculaCoeficienteMoneda($nivel->moneda_id, $moneda_id, $cotizacion);
-                if ($coeficienteConversion == 0) {
-                    $coeficienteConversion = 1.;
-                }
-            }
-
-            $montoEnMonedaNivel = (float) $monto * $coeficienteConversion;
+            $montoEnMonedaNivel = $this->montoHomogeneoParaNivel(
+                (float) $monto,
+                $moneda_id,
+                $nivel->moneda_id,
+                $fecha
+            );
             $enRango = $this->nivelAplicaPorMonto(
                 $nivel,
                 $montoEnMonedaNivel,
@@ -869,6 +877,20 @@ class ArbolaprobacionService
         }
 
         return $filtrados;
+    }
+
+    /**
+     * Monto del comprobante expresado en la moneda del nivel (nunca 1:1 entre monedas distintas).
+     */
+    private function montoHomogeneoParaNivel(float $monto, $monedaDocumentoId, $monedaNivelId, $fecha): float
+    {
+        $de = (int) ($monedaDocumentoId ?: 1);
+        $a = (int) ($monedaNivelId ?: 1);
+        $cotizacion = ($de === $a)
+            ? null
+            : $this->cotizacionService->leeCotizacionDiaria($fecha, $de);
+
+        return ArbolMontoHomogeneoSupport::convertir($monto, $de, $a, $cotizacion);
     }
 
     /**
@@ -1186,9 +1208,19 @@ class ArbolaprobacionService
                     $circuitoReMov
                 );
                 if ($nivelCfg !== null) {
+                    $estadoTras = $this->resolverEstadoDocumentoTrasAprobarNivelRe(
+                        $arbol,
+                        $centrocostoArbol,
+                        (int) $movimientoPre->nivel,
+                        $requisicion->fecha,
+                        (float) $totalesReq['monto'],
+                        $totalesReq['moneda_id'],
+                        $nivelCfg->documento_estado_al_aprobar,
+                        $circuitoReMov
+                    );
                     $this->aplicaEstadoRequisicionPorNombre(
                         $comprobante_id,
-                        $nivelCfg->documento_estado_al_aprobar,
+                        $estadoTras,
                         'Árbol de aprobación: nivel '.$movimientoPre->nivel.' aprobado'
                             .($circuitoReMov ? ' [rama '.$circuitoReMov.']' : ''),
                         $usuario_id
@@ -1863,6 +1895,7 @@ class ArbolaprobacionService
 
     /**
      * Estado de requisición al aprobar un nivel: el configurado en el árbol o APROBADA si no hay ninguno.
+     * Si el nivel dice APROBADA pero aún hay firmante siguiente por monto, deja EN ARBOL APROBACION.
      */
     private function estadoRequisicionAlAprobarNivel(?string $estadoConfigurado): string
     {
@@ -1872,6 +1905,34 @@ class ArbolaprobacionService
         }
 
         return Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+    }
+
+    /**
+     * Resuelve el estado real tras firmar un nivel RE (no corta doble aprobación por APROBADA intermedia).
+     */
+    private function resolverEstadoDocumentoTrasAprobarNivelRe(
+        Arbolaprobacion $arbol,
+        int $centrocostoId,
+        int $nivelQueSeAprueba,
+        $fecha,
+        float $monto,
+        $monedaId,
+        ?string $estadoConfigurado,
+        ?string $rama = null
+    ): string {
+        $base = $this->estadoRequisicionAlAprobarNivel($estadoConfigurado);
+        $proximo = $this->buscaProximoNivel(
+            $arbol,
+            $centrocostoId,
+            $nivelQueSeAprueba,
+            $fecha,
+            $monto,
+            $monedaId,
+            $rama
+        );
+        $hayProximo = (int) ($proximo['proximonivel'] ?? 0) > 0;
+
+        return ArbolRequisicionEstadoTrasNivelSupport::resolver($base, $hayProximo);
     }
 
     private function aplicaEstadoRequisicionPorNombre(int $requisicion_id, ?string $estadoNombre, string $observacion, $usuarioHistoriaId): void
@@ -1929,16 +1990,12 @@ class ArbolaprobacionService
                 continue;
             }
 
-            $coeficienteConversion = 1.;
-            if ($nivel->moneda_id != $moneda_id && $moneda_id !== null && $moneda_id !== '') {
-                $cotizacion = $this->cotizacionService->leeCotizacionDiaria($fecha, $moneda_id);
-                $coeficienteConversion = (float) calculaCoeficienteMoneda($nivel->moneda_id, $moneda_id, $cotizacion);
-                if ($coeficienteConversion == 0) {
-                    $coeficienteConversion = 1.;
-                }
-            }
-
-            $montoEnMonedaNivel = (float) $montoOriginal * $coeficienteConversion;
+            $montoEnMonedaNivel = $this->montoHomogeneoParaNivel(
+                (float) $montoOriginal,
+                $moneda_id,
+                $nivel->moneda_id,
+                $fecha
+            );
             $enRango = $this->nivelAplicaPorMonto(
                 $nivel,
                 $montoEnMonedaNivel,
@@ -2546,7 +2603,16 @@ class ArbolaprobacionService
                     $totalesReq['moneda_id']
                 );
                 $est = $nivelCfg
-                    ? $this->estadoRequisicionAlAprobarNivel($nivelCfg->documento_estado_al_aprobar)
+                    ? $this->resolverEstadoDocumentoTrasAprobarNivelRe(
+                        $arbol,
+                        $cc,
+                        (int) $m->nivel,
+                        $req->fecha,
+                        (float) $totalesReq['monto'],
+                        $totalesReq['moneda_id'],
+                        $nivelCfg->documento_estado_al_aprobar,
+                        ReArbolRamaCatalog::normalizar($m->circuito_re ?? null)
+                    )
                     : null;
                 $row['indicacion_estado_requisicion'] = $est !== null
                     ? 'Tras aprobar este nivel, la requisición quedaría en estado: '.$est.'.'
@@ -2767,7 +2833,18 @@ class ArbolaprobacionService
             return null;
         }
 
-        return $this->estadoRequisicionAlAprobarNivel($nivelCfg->documento_estado_al_aprobar);
+        $circuitoRe = ReArbolRamaCatalog::normalizar($mov->circuito_re ?? null);
+
+        return $this->resolverEstadoDocumentoTrasAprobarNivelRe(
+            $arbol,
+            $centrocostoArbol,
+            (int) $mov->nivel,
+            $requisicion->fecha,
+            (float) $totales['monto'],
+            $totales['moneda_id'],
+            $nivelCfg->documento_estado_al_aprobar,
+            $circuitoRe
+        );
     }
 
     public function nombreTipoArbolOrdenesCompra(): string

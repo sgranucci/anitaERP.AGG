@@ -9,6 +9,12 @@
     $urlAltaPremioUif = ($puedeAgregarPremioUif && $clienteUifId)
         ? route('crea_cliente_premio_uif', ['id' => $clienteUifId]).'?return_cliente_tab=3'.$suffixAltaPremio
         : null;
+    $premiosFicha = isset($data) ? collect($data->cliente_premios_uif ?? []) : collect();
+    $premiosTotal = (int) ($data->cliente_premios_uif_count ?? $premiosFicha->count());
+    $premiosMostrados = $premiosFicha->count();
+    $urlPremiosFicha = $clienteUifId
+        ? route('premios_ficha_cliente_uif', ['id' => $clienteUifId])
+        : '';
 @endphp
 <div class="form3"@if (! $mostrarForm3Directo) style="display: none"@endif>
     @include('uif.cliente_premio_uif.partials.foto_estilos')
@@ -45,6 +51,18 @@
                 @endif
             @endif
         </div>
+        @if ($premiosTotal > 0)
+            <p class="text-muted small mb-2" id="premios-ficha-resumen"
+               data-total="{{ $premiosTotal }}"
+               data-mostrados="{{ $premiosMostrados }}">
+                @if ($premiosTotal > $premiosMostrados)
+                    Mostrando <span class="premios-ficha-n">{{ $premiosMostrados }}</span> más recientes de {{ number_format($premiosTotal, 0, ',', '.') }} premios.
+                    Usá «Cargar más anteriores» para seguir viendo el historial (no se envían al Actualizar el cliente).
+                @else
+                    {{ number_format($premiosTotal, 0, ',', '.') }} premio(s). Se gestionan por su propia pantalla; «Actualizar» el cliente no los regraba.
+                @endif
+            </p>
+        @endif
     	<table class="table" id="premio-table">
     		<thead>
     			<tr>
@@ -57,55 +75,32 @@
     				<th></th>
     			</tr>
     		</thead>
-    		<tbody id="tbody-tabla-premio">
-		 		@if (isset($data) && isset($data->cliente_premios_uif) && count($data->cliente_premios_uif) > 0)
-					@foreach (old('premio', $data->cliente_premios_uif->count() ? $data->cliente_premios_uif : ['']) as $premio)
-            			<tr class="item-premio">
-                			<td>
-                				<input type="hidden" name="premios[]" class="form-control iipremio" readonly value="{{ $loop->index+1 }}" />
-								<input type="hidden" name="premio_ids[]" class="form-control premio_id" value="{{ $premio->id ?? '' }}" />
-								<input type="datetime" name="fechaentregas[]" class="form-control fechaentrega" value="{{ $premio->fechaentrega->format('d-m-Y H:i:s') }}" />
-                			</td>
-							<td>
-                				<input type="text" name="salas[]" class="form-control sala" readonly value="{{ $premio->salas->nombre }}" />
-                			</td>
-							<td>
-                				<input type="text" name="detalles[]" class="form-control detalle" value="{{ $premio->juegos_uif->nombre }}" />
-                			</td>
-							<td>
-                				<input type="text" name="numerotitos[]" class="form-control numerotito" value="{{ $premio->numerotito }}" />
-                			</td>
-							<td>
-                				<input type="text" name="montopremios[]" class="form-control montopremio" style="text-align: right;" value="{{ number_format((float) ($premio->monto ?? 0), 2, ',', '.') }}" />
-                			</td>
-                            <td class="text-center align-middle premio-foto-preview">
-                                @include('uif.cliente_premio_uif.partials.foto_celda', [
-                                    'foto' => $premio->foto ?? null,
-                                    'premioId' => $premio->id ?? null,
-                                ])
-                            </td>
-							<td>
-								@if (can('editar-cliente-premio-uif', false) && ! $detalleClienteUifRestringido)
-                                	<a href="{{ route('edita_cliente_premio_uif', ['id' => $premio->id]) }}?return_cliente_tab=3{{ $suffixConsultaPremios }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                    <i class="fa fa-edit"></i>
-                                	</a>
-								@endif
-								@if (can('editar-cliente-premio-uif', false) && ! $detalleClienteUifRestringido)
-                                	<a href="{{route('lista_un_cliente_premio_uif', ['id' => $premio->id])}}" class="btn-accion-tabla tooltipsC" title="Listar el premio">
-                                    <i class="fa fa-print"></i>
-                                	</a>
-								@endif
-								@if (can('borrar-cliente-premio-uif', false) && ! $detalleClienteUifRestringido)
-									<button style="width: 7%;" type="button" title="Elimina el premio" class="btn-accion-tabla eliminar_premio tooltipsC">
-										<i class="fa fa-times-circle text-danger"></i>
-									</button>
-								@endif
-                			</td>
-                		</tr>
+    		<tbody id="tbody-tabla-premio"
+                   data-premios-url="{{ $urlPremiosFicha }}"
+                   data-premios-offset="{{ $premiosMostrados }}"
+                   data-premios-total="{{ $premiosTotal }}"
+                   data-premios-origen="{{ $consultaPremiosCliente ? 'modal_consulta' : '' }}">
+		 		@if ($premiosFicha->count() > 0)
+					{{-- Solo lectura en ficha: sin name= (no van en el POST del cliente). --}}
+					@foreach ($premiosFicha as $premio)
+                        @include('uif.cliente_uif.partials.premio_renglon_ficha', [
+                            'premio' => $premio,
+                            'indice' => $loop->iteration,
+                            'detalleClienteUifRestringido' => $detalleClienteUifRestringido,
+                            'suffixConsultaPremios' => $suffixConsultaPremios,
+                        ])
            			@endforeach
 				@endif
        		</tbody>
        	</table>
+        @if ($premiosTotal > $premiosMostrados && $urlPremiosFicha !== '')
+            <div class="text-center mb-2">
+                <button type="button" id="cargar-mas-premios-ficha" class="btn btn-outline-secondary btn-sm">
+                    <i class="fa fa-history"></i> Cargar más anteriores
+                    (<span class="text-muted">(<span id="premios-ficha-restantes">{{ number_format($premiosTotal - $premiosMostrados, 0, ',', '.') }}</span> restantes)</span>
+                </button>
+            </div>
+        @endif
 		@include('uif.cliente_uif.template2')
     </div>
 </div>

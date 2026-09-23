@@ -23,6 +23,7 @@ use App\Models\Caja\Cheque;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Services\Caja\IngresoEgresoComprobanteIvaPdfIaService;
 use App\Services\Caja\IngresoEgresoComprobanteIvaService;
+use App\Services\Caja\IngresoEgresoCanjeChequeDetalleIaService;
 use App\Services\Caja\IngresoEgresoService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
@@ -580,6 +581,29 @@ class IngresoEgresoController extends Controller
                 'cuentalibradora' => $cheque->cuentalibradora,
                 'anombrede' => $cheque->anombrede,
             ],
+        ]);
+    }
+
+    /**
+     * Sugiere el detalle del movimiento leyendo los cheques a canjear (IA + fallback).
+     */
+    public function sugerirDetalleCanjeCheque(Request $request, IngresoEgresoCanjeChequeDetalleIaService $detalleIaService)
+    {
+        can('crear-ingresos-egresos-caja', false);
+        can('editar-ingresos-egresos-caja', false);
+
+        $cheques = $request->input('cheques', []);
+        if (! is_array($cheques)) {
+            $cheques = [];
+        }
+
+        $resultado = $detalleIaService->sugerir(array_values($cheques));
+
+        return response()->json([
+            'mensaje' => 'ok',
+            'detalle' => $resultado['detalle'],
+            'fuente' => $resultado['fuente'],
+            'error' => $resultado['error'],
         ]);
     }
 

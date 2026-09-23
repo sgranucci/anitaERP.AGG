@@ -23,9 +23,13 @@
         </a>
     @endif
 
-    @if (isset($data) && $data && !empty($tiene_ordencompra_asociada) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
-        <button type="button" class="btn btn-outline-light btn-sm mr-1 js-requisicion-comprobantes" title="Ver órdenes de compra y comprobantes vinculados" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
-            <i class="fas fa-shopping-cart"></i> Órdenes de compra
+    @if (isset($data) && $data && (can('editar-requisicion', false) || can('listar-requisicion', false)))
+        <button type="button"
+                class="btn btn-outline-info btn-sm mr-1 js-circuito-documentos-relacionados"
+                title="Documentos relacionados (OC, COM, factura, OP)"
+                data-url="{{ route('requisicion_documentos_relacionados', ['id' => $data->id]) }}"
+                data-numero="REQ {{ $data->numerorequisicion }}">
+            <i class="fa fa-sitemap"></i> Documentos
         </button>
     @endif
 

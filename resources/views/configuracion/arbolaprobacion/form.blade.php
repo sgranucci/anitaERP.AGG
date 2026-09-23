@@ -128,7 +128,8 @@ window.AnitaArbolTiposConEstadoDoc = @json($tipos_con_estado_doc ?? []);
             En requisiciones se aplica el <strong>Estado doc.</strong> (default APROBADA).
             <strong>Rama A</strong> = allowlist/auto · <strong>Rama B</strong> = autorización (tipicamente N1 EN COMPRAS → N2 firmantes por monto).
             Las ramas las define el bloque <strong>Circuito RE por cuentas</strong> (allowlist + triggers).
-            <strong>Doble apr.</strong> por CC: con S, Desde monto actúa como piso; con N, bandas exclusivas Desde–Hasta.
+            <strong>2ª firma</strong> (por CC): activá el tilde si montos altos deben pasar por el área y después por un segundo firmante (ej. ≥ 5M → Beta).
+            Podés dejar <strong>APROBADA</strong> en el área: el sistema solo cierra ahí cuando <em>no</em> corresponde la segunda firma; si el monto la requiere, sigue al nivel siguiente.
         @elseif($esRequisicionesSala)
             En requisiciones de sala se aplica el Estado doc. si está definido.
         @elseif($tipoArbolActual === 'Pedidos')
@@ -150,7 +151,7 @@ window.AnitaArbolTiposConEstadoDoc = @json($tipos_con_estado_doc ?? []);
                     <th style="width: 9%;">Hasta</th>
                     <th style="width: 6%;">Moneda</th>
                     <th style="width: 12%;" class="col-estado-doc" title="Estado del documento al aprobar este nivel (solo RE/RS/OC/SU)">Estado doc.</th>
-                    <th style="width: 7%;" class="col-doble-aprobacion" title="Doble aprobación por CC">Doble</th>
+                    <th style="width: 7%;" class="col-doble-aprobacion" title="Si el monto supera el umbral del segundo firmante, firma el área y después la 2ª firma">2ª firma</th>
                     <th></th>
                 </tr>
             </thead>
@@ -238,7 +239,8 @@ window.AnitaArbolTiposConEstadoDoc = @json($tipos_con_estado_doc ?? []);
                         </td>
                         <td class="text-center col-doble-aprobacion">
                             <input type="hidden" name="doble_aprobacions[]" class="doble_aprobacion_valor" value="{{ $dobleSel }}">
-                            <input type="checkbox" class="doble_aprobacion_check" value="S" title="Doble aprobación para este CC"
+                            <input type="checkbox" class="doble_aprobacion_check" value="S"
+                                title="2ª firma: montos altos pasan por el área y después por el firmante de umbral (ej. ≥ 5M)"
                                 {{ $dobleSel === 'S' ? 'checked' : '' }}>
                         </td>
                         <td>

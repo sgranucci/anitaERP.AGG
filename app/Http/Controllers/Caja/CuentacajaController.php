@@ -356,7 +356,8 @@ class CuentacajaController extends Controller
             $cuenta,
             (string) $request->query('fecha_pago', ''),
             (string) $request->query('fecha_emision', ''),
-            $diferidoOverride
+            $diferidoOverride,
+            ($chequeraId = (int) $request->query('chequera_id')) > 0 ? $chequeraId : null
         ));
     }
 

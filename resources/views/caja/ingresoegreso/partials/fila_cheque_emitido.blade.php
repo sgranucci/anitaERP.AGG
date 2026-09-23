@@ -50,7 +50,7 @@
     <td>
         <input type="text" name="numerocheque_emitidos[]" class="form-control form-control-sm numerocheque_emitido"
             value="{{ $cheque?->numerocheque ?? '' }}" placeholder="Nro."
-            title="Numerador Anita de la cuenta (se completa al elegirla)" inputmode="numeric">
+            title="Se completa al elegir cuenta/chequera (talonario ERP o Anita)" inputmode="numeric">
         <small class="tctes_emitido_lbl text-muted d-block" style="font-size:10px;line-height:1.2;"></small>
     </td>
     <td>

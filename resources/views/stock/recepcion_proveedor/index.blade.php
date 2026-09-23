@@ -16,6 +16,7 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/recalcular_tra_tito.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/recalcular_tra_tito.js')) ?: time() }}" type="text/javascript"></script>
 @endif
+@include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
 <?php use App\Support\Stock\RecepcionProveedorListadoFiltros; ?>
@@ -24,6 +25,7 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
 @endphp
+@include('compras.partials.documentos_relacionados_circuito_modal')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -123,6 +125,15 @@ window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
                                     'recepcionId' => $row->id,
                                     'modo' => 'tabla',
                                 ])
+                                @if (can('listar-recepcion-proveedor', false) || can('editar-recepcion-proveedor', false))
+                                <button type="button"
+                                        class="btn-accion-tabla tooltipsC text-info js-circuito-documentos-relacionados"
+                                        title="Documentos relacionados (RQ, OC, factura, OP)"
+                                        data-url="{{ route('recepcion_proveedor_documentos_relacionados', ['id' => $row->id]) }}"
+                                        data-numero="COM {{ $row->numerorecepcion }}">
+                                    <i class="fa fa-sitemap"></i>
+                                </button>
+                                @endif
                                 @if (can('editar-recepcion-proveedor', false) || can('actualizar-recepcion-proveedor', false))
                                 <a href="{{ route('editar_recepcion_proveedor', array_merge(['id' => $row->id], $retornoListadoQuery)) }}" class="btn-accion-tabla tooltipsC" title="{{ $row->estado === 'BORRADOR' ? 'Editar borrador' : 'Ver recepción' }}">
                                     <i class="fa fa-edit"></i>

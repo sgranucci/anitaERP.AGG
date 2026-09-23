@@ -499,6 +499,14 @@ class InterbankingArchivoPagoService
             return [];
         }
 
+        $aopsPorRec = $this->anitaReader->mapaRecsAnuladosPorAop(
+            $empresaAnita,
+            $opDesde,
+            $opHasta,
+            $errores
+        );
+        $opsAnuladasErp = $this->mapaOpsAnuladasErp($empresaId, $opDesde, $opHasta);
+
         $auxpag = $this->anitaReader->listarAuxpagPeriodo(
             $empresaAnita,
             $desdeYmd,
@@ -539,6 +547,10 @@ class InterbankingArchivoPagoService
             }
             $suc = (int) ($pag->pag_sucursal ?? 0);
             if ($rec < $opDesde || $rec > $opHasta) {
+                continue;
+            }
+            if (isset($aopsPorRec[$empPag.'|'.$rec])
+                || isset($opsAnuladasErp[strtoupper(substr($tipo, 0, 3)).'|'.$rec])) {
                 continue;
             }
             $lineas = $this->filtrarLineasAuxpagTransferencia(
@@ -644,6 +656,36 @@ class InterbankingArchivoPagoService
         }
 
         return $conCbu !== [] ? $conCbu : $bancarias;
+    }
+
+    /**
+     * OP originales en ERP ya dadas de baja o revertidas.
+     *
+     * @return array<string, true> clave TIPO|numero
+     */
+    private function mapaOpsAnuladasErp(int $empresaId, int $opDesde, int $opHasta): array
+    {
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        $filas = Pagoproveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->whereBetween('numerotransaccion', [$opDesde, $opHasta])
+            ->whereIn('estado', ['BAJA', 'REVERTIDA'])
+            ->where(function ($q) {
+                $q->whereNull('pagoproveedor_origen_id')
+                    ->orWhere('pagoproveedor_origen_id', 0);
+            })
+            ->get(['tipocomprobante', 'numerotransaccion']);
+
+        $mapa = [];
+        foreach ($filas as $fila) {
+            $tipo = strtoupper(substr(trim((string) $fila->tipocomprobante), 0, 3));
+            $mapa[$tipo.'|'.(int) $fila->numerotransaccion] = true;
+        }
+
+        return $mapa;
     }
 
     private function claveOp(string $tipo, int $numero, string $cbu): string

@@ -56,4 +56,16 @@ class ChequePropioAnitaNumeracionSupportTest extends TestCase
         $this->assertSame('BMD', ChequePropioAnitaNumeracionSupport::elegirTctes($filas, false)['clave']);
         $this->assertNull(ChequePropioAnitaNumeracionSupport::elegirTctes([], true));
     }
+
+    public function test_resuelve_chequera_explicita_o_preferida(): void
+    {
+        $lista = [
+            ['id' => 10, 'preferida' => false],
+            ['id' => 20, 'preferida' => true],
+        ];
+        $this->assertSame(99, ChequePropioAnitaNumeracionSupport::resolverChequeraIdParaNumero(99, $lista));
+        $this->assertSame(20, ChequePropioAnitaNumeracionSupport::resolverChequeraIdParaNumero(null, $lista));
+        $this->assertSame(20, ChequePropioAnitaNumeracionSupport::resolverChequeraIdParaNumero(0, $lista));
+        $this->assertNull(ChequePropioAnitaNumeracionSupport::resolverChequeraIdParaNumero(null, []));
+    }
 }

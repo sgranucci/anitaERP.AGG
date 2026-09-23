@@ -25,6 +25,7 @@ use App\Services\Compras\ProveedorCuentacorrienteImportarDesdeAnitaService;
 use App\Services\Compras\RetencionesPagoCalculator;
 use App\Services\Compras\RetencionesPagoContextoBuilder;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
+use App\Support\Compras\PagoproveedorDocumentosRelacionadosSupport;
 use App\Support\Compras\PagoproveedorListadoFiltros;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Compras\PropuestaPagoModoSupport;
@@ -683,6 +684,20 @@ class PagoproveedorController extends Controller
         }
 
         return $out;
+    }
+
+    public function documentosRelacionados(int $id)
+    {
+        if (! can('listar-pagoproveedor', false) && ! can('editar-pagoproveedor', false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $pago = Pagoproveedor::query()->find($id);
+        if ($pago === null) {
+            return response()->json(['message' => 'Orden de pago no encontrada.'], 404);
+        }
+
+        return response()->json(PagoproveedorDocumentosRelacionadosSupport::armar($pago));
     }
 
     public function imprimir(int $id)

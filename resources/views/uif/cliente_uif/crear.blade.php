@@ -73,9 +73,10 @@ $( "#botonform0" ).click(function() {
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('uif.cliente_uif.form1')
                     @include('uif.cliente_uif.form2')
+                    {{-- Archivos antes que premios/riesgo: evita perder uploads si el POST supera max_input_vars. --}}
+                    @include('uif.cliente_uif.form5')
                     @include('uif.cliente_uif.form3')
                     @include('uif.cliente_uif.form4')
-                    @include('uif.cliente_uif.form5')
                 </div>
                 <div class="card-footer">
                 	<div class="row">

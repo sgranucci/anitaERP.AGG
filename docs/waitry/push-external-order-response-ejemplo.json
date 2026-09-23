@@ -4,6 +4,7 @@
     "response": {
         "orderId": 987654,
         "external_id": "12345",
-        "external_delivery_id": "E-26BADA"
+        "external_delivery_id": "E-26BADA",
+        "warning": "items not added: V0594"
     }
 }

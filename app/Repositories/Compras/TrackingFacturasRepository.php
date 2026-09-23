@@ -68,7 +68,12 @@ class TrackingFacturasRepository
         }
         $query->orderByDesc('pcp.id');
 
-        return $paginando ? $query->paginate(self::REGISTROS_POR_PAGINA) : $query->get();
+        $resultado = $paginando ? $query->paginate(self::REGISTROS_POR_PAGINA) : $query->get();
+        TrackingPrecargaPendienteSupport::hidratarOrdencompraIds(
+            $paginando ? collect($resultado->items()) : $resultado
+        );
+
+        return $resultado;
     }
 
     /**
@@ -79,10 +84,7 @@ class TrackingFacturasRepository
      */
     public function contarPrecargasPendientes(array $filtros): int
     {
-        $query = TrackingPrecargaPendienteSupport::consultaBase($this->empresaRepository);
-        TrackingPrecargaPendienteSupport::aplicarFiltros($query, $filtros);
-
-        return (int) $query->reorder()->count('pcp.id');
+        return TrackingPrecargaPendienteSupport::contarPendientes($this->empresaRepository, $filtros);
     }
 
     /**
@@ -98,26 +100,23 @@ class TrackingFacturasRepository
      */
     public function resumen(array $filtros): array
     {
-        $precargasPendientes = $this->contarPrecargasPendientes($filtros);
-
         if (TrackingFacturasListadoFiltros::esSegmentoPrecargaPendiente($filtros)) {
-            $query = TrackingPrecargaPendienteSupport::consultaBase($this->empresaRepository);
-            TrackingPrecargaPendienteSupport::aplicarFiltros($query, $filtros);
-            $fila = $query->reorder()
-                ->selectRaw('count(*) as registros')
-                ->selectRaw('coalesce(sum(pcp.total), 0) as total')
-                ->first();
+            // Un solo agregado liviano: el chip y el total del segmento coinciden.
+            $agregado = TrackingPrecargaPendienteSupport::resumenPendientes(
+                $this->empresaRepository,
+                $filtros
+            );
 
             return [
-                'registros' => (int) ($fila->registros ?? 0),
-                'total' => (float) ($fila->total ?? 0),
+                'registros' => $agregado['registros'],
+                'total' => $agregado['total'],
                 'saldo' => 0.0,
-                'con_pdf' => (int) ($fila->registros ?? 0),
+                'con_pdf' => $agregado['registros'],
                 'sin_pdf' => 0,
                 'sin_pdf_externos' => 0,
                 'sin_resolver' => 0,
                 'sin_contabilizar' => 0,
-                'precargas_pendientes' => $precargasPendientes,
+                'precargas_pendientes' => $agregado['registros'],
                 'con_deuda' => 0,
                 'deuda_corriente' => 0,
                 'deuda_0_30' => 0,
@@ -132,6 +131,8 @@ class TrackingFacturasRepository
             ];
         }
 
+        $precargasPendientes = $this->contarPrecargasPendientes($filtros);
+
         $query = $this->consultaBase();
         TrackingFacturasListadoFiltros::aplicar($query, $filtros);
 
@@ -142,8 +143,11 @@ class TrackingFacturasRepository
         // FIN/CIN son internos: no se escanean, no son un faltante operativo.
         $abrevInternas = "tipotransaccion_compra.abreviatura not in ('FIN', 'CIN')";
 
+        // consultaBase trae columnas de grilla: hay que limpiarlas o el SELECT
+        // arrastra joins y campos que el agregado no necesita.
         $fila = $query
             ->reorder()
+            ->select([])
             ->selectRaw('count(*) as registros')
             ->selectRaw('coalesce(sum(comprobante_proveedor.total), 0) as total')
             ->selectRaw('coalesce(sum(comprobante_tracking_indice.pago_saldo), 0) as saldo')
@@ -391,7 +395,10 @@ class TrackingFacturasRepository
     {
         $filas = $this->consultaBase()
             ->reorder()
-            ->select('tipotransaccion_compra.codigoafip', 'tipotransaccion_compra.abreviatura')
+            ->select([
+                'tipotransaccion_compra.codigoafip',
+                'tipotransaccion_compra.abreviatura',
+            ])
             ->distinct()
             ->get();
 

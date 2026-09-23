@@ -35,6 +35,7 @@ use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
+use App\Support\Compras\CircuitoComprasDocumentosRelacionadosSupport;
 use App\Support\Compras\RequisicionListadoFiltros;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\RequisicionSeguimientoAprobacionSupport;
@@ -327,23 +328,14 @@ class RequisicionController extends Controller
             return response()->json(['message' => 'Requisición no encontrada.'], 404);
         }
 
-        $ocs = Ordencompra::query()
-            ->where('requisicion_id', $id)
-            ->orderBy('fecha', 'desc')
-            ->orderBy('id', 'desc')
-            ->get(['id', 'numeroordencompra', 'fecha', 'estadoordencompra']);
+        return response()->json(
+            CircuitoComprasDocumentosRelacionadosSupport::armarDesdeRequisicion($req)
+        );
+    }
 
-        $filas = $this->filasOrdenesCompraVinculadasDesdeColeccion($ocs);
-
-        return response()->json([
-            'numerorequisicion' => $req->numerorequisicion,
-            'requisicion_id' => $req->id,
-            'filas' => $filas,
-            'proximamente' => [
-                'Recepciones de proveedores asociadas a la orden de compra',
-                'Facturas de compra vinculadas a esa orden',
-            ],
-        ]);
+    public function documentosRelacionados(int $id)
+    {
+        return $this->comprobantesAsociados($id);
     }
 
     /**

@@ -248,10 +248,18 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         return $cliente_uif;
     }
 
+    /**
+     * Premios recientes a mostrar en la ficha de edición.
+     * No se regraban al actualizar el cliente: alta/edición/baja van por endpoints propios.
+     */
+    public const PREMIOS_EN_FICHA_LIMITE = 40;
+
     public function find($id)
     {
+        // Sin cliente_premios_uif completo: clientes con miles de pagos no deben
+        // hinchar la ficha ni el POST de actualización. Quien necesite todos (p.ej. matriz)
+        // hace lazy-load o leePremiosPorClienteUif.
         if (null == $cliente_uif = $this->model->with('cliente_archivos_uif')
-            ->with('cliente_premios_uif')
             ->with('cliente_riesgos_uif')
             ->with('provincia_nacimientos')
             ->with('localidad_nacimientos')
@@ -261,6 +269,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             ->with('sos_uif')
             ->with('actividades_uif')
             ->with('estadociviles_uif')
+            ->withCount('cliente_premios_uif')
             ->find($id)) {
             throw new ModelNotFoundException('Registro no encontrado');
         }
@@ -271,7 +280,6 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
     public function findOrFail($id)
     {
         if (null == $cliente_uif = $this->model->with('cliente_archivos_uif')
-            ->with('cliente_premios_uif')
             ->with('cliente_riesgos_uif')
             ->with('provincia_nacimientos')
             ->with('localidad_nacimientos')
@@ -281,11 +289,51 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             ->with('sos_uif')
             ->with('actividades_uif')
             ->with('estadociviles_uif')
+            ->withCount('cliente_premios_uif')
             ->findOrFail($id)) {
             throw new ModelNotFoundException('Registro no encontrado');
         }
 
         return $cliente_uif;
+    }
+
+    /**
+     * Carga solo los últimos N premios para la solapa de la ficha (lectura).
+     */
+    public function cargarPremiosParaFicha(Cliente_Uif $cliente, ?int $limite = null): Cliente_Uif
+    {
+        $limite = $limite ?? self::PREMIOS_EN_FICHA_LIMITE;
+        if (! isset($cliente->cliente_premios_uif_count)) {
+            $cliente->loadCount('cliente_premios_uif');
+        }
+        $premios = $cliente->cliente_premios_uif()
+            ->with(['salas:id,nombre', 'juegos_uif:id,nombre'])
+            ->limit(max(1, $limite))
+            ->get();
+        $cliente->setRelation('cliente_premios_uif', $premios);
+
+        return $cliente;
+    }
+
+    /**
+     * Página de premios para la ficha (offset/limit), sin meterlos en el POST de Actualizar.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Uif\Cliente_Premio_Uif>
+     */
+    public function leePremiosFichaPagina(int $clienteUifId, int $offset = 0, ?int $limite = null)
+    {
+        $limite = $limite ?? self::PREMIOS_EN_FICHA_LIMITE;
+        $offset = max(0, $offset);
+        $limite = max(1, min(100, $limite));
+
+        return $this->model->newQuery()
+            ->whereKey($clienteUifId)
+            ->firstOrFail()
+            ->cliente_premios_uif()
+            ->with(['salas:id,nombre', 'juegos_uif:id,nombre'])
+            ->offset($offset)
+            ->limit($limite)
+            ->get();
     }
 
     /**

@@ -7,6 +7,7 @@
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/comprobante_proveedor/filtro.js') }}" type="text/javascript"></script>
+@include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
 <?php
@@ -19,6 +20,7 @@ use App\Support\Listado\QueryRetornoListado;
     $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route('comprobante_proveedor', ComprobanteProveedorListadoFiltros::paraQueryStringExternos($filtros ?? []));
 @endphp
+@include('compras.partials.documentos_relacionados_circuito_modal')
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -130,6 +132,15 @@ use App\Support\Listado\QueryRetornoListado;
                                 <a href="{{ route('editar_comprobante_proveedor', ['id' => $row->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
                                     <i class="fa fa-edit"></i>
                                 </a>
+                                @endif
+                                @if (can('listar-comprobante-proveedor', false) || can('editar-comprobante-proveedor', false))
+                                <button type="button"
+                                        class="btn-accion-tabla tooltipsC text-info js-circuito-documentos-relacionados"
+                                        title="Documentos relacionados (RQ, OC, COM, OP)"
+                                        data-url="{{ route('comprobante_proveedor_documentos_relacionados', ['id' => $row->id]) }}"
+                                        data-numero="Factura #{{ $row->id }}">
+                                    <i class="fa fa-sitemap"></i>
+                                </button>
                                 @endif
                                 @if (($row->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO
                                     && ($row->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::ANULADO

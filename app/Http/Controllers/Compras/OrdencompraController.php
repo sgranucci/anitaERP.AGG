@@ -39,6 +39,7 @@ use App\Services\Compras\OrdencompraRevertirCierreLineaService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorPrecioPendienteService;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
+use App\Support\Compras\CircuitoComprasDocumentosRelacionadosSupport;
 use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Support\Compras\OrdencompraContratoVencimientoSupport;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
@@ -159,7 +160,13 @@ class OrdencompraController extends Controller
 
     public function editar(Request $request, $id)
     {
-        $soloConsulta = $request->query('origen') === 'modal_consulta';
+        $puedeActualizar = can('actualizar-ordencompra', false);
+        // Consulta (Finanzas/Contaduría/Control de Gestión): listar+editar sin actualizar → solo lectura.
+        $soloLectura = ! $puedeActualizar;
+        $soloConsulta = $request->query('origen') === 'modal_consulta'
+            || $request->query('vista') === 'consulta'
+            || $soloLectura;
+
         if ($soloConsulta) {
             if (! can('listar-ordencompra', false) && ! can('editar-ordencompra', false)) {
                 can('listar-ordencompra');
@@ -168,8 +175,10 @@ class OrdencompraController extends Controller
             can('editar-ordencompra');
         }
 
-        $puedeActualizar = can('actualizar-ordencompra', false);
-        $soloLectura = $soloConsulta && ! $puedeActualizar;
+        if ($soloLectura) {
+            $request->query->set('origen', 'modal_consulta');
+            $request->query->set('vista', 'consulta');
+        }
 
         return $this->formularioOrdencompra((int) $id, $soloLectura, null, $request);
     }
@@ -484,6 +493,22 @@ class OrdencompraController extends Controller
 
         return response()->json(
             $this->ordencompraRecepcionesListadoService->listar((int) $ordencompra_id)
+        );
+    }
+
+    public function documentosRelacionados(int $id)
+    {
+        if (! can('listar-ordencompra', false) && ! can('editar-ordencompra', false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $oc = Ordencompra::query()->find($id);
+        if ($oc === null) {
+            return response()->json(['message' => 'Orden de compra no encontrada.'], 404);
+        }
+
+        return response()->json(
+            CircuitoComprasDocumentosRelacionadosSupport::armarDesdeOrdencompra($oc)
         );
     }
 

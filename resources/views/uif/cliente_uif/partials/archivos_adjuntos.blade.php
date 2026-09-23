@@ -18,7 +18,7 @@
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
             @endphp
-            <div class="col-md-6 col-lg-4 mb-3 cliente-uif-archivo-item">
+            <div class="col-md-6 col-lg-4 mb-3 cliente-uif-archivo-item" data-nombrearchivo="{{ $safeName }}">
                 <div class="card card-outline card-secondary h-100 mb-0">
                     <div class="card-body p-2 d-flex flex-column">
                         <div class="small text-truncate mb-1" title="{{ $safeName }}">{{ $safeName }}</div>
@@ -54,7 +54,6 @@
                             </a>
                         </div>
                         @if (! $ocultarInputsConservar)
-                            <input type="hidden" name="nombresanteriores[]" value="{{ $arch->nombrearchivo }}">
                             <button type="button" class="btn btn-sm btn-outline-danger mt-2 eliminar-archivo-cliente-uif" title="Quitar de la lista; se elimina del cliente al guardar">
                                 <i class="fa fa-times"></i> Quitar
                             </button>

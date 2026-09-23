@@ -51,14 +51,14 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_confirmando_styles')
 @endif
-@include('compras.requisicion.partials.comprobantes_asociados_script')
+@include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
 @section('contenido')
 @php
     $volverListadoUrl = route('consultar_requisicion', $filtrosQuery ?? []);
 @endphp
-@include('compras.requisicion.partials.comprobantes_asociados_modal')
+@include('compras.partials.documentos_relacionados_circuito_modal')
 @include('compras.requisicion.partials.modal_firmante_retome_arbol')
 @include('compras.requisicion.partials.modal_centrocosto_retome_arbol')
 @if(!empty($es_provisorio))

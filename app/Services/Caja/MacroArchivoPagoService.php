@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\DB;
  * Filtra OP como p-enviamacro.c:
  * - Anita: auxpag con axp_banco = cuenta elegida y tipo TMR/TMK/TMB (transf) o CHP/CPC (cheque)
  * - ERP: movimientos/cheques de la cuentacaja Macro seleccionada
+ * - Excluye revertidas/anuladas: AOP en Anita (mismo nro), cpro_fecha_anula, estado ERP
  *
  * Canal: config macro.canal (archivo hoy; webservice después).
  */
@@ -103,6 +104,7 @@ class MacroArchivoPagoService
 
         if ($incluirAnita) {
             [$filasAnita, $benefAnita, $retAnita] = $this->recolectarAnita(
+                $empresaId,
                 $empresaAnita,
                 $cuentaAnita,
                 $cuentaDebito,
@@ -284,6 +286,7 @@ class MacroArchivoPagoService
      * @return array{0:list<array<string,mixed>>,1:array<string,array<string,mixed>>,2:list<array<string,mixed>>}
      */
     private function recolectarAnita(
+        int $empresaId,
         int $empresaAnita,
         string $cuentaAnita,
         string $cuentaDebito,
@@ -314,6 +317,14 @@ class MacroArchivoPagoService
         if ($pagos === []) {
             return [[], [], []];
         }
+
+        $aopsPorRec = $this->anitaReader->mapaRecsAnuladosPorAop(
+            $empresaAnita,
+            $opDesde,
+            $opHasta,
+            $errores
+        );
+        $opsAnuladasErp = $this->mapaOpsAnuladasErp($empresaId, $opDesde, $opHasta);
 
         $auxpag = $this->anitaReader->listarAuxpagPeriodo($empresaAnita, $desdeYmd, $hastaYmd, $errores);
         $auxPorOp = [];
@@ -356,6 +367,9 @@ class MacroArchivoPagoService
                 continue;
             }
             $empPag = (int) ($pag->pag_empresa ?? 0) ?: $empresaAnita;
+            if (isset($aopsPorRec[$empPag.'|'.$rec]) || isset($opsAnuladasErp[$this->claveOp($tipo, $rec)])) {
+                continue;
+            }
             $suc = (int) ($pag->pag_sucursal ?? 0);
             $proCod = InterbankingArchivoPagoAnitaReader::padProveedor((string) ($pag->pag_pro ?? ''));
             $prom = $mapaProm[$proCod] ?? null;
@@ -407,6 +421,9 @@ class MacroArchivoPagoService
                     $nroCh = (int) ($axp->axp_nro ?? 0);
                     $fechaCh = (int) ($axp->axp_fecha_co ?? 0);
                     $cheque = $this->anitaReader->leerCheque($cuentaAnita, $nroCh, $fechaCh, $errores);
+                    if (MacroArchivoPagoAnitaReader::chequeAnuladoEnCpromae($cheque)) {
+                        continue;
+                    }
                     if ($cheque === null) {
                         // Sin cpromae: igual exporta con datos de auxpag (importe/fecha)
                         $impCh = $imp;
@@ -980,6 +997,35 @@ class MacroArchivoPagoService
         return strtoupper((string) ($f['orden_pago'] ?? ''))
             .'|'.(string) ($f['medio'] ?? '')
             .'|'.(string) ($f['referencia_cbu_o_cheque'] ?? '');
+    }
+
+    /**
+     * OP originales en ERP ya dadas de baja o revertidas (no compensatorios AOP).
+     *
+     * @return array<string, true> clave tipo|numero
+     */
+    private function mapaOpsAnuladasErp(int $empresaId, int $opDesde, int $opHasta): array
+    {
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        $filas = Pagoproveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->whereBetween('numerotransaccion', [$opDesde, $opHasta])
+            ->whereIn('estado', ['BAJA', 'REVERTIDA'])
+            ->where(function ($q) {
+                $q->whereNull('pagoproveedor_origen_id')
+                    ->orWhere('pagoproveedor_origen_id', 0);
+            })
+            ->get(['tipocomprobante', 'numerotransaccion']);
+
+        $mapa = [];
+        foreach ($filas as $fila) {
+            $mapa[$this->claveOp((string) $fila->tipocomprobante, (int) $fila->numerotransaccion)] = true;
+        }
+
+        return $mapa;
     }
 
     private function claveOp(string $tipo, int $numero): string

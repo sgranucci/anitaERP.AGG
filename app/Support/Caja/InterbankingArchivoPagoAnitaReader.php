@@ -53,6 +53,35 @@ final class InterbankingArchivoPagoAnitaReader
     }
 
     /**
+     * OP revertidas en Anita: AOP con el mismo pag_rec (sin filtro de fecha).
+     *
+     * @param  list<string>  $errores
+     * @return array<string, true> clave empresa|rec
+     */
+    public function mapaRecsAnuladosPorAop(
+        int $empresaAnita,
+        int $opDesde,
+        int $opHasta,
+        array &$errores,
+    ): array {
+        $where = ' WHERE pag_empresa='.$empresaAnita
+            ." AND pag_tipo = 'AOP'"
+            .' AND pag_rec BETWEEN '.$opDesde.' AND '.$opHasta;
+        $filas = $this->listar('che_ban', 'pago', self::PAGO_CAMPOS, $where, $errores, 'pago-aop-ib');
+        $mapa = [];
+        foreach ($filas as $fila) {
+            $rec = (int) ($fila->pag_rec ?? 0);
+            if ($rec <= 0) {
+                continue;
+            }
+            $emp = (int) ($fila->pag_empresa ?? 0) ?: $empresaAnita;
+            $mapa[$emp.'|'.$rec] = true;
+        }
+
+        return $mapa;
+    }
+
+    /**
      * @param  list<string>  $errores
      * @return list<object>
      */

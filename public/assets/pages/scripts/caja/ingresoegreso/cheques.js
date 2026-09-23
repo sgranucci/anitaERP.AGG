@@ -161,14 +161,22 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
     $tr.find('.tctes_numero_emitido').val(data.tctes_numero || '');
     $tr.find('.tctes_clave_emitido').val(data.tctes_clave || '');
     filtrarChequerasChequeEmitido($tr, data.id, !!data.diferido, data.chequeras || []);
+    if (data.chequera_id && !$tr.find('.chequera_emitido_id').val()) {
+        var chAuto = chequeraDesdeLista(data.chequeras || [], data.chequera_id, !!data.diferido);
+        if (chAuto) {
+            pintarChequeraEmitido($tr, chAuto);
+        }
+    }
     var $nro = $tr.find('.numerocheque_emitido');
     var auto = $nro.data('auto') === 1 || !$nro.val();
     if (data.proximo_numero && (forzarNumero || auto)) {
         $nro.val(data.proximo_numero).data('auto', 1);
     }
-    var titulo = 'Numerador Anita';
+    var titulo = data.fuente_numero === 'chequera'
+        ? 'Próximo de la chequera (talonario ERP)'
+        : 'Numerador Anita';
     if (data.tctes_clave) {
-        titulo += ' ' + data.tctes_clave;
+        titulo += ' · ' + data.tctes_clave;
         if (data.tctes_desc) {
             titulo += ' — ' + data.tctes_desc;
         }
@@ -181,7 +189,13 @@ function aplicarCuentaChequeEmitido($tr, data, forzarNumero) {
         $nro.attr('title', data.aviso);
     }
     var lbl = '';
-    if (data.tctes_clave) {
+    if (data.fuente_numero === 'chequera' && data.proximo_numero) {
+        lbl = 'Chequera · nro. ' + data.proximo_numero;
+        if (data.tctes_clave) {
+            lbl += ' · Anita ' + data.tctes_clave;
+        }
+        lbl += data.diferido ? ' (diferido)' : ' (al día)';
+    } else if (data.tctes_clave) {
         lbl = data.tctes_clave;
         if (data.tctes_desc) {
             lbl += ' · ' + data.tctes_desc;
@@ -208,6 +222,9 @@ function cargarEmisionChequeEmitido($tr, extras, onOk) {
     };
     if (extras.diferido === 1 || extras.diferido === 0) {
         params.diferido = extras.diferido;
+    }
+    if (parseInt($tr.find('.chequera_emitido_id').val() || '0', 10) > 0) {
+        params.chequera_id = $tr.find('.chequera_emitido_id').val();
     }
     var url = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/caja/cuentacaja/api/cheque-emision';
     if (cuentaId > 0 && !extras.porCodigo) {
@@ -320,13 +337,32 @@ function aplicarCuentaChequeReemplazo($tr, data, forzarNumero) {
         $tr.find('.moneda_reemplazo_id').val(data.moneda_id);
     }
     filtrarChequerasChequeReemplazo($tr, data.id, !!data.diferido, data.chequeras || []);
+    if (data.chequera_id && !$tr.find('.chequera_reemplazo_id').val()) {
+        var chAutoR = chequeraDesdeLista(data.chequeras || [], data.chequera_id, !!data.diferido);
+        if (chAutoR) {
+            pintarChequeraReemplazo($tr, chAutoR);
+        }
+    }
     var $nro = $tr.find('.numerocheque_reemplazo');
     var auto = $nro.data('auto') === 1 || !$nro.val();
     if (data.proximo_numero && (forzarNumero || auto)) {
         $nro.val(data.proximo_numero).data('auto', 1);
     }
+    var titulo = data.fuente_numero === 'chequera'
+        ? 'Próximo de la chequera (talonario ERP)'
+        : 'Numerador Anita';
+    $nro.attr('title', titulo);
+    if (data.aviso && !data.proximo_numero) {
+        $nro.attr('title', data.aviso);
+    }
     var lbl = '';
-    if (data.tctes_clave) {
+    if (data.fuente_numero === 'chequera' && data.proximo_numero) {
+        lbl = 'Chequera · nro. ' + data.proximo_numero;
+        if (data.tctes_clave) {
+            lbl += ' · Anita ' + data.tctes_clave;
+        }
+        lbl += data.diferido ? ' (diferido)' : ' (al d\u00eda)';
+    } else if (data.tctes_clave) {
         lbl = data.tctes_clave;
         if (data.tctes_desc) {
             lbl += ' · ' + data.tctes_desc;
@@ -741,6 +777,7 @@ function activaEventosChequesIngresoEgreso() {
                 }
                 aplicarChequeAnuladoEnFilaReemplazo(row, data.cheque);
                 flModificaAsiento = true;
+                precargarDetalleCanjeChequesConIa();
             })
             .fail(function (xhr) {
                 var msg = (xhr && xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.error))
@@ -748,6 +785,82 @@ function activaEventosChequesIngresoEgreso() {
                 alert(msg);
             });
     });
+}
+
+function precargarDetalleCanjeChequesConIa() {
+    var modo = String($('#ie_modo_uso').val() || '').trim();
+    if (modo !== 'canje_cheques' && !(typeof esCanjeChequesIngresoEgreso === 'function' && esCanjeChequesIngresoEgreso())) {
+        return;
+    }
+
+    var cheques = [];
+    $('#tbody-cheque-reemplazo-table tr.item-cheque-reemplazo').each(function () {
+        var $tr = $(this);
+        var id = parseInt($tr.find('.cheque_anulado_id').val() || '0', 10);
+        var nroLbl = String($tr.find('.numerocheque_anulado').val() || '').trim();
+        var nroBuscar = String($tr.find('.numerocheque_anulado_buscar').val() || '').trim();
+        var nro = nroBuscar || nroLbl.replace(/\s*\(.*$/, '');
+        if (id <= 0 && nro === '') {
+            return;
+        }
+        cheques.push({
+            id: id,
+            numerocheque: nro,
+            origen: $tr.find('.origen_anulado').val() || $tr.find('.origen_reemplazo').val() || 'R',
+            monto: $tr.find('.montocheque_reemplazo').val() || '',
+            banco: String($tr.find('.nombrebanco_reemplazo').val() || '').trim()
+                || (nroLbl.match(/\(([^)]+)\)/) ? nroLbl.match(/\(([^)]+)\)/)[1] : ''),
+            anombrede: String($tr.find('.anombrede_reemplazo').val() || '').trim(),
+            fechapago: $tr.find('.fechapago_reemplazo').val() || '',
+            cuentacaja_nombre: String($tr.find('.nombre_reemplazo').val() || '').trim(),
+            cuentacaja_codigo: String($tr.find('.codigo_reemplazo').val() || '').trim()
+        });
+    });
+
+    if (cheques.length === 0) {
+        return;
+    }
+
+    var $detalle = $('#detalle');
+    if (!$detalle.length) {
+        return;
+    }
+    if (!$detalle.data('ie-canje-detalle-bound')) {
+        $detalle.data('ie-canje-detalle-bound', 1);
+        $detalle.on('input.ieCanjeDetalle', function () {
+            $(this).data('ie-canje-detalle', 0);
+        });
+    }
+    var actual = String($detalle.val() || '').trim();
+    var generadoPorCanje = $detalle.data('ie-canje-detalle') === 1;
+    if (actual !== '' && !generadoPorCanje) {
+        return;
+    }
+
+    $.post(carpetaBase + '/caja/ingresoegreso/sugerir-detalle-canje-cheque', {
+        _token: $('input[name=_token]').val(),
+        cheques: cheques
+    })
+        .done(function (data) {
+            if (!data || data.mensaje !== 'ok' || !data.detalle) {
+                return;
+            }
+            var texto = String(data.detalle || '').trim();
+            if (texto === '') {
+                return;
+            }
+            var actualAhora = String($detalle.val() || '').trim();
+            var sigueGenerado = $detalle.data('ie-canje-detalle') === 1;
+            if (actualAhora !== '' && !sigueGenerado) {
+                return;
+            }
+            $detalle.off('input.ieCanjeDetalle');
+            $detalle.val(texto);
+            $detalle.data('ie-canje-detalle', 1);
+            $detalle.on('input.ieCanjeDetalle', function () {
+                $(this).data('ie-canje-detalle', 0);
+            });
+        });
 }
 
 function aplicarChequeAnuladoEnFilaReemplazo(row, cheque) {
@@ -797,11 +910,22 @@ function aplicarChequeAnuladoEnFilaReemplazo(row, cheque) {
         row.find('.anombrede_reemplazo').val('');
     }
 
-    // Nro. nuevo vacío: el operador lo completa (puede usar otra chequera / numerador).
-    row.find('.numerocheque_reemplazo').val('').data('auto', 0);
+    // Próximo número: misma lógica que emitidos / OP (chequera ERP, fallback Anita).
+    row.find('.numerocheque_reemplazo').val('').data('auto', 1);
     row.find('.tctes_reemplazo_lbl').text('');
     toggleBloqueReemplazo(row);
-    enfocarCampoCheque(row.find('.numerocheque_reemplazo')[0]);
+    if (origen === 'E' && parseInt(row.find('.cuentacaja_reemplazo_id').val() || '0', 10) > 0) {
+        var extras = { forzarNumero: true };
+        var tipo = String(row.find('.chequera_reemplazo_tipo').val() || '').toUpperCase();
+        if (tipo === 'D' || tipo === 'N' || tipo === 'C') {
+            extras.diferido = tipo === 'D' ? 1 : 0;
+        }
+        cargarEmisionChequeReemplazo(row, extras, function () {
+            enfocarCampoCheque(row.find('.numerocheque_reemplazo')[0]);
+        });
+    } else {
+        enfocarCampoCheque(row.find('.numerocheque_reemplazo')[0]);
+    }
 }
 
 function toggleBloqueReemplazo(row) {

@@ -352,14 +352,9 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 				}
 			}
 		}
-		else
-		{
-			$cliente_premio_uif = EloquentAuditDeleteSupport::each(
-				$this->model->newQuery()->where('cliente_uif_id', $id)
-			);
-		}
+		// Sin payload de premios: no borrar (antes eliminaba todos los pagos del cliente).
 
-		return $cliente_premio_uif;
+		return $cliente_premio_uif ?? '1';
 	}
 
 	public function listaPremioParaExportar($periodo, $limiteinformeuif, $empresaId = null)

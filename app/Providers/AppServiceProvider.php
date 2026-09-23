@@ -2330,6 +2330,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->tag([
             \App\Services\Compras\Ai\ExtraerFacturaProveedorSkill::class,
             \App\Services\Caja\Ai\ExtraerComprobanteIvaCajaSkill::class,
+            \App\Services\Caja\Ai\RedactarDetalleCanjeChequeSkill::class,
             \App\Services\Stock\Ai\ExtraerRemitoRecepcionSkill::class,
             \App\Services\Contable\Ai\SugerirParesConciliacionBancariaSkill::class,
             \App\Services\Configuracion\Ai\ExplicarContextoArbolAprobacionSkill::class,

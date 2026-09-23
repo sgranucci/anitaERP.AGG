@@ -299,6 +299,7 @@
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-cliente-uif', borraTarjetaArchivoClienteUif);
+        $('#cargar-mas-premios-ficha').on('click', cargarMasPremiosFicha);
 
         inicializarTablaRiesgoPeriodoFilas();
 
@@ -626,6 +627,65 @@
     	});
     }
 
+    /**
+     * Historial de premios: carga páginas siguientes por AJAX (sin name= → no van en Actualizar).
+     */
+    function cargarMasPremiosFicha(event) {
+        if (event) {
+            event.preventDefault();
+        }
+        var $tbody = $('#tbody-tabla-premio');
+        var url = ($tbody.attr('data-premios-url') || '').trim();
+        if (!url) {
+            return;
+        }
+        var offset = parseInt($tbody.attr('data-premios-offset') || '0', 10) || 0;
+        var total = parseInt($tbody.attr('data-premios-total') || '0', 10) || 0;
+        var origen = ($tbody.attr('data-premios-origen') || '').trim();
+        var $btn = $('#cargar-mas-premios-ficha');
+        if ($btn.data('loading')) {
+            return;
+        }
+        $btn.data('loading', true).prop('disabled', true);
+
+        $.ajax({
+            type: 'GET',
+            url: url,
+            data: {
+                offset: offset,
+                limit: 40,
+                origen: origen || undefined
+            },
+            success: function (data) {
+                if (data && data.html) {
+                    $tbody.append(data.html);
+                }
+                var next = (data && typeof data.next_offset === 'number') ? data.next_offset : offset;
+                var tot = (data && typeof data.total === 'number') ? data.total : total;
+                $tbody.attr('data-premios-offset', next);
+                $tbody.attr('data-premios-total', tot);
+                actualizaRenglonesPremio();
+
+                var $n = $('.premios-ficha-n');
+                if ($n.length) {
+                    $n.text(next);
+                }
+                var restantes = Math.max(0, tot - next);
+                $('#premios-ficha-restantes').text(restantes.toLocaleString('es-AR'));
+
+                if (!data || !data.has_more || restantes <= 0) {
+                    $btn.closest('div').remove();
+                } else {
+                    $btn.data('loading', false).prop('disabled', false);
+                }
+            },
+            error: function () {
+                window.alert('No se pudieron cargar más premios.');
+                $btn.data('loading', false).prop('disabled', false);
+            }
+        });
+    }
+
     function agregaRenglonRiesgo(event){
     	event.preventDefault();
     	var renglon = $('#template-renglon-riesgo').html();
@@ -668,6 +728,17 @@
         event.preventDefault();
         var $wrap = $(this).closest('.cliente-uif-archivo-item');
         if ($wrap.length) {
+            var nombre = ($wrap.attr('data-nombrearchivo') || '').trim();
+            if (nombre) {
+                var $box = $('#archivos-cliente-uif-quitar');
+                if ($box.length) {
+                    $('<input>', {
+                        type: 'hidden',
+                        name: 'archivos_quitar[]',
+                        value: nombre
+                    }).appendTo($box);
+                }
+            }
             $wrap.remove();
             verificaAlertaUif();
             return;

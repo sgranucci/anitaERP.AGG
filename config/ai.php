@@ -86,6 +86,14 @@ return [
             'driver' => null,
         ],
 
+        'redactar_detalle_canje_cheque' => [
+            'habilitada' => filter_var(env('AI_SKILL_REDACTAR_DETALLE_CANJE_CHEQUE', true), FILTER_VALIDATE_BOOLEAN),
+            'permiso' => 'crear-ingresos-egresos-caja',
+            'auto_aplicar_score' => (float) env('AI_SKILL_REDACTAR_DETALLE_CANJE_CHEQUE_AUTO_SCORE', 0.7),
+            'driver' => null,
+            'timeout' => (int) env('AI_SKILL_REDACTAR_DETALLE_CANJE_CHEQUE_TIMEOUT', 25),
+        ],
+
         'emparejar_remito_recepcion' => [
             'habilitada' => filter_var(env('AI_SKILL_EMPAREJAR_REMITO_RECEPCION', true), FILTER_VALIDATE_BOOLEAN),
             'permiso' => 'ocr-recepcion-proveedor',

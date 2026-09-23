@@ -49,6 +49,7 @@ $(function () {
     window.ocSugerirEnvioProveedor = { ordencompra_id: {{ (int) $data->id }} };
 </script>
 @endif
+@include('compras.partials.documentos_relacionados_circuito_script')
 @endsection
 
 @section('contenido')
@@ -58,6 +59,7 @@ $(function () {
         ? ['id' => $data->id] + ($filtrosQuery ?? [])
         : ($filtrosQuery ?? []);
 @endphp
+@include('compras.partials.documentos_relacionados_circuito_modal')
 <div class="row oc-ui" id="ordencompra-editar-root">
     <div class="col-lg-12">
         @include('includes.form-error')

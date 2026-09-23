@@ -19,13 +19,15 @@ final class ChequePropioAnitaNumeracionSupport
 {
     /**
      * @param  bool|null  $diferidoOverride  Si viene de la chequera (D/N), pisa la fecha.
+     * @param  int|null  $chequeraId  Si hay chequera, el próximo número sale del talonario ERP (como OP).
      * @return array<string, mixed>
      */
     public static function payloadEmision(
         Cuentacaja $cuenta,
         string $fechaPago = '',
         string $fechaEmision = '',
-        ?bool $diferidoOverride = null
+        ?bool $diferidoOverride = null,
+        ?int $chequeraId = null
     ): array {
         $fechaPago = self::ymd($fechaPago);
         $fechaEmision = self::ymd($fechaEmision) ?: $fechaPago;
@@ -35,14 +37,32 @@ final class ChequePropioAnitaNumeracionSupport
         $elegido = null;
         $proximo = null;
         $aviso = null;
+        $fuenteNumero = null;
+        $chequeraUsadaId = null;
+
+        $chequeras = self::chequerasDeCuenta((int) $cuenta->id, $diferido);
+        $chequeraUsadaId = self::resolverChequeraIdParaNumero($chequeraId, $chequeras);
+
+        if ($chequeraUsadaId !== null) {
+            try {
+                $proximo = (int) ChequeConsultaChequeraSupport::siguienteNumero($chequeraUsadaId);
+                $fuenteNumero = 'chequera';
+            } catch (\Throwable $e) {
+                $aviso = $e->getMessage();
+            }
+        }
 
         if (self::estaHabilitada()) {
             try {
                 $tctes = self::listarTctesCheque((string) $cuenta->codigo);
                 $elegido = self::elegirTctes($tctes, $diferido);
                 if ($elegido !== null) {
-                    $proximo = self::leerProximoNumero((int) $elegido['numero']);
-                } else {
+                    if ($proximo === null) {
+                        $proximo = self::leerProximoNumero((int) $elegido['numero']);
+                        $fuenteNumero = 'anita';
+                        $aviso = null;
+                    }
+                } elseif ($proximo === null) {
                     $aviso = 'La cuenta no tiene tipo de comprobante Anita con numerador de cheques (tctes).';
                 }
             } catch (\Throwable $e) {
@@ -50,7 +70,9 @@ final class ChequePropioAnitaNumeracionSupport
                     'cuentacaja_id' => $cuenta->id,
                     'error' => $e->getMessage(),
                 ]);
-                $aviso = 'No se pudo leer el numerador Anita: '.$e->getMessage();
+                if ($proximo === null) {
+                    $aviso = 'No se pudo leer el numerador Anita: '.$e->getMessage();
+                }
             }
         }
 
@@ -64,10 +86,34 @@ final class ChequePropioAnitaNumeracionSupport
             'tctes_desc' => $elegido['desc'] ?? '',
             'tctes_numero' => $elegido['numero'] ?? 0,
             'proximo_numero' => $proximo,
+            'fuente_numero' => $fuenteNumero,
+            'chequera_id' => $chequeraUsadaId,
             'diferido' => $diferido,
             'aviso' => $aviso,
-            'chequeras' => self::chequerasDeCuenta((int) $cuenta->id, $diferido),
+            'chequeras' => $chequeras,
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $chequeras
+     */
+    public static function resolverChequeraIdParaNumero(?int $chequeraId, array $chequeras): ?int
+    {
+        $chequeraId = (int) ($chequeraId ?? 0);
+        if ($chequeraId > 0) {
+            return $chequeraId;
+        }
+        if ($chequeras === []) {
+            return null;
+        }
+        foreach ($chequeras as $ch) {
+            if (! empty($ch['preferida']) && (int) ($ch['id'] ?? 0) > 0) {
+                return (int) $ch['id'];
+            }
+        }
+        $primero = (int) ($chequeras[0]['id'] ?? 0);
+
+        return $primero > 0 ? $primero : null;
     }
 
     public static function estaHabilitada(): bool

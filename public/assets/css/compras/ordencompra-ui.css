@@ -278,6 +278,55 @@
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     color: var(--oc-blue-dark);
+    text-decoration: none;
+}
+
+.oc-ui .oc-grilla a.oc-numero:hover {
+    color: var(--oc-blue);
+    text-decoration: underline;
+}
+
+.oc-ui .oc-busqueda {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.oc-ui .oc-busqueda .form-control {
+    max-width: 360px;
+    min-width: 220px;
+    flex: 1 1 220px;
+}
+
+.oc-ui .oc-busqueda .btn-light {
+    background: #fff;
+    border-color: var(--oc-border);
+    color: var(--oc-ink);
+}
+
+.oc-ui .oc-busqueda .btn-light:hover {
+    background: var(--oc-blue-soft);
+    border-color: var(--oc-blue);
+    color: var(--oc-navy);
+}
+
+.oc-ui .oc-grilla th.width40,
+.oc-ui .oc-grilla td:last-child {
+    position: sticky;
+    right: 0;
+    background: #fff;
+    z-index: 1;
+    box-shadow: -4px 0 6px -4px rgba(0, 0, 0, 0.12);
+}
+
+.oc-ui .oc-grilla thead th.width40 {
+    background: var(--oc-thead);
+    z-index: 2;
+}
+
+.oc-ui .oc-grilla tbody tr:hover td:last-child {
+    background: var(--oc-cream-hover);
 }
 
 .oc-ui .oc-grilla .oc-proveedor {

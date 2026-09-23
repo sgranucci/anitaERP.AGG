@@ -65,7 +65,10 @@ final class TrackingPrecargaPendienteSupport
                 DB::raw('NULL as asiento_id'),
                 DB::raw("'PRECARGA_PENDIENTE' as estado"),
                 DB::raw('1 as es_precarga'),
-                'ordencompra.id as ordencompra_id',
+                // Se completa después de paginar (ver hidratarOrdencompraIds):
+                // un JOIN/subquery contra ordencompra sin índice compuesto
+                // reventaba el listado de Biyemas (~20k OC).
+                DB::raw('NULL as ordencompra_id'),
             ])
             ->join('empresa', 'empresa.id', '=', 'pcp.empresa_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'pcp.proveedor_id')
@@ -74,16 +77,155 @@ final class TrackingPrecargaPendienteSupport
                 'tipotransaccion_compra.id',
                 '=',
                 'pcp.tipotransaccion_compra_id'
-            )
-            ->leftJoin('ordencompra', function ($join) {
-                $join->on('ordencompra.empresa_id', '=', 'pcp.empresa_id')
-                    ->on('ordencompra.numeroordencompra', '=', 'pcp.numeroordencompra');
-            });
+            );
 
         self::aplicarAlcancePendiente($query);
         $empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pcp.empresa_id');
 
         return $query;
+    }
+
+    /**
+     * Resuelve ordencompra_id de un lote de precargas (empresa + número OC).
+     *
+     * @param  iterable<mixed>  $filas
+     */
+    public static function hidratarOrdencompraIds(iterable $filas): void
+    {
+        $filas = $filas instanceof \Illuminate\Support\Collection
+            ? $filas
+            : collect($filas);
+
+        if ($filas->isEmpty()) {
+            return;
+        }
+
+        $claves = [];
+        foreach ($filas as $fila) {
+            $empresaId = (int) ($fila->empresa_id ?? 0);
+            $numero = trim((string) ($fila->numeroordencompra ?? ''));
+            if ($empresaId <= 0 || $numero === '' || $numero === '0') {
+                continue;
+            }
+            $claves[$empresaId.'|'.$numero] = [$empresaId, $numero];
+        }
+
+        if ($claves === []) {
+            return;
+        }
+
+        $mapa = [];
+        $query = DB::table('ordencompra')->select(['id', 'empresa_id', 'numeroordencompra']);
+        $query->where(function ($q) use ($claves) {
+            foreach ($claves as [$empresaId, $numero]) {
+                $q->orWhere(function ($w) use ($empresaId, $numero) {
+                    $w->where('empresa_id', $empresaId)
+                        ->where('numeroordencompra', $numero);
+                });
+            }
+        });
+
+        foreach ($query->get() as $oc) {
+            $clave = ((int) $oc->empresa_id).'|'.trim((string) $oc->numeroordencompra);
+            // Primera coincidencia gana (equivalente al LIMIT 1 del SQL viejo).
+            $mapa[$clave] ??= (int) $oc->id;
+        }
+
+        foreach ($filas as $fila) {
+            $empresaId = (int) ($fila->empresa_id ?? 0);
+            $numero = trim((string) ($fila->numeroordencompra ?? ''));
+            $fila->ordencompra_id = $mapa[$empresaId.'|'.$numero] ?? null;
+        }
+    }
+
+    /**
+     * Conteo de precargas pendientes sin joins de grilla.
+     *
+     * `consultaBase` une empresa/proveedor/tipo/OC para pintar filas; en un
+     * COUNT eso multiplica trabajo (sobre todo el left join a ordencompra) y
+     * el chip del resumen se siente lento. Acá solo se joinea lo que el
+     * filtro externo pide (familia → tipo; búsqueda → empresa/proveedor).
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function contarPendientes(
+        EmpresaRepositoryInterface $empresaRepository,
+        array $filtros
+    ): int {
+        $query = Precarga_Comprobante_Proveedor::query()
+            ->from('precarga_comprobante_proveedor as pcp');
+
+        self::aplicarAlcancePendiente($query);
+        $empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pcp.empresa_id');
+
+        $familia = strtoupper(trim((string) ($filtros['familia'] ?? '')));
+        $necesitaTipo = TrackingComprobanteFamilia::esFamiliaValida($familia);
+        $valor = trim((string) ($filtros['valor'] ?? ($filtros['busqueda'] ?? '')));
+        $necesitaEmpresaProveedor = $valor !== '';
+
+        if ($necesitaTipo) {
+            $query->leftJoin(
+                'tipotransaccion_compra',
+                'tipotransaccion_compra.id',
+                '=',
+                'pcp.tipotransaccion_compra_id'
+            );
+        }
+        if ($necesitaEmpresaProveedor) {
+            $query->join('empresa', 'empresa.id', '=', 'pcp.empresa_id')
+                ->leftJoin('proveedor', 'proveedor.id', '=', 'pcp.proveedor_id');
+        }
+
+        self::aplicarFiltros($query, $filtros);
+
+        return (int) $query->reorder()->count('pcp.id');
+    }
+
+    /**
+     * Totales del segmento precargas pendientes (COUNT + SUM) sin joins de grilla.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{registros: int, total: float}
+     */
+    public static function resumenPendientes(
+        EmpresaRepositoryInterface $empresaRepository,
+        array $filtros
+    ): array {
+        $query = Precarga_Comprobante_Proveedor::query()
+            ->from('precarga_comprobante_proveedor as pcp');
+
+        self::aplicarAlcancePendiente($query);
+        $empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pcp.empresa_id');
+
+        $familia = strtoupper(trim((string) ($filtros['familia'] ?? '')));
+        $necesitaTipo = TrackingComprobanteFamilia::esFamiliaValida($familia);
+        $valor = trim((string) ($filtros['valor'] ?? ($filtros['busqueda'] ?? '')));
+        $necesitaEmpresaProveedor = $valor !== '';
+
+        if ($necesitaTipo) {
+            $query->leftJoin(
+                'tipotransaccion_compra',
+                'tipotransaccion_compra.id',
+                '=',
+                'pcp.tipotransaccion_compra_id'
+            );
+        }
+        if ($necesitaEmpresaProveedor) {
+            $query->join('empresa', 'empresa.id', '=', 'pcp.empresa_id')
+                ->leftJoin('proveedor', 'proveedor.id', '=', 'pcp.proveedor_id');
+        }
+
+        self::aplicarFiltros($query, $filtros);
+
+        $fila = $query->reorder()
+            ->selectRaw('count(pcp.id) as registros')
+            ->selectRaw('coalesce(sum(pcp.total), 0) as total')
+            ->first();
+
+        return [
+            'registros' => (int) ($fila->registros ?? 0),
+            'total' => (float) ($fila->total ?? 0),
+        ];
     }
 
     /**
@@ -104,18 +246,24 @@ final class TrackingPrecargaPendienteSupport
                         ]
                     );
             })
+            // Dos NOT EXISTS (en vez de un OR): el OR adentro impide usar índices
+            // y hace full scan de comprobante_proveedor por cada precarga (~4–5 s).
             ->whereNotExists(function ($cp) {
                 $cp->selectRaw('1')
                     ->from('comprobante_proveedor as cp')
+                    ->whereColumn('cp.precarga_comprobante_proveedor_id', 'pcp.id')
                     ->where(function ($w) {
-                        $w->whereColumn('cp.precarga_comprobante_proveedor_id', 'pcp.id')
-                            ->orWhere(function ($m) {
-                                $m->whereColumn('cp.empresa_id', 'pcp.empresa_id')
-                                    ->whereColumn('cp.letra', 'pcp.letra')
-                                    ->whereColumn('cp.sucursal', 'pcp.sucursal')
-                                    ->whereColumn('cp.numerocomprobante', 'pcp.numerocomprobante');
-                            });
-                    })
+                        $w->whereNull('cp.estado')
+                            ->orWhereRaw('UPPER(TRIM(cp.estado)) != ?', ['ANULADA']);
+                    });
+            })
+            ->whereNotExists(function ($cp) {
+                $cp->selectRaw('1')
+                    ->from('comprobante_proveedor as cp')
+                    ->whereColumn('cp.empresa_id', 'pcp.empresa_id')
+                    ->whereColumn('cp.letra', 'pcp.letra')
+                    ->whereColumn('cp.sucursal', 'pcp.sucursal')
+                    ->whereColumn('cp.numerocomprobante', 'pcp.numerocomprobante')
                     ->where(function ($w) {
                         $w->whereNull('cp.estado')
                             ->orWhereRaw('UPPER(TRIM(cp.estado)) != ?', ['ANULADA']);

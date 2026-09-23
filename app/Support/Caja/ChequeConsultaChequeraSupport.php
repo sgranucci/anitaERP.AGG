@@ -5,9 +5,13 @@ namespace App\Support\Caja;
 use App\Models\Caja\Cheque;
 use App\Models\Caja\Chequera;
 use App\Models\Caja\Cuentacaja;
+use App\Support\Database\SqlDialectSupport;
 
 /**
- * Etiquetas y consulta de chequeras para el lookup de cheques emitidos.
+ * Etiquetas, consulta y numeración ERP de chequeras (talonario).
+ *
+ * El próximo número con chequera asociada usa el rango ERP (`desdenumerocheque` /
+ * `hastanumerocheque` + MAX emitidos), igual que OP por propuesta.
  */
 final class ChequeConsultaChequeraSupport
 {
@@ -89,6 +93,56 @@ final class ChequeConsultaChequeraSupport
     }
 
     /**
+     * Próximo número del talonario ERP (mismo criterio que OP por propuesta).
+     *
+     * `numerocheque` es varchar: hay que castear (MAX textual: '9' gana a '10').
+     * Con `$lock` serializa dos emisiones concurrentes sobre la misma chequera.
+     *
+     * @throws \InvalidArgumentException|\RuntimeException
+     */
+    public static function siguienteNumero(int $chequeraId, ?Chequera $chequera = null, bool $lock = false): string
+    {
+        if ($chequeraId <= 0) {
+            throw new \InvalidArgumentException('Chequera inválida.');
+        }
+
+        if ($lock) {
+            $chequera = Chequera::query()->whereKey($chequeraId)->lockForUpdate()->first();
+        } elseif ($chequera === null || (int) $chequera->id !== $chequeraId) {
+            $chequera = Chequera::query()->find($chequeraId);
+        }
+
+        if ($chequera === null) {
+            throw new \RuntimeException('Chequera #'.$chequeraId.' no encontrada.');
+        }
+
+        $desde = (int) preg_replace('/\D/', '', (string) ($chequera->desdenumerocheque ?: '1'));
+        if ($desde <= 0) {
+            $desde = 1;
+        }
+        $hasta = (int) preg_replace('/\D/', '', (string) ($chequera->hastanumerocheque ?: '99999999'));
+        if ($hasta <= 0) {
+            $hasta = 99999999;
+        }
+
+        $cast = SqlDialectSupport::castEntero('numerocheque');
+        $ultimo = (int) (Cheque::query()
+            ->where('chequera_id', $chequeraId)
+            ->where('origen', 'E')
+            ->selectRaw('MAX('.$cast.') as ultimo')
+            ->value('ultimo') ?: ($desde - 1));
+
+        $sig = max($desde, $ultimo + 1);
+        if ($sig > $hasta) {
+            throw new \RuntimeException(
+                'Chequera #'.$chequeraId.' sin números disponibles (rango '.$desde.'-'.$hasta.').'
+            );
+        }
+
+        return (string) $sig;
+    }
+
+    /**
      * @param  array<string, mixed>  $opts
      * @return list<array<string, mixed>>
      */
@@ -156,10 +210,12 @@ final class ChequeConsultaChequeraSupport
             return [];
         }
 
+        $cast = SqlDialectSupport::castEntero('numerocheque');
+
         return Cheque::query()
             ->whereIn('chequera_id', $ids)
             ->where('origen', 'E')
-            ->selectRaw('chequera_id, MAX(CAST(numerocheque AS UNSIGNED)) as ultimo')
+            ->selectRaw('chequera_id, MAX('.$cast.') as ultimo')
             ->groupBy('chequera_id')
             ->pluck('ultimo', 'chequera_id')
             ->map(static fn ($v) => (int) $v)

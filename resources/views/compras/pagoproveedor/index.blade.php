@@ -8,6 +8,7 @@
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/pagoproveedor/filtro.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js")}}" type="text/javascript"></script>
+@include('compras.pagoproveedor.partials.documentos_relacionados_script')
 @if (session('imprimir_pagoproveedor_url'))
 <script>
     (function () {
@@ -162,6 +163,15 @@
                                         </a>
                                         @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
                                             <button type="button"
+                                                class="btn-accion-tabla tooltipsC js-op-documentos-relacionados text-info"
+                                                title="Documentos relacionados (factura, OC, COM, requisición)"
+                                                data-id="{{ $fila->id }}"
+                                                data-numero="{{ $fila->etiquetaComprobante() }}">
+                                                <i class="fa fa-sitemap"></i>
+                                            </button>
+                                        @endif
+                                        @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
+                                            <button type="button"
                                                 class="btn-accion-tabla tooltipsC js-op-enviar-proveedor text-success"
                                                 title="Enviar OP por email"
                                                 data-pagoproveedor-id="{{ $fila->id }}">
@@ -184,4 +194,5 @@
     </div>
 </div>
 @include('compras.pagoproveedor.partials.modal_enviar_proveedor')
+@include('compras.pagoproveedor.partials.documentos_relacionados_modal')
 @endsection

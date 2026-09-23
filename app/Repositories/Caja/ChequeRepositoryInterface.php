@@ -14,7 +14,13 @@ interface ChequeRepositoryInterface extends RepositoryInterface
     public function leeCheque($filtros, bool $flPaginando = true);
 
     public function sincronizarConAnita();
-    public function sincronizarCpromaeConAnita(): void;
+
+    /**
+     * @param  list<string>|null  $estados  null = abiertos (espacio/N)
+     * @return array{leidos: int, creados: int, existentes: int, omitidos: int}
+     */
+    public function sincronizarCpromaeConAnita(?int $fechaDesdeYmd = null, ?array $estados = null): array;
+
     public function sincronizarCtermaeConAnita(bool $soloCartera = false): void;
     public function traerRegistroDeAnita($key1, $key2, $key3);
 	public function guardarAnita($request);

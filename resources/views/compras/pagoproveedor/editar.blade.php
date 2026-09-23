@@ -17,6 +17,7 @@
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/cheques.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/cheques.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/form.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/crear.js')) ?: time() }}" type="text/javascript"></script>
+@include('compras.pagoproveedor.partials.documentos_relacionados_script')
 <script>
     @php
         $ppOldAplicaciones = [];
@@ -77,6 +78,15 @@
             <div class="card-header">
                 <h3 class="card-title">{{ $opSoloLectura ? 'Consultar' : 'Editar' }} orden de pago — {{ $estado }}</h3>
                 <div class="card-tools">
+                    @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
+                        <button type="button"
+                            class="btn btn-outline-info btn-sm mr-1 js-op-documentos-relacionados"
+                            title="Documentos relacionados (factura, OC, COM, requisición)"
+                            data-id="{{ $data->id }}"
+                            data-numero="{{ $data->etiquetaComprobante() }}">
+                            <i class="fa fa-sitemap"></i> Documentos
+                        </button>
+                    @endif
                     <a href="{{ route('pagoproveedor') }}" class="btn btn-outline-info btn-sm"><i class="fa fa-reply-all"></i> Volver</a>
                 </div>
             </div>
@@ -147,6 +157,15 @@
                 <a class="btn btn-secondary" target="_blank" rel="noopener" href="{{ route('imprimir_pagoproveedor', $data->id) }}">
                     <i class="fa fa-print"></i> Imprimir
                 </a>
+                @if (can('listar-pagoproveedor', false) || can('editar-pagoproveedor', false))
+                    <button type="button"
+                        class="btn btn-outline-info js-op-documentos-relacionados"
+                        title="Documentos relacionados (factura, OC, COM, requisición)"
+                        data-id="{{ $data->id }}"
+                        data-numero="{{ $data->etiquetaComprobante() }}">
+                        <i class="fa fa-sitemap"></i> Documentos
+                    </button>
+                @endif
             </div>
         </div>
     </div>
@@ -155,4 +174,5 @@
 @include('includes.compras.modalconsultacbupago')
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.contable.modalconsultacuentacontable')
+@include('compras.pagoproveedor.partials.documentos_relacionados_modal')
 @endsection

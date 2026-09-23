@@ -91,7 +91,8 @@
     </td>
     <td>
         <input type="text" name="numerocheque_reemplazo[]" class="form-control form-control-sm numerocheque_reemplazo"
-            value="{{ $cheque?->numerocheque ?? '' }}" placeholder="Nro. nuevo" inputmode="numeric">
+            value="{{ $cheque?->numerocheque ?? '' }}" placeholder="Nro. nuevo"
+            title="Se completa al buscar el cheque a anular (talonario ERP o Anita)" inputmode="numeric">
         <small class="tctes_reemplazo_lbl text-muted d-block" style="font-size:10px;line-height:1.2;"></small>
     </td>
     <td>

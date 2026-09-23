@@ -180,11 +180,8 @@ class Cliente_Riesgo_UifRepository implements Cliente_Riesgo_UifRepositoryInterf
 				}
 			}
 		}
-		else
-		{
-			$cliente_riesgo_uif = $this->model->where('cliente_uif_id', $id)->delete();
-		}
+		// Sin riesgo_ids en el request: no tocar (antes borraba todos al Actualizar el cliente).
 
-		return $cliente_riesgo_uif;
+		return $cliente_riesgo_uif ?? '1';
 	}
 }

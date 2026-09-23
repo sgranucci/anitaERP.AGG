@@ -1,21 +1,21 @@
 <template id="template-renglon-premio">
 	<tr class="item-premio">
 		<td>
-			<input type="hidden" name="premios[]" class="form-control iipremio" readonly value="1" />
-			<input type="hidden" name="premio_ids[]" class="form-control premio_id" value="" />
-			<input type="datetime" name="fechaentregas[]" class="form-control fechaentrega" value="" />
+			<input type="hidden" class="form-control iipremio" readonly value="1" />
+			<input type="hidden" class="form-control premio_id" value="" />
+			<input type="datetime" class="form-control fechaentrega" readonly value="" />
 		</td>
 		<td>
-			<input type="text" name="salas[]" class="form-control sala" readonly value="" />
+			<input type="text" class="form-control sala" readonly value="" />
 		</td>
 		<td>
-			<input type="text" name="detalles[]" class="form-control detalle" value="" />
+			<input type="text" class="form-control detalle" readonly value="" />
 		</td>
 		<td>
-			<input type="text" name="numerotitos[]" class="form-control numerotito" value="" />
+			<input type="text" class="form-control numerotito" readonly value="" />
 		</td>
 		<td>
-			<input type="text" name="montopremios[]" class="form-control montopremio" style="text-align: right;" value="" />
+			<input type="text" class="form-control montopremio" readonly style="text-align: right;" value="" />
 		</td>
 		<td class="text-center align-middle premio-foto-preview">
 			<span class="text-muted">—</span>

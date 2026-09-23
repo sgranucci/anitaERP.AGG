@@ -16,6 +16,7 @@
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/erp-workspace-panel.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/erp-workspace-panel.js')) ?: time() }}" type="text/javascript"></script>
+@include('compras.partials.documentos_relacionados_circuito_script')
 @if (session('sugerir_envio_oc'))
 <script>
     window.ocSugerirEnvioProveedor = { ordencompra_id: {{ (int) session('sugerir_envio_oc') }} };
@@ -59,6 +60,7 @@ $(function () {
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
 @endphp
+@include('compras.partials.documentos_relacionados_circuito_modal')
 @include('compras.ordencompra.partials.modal_enviar_proveedor')
 @include('compras.ordencompra.partials.modal_asignar_factura_legajo')
 
@@ -154,19 +156,11 @@ $(function () {
                         <i class="fas fa-chart-line"></i> KPIs
                     </a>
                 @endif
-                @include('includes.listado.filtros_toolbar', [
-                    'formId' => 'form-filtros-ordencompra',
-                    'filtroValor' => $filtros['valor'] ?? '',
-                    'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosTexto($filtros ?? []),
-                    'limpiarUrl' => route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
-                    'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
-                    'toggleTarget' => '#panel-filtros-ordencompra',
-                    'toggleId' => 'btn-toggle-filtros-ordencompra',
-                    'inputId' => 'filtro_valor',
-                    'nuevoRegistroUrl' => route('crear_ordencompra', $retornoListadoQuery),
-                    'nuevoRegistroCan' => 'crear-ordencompra',
-                    'nuevoRegistroLabel' => 'Nueva orden',
-                ])
+                @if (can('crear-ordencompra', false))
+                    <a href="{{ route('crear_ordencompra', $retornoListadoQuery) }}" class="btn btn-light btn-sm">
+                        <i class="fa fa-fw fa-plus-circle"></i> Nueva orden
+                    </a>
+                @endif
             </div>
         </div>
 
@@ -180,6 +174,21 @@ $(function () {
 
             @include('compras.ordencompra.partials.resumen_index')
             @include('compras.ordencompra.partials.segmentos_estado')
+
+            <div class="oc-busqueda card-body py-2 border-bottom bg-white">
+                @include('includes.listado.filtros_toolbar', [
+                    'formId' => 'form-filtros-ordencompra',
+                    'filtroValor' => $filtros['valor'] ?? '',
+                    'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                    'limpiarUrl' => route('consultar_ordencompra', OrdencompraListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
+                    'placeholder' => 'Búsqueda rápida (nº OC, proveedor, solicitante…)…',
+                    'toggleTarget' => '#panel-filtros-ordencompra',
+                    'toggleId' => 'btn-toggle-filtros-ordencompra',
+                    'inputId' => 'filtro_valor',
+                    'toggleLabel' => 'Filtros',
+                ])
+            </div>
+
             @include('compras.ordencompra.partials.filtros_externos', [
                 'exportRuta' => 'listar_ordencompra',
                 'exportQueryparams' => $filtrosQuery ?? [],
@@ -212,7 +221,19 @@ $(function () {
                             @endphp
                             <tr data-ws-id="{{ $row->id }}" @if($esSuspendidaFila) class="oc-fila-suspendida" @endif>
                                 <td>
-                                    <span class="oc-numero">{{ $row->numeroordencompra }}</span>
+                                    @php
+                                        $urlConsultaFila = route('solo_consulta_ordencompra', ['id' => $row->id]);
+                                    @endphp
+                                    <a href="{{ $urlConsultaFila }}"
+                                       class="oc-numero js-erp-workspace"
+                                       title="Ver orden de compra"
+                                       data-ws-modo="edit"
+                                       data-ws-id="{{ $row->id }}"
+                                       data-ws-titulo="Consulta OC {{ $row->numeroordencompra }}"
+                                       data-ws-meta="{{ $row->nombreproveedor }}"
+                                       data-ws-edit="{{ $urlConsultaFila }}">
+                                        {{ $row->numeroordencompra }}
+                                    </a>
                                     @if (!empty($row->requisicion_id))
                                         <span class="oc-meta">Req. {{ $row->requisicion_id }}</span>
                                     @endif

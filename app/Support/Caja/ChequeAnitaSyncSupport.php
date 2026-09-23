@@ -16,11 +16,35 @@ use App\Support\Database\SqlDialectSupport;
 final class ChequeAnitaSyncSupport
 {
     /**
+     * CHP abiertos: diferido (espacio) / no presentado (N).
+     *
      * @return list<object>
      */
     public static function listarCpromaeAbiertos(int $fechaDesdeYmd): array
     {
-        $where = " WHERE cpro_estado IN (' ', 'N') AND cpro_fecha_cheque >= ".$fechaDesdeYmd.' ';
+        return self::listarCpromaePorEstados($fechaDesdeYmd, [' ', 'N']);
+    }
+
+    /**
+     * @param  list<string>  $estados  Valores Anita cpro_estado (ej. ' ', 'N', '*', 'A', 'R', 'C')
+     * @return list<object>
+     */
+    public static function listarCpromaePorEstados(int $fechaDesdeYmd, array $estados): array
+    {
+        $estadosSql = [];
+        foreach ($estados as $estado) {
+            $e = (string) $estado;
+            if ($e === '') {
+                $e = ' ';
+            }
+            $estadosSql[] = "'".str_replace("'", "''", $e)."'";
+        }
+        if ($estadosSql === []) {
+            return [];
+        }
+
+        $where = ' WHERE cpro_estado IN ('.implode(', ', $estadosSql).')'
+            .' AND cpro_fecha_cheque >= '.$fechaDesdeYmd.' ';
         $camposBase = '
                     cpro_cuenta,
                     cpro_nro_cheque,

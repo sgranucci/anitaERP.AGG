@@ -6,11 +6,13 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Historia;
+use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Comprobante;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Compras\Tipotransaccion_Compra;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
@@ -29,6 +31,7 @@ use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
 use App\Support\Compras\OrdencompraLegajoScanMaterializacionLock;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Support\Compras\PagoproveedorEtiquetaAnitaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
@@ -1882,7 +1885,7 @@ class OrdencompraLegajoBandejaPaqueteService
 
             if (! isset($ops[$pagoId])) {
                 $ops[$pagoId] = $filaPago;
-                $ops[$pagoId]['monto_aplicado_legajo'] = 0.0;
+                $ops[$pagoId]['monto_aplicado_legajo'] = $montoApl;
                 $ops[$pagoId]['aplicaciones'] = [];
             } else {
                 $ops[$pagoId]['monto_aplicado_legajo'] = (float) $ops[$pagoId]['monto_aplicado_legajo'] + $montoApl;
@@ -1899,7 +1902,7 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
 
-        // Si alguna CC tiene OP directo sin fila en pagoproveedor_comprobante, completar.
+        // Si alguna CC tiene OP directo o apps Anita sin fila en pagoproveedor_comprobante, completar.
         $faltantes = [];
         foreach ($ctPorCp as $cpId => $_) {
             if (! isset($porCp[$cpId])) {
@@ -1908,20 +1911,7 @@ class OrdencompraLegajoBandejaPaqueteService
         }
         if ($faltantes !== []) {
             $fallback = $this->pagosFallbackPorCuentacorriente($faltantes);
-            foreach ($fallback['lista'] as $op) {
-                $opId = (int) ($op['id'] ?? 0);
-                if ($opId > 0 && ! isset($ops[$opId])) {
-                    $ops[$opId] = $op;
-                }
-            }
-            foreach ($fallback['por_comprobante'] as $cpId => $lista) {
-                foreach ($lista as $fila) {
-                    $opId = (int) ($fila['id'] ?? 0);
-                    if ($opId > 0 && ! isset($porCp[$cpId][$opId])) {
-                        $porCp[$cpId][$opId] = $fila;
-                    }
-                }
-            }
+            $this->fusionarPagosResueltos($ops, $porCp, $fallback);
         }
 
         $lista = array_values($ops);
@@ -1942,7 +1932,13 @@ class OrdencompraLegajoBandejaPaqueteService
     }
 
     /**
-     * Fallback cuando no hay aplicaciones OP→CC (solo vínculo en cuenta corriente).
+     * Fallback cuando no hay aplicaciones OP→CC nativas (`pagoproveedor_comprobante`).
+     *
+     * Orden: (1) `CC.pagoproveedor_id` en la deuda; (2) apps Anita
+     * `proveedor_cuentacorriente_aplicacion` → CC crédito / `aplicacion.pagoproveedor_id`
+     * o etiqueta `comprobanteaplicado` ("OPP A 2-57827") si la cabecera OP
+     * se importó aparte sin FK. Lo importado desde Anita suele tener (2)
+     * sin crear filas en `pagoproveedor_comprobante`.
      *
      * @param  list<int>  $comprobanteIds
      * @return array{
@@ -1988,6 +1984,18 @@ class OrdencompraLegajoBandejaPaqueteService
             }
         }
 
+        $faltantes = [];
+        foreach ($comprobanteIds as $cpId) {
+            $cpId = (int) $cpId;
+            if ($cpId > 0 && ! isset($porCp[$cpId])) {
+                $faltantes[] = $cpId;
+            }
+        }
+        if ($faltantes !== []) {
+            $viaApp = $this->pagosFallbackPorAplicacionCuentacorriente($faltantes);
+            $this->fusionarPagosResueltos($ops, $porCp, $viaApp);
+        }
+
         $lista = array_values($ops);
         usort($lista, static function (array $a, array $b): int {
             return strcmp((string) ($b['fecha_iso'] ?? ''), (string) ($a['fecha_iso'] ?? ''));
@@ -1998,6 +2006,170 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         return ['lista' => $lista, 'por_comprobante' => $porComprobante];
+    }
+
+    /**
+     * Pagos visibles vía aplicaciones de CC (camino típico de import Anita).
+     *
+     * @param  list<int>  $comprobanteIds
+     * @return array{
+     *   lista: list<array<string, mixed>>,
+     *   por_comprobante: array<int, list<array<string, mixed>>>
+     * }
+     */
+    private function pagosFallbackPorAplicacionCuentacorriente(array $comprobanteIds): array
+    {
+        if ($comprobanteIds === []) {
+            return ['lista' => [], 'por_comprobante' => []];
+        }
+
+        $deudas = Proveedor_Cuentacorriente::query()
+            ->whereIn('comprobante_proveedor_id', $comprobanteIds)
+            ->where('total', '>', 0)
+            ->get(['id', 'comprobante_proveedor_id']);
+        if ($deudas->isEmpty()) {
+            return ['lista' => [], 'por_comprobante' => []];
+        }
+
+        $ctACp = [];
+        foreach ($deudas as $deuda) {
+            $ctACp[(int) $deuda->id] = (int) $deuda->comprobante_proveedor_id;
+        }
+        $ctIds = array_keys($ctACp);
+
+        $apps = Proveedor_Cuentacorriente_Aplicacion::query()
+            ->whereIn('proveedor_cuentacorriente_id', $ctIds)
+            ->with([
+                'pagoproveedores:id,fecha,tipocomprobante,letra,sucursal,numerotransaccion,monto,moneda_id,estado',
+                'pagoproveedores.monedas:id,abreviatura',
+                'proveedor_cuentacorriente_aplicados.pagoproveedores:id,fecha,tipocomprobante,letra,sucursal,numerotransaccion,monto,moneda_id,estado',
+                'proveedor_cuentacorriente_aplicados.pagoproveedores.monedas:id,abreviatura',
+            ])
+            ->orderByDesc('id')
+            ->get();
+
+        $etiquetasSinFk = [];
+        foreach ($apps as $app) {
+            if ($app->pagoproveedores !== null) {
+                continue;
+            }
+            if ($app->proveedor_cuentacorriente_aplicados?->pagoproveedores !== null) {
+                continue;
+            }
+            $eti = trim((string) ($app->comprobanteaplicado ?? ''));
+            if ($eti !== '' && PagoproveedorEtiquetaAnitaSupport::esEtiquetaOp($eti)) {
+                $etiquetasSinFk[] = $eti;
+            }
+        }
+        $pagoIdsPorEtiqueta = PagoproveedorEtiquetaAnitaSupport::mapaIdsPorEtiquetas($etiquetasSinFk);
+        $pagosPorId = [];
+        if ($pagoIdsPorEtiqueta !== []) {
+            $pagosPorId = Pagoproveedor::query()
+                ->with(['monedas:id,abreviatura'])
+                ->whereIn('id', array_values(array_unique($pagoIdsPorEtiqueta)))
+                ->get()
+                ->keyBy('id');
+        }
+
+        $ops = [];
+        $porCp = [];
+        foreach ($apps as $app) {
+            $ctId = (int) $app->proveedor_cuentacorriente_id;
+            $cpId = (int) ($ctACp[$ctId] ?? 0);
+            if ($cpId <= 0) {
+                continue;
+            }
+
+            $pago = $app->pagoproveedores;
+            if ($pago === null) {
+                $credito = $app->proveedor_cuentacorriente_aplicados;
+                $pago = $credito?->pagoproveedores;
+            }
+            if ($pago === null) {
+                $eti = trim((string) ($app->comprobanteaplicado ?? ''));
+                $pagoIdEtiqueta = (int) ($pagoIdsPorEtiqueta[$eti] ?? 0);
+                $pago = $pagoIdEtiqueta > 0 ? ($pagosPorId[$pagoIdEtiqueta] ?? null) : null;
+            }
+            if ($pago === null) {
+                continue;
+            }
+            $pagoId = (int) $pago->id;
+            if ($pagoId <= 0) {
+                continue;
+            }
+
+            $montoApl = abs((float) $app->total);
+            if ($montoApl <= 0) {
+                continue;
+            }
+            $filaPago = $this->filaPagoResumen($pago, $montoApl);
+
+            if (! isset($ops[$pagoId])) {
+                $ops[$pagoId] = $filaPago;
+                $ops[$pagoId]['monto_aplicado_legajo'] = $montoApl;
+                $ops[$pagoId]['aplicaciones'] = [];
+            } else {
+                $ops[$pagoId]['monto_aplicado_legajo'] = (float) $ops[$pagoId]['monto_aplicado_legajo'] + $montoApl;
+            }
+            $ops[$pagoId]['aplicaciones'][] = [
+                'comprobante_proveedor_id' => $cpId,
+                'monto_aplicado' => $montoApl,
+            ];
+
+            if (! isset($porCp[$cpId][$pagoId])) {
+                $porCp[$cpId][$pagoId] = $filaPago;
+            } else {
+                $porCp[$cpId][$pagoId]['monto_aplicado'] = (float) $porCp[$cpId][$pagoId]['monto_aplicado'] + $montoApl;
+            }
+        }
+
+        $lista = array_values($ops);
+        usort($lista, static function (array $a, array $b): int {
+            return strcmp((string) ($b['fecha_iso'] ?? ''), (string) ($a['fecha_iso'] ?? ''));
+        });
+        $porComprobante = [];
+        foreach ($porCp as $cpId => $map) {
+            $rows = array_values($map);
+            usort($rows, static function (array $a, array $b): int {
+                return strcmp((string) ($b['fecha_iso'] ?? ''), (string) ($a['fecha_iso'] ?? ''));
+            });
+            $porComprobante[$cpId] = $rows;
+        }
+
+        return ['lista' => $lista, 'por_comprobante' => $porComprobante];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $ops
+     * @param  array<int, array<int, array<string, mixed>>>  $porCp
+     * @param  array{lista: list<array<string, mixed>>, por_comprobante: array<int, list<array<string, mixed>>>}  $extra
+     */
+    private function fusionarPagosResueltos(array &$ops, array &$porCp, array $extra): void
+    {
+        foreach ($extra['lista'] as $op) {
+            $opId = (int) ($op['id'] ?? 0);
+            if ($opId <= 0) {
+                continue;
+            }
+            if (! isset($ops[$opId])) {
+                $ops[$opId] = $op;
+
+                continue;
+            }
+            $ops[$opId]['monto_aplicado_legajo'] = (float) ($ops[$opId]['monto_aplicado_legajo'] ?? 0)
+                + (float) ($op['monto_aplicado_legajo'] ?? 0);
+            foreach ($op['aplicaciones'] ?? [] as $apl) {
+                $ops[$opId]['aplicaciones'][] = $apl;
+            }
+        }
+        foreach ($extra['por_comprobante'] as $cpId => $lista) {
+            foreach ($lista as $fila) {
+                $opId = (int) ($fila['id'] ?? 0);
+                if ($opId > 0 && ! isset($porCp[$cpId][$opId])) {
+                    $porCp[$cpId][$opId] = $fila;
+                }
+            }
+        }
     }
 
     /**

@@ -354,29 +354,60 @@ class ArticuloArbolIntegracionService
             $id = (int) ($uso->arbolaprobacion_id ?? 0);
             if ($id > 0) {
                 $arbol = $this->arbolaprobacionRepository->find($id);
-                if ($arbol) {
-                    $est = strtoupper(trim((string) ($arbol->estado ?? '')));
-                    if ($est === 'ACTIVO') {
-                        return $arbol;
-                    }
+                if ($arbol && $this->arbolActivo($arbol)) {
+                    return $arbol;
                 }
             }
         }
 
-        // default / arbol sin id: primer árbol activo de tipo Artículos
         $tipoarbol = $this->nombreTipoArbol();
-        $coleccion = $this->arbolaprobacionRepository->findPorTipoArbol($tipoarbol);
+        $empresaId = (int) ($articulo->empresa_id ?? 0);
+        $coleccion = $empresaId > 0
+            ? $this->arbolaprobacionRepository->findPorTipoArbolYEmpresa($tipoarbol, $empresaId)
+            : null;
+
+        // Sin empresa en el artículo: mismos firmantes en las tres operativas; se usa la 1.
+        if (! $coleccion || ! $coleccion->count()) {
+            $coleccion = $this->arbolaprobacionRepository->findPorTipoArbol($tipoarbol);
+            if ($coleccion && $coleccion->count()) {
+                $deOperativa = $coleccion->filter(fn ($a) => (int) ($a->empresa_id ?? 0) === 1);
+                if ($deOperativa->count()) {
+                    $coleccion = $deOperativa->values();
+                }
+            }
+        }
+
         if (! $coleccion || ! $coleccion->count()) {
             return null;
         }
 
-        // Preferir árbol cuyo nombre contenga "default" (case-insensitive); sino el primero.
-        $preferido = $coleccion->first(function ($a) {
-            return stripos((string) ($a->nombre ?? ''), 'default') !== false
-                || stripos((string) ($a->nombre ?? ''), 'contadur') !== false;
+        if ($this->usoEsGastronomia($uso)) {
+            $gastro = $coleccion->first(fn ($a) => stripos((string) ($a->nombre ?? ''), 'gastron') !== false);
+            if ($gastro) {
+                return $gastro;
+            }
+        }
+
+        $contabilidad = $coleccion->first(function ($a) {
+            $nombre = (string) ($a->nombre ?? '');
+
+            return stripos($nombre, 'contadur') !== false
+                || stripos($nombre, 'default') !== false;
         });
 
-        return $preferido ?: $coleccion->first();
+        return $contabilidad ?: $coleccion->first();
+    }
+
+    private function usoEsGastronomia(?Usoarticulo $uso): bool
+    {
+        $nombre = mb_strtoupper(trim((string) ($uso->nombre ?? '')));
+
+        return $nombre === 'GASTRONOMIA' || $nombre === 'GASTRONOMÍA';
+    }
+
+    private function arbolActivo(Arbolaprobacion $arbol): bool
+    {
+        return strtoupper(trim((string) ($arbol->estado ?? ''))) === 'ACTIVO';
     }
 
     private function marcarEstado(int $articuloId, string $estado, string $observacion, $usuarioId = null): void

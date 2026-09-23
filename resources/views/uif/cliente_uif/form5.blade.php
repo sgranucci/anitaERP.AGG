@@ -4,9 +4,10 @@
 @endphp
 <div class="card form5" style="display: none">
     <div class="card-body" id="div-archivos-uif">
-        {{-- Solo perfiles que pueden gestionar archivos: sin este flag el backend no borra/recrea adjuntos. --}}
+        {{-- Flag: el perfil puede gestionar adjuntos. Sin quitar/nuevos el backend no toca filas existentes. --}}
         @unless($archivoClienteUifRestringido)
             <input type="hidden" name="archivos_cliente_uif_sync" value="1">
+            <div id="archivos-cliente-uif-quitar" class="d-none" aria-hidden="true"></div>
         @endunless
         @if ($tieneCliente)
             <p class="text-muted small mb-2">Archivos actuales</p>

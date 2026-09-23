@@ -38,4 +38,15 @@ interface Cliente_UifRepositoryInterface extends RepositoryInterface
      */
     public function findResumenParaConsulta(int $id): ?array;
 
+    /**
+     * Carga solo los últimos N premios para la solapa de la ficha (no se regraban al Actualizar).
+     */
+    public function cargarPremiosParaFicha(Cliente_Uif $cliente, ?int $limite = null): Cliente_Uif;
+
+    /**
+     * Página de premios para «Cargar más» en la ficha.
+     *
+     * @return \Illuminate\Support\Collection<int, \App\Models\Uif\Cliente_Premio_Uif>
+     */
+    public function leePremiosFichaPagina(int $clienteUifId, int $offset = 0, ?int $limite = null);
 }

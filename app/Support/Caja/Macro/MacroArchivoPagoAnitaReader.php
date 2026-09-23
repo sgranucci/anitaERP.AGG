@@ -24,7 +24,7 @@ final class MacroArchivoPagoAnitaReader
         .'prom_cond_gan,prom_cod_postal,prom_e_mail';
 
     private const CPROMAE_CAMPOS = 'cpro_cuenta,cpro_nro_cheque,cpro_fecha_cheque,cpro_fecha_emision,'
-        .'cpro_importe,cpro_para_dep';
+        .'cpro_importe,cpro_para_dep,cpro_fecha_anula';
 
     private const RETMOV_CAMPOS = 'retv_proveedor,retv_tipo,retv_letra,retv_sucursal,retv_nro,retv_fecha,'
         .'retv_codigo_ret,retv_gravado,retv_pago_actual,retv_pago_anterior,retv_sujeto,retv_retencion,'
@@ -85,6 +85,59 @@ final class MacroArchivoPagoAnitaReader
         }
 
         return $this->listar('che_ban', 'pago', 'pag_empresa,pag_fecha,pag_tipo,pag_rec,pag_sucursal,pag_pro,pag_leyenda', $where, $errores, 'pago-macro');
+    }
+
+    /**
+     * OP revertidas en Anita: existe AOP con el mismo pag_rec (OPP/OPA 125102 → AOP 125102).
+     * Sin filtro de fecha: la anulación puede ser otro día y el Macro consulta el día de la OPP.
+     *
+     * @param  list<string>  $errores
+     * @return array<string, true> clave empresa|rec
+     */
+    public function mapaRecsAnuladosPorAop(
+        int $empresaAnita,
+        int $opDesde,
+        int $opHasta,
+        array &$errores,
+    ): array {
+        $where = ' WHERE pag_empresa='.$empresaAnita
+            ." AND pag_tipo = 'AOP'"
+            .' AND pag_rec BETWEEN '.$opDesde.' AND '.$opHasta;
+        $filas = $this->listar(
+            'che_ban',
+            'pago',
+            'pag_empresa,pag_fecha,pag_tipo,pag_rec,pag_sucursal,pag_pro,pag_leyenda',
+            $where,
+            $errores,
+            'pago-aop-macro'
+        );
+        $mapa = [];
+        foreach ($filas as $fila) {
+            $rec = (int) ($fila->pag_rec ?? 0);
+            if ($rec <= 0) {
+                continue;
+            }
+            $emp = (int) ($fila->pag_empresa ?? 0) ?: $empresaAnita;
+            $mapa[$emp.'|'.$rec] = true;
+        }
+
+        return $mapa;
+    }
+
+    /**
+     * Cheque propio anulado en cpromae (reversión graba cpro_fecha_anula).
+     */
+    public static function chequeAnuladoEnCpromae(?object $cheque): bool
+    {
+        if ($cheque === null) {
+            return false;
+        }
+        $fecha = trim((string) ($cheque->cpro_fecha_anula ?? ''));
+        if ($fecha === '' || $fecha === '0') {
+            return false;
+        }
+
+        return (int) preg_replace('/\D+/', '', $fecha) > 0;
     }
 
     /**

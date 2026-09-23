@@ -31,6 +31,45 @@ FAILED_24H_WARN="${FAILED_24H_WARN:-5}"
 OUTPUT_JSON=false
 STRICT=false
 
+# Esperados = numprocs de cada programa Supervisor (no un total único).
+# WORKERS_EXPECTED / QUEUE_WORKERS_NUMPROCS solo cubre la cola default si falta el conf.
+numprocs_de() {
+    local file="$1" program="$2"
+    [[ -r "$file" ]] || return 1
+    awk -v p="[program:${program}]" '
+        $0 == p { found=1; next }
+        found && /^\[/ { exit }
+        found && /^[ \t]*numprocs=/ {
+            sub(/^[ \t]*numprocs=/, "")
+            gsub(/[ \t\r]/, "")
+            print
+            exit
+        }
+    ' "$file"
+}
+
+conf_supervisor() {
+    local base="$1"
+    if [[ -r "/etc/supervisor/conf.d/${base}" ]]; then
+        echo "/etc/supervisor/conf.d/${base}"
+    else
+        echo "${ROOT}/deploy/supervisor/${base}"
+    fi
+}
+
+EXPECTED_DEFAULT="$(numprocs_de "$(conf_supervisor anitaERP-queue.conf)" anitaERP-queue || true)"
+EXPECTED_DEFAULT="${EXPECTED_DEFAULT:-$WORKERS_EXPECTED}"
+EXPECTED_REPORTS="$(numprocs_de "$(conf_supervisor anitaERP-queue-reports.conf)" anitaERP-queue-reports || true)"
+EXPECTED_REPORTS="${EXPECTED_REPORTS:-2}"
+EXPECTED_REPORTS_MAIL="$(numprocs_de "$(conf_supervisor anitaERP-queue-reports.conf)" anitaERP-queue-reports-mail || true)"
+EXPECTED_REPORTS_MAIL="${EXPECTED_REPORTS_MAIL:-1}"
+EXPECTED_PADRONES="$(numprocs_de "$(conf_supervisor anitaERP-queue-padrones.conf)" anitaERP-queue-padrones || true)"
+EXPECTED_PADRONES="${EXPECTED_PADRONES:-1}"
+# Solape al reciclar por --max-time: el proceso viejo termina el job y Supervisor ya levantó el nuevo.
+POOL_SLACK=1
+# Padrones suma el drenado del schedule (queue:work --stop-when-empty cada minuto).
+PADRONES_SLACK=2
+
 usage() {
     cat <<'EOF'
 Uso: verificar-pico.sh [opciones]
@@ -45,7 +84,7 @@ Variables de entorno (umbrales):
   PENDING_CRITICAL=20     Jobs pendientes → crítico
   RESERVED_STUCK_SEC=2100 Job reservado más de N seg → crítico (default > timeout CAEA)
   FAILED_24H_WARN=5       Fallos en 24 h ≥ N → advertencia
-  WORKERS_EXPECTED=1      Cantidad de procesos queue:work esperados
+  WORKERS_EXPECTED=3      Fallback de workers de la cola default si no se lee el conf de Supervisor
 
 Códigos de salida: 0 OK | 1 CRÍTICO | 2 ADVERTENCIA
 EOF
@@ -69,14 +108,31 @@ fi
 QUEUE_CONNECTION="${QUEUE_CONNECTION:-sync}"
 
 # --- Worker process(es) ---
-mapfile -t WORKER_LINES < <(ps -eo pid,user,etime,cmd --no-headers 2>/dev/null \
+# -ww: sin esto ps recorta a 80 columnas y --queue=reports-mail se lee como reports.
+mapfile -t WORKER_LINES < <(ps -ww -eo pid,user,etime,args --no-headers 2>/dev/null \
     | grep '[q]ueue:work database' || true)
 WORKER_COUNT="${#WORKER_LINES[@]}"
 WORKER_PIDS=()
 WORKER_ETIMES=()
+DEFAULT_COUNT=0
+REPORTS_COUNT=0
+REPORTS_MAIL_COUNT=0
+PADRONES_COUNT=0
+OTHER_COUNT=0
 for line in "${WORKER_LINES[@]}"; do
     WORKER_PIDS+=("$(echo "$line" | awk '{print $1}')")
     WORKER_ETIMES+=("$(echo "$line" | awk '{print $3}')")
+    if [[ "$line" == *"--queue=reports-mail"* ]]; then
+        REPORTS_MAIL_COUNT=$((REPORTS_MAIL_COUNT + 1))
+    elif [[ "$line" == *"--queue=reports"* ]]; then
+        REPORTS_COUNT=$((REPORTS_COUNT + 1))
+    elif [[ "$line" == *"--queue=padrones"* ]]; then
+        PADRONES_COUNT=$((PADRONES_COUNT + 1))
+    elif [[ "$line" == *"--queue="* ]]; then
+        OTHER_COUNT=$((OTHER_COUNT + 1))
+    else
+        DEFAULT_COUNT=$((DEFAULT_COUNT + 1))
+    fi
 done
 
 # --- Supervisor (opcional, sin sudo puede fallar) ---
@@ -103,9 +159,9 @@ require 'vendor/autoload.php';
 \$app = require 'bootstrap/app.php';
 \$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 \$now = time();
-\$pending = (int) DB::table('jobs')->count();
 \$reserved = (int) DB::table('jobs')->whereNotNull('reserved_at')->count();
-\$delayed = (int) DB::table('jobs')->where('available_at', '>', \$now)->count();
+\$delayed = (int) DB::table('jobs')->whereNull('reserved_at')->where('available_at', '>', \$now)->count();
+\$pending = (int) DB::table('jobs')->whereNull('reserved_at')->where('available_at', '<=', \$now)->count();
 \$oldestReserved = DB::table('jobs')->whereNotNull('reserved_at')->min('reserved_at');
 \$stuckSec = \$oldestReserved ? max(0, \$now - (int) \$oldestReserved) : 0;
 \$failed24 = (int) DB::table('failed_jobs')->where('failed_at', '>=', now()->subDay())->count();
@@ -157,12 +213,36 @@ if [[ "$QUEUE_CONNECTION" != "database" && "$QUEUE_CONNECTION" != "redis" ]]; th
     ISSUES_WARN+=("QUEUE_CONNECTION=$QUEUE_CONNECTION (cola desactivada; worker no procesa jobs Laravel)")
 fi
 
+# Un job recién tomado (reserved de pocos segundos) es trabajo normal, no un worker de menos.
+cola_exigida() {
+    [[ "$JOBS_PENDING" -ge "$PENDING_WARN" ]] && return 0
+    [[ "$JOBS_RESERVED" -gt 0 && "$JOBS_OLDEST_RESERVED_SEC" -ge "$RESERVED_STUCK_SEC" ]] && return 0
+    return 1
+}
+
+evaluar_pool() {
+    local nombre="$1" count="$2" expected="$3" slack="$4"
+    local tope=$((expected + slack))
+    if [[ "$count" -eq 0 ]]; then
+        ISSUES_CRITICAL+=("Sin workers de cola ${nombre} (esperados=${expected})")
+        return
+    fi
+    if [[ "$count" -lt "$expected" ]] && cola_exigida; then
+        ISSUES_WARN+=("Workers ${nombre}=${count} (esperados=${expected})")
+    elif [[ "$count" -gt "$tope" ]] && cola_exigida; then
+        ISSUES_WARN+=("Workers ${nombre}=${count} (esperados=${expected}, tope=${tope})")
+    fi
+}
+
 if [[ "$WORKER_COUNT" -eq 0 ]]; then
     ISSUES_CRITICAL+=("Sin proceso queue:work database")
-elif [[ "$WORKER_COUNT" -ne "$WORKERS_EXPECTED" ]]; then
-    # Rotación --max-time / reinicio supervisor: mismatch de segundos con cola vacía no es incidente.
-    if [[ "$JOBS_PENDING" -ge "$PENDING_WARN" || "$JOBS_RESERVED" -gt 0 ]]; then
-        ISSUES_WARN+=("Workers activos=$WORKER_COUNT (esperados=$WORKERS_EXPECTED)")
+else
+    evaluar_pool "default" "$DEFAULT_COUNT" "$EXPECTED_DEFAULT" "$POOL_SLACK"
+    evaluar_pool "reports" "$REPORTS_COUNT" "$EXPECTED_REPORTS" "$POOL_SLACK"
+    evaluar_pool "reports-mail" "$REPORTS_MAIL_COUNT" "$EXPECTED_REPORTS_MAIL" "$POOL_SLACK"
+    evaluar_pool "padrones" "$PADRONES_COUNT" "$EXPECTED_PADRONES" "$PADRONES_SLACK"
+    if [[ "$OTHER_COUNT" -gt 0 ]]; then
+        ISSUES_WARN+=("Workers de cola no reconocida=${OTHER_COUNT}")
     fi
 fi
 
@@ -218,6 +298,12 @@ print(json.dumps({
     "exit_code": $EXIT_CODE,
     "queue_connection": "$QUEUE_CONNECTION",
     "worker_count": $WORKER_COUNT,
+    "worker_pools": {
+        "default": {"count": $DEFAULT_COUNT, "expected": $EXPECTED_DEFAULT},
+        "reports": {"count": $REPORTS_COUNT, "expected": $EXPECTED_REPORTS},
+        "reports_mail": {"count": $REPORTS_MAIL_COUNT, "expected": $EXPECTED_REPORTS_MAIL},
+        "padrones": {"count": $PADRONES_COUNT, "expected": $EXPECTED_PADRONES}
+    },
     "worker_pids": $(printf '%s\n' "${WORKER_PIDS[@]:-}" | python3 -c 'import json,sys; print(json.dumps([x for x in sys.stdin.read().splitlines() if x]))'),
     "supervisor_state": "$SUPERVISOR_STATE",
     "jobs": {
@@ -252,6 +338,10 @@ if [[ "$WORKER_COUNT" -eq 0 ]]; then
     echo "Procesos queue:work: 0 (NINGUNO)"
 else
     echo "Procesos queue:work: $WORKER_COUNT"
+    echo "  default:      ${DEFAULT_COUNT} / ${EXPECTED_DEFAULT}"
+    echo "  reports:      ${REPORTS_COUNT} / ${EXPECTED_REPORTS}"
+    echo "  reports-mail: ${REPORTS_MAIL_COUNT} / ${EXPECTED_REPORTS_MAIL}"
+    echo "  padrones:     ${PADRONES_COUNT} / ${EXPECTED_PADRONES}"
     for i in "${!WORKER_LINES[@]}"; do
         echo "  PID ${WORKER_PIDS[$i]}  uptime ${WORKER_ETIMES[$i]}"
     done
