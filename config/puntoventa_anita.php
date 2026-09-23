@@ -23,9 +23,13 @@ return [
     ],
 
     'default_pais_id' => (int) env('PUNTOVENTA_SYNC_DEFAULT_PAIS_ID', 1),
-    /** Histórico AGG/otros; en Ferli el mapper usa default_provincia_id_ferli si queda en 3. */
+    /**
+     * Fallback solo si la empresa del PV no tiene provincia/localidad.
+     * El mapper prioriza empresa.localidad_id / provincia_id / codigopostal
+     * (en AGG: BSA Avellaneda, KSA Wilde, RSA F. Varela).
+     * Histórico 3=Catamarca / 108=COLONIA CELLO (o CABRAL SARGENTO según maestro) — no usar en AGG.
+     */
     'default_provincia_id' => (int) env('PUNTOVENTA_SYNC_DEFAULT_PROVINCIA_ID', 3),
-    /** Histórico: id 108 = "CABRAL SARGENTO" (calle en maestro). Ferli: ver *_ferli. */
     'default_localidad_id' => (int) env('PUNTOVENTA_SYNC_DEFAULT_LOCALIDAD_ID', 108),
 
     /** Calzados Ferli: casa central Villa Madero / Bs.As. (solo si EMPRESA=Calzados Ferli). */

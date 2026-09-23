@@ -210,6 +210,35 @@ final class PuntoventaFieldMapper
     }
 
     /**
+     * Domicilio fiscal de la empresa del PV (AGG multiempresa: BSA Avellaneda, KSA Wilde, RSA F. Varela).
+     * Preferir siempre esto sobre el default histórico 108/Catamarca del sync.
+     *
+     * @return array{localidad_id: ?int, provincia_id: ?int, codigopostal: ?string}|null
+     */
+    private static function domicilioFiscalEmpresa(int $empresaId): ?array
+    {
+        if ($empresaId <= 0) {
+            return null;
+        }
+
+        static $cache = [];
+        if (! array_key_exists($empresaId, $cache)) {
+            $empresa = Empresa::query()
+                ->whereKey($empresaId)
+                ->first(['localidad_id', 'provincia_id', 'codigopostal']);
+            $cache[$empresaId] = $empresa
+                ? [
+                    'localidad_id' => (int) ($empresa->localidad_id ?? 0) ?: null,
+                    'provincia_id' => (int) ($empresa->provincia_id ?? 0) ?: null,
+                    'codigopostal' => trim((string) ($empresa->codigopostal ?? '')) ?: null,
+                ]
+                : null;
+        }
+
+        return $cache[$empresaId];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function mapAll(object $row): array
@@ -220,7 +249,21 @@ final class PuntoventaFieldMapper
             $domicilio = '-';
         }
 
+        $empresaId = self::mapEmpresaId($row);
+        $fiscal = self::domicilioFiscalEmpresa($empresaId);
+
+        $localidadId = ($fiscal['localidad_id'] ?? null)
+            ?: self::localidadIdDefaultSiExiste();
+        $provinciaId = ($fiscal['provincia_id'] ?? null)
+            ?: self::provinciaIdDefault();
+
         $codPostal = self::strProp($row, 'suc_cod_postal');
+        if ($codPostal === '') {
+            $codPostal = $fiscal['codigopostal']
+                ?? (EntornoEmpresaSupport::esFerli()
+                    ? (string) config('puntoventa_anita.default_codigopostal_ferli', '1768')
+                    : null);
+        }
 
         $division = isset($row->suc_division) ? $row->suc_division : null;
         $numeropoliza = self::strProp($row, 'suc_poliza');
@@ -230,16 +273,12 @@ final class PuntoventaFieldMapper
         return [
             'nombre' => self::mapNombre($row),
             'codigo' => $codigo,
-            'empresa_id' => self::mapEmpresaId($row),
+            'empresa_id' => $empresaId,
             'domicilio' => $domicilio,
-            'provincia_id' => self::provinciaIdDefault(),
-            'localidad_id' => self::localidadIdDefaultSiExiste(),
+            'provincia_id' => $provinciaId,
+            'localidad_id' => $localidadId,
             'pais_id' => (int) config('puntoventa_anita.default_pais_id', 1),
-            'codigopostal' => $codPostal !== ''
-                ? $codPostal
-                : (EntornoEmpresaSupport::esFerli()
-                    ? (string) config('puntoventa_anita.default_codigopostal_ferli', '1768')
-                    : null),
+            'codigopostal' => $codPostal !== '' && $codPostal !== null ? $codPostal : null,
             'telefono' => self::strProp($row, 'suc_telefono') ?: null,
             'email' => null,
             'leyenda' => self::strProp($row, 'suc_leyenda1') ?: null,

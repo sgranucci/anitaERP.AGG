@@ -1917,8 +1917,12 @@ class FacturacionService
 			$cuentacontable_id = null;
 			foreach ($concepto->concepto_ordenventas->concepto_cuentacontable_ordenventas as $cuenta)
 			{
-				if ($empresa_id == $cuenta->empresa_id)
-					$cuentacontable_id = $cuenta->cuentacontable_id;
+				if ($empresa_id == $cuenta->empresa_id) {
+					$cuentacontable_id = $this->resolverCuentaContableIdParaEmpresa(
+						(int) $cuenta->cuentacontable_id,
+						(int) $empresa_id
+					);
+				}
 			}
 
 			$dataFactura[] = [
@@ -7747,47 +7751,92 @@ class FacturacionService
 		return $asientoContable;
 	}
 
+	/**
+	 * Id de cuenta contable en el plan de $empresaId (mismo código Anita).
+	 * Si la cuenta ya es de esa empresa, devuelve el mismo id; si no hay equivalente, 0.
+	 */
+	private function resolverCuentaContableIdParaEmpresa(int $cuentacontableId, int $empresaId): int
+	{
+		if ($cuentacontableId <= 0 || $empresaId <= 0) {
+			return 0;
+		}
+
+		$cuenta = $this->cuentacontableRepository->findPorId($cuentacontableId);
+		if (! $cuenta) {
+			return 0;
+		}
+
+		if ((int) $cuenta->empresa_id === $empresaId) {
+			return (int) $cuenta->id;
+		}
+
+		$enEmpresa = $this->cuentacontableRepository->findPorCodigo($empresaId, $cuenta->codigo);
+
+		return $enEmpresa ? (int) $enEmpresa->id : 0;
+	}
+
 	public function armaContabilidad($dataFactura, $conceptostotales, $empresa_id, $total)
 	{
 		$asientoContable = [];
 
-		// Saca el subtotal
+		// Saca el subtotal (neto fiscal Gravado/Exento). No cambia con la cuenta de venta.
 		$subTotal = 0;
 		foreach ($conceptostotales as $conc)
 		{
-			// Graba solo los importes distintos a 0
 			if (str_contains($conc['concepto'], 'Exento') ||
 				str_contains($conc['concepto'], 'Gravado'))
 				$subTotal = $conc['importe'];
 		}
 
+		// Fallback de cuenta solo si el renglón no trae concepto/artículo.
 		$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
-
 		if (strtoupper(config('app.empresa')) == 'AGG')
 		{
-			if (isset($dataFactura[0]['cuentacontable_id']))
-				$cuentaVenta = config('facturacion.CUENTACONTABLE_VENTA');
-			else
+			$tieneCuentaLinea = false;
+			foreach ($dataFactura as $it) {
+				if ((int) ($it['cuentacontable_id'] ?? 0) > 0) {
+					$tieneCuentaLinea = true;
+					break;
+				}
+			}
+			if (! $tieneCuentaLinea)
 				$cuentaVenta = config('ordenventa.CUENTAVENTA');
 		}
+
 		if (config('facturacion.USA_DETRACCION') == 'S')
 		{
-			$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
+			// Misma lógica de importe ($subTotal). La cuenta sale del renglón (concepto),
+			// no del hardcode CUENTACONTABLE_VENTA. USA_DETRACCION no elige cuenta.
+			$cuentaId = 0;
+			foreach ($dataFactura as $item) {
+				$rawId = (int) ($item['cuentacontable_id'] ?? 0);
+				if ($rawId <= 0) {
+					continue;
+				}
+				$cuentaId = $this->resolverCuentaContableIdParaEmpresa($rawId, (int) $empresa_id);
+				if ($cuentaId > 0) {
+					break;
+				}
+			}
+			if ($cuentaId <= 0) {
+				$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
+				$cuentaId = $cuentacontable ? (int) $cuentacontable->id : 0;
+			}
 
-			if ($cuentacontable)
+			if ($cuentaId > 0)
 			{
 				for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
 				{
-					if ($asientoContable[$i]['cuentacontable_id'] == $cuentacontable->id)
+					if ($asientoContable[$i]['cuentacontable_id'] == $cuentaId)
 					{
 						$flEncontro = true;
 						break;
 					}
 				}
-				if (!$flEncontro)						
-					$asientoContable[] = [	
+				if (!$flEncontro)
+					$asientoContable[] = [
 										'empresa_id' => $empresa_id,
-										'cuentacontable_id' => $cuentacontable->id,
+										'cuentacontable_id' => $cuentaId,
 										'monto' => $subTotal
 									];
 				else
@@ -7802,13 +7851,18 @@ class FacturacionService
 
 				if ($monto != 0)
 				{
-					if ($item['cuentacontable_id'] > 0)
+					$cuentaId = (int) ($item['cuentacontable_id'] ?? 0);
+					if ($cuentaId > 0) {
+						$cuentaId = $this->resolverCuentaContableIdParaEmpresa($cuentaId, (int) $empresa_id);
+					}
+
+					if ($cuentaId > 0)
 					{
 						$ccItem = (int) ($item['centrocosto_id'] ?? 0);
 						for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
 						{
 							$ccAsiento = (int) ($asientoContable[$i]['centrocosto_id'] ?? 0);
-							if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id']
+							if ($asientoContable[$i]['cuentacontable_id'] == $cuentaId
 								&& $ccAsiento === $ccItem)
 							{
 								$flEncontro = true;
@@ -7816,12 +7870,12 @@ class FacturacionService
 							}
 						}
 						if (!$flEncontro)
-							$asientoContable[] = [	
+							$asientoContable[] = [
 												'empresa_id' => $empresa_id,
-												'cuentacontable_id' => $item['cuentacontable_id'],
+												'cuentacontable_id' => $cuentaId,
 												'centrocosto_id' => $ccItem > 0 ? $ccItem : null,
 												'monto' => $monto
-											];			
+											];
 						else
 							$asientoContable[$i]['monto'] += $monto;
 					}
@@ -7829,20 +7883,18 @@ class FacturacionService
 					{
 						$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuentaVenta);
 
-						$cuentacontable_id = 0;
-						
 						if ($cuentacontable)
 						{
 							for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
 							{
-								if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id'])
+								if ($asientoContable[$i]['cuentacontable_id'] == $cuentacontable->id)
 								{
 									$flEncontro = true;
 									break;
 								}
 							}
-							if (!$flEncontro)						
-								$asientoContable[] = [	
+							if (!$flEncontro)
+								$asientoContable[] = [
 													'empresa_id' => $empresa_id,
 													'cuentacontable_id' => $cuentacontable->id,
 													'monto' => $monto

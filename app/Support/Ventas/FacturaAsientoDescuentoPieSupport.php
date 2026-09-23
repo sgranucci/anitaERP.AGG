@@ -57,7 +57,7 @@ final class FacturaAsientoDescuentoPieSupport
 
     /**
      * Reduce las líneas de venta ya armadas para que sumen el neto fiscal.
-     * No aplica si el asiento ya está en el gravado (p. ej. USA_DETRACCION=S).
+     * Solo aplica con descuento de pie (concepto "Descuento…").
      *
      * @param  list<array<string, mixed>>  $lineasVenta
      * @param  list<array<string, mixed>>  $conceptosTotales
