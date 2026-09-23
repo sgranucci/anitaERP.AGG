@@ -116,11 +116,8 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 			$zonavtas_id = $data['zonavtas_id'] ?? [];
 
 			$cliente = $this->modelCliente->find($id);
-			if ($cliente)
-			{
-				$subzonavta_id = $cliente->subzonavta_id;
-				$vendedor_id = $cliente->vendedor_id;
-			}
+			$subzonavta_id = $cliente->subzonavta_id ?? null;
+			$vendedor_id = $cliente->vendedor_id ?? null;
 
 			// Borra de anita
 			self::eliminarAnita($data['codigo']);
@@ -141,7 +138,8 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 				{
 					if ($i < count($nombres))
 					{
-						$provincia = Provincia::find($provincias_id[$i])->first();
+						// find() ya devuelve el modelo o null; no encadenar first()
+						$provincia = Provincia::find($provincias_id[$i] ?? null);
 						if ($provincia)
 							$pais_id = $provincia->pais_id;
 						else
@@ -181,7 +179,8 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 				//* Valida si se cargo el lugar de entrega
 				if ($nombres[$i_entrega] != '') 
 				{
-					$provincia = Provincia::find($provincias_id[$i_entrega])->first();
+					// find() ya devuelve el modelo o null; no encadenar first()
+					$provincia = Provincia::find($provincias_id[$i_entrega] ?? null);
 					if ($provincia)
 						$pais_id = $provincia->pais_id;
 					else
