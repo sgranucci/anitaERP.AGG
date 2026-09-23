@@ -19,9 +19,11 @@ use Illuminate\Support\Facades\Schema;
  *   2. identificacion_proveedor_cuit era nullable y la materialización del scan no lo completaba.
  *      En MySQL un NULL nunca choca con otro NULL, así que esas filas quedaban fuera del control.
  *
- * La clave nueva es empresa + código AFIP + letra + sucursal + número + CUIT. Además las precargas
- * ANULADA dejan de reservar la clave, que es la semántica que ya usaba la aplicación
- * (findDuplicadoPrecargaPorAfip excluye ANULADA) y que el índice anterior no respetaba.
+ * La clave nueva es empresa + código AFIP + letra + sucursal + número + CUIT (columna
+ * materializada `clave_unicidad_cuit`: NULL si ANULADA, CUIT o '' si viva). Las ANULADA dejan
+ * de reservar la clave, igual que findDuplicadoPrecargaPorAfip. No se usa GENERATED: MariaDB 11
+ * rechaza STORED/índice único sobre expresiones que tocan `identificacion_proveedor_cuit` cuando
+ * esa columna ya integra un UNIQUE (errno 1901).
  */
 return new class extends Migration
 {
@@ -145,28 +147,32 @@ return new class extends Migration
     }
 
     /**
-     * Columna generada para que las ANULADA (NULL, y en un índice único un NULL no choca con nada)
-     * liberen la clave fiscal, mientras las vivas sin CUIT sí choquen entre sí (cadena vacía).
+     * Columna materializada (no GENERATED): MariaDB 11 rechaza STORED/índice único sobre
+     * expresiones que referencian `identificacion_proveedor_cuit` cuando esa columna ya está
+     * en un UNIQUE (errno 1901). ANULADA → NULL (libera clave); viva → CUIT o ''.
+     * El modelo mantiene el valor en saving (ver Precarga_Comprobante_Proveedor::booted).
      */
     private function agregarColumnaCuitVigente(): void
     {
-        if (Schema::hasColumn(self::TABLA, self::COLUMNA_CUIT_VIGENTE)) {
-            return;
+        if (! Schema::hasColumn(self::TABLA, self::COLUMNA_CUIT_VIGENTE)) {
+            Schema::table(self::TABLA, function (Blueprint $table) {
+                $table->string(self::COLUMNA_CUIT_VIGENTE, 11)->nullable();
+            });
         }
 
-        $expresion = "CASE WHEN UPPER(TRIM(COALESCE(estado, ''))) = 'ANULADA'"
-            ." THEN NULL ELSE COALESCE(identificacion_proveedor_cuit, '') END";
+        // Vivas: CUIT o cadena vacía (dos sin CUIT chocan entre sí).
+        DB::table(self::TABLA)
+            ->whereRaw("UPPER(TRIM(COALESCE(estado, ''))) != ?", ['ANULADA'])
+            ->update([
+                self::COLUMNA_CUIT_VIGENTE => DB::raw("COALESCE(identificacion_proveedor_cuit, '')"),
+            ]);
 
-        // SQLite no admite agregar columnas generadas STORED con ALTER TABLE; VIRTUAL sí, y se
-        // puede indexar igual.
-        $persistencia = MigrationDialectSupport::esMysql() || MigrationDialectSupport::esPostgres()
-            ? 'STORED'
-            : 'VIRTUAL';
-
-        DB::statement(
-            'ALTER TABLE '.self::TABLA.' ADD COLUMN '.self::COLUMNA_CUIT_VIGENTE
-            .' VARCHAR(11) GENERATED ALWAYS AS ('.$expresion.') '.$persistencia
-        );
+        // ANULADA: NULL para no reservar la clave fiscal.
+        DB::table(self::TABLA)
+            ->whereRaw("UPPER(TRIM(COALESCE(estado, ''))) = ?", ['ANULADA'])
+            ->update([
+                self::COLUMNA_CUIT_VIGENTE => null,
+            ]);
     }
 
     private function assertSinColisiones(): void

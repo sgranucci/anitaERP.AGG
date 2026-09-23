@@ -15,8 +15,8 @@ use App\Models\Configuracion\Provincia;
 class Precarga_Comprobante_Proveedor extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    protected $fillable = ['empresa_id', 'provincia_destino_id', 'proveedor_id', 'identificacion_proveedor_cuit', 'tipotransaccion_compra_id', 'letra', 'sucursal', 
-                            'numerocomprobante', 'fechafactura', 'fecharecepcionemail', 'fecharecepcionemail', 
+    protected $fillable = ['empresa_id', 'provincia_destino_id', 'proveedor_id', 'identificacion_proveedor_cuit', 'tipotransaccion_compra_id', 'codigo_afip', 'clave_unicidad_cuit', 'letra', 'sucursal',
+                            'numerocomprobante', 'fechafactura', 'fecharecepcionemail', 'fecharecepcionemail',
                             'fechavencimientocaicae', 'fechavencimiento', 'numerocae', 'tipo_autorizacion', 'numeroordencompra', 'rutaalmacenamiento',
                             'pararevisar', 'marca_error', 'aviso_error', 'subtotal', 'total', 'estado', 'anita_nro_interno', 'anita_scan_documento_id',
                             'origen_entrada', 'moneda', 'moneda_id', 'cotizacion'];
@@ -29,10 +29,8 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
     ];
 
     /**
-     * codigo_afip es derivado del tipo y está desnormalizado acá porque el índice único de la clave
-     * fiscal lo necesita en la fila (un índice no puede leer tipotransaccion_compra). El tipo interno
-     * lo adivina el scan y hay decenas por cada código AFIP, así que la clave se controla por el
-     * código, que es el dato estable.
+     * codigo_afip y clave_unicidad_cuit se desnormalizan acá porque el índice único fiscal los
+     * necesita en la fila. ANULADA libera la clave (NULL); viva usa CUIT o '' (sin CUIT chocan).
      */
     protected static function booted(): void
     {
@@ -40,6 +38,14 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
             $precarga->codigo_afip = \App\Support\Compras\ComprobanteProveedorUnicidadSupport::codigoAfipDesdeTipoId(
                 (int) $precarga->tipotransaccion_compra_id
             );
+
+            $estado = strtoupper(trim((string) ($precarga->estado ?? '')));
+            if ($estado === 'ANULADA') {
+                $precarga->clave_unicidad_cuit = null;
+            } else {
+                $cuit = trim((string) ($precarga->identificacion_proveedor_cuit ?? ''));
+                $precarga->clave_unicidad_cuit = $cuit;
+            }
         });
     }
 
