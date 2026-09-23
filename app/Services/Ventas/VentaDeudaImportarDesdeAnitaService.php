@@ -115,6 +115,84 @@ class VentaDeudaImportarDesdeAnitaService
     }
 
     /**
+     * Cabecera ERP de un crédito que en Anita no tiene fila `venta` (el COA que aplica una factura).
+     * El cliente es el de la factura del ERP: el código Anita puede repetirse en otro maestro.
+     *
+     * @param  array<string, mixed>  $climov
+     * @return array{venta_id:?int, etiqueta:string, total:float, creada:bool, error:?string}
+     */
+    public function asegurarCabeceraDesdeClimov(
+        array $climov,
+        int $clienteIdErp,
+        bool $dryRun = true,
+        int $usuarioId = 1,
+    ): array {
+        $fila = $this->filaVentaSinteticaDesdeClimov($climov);
+        $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) ($fila['ven_tipo'] ?? ''));
+        $letra = ClienteCuentacorrienteAnitaImportClaveSupport::letra((string) ($fila['ven_letra'] ?? ''));
+        $suc = (int) ($fila['ven_sucursal'] ?? 0);
+        $nro = (int) ($fila['ven_nro'] ?? 0);
+        $etiqueta = ClienteCuentacorrienteAnitaImportClaveSupport::etiquetaErp($tipo, $letra, $suc, $nro);
+        $vacio = [
+            'venta_id' => null,
+            'etiqueta' => $etiqueta,
+            'total' => 0.0,
+            'creada' => false,
+            'error' => null,
+        ];
+        if ($clienteIdErp <= 0 || $tipo === '' || $nro <= 0) {
+            $vacio['error'] = 'Climov incompleto para '.$etiqueta;
+
+            return $vacio;
+        }
+
+        $indice = ClienteCuentacorrienteAnitaImportVentaMatchSupport::indexarVentasPorClaves([[
+            'tipo' => $tipo,
+            'letra' => $letra,
+            'sucursal' => $suc,
+            'numero' => $nro,
+        ]]);
+        $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDocumento($tipo, $letra, $suc, $nro);
+        foreach ($indice[$clave] ?? [] as $venta) {
+            if ((int) ($venta->cliente_id ?? 0) === $clienteIdErp) {
+                $vacio['venta_id'] = (int) $venta->id;
+                $vacio['total'] = round((float) (Venta::query()->whereKey($venta->id)->value('total') ?? 0), 4);
+
+                return $vacio;
+            }
+        }
+        if (($indice[$clave] ?? []) !== []) {
+            $vacio['error'] = $etiqueta.' ya existe en otro cliente.';
+
+            return $vacio;
+        }
+
+        $prep = $this->preparar($fila, null, 'Importado Anita climov (COA contrapartida)');
+        if (($prep['estado'] ?? '') !== 'ok') {
+            $vacio['error'] = (string) ($prep['error'] ?? 'No se pudo armar '.$etiqueta);
+
+            return $vacio;
+        }
+
+        $cliente = Cliente::query()->find($clienteIdErp);
+        $prep['data']['cliente_id'] = $clienteIdErp;
+        if ($cliente) {
+            $prep['data']['nombre'] = trim((string) ($cliente->nombre ?? '')) ?: $prep['data']['nombre'];
+        }
+        $vacio['total'] = round((float) ($prep['data']['total'] ?? 0), 4);
+        if ($dryRun) {
+            return $vacio;
+        }
+
+        $venta = $this->persistir($prep, $usuarioId);
+        $vacio['venta_id'] = (int) $venta->id;
+        $vacio['total'] = round((float) $venta->total, 4);
+        $vacio['creada'] = true;
+
+        return $vacio;
+    }
+
+    /**
      * @param  array<string, mixed>  $climov
      * @return array<string, mixed>
      */

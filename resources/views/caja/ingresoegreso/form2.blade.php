@@ -101,61 +101,37 @@
                 <div class="form-group row totales-por-moneda-cheque-recibido mt-2"></div>
             </div>
             <div class="tab-pane fade" id="panel-cheques-reemplazo" role="tabpanel">
-                <p class="text-muted small">
+                <p class="text-muted small mb-2">
                     Anula un cheque existente y registra el reemplazo (emitido o recibido).
+                    La empresa se toma de <strong>Datos principales</strong>.
+                    Tras Buscar, todos los datos del reemplazo son editables (cuenta, chequera distinta, banco, sucursal, montos, etc.).
                 </p>
+                <div class="alert alert-warning py-2 px-3 small d-none" id="ie-reemplazo-aviso-empresa-banner" role="alert">
+                    Seleccione la <strong>empresa</strong> en Datos principales antes de buscar el cheque a anular.
+                </div>
+                <div class="table-responsive">
                 <table class="table table-sm table-bordered" id="cheque-reemplazo-table">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
-                            <th>Cheque a anular</th>
-                            <th>Tipo reemplazo</th>
-                            <th>Nro. nuevo</th>
-                            <th>F. pago</th>
-                            <th>Cuenta / Banco</th>
-                            <th>Monto</th>
-                            <th>Mon.</th>
-                            <th></th>
+                            <th style="min-width:11rem;">Cheque a anular</th>
+                            <th style="width:6rem;">Tipo</th>
+                            <th style="min-width:14rem;">Cuenta / Chequera / Banco</th>
+                            <th style="width:6rem;">Nro. nuevo</th>
+                            <th style="width:7.5rem;">F. pago</th>
+                            <th style="min-width:8rem;">A nombre / extra</th>
+                            <th style="width:7rem;">Monto</th>
+                            <th style="width:4.5rem;">Mon.</th>
+                            <th style="width:5rem;">Cotiz.</th>
+                            <th style="width:2rem;"></th>
                         </tr>
                     </thead>
                     <tbody id="tbody-cheque-reemplazo-table">
                         @foreach ($chequesReemplazo as $cheque)
-                            <tr class="item-cheque-reemplazo">
-                                <td>
-                                    <input type="hidden" name="cheque_anulado_ids[]" class="cheque_anulado_id" value="{{ $cheque->cheque_reemplaza_id }}">
-                                    <input type="text" class="form-control numerocheque_anulado" readonly value="{{ $cheque->chequeReemplazado->numerocheque ?? '' }}">
-                                </td>
-                                <td>
-                                    <select name="origen_reemplazo[]" class="form-control origen_reemplazo">
-                                        <option value="E" @if($cheque->origen === 'E') selected @endif>Emitido</option>
-                                        <option value="R" @if($cheque->origen === 'R') selected @endif>Recibido</option>
-                                    </select>
-                                </td>
-                                <td><input type="text" name="numerocheque_reemplazo[]" class="form-control numerocheque_reemplazo" value="{{ $cheque->numerocheque }}"></td>
-                                <td><input type="date" name="fechapago_reemplazo[]" class="form-control fechapago_reemplazo" value="{{ $cheque->fechapago }}"></td>
-                                <td>
-                                    <input type="hidden" name="cuentacaja_reemplazo_ids[]" class="cuentacaja_reemplazo_id" value="{{ $cheque->cuentacaja_id }}">
-                                    <input type="hidden" name="banco_reemplazo_ids[]" class="banco_reemplazo_id" value="{{ $cheque->banco_id }}">
-                                    <input type="hidden" name="chequera_reemplazo_ids[]" class="chequera_reemplazo_id" value="{{ $cheque->chequera_id }}">
-                                    <input type="text" class="form-control detalle_reemplazo_cuenta" readonly value="{{ $cheque->cuentacajas->codigo ?? ($cheque->bancos->nombre ?? '') }}">
-                                </td>
-                                <td><input type="number" name="montocheque_reemplazo[]" class="form-control montocheque_reemplazo" value="{{ $cheque->monto }}"></td>
-                                <td>
-                                    <select name="moneda_reemplazo_ids[]" class="form-control moneda_reemplazo_id">
-                                        @foreach ($moneda_query as $m)
-                                            <option value="{{ $m->id }}" @if((int) $m->id === (int) $cheque->moneda_id) selected @endif>{{ $m->abreviatura }}</option>
-                                        @endforeach
-                                    </select>
-                                    <input type="hidden" name="cotizacioncheque_reemplazo[]" class="cotizacioncheque_reemplazo" value="{{ $cheque->cotizacion }}">
-                                </td>
-                                <td>
-                                    <button type="button" class="btn-accion-tabla eliminar_cheque_reemplazo tooltipsC" title="Eliminar">
-                                        <i class="fa fa-times-circle text-danger"></i>
-                                    </button>
-                                </td>
-                            </tr>
+                            @include('caja.ingresoegreso.partials.fila_cheque_reemplazo', ['cheque' => $cheque])
                         @endforeach
                     </tbody>
                 </table>
+                </div>
                 @include('caja.ingresoegreso.template_cheque_reemplazo')
                 <button type="button" id="agrega_renglon_cheque_reemplazo" class="btn btn-danger btn-sm">+ Anulaci&oacute;n / reemplazo</button>
             </div>

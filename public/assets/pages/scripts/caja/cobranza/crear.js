@@ -1925,6 +1925,39 @@ var saldoFinalCobranza = 0;
 		}
 
 		pintarResumenLiquidacion();
+		sincronizarTipoAnticipoCobranza();
+	}
+
+	function sincronizarTipoAnticipoCobranza()
+	{
+		if (window.sincronizandoTipoCobranza) {
+			return;
+		}
+		var hay = false;
+		$('#tbody-comprobante-table .montoaplicadocomprobante').each(function () {
+			if (Math.abs(numeroSeguroCob($(this).val())) > 0.01) {
+				hay = true;
+			}
+		});
+		var $sel = $('#tipotransaccion_caja_id');
+		if (!$sel.length) {
+			return;
+		}
+		var $coa = $sel.find('option[data-abreviatura="COA"]');
+		var $cob = $sel.find('option[data-abreviatura="COB"]');
+		var actual = String($sel.find('option:selected').data('abreviatura') || '');
+		var destino = null;
+		if (!hay && $coa.length) {
+			destino = String($coa.val());
+		} else if (hay && actual === 'COA' && $cob.length) {
+			destino = String($cob.val());
+		}
+		if (destino === null || String($sel.val()) === destino) {
+			return;
+		}
+		window.sincronizandoTipoCobranza = true;
+		$sel.val(destino).trigger('change');
+		window.sincronizandoTipoCobranza = false;
 	}
 
 	function generaAsientoContable()

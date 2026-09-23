@@ -99,7 +99,12 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
         if (null == $caja_movimiento = $this->model->with("caja_movimiento_cuentacajas")
 									->with("caja_movimiento_estados")
 									->with("caja_movimiento_archivos")
-									->with("cheques")
+									->with([
+										'cheques.bancos',
+										'cheques.cuentacajas',
+										'cheques.chequeras',
+										'cheques.chequeReemplazado.bancos',
+									])
 									->with("asientos")
 									->with("empresas")
 									->with("conceptogastos")
@@ -116,7 +121,12 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
         if (null == $caja_movimiento = $this->model->with("caja_movimiento_cuentacajas")
 											->with("caja_movimiento_archivos")
 											->with("caja_movimiento_estados")
-											->with("cheques")
+											->with([
+												'cheques.bancos',
+												'cheques.cuentacajas',
+												'cheques.chequeras',
+												'cheques.chequeReemplazado.bancos',
+											])
 											->with("asientos")
 											->with("empresas")
 											->with("conceptogastos")

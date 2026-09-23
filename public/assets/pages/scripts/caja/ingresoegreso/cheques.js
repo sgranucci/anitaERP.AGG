@@ -243,6 +243,181 @@ window.aplicarCuentaChequeEmitido = aplicarCuentaChequeEmitido;
 window.cargarEmisionChequeEmitido = cargarEmisionChequeEmitido;
 window.abrirConsultaCuentaChequeEmitido = abrirConsultaCuentaChequeEmitido;
 
+function pintarChequeraReemplazo($tr, ch) {
+    $tr.find('.chequera_reemplazo_id').val(ch && ch.id ? ch.id : '');
+    $tr.find('.chequera_reemplazo_tipo').val(ch && ch.tipocheque ? ch.tipocheque : '');
+    $tr.find('.chequera_reemplazo_tipochequera').val(ch && ch.tipochequera ? ch.tipochequera : '');
+    var etiqueta = ch ? (ch.etiqueta_completa || ch.etiqueta || '') : '';
+    $tr.find('.chequera_reemplazo_lbl').val(etiqueta);
+    $tr.find('.chequera_reemplazo_lbl').attr(
+        'title',
+        etiqueta || 'F1 / lupa: elegir chequera (puede ser distinta a la anulada)'
+    );
+}
+
+function filtrarChequerasChequeReemplazo($tr, cuentacajaId, preferirDiferido, lista) {
+    if (!$tr || !$tr.length || !$tr.find('.chequera_reemplazo_id').length) {
+        return;
+    }
+    if (!(parseInt(cuentacajaId || '0', 10) > 0)) {
+        pintarChequeraReemplazo($tr, null);
+        $tr.removeData('chequeras_reemplazo');
+        return;
+    }
+    if (lista && lista.length) {
+        $tr.data('chequeras_reemplazo', lista);
+    }
+    lista = lista || $tr.data('chequeras_reemplazo') || [];
+    if (!lista.length) {
+        return;
+    }
+    var actual = $tr.find('.chequera_reemplazo_id').val();
+    var ch = chequeraDesdeLista(lista, actual, preferirDiferido);
+    pintarChequeraReemplazo($tr, ch);
+}
+
+function abrirConsultaChequeraReemplazo($tr) {
+    if (!$tr || !$tr.length) {
+        return;
+    }
+    var cuentaId = parseInt($tr.find('.cuentacaja_reemplazo_id').val() || '0', 10);
+    if (!(cuentaId > 0)) {
+        alert('Primero indique la cuenta de tesorer\u00eda');
+        return;
+    }
+    if (typeof abrirModalConsultaChequera !== 'function') {
+        alert('No est\u00e1 disponible la consulta de chequeras');
+        return;
+    }
+    var codigo = String($tr.find('.codigo_reemplazo').val() || '').trim();
+    var nombre = String($tr.find('.nombre_reemplazo').val() || '').trim();
+    abrirModalConsultaChequera({
+        cuentacajaId: cuentaId,
+        cuentaLabel: (codigo + (nombre ? ' · ' + nombre : '')).trim(),
+        fechaPago: $tr.find('.fechapago_reemplazo').val() || $('#fecha').val() || '',
+        fechaEmision: $('#fecha').val() || '',
+        selectedId: $tr.find('.chequera_reemplazo_id').val(),
+        onElegir: function (ch) {
+            pintarChequeraReemplazo($tr, ch);
+            if (typeof flModificaAsiento !== 'undefined') {
+                flModificaAsiento = true;
+            }
+            cargarEmisionChequeReemplazo($tr, { forzarNumero: true });
+        }
+    });
+}
+
+function aplicarCuentaChequeReemplazo($tr, data, forzarNumero) {
+    if (!$tr || !$tr.length || !data || !(parseInt(data.id, 10) > 0)) {
+        return;
+    }
+    $tr.find('.cuentacaja_reemplazo_id').val(data.id);
+    if (data.codigo != null) {
+        $tr.find('.codigo_reemplazo').val(data.codigo);
+    }
+    $tr.find('.nombre_reemplazo').val(data.nombre || '');
+    if (data.moneda_id) {
+        $tr.find('.moneda_reemplazo_id').val(data.moneda_id);
+    }
+    filtrarChequerasChequeReemplazo($tr, data.id, !!data.diferido, data.chequeras || []);
+    var $nro = $tr.find('.numerocheque_reemplazo');
+    var auto = $nro.data('auto') === 1 || !$nro.val();
+    if (data.proximo_numero && (forzarNumero || auto)) {
+        $nro.val(data.proximo_numero).data('auto', 1);
+    }
+    var lbl = '';
+    if (data.tctes_clave) {
+        lbl = data.tctes_clave;
+        if (data.tctes_desc) {
+            lbl += ' · ' + data.tctes_desc;
+        }
+        lbl += data.diferido ? ' (diferido)' : ' (al d\u00eda)';
+    } else if (data.aviso) {
+        lbl = data.aviso;
+    }
+    $tr.find('.tctes_reemplazo_lbl').text(lbl);
+    if (typeof flModificaAsiento !== 'undefined') {
+        flModificaAsiento = true;
+    }
+}
+
+function cargarEmisionChequeReemplazo($tr, extras, onOk) {
+    var empresaId = parseInt($('#empresa_id').val() || '0', 10);
+    var cuentaId = parseInt($tr.find('.cuentacaja_reemplazo_id').val() || '0', 10);
+    var codigo = String($tr.find('.codigo_reemplazo').val() || '').trim();
+    extras = extras || {};
+    var params = {
+        empresa_id: empresaId,
+        fecha_pago: $tr.find('.fechapago_reemplazo').val() || $('#fecha').val() || '',
+        fecha_emision: $('#fecha').val() || ''
+    };
+    if (extras.diferido === 1 || extras.diferido === 0) {
+        params.diferido = extras.diferido;
+    }
+    if (parseInt($tr.find('.chequera_reemplazo_id').val() || '0', 10) > 0) {
+        params.chequera_id = $tr.find('.chequera_reemplazo_id').val();
+    }
+    var url = (typeof carpetaBase !== 'undefined' ? carpetaBase : '') + '/caja/cuentacaja/api/cheque-emision';
+    if (cuentaId > 0 && !extras.porCodigo) {
+        params.cuentacaja_id = cuentaId;
+    } else if (codigo) {
+        url += '/' + encodeURIComponent(codigo);
+    } else {
+        if (typeof onOk === 'function') {
+            onOk(false);
+        }
+        return;
+    }
+    $.getJSON(url, params)
+        .done(function (data) {
+            aplicarCuentaChequeReemplazo($tr, data, !!extras.forzarNumero);
+            if (typeof onOk === 'function') {
+                onOk(true);
+            }
+        })
+        .fail(function (xhr) {
+            if (typeof avisoCuentaInexistente === 'function') {
+                avisoCuentaInexistente(xhr);
+            } else {
+                alert((xhr && xhr.responseJSON && xhr.responseJSON.error) || 'No existe la cuenta de caja');
+            }
+            if (typeof onOk === 'function') {
+                onOk(false);
+            }
+        });
+}
+
+function empresaIngresoEgresoId() {
+    return String($('#empresa_id').val() || '').trim();
+}
+
+function actualizarAvisoEmpresaReemplazo() {
+    var ok = !!empresaIngresoEgresoId();
+    var $banner = $('#ie-reemplazo-aviso-empresa-banner');
+    if ($banner.length) {
+        $banner.toggleClass('d-none', ok);
+    }
+    $('.ie-reemplazo-aviso-empresa').toggle(!ok);
+}
+
+function irADatosPrincipalesEmpresa() {
+    $('#botonform1').trigger('click');
+    setTimeout(function () {
+        var $emp = $('#empresa_id');
+        if ($emp.length && $emp.is('select')) {
+            $emp.focus();
+        }
+    }, 80);
+}
+
+window.aplicarCuentaChequeReemplazo = aplicarCuentaChequeReemplazo;
+window.cargarEmisionChequeReemplazo = cargarEmisionChequeReemplazo;
+window.abrirConsultaChequeraReemplazo = abrirConsultaChequeraReemplazo;
+window.pintarChequeraReemplazo = pintarChequeraReemplazo;
+window.actualizarAvisoEmpresaReemplazo = actualizarAvisoEmpresaReemplazo;
+window.empresaIngresoEgresoId = empresaIngresoEgresoId;
+window.irADatosPrincipalesEmpresa = irADatosPrincipalesEmpresa;
+
 function activarTecladoChequeEmitido() {
     if (window.__chequeEmitidoTecladoActivo) {
         return;
@@ -364,7 +539,7 @@ function activaEventosChequesIngresoEgreso() {
         if (typeof sumaMonto === 'function') sumaMonto();
         flModificaAsiento = true;
     });
-    $(document).on('change', '.montocheque_reemplazo, .origen_reemplazo', function () {
+    $(document).on('change', '.montocheque_reemplazo, .cotizacioncheque_reemplazo, .moneda_reemplazo_id, .origen_reemplazo', function () {
         toggleBloqueReemplazo($(this).closest('tr'));
         if (typeof sumaMonto === 'function') sumaMonto();
         flModificaAsiento = true;
@@ -417,13 +592,76 @@ function activaEventosChequesIngresoEgreso() {
     });
 
     $(document).on('click', '.consultacuentacaja_reemplazo', function () {
-        cuentacajaxcodigoReemplazo = $(this).closest('tr');
-        if (!$('#empresa_id').val()) {
-            alert('Debe ingresar empresa');
+        var $tr = $(this).closest('tr');
+        if (!empresaIngresoEgresoId()) {
+            actualizarAvisoEmpresaReemplazo();
+            alert('Indique la empresa en Datos principales');
+            irADatosPrincipalesEmpresa();
             return;
         }
+        cuentacajaxcodigoReemplazo = $tr;
+        $('#consultacuentacaja').val('');
+        $('#datoscuentacaja').html('');
         $('#consultacuentacajaModal').modal('show');
     });
+
+    $(document).on('click', '.consultachequera_reemplazo, .chequera_reemplazo_lbl', function (e) {
+        e.preventDefault();
+        abrirConsultaChequeraReemplazo($(this).closest('tr'));
+    });
+
+    $(document).on('input', '.numerocheque_reemplazo', function () {
+        $(this).data('auto', 0);
+    });
+
+    $(document).on('change', '.fechapago_reemplazo', function () {
+        var $tr = $(this).closest('tr');
+        if ($tr.find('.origen_reemplazo').val() === 'E'
+            && parseInt($tr.find('.cuentacaja_reemplazo_id').val() || '0', 10) > 0) {
+            cargarEmisionChequeReemplazo($tr, {
+                forzarNumero: $tr.find('.numerocheque_reemplazo').data('auto') === 1
+            });
+        }
+    });
+
+    $(document).on('keydown', '.codigo_reemplazo', function (e) {
+        var $tr = $(this).closest('tr');
+        if (esTeclaF1ChequeEmitido(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            $tr.find('.consultacuentacaja_reemplazo').trigger('click');
+            return;
+        }
+        if (esTeclaEnterChequeEmitido(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            cargarEmisionChequeReemplazo($tr, { porCodigo: true, forzarNumero: true });
+        }
+    });
+
+    $(document).on('keydown', '.numerocheque_anulado_buscar', function (e) {
+        if (esTeclaEnterChequeEmitido(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).closest('tr').find('.buscar_cheque_anulado').trigger('click');
+        }
+    });
+
+    $(document).on('change', '#empresa_id', function () {
+        actualizarAvisoEmpresaReemplazo();
+        var modo = String($('#ie_modo_uso').val() || '');
+        if (modo === 'canje_cheques' && empresaIngresoEgresoId()) {
+            $('#botonform2').trigger('click');
+            var $tabReemp = $('#tabs-cheques-ingresoegreso a[href="#panel-cheques-reemplazo"]');
+            if ($tabReemp.length) {
+                $tabReemp.trigger('click');
+            }
+            if ($('#tbody-cheque-reemplazo-table tr.item-cheque-reemplazo').length === 0) {
+                agregaRenglonChequeReemplazo({ preventDefault: function () {} });
+            }
+        }
+    });
+    actualizarAvisoEmpresaReemplazo();
 
     $(document).on('click', '.consultabanco_recibido', function () {
         var $campo = $(this).closest('tr');
@@ -476,32 +714,94 @@ function activaEventosChequesIngresoEgreso() {
 
     $(document).on('click', '.buscar_cheque_anulado', function () {
         var row = $(this).closest('tr');
-        var numero = row.find('.numerocheque_anulado_buscar').val();
-        var empresa_id = $('#empresa_id').val();
-        if (!numero || !empresa_id) {
-            alert('Indique empresa y n\u00famero de cheque a anular');
+        var numero = String(row.find('.numerocheque_anulado_buscar').val() || '').trim();
+        var empresa_id = empresaIngresoEgresoId();
+        actualizarAvisoEmpresaReemplazo();
+        if (!empresa_id) {
+            alert('Indique la empresa en Datos principales y el n\u00famero de cheque a anular');
+            irADatosPrincipalesEmpresa();
+            return;
+        }
+        if (!numero) {
+            alert('Indique el n\u00famero de cheque a anular');
+            enfocarCampoCheque(row.find('.numerocheque_anulado_buscar')[0]);
             return;
         }
         $.post(carpetaBase + '/caja/ingresoegreso/buscar-cheque', {
             _token: $('input[name=_token]').val(),
             empresa_id: empresa_id,
             numerocheque: numero,
-            banco_id: row.find('.banco_reemplazo_id').val() || 0
-        }, function (data) {
-            if (data.mensaje !== 'ok') {
-                alert('Cheque no encontrado');
-                return;
-            }
-            row.find('.cheque_anulado_id').val(data.cheque.id);
-            row.find('.numerocheque_anulado').val(data.cheque.numerocheque + ' (' + data.cheque.banco + ')');
-            row.find('.montocheque_reemplazo').val(data.cheque.monto);
-            row.find('.moneda_reemplazo_id').val(data.cheque.moneda_id);
-            row.find('.cotizacioncheque_reemplazo').val(data.cheque.cotizacion);
-            row.find('.origen_reemplazo').val(data.cheque.origen === 'E' ? 'E' : 'R');
-            toggleBloqueReemplazo(row);
-            flModificaAsiento = true;
-        });
+            banco_id: 0
+        })
+            .done(function (data) {
+                if (!data || data.mensaje !== 'ok' || !data.cheque) {
+                    alert('Cheque no encontrado para esa empresa (verifique n\u00famero exacto y que no est\u00e9 anulado)');
+                    enfocarCampoCheque(row.find('.numerocheque_anulado_buscar')[0]);
+                    return;
+                }
+                aplicarChequeAnuladoEnFilaReemplazo(row, data.cheque);
+                flModificaAsiento = true;
+            })
+            .fail(function (xhr) {
+                var msg = (xhr && xhr.responseJSON && (xhr.responseJSON.message || xhr.responseJSON.error))
+                    || 'Error al buscar el cheque';
+                alert(msg);
+            });
     });
+}
+
+function aplicarChequeAnuladoEnFilaReemplazo(row, cheque) {
+    var origen = cheque.origen === 'E' ? 'E' : 'R';
+    row.find('.cheque_anulado_id').val(cheque.id);
+    row.find('.origen_anulado').val(origen);
+    row.find('.numerocheque_anulado').val(
+        (cheque.numerocheque || '') + (cheque.banco ? ' (' + cheque.banco + ')' : '')
+    );
+    row.find('.origen_reemplazo').val(origen);
+    row.find('.montocheque_reemplazo').val(cheque.monto);
+    row.find('.moneda_reemplazo_id').val(cheque.moneda_id);
+    row.find('.cotizacioncheque_reemplazo').val(cheque.cotizacion != null ? cheque.cotizacion : 1);
+    if (cheque.fechapago) {
+        row.find('.fechapago_reemplazo').val(cheque.fechapago);
+    } else if (!$('#fecha').val()) {
+        // noop
+    } else if (!row.find('.fechapago_reemplazo').val()) {
+        row.find('.fechapago_reemplazo').val($('#fecha').val());
+    }
+
+    if (origen === 'E') {
+        row.find('.cuentacaja_reemplazo_id').val(cheque.cuentacaja_id || '');
+        row.find('.codigo_reemplazo').val(cheque.cuentacaja_codigo || '');
+        row.find('.nombre_reemplazo').val(cheque.cuentacaja_nombre || '');
+        row.find('.chequera_reemplazo_id').val(cheque.chequera_id || '');
+        row.find('.chequera_reemplazo_tipo').val(cheque.chequera_tipo || '');
+        row.find('.chequera_reemplazo_tipochequera').val(cheque.chequera_tipochequera || '');
+        row.find('.chequera_reemplazo_lbl').val(cheque.chequera_etiqueta || '');
+        row.find('.anombrede_reemplazo').val(cheque.anombrede || '');
+        row.find('.banco_reemplazo_id').val(cheque.banco_id || '');
+        row.find('.codigobanco_reemplazo').val(cheque.banco_codigo || '');
+        row.find('.nombrebanco_reemplazo').val(cheque.banco || '');
+        row.find('.sucursalpago_reemplazo').val('');
+        row.find('.cuentalibradora_reemplazo').val('');
+    } else {
+        row.find('.banco_reemplazo_id').val(cheque.banco_id || '');
+        row.find('.codigobanco_reemplazo').val(cheque.banco_codigo || '');
+        row.find('.nombrebanco_reemplazo').val(cheque.banco || '');
+        row.find('.sucursalpago_reemplazo').val(cheque.sucursalpago || '');
+        row.find('.cuentalibradora_reemplazo').val(cheque.cuentalibradora || '');
+        row.find('.cuentacaja_reemplazo_id').val('');
+        row.find('.codigo_reemplazo').val('');
+        row.find('.nombre_reemplazo').val('');
+        row.find('.chequera_reemplazo_id').val('');
+        row.find('.chequera_reemplazo_lbl').val('');
+        row.find('.anombrede_reemplazo').val('');
+    }
+
+    // Nro. nuevo vacío: el operador lo completa (puede usar otra chequera / numerador).
+    row.find('.numerocheque_reemplazo').val('').data('auto', 0);
+    row.find('.tctes_reemplazo_lbl').text('');
+    toggleBloqueReemplazo(row);
+    enfocarCampoCheque(row.find('.numerocheque_reemplazo')[0]);
 }
 
 function toggleBloqueReemplazo(row) {
@@ -509,9 +809,13 @@ function toggleBloqueReemplazo(row) {
     if (tipo === 'R') {
         row.find('.bloque-reemplazo-emitido').hide();
         row.find('.bloque-reemplazo-recibido').show();
+        row.find('.bloque-reemplazo-emitido-extra').hide();
+        row.find('.bloque-reemplazo-recibido-extra').show();
     } else {
         row.find('.bloque-reemplazo-recibido').hide();
         row.find('.bloque-reemplazo-emitido').show();
+        row.find('.bloque-reemplazo-recibido-extra').hide();
+        row.find('.bloque-reemplazo-emitido-extra').show();
     }
 }
 
@@ -585,11 +889,19 @@ function resolverChequeCarteraEnFila($tr, valor) {
 
 function agregaRenglonChequeReemplazo(e) {
     e.preventDefault();
+    actualizarAvisoEmpresaReemplazo();
+    if (!empresaIngresoEgresoId()) {
+        alert('Indique la empresa en Datos principales antes de agregar el reemplazo');
+        irADatosPrincipalesEmpresa();
+        return;
+    }
     var html = $('#template-renglon-cheque-reemplazo').html();
     $('#tbody-cheque-reemplazo-table').append(html);
     var row = $('#tbody-cheque-reemplazo-table tr:last');
     row.find('.fechapago_reemplazo').val($('#fecha').val());
     toggleBloqueReemplazo(row);
+    actualizarAvisoEmpresaReemplazo();
+    enfocarCampoCheque(row.find('.numerocheque_anulado_buscar')[0]);
     flModificaAsiento = true;
 }
 
@@ -688,9 +1000,13 @@ function serializarChequesReemplazo() {
     $('#tbody-cheque-reemplazo-table tr').each(function () {
         var idAnulado = $(this).find('.cheque_anulado_id').val();
         if (!idAnulado) return;
+        var origenAnulado = String($(this).find('.origen_anulado').val() || '').toUpperCase();
+        if (origenAnulado !== 'E' && origenAnulado !== 'R') {
+            origenAnulado = String($(this).find('.origen_reemplazo').val() || 'R').toUpperCase();
+        }
         datos.push({
             cheque_anulado_id: idAnulado,
-            origen_anulado: 'R',
+            origen_anulado: origenAnulado,
             origen_reemplazo: $(this).find('.origen_reemplazo').val(),
             monto_anulado: parseFloat($(this).find('.montocheque_reemplazo').val()) || 0,
             monto_reemplazo: parseFloat($(this).find('.montocheque_reemplazo').val()) || 0,

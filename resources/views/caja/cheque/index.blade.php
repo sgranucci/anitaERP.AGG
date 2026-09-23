@@ -84,6 +84,9 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                     <a href="{{ route('aging_cheque_cartera') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Aging cartera">
                         <i class="fa fa-hourglass-half"></i> Aging
                     </a>
+                    <a href="{{ route('historial_deposito_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Historial boletas de depósito">
+                        <i class="fa fa-university"></i> Depósitos
+                    </a>
                     <a href="{{ route('conciliacion_deposito_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Conciliación depósitos">
                         <i class="fa fa-balance-scale"></i> Conciliación
                     </a>

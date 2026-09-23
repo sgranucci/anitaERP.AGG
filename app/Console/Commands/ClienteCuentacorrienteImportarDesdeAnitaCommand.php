@@ -20,6 +20,8 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--forzar-aplicaciones : Reaplica aplicaciones sintéticas Anita sync si el aplicado no cierra}
                             {--sin-importar-ventas : No crea cabeceras venta ERP faltantes (solo CC de las que ya existen)}
                             {--cerrar-sin-deuda-anita : Salda CC ERP pendiente que no está en climov abierto de Anita (con o sin --cliente)}
+                            {--reparar-contrapartidas : Reemplaza el cierre sin movimiento por el comprobante que aplica la factura}
+                            {--todos : Repara todos los clientes. Obligatorio si no se pasa --cliente}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
@@ -47,7 +49,19 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
         $forzar = (bool) $this->option('forzar-aplicaciones');
         $importarVentas = ! (bool) $this->option('sin-importar-ventas');
         $cerrarSinDeudaAnita = (bool) $this->option('cerrar-sin-deuda-anita');
+        $repararContrapartidas = (bool) $this->option('reparar-contrapartidas');
         $usuarioId = max(1, (int) $this->option('usuario-id'));
+
+        if ($repararContrapartidas) {
+            return $this->repararContrapartidas(
+                $service,
+                $dryRun,
+                $cliente,
+                $usuarioId,
+                (bool) $this->option('todos'),
+                $limite,
+            );
+        }
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
@@ -161,6 +175,72 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
 
         if ($dryRun) {
             $this->comment('Dry-run: no se grabó nada. Para persistir: mismo comando con --ejecutar.');
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function repararContrapartidas(
+        ClienteCuentacorrienteImportarDesdeAnitaService $service,
+        bool $dryRun,
+        string $cliente,
+        int $usuarioId,
+        bool $todos,
+        ?int $limite,
+    ): int {
+        if ($cliente === '' && ! $todos) {
+            $this->error('Indicá --cliente o --todos.');
+
+            return self::FAILURE;
+        }
+
+        $alcance = $cliente !== '' ? 'cliente '.$cliente : 'todos los clientes';
+        $this->line(($dryRun ? 'DRY-RUN' : 'EJECUTAR').' | contrapartidas de '.$alcance);
+        set_time_limit(0);
+
+        try {
+            $stats = $service->repararContrapartidasSinMovimiento(
+                $dryRun,
+                $cliente !== '' ? $cliente : null,
+                $usuarioId,
+                $limite,
+                function (int $hechos, int $total) {
+                    $this->line('Procesados '.$hechos.' / '.$total);
+                },
+            );
+        } catch (\Throwable $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $this->table(['Métrica', 'Cantidad'], [
+            ['Facturas a reparar', $stats['fantasmas']],
+            ['Reparadas', $stats['reparados']],
+            ['Parciales', $stats['parciales'] ?? 0],
+            ['Sin contrapartida en Anita', $stats['omitidos']],
+            ['Importe aplicado', number_format((float) $stats['importe'], 2, ',', '.')],
+            ['Quedó descubierto', number_format((float) ($stats['descubierto'] ?? 0), 2, ',', '.')],
+        ]);
+        if (($stats['muestra'] ?? []) !== []) {
+            $this->table(
+                ['Factura', 'CC', 'Importe', 'Contrapartida'],
+                array_map(static fn (array $r) => [
+                    $r['factura'] ?? '',
+                    $r['cc_id'] ?? '',
+                    number_format((float) ($r['importe'] ?? 0), 2, ',', '.'),
+                    $r['contrapartida'] ?? '',
+                ], $stats['muestra'])
+            );
+        }
+        foreach (array_slice($stats['errores'] ?? [], 0, 40) as $error) {
+            $this->warn((string) $error);
+        }
+        if (count($stats['errores'] ?? []) > 40) {
+            $this->warn('… y '.(count($stats['errores']) - 40).' avisos más.');
+        }
+        if ($dryRun) {
+            $this->comment('Dry-run: no se grabó nada.');
         }
 
         return self::SUCCESS;

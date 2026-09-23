@@ -793,10 +793,26 @@ var montoPendienteSp = 0;
 				return;
 			}
 			if (typeof cuentacajaxcodigoReemplazo !== 'undefined' && cuentacajaxcodigoReemplazo && cuentacajaxcodigoReemplazo.length) {
-				var seleccionR = $(this).parents("tr").children().html();
-				var codigoR = $(this).parents("tr").find(".codigo").html();
-				cuentacajaxcodigoReemplazo.find('.cuentacaja_reemplazo_id').val(seleccionR);
-				cuentacajaxcodigoReemplazo.find('.codigo_reemplazo').val(codigoR);
+				var $trR = cuentacajaxcodigoReemplazo;
+				var dataR = {
+					id: $(this).parents("tr").find(".cuentacaja_id").text() || $(this).parents("tr").children().first().text(),
+					nombre: $(this).parents("tr").find(".nombre").text(),
+					codigo: $(this).parents("tr").find(".codigo").text(),
+					moneda_id: $(this).parents("tr").find(".moneda_id").html()
+				};
+				if (typeof aplicarCuentaChequeReemplazo === 'function') {
+					aplicarCuentaChequeReemplazo($trR, dataR, false);
+				} else {
+					$trR.find('.cuentacaja_reemplazo_id').val(dataR.id);
+					$trR.find('.codigo_reemplazo').val(dataR.codigo);
+					$trR.find('.nombre_reemplazo').val(dataR.nombre);
+					if (dataR.moneda_id) {
+						$trR.find('.moneda_reemplazo_id').val(dataR.moneda_id);
+					}
+				}
+				if (typeof cargarEmisionChequeReemplazo === 'function') {
+					cargarEmisionChequeReemplazo($trR, { forzarNumero: true });
+				}
 				cuentacajaxcodigoReemplazo = null;
 				$('#consultacuentacajaModal').modal('hide');
 				flModificaAsiento = true;
@@ -1843,10 +1859,32 @@ var montoPendienteSp = 0;
 			filtrarTipos(modo);
 			if (modo === 'canje_cheques') {
 				setTimeout(function () {
+					var tieneEmpresa = typeof empresaIngresoEgresoId === 'function'
+						? !!empresaIngresoEgresoId()
+						: !!String($('#empresa_id').val() || '').trim();
+					if (!tieneEmpresa) {
+						if (typeof actualizarAvisoEmpresaReemplazo === 'function') {
+							actualizarAvisoEmpresaReemplazo();
+						}
+						alert('Para canje / reemplazo de cheques indique primero la empresa en Datos principales');
+						if (typeof irADatosPrincipalesEmpresa === 'function') {
+							irADatosPrincipalesEmpresa();
+						} else {
+							$('#botonform1').trigger('click');
+						}
+						return;
+					}
 					$('#botonform2').trigger('click');
 					var $tabReemp = $('#tabs-cheques-ingresoegreso a[href="#panel-cheques-reemplazo"]');
 					if ($tabReemp.length) {
 						$tabReemp.trigger('click');
+					}
+					if (typeof actualizarAvisoEmpresaReemplazo === 'function') {
+						actualizarAvisoEmpresaReemplazo();
+					}
+					if ($('#tbody-cheque-reemplazo-table tr.item-cheque-reemplazo').length === 0
+						&& typeof agregaRenglonChequeReemplazo === 'function') {
+						agregaRenglonChequeReemplazo({ preventDefault: function () {} });
 					}
 				}, 50);
 			}

@@ -29,7 +29,9 @@ use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\Retencion_CobranzaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Models\Caja\Tipotransaccion_Caja;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
 use App\Support\Caja\ChequePropioInstrumentoSupport;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -175,6 +177,7 @@ class CobranzaService
 				$data['estado'] = Cobranza_Estado::$enumEstado[0]['nombre'];
 			}
 			$data['usuario_ids'][] = Auth::user()->id;
+			$this->aplicarTipoCobranzaSegunComprobantes($data);
 
 			return CobranzaNumeracionTransaccion::conExclusividad(
 				(int) $data['empresa_id'],
@@ -186,8 +189,10 @@ class CobranzaService
 					);
 					$data['usuario_id'] = Auth::user()->id;
 
-					if (! isset($data['detalle'])) {
-						$data['detalle'] = 'Cobranza Nro. '.$data['numerotransaccion'];
+					if (! isset($data['detalle']) || trim((string) $data['detalle']) === '') {
+						$abrev = IngresoEgresoAnitaNumeracionSupport::abreviaturaTipo((int) $data['tipotransaccion_caja_id']);
+						$prefijo = $abrev === 'COA' ? 'COA' : 'Cobranza';
+						$data['detalle'] = $prefijo.' Nro. '.$data['numerotransaccion'];
 					}
 
 					if (isset($data['ordenventa_id']) && $data['ordenventa_id'] > 0) {
@@ -338,6 +343,80 @@ class CobranzaService
 		$this->persistirAnticiposPagoDeMas($data, $cobranza->id);
 	}
 
+	/**
+	 * Sin comprobantes aplicados la cobranza es COA. Si se aplican facturas, vuelve a COB.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function aplicarTipoCobranzaSegunComprobantes(array &$data): void
+	{
+		if (! empty($data['venta_id'])) {
+			return;
+		}
+
+		$coaId = $this->tipoCajaIdPorAbreviatura('COA');
+		$cobId = $this->tipoCajaIdPorAbreviatura('COB');
+		$sinComprobantes = $this->cobranzaSinComprobantesAplicados($data);
+
+		if ($sinComprobantes) {
+			if ($coaId <= 0) {
+				throw new Exception('No hay tipo de transacción de caja COA. No se puede grabar un cobro anticipado.');
+			}
+			$data['tipotransaccion_caja_id'] = $coaId;
+			$this->renombrarDetalleCobranza($data, 'Cobranza', 'COA');
+
+			return;
+		}
+
+		$actual = (int) ($data['tipotransaccion_caja_id'] ?? 0);
+		if ($cobId > 0 && $coaId > 0 && $actual === $coaId) {
+			$data['tipotransaccion_caja_id'] = $cobId;
+			$this->renombrarDetalleCobranza($data, 'COA', 'Cobranza');
+		}
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function cobranzaSinComprobantesAplicados(array $data): bool
+	{
+		$ids = $data['idcuentacorrientes'] ?? [];
+		$montos = $data['montoaplicadocomprobantes'] ?? [];
+		if (! is_array($ids)) {
+			return true;
+		}
+
+		foreach ($ids as $i => $ccId) {
+			if ((int) $ccId > 0 && abs((float) ($montos[$i] ?? 0)) > 0.01) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function renombrarDetalleCobranza(array &$data, string $desde, string $hacia): void
+	{
+		$numero = trim((string) ($data['numerotransaccion'] ?? ''));
+		$detalle = trim((string) ($data['detalle'] ?? ''));
+		if ($numero === '' || $detalle === '') {
+			return;
+		}
+		if ($detalle === $desde.' Nro. '.$numero) {
+			$data['detalle'] = $hacia.' Nro. '.$numero;
+		}
+	}
+
+	private function tipoCajaIdPorAbreviatura(string $abreviatura): int
+	{
+		return (int) (Tipotransaccion_Caja::query()
+			->whereRaw('UPPER(TRIM(abreviatura)) = ?', [strtoupper(trim($abreviatura))])
+			->value('id') ?? 0);
+	}
+
     public function actualizaCobranza($request, $id, $origen = null)
     {
         session(['empresa_id' => $request->empresa_id]);
@@ -355,6 +434,7 @@ class CobranzaService
 			$data['estados'][] = $data['estado'];
 			$data['observacionestados'][] = "Actualización de Cobranza";
 			$data['usuario_ids'][] = Auth::user()->id;
+			$this->aplicarTipoCobranzaSegunComprobantes($data);
 
 			if ($origen) {
 				Self::actualiza($data, $id, $request);

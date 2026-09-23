@@ -60,6 +60,7 @@ use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 use setasign\Fpdi\Fpdi;
 use App\Support\Ventas\CaiRemitoVigenteSupport;
+use App\Support\Ventas\FerliRinNumeracionSupport;
 use App\Support\Ventas\RemitoFormularioLeyendaSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
@@ -3812,8 +3813,10 @@ class FacturacionService
 		$this->nombreTipoTransaccion = $tipotransaccion->nombre;
 		$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
 		$emiteRemito = $this->tipoEmiteRemito($tipotransaccion);
+		$numeraFerliRinErp = FerliRinNumeracionSupport::aplica($tipotransaccion);
 		// Numera factura con web service si es factura electronica
-		if ($puntoventa->modofacturacion != 'M')
+		// Ferli RIN: siempre ERP (sistema_numerador), sin ARCA.
+		if (! $numeraFerliRinErp && $puntoventa->modofacturacion != 'M')
 		{
 			$modoClienteFce = $this->hidratarContextoFceCliente($data, $cliente, $totalComprobante);
 			$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
@@ -3826,7 +3829,7 @@ class FacturacionService
 
 			//$numero = 74405;
 		}
-		else // Numera manualmente: max+1 por tipo, letra y punto de venta
+		else // Numera manualmente / Ferli RIN ERP
 		{
 			$numero = $this->ultimoNumeroBaseModoManual(
 				$puntoventa,
@@ -3844,7 +3847,7 @@ class FacturacionService
 		$numero++;
 
 		// Remito solo con FAC/FCE
-		if ($emiteRemito && $puntoventaremito && $puntoventa->modofacturacion != 'M')
+		if ($emiteRemito && $puntoventaremito && ! $numeraFerliRinErp && $puntoventa->modofacturacion != 'M')
 			$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito('REM','R',$puntoventaremito->codigo);
 		else	
 			$numeroremito = 0;
@@ -3855,7 +3858,7 @@ class FacturacionService
 				//$numeroremito = 74406;
 
 				// Procesa Factura electronica
-				if ($puntoventa->modofacturacion != 'M')
+				if (! $numeraFerliRinErp && $puntoventa->modofacturacion != 'M')
 				{
 					// Arma tributos
 					$tributos = [];
@@ -3935,7 +3938,7 @@ class FacturacionService
 				$this->asegurarMventaIdParaAnitaOt($dataFactura, $pedido);
 
 				// AlicIVA debe resolverse antes de pedir CAE (AFIP [10019]).
-				if ($puntoventa->modofacturacion != 'M') {
+				if (! $numeraFerliRinErp && $puntoventa->modofacturacion != 'M') {
 					$this->assertImpuestosAlicIvaParaArca($impuestos);
 				}
 
@@ -4177,7 +4180,7 @@ class FacturacionService
 
 					// ARCA dentro de la TX (necesita venta_id). Diferir vencae Anita: la venta Informix
 					// se graba post-commit; si vencae va antes queda huérfano / falla el CAE.
-					if ($puntoventa->modofacturacion != 'M')
+					if (! $numeraFerliRinErp && $puntoventa->modofacturacion != 'M')
 					{
 						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
 							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
@@ -4240,7 +4243,7 @@ class FacturacionService
 
 				// Post-commit: ERP ya tiene CAE/venta. Fallos Anita no deben parecer "no hay factura"
 				// ni disparar rollback/borraAnita como si la emisión hubiera fallado.
-				if ($puntoventa->modofacturacion != 'M' && $vta) {
+				if ((! $numeraFerliRinErp && $puntoventa->modofacturacion != 'M') && $vta) {
 					try {
 						$this->asegurarMventaIdParaAnitaOt($dataFactura, $pedido);
 
@@ -7172,6 +7175,7 @@ class FacturacionService
 
 	/**
 	 * PV modo M. El Bierzo: max(ERP ARCA+letra+PV, Anita tipo+letra+sucursal); el caller suma 1.
+	 * Ferli RIN: reserva en sistema_numerador (ERP) y devuelve base para el ++ del caller.
 	 * AGG y resto: último comprobante del tipotransaccion_id en el PV (sin cambiar).
 	 */
 	private function ultimoNumeroBaseModoManual(
@@ -7181,6 +7185,12 @@ class FacturacionService
 		?object $cliente = null,
 		$totalComprobante = null,
 	): int {
+		if (FerliRinNumeracionSupport::aplica($tipotransaccion)) {
+			return FerliRinNumeracionSupport::reservarBaseParaIncremento(
+				(int) ($puntoventa->empresa_id ?? 0)
+			);
+		}
+
 		if (! EntornoEmpresaSupport::esElBierzo()) {
 			$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
 				(int) ($tipotransaccion->id ?? 0),

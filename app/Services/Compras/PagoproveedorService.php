@@ -277,8 +277,8 @@ class PagoproveedorService
                     'cotizacion' => $cotizacion,
                     'moneda_id' => $monedaId,
                     'modo_cotizacion' => (string) ($data['modo_cotizacion'] ?? $pago->modo_cotizacion),
-                    'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null)
-                        ?: ($pago->tipotransaccion_caja_id ?: IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig() ?: null),
+                    'tipotransaccion_caja_id' => $this->resolverTipoCajaActualizacion($data, $pago),
+                    'tipocomprobante' => $this->resolverTipoComprobanteActualizacion($data, $pago),
                 ], $id);
 
                 $pago = $this->pagoproveedorRepository->findOrFail($id);
@@ -800,9 +800,11 @@ class PagoproveedorService
     {
         if (PagoproveedorAnitaNumeracionSupport::esTipoOpa($tipoComprobante)) {
             $tipoOpaId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorAbreviaturaPublica('OPA');
-            if ($tipoOpaId > 0) {
-                return $tipoOpaId;
+            if ($tipoOpaId <= 0) {
+                throw new Exception('No hay tipo de transacción de caja OPA. No se puede grabar un pago sin comprobantes aplicados.');
             }
+
+            return $tipoOpaId;
         }
 
         $tipoCajaId = (int) ($tipoCajaIdRequest ?: 0);
@@ -828,6 +830,46 @@ class PagoproveedorService
         }
 
         return false;
+    }
+
+    /**
+     * Sin comprobantes aplicados el pago es OPA. Si se le aplican facturas, vuelve a OPP.
+     */
+    private function resolverTipoCajaActualizacion(array $data, Pagoproveedor $pago): int
+    {
+        if ($this->esAnticipoSinAplicaciones($data)) {
+            $tipoOpaId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorAbreviaturaPublica('OPA');
+            if ($tipoOpaId <= 0) {
+                throw new Exception('No hay tipo de transacción de caja OPA. No se puede grabar un pago sin comprobantes aplicados.');
+            }
+
+            return $tipoOpaId;
+        }
+
+        $tipoOpaId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorAbreviaturaPublica('OPA');
+        $actual = (int) ($data['tipotransaccion_caja_id'] ?? 0);
+        if ($actual <= 0) {
+            $actual = (int) $pago->tipotransaccion_caja_id;
+        }
+        if ($tipoOpaId > 0 && ($actual === $tipoOpaId || strtoupper((string) $pago->tipocomprobante) === 'OPA')) {
+            $tipoOppId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorAbreviaturaPublica('OPP');
+            if ($tipoOppId > 0) {
+                return $tipoOppId;
+            }
+        }
+
+        return $actual;
+    }
+
+    private function resolverTipoComprobanteActualizacion(array $data, Pagoproveedor $pago): string
+    {
+        if ($this->esAnticipoSinAplicaciones($data)) {
+            return 'OPA';
+        }
+
+        $tipo = strtoupper(trim((string) ($pago->tipocomprobante ?: 'OPP')));
+
+        return $tipo === 'OPA' ? 'OPP' : ($tipo !== '' ? $tipo : 'OPP');
     }
 
     private function marcarComoOpa(Pagoproveedor $pago): void

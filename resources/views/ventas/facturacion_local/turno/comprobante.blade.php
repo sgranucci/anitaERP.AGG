@@ -22,29 +22,56 @@
     <p class="meta">Apertura: {{ optional($turno->apertura_en)->format('d/m/Y H:i') }} · {{ $turno->usuarioApertura->nombre ?? '' }}</p>
     <p class="meta">Cierre: {{ optional($turno->cierre_en)->format('d/m/Y H:i') }} · {{ $turno->usuarioCierre->nombre ?? '' }}</p>
     <p class="meta">Fondo inicial: {{ number_format($turno->fondo_inicial, 2, ',', '.') }}</p>
-    <p class="meta">Facturación turno: {{ number_format($turno->monto_facturacion_turno, 2, ',', '.') }}</p>
+    <p class="meta">Facturación turno: {{ number_format((float) ($resumen['total_facturado'] ?? $turno->monto_facturacion_turno), 2, ',', '.') }}
+        ({{ (int) ($resumen['cantidad_facturas'] ?? 0) }} comprobantes)</p>
+    @if ((int) ($resumen['cantidad_nc'] ?? 0) > 0)
+        <p class="meta">Notas de crédito: {{ (int) $resumen['cantidad_nc'] }} · {{ number_format((float) $resumen['total_nc'], 2, ',', '.') }}</p>
+    @endif
+    <p class="meta">Neto por medios: {{ number_format((float) ($resumen['neto_medios'] ?? 0), 2, ',', '.') }}</p>
     <p class="meta">Sobrante/faltante: {{ number_format((float) $turno->sobrante_faltante, 2, ',', '.') }}</p>
     @if ($turno->observacion_cierre)
         <p class="meta">Obs.: {{ $turno->observacion_cierre }}</p>
     @endif
-    @php $medios = $turno->medios_contado_cierre_json ?? []; @endphp
+    @php
+        $medios = $resumen['por_medio'] ?? [];
+        $arqueo = is_array($turno->medios_contado_cierre_json) ? $turno->medios_contado_cierre_json : [];
+        $arqueoPorCuenta = [];
+        foreach ($arqueo as $fila) {
+            $ccId = (int) ($fila['cuentacaja_id'] ?? 0);
+            if ($ccId > 0) {
+                $arqueoPorCuenta[$ccId] = $fila;
+            }
+        }
+    @endphp
     @if (! empty($medios))
     <table>
         <thead>
             <tr>
-                <th>Cuenta</th>
-                <th>Esperado</th>
+                <th>Medio de pago</th>
+                <th>Comprobantes</th>
+                <th>Cobrado</th>
+                <th>Devuelto NC</th>
+                <th>Neto</th>
                 <th>Contado</th>
                 <th>Dif.</th>
             </tr>
         </thead>
         <tbody>
             @foreach ($medios as $m)
+            @php
+                $ccId = (int) ($m['cuentacaja_id'] ?? 0);
+                $contado = $arqueoPorCuenta[$ccId]['contado'] ?? null;
+                $neto = (float) ($m['neto'] ?? 0);
+                $dif = $contado === null ? null : ((float) $contado - $neto);
+            @endphp
             <tr>
-                <td>{{ $m['cuentacaja_id'] ?? '' }}</td>
-                <td style="text-align:right;">{{ number_format((float) ($m['esperado'] ?? 0), 2, ',', '.') }}</td>
-                <td style="text-align:right;">{{ number_format((float) ($m['contado'] ?? 0), 2, ',', '.') }}</td>
-                <td style="text-align:right;">{{ number_format((float) ($m['contado'] ?? 0) - (float) ($m['esperado'] ?? 0), 2, ',', '.') }}</td>
+                <td>{{ trim(($m['codigo'] ?? '').' '.($m['nombre'] ?? '')) }}</td>
+                <td style="text-align:right;">{{ (int) ($m['cantidad'] ?? 0) }}</td>
+                <td style="text-align:right;">{{ number_format((float) ($m['cobrado'] ?? 0), 2, ',', '.') }}</td>
+                <td style="text-align:right;">{{ number_format((float) ($m['devuelto'] ?? 0), 2, ',', '.') }}</td>
+                <td style="text-align:right;">{{ number_format($neto, 2, ',', '.') }}</td>
+                <td style="text-align:right;">{{ $contado === null ? '—' : number_format((float) $contado, 2, ',', '.') }}</td>
+                <td style="text-align:right;">{{ $dif === null ? '—' : number_format($dif, 2, ',', '.') }}</td>
             </tr>
             @endforeach
         </tbody>

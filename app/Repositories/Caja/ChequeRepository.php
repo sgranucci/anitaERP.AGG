@@ -697,6 +697,9 @@ class ChequeRepository implements ChequeRepositoryInterface
         $cuentacajaReemplazo = $data['cuentacaja_reemplazo_ids'] ?? [];
         $chequeraReemplazo = $data['chequera_reemplazo_ids'] ?? [];
         $bancoReemplazo = $data['banco_reemplazo_ids'] ?? [];
+        $sucursalReemplazo = $data['sucursalpago_reemplazo'] ?? [];
+        $cuentalibradoraReemplazo = $data['cuentalibradora_reemplazo'] ?? [];
+        $anombredeReemplazo = $data['anombrede_reemplazo'] ?? [];
 
         foreach ($anulados as $i => $anuladoId) {
             $anuladoId = (int) $anuladoId;
@@ -720,6 +723,10 @@ class ChequeRepository implements ChequeRepositoryInterface
 
             $tipoReemplazo = strtoupper((string) ($origenReemplazo[$i] ?? 'E'));
             $fechaPago = (string) ($fechasReemplazo[$i] ?? $fechaOperacion);
+            $anombredeNuevo = trim((string) ($anombredeReemplazo[$i] ?? ''));
+            if ($anombredeNuevo === '') {
+                $anombredeNuevo = (string) ($anulado->anombrede ?? '');
+            }
 
             if ($tipoReemplazo === 'E') {
                 $cuentacajaId = (int) ($cuentacajaReemplazo[$i] ?? $anulado->cuentacaja_id ?? 0);
@@ -756,10 +763,18 @@ class ChequeRepository implements ChequeRepositoryInterface
                     'monto' => $montoReemplazo,
                     'cotizacion' => ChequePropioCpromaeAnitaMapper::cotizacion((float) ($cotizReemplazo[$i] ?? $anulado->cotizacion)),
                     'proveedor_id' => $anulado->proveedor_id,
-                    'anombrede' => $anulado->anombrede,
+                    'anombrede' => $anombredeNuevo,
                     'banco_id' => (int) ($cuentacaja->banco_id ?? $anulado->banco_id),
                 ];
             } else {
+                $sucursal = trim((string) ($sucursalReemplazo[$i] ?? ''));
+                if ($sucursal === '') {
+                    $sucursal = (string) ($anulado->sucursalpago ?? '');
+                }
+                $cuentalibradora = trim((string) ($cuentalibradoraReemplazo[$i] ?? ''));
+                if ($cuentalibradora === '') {
+                    $cuentalibradora = (string) ($anulado->cuentalibradora ?? '');
+                }
                 $payload = [
                     'origen' => 'R',
                     'caracter' => 'R',
@@ -775,8 +790,8 @@ class ChequeRepository implements ChequeRepositoryInterface
                     'monto' => $montoReemplazo,
                     'cotizacion' => (float) ($cotizReemplazo[$i] ?? $anulado->cotizacion),
                     'banco_id' => (int) ($bancoReemplazo[$i] ?? $anulado->banco_id),
-                    'sucursalpago' => $anulado->sucursalpago,
-                    'cuentalibradora' => $anulado->cuentalibradora,
+                    'sucursalpago' => $sucursal,
+                    'cuentalibradora' => $cuentalibradora,
                 ];
             }
 

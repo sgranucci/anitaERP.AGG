@@ -62,9 +62,9 @@
                     </div>
                 </div>
                 <ul class="cp-flujo-card__bullets text-left mb-0">
-                    <li>Prefiere egreso / OPP</li>
-                    <li>Abre solapa Cheques → Reemplazo</li>
-                    <li>Emitidos / recibidos también</li>
+                    <li>Requiere empresa en Datos principales</li>
+                    <li>Abre Cheques → Anulación / reemplazo</li>
+                    <li>Reemplazo editable (otra chequera / cuenta)</li>
                 </ul>
             </button>
         </div>

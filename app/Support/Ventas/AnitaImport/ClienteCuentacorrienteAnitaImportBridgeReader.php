@@ -186,6 +186,57 @@ final class ClienteCuentacorrienteAnitaImportBridgeReader
     }
 
     /**
+     * climov de esos comprobantes, cerrados incluidos.
+     * El listado de deuda abierta no los trae (cliv_estado = C).
+     *
+     * @param  list<string>  $clavesDocumento  tipo|letra|suc|nro
+     * @return list<array<string, mixed>>
+     */
+    public function listarClimovPorDocumentos(array $clavesDocumento, ?string $clienteCodigo = null): array
+    {
+        $clavesDocumento = array_values(array_unique(array_filter($clavesDocumento)));
+        if ($clavesDocumento === []) {
+            return [];
+        }
+
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $cliente = trim((string) $clienteCodigo);
+        $out = [];
+        foreach (array_chunk($clavesDocumento, 40) as $chunk) {
+            $ors = [];
+            foreach ($chunk as $clave) {
+                $partes = explode('|', $clave);
+                if (count($partes) < 4) {
+                    continue;
+                }
+                [$tipo, $letra, $suc, $nro] = $partes;
+                $ors[] = "(cliv_tipo = '".$this->esc($tipo)
+                    ."' AND cliv_letra = '".$this->esc($letra)
+                    ."' AND cliv_sucursal = ".(int) $suc
+                    .' AND cliv_nro = '.(int) $nro.')';
+            }
+            if ($ors === []) {
+                continue;
+            }
+            $where = ' WHERE ('.implode(' OR ', $ors).')';
+            if ($cliente !== '') {
+                $where .= " AND cliv_cliente = '".$this->esc($cliente)."'";
+            }
+            foreach ($this->listar(
+                $perfil['tabla_climov'],
+                $perfil['campos_climov'],
+                $where,
+                'cliv_fecha, cliv_tipo, cliv_nro',
+                $perfil
+            ) as $fila) {
+                $out[] = $fila;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<string>  $clavesDocumento  tipo|letra|suc|nro
      * @return array<string, array<string, mixed>>  clave => fila venta Anita
      */

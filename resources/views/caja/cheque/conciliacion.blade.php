@@ -33,6 +33,9 @@ window.chequeAcreditarUrls = {
                         <i class="fa fa-check"></i> Acreditar sel.
                     </button>
                     @endif
+                    <a href="{{ route('historial_deposito_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Historial boletas de depósito">
+                        <i class="fa fa-university"></i> Historial depósitos
+                    </a>
                     <a href="{{ route('cheque') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-reply-all"></i> Volver a cheques
                     </a>

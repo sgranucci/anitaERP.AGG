@@ -73,7 +73,7 @@
                             <div class="custom-control custom-radio custom-control-inline">
                                 <input type="radio" class="custom-control-input" name="modo" id="modo_deuda" value="deuda"
                                     @checked($modoDeuda)>
-                                <label class="custom-control-label" for="modo_deuda">Deuda pendiente (facturas impagas)</label>
+                                <label class="custom-control-label" for="modo_deuda">Deuda pendiente (saldo de cuenta)</label>
                             </div>
                             <div class="custom-control custom-radio custom-control-inline">
                                 <input type="radio" class="custom-control-input" name="modo" id="modo_ficha" value="ficha"

@@ -61,7 +61,7 @@ final class CobranzaNumeracionTransaccion
      */
     public static function abreviaturasSecuencialesAdmin(): array
     {
-        return ['COB', 'REM', 'RMI', 'DEV'];
+        return ['COB', 'COA', 'REM', 'RMI', 'DEV'];
     }
 
     public static function usaNumeracionSecuencial(int $tipotransaccionCajaId): bool

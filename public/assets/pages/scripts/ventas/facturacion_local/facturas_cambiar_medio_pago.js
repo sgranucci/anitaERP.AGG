@@ -430,18 +430,29 @@
         });
     }
 
-    document.querySelectorAll('.js-fd-cambiar-medio-pago').forEach(function (btn) {
-        btn.addEventListener('click', function (e) {
-            e.preventDefault();
-            var ventaId = parseInt(btn.getAttribute('data-venta-id'), 10);
-            if (!ventaId) {
-                return;
-            }
+    document.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('.js-fd-cambiar-medio-pago') : null;
+        if (!btn) {
+            return;
+        }
+        e.preventDefault();
+        var ventaId = parseInt(btn.getAttribute('data-venta-id'), 10);
+        if (!ventaId) {
+            return;
+        }
+        function abrirCambio() {
             if (typeof $ !== 'undefined') {
                 $('#modal-fd-cambiar-medio-pago').modal('show');
             }
             cargarDatos(ventaId);
-        });
+        }
+        var lista = document.getElementById('modal-fl-facturas-medio');
+        if (lista && lista.classList.contains('show') && typeof $ !== 'undefined') {
+            $('#modal-fl-facturas-medio').one('hidden.bs.modal', abrirCambio);
+            $('#modal-fl-facturas-medio').modal('hide');
+            return;
+        }
+        abrirCambio();
     });
 
     var btnGuardar = document.getElementById('fd-cmp-guardar');

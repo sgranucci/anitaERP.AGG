@@ -481,6 +481,7 @@ class IngresoEgresoController extends Controller
             'caja_movimiento_cuentacajas.cuentacajas',
             'caja_movimiento_cuentacajas.monedas',
             'cheques.bancos',
+            'cheques.monedas',
             'asientos.asiento_movimientos.cuentacontables',
             'asientos.asiento_movimientos.centrocostos',
         ]);
@@ -537,9 +538,22 @@ class IngresoEgresoController extends Controller
             $query->where('banco_id', $bancoId);
         }
 
-        $cheque = $query->with('bancos')->with('monedas')->with('cuentacajas')->first();
+        $cheque = $query
+            ->with(['bancos', 'monedas', 'cuentacajas', 'chequeras'])
+            ->first();
         if ($cheque === null) {
             return response()->json(['mensaje' => 'ng']);
+        }
+
+        $chequera = $cheque->chequeras;
+        $etiquetaChequera = '';
+        if ($chequera !== null) {
+            $etiquetaChequera = \App\Support\Caja\ChequeConsultaChequeraSupport::etiquetaCompleta(
+                (string) ($chequera->codigo ?? ''),
+                (string) ($chequera->tipocheque ?? 'N'),
+                $chequera->desdenumerocheque ?? null,
+                $chequera->hastanumerocheque ?? null
+            );
         }
 
         return response()->json([
@@ -554,7 +568,17 @@ class IngresoEgresoController extends Controller
                 'fechapago' => $cheque->fechapago,
                 'banco_id' => $cheque->banco_id,
                 'banco' => $cheque->bancos->nombre ?? '',
+                'banco_codigo' => $cheque->bancos->codigo ?? '',
                 'cuentacaja_id' => $cheque->cuentacaja_id,
+                'cuentacaja_codigo' => $cheque->cuentacajas->codigo ?? '',
+                'cuentacaja_nombre' => $cheque->cuentacajas->nombre ?? '',
+                'chequera_id' => $cheque->chequera_id,
+                'chequera_etiqueta' => $etiquetaChequera,
+                'chequera_tipo' => $chequera !== null ? (string) ($chequera->tipocheque ?? '') : '',
+                'chequera_tipochequera' => $chequera !== null ? (string) ($chequera->tipochequera ?? '') : '',
+                'sucursalpago' => $cheque->sucursalpago,
+                'cuentalibradora' => $cheque->cuentalibradora,
+                'anombrede' => $cheque->anombrede,
             ],
         ]);
     }

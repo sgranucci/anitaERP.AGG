@@ -59,14 +59,17 @@
                             <td class="text-right">{{ number_format($t->fondo_inicial, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format($t->monto_facturacion_turno, 2, ',', '.') }}</td>
                             <td>{{ optional($t->cierre_en)->format('d/m/Y H:i') }}</td>
-                            <td>
+                            <td class="text-nowrap">
+                                <a href="{{ route('facturacion_local_turno_ver', $t->id) }}"
+                                   class="btn-accion-tabla tooltipsC"
+                                   title="{{ $t->estado === 'cerrado' ? 'Ver cierre' : 'Revisar medios y cerrar' }}">
+                                    <i class="fa {{ $t->estado === 'cerrado' ? 'fa-eye' : 'fa-lock' }}"></i>
+                                </a>
                                 @if ($t->estado === 'cerrado')
-                                    <a href="{{ route('facturacion_local_turno_pdf', $t->id) }}" target="_blank" class="btn btn-sm btn-outline-secondary">PDF</a>
-                                @elseif (can('cerrar-turno-facturacion-local', false))
-                                    <form method="POST" action="{{ route('facturacion_local_turno_cerrar', $t->id) }}" class="d-inline" onsubmit="return confirm('¿Cerrar turno?');">
-                                        @csrf
-                                        <button class="btn btn-sm btn-warning">Cerrar</button>
-                                    </form>
+                                    <a href="{{ route('facturacion_local_turno_pdf', $t->id) }}" target="_blank" rel="noopener"
+                                       class="btn-accion-tabla tooltipsC" title="PDF del cierre">
+                                        <i class="fas fa-file-pdf text-danger"></i>
+                                    </a>
                                 @endif
                             </td>
                         </tr>

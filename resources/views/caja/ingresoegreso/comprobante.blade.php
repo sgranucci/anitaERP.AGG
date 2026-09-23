@@ -81,6 +81,13 @@
             $monedaAbrTotal = (string) ($linea->monedas->abreviatura ?? '');
         }
     }
+    // OP solo con cheques (sin cuentas de caja): el total del PDF debe incluir esos montos.
+    foreach ($movimiento->cheques ?? [] as $cheque) {
+        $totalAbs += abs((float) ($cheque->monto ?? 0));
+        if ($monedaAbrTotal === '') {
+            $monedaAbrTotal = (string) (optional($cheque->monedas)->abreviatura ?? '');
+        }
+    }
     if ($monedaAbrTotal === '' && $sp) {
         $monedaAbrTotal = (string) (optional($sp->monedas)->abreviatura ?? '');
     }
@@ -266,7 +273,7 @@
                     <td>{{ $cheque->numerocheque }}</td>
                     <td>{{ $cheque->bancos->nombre ?? '' }}</td>
                     <td>{{ $cheque->origen }}</td>
-                    <td class="right">{{ number_format((float) $cheque->importe, 2, ',', '.') }}</td>
+                    <td class="right">{{ number_format((float) $cheque->monto, 2, ',', '.') }}</td>
                 </tr>
             @endforeach
         </tbody>

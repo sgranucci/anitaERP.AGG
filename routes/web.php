@@ -809,6 +809,8 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     });
 
     Route::get('ventas/facturacion-local/cierres-turno', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@index')->name('facturacion_local_turnos');
+    Route::get('ventas/facturacion-local/cierres-turno/{id}', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@ver')->name('facturacion_local_turno_ver');
+    Route::get('ventas/facturacion-local/cierres-turno/{id}/facturas-medio', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@facturasMedio')->name('facturacion_local_turno_facturas_medio');
     Route::post('ventas/facturacion-local/turnos/abrir', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@abrir')->name('facturacion_local_turno_abrir');
     Route::post('ventas/facturacion-local/turnos/{id}/cerrar', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@cerrar')->name('facturacion_local_turno_cerrar');
     Route::get('ventas/facturacion-local/turnos/{id}/pdf', 'Ventas\FacturacionLocal\FacturacionLocalTurnoController@pdf')->name('facturacion_local_turno_pdf');
@@ -2777,8 +2779,10 @@ Route::get('caja/cheque', 'Caja\ChequeController@index')->name('cheque');
 Route::get('caja/listacheque/{formato?}/{busqueda?}', 'Caja\ChequeController@listar')->name('lista_cheque');
 Route::get('caja/listaagingcheque/{formato?}', 'Caja\ChequeController@listarAging')->name('lista_aging_cheque');
 Route::get('caja/listaconciliaciondepositocheque/{formato?}', 'Caja\ChequeController@listarConciliacionDeposito')->name('lista_conciliacion_deposito_cheque');
+Route::get('caja/listahistorialdepositocheque/{formato?}', 'Caja\ChequeController@listarHistorialDepositos')->name('lista_historial_deposito_cheque');
 Route::get('caja/cheque/aging-cartera', 'Caja\ChequeController@agingCartera')->name('aging_cheque_cartera');
 Route::get('caja/cheque/conciliacion-deposito', 'Caja\ChequeController@conciliacionDeposito')->name('conciliacion_deposito_cheque');
+Route::get('caja/cheque/historial-depositos', 'Caja\ChequeController@historialDepositos')->name('historial_deposito_cheque');
 Route::get('caja/cheque/cashflow-semanal', 'Caja\ChequeController@cashflowSemanal')->name('cashflow_cheque');
 Route::get('caja/cheque/reporte', 'Caja\ChequeController@reporte')->name('reporte_cheque');
 Route::get('caja/listareportecheque/{formato?}', 'Caja\ChequeController@listarReporte')->name('lista_reporte_cheque');

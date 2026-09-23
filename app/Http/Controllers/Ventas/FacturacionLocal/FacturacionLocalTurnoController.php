@@ -7,6 +7,7 @@ use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\TurnoOperativoLocal;
 use App\Services\Ventas\FacturacionLocal\FacturacionLocalTurnoService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalTurnoCierreSupport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -79,6 +80,56 @@ class FacturacionLocalTurnoController extends Controller
         }
     }
 
+    public function ver(int $id)
+    {
+        $this->assertFerli();
+        $this->assertPuedeVerCierre();
+
+        $turno = $this->turnoParaCierre($id);
+        $resumen = FacturacionLocalTurnoCierreSupport::resumen($turno);
+        $puedeCerrar = $turno->estaAbierto() && can('cerrar-turno-facturacion-local', false);
+        $puedeMoverMedio = $turno->estaAbierto()
+            && $turno->cierre_en === null
+            && can('cambiar-medio-pago-facturacion-local', false);
+
+        return view('ventas.facturacion_local.turno.ver', compact(
+            'turno',
+            'resumen',
+            'puedeCerrar',
+            'puedeMoverMedio',
+        ));
+    }
+
+    public function facturasMedio(Request $request, int $id)
+    {
+        $this->assertFerli();
+        $this->assertPuedeVerCierre();
+
+        $turno = $this->turnoParaCierre($id);
+        $soloNc = (int) $request->input('notas_credito', 0) === 1;
+        $cuentacajaId = (int) $request->input('cuentacaja_id', 0);
+        $facturas = FacturacionLocalTurnoCierreSupport::comprobantes($turno, $cuentacajaId, $soloNc);
+
+        $titulo = 'Notas de crédito del turno';
+        if (! $soloNc) {
+            $resumen = FacturacionLocalTurnoCierreSupport::resumen($turno);
+            $titulo = 'Facturas';
+            foreach ($resumen['por_medio'] as $medio) {
+                if ((int) $medio['cuentacaja_id'] === $cuentacajaId) {
+                    $nombre = trim((string) $medio['codigo'].' '.(string) $medio['nombre']);
+                    $titulo = 'Facturas — '.($nombre !== '' ? $nombre : 'Medio de pago');
+                    break;
+                }
+            }
+        }
+
+        return response()->json([
+            'ok' => true,
+            'titulo' => $titulo,
+            'facturas' => $facturas,
+        ]);
+    }
+
     public function cerrar(Request $request, int $id)
     {
         $this->assertFerli();
@@ -104,7 +155,7 @@ class FacturacionLocalTurnoController extends Controller
                 ]);
             }
 
-            return redirect()->route('facturacion_local_turnos')
+            return redirect()->route('facturacion_local_turno_ver', $turno->id)
                 ->with('mensaje', 'Turno #'.$turno->id.' cerrado');
         } catch (InvalidArgumentException $e) {
             if ($request->expectsJson()) {
@@ -118,12 +169,11 @@ class FacturacionLocalTurnoController extends Controller
     public function pdf(int $id)
     {
         $this->assertFerli();
-        can('listar-turno-facturacion-local');
-        $turno = TurnoOperativoLocal::query()
-            ->with(['localVenta', 'turnoLocal', 'usuarioApertura', 'usuarioCierre'])
-            ->findOrFail($id);
+        $this->assertPuedeVerCierre();
+        $turno = $this->turnoParaCierre($id);
+        $resumen = FacturacionLocalTurnoCierreSupport::resumen($turno);
 
-        $pdf = Pdf::loadView('ventas.facturacion_local.turno.comprobante', compact('turno'))
+        $pdf = Pdf::loadView('ventas.facturacion_local.turno.comprobante', compact('turno', 'resumen'))
             ->setPaper('a4');
 
         return $pdf->stream('cierre_turno_local_'.$turno->id.'.pdf');
@@ -134,5 +184,21 @@ class FacturacionLocalTurnoController extends Controller
         if (! EntornoEmpresaSupport::esFerli()) {
             abort(404);
         }
+    }
+
+    private function assertPuedeVerCierre(): void
+    {
+        if (can('listar-turno-facturacion-local', false) || can('cerrar-turno-facturacion-local', false)) {
+            return;
+        }
+
+        can('listar-turno-facturacion-local');
+    }
+
+    private function turnoParaCierre(int $id): TurnoOperativoLocal
+    {
+        return TurnoOperativoLocal::query()
+            ->with(['localVenta', 'turnoLocal', 'usuarioApertura', 'usuarioCierre'])
+            ->findOrFail($id);
     }
 }

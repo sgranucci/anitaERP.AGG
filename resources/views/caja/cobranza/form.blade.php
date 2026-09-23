@@ -29,7 +29,7 @@
                 <select name="tipotransaccion_caja_id" id="tipotransaccion_caja_id" data-placeholder="Tipo de transacci&oacute;n" class="form-control required" data-fouc required>
                     <option value="">-- Seleccionar --</option>
                     @foreach($tipotransaccion_caja_query as $value)
-                        <option value="{{ $value->id }}" @selected((int) $tipoTransaccionSel === (int) $value->id)>
+                        <option value="{{ $value->id }}" data-abreviatura="{{ strtoupper(trim((string) ($value->abreviatura ?? ''))) }}" @selected((int) $tipoTransaccionSel === (int) $value->id)>
                             {{ $value->nombre }}
                         </option>
                     @endforeach

@@ -8,10 +8,12 @@ use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionCheque;
 use App\Exports\Caja\ChequeAgingExport;
 use App\Exports\Caja\ChequeDepositoConciliacionExport;
+use App\Exports\Caja\ChequeDepositoHistorialExport;
 use App\Exports\Caja\ChequeListadoExport;
 use App\Exports\Caja\ChequeReporteExport;
 use App\Models\Caja\Cheque;
 use App\Models\Caja\Chequera;
+use App\Models\Caja\Cuentacaja;
 use App\Repositories\Caja\ChequeRepositoryInterface;
 use App\Repositories\Caja\ChequeraRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
@@ -29,6 +31,8 @@ use App\Support\Caja\ChequeCashflowSemanalSupport;
 use App\Support\Caja\ChequeDepositoComprobanteSupport;
 use App\Support\Caja\ChequeDepositoConciliacionFiltros;
 use App\Support\Caja\ChequeDepositoConciliacionSupport;
+use App\Support\Caja\ChequeDepositoHistorialFiltros;
+use App\Support\Caja\ChequeDepositoHistorialSupport;
 use App\Support\Caja\ChequeConsultaChequeraSupport;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequeNdConfigSupport;
@@ -674,6 +678,80 @@ class ChequeController extends Controller
             'filtrosQuery' => ChequeDepositoConciliacionFiltros::paraQueryString($filtros),
             'puede_acreditar' => can('editar-cheque', false) || can('actualizar-cheque', false),
         ]);
+    }
+
+    /**
+     * Historial de boletas de depósito CHT (agrupado por fecha + cuenta + nro. boleta).
+     */
+    public function historialDepositos(Request $request)
+    {
+        can('listar-cheque');
+
+        $filtros = ChequeDepositoHistorialFiltros::resolverDesdeRequest($request);
+        $resumen = ChequeDepositoHistorialSupport::resumirPaginado(
+            $filtros,
+            max(1, (int) $request->input('page', 1)),
+            25,
+            $this->empresaRepository
+        );
+
+        $cuentaFiltro = null;
+        $cuentaId = (int) ($filtros['cuentacaja_id'] ?? 0);
+        if ($cuentaId > 0) {
+            $cuentaFiltro = Cuentacaja::query()->find($cuentaId);
+        }
+
+        return view('caja.cheque.historial', [
+            'resumen' => $resumen,
+            'paginator' => $resumen['paginator'],
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'cuentaFiltro' => $cuentaFiltro,
+            'filtros' => $filtros,
+            'filtrosQuery' => ChequeDepositoHistorialFiltros::paraQueryString($filtros),
+        ]);
+    }
+
+    public function listarHistorialDepositos(Request $request, $formato = null)
+    {
+        can('listar-cheque');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = ChequeDepositoHistorialFiltros::resolverDesdeRequest($request);
+        $resumen = ChequeDepositoHistorialSupport::resumir($filtros, $this->empresaRepository);
+        $grupos = $resumen['grupos'] ?? [];
+        $subtitulo = ChequeDepositoHistorialFiltros::subtitulo($filtros);
+
+        switch ($formato) {
+            case 'PDF':
+                $html = view('caja.cheque.historial_listado', [
+                    'grupos' => $grupos,
+                    'subtitulo' => $subtitulo,
+                    'filtros' => $filtros,
+                ])->render();
+                $ruta = storage_path('pdf/listados/listado_historial_deposito_cheque.pdf');
+                DompdfListadoSupport::guardarLegalLandscape($html, $ruta, [
+                    'titulo_corto' => 'Historial depósitos CHT',
+                ]);
+
+                return response()->download($ruta);
+
+            case 'EXCEL':
+                return (new ChequeDepositoHistorialExport)
+                    ->parametros($filtros)
+                    ->download('historial_deposito_cheque.xlsx');
+
+            case 'CSV':
+                return (new ChequeDepositoHistorialExport)
+                    ->parametros($filtros)
+                    ->download('historial_deposito_cheque.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route(
+            'historial_deposito_cheque',
+            ChequeDepositoHistorialFiltros::paraQueryString($filtros)
+        );
     }
 
     public function listarConciliacionDeposito(Request $request, $formato = null)

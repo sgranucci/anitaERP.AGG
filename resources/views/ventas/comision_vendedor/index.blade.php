@@ -128,12 +128,6 @@
                     @endif
 
                     <style>
-                        .comision-vendedor-hero {
-                            background: linear-gradient(120deg, #145A32 0%, #1E8449 45%, #58D68D 100%) !important;
-                            border-bottom: 0;
-                        }
-                        .comision-vendedor-hero .card-title,
-                        .comision-vendedor-hero-sub { color: #fff !important; }
                         .comision-vendedor-kpis { background: #F4F9FC; border-bottom: 1px solid #d6eaf8; }
                         .comision-kpi {
                             background: #fff;

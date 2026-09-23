@@ -84,7 +84,7 @@ window.FACTURACION_LOCAL = {
                 </button>
             @endif
             @if ($turno && can('cerrar-turno-facturacion-local', false))
-                <button type="button" class="fl-btn fl-btn-ghost" id="fl-cerrar-turno">Cerrar turno</button>
+                <a href="{{ route('facturacion_local_turno_ver', $turno->id) }}" class="fl-btn fl-btn-ghost">Cerrar turno</a>
             @endif
             <a href="{{ route('facturacion_local_turno') }}" class="fl-btn fl-btn-ghost">Turnos</a>
             <a href="{{ route('facturacion_local_locales') }}" class="fl-btn fl-btn-ghost">Locales</a>

@@ -259,6 +259,14 @@ class PedidoServiceFerli
 								$estadopedido = $nombretarea;
 						}
 
+						// Circuito picking stock (sin OT): picking_facturado = ya facturado
+						// Misma regla que conteoEstadoLineaCombinacion / cabecera estadopedido.
+						if ($estadopedido != 'ANULADO'
+							&& ($pedido['picking_facturado'] ?? PedidoPickingFerliSupport::NO_MARCADO)
+								=== PedidoPickingFerliSupport::FACTURADO) {
+							$estadopedido = 'FACTURADA';
+						}
+
 						$numeroot = $pedido['codigoot'];
 						$fecha = $pedido['fecha'];
 						$nombrevendedor = $pedido['nombrevendedor'];
@@ -326,7 +334,8 @@ class PedidoServiceFerli
 			switch($estado)
 			{
 				case 'PENDIENTES':
-					if ($item['numeroot'] == '' || $item['numeroot'] == '0')
+					// Solo líneas realmente pendientes (sin OT y no facturadas por picking).
+					if ($item['estadopedido'] == 'PENDIENTE')
 						$cc = true;
 					break;
 				case 'EN PRODUCCION':

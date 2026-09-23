@@ -452,8 +452,12 @@ class ClienteCuentacorrienteReporteService
                     ->selectRaw('SUM(total)')
                     ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
             ])
-            ->whereNotNull('cliente_cuentacorriente.venta_id')
-            ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc())
+            ->where(function ($q) {
+                $q->where(function ($deuda) {
+                    $deuda->whereNotNull('cliente_cuentacorriente.venta_id')
+                        ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc());
+                })->orWhere('cliente_cuentacorriente.total', '<', 0);
+            })
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
 
         $this->aplicarFiltrosComunes($query, $filtros, $clienteIds, $vendedorIds);
