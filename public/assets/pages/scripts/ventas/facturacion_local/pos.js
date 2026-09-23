@@ -216,34 +216,16 @@
         actualizarCampoCupon(tr, cuenta);
     }
 
-    function textoEsTarjeta(nombre, codigo) {
-        var texto = String(nombre || '') + ' ' + String(codigo || '');
-        texto = texto.toUpperCase()
-            .replace(/[ÁÉÍÓÚÜÑ]/g, function (c) {
-                return ({ Á: 'A', É: 'E', Í: 'I', Ó: 'O', Ú: 'U', Ü: 'U', Ñ: 'N' })[c] || c;
-            })
-            .replace(/\s+/g, ' ')
-            .trim();
-        if (!texto) return false;
-        var excluidos = ['CANJE', 'CTG', 'EFECTIVO', 'TRANSFER', 'MERCADO PAGO', 'MERCADOPAGO', 'CHEQUE', 'DOLAR', 'EURO'];
-        for (var i = 0; i < excluidos.length; i++) {
-            if (texto.indexOf(excluidos[i]) !== -1) return false;
-        }
-        var marcas = ['VISA', 'MASTER', 'MAESTRO', 'CABAL', 'AMEX', 'AMERICAN EXPRESS', 'NARANJA', 'FISERV', 'POSNET', 'GETNET', 'PAYWAY', 'FIRST DATA', 'TARJETA', 'CREDITO', 'DEBITO'];
-        for (var j = 0; j < marcas.length; j++) {
-            if (texto.indexOf(marcas[j]) !== -1) return true;
-        }
-        return false;
-    }
-
     function cuentaPideCupon(cuenta) {
         if (!cuenta) return false;
         if (typeof cuenta.pide_cupon === 'boolean') return cuenta.pide_cupon;
+        if (typeof cuenta.es_tarjeta === 'boolean') return cuenta.es_tarjeta;
         var conocida = (CFG.cuentas || []).find(function (c) {
             return String(c.id) === String(cuenta.id);
         });
         if (conocida && typeof conocida.pide_cupon === 'boolean') return conocida.pide_cupon;
-        return textoEsTarjeta(cuenta.nombre, cuenta.codigo);
+        if (conocida && typeof conocida.es_tarjeta === 'boolean') return conocida.es_tarjeta;
+        return false;
     }
 
     function actualizarCampoCupon(tr, cuenta) {

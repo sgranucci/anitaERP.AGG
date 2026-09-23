@@ -181,7 +181,9 @@ final class FacturacionLocalNotaCreditoService
                 }
                 $emision->save();
 
-                $this->turnoService->sumarFacturacion($turno, -1 * abs((float) $ventaOrigen->total));
+                // Importe real de la NC (puede ser parcial). El cierre atribuye la NC al turno
+                // por ventana de emisión (created_at), no por el turno de la factura origen.
+                $this->turnoService->sumarFacturacion($turno, -1 * abs((float) $ventaNc->total));
 
                 $facturaTxt = trim((string) ($resultado['factura'] ?? $ventaNc->codigo));
                 $pdfUrl = url('ventas/listaunafactura/'.$ventaNc->id);

@@ -14,18 +14,28 @@ class Cuentacaja extends Model implements Auditable
     use CuentacajaTrait;
     use \OwenIt\Auditing\Auditable;
 
-    protected $fillable = ['nombre', 'descripcion_operaciones', 'orden', 'codigo', 'tipocuenta', 'banco_id',
-        'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu', 'cuenta_interbanking'];
+    protected $fillable = ['nombre', 'descripcion_operaciones', 'orden', 'codigo', 'tipocuenta', 'es_tarjeta',
+        'banco_id', 'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu', 'cuenta_interbanking'];
 
     protected $table = 'cuentacaja';
 
     protected $casts = [
         'orden' => 'integer',
+        'es_tarjeta' => 'boolean',
     ];
 
     protected $attributes = [
         'orden' => 0,
+        'es_tarjeta' => false,
     ];
+
+    /**
+     * Tarjeta / medio con Nº de cupón o transacción (POS Local, etc.).
+     */
+    public function pideCupon(): bool
+    {
+        return (bool) $this->es_tarjeta;
+    }
 
     /**
      * Etiqueta corta para pantallas operativas (rendición máquinas, etc.).

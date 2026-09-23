@@ -80,9 +80,13 @@
                             <input type="text" name="lote_hasta" id="lote_hasta" class="form-control" value="{{ $lote_hasta }}">
                         </div>
                     </div>
-                    <p class="text-muted small mb-0 pl-2">
+                    <p class="text-muted small mb-1 pl-2">
                         Un picking puede mezclar varios clientes. Al facturar, eleg&iacute; l&iacute;neas del <strong>mismo cliente</strong>.
                     </p>
+                    <div class="alert alert-warning py-1 px-2 mb-0 small ml-2 mr-2" role="status">
+                        <i class="fa fa-info-circle"></i>
+                        Las l&iacute;neas <strong>Preparadas</strong> a&uacute;n no descontaron stock; el consumo del lote/OT se graba al <strong>facturar</strong>.
+                    </div>
                 </div>
                 <div class="card-footer d-flex flex-wrap align-items-center">
                     <button type="submit" class="btn btn-primary btn-sm mr-2">

@@ -69,7 +69,8 @@ class FacturacionLocalProcesoController extends Controller
         $cuentasPos = ($local?->cuentacajas ?? collect())->map(static function ($c) {
             $presentacion = FacturacionLocalMedioPresentacionSupport::presentacion(
                 (string) $c->nombre,
-                (string) $c->codigo
+                (string) $c->codigo,
+                (bool) ($c->es_tarjeta ?? false)
             );
 
             return [
@@ -81,6 +82,7 @@ class FacturacionLocalProcesoController extends Controller
                 'tema' => $presentacion['tema'],
                 'etiqueta_boton' => $presentacion['etiqueta'],
                 'pide_cupon' => $presentacion['pide_cupon'],
+                'es_tarjeta' => (bool) ($c->es_tarjeta ?? false),
             ];
         })->values()->all();
 

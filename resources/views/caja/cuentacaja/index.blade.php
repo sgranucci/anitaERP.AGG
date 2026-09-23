@@ -81,6 +81,7 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                             <th style="width:5rem;">Código</th>
                             <th style="width:3.5rem;" title="Orden">Ord</th>
                             <th style="width:5.5rem;">Tipo</th>
+                            <th style="width:3.5rem;" title="Es tarjeta / pide cupón">Tarj.</th>
                             <th style="min-width:6rem;">Banco</th>
                             <th style="min-width:6rem;">Empresa</th>
                             <th style="min-width:8rem;">Cta. contable</th>
@@ -121,6 +122,9 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                             <td>{{ $data->codigo }}</td>
                             <td class="text-center">{{ $data->orden ?? 0 }}</td>
                             <td class="small" title="{{ $tipoNombre }}">{{ \Illuminate\Support\Str::limit($tipoNombre, 14) }}</td>
+                            <td class="text-center small" title="{{ !empty($data->es_tarjeta) ? 'Es tarjeta (pide cupón)' : 'No' }}">
+                                {{ !empty($data->es_tarjeta) ? 'Sí' : '' }}
+                            </td>
                             <td class="small" title="{{ $data->bancos->nombre ?? '' }}">
                                 {{ \Illuminate\Support\Str::limit((string) ($data->bancos->nombre ?? ''), 18) }}
                             </td>

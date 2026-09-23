@@ -10,6 +10,7 @@ use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteClienteSupport;
 use App\Support\Ventas\ClienteCuentacorrienteReporteFiltros;
@@ -452,13 +453,9 @@ class ClienteCuentacorrienteReporteService
                     ->selectRaw('SUM(total)')
                     ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
             ])
-            ->where(function ($q) {
-                $q->where(function ($deuda) {
-                    $deuda->whereNotNull('cliente_cuentacorriente.venta_id')
-                        ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc());
-                })->orWhere('cliente_cuentacorriente.total', '<', 0);
-            })
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
+
+        ClienteCuentacorrienteDeudaAlcanceSupport::aplicar($query);
 
         $this->aplicarFiltrosComunes($query, $filtros, $clienteIds, $vendedorIds);
 

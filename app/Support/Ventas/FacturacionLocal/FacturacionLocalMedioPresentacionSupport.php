@@ -10,18 +10,17 @@ final class FacturacionLocalMedioPresentacionSupport
     /**
      * @return array{icono:string,icono_color:string,tema:string,etiqueta:string,pide_cupon:bool}
      */
-    public static function presentacion(string $nombre, ?string $codigo = null): array
+    public static function presentacion(string $nombre, ?string $codigo = null, bool $esTarjeta = false): array
     {
         $texto = self::normalizar($nombre.' '.(string) $codigo);
         $regla = self::resolverRegla($texto);
-        $pideCupon = FacturacionLocalMedioTarjetaSupport::pideCupon($nombre, $codigo);
 
         return [
             'icono' => $regla['icono'],
             'icono_color' => $regla['icono_color'],
             'tema' => $regla['tema'],
             'etiqueta' => $regla['etiqueta'],
-            'pide_cupon' => $pideCupon,
+            'pide_cupon' => $esTarjeta,
         ];
     }
 

@@ -36,7 +36,15 @@ class ValidacionCuentacaja extends FormRequest
             'cuenta_interbanking' => 'nullable|max:255',
             'usocuentacaja_ids' => 'nullable|array',
             'usocuentacaja_ids.*' => 'integer|exists:usocuentacaja,id',
+            'es_tarjeta' => 'nullable|boolean',
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'es_tarjeta' => $this->boolean('es_tarjeta'),
+        ]);
     }
 
     public function attributes()
@@ -46,6 +54,7 @@ class ValidacionCuentacaja extends FormRequest
             'banco_id' => 'banco',
             'descripcion_operaciones' => 'descripción para operaciones',
             'orden' => 'orden en posición financiera',
+            'es_tarjeta' => 'es tarjeta (pide cupón)',
         ];
     }
 }

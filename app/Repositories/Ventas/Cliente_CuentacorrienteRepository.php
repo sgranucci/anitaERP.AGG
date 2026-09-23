@@ -4,6 +4,7 @@ namespace App\Repositories\Ventas;
 
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
@@ -124,9 +125,9 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                     ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
             ])
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
-            ->whereNotNull('cliente_cuentacorriente.venta_id')
-            ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc())
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
+
+        ClienteCuentacorrienteDeudaAlcanceSupport::aplicar($query);
 
         $this->aplicarFiltroMoneda($query, $monedaId);
 
@@ -324,9 +325,9 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ])
             ->leftJoin('moneda', 'moneda.id', '=', 'cliente_cuentacorriente.moneda_id')
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
-            ->whereNotNull('cliente_cuentacorriente.venta_id')
-            ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc())
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
+
+        ClienteCuentacorrienteDeudaAlcanceSupport::aplicar($query);
 
         $this->aplicarFiltroMoneda($query, $monedaId);
 

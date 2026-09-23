@@ -555,6 +555,10 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $data['orden'] = max(0, (int) ($data['orden'] ?? 0));
         }
 
+        if (array_key_exists('es_tarjeta', $data)) {
+            $data['es_tarjeta'] = filter_var($data['es_tarjeta'], FILTER_VALIDATE_BOOLEAN);
+        }
+
         return $data;
     }
 

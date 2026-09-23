@@ -1880,29 +1880,31 @@
 		var $lote = $box.find('.picking-lote');
 		var $dep = $box.find('.picking-deposito');
 		var $lupa = $box.find('.consulta-lotes-stock-picking');
-		$box.find('small.text-muted').remove();
+		$box.find('small.picking-facturado-msg, small.picking-ayuda').remove();
 		$box.find('.guarda-picking').remove();
 
 		if (estado === 'facturado') {
 			$lote.prop('readonly', true);
 			$dep.prop('disabled', true);
 			$lupa.prop('disabled', true);
-			$box.append('<small class="text-muted d-block">Ya facturado</small>');
+			$box.append('<small class="text-muted d-block picking-facturado-msg">Ya facturado</small>');
 		} else if (estado === 'preparado') {
 			$lote.prop('readonly', true);
 			$dep.prop('disabled', true);
 			$lupa.prop('disabled', true);
 			$box.append(
-				'<button type="button" title="Quitar picking" class="btn btn-sm btn-outline-secondary btn-block guarda-picking tooltipsC">' +
-				'<i class="fa fa-undo"></i> Quitar</button>'
+				'<button type="button" title="Quitar marca de preparado (el stock no se tocó al preparar)" class="btn btn-sm btn-outline-secondary btn-block guarda-picking tooltipsC">' +
+				'<i class="fa fa-undo"></i> Quitar</button>' +
+				'<small class="text-muted d-block picking-ayuda" title="El egreso de stock ocurre al facturar el picking">Preparado: sin descuento de stock hasta facturar</small>'
 			);
 		} else {
 			$lote.prop('readonly', false);
 			$dep.prop('disabled', false);
 			$lupa.prop('disabled', false);
 			$box.append(
-				'<button type="button" title="Marcar como preparado" class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">' +
-				'<i class="fa fa-check"></i> Preparar</button>'
+				'<button type="button" title="Marcar preparado (no descuenta stock; el egreso es al facturar)" class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">' +
+				'<i class="fa fa-check"></i> Preparar</button>' +
+				'<small class="text-muted d-block picking-ayuda">No descuenta stock; elegí lote+depósito con F1</small>'
 			);
 		}
 
@@ -1941,6 +1943,11 @@
 				pickingAviso('Indique el número de OT stock / lote a preparar', 'error');
 				return;
 			}
+			if (depositoId <= 0) {
+				$btn.prop('disabled', false);
+				pickingAviso('Seleccione el depósito de salida (use F1 / lupa y Elegir el lote con su depósito)', 'error');
+				return;
+			}
 			$.post(carpetaBase + '/stock/picking-pedido/marcar', {
 				pedido_combinacion_id: pedidoCombinacionId,
 				picking_lote_codigo: lote,
@@ -1963,7 +1970,7 @@
 						$('#picking_activo_etiqueta').text('Picking #' + data.picking_codigo);
 					}
 					actualizarUiPicking($tr, 'preparado');
-					pickingAviso('Línea preparada' + (data.picking_codigo ? (' en picking #' + data.picking_codigo) : ''));
+					pickingAviso(data.aviso || ('Línea preparada' + (data.picking_codigo ? (' en picking #' + data.picking_codigo) : '') + '. El stock no se descuenta hasta facturar.'));
 				})
 				.fail(function (xhr) {
 					pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al marcar picking', 'error');

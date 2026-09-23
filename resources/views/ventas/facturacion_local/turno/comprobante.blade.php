@@ -22,10 +22,18 @@
     <p class="meta">Apertura: {{ optional($turno->apertura_en)->format('d/m/Y H:i') }} · {{ $turno->usuarioApertura->nombre ?? '' }}</p>
     <p class="meta">Cierre: {{ optional($turno->cierre_en)->format('d/m/Y H:i') }} · {{ $turno->usuarioCierre->nombre ?? '' }}</p>
     <p class="meta">Fondo inicial: {{ number_format($turno->fondo_inicial, 2, ',', '.') }}</p>
+    @php
+        $cantFacPdf = (int) ($resumen['cantidad_facturas'] ?? 0);
+        $cantNcPdf = (int) ($resumen['cantidad_nc'] ?? 0);
+        $detalleCantPdf = $cantFacPdf.' facturas';
+        if ($cantNcPdf > 0) {
+            $detalleCantPdf .= ' · '.$cantNcPdf.' NC';
+        }
+    @endphp
     <p class="meta">Facturación turno: {{ number_format((float) ($resumen['total_facturado'] ?? $turno->monto_facturacion_turno), 2, ',', '.') }}
-        ({{ (int) ($resumen['cantidad_facturas'] ?? 0) }} comprobantes)</p>
-    @if ((int) ($resumen['cantidad_nc'] ?? 0) > 0)
-        <p class="meta">Notas de crédito: {{ (int) $resumen['cantidad_nc'] }} · {{ number_format((float) $resumen['total_nc'], 2, ',', '.') }}</p>
+        ({{ $detalleCantPdf }})</p>
+    @if ($cantNcPdf > 0)
+        <p class="meta">Notas de crédito: {{ $cantNcPdf }} · {{ number_format((float) $resumen['total_nc'], 2, ',', '.') }}</p>
     @endif
     <p class="meta">Neto por medios: {{ number_format((float) ($resumen['neto_medios'] ?? 0), 2, ',', '.') }}</p>
     <p class="meta">Sobrante/faltante: {{ number_format((float) $turno->sobrante_faltante, 2, ',', '.') }}</p>

@@ -138,7 +138,7 @@ final class FacturacionLocalPreflightService
 
         $cuentas = Cuentacaja::query()
             ->whereIn('id', array_values(array_unique($ids)))
-            ->get(['id', 'nombre', 'codigo'])
+            ->get(['id', 'nombre', 'codigo', 'es_tarjeta'])
             ->keyBy('id');
 
         $hayTarjeta = false;
@@ -147,7 +147,7 @@ final class FacturacionLocalPreflightService
             if (! $cuenta) {
                 continue;
             }
-            if (! FacturacionLocalMedioTarjetaSupport::pideCupon((string) $cuenta->nombre, (string) $cuenta->codigo)) {
+            if (! FacturacionLocalMedioTarjetaSupport::pideCupon($cuenta)) {
                 continue;
             }
             $hayTarjeta = true;

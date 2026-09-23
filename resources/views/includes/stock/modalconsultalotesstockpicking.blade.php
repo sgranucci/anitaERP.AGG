@@ -9,6 +9,10 @@
         </button>
       </div>
       <div class="modal-body">
+        <p class="small text-muted mb-2">
+          <i class="fa fa-info-circle"></i>
+          Eleg&iacute; lote <strong>y</strong> dep&oacute;sito con saldo. Preparar no descuenta stock; el egreso es al facturar.
+        </p>
         <div class="form-group row mb-2">
           <label for="consultalotesstockpicking" class="col-form-label col-auto pr-2">Buscar:</label>
           <div class="col">

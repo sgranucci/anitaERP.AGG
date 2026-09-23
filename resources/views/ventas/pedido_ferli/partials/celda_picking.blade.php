@@ -42,7 +42,7 @@
         </div>
     </div>
     <select class="form-control form-control-sm picking-deposito mb-1"
-            title="Dep&oacute;sito de salida"
+            title="Dep&oacute;sito con saldo del lote (usar F1 / Elegir)"
             @if ($pickingFacturado || $pickingMarcado) disabled @endif>
         <option value="0">Dep&oacute;sito…</option>
         @foreach ($depositosPicking as $dep)
@@ -52,18 +52,24 @@
         @endforeach
     </select>
     @if ($pickingFacturado)
-        <small class="text-muted d-block">Ya facturado</small>
+        <small class="text-muted d-block picking-facturado-msg">Ya facturado</small>
     @elseif ($pickingMarcado)
         <button type="button"
-                title="Quitar picking"
+                title="Quitar marca de preparado (el stock no se toc&oacute; al preparar)"
                 class="btn btn-sm btn-outline-secondary btn-block guarda-picking tooltipsC">
             <i class="fa fa-undo"></i> Quitar
         </button>
+        <small class="text-muted d-block picking-ayuda" title="El egreso de stock ocurre al facturar el picking">
+            Preparado: sin descuento de stock hasta facturar
+        </small>
     @else
         <button type="button"
-                title="Marcar como preparado"
+                title="Marcar preparado (no descuenta stock; el egreso es al facturar)"
                 class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">
             <i class="fa fa-check"></i> Preparar
         </button>
+        <small class="text-muted d-block picking-ayuda">
+            No descuenta stock; eleg&iacute; lote+dep&oacute;sito con F1
+        </small>
     @endif
 </div>

@@ -109,21 +109,45 @@ final class FacturacionLocalTurnoCierreSupport
             return self::$cache[$turnoId];
         }
 
+        $turno = TurnoOperativoLocal::query()->find($turnoId);
+        if ($turno === null) {
+            self::$cache[$turnoId] = self::resumenVacio();
+
+            return self::$cache[$turnoId];
+        }
+
+        // Facturas: emisiones grabadas en este turno operativo.
         $emisiones = FacturacionLocalEmision::query()
             ->where('turno_operativo_local_id', $turnoId)
             ->get(['id', 'venta_id', 'venta_nc_id', 'es_ticket_regalo']);
 
-        $facIds = [];
+        // NC: la emisión queda en el turno de la factura; atribuir la NC al turno en que se emitió
+        // (ventana apertura→cierre), para que un cierre posterior no quede en 0 comprobantes.
+        $desde = $turno->apertura_en;
+        $hasta = $turno->cierre_en ?? Carbon::now();
         $ncIds = [];
+        if ($desde !== null) {
+            $ncIds = FacturacionLocalEmision::query()
+                ->where('facturacion_local_emision.local_venta_id', (int) $turno->local_venta_id)
+                ->whereNotNull('facturacion_local_emision.venta_nc_id')
+                ->where('facturacion_local_emision.venta_nc_id', '>', 0)
+                ->join('venta as v_nc', 'v_nc.id', '=', 'facturacion_local_emision.venta_nc_id')
+                ->where('v_nc.created_at', '>=', $desde)
+                ->where('v_nc.created_at', '<=', $hasta)
+                ->pluck('facturacion_local_emision.venta_nc_id')
+                ->map(static fn ($id): int => (int) $id)
+                ->filter(static fn (int $id): bool => $id > 0)
+                ->unique()
+                ->all();
+            $ncIds = array_combine($ncIds, $ncIds) ?: [];
+        }
+
+        $facIds = [];
         $regalo = [];
         foreach ($emisiones as $emision) {
             $ventaId = (int) $emision->venta_id;
             if ($ventaId > 0) {
                 $facIds[$ventaId] = $ventaId;
-            }
-            $ncId = (int) ($emision->venta_nc_id ?? 0);
-            if ($ncId > 0) {
-                $ncIds[$ncId] = $ncId;
             }
             if ($emision->es_ticket_regalo && $ventaId > 0) {
                 $regalo[$ventaId] = true;
@@ -356,6 +380,23 @@ final class FacturacionLocalTurnoCierreSupport
         }
 
         return $out;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function resumenVacio(): array
+    {
+        return [
+            'cantidad_facturas' => 0,
+            'total_facturado' => 0.0,
+            'cantidad_nc' => 0,
+            'total_nc' => 0.0,
+            'neto_medios' => 0.0,
+            'por_medio' => [],
+            'comprobantes_por_medio' => [],
+            'notas_credito' => [],
+        ];
     }
 
     /**

@@ -44,6 +44,22 @@
 	</div>
 </div>
 @php
+	$esTarjetaForm = (bool) old('es_tarjeta', $data->es_tarjeta ?? false);
+@endphp
+<div class="form-group row">
+	<label for="es_tarjeta" class="col-lg-3 col-form-label">Tarjeta / cup&oacute;n</label>
+	<div class="col-lg-8">
+		<div class="form-check mt-2">
+			<input type="checkbox" class="form-check-input" name="es_tarjeta" id="es_tarjeta" value="1"
+				{{ $esTarjetaForm ? 'checked' : '' }}>
+			<label class="form-check-label" for="es_tarjeta">
+				Es tarjeta (pide n&uacute;mero de cup&oacute;n / transacci&oacute;n en POS)
+			</label>
+		</div>
+		<small class="form-text text-muted">Visa, Mastercard, MEP, Go Cuotas, etc. No aplica a efectivo, transferencia ni Mercado Pago billetera.</small>
+	</div>
+</div>
+@php
 	$bancoIdForm = old('banco_id', $data->banco_id ?? '');
 	$bancoModelForm = null;
 	if ((int) $bancoIdForm > 0) {

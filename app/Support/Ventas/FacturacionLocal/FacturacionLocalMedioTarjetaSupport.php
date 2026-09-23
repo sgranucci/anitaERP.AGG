@@ -2,47 +2,30 @@
 
 namespace App\Support\Ventas\FacturacionLocal;
 
+use App\Models\Caja\Cuentacaja;
+
 /**
- * Medio de tarjeta del POS Local: pide número de cupón del posnet.
- * Canje, efectivo, transferencia y billeteras no lo piden.
+ * Cupón / Nº de transacción en POS Local: manda cuentacaja.es_tarjeta (ABM).
  */
 final class FacturacionLocalMedioTarjetaSupport
 {
-    public static function pideCupon(string $nombre, ?string $codigo = null): bool
+    public static function pideCupon(?Cuentacaja $cuenta): bool
     {
-        $texto = self::normalizar($nombre.' '.(string) $codigo);
-        if ($texto === '') {
+        if ($cuenta === null) {
             return false;
         }
 
-        foreach (['CANJE', 'CTG', 'EFECTIVO', 'TRANSFER', 'MERCADO PAGO', 'MERCADOPAGO', 'CHEQUE', 'DOLAR', 'EURO'] as $excluido) {
-            if (str_contains($texto, $excluido)) {
-                return false;
-            }
-        }
-
-        foreach ([
-            'VISA', 'MASTER', 'MAESTRO', 'CABAL', 'AMEX', 'AMERICAN EXPRESS', 'NARANJA',
-            'FISERV', 'POSNET', 'GETNET', 'PAYWAY', 'FIRST DATA',
-            'TARJETA', 'CREDITO', 'DEBITO',
-        ] as $marca) {
-            if (str_contains($texto, $marca)) {
-                return true;
-            }
-        }
-
-        return false;
+        return $cuenta->pideCupon();
     }
 
-    private static function normalizar(string $texto): string
+    public static function pideCuponPorId(int $cuentacajaId): bool
     {
-        $texto = mb_strtoupper(trim($texto));
-        $texto = str_replace(
-            ['Á', 'É', 'Í', 'Ó', 'Ú', 'Ü', 'Ñ'],
-            ['A', 'E', 'I', 'O', 'U', 'U', 'N'],
-            $texto
-        );
+        if ($cuentacajaId <= 0) {
+            return false;
+        }
 
-        return preg_replace('/\s+/', ' ', $texto) ?? $texto;
+        $cuenta = Cuentacaja::query()->find($cuentacajaId, ['id', 'es_tarjeta']);
+
+        return self::pideCupon($cuenta);
     }
 }

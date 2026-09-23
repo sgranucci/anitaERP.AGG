@@ -71,7 +71,12 @@
                     <div class="col-md-2">
                         <div class="text-muted small">Facturado</div>
                         <div class="font-weight-bold">${{ $fmt($resumen['total_facturado'] ?? 0) }}</div>
-                        <div class="small text-muted">{{ (int) ($resumen['cantidad_facturas'] ?? 0) }} comprobantes</div>
+                        <div class="small text-muted">
+                            {{ (int) ($resumen['cantidad_facturas'] ?? 0) }} facturas
+                            @if ((int) ($resumen['cantidad_nc'] ?? 0) > 0)
+                                · {{ (int) $resumen['cantidad_nc'] }} NC
+                            @endif
+                        </div>
                     </div>
                     <div class="col-md-2">
                         <div class="text-muted small">Neto por medios</div>

@@ -149,6 +149,15 @@
             @endif
         </div>
     </div>
+    @if (\App\Support\Ventas\PedidoPickingFerliSupport::habilitado())
+        <div class="px-3 pt-2 mb-0">
+            <div class="alert alert-warning py-1 px-2 mb-0 small" role="status">
+                <i class="fa fa-info-circle"></i>
+                <strong>Preparado</strong> no reserva ni descuenta stock: solo marca lote/dep&oacute;sito para despacho.
+                El egreso se graba al <strong>facturar</strong> el picking. Us&aacute; F1 / lupa y <strong>Elegir</strong> para tomar el dep&oacute;sito con saldo.
+            </div>
+        </div>
+    @endif
     <div class="card-body p-2">
     	@include('ventas.pedido_ferli.partials.picking_estilos')
     	<div class="table-responsive">

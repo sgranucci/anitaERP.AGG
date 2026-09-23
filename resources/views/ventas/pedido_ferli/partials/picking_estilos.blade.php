@@ -43,6 +43,11 @@
         font-size: 0.7rem;
         font-weight: 600;
     }
+    .picking-box .picking-ayuda {
+        font-size: 0.65rem;
+        line-height: 1.2;
+        color: #6c757d;
+    }
     tr.item-pedido.picking-row-preparado {
         background-color: #fef9e7 !important;
     }

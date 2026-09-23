@@ -208,12 +208,18 @@ final class PedidoPickingFerliSupport
             return ['error' => 'Indique el número de OT stock / lote a preparar'];
         }
 
+        $depositoId = $depositoId && $depositoId > 0 ? $depositoId : null;
+        $validacionStock = self::validarSaldoLoteDepositoParaMarcar($linea, $loteCodigo, $depositoId);
+        if (! empty($validacionStock['error'])) {
+            return $validacionStock;
+        }
+
         $picking = self::resolverPickingParaMarcar($pickingId, $pickingCodigo);
 
         $linea->picking = self::MARCADO;
         $linea->picking_id = $picking->id;
         $linea->picking_lote_codigo = $loteCodigo;
-        $linea->picking_deposito_id = $depositoId && $depositoId > 0 ? $depositoId : null;
+        $linea->picking_deposito_id = $depositoId;
         $linea->picking_at = now();
         $linea->picking_usuario_id = Auth::id();
         $linea->save();
@@ -226,7 +232,200 @@ final class PedidoPickingFerliSupport
             'picking_codigo' => (int) $picking->codigo,
             'picking_lote_codigo' => $linea->picking_lote_codigo,
             'picking_deposito_id' => $linea->picking_deposito_id,
+            'aviso' => 'Línea preparada. El stock no se descuenta hasta facturar el picking.',
         ];
+    }
+
+    /**
+     * Exige depósito con saldo neto del lote/OT (mismo criterio que el modal de consulta).
+     * Preparar no consume stock; valida para que al facturar el egreso salga del depósito correcto.
+     *
+     * @return array{error?: string, saldo?: float, deposito_id?: int}
+     */
+    public static function validarSaldoLoteDepositoParaMarcar(
+        Pedido_Combinacion $linea,
+        string $loteCodigo,
+        ?int $depositoId
+    ): array {
+        $articuloId = (int) ($linea->articulo_id ?? 0);
+        $combinacionId = (int) ($linea->combinacion_id ?? 0);
+        if ($articuloId <= 0 || $combinacionId <= 0) {
+            return ['error' => 'La línea no tiene artículo/combinación para validar stock'];
+        }
+
+        if (! $depositoId || $depositoId <= 0) {
+            return ['error' => 'Seleccione el depósito de salida (use F1 / lupa y Elegir el lote con su depósito)'];
+        }
+
+        $saldos = self::saldosNetosLotePorDeposito($articuloId, $combinacionId, $loteCodigo);
+        $saldoElegido = (float) ($saldos[$depositoId]['saldo'] ?? 0);
+        $cantidadLinea = (float) ($linea->cantidad ?? 0);
+        if ($cantidadLinea <= 0) {
+            $cantidadLinea = (float) $linea->pedido_combinacion_talles->sum('cantidad');
+        }
+
+        if ($saldoElegido <= 0.0001) {
+            $sugerencias = self::formatearSugerenciasDepositosConSaldo($saldos);
+            $depTxt = self::etiquetaDeposito($depositoId);
+            $msg = "El lote/OT {$loteCodigo} no tiene saldo en el depósito {$depTxt}.";
+            if ($sugerencias !== '') {
+                $msg .= ' Saldo disponible en: '.$sugerencias.'. Use F1 y Elegir.';
+            } else {
+                $msg .= ' No hay saldo pendiente para ese lote/OT.';
+            }
+
+            return ['error' => $msg, 'saldo' => 0.0, 'deposito_id' => $depositoId];
+        }
+
+        if ($cantidadLinea > 0 && ($saldoElegido + 0.0001) < $cantidadLinea) {
+            $depTxt = self::etiquetaDeposito($depositoId);
+            $saldoFmt = number_format($saldoElegido, 0, ',', '.');
+            $cantFmt = number_format($cantidadLinea, 0, ',', '.');
+
+            return [
+                'error' => "Saldo insuficiente del lote/OT {$loteCodigo} en {$depTxt}: hay {$saldoFmt} pares y la línea pide {$cantFmt}.",
+                'saldo' => $saldoElegido,
+                'deposito_id' => $depositoId,
+            ];
+        }
+
+        $faltaTalle = self::mensajeSiStockNoCubreNumeracionPedido(
+            $linea,
+            $saldos[$depositoId]['talles'] ?? []
+        );
+        if ($faltaTalle !== null) {
+            return [
+                'error' => $faltaTalle,
+                'saldo' => $saldoElegido,
+                'deposito_id' => $depositoId,
+            ];
+        }
+
+        return ['saldo' => $saldoElegido, 'deposito_id' => $depositoId];
+    }
+
+    /**
+     * Saldo neto por depósito del lote importado o OT (código).
+     *
+     * @return array<int, array{saldo: float, talles: array<string, float>, codigo: string, nombre: string}>
+     */
+    public static function saldosNetosLotePorDeposito(
+        int $articuloId,
+        int $combinacionId,
+        string $loteCodigo
+    ): array {
+        $loteCodigo = trim($loteCodigo);
+        if ($loteCodigo === '' || $loteCodigo === '0' || $articuloId <= 0 || $combinacionId <= 0) {
+            return [];
+        }
+
+        $otId = (int) (Ordentrabajo::query()->where('codigo', $loteCodigo)->value('id') ?? 0);
+
+        $rows = DB::table('articulo_movimiento as am')
+            ->join('articulo_movimiento_talle as amt', 'amt.articulo_movimiento_id', '=', 'am.id')
+            ->join('talle as t', 't.id', '=', 'amt.talle_id')
+            ->leftJoin('depmae as d', 'd.id', '=', 'am.deposito_id')
+            ->where('am.articulo_id', $articuloId)
+            ->where('am.combinacion_id', $combinacionId)
+            ->where(function ($q) use ($loteCodigo, $otId) {
+                $q->where('am.lote', $loteCodigo);
+                if ($otId > 0) {
+                    $q->orWhere('am.ordentrabajo_id', $otId);
+                }
+            })
+            ->groupBy('am.deposito_id', 'd.codigo', 'd.nombre', 't.nombre')
+            ->select([
+                'am.deposito_id',
+                'd.codigo as deposito_codigo',
+                'd.nombre as deposito_nombre',
+                't.nombre as talle',
+                DB::raw('SUM(amt.cantidad) as saldo'),
+            ])
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $depId = (int) ($row->deposito_id ?? 0);
+            if ($depId <= 0) {
+                continue;
+            }
+            if (! isset($out[$depId])) {
+                $out[$depId] = [
+                    'saldo' => 0.0,
+                    'talles' => [],
+                    'codigo' => (string) ($row->deposito_codigo ?? ''),
+                    'nombre' => (string) ($row->deposito_nombre ?? ''),
+                ];
+            }
+            $cant = (float) ($row->saldo ?? 0);
+            $out[$depId]['saldo'] += $cant;
+            $talleNom = trim((string) ($row->talle ?? ''));
+            if ($talleNom !== '' && abs($cant) > 0.0001) {
+                $out[$depId]['talles'][$talleNom] = (float) (($out[$depId]['talles'][$talleNom] ?? 0) + $cant);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int, array{saldo: float, talles: array<string, float>, codigo: string, nombre: string}>  $saldos
+     */
+    private static function formatearSugerenciasDepositosConSaldo(array $saldos): string
+    {
+        $parts = [];
+        foreach ($saldos as $depId => $info) {
+            if ((float) ($info['saldo'] ?? 0) <= 0.0001) {
+                continue;
+            }
+            $etiqueta = trim(($info['codigo'] ?? '').' — '.($info['nombre'] ?? ''), ' —');
+            if ($etiqueta === '') {
+                $etiqueta = '#'.$depId;
+            }
+            $parts[] = $etiqueta.' ('.number_format((float) $info['saldo'], 0, ',', '.').' pares)';
+        }
+
+        return implode('; ', $parts);
+    }
+
+    private static function etiquetaDeposito(int $depositoId): string
+    {
+        $dep = Depmae::query()->find($depositoId, ['id', 'codigo', 'nombre']);
+        if (! $dep) {
+            return '#'.$depositoId;
+        }
+
+        return trim(($dep->codigo ?? '').' — '.($dep->nombre ?? ''), ' —') ?: '#'.$depositoId;
+    }
+
+    /**
+     * @param  array<string, float>  $tallesStock
+     */
+    private static function mensajeSiStockNoCubreNumeracionPedido(Pedido_Combinacion $linea, array $tallesStock): ?string
+    {
+        $linea->loadMissing('pedido_combinacion_talles.talles');
+        $faltantes = [];
+        foreach ($linea->pedido_combinacion_talles as $pct) {
+            $need = (float) ($pct->cantidad ?? 0);
+            if ($need <= 0) {
+                continue;
+            }
+            $nombre = trim((string) ($pct->talles->nombre ?? ''));
+            if ($nombre === '') {
+                continue;
+            }
+            $hay = (float) ($tallesStock[$nombre] ?? 0);
+            if (($hay + 0.0001) < $need) {
+                $faltantes[] = $nombre.': pide '.number_format($need, 0, ',', '.')
+                    .', hay '.number_format($hay, 0, ',', '.');
+            }
+        }
+
+        if ($faltantes === []) {
+            return null;
+        }
+
+        return 'El depósito no cubre la numeración del pedido ('.implode('; ', $faltantes).').';
     }
 
     public static function desmarcar(int $pedidoCombinacionId): array
