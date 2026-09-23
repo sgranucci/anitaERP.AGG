@@ -21,6 +21,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--sin-importar-ventas : No crea cabeceras venta ERP faltantes (solo CC de las que ya existen)}
                             {--cerrar-sin-deuda-anita : Salda CC ERP pendiente que no está en climov abierto de Anita (con o sin --cliente)}
                             {--reparar-contrapartidas : Reemplaza el cierre sin movimiento por el comprobante que aplica la factura}
+                            {--reparar-cob-multifila : Amplía COB/COA cortos (varias filas climov) y completa FAC+aplicaciones}
                             {--todos : Repara todos los clientes. Obligatorio si no se pasa --cliente}
                             {--ajuste-anita : Cierra la ficha con un AJU por cada aplicación Anita sin comprobante}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
@@ -51,7 +52,19 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
         $importarVentas = ! (bool) $this->option('sin-importar-ventas');
         $cerrarSinDeudaAnita = (bool) $this->option('cerrar-sin-deuda-anita');
         $repararContrapartidas = (bool) $this->option('reparar-contrapartidas');
+        $repararCobMultifila = (bool) $this->option('reparar-cob-multifila');
         $usuarioId = max(1, (int) $this->option('usuario-id'));
+
+        if ($repararCobMultifila) {
+            return $this->repararCobMultifila(
+                $service,
+                $dryRun,
+                $cliente,
+                $usuarioId,
+                (bool) $this->option('todos'),
+                $limite,
+            );
+        }
 
         if ($repararContrapartidas) {
             return $this->repararContrapartidas(
@@ -266,6 +279,77 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
         }
         if ($dryRun) {
             $this->comment('Dry-run: no se grabó nada.');
+        }
+
+        return self::SUCCESS;
+    }
+
+    private function repararCobMultifila(
+        ClienteCuentacorrienteImportarDesdeAnitaService $service,
+        bool $dryRun,
+        string $cliente,
+        int $usuarioId,
+        bool $todos,
+        ?int $limite,
+    ): int {
+        if ($cliente === '' && ! $todos) {
+            $this->error('Indicá --cliente o --todos.');
+
+            return self::FAILURE;
+        }
+
+        $alcance = $cliente !== '' ? 'cliente '.$cliente : 'todos los clientes';
+        $this->line(($dryRun ? 'DRY-RUN' : 'EJECUTAR').' | COB multifila de '.$alcance);
+        set_time_limit(0);
+
+        try {
+            $stats = $service->repararCobMultifila(
+                $dryRun,
+                $cliente !== '' ? $cliente : null,
+                $usuarioId,
+                $limite,
+                function (int $hechos, int $total) {
+                    if ($hechos === $total || $hechos % 10 === 0) {
+                        $this->line('Procesados '.$hechos.' / '.$total);
+                    }
+                },
+            );
+        } catch (\Throwable $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $this->table(['Métrica', 'Cantidad'], [
+            ['COB/COA a reparar', $stats['candidatos']],
+            ['Reparados', $stats['reparados']],
+            ['COB ampliados', $stats['cob_ampliados']],
+            ['CC deuda creadas', $stats['cc_deuda_creadas']],
+            ['Aplicaciones', $stats['aplicaciones']],
+            ['Haber ampliado', number_format((float) $stats['importe_ampliado'], 2, ',', '.')],
+        ]);
+        if (($stats['muestra'] ?? []) !== []) {
+            $this->table(
+                ['Cliente', 'COB', 'ERP', 'Anita', 'Diff', 'Apps', 'CC+'],
+                array_map(static fn (array $r) => [
+                    $r['cliente'] ?? '',
+                    $r['cob'] ?? '',
+                    number_format((float) ($r['erp'] ?? 0), 2, ',', '.'),
+                    number_format((float) ($r['anita'] ?? 0), 2, ',', '.'),
+                    number_format((float) ($r['diff'] ?? 0), 2, ',', '.'),
+                    $r['apps'] ?? 0,
+                    $r['cc_nuevas'] ?? 0,
+                ], $stats['muestra'])
+            );
+        }
+        foreach (array_slice($stats['errores'] ?? [], 0, 40) as $error) {
+            $this->warn((string) $error);
+        }
+        if (count($stats['errores'] ?? []) > 40) {
+            $this->warn('… y '.(count($stats['errores']) - 40).' avisos más.');
+        }
+        if ($dryRun) {
+            $this->comment('Dry-run: no se grabó nada. Para persistir: mismo comando con --ejecutar.');
         }
 
         return self::SUCCESS;

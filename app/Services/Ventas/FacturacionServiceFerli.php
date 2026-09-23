@@ -343,7 +343,11 @@ class FacturacionServiceFerli extends FacturacionService
             function ($vta) use ($lineasParaPost, $fechaFactura, $pedido) {
                 foreach ($lineasParaPost as $linea) {
                     PedidoPickingFerliSupport::marcarFacturado((int) $linea->id, (int) $vta->id);
-                    PedidoPickingFerliSupport::grabarConsumoStock($linea, (string) $fechaFactura, (int) $vta->id);
+                    PedidoPickingFerliSupport::asegurarConsumoStockPickingAlFacturar(
+                        $linea,
+                        (string) $fechaFactura,
+                        (int) $vta->id
+                    );
                 }
                 // marcarFacturado usa Query Builder (sin observer): refrescar cabecera
                 PedidoEstadoCabeceraSupport::refrescar((int) ($pedido->id ?? 0));

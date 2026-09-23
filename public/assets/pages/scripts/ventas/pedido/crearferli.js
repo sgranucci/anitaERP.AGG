@@ -1893,18 +1893,18 @@
 			$dep.prop('disabled', true);
 			$lupa.prop('disabled', true);
 			$box.append(
-				'<button type="button" title="Quitar marca de preparado (el stock no se tocó al preparar)" class="btn btn-sm btn-outline-secondary btn-block guarda-picking tooltipsC">' +
+				'<button type="button" title="Quitar picking y devolver stock al lote/OT" class="btn btn-sm btn-outline-secondary btn-block guarda-picking tooltipsC">' +
 				'<i class="fa fa-undo"></i> Quitar</button>' +
-				'<small class="text-muted d-block picking-ayuda" title="El egreso de stock ocurre al facturar el picking">Preparado: sin descuento de stock hasta facturar</small>'
+				'<small class="text-muted d-block picking-ayuda" title="Stock ya descontado del lote/OT">Stock descontado (atrapado)</small>'
 			);
 		} else {
 			$lote.prop('readonly', false);
 			$dep.prop('disabled', false);
 			$lupa.prop('disabled', false);
 			$box.append(
-				'<button type="button" title="Marcar preparado (no descuenta stock; el egreso es al facturar)" class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">' +
+				'<button type="button" title="Preparar y descontar stock del lote/OT" class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">' +
 				'<i class="fa fa-check"></i> Preparar</button>' +
-				'<small class="text-muted d-block picking-ayuda">No descuenta stock; elegí lote+depósito con F1</small>'
+				'<small class="text-muted d-block picking-ayuda">Al preparar descuenta stock; usá F1</small>'
 			);
 		}
 
@@ -1970,7 +1970,7 @@
 						$('#picking_activo_etiqueta').text('Picking #' + data.picking_codigo);
 					}
 					actualizarUiPicking($tr, 'preparado');
-					pickingAviso(data.aviso || ('Línea preparada' + (data.picking_codigo ? (' en picking #' + data.picking_codigo) : '') + '. El stock no se descuenta hasta facturar.'));
+					pickingAviso(data.aviso || ('Línea preparada' + (data.picking_codigo ? (' en picking #' + data.picking_codigo) : '') + '. Stock descontado del lote/OT.'));
 				})
 				.fail(function (xhr) {
 					pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al marcar picking', 'error');
@@ -1990,7 +1990,7 @@
 					$tr.find('.picking-lote').val('');
 					$tr.find('.picking-deposito').val('0');
 					actualizarUiPicking($tr, 'pendiente');
-					pickingAviso('Picking quitado');
+					pickingAviso('Picking quitado; stock devuelto al lote/OT');
 				})
 				.fail(function (xhr) {
 					pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al desmarcar picking', 'error');

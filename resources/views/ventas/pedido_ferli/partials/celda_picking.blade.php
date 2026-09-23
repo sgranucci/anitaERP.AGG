@@ -55,21 +55,21 @@
         <small class="text-muted d-block picking-facturado-msg">Ya facturado</small>
     @elseif ($pickingMarcado)
         <button type="button"
-                title="Quitar marca de preparado (el stock no se toc&oacute; al preparar)"
+                title="Quitar picking y devolver stock al lote/OT"
                 class="btn btn-sm btn-outline-secondary btn-block guarda-picking tooltipsC">
             <i class="fa fa-undo"></i> Quitar
         </button>
-        <small class="text-muted d-block picking-ayuda" title="El egreso de stock ocurre al facturar el picking">
-            Preparado: sin descuento de stock hasta facturar
+        <small class="text-muted d-block picking-ayuda" title="Stock ya descontado del lote/OT">
+            Stock descontado (atrapado)
         </small>
     @else
         <button type="button"
-                title="Marcar preparado (no descuenta stock; el egreso es al facturar)"
+                title="Preparar y descontar stock del lote/OT"
                 class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">
             <i class="fa fa-check"></i> Preparar
         </button>
         <small class="text-muted d-block picking-ayuda">
-            No descuenta stock; eleg&iacute; lote+dep&oacute;sito con F1
+            Al preparar descuenta stock; us&aacute; F1
         </small>
     @endif
 </div>

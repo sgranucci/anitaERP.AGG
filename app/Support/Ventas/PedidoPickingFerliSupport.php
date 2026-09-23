@@ -42,6 +42,11 @@ final class PedidoPickingFerliSupport
 
     public const CONCEPTO_DEVOLUCION_NC_PICKING_PREFIJO = 'Devolución NC OT/lote #';
 
+    /** Reverso al quitar picking (antes de facturar). */
+    public const CONCEPTO_DEVOLUCION_PICKING_PREFIJO = 'Devolución picking #';
+
+    public const CONCEPTO_CONSUMO_OT = 'Consumo de OT';
+
     private const SESSION_PICKING_ACTIVO = 'picking_pedido_activo_id';
 
     public static function habilitado(): bool
@@ -214,15 +219,36 @@ final class PedidoPickingFerliSupport
             return $validacionStock;
         }
 
+        if (($linea->picking ?? self::NO_MARCADO) === self::MARCADO) {
+            return ['error' => 'La línea ya está preparada'];
+        }
+
         $picking = self::resolverPickingParaMarcar($pickingId, $pickingCodigo);
 
-        $linea->picking = self::MARCADO;
-        $linea->picking_id = $picking->id;
-        $linea->picking_lote_codigo = $loteCodigo;
-        $linea->picking_deposito_id = $depositoId;
-        $linea->picking_at = now();
-        $linea->picking_usuario_id = Auth::id();
-        $linea->save();
+        try {
+            DB::transaction(function () use ($linea, $picking, $loteCodigo, $depositoId) {
+                $linea->picking = self::MARCADO;
+                $linea->picking_id = $picking->id;
+                $linea->picking_lote_codigo = $loteCodigo;
+                $linea->picking_deposito_id = $depositoId;
+                $linea->picking_at = now();
+                $linea->picking_usuario_id = Auth::id();
+                $linea->save();
+
+                // Atrapa mercadería: sale del saldo al preparar (no espera la factura).
+                self::grabarConsumoStock(
+                    $linea->fresh(['articulos', 'combinaciones', 'pedido_combinacion_talles']),
+                    now()->toDateString(),
+                    0,
+                    $loteCodigo,
+                    $depositoId
+                );
+            });
+        } catch (\Throwable $e) {
+            return ['error' => 'No se pudo preparar: '.$e->getMessage()];
+        }
+
+        $linea->refresh();
 
         return [
             'ok' => true,
@@ -232,13 +258,12 @@ final class PedidoPickingFerliSupport
             'picking_codigo' => (int) $picking->codigo,
             'picking_lote_codigo' => $linea->picking_lote_codigo,
             'picking_deposito_id' => $linea->picking_deposito_id,
-            'aviso' => 'Línea preparada. El stock no se descuenta hasta facturar el picking.',
+            'aviso' => 'Línea preparada y stock descontado del lote/OT (queda reservado hasta facturar o quitar picking).',
         ];
     }
 
     /**
      * Exige depósito con saldo neto del lote/OT (mismo criterio que el modal de consulta).
-     * Preparar no consume stock; valida para que al facturar el egreso salga del depósito correcto.
      *
      * @return array{error?: string, saldo?: float, deposito_id?: int}
      */
@@ -438,15 +463,141 @@ final class PedidoPickingFerliSupport
             return ['error' => 'No se puede desmarcar: ya facturada'];
         }
 
-        $linea->picking = self::NO_MARCADO;
-        $linea->picking_id = null;
-        $linea->picking_lote_codigo = null;
-        $linea->picking_deposito_id = null;
-        $linea->picking_at = null;
-        $linea->picking_usuario_id = null;
-        $linea->save();
+        try {
+            DB::transaction(function () use ($linea) {
+                self::revertirConsumoStockPorLineaPicking((int) $linea->id);
+                $linea->picking = self::NO_MARCADO;
+                $linea->picking_id = null;
+                $linea->picking_lote_codigo = null;
+                $linea->picking_deposito_id = null;
+                $linea->picking_at = null;
+                $linea->picking_usuario_id = null;
+                $linea->save();
+            });
+        } catch (\Throwable $e) {
+            return ['error' => 'No se pudo quitar el picking: '.$e->getMessage()];
+        }
 
         return ['ok' => true, 'pedido_combinacion_id' => $linea->id];
+    }
+
+    /**
+     * Devuelve al stock el consumo hecho al preparar (antes de facturar).
+     */
+    public static function revertirConsumoStockPorLineaPicking(int $pedidoCombinacionId, ?string $fecha = null): int
+    {
+        if ($pedidoCombinacionId <= 0) {
+            return 0;
+        }
+
+        $fechaYmd = $fecha ? Carbon::parse($fecha)->format('Y-m-d') : now()->toDateString();
+        $revertidos = 0;
+
+        $movimientos = Articulo_Movimiento::query()
+            ->with('articulo_movimiento_talles')
+            ->where('pedido_combinacion_id', $pedidoCombinacionId)
+            ->where('concepto', self::CONCEPTO_CONSUMO_OT)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($movimientos as $mov) {
+            if (! self::esConsumoPickingRevertible($mov)) {
+                continue;
+            }
+            if (self::yaTieneDevolucionConsumoPicking((int) $mov->id)) {
+                continue;
+            }
+
+            $payload = self::payloadReversoConsumoPicking($mov, 0, $fechaYmd);
+            if ($payload === null) {
+                continue;
+            }
+            $payload['concepto'] = self::conceptoDevolucionPicking((int) $mov->id);
+            $payload['venta_id'] = null;
+
+            $reverso = Articulo_Movimiento::query()->create($payload);
+            foreach ($mov->articulo_movimiento_talles as $talle) {
+                Articulo_Movimiento_Talle::query()->create([
+                    'articulo_movimiento_id' => $reverso->id,
+                    'pedido_combinacion_talle_id' => $talle->pedido_combinacion_talle_id,
+                    'talle_id' => $talle->talle_id,
+                    'cantidad' => -1 * (float) $talle->cantidad,
+                    'precio' => $talle->precio,
+                ]);
+            }
+            $revertidos++;
+        }
+
+        return $revertidos;
+    }
+
+    public static function conceptoDevolucionPicking(int $movimientoOrigenId): string
+    {
+        return self::CONCEPTO_DEVOLUCION_PICKING_PREFIJO.$movimientoOrigenId;
+    }
+
+    public static function yaTieneDevolucionConsumoPicking(int $movimientoOrigenId): bool
+    {
+        if ($movimientoOrigenId <= 0) {
+            return false;
+        }
+
+        return Articulo_Movimiento::query()
+            ->where(function ($q) use ($movimientoOrigenId) {
+                $q->where('concepto', self::conceptoDevolucionPicking($movimientoOrigenId))
+                    ->orWhere('concepto', self::conceptoDevolucionNcPicking($movimientoOrigenId))
+                    ->orWhere('concepto', 'Devolución NC picking #'.$movimientoOrigenId);
+            })
+            ->exists();
+    }
+
+    /**
+     * Neto de pares salidos por picking de la línea (consumo − devoluciones).
+     * Negativo = mercadería ya atrapada / egresada.
+     */
+    public static function netoConsumoStockPickingLinea(int $pedidoCombinacionId): float
+    {
+        if ($pedidoCombinacionId <= 0) {
+            return 0.0;
+        }
+
+        return (float) Articulo_Movimiento::query()
+            ->where('pedido_combinacion_id', $pedidoCombinacionId)
+            ->where(function ($q) {
+                $q->where('concepto', self::CONCEPTO_CONSUMO_OT)
+                    ->orWhere('concepto', 'like', self::CONCEPTO_DEVOLUCION_PICKING_PREFIJO.'%')
+                    ->orWhere('concepto', 'like', self::CONCEPTO_DEVOLUCION_NC_PICKING_PREFIJO.'%')
+                    ->orWhere('concepto', 'like', 'Devolución NC picking #%');
+            })
+            ->sum('cantidad');
+    }
+
+    /**
+     * Al facturar: si ya se consumió al preparar, solo vincula venta_id; si no (líneas viejas), consume ahora.
+     */
+    public static function asegurarConsumoStockPickingAlFacturar(
+        Pedido_Combinacion $linea,
+        string $fecha,
+        int $ventaId
+    ): void {
+        $pcId = (int) $linea->id;
+        if ($pcId <= 0 || $ventaId <= 0) {
+            return;
+        }
+
+        if (self::netoConsumoStockPickingLinea($pcId) < -0.0001) {
+            Articulo_Movimiento::query()
+                ->where('pedido_combinacion_id', $pcId)
+                ->where('concepto', self::CONCEPTO_CONSUMO_OT)
+                ->where(function ($q) {
+                    $q->whereNull('venta_id')->orWhere('venta_id', 0);
+                })
+                ->update(['venta_id' => $ventaId, 'updated_at' => now()]);
+
+            return;
+        }
+
+        self::grabarConsumoStock($linea, $fecha, $ventaId);
     }
 
     public static function marcarFacturado(int $pedidoCombinacionId, int $ventaId): void
@@ -596,14 +747,7 @@ final class PedidoPickingFerliSupport
                 continue;
             }
 
-            $concepto = (string) $payload['concepto'];
-            $yaDevuelto = Articulo_Movimiento::query()
-                ->where(function ($q) use ($concepto, $mov) {
-                    $q->where('concepto', $concepto)
-                        ->orWhere('concepto', 'Devolución NC picking #'.(int) $mov->id);
-                })
-                ->exists();
-            if ($yaDevuelto) {
+            if (self::yaTieneDevolucionConsumoPicking((int) $mov->id)) {
                 continue;
             }
 
@@ -778,7 +922,8 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * Consume de stock (tipo 4) al facturar picking — sin crear OT de consumo.
+     * Consume de stock (tipo 4) al preparar picking — atrapa el lote/OT.
+     * Al facturar, {@see asegurarConsumoStockPickingAlFacturar} evita doble egreso.
      * Patrón PedidoServiceFerli::generaMovimientoStock.
      */
     public static function grabarConsumoStock(
@@ -832,7 +977,7 @@ final class PedidoPickingFerliSupport
             'articulo_id' => $articulo->id,
             'combinacion_id' => $combinacion->id,
             'modulo_id' => $linea->modulo_id,
-            'concepto' => 'Consumo de OT',
+            'concepto' => self::CONCEPTO_CONSUMO_OT,
             'cantidad' => $linea->cantidad,
             'precio' => $linea->precio,
             'costo' => 0,

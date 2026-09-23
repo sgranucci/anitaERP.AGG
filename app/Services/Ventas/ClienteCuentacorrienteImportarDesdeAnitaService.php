@@ -1473,4 +1473,339 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
 
         return $stats;
     }
+
+    /**
+     * Patron Hansen: COB/COA en ERP con saldo abierto, pero en Anita climov
+     * el mismo documento tiene varias filas (una por factura) cuya suma es mayor.
+     * Amplia el credito, crea CC de deudas faltantes y graba las aplicaciones.
+     *
+     * @return array<string, mixed>
+     */
+    public function repararCobMultifila(
+        bool $dryRun = true,
+        ?string $clienteCodigo = null,
+        int $usuarioId = 1,
+        ?int $limite = null,
+        ?callable $progreso = null,
+    ): array {
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $codigo = trim((string) $clienteCodigo);
+        $query = Cliente_Cuentacorriente::query()
+            ->with(['ventas', 'clientes'])
+            ->where('cliente_cuentacorriente.total', '<', -0.01)
+            ->whereHas('ventas', function ($v) {
+                $v->where(function ($q) {
+                    $q->where('codigo', 'like', 'COB%')
+                        ->orWhere('codigo', 'like', 'COA%');
+                });
+            })
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc())
+            ->orderBy('cliente_cuentacorriente.id');
+
+        if ($codigo !== '') {
+            $codigoErp = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoErp($codigo);
+            $ids = Cliente::query()
+                ->where(function ($q) use ($codigoErp, $codigo) {
+                    $q->where('codigo', $codigoErp)->orWhere('codigo', $codigo);
+                })
+                ->pluck('id');
+            $query->whereIn('cliente_cuentacorriente.cliente_id', $ids);
+        }
+
+        $candidatos = $query->get();
+        $claves = [];
+        foreach ($candidatos as $cc) {
+            $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDesdeCodigoVenta(
+                (string) ($cc->ventas->codigo ?? '')
+            );
+            if ($clave !== null) {
+                $claves[$clave] = $cc;
+            }
+        }
+
+        $climovPorClave = $this->indexarClimovPorClave(array_keys($claves));
+        $items = [];
+        foreach ($claves as $clave => $cc) {
+            $filas = $climovPorClave[$clave] ?? [];
+            if (count($filas) < 2) {
+                continue;
+            }
+            $codigoCli = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoAnita(
+                (string) ($cc->clientes->codigo ?? '')
+            );
+            $montoAnita = $this->montoDocumentoClimov($filas, $codigoCli);
+            $erp = round(abs((float) $cc->total), 4);
+            if ($montoAnita <= $erp + 0.05) {
+                continue;
+            }
+            $items[] = [
+                'cc' => $cc,
+                'clave' => $clave,
+                'filas' => $filas,
+                'monto_anita' => $montoAnita,
+                'monto_erp' => $erp,
+                'diff' => round($montoAnita - $erp, 4),
+            ];
+        }
+        if ($limite !== null && $limite > 0) {
+            $items = array_slice($items, 0, $limite);
+        }
+
+        $stats = [
+            'modo' => $dryRun ? 'dry-run' : 'ejecutar',
+            'candidatos' => count($items),
+            'reparados' => 0,
+            'cob_ampliados' => 0,
+            'cc_deuda_creadas' => 0,
+            'aplicaciones' => 0,
+            'importe_ampliado' => 0.0,
+            'muestra' => [],
+            'errores' => [],
+        ];
+        $total = count($items);
+        $hechos = 0;
+
+        foreach ($items as $item) {
+            /** @var Cliente_Cuentacorriente $ccCob */
+            $ccCob = $item['cc'];
+            $etiquetaCob = (string) ($ccCob->ventas->codigo ?? '');
+            try {
+                $resultado = $this->persistirCobMultifila($item, $perfil, $dryRun, $usuarioId);
+                if ($resultado['ok']) {
+                    $stats['reparados']++;
+                    $stats['cob_ampliados'] += $resultado['cob_ampliado'] ? 1 : 0;
+                    $stats['cc_deuda_creadas'] += $resultado['cc_creadas'];
+                    $stats['aplicaciones'] += $resultado['aplicaciones'];
+                    $stats['importe_ampliado'] = round(
+                        $stats['importe_ampliado'] + (float) $resultado['diff'],
+                        4
+                    );
+                }
+                foreach ($resultado['errores'] as $err) {
+                    $stats['errores'][] = $err;
+                }
+                if (count($stats['muestra']) < 30) {
+                    $stats['muestra'][] = [
+                        'cliente' => (string) ($ccCob->clientes->codigo ?? ''),
+                        'cob' => $etiquetaCob,
+                        'erp' => $item['monto_erp'],
+                        'anita' => $item['monto_anita'],
+                        'diff' => $item['diff'],
+                        'apps' => $resultado['aplicaciones'],
+                        'cc_nuevas' => $resultado['cc_creadas'],
+                    ];
+                }
+            } catch (\Throwable $e) {
+                $stats['errores'][] = $etiquetaCob.': '.$e->getMessage();
+            }
+            $hechos++;
+            if ($progreso !== null) {
+                $progreso($hechos, $total);
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @param  array{cc:Cliente_Cuentacorriente,clave:string,filas:list<array<string,mixed>>,monto_anita:float,monto_erp:float,diff:float}  $item
+     * @param  array<string, mixed>  $perfil
+     * @return array{ok:bool,cob_ampliado:bool,cc_creadas:int,aplicaciones:int,diff:float,errores:list<string>}
+     */
+    private function persistirCobMultifila(array $item, array $perfil, bool $dryRun, int $usuarioId): array
+    {
+        $ccCob = $item['cc'];
+        $filas = $item['filas'];
+        $montoAnita = (float) $item['monto_anita'];
+        $diff = (float) $item['diff'];
+        $out = [
+            'ok' => false,
+            'cob_ampliado' => false,
+            'cc_creadas' => 0,
+            'aplicaciones' => 0,
+            'diff' => $diff,
+            'errores' => [],
+        ];
+
+        $lineas = [];
+        foreach ($filas as $fila) {
+            $refTipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) ($fila['cliv_ref_tipo'] ?? ''));
+            $refLetra = ClienteCuentacorrienteAnitaImportClaveSupport::letra((string) ($fila['cliv_ref_letra'] ?? ''));
+            $refSuc = (int) ($fila['cliv_ref_sucursal'] ?? 0);
+            $refNro = (int) ($fila['cliv_ref_nro'] ?? 0);
+            $monto = round(abs((float) ($fila['cliv_monto'] ?? 0)), 4);
+            if ($refTipo === '' || $refNro <= 0 || $monto < 0.01) {
+                continue;
+            }
+            $claveDeuda = ClienteCuentacorrienteAnitaImportClaveSupport::claveDocumento(
+                $refTipo,
+                $refLetra,
+                $refSuc,
+                $refNro
+            );
+            $lineas[] = [
+                'clave' => $claveDeuda,
+                'tipo' => $refTipo,
+                'letra' => $refLetra,
+                'sucursal' => $refSuc,
+                'numero' => $refNro,
+                'monto' => $monto,
+                'fecha' => ClienteCuentacorrienteAnitaImportClaveSupport::fechaIsoDesdeAnita(
+                    (string) ($fila['cliv_fecha'] ?? '')
+                ) ?: ($ccCob->fecha?->format('Y-m-d') ?? now()->format('Y-m-d')),
+            ];
+        }
+        if ($lineas === []) {
+            $out['errores'][] = ($ccCob->ventas->codigo ?? 'COB').' sin referencias FAC en climov.';
+
+            return $out;
+        }
+
+        $clavesDeuda = array_values(array_unique(array_column($lineas, 'clave')));
+        $climovDeuda = $this->indexarClimovPorClave($clavesDeuda);
+
+        if ($dryRun) {
+            $out['ok'] = true;
+            $out['cob_ampliado'] = $diff > 0.05;
+            foreach ($lineas as $linea) {
+                $resuelto = $this->resolverCcCredito([
+                    'tipo' => $linea['tipo'],
+                    'letra' => $linea['letra'],
+                    'sucursal' => $linea['sucursal'],
+                    'numero' => $linea['numero'],
+                    'clave' => $linea['clave'],
+                ]);
+                if (($resuelto['cc_id'] ?? null) === null) {
+                    $out['cc_creadas']++;
+                }
+                $out['aplicaciones']++;
+            }
+
+            return $out;
+        }
+
+        DB::transaction(function () use (
+            $ccCob,
+            $montoAnita,
+            $diff,
+            $lineas,
+            $climovDeuda,
+            $usuarioId,
+            &$out
+        ) {
+            if ($diff > 0.05) {
+                $totalFirmado = round(-1 * $montoAnita, 4);
+                $ccCob->total = $totalFirmado;
+                $ccCob->save();
+                $ventaId = (int) ($ccCob->venta_id ?? 0);
+                if ($ventaId > 0) {
+                    $this->ampliarTotalVentaCredito($ventaId, $montoAnita, $totalFirmado);
+                }
+                $out['cob_ampliado'] = true;
+            }
+
+            $etiquetaCob = (string) ($ccCob->ventas->codigo ?? '');
+            $ccCob->refresh();
+            $ccCob->loadMissing(['ventas', 'clientes']);
+
+            foreach ($lineas as $linea) {
+                $filasDeuda = $climovDeuda[$linea['clave']] ?? [];
+                $climovFac = $filasDeuda[0] ?? null;
+                if ($climovFac === null) {
+                    $climovFac = [
+                        'cliv_tipo' => $linea['tipo'],
+                        'cliv_letra' => $linea['letra'],
+                        'cliv_sucursal' => $linea['sucursal'],
+                        'cliv_nro' => $linea['numero'],
+                        'cliv_monto' => $linea['monto'],
+                        'cliv_fecha' => str_replace('-', '', $linea['fecha']),
+                        'cliv_fecha_vto' => str_replace('-', '', $linea['fecha']),
+                        'cliv_cliente' => ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoAnita(
+                            (string) ($ccCob->clientes->codigo ?? '')
+                        ),
+                        'cliv_cod_mon' => '1',
+                        'cliv_cotizacion' => 1,
+                        'cliv_nro_cuota' => 1,
+                    ];
+                }
+
+                $cabecera = $this->ventaImport->asegurarCabeceraDesdeClimov(
+                    $climovFac,
+                    (int) $ccCob->cliente_id,
+                    false,
+                    $usuarioId
+                );
+                if ($cabecera['error'] !== null || (int) ($cabecera['venta_id'] ?? 0) <= 0) {
+                    $out['errores'][] = ($cabecera['etiqueta'] ?? $linea['clave']).': '
+                        .($cabecera['error'] ?? 'sin venta');
+
+                    continue;
+                }
+
+                $ventaDeuda = Venta::query()->find((int) $cabecera['venta_id']);
+                if ($ventaDeuda === null) {
+                    $out['errores'][] = $cabecera['etiqueta'].' venta no encontrada.';
+
+                    continue;
+                }
+
+                $ccDeuda = Cliente_Cuentacorriente::query()
+                    ->where('venta_id', (int) $ventaDeuda->id)
+                    ->orderBy('id')
+                    ->first();
+                if ($ccDeuda === null) {
+                    $montoDoc = round(abs((float) ($climovFac['cliv_monto'] ?? $ventaDeuda->total ?? $linea['monto'])), 4);
+                    if ($montoDoc < 0.01) {
+                        $montoDoc = $linea['monto'];
+                    }
+                    $signo = 1;
+                    $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) ($climovFac['cliv_tipo'] ?? $linea['tipo']));
+                    if (str_starts_with($tipo, 'NC') || $tipo === 'CIM') {
+                        $signo = -1;
+                    }
+                    $fecha = ClienteCuentacorrienteAnitaImportClaveSupport::fechaIsoDesdeAnita(
+                        (string) ($climovFac['cliv_fecha'] ?? '')
+                    ) ?: (string) ($ventaDeuda->fecha?->format('Y-m-d') ?? $linea['fecha']);
+                    $fechaVto = ClienteCuentacorrienteAnitaImportClaveSupport::fechaIsoDesdeAnita(
+                        (string) ($climovFac['cliv_fecha_vto'] ?? '')
+                    ) ?: $fecha;
+                    $ccDeuda = Cliente_Cuentacorriente::query()->create([
+                        'fecha' => $fecha,
+                        'fechavencimiento' => $fechaVto,
+                        'cliente_id' => (int) $ccCob->cliente_id,
+                        'total' => round($montoDoc * $signo, 4),
+                        'moneda_id' => (int) ($ventaDeuda->moneda_id ?: $ccCob->moneda_id),
+                        'cotizacion' => (float) ($ventaDeuda->cotizacion ?: $ccCob->cotizacion ?: 1),
+                        'venta_id' => (int) $ventaDeuda->id,
+                        'cobranza_id' => null,
+                        'empresa_id' => $this->empresaIdDesdeVenta($ventaDeuda) ?? $ccCob->empresa_id,
+                    ]);
+                    $out['cc_creadas']++;
+                }
+
+                $antes = Cliente_Cuentacorriente_Aplicacion::query()
+                    ->where('cliente_cuentacorriente_id', (int) $ccDeuda->id)
+                    ->where('comprobanteaplicado', $etiquetaCob)
+                    ->count();
+                $this->grabarParAplicacion(
+                    $ccDeuda,
+                    $ccCob,
+                    (float) $linea['monto'],
+                    (string) $linea['fecha'],
+                    $etiquetaCob,
+                    (string) ($ventaDeuda->codigo ?: $cabecera['etiqueta'])
+                );
+                $despues = Cliente_Cuentacorriente_Aplicacion::query()
+                    ->where('cliente_cuentacorriente_id', (int) $ccDeuda->id)
+                    ->where('comprobanteaplicado', $etiquetaCob)
+                    ->count();
+                if ($despues > $antes) {
+                    $out['aplicaciones']++;
+                }
+            }
+            $out['ok'] = true;
+        });
+
+        return $out;
+    }
 }
