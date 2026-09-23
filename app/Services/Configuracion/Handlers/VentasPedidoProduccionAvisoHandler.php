@@ -16,8 +16,10 @@ class VentasPedidoProduccionAvisoHandler implements ModuloAvisoHandlerInterface
 
     public function contextoFiltro(int $entityId): array
     {
+        // Pedido no tiene empresa_id; destinatarios sin filtro de empresa reciben el aviso
+        // (equivalente a MAILD lista 1 del Anita / envia_mail_alarma_stock.fc).
         return [
-            'empresa_id' => 1,
+            'empresa_id' => null,
             'centrocosto_id' => null,
         ];
     }

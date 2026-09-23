@@ -1,10 +1,13 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
+ * AGG only (IDs de árbol/usuario de Kandiko / Rebisco).
+ *
  * - REBISCO CH: Beta (id 318) cierra en APROBADA.
  * - KANDIKO Técnica: Angel solo cubría 0–5M; montos ≥5M (o USD equivalentes) no tenían
  *   firmante y el circuito podía cerrar sin aprobación. Activa 2ª firma (Beta nivel 3).
@@ -27,6 +30,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return;
+        }
+
         if (! Schema::hasTable('arbolaprobacion_nivel')) {
             return;
         }
@@ -82,6 +89,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! EntornoEmpresaSupport::esAgg()) {
+            return;
+        }
+
         if (! Schema::hasTable('arbolaprobacion_nivel')) {
             return;
         }
