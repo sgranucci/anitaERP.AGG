@@ -286,6 +286,7 @@ class PedidoInterformingController extends Controller
             'formapago_query' => $this->formapagoRepository->all(),
             'incoterm_query' => $this->incotermRepository->all(),
             'actividad_arca_query' => $this->actividadArcaRepository->all(),
+            'moneda_query' => Moneda::orderBy('nombre')->get(),
             'puntoventadefault_id' => $prefs['puntoventa_id'] ?? $defaultsIf['puntoventa_id'],
             'puntoventaremitodefault_id' => $prefs['puntoventaremito_id'] ?? null,
             'tipotransacciondefault_id' => $prefs['tipotransaccion_id'] ?? $defaultsIf['tipotransaccion_id'],

@@ -2183,28 +2183,82 @@
 
 		$modal.find('#aceptaFacturarOrdenTrabajoModal').text(esRemito ? 'Genera Remito' : 'Genera Factura');
 
-		// Interforming: columnas Cantidad (no caja/pieza/pesada) + moneda/cotización del pedido.
+		// Interforming: columnas Cantidad (no caja/pieza/pesada) + moneda/cotización editables.
 		$modal.toggleClass('factura-pedido-interforming', esInterforming);
 		$modal.find('.th-fac-caja, .th-fac-pieza, .td-fac-caja, .td-fac-pieza').toggle(!esInterforming);
 		$modal.find('.th-fac-cantidad').text(esInterforming ? 'Cantidad' : 'Pesada');
 		if (esInterforming && !esRemito) {
-			var monedaEtiqueta = String($('#factura_pedido_moneda_etiqueta').val() || '').trim();
+			var monedaId = String($('#factura_pedido_moneda_id').val() || '').trim();
 			var cotizacion = String($('#factura_pedido_cotizacion').val() || '').trim();
-			if (!monedaEtiqueta && $('#moneda_id').length) {
-				var $opt = $('#moneda_id').find('option:selected');
-				monedaEtiqueta = String($opt.text() || '').trim();
-				$('#factura_pedido_moneda_id').val($('#moneda_id').val() || '');
+			if (!monedaId && $('#moneda_id').length) {
+				monedaId = String($('#moneda_id').val() || '').trim();
+				$('#factura_pedido_moneda_id').val(monedaId);
 			}
 			if (!cotizacion && $('#cotizacion').length) {
 				cotizacion = String($('#cotizacion').val() || '').trim();
 				$('#factura_pedido_cotizacion').val(cotizacion);
 			}
-			$modal.find('#factura_pedido_moneda_display').val(monedaEtiqueta);
-			$modal.find('#factura_pedido_cotizacion_display').val(cotizacion);
+			var $selMoneda = $modal.find('#factura_pedido_moneda_id_modal');
+			if (monedaId && $selMoneda.find('option[value="' + monedaId + '"]').length) {
+				$selMoneda.val(monedaId);
+			}
+			sincronizarMonedaCotizacionFacturaPedidoDesdeModal($modal);
+			if (cotizacion !== '') {
+				$modal.find('#factura_pedido_cotizacion_modal').val(cotizacion);
+				$('#factura_pedido_cotizacion').val(cotizacion);
+			}
 			$modal.find('#div-factura-pedido-moneda-cotizacion').removeClass('d-none');
 		} else {
 			$modal.find('#div-factura-pedido-moneda-cotizacion').addClass('d-none');
 		}
+	}
+
+	function sincronizarMonedaCotizacionFacturaPedidoDesdeModal($modal) {
+		$modal = $modal && $modal.length ? $modal : $('#facturarPedidoModal');
+		var monedaId = String($modal.find('#factura_pedido_moneda_id_modal').val() || '').trim();
+		var cotizacion = String($modal.find('#factura_pedido_cotizacion_modal').val() || '').trim();
+		var $opt = $modal.find('#factura_pedido_moneda_id_modal option:selected');
+		var etiqueta = String($opt.text() || '').trim();
+		$('#factura_pedido_moneda_id').val(monedaId);
+		$('#factura_pedido_cotizacion').val(cotizacion);
+		$('#factura_pedido_moneda_etiqueta').val(etiqueta);
+	}
+
+	function leerMonedaCotizacionFacturaPedidoParaEmitir() {
+		sincronizarMonedaCotizacionFacturaPedidoDesdeModal($('#facturarPedidoModal'));
+		return {
+			moneda_id: String($('#factura_pedido_moneda_id').val() || '').trim(),
+			cotizacion: String($('#factura_pedido_cotizacion').val() || '').trim()
+		};
+	}
+
+	function cargarCotizacionVigenteFacturaPedido($modal, monedaId) {
+		if (!window.pedidoSinRemitoObligatorio) {
+			return;
+		}
+		monedaId = parseInt(monedaId, 10) || 0;
+		if (monedaId <= 0) {
+			return;
+		}
+		if (monedaId === 1) {
+			$modal.find('#factura_pedido_cotizacion_modal').val('1');
+			sincronizarMonedaCotizacionFacturaPedidoDesdeModal($modal);
+			programarRecalculoPreviewFacturaPedido();
+			return;
+		}
+		var fecha = String($modal.find('#fechafactura').val() || '').trim();
+		if (!fecha) {
+			return;
+		}
+		$.get(carpetaBase + '/configuracion/leercotizacion/' + encodeURIComponent(fecha) + '/' + monedaId)
+			.done(function (data) {
+				var cot = data && data.cotizacionventa != null ? data.cotizacionventa : 0;
+				if (parseFloat(cot) > 0) {
+					$modal.find('#factura_pedido_cotizacion_modal').val(cot);
+				}
+				sincronizarMonedaCotizacionFacturaPedidoDesdeModal($modal);
+				programarRecalculoPreviewFacturaPedido();
+			});
 	}
 
 	function aplicarColumnasFacturaInterforming($modal) {
@@ -2440,7 +2494,7 @@
 			selectIncoterm.empty();
 			selectIncoterm.append('<option value="">-- Seleccionar incoterm --</option>');
 			$.each(sel_incoterm, function(obj, item) {
-				selectIncoterm.append('<option value="' + item.id + '">' + item.nombre + '</option>');
+				selectIncoterm.append('<option value="' + item.id + '">' + (item.abreviatura ? (item.abreviatura + ' — ') : '') + item.nombre + '</option>');
 			});
 		}
 
@@ -2488,6 +2542,40 @@
 		sincronizarLugarEntregaPedidoDesdeModal();
 	});
 
+	$(document).on('change', '#factura_pedido_moneda_id_modal', function () {
+		if (!window.pedidoSinRemitoObligatorio) {
+			return;
+		}
+		var $modal = $('#facturarPedidoModal');
+		sincronizarMonedaCotizacionFacturaPedidoDesdeModal($modal);
+		cargarCotizacionVigenteFacturaPedido($modal, $(this).val());
+	});
+
+	$(document).on('change input', '#factura_pedido_cotizacion_modal', function () {
+		if (!window.pedidoSinRemitoObligatorio) {
+			return;
+		}
+		sincronizarMonedaCotizacionFacturaPedidoDesdeModal($('#facturarPedidoModal'));
+		programarRecalculoPreviewFacturaPedido();
+	});
+
+	// Al enfocar un importe del modal: seleccionar todo para que al tipear se reemplace.
+	$(document).on('focus', [
+		'#factura_pedido_cotizacion_modal',
+		'#facturarPedidoModal #descuentopie',
+		'#facturarPedidoModal #descuentolinea',
+		'#facturarPedidoModal #descuentoimportepie',
+		'#facturarPedidoModal #cantidadbulto',
+		'#facturarPedidoModal #peso_neto'
+	].join(','), function () {
+		var el = this;
+		setTimeout(function () {
+			if (el && typeof el.select === 'function') {
+				el.select();
+			}
+		}, 0);
+	});
+
 	var previewFacturaPedidoXhr = null;
 	var previewFacturaPedidoTimer = null;
 	var previewFacturaPedidoSeq = 0;
@@ -2522,6 +2610,9 @@
 		var pedido_id = $('#pedido_id').val();
 		var totalcajaspedido = modal.find('#cantidadbulto').val();
 		var lugarEntregaPreview = datosLugarEntregaFacturaPedido();
+		var monedaCotizPreview = window.pedidoSinRemitoObligatorio
+			? leerMonedaCotizacionFacturaPedidoParaEmitir()
+			: { moneda_id: '', cotizacion: '' };
 		var seq = ++previewFacturaPedidoSeq;
 
 		if (previewFacturaPedidoXhr && previewFacturaPedidoXhr.readyState !== 4) {
@@ -2545,6 +2636,8 @@
 				totalcajaspedido: totalcajaspedido,
 				cliente_entrega_id: lugarEntregaPreview.cliente_entrega_id,
 				lugarentrega: lugarEntregaPreview.lugarentrega,
+				moneda_id: monedaCotizPreview.moneda_id,
+				cotizacion: monedaCotizPreview.cotizacion,
 				_token: token
 			},
 			success: function(data){
@@ -2954,6 +3047,28 @@
 		let actividad_arca_id = $('#actividad_arca_id').val();
 		let pedido_id = $('#pedido_id').val();
 		var lugarEntregaFactura = datosLugarEntregaFacturaPedido();
+		var monedaCotizFactura = window.pedidoSinRemitoObligatorio
+			? leerMonedaCotizacionFacturaPedidoParaEmitir()
+			: { moneda_id: '', cotizacion: '' };
+
+		if (window.pedidoSinRemitoObligatorio) {
+			if (!monedaCotizFactura.moneda_id) {
+				alert('Debe indicar la moneda de facturación.');
+				$('#factura_pedido_moneda_id_modal').focus();
+				if (typeof liberarEmisionComprobantePedido === 'function') {
+					liberarEmisionComprobantePedido();
+				}
+				return;
+			}
+			if (!(parseFloat(monedaCotizFactura.cotizacion) > 0)) {
+				alert('Debe indicar la cotización de facturación.');
+				$('#factura_pedido_cotizacion_modal').focus();
+				if (typeof liberarEmisionComprobantePedido === 'function') {
+					liberarEmisionComprobantePedido();
+				}
+				return;
+			}
+		}
 		
 		$('#facturarPedidoModal').modal('hide');
 
@@ -2985,6 +3100,8 @@
 				actividad_arca_id: actividad_arca_id,
 				cliente_entrega_id: lugarEntregaFactura.cliente_entrega_id,
 				lugarentrega: lugarEntregaFactura.lugarentrega,
+				moneda_id: monedaCotizFactura.moneda_id,
+				cotizacion: monedaCotizFactura.cotizacion,
 				retorno_index: pathRetornoIndexPedidos(),
 				_token: token
 			},

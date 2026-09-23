@@ -35,7 +35,7 @@ final class VillafrancaFacturacionSupport
     public static function esReparto101($pedido): bool
     {
         $tipo = is_object($pedido)
-            ? ($pedido->transportes->tipoexpreso ?? '')
+            ? ($pedido->transportes?->tipoexpreso ?? '')
             : '';
 
         return (string) $tipo === self::TIPOEXPRESO_REPARTO_101;

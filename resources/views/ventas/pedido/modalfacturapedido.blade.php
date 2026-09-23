@@ -87,10 +87,19 @@
                             </select>                            
                         </div>
                         <div class="form-group row d-none" id="div-factura-pedido-moneda-cotizacion">
-                            <label for="factura_pedido_moneda_display" class="col-lg-4 col-form-label">Moneda</label>
-                            <input type="text" id="factura_pedido_moneda_display" class="col-lg-4 form-control" value="" readonly>
-                            <label for="factura_pedido_cotizacion_display" class="col-lg-2 col-form-label text-right pr-2">Cotiz.</label>
-                            <input type="text" id="factura_pedido_cotizacion_display" class="col-lg-2 form-control" value="" readonly>
+                            <label for="factura_pedido_moneda_id_modal" class="col-lg-4 col-form-label">Moneda</label>
+                            <select id="factura_pedido_moneda_id_modal" class="col-lg-4 form-control" title="Moneda de facturación">
+                                <option value="">-- Seleccionar --</option>
+                                @foreach (($moneda_query ?? []) as $monedaOpt)
+                                    <option value="{{ $monedaOpt->id }}"
+                                            data-abreviatura="{{ $monedaOpt->abreviatura ?? '' }}">
+                                        {{ trim(($monedaOpt->abreviatura ?? '').' — '.($monedaOpt->nombre ?? ''), ' —') }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <label for="factura_pedido_cotizacion_modal" class="col-lg-2 col-form-label text-right pr-2">Cotiz.</label>
+                            <input type="number" id="factura_pedido_cotizacion_modal" class="col-lg-2 form-control"
+                                   value="" min="0" step="0.000001" title="Cotización de facturación">
                         </div>
                     </div>
                 </div>

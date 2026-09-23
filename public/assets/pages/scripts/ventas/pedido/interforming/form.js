@@ -748,6 +748,22 @@
         enfocarCodigoClienteAlCargar();
         inicializarEntregaSiEdicion();
 
+        // Cotización / descuento / importes de ítem: al enfocar, seleccionar todo para tipar encima.
+        $(document).on(
+            'focus',
+            '#form-pedido-interforming #cotizacion, #form-pedido-interforming #descuento, ' +
+            '#form-pedido-interforming .precio, #form-pedido-interforming .cantidad, ' +
+            '#form-pedido-interforming .descuento, #form-pedido-interforming input[name*="[porc_fason]"]',
+            function () {
+                var el = this;
+                setTimeout(function () {
+                    if (el && typeof el.select === 'function') {
+                        el.select();
+                    }
+                }, 0);
+            }
+        );
+
         $('#btn-agregar-item-pedido-if').on('click', function () {
             agregarFila();
         });

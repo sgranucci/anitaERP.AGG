@@ -546,6 +546,14 @@ class FacturacionService
 				}
 				
 				$moneda_id = $pedido_articulo->moneda_id;
+				if ($esInterforming) {
+					$monedaRequest = (int) ($data['moneda_id'] ?? 0);
+					if ($monedaRequest > 0) {
+						$moneda_id = $monedaRequest;
+					} elseif ((int) ($pedido->moneda_id ?? 0) > 0) {
+						$moneda_id = (int) $pedido->moneda_id;
+					}
+				}
 				
 				// Trae la categoria
 				$categoria = Categoria::find($articulo->categoria_id);
@@ -568,16 +576,14 @@ class FacturacionService
 				// Si esta calculando factura para la pre-factura y es reparto 101 calcula dividiendo
 				if (config('app.empresa') == "EL BIERZO" &&
 					!$this->flCalculaDesdeGeneracionFactura &&
-					$pedido->transportes->tipoexpreso == '4')
+					(string) ($pedido->transportes?->tipoexpreso ?? '') === '4')
 				{
 					$this->flDivide = true;
 					$this->flGrabaComprobanteDividido = true;
 					$this->coeficienteCliente = 100.;
 
-					if ($pedido->transportes->tipoexpreso == '4') // Genera solo remito
-						$this->coeficienteExtraCliente = config('facturacion.COEFICIENTE_EXTRA_REPARTO_101');
-					else
-						$this->coeficienteExtraCliente = $cliente->coeficienteextra;
+					// Genera solo remito (tipoexpreso 4)
+					$this->coeficienteExtraCliente = config('facturacion.COEFICIENTE_EXTRA_REPARTO_101');
 
 					$this->anularDescuentoPieSiVillafranca();
 				}
@@ -815,11 +821,14 @@ class FacturacionService
 	{
 		$retorno = null;
 
+		// División Bierzo/Villafranca (tipoexpreso 3/4). Pedidos IF suelen ir sin transporte.
+		$tipoExpreso = (string) ($pedido->transportes?->tipoexpreso ?? '');
+
 		// Controla si divide factura
-		if (($pedido->transportes->tipoexpreso == '4' || $pedido->transportes->tipoexpreso == '3') && 
+		if (($tipoExpreso === '4' || $tipoExpreso === '3') &&
 			($tipotransaccion->codigo == '001' || $tipotransaccion->codigo == '201'))
 		{
-			if ($pedido->transportes->tipoexpreso == '4') // Genera solo remito
+			if ($tipoExpreso === '4') // Genera solo remito
 				$this->coeficienteExtraCliente = config('facturacion.COEFICIENTE_EXTRA_REPARTO_101');
 			else
 				$this->coeficienteExtraCliente = $cliente->coeficienteextra;
@@ -830,7 +839,7 @@ class FacturacionService
 				$this->flGrabaComprobanteDividido = false;
 				$this->usaNumeradorVillafrancaPropio = VillafrancaFacturacionSupport::esReparto101($pedido);
 
-				if ($pedido->transportes->tipoexpreso == '4') // Reparto 101 con remito en bierzo
+				if ($tipoExpreso === '4') // Reparto 101 con remito en bierzo
 					$this->coeficienteCliente = 100.;
 				else
 					$this->coeficienteCliente = $cliente->coeficientes->porcentajedivision;
@@ -1014,11 +1023,26 @@ class FacturacionService
 		if ($totalComprobante == 0.)
 			return ['error' => 'Factura en 0'];
 
+		if (EntornoEmpresaSupport::esInterforming()) {
+			$monedaRequest = (int) ($data['moneda_id'] ?? 0);
+			if ($monedaRequest > 0) {
+				$moneda_id = $monedaRequest;
+				foreach ($dataFactura as $i => $linea) {
+					$dataFactura[$i]['moneda_id'] = $moneda_id;
+				}
+			}
+		}
+
 		$cotizacion = $this->cotizacionService->calculaCotizacionVenta($fechaFactura, $moneda_id);
 		if (EntornoEmpresaSupport::esInterforming()) {
-			$cotPedido = (float) ($pedido->cotizacion ?? 0);
-			if ($cotPedido > 1.0001) {
-				$cotizacion = $cotPedido;
+			$cotRequest = (float) ($data['cotizacion'] ?? 0);
+			if ($cotRequest > 0) {
+				$cotizacion = $cotRequest;
+			} else {
+				$cotPedido = (float) ($pedido->cotizacion ?? 0);
+				if ($cotPedido > 1.0001) {
+					$cotizacion = $cotPedido;
+				}
 			}
 		}
 
@@ -9605,10 +9629,10 @@ class FacturacionService
 		$data['sucursalfactura'] = '1';
 		$data['numerofactura'] = $pedido->codigo;
 		$data['codigocliente'] = $cliente->codigo;
-		$data['codigotransporte'] = $pedido->transportes->codigo;
-		$data['codigovendedor'] = $pedido->vendedores->codigo;
-		$data['codigozona'] = $pedido->zonavtas->codigo;
-		$data['codigoprovincia'] = $cliente->provincias->codigo;
+		$data['codigotransporte'] = $pedido->transportes?->codigo ?? '';
+		$data['codigovendedor'] = $pedido->vendedores?->codigo ?? '';
+		$data['codigozona'] = $pedido->zonavtas?->codigo ?? '';
+		$data['codigoprovincia'] = $cliente->provincias?->codigo ?? '';
 		$data['codigosubzona'] = $cliente->subzonavtas->id ?? '0';
 		$data['condicionventa_id'] = $cliente->condicionventa_id ?? 0;
 		$data['vendedor_id'] = $pedido->vendedor_id;

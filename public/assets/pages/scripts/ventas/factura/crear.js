@@ -1100,7 +1100,7 @@
 			selectIncoterm.empty();
 			selectIncoterm.append('<option value="">-- Seleccionar incoterm --</option>');
 			$.each(sel_incoterm, function(obj, item) {
-				selectIncoterm.append('<option value="' + item.id + '">' + item.nombre + '</option>');
+				selectIncoterm.append('<option value="' + item.id + '">' + (item.abreviatura ? (item.abreviatura + ' — ') : '') + item.nombre + '</option>');
 			});
 		}
 
