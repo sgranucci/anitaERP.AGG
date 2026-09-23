@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Contable\CuentacontableArbolSupport;
 use Auth;
 use Exception;
 
@@ -760,49 +761,56 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 	}
 
 	/**
-	 * Anita ctam_tipo → ERP tipocuenta.
-	 * Canónico ERP: 1 imputable, 2 título/encabezado, 3 totalizadora
-	 * (CuentacontableTipocuentaNormalizacionSupport).
-	 * Ferli Anita: 0 Regular, 1 título, 2 totalizadora, 3 capítulo (título).
-	 * Resto: 0 título, 1 imputable, 2/3 totalizadora.
+	 * Anita ctam_tipo → ERP tipocuenta (canónico = CuentacontableArbolSupport).
+	 *
+	 * AGG y Ferli (ctamae real): 0 Regular/imputable, 1 título, 2 totalizadora, 3 capítulo (título).
+	 * Otros entornos (legado): 0 título, 1 imputable, 2/3 totalizadora.
 	 */
 	public static function tipocuentaErpDesdeAnita(string $ctamTipo): string
 	{
-		if (EntornoEmpresaSupport::esFerli()) {
+		if (self::anitaTipocuentaComoFerli()) {
 			return match ($ctamTipo) {
-				'0' => '1',
-				'1', '3' => '2',
-				'2' => '3',
-				default => '3',
+				'0' => CuentacontableArbolSupport::TIPO_IMPUTABLE,
+				'1', '3' => CuentacontableArbolSupport::TIPO_TITULO,
+				'2' => CuentacontableArbolSupport::TIPO_TOTALIZADORA,
+				default => CuentacontableArbolSupport::TIPO_TOTALIZADORA,
 			};
 		}
 
 		return match ($ctamTipo) {
-			'0' => '2',
-			'1' => '1',
-			'2', '3' => '3',
-			default => '3',
+			'0' => CuentacontableArbolSupport::TIPO_TITULO,
+			'1' => CuentacontableArbolSupport::TIPO_IMPUTABLE,
+			'2', '3' => CuentacontableArbolSupport::TIPO_TOTALIZADORA,
+			default => CuentacontableArbolSupport::TIPO_TOTALIZADORA,
 		};
 	}
 
 	/**
 	 * ERP tipocuenta → Anita ctam_tipo. Espejo de tipocuentaErpDesdeAnita().
-	 * En Ferli un título del ERP vuelve como título intermedio (1); el capítulo (3) no se distingue.
+	 * Con mapeo tipo Ferli/AGG un título del ERP vuelve como título intermedio (1).
 	 */
 	public static function tipoAnitaDesdeErp(string $tipocuenta): string
 	{
-		if (EntornoEmpresaSupport::esFerli()) {
+		if (self::anitaTipocuentaComoFerli()) {
 			return match ($tipocuenta) {
-				'1' => '0',
-				'2' => '1',
+				CuentacontableArbolSupport::TIPO_IMPUTABLE => '0',
+				CuentacontableArbolSupport::TIPO_TITULO => '1',
 				default => '2',
 			};
 		}
 
 		return match ($tipocuenta) {
-			'1' => '1',
-			'2' => '0',
+			CuentacontableArbolSupport::TIPO_IMPUTABLE => '1',
+			CuentacontableArbolSupport::TIPO_TITULO => '0',
 			default => '2',
 		};
+	}
+
+	/**
+	 * AGG y Ferli comparten la semántica de ctam_tipo en Anita (0=Regular).
+	 */
+	private static function anitaTipocuentaComoFerli(): bool
+	{
+		return EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esAgg();
 	}
 }

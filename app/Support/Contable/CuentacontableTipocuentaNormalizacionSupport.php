@@ -7,6 +7,8 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 /**
  * Alinea cuentacontable.tipocuenta con Anita ctamae.ctam_tipo
  * vía CuentacontableRepository::tipocuentaErpDesdeAnita() (mapeo por entorno).
+ *
+ * Canónico ERP: CuentacontableArbolSupport::TIPO_IMPUTABLE|TIPO_TITULO|TIPO_TOTALIZADORA.
  */
 final class CuentacontableTipocuentaNormalizacionSupport
 {
