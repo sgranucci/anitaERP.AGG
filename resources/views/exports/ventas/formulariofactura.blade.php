@@ -16,8 +16,9 @@
 
     $facturaPdfEsElBierzo = config('app.empresa') === 'EL BIERZO';
     $facturaPdfEsFerli = \App\Support\Configuracion\EntornoEmpresaSupport::esFerli();
+    $esRinFerli = \App\Support\Ventas\FerliRinNumeracionSupport::esVentaRin($venta);
     $facturaPdfCeldaTotales = 'background-color: #e9ecef; border: 1px solid #dee2e6;';
-    $facturaPdfPieCentroTieneTexto = ($letra === 'B') || $facturaPdfEsElBierzo || $facturaPdfEsFerli;
+    $facturaPdfPieCentroTieneTexto = ($letra === 'B') || $facturaPdfEsElBierzo || $facturaPdfEsFerli || $esRinFerli;
     if (empty($logoEmpresaDataUri)) {
         $logoEmpresaDat = EmpresaLogoArchivo::dataUriDesdeNombre($venta->puntoventas->empresas->nombre ?? null);
         $logoEmpresaDataUri = $logoEmpresaDat['uri'] ?? null;

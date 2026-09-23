@@ -179,6 +179,25 @@ class VentaDeudaImportarDesdeAnitaService
         if ($cliente) {
             $prep['data']['nombre'] = trim((string) ($cliente->nombre ?? '')) ?: $prep['data']['nombre'];
         }
+        $ocupada = Venta::query()
+            ->where('puntoventa_id', (int) ($prep['data']['puntoventa_id'] ?? 0))
+            ->where('numerocomprobante', (int) ($prep['data']['numerocomprobante'] ?? 0))
+            ->orderBy('id')
+            ->first();
+        if ($ocupada) {
+            if ((int) $ocupada->cliente_id !== $clienteIdErp && (int) $ocupada->cliente_id > 0) {
+                $vacio['error'] = $etiqueta.' ya existe en otro cliente ('.$ocupada->codigo.').';
+
+                return $vacio;
+            }
+            $vacio['venta_id'] = (int) $ocupada->id;
+            $vacio['total'] = round((float) $ocupada->total, 4);
+            $vacio['etiqueta'] = trim((string) ($ocupada->codigo ?? '')) !== ''
+                ? (string) $ocupada->codigo
+                : $etiqueta;
+
+            return $vacio;
+        }
         $vacio['total'] = round((float) ($prep['data']['total'] ?? 0), 4);
         if ($dryRun) {
             return $vacio;

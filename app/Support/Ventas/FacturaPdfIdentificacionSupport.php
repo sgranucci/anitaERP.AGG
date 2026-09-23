@@ -53,6 +53,9 @@ final class FacturaPdfIdentificacionSupport
     public static function nombre(string $codigoVenta, int $codigoAfip, bool $esFce): string
     {
         $prefijo = strtoupper(trim(explode(' ', $codigoVenta, 2)[0] ?? ''));
+        if ($prefijo === 'RIN') {
+            return 'REMITO INTERNO';
+        }
         if ($prefijo === 'NCE' || $prefijo === 'NCD' || in_array($codigoAfip, [3, 8, 13, 53, 203, 208], true)) {
             return $esFce ? 'NOTA DE CREDITO ELECTRONICA' : 'NOTA DE CREDITO';
         }

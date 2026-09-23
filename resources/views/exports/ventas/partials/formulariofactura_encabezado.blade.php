@@ -1,6 +1,8 @@
 @php
     $esRemitoHoja = (bool) ($esRemitoHoja ?? false);
     $facturaPdfEsFerli = (bool) ($facturaPdfEsFerli ?? \App\Support\Configuracion\EntornoEmpresaSupport::esFerli());
+    $esRinFerli = (bool) ($esRinFerli ?? \App\Support\Ventas\FerliRinNumeracionSupport::esVentaRin($venta ?? null));
+    $esCabeceraRemitoStyle = $esRemitoHoja || $esRinFerli;
     $codigoPvRemito = trim((string) (
         $venta->puntoventaremito?->codigo
         ?? $venta->remitos?->puntoventas?->codigo
@@ -86,15 +88,19 @@
                 </p>
             </div>
         </td>
-        <td class="factura-cabecera-letra {{ $esRemitoHoja ? 'factura-cabecera-letra-remito' : '' }}">
-            <div class="factura-letra-caja">{{ $esRemitoHoja ? 'R' : $letra }}</div>
-            <div class="factura-codigo-tipo">Código {{ $esRemitoHoja ? '091' : ($codigoTipoTransaccionPad ?? $codigoTipoTransaccion) }}</div>
-            @if ($esRemitoHoja)
+        <td class="factura-cabecera-letra {{ $esCabeceraRemitoStyle ? 'factura-cabecera-letra-remito' : '' }}">
+            <div class="factura-letra-caja">{{ $esCabeceraRemitoStyle ? 'R' : $letra }}</div>
+            @if ($esRinFerli)
+                <div class="factura-codigo-tipo">Uso interno</div>
+            @else
+                <div class="factura-codigo-tipo">Código {{ $esRemitoHoja ? '091' : ($codigoTipoTransaccionPad ?? $codigoTipoTransaccion) }}</div>
+            @endif
+            @if ($esCabeceraRemitoStyle)
                 <div class="factura-remito-no-valido">DOCUMENTO NO VALIDO<br>COMO FACTURA</div>
             @endif
         </td>
         <td class="factura-cabecera-comprobante">
-            <strong>{{ $esRemitoHoja ? 'REMITO' : ($nombreTipoComprobanteImpresion ?? $venta->tipotransacciones->nombre ?? '') }}</strong><br>
+            <strong>{{ $esRemitoHoja ? 'REMITO' : ($esRinFerli ? 'REMITO INTERNO' : ($nombreTipoComprobanteImpresion ?? $venta->tipotransacciones->nombre ?? '')) }}</strong><br>
             <strong>Nro. {{ $esRemitoHoja ? $nroRemitoFormateado : $venta->codigo }}</strong>
             <p>
                 @if ($facturaPdfEsFerli)
@@ -227,6 +233,18 @@
             @endif
         </td>
         <td class="text-right">Factura: {{ $venta->codigo }}</td>
+    </tr>
+</table>
+@elseif ($esRinFerli)
+<table class="table borderless factura-remito-caja-admin">
+    <tr>
+        <td>Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes?->condicionventas?->nombre ?? 'CONTADO' }}</td>
+        <td class="text-center">
+            @if (isset($venta->transportes->codigo))
+                Reparto: {{ $venta->transportes->codigo }}
+            @endif
+        </td>
+        <td class="text-right">&nbsp;</td>
     </tr>
 </table>
 @elseif ($facturaPdfRemitoDebajoCliente)

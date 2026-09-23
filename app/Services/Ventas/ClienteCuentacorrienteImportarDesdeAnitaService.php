@@ -6,6 +6,7 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Cuentacorriente;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Models\Ventas\Tipotransaccion;
+use App\Models\Ventas\Venta;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\RecepcionProveedorAnitaImportSupport;
@@ -645,6 +646,10 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
                     });
             })
             ->orderBy('id');
+        // El remito interno no tiene fila en aplmov: no hay contrapartida para grabar.
+        $query->whereHas('cliente_cuentacorrientes.ventas', function ($q) {
+            $q->where('codigo', 'not like', 'RIN %');
+        });
         if ($codigo !== '') {
             $codigoErp = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoErp($codigo);
             $ids = Cliente::query()
@@ -689,7 +694,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
         $total = count($items);
         $hechos = 0;
 
-        foreach (array_chunk($items, 20) as $lote) {
+        foreach (array_chunk($items, 10) as $lote) {
             $clavesDeuda = [];
             foreach ($lote as $item) {
                 $clave = ClienteCuentacorrienteAnitaImportClaveSupport::claveDesdeCodigoVenta(
@@ -890,7 +895,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
         }
 
         if (! $dryRun) {
-            DB::transaction(function () use ($cc, $plan, $sueltas, $usuarioId, $etiquetaDeuda) {
+            DB::transaction(function () use ($cc, $plan, $sueltas, $usuarioId, $etiquetaDeuda, $codigoCliente, $climovPorClave) {
                 if ($sueltas->isNotEmpty()) {
                     EloquentAuditDeleteSupport::each(
                         Cliente_Cuentacorriente_Aplicacion::query()->whereIn('id', $sueltas->pluck('id')->all())
@@ -1341,5 +1346,131 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             'errores' => [],
             'modo' => '',
         ];
+    }
+
+    /**
+     * Cierra en la ficha lo que Anita no tiene en aplmov: un AJU por comprobante,
+     * misma fecha, sin caja ni asiento. La etiqueta dice que es aplicación Anita.
+     *
+     * @return array{documentos:int, importe:float, errores:list<string>}
+     */
+    public function cerrarFichaConAjusteAnita(bool $dryRun = true, int $usuarioId = 1): array
+    {
+        $tipoAjuId = (int) Tipotransaccion::query()
+            ->whereRaw('UPPER(TRIM(abreviatura)) = ?', ['AJU'])
+            ->value('id');
+        if ($tipoAjuId <= 0) {
+            throw new RuntimeException('No hay tipo de comprobante AJU.');
+        }
+
+        $porCc = [];
+        $aplicaciones = Cliente_Cuentacorriente_Aplicacion::query()
+            ->with(['cliente_cuentacorrientes.ventas'])
+            ->where('comprobanteaplicado', self::ETIQUETA_CIERRE_SIN_CONTRAPARTIDA)
+            ->orderBy('id')
+            ->get();
+        foreach ($aplicaciones as $apl) {
+            $cc = $apl->cliente_cuentacorrientes;
+            if ($cc === null) {
+                continue;
+            }
+            $porCc[(int) $cc->id]['cc'] = $cc;
+            $porCc[(int) $cc->id]['ids'][] = (int) $apl->id;
+            $porCc[(int) $cc->id]['importe'] = round(
+                ($porCc[(int) $cc->id]['importe'] ?? 0) + abs((float) $apl->total),
+                4
+            );
+        }
+
+        $stats = ['documentos' => 0, 'importe' => 0.0, 'errores' => []];
+        foreach ($porCc as $item) {
+            /** @var Cliente_Cuentacorriente $cc */
+            $cc = $item['cc'];
+            $monto = round((float) $item['importe'], 4);
+            $origen = $cc->ventas;
+            if ($origen === null || $monto <= 0.009) {
+                $stats['errores'][] = 'CC #'.$cc->id.' sin comprobante de origen.';
+
+                continue;
+            }
+            $codigo = mb_substr('AJU Anita '.$origen->codigo, 0, 100);
+            $stats['documentos']++;
+            $stats['importe'] = round($stats['importe'] + $monto, 4);
+            if ($dryRun) {
+                continue;
+            }
+
+            DB::transaction(function () use ($cc, $origen, $codigo, $monto, $tipoAjuId, $usuarioId, $item) {
+                $venta = Venta::query()->where('codigo', $codigo)->first();
+                if ($venta === null) {
+                    $fecha = $cc->fecha?->format('Y-m-d') ?? now()->format('Y-m-d');
+                    $venta = Venta::query()->create([
+                        'fecha' => $fecha,
+                        'fechajornada' => $fecha,
+                        'tipotransaccion_id' => $tipoAjuId,
+                        'puntoventa_id' => (int) $origen->puntoventa_id,
+                        'numerocomprobante' => 900000 + (int) $cc->id,
+                        'codigo_afip' => $origen->codigo_afip,
+                        'cliente_id' => (int) $cc->cliente_id,
+                        'condicionventa_id' => $origen->condicionventa_id,
+                        'vendedor_id' => $origen->vendedor_id,
+                        'total' => round(-1 * $monto, 4),
+                        'moneda_id' => (int) $cc->moneda_id,
+                        'cotizacion' => (float) ($cc->cotizacion ?: 1),
+                        'estado' => 'C',
+                        'usuario_id' => $usuarioId,
+                        'leyenda' => 'Aplicación Anita. No está en aplmov; cierra la ficha contra la deuda.',
+                        'descuento' => 0,
+                        'codigo' => $codigo,
+                        'nombre' => (string) ($origen->nombre ?: 'Ajuste aplicación Anita'),
+                        'domicilio' => (string) ($origen->domicilio ?: '-'),
+                        'localidad_id' => $origen->localidad_id,
+                        'provincia_id' => $origen->provincia_id,
+                        'pais_id' => (int) ($origen->pais_id ?: 1),
+                        'numeroremito' => 0,
+                        'cantidadbulto' => 0,
+                    ]);
+                }
+
+                $ccCredito = Cliente_Cuentacorriente::query()->where('venta_id', $venta->id)->orderBy('id')->first();
+                $total = round(-1 * $monto, 4);
+                if ($ccCredito === null) {
+                    $fecha = $cc->fecha?->format('Y-m-d') ?? now()->format('Y-m-d');
+                    $ccCredito = Cliente_Cuentacorriente::query()->create([
+                        'fecha' => $fecha,
+                        'fechavencimiento' => $fecha,
+                        'cliente_id' => (int) $cc->cliente_id,
+                        'total' => $total,
+                        'moneda_id' => (int) $cc->moneda_id,
+                        'cotizacion' => (float) ($cc->cotizacion ?: 1),
+                        'venta_id' => (int) $venta->id,
+                        'cobranza_id' => null,
+                        'empresa_id' => $cc->empresa_id,
+                    ]);
+                } else {
+                    $total = round((float) $ccCredito->total - $monto, 4);
+                    $ccCredito->total = $total;
+                    $ccCredito->save();
+                }
+                if (abs((float) $venta->total - $total) > 0.02) {
+                    $venta->total = $total;
+                    $venta->save();
+                }
+
+                EloquentAuditDeleteSupport::each(
+                    Cliente_Cuentacorriente_Aplicacion::query()->whereIn('id', $item['ids'])
+                );
+                $this->grabarParAplicacion(
+                    $cc,
+                    $ccCredito,
+                    $monto,
+                    $cc->fecha?->format('Y-m-d') ?? now()->format('Y-m-d'),
+                    $codigo,
+                    (string) $origen->codigo
+                );
+            });
+        }
+
+        return $stats;
     }
 }

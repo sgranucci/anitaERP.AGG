@@ -52,4 +52,18 @@ final class FacturaPdfIdentificacionSupportTest extends TestCase
         self::assertSame('FACTURA', $ident['nombre']);
         self::assertFalse($ident['es_fce']);
     }
+
+    public function test_rin_se_imprime_como_remito_interno(): void
+    {
+        $ident = S::desdeVenta((object) [
+            'codigo' => 'RIN A-00001-00002738',
+            'codigo_afip' => 10,
+            'tipotransacciones' => (object) ['codigo' => '10', 'nombre' => 'REMITO INTERNO', 'abreviatura' => 'RIN'],
+        ]);
+
+        self::assertSame('A', $ident['letra']);
+        self::assertSame(10, $ident['codigo_afip']);
+        self::assertSame('REMITO INTERNO', $ident['nombre']);
+        self::assertFalse($ident['es_fce']);
+    }
 }

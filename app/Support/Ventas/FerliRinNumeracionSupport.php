@@ -37,6 +37,25 @@ final class FerliRinNumeracionSupport
     }
 
     /**
+     * Venta RIN en Ferli (impresión PDF como remito interno, no FAC).
+     */
+    public static function esVentaRin(?object $venta): bool
+    {
+        if (! EntornoEmpresaSupport::esFerli() || $venta === null) {
+            return false;
+        }
+
+        $prefijo = strtoupper(trim(explode(' ', (string) ($venta->codigo ?? ''), 2)[0] ?? ''));
+        if ($prefijo === self::ABREVIATURA) {
+            return true;
+        }
+
+        $abr = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
+
+        return $abr === self::ABREVIATURA;
+    }
+
+    /**
      * Reserva el siguiente número RIN (ya el que se graba en venta.numerocomprobante).
      * Debe llamarse dentro de una transacción DB si el caller la abre.
      */

@@ -22,6 +22,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
                             {--cerrar-sin-deuda-anita : Salda CC ERP pendiente que no está en climov abierto de Anita (con o sin --cliente)}
                             {--reparar-contrapartidas : Reemplaza el cierre sin movimiento por el comprobante que aplica la factura}
                             {--todos : Repara todos los clientes. Obligatorio si no se pasa --cliente}
+                            {--ajuste-anita : Cierra la ficha con un AJU por cada aplicación Anita sin comprobante}
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}';
 
@@ -61,6 +62,30 @@ class ClienteCuentacorrienteImportarDesdeAnitaCommand extends Command
                 (bool) $this->option('todos'),
                 $limite,
             );
+        }
+
+        if ((bool) $this->option('ajuste-anita')) {
+            $this->line(($dryRun ? 'DRY-RUN' : 'EJECUTAR').' | ajuste Anita para igualar ficha y deuda');
+            set_time_limit(0);
+            try {
+                $stats = $service->cerrarFichaConAjusteAnita($dryRun, $usuarioId);
+            } catch (\Throwable $e) {
+                $this->error($e->getMessage());
+
+                return self::FAILURE;
+            }
+            $this->table(['Métrica', 'Cantidad'], [
+                ['Ajustes', $stats['documentos']],
+                ['Importe', number_format((float) $stats['importe'], 2, ',', '.')],
+            ]);
+            foreach (array_slice($stats['errores'], 0, 20) as $error) {
+                $this->warn((string) $error);
+            }
+            if ($dryRun) {
+                $this->comment('Dry-run: no se grabó nada.');
+            }
+
+            return self::SUCCESS;
         }
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
