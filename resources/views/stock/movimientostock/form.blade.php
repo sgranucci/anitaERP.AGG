@@ -303,14 +303,24 @@
                     </div>
                 </div>
                 @if($movimientoStockModoFerli)
-                <div class="form-group row mb-2" id="marca" data-articulo="{{ $articulo_query }}" data-articuloall="{{ $articuloall_query }}">
+                @php
+                    $articuloQueryJson = ($articulo_query ?? collect())->values()->toJson(JSON_UNESCAPED_UNICODE);
+                    $articuloAllQueryJson = ($articuloall_query ?? collect())->values()->toJson(JSON_UNESCAPED_UNICODE);
+                @endphp
+                <div class="form-group row mb-2" id="marca" data-articulo="{{ $articuloQueryJson }}" data-articuloall="{{ $articuloAllQueryJson }}">
                     <label for="mventa_id" class="col-lg-4 col-form-label requerido">Marca</label>
                     <div class="col-lg-8">
                         <select name="mventa_id" id="mventa_id" data-placeholder="Marca de venta" class="form-control required" data-fouc>
                             <option value="">-- Seleccionar marca --</option>
                             @foreach($mventa_query as $key => $value)
+                                @php
+                                    $marcaSeleccionada = (int) $value->id === (int) old('mventa_id', $movimientostock->mventa_id ?? '');
+                                @endphp
                                 <option value="{{ $value->id }}"
-                                    @if((int) $value->id === (int) old('mventa_id', $movimientostock->mventa_id ?? '')) selected @endif>
+                                    @if($marcaSeleccionada)
+                                        selected
+                                    @endif
+                                >
                                     {{ $value->nombre }}
                                 </option>
                             @endforeach
@@ -389,7 +399,6 @@
     				<th class="col-comb">Combinaci&oacute;n</th>
     				<th class="col-mod">M&oacute;dulo</th>
     				<th class="col-qty text-right">Cantidad</th>
-    				<th class="col-precio text-right" title="Calzado: se sugiere por talle/lista y se puede corregir. No venta: editable (última compra).">Precio</th>
 					<th class="col-flag" title="Todos los art&iacute;culos">A</th>
     				<th class="col-flag" title="Todas las combinaciones">C</th>
                     @else
@@ -411,7 +420,14 @@
 		 		@foreach ($lineasFormulario as $pedidoitem)
             			<tr class="item-pedido" data-ms-uid="msl-{{ $loop->index }}-{{ (int) ($pedidoitem->id ?? 0) }}">
                 			<td class="align-middle">
-								<input type="text" name="items[]" class="form-control form-control-sm item text-center" value="{{ $loop->index+1 }}" readonly style="@if ($pedidoitem->estado ?? '' == 'A') background-color:red;font-weight:900; @endif">
+                                @php
+                                    $itemEstadoAnulado = (string) ($pedidoitem->estado ?? '') === 'A';
+                                @endphp
+                                @if($itemEstadoAnulado)
+								<input type="text" name="items[]" class="form-control form-control-sm item text-center" value="{{ $loop->index+1 }}" readonly style="background-color:red;font-weight:900;">
+                                @else
+								<input type="text" name="items[]" class="form-control form-control-sm item text-center" value="{{ $loop->index+1 }}" readonly>
+                                @endif
                 				<input type="hidden" name="medidas[]" class="form-control medidas" readonly value="{{ MovimientoStockFormLineasSupport::medidasHidden($loop->index, $pedidoitem) }}" />
                 				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{ MovimientoStockFormLineasSupport::valorLinea($loop->index, 'listasprecios_id', $pedidoitem->listaprecio_id ?? '') }}" />
                 				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{ MovimientoStockFormLineasSupport::valorLinea($loop->index, 'monedas_id', $pedidoitem->moneda_id ?? '') }}" />
@@ -458,14 +474,14 @@
                                 $descCombLinea = $combModel
                                     ? trim((string) ($combModel->codigo ?? '').'-'.(string) ($combModel->nombre ?? ''), '-')
                                     : '';
-                                $descModLinea = (string) (optional($pedidoitem->modulos)->nombre ?? ($pedidoitem->desc_modulo ?? ''));
+                                $descModLinea = (string) (optional($pedidoitem->modulos ?? null)->nombre ?? ($pedidoitem->desc_modulo ?? ''));
                             @endphp
                 			@include('stock.movimientostock.partials.fila_item_ferli', [
                 			    'combinacionIdPrev' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'combinaciones_id', $pedidoitem->combinacion_id ?? ''),
                 			    'descCombinacion' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'desc_combinacion', $descCombLinea),
                 			    'moduloIdPrev' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'modulos_id', $pedidoitem->modulo_id ?? ''),
                 			    'descModulo' => MovimientoStockFormLineasSupport::valorLinea($loop->index, 'desc_modulo', $descModLinea),
-                			    'cantidad' => number_format(abs($pedidoitem->cantidad), 0, '.', ''),
+                			    'cantidad' => number_format(abs((float) ($pedidoitem->cantidad ?? 0)), 0, '.', ''),
                 			    'precio' => number_format((float) old('precios.'.$loop->index, optional($pedidoitem)->precio ?? 0), 2),
                 			])
                             @else

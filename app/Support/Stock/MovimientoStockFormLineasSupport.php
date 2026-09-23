@@ -128,6 +128,8 @@ final class MovimientoStockFormLineasSupport
                 'combinacion_id' => old('combinaciones_id.'.$i, ''),
                 'modulo_id' => old('modulos_id.'.$i, ''),
                 'combinaciones' => null,
+                'modulos' => null,
+                'desc_modulo' => old('desc_modulo.'.$i, ''),
                 'listaprecio_id' => old('listasprecios_id.'.$i, ''),
                 'moneda_id' => old('monedas_id.'.$i, ''),
                 'incluyeimpuesto' => old('incluyeimpuestos.'.$i, ''),

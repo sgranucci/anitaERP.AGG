@@ -73,18 +73,37 @@
                 <strong class="factura-empresa-nombre">{{ $empresaPv->nombre ?? '' }}</strong>
                 <p class="factura-empresa-datos">
                     @if ($facturaPdfEsFerli)
-                        {{ $venta->puntoventas->domicilio }}<br>
-                        {{ $venta->puntoventas->localidades->nombre ?? '' }}
-                        @if (! empty($venta->puntoventas->codigopostal))
-                            ({{ $venta->puntoventas->codigopostal }})
-                        @endif
-                        <br>
-                        {{ $venta->puntoventas->provincias->nombre ?? '' }}
                         @php
+                            // Local POS: domicilio comercial del local (pdf_lugar), no el fiscal de fábrica (PV Villa Madero).
+                            $domicilioIzqLocal = $facturaPdfEsLocal ? trim((string) $pdfLugar) : '';
+                            $domPv = trim((string) ($venta->puntoventas->domicilio ?? ''));
+                            if ($domPv === '-' || $domPv === '.') {
+                                $domPv = '';
+                            }
+                            $locPv = trim((string) ($venta->puntoventas->localidades->nombre ?? ''));
+                            $cpPv = trim((string) ($venta->puntoventas->codigopostal ?? ''));
+                            $provPv = trim((string) ($venta->puntoventas->provincias->nombre ?? ''));
                             $telPv = trim((string) ($venta->puntoventas->telefono ?? ''));
                             // En maestros Ferli a veces quedó ciudad/CP en telefono; no rotular como TEL.
                             $telPvPareceTelefono = $telPv !== '' && preg_match('/\d/', $telPv) && ! preg_match('/\bCP\.?\s*\d/i', $telPv);
                         @endphp
+                        @if ($domicilioIzqLocal !== '')
+                            {{ $domicilioIzqLocal }}
+                        @else
+                            @if ($domPv !== '')
+                                {{ $domPv }}<br>
+                            @endif
+                            @if ($locPv !== '')
+                                {{ $locPv }}
+                                @if ($cpPv !== '')
+                                    ({{ $cpPv }})
+                                @endif
+                                <br>
+                            @endif
+                            @if ($provPv !== '')
+                                {{ $provPv }}
+                            @endif
+                        @endif
                         @if ($telPvPareceTelefono)
                             <br>TEL.: {{ $telPv }}
                         @elseif ($telPv !== '')

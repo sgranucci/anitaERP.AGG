@@ -253,9 +253,9 @@
     </div>
     <div class="card-body py-3">
         <p class="text-muted small mb-3">
-            Domicilio y teléfono salen del <strong>punto de venta</strong> del local.
             Estos textos van en la factura del POS; no afectan facturas de fábrica.
             Vacío = no se imprime esa línea (no hereda fábrica).
+            El teléfono sale del <strong>punto de venta</strong> del local.
         </p>
         <div class="form-group row">
             <label for="pdf_web" class="col-lg-4 control-label text-right pr-2">Web / email PDF</label>
@@ -267,11 +267,14 @@
             </div>
         </div>
         <div class="form-group row">
-            <label for="pdf_lugar" class="col-lg-4 control-label text-right pr-2">Lugar de emisión</label>
-            <div class="col-lg-4">
+            <label for="pdf_lugar" class="col-lg-4 control-label text-right pr-2">Domicilio / lugar</label>
+            <div class="col-lg-7">
                 <input type="text" name="pdf_lugar" id="pdf_lugar" class="form-control" maxlength="80"
                     value="{{ old('pdf_lugar', $data->pdf_lugar ?? '') }}"
-                    placeholder="Ej. Bs.As.">
+                    placeholder="Ej. Chilavert 6452, CABA">
+                <small class="form-text text-muted">
+                    Se imprime a la izquierda (en lugar del domicilio fiscal del PV) y en &laquo;Lugar y fecha&raquo;.
+                </small>
             </div>
         </div>
         <div class="form-group row">

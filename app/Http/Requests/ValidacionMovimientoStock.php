@@ -7,6 +7,7 @@ use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockCanjeSupport;
+use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
@@ -90,6 +91,12 @@ class ValidacionMovimientoStock extends FormRequest
                 'exists:bien_uso,id',
             ],
             'centrocosto_destino_id' => 'nullable|integer|exists:centrocosto,id',
+            'mventa_id' => [
+                Rule::requiredIf(fn () => MovimientoStockFerliSupport::esCalzadosFerli()),
+                'nullable',
+                'integer',
+                'exists:mventa,id',
+            ],
         ];
     }
 
@@ -256,6 +263,9 @@ class ValidacionMovimientoStock extends FormRequest
             'deposito_id.required' => 'Debe seleccionar un depósito.',
             'deposito_id.exists' => 'El depósito seleccionado no existe o no es válido.',
             'deposito_id.integer' => 'El depósito indicado no es válido.',
+            'mventa_id.required' => 'Debe seleccionar la marca antes de grabar el movimiento.',
+            'mventa_id.exists' => 'La marca seleccionada no es válida.',
+            'mventa_id.integer' => 'La marca indicada no es válida.',
         ];
     }
 

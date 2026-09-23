@@ -60,22 +60,28 @@
         if (esArticuloVenta) {
             $tr.removeClass('ms-linea-simple');
             $cant.removeClass('cantidad-stock').prop('readonly', true);
-            $precio.prop('readonly', false);
+            // Ferli mov. stock: precio oculto (hidden); no editar en pantalla
+            $precio.prop('readonly', true);
             $comb.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
             $mod.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
             $flags.prop('disabled', false);
         } else {
             $tr.addClass('ms-linea-simple');
             $cant.addClass('cantidad-stock').prop('readonly', false);
-            $precio.prop('readonly', false);
+            $precio.prop('readonly', true);
             // No disabled: deben viajar vacíos en el POST (índices de arrays).
             $comb.val('').css('pointer-events', 'none').attr('tabindex', '-1');
             $mod.val('').css('pointer-events', 'none').attr('tabindex', '-1');
             $tr.find('.combinacion_id_previa, .modulo_id_previa, .desc_combinacion, .desc_modulo, .medidas').val('');
             $flags.prop('checked', false);
-            var articuloId = msFilaArticuloId($tr);
-            if (articuloId && !msPrecioEsManual($tr)) {
-                msResolverPrecioLinea($tr, articuloId);
+            // Ferli: no resolver precio de fábrica/lista; el backend completa costo al grabar.
+            if (!msEsModoFerli()) {
+                var articuloId = msFilaArticuloId($tr);
+                if (articuloId && !msPrecioEsManual($tr)) {
+                    msResolverPrecioLinea($tr, articuloId);
+                }
+            } else if (!msPrecioEsManual($tr)) {
+                $precio.val('0.00');
             }
             if (typeof window.msEnfocarCantidadFila === 'function') {
                 window.msEnfocarCantidadFila($tr);

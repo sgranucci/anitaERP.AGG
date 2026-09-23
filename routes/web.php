@@ -1568,6 +1568,7 @@ Route::match(['get', 'post'], 'stock/movimientostock/preview-conversion-formula'
 Route::get('stock/movimientostock/api/saldo-articulo', 'Stock\MovimientoStockController@saldoArticuloDeposito')->name('movimientostock_saldo_articulo');
 Route::get('stock/movimientostock/api/sugerir-tipo-transferencia-contable', 'Stock\MovimientoStockController@sugerirTipoTransferenciaContable')->name('movimientostock_sugerir_tipo_transferencia_contable');
 Route::get('stock/movimientostock/api/precio-linea', 'Stock\MovimientoStockController@precioLineaArticulo')->name('movimientostock_precio_linea');
+Route::get('stock/movimientostock/api/catalogo-articulos', 'Stock\MovimientoStockController@catalogoArticulosPorDeposito')->name('movimientostock_catalogo_articulos');
 Route::post('stock/movimientostock/api/resolver-etiqueta-surmar', 'Stock\MovimientoStockController@resolverEtiquetaSurmar')->name('movimientostock_resolver_etiqueta_surmar');
 Route::post('stock/movimientostock/api/zpl-etiquetas-surmar', 'Stock\MovimientoStockController@zplEtiquetasSurmarBatch')->name('movimientostock_zpl_etiquetas_surmar');
 Route::get('stock/movimientostock/etiqueta-surmar/{etiquetaId}/zpl', 'Stock\MovimientoStockController@imprimirEtiquetaSurmar')->name('movimientostock_etiqueta_surmar_zpl');

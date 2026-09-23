@@ -58,6 +58,16 @@
             alert('No puede grabar sin un tipo de transacción');
             return;
         }
+
+		if (window.movimientoStockModoFerli) {
+			var mventaId = ($('#mventa_id').val() || '').trim();
+			if (!mventaId) {
+				alert('Debe seleccionar la marca antes de grabar el movimiento.');
+				$('#mventa_id').focus();
+				return;
+			}
+		}
+
         // Controla datos correctos
 		var item = 0;
 		var flError = false;
@@ -160,12 +170,17 @@
 			selectedId = String($tr.find('.combinacion_id_previa').val() || '');
 		}
 
-		if (fl_todas_las_combinaciones == 'on' || fl_todos_los_articulos == 'on' || flsinfiltro)
-			var url_comb = carpetaBase+'/stock/leercombinaciones/';
-		else
-			var url_comb = carpetaBase+'/stock/leercombinacionesactivas/';
+		if (fl_todas_las_combinaciones == 'on' || fl_todos_los_articulos == 'on' || flsinfiltro) {
+			var url_comb = carpetaBase+'/stock/leercombinaciones/'+articulo_id;
+		} else {
+			var url_comb = carpetaBase+'/stock/leercombinacionesactivas/'+articulo_id;
+			if (window.movimientoStockModoFerli) {
+				var ambitoComb = (window.movimientoStockAmbitoCatalogo || 'FABRICA').toString().toUpperCase();
+				url_comb += '?ambito=' + encodeURIComponent(ambitoComb);
+			}
+		}
 
-        $.get(url_comb+articulo_id, function(data){
+        $.get(url_comb, function(data){
             var comb = $.map(data || [], function(value){
                 return [value];
             });
@@ -582,10 +597,11 @@
 				preciosTalle = preciosTalle || [];
 				var jsonObject = [];
 				var off = 0;
+				var ocultarPreciosFerli = !!window.movimientoStockModoFerli;
 				for (var i = 0; i < med.length; i++) {
 					var cantTalle = cant[i] === '' || cant[i] == null ? 0 : cant[i];
 					var dato = preciosTalle[i] || {};
-					var precioTalle = parseFloat(dato.precio);
+					var precioTalle = ocultarPreciosFerli ? 0 : parseFloat(dato.precio);
 					if (!isFinite(precioTalle)) {
 						precioTalle = 0;
 					}
@@ -593,9 +609,9 @@
 						medida: med[i],
 						cantidad: cantTalle,
 						precio: precioTalle,
-						listaprecio: dato.listaprecio_id,
-						incluyeimpuesto: dato.incluyeimpuesto,
-						moneda: dato.moneda_id,
+						listaprecio: ocultarPreciosFerli ? null : dato.listaprecio_id,
+						incluyeimpuesto: ocultarPreciosFerli ? null : dato.incluyeimpuesto,
+						moneda: ocultarPreciosFerli ? null : dato.moneda_id,
 						talle_id: talleid[i]
 					});
 					if (precioTalle > 0) {
@@ -606,18 +622,25 @@
 				$tr.find('.medidas').val(JSON.stringify(jsonObject));
 
 				if (!precioManual) {
-					var datoOff = preciosTalle[off] || {};
-					var pre = fNumero(datoOff.precio, 2);
-					var lis = fNumero(datoOff.listaprecio_id, 0);
-					var inc = fNumero(datoOff.incluyeimpuesto, 0);
-					var mon = fNumero(datoOff.moneda_id, 0);
-					if (pre === 'NaN' || pre < 0 || pre > 9999999999) {
-						pre = 0;
+					if (ocultarPreciosFerli) {
+						$tr.find('.precio').val('0.00');
+						$tr.find('.listaprecio_id').val('');
+						$tr.find('.incluyeimpuesto').val('');
+						$tr.find('.moneda_id').val('');
+					} else {
+						var datoOff = preciosTalle[off] || {};
+						var pre = fNumero(datoOff.precio, 2);
+						var lis = fNumero(datoOff.listaprecio_id, 0);
+						var inc = fNumero(datoOff.incluyeimpuesto, 0);
+						var mon = fNumero(datoOff.moneda_id, 0);
+						if (pre === 'NaN' || pre < 0 || pre > 9999999999) {
+							pre = 0;
+						}
+						$tr.find('.precio').val(pre);
+						$tr.find('.listaprecio_id').val(lis);
+						$tr.find('.incluyeimpuesto').val(inc);
+						$tr.find('.moneda_id').val(mon);
 					}
-					$tr.find('.precio').val(pre);
-					$tr.find('.listaprecio_id').val(lis);
-					$tr.find('.incluyeimpuesto').val(inc);
-					$tr.find('.moneda_id').val(mon);
 				}
 
 				sumaPares(modalActivo, 'cantidadesportalles');
@@ -637,10 +660,15 @@
 				}
 			}
 
-			asignaPrecioPorTalles(articuloIdFila, talleid).always(function (data) {
-				aplicarMedidas($.isArray(data) ? data : []);
+			if (window.movimientoStockModoFerli) {
+				aplicarMedidas([]);
 				$('#medidasModal').modal('hide');
-			});
+			} else {
+				asignaPrecioPorTalles(articuloIdFila, talleid).always(function (data) {
+					aplicarMedidas($.isArray(data) ? data : []);
+					$('#medidasModal').modal('hide');
+				});
+			}
 		});
 
 		$('#medidasModal').on('hidden.bs.modal', function () {

@@ -31,6 +31,7 @@ use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockEdicionVentanaSupport;
+use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockFormLineasSupport;
 use App\Support\Stock\MovimientoStockFormulaConversionSupport;
 use App\Support\Pdf\DompdfPaperSupport;
@@ -170,6 +171,7 @@ class MovimientoStockController extends Controller
             'estadosTransferencia' => \App\Support\Stock\TransferenciaMercaderiaEstados::etiquetas(),
             'detalleFerliPorItem' => \App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport::porItemDesdeSalida($transferencia),
             'mostrarDetalleFerli' => \App\Support\Stock\MovimientoStockFerliSupport::esCalzadosFerli(),
+            'ocultarColumnasDestinoFerli' => \App\Support\Stock\MovimientoStockFerliSupport::esCalzadosFerli(),
         ]);
     }
 
@@ -230,7 +232,8 @@ class MovimientoStockController extends Controller
         $this->armarTablasVista($deposito_query,
                                 $mventa_query, $articulo_query, $modulo_query, 
                                 $listaprecio_query, $articuloall_query, $articuloxsku_query,
-                                $tipotransaccion_query, $lote_query);
+                                $tipotransaccion_query, $lote_query, null,
+                                (int) old('deposito_salida_id', old('deposito_id', MovimientoStockPreferenciasUsuario::resolverDepositoDefaultId() ?? 0)));
 
         $tipotransacciondefault_id = $this->resolverTipotransaccionStockDefaultId();
         $depositodefault_id = MovimientoStockPreferenciasUsuario::resolverDepositoDefaultId();
@@ -248,6 +251,16 @@ class MovimientoStockController extends Controller
         $transferenciaVinculada = null;
         $color_query = \App\Models\Stock\Color::query()->orderBy('nombre')->get(['id', 'nombre']);
         $talle_query = \App\Models\Stock\Talle::query()->orderBy('nombre')->get(['id', 'nombre']);
+        $depositoOperativoMs = (int) old(
+            'deposito_salida_id',
+            old('deposito_id', $depositodefault_id ?? 0)
+        );
+        $movimientoStockCanalCatalogo = MovimientoStockFerliSupport::codigoCanal(
+            $depositoOperativoMs > 0 ? $depositoOperativoMs : null
+        );
+        $movimientoStockAmbitoCatalogo = MovimientoStockFerliSupport::ambitoCatalogo(
+            $depositoOperativoMs > 0 ? $depositoOperativoMs : null
+        );
 
         return view('stock.movimientostock.crear', compact(
             'mventa_query', 'articulo_query', 'modulo_query', 'listaprecio_query', 
@@ -255,7 +268,7 @@ class MovimientoStockController extends Controller
             'tipotransaccion_query', 'tipotransacciondefault_id', 'depositodefault_id', 'deposito_query', 'lote_query',
             'empresa_query', 'empresa_id', 'centrocosto_query', 'movimientostock',
             'asientoPreview', 'mostrarSolapaAsiento', 'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
-            'color_query', 'talle_query') + [
+            'color_query', 'talle_query', 'movimientoStockCanalCatalogo', 'movimientoStockAmbitoCatalogo') + [
             'modo_surmar' => $modoSurmar,
             'ruta_index_movimientostock' => $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
             'ruta_guardar_movimientostock' => $modoSurmar ? 'guardar_movimiento_surmar' : 'guardar_movimientostock',
@@ -336,15 +349,20 @@ class MovimientoStockController extends Controller
         $this->aplicarModoSurmarAlRequest($request);
         $modoSurmar = $this->esModoSurmar($request);
     	$movimientostock = $this->movimientoStockService->leeMovimientoStock($id);
+        $depositoActualId = (int) ($movimientostock->articulos_movimiento[0]->deposito_id ?? 0);
+        $depositoOperativoEditar = (int) old(
+            'deposito_salida_id',
+            old('deposito_id', $depositoActualId)
+        );
 		$this->armarTablasVista($deposito_query,
                             $mventa_query, $articulo_query, $modulo_query, 
                             $listaprecio_query, $articuloall_query, $articuloxsku_query, 
-                            $tipotransaccion_query, $lote_query, $movimientostock);
+                            $tipotransaccion_query, $lote_query, $movimientostock,
+                            $depositoOperativoEditar > 0 ? $depositoOperativoEditar : null);
 
 		$tipotransacciondefault_id = $this->resolverTipotransaccionStockDefaultId();
         $depositodefault_id = MovimientoStockPreferenciasUsuario::resolverDepositoDefaultId();
         $empresa_query = $this->empresaRepository->allFiltrado();
-        $depositoActualId = (int) ($movimientostock->articulos_movimiento[0]->deposito_id ?? 0);
         $empresa_id = old(
             'empresa_id',
             $depositoActualId > 0
@@ -388,6 +406,13 @@ class MovimientoStockController extends Controller
                 ->consumosPayloadPorLineaProducto((int) $movimientostock->id);
         }
 
+        $movimientoStockCanalCatalogo = MovimientoStockFerliSupport::codigoCanal(
+            $depositoOperativoEditar > 0 ? $depositoOperativoEditar : null
+        );
+        $movimientoStockAmbitoCatalogo = MovimientoStockFerliSupport::ambitoCatalogo(
+            $depositoOperativoEditar > 0 ? $depositoOperativoEditar : null
+        );
+
         return view('stock.movimientostock.editar', compact('movimientostock', 
 			'mventa_query', 'articulo_query', 'modulo_query', 
 			'listaprecio_query', 'articuloall_query', 'articuloxsku_query', 
@@ -395,7 +420,8 @@ class MovimientoStockController extends Controller
             'empresa_query', 'empresa_id', 'centrocosto_query', 'asientoPreview', 'mostrarSolapaAsiento',
             'movimientoStockModoFerli', 'bienesUsoActivos', 'transferenciaVinculada',
             'puedeModificarVentana', 'controlVentanaActivo',
-            'color_query', 'talle_query', 'etiquetasSurmarPorLinea') + [
+            'color_query', 'talle_query', 'etiquetasSurmarPorLinea',
+            'movimientoStockCanalCatalogo', 'movimientoStockAmbitoCatalogo') + [
             'modo_surmar' => $modoSurmar,
             'ruta_index_movimientostock' => $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
             'ruta_actualizar_movimientostock' => $modoSurmar ? 'actualizar_movimiento_surmar' : 'actualizar_movimientostock',
@@ -765,6 +791,29 @@ class MovimientoStockController extends Controller
         ]);
     }
 
+    /**
+     * Catálogo Ferli según depósito operativo (LOCAL si es de local_venta, si no FÁBRICA).
+     * Incluye calzado con combinación activa e insumos sin combinación.
+     */
+    public function catalogoArticulosPorDeposito(Request $request): JsonResponse
+    {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
+            return response()->json(['message' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $depositoId = (int) $request->query('deposito_id', 0);
+        $ambito = MovimientoStockFerliSupport::ambitoCatalogo($depositoId > 0 ? $depositoId : null);
+        $canal = MovimientoStockFerliSupport::codigoCanal($depositoId > 0 ? $depositoId : null);
+        $arts = MovimientoStockFerliSupport::listadoParaSelector($depositoId > 0 ? $depositoId : null);
+
+        return response()->json([
+            'deposito_id' => $depositoId,
+            'ambito' => $ambito,
+            'canal' => $canal,
+            'articulos' => $arts->values()->all(),
+        ]);
+    }
+
     public function sugerirTipoTransferenciaContable(Request $request): JsonResponse
     {
         if (! MovimientoSurmarPermisoSupport::puedeCrear(false)
@@ -938,7 +987,7 @@ class MovimientoStockController extends Controller
    	private function armarTablasVista(&$deposito_query,
                 &$mventa_query, &$articulo_query, &$modulo_query, &$listaprecio_query, 
                 &$articuloall_query, &$articuloxsku_query, 
-                &$tipotransaccion_query, &$lote_query, $movimientostock = null)
+                &$tipotransaccion_query, &$lote_query, $movimientostock = null, ?int $depositoOperativoId = null)
     {
         $mventa_query = Mventa::all();
         $tipotransaccion_query = $this->tipotransaccionStockRepository->all(['E', 'S', 'T', 'C'], ['A']);
@@ -957,37 +1006,30 @@ class MovimientoStockController extends Controller
         }
         $deposito_query = $this->depmaeRepository->allFiltrado();
     
-        $articulo_ids = Array();
-        if ($movimientostock != null)	
-        {
+        $articulo_ids = [];
+        if ($movimientostock != null) {
             $articulo_ids[] = $movimientostock->articulo_id;
-        }
-        else
+        } else {
             $articulo_ids[] = 0;
+        }
 
-        $articulo_query = Articulo::select('id', 'sku', 'descripcion', 'mventa_id')
-            ->orderBy('descripcion', 'ASC')
-            ->where(function ($q) use ($articulo_ids) {
-                $q->where(function ($qActivos) {
-                    \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo($qActivos)
-                        ->whereExists(function ($query) {
-                            $query->select(DB::raw(1))
-                                ->from('combinacion')
-                                ->whereRaw('combinacion.articulo_id=articulo.id and '.\App\Support\Stock\CombinacionEstadoCanalSupport::sqlColumnaActiva());
-                        });
-                })->orWhereIn('id', $articulo_ids);
-            })
-            ->get();
+        if ($depositoOperativoId === null || $depositoOperativoId <= 0) {
+            $depositoOperativoId = (int) (MovimientoStockPreferenciasUsuario::resolverDepositoDefaultId() ?? 0);
+            if ($depositoOperativoId <= 0 && $movimientostock !== null) {
+                $depositoOperativoId = (int) ($movimientostock->articulos_movimiento[0]->deposito_id ?? 0);
+            }
+        }
 
-        $articuloall_query = \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
-            Articulo::select('id', 'sku', 'descripcion', 'mventa_id')
-                ->orderBy('descripcion', 'ASC')
-                ->whereExists(function ($query) {
-                    $query->select(DB::raw(1))
-                        ->from('combinacion')
-                        ->whereRaw('combinacion.articulo_id=articulo.id');
-                })
-        )->get();
+        $articulo_query = \App\Support\Stock\MovimientoStockFerliSupport::listadoParaSelector(
+            $depositoOperativoId > 0 ? $depositoOperativoId : null,
+            $articulo_ids
+        );
+
+        // Misma base: en Ferli el “todos” ya no trae fábrica si el depósito es local (y viceversa).
+        $articuloall_query = \App\Support\Stock\MovimientoStockFerliSupport::listadoParaSelector(
+            $depositoOperativoId > 0 ? $depositoOperativoId : null,
+            $articulo_ids
+        );
 
         $articuloxsku_query = $articulo_query->sortBy('sku');
 

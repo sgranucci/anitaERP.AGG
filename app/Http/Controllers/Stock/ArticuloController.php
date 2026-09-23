@@ -1253,6 +1253,10 @@ class ArticuloController extends Controller
         $listaPrecioReq = $request->input('listaprecio_id');
         $listaPrecioReq = ($listaPrecioReq !== null && $listaPrecioReq !== '') ? (int) $listaPrecioReq : null;
         $listaPrecio = PrecioListaVigenteSupport::resolverListaDesdeRequest($listaPrecioReq);
+        if (filter_var($request->input('ocultar_precio'), FILTER_VALIDATE_BOOLEAN)
+            || strtoupper(trim((string) $request->input('canal', ''))) === \App\Models\Ventas\Canal::CODIGO_LOCAL) {
+            $listaPrecio['mostrar'] = false;
+        }
         $colspanTabla = $listaPrecio['mostrar'] ? 7 : 6;
 
         $consultaRaw = $request->input('consulta');
@@ -1301,6 +1305,23 @@ class ArticuloController extends Controller
         }
 
         \App\Support\Stock\ArticuloSeleccionOperativaSupport::aplicarSoloActivos($query);
+
+        // deposito_id manda (mov. stock / TRA Ferli): canal del depósito + calzado con
+        // combinación activa O insumos sin combinación. Canal=LOCAL suelto queda para facturación local.
+        if ($request->filled('deposito_id')
+            && \App\Support\Stock\MovimientoStockFerliSupport::usaCanales()) {
+            $depId = (int) $request->input('deposito_id');
+            \App\Support\Stock\MovimientoStockFerliSupport::aplicarFiltroCatalogo(
+                $query,
+                $depId > 0 ? $depId : null
+            );
+        } elseif (strtoupper(trim((string) $request->input('canal', ''))) === \App\Models\Ventas\Canal::CODIGO_LOCAL
+            && \App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva()) {
+            \App\Support\Stock\ArticuloEstadoCanalSupport::aplicarSoloActivosEnCanal(
+                $query,
+                \App\Models\Ventas\Canal::CODIGO_LOCAL
+            );
+        }
 
         $cont = count($columns);
 
@@ -1512,6 +1533,25 @@ class ArticuloController extends Controller
         $articulo = $this->articuloRepository->findPorSku($sku, $empresaId);
 
         if (! \App\Support\Stock\ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
+            return response()->json(null);
+        }
+
+        if ($articulo
+            && $request->filled('deposito_id')
+            && \App\Support\Stock\MovimientoStockFerliSupport::usaCanales()) {
+            $depId = (int) $request->query('deposito_id', $request->input('deposito_id'));
+            $ok = Articulo::query()->whereKey((int) $articulo->id);
+            \App\Support\Stock\MovimientoStockFerliSupport::aplicarFiltroCatalogo(
+                $ok,
+                $depId > 0 ? $depId : null
+            );
+            if (! $ok->exists()) {
+                return response()->json(null);
+            }
+        } elseif ($articulo
+            && strtoupper(trim((string) $request->query('canal', $request->input('canal', '')))) === \App\Models\Ventas\Canal::CODIGO_LOCAL
+            && \App\Support\Stock\ArticuloEstadoCanalSupport::uiFerliActiva()
+            && ! \App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport::articuloOperativoLocal((int) $articulo->id)) {
             return response()->json(null);
         }
 

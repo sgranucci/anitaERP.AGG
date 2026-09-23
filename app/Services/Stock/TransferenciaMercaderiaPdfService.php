@@ -48,10 +48,8 @@ class TransferenciaMercaderiaPdfService
         }
 
         $detalleFerliPorItem = TransferenciaMercaderiaDetalleFerliSupport::porItemDesdeSalida($transferencia);
-        $mostrarDetalleFerli = MovimientoStockFerliSupport::esCalzadosFerli()
-            && collect($detalleFerliPorItem)->contains(static function (array $d): bool {
-                return $d['combinacion_etiqueta'] !== '' || $d['medidas_txt'] !== '';
-            });
+        $mostrarDetalleFerli = MovimientoStockFerliSupport::esCalzadosFerli();
+        $ocultarColumnasDestinoFerli = $mostrarDetalleFerli;
 
         $html = view('stock.movimientostock.transferencia_com_pdf', compact(
             'transferencia',
@@ -63,6 +61,7 @@ class TransferenciaMercaderiaPdfService
             'totalDestino',
             'detalleFerliPorItem',
             'mostrarDetalleFerli',
+            'ocultarColumnasDestinoFerli',
         ))->render();
 
         $pdf = app('dompdf.wrapper');

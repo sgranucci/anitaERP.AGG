@@ -66,9 +66,12 @@ final class FerliExcelStockImportParser
             return null;
         }
 
+        // Defaults: layout artesanal clásico (foto | linea | art | desc…).
+        // Se pisan al leer el header: el export "Stock por OT" trae LINEA|ART.|DESCRIPCION
+        // en cols 1–3 y si sku queda en 3 se lee el color como SKU (Boaonda).
         $cols = [
-            'sku' => 3,
-            'descripcion' => 4,
+            'sku' => 0,
+            'descripcion' => 0,
             'color' => 0,
             'situacion' => 0,
             'identificador' => 0,
@@ -89,7 +92,9 @@ final class FerliExcelStockImportParser
                 $cols['talles'][$c] = (int) $txt;
                 continue;
             }
-            if ($txt === 'color') {
+            if (preg_match('/^art\.?$/', $txt) || $txt === 'sku' || $txt === 'articulo' || $txt === 'artículo') {
+                $cols['sku'] = $c;
+            } elseif ($txt === 'color') {
                 $cols['color'] = $c;
             } elseif (str_contains($txt, 'descripcion') || str_contains($txt, 'descripción')) {
                 $cols['descripcion'] = $c;
@@ -122,6 +127,13 @@ final class FerliExcelStockImportParser
 
         if ($cols['talles'] === []) {
             return null;
+        }
+        // Fallback layout artesanal si el header no trajo ART./DESCRIPCION.
+        if ($cols['sku'] === 0) {
+            $cols['sku'] = 3;
+        }
+        if ($cols['descripcion'] === 0) {
+            $cols['descripcion'] = $cols['sku'] + 1;
         }
         if ($cols['modulos'] === 0) {
             for ($c = 1; $c <= $maxC; $c++) {
@@ -306,19 +318,21 @@ final class FerliExcelStockImportParser
 
     public static function codigoCombinacionDesdeDescripcionYSku(string $desc, string $skuExcel): string
     {
+        // Solo confiar en el código si viene en la descripción ("1-C.NEGRO", "4-PRETO-BRANCO").
+        // El sufijo del SKU (…-01) es variante de artículo, NO código de combinación:
+        // usarlo armaba NEGRO/ANTIQUE mal (MENORCA FUCSIA→NEGRO, CHICHA NATURAL→NEGRO, DOROTHY).
         if (preg_match('/^(\d+)\s*-/', trim($desc), $m)) {
             return (string) (int) $m[1];
         }
 
-        return self::codigoCombinacionDesdeSku($skuExcel);
+        return '';
     }
 
+    /**
+     * @deprecated El sufijo del SKU no es código de combinación; se deja por compatibilidad de llamadas.
+     */
     public static function codigoCombinacionDesdeSku(string $skuExcel): string
     {
-        if (preg_match('/-(\d+)\s*$/', $skuExcel, $m)) {
-            return (string) (int) $m[1];
-        }
-
         return '';
     }
 

@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\Schema;
  * Valores: A / I (igual que combinacion.estado legacy y Anita comb_estado).
  *
  * Ámbito por programa (no por “dónde está sentado” el usuario):
- * - POS / stock local / precios local: estado_local
- * - Pedidos / OT / remito / factura fábrica / mov. stock: estado_fabrica
+ * - POS / stock local / precios local / mov. stock Ferli (TRA-tienda): estado_local
+ * - Pedidos / OT / remito / factura fábrica: estado_fabrica
  * - Anita fábrica: solo lee/escribe estado_fabrica (+ deriva estado legacy)
  */
 final class CombinacionEstadoCanalSupport

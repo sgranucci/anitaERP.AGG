@@ -44,6 +44,18 @@ function urlLeerArticuloPorSku(sku, queryExtra) {
     if (consultaArticuloFiltrarDepositosUsuario()) {
         parts.push('filtrar_depositos_usuario=1');
     }
+    var depositoCatalogo = parseInt($('#consultaarticuloModal').data('articuloDepositoId'), 10) || 0;
+    if (depositoCatalogo > 0) {
+        parts.push('deposito_id=' + encodeURIComponent(String(depositoCatalogo)));
+    } else {
+        var canalArticulo = $('#consultaarticuloModal').data('articuloCanal');
+        if (typeof canalArticulo === 'string' && canalArticulo.length > 0) {
+            parts.push('canal=' + encodeURIComponent(canalArticulo));
+        }
+    }
+    if ($('#consultaarticuloModal').data('articuloOcultarPrecio')) {
+        parts.push('ocultar_precio=1');
+    }
     if (parts.length) {
         url += '?' + parts.join('&');
     }
@@ -419,6 +431,18 @@ function buscar_datos_articulo(consulta) {
     }
     if (consultaArticuloFiltrarDepositosUsuario()) {
         postData.filtrar_depositos_usuario = 1;
+    }
+    var depositoCatalogo = parseInt($('#consultaarticuloModal').data('articuloDepositoId'), 10) || 0;
+    if (depositoCatalogo > 0) {
+        postData.deposito_id = depositoCatalogo;
+    } else {
+        var canalArticulo = $('#consultaarticuloModal').data('articuloCanal');
+        if (typeof canalArticulo === 'string' && canalArticulo.length > 0) {
+            postData.canal = canalArticulo;
+        }
+    }
+    if ($('#consultaarticuloModal').data('articuloOcultarPrecio')) {
+        postData.ocultar_precio = 1;
     }
     var empresaIdConsulta = empresaIdConsultaArticulo();
     if (empresaIdConsulta !== '') {

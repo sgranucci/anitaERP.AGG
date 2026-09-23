@@ -129,18 +129,31 @@ class CombinacionController extends Controller
 
 	public function leerCombinacionesActivas($id)
     {
-        $q = Combinacion::select('id', 'codigo', 'nombre')->where('articulo_id', $id);
-        CombinacionEstadoCanalSupport::scopeActivasEnAmbito(
-            $q,
+        $ambito = strtoupper(trim((string) request()->query(
+            'ambito',
             CombinacionEstadoCanalSupport::AMBITO_FABRICA
-        );
+        )));
+        if (! in_array($ambito, [
+            CombinacionEstadoCanalSupport::AMBITO_FABRICA,
+            CombinacionEstadoCanalSupport::AMBITO_LOCAL,
+        ], true)) {
+            $ambito = CombinacionEstadoCanalSupport::AMBITO_FABRICA;
+        }
 
-        return $q->orderBy('codigo', 'asc')->get()->toArray();
+        $q = Combinacion::select('id', 'codigo', 'nombre')->where('articulo_id', $id);
+        CombinacionEstadoCanalSupport::scopeActivasEnAmbito($q, $ambito);
+
+        return $q->orderBy('nombre', 'asc')->orderBy('codigo', 'asc')->get()->toArray();
     }
 
 	public function leerCombinaciones($id)
     {
-        return Combinacion::select('id','codigo','nombre')->where('articulo_id',$id)->orderBy('codigo','asc')->get()->toArray();
+        return Combinacion::select('id', 'codigo', 'nombre')
+            ->where('articulo_id', $id)
+            ->orderBy('nombre', 'asc')
+            ->orderBy('codigo', 'asc')
+            ->get()
+            ->toArray();
     }
 
     public function create($id = null)

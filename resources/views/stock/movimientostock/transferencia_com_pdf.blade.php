@@ -77,18 +77,20 @@
     <thead>
         <tr>
             <th>#</th>
-            <th>SKU origen</th>
-            <th>Art&iacute;culo origen</th>
+            <th>SKU</th>
+            <th>Art&iacute;culo</th>
             @if (! empty($mostrarDetalleFerli))
                 <th>Color</th>
-                <th>Talles</th>
+                <th>Cant. x talle</th>
             @endif
-            <th class="num">Cant. origen</th>
-            <th class="num">Costo orig.</th>
-            <th>SKU destino</th>
-            <th>Art&iacute;culo destino</th>
-            <th class="num">Cant. destino</th>
-            <th class="num">Costo dest.</th>
+            <th class="num">Cantidad</th>
+            @if (empty($ocultarColumnasDestinoFerli))
+                <th class="num">Costo orig.</th>
+                <th>SKU destino</th>
+                <th>Art&iacute;culo destino</th>
+                <th class="num">Cant. destino</th>
+                <th class="num">Costo dest.</th>
+            @endif
         </tr>
     </thead>
     <tbody>
@@ -105,20 +107,24 @@
                 <td>{{ $det['medidas_txt'] ?? '—' }}</td>
             @endif
             <td class="num">{{ number_format(abs((float) $linea->cantidad_origen), 4, ',', '.') }}</td>
-            <td class="num">{{ number_format((float) $linea->precio_costo_origen, 4, ',', '.') }}</td>
-            <td>{{ optional($linea->articuloDestino)->sku ?? '—' }}</td>
-            <td>{{ optional($linea->articuloDestino)->descripcion ?? '—' }}</td>
-            <td class="num">{{ number_format(abs((float) $linea->cantidad_destino), 4, ',', '.') }}</td>
-            <td class="num">{{ number_format((float) $linea->precio_costo_destino, 4, ',', '.') }}</td>
+            @if (empty($ocultarColumnasDestinoFerli))
+                <td class="num">{{ number_format((float) $linea->precio_costo_origen, 4, ',', '.') }}</td>
+                <td>{{ optional($linea->articuloDestino)->sku ?? '—' }}</td>
+                <td>{{ optional($linea->articuloDestino)->descripcion ?? '—' }}</td>
+                <td class="num">{{ number_format(abs((float) $linea->cantidad_destino), 4, ',', '.') }}</td>
+                <td class="num">{{ number_format((float) $linea->precio_costo_destino, 4, ',', '.') }}</td>
+            @endif
         </tr>
         @endforeach
     </tbody>
 </table>
 
 <div class="totales">
-    Total cantidad origen: {{ number_format($totalOrigen, 4, ',', '.') }}
-    &nbsp;|&nbsp;
-    Total cantidad destino: {{ number_format($totalDestino, 4, ',', '.') }}
+    Total cantidad: {{ number_format($totalOrigen, 4, ',', '.') }}
+    @if (empty($ocultarColumnasDestinoFerli))
+        &nbsp;|&nbsp;
+        Total cantidad destino: {{ number_format($totalDestino, 4, ',', '.') }}
+    @endif
 </div>
 
 @if(trim((string) ($transferencia->observacion ?? '')) !== '')

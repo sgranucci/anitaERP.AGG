@@ -371,6 +371,11 @@ final class FerliExcelStockImportPlanner
 
     private static function resolverCombinacion(int $articuloId, string $cod, string $desc): ?Combinacion
     {
+        // 1) Si hay código explícito en la descripción ("4-C.FUCSIA"), usarlo.
+        // 2) Si no, resolver por nombre de color (NATURAL, C. FUCSIA, NEGRO…).
+        // Nunca inferir el código desde el sufijo del SKU (…-01).
+        $porNombre = self::resolverCombinacionPorNombre($articuloId, $desc);
+
         if ($cod !== '') {
             $combinacion = Combinacion::query()
                 ->where('articulo_id', $articuloId)
@@ -380,10 +385,21 @@ final class FerliExcelStockImportPlanner
                 })
                 ->first();
             if ($combinacion) {
+                // Si el nombre del Excel apunta a otra combinación, manda el nombre
+                // (evita quedarse con 1-NEGRO cuando el Excel dice FUCSIA/NATURAL).
+                if ($porNombre && (int) $porNombre->id !== (int) $combinacion->id) {
+                    return $porNombre;
+                }
+
                 return $combinacion;
             }
         }
 
+        return $porNombre;
+    }
+
+    private static function resolverCombinacionPorNombre(int $articuloId, string $desc): ?Combinacion
+    {
         $normDesc = self::normColor($desc);
         $normDesc = preg_replace('/^\d+-/', '', $normDesc) ?? $normDesc;
         if ($normDesc === '') {
@@ -395,7 +411,7 @@ final class FerliExcelStockImportPlanner
         $cerca = [];
         foreach ($combos as $combo) {
             $normCombo = self::normColor((string) $combo->nombre);
-            if ($normCombo === '' ) {
+            if ($normCombo === '') {
                 continue;
             }
             if ($normCombo === $normDesc || str_contains($normCombo, $normDesc) || str_contains($normDesc, $normCombo)) {

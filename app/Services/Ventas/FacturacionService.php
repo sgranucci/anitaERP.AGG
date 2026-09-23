@@ -8651,9 +8651,10 @@ class FacturacionService
 				$kiloDescuento = $ventaItem->cantidad - $cantidad;
 				$flConDescuento = true;
 			}
+			// Ferli: en "DESCRIPCION COLOR" va el nombre de la combinación (ej. C.NEGRO),
+			// no el color de fondo técnico (ej. CEMENTO-NEGRO).
 			$colorLinea = trim((string) (
-				$ventaItem->combinaciones?->coloresfondos?->nombre
-				?? $ventaItem->combinaciones?->nombre
+				$ventaItem->combinaciones?->nombre
 				?? ''
 			));
 			$talle = $ventaItem->talles;

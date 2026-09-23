@@ -80,18 +80,20 @@ Transferencia {{ $transferencia->codigo }}
                     <thead style="background-color: #85C1E9; color: #17202A;">
                         <tr>
                             <th>#</th>
-                            <th>SKU origen</th>
-                            <th>Art&iacute;culo origen</th>
+                            <th>SKU</th>
+                            <th>Art&iacute;culo</th>
                             @if (! empty($mostrarDetalleFerli))
                                 <th>Color</th>
-                                <th>Talles</th>
+                                <th>Cant. x talle</th>
                             @endif
-                            <th class="text-right">Cant. origen</th>
-                            <th class="text-right">Costo orig.</th>
-                            <th>SKU destino</th>
-                            <th>Art&iacute;culo destino</th>
-                            <th class="text-right">Cant. destino</th>
-                            <th class="text-right">Costo dest.</th>
+                            <th class="text-right">Cantidad</th>
+                            @if (empty($ocultarColumnasDestinoFerli))
+                                <th class="text-right">Costo orig.</th>
+                                <th>SKU destino</th>
+                                <th>Art&iacute;culo destino</th>
+                                <th class="text-right">Cant. destino</th>
+                                <th class="text-right">Costo dest.</th>
+                            @endif
                         </tr>
                     </thead>
                     <tbody>
@@ -120,23 +122,25 @@ Transferencia {{ $transferencia->codigo }}
                                     <td>{{ $det['medidas_txt'] ?? '—' }}</td>
                                 @endif
                                 <td class="text-right">{{ number_format((float) $item->cantidad_origen, 2, ',', '.') }}</td>
-                                <td class="text-right">{{ number_format((float) $item->precio_costo_origen, 4, ',', '.') }}</td>
-                                <td>
-                                    @include('stock.partials.link_articulo_consulta', [
-                                        'articuloId' => (int) ($item->articulo_destino_id ?? optional($item->articuloDestino)->id ?? 0),
-                                        'texto' => $item->articuloDestino->sku ?? '',
-                                        'titulo' => 'Consultar artículo destino / insumo',
-                                    ])
-                                </td>
-                                <td>
-                                    @include('stock.partials.link_articulo_consulta', [
-                                        'articuloId' => (int) ($item->articulo_destino_id ?? optional($item->articuloDestino)->id ?? 0),
-                                        'texto' => $item->articuloDestino->descripcion ?? '',
-                                        'titulo' => 'Consultar artículo destino / insumo',
-                                    ])
-                                </td>
-                                <td class="text-right">{{ number_format((float) $item->cantidad_destino, 2, ',', '.') }}</td>
-                                <td class="text-right">{{ number_format((float) $item->precio_costo_destino, 4, ',', '.') }}</td>
+                                @if (empty($ocultarColumnasDestinoFerli))
+                                    <td class="text-right">{{ number_format((float) $item->precio_costo_origen, 4, ',', '.') }}</td>
+                                    <td>
+                                        @include('stock.partials.link_articulo_consulta', [
+                                            'articuloId' => (int) ($item->articulo_destino_id ?? optional($item->articuloDestino)->id ?? 0),
+                                            'texto' => $item->articuloDestino->sku ?? '',
+                                            'titulo' => 'Consultar artículo destino / insumo',
+                                        ])
+                                    </td>
+                                    <td>
+                                        @include('stock.partials.link_articulo_consulta', [
+                                            'articuloId' => (int) ($item->articulo_destino_id ?? optional($item->articuloDestino)->id ?? 0),
+                                            'texto' => $item->articuloDestino->descripcion ?? '',
+                                            'titulo' => 'Consultar artículo destino / insumo',
+                                        ])
+                                    </td>
+                                    <td class="text-right">{{ number_format((float) $item->cantidad_destino, 2, ',', '.') }}</td>
+                                    <td class="text-right">{{ number_format((float) $item->precio_costo_destino, 4, ',', '.') }}</td>
+                                @endif
                             </tr>
                         @endforeach
                     </tbody>
