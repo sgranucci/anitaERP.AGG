@@ -255,11 +255,37 @@
     window.aplicarVendedorDesdeCliente = aplicarVendedorDesdeCliente;
     window.aplicarVendedorPedidoDesdeCliente = aplicarVendedorDesdeCliente;
 
-    /* --- Cliente: condicion / expreso / lugar (a-pedido.c) --- */
+    /* --- Cliente: condicion / expreso / lugar (alineado a Bierzo / ClienteEntregaPedidoSupport) --- */
+
+    function etiquetaLugarEntrega(entrega) {
+        if (!entrega) {
+            return '';
+        }
+        if (entrega.etiqueta) {
+            return String(entrega.etiqueta);
+        }
+        var nombre = String(entrega.nombre || '').trim();
+        if (nombre) {
+            return nombre;
+        }
+        var domicilio = String(entrega.domicilio || '').trim();
+        if (domicilio) {
+            return domicilio;
+        }
+        return String(entrega.localidad || '').trim();
+    }
+
+    function entregasNombradasCliente(entregas) {
+        return (entregas || []).filter(function (entrega) {
+            return String(entrega.nombre || '').trim() !== '' || entrega.nombre_usable === true
+                || String(etiquetaLugarEntrega(entrega) || '').trim() !== '';
+        });
+    }
 
     function actualizarEstadoRequeridoLugarEntrega() {
         var obligatorio = $('#fl_cliente_tiene_entrega').val() === '1';
-        var seleccionado = !!$('#cliente_entrega_id').val();
+        var seleccionado = !!$('#cliente_entrega_id').val()
+            || String($('#lugarentrega').val() || '').trim() !== '';
 
         $('#label-lugarentrega').toggleClass('requerido', obligatorio);
         $('#aviso-lugarentrega-obligatorio').toggle(obligatorio && !seleccionado);
@@ -268,9 +294,30 @@
 
     function limpiarLugarEntregaCliente() {
         $('#cliente_entrega_id').val('');
+        $('#cliente_entrega_id_previa').val('');
         $('#entrega_nombre').val('');
         $('#lugarentrega').val('');
         actualizarEstadoRequeridoLugarEntrega();
+    }
+
+    function buscarEntregaClientePorTexto(entregas, texto) {
+        var buscado = String(texto || '').trim().toUpperCase();
+        if (!buscado) {
+            return null;
+        }
+
+        var encontrada = null;
+        $.each(entregas || [], function (index, value) {
+            var etiqueta = String(etiquetaLugarEntrega(value) || '').trim().toUpperCase();
+            var nombre = String(value.nombre || '').trim().toUpperCase();
+            var domicilio = String(value.domicilio || '').trim().toUpperCase();
+            if (etiqueta === buscado || nombre === buscado || domicilio === buscado) {
+                encontrada = value;
+                return false;
+            }
+        });
+
+        return encontrada;
     }
 
     function aplicarLugarEntregaCliente(entrega) {
@@ -278,10 +325,11 @@
             return;
         }
 
+        var etiqueta = etiquetaLugarEntrega(entrega);
         $('#cliente_entrega_id').val(entrega.id);
         $('#cliente_entrega_id_previa').val(entrega.id);
-        $('#entrega_nombre').val(entrega.nombre || '');
-        $('#lugarentrega').val(entrega.nombre || '').prop('readonly', true);
+        $('#entrega_nombre').val(etiqueta);
+        $('#lugarentrega').val(etiqueta).prop('readonly', true);
 
         // Anita: el expreso del lugar de entrega pisa el del cliente
         if (entrega.transporte_id) {
@@ -301,7 +349,7 @@
         var html = '';
         $.each(entregas, function (index, value) {
             html += '<tr>';
-            html += '<td class="nombre">' + (value.nombre || '') + '</td>';
+            html += '<td class="nombre">' + (etiquetaLugarEntrega(value) || '') + '</td>';
             html += '<td class="domicilio">' + (value.domicilio || '') + '</td>';
             html += '<td class="localidad">' + (value.localidad || '') + '</td>';
             html += '<td class="provincia">' + (value.provincia || '') + '</td>';
@@ -320,8 +368,13 @@
         $('#seleccionclienteentregaModal').modal('show');
     }
 
-    function completarCliente_Entrega(clienteId) {
+    function completarCliente_Entrega(clienteId, flCambioCliente) {
         window._entregasClienteActual = [];
+        flCambioCliente = !!flCambioCliente;
+
+        if (!clienteId || !$.isNumeric(clienteId) || parseInt(clienteId, 10) <= 0) {
+            return;
+        }
 
         $.get(carpetaBase + '/ventas/leercliente_entrega/' + clienteId, function (data) {
             var entr = $.map(data, function (value) {
@@ -329,26 +382,31 @@
             });
 
             window._entregasClienteActual = entr;
-            var flTieneEntrega = entr.length > 0;
+            var nombradas = entregasNombradasCliente(entr);
+            var flTieneEntrega = nombradas.length > 0;
             $('#fl_cliente_tiene_entrega').val(flTieneEntrega ? '1' : '0');
 
             if (!flTieneEntrega) {
                 $('#cliente_entrega_id').val('');
+                $('#cliente_entrega_id_previa').val('');
                 $('#entrega_nombre').val('');
                 $('#div-cambiar-lugarentrega').hide();
                 $('#lugarentrega').prop('readonly', false).attr('placeholder', '');
 
-                $.get(carpetaBase + '/ventas/leercliente/' + clienteId, function (clienteData) {
-                    $('#lugarentrega').val(clienteData.lugarentrega || '');
-                });
+                if (flCambioCliente || !String($('#lugarentrega').val() || '').trim()) {
+                    $.get(carpetaBase + '/ventas/leercliente/' + clienteId, function (clienteData) {
+                        $('#lugarentrega').val(clienteData.lugarentrega || '');
+                        actualizarEstadoRequeridoLugarEntrega();
+                    });
+                }
                 actualizarEstadoRequeridoLugarEntrega();
                 return;
             }
 
             $('#lugarentrega').prop('readonly', true).attr('placeholder', 'Seleccione un lugar de entrega del cliente');
 
-            if (entr.length === 1) {
-                aplicarLugarEntregaCliente(entr[0]);
+            if (nombradas.length === 1) {
+                aplicarLugarEntregaCliente(nombradas[0]);
                 $('#div-cambiar-lugarentrega').hide();
                 actualizarEstadoRequeridoLugarEntrega();
                 return;
@@ -371,9 +429,24 @@
                 }
             }
 
-            limpiarLugarEntregaCliente();
+            var porTexto = buscarEntregaClientePorTexto(entr, $('#lugarentrega').val());
+            if (porTexto) {
+                aplicarLugarEntregaCliente(porTexto);
+                actualizarEstadoRequeridoLugarEntrega();
+                return;
+            }
+
+            if (flCambioCliente) {
+                limpiarLugarEntregaCliente();
+                actualizarEstadoRequeridoLugarEntrega();
+                mostrarModalSeleccionEntrega(nombradas);
+                return;
+            }
+
+            $('#cliente_entrega_id').val('');
+            $('#cliente_entrega_id_previa').val('');
+            $('#entrega_nombre').val('');
             actualizarEstadoRequeridoLugarEntrega();
-            mostrarModalSeleccionEntrega(entr);
         });
     }
 
@@ -427,7 +500,7 @@
         if (!clienteId || !$.isNumeric(clienteId) || parseInt(clienteId, 10) <= 0) {
             return;
         }
-        completarCliente_Entrega(clienteId);
+        completarCliente_Entrega(clienteId, true);
         asignaDatosCliente(clienteId, true);
     }
 
@@ -567,7 +640,8 @@
     };
 
     function validarLugarEntregaAntesGuardar() {
-        if ($('#fl_cliente_tiene_entrega').val() === '1' && !$('#cliente_entrega_id').val()) {
+        var tieneTexto = String($('#lugarentrega').val() || '').trim() !== '';
+        if ($('#fl_cliente_tiene_entrega').val() === '1' && !$('#cliente_entrega_id').val() && !tieneTexto) {
             actualizarEstadoRequeridoLugarEntrega();
             alert('Debe seleccionar un lugar de entrega del cliente.');
             mostrarModalSeleccionEntrega(window._entregasClienteActual || []);
@@ -659,21 +733,8 @@
         if (!clienteId || !$.isNumeric(clienteId) || parseInt(clienteId, 10) <= 0) {
             return;
         }
-        $.get(carpetaBase + '/ventas/leercliente_entrega/' + clienteId, function (data) {
-            var entr = $.map(data, function (value) {
-                return [value];
-            });
-            window._entregasClienteActual = entr;
-            var flTieneEntrega = entr.length > 0;
-            $('#fl_cliente_tiene_entrega').val(flTieneEntrega ? '1' : '0');
-            if (flTieneEntrega) {
-                $('#lugarentrega').prop('readonly', true);
-                if (entr.length > 1) {
-                    $('#div-cambiar-lugarentrega').show();
-                }
-            }
-            actualizarEstadoRequeridoLugarEntrega();
-        });
+        // false = no es cambio de cliente: conserva texto Anita y matchea por ID/etiqueta.
+        completarCliente_Entrega(clienteId, false);
     }
 
     $(function () {

@@ -2080,22 +2080,40 @@
 		// Arma select de tipos de transacciones
 		selectTipoTransaccion.empty();
 		selectTipoTransaccion.append('<option value="">-- Seleccionar tipo de transacción --</option>');
-		$.each(sel_tipotransaccion, function(obj, item) {
+		var ctxCircuitoRemito = {
+			letraCliente: ($('#letra_cliente_factura').val() || window.facturacionLetraCliente || ''),
+			codigoDocumento: ($('#codigoremito').val() || $('#codigopedido').val() || window.facturacionCodigoDocumento || ''),
+			preferPvId: puntoVentaDefault,
+			preferTipoId: tipoTransaccionDefault
+		};
+		var listasCircuitoRemito = (window.FacturacionCircuitoAfip
+			? window.FacturacionCircuitoAfip.filtrarListas(sel_tipotransaccion, sel_puntoventa, ctxCircuitoRemito)
+			: { tipos: sel_tipotransaccion, puntoventas: sel_puntoventa });
+		$.each(listasCircuitoRemito.tipos, function(obj, item) {
 			op = (window.PreferenciasFacturacionUsuario
 				? window.PreferenciasFacturacionUsuario.opcionSelected(tipoTransaccionDefault, item.id)
 				: (tipoTransaccionDefault == item.id ? ' selected="selected"' : ''));
-			selectTipoTransaccion.append('<option value="' + item.id + '" data-abreviatura="' + (item.abreviatura || '') + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
+			var attrsT = window.FacturacionCircuitoAfip
+				? window.FacturacionCircuitoAfip.attrsTipoOption(item)
+				: (' data-abreviatura="' + (item.abreviatura || '') + '"');
+			selectTipoTransaccion.append('<option value="' + item.id + '"' + attrsT + op + '>' + item.abreviatura + '-' + item.nombre + '</option>');
 		});
 
 		// Arma select de puntos de venta
 		selectPuntoVenta.empty();
 		selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
-		$.each(sel_puntoventa, function(obj, item) {
+		$.each(listasCircuitoRemito.puntoventas, function(obj, item) {
 			op = (window.PreferenciasFacturacionUsuario
 				? window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaDefault, item.id)
 				: (puntoVentaDefault == item.id ? ' selected="selected"' : ''));
-			selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
+			var attrsP = window.FacturacionCircuitoAfip
+				? window.FacturacionCircuitoAfip.attrsPvOption(item)
+				: '';
+			selectPuntoVenta.append('<option value="' + item.id + '"' + attrsP + op + '>' + item.codigo + '-' + item.nombre + '</option>');
 		});
+		if (window.FacturacionCircuitoAfip) {
+			window.FacturacionCircuitoAfip.aplicar(selectTipoTransaccion, selectPuntoVenta, ctxCircuitoRemito);
+		}
 
 		// Arma select de puntos de venta del remito
 		selectPuntoVentaRemito.empty();

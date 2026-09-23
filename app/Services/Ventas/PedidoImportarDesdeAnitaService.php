@@ -769,6 +769,26 @@ class PedidoImportarDesdeAnitaService
             return null;
         }
 
+        $cliente = $this->buscarClientePorCodigoAnita($codigo, $codigoAnita);
+        if ($cliente) {
+            return $cliente;
+        }
+
+        // Si falta en ERP, traer de climae (mismo patrón que artículos vía traerRegistroDeAnita).
+        $codigoSync = $codigoAnita !== '' ? $codigoAnita : $codigo;
+        try {
+            app(ClienteAnitaSyncService::class)->traerRegistroDeAnita($codigoSync);
+        } catch (\Throwable $e) {
+            Log::warning('Pedido Anita: no se pudo traer cliente '.$codigoSync.': '.$e->getMessage());
+
+            return null;
+        }
+
+        return $this->buscarClientePorCodigoAnita($codigo, $codigoAnita);
+    }
+
+    private function buscarClientePorCodigoAnita(string $codigo, string $codigoAnita): ?Cliente
+    {
         return Cliente::query()
             ->where(function ($q) use ($codigo, $codigoAnita) {
                 if ($codigo !== '') {

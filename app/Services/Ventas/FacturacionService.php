@@ -68,6 +68,8 @@ use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\PedidoInterformingFacturacionSupport;
+use App\Support\Ventas\FacturacionCircuitoAfipSupport;
 use App\Support\Ventas\TransporteDepositoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use App\Support\Ventas\ComprobanteImpresionResolverSupport;
@@ -196,6 +198,9 @@ class FacturacionService
 	protected $tot_pares1, $tot_pares2, $tot_pares3, $tot_pares4;
 	protected $mventa_id;
 	protected $cantidadBulto, $puntoventaremito_id;
+
+	/** @var float Peso neto exportación (Interforming → constata Anita comp_peso_neto). */
+	protected $pesoNetoExportacion = 0.0;
 	protected $formapago_id, $mercaderiaExportacion, $leyendaExportacion, $incoterm_id, $abreviaturaIncoterm;
 	protected $condicionVentaExportacion, $formaPagoExportacion, $monedaExportacion;
 	protected $descuentoPie, $descuentoLinea, $descuentoImportePie;
@@ -494,6 +499,7 @@ class FacturacionService
 		// Lee los items a facturar
 		$dataFactura = [];
 		$totKilo = 0;
+		$esInterforming = EntornoEmpresaSupport::esInterforming();
 
 		for ($offItem = 0; $offItem < count($pedido_articulo_ids); $offItem++)
 		{
@@ -505,10 +511,22 @@ class FacturacionService
 				continue;
 			}
 
-			if (PedidoEstadoErpSupport::esItemPendienteFacturable($pedido_articulo->estado ?? null))
+			$itemFacturable = $esInterforming
+				? PedidoInterformingFacturacionSupport::esItemFacturable($pedido_articulo)
+				: PedidoEstadoErpSupport::esItemPendienteFacturable($pedido_articulo->estado ?? null);
+
+			if ($itemFacturable)
 			{
-				if ((float) $pedido_articulo->pesada <= 0) {
-					continue;
+				if ($esInterforming) {
+					$cantidadBase = PedidoInterformingFacturacionSupport::cantidadFacturable($pedido_articulo);
+					if ($cantidadBase <= 0) {
+						continue;
+					}
+				} else {
+					if ((float) $pedido_articulo->pesada <= 0) {
+						continue;
+					}
+					$cantidadBase = (float) $pedido_articulo->pesada;
 				}
 
 				// Trae el articulo
@@ -580,7 +598,7 @@ class FacturacionService
 							$precioUnitario = $pedido_articulo->precio * $this->coeficienteExtraCliente;
 
 						$kilo = VillafrancaFacturacionSupport::redondearCantidadDivision(
-							$pedido_articulo->pesada * $coeficienteDivision / 100.
+							$cantidadBase * $coeficienteDivision / 100.
 						);
 						$pieza = VillafrancaFacturacionSupport::redondearCantidadDivision(
 							$pedido_articulo->pieza * $coeficienteDivision / 100.
@@ -594,7 +612,7 @@ class FacturacionService
 						$coeficiente = ((100. - $coeficienteDivision)/100.);
 
 						$kilo = VillafrancaFacturacionSupport::redondearCantidadDivision(
-							$pedido_articulo->pesada * $coeficiente
+							$cantidadBase * $coeficiente
 						);
 						$pieza = VillafrancaFacturacionSupport::redondearCantidadDivision(
 							$pedido_articulo->pieza * $coeficiente
@@ -606,7 +624,7 @@ class FacturacionService
 				}
 				else
 				{
-					$kilo = $pedido_articulo->pesada;
+					$kilo = $cantidadBase;
 					$pieza = $pedido_articulo->pieza;
 					$caja = $pedido_articulo->caja;
 				}
@@ -757,6 +775,10 @@ class FacturacionService
 				return ['error' => 'Pedido inexistente'];
 			else
 				$pedido = $pedido_query[0];
+
+			if ($errorCircuito = $this->errorCircuitoAfipFacturacion($data, $cliente, $tipotransaccion, (string) ($pedido->codigo ?? ''))) {
+				return $errorCircuito;
+			}
 
 			if (PedidoEstadoErpSupport::esTransferido($pedido->estado ?? null, $pedido->estadopedido ?? null)) {
 				return ['error' => 'El pedido ya fue transferido al despacho.'];
@@ -936,6 +958,7 @@ class FacturacionService
 		$this->descuentoLinea = 0;
 		$this->descuentoImportePie = $data['descuentoimportepie'];
 		$this->cantidadBulto = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
+		$this->pesoNetoExportacion = (float) ($data['peso_neto'] ?? 0);
 		$this->puntoventaremito_id = $data['puntoventaremito_id'];
 		$this->formapago_id = $data['formapago_id'];
 		$this->incoterm_id = $data['incoterm_id'];
@@ -992,6 +1015,12 @@ class FacturacionService
 			return ['error' => 'Factura en 0'];
 
 		$cotizacion = $this->cotizacionService->calculaCotizacionVenta($fechaFactura, $moneda_id);
+		if (EntornoEmpresaSupport::esInterforming()) {
+			$cotPedido = (float) ($pedido->cotizacion ?? 0);
+			if ($cotPedido > 1.0001) {
+				$cotizacion = $cotPedido;
+			}
+		}
 
 		$this->sincronizarLugarEntregaPedido($pedido);
 		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $pedido);
@@ -1031,7 +1060,12 @@ class FacturacionService
 		if ($this->puntoventaremito_id >= 1)
 			$puntoventaremito = $this->puntoventaRepository->find($this->puntoventaremito_id);
 
-		if ($puntoventa && ($puntoventa->modofacturacion != 'M' ? $puntoventaremito : true))
+		// Interforming factura PED/PEX sin remito borrador (REB/REX): remito opcional.
+		$requiereRemitoPv = $puntoventa
+			&& $puntoventa->modofacturacion != 'M'
+			&& ! EntornoEmpresaSupport::esInterforming();
+
+		if ($puntoventa && ($requiereRemitoPv ? $puntoventaremito : true))
 		{
 			// Lee empresa
 			$empresa = Empresa::find($puntoventa->empresa_id);
@@ -3021,6 +3055,10 @@ class FacturacionService
 		$clientePolitica = $this->clienteQuery->traeClienteporId($cliente_id);
 		if ($errorPolitica = $this->errorPoliticaComercialFactura($clientePolitica, $data, $tipotransaccion)) {
 			return $errorPolitica;
+		}
+
+		if ($errorCircuito = $this->errorCircuitoAfipFacturacion($data, $clientePolitica, $tipotransaccion, null)) {
+			return $errorCircuito;
 		}
 
 		$codigoTipoTransaccion = $tipotransaccion->codigo;
@@ -5892,6 +5930,12 @@ class FacturacionService
 		// Graba comprob
 		$exento = $dataCAE['exento']+$dataCAE['nogravado'];
 		$apiAnita = new ApiAnita();
+		$esInterformingComprob = EntornoEmpresaSupport::esInterforming();
+		$leyenda5Anita = '';
+		if ($esInterformingComprob) {
+			$leyenda5Anita = mb_substr(trim((string) ($leyenda ?? '')), 0, 60);
+		}
+		$pesoNetoAnita = (float) ($venta['peso_neto'] ?? $this->pesoNetoExportacion ?? 0);
 		$data = array( 	'tabla' => 'comprob', 
 						'acc' => 'insert',
 						'campos' => ' 
@@ -5903,7 +5947,8 @@ class FacturacionService
 							comp_merc_exp, comp_moneda_exp, comp_sucursal_rem' : '').
 							(config('app.empresa') == 'AGG' ? ', comp_empresa' : '').
 							(config('app.empresa') == 'EL BIERZO' ? 
-							', comp_estado, comp_cod_remito, comp_cod_aut_cre, comp_fecha_vto' : ''),
+							', comp_estado, comp_cod_remito, comp_cod_aut_cre, comp_fecha_vto' : '').
+							($esInterformingComprob ? ', comp_leyenda5, comp_incoterm, comp_bultos, comp_peso_neto' : ''),
 						'valores' => "
 							'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
 							'".substr($venta['codigo'], 0, 3)."',
@@ -5937,7 +5982,12 @@ class FacturacionService
 							", '".' '."',
 							'".' '."',
 							'".' '."',
-							'".date('Ymd', strtotime($fechaVencimiento))."'" : "")." "
+							'".date('Ymd', strtotime($fechaVencimiento))."'" : "").
+							($esInterformingComprob ?
+							", '".str_replace("'", "''", $leyenda5Anita)."',
+							'".str_replace("'", "''", (string) ($this->abreviaturaIncoterm ?? ''))."',
+							'".$this->cantidadBultoParaAnita($venta)."',
+							'".$pesoNetoAnita."'" : "")." "
 					);
 		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
@@ -7114,6 +7164,36 @@ class FacturacionService
 
 		$data['tipotransaccion_id'] = $resuelto;
 		$tipoTransaccionId = $resuelto;
+	}
+
+	/**
+	 * Guarda de circuito AFIP (export vs local) para fact admin / pedido / remito.
+	 * No se invoca desde POS Ferli local ni gastro/estacionamiento AGG.
+	 *
+	 * @return array{error: string}|null
+	 */
+	private function errorCircuitoAfipFacturacion(
+		array $data,
+		?object $cliente,
+		?object $tipotransaccion,
+		?string $codigoDocumento = null,
+	): ?array {
+		$puntoventa = $this->puntoventaRepository->find($data['puntoventa_id'] ?? 0);
+		$letra = FacturacionCircuitoAfipSupport::letraClienteDesdeModelo($cliente);
+		if ($letra === '' && $cliente && ! empty($cliente->condicioniva_id)) {
+			$cond = $this->condicionivaRepository->find($cliente->condicioniva_id);
+			$letra = strtoupper(trim((string) ($cond->letra ?? '')));
+		}
+
+		$mensaje = FacturacionCircuitoAfipSupport::mensajeErrorSiInvalido(
+			$puntoventa,
+			$tipotransaccion,
+			$letra !== '' ? $letra : null,
+			$codigoDocumento,
+			(int) ($data['incoterm_id'] ?? 0),
+		);
+
+		return $mensaje !== null ? ['error' => $mensaje] : null;
 	}
 
 	/**
@@ -9871,6 +9951,15 @@ class FacturacionService
 			$data['puntoventaremito_id'] = $remito->puntoventa_id;
 		}
 		$this->puntoventaremito_id = (int) ($data['puntoventaremito_id'] ?? $remito->puntoventa_id ?? 0);
+
+		$tipoRemito = $this->tipotransaccionRepository->find($data['tipotransaccion_id'] ?? 0);
+		$codigoDocRemito = (string) ($remito->codigo ?? '');
+		if ($codigoDocRemito === '' && ! empty($remito->pedido_id)) {
+			$codigoDocRemito = (string) ($remito->pedidos->codigo ?? $remito->pedido->codigo ?? '');
+		}
+		if ($errorCircuito = $this->errorCircuitoAfipFacturacion($data, $cliente, $tipoRemito, $codigoDocRemito)) {
+			return $errorCircuito;
+		}
 
 		$emitir = function () use ($data, $cliente, $remito) {
 			try {

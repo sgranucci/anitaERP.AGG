@@ -16,11 +16,18 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
  * En Anita (módulo ventas), suc_direccion almacena el código de actividad ARCA (ej. 561012, 524120),
  * no la calle del local. Se resuelve contra actividad_arca.codigoarca → puntoventa.actividad_arca_id.
  *
- * Calzados Ferli (suc_fiscal distinto a AGG): E = electrónica CAE, X = exportación WSFEX.
- * pathafip (afip.php en disco) es legacy; con transporte SOAP no se sincroniza desde suc_leyenda2.
+ * Calzados Ferli e Interforming (suc_fiscal distinto a AGG): E = electrónica CAE (wsfev1),
+ * X = exportación WSFEX. pathafip (afip.php en disco) es legacy; con transporte SOAP no se
+ * sincroniza desde suc_leyenda2.
  */
 final class PuntoventaFieldMapper
 {
+    /** Ferli / Interforming: misma semántica Anita suc_fiscal E/X. */
+    private static function usaMapaFiscalExportacion(): bool
+    {
+        return EntornoEmpresaSupport::esFerli() || EntornoEmpresaSupport::esInterforming();
+    }
+
     public static function mapCodigo(object $row): ?string
     {
         $n = (int) ($row->suc_numero ?? 0);
@@ -69,13 +76,14 @@ final class PuntoventaFieldMapper
 
     /**
      * AGG / histórico: N→M, E→E, L→C, A→A, R→R, M→L, O→O, I→I.
-     * Ferli: E→C (electrónica CAE), X→E (exportación), F/N→M.
+     * Ferli / Interforming: E→C (electrónica CAE), X→E (exportación WSFEX), F/N→M.
+     * Anita IF: suc 4 fiscal=X (export), suc 5 fiscal=E (local electrónica).
      */
     public static function mapModoFacturacion(object $row): string
     {
         $fiscal = strtoupper(trim((string) ($row->suc_fiscal ?? '')));
 
-        if (EntornoEmpresaSupport::esFerli()) {
+        if (self::usaMapaFiscalExportacion()) {
             return match ($fiscal) {
                 'E' => 'C',
                 'X' => 'E',
@@ -105,7 +113,7 @@ final class PuntoventaFieldMapper
 
     public static function mapWebservice(object $row): string
     {
-        if (EntornoEmpresaSupport::esFerli() && self::mapModoFacturacion($row) === 'E') {
+        if (self::usaMapaFiscalExportacion() && self::mapModoFacturacion($row) === 'E') {
             return 'wsfex_v1';
         }
 

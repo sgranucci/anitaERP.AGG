@@ -151,6 +151,7 @@ final class PedidoListadoSupport
             'cliente_id' => (int) ($pedido->cliente_id ?? 0),
             'nombrecliente' => $nombreDisplay,
             'estadocliente' => (string) ($pedido->clientes->estado ?? ''),
+            'letra_cliente' => FacturacionCircuitoAfipSupport::letraClienteDesdeModelo($pedido->clientes ?? null),
             'descuento' => (string) ($pedido->descuento ?? '0'),
             'cliente_entrega_id' => (string) ($pedido->cliente_entrega_id ?? ''),
             'lugarentrega' => (string) ($pedido->lugarentrega ?? ''),

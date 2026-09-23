@@ -30,6 +30,7 @@ Pedidos de Clientes
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/padron-operacion.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 @include('includes.ventas.preferencias_facturacion_scripts')
+@include('includes.ventas.facturacion_circuito_scripts')
 @include('ventas.partials.aviso_deposito_facturacion')
 @include('includes.ventas.cliente_despacho_js')
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crear.js')) ?: time() }}" type="text/javascript"></script>

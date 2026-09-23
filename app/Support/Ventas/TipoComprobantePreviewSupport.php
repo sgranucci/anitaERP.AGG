@@ -125,11 +125,16 @@ final class TipoComprobantePreviewSupport
         }
 
         $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
-        if (in_array($abrev, ['FCE', 'NCE', 'DCE'], true)) {
-            return true;
+        $codigo = (int) preg_replace('/\D+/', '', (string) ($tipo->codigo ?? ''));
+
+        // NCE Anita exportación (AFIP 021) no es NCE MiPyME FCE (203+).
+        if ($abrev === 'NCE') {
+            return $codigo >= 200 && $codigo < 300;
         }
 
-        $codigo = (int) preg_replace('/\D+/', '', (string) ($tipo->codigo ?? ''));
+        if (in_array($abrev, ['FCE', 'DCE'], true)) {
+            return true;
+        }
 
         return $codigo >= 200 && $codigo < 300;
     }
@@ -141,6 +146,10 @@ final class TipoComprobantePreviewSupport
         }
 
         $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+        // FAE (exportación) no se reemplaza por FAC/FCE MiPyME.
+        if ($abrev === 'FAE') {
+            return false;
+        }
         if (in_array($abrev, ['FAC', 'FCE'], true)) {
             return true;
         }

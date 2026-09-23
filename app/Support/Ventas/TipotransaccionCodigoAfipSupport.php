@@ -82,8 +82,21 @@ final class TipotransaccionCodigoAfipSupport
             return 0;
         }
 
+        // Exportación (letra E): FAE/NCE/NDE Anita → AFIP 19/21/20 (base 1/3/2 + offset 18).
+        // No usar bases FCE 201–203: NCE Anita exportación no es NCE MiPyME.
+        if ($letra === 'E') {
+            $baseExport = match ($tipo) {
+                'FAC', 'FAE', 'FAK' => 1,
+                'ND', 'NDB', 'NDR', 'NDT', 'NDP', 'NDA', 'NDJ', 'NDI', 'NDE' => 2,
+                'NC', 'NCD', 'NCK', 'NCA', 'NCG', 'NCP', 'NCR', 'NCJ', 'NCI', 'NCE', 'NCL' => 3,
+                default => 0,
+            };
+
+            return $baseExport > 0 ? $baseExport + self::offsetLetra('E') : 0;
+        }
+
         $base = match ($tipo) {
-            'FAC', 'FAK' => 1,
+            'FAC', 'FAK', 'FAE' => 1,
             'ND', 'NDB', 'NDR', 'NDT', 'NDP', 'NDA', 'NDJ', 'NDI' => 2,
             'NC', 'NCD', 'NCK', 'NCA', 'NCG', 'NCP', 'NCR', 'NCJ', 'NCI' => 3,
             'REC' => 4,

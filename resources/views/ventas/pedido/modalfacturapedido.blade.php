@@ -86,6 +86,12 @@
                                 @endforeach					
                             </select>                            
                         </div>
+                        <div class="form-group row d-none" id="div-factura-pedido-moneda-cotizacion">
+                            <label for="factura_pedido_moneda_display" class="col-lg-4 col-form-label">Moneda</label>
+                            <input type="text" id="factura_pedido_moneda_display" class="col-lg-4 form-control" value="" readonly>
+                            <label for="factura_pedido_cotizacion_display" class="col-lg-2 col-form-label text-right pr-2">Cotiz.</label>
+                            <input type="text" id="factura_pedido_cotizacion_display" class="col-lg-2 form-control" value="" readonly>
+                        </div>
                     </div>
                 </div>
                 <div id="aviso-deposito-facturacion-pedido" class="aviso-deposito-facturacion small text-muted d-none mb-2" role="status" style="font-size: 11px; line-height: 1.3;"></div>
@@ -98,9 +104,9 @@
                                 <th style="width: 15%;">Art&iacute;culo</th>
                                 <th style="width: 25%;">Descripción Artículo</th>
                                 <th style="width: 8%;">UMD</th>
-                                <th style="width: 10%;">Cajas</th>
-                                <th style="width: 10%;">Piezas</th>
-                                <th style="width: 10%;">Pesada</th>
+                                <th class="th-fac-caja" style="width: 10%;">Cajas</th>
+                                <th class="th-fac-pieza" style="width: 10%;">Piezas</th>
+                                <th class="th-fac-cantidad" style="width: 10%;">Pesada</th>
                                 <th style="width: 10%;">Bonificación</th>
                                 <th style="width: 10%;">Precio</th>
                             </tr>
@@ -128,6 +134,10 @@
                 <div class="form-group row">
                     <label for="cantidadbulto" class="col-lg-4 col-form-label">Cantidad de bultos</label>
                     <input type="number" id="cantidadbulto" name="cantidadbulto" value="" min="0" step="1" inputmode="numeric">
+                </div>
+                <div class="form-group row" id="div_peso_neto_exportacion" style="display:none;">
+                    <label for="peso_neto" class="col-lg-4 col-form-label">Peso neto (KG)</label>
+                    <input type="number" id="peso_neto" name="peso_neto" value="" min="0" step="0.01" inputmode="decimal">
                 </div>
             </form>
             <!-- textarea -->

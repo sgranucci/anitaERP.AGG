@@ -8,9 +8,25 @@ Pedidos Interforming
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/index.js') }}" type="text/javascript"></script>
+@if (can('ejecutar-importar-pedido-anita', false))
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/importar_anita.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/interforming/importar_anita.js')) ?: time() }}" type="text/javascript"></script>
+@endif
+@if (!empty($puedeFacturarIndex))
+<script>window.pedidoModoIndexFacturacion = true;</script>
+<script>window.pedidoSinRemitoObligatorio = true;</script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}" type="text/javascript"></script>
+@include('includes.ventas.preferencias_facturacion_scripts')
+@include('includes.ventas.facturacion_circuito_scripts')
+@include('ventas.partials.aviso_deposito_facturacion')
+    20|<script src="{{ asset('assets/pages/scripts/ventas/pedido/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/facturar_index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/facturar_index.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @endsection
 
-<?php use App\Support\Ventas\PedidoInterformingListadoFiltros; ?>
+<?php
+use App\Support\Ventas\PedidoInterformingFacturacionSupport;
+use App\Support\Ventas\PedidoInterformingListadoFiltros;
+?>
 
 @section('contenido')
 @php
@@ -23,6 +39,22 @@ Pedidos Interforming
             <div class="card-header">
                 <h3 class="card-title">Pedidos de clientes (Interforming)</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('ejecutar-importar-pedido-anita', false))
+                        <button type="button"
+                                class="btn btn-outline-success btn-sm mr-2"
+                                data-toggle="modal"
+                                data-target="#modalImportarPedidoAnita"
+                                title="Importar pedidos desde Anita">
+                            <i class="fa fa-download"></i> Importar Anita
+                        </button>
+                    @endif
+                    @if (can('listar-importar-pedido-anita', false))
+                        <a href="{{ route('importar_pedido_anita') }}"
+                           class="btn btn-outline-secondary btn-sm mr-2"
+                           title="Pantalla de importación Anita">
+                            <i class="fa fa-list"></i> Vista previa Anita
+                        </a>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-pedido-interforming',
                         'filtroValor' => $filtros['valor'] ?? '',
@@ -79,6 +111,14 @@ Pedidos Interforming
                                        class="btn-accion-tabla tooltipsC" title="PDF" target="_blank" rel="noopener">
                                         <i class="fa fa-file-pdf text-danger"></i>
                                     </a>
+                                    @if (!empty($puedeFacturarIndex) && PedidoInterformingFacturacionSupport::puedeFacturar($pedido))
+                                        <a href="#"
+                                           class="btn-accion-tabla tooltipsC btn-facturar-pedido-index"
+                                           data-pedido-id="{{ $pedido->id }}"
+                                           title="Facturar">
+                                            <i class="fas fa-file-invoice text-success"></i>
+                                        </a>
+                                    @endif
                                     @if (can('editar-pedidos', false))
                                         <a href="{{ route('editar_pedido', ['id' => $pedido->id] + $retornoListadoQuery) }}"
                                            class="btn-accion-tabla tooltipsC" title="Editar">
@@ -108,4 +148,12 @@ Pedidos Interforming
     </div>
 </div>
 {{ $datas->appends($filtrosQuery ?? [])->links() }}
+
+@include('includes.proceso-overlay-pedido')
+@if (!empty($puedeFacturarIndex))
+    @include('ventas.pedido.partials.facturar_desde_index')
+@endif
+@if (can('ejecutar-importar-pedido-anita', false))
+    @include('ventas.pedido.interforming.partials.modal_importar_anita')
+@endif
 @endsection

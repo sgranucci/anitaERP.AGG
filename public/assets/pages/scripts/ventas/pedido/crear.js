@@ -1987,8 +1987,16 @@
 	}
 
 	function estadoItemPendienteFacturable($tr) {
-		var estadoItem = $tr.find('.estados').val();
-		return estadoItem == 'P' || estadoItem == '0';
+		var estadoItem = String($tr.find('.estados').val() || '').trim().toUpperCase();
+		// Bierzo ERP: P / 0 = pendiente
+		if (estadoItem === 'P' || estadoItem === '0') {
+			return true;
+		}
+		// Interforming (Anita): Aprobado / Entregado — mismo criterio que PedidoInterformingFacturacionSupport
+		if (window.pedidoSinRemitoObligatorio && (estadoItem === 'A' || estadoItem === 'E')) {
+			return true;
+		}
+		return false;
 	}
 
 	function generaFacturaAbrirModal()
@@ -2156,18 +2164,55 @@
 	{
 		var esRemito = window.modoEmisionPedido === 'remito';
 		var $modal = $(modal);
+		var esInterforming = !!window.pedidoSinRemitoObligatorio;
 
 		$modal.find('#tipotransaccion, #puntoventa, #actividad_arca').toggle(!esRemito);
-		$modal.find('#puntoventaremito').show();
+		if (esInterforming) {
+			$modal.find('#puntoventaremito').hide();
+		} else {
+			$modal.find('#puntoventaremito').show();
+		}
 		$modal.find('#descuentopie, #descuentolinea, #descuentoimportepie').closest('.form-group').toggle(!esRemito);
 		$modal.find('#div_leyendafacturacion, #datos-exportacion').toggle(!esRemito);
 		$modal.find('#cantidadbulto').closest('.form-group').toggle(!esRemito);
+		$modal.find('#div_peso_neto_exportacion').toggle(!esRemito && esInterforming);
 		$modal.find('#total-factura-pedido-table').closest('.row').toggle(!esRemito);
 		$modal.find('label.col-form-label').filter(function () {
 			return $(this).text().indexOf('Items a') === 0;
 		}).text(esRemito ? 'Items a Remitir' : 'Items a Facturar');
 
 		$modal.find('#aceptaFacturarOrdenTrabajoModal').text(esRemito ? 'Genera Remito' : 'Genera Factura');
+
+		// Interforming: columnas Cantidad (no caja/pieza/pesada) + moneda/cotización del pedido.
+		$modal.toggleClass('factura-pedido-interforming', esInterforming);
+		$modal.find('.th-fac-caja, .th-fac-pieza, .td-fac-caja, .td-fac-pieza').toggle(!esInterforming);
+		$modal.find('.th-fac-cantidad').text(esInterforming ? 'Cantidad' : 'Pesada');
+		if (esInterforming && !esRemito) {
+			var monedaEtiqueta = String($('#factura_pedido_moneda_etiqueta').val() || '').trim();
+			var cotizacion = String($('#factura_pedido_cotizacion').val() || '').trim();
+			if (!monedaEtiqueta && $('#moneda_id').length) {
+				var $opt = $('#moneda_id').find('option:selected');
+				monedaEtiqueta = String($opt.text() || '').trim();
+				$('#factura_pedido_moneda_id').val($('#moneda_id').val() || '');
+			}
+			if (!cotizacion && $('#cotizacion').length) {
+				cotizacion = String($('#cotizacion').val() || '').trim();
+				$('#factura_pedido_cotizacion').val(cotizacion);
+			}
+			$modal.find('#factura_pedido_moneda_display').val(monedaEtiqueta);
+			$modal.find('#factura_pedido_cotizacion_display').val(cotizacion);
+			$modal.find('#div-factura-pedido-moneda-cotizacion').removeClass('d-none');
+		} else {
+			$modal.find('#div-factura-pedido-moneda-cotizacion').addClass('d-none');
+		}
+	}
+
+	function aplicarColumnasFacturaInterforming($modal) {
+		if (!window.pedidoSinRemitoObligatorio) {
+			return;
+		}
+		$modal.find('.th-fac-caja, .th-fac-pieza, .td-fac-caja, .td-fac-pieza').hide();
+		$modal.find('.th-fac-cantidad').text('Cantidad');
 	}
 
 	// Carga modal de facturacion / remito
@@ -2221,42 +2266,43 @@
 
 		$("#tbody-tabla .articulo_id").each(function(){
 			var $tr = $(this).parents('tr');
-			let estadoItem = $tr.find('.estados').val();
 
-			if (estadoItem == 'P' || estadoItem == '0')
-			{
-				if (pesadaNumericaFilaPedido($tr) <= 0) {
-					return;
-				}
-
-				agregaRenglonFactura();
-
-				// Asigna variables
-				let articulo_id = $(this).val();
-				let codigoarticulo = $tr.find(".codigoarticulo").val();
-				let descripcionarticulo = $tr.find(".descripcionarticulo").val();
-				let pedido_articulo_id = $tr.find(".ids").val();
-				let unidadmedida = $tr.find(".unidadmedida_id").find(':selected').text();
-				let unidadmedida_id = $tr.find(".unidadmedida_id").val();
-				let caja = $tr.find(".caja").val();
-				let pieza = $tr.find(".pieza").val();
-				let pesada = $tr.find(".pesada").val();
-				let descuentoventa_id = $tr.find(".descuentoventa_id").val();
-				let precio = $tr.find(".precio").val();
-
-				$('#factura-pedido-table').find('tr').last().find('.id_fac').val(pedido_articulo_id);
-				$('#factura-pedido-table').find('tr').last().find('.articulo_id_fac').val(articulo_id);
-				$('#factura-pedido-table').find('tr').last().find('.codigoarticulo_fac').val(codigoarticulo);
-				$('#factura-pedido-table').find('tr').last().find('.descripcionarticulo_fac').val(descripcionarticulo);
-				$('#factura-pedido-table').find('tr').last().find('.unidadmedida_fac').val(unidadmedida);
-				$('#factura-pedido-table').find('tr').last().find('.unidadmedida_id_fac').val(unidadmedida_id);
-				$('#factura-pedido-table').find('tr').last().find('.caja_fac').val(caja);
-				$('#factura-pedido-table').find('tr').last().find('.pieza_fac').val(pieza);
-				$('#factura-pedido-table').find('tr').last().find('.pesada_fac').val(pesada);
-				$('#factura-pedido-table').find('tr').last().find('.descuentoventa_id_fac').val(descuentoventa_id);
-				$('#factura-pedido-table').find('tr').last().find('.precio_fac').val(precio);
+			if (!estadoItemPendienteFacturable($tr)) {
+				return;
 			}
+			if (pesadaNumericaFilaPedido($tr) <= 0) {
+				return;
+			}
+
+			agregaRenglonFactura();
+
+			// Asigna variables
+			let articulo_id = $(this).val();
+			let codigoarticulo = $tr.find(".codigoarticulo").val();
+			let descripcionarticulo = $tr.find(".descripcionarticulo").val();
+			let pedido_articulo_id = $tr.find(".ids").val();
+			let unidadmedida = $tr.find(".unidadmedida_id").find(':selected').text();
+			let unidadmedida_id = $tr.find(".unidadmedida_id").val();
+			let caja = $tr.find(".caja").val();
+			let pieza = $tr.find(".pieza").val();
+			let pesada = $tr.find(".pesada").val();
+			let descuentoventa_id = $tr.find(".descuentoventa_id").val();
+			let precio = $tr.find(".precio").val();
+
+			$('#factura-pedido-table').find('tr').last().find('.id_fac').val(pedido_articulo_id);
+			$('#factura-pedido-table').find('tr').last().find('.articulo_id_fac').val(articulo_id);
+			$('#factura-pedido-table').find('tr').last().find('.codigoarticulo_fac').val(codigoarticulo);
+			$('#factura-pedido-table').find('tr').last().find('.descripcionarticulo_fac').val(descripcionarticulo);
+			$('#factura-pedido-table').find('tr').last().find('.unidadmedida_fac').val(unidadmedida);
+			$('#factura-pedido-table').find('tr').last().find('.unidadmedida_id_fac').val(unidadmedida_id);
+			$('#factura-pedido-table').find('tr').last().find('.caja_fac').val(caja);
+			$('#factura-pedido-table').find('tr').last().find('.pieza_fac').val(pieza);
+			$('#factura-pedido-table').find('tr').last().find('.pesada_fac').val(pesada);
+			$('#factura-pedido-table').find('tr').last().find('.descuentoventa_id_fac').val(descuentoventa_id);
+			$('#factura-pedido-table').find('tr').last().find('.precio_fac').val(precio);
 		});
+
+		aplicarColumnasFacturaInterforming(modal);
 
 		if (esRemito) {
 			var excluidosRemito = window._pedidoItemsSinPesadaExcluidos || 0;
@@ -2329,6 +2375,8 @@
 		$('#factura-pedido-table').find('tr').last().find('.pieza_fac').css('fontWeight', 'bold');
 		$('#factura-pedido-table').find('tr').last().find('.pesada_fac').css('fontWeight', 'bold');
 
+		aplicarColumnasFacturaInterforming(modal);
+
 		if (typeof asignarCantidadBultoDesdePedido === 'function') {
 			asignarCantidadBultoDesdePedido(totalcajaspedido);
 		} else {
@@ -2353,21 +2401,39 @@
 
 		selectTipoTransaccion.empty();
 		selectTipoTransaccion.append('<option value="">-- Seleccionar tipo de transacción --</option>');
-		$.each(sel_tipotransaccion, function(obj, item) {
+		var ctxCircuito = {
+			letraCliente: ($('#letra_cliente_factura').val() || window.facturacionLetraCliente || ''),
+			codigoDocumento: ($('#codigopedido').val() || window.facturacionCodigoDocumento || ''),
+			preferPvId: puntoVentaDefault,
+			preferTipoId: tipoTransaccionDefault
+		};
+		var listasCircuito = (window.FacturacionCircuitoAfip
+			? window.FacturacionCircuitoAfip.filtrarListas(sel_tipotransaccion, sel_puntoventa, ctxCircuito)
+			: { tipos: sel_tipotransaccion, puntoventas: sel_puntoventa });
+		$.each(listasCircuito.tipos, function(obj, item) {
 			op = (window.PreferenciasFacturacionUsuario
 				? window.PreferenciasFacturacionUsuario.opcionSelected(tipoTransaccionDefault, item.id)
 				: (tipoTransaccionDefault == item.id ? ' selected="selected"' : ''));
-			selectTipoTransaccion.append('<option value="' + item.id + '" data-abreviatura="' + (item.abreviatura || '') + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
+			var attrsT = window.FacturacionCircuitoAfip
+				? window.FacturacionCircuitoAfip.attrsTipoOption(item)
+				: (' data-abreviatura="' + (item.abreviatura || '') + '"');
+			selectTipoTransaccion.append('<option value="' + item.id + '"' + attrsT + op + '>' + item.abreviatura + '-' + item.nombre + '</option>');
 		});
 
 		selectPuntoVenta.empty();
 		selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
-		$.each(sel_puntoventa, function(obj, item) {
+		$.each(listasCircuito.puntoventas, function(obj, item) {
 			op = (window.PreferenciasFacturacionUsuario
 				? window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaDefault, item.id)
 				: (puntoVentaDefault == item.id ? ' selected="selected"' : ''));
-			selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
+			var attrsP = window.FacturacionCircuitoAfip
+				? window.FacturacionCircuitoAfip.attrsPvOption(item)
+				: '';
+			selectPuntoVenta.append('<option value="' + item.id + '"' + attrsP + op + '>' + item.codigo + '-' + item.nombre + '</option>');
 		});
+		if (window.FacturacionCircuitoAfip) {
+			window.FacturacionCircuitoAfip.aplicar(selectTipoTransaccion, selectPuntoVenta, ctxCircuito);
+		}
 
 		if (document.querySelector('#datosfactura').dataset.incoterm !== '')
 		{
@@ -2706,7 +2772,7 @@
 		let pedido_id = $('#pedido_id').val();
 		let estadoPedido = $('#estadopedido').val();
 
-		if (estadoPedido != 'Pendiente')
+		if (estadoPedido != 'Pendiente' && !window.pedidoSinRemitoObligatorio)
 		{
 			alert(window.modoEmisionPedido === 'remito'
 				? "No puede generar remito de un pedido que no este pendiente"
@@ -2729,7 +2795,7 @@
 			return;
 		}
 
-		if (puntoventaremito_id < 1)
+		if (!window.pedidoSinRemitoObligatorio && puntoventaremito_id < 1)
 		{
 			alert("No puede facturar sin punto de venta del remito");
 			$('#facturarOrdenventaModal').modal('hide');
@@ -2883,6 +2949,7 @@
 		var incoterm_id = $('#incoterm_id').val();
 		var mercaderia = $('#mercaderia').val();
 		var leyendaexportacion = $('#leyendaexportacion').val();
+		var peso_neto = $('#peso_neto').val() || 0;
 		let cliente_id = $('#cliente_id').val();
 		let actividad_arca_id = $('#actividad_arca_id').val();
 		let pedido_id = $('#pedido_id').val();
@@ -2909,6 +2976,7 @@
 				descuentolinea: descuentolinea,
 				leyendafactura: leyendafactura,
 				cantidadbulto: cantidadbulto,
+				peso_neto: peso_neto,
 				puntoventaremito_id: puntoventaremito_id,
 				formapago_id: formapago_id,
 				incoterm_id: incoterm_id,
@@ -3016,6 +3084,8 @@
 				$('#div_mercaderia').show();
 				$('#div_incoterm').show();
 				$('#div_leyendaexportacion').show();
+				// Anita b-fremito carga_pant4 → comp_peso_neto
+				$('#div_peso_neto_exportacion').show();
 			}
 			else
 			{
@@ -3023,6 +3093,9 @@
 				$('#div_mercaderia').hide();
 				$('#div_incoterm').hide();
 				$('#div_leyendaexportacion').hide();
+				if (!window.pedidoSinRemitoObligatorio) {
+					$('#div_peso_neto_exportacion').hide();
+				}
 			}
 		});
 	}
@@ -3112,6 +3185,10 @@
 			$('#tiposuspension_id').val(tiposuspension_id);
 			if (data.politica_comercial && window.clientePoliticaComercial) {
 				window.clientePoliticaComercial.setActual(data.politica_comercial);
+			}
+			window.facturacionLetraCliente = String(data.letra || '').toUpperCase();
+			if ($('#letra_cliente_factura').length) {
+				$('#letra_cliente_factura').val(window.facturacionLetraCliente);
 			}
 			// Lee zona de venta
 			leeZonaVta();			

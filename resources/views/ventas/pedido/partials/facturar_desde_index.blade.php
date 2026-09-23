@@ -18,6 +18,10 @@
             <input type="hidden" id="entrega_nombre" value="">
             <input type="hidden" id="fl_cliente_tiene_entrega" value="0">
             <input type="hidden" id="estadocliente" value="">
+            <input type="hidden" id="letra_cliente_factura" value="">
+            <input type="hidden" id="factura_pedido_moneda_id" value="">
+            <input type="hidden" id="factura_pedido_cotizacion" value="">
+            <input type="hidden" id="factura_pedido_moneda_etiqueta" value="">
         </div>
         <div id="aviso-padron-operacion-pedido" class="d-none"></div>
         <input type="hidden" id="csrf_token" value="{{ csrf_token() }}">
@@ -34,4 +38,6 @@
     </form>
 </div>
 @include('ventas.pedido.modalfacturapedido')
-@include('includes.ventas.modalseleccionclienteentrega')
+@if ($incluirModalEntrega ?? true)
+    @include('includes.ventas.modalseleccionclienteentrega')
+@endif

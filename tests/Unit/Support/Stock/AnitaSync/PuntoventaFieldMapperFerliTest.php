@@ -30,6 +30,24 @@ class PuntoventaFieldMapperFerliTest extends TestCase
         $this->assertSame('wsfex_v1', PuntoventaFieldMapper::mapWebservice($row));
     }
 
+    public function test_interforming_suc_fiscal_x_es_exportacion_wsfex(): void
+    {
+        config(['app.empresa' => EntornoEmpresaSupport::INTERFORMING]);
+        $row = (object) ['suc_fiscal' => 'X'];
+
+        $this->assertSame('E', PuntoventaFieldMapper::mapModoFacturacion($row));
+        $this->assertSame('wsfex_v1', PuntoventaFieldMapper::mapWebservice($row));
+    }
+
+    public function test_interforming_suc_fiscal_e_es_cae_local(): void
+    {
+        config(['app.empresa' => EntornoEmpresaSupport::INTERFORMING]);
+        $row = (object) ['suc_fiscal' => 'E'];
+
+        $this->assertSame('C', PuntoventaFieldMapper::mapModoFacturacion($row));
+        $this->assertSame('wsfev1', PuntoventaFieldMapper::mapWebservice($row));
+    }
+
     public function test_ferli_no_mapea_pathafip_desde_leyenda2(): void
     {
         $row = (object) [

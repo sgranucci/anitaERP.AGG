@@ -31,14 +31,22 @@
         $('#nombrecliente').val(data.nombrecliente);
         $('#estadopedido').val(data.estadopedido);
         $('#estadocliente').val(data.estadocliente || '');
+        window.facturacionLetraCliente = String(data.letra_cliente || '').toUpperCase();
+        window.facturacionCodigoDocumento = String(data.codigo || '');
+        if ($('#letra_cliente_factura').length) {
+            $('#letra_cliente_factura').val(window.facturacionLetraCliente);
+        }
         $('#descuento').val(data.descuento);
         $('#lugarentrega').val(data.lugarentrega);
         $('#cliente_entrega_id').val(data.cliente_entrega_id);
         $('#cliente_entrega_id_previa').val(data.cliente_entrega_id);
         $('#entrega_nombre').val(data.entrega_nombre || data.lugarentrega);
+        $('#factura_pedido_moneda_id').val(data.moneda_id || '');
+        $('#factura_pedido_cotizacion').val(data.cotizacion || '');
+        $('#factura_pedido_moneda_etiqueta').val(data.moneda_etiqueta || data.moneda_abreviatura || '');
         $('#totalcajaspedido').val((data.totales && data.totales.caja) || '0');
         $('#totalpiezaspedido').val((data.totales && data.totales.pieza) || '0');
-        $('#totalkilospesados').val((data.totales && data.totales.pesada) || '0');
+        $('#totalkilospesados').val((data.totales && (data.totales.pesada || data.totales.cantidad)) || '0');
 
         var $tbody = $('#tbody-tabla').empty();
         $.each(data.items || [], function (_, item) {

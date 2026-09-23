@@ -754,6 +754,23 @@
 			if (data.politica_comercial && window.clientePoliticaComercial) {
 				window.clientePoliticaComercial.setActual(data.politica_comercial);
 			}
+			var letraCli = data.letra || (data.condicionivas && data.condicionivas.letra) || '';
+			window.facturacionLetraCliente = String(letraCli || '').toUpperCase();
+			if ($('#letra_cliente_factura').length) {
+				$('#letra_cliente_factura').val(window.facturacionLetraCliente);
+			}
+			if (window.FacturacionCircuitoAfip && flCambioCliente) {
+				window.FacturacionCircuitoAfip.aplicar(
+					$('#tipotransaccion_id'),
+					$('#puntoventa_id'),
+					{
+						letraCliente: window.facturacionLetraCliente,
+						codigoDocumento: window.facturacionCodigoDocumento || '',
+						preferPvId: $('#puntoventadefault_id').val(),
+						preferTipoId: $('#tipotransacciondefault_id').val()
+					}
+				);
+			}
 		});
 		
         setTimeout(() => {
@@ -1034,10 +1051,30 @@
 		// Arma select de puntos de venta
 		selectPuntoVenta.empty();
 		selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
-		$.each(sel_puntoventa, function(obj, item) {
+		var ctxCircuitoFac = {
+			letraCliente: ($('#letra_cliente_factura').val() || window.facturacionLetraCliente || ''),
+			codigoDocumento: (window.facturacionCodigoDocumento || ''),
+			preferPvId: puntoVentaDefault
+		};
+		var listasCircuitoFac = (window.FacturacionCircuitoAfip
+			? window.FacturacionCircuitoAfip.filtrarListas(
+				(function () {
+					try { return JSON.parse(document.querySelector('#datosfactura').dataset.tipotransaccion || '[]'); } catch (e) { return []; }
+				})(),
+				sel_puntoventa,
+				ctxCircuitoFac
+			)
+			: { puntoventas: sel_puntoventa });
+		$.each(listasCircuitoFac.puntoventas || sel_puntoventa, function(obj, item) {
 			op = window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaDefault, item.id);
-			selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
+			var attrsP = window.FacturacionCircuitoAfip
+				? window.FacturacionCircuitoAfip.attrsPvOption(item)
+				: '';
+			selectPuntoVenta.append('<option value="' + item.id + '"' + attrsP + op + '>' + item.codigo + '-' + item.nombre + '</option>');
 		});
+		if (window.FacturacionCircuitoAfip) {
+			window.FacturacionCircuitoAfip.aplicar($('#tipotransaccion_id'), selectPuntoVenta, ctxCircuitoFac);
+		}
 
 		if (puntoVentaDefault) {
 			selectPuntoVenta.val(puntoVentaDefault);
@@ -1176,6 +1213,8 @@
 				$('#div_mercaderia').show();
 				$('#div_incoterm').show();
 				$('#div_leyendaexportacion').show();
+				// Anita b-fremito carga_pant4: peso neto (Interforming → comp_peso_neto)
+				$('#div_peso_neto_exportacion').show();
 			}
 			else
 			{
@@ -1183,6 +1222,9 @@
 				$('#div_mercaderia').hide();
 				$('#div_incoterm').hide();
 				$('#div_leyendaexportacion').hide();
+				if (!window.pedidoSinRemitoObligatorio) {
+					$('#div_peso_neto_exportacion').hide();
+				}
 			}
 		});
 	}

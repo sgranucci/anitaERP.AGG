@@ -16,7 +16,17 @@ Editar pedido Interforming
 <script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/form.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/interforming/form.js')) ?: time() }}" type="text/javascript"></script>
+@if (!empty($mostrarFacturarPedido))
+<script>window.pedidoModoIndexFacturacion = true;</script>
+<script>window.pedidoSinRemitoObligatorio = true;</script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}" type="text/javascript"></script>
+@include('includes.ventas.preferencias_facturacion_scripts')
+@include('includes.ventas.facturacion_circuito_scripts')
+@include('ventas.partials.aviso_deposito_facturacion')
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/facturar_index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/facturar_index.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -34,6 +44,14 @@ Editar pedido Interforming
                 <h3 class="card-title">Pedido {{ $pedido->codigo }} (Interforming)</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center">
                     @include('ventas.pedido.interforming.partials.badge_aprobacion', ['pedido' => $pedido])
+                    @if (!empty($mostrarFacturarPedido))
+                        <a href="#"
+                           class="btn btn-success btn-sm ml-2 btn-facturar-pedido-index"
+                           data-pedido-id="{{ $pedido->id }}"
+                           title="Facturar">
+                            <i class="fas fa-file-invoice"></i> Facturar
+                        </a>
+                    @endif
                     @if (!($ocultarVolver ?? false))
                         <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm ml-2">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -84,6 +102,14 @@ Editar pedido Interforming
                         <i class="fa fa-save"></i> Actualizar
                     </button>
                 @endif
+                @if (!empty($mostrarFacturarPedido))
+                    <a href="#"
+                       class="btn btn-success btn-facturar-pedido-index"
+                       data-pedido-id="{{ $pedido->id }}"
+                       title="Facturar">
+                        <i class="fas fa-file-invoice"></i> Facturar
+                    </a>
+                @endif
             </div>
         </div>
     </div>
@@ -94,4 +120,8 @@ Editar pedido Interforming
 @include('includes.ventas.modalseleccionclienteentrega')
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultadeposito')
+@include('includes.proceso-overlay-pedido')
+@if (!empty($mostrarFacturarPedido))
+    @include('ventas.pedido.partials.facturar_desde_index', ['incluirModalEntrega' => false])
+@endif
 @endsection

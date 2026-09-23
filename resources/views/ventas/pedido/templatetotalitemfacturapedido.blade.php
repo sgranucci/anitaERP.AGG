@@ -22,13 +22,13 @@
 			<input type="text" name="unidadmedidas_fac[]" class="form-control unidadmedida_fac" value="" readonly/>	
 			<input type="hidden" name="unidadmedid_ids_fac[]" class="form-control unidadmedida_id_fac" value="" readonly/>							
 		</td>			
-		<td style="margin : 0; padding : 0; height: 17px;">
+		<td class="td-fac-caja" style="margin : 0; padding : 0; height: 17px;">
 			<input type="text" id="icaja" name="cajas_fac[]" class="form-control caja_fac" value="" readonly/>
 		</td>
-		<td style="margin : 0; padding : 0; height: 17px;">
+		<td class="td-fac-pieza" style="margin : 0; padding : 0; height: 17px;">
 			<input type="text" id="ipieza" name="piezas_fac[]" class="form-control pieza_fac" value="" readonly/>
 		</td>
-		<td style="margin : 0; padding : 0; height: 17px;" colspan="2">
+		<td class="td-fac-cantidad" style="margin : 0; padding : 0; height: 17px;" colspan="2">
 			<input type="text" name="pesadas_fac[]" style="text-align:center;" class="form-control pesada_fac" value="" readonly/>
 		</td>			
         <td style="margin : 0; padding : 0; height: 17px;">

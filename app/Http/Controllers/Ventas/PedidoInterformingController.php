@@ -11,12 +11,20 @@ use App\Models\Stock\Unidadmedida;
 use App\Models\Ventas\Condicionventa;
 use App\Models\Ventas\PedidoInterforming;
 use App\Models\Ventas\Vendedor;
+use App\Repositories\Configuracion\Actividad_ArcaRepositoryInterface;
+use App\Repositories\Ventas\FormapagoRepositoryInterface;
+use App\Repositories\Ventas\IncotermRepositoryInterface;
 use App\Repositories\Ventas\MotivocierrepedidoRepositoryInterface;
+use App\Repositories\Ventas\PuntoventaRepositoryInterface;
+use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Services\Ventas\PedidoInterformingPdfService;
 use App\Services\Ventas\PedidoInterformingService;
+use App\Support\Ventas\InterformingFacturacionMaestrosSupport;
 use App\Support\Ventas\PedidoEstadosInterforming;
+use App\Support\Ventas\PedidoInterformingFacturacionSupport;
 use App\Support\Ventas\PedidoInterformingListadoFiltros;
 use App\Support\Ventas\PedidoInterformingSupport;
+use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
 
@@ -31,7 +39,12 @@ class PedidoInterformingController extends Controller
     public function __construct(
         PedidoInterformingService $pedidoService,
         PedidoInterformingPdfService $pedidoPdfService,
-        MotivocierrepedidoRepositoryInterface $motivocierrepedidoRepository
+        MotivocierrepedidoRepositoryInterface $motivocierrepedidoRepository,
+        private readonly PuntoventaRepositoryInterface $puntoventaRepository,
+        private readonly TipotransaccionRepositoryInterface $tipotransaccionRepository,
+        private readonly FormapagoRepositoryInterface $formapagoRepository,
+        private readonly IncotermRepositoryInterface $incotermRepository,
+        private readonly Actividad_ArcaRepositoryInterface $actividadArcaRepository,
     ) {
         $this->pedidoService = $pedidoService;
         $this->pedidoPdfService = $pedidoPdfService;
@@ -45,13 +58,21 @@ class PedidoInterformingController extends Controller
 
         $filtros = PedidoInterformingListadoFiltros::resolverDesdeRequest($request);
         $datas = $this->pedidoService->leePedidos($filtros, true);
+        $puedeFacturarIndex = can('crear-factura', false) || can('editar-pedidos', false);
 
-        return view(PedidoInterformingSupport::vista('index'), [
+        $vista = [
             'datas' => $datas,
             'filtros' => $filtros,
             'filtrosQuery' => PedidoInterformingListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => PedidoInterformingListadoFiltros::CAMPOS,
-        ]);
+            'puedeFacturarIndex' => $puedeFacturarIndex,
+        ];
+
+        if ($puedeFacturarIndex) {
+            $vista = array_merge($vista, $this->datosVistaFacturacionIndex());
+        }
+
+        return view(PedidoInterformingSupport::vista('index'), $vista);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -151,14 +172,18 @@ class PedidoInterformingController extends Controller
 
         $puedeActualizarPedido = can('actualizar-pedidos', false);
         $ocultarVolver = $soloConsulta;
+        $mostrarFacturarPedido = PedidoInterformingFacturacionSupport::puedeFacturar($pedido);
 
-        return view(
-            PedidoInterformingSupport::vista('editar'),
-            array_merge(
-                $this->datosFormulario($pedido, 'editar'),
-                compact('soloConsulta', 'puedeActualizarPedido', 'ocultarVolver')
-            )
+        $vista = array_merge(
+            $this->datosFormulario($pedido, 'editar'),
+            compact('soloConsulta', 'puedeActualizarPedido', 'ocultarVolver', 'mostrarFacturarPedido')
         );
+
+        if ($mostrarFacturarPedido) {
+            $vista = array_merge($vista, $this->datosVistaFacturacionIndex());
+        }
+
+        return view(PedidoInterformingSupport::vista('editar'), $vista);
     }
 
     public function actualizar(ValidacionPedidoInterforming $request, $id)
@@ -208,6 +233,23 @@ class PedidoInterformingController extends Controller
         return $this->pedidoPdfService->descargar((int) $id);
     }
 
+    public function contextoFacturacion(int $id)
+    {
+        PedidoInterformingSupport::abortSiNoInterforming();
+        if (! can('crear-factura', false) && ! can('editar-pedidos', false)) {
+            can('editar-pedidos');
+        }
+
+        $pedido = $this->pedidoService->leePedido($id);
+        if (! $pedido || ! PedidoInterformingFacturacionSupport::puedeFacturar($pedido)) {
+            return response()->json([
+                'error' => 'El pedido no se puede facturar (estado o cantidades).',
+            ], 422);
+        }
+
+        return response()->json(PedidoInterformingFacturacionSupport::contextoFacturacion($pedido));
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -224,6 +266,30 @@ class PedidoInterformingController extends Controller
             'motivocierrepedido_query' => $this->motivocierrepedidoRepository->all(),
             'estadosCabecera' => PedidoEstadosInterforming::etiquetasCabecera(),
             'estadosItem' => PedidoEstadosInterforming::etiquetasItem(),
+        ];
+    }
+
+    /**
+     * Datos del shell de facturación desde el index (mismo contrato que Bierzo).
+     *
+     * @return array<string, mixed>
+     */
+    private function datosVistaFacturacionIndex(): array
+    {
+        $prefs = UsuarioPreferenciaFacturacionSupport::leer();
+        // Preferencias de usuario; si faltan, PV4+FAE (Anita suc export / b-fremito).
+        $defaultsIf = InterformingFacturacionMaestrosSupport::defaultsParaPedido('PEX');
+
+        return [
+            'puntoventa_query' => $this->puntoventaRepository->all('A'),
+            'tipotransaccion_query' => $this->tipotransaccionRepository->all(['V'], ['A']),
+            'formapago_query' => $this->formapagoRepository->all(),
+            'incoterm_query' => $this->incotermRepository->all(),
+            'actividad_arca_query' => $this->actividadArcaRepository->all(),
+            'puntoventadefault_id' => $prefs['puntoventa_id'] ?? $defaultsIf['puntoventa_id'],
+            'puntoventaremitodefault_id' => $prefs['puntoventaremito_id'] ?? null,
+            'tipotransacciondefault_id' => $prefs['tipotransaccion_id'] ?? $defaultsIf['tipotransaccion_id'],
+            'data' => null,
         ];
     }
 }

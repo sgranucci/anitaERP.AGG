@@ -104,5 +104,10 @@ final class TipotransaccionCodigoAfipSupportTest extends TestCase
         $this->assertSame(206, TipotransaccionCodigoAfipSupport::codigoAfipDesdeAnitaTipoLetra('FCE', 'B'));
         $this->assertSame(3, TipotransaccionCodigoAfipSupport::codigoAfipDesdeAnitaTipoLetra('NCD', 'A'));
         $this->assertSame(0, TipotransaccionCodigoAfipSupport::codigoAfipDesdeAnitaTipoLetra('REM', 'R'));
+        // Interforming / Anita exportación (letra E)
+        $this->assertSame(19, TipotransaccionCodigoAfipSupport::codigoAfipDesdeAnitaTipoLetra('FAE', 'E'));
+        $this->assertSame(19, TipotransaccionCodigoAfipSupport::codigoAfipDesdeAnitaTipoLetra('FAC', 'E'));
+        $this->assertSame(21, TipotransaccionCodigoAfipSupport::codigoAfipDesdeAnitaTipoLetra('NCE', 'E'));
+        $this->assertSame(20, TipotransaccionCodigoAfipSupport::codigoAfipDesdeAnitaTipoLetra('NDE', 'E'));
     }
 }

@@ -256,6 +256,7 @@ class ClienteController extends Controller
         $cliente = $this->clienteQuery->traeClienteporId($cliente_id, [
             'id', 'vendedor_id', 'transporte_id', 'condicionventa_id', 'descuento',
             'tiposuspension_id', 'lugarentrega', 'zonavta_id', 'estado', 'leyenda', 'nombre',
+            'condicioniva_id',
         ]);
         if (! $cliente) {
             return null;
@@ -263,6 +264,15 @@ class ClienteController extends Controller
 
         $data = $cliente->toArray();
         $data['politica_comercial'] = ClientePoliticaComercialSupport::payload($cliente);
+        $letra = '';
+        if (! empty($cliente->condicioniva_id)) {
+            $letra = strtoupper(trim((string) (
+                \App\Models\Configuracion\Condicioniva::query()
+                    ->whereKey((int) $cliente->condicioniva_id)
+                    ->value('letra') ?? ''
+            )));
+        }
+        $data['letra'] = $letra;
 
         return $data;
     }

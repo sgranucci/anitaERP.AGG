@@ -29,6 +29,7 @@
 @endphp
 @include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'factura', 'politicaCliente' => $politicaCliente])
 @include('includes.ventas.preferencias_facturacion_scripts')
+@include('includes.ventas.facturacion_circuito_scripts')
 @include('ventas.partials.aviso_deposito_facturacion')
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/factura/consulta_referencia.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/consulta_referencia.js')) ?: time() }}" type="text/javascript"></script>
