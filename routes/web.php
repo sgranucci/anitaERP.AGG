@@ -3894,6 +3894,8 @@ Route::get('compras/articulo-cuenta-oc-reporte', 'Compras\ArticuloCuentaOcReport
 Route::get('compras/listar-articulo-cuenta-oc-reporte/{formato?}', 'Compras\ArticuloCuentaOcReporteController@exportar')->name('listar_reporte_articulo_cuenta_oc');
 Route::get('compras/comprobante-proveedor-imputacion-ap-reporte', 'Compras\ComprobanteProveedorImputacionApReporteController@index')->name('reporte_imputacion_ap_proveedor');
 Route::get('compras/listar-comprobante-proveedor-imputacion-ap/{formato?}', 'Compras\ComprobanteProveedorImputacionApReporteController@exportar')->name('listar_reporte_imputacion_ap_proveedor');
+Route::get('compras/iva-compras', 'Compras\IvaComprasReporteController@index')->name('iva_compras');
+Route::get('compras/listar-iva-compras/{formato}', 'Compras\IvaComprasReporteController@exportar')->name('listar_iva_compras');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
 Route::get('compras/suscripciones', 'Compras\SuscripcionController@index')->name('consultar_suscripcion');
 Route::get('compras/suscripciones/crear', 'Compras\SuscripcionController@crear')->name('crear_suscripcion');

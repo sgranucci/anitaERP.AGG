@@ -43,7 +43,13 @@
             </p>
         @endif
 
-        <p class="small font-weight-bold text-muted mb-1">Cuadre general por unidad de negocio (incluye cierres agrupados)</p>
+        <p class="small font-weight-bold text-muted mb-1">
+            @if (! empty(($features ?? [])['unidades_negocio']))
+                Cuadre general por unidad de negocio (incluye cierres agrupados)
+            @else
+                Cuadre general (ventas e IVA)
+            @endif
+        </p>
         @php $resumenExento = (float) ($resumen['erp_exento'] ?? 0); @endphp
         @if (abs($resumenExento) > 0.009)
             <p class="small text-muted mb-1">
@@ -51,11 +57,13 @@
                 Incluye {{ $formatear($resumenExento) }} exento, imputado a Ventas sin IVA (no genera d&eacute;bito fiscal).
             </p>
         @endif
-        <p class="small text-muted mb-1">
-            <i class="fa fa-info-circle"></i>
-            Cada unidad cuadra contra sus cuentas de cierre (gastronomía, estacionamiento, vending, administración).
-            El detalle Tabaco controla la cuenta kiosco dentro de gastronomía.
-        </p>
+        @if (! empty(($features ?? [])['unidades_negocio']))
+            <p class="small text-muted mb-1">
+                <i class="fa fa-info-circle"></i>
+                Cada unidad cuadra contra sus cuentas de cierre (gastronomía, estacionamiento, vending, administración).
+                El detalle Tabaco controla la cuenta kiosco dentro de gastronomía.
+            </p>
+        @endif
 
         <div class="table-responsive mb-3">
             <table class="table table-sm table-bordered mb-0" style="font-size: 0.78rem;">

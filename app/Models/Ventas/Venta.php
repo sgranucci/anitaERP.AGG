@@ -159,6 +159,12 @@ class Venta extends Model implements Auditable
                     ->with("condicionivas");
     }
 
+    /** Lugar de entrega del comprobante (provincia para convenio multilateral). */
+    public function cliente_entregas()
+    {
+        return $this->belongsTo(Cliente_Entrega::class, 'cliente_entrega_id');
+    }
+
     public function condicionventas()
     {
         return $this->belongsTo(Condicionventa::class, 'condicionventa_id');

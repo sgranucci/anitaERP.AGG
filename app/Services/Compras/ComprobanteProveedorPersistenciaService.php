@@ -19,6 +19,7 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
+use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
@@ -709,14 +710,26 @@ class ComprobanteProveedorPersistenciaService
                 throw new RuntimeException('Concepto IVA compra id «'.$conceptoId.'» inexistente.');
             }
 
+            $cuentaDebeId = ! empty($linea['cuentacontabledebe_id'])
+                ? (int) $linea['cuentacontabledebe_id']
+                : null;
+            // Impuestos con cuenta en el maestro: no persistir override del contrato.
+            if (ComprobanteProveedorConceptoIvaTipos::esImpuesto((string) ($concepto->tipoconcepto ?? ''))) {
+                $empresaId = (int) ($comprobante->empresa_id ?? 0);
+                $maestro = (int) $concepto->cuentacontableDebeIdParaEmpresa(
+                    $empresaId > 0 ? $empresaId : null
+                );
+                if ($maestro > 0) {
+                    $cuentaDebeId = $maestro;
+                }
+            }
+
             $this->conceptoRepository->create([
                 'comprobante_proveedor_id' => $comprobante->id,
                 'concepto_ivacompra_id' => $concepto->id,
                 'orden' => $i + 1,
                 'monto' => $linea['monto'] ?? 0,
-                'cuentacontabledebe_id' => ! empty($linea['cuentacontabledebe_id'])
-                    ? (int) $linea['cuentacontabledebe_id']
-                    : null,
+                'cuentacontabledebe_id' => $cuentaDebeId,
             ]);
         }
     }

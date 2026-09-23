@@ -1,28 +1,30 @@
 <?php
 
-namespace App\Exports\Ventas;
+declare(strict_types=1);
 
-use App\Services\Ventas\IvaVentasReporteService;
+namespace App\Exports\Compras;
+
+use App\Services\Compras\IvaComprasReporteService;
+use App\Support\Compras\IvaComprasListadoFiltros;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Export\ExcelFormatoNumero;
-use App\Support\Ventas\IvaVentasListadoFiltros;
 use Illuminate\Contracts\View\View;
-use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class IvaComprasListadoExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
 
@@ -45,19 +47,19 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
 
     private string $colUltima = 'Q';
 
-    /** Primera columna de importes (1-based). */
     private int $idxPrimerMonto = 8;
 
-    /** Cantidad de columnas de importes. */
     private int $cantidadMontos = 0;
 
     private bool $esCsv = false;
 
-    /** Congela Cliente y Nombre (A y B): freeze arranca en C. */
     private const COL_FREEZE = 'C';
 
+    /** Ancho de columnas de importe: alcanza para ##,###,###.## y cabeceras tipo "Monotributo". */
+    private const ANCHO_MONTO = 14;
+
     public function __construct(
-        private readonly IvaVentasReporteService $reporteService,
+        private readonly IvaComprasReporteService $reporteService,
     ) {
     }
 
@@ -83,43 +85,34 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogos);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
         $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
+        // título + subtítulo + thead
         $this->filaCabecerasExcel = $this->hayFilaLogos ? 4 : 3;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
-        // Columnas fijas: sin host = 7 (A–G), con host = 8 (A–H). Los importes arrancan justo después.
-        $clasificarHost = ! empty($this->filtros['clasificar_por_host']);
-        $columnasFijas = $clasificarHost ? 8 : 7;
+        $columnasFijas = 7; // N.Pro | Proveedor | CUIT | Fec.Mov | Fec.Iva | Tip | Nro.Comp
         $this->cantidadMontos = count($resultado['columnas'] ?? []);
         $this->idxPrimerMonto = $columnasFijas + 1;
         $totalColumnas = max($columnasFijas, $columnasFijas + $this->cantidadMontos);
         $this->colUltima = Coordinate::stringFromColumnIndex($totalColumnas);
 
-        $subtitulo = 'Período: '.IvaVentasListadoFiltros::formatearPeriodoTexto($this->filtros)
-            .' · Orden: '.IvaVentasListadoFiltros::formatearOrdenTexto($this->filtros)
-            .' · '.IvaVentasListadoFiltros::formatearSubdiarioTexto($this->filtros);
-        if (! empty($this->filtros['cortar_por_jurisdiccion'])) {
-            $subtitulo .= ' · Corte por jurisdicción';
-        }
+        $subtitulo = 'Período: '.IvaComprasListadoFiltros::formatearPeriodoTexto($this->filtros)
+            .' · Orden: '.IvaComprasListadoFiltros::formatearOrdenTexto($this->filtros)
+            .' · '.IvaComprasListadoFiltros::formatearSubdiarioTexto($this->filtros);
 
-        return view('exports.ventas.iva_ventasindex', [
+        return view('exports.compras.iva_comprasindex', [
             'resultado' => $resultado,
             'filas' => $filas,
             'filtros' => $this->filtros,
-            'titulo' => 'IVA VENTAS',
+            'titulo' => 'IVA COMPRAS',
             'subtitulo' => $subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
-            'clasificar_por_host' => $clasificarHost,
-            'cortar_por_jurisdiccion' => ! empty($this->filtros['cortar_por_jurisdiccion']),
-            'para_pdf' => true,
             'esExcel' => true,
             'formatoNumero' => $this->formatoNumeroEfectivo(),
-            'puede_ver_venta' => false,
         ]);
     }
 
     public function columnFormats(): array
     {
-        // Columnas fijas identificadoras como texto; columnas de importe con máscara neutra (sumables/adaptables).
         $codigoMonto = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
         $cols = [];
 
@@ -154,17 +147,30 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
                     'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
                     'color' => ['rgb' => '85C1E9'],
                 ],
+                'alignment' => [
+                    'wrapText' => true,
+                    'vertical' => Alignment::VERTICAL_CENTER,
+                ],
             ],
         ];
     }
 
     public function columnWidths(): array
     {
-        return [
-            'A' => 12, 'B' => 28, 'C' => 14, 'D' => 10, 'E' => 8, 'F' => 16,
-            'G' => 12, 'H' => 12, 'I' => 12, 'J' => 12, 'K' => 12, 'L' => 12,
-            'M' => 12, 'N' => 12, 'O' => 12, 'P' => 12,
+        $widths = [
+            'A' => 10,
+            'B' => 28,
+            'C' => 14,
+            'D' => 11,
+            'E' => 11,
+            'F' => 6,
+            'G' => 15,
         ];
+        for ($i = 0; $i < $this->cantidadMontos; $i++) {
+            $widths[Coordinate::stringFromColumnIndex($this->idxPrimerMonto + $i)] = self::ANCHO_MONTO;
+        }
+
+        return $widths;
     }
 
     public function registerEvents(): array
@@ -177,35 +183,67 @@ class IvaVentasListadoExport implements FromView, ShouldAutoSize, WithColumnForm
                 if ($this->hayFilaLogos && count($this->rutasLogosExcel) > 0) {
                     $sheet->getRowDimension(1)->setRowHeight(54);
                     $offsetXp = 6;
-                    foreach ($this->rutasLogosExcel as $idx => $ruta) {
+                    foreach ($this->rutasLogosExcel as $ruta) {
                         if (! is_string($ruta) || ! is_readable($ruta)) {
                             continue;
                         }
-                        $drawing = new Drawing;
+                        $drawing = new Drawing();
                         $drawing->setPath($ruta);
-                        $drawing->setResizeProportional(true);
-                        $drawing->setHeight(46);
+                        $drawing->setHeight(48);
                         $drawing->setCoordinates('A1');
-                        $drawing->setOffsetX($offsetXp + $idx * 160);
-                        $drawing->setOffsetY(4);
+                        $drawing->setOffsetX($offsetXp);
                         $drawing->setWorksheet($sheet);
+                        $offsetXp += 120;
                     }
                 }
 
-                $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.$colUltima.$filaTit);
-                $sheet->getStyle('A'.$filaTit.':'.$colUltima.$filaTit)->applyFromArray([
-                    'font' => ['bold' => true, 'size' => 14, 'name' => 'Arial', 'color' => ['rgb' => '17202A']],
-                    'alignment' => ['vertical' => Alignment::VERTICAL_CENTER],
-                ]);
-
+                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.$colUltima.$this->filaTituloExcel);
+                if ($this->filaCabecerasExcel > $this->filaTituloExcel + 1) {
+                    $sheet->mergeCells('A'.($this->filaTituloExcel + 1).':'.$colUltima.($this->filaTituloExcel + 1));
+                }
+                $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setBold(true)->setSize(16)->setName('Arial');
+                $sheet->getRowDimension($this->filaCabecerasExcel)->setRowHeight(30);
                 $sheet->freezePane(self::COL_FREEZE.$this->filaPrimeraDatosExcel);
+
+                if ($this->esCsv || $this->cantidadMontos < 1) {
+                    return;
+                }
+
+                $ultimaFila = max($this->filaPrimeraDatosExcel, (int) $sheet->getHighestRow());
+                if ($ultimaFila < $this->filaPrimeraDatosExcel) {
+                    return;
+                }
+
+                $colDesde = Coordinate::stringFromColumnIndex($this->idxPrimerMonto);
+                $colHasta = Coordinate::stringFromColumnIndex($this->idxPrimerMonto + $this->cantidadMontos - 1);
+                $rangoMontos = $colDesde.$this->filaPrimeraDatosExcel.':'.$colHasta.$ultimaFila;
+                $codigoMonto = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+
+                $sheet->getStyle($rangoMontos)->getNumberFormat()->setFormatCode($codigoMonto);
+                $sheet->getStyle($rangoMontos)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+                // FromView deja strings; forzar numérico para que el formato #,##0.00 se vea y no salga #####.
+                if (ExcelFormatoNumero::esAuto(ExcelFormatoNumero::preferenciaGlobal())) {
+                    for ($r = $this->filaPrimeraDatosExcel; $r <= $ultimaFila; $r++) {
+                        for ($c = 0; $c < $this->cantidadMontos; $c++) {
+                            $coord = Coordinate::stringFromColumnIndex($this->idxPrimerMonto + $c).$r;
+                            $cell = $sheet->getCell($coord);
+                            $raw = $cell->getValue();
+                            if ($raw === null || $raw === '') {
+                                continue;
+                            }
+                            if (is_numeric($raw)) {
+                                $cell->setValueExplicit((float) $raw, DataType::TYPE_NUMERIC);
+                            }
+                        }
+                    }
+                }
             },
         ];
     }
 
     public function title(): string
     {
-        return 'IVA ventas';
+        return 'IVA compras';
     }
 }

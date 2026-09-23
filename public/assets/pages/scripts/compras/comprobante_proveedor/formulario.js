@@ -386,6 +386,15 @@ $(function () {
         if (!contratoImputacionManual()) {
             return;
         }
+        var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+        var meta = conceptosMeta[conceptoId] || {};
+        var tipo = String(meta.tipoconcepto || '');
+        var codigo = String(meta.codigo || '');
+        // Solo neto: IVA/percepciones usan la cuenta del maestro, no la del contrato.
+        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0 && !esImpuestoInterno(tipo, codigo);
+        if (!esNeto) {
+            return;
+        }
         var datos = contratoCuentaManualDatos();
         if (datos.id <= 0) {
             actualizarVisibilidadEditorCuentaDebe($row);
@@ -403,14 +412,16 @@ $(function () {
     }
 
     function aplicarCuentaConceptoEnFila($row, forzar) {
-        if (contratoImputacionManual()) {
-            aplicarCuentaContratoEnFila($row, forzar);
-            return;
-        }
         var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
         var meta = conceptosMeta[conceptoId] || {};
         var tipo = String(meta.tipoconcepto || '');
         var codigo = String(meta.codigo || '');
+        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0 && !esImpuestoInterno(tipo, codigo);
+        // Contrato manual: solo el neto toma la cuenta del contrato.
+        if (contratoImputacionManual() && esNeto) {
+            aplicarCuentaContratoEnFila($row, forzar);
+            return;
+        }
         // Neto cubierto por OC/COM: no precargar la cuenta del maestro (sale de artículos OC;
         // el override solo se setea desde la solapa Asiento contable).
         if (conceptoId > 0 && reglaCubreCuentaDebeSinEditor(tipo, codigo)) {

@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Stock\Articulo;
@@ -152,6 +153,7 @@ final class OrdencompraContratoRutaFacturaSupport
 
     /**
      * Completa la cuenta DEBE del neto con la del contrato si el renglón viene vacío.
+     * Solo tipoconcepto neto (N/G/E, sin impuesto interno): IVA/percepciones conservan el maestro.
      *
      * @param  list<array<string, mixed>>  $lineas
      * @return list<array<string, mixed>>
@@ -159,14 +161,39 @@ final class OrdencompraContratoRutaFacturaSupport
     public static function rellenarCuentaManualEnLineas(?Ordencompra $oc, array $lineas, ?string $fechaYmd = null): array
     {
         $cuentaId = self::cuentaManualId($oc, $fechaYmd);
-        if ($cuentaId <= 0) {
+        if ($cuentaId <= 0 || $lineas === []) {
             return $lineas;
         }
 
-        foreach ($lineas as $i => $linea) {
-            if ((int) ($linea['cuentacontabledebe_id'] ?? 0) <= 0) {
-                $lineas[$i]['cuentacontabledebe_id'] = $cuentaId;
+        $conceptoIds = [];
+        foreach ($lineas as $linea) {
+            $cid = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            if ($cid > 0) {
+                $conceptoIds[$cid] = $cid;
             }
+        }
+        $conceptos = $conceptoIds === []
+            ? collect()
+            : Concepto_Ivacompra::query()
+                ->whereIn('id', array_values($conceptoIds))
+                ->get(['id', 'tipoconcepto', 'codigo'])
+                ->keyBy('id');
+
+        foreach ($lineas as $i => $linea) {
+            if ((int) ($linea['cuentacontabledebe_id'] ?? 0) > 0) {
+                continue;
+            }
+            $concepto = $conceptos->get((int) ($linea['concepto_ivacompra_id'] ?? 0));
+            if ($concepto === null) {
+                continue;
+            }
+            if (! ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                (string) ($concepto->tipoconcepto ?? ''),
+                (string) ($concepto->codigo ?? '')
+            )) {
+                continue;
+            }
+            $lineas[$i]['cuentacontabledebe_id'] = $cuentaId;
         }
 
         return $lineas;

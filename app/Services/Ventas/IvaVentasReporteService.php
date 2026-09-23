@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas;
 
+use App\Models\Configuracion\Provincia;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeReader;
+use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasAuditoriaCorrelatividadSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasFeaturesSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasFslAnitaArmadoSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasUnidadNegocioSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
@@ -49,12 +52,16 @@ final class IvaVentasReporteService
         $totalesGeneral = IvaVentasColumnasSupport::montosVacios();
         $monedaReporteId = (int) ($filtros['moneda_id'] ?? 1);
         $soloMonedaOrigen = ! empty($filtros['solo_moneda_origen']);
-        $clasificarHost = ! empty($filtros['clasificar_por_host']);
+        $clasificarHost = IvaVentasFeaturesSupport::clasificarPorHost()
+            && ! empty($filtros['clasificar_por_host']);
+        $cortarJurisdiccion = ! empty($filtros['cortar_por_jurisdiccion']);
+        $provinciaFiltroId = (int) ($filtros['provincia_id'] ?? 0);
         $vendingPvIds = IvaVentasUnidadNegocioSupport::vendingPuntoventaIds((int) ($filtros['empresa_id'] ?? 0));
         $excluidasPre = 0;
         $excluidasTipo = 0;
         $excluidasSubdiario = 0;
         $excluidasMoneda = 0;
+        $excluidasJurisdiccion = 0;
         $clavesErpFsl = [];
 
         foreach ($ventas as $venta) {
@@ -67,6 +74,16 @@ final class IvaVentasReporteService
                 } elseif ($motivoExclusion === 'subdiario') {
                     $excluidasSubdiario++;
                 }
+                continue;
+            }
+
+            $provinciaJurisdiccionId = ClienteProvinciaIibbSupport::idProvinciaEntregaParaConvenio(
+                $venta->clientes,
+                $venta->cliente_entregas,
+                (int) ($venta->provincia_id ?? 0) ?: null,
+            );
+            if ($provinciaFiltroId > 0 && $provinciaJurisdiccionId !== $provinciaFiltroId) {
+                $excluidasJurisdiccion++;
                 continue;
             }
 
@@ -106,6 +123,7 @@ final class IvaVentasReporteService
                 'cliente_nombre' => $this->clienteNombre($venta),
                 'cliente_id' => (int) ($venta->cliente_id ?? 0),
                 'cuit' => $this->cuitCliente($venta),
+                'provincia_id' => $provinciaJurisdiccionId,
                 'fecha_mov' => date('d/m/Y', strtotime((string) $venta->fecha)),
                 'fecha_orden' => $ordenFecha,
                 'tipo' => $tipo,
@@ -148,7 +166,11 @@ final class IvaVentasReporteService
         }
 
         $conteoFslAnita = 0;
-        if (! empty($filtros['completar_fsl_anita']) && TipotransaccionIvaVentasSupport::fslVaAlIvaVentas()) {
+        $puedeFslAnita = IvaVentasFeaturesSupport::completarFslAnita()
+            && ! empty($filtros['completar_fsl_anita'])
+            && $provinciaFiltroId <= 0
+            && TipotransaccionIvaVentasSupport::fslVaAlIvaVentas();
+        if ($puedeFslAnita) {
             $conteoFslAnita = $this->incorporarFslAnita(
                 $filtros,
                 $filas,
@@ -158,13 +180,18 @@ final class IvaVentasReporteService
             );
         }
 
-        $filas = $this->ordenarFilas($filas, $filtros, $clasificarHost);
+        $this->enriquecerProvinciasFilas($filas);
+
+        $filas = $this->ordenarFilas($filas, $filtros, $clasificarHost, $cortarJurisdiccion);
         $totalesPorPvLista = $this->ordenarTotalesPv(array_values($totalesPorPv));
+        $totalesPorJurisdiccion = $cortarJurisdiccion
+            ? $this->armarTotalesPorJurisdiccion($filas)
+            : [];
 
         // Vista del listado: opcionalmente colapsa las Facturas B en un resumen por día + PV + tipo.
         // El detalle completo ($filas) se conserva para conciliación y auditoría de correlatividad.
         $filasDisplay = ! empty($filtros['agrupar_b_por_dia'])
-            ? $this->agruparFacturasBPorDia($filas, $filtros, $clasificarHost)
+            ? $this->agruparFacturasBPorDia($filas, $filtros, $clasificarHost, $cortarJurisdiccion)
             : $filas;
 
         foreach ($totalesGeneral as $k => $v) {
@@ -183,7 +210,9 @@ final class IvaVentasReporteService
             'filas' => $filas,
             'filas_display' => $filasDisplay,
             'agrupado_b_por_dia' => ! empty($filtros['agrupar_b_por_dia']),
+            'cortar_por_jurisdiccion' => $cortarJurisdiccion,
             'totales_por_puntoventa' => $totalesPorPvLista,
+            'totales_por_jurisdiccion' => $totalesPorJurisdiccion,
             'totales_general' => $totalesGeneral,
             'stats' => [
                 'ventas' => count($filas),
@@ -192,6 +221,7 @@ final class IvaVentasReporteService
                 'excluidas_tipo' => $excluidasTipo,
                 'excluidas_subdiario' => $excluidasSubdiario,
                 'excluidas_moneda' => $excluidasMoneda,
+                'excluidas_jurisdiccion' => $excluidasJurisdiccion,
                 'ventas_periodo' => $ventas->count(),
                 'ventas_fsl_anita' => $conteoFslAnita,
             ],
@@ -246,6 +276,7 @@ final class IvaVentasReporteService
                 'tipotransacciones',
                 'puntoventas.empresas',
                 'clientes',
+                'cliente_entregas',
                 'monedas',
                 'gastronomiaEmision.configuracionPuntoventa',
                 'estacionamientoEmision.configuracionPuntoventa',
@@ -535,11 +566,113 @@ final class IvaVentasReporteService
 
     /**
      * @param  list<array<string, mixed>>  $filas
+     */
+    private function enriquecerProvinciasFilas(array &$filas): void
+    {
+        $ids = [];
+        foreach ($filas as $fila) {
+            $id = (int) ($fila['provincia_id'] ?? 0);
+            if ($id > 0) {
+                $ids[$id] = true;
+            }
+        }
+
+        $map = [];
+        if ($ids !== []) {
+            $map = Provincia::query()
+                ->whereIn('id', array_keys($ids))
+                ->get(['id', 'codigo', 'nombre', 'jurisdiccion'])
+                ->keyBy('id');
+        }
+
+        foreach ($filas as &$fila) {
+            $id = (int) ($fila['provincia_id'] ?? 0);
+            $prov = $id > 0 ? ($map[$id] ?? null) : null;
+            if ($prov === null) {
+                $fila['provincia_id'] = $id > 0 ? $id : null;
+                $fila['provincia_codigo'] = '';
+                $fila['provincia_nombre'] = '';
+                $fila['provincia_jurisdiccion'] = '';
+                $fila['provincia_label'] = 'Sin jurisdicción';
+                $fila['provincia_orden'] = 'zzzz|'.str_pad((string) $id, 8, '0', STR_PAD_LEFT);
+
+                continue;
+            }
+
+            $codigo = trim((string) ($prov->codigo ?? ''));
+            $nombre = trim((string) ($prov->nombre ?? ''));
+            $jur = trim((string) ($prov->jurisdiccion ?? ''));
+            $label = trim($codigo.' '.$nombre);
+            if ($jur !== '') {
+                $label .= ' (jur. '.$jur.')';
+            }
+
+            $fila['provincia_id'] = $id;
+            $fila['provincia_codigo'] = $codigo;
+            $fila['provincia_nombre'] = $nombre;
+            $fila['provincia_jurisdiccion'] = $jur;
+            $fila['provincia_label'] = $label !== '' ? $label : ('Provincia #'.$id);
+            $fila['provincia_orden'] = str_pad($codigo !== '' ? $codigo : (string) $id, 8, '0', STR_PAD_LEFT)
+                .'|'.$nombre;
+        }
+        unset($fila);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
      */
-    private function ordenarFilas(array $filas, array $filtros, bool $clasificarHost): array
+    private function armarTotalesPorJurisdiccion(array $filas): array
     {
-        usort($filas, function (array $a, array $b) use ($clasificarHost): int {
+        $totales = [];
+        foreach ($filas as $fila) {
+            $clave = (string) ((int) ($fila['provincia_id'] ?? 0));
+            if (! isset($totales[$clave])) {
+                $totales[$clave] = [
+                    'provincia_id' => (int) ($fila['provincia_id'] ?? 0) ?: null,
+                    'provincia_codigo' => (string) ($fila['provincia_codigo'] ?? ''),
+                    'provincia_nombre' => (string) ($fila['provincia_nombre'] ?? ''),
+                    'provincia_jurisdiccion' => (string) ($fila['provincia_jurisdiccion'] ?? ''),
+                    'provincia_label' => (string) ($fila['provincia_label'] ?? 'Sin jurisdicción'),
+                    'provincia_orden' => (string) ($fila['provincia_orden'] ?? 'zzzz'),
+                    'cantidad' => 0,
+                    'columnas' => IvaVentasColumnasSupport::montosVacios(),
+                ];
+            }
+            $totales[$clave]['cantidad']++;
+            IvaVentasColumnasSupport::acumular($totales[$clave]['columnas'], $fila['columnas'] ?? []);
+        }
+
+        $lista = array_values($totales);
+        usort($lista, static function (array $a, array $b): int {
+            return strcmp((string) ($a['provincia_orden'] ?? ''), (string) ($b['provincia_orden'] ?? ''));
+        });
+
+        foreach ($lista as &$tot) {
+            foreach ($tot['columnas'] as $k => $v) {
+                $tot['columnas'][$k] = round((float) $v, 2);
+            }
+        }
+        unset($tot);
+
+        return $lista;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function ordenarFilas(array $filas, array $filtros, bool $clasificarHost, bool $cortarJurisdiccion = false): array
+    {
+        usort($filas, function (array $a, array $b) use ($clasificarHost, $cortarJurisdiccion): int {
+            if ($cortarJurisdiccion) {
+                $ja = (string) ($a['provincia_orden'] ?? '');
+                $jb = (string) ($b['provincia_orden'] ?? '');
+                if ($ja !== $jb) {
+                    return strcmp($ja, $jb);
+                }
+            }
+
             $secOrder = ['operacion' => 0, 'administracion' => 1];
             $sa = $secOrder[$a['seccion'] ?? ''] ?? 9;
             $sb = $secOrder[$b['seccion'] ?? ''] ?? 9;
@@ -602,8 +735,12 @@ final class IvaVentasReporteService
      * @param  array<string, mixed>  $filtros
      * @return list<array<string, mixed>>
      */
-    private function agruparFacturasBPorDia(array $filas, array $filtros, bool $clasificarHost): array
-    {
+    private function agruparFacturasBPorDia(
+        array $filas,
+        array $filtros,
+        bool $clasificarHost,
+        bool $cortarJurisdiccion = false,
+    ): array {
         $grupos = [];
         $otras = [];
 
@@ -615,6 +752,7 @@ final class IvaVentasReporteService
             }
 
             $clave = implode('|', [
+                $cortarJurisdiccion ? (string) ((int) ($fila['provincia_id'] ?? 0)) : '',
                 (string) ($fila['seccion'] ?? ''),
                 (int) ($fila['puntoventa_id'] ?? 0),
                 (string) ($fila['fecha_orden'] ?? ''),
@@ -679,6 +817,6 @@ final class IvaVentasReporteService
             ]);
         }
 
-        return $this->ordenarFilas(array_merge($otras, $resumenes), $filtros, $clasificarHost);
+        return $this->ordenarFilas(array_merge($otras, $resumenes), $filtros, $clasificarHost, $cortarJurisdiccion);
     }
 }

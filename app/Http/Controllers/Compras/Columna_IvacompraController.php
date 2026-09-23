@@ -8,6 +8,7 @@ use App\Models\Compras\Columna_Ivacompra;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionColumna_Ivacompra;
 use App\Repositories\Compras\Columna_IvacompraRepositoryInterface;
+use App\Support\Compras\IvaCompras\IvaComprasColumnasSupport;
 
 class Columna_IvacompraController extends Controller
 {
@@ -52,6 +53,7 @@ class Columna_IvacompraController extends Controller
     public function guardar(ValidacionColumna_Ivacompra $request)
     {
 		$this->repository->create($request->all());
+        IvaComprasColumnasSupport::olvidarCache();
 
         return redirect('compras/columna_ivacompra')->with('mensaje', 'Colúmna de iva compras creada con éxito');
     }
@@ -83,6 +85,7 @@ class Columna_IvacompraController extends Controller
         can('actualizar-columna-iva-compra');
 
         $this->repository->update($request->all(), $id);
+        IvaComprasColumnasSupport::olvidarCache();
 
         return redirect('compras/columna_ivacompra')->with('mensaje', 'Colúmna de iva compras actualizada con éxito');
     }
@@ -99,6 +102,7 @@ class Columna_IvacompraController extends Controller
 
         if ($request->ajax()) {
         	if ($this->repository->delete($id)) {
+                IvaComprasColumnasSupport::olvidarCache();
                 return response()->json(['mensaje' => 'ok']);
             } else {
                 return response()->json(['mensaje' => 'ng']);

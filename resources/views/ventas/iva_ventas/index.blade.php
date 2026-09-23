@@ -7,6 +7,7 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{ asset('assets/pages/scripts/ventas/iva_ventas/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -24,10 +25,24 @@
             </div>
             <form method="get" action="{{ route('iva_ventas') }}" id="form-iva-ventas" class="mb-0">
                 <div class="card-body pb-2">
+                    @php
+                        $feat = $features ?? \App\Support\Ventas\IvaVentas\IvaVentasFeaturesSupport::all();
+                        $featBingoFsl = ! empty($feat['bingo_fsl']);
+                        $featUnidades = ! empty($feat['unidades_negocio']);
+                        $featHost = ! empty($feat['clasificar_por_host']);
+                        $featFslAnita = ! empty($feat['completar_fsl_anita']);
+                    @endphp
                     <p class="text-muted small mb-3">
                         Listado de ventas con desglose impositivo desde AnitaERP (tablas <code>venta</code> / <code>venta_impuesto</code>).
-                        Solo entran los tipos de transacción con el tilde <strong>Va al IVA ventas</strong> (bingo FBI, máquinas FSL, facturas, NC/ND, etc.).
-                        Las FSL que aún viven en Anita se completan si el tipo FSL está tildado.
+                        Solo entran los tipos de transacción con el tilde <strong>Va al IVA ventas</strong>
+                        @if ($featBingoFsl)
+                            (bingo FBI, máquinas FSL, facturas, NC/ND, etc.).
+                            Las FSL que aún viven en Anita se completan si el tipo FSL está tildado.
+                        @else
+                            (facturas, NC/ND, etc.).
+                        @endif
+                        La jurisdicción (convenio multilateral) usa la provincia de entrega del comprobante;
+                        si no hay entrega, la del cliente.
                     </p>
 
                     @php
@@ -99,24 +114,53 @@
                         </div>
                     </div>
 
+                    @include('configuracion.partials.campo_consulta_provincia', [
+                        'inputName' => 'provincia_id',
+                        'inputId' => 'provincia_id',
+                        'provinciaId' => (int) ($filtros['provincia_id'] ?? 0) ?: '',
+                        'codigo' => $provincia->codigo ?? '',
+                        'nombre' => $provincia->nombre ?? '',
+                        'jurisdiccion' => $provincia->jurisdiccion ?? '',
+                        'label' => 'Jurisdicción IIBB',
+                        'col_label' => $colLabel,
+                        'col_input' => $colInput,
+                        'requerido' => false,
+                        'help' => 'Opcional: filtrar una provincia. Vacío = todas. Entrega (cliente_entrega); si no hay, provincia/jurisdicción del cliente.',
+                    ])
+
                     <div class="form-group row">
                         <div class="{{ $colLabel }} d-none d-lg-block"></div>
                         <div class="{{ $colInput }}">
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" name="cortar_por_jurisdiccion" id="cortar_por_jurisdiccion" value="1"
+                                    @checked(! empty($filtros['cortar_por_jurisdiccion']))>
+                                <label class="form-check-label" for="cortar_por_jurisdiccion">
+                                    Cortar por jurisdicción (secciones y totales para convenio multilateral)
+                                </label>
+                            </div>
                             <div class="form-check mb-1">
                                 <input class="form-check-input" type="checkbox" name="conciliar_contable" id="conciliar_contable" value="1"
                                     @checked($filtros['conciliar_contable'] ?? true)>
                                 <label class="form-check-label" for="conciliar_contable">Conciliar contra mayor contable (cuentas ventas e IVA)</label>
                             </div>
-                            <div class="form-check mb-1">
-                                <input class="form-check-input" type="checkbox" name="conciliar_por_unidad" id="conciliar_por_unidad" value="1"
-                                    @checked($filtros['conciliar_por_unidad'] ?? true)>
-                                <label class="form-check-label" for="conciliar_por_unidad">Conciliar por unidad de negocio (Gastronomía / Vending / Estacionamiento)</label>
-                            </div>
-                            <div class="form-check mb-1">
-                                <input class="form-check-input" type="checkbox" name="clasificar_por_host" id="clasificar_por_host" value="1"
-                                    @checked(! empty($filtros['clasificar_por_host']))>
-                                <label class="form-check-label" for="clasificar_por_host">Clasificar por host (PC de facturación)</label>
-                            </div>
+                            @if ($featUnidades)
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input" type="checkbox" name="conciliar_por_unidad" id="conciliar_por_unidad" value="1"
+                                        @checked($filtros['conciliar_por_unidad'] ?? true)>
+                                    <label class="form-check-label" for="conciliar_por_unidad">Conciliar por unidad de negocio (Gastronomía / Vending / Estacionamiento)</label>
+                                </div>
+                            @else
+                                <input type="hidden" name="conciliar_por_unidad" value="0">
+                            @endif
+                            @if ($featHost)
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input" type="checkbox" name="clasificar_por_host" id="clasificar_por_host" value="1"
+                                        @checked(! empty($filtros['clasificar_por_host']))>
+                                    <label class="form-check-label" for="clasificar_por_host">Clasificar por host (PC de facturación)</label>
+                                </div>
+                            @else
+                                <input type="hidden" name="clasificar_por_host" value="0">
+                            @endif
                             <div class="form-check">
                                 <input class="form-check-input js-auto-consultar" type="checkbox" name="agrupar_b_por_dia" id="agrupar_b_por_dia" value="1"
                                     @checked(! empty($filtros['agrupar_b_por_dia']))>
@@ -135,12 +179,16 @@
                                     @checked(! empty($filtros['auditar_ctamov']))>
                                 <label class="form-check-label" for="auditar_ctamov">Auditar contra ctamov (Anita) — lee el bridge, puede demorar</label>
                             </div>
-                            <input type="hidden" name="completar_fsl_anita" value="0">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="completar_fsl_anita" id="completar_fsl_anita" value="1"
-                                    @checked(! empty($filtros['completar_fsl_anita']))>
-                                <label class="form-check-label" for="completar_fsl_anita">Incluir FSL máquinas/ruletas desde Anita (sin duplicar ERP)</label>
-                            </div>
+                            @if ($featFslAnita)
+                                <input type="hidden" name="completar_fsl_anita" value="0">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="completar_fsl_anita" id="completar_fsl_anita" value="1"
+                                        @checked(! empty($filtros['completar_fsl_anita']))>
+                                    <label class="form-check-label" for="completar_fsl_anita">Incluir FSL máquinas/ruletas desde Anita (sin duplicar ERP)</label>
+                                </div>
+                            @else
+                                <input type="hidden" name="completar_fsl_anita" value="0">
+                            @endif
                         </div>
                     </div>
 
@@ -163,6 +211,16 @@
                             <strong>Período:</strong> {{ $periodo_texto ?? '' }}
                             · <strong>Orden:</strong> {{ $orden_texto ?? '' }}
                             · <strong>Subdiario:</strong> {{ $subdiario_texto ?? '' }}
+                            @if (! empty($filtros['cortar_por_jurisdiccion']))
+                                · <strong>Corte:</strong> por jurisdicción
+                            @endif
+                            @if ((int) ($filtros['provincia_id'] ?? 0) > 0)
+                                · <strong>Jurisdicción:</strong>
+                                {{ trim(($provincia->codigo ?? '').' '.($provincia->nombre ?? '')) }}
+                                @if (! empty($provincia->jurisdiccion))
+                                    (jur. {{ $provincia->jurisdiccion }})
+                                @endif
+                            @endif
                             @if (! empty($filtros['clasificar_por_host']))
                                 · <strong>Host:</strong> clasificado
                             @endif
@@ -217,7 +275,18 @@
                     @elseif ($sinComprobantes && $exclTipo > 0 && $ventasPeriodo > 0)
                         <div class="alert alert-warning mx-3 mt-3 mb-0">
                             Hay {{ $exclTipo }} comprobante(s) cuyo tipo de transacci&oacute;n no tiene tildado
-                            <strong>Va al IVA ventas</strong>. Revise el ABM de tipos (FBI, FSL, FAC, etc.).
+                            <strong>Va al IVA ventas</strong>. Revise el ABM de tipos
+                            @if ($featBingoFsl)
+                                (FBI, FSL, FAC, etc.).
+                            @else
+                                (FAC, NC, ND, etc.).
+                            @endif
+                        </div>
+                    @elseif ($sinComprobantes && (int) ($statsIva['excluidas_jurisdiccion'] ?? 0) > 0 && $ventasPeriodo > 0)
+                        <div class="alert alert-warning mx-3 mt-3 mb-0">
+                            Hay {{ (int) $statsIva['excluidas_jurisdiccion'] }} comprobante(s) en el per&iacute;odo
+                            fuera de la jurisdicci&oacute;n filtrada
+                            (provincia de entrega / cliente).
                         </div>
                     @elseif ($sinComprobantes && $ventasPeriodo === 0)
                         <div class="alert alert-info mx-3 mt-3 mb-0">
@@ -251,6 +320,7 @@
                                 'resultado' => $resultado,
                                 'filas' => $filasVista ?? [],
                                 'clasificar_por_host' => ! empty($filtros['clasificar_por_host']),
+                                'cortar_por_jurisdiccion' => ! empty($filtros['cortar_por_jurisdiccion']),
                                 'mostrar_secciones' => true,
                                 'puede_ver_venta' => $puede_ver_venta ?? false,
                                 'puede_ver_cliente' => $puede_ver_cliente ?? false,
@@ -278,30 +348,39 @@
 
                     @include('ventas.iva_ventas.partials.conciliacion_contable', [
                         'resultado' => $resultado,
+                        'features' => $feat,
                         'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
                         'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                         'puede_ver_venta' => $puede_ver_venta ?? false,
                         'puede_ver_asiento' => $puede_ver_asiento ?? false,
                     ])
 
-                    @include('ventas.iva_ventas.partials.conciliacion_unidad_negocio', [
-                        'resultado' => $resultado,
-                        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
-                    ])
+                    @if ($featUnidades)
+                        @include('ventas.iva_ventas.partials.conciliacion_unidad_negocio', [
+                            'resultado' => $resultado,
+                            'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
+                        ])
+                    @endif
 
                     @include('ventas.iva_ventas.partials.auditoria_diaria', [
                         'resultado' => $resultado,
                     ])
 
-                    @include('ventas.iva_ventas.partials.auditoria_diaria_unidad_negocio', [
-                        'resultado' => $resultado,
-                        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
-                    ])
+                    @if ($featUnidades)
+                        @include('ventas.iva_ventas.partials.auditoria_diaria_unidad_negocio', [
+                            'resultado' => $resultado,
+                            'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
+                        ])
+                    @endif
 
                     @include('ventas.iva_ventas.partials.auditoria_correlatividad', [
                         'resultado' => $resultado,
                         'puede_ver_puntoventa' => $puede_ver_puntoventa ?? false,
                         'puede_ver_venta' => $puede_ver_venta ?? false,
+                    ])
+
+                    @include('ventas.iva_ventas.partials.totales_jurisdiccion', [
+                        'resultado' => $resultado,
                     ])
 
                     @include('ventas.iva_ventas.partials.totales_puntoventa', [
@@ -314,6 +393,7 @@
     </div>
 </div>
 
+@include('includes.configuracion.modalconsultaprovincia')
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'iva-ventas-procesando-overlay',
     'tituloId' => 'iva-ventas-procesando-titulo',

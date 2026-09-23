@@ -79,6 +79,7 @@ final class IvaVentasFslAnitaArmadoSupport
             'cliente_nombre' => $nombre,
             'cliente_id' => 0,
             'cuit' => '',
+            'provincia_id' => null,
             'fecha_mov' => $fechaMov,
             'fecha_orden' => $fechaIso,
             'tipo' => MaquinaFslTipoSupport::ABREVIATURA,

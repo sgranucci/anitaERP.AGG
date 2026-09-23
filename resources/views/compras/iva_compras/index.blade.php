@@ -1,0 +1,200 @@
+@extends("theme.$theme.layout")
+@section('titulo')
+    IVA compras
+@endsection
+
+@section('scripts')
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<script src="{{ asset('assets/pages/scripts/compras/iva_compras/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/iva_compras/filtro.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+@endsection
+
+@section('contenido')
+<div class="row">
+    <div class="col-lg-12">
+        @include('includes.mensaje')
+        <div class="card card-info">
+            <div class="card-header">
+                <h3 class="card-title">IVA compras</h3>
+                <div class="card-tools">
+                    <a href="{{ route('iva_compras') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
+                        <i class="fa fa-eraser"></i> Limpiar
+                    </a>
+                </div>
+            </div>
+            <form method="get" action="{{ route('iva_compras') }}" id="form-iva-compras" class="mb-0">
+                <div class="card-body pb-2">
+                    <p class="text-muted small mb-3">
+                        Libro de IVA compras desde comprobantes de proveedor (equivalente Anita <code>l-compra</code>).
+                        Las columnas del listado salen del maestro <strong>Colúmnas iva-compras</strong>
+                        (<code>columna_ivacompra</code>); cada concepto suma su importe en la columna asignada.
+                        Conciliación opcional contra el mayor on-line (cuentas en <code>config/iva_compras.php</code>).
+                    </p>
+
+                    @php
+                        $colLabel = 'col-lg-2 control-label text-right pr-2';
+                        $colInput = 'col-lg-4';
+                        $empresasDisponibles = collect($empresa_query ?? []);
+                    @endphp
+
+                    <div class="form-group row">
+                        <label for="empresa_id" class="{{ $colLabel }} requerido">Empresa</label>
+                        <div class="{{ $colInput }}">
+                            @if ($empresasDisponibles->count() > 1)
+                                <select name="empresa_id" id="empresa_id" class="form-control" required>
+                                    <option value="">Seleccione…</option>
+                                    @foreach ($empresasDisponibles as $emp)
+                                        <option value="{{ $emp->id }}" @selected((int) ($filtros['empresa_id'] ?? 0) === (int) $emp->id)>
+                                            {{ $emp->nombre }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            @elseif ($empresasDisponibles->count() === 1)
+                                <input type="hidden" name="empresa_id" id="empresa_id" value="{{ (int) $empresasDisponibles->first()->id }}">
+                                <span class="form-control-plaintext">{{ $empresasDisponibles->first()->nombre }}</span>
+                            @else
+                                <p class="text-danger small mb-0">Sin empresas asignadas.</p>
+                            @endif
+                        </div>
+                        <label for="moneda_id" class="{{ $colLabel }}">Moneda reporte</label>
+                        <div class="{{ $colInput }}">
+                            <select name="moneda_id" id="moneda_id" class="form-control">
+                                @foreach ($moneda_query ?? [] as $mon)
+                                    <option value="{{ $mon->id }}" @selected((int) ($filtros['moneda_id'] ?? 1) === (int) $mon->id)>
+                                        {{ $mon->nombre ?? $mon->codigo }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label for="fecha_desde" class="{{ $colLabel }} requerido">Desde (fecha IVA)</label>
+                        <div class="{{ $colInput }}">
+                            <input type="date" name="fecha_desde" id="fecha_desde" class="form-control"
+                                value="{{ $filtros['fecha_desde'] ?? date('Y-m-01') }}" required>
+                        </div>
+                        <label for="fecha_hasta" class="{{ $colLabel }} requerido">Hasta</label>
+                        <div class="{{ $colInput }}">
+                            <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control"
+                                value="{{ $filtros['fecha_hasta'] ?? date('Y-m-d') }}" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label for="orden" class="{{ $colLabel }}">Orden</label>
+                        <div class="{{ $colInput }}">
+                            <select name="orden" id="orden" class="form-control">
+                                @foreach ($orden_enum as $value => $label)
+                                    <option value="{{ $value }}" @selected(($filtros['orden'] ?? '') === $value)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <label for="subdiario" class="{{ $colLabel }}">Subdiario</label>
+                        <div class="{{ $colInput }}">
+                            <select name="subdiario" id="subdiario" class="form-control">
+                                @foreach ($subdiario_enum as $value => $label)
+                                    <option value="{{ $value }}" @selected(($filtros['subdiario'] ?? '') === $value)>{{ $label }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <div class="{{ $colLabel }} d-none d-lg-block"></div>
+                        <div class="{{ $colInput }}">
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" name="conciliar_contable" id="conciliar_contable" value="1"
+                                    @checked($filtros['conciliar_contable'] ?? true)>
+                                <label class="form-check-label" for="conciliar_contable">Conciliar contra mayor contable (cuentas compras e IVA crédito)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="solo_moneda_origen" id="solo_moneda_origen" value="1"
+                                    @checked(! empty($filtros['solo_moneda_origen']))>
+                                <label class="form-check-label" for="solo_moneda_origen">Convertir moneda extranjera con cotización del comprobante</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group row mb-0">
+                        <div class="{{ $colLabel }} d-none d-lg-block"></div>
+                        <div class="col-lg-10">
+                            <input type="hidden" name="consultar" value="1">
+                            <button type="submit" class="btn btn-primary btn-sm" id="btn-consultar">
+                                <i class="fa fa-search"></i> Consultar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+
+            @include('includes.proceso_overlay_aviso', [
+                'overlayId' => 'iva-compras-overlay',
+                'tituloId' => 'iva-compras-titulo',
+                'subtituloId' => 'iva-compras-subtitulo',
+                'titulo' => 'Consultando IVA compras…',
+                'subtitulo' => 'Puede demorar según el período. No cierre la página.',
+            ])
+
+            @if ($consultado ?? false)
+                <div class="card-body p-0 border-top">
+                    <div class="px-3 py-2 border-bottom bg-light">
+                        <p class="mb-0 small">
+                            <strong>Período:</strong> {{ $periodo_texto ?? '' }}
+                            · <strong>Orden:</strong> {{ $orden_texto ?? '' }}
+                            · <strong>Subdiario:</strong> {{ $subdiario_texto ?? '' }}
+                        </p>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
+                        <div class="mb-1 mb-md-0">
+                            @include('includes.exportar-tabla-queryparams', [
+                                'ruta' => 'listar_iva_compras',
+                                'queryparams' => array_merge($filtrosQuery ?? [], ['consultar' => 1]),
+                            ])
+                        </div>
+                        @if (! empty($resultado['stats']))
+                            <div class="small mb-1 mb-md-0 text-md-right">
+                                <span class="text-muted">Comprobantes:</span>
+                                <strong>{{ (int) ($resultado['stats']['comprobantes'] ?? 0) }}</strong>
+                                · Total <strong>{{ number_format((float) ($resultado['totales_general']['total'] ?? 0), 2, ',', '.') }}</strong>
+                            </div>
+                        @endif
+                    </div>
+
+                    @include('compras.iva_compras.partials.conciliacion_contable', [
+                        'resultado' => $resultado,
+                        'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
+                        'puede_ver_asiento' => $puede_ver_asiento ?? false,
+                        'puede_ver_comprobante' => $puede_ver_comprobante ?? false,
+                    ])
+
+                    <div class="table-responsive">
+                        <table id="tabla-paginada" class="table table-sm table-bordered table-hover mb-0" style="font-size: 0.8rem;">
+                            @include('compras.iva_compras.partials.tabla_datos', [
+                                'resultado' => $resultado,
+                                'filas' => $filasVista ?? [],
+                                'puede_ver_comprobante' => $puede_ver_comprobante ?? false,
+                                'puede_ver_proveedor' => $puede_ver_proveedor ?? false,
+                                'puede_ver_tipotransaccion' => $puede_ver_tipotransaccion ?? false,
+                                'para_pdf' => false,
+                            ])
+                        </table>
+                    </div>
+
+                    @if ($filas instanceof \Illuminate\Contracts\Pagination\LengthAwarePaginator)
+                        <div class="px-3 py-2 d-flex flex-wrap align-items-center justify-content-between border-top">
+                            <div class="small text-muted mb-1">
+                                @if ($filas->total() > 0)
+                                    Mostrando {{ $filas->firstItem() }}–{{ $filas->lastItem() }} de {{ $filas->total() }}
+                                @endif
+                            </div>
+                            <div>{{ $filas->links() }}</div>
+                        </div>
+                    @endif
+                </div>
+            @endif
+        </div>
+    </div>
+</div>
+@endsection

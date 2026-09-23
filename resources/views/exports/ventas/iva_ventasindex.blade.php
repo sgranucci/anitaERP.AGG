@@ -17,6 +17,8 @@
     };
     $columnasFijas = empty($clasificar_por_host) ? 7 : 8;
     $colspanTotal = $columnasFijas + count($resultado['columnas'] ?? []);
+    $cortarJurisdiccion = ! empty($cortar_por_jurisdiccion);
+    $jurisdiccionAnterior = null;
 @endphp
 <table>
     @if ($filaLogo)
@@ -48,6 +50,18 @@
         @endforeach
     </tr>
     @foreach ($filas as $fila)
+        @php
+            $jurClave = (string) ((int) ($fila['provincia_id'] ?? 0));
+            $jurLabel = (string) ($fila['provincia_label'] ?? 'Sin jurisdicción');
+        @endphp
+        @if ($cortarJurisdiccion && $jurClave !== $jurisdiccionAnterior)
+            <tr>
+                <td colspan="{{ $colspanTotal }}" style="font-weight: bold; background-color: #fdebd0;">
+                    Jurisdicción: {{ $jurLabel }}
+                </td>
+            </tr>
+            @php $jurisdiccionAnterior = $jurClave; @endphp
+        @endif
         <tr>
             <td>{{ $fila['cliente_codigo'] ?? '' }}</td>
             <td>{{ $fila['cliente_nombre'] ?? '' }}</td>
@@ -71,5 +85,32 @@
                 <td>{{ $fmtMonto($resultado['totales_general'][$col['key']] ?? 0) }}</td>
             @endforeach
         </tr>
+    @endif
+    @if ($cortarJurisdiccion && ! empty($resultado['totales_por_jurisdiccion']))
+        <tr>
+            <td colspan="{{ $colspanTotal }}" style="font-weight: bold;">Totales por jurisdicción</td>
+        </tr>
+        <tr>
+            <th>Jurisdicción</th>
+            <th>Comp.</th>
+            @foreach ($resultado['columnas'] ?? [] as $col)
+                <th>{{ $col['label'] }}</th>
+            @endforeach
+            @for ($i = 0; $i < max(0, $columnasFijas - 2); $i++)
+                <th></th>
+            @endfor
+        </tr>
+        @foreach ($resultado['totales_por_jurisdiccion'] as $tot)
+            <tr>
+                <td>{{ $tot['provincia_label'] ?? 'Sin jurisdicción' }}</td>
+                <td>{{ (int) ($tot['cantidad'] ?? 0) }}</td>
+                @foreach ($resultado['columnas'] ?? [] as $col)
+                    <td>{{ $fmtMonto($tot['columnas'][$col['key']] ?? 0) }}</td>
+                @endforeach
+                @for ($i = 0; $i < max(0, $columnasFijas - 2); $i++)
+                    <td></td>
+                @endfor
+            </tr>
+        @endforeach
     @endif
 </table>

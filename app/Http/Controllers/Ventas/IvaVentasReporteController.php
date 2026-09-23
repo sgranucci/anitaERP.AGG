@@ -6,10 +6,12 @@ namespace App\Http\Controllers\Ventas;
 
 use App\Exports\Ventas\IvaVentasListadoExport;
 use App\Http\Controllers\Controller;
+use App\Models\Configuracion\Provincia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Ventas\IvaVentasReporteService;
 use App\Support\Reportes\ReportePreferenciasUsuario;
+use App\Support\Ventas\IvaVentas\IvaVentasFeaturesSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
@@ -80,11 +82,18 @@ class IvaVentasReporteController extends Controller
             $filas->appends($filtrosQuery);
         }
 
+        $provincia = null;
+        if ((int) ($filtros['provincia_id'] ?? 0) > 0) {
+            $provincia = Provincia::query()->find((int) $filtros['provincia_id']);
+        }
+
         return view('ventas.iva_ventas.index', [
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'empresa_query' => $empresaQuery,
             'moneda_query' => $monedaQuery,
+            'provincia' => $provincia,
+            'features' => IvaVentasFeaturesSupport::all(),
             'orden_enum' => IvaVentasListadoFiltros::ORDENES,
             'subdiario_enum' => IvaVentasListadoFiltros::SUBDIARIOS,
             'consultado' => $consultado,
@@ -122,12 +131,18 @@ class IvaVentasReporteController extends Controller
         $resultado = $this->ampliarSubdiarioSiExcluyeTodo($filtros, $resultado, $subdiarioAjustado);
         $filas = $resultado['filas_display'] ?? $resultado['filas'];
 
+        $provincia = null;
+        if ((int) ($filtros['provincia_id'] ?? 0) > 0) {
+            $provincia = Provincia::query()->find((int) $filtros['provincia_id']);
+        }
+
         switch (strtoupper($formato)) {
             case 'PDF':
                 $view = \View::make('ventas.iva_ventas.listado', [
                     'resultado' => $resultado,
                     'filas' => $filas,
                     'filtros' => $filtros,
+                    'provincia' => $provincia,
                     'para_pdf' => true,
                     'puede_ver_venta' => false,
                 ])->render();

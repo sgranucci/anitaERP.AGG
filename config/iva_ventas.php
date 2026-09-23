@@ -23,7 +23,38 @@ declare(strict_types=1);
 |
 */
 
+$empresaEntorno = strtoupper(trim((string) env('EMPRESA', 'AGG')));
+$defaultSalaAgg = $empresaEntorno === 'AGG';
+
 return [
+    /*
+    |--------------------------------------------------------------------------
+    | Features de pantalla / proceso (Bingo, unidades, host, FSL Anita)
+    |--------------------------------------------------------------------------
+    |
+    | En AGG quedan encendidos por defecto. En Ferli / El Bierzo / otros se
+    | ocultan checkboxes y cuadros de sala. Override por .env sin redeploy.
+    |
+    */
+    'features' => [
+        'bingo_fsl' => filter_var(
+            env('IVA_VENTAS_BINGO_FSL', $defaultSalaAgg ? 'true' : 'false'),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        'unidades_negocio' => filter_var(
+            env('IVA_VENTAS_UNIDADES_NEGOCIO', $defaultSalaAgg ? 'true' : 'false'),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        'clasificar_por_host' => filter_var(
+            env('IVA_VENTAS_CLASIFICAR_HOST', $defaultSalaAgg ? 'true' : 'false'),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        'completar_fsl_anita' => filter_var(
+            env('IVA_VENTAS_FSL_ANITA', $defaultSalaAgg ? 'true' : 'false'),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+    ],
+
     'conciliacion' => [
         'cuentas_ventas_por_empresa' => [
             1 => [413010001, 414010001, 415010003, 414020001],

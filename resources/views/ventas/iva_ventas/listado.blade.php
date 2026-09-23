@@ -8,6 +8,13 @@
     $subtitulo = 'Período: '.IvaVentasListadoFiltros::formatearPeriodoTexto($filtros)
         .' · Orden: '.IvaVentasListadoFiltros::formatearOrdenTexto($filtros)
         .' · '.IvaVentasListadoFiltros::formatearSubdiarioTexto($filtros);
+    if ((int) ($filtros['provincia_id'] ?? 0) > 0) {
+        $provNombre = trim((string) (($provincia->nombre ?? '') ?: ('#'.(int) $filtros['provincia_id'])));
+        $subtitulo .= ' · Jurisdicción: '.$provNombre;
+    }
+    if (! empty($filtros['cortar_por_jurisdiccion'])) {
+        $subtitulo .= ' · Corte por jurisdicción';
+    }
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -125,6 +132,33 @@
         </table>
     @endif
 
+    @if (! empty($resultado['totales_por_jurisdiccion']))
+        <h3 class="seccion">Totales por jurisdicción (convenio multilateral)</h3>
+        @php $columnasJur = $resultado['columnas'] ?? []; @endphp
+        <table class="data" style="margin-bottom: 10px;">
+            <thead>
+                <tr>
+                    <th>Jurisdicción</th>
+                    <th class="text-right">Comp.</th>
+                    @foreach ($columnasJur as $col)
+                        <th class="text-right">{{ $col['label'] }}</th>
+                    @endforeach
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($resultado['totales_por_jurisdiccion'] as $tot)
+                    <tr>
+                        <td>{{ $tot['provincia_label'] ?? 'Sin jurisdicción' }}</td>
+                        <td class="text-right">{{ (int) ($tot['cantidad'] ?? 0) }}</td>
+                        @foreach ($columnasJur as $col)
+                            <td class="text-right">{{ number_format((float) ($tot['columnas'][$col['key']] ?? 0), 2, ',', '.') }}</td>
+                        @endforeach
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
+
     @if (! empty($resultado['totales_por_puntoventa']))
         <h3 class="seccion">Totales por punto de venta</h3>
         @php $columnas = $resultado['columnas'] ?? []; @endphp
@@ -161,6 +195,7 @@
             'resultado' => $resultado,
             'filas' => $filas,
             'clasificar_por_host' => ! empty($filtros['clasificar_por_host']),
+            'cortar_por_jurisdiccion' => ! empty($filtros['cortar_por_jurisdiccion']),
             'para_pdf' => true,
             'puede_ver_venta' => false,
             'mostrar_secciones' => true,

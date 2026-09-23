@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas;
 
+use App\Support\Ventas\IvaVentas\IvaVentasFeaturesSupport;
 use Illuminate\Http\Request;
 
 final class IvaVentasListadoFiltros
@@ -29,7 +30,7 @@ final class IvaVentasListadoFiltros
         self::SUBDIARIO_VENTAS_B => 'Ventas B (consumidor final)',
     ];
 
-  /**
+    /**
      * @return array<string, mixed>
      */
     public static function resolverDesdeRequest(Request $request): array
@@ -46,6 +47,22 @@ final class IvaVentasListadoFiltros
 
         $empresaId = (int) $request->input('empresa_id', 0);
         $monedaId = (int) $request->input('moneda_id', 1);
+        $provinciaId = max(0, (int) $request->input('provincia_id', 0));
+
+        $features = IvaVentasFeaturesSupport::all();
+        $consultando = $request->boolean('consultar');
+
+        $clasificarHost = $features['clasificar_por_host'] && $request->boolean('clasificar_por_host');
+        $conciliarPorUnidad = $features['unidades_negocio'] && (
+            $consultando
+                ? $request->boolean('conciliar_por_unidad', true)
+                : true
+        );
+        $completarFsl = $features['completar_fsl_anita'] && (
+            $consultando
+                ? $request->boolean('completar_fsl_anita', true)
+                : true
+        );
 
         return [
             'empresa_id' => $empresaId,
@@ -53,21 +70,19 @@ final class IvaVentasListadoFiltros
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', date('Y-m-d'))),
             'orden_fecha' => $orden,
             'subdiario' => $subdiario,
-            'clasificar_por_host' => $request->boolean('clasificar_por_host'),
+            'provincia_id' => $provinciaId,
+            'cortar_por_jurisdiccion' => $request->boolean('cortar_por_jurisdiccion'),
+            'clasificar_por_host' => $clasificarHost,
             'agrupar_b_por_dia' => $request->boolean('agrupar_b_por_dia'),
             'auditar_ctamov' => $request->boolean('auditar_ctamov'),
-            'conciliar_contable' => $request->boolean('consultar')
+            'conciliar_contable' => $consultando
                 ? $request->boolean('conciliar_contable', true)
                 : true,
-            'conciliar_por_unidad' => $request->boolean('consultar')
-                ? $request->boolean('conciliar_por_unidad', true)
-                : true,
-            'solo_moneda_origen' => $request->boolean('consultar')
+            'conciliar_por_unidad' => $conciliarPorUnidad,
+            'solo_moneda_origen' => $consultando
                 ? $request->boolean('solo_moneda_origen')
                 : true,
-            'completar_fsl_anita' => $request->boolean('consultar')
-                ? $request->boolean('completar_fsl_anita', true)
-                : true,
+            'completar_fsl_anita' => $completarFsl,
             'moneda_id' => $monedaId > 0 ? $monedaId : 1,
         ];
     }
@@ -92,6 +107,15 @@ final class IvaVentasListadoFiltros
             'subdiario' => $filtros['subdiario'] ?? self::SUBDIARIO_VENTAS_A_B,
             'moneda_id' => (int) ($filtros['moneda_id'] ?? 1),
         ];
+
+        $provinciaId = (int) ($filtros['provincia_id'] ?? 0);
+        if ($provinciaId > 0) {
+            $out['provincia_id'] = $provinciaId;
+        }
+
+        if (! empty($filtros['cortar_por_jurisdiccion'])) {
+            $out['cortar_por_jurisdiccion'] = 1;
+        }
 
         if (! empty($filtros['clasificar_por_host'])) {
             $out['clasificar_por_host'] = 1;

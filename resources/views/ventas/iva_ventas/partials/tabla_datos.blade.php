@@ -6,12 +6,14 @@
     $puedeVerTipotransaccion = $puede_ver_tipotransaccion ?? false;
     $paraPdf = $para_pdf ?? false;
     $clasificarHost = $clasificar_por_host ?? false;
+    $cortarJurisdiccion = $cortar_por_jurisdiccion ?? false;
     $mostrarSecciones = $mostrar_secciones ?? true;
     $queryConsulta = ['origen' => 'modal_consulta', 'vista' => 'consulta'];
     $columnas = $resultado['columnas'] ?? \App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport::COLUMNAS;
     $colSpan = 7 + count($columnas) + ($clasificarHost ? 1 : 0);
     $seccionAnterior = null;
     $hostAnterior = null;
+    $jurisdiccionAnterior = null;
     $claseFila = static function (array $fila): string {
         $clases = [];
         if ($fila['anulada'] ?? false) {
@@ -46,10 +48,22 @@
         @php
             $seccion = $fila['seccion'] ?? '';
             $host = (string) ($fila['host'] ?? '');
+            $jurClave = (string) ((int) ($fila['provincia_id'] ?? 0));
+            $jurLabel = (string) ($fila['provincia_label'] ?? 'Sin jurisdicción');
             $clienteId = (int) ($fila['cliente_id'] ?? 0);
             $pvId = (int) ($fila['puntoventa_id'] ?? 0);
             $tipoId = (int) ($fila['tipotransaccion_id'] ?? 0);
         @endphp
+        @if ($mostrarSecciones && $cortarJurisdiccion && $jurClave !== $jurisdiccionAnterior)
+            <tr class="font-weight-bold" style="background-color: #fdebd0;">
+                <td colspan="{{ $colSpan }}">Jurisdicción: {{ $jurLabel }}</td>
+            </tr>
+            @php
+                $jurisdiccionAnterior = $jurClave;
+                $seccionAnterior = null;
+                $hostAnterior = null;
+            @endphp
+        @endif
         @if ($mostrarSecciones && $seccion !== $seccionAnterior)
             <tr class="font-weight-bold" style="background-color: #d6eaf8;">
                 <td colspan="{{ $colSpan }}">{{ $fila['seccion_label'] ?? $seccion }}</td>

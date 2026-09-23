@@ -9,6 +9,7 @@ use App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionCuentaSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionModoSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasConciliacionUnidadCuentaSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasFeaturesSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasUnidadNegocioSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
 use Illuminate\Support\Facades\DB;
@@ -58,7 +59,8 @@ final class IvaVentasConciliacionContableService
             $filas,
         );
 
-        $conciliarPorUnidad = ! empty($filtros['conciliar_por_unidad']);
+        $conciliarPorUnidad = IvaVentasFeaturesSupport::unidadesNegocio()
+            && ! empty($filtros['conciliar_por_unidad']);
         $porUnidadNegocio = $conciliarPorUnidad
             ? $this->armarPorUnidadNegocio($empresaId, $filtros, $filas, $contableEmpresa, $ctamov)
             : ['habilitada' => false];

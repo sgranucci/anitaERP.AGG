@@ -9,7 +9,7 @@ use App\Models\Compras\Concepto_Ivacompra;
 /**
  * Cuenta DEBE del neto cuando la factura no tiene OC ni COM.
  * La cuenta cargada en un neto (exento, gravado) se reutiliza en los otros netos vacíos.
- * La cuenta del maestro (IVA) no se copia: cada impuesto conserva la suya.
+ * Impuestos/percepciones: si el maestro tiene cuenta DEBE, esa manda (no se pisa con contrato).
  */
 final class ComprobanteProveedorCuentaDebeNetoSupport
 {
@@ -19,9 +19,23 @@ final class ComprobanteProveedorCuentaDebeNetoSupport
         ?Concepto_Ivacompra $concepto,
     ): int {
         $empresaId = (int) ($comprobante->empresa_id ?? 0);
+        $empresaArg = $empresaId > 0 ? $empresaId : null;
+
+        // IVA / percepciones: maestro primero (evita heredar la cuenta del contrato manual).
+        if ($concepto !== null && ComprobanteProveedorConceptoIvaTipos::esImpuesto(
+            (string) ($concepto->tipoconcepto ?? '')
+        )) {
+            $maestro = (int) $concepto->cuentacontableDebeIdParaEmpresa($empresaArg);
+            if ($maestro > 0) {
+                return $maestro;
+            }
+
+            return (int) ($linea->cuentacontabledebe_id ?? 0);
+        }
+
         $cuentaId = (int) ($linea->cuentacontabledebe_id ?? 0);
         if ($cuentaId <= 0 && $concepto !== null) {
-            $cuentaId = (int) $concepto->cuentacontableDebeIdParaEmpresa($empresaId > 0 ? $empresaId : null);
+            $cuentaId = (int) $concepto->cuentacontableDebeIdParaEmpresa($empresaArg);
         }
         if ($cuentaId > 0) {
             return $cuentaId;

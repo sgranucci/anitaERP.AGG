@@ -11,6 +11,43 @@ use App\Models\Ventas\Cliente_Entrega;
  */
 final class ClienteProvinciaIibbSupport
 {
+    /**
+     * Provincia de entrega para asignación de ventas (convenio multilateral).
+     *
+     * Prioridad: entrega.provincia_id → entrega.provincia_iibb_id
+     * → cliente.provincia_iibb_id → cliente.provincia_id
+     * → provincia grabada en la factura (snapshot).
+     */
+    public static function idProvinciaEntregaParaConvenio(
+        ?Cliente $cliente,
+        ?Cliente_Entrega $entrega = null,
+        ?int $ventaProvinciaId = null,
+    ): ?int {
+        $domicilioEntrega = (int) ($entrega->provincia_id ?? 0);
+        if ($domicilioEntrega > 0) {
+            return $domicilioEntrega;
+        }
+
+        $sedeEntrega = self::idDeEntrega($entrega);
+        if ($sedeEntrega !== null) {
+            return $sedeEntrega;
+        }
+
+        $sedeCliente = self::idDe($cliente);
+        if ($sedeCliente !== null) {
+            return $sedeCliente;
+        }
+
+        $domicilioCliente = (int) ($cliente->provincia_id ?? 0);
+        if ($domicilioCliente > 0) {
+            return $domicilioCliente;
+        }
+
+        $ventaProv = (int) ($ventaProvinciaId ?? 0);
+
+        return $ventaProv > 0 ? $ventaProv : null;
+    }
+
     public static function idDe(?Cliente $cliente): ?int
     {
         $id = (int) ($cliente->provincia_iibb_id ?? 0);

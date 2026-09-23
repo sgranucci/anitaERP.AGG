@@ -15,6 +15,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Compras\ConceptoIvacompraListadoFiltros;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
+use App\Support\Compras\IvaCompras\IvaComprasColumnasSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
@@ -102,6 +103,7 @@ class Concepto_IvacompraController extends Controller
         can('crear-concepto-iva-compra');
 
         $this->concepto_ivacompraRepository->create($request->validated());
+        IvaComprasColumnasSupport::olvidarCache();
 
         return redirect()
             ->route('concepto_ivacompra', QueryRetornoListado::desdeRequest($request, ConceptoIvacompraListadoFiltros::class))
@@ -125,6 +127,7 @@ class Concepto_IvacompraController extends Controller
         can('actualizar-concepto-iva-compra');
 
         $this->concepto_ivacompraRepository->update($request->validated(), $id);
+        IvaComprasColumnasSupport::olvidarCache();
 
         return redirect()
             ->route('concepto_ivacompra', QueryRetornoListado::desdeRequest($request, ConceptoIvacompraListadoFiltros::class))
@@ -137,6 +140,8 @@ class Concepto_IvacompraController extends Controller
 
         if ($request->ajax()) {
             if ($this->concepto_ivacompraRepository->delete($id)) {
+                IvaComprasColumnasSupport::olvidarCache();
+
                 return response()->json(['mensaje' => 'ok']);
             }
 
