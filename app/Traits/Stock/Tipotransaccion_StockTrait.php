@@ -8,6 +8,7 @@ trait Tipotransaccion_StockTrait
         'E' => 'Entradas de stock',
         'S' => 'Salidas de stock',
         'T' => 'Transferencia de stock',
+        'C' => 'Canje de stock (+/−)',
     ];
 
     public static $enumSigno = [

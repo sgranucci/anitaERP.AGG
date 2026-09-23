@@ -28,6 +28,7 @@ use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaCodigoSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
+use App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
@@ -766,7 +767,7 @@ class TransferenciaMercaderiaService
             $this->transferenciaAsientoService->assertCuadreAntesDeConfirmar($transferencia);
 
             $lineas = $transferencia->articulos->all();
-            $payloadEntrada = $this->armarPayloadMovimientoDesdePersistidas($lineas, 'entrada');
+            $payloadEntrada = $this->armarPayloadMovimientoDesdePersistidas($lineas, 'entrada', $transferencia);
             $tipo = $transferencia->tipotransaccion_stock;
             $etiquetaOrigen = $esOrigenBien
                 ? TransferenciaBienUsoSupport::etiquetaBien($transferencia->bienUsoOrigen)
@@ -821,7 +822,7 @@ class TransferenciaMercaderiaService
 
         return DB::transaction(function () use ($transferencia, $usuarioId, $motivo) {
             $lineas = $transferencia->articulos->all();
-            $payloadReverso = $this->armarPayloadMovimientoDesdePersistidas($lineas, 'salida');
+            $payloadReverso = $this->armarPayloadMovimientoDesdePersistidas($lineas, 'salida', $transferencia);
             $esOrigenBien = (int) ($transferencia->bien_uso_origen_id ?? 0) > 0;
 
             $this->grabarMovimiento(
@@ -922,11 +923,20 @@ class TransferenciaMercaderiaService
             $item++;
             $numeroparte = trim((string) ($linea['numeroparte'] ?? ''));
             $unidades = UnidadesCajaPiezaSupport::extraerDeLinea($linea);
+            $combinacionId = (int) ($linea['combinacion_id'] ?? 0);
+            $moduloId = (int) ($linea['modulo_id'] ?? 0);
+            $medidas = $linea['medidas'] ?? '';
+            if (is_array($medidas)) {
+                $medidas = json_encode($medidas, JSON_UNESCAPED_UNICODE) ?: '';
+            }
             $resueltas[] = array_merge($conv, [
                 'item' => $item,
                 'numeroparte' => $numeroparte !== '' ? $numeroparte : null,
                 'caja' => $unidades['caja'],
                 'pieza' => $unidades['pieza'],
+                'combinacion_id' => $combinacionId > 0 ? $combinacionId : null,
+                'modulo_id' => $moduloId > 0 ? $moduloId : null,
+                'medidas' => is_string($medidas) ? $medidas : '',
             ]);
         }
 
@@ -1205,22 +1215,36 @@ class TransferenciaMercaderiaService
         $precios = [];
         $items = [];
         $numeropartes = [];
+        $combinacionesId = [];
+        $modulosId = [];
+        $medidas = [];
 
         foreach ($lineas as $linea) {
             if ($lado === 'salida') {
-                $articulosId[] = (int) $linea['articulo_origen_id'];
-                $cantidades[] = (float) $linea['cantidad_origen'];
-                $precios[] = (float) $linea['precio_costo_origen'];
+                $articulosId[] = (int) ($linea['articulo_origen_id'] ?? $linea['articulo_id'] ?? 0);
+                $cantidades[] = (float) ($linea['cantidad_origen'] ?? $linea['cantidad'] ?? 0);
+                $precios[] = (float) ($linea['precio_costo_origen'] ?? $linea['precio'] ?? 0);
             } else {
-                $articulosId[] = (int) $linea['articulo_destino_id'];
-                $cantidades[] = (float) $linea['cantidad_destino'];
-                $precios[] = (float) $linea['precio_costo_destino'];
+                $articulosId[] = (int) ($linea['articulo_destino_id'] ?? $linea['articulo_id'] ?? 0);
+                $cantidades[] = (float) ($linea['cantidad_destino'] ?? $linea['cantidad'] ?? 0);
+                $precios[] = (float) ($linea['precio_costo_destino'] ?? $linea['precio'] ?? 0);
             }
-            $items[] = (int) $linea['item'];
+            $items[] = (int) ($linea['item'] ?? (count($items) + 1));
             $numeropartes[] = (string) ($linea['numeroparte'] ?? '');
             $unidades = UnidadesCajaPiezaSupport::extraerDeLinea($linea);
             $cajas[] = $unidades['caja'];
             $piezas[] = $unidades['pieza'];
+            $combinacionesId[] = isset($linea['combinacion_id']) && (int) $linea['combinacion_id'] > 0
+                ? (int) $linea['combinacion_id']
+                : null;
+            $modulosId[] = isset($linea['modulo_id']) && (int) $linea['modulo_id'] > 0
+                ? (int) $linea['modulo_id']
+                : null;
+            $medRaw = $linea['medidas'] ?? '';
+            if (is_array($medRaw)) {
+                $medRaw = json_encode($medRaw, JSON_UNESCAPED_UNICODE) ?: '';
+            }
+            $medidas[] = is_string($medRaw) ? $medRaw : '';
         }
 
         $n = count($articulosId);
@@ -1228,8 +1252,8 @@ class TransferenciaMercaderiaService
         return [
             'articulos_id' => $articulosId,
             'skus' => array_fill(0, $n, ''),
-            'combinaciones_id' => array_fill(0, $n, null),
-            'modulos_id' => array_fill(0, $n, null),
+            'combinaciones_id' => $combinacionesId,
+            'modulos_id' => $modulosId,
             'items' => $items,
             'cantidades' => $cantidades,
             'cajas' => $cajas,
@@ -1240,7 +1264,7 @@ class TransferenciaMercaderiaService
             'monedas_id' => array_fill(0, $n, null),
             'descuentos' => array_fill(0, $n, 0),
             'loteids' => array_fill(0, $n, 0),
-            'medidas' => [],
+            'medidas' => $medidas,
             'numeropartes' => $numeropartes,
         ];
     }
@@ -1248,10 +1272,19 @@ class TransferenciaMercaderiaService
     /**
      * @param  list<Transferencia_Mercaderia_Articulo>  $lineas
      */
-    private function armarPayloadMovimientoDesdePersistidas(array $lineas, string $lado): array
+    private function armarPayloadMovimientoDesdePersistidas(array $lineas, string $lado, ?Transferencia_Mercaderia $transferencia = null): array
     {
+        $detalleSalida = [];
+        if ($transferencia !== null && (int) ($transferencia->movimientostock_salida_id ?? 0) > 0) {
+            $movSalida = \App\Models\Stock\MovimientoStock::query()
+                ->with(['articulos_movimiento.articulo_movimiento_talles.talles'])
+                ->find((int) $transferencia->movimientostock_salida_id);
+            $detalleSalida = TransferenciaMercaderiaDetalleFerliSupport::lineasPayloadDesdeMovimiento($movSalida);
+        }
+
         $mapped = [];
-        foreach ($lineas as $linea) {
+        foreach ($lineas as $i => $linea) {
+            $detalle = $detalleSalida[$i] ?? [];
             $mapped[] = [
                 'item' => (int) $linea->item,
                 'articulo_origen_id' => (int) $linea->articulo_origen_id,
@@ -1260,9 +1293,12 @@ class TransferenciaMercaderiaService
                 'cantidad_destino' => (float) $linea->cantidad_destino,
                 'precio_costo_origen' => (float) $linea->precio_costo_origen,
                 'precio_costo_destino' => (float) $linea->precio_costo_destino,
-                'numeroparte' => $linea->numeroparte,
-                'caja' => (float) ($linea->caja ?? 0),
-                'pieza' => (float) ($linea->pieza ?? 0),
+                'numeroparte' => $linea->numeroparte ?? ($detalle['numeroparte'] ?? null),
+                'caja' => (float) ($linea->caja ?? $detalle['caja'] ?? 0),
+                'pieza' => (float) ($linea->pieza ?? $detalle['pieza'] ?? 0),
+                'combinacion_id' => $detalle['combinacion_id'] ?? null,
+                'modulo_id' => $detalle['modulo_id'] ?? null,
+                'medidas' => $detalle['medidas'] ?? '',
             ];
         }
 

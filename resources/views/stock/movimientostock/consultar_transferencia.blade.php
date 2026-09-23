@@ -82,6 +82,10 @@ Transferencia {{ $transferencia->codigo }}
                             <th>#</th>
                             <th>SKU origen</th>
                             <th>Art&iacute;culo origen</th>
+                            @if (! empty($mostrarDetalleFerli))
+                                <th>Color</th>
+                                <th>Talles</th>
+                            @endif
                             <th class="text-right">Cant. origen</th>
                             <th class="text-right">Costo orig.</th>
                             <th>SKU destino</th>
@@ -92,6 +96,9 @@ Transferencia {{ $transferencia->codigo }}
                     </thead>
                     <tbody>
                         @foreach ($transferencia->articulos as $item)
+                            @php
+                                $det = ($detalleFerliPorItem ?? [])[(int) $item->item] ?? null;
+                            @endphp
                             <tr>
                                 <td>{{ $item->item }}</td>
                                 <td>
@@ -108,6 +115,10 @@ Transferencia {{ $transferencia->codigo }}
                                         'titulo' => 'Consultar artículo origen',
                                     ])
                                 </td>
+                                @if (! empty($mostrarDetalleFerli))
+                                    <td>{{ $det['combinacion_etiqueta'] ?? '—' }}</td>
+                                    <td>{{ $det['medidas_txt'] ?? '—' }}</td>
+                                @endif
                                 <td class="text-right">{{ number_format((float) $item->cantidad_origen, 2, ',', '.') }}</td>
                                 <td class="text-right">{{ number_format((float) $item->precio_costo_origen, 4, ',', '.') }}</td>
                                 <td>

@@ -370,6 +370,10 @@
         @endphp
         <div class="row" id="ms-surmar-workbench">
             <div class="col-12 ms-surmar-col-items" id="ms-surmar-col-items">
+        <div class="alert alert-info py-2 px-3 mb-2" id="ms_aviso_canje" style="display:none;">
+            <strong>Canje:</strong> en cada rengl&oacute;n eleg&iacute; <em>Sale</em> (resta stock) o <em>Entra</em> (suma).
+            Hace falta al menos una l&iacute;nea de cada sentido en el mismo dep&oacute;sito (p. ej. talle/color incorrecto que sale y el correcto que entra).
+        </div>
         <div class="table-responsive">
     	<table class="table table-sm table-bordered table-hover table-ms-items-compact" id="tabla-items-movimientostock">
     		<thead class="thead-light">
@@ -380,6 +384,7 @@
     				<th class="col-desc">Descripci&oacute;n</th>
     				<th class="col-npu ms-col-npu-baja text-center" style="display:none;" title="N&uacute;mero de parte &uacute;nica">NPU</th>
     				<th class="col-saldo-orig text-right" title="Saldo en dep&oacute;sito origen">Saldo orig.</th>
+                    <th class="col-sentido ms-col-canje-sentido" style="display:none;" title="Sale resta; Entra suma">Sentido</th>
                     @if($movimientoStockModoFerli)
     				<th class="col-comb">Combinaci&oacute;n</th>
     				<th class="col-mod">M&oacute;dulo</th>
@@ -438,6 +443,15 @@
                                 'numeroparte' => old('numeropartes.'.$loop->index, $pedidoitem->numeroparte ?? ''),
                             ])
                             @include('stock.movimientostock.partials.fila_saldo_origen')
+                            @php
+                                $sentidoLinea = old(
+                                    'sentidos.'.$loop->index,
+                                    \App\Support\Stock\MovimientoStockCanjeSupport::sentidoDesdeCantidad((float) ($pedidoitem->cantidad ?? 0))
+                                );
+                            @endphp
+                            @include('stock.movimientostock.partials.fila_sentido_canje', [
+                                'sentido' => $sentidoLinea,
+                            ])
                             @if($movimientoStockModoFerli)
                             @php
                                 $combModel = $pedidoitem->combinaciones ?? null;

@@ -168,6 +168,8 @@ class MovimientoStockController extends Controller
         return view('stock.movimientostock.consultar_transferencia', [
             'transferencia' => $transferencia,
             'estadosTransferencia' => \App\Support\Stock\TransferenciaMercaderiaEstados::etiquetas(),
+            'detalleFerliPorItem' => \App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport::porItemDesdeSalida($transferencia),
+            'mostrarDetalleFerli' => \App\Support\Stock\MovimientoStockFerliSupport::esCalzadosFerli(),
         ]);
     }
 
@@ -939,7 +941,7 @@ class MovimientoStockController extends Controller
                 &$tipotransaccion_query, &$lote_query, $movimientostock = null)
     {
         $mventa_query = Mventa::all();
-        $tipotransaccion_query = $this->tipotransaccionStockRepository->all(['E', 'S', 'T'], ['A']);
+        $tipotransaccion_query = $this->tipotransaccionStockRepository->all(['E', 'S', 'T', 'C'], ['A']);
         if ($movimientostock !== null) {
             $tipoActualId = (int) ($movimientostock->tipotransaccion_stock_id ?? 0);
             if ($tipoActualId > 0 && ! $tipotransaccion_query->contains('id', $tipoActualId)) {
@@ -1037,9 +1039,21 @@ class MovimientoStockController extends Controller
         foreach ($request->input('articulos_id', []) as $i => $articuloId) {
             $cantidad = abs((float) ($request->input('cantidades', [])[$i] ?? 0));
             if ((int) $articuloId > 0 && $cantidad > 0) {
+                $combinacionId = (int) ($request->input('combinaciones_id', [])[$i] ?? 0);
+                $moduloId = (int) ($request->input('modulos_id', [])[$i] ?? 0);
+                $medidas = $request->input('medidas', [])[$i] ?? '';
+                if (is_array($medidas)) {
+                    $medidas = json_encode($medidas, JSON_UNESCAPED_UNICODE) ?: '';
+                }
                 $lineas[] = [
                     'articulo_id' => (int) $articuloId,
                     'cantidad' => $cantidad,
+                    'combinacion_id' => $combinacionId > 0 ? $combinacionId : null,
+                    'modulo_id' => $moduloId > 0 ? $moduloId : null,
+                    'medidas' => is_string($medidas) ? $medidas : '',
+                    'numeroparte' => trim((string) ($request->input('numeropartes', [])[$i] ?? '')),
+                    'caja' => (float) ($request->input('cajas', [])[$i] ?? 0),
+                    'pieza' => (float) ($request->input('piezas', [])[$i] ?? 0),
                 ];
             }
         }

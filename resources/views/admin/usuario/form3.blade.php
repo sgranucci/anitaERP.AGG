@@ -2,6 +2,12 @@
     <div class="card-header py-2">
         <strong class="text-dark"><i class="fas fa-exchange-alt mr-1"></i> Tipos de transacci&oacute;n de stock autorizados</strong>
         <small class="text-muted d-block d-md-inline d-md-ml-2">Opcional &mdash; sin filas = todas las transacciones activas</small>
+        @if (\App\Support\Configuracion\EntornoEmpresaSupport::esFerli())
+            <div class="alert alert-info py-2 px-3 mb-0 mt-2 mb-2">
+                Para personal de local: agregar solo <strong>TRA</strong> (transferencias) y <strong>ENT</strong> (entradas).
+                Sin filas el usuario puede usar todos los tipos (ajustes SOB/FAL, salidas, etc.).
+            </div>
+        @endif
     </div>
     <div class="card-body">
         <table class="table table-sm" id="usuario-tipotransaccion-stock-table">

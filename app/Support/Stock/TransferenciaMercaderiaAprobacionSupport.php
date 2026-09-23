@@ -2,9 +2,8 @@
 
 namespace App\Support\Stock;
 
-use App\Models\Stock\Articulo;
-use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 final class TransferenciaMercaderiaAprobacionSupport
 {
@@ -14,6 +13,9 @@ final class TransferenciaMercaderiaAprobacionSupport
 
     public const MODO_SIEMPRE = 'siempre';
 
+    /** En Ferli solo TRA queda pendiente de recepción; otros tipos T impactan al instante. */
+    public const ABREV_APROBACION_FERLI = 'TRA';
+
     /**
      * ¿La transferencia queda pendiente de aprobación (con aviso)?
      *
@@ -22,6 +24,10 @@ final class TransferenciaMercaderiaAprobacionSupport
      */
     public static function requiereAprobacion(?Tipotransaccion_Stock $tipo, ?bool $decisionAvisoUsuario = null): bool
     {
+        if (EntornoEmpresaSupport::esFerli() && ! self::esTipoAprobableFerli($tipo)) {
+            return false;
+        }
+
         $modo = (string) config('stock.transferencia_modo_aprobacion', self::MODO_TIPO_TRANSACCION);
 
         return match ($modo) {
@@ -29,6 +35,15 @@ final class TransferenciaMercaderiaAprobacionSupport
             self::MODO_SIEMPRE => true,
             default => self::requiereAprobacionPorTipo($tipo, $decisionAvisoUsuario),
         };
+    }
+
+    public static function esTipoAprobableFerli(?Tipotransaccion_Stock $tipo): bool
+    {
+        if ($tipo === null) {
+            return false;
+        }
+
+        return strtoupper(trim((string) ($tipo->abreviatura ?? ''))) === self::ABREV_APROBACION_FERLI;
     }
 
     /**

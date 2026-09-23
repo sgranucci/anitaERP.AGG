@@ -5,7 +5,9 @@ namespace App\Services\Stock;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Pdf\DompdfPaperSupport;
+use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
+use App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport;
 
 class TransferenciaMercaderiaPdfService
 {
@@ -45,6 +47,12 @@ class TransferenciaMercaderiaPdfService
             $totalDestino += abs((float) $linea->cantidad_destino);
         }
 
+        $detalleFerliPorItem = TransferenciaMercaderiaDetalleFerliSupport::porItemDesdeSalida($transferencia);
+        $mostrarDetalleFerli = MovimientoStockFerliSupport::esCalzadosFerli()
+            && collect($detalleFerliPorItem)->contains(static function (array $d): bool {
+                return $d['combinacion_etiqueta'] !== '' || $d['medidas_txt'] !== '';
+            });
+
         $html = view('stock.movimientostock.transferencia_com_pdf', compact(
             'transferencia',
             'logos',
@@ -53,6 +61,8 @@ class TransferenciaMercaderiaPdfService
             'destino',
             'totalOrigen',
             'totalDestino',
+            'detalleFerliPorItem',
+            'mostrarDetalleFerli',
         ))->render();
 
         $pdf = app('dompdf.wrapper');

@@ -64,10 +64,13 @@ final class ArticuloMovimientoCantidadSignoSupport
 
     /**
      * Condición SQL para filtrar filas con signo incorrecto (tipotransaccion stock).
+     * Canje (operacion C) admite ambos signos en el mismo comprobante.
      */
     public static function sqlFiltroSignoIncorrectoStock(): string
     {
-        return '(ts.signo = 1 AND am.cantidad < 0)
-            OR (ts.signo = -1 AND am.cantidad > 0)';
+        return '((ts.operacion IS NULL OR ts.operacion <> \'C\') AND (('
+            .'(ts.signo = 1 AND am.cantidad < 0)'
+            .' OR (ts.signo = -1 AND am.cantidad > 0)'
+            .')))';
     }
 }

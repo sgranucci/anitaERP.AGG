@@ -6,6 +6,7 @@ use App\Models\Stock\Depmae;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
+use App\Support\Stock\MovimientoStockCanjeSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
@@ -139,6 +140,14 @@ class ValidacionMovimientoStock extends FormRequest
                     AltaNpuMovimientoStockSupport::validarAntesDeGrabar($this->all(), $tipo);
                 } catch (\RuntimeException $e) {
                     $validator->errors()->add('cantidades', $e->getMessage());
+                }
+            }
+
+            if ($tipo && MovimientoStockCanjeSupport::esTipoCanje($tipo) && ! $this->validarComoTransferenciaNueva()) {
+                $payload = MovimientoStockCanjeSupport::normalizarPayloadFormulario($this->all(), $tipo);
+                $check = MovimientoStockCanjeSupport::validarLineas($payload);
+                if (! $check['ok']) {
+                    $validator->errors()->add('cantidades', (string) $check['mensaje']);
                 }
             }
 

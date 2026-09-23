@@ -91,15 +91,15 @@ class Tipotransaccion_StockController extends Controller
 
         $consulta = strtoupper(trim((string) ($request->get('consulta') ?? '')));
         $omitirFiltroUsuario = $request->boolean('omitir_filtro_usuario');
-        $operaciones = collect($request->input('operaciones', ['E', 'S', 'T']))
+        $operaciones = collect($request->input('operaciones', ['E', 'S', 'T', 'C']))
             ->map(fn ($op) => strtoupper(trim((string) $op)))
-            ->filter(fn ($op) => in_array($op, ['E', 'S', 'T'], true))
+            ->filter(fn ($op) => in_array($op, ['E', 'S', 'T', 'C'], true))
             ->unique()
             ->values()
             ->all();
 
         if ($operaciones === []) {
-            $operaciones = ['E', 'S', 'T'];
+            $operaciones = ['E', 'S', 'T', 'C'];
         }
 
         $query = Tipotransaccion_Stock::query()
@@ -167,15 +167,15 @@ class Tipotransaccion_StockController extends Controller
         }
 
         $omitirFiltroUsuario = $request->boolean('omitir_filtro_usuario');
-        $operaciones = collect($request->input('operaciones', ['E', 'S', 'T']))
+        $operaciones = collect($request->input('operaciones', ['E', 'S', 'T', 'C']))
             ->map(fn ($op) => strtoupper(trim((string) $op)))
-            ->filter(fn ($op) => in_array($op, ['E', 'S', 'T'], true))
+            ->filter(fn ($op) => in_array($op, ['E', 'S', 'T', 'C'], true))
             ->unique()
             ->values()
             ->all();
 
         if ($operaciones === []) {
-            $operaciones = ['E', 'S', 'T'];
+            $operaciones = ['E', 'S', 'T', 'C'];
         }
 
         $query = Tipotransaccion_Stock::query()

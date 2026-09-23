@@ -99,12 +99,20 @@
 			if (op === 'S') {
 				return true;
 			}
+			if (op === 'C') {
+				return true;
+			}
 			return op === 'T' && $('#tm_deposito_salida').is(':visible');
 		}
 
 		if (!flError && movimientoRestaStockEnDepositoOrigen()) {
+			var esCanjeOp = typeof window.msOperacionTipoTransaccion === 'function'
+				&& window.msOperacionTipoTransaccion() === 'C';
 			$("#tbody-tabla tr.item-pedido").each(function () {
 				var $tr = $(this);
+				if (esCanjeOp && String($tr.find('.ms-sentido-canje').val() || 'E').toUpperCase() !== 'S') {
+					return;
+				}
 				var cant = parseFloat($tr.find(".cantidad-stock").val() || $tr.find(".cantidad").val() || 0);
 				if (!cant || cant <= 0) {
 					return;
@@ -187,7 +195,16 @@
 			}
 
 			// Sin combinaciones = artículo no de venta → solo cantidad + precio (modo original).
-			var esArticuloVenta = comb.length > 0 || (selectedId !== '' && found);
+			// Histórico / TM plana: cantidad grabada sin combinación ni medidas → no forzar
+			// modal de talles (eso dejaba la cantidad en 0 al aceptar el modal vacío).
+			var medidasVacias = !String($tr.find('.medidas').val() || '').trim();
+			var cantActual = parseFloat($tr.find('.cantidad').first().val()) || 0;
+			var esArticuloVenta;
+			if (!selectedId && medidasVacias && cantActual > 0) {
+				esArticuloVenta = false;
+			} else {
+				esArticuloVenta = comb.length > 0 || (selectedId !== '' && found);
+			}
 			if (typeof window.msAplicarModoLineaFerli === 'function') {
 				window.msAplicarModoLineaFerli($tr, esArticuloVenta);
 			}
@@ -605,7 +622,13 @@
 
 				sumaPares(modalActivo, 'cantidadesportalles');
 				muestraTotalPares();
-				$tr.find('.cantidad').first().val(totPares);
+				var cantPrevia = parseFloat($tr.find('.cantidad').first().val()) || 0;
+				// No pisar una cantidad válida con 0 si el modal quedó vacío (ej. edición histórica).
+				if (!(totPares === 0 && cantPrevia > 0 && !jsonObject.some(function (r) {
+					return parseFloat(r.cantidad) > 0;
+				}))) {
+					$tr.find('.cantidad').first().val(totPares);
+				}
 				if (typeof TotalParesPedido === 'function') {
 					TotalParesPedido();
 				}

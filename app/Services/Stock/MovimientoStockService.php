@@ -18,6 +18,7 @@ use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\ArticuloPrecioMovimientoStockSupport;
 use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
+use App\Support\Stock\MovimientoStockCanjeSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
@@ -118,15 +119,28 @@ class MovimientoStockService
 			AltaNpuMovimientoStockSupport::validarAntesDeGrabar($data, $tipotransaccion);
 			AltaNpuMovimientoStockSupport::normalizarLineasParaGrabar($data, $tipotransaccion);
 
+			if (MovimientoStockCanjeSupport::esTipoCanje($tipotransaccion)) {
+				$data = MovimientoStockCanjeSupport::normalizarPayloadFormulario($data, $tipotransaccion);
+				$checkCanje = MovimientoStockCanjeSupport::validarLineas($data);
+				if (! $checkCanje['ok']) {
+					throw new \Exception((string) $checkCanje['mensaje']);
+				}
+			}
+
 			$signoCantidadMovimiento = $data['signo_cantidad'] ?? $tipotransaccion->signo;
+			$esCanje = MovimientoStockCanjeSupport::esTipoCanje($tipotransaccion);
+			$signoParaBloqueoRecuento = $esCanje
+				&& MovimientoStockCanjeSupport::tieneLineasSalida(array_values((array) ($data['cantidades'] ?? [])))
+				? 'R'
+				: (is_string($signoCantidadMovimiento)
+					? $signoCantidadMovimiento
+					: (string) ($tipotransaccion->signo ?? ''));
 
 			if (empty($data['omitir_validacion_recuento_abierto'])) {
 				RecuentoBloqueoSalidaDepositoSupport::assertSalidaPermitida(
 					(int) ($data['deposito_id'] ?? 0),
 					isset($data['fecha']) ? (string) $data['fecha'] : null,
-					is_string($signoCantidadMovimiento)
-						? $signoCantidadMovimiento
-						: (string) ($tipotransaccion->signo ?? ''),
+					$signoParaBloqueoRecuento,
 				);
 			}
 
@@ -217,7 +231,10 @@ class MovimientoStockService
 
 				if (
 					empty($data['omitir_validacion_saldo'])
-					&& MovimientoStockSalidaSaldoSupport::esSignoRestaStock($signoCantidadMovimiento)
+					&& MovimientoStockSalidaSaldoSupport::esSignoRestaStock(
+						is_string($signoCantidadMovimiento) ? $signoCantidadMovimiento : null
+					)
+					&& ! $esCanje
 				) {
 					MovimientoStockSalidaSaldoSupport::validarDesdeLineasFormulario(
 						(int) ($data['deposito_id'] ?? 0),
@@ -227,6 +244,25 @@ class MovimientoStockService
 						$colores,
 						$talles,
 					);
+				}
+
+				if (empty($data['omitir_validacion_saldo']) && $esCanje) {
+					[$artsSal, $cantsSal, $colsSal, $tallsSal] = MovimientoStockCanjeSupport::lineasSalidaParaSaldo(
+						$articulos,
+						$cantidades,
+						$colores,
+						$talles,
+					);
+					if ($artsSal !== []) {
+						MovimientoStockSalidaSaldoSupport::validarDesdeLineasFormulario(
+							(int) ($data['deposito_id'] ?? 0),
+							$artsSal,
+							$cantsSal,
+							$this->saldoDepositoRepository,
+							$colsSal,
+							$tallsSal,
+						);
+					}
 				}
 
 				// Graba items
@@ -324,19 +360,24 @@ class MovimientoStockService
 						'codigocombinacion' => '',
 						'pedido' => $data['pedido'] ?? '',
 						'partida' => 0,
-						'empresa' => $data['empresa'] ?? config('app.empresa')
+						'empresa' => $data['empresa'] ?? config('app.empresa'),
 					];
-
+					if ($esCanje) {
+						$dataArticuloMovimiento['cantidad_ya_firmada'] = true;
+					}
 					$dataTalle = [];
 					$medidasJson = trim((string) ($medidas[$i] ?? ''));
 					if ($medidasJson !== '') {
 						$jtalles = json_decode($medidasJson);
 						if (is_array($jtalles)) {
+							$factorSignoTalle = $esCanje
+								? ((float) ($cantidades[$i] ?? 0) < 0 ? -1 : 1)
+								: ($signoCantidadMovimiento == 'S' ? 1 : -1);
 							foreach ($jtalles as $medida) {
 								$dataTalle[] = [
 									'id' => null,
 									'talle_id' => $medida->talle_id,
-									'cantidad' => $medida->cantidad * ($signoCantidadMovimiento == 'S' ? 1 : -1),
+									'cantidad' => abs((float) $medida->cantidad) * $factorSignoTalle,
 									'precio' => $precioLinea,
 								];
 							}
