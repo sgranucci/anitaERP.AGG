@@ -138,6 +138,16 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 				{
 					if ($i < count($nombres))
 					{
+						$nombreEntrega = $this->textoEntrega($nombres[$i] ?? null);
+						if ($nombreEntrega === '') {
+							continue;
+						}
+						$domicilioEntrega = $this->domicilioEntregaObligatorio(
+							$domicilios[$i] ?? null,
+							$nombreEntrega,
+							$i
+						);
+
 						// find() ya devuelve el modelo o null; no encadenar first()
 						$provincia = Provincia::find($provincias_id[$i] ?? null);
 						if ($provincia)
@@ -147,21 +157,21 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 
 						$cliente_entrega = $this->model->findOrFail($_id[$i])->update([
 									'cliente_id' => $id,
-									'nombre' => $nombres[$i],
+									'nombre' => $nombreEntrega,
 									'codigo' => $i,
-									'domicilio' => $domicilios[$i],
-									'localidad_id' => $localidades_id[$i],
-									'provincia_id' => $provincias_id[$i],
+									'domicilio' => $domicilioEntrega,
+									'localidad_id' => $localidades_id[$i] ?? null,
+									'provincia_id' => $provincias_id[$i] ?? null,
 									'provincia_iibb_id' => $this->provinciaIibbIdDesdeFormulario(
 										$provincias_iibb_id[$i] ?? null,
 										$cliente
 									),
 									'pais_id' => $pais_id,
-									'codigopostal' => $codigospostales[$i],
+									'codigopostal' => $this->textoEntrega($codigospostales[$i] ?? null) ?: null,
 									'zonavta_id' => ! empty($zonavtas_id[$i]) ? $zonavtas_id[$i] : null,
 									'subzonavta_id' => $subzonavta_id,
 									'vendedor_id' => $vendedor_id,
-									'transporte_id' => $transportes_id[$i],
+									'transporte_id' => ! empty($transportes_id[$i]) ? $transportes_id[$i] : null,
 									]);
 
 						// Guarda en anita
@@ -176,40 +186,69 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 
 			for ($i_entrega = $i; $i_entrega < count($nombres); $i_entrega++)
 			{
-				//* Valida si se cargo el lugar de entrega
-				if ($nombres[$i_entrega] != '') 
-				{
-					// find() ya devuelve el modelo o null; no encadenar first()
-					$provincia = Provincia::find($provincias_id[$i_entrega] ?? null);
-					if ($provincia)
-						$pais_id = $provincia->pais_id;
-					else
-						$pais_id = 1;
-		
-					$cliente_entrega = $this->model->create([
-									'cliente_id' => $id,
-									'nombre' => $nombres[$i_entrega],
-									'codigo' => $i_entrega,
-									'domicilio' => $domicilios[$i_entrega],
-									'localidad_id' => $localidades_id[$i_entrega],
-									'provincia_id' => $provincias_id[$i_entrega],
-									'provincia_iibb_id' => $this->provinciaIibbIdDesdeFormulario(
-										$provincias_iibb_id[$i_entrega] ?? null,
-										$cliente
-									),
-									'pais_id' => $pais_id,
-									'codigopostal' => $codigospostales[$i_entrega],
-									'zonavta_id' => ! empty($zonavtas_id[$i_entrega]) ? $zonavtas_id[$i_entrega] : null,
-									'subzonavta_id' => $subzonavta_id,
-									'vendedor_id' => $vendedor_id,
-									'transporte_id' => $transportes_id[$i_entrega],
-									]);
-
-					// Guarda en anita
-					self::guardarAnita($data, $i_entrega);
+				$nombreEntrega = $this->textoEntrega($nombres[$i_entrega] ?? null);
+				if ($nombreEntrega === '') {
+					continue;
 				}
+
+				$domicilioEntrega = $this->domicilioEntregaObligatorio(
+					$domicilios[$i_entrega] ?? null,
+					$nombreEntrega,
+					$i_entrega
+				);
+
+				// find() ya devuelve el modelo o null; no encadenar first()
+				$provincia = Provincia::find($provincias_id[$i_entrega] ?? null);
+				if ($provincia)
+					$pais_id = $provincia->pais_id;
+				else
+					$pais_id = 1;
+
+				$cliente_entrega = $this->model->create([
+								'cliente_id' => $id,
+								'nombre' => $nombreEntrega,
+								'codigo' => $i_entrega,
+								'domicilio' => $domicilioEntrega,
+								'localidad_id' => $localidades_id[$i_entrega] ?? null,
+								'provincia_id' => $provincias_id[$i_entrega] ?? null,
+								'provincia_iibb_id' => $this->provinciaIibbIdDesdeFormulario(
+									$provincias_iibb_id[$i_entrega] ?? null,
+									$cliente
+								),
+								'pais_id' => $pais_id,
+								'codigopostal' => $this->textoEntrega($codigospostales[$i_entrega] ?? null) ?: null,
+								'zonavta_id' => ! empty($zonavtas_id[$i_entrega]) ? $zonavtas_id[$i_entrega] : null,
+								'subzonavta_id' => $subzonavta_id,
+								'vendedor_id' => $vendedor_id,
+								'transporte_id' => ! empty($transportes_id[$i_entrega]) ? $transportes_id[$i_entrega] : null,
+								]);
+
+				// Guarda en anita
+				self::guardarAnita($data, $i_entrega);
 			}
 		}
+	}
+
+	private function textoEntrega(mixed $valor): string
+	{
+		return trim((string) ($valor ?? ''));
+	}
+
+	/**
+	 * domicilio es NOT NULL; ConvertEmptyStringsToNull deja null si el input viene vacío.
+	 */
+	private function domicilioEntregaObligatorio(mixed $domicilio, string $nombreLugar, int $indice): string
+	{
+		$texto = $this->textoEntrega($domicilio);
+		if ($texto !== '') {
+			return $texto;
+		}
+
+		$etiqueta = $nombreLugar !== '' ? $nombreLugar : ('nº '.($indice + 1));
+
+		throw new \InvalidArgumentException(
+			'El lugar de entrega «'.$etiqueta.'» requiere domicilio. Completalo en la solapa Lugares de entrega.'
+		);
 	}
 
     public function sincronizarConAnita(){

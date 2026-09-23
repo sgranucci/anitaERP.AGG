@@ -41,10 +41,13 @@
             </div>
         </div>
         <div class="form-group row">
-            <label class="col-lg-3 control-label text-right pr-2">Domicilio</label>
+            <label class="col-lg-3 control-label text-right pr-2">
+                Domicilio
+                <span class="text-danger" title="Obligatorio si cargás un lugar de entrega">*</span>
+            </label>
             <div class="col-lg-8">
                 <input type="text" name="domicilios[]" class="form-control"
-                    value="{{ $domicilioEntrega }}" placeholder="Calle y número" maxlength="255">
+                    value="{{ $domicilioEntrega }}" placeholder="Calle y número (obligatorio si hay nombre)" maxlength="255">
             </div>
         </div>
         <div class="form-group row">
