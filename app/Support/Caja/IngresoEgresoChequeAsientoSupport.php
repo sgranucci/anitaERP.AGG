@@ -201,11 +201,24 @@ final class IngresoEgresoChequeAsientoSupport
         $debe = $d_h === 'D' ? $monto : '';
         $haber = $d_h === 'H' ? $monto : '';
 
+        // Solo acumula en la misma pierna (D o H). Canje banco→banco: anulación
+        // (Debe) + reemplazo (Haber) en la misma cuenta deben ser 2 líneas; si se
+        // mezclan en una, Anita rechaza ("al menos dos movimientos") y el ERP
+        // pierde el Debe al persistir (haber pisa el monto).
         $indice = null;
         for ($i = 0; $i < count($asiento); $i++) {
-            if ((int) $asiento[$i]['cuentacontable_id'] === $cuentacontableId
+            $mismaCuenta = (int) $asiento[$i]['cuentacontable_id'] === $cuentacontableId
                 && (int) $asiento[$i]['moneda_id'] === $monedaId
-                && (float) $asiento[$i]['cotizacion'] === (float) $cotizacion) {
+                && (float) $asiento[$i]['cotizacion'] === (float) $cotizacion;
+            if (! $mismaCuenta) {
+                continue;
+            }
+
+            $existeDebe = (float) ($asiento[$i]['debe'] ?: 0) > 0;
+            $existeHaber = (float) ($asiento[$i]['haber'] ?: 0) > 0;
+            $mismaPierna = ($d_h === 'D' && $existeDebe && ! $existeHaber)
+                || ($d_h === 'H' && $existeHaber && ! $existeDebe);
+            if ($mismaPierna) {
                 $indice = $i;
                 break;
             }
