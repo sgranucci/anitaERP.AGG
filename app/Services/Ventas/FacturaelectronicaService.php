@@ -158,7 +158,17 @@ class FacturaElectronicaService
 						'msg' => $mensaje,
 					]);
 
-					return -1;
+					// Propagar el motivo real (certificado, tipo AFIP, etc.) en lugar de -1 genérico.
+					$detalle = trim((string) $mensaje);
+					$error = 'No se pudo numerar el comprobante.';
+					if ($detalle !== '' && stripos($error, $detalle) === false) {
+						$error .= ' '.$detalle;
+					}
+
+					return [
+						'error' => $error,
+						'mensaje' => $detalle,
+					];
 				}
 			}
 
@@ -781,10 +791,17 @@ class FacturaElectronicaService
 	 */
 	public function armaTipoTransaccion($letra, $modofacturacion, &$tipotransaccion, $puntoventa, $totalcomprobante, bool $forzarNcNdFce = false)
 	{
+		// Normalizar a int AFIP (ej. "019" → 19) antes de remapear por letra/PV.
+		$tipotransaccion = (int) preg_replace('/\D+/', '', (string) $tipotransaccion);
+
 		if ($letra == 'B') {
 			$tipotransaccion += 5;
 		} elseif ($letra == 'E' || ArcaPuntoventaWebserviceSupport::esWsfex((string) ($puntoventa->webservice ?? ''))) {
-			$tipotransaccion += 18;
+			// Histórico: FAC 001 + letra E / PV wsfex → 19.
+			// Interforming FAE/NCE/NDE ya traen 019/020/021: no sumar 18 de nuevo (quedaba 37/38/39).
+			if (! in_array($tipotransaccion, [19, 20, 21], true)) {
+				$tipotransaccion += 18;
+			}
 		} elseif ($letra == 'M') {
 			$tipotransaccion += 50;
 		}

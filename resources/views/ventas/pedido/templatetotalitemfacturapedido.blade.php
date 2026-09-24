@@ -28,9 +28,12 @@
 		<td class="td-fac-pieza" style="margin : 0; padding : 0; height: 17px;">
 			<input type="text" id="ipieza" name="piezas_fac[]" class="form-control pieza_fac" value="" readonly/>
 		</td>
-		<td class="td-fac-cantidad" style="margin : 0; padding : 0; height: 17px;" colspan="2">
+		<td class="td-fac-cantidad" style="margin : 0; padding : 0; height: 17px;">
 			<input type="text" name="pesadas_fac[]" style="text-align:center;" class="form-control pesada_fac" value="" readonly/>
-		</td>			
+		</td>
+		<td class="td-fac-bonificacion" style="margin : 0; padding : 0; height: 17px;">
+			<input type="text" name="porcentajedescuentos_fac[]" class="form-control porcentajedescuento_fac" value="" readonly/>
+		</td>
         <td style="margin : 0; padding : 0; height: 17px;">
         	<input type="text" style="text-align: right;" name="precios_fac[]" class="form-control precio_fac" value="" readonly/>
         </td>

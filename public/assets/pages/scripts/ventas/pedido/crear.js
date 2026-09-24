@@ -60,13 +60,26 @@
 		if (typeof data === 'string') {
 			return data;
 		}
-		if (data.error) {
-			return String(data.error);
+		function componerErrorItem(item) {
+			if (!item) {
+				return null;
+			}
+			var err = item.error ? String(item.error).trim() : '';
+			var msg = item.mensaje ? String(item.mensaje).trim() : '';
+			if (err && msg && err.indexOf(msg) === -1) {
+				return err + ' ' + msg;
+			}
+			return err || msg || null;
+		}
+		var compuesto = componerErrorItem(data);
+		if (compuesto) {
+			return compuesto;
 		}
 		if (Array.isArray(data)) {
 			for (var i = 0; i < data.length; i++) {
-				if (data[i] && data[i].error) {
-					return String(data[i].error);
+				compuesto = componerErrorItem(data[i]);
+				if (compuesto) {
+					return compuesto;
 				}
 			}
 		}
@@ -2860,10 +2873,10 @@
 		var incoterm_id = $('#incoterm_id').val();
 		var mercaderia = $('#mercaderia').val();
 		var leyendaexportacion = $('#leyendaexportacion').val();
-		let cliente_id = $('#cliente_id').val();
-		let actividad_arca_id = $('#actividad_arca_id').val();
-		let pedido_id = $('#pedido_id').val();
-		let estadoPedido = $('#estadopedido').val();
+		// Exportación: un solo campo visible; reutilizarlo como leyenda general si viene vacío.
+		if ($('#div_leyendafacturacion').is(':hidden') && !String(leyendafactura || '').trim()) {
+			leyendafactura = leyendaexportacion;
+		}
 
 		if (estadoPedido != 'Pendiente' && !window.pedidoSinRemitoObligatorio)
 		{
@@ -3042,6 +3055,9 @@
 		var incoterm_id = $('#incoterm_id').val();
 		var mercaderia = $('#mercaderia').val();
 		var leyendaexportacion = $('#leyendaexportacion').val();
+		if ($('#div_leyendafacturacion').is(':hidden') && !String(leyendafactura || '').trim()) {
+			leyendafactura = leyendaexportacion;
+		}
 		var peso_neto = $('#peso_neto').val() || 0;
 		let cliente_id = $('#cliente_id').val();
 		let actividad_arca_id = $('#actividad_arca_id').val();
@@ -3201,6 +3217,8 @@
 				$('#div_mercaderia').show();
 				$('#div_incoterm').show();
 				$('#div_leyendaexportacion').show();
+				// En exportación solo se usa leyenda de exportación (no la general).
+				$('#div_leyendafacturacion').hide();
 				// Anita b-fremito carga_pant4 → comp_peso_neto
 				$('#div_peso_neto_exportacion').show();
 			}
@@ -3210,6 +3228,9 @@
 				$('#div_mercaderia').hide();
 				$('#div_incoterm').hide();
 				$('#div_leyendaexportacion').hide();
+				if (window.modoEmisionPedido !== 'remito') {
+					$('#div_leyendafacturacion').show();
+				}
 				if (!window.pedidoSinRemitoObligatorio) {
 					$('#div_peso_neto_exportacion').hide();
 				}
