@@ -978,6 +978,17 @@ class FacturacionService
 		$this->formaPagoExportacion = '';
 		$this->monedaExportacion = '';
 		$this->abreviaturaIncoterm = '';
+		if ((int) $this->incoterm_id >= 1) {
+			$incoterm = $this->incotermRepository->find($this->incoterm_id);
+			if ($incoterm) {
+				$this->condicionVentaExportacion = $incoterm->nombre;
+				$this->abreviaturaIncoterm = $incoterm->abreviatura;
+			}
+			$formapago = $this->formapagoRepository->find($this->formapago_id);
+			if ($formapago) {
+				$this->formaPagoExportacion = $formapago->nombre;
+			}
+		}
 
 		$this->cuentacontable_id = $cliente->cuentacontable_id;
 		$this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
@@ -1141,9 +1152,6 @@ class FacturacionService
 					$tipoTransaccion_id,
 					$letra,
 				);
-				if (is_array($numero)) {
-					return $numero;
-				}
 				break;
 			case 'M':
 				$numero = $this->ultimoNumeroBaseModoManual(
@@ -1154,6 +1162,9 @@ class FacturacionService
 					$totalComprobante,
 				);
 				break;
+			}
+			if (is_array($numero)) {
+				return $numero;
 			}
 			}
 			PedidoFacturacionProfiler::etapa('numeracion_factura_fin');
@@ -1259,7 +1270,7 @@ class FacturacionService
 					}
 					$dataCAE = [
 							'codigoempresa' => $empresa->codigo,
-							'tipodoc' => $cliente->tipodocumentos->codigoexterno,
+							'tipodoc' => $cliente->tipodocumentos?->codigoexterno ?? 99,
 							'numerodocumento' => $cliente->numerodocumento,
 							'condicioniva_id' => $cliente->condicioniva_id,
 							'numerocomprobante' => $numero,
@@ -1273,18 +1284,26 @@ class FacturacionService
 							'tributo' => $totalTributo,
 							'fechavencimiento' => date('Ymd', strtotime($cuentaCorriente[0]['fechavencimiento'])),
 							'moneda' => $codigoMoneda,
-							'cotizacion' => 1,
+							'cotizacion' => ($codigoMoneda == 'PES' ? 1. : $cotizacion),
 							'tributos' => $tributos,
 							'impuestos' => $impuestos,
 							'comprobantesasociados' => $comprobantesAsociados,
 							'fechaasignaciondesde' => date('Ymd', strtotime($fechaAsignacion)),
 							'fechaasignacionhasta' => date('Ymd', strtotime($fechaFactura)),
-							'pais' => $cliente->paises?->codigo ?? '',
+							'pais' => $cliente->paises?->codigo_afip
+								?? $cliente->paises?->codigo
+								?? '',
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
-							'formapago' => $cliente->condicionventas->nombre ?? '',
+							'formapago' => $cliente->condicionventas?->nombre ?? '',
 							'formapagoexportacion' => $this->formaPagoExportacion,
 							'incoterms' => $this->abreviaturaIncoterm,
+							'obs' => trim((string) ($this->leyendaExportacion ?? '')) !== ''
+								? (string) $this->leyendaExportacion
+								: (string) ($leyenda ?? ''),
+							'obs_comerciales' => trim((string) ($this->mercaderiaExportacion ?? '')) !== ''
+								? (string) $this->mercaderiaExportacion
+								: ' ',
 							'items' => $dataFactura
 					];
 				}
@@ -2136,6 +2155,9 @@ class FacturacionService
 								->traeUltimoNumeroComprobante($empresa->nroinscripcion,
 																$codigoTipoTransaccion,
 																$puntoventa);
+					if (is_array($numero)) {
+						return $numero;
+					}
 					break;
 				case 'A':
 					$numero = $this->ultimoNumeroBaseModoCaea(
@@ -2194,7 +2216,7 @@ class FacturacionService
 
 					$dataCAE = [
 							'codigoempresa' => $empresa->codigo,
-							'tipodoc' => $cliente->tipodocumentos->codigoexterno,
+							'tipodoc' => $cliente->tipodocumentos?->codigoexterno ?? 99,
 							'numerodocumento' => $cliente->numerodocumento,
 							'condicioniva_id' => $cliente->condicioniva_id,
 							'numerocomprobante' => $numero,
@@ -2214,7 +2236,9 @@ class FacturacionService
 							'comprobantesasociados' => $comprobantesAsociados,
 							'fechaasignaciondesde' => date('Ymd', strtotime($fechaAsignacion)),
 							'fechaasignacionhasta' => date('Ymd', strtotime($fechaFactura)),
-							'pais' => $cliente->paises?->codigo ?? '',
+							'pais' => $cliente->paises?->codigo_afip
+								?? $cliente->paises?->codigo
+								?? '',
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
 							'formapago' => $cliente->condicionventas->nombre ?? 'CONTADO',
@@ -3297,6 +3321,9 @@ class FacturacionService
 										$opcionesEmisionNumeracion,
 									);
 						PedidoFacturacionProfiler::etapa('arca_ultimo_numero_fin');
+						if (is_array($numero)) {
+							return $numero;
+						}
 					}
 					break;
 				case 'A':
@@ -3892,6 +3919,10 @@ class FacturacionService
 						->traeUltimoNumeroComprobante($empresa->nroinscripcion,
 														$codigoTipoTransaccion,
 														$puntoventa);
+
+			if (is_array($numero)) {
+				return $numero;
+			}
 
 			//$numero = 74405;
 		}
@@ -5957,7 +5988,9 @@ class FacturacionService
 		$esInterformingComprob = EntornoEmpresaSupport::esInterforming();
 		$leyenda5Anita = '';
 		if ($esInterformingComprob) {
-			$leyenda5Anita = mb_substr(trim((string) ($leyenda ?? '')), 0, 60);
+			// Preferir leyenda de exportación (FAE); si viene vacía, caer a la leyenda general.
+			$leyendaExport = trim((string) ($this->leyendaExportacion ?? ''));
+			$leyenda5Anita = mb_substr($leyendaExport !== '' ? $leyendaExport : trim((string) ($leyenda ?? '')), 0, 60);
 		}
 		$pesoNetoAnita = (float) ($venta['peso_neto'] ?? $this->pesoNetoExportacion ?? 0);
 		$data = array( 	'tabla' => 'comprob', 

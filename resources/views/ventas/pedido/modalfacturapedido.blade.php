@@ -151,13 +151,13 @@
             </form>
             <!-- textarea -->
             <div class="form-group" id="div_leyendafacturacion">
-                <label>Leyendas</label>
-                <textarea id="leyendafactura" class="form-control" cols="40" rows="6" placeholder="Leyendas de factura ..."></textarea>
+                <label>Leyenda</label>
+                <textarea id="leyendafactura" class="form-control" cols="40" rows="4" placeholder="Leyenda del comprobante..."></textarea>
             </div>
             <div id="datos-exportacion" style="display: none">
                 <div class="form-group" id="div_leyendaexportacion">
-                    <label>Leyenda Exportaci&oacute;n</label>
-                    <textarea id="leyendaexportacion" class="form-control" cols="90" rows="6" placeholder="Leyendas de exportación ..."></textarea>
+                    <label>Leyenda exportaci&oacute;n</label>
+                    <textarea id="leyendaexportacion" class="form-control" cols="90" rows="4" placeholder="Texto de la factura de exportaci&oacute;n..."></textarea>
                 </div>
                 <div class="form-group row" id="div_incoterm">
                     <label for="recipient-name" class="col-lg-4 col-form-label requerido">Condiciones de venta (incoterms)</label>
@@ -171,7 +171,8 @@
                 </div>
                 <div class="form-group row" id="div_mercaderia">
                     <label for="recipient-name" class="col-lg-4 col-form-label">Mercader&iacute;a</label>
-                    <input type="text" class="col-lg-5 form-control" id="mercaderia" name="marcaderia" value=""></input>
+                    <input type="text" class="col-lg-5 form-control" id="mercaderia" name="marcaderia" value="" maxlength="60" title="Descripci&oacute;n corta del tipo de mercader&iacute;a (no es la leyenda de la FAE)">
+                    <small class="col-lg-12 form-text text-muted">Descripci&oacute;n corta del bien exportado (no reemplaza la leyenda de exportaci&oacute;n).</small>
                 </div>
             </div>
             @include('ventas.pedido.templatefacturapedido')
