@@ -177,13 +177,16 @@ final class LibroIvaDigitalMapeosSupport
     public static function codigoMonedaAfip(?string $codigoMonedaErp, ?string $nombreMoneda = null): string
     {
         $codigo = strtoupper(trim((string) $codigoMonedaErp));
-        if ($codigo === 'PES' || $codigo === '1' || stripos((string) $nombreMoneda, 'PES') !== false) {
+        $nombre = strtoupper(trim((string) $nombreMoneda));
+        if ($codigo === 'PES' || $codigo === '1' || $codigo === 'ARS'
+            || str_contains($nombre, 'PESO')) {
             return 'PES';
         }
-        if ($codigo === 'DOL' || $codigo === '2' || stripos((string) $nombreMoneda, 'DOL') !== false) {
+        if ($codigo === 'DOL' || $codigo === '2' || $codigo === 'USD' || $codigo === 'U$S' || $codigo === 'U$D'
+            || str_contains($nombre, 'DOL') || str_contains($nombre, 'DOLAR') || str_contains($nombre, 'DÓLAR')) {
             return 'DOL';
         }
-        if (in_array($codigo, ['EUR', '060', '60', '3'], true) || stripos((string) $nombreMoneda, 'EURO') !== false) {
+        if (in_array($codigo, ['EUR', '060', '60', '3'], true) || str_contains($nombre, 'EURO')) {
             return '060';
         }
 

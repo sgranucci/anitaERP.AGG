@@ -14,6 +14,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\AsientoAlcanceCierreSupport;
 use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Contable\Anita\AsientoAnitaFerliSupport;
+use App\Support\Contable\Anita\AsientoAnitaInterformingSupport;
 use App\Support\Contable\AsientoAnitaNumeracionLock;
 use App\Support\Contable\AsientoAnitaNumeracionSupport;
 use App\Support\Contable\AsientoBalanceSupport;
@@ -791,7 +792,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 					$codigoMoneda = '1';
 
 				$esquemaCtamovReducido = strtoupper(config('app.empresa')) == 'EL BIERZO'
-					|| AsientoAnitaFerliSupport::usaEsquemaCtamovReducido();
+					|| AsientoAnitaFerliSupport::usaEsquemaCtamovReducido()
+					|| AsientoAnitaInterformingSupport::usaEsquemaCtamovReducido();
 
 				$data = array( 'tabla' => $this->tableAnita[0], 
 						'acc' => 'insert',
@@ -1330,6 +1332,13 @@ class AsientoRepository implements AsientoRepositoryInterface
 			);
 		}
 
+		if (AsientoAnitaInterformingSupport::aplica()) {
+			return AsientoAnitaInterformingSupport::leerSiguienteCandidato(
+				$codigoEmpresa,
+				isset($this->path_sistema) ? (string) $this->path_sistema : null
+			);
+		}
+
 		if (strtoupper(config('app.empresa')) == 'EL BIERZO') {
 			$data = [
 				'acc' => 'list',
@@ -1404,6 +1413,16 @@ class AsientoRepository implements AsientoRepositoryInterface
 
 		if (AsientoAnitaFerliSupport::aplica()) {
 			AsientoAnitaFerliSupport::persistirNumerador(
+				$numeroAsignado,
+				isset($this->path_sistema) ? (string) $this->path_sistema : null
+			);
+
+			return;
+		}
+
+		if (AsientoAnitaInterformingSupport::aplica()) {
+			AsientoAnitaInterformingSupport::persistirNumerador(
+				$codigoEmpresa,
 				$numeroAsignado,
 				isset($this->path_sistema) ? (string) $this->path_sistema : null
 			);

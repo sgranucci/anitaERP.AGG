@@ -4,6 +4,7 @@ namespace App\Services\Arca;
 
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
+use App\Support\Ventas\ArcaUnidadMedidaAfipSupport;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use SoapClient;
@@ -321,8 +322,15 @@ class ArcaWsfexFacturaElectronicaService
             $tipoExpo = 1;
         }
 
-        $monedaId = LibroIvaDigitalMapeosSupport::codigoMonedaAfip((string) ($datos['moneda'] ?? 'PES'));
+        $monedaId = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
+            (string) ($datos['moneda'] ?? 'PES'),
+            (string) ($datos['moneda_nombre'] ?? $datos['nombremoneda'] ?? '')
+        );
         $cotizacion = $this->moneyCotiz((float) ($datos['cotizacion'] ?? 1));
+        // ARCA WSFEX [1601]: con Moneda_Id PES la cotización debe ser exactamente 1.
+        if (strtoupper(trim($monedaId)) === 'PES') {
+            $cotizacion = 1.0;
+        }
 
         $permisoExistente = (string) ($datos['permiso_existente'] ?? '');
         if ($permisoExistente === '' && $cbteTipo === 19 && $tipoExpo === 1) {
@@ -418,14 +426,30 @@ class ArcaWsfexFacturaElectronicaService
             }
             $qty = (float) ($item['cantidad'] ?? $item['pro_qty'] ?? 0);
             $precio = (float) ($item['precio'] ?? $item['pro_precio_uni'] ?? 0);
+            $bonif = (float) ($item['pro_bonificacion'] ?? 0);
             $total = (float) ($item['pro_total_item'] ?? ($qty * $precio));
+            $umed = ArcaUnidadMedidaAfipSupport::normalizarCodigoPayload(
+                $item['codigounidadmedida'] ?? $item['pro_umed'] ?? null,
+                (string) ($item['unidadmedida_abreviatura'] ?? $item['unidadmedida'] ?? ''),
+                (string) ($item['unidadmedida_nombre'] ?? '')
+            );
+            // WSFEX [1775]: umed 0/97/99 exige qty, precio y bonificación en 0.
+            if (ArcaUnidadMedidaAfipSupport::esSinCantidad($umed)) {
+                if (abs($qty) > 0.00001 || abs($precio) > 0.00001 || abs($bonif) > 0.00001) {
+                    $umed = 7;
+                } else {
+                    $qty = 0.0;
+                    $precio = 0.0;
+                    $bonif = 0.0;
+                }
+            }
             $items[] = [
                 'Pro_codigo' => (string) ($item['sku'] ?? $item['pro_codigo'] ?? ' '),
                 'Pro_ds' => $this->sanearTexto((string) ($item['descripcion'] ?? $item['pro_ds'] ?? ''), 4000),
                 'Pro_qty' => $this->moneyQty($qty),
-                'Pro_umed' => (int) ($item['codigounidadmedida'] ?? $item['pro_umed'] ?? 7),
+                'Pro_umed' => $umed,
                 'Pro_precio_uni' => $this->money($precio),
-                'Pro_bonificacion' => $this->money($item['pro_bonificacion'] ?? 0),
+                'Pro_bonificacion' => $this->money($bonif),
                 'Pro_total_item' => $this->money($total),
             ];
         }

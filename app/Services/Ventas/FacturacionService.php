@@ -668,7 +668,10 @@ class FacturacionService
 						"articulo_id" => $articulo->id,
 						"sku" => $articulo->sku,
 						"descripcion" => $articulo->descripcion,
-						"codigounidadmedida" => $articulo->unidadesdemedidas->codigo ?? 1,
+						"codigounidadmedida" => \App\Support\Ventas\ArcaUnidadMedidaAfipSupport::codigoAfip(
+							$articulo->unidadesdemedidas
+						),
+						'unidadmedida_abreviatura' => (string) ($articulo->unidadesdemedidas->abreviatura ?? ''),
 						'categoria' => $codigoCategoria,
 						'moneda_id' => $moneda_id,
 						'listaprecio_id' => $pedido_articulo->listaprecio_id,
@@ -1261,14 +1264,17 @@ class FacturacionService
 					
 					// Lee moneda
 					$moneda = Moneda::find($moneda_id);
-					$codigomoneda = 'PES';
-					if ($moneda)
-					{
-						$codigoMoneda = $moneda->codigo;
-
-						if ($this->incoterm_id >= 1)
+					$codigoMoneda = 'PES';
+					if ($moneda) {
+						$codigoMoneda = (string) ($moneda->codigo ?: $moneda->abreviatura ?: 'PES');
+						if ($this->incoterm_id >= 1) {
 							$this->monedaExportacion = $moneda->nombre;
+						}
 					}
+					$codigoMonedaAfip = \App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
+						$codigoMoneda,
+						$moneda->nombre ?? null
+					);
 					$dataCAE = [
 							'codigoempresa' => $empresa->codigo,
 							'tipodoc' => $cliente->tipodocumentos?->codigoexterno ?? 99,
@@ -1284,8 +1290,8 @@ class FacturacionService
 							'logistica' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total Logistica', 'importe'),
 							'tributo' => $totalTributo,
 							'fechavencimiento' => date('Ymd', strtotime($cuentaCorriente[0]['fechavencimiento'])),
-							'moneda' => $codigoMoneda,
-							'cotizacion' => ($codigoMoneda == 'PES' ? 1. : $cotizacion),
+							'moneda' => $codigoMonedaAfip,
+							'cotizacion' => (strtoupper($codigoMonedaAfip) === 'PES' ? 1. : $cotizacion),
 							'tributos' => $tributos,
 							'impuestos' => $impuestos,
 							'comprobantesasociados' => $comprobantesAsociados,
