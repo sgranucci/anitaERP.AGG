@@ -82,7 +82,6 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 		{
 			$tipotransaccion_caja = $this->tipotransaccion_cajaRepository->find($data['tipotransaccion_caja_id']);
 
-			$signo = IngresoEgresoCajaMontoSignoSupport::signoPersistencia($tipotransaccion_caja);
 			$cuentacaja_ids = $data['cuentacaja_ids'] ?? [];
 			$moneda_ids = $data['moneda_ids'] ?? [];
 			$montos = NumeroDecimalLocalSupport::listaAFloat($data['montos'] ?? []);
@@ -107,8 +106,12 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 					if ($i < count($cuentacaja_ids))
 					{
 						$monto = 0;
-						if (($montos[$i] ?? 0) != 0)
-							$monto = $montos[$i] * $signo;
+						if (($montos[$i] ?? 0) != 0) {
+							$monto = IngresoEgresoCajaMontoSignoSupport::aBaseDatos(
+								(float) $montos[$i],
+								$tipotransaccion_caja
+							);
+						}
 
 						$caja_movimiento_cuentacaja = $this->model->findOrFail($_id[$i])->update([
 									"caja_movimiento_id" => $id,
@@ -133,8 +136,12 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 					if (!isset($observaciones[$i_movimiento]))
 						$observaciones[$i_movimiento] = ' ';
 					$monto = 0;
-					if (($montos[$i_movimiento] ?? 0) != 0)
-						$monto = $montos[$i_movimiento] * $signo;
+					if (($montos[$i_movimiento] ?? 0) != 0) {
+						$monto = IngresoEgresoCajaMontoSignoSupport::aBaseDatos(
+							(float) $montos[$i_movimiento],
+							$tipotransaccion_caja
+						);
+					}
 					$caja_movimiento_cuentacaja = $this->model->create([
 						"caja_movimiento_id" => $id,
 						"fecha" => $fecha,

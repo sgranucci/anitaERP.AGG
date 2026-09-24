@@ -642,7 +642,11 @@ class IngresoEgresoService
 				// Busca si la imputacion ya existe
 				if ($cuentacaja)
 				{
-					$importeFirmado = (float) $movimiento->montos * $signo;
+					// abs + signo: evita doble firma si el form trae monto negativo (UI = Haber).
+					$importeFirmado = IngresoEgresoCajaMontoSignoSupport::importeFirmadoParaAsiento(
+						(float) $movimiento->montos,
+						$tipotransaccion_caja
+					);
 					if ($importeFirmado > 0)
 					{
 						$debe = round(abs($importeFirmado), 2);

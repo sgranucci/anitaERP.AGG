@@ -520,10 +520,12 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         .'emp_actividad, emp_zonageo';
 
     /**
-     * Llenado inicial desde Anita (sueldos.empleado + emping + empley).
-     * Inserta solo los empleados faltantes por (empresa, legajo). No genera auditoría ni observers.
+     * Sync desde Anita (sueldos.empleado + emping + empley).
+     * Inserta legajos faltantes por (empresa, legajo) y re-sincroniza egreso/estado
+     * y datos organizativos (centro de costo, categoría, lugar de trabajo, etc.)
+     * en los ya existentes. No genera auditoría ni observers.
      *
-     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
+     * @return array{en_anita:int, importados:int, ya_existia:int, actualizados_egreso:int, actualizados_datos:int, sin_empresa:int, omitidos:int, historia:int, leyendas:int, bases:int, errores:list<string>}
      */
     public function sincronizarConAnita(): array
     {
@@ -532,6 +534,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
         $res = [
             'en_anita' => 0, 'importados' => 0, 'ya_existia' => 0, 'actualizados_egreso' => 0,
+            'actualizados_datos' => 0,
             'sin_empresa' => 0,
             'omitidos' => 0, 'historia' => 0, 'leyendas' => 0, 'bases' => 0, 'errores' => [],
         ];
@@ -567,19 +570,30 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             return $res;
         }
 
-        $existentes = []; // key => ['id'=>, 'estado'=>, 'fecha_egreso'=>, 'motivoegreso_id'=>]
-        foreach (DB::table('empleado_sueldos')->select('id', 'empresa_id', 'legajo', 'estado', 'fecha_egreso', 'motivoegreso_id')->get() as $e) {
+        $existentes = []; // key => estado actual comparable
+        foreach (DB::table('empleado_sueldos')->select(
+            'id', 'empresa_id', 'legajo', 'estado', 'fecha_egreso', 'motivoegreso_id',
+            'centrocosto_id', 'categoria_id', 'agrupamiento_id', 'lugartrabajo_id',
+            'obrasocial_id', 'sindicato_id', 'art_id'
+        )->get() as $e) {
             $existentes[$e->empresa_id.':'.$e->legajo] = [
                 'id' => (int) $e->id,
                 'estado' => (string) $e->estado,
                 'fecha_egreso' => $e->fecha_egreso ? substr((string) $e->fecha_egreso, 0, 10) : null,
                 'motivoegreso_id' => $e->motivoegreso_id !== null ? (int) $e->motivoegreso_id : null,
+                'centrocosto_id' => $e->centrocosto_id !== null ? (int) $e->centrocosto_id : null,
+                'categoria_id' => $e->categoria_id !== null ? (int) $e->categoria_id : null,
+                'agrupamiento_id' => $e->agrupamiento_id !== null ? (int) $e->agrupamiento_id : null,
+                'lugartrabajo_id' => $e->lugartrabajo_id !== null ? (int) $e->lugartrabajo_id : null,
+                'obrasocial_id' => $e->obrasocial_id !== null ? (int) $e->obrasocial_id : null,
+                'sindicato_id' => $e->sindicato_id !== null ? (int) $e->sindicato_id : null,
+                'art_id' => $e->art_id !== null ? (int) $e->art_id : null,
             ];
         }
 
         $now = now();
         $insertRows = [];
-        $egresoUpdates = []; // id => patch
+        $empleadoUpdates = []; // id => patch
         $meta = [];   // key => ['origen'=>?, 'bases'=>[cod=>valor], 'feing'=>?]
         $seen = [];
 
@@ -603,6 +617,13 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $motivoId = $this->fk($maps['motivoegreso_id'], $f->emp_motivoegr ?? null);
             $catCod = $this->normCodigo($f->emp_categoria ?? null);
             $categoria = $catCod !== null ? ($categoriaPorCodigo[$catCod] ?? null) : null;
+            $categoriaId = $categoria['id'] ?? null;
+            $centrocostoId = $this->fk($maps['centrocosto_id'], $f->emp_centro_costos ?? null);
+            $agrupamientoId = $this->fk($maps['agrupamiento_id'], $f->emp_cod_agrup ?? null);
+            $lugartrabajoId = $this->fk($maps['lugartrabajo_id'], $f->emp_lugartrabajo ?? null);
+            $obrasocialId = $this->fk($maps['obrasocial_id'], $f->emp_codigo_o_soc ?? null);
+            $sindicatoId = $this->fk($maps['sindicato_id'], $f->emp_gremio ?? null);
+            $artId = $this->fk($maps['art_id'], $f->emp_codigo_art ?? null);
 
             // Las bases 4..11 pueden ser excepciones individuales aun cuando la
             // categoría use tabla (origen T). Conservar metadata también para
@@ -624,26 +645,72 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
             if (isset($existentes[$key])) {
                 $res['ya_existia']++;
-                // Re-sync de baja/egreso: el alta inicial es insert-only y dejaba egresos viejos.
+                // Re-sync: egreso/estado + datos organizativos (Anita es fuente).
                 $cur = $existentes[$key];
                 $feegrStr = $feegr ? substr((string) $feegr, 0, 10) : null;
                 $patch = [];
+                $tocaEgreso = false;
+                $tocaDatos = false;
                 if ($cur['estado'] !== $estado) {
                     $patch['estado'] = $estado;
+                    $tocaEgreso = true;
                 }
                 if ($cur['fecha_egreso'] !== $feegrStr) {
                     $patch['fecha_egreso'] = $feegrStr;
+                    $tocaEgreso = true;
                 }
                 if ($cur['motivoegreso_id'] !== $motivoId) {
                     $patch['motivoegreso_id'] = $motivoId;
+                    $tocaEgreso = true;
+                }
+                if ($cur['centrocosto_id'] !== $centrocostoId) {
+                    $patch['centrocosto_id'] = $centrocostoId;
+                    $tocaDatos = true;
+                }
+                if ($cur['categoria_id'] !== $categoriaId) {
+                    $patch['categoria_id'] = $categoriaId;
+                    $tocaDatos = true;
+                }
+                if ($cur['agrupamiento_id'] !== $agrupamientoId) {
+                    $patch['agrupamiento_id'] = $agrupamientoId;
+                    $tocaDatos = true;
+                }
+                if ($cur['lugartrabajo_id'] !== $lugartrabajoId) {
+                    $patch['lugartrabajo_id'] = $lugartrabajoId;
+                    $tocaDatos = true;
+                }
+                if ($cur['obrasocial_id'] !== $obrasocialId) {
+                    $patch['obrasocial_id'] = $obrasocialId;
+                    $tocaDatos = true;
+                }
+                if ($cur['sindicato_id'] !== $sindicatoId) {
+                    $patch['sindicato_id'] = $sindicatoId;
+                    $tocaDatos = true;
+                }
+                if ($cur['art_id'] !== $artId) {
+                    $patch['art_id'] = $artId;
+                    $tocaDatos = true;
                 }
                 if ($patch !== []) {
                     $patch['updated_at'] = $now;
-                    $egresoUpdates[$cur['id']] = $patch;
+                    $empleadoUpdates[$cur['id']] = $patch;
+                    if ($tocaEgreso) {
+                        $res['actualizados_egreso']++;
+                    }
+                    if ($tocaDatos) {
+                        $res['actualizados_datos']++;
+                    }
                     $existentes[$key] = array_merge($cur, [
                         'estado' => $patch['estado'] ?? $cur['estado'],
                         'fecha_egreso' => array_key_exists('fecha_egreso', $patch) ? $feegrStr : $cur['fecha_egreso'],
                         'motivoegreso_id' => array_key_exists('motivoegreso_id', $patch) ? $motivoId : $cur['motivoegreso_id'],
+                        'centrocosto_id' => array_key_exists('centrocosto_id', $patch) ? $centrocostoId : $cur['centrocosto_id'],
+                        'categoria_id' => array_key_exists('categoria_id', $patch) ? $categoriaId : $cur['categoria_id'],
+                        'agrupamiento_id' => array_key_exists('agrupamiento_id', $patch) ? $agrupamientoId : $cur['agrupamiento_id'],
+                        'lugartrabajo_id' => array_key_exists('lugartrabajo_id', $patch) ? $lugartrabajoId : $cur['lugartrabajo_id'],
+                        'obrasocial_id' => array_key_exists('obrasocial_id', $patch) ? $obrasocialId : $cur['obrasocial_id'],
+                        'sindicato_id' => array_key_exists('sindicato_id', $patch) ? $sindicatoId : $cur['sindicato_id'],
+                        'art_id' => array_key_exists('art_id', $patch) ? $artId : $cur['art_id'],
                     ]);
                 }
                 continue;
@@ -674,13 +741,13 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'fecha_ingreso' => $feing,
                 'fecha_egreso' => $feegr,
                 'motivoegreso_id' => $motivoId,
-                'categoria_id' => $categoria['id'] ?? null,
-                'agrupamiento_id' => $this->fk($maps['agrupamiento_id'], $f->emp_cod_agrup ?? null),
-                'lugartrabajo_id' => $this->fk($maps['lugartrabajo_id'], $f->emp_lugartrabajo ?? null),
-                'centrocosto_id' => $this->fk($maps['centrocosto_id'], $f->emp_centro_costos ?? null),
-                'obrasocial_id' => $this->fk($maps['obrasocial_id'], $f->emp_codigo_o_soc ?? null),
-                'sindicato_id' => $this->fk($maps['sindicato_id'], $f->emp_gremio ?? null),
-                'art_id' => $this->fk($maps['art_id'], $f->emp_codigo_art ?? null),
+                'categoria_id' => $categoriaId,
+                'agrupamiento_id' => $agrupamientoId,
+                'lugartrabajo_id' => $lugartrabajoId,
+                'centrocosto_id' => $centrocostoId,
+                'obrasocial_id' => $obrasocialId,
+                'sindicato_id' => $sindicatoId,
+                'art_id' => $artId,
                 'grupo_concepto_1_codigo' => $this->intNull($f->emp_grp1 ?? null),
                 'grupo_concepto_2_codigo' => $this->intNull($f->emp_grp2 ?? null),
                 'grupo_concepto_3_codigo' => $this->intNull($f->emp_grp3 ?? null),
@@ -709,9 +776,8 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             ];
         }
 
-        foreach ($egresoUpdates as $empId => $patch) {
+        foreach ($empleadoUpdates as $empId => $patch) {
             DB::table('empleado_sueldos')->where('id', $empId)->update($patch);
-            $res['actualizados_egreso']++;
         }
 
         foreach (array_chunk($insertRows, 400) as $chunk) {
@@ -728,7 +794,10 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         $empresaIdPorCodigo = $empresaPorCodigo;
 
         $res['bases'] = $this->importarBasesInicial($meta, $idPorKey, $nombrebasePorCodigo, $now);
-        $res['historia'] = $this->importarEmpingInicial($api, $empresaIdPorCodigo, $idPorKey, $maps['motivoegreso_id'], $now, $meta);
+        // Historia solo para legajos recién insertados (meta incluye preexistentes por las bases).
+        $res['historia'] = $this->importarEmpingInicial(
+            $api, $empresaIdPorCodigo, $idPorKey, $maps['motivoegreso_id'], $now, $meta, $seen
+        );
         $res['leyendas'] = $this->importarEmpleyInicial($api, $empresaIdPorCodigo, $idPorKey, $now);
 
         return $res;
@@ -797,9 +866,21 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
      * @param  array<string,int>  $idPorKey
      * @param  array<string,int>  $motivoPorCodigo
      * @param  array<string, array{origen:?string, feing:?string, bases:array<int,?float>}>  $meta
+     * @param  array<string,bool>  $keysNuevos  Solo estos (empresa:legajo) reciben emping; evita duplicar en re-sync.
      */
-    private function importarEmpingInicial(ApiAnita $api, array $empresaIdPorCodigo, array $idPorKey, array $motivoPorCodigo, $now, array $meta): int
-    {
+    private function importarEmpingInicial(
+        ApiAnita $api,
+        array $empresaIdPorCodigo,
+        array $idPorKey,
+        array $motivoPorCodigo,
+        $now,
+        array $meta,
+        array $keysNuevos
+    ): int {
+        if ($keysNuevos === []) {
+            return 0;
+        }
+
         $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
             'acc' => 'list', 'sistema' => 'sueldos', 'tabla' => 'emping',
             'campos' => 'empi_empresa, empi_legajo, empi_fecha_ing, empi_fecha_egr, empi_motivoegr, empi_coment_baja',
@@ -822,7 +903,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $key = $empresaId.':'.$legajo;
             $empleadoId = $idPorKey[$key] ?? null;
             // Solo historia de empleados recién importados (evita duplicar en re-ejecución).
-            if ($empleadoId === null || ! isset($meta[$key])) {
+            if ($empleadoId === null || ! isset($keysNuevos[$key])) {
                 continue;
             }
             $feing = VacacionFechaAnita::erpDesdeAnita($r->empi_fecha_ing ?? 0);
@@ -850,10 +931,11 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             ];
         }
 
-        // Empleados importados sin historia en emping: al menos su ingreso inicial.
-        foreach ($meta as $key => $m) {
+        // Empleados recién importados sin historia en emping: al menos su ingreso inicial.
+        foreach ($keysNuevos as $key => $_) {
             $empleadoId = $idPorKey[$key] ?? null;
-            if ($empleadoId === null || isset($conHistoria[$key])) {
+            $m = $meta[$key] ?? null;
+            if ($empleadoId === null || $m === null || isset($conHistoria[$key])) {
                 continue;
             }
             $feing = $m['feing'] ?? null;

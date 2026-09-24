@@ -260,9 +260,19 @@ class PagoproveedorAnularRevertirService
                 }
             }
 
+            // Misma idea que el detalle del AOP ("ANULA OPP…"): la OPP original
+            // queda con un texto que en el index se lea como revertida.
+            $detalleOrig = trim((string) ($pago->detalle ?? ''));
+            if ($detalleOrig === '') {
+                $detalleOrig = 'REVERTIDA';
+            } elseif (preg_match('/^(REVERTIDA|ANULA)\b/iu', $detalleOrig) !== 1) {
+                $detalleOrig = 'REVERTIDA: '.$detalleOrig;
+            }
+
             $this->pagoproveedorRepository->update([
                 'estado' => 'REVERTIDA',
                 'pagoproveedor_revertido_por_id' => (int) $reverso->id,
+                'detalle' => $detalleOrig,
             ], (int) $pago->id);
 
             $this->registrarEstado($pago, 'REVERTIDA', $leyenda.' (compensatorio OP '.$reverso->id.')');

@@ -226,6 +226,9 @@ final class PagoproveedorListadoUnificadoSupport
             $this->mapCuentasCajaPagoproveedor($ppIds),
             $this->mapCuentasChequePagoproveedor($ppIds)
         );
+        // AOP compensatorio: cheques y cuentacaja quedan en la OPP original.
+        $cuentasPp = $this->completarCuentasDesdeOrigenAop($filas, $cuentasPp, $ppIds);
+
         $cuentasIe = $this->fusionarCuentasCajaYCheques(
             $this->mapCuentasCajaIeOpp($ieIds),
             $this->mapCuentasChequeIeOpp($ieIds)
@@ -242,6 +245,75 @@ final class PagoproveedorListadoUnificadoSupport
 
             return $fila->conCuentasCaja($texto);
         })->values();
+    }
+
+    /**
+     * En reversiones el AOP no tiene cheques propios (siguen en la OPP). Si la fila
+     * AOP quedó sin cuentas/cheques, copia la etiqueta del `pagoproveedor_origen_id`.
+     *
+     * @param  Collection<int, PagoproveedorListadoFila>  $filas
+     * @param  array<int, string>  $cuentasPp
+     * @param  list<int>  $ppIdsYaCargados
+     * @return array<int, string>
+     */
+    private function completarCuentasDesdeOrigenAop(
+        Collection $filas,
+        array $cuentasPp,
+        array $ppIdsYaCargados
+    ): array {
+        $aopIdsVacios = $filas
+            ->filter(static function (PagoproveedorListadoFila $fila) use ($cuentasPp): bool {
+                if ($fila->esIeOpp()) {
+                    return false;
+                }
+                if (preg_match('/^AOP\b/i', $fila->etiquetaComprobante()) !== 1) {
+                    return false;
+                }
+
+                return trim((string) ($cuentasPp[$fila->id] ?? '')) === '';
+            })
+            ->map(static fn (PagoproveedorListadoFila $fila): int => $fila->id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($aopIdsVacios === []) {
+            return $cuentasPp;
+        }
+
+        $origenPorAop = DB::table('pagoproveedor')
+            ->whereIn('id', $aopIdsVacios)
+            ->whereNotNull('pagoproveedor_origen_id')
+            ->where('pagoproveedor_origen_id', '>', 0)
+            ->pluck('pagoproveedor_origen_id', 'id')
+            ->map(static fn ($id): int => (int) $id)
+            ->all();
+
+        if ($origenPorAop === []) {
+            return $cuentasPp;
+        }
+
+        $origenIds = array_values(array_unique(array_values($origenPorAop)));
+        $faltantes = array_values(array_diff($origenIds, array_map('intval', $ppIdsYaCargados)));
+        if ($faltantes !== []) {
+            $extra = $this->fusionarCuentasCajaYCheques(
+                $this->mapCuentasCajaPagoproveedor($faltantes),
+                $this->mapCuentasChequePagoproveedor($faltantes)
+            );
+            foreach ($extra as $id => $texto) {
+                $cuentasPp[(int) $id] = $texto;
+            }
+        }
+
+        foreach ($origenPorAop as $aopId => $origenId) {
+            $textoOrigen = trim((string) ($cuentasPp[(int) $origenId] ?? ''));
+            if ($textoOrigen === '') {
+                continue;
+            }
+            $cuentasPp[(int) $aopId] = $textoOrigen;
+        }
+
+        return $cuentasPp;
     }
 
     /**

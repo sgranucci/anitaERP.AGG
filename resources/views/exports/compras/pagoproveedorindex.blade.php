@@ -36,7 +36,9 @@
                 </td>
                 <td>{{ number_format((float)$fila->monto, 2, ',', '.') }}</td>
                 <td>{{ $fila->estado }}</td>
-                <td>{{ $fila->detalle }}</td>
+                <td>{{ $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                    ? $fila->detalleIndicativo()
+                    : $fila->detalle }}</td>
             </tr>
         @endforeach
     </tbody>

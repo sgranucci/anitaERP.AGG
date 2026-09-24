@@ -104,7 +104,9 @@
                                 </td>
                                 <td>{{ $fila->empresas->nombre ?? '' }}</td>
                                 <td>{{ $fila->proveedores->nombre ?? '' }}</td>
-                                <td><small>{{ $fila->detalle ?? '' }}</small></td>
+                                <td><small>{{ $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                                    ? $fila->detalleIndicativo()
+                                    : ($fila->detalle ?? '') }}</small></td>
                                 <td>
                                     @php
                                         $cuentasCaja = $fila instanceof \App\Support\Compras\PagoproveedorListadoFila

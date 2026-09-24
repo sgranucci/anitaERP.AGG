@@ -24,7 +24,7 @@
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @if (can('actualizar-empleado-sueldos', false))
                         <form action="{{ route('sincronizar_empleado_sueldos_anita') }}" method="POST" class="d-inline mr-1"
-                              onsubmit="return confirm('¿Sincronizar empleados desde Anita? Solo se agregarán los legajos que falten, con su historia (emping), leyendas (empley) y bases.');">
+                              onsubmit="return confirm('¿Sincronizar empleados desde Anita? Se agregarán legajos faltantes y se actualizarán egreso/estado y datos organizativos (centro de costo, categoría, lugar de trabajo, etc.) en los existentes.');">
                             @csrf
                             <button type="submit" class="btn btn-outline-primary btn-sm">
                                 <i class="fa fa-fw fa-refresh"></i> Sincronizar desde Anita

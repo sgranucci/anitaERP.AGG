@@ -62,6 +62,42 @@ final class PagoproveedorListadoFila
     }
 
     /**
+     * Descripción para grilla/export: la OPP revertida mantiene el texto original
+     * ("Orden de pago Nro.…") mientras la AOP ya dice "ANULA OPP…". Prefija
+     * "REVERTIDA:" en la original para que el listado sea legible de un vistazo.
+     */
+    public function detalleIndicativo(): string
+    {
+        return self::formatearDetalleIndicativo($this->detalle, $this->estado, $this->etiqueta);
+    }
+
+    public static function formatearDetalleIndicativo(
+        string $detalle,
+        string $estado,
+        string $etiquetaComprobante = ''
+    ): string {
+        $detalle = trim($detalle);
+        if (strtoupper(trim($estado)) !== 'REVERTIDA') {
+            return $detalle;
+        }
+
+        // AOP / compensatorio: ya trae "ANULA OPP …".
+        if (preg_match('/^AOP\b/i', trim($etiquetaComprobante)) === 1) {
+            return $detalle;
+        }
+
+        if ($detalle === '') {
+            return 'REVERTIDA';
+        }
+
+        if (preg_match('/^(REVERTIDA|ANULA)\b/iu', $detalle) === 1) {
+            return $detalle;
+        }
+
+        return 'REVERTIDA: '.$detalle;
+    }
+
+    /**
      * Compatibilidad con vistas/export que usan relaciones Eloquent.
      */
     public function __get(string $name): mixed
