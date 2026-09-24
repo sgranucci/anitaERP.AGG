@@ -944,6 +944,8 @@ class OrdencompraController extends Controller
     {
         if (! can('actualizar-ordencompra', false)
             && ! can('crear-comprobante-proveedor', false)
+            && ! can('editar-pagoproveedor', false)
+            && ! can('crear-pagoproveedor', false)
             && ! can('listar-legajo-compra', false)
         ) {
             can('actualizar-ordencompra');
@@ -1495,7 +1497,13 @@ class OrdencompraController extends Controller
             && OrdencompraLegajoGastronomiaSupport::puedeDevolverACuentasAPagar($data);
         $oc_puede_devolver_compras = $id !== null && $data
             && empty($visualizar)
-            && (can('actualizar-ordencompra', false) || can('crear-comprobante-proveedor', false))
+            && (
+                can('actualizar-ordencompra', false)
+                || can('crear-comprobante-proveedor', false)
+                || can('editar-pagoproveedor', false)
+                || can('crear-pagoproveedor', false)
+                || can('listar-legajo-compra', false)
+            )
             && OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($data);
         $oc_puede_finalizar_legajo = $id !== null && $data
             && empty($visualizar)

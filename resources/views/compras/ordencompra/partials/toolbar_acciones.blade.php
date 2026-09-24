@@ -73,13 +73,16 @@
                 @if (!empty($oc_puede_devolver_cxp) || !empty($oc_puede_devolver_compras) || !empty($oc_puede_finalizar_legajo))
                     <div class="dropdown-divider"></div>
                 @endif
-                @if (!empty($oc_puede_devolver_cxp))
-                    <button type="button" class="dropdown-item" data-toggle="modal" data-target="#modalOcDevolverCxp">
+                @if (!empty($oc_puede_devolver_cxp) && !empty($oc_puede_devolver_compras))
+                    <button type="button" class="dropdown-item" data-toggle="modal" data-target="#modalOcDevolverLegajo">
+                        <i class="fa fa-undo"></i> Devolver legajo…
+                    </button>
+                @elseif (!empty($oc_puede_devolver_cxp))
+                    <button type="button" class="dropdown-item" data-toggle="modal" data-target="#modalOcDevolverLegajo">
                         <i class="fa fa-undo"></i> Devolver a Cuentas a pagar
                     </button>
-                @endif
-                @if (!empty($oc_puede_devolver_compras))
-                    <button type="button" class="dropdown-item" data-toggle="modal" data-target="#modalOcDevolverCompras">
+                @elseif (!empty($oc_puede_devolver_compras))
+                    <button type="button" class="dropdown-item" data-toggle="modal" data-target="#modalOcDevolverLegajo">
                         <i class="fa fa-reply"></i> Devolver a Compras
                     </button>
                 @endif

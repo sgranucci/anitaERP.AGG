@@ -10,7 +10,7 @@
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small">
-                        Vuelve el legajo de Cuentas a pagar a <strong>COMPRAS</strong>
+                        Vuelve el legajo a <strong>COMPRAS</strong>
                         (OC #{{ $data->ordencompras->numeroordencompra ?? $data->ordencompra_id }}).
                         El comentario es obligatorio.
                     </p>

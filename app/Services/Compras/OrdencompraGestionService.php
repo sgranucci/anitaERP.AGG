@@ -914,7 +914,7 @@ class OrdencompraGestionService
             return [
                 'mensaje' => 'error',
                 'errores' => $enPagos
-                    ? 'El legajo está en Pagos y no hay FC/NC pendientes de carga. Para devolverlo usá Devolver a Cuentas a pagar.'
+                    ? 'El legajo está en Pagos y no hay FC/NC pendientes de carga. Para devolverlo usá Devolver legajo (Cuentas a pagar o Compras).'
                     : 'Este legajo no se puede enviar a Cuentas a pagar.',
             ];
         }
@@ -1005,7 +1005,7 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
         }
         if (! OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($oc)) {
-            return ['mensaje' => 'error', 'errores' => 'Solo se puede devolver a Compras un legajo en Cuentas a pagar, o en Pagos si tiene facturas pendientes de entrega.'];
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede devolver a Compras un legajo que está en Cuentas a pagar o en Pagos.'];
         }
         $obs = trim($observacion);
         if ($obs === '') {

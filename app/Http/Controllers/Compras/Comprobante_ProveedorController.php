@@ -1207,7 +1207,13 @@ class Comprobante_ProveedorController extends Controller
                     $urlPaqueteLegajo = route('ordencompra_legajo_bandeja_paquete', ['id' => (int) $oc->id]);
                 }
                 $cpPuedeDevolverCompras = (int) $oc->id > 0
-                    && (can('actualizar-ordencompra', false) || can('crear-comprobante-proveedor', false))
+                    && (
+                        can('actualizar-ordencompra', false)
+                        || can('crear-comprobante-proveedor', false)
+                        || can('editar-pagoproveedor', false)
+                        || can('crear-pagoproveedor', false)
+                        || can('listar-legajo-compra', false)
+                    )
                     && OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($oc);
                 if ($cpPuedeDevolverCompras) {
                     $urlDevolverCompras = route('ordencompra_devolver_compras', ['id' => (int) $oc->id]);

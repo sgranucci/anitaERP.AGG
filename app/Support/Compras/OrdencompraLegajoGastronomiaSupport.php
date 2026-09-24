@@ -243,9 +243,9 @@ final class OrdencompraLegajoGastronomiaSupport
         if (OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorId)) {
             return true;
         }
-        // Desde Pagos: solo si hay FC retenidas (mercadería pendiente) para que Compras las retome.
+        // Desde Pagos: se puede volver directo a Compras (p. ej. COM faltantes).
         if (self::esSectorPagos($sectorId)) {
-            return OrdencompraEnvioCuentasAPagarGateSupport::documentosPendienteEntrega($oc) !== [];
+            return true;
         }
 
         return false;

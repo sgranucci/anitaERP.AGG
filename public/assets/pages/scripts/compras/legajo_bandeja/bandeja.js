@@ -1077,20 +1077,16 @@
             $('#modalBandejaEnviarPagos').modal('show');
         });
 
-        $('.js-bandeja-devolver-cxp').on('click', function () {
-            var $form = $('#formBandejaDevolverCxp');
-            $form.attr('action', $(this).data('url'));
-            $form.find('input[name=observacion]').val('');
-            $form.find('textarea[name=leyenda]').val('');
-            $('#modalBandejaDevolverCxp').modal('show');
-        });
-
-        $('.js-bandeja-devolver-compras').on('click', function () {
-            var $form = $('#formBandejaDevolverCompras');
-            $form.attr('action', $(this).data('url'));
-            $form.find('input[name=observacion]').val('');
-            $form.find('textarea[name=leyenda]').val('');
-            $('#modalBandejaDevolverCompras').modal('show');
+        $('.js-bandeja-devolver-legajo').on('click', function () {
+            var $btn = $(this);
+            if (!window.OcDevolverLegajo) {
+                alert('No se pudo abrir el diálogo de devolución.');
+                return;
+            }
+            window.OcDevolverLegajo.open('#modalBandejaDevolverLegajo', {
+                urlCxp: $btn.data('url-cxp') || '',
+                urlCompras: $btn.data('url-compras') || '',
+            });
         });
 
         $('.js-bandeja-enviar-cxp').on('click', function () {

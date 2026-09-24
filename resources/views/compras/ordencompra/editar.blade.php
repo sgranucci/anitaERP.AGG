@@ -26,6 +26,7 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 <script src="{{ asset('assets/pages/scripts/configuracion/arbolaprobacion/panel_ia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/formulario.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/formulario.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/devolver_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/devolver_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js')) ?: time() }}" type="text/javascript"></script>
@@ -256,65 +257,19 @@ $(function () {
                 </div>
             </div>
             @endif
-            @if (!empty($oc_puede_devolver_cxp))
-            <div class="modal fade" id="modalOcDevolverCxp" tabindex="-1" role="dialog" aria-hidden="true">
-                <div class="modal-dialog" role="document">
-                    <div class="modal-content">
-                        <form method="POST" action="{{ route('ordencompra_devolver_cuentas_a_pagar', ['id' => $data->id]) }}">
-                            @csrf
-                            <div class="modal-header">
-                                <h5 class="modal-title">Devolver a Cuentas a pagar</h5>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                            </div>
-                            <div class="modal-body">
-                                <p class="text-muted small">Vuelve el legajo de Pagos a <strong>CUENTAS A PAGAR</strong>. El comentario es obligatorio.</p>
-                                <div class="form-group">
-                                    <label for="oc_dev_cxp_obs">Comentario / motivo</label>
-                                    <input type="text" name="observacion" id="oc_dev_cxp_obs" class="form-control" maxlength="255" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="oc_dev_cxp_leyenda">Detalle</label>
-                                    <textarea name="leyenda" id="oc_dev_cxp_leyenda" class="form-control" rows="3" maxlength="2000"></textarea>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                                <button type="submit" class="btn btn-warning">Devolver a Cuentas a pagar</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            @endif
-            @if (!empty($oc_puede_devolver_compras))
-            <div class="modal fade" id="modalOcDevolverCompras" tabindex="-1" role="dialog" aria-hidden="true">
-                <div class="modal-dialog" role="document">
-                    <div class="modal-content">
-                        <form method="POST" action="{{ route('ordencompra_devolver_compras', ['id' => $data->id]) }}">
-                            @csrf
-                            <div class="modal-header">
-                                <h5 class="modal-title">Devolver a Compras</h5>
-                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                            </div>
-                            <div class="modal-body">
-                                <p class="text-muted small">Vuelve el legajo de Cuentas a pagar a <strong>COMPRAS</strong>. El comentario es obligatorio.</p>
-                                <div class="form-group">
-                                    <label for="oc_dev_com_obs">Comentario / motivo</label>
-                                    <input type="text" name="observacion" id="oc_dev_com_obs" class="form-control" maxlength="255" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="oc_dev_com_leyenda">Detalle</label>
-                                    <textarea name="leyenda" id="oc_dev_com_leyenda" class="form-control" rows="3" maxlength="2000"></textarea>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                                <button type="submit" class="btn btn-warning">Devolver a Compras</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
+            @if (!empty($oc_puede_devolver_cxp) || !empty($oc_puede_devolver_compras))
+                @include('compras.partials.modal_devolver_legajo', [
+                    'modalId' => 'modalOcDevolverLegajo',
+                    'formId' => 'formOcDevolverLegajo',
+                    'puedeCxp' => !empty($oc_puede_devolver_cxp),
+                    'puedeCompras' => !empty($oc_puede_devolver_compras),
+                    'urlCxp' => !empty($oc_puede_devolver_cxp)
+                        ? route('ordencompra_devolver_cuentas_a_pagar', ['id' => $data->id])
+                        : null,
+                    'urlCompras' => !empty($oc_puede_devolver_compras)
+                        ? route('ordencompra_devolver_compras', ['id' => $data->id])
+                        : null,
+                ])
             @endif
             @if (!empty($oc_puede_finalizar_legajo))
             <div class="modal fade" id="modalOcFinalizarLegajo" tabindex="-1" role="dialog" aria-hidden="true">

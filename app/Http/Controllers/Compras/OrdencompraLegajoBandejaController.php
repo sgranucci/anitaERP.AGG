@@ -77,6 +77,8 @@ class OrdencompraLegajoBandejaController extends Controller
                 || can('listar-legajo-compra', false),
             'puede_devolver_compras' => can('crear-comprobante-proveedor', false)
                 || can('actualizar-ordencompra', false)
+                || can('editar-pagoproveedor', false)
+                || can('crear-pagoproveedor', false)
                 || can('listar-legajo-compra', false),
             'puede_ver_comprobante' => can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false),
             'puede_ver_pago' => can('editar-pagoproveedor', false) || can('listar-pagoproveedor', false),

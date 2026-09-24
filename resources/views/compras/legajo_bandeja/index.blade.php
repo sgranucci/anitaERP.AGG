@@ -551,6 +551,7 @@ Bandeja de legajos
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/devolver_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/devolver_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js')) ?: time() }}" type="text/javascript"></script>
@@ -734,65 +735,16 @@ Bandeja de legajos
     </div>
 </div>
 @endif
-@if (!empty($puede_devolver_cxp))
-<div class="modal fade" id="modalBandejaDevolverCxp" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <form method="POST" id="formBandejaDevolverCxp" action="">
-                @csrf
-                <div class="modal-header">
-                    <h5 class="modal-title">Devolver a Cuentas a pagar</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted small">Vuelve el legajo de Pagos a <strong>CUENTAS A PAGAR</strong>. El comentario es obligatorio.</p>
-                    <div class="form-group">
-                        <label for="bandeja_dev_cxp_obs">Comentario / motivo</label>
-                        <input type="text" name="observacion" id="bandeja_dev_cxp_obs" class="form-control" maxlength="255" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="bandeja_dev_cxp_leyenda">Detalle</label>
-                        <textarea name="leyenda" id="bandeja_dev_cxp_leyenda" class="form-control" rows="3" maxlength="2000"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-warning">Devolver a Cuentas a pagar</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-@endif
-@if (!empty($puede_devolver_compras))
-<div class="modal fade" id="modalBandejaDevolverCompras" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <form method="POST" id="formBandejaDevolverCompras" action="">
-                @csrf
-                <div class="modal-header">
-                    <h5 class="modal-title">Devolver a Compras</h5>
-                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted small">Vuelve el legajo de Cuentas a pagar a <strong>COMPRAS</strong>. El comentario es obligatorio.</p>
-                    <div class="form-group">
-                        <label for="bandeja_dev_com_obs">Comentario / motivo</label>
-                        <input type="text" name="observacion" id="bandeja_dev_com_obs" class="form-control" maxlength="255" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="bandeja_dev_com_leyenda">Detalle</label>
-                        <textarea name="leyenda" id="bandeja_dev_com_leyenda" class="form-control" rows="3" maxlength="2000"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-warning">Devolver a Compras</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+@if (!empty($puede_devolver_cxp) || !empty($puede_devolver_compras))
+@include('compras.partials.modal_devolver_legajo', [
+    'modalId' => 'modalBandejaDevolverLegajo',
+    'formId' => 'formBandejaDevolverLegajo',
+    'puedeCxp' => !empty($puede_devolver_cxp),
+    'puedeCompras' => !empty($puede_devolver_compras),
+    'urlCxp' => '',
+    'urlCompras' => '',
+    'dinamico' => true,
+])
 @endif
 
 <div class="modal fade" id="modalBandejaHistoria" tabindex="-1" role="dialog" aria-hidden="true">
@@ -1344,15 +1296,16 @@ Bandeja de legajos
                                         </button>
                                     @endif
                                     @if (!empty($puede_devolver_cxp) && !empty($row['puede_devolver_cxp']))
-                                        <button type="button" class="btn btn-xs btn-outline-warning js-bandeja-devolver-cxp"
-                                                data-url="{{ $row['url_devolver_cxp'] }}"
-                                                title="Devolver a Cuentas a pagar">
+                                        <button type="button" class="btn btn-xs btn-outline-warning js-bandeja-devolver-legajo"
+                                                data-url-cxp="{{ $row['url_devolver_cxp'] }}"
+                                                data-url-compras="{{ (!empty($puede_devolver_compras) && !empty($row['puede_devolver_compras'])) ? $row['url_devolver_compras'] : '' }}"
+                                                title="{{ (!empty($puede_devolver_compras) && !empty($row['puede_devolver_compras'])) ? 'Devolver legajo (Cuentas a pagar o Compras)' : 'Devolver a Cuentas a pagar' }}">
                                             <i class="fa fa-undo"></i>
                                         </button>
-                                    @endif
-                                    @if (!empty($puede_devolver_compras) && !empty($row['puede_devolver_compras']))
-                                        <button type="button" class="btn btn-xs btn-outline-warning js-bandeja-devolver-compras"
-                                                data-url="{{ $row['url_devolver_compras'] }}"
+                                    @elseif (!empty($puede_devolver_compras) && !empty($row['puede_devolver_compras']))
+                                        <button type="button" class="btn btn-xs btn-outline-warning js-bandeja-devolver-legajo"
+                                                data-url-cxp=""
+                                                data-url-compras="{{ $row['url_devolver_compras'] }}"
                                                 title="Devolver a Compras">
                                             <i class="fa fa-reply"></i>
                                         </button>
