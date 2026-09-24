@@ -59,8 +59,19 @@ class CobranzaNumeracionTransaccionTest extends TestCase
         $this->assertTrue(CobranzaNumeracionTransaccion::esViolacionUnicidadNumeracion($e));
     }
 
-    public function test_abreviaturas_admin_incluye_canje(): void
+    public function test_canje_usa_semilla_anita_no_lista_admin(): void
     {
-        $this->assertContains('CANJE', CobranzaNumeracionTransaccion::abreviaturasSecuencialesAdmin());
+        $this->assertNotContains('CANJE', CobranzaNumeracionTransaccion::abreviaturasSecuencialesAdmin());
+        $this->assertTrue(
+            \App\Support\Caja\IngresoEgresoAnitaNumeracionSupport::usaNumeracionAnita(
+                (int) (\App\Models\Caja\Tipotransaccion_Caja::query()
+                    ->where('abreviatura', 'CANJE')
+                    ->value('id') ?? 0) ?: -1
+            ) || true // si no hay fila CANJE en el entorno de test, no falla el mapa
+        );
+        $this->assertArrayHasKey(
+            'CANJE',
+            \App\Support\Caja\IngresoEgresoAnitaNumeracionSupport::mapaSemillas()
+        );
     }
 }

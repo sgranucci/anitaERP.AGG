@@ -76,4 +76,19 @@ final class OrdencompraLegajoDocumentoTipoSupportTest extends TestCase
             OrdencompraLegajoDocumentoTipoSupport::numeroConTipo('NC', 'CIS A 0070-00030193')
         );
     }
+
+    public function test_etiqueta_titulo_portal(): void
+    {
+        $this->assertSame('FACTURA (FC)', OrdencompraLegajoDocumentoTipoSupport::etiquetaTitulo('FC'));
+        $this->assertSame('NOTA DE CRÉDITO (NC)', OrdencompraLegajoDocumentoTipoSupport::etiquetaTitulo('NC'));
+        $this->assertSame('NOTA DE DÉBITO (ND)', OrdencompraLegajoDocumentoTipoSupport::etiquetaTitulo('ND'));
+        $this->assertSame('NOTA DE CRÉDITO (NC)', OrdencompraLegajoDocumentoTipoSupport::etiquetaTitulo('CIS'));
+    }
+
+    public function test_prefijo_numero(): void
+    {
+        $this->assertSame('FAC', OrdencompraLegajoDocumentoTipoSupport::prefijoNumero('FC'));
+        $this->assertSame('NC', OrdencompraLegajoDocumentoTipoSupport::prefijoNumero('NC'));
+        $this->assertSame('ND', OrdencompraLegajoDocumentoTipoSupport::prefijoNumero('ND'));
+    }
 }

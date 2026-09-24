@@ -44,31 +44,56 @@
             <dd class="col-sm-8 text-break">{{ $oc->detalle !== null && $oc->detalle !== '' ? $oc->detalle : '—' }}</dd>
         </dl>
         @php
-            $paquete = $paquete_legajo ?? ['factura' => null, 'recepciones' => [], 'url_pdf_oc' => null];
-            $facturaLegajo = $paquete['factura'] ?? null;
+            $paquete = $paquete_legajo ?? ['factura' => null, 'comprobantes' => [], 'recepciones' => [], 'url_pdf_oc' => null];
+            $comprobantesLegajo = $paquete['comprobantes'] ?? [];
+            if ($comprobantesLegajo === [] && ! empty($paquete['factura'])) {
+                $comprobantesLegajo = [$paquete['factura']];
+            }
             $recepcionesLegajo = $paquete['recepciones'] ?? [];
             $urlPdfOc = $paquete['url_pdf_oc'] ?? null;
+            $notaLegajo = trim((string) ($paquete['nota_legajo'] ?? ''));
         @endphp
         <div class="px-3 pb-3">
-            <h3 class="h6 text-muted mb-2">Factura del legajo</h3>
-            @if ($facturaLegajo)
-                <dl class="row kv mb-2">
-                    <dt class="col-sm-4">Número</dt>
-                    <dd class="col-sm-8">{{ $facturaLegajo['numero'] }}</dd>
-                    <dt class="col-sm-4">Fecha</dt>
-                    <dd class="col-sm-8">{{ $facturaLegajo['fecha'] ?? '—' }}</dd>
-                    @if ($facturaLegajo['total'] !== null)
-                    <dt class="col-sm-4">Importe</dt>
-                    <dd class="col-sm-8">{{ number_format((float) $facturaLegajo['total'], 2, ',', '.') }}</dd>
-                    @endif
-                </dl>
-                @if (!empty($facturaLegajo['url_pdf']))
-                    <a href="{{ $facturaLegajo['url_pdf'] }}" class="btn btn-outline-primary btn-sm btn-block mb-3" target="_blank" rel="noopener noreferrer">
-                        <i class="fa fa-file-pdf-o"></i> Ver PDF de la factura
-                    </a>
+            @if ($notaLegajo !== '')
+                <h3 class="h6 text-muted mb-2">Nota del legajo</h3>
+                <p class="small mb-3 p-2 border rounded bg-light text-break" style="white-space:pre-wrap;">{{ $notaLegajo }}</p>
+            @endif
+
+            <h3 class="h6 text-muted mb-2">
+                Comprobantes del legajo
+                @if (count($comprobantesLegajo) > 1)
+                    <span class="badge badge-secondary">{{ count($comprobantesLegajo) }}</span>
                 @endif
+            </h3>
+            @if (count($comprobantesLegajo) > 0)
+                @foreach ($comprobantesLegajo as $comp)
+                    <dl class="row kv mb-2">
+                        <dt class="col-sm-4">{{ $comp['tipo_titulo'] ?? 'Comprobante' }}</dt>
+                        <dd class="col-sm-8">
+                            <strong>{{ $comp['numero'] ?? '—' }}</strong>
+                            @if (!empty($comp['tipo_abrev']))
+                                <span class="badge badge-light border">{{ $comp['tipo_abrev'] }}</span>
+                            @endif
+                        </dd>
+                        <dt class="col-sm-4">Fecha</dt>
+                        <dd class="col-sm-8">{{ $comp['fecha'] ?? '—' }}</dd>
+                        @if (($comp['total'] ?? null) !== null)
+                        <dt class="col-sm-4">Importe</dt>
+                        <dd class="col-sm-8">{{ number_format((float) $comp['total'], 2, ',', '.') }}</dd>
+                        @endif
+                    </dl>
+                    @if (!empty($comp['url_pdf']))
+                        <a href="{{ $comp['url_pdf'] }}" class="btn btn-outline-primary btn-sm btn-block mb-3" target="_blank" rel="noopener noreferrer">
+                            <i class="fa fa-file-pdf-o"></i>
+                            Ver PDF
+                            @if (!empty($comp['tipo_abrev']))
+                                {{ $comp['tipo_abrev'] }}
+                            @endif
+                        </a>
+                    @endif
+                @endforeach
             @else
-                <p class="text-muted small mb-3">No hay factura PDF asociada al legajo.</p>
+                <p class="text-muted small mb-3">No hay comprobantes PDF asociados al legajo.</p>
             @endif
 
             <h3 class="h6 text-muted mb-2">Recepción (COM)</h3>

@@ -6,8 +6,10 @@ namespace App\Services\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cuentacaja;
+use App\Models\Caja\Cheque;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Proveedor;
+use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\InterbankingArchivoPagoAnitaReader;
 use App\Support\Caja\Macro\MacroArchivoPagoAnitaReader;
@@ -26,6 +28,7 @@ use Illuminate\Support\Facades\DB;
  * Filtra OP como p-enviamacro.c:
  * - Anita: auxpag con axp_banco = cuenta elegida y tipo TMR/TMK/TMB (transf) o CHP/CPC (cheque)
  * - ERP: movimientos/cheques de la cuentacaja Macro seleccionada
+ *   (incluye canje/reemplazo CANJE como IEV: el cheque nuevo con cheque_reemplaza_id)
  * - Excluye revertidas/anuladas: AOP en Anita (mismo nro), cpro_fecha_anula, estado ERP
  *
  * Canal: config macro.canal (archivo hoy; webservice después).
@@ -849,7 +852,185 @@ class MacroArchivoPagoService
             }
         }
 
+        // Canje/reemplazo ERP: no hay IEV en Anita (CANJE no escribe tesmov).
+        // Como p-enviamacro con IEV: incluir el cheque nuevo (cheque_reemplaza_id).
+        if ($incluirCheques) {
+            [$filasCanje, $benefCanje, $omitCanje] = $this->recolectarCanjeChequesErp(
+                $empresaId,
+                $empresaAnita,
+                $cuentacajaId,
+                $cuentaDebito,
+                $fechaDesde,
+                $fechaHasta,
+                $tipoOp,
+                $sucursalBanco,
+                $opsAnita,
+                $filas
+            );
+            array_push($filas, ...$filasCanje);
+            foreach ($benefCanje as $cuit => $ben) {
+                $beneficiarios[$cuit] = $ben;
+            }
+            array_push($omitidas, ...$omitCanje);
+        }
+
         return [$filas, $beneficiarios, $retenciones, $omitidas];
+    }
+
+    /**
+     * Cheques emitidos por canje (IE tipo CANJE) de la cuentacaja Macro.
+     * Se filtra por fecha (no por nro OP: el canje numera aparte, p.ej. 1, 2…).
+     *
+     * @param  array<string, true>  $opsAnita
+     * @param  list<array<string,mixed>>  $filasYa
+     * @return array{0:list<array<string,mixed>>,1:array<string,array<string,mixed>>,2:list<array<string,mixed>>}
+     */
+    private function recolectarCanjeChequesErp(
+        int $empresaId,
+        int $empresaAnita,
+        int $cuentacajaId,
+        string $cuentaDebito,
+        string $fechaDesde,
+        string $fechaHasta,
+        string $tipoOp,
+        int $sucursalBanco,
+        array $opsAnita,
+        array $filasYa,
+    ): array {
+        $tiposFiltro = MacroArchivoPagoFormatoSupport::tiposComprobanteFiltro($tipoOp);
+        $extras = array_map(
+            'strtoupper',
+            (array) config('macro.tipos_op_extra_con_opp', ['IEV'])
+        );
+        if ($tiposFiltro !== null
+            && ! in_array('IEV', $tiposFiltro, true)
+            && ! in_array('OPP', $tiposFiltro, true)
+            && count(array_intersect($tiposFiltro, $extras)) === 0
+        ) {
+            return [[], [], []];
+        }
+
+        $yaCheques = [];
+        foreach ($filasYa as $f) {
+            if (($f['medio'] ?? '') !== 'cheque') {
+                continue;
+            }
+            $n = (int) ($f['referencia_cbu_o_cheque'] ?? 0);
+            if ($n > 0) {
+                $yaCheques[$n] = true;
+            }
+        }
+
+        $tipoCanjeId = (int) (DB::table('tipotransaccion_caja')
+            ->whereRaw('UPPER(TRIM(abreviatura)) = ?', [IngresoEgresoCanjeChequeSupport::ABREV_CANJE])
+            ->whereNull('deleted_at')
+            ->value('id') ?? 0);
+
+        $query = Cheque::query()
+            ->with(['proveedores', 'cuentacajas', 'caja_movimientos'])
+            ->where('origen', 'E')
+            ->where('cuentacaja_id', $cuentacajaId)
+            ->whereNotNull('cheque_reemplaza_id')
+            ->where('cheque_reemplaza_id', '>', 0)
+            ->whereNotIn(DB::raw('UPPER(TRIM(estado))'), ['A', 'ANULADO', 'BAJA'])
+            ->whereHas('caja_movimientos', function ($q) use ($empresaId, $fechaDesde, $fechaHasta, $tipoCanjeId) {
+                $q->where('empresa_id', $empresaId)
+                    ->whereBetween('fecha', [$fechaDesde, $fechaHasta])
+                    ->whereNull('caja_movimiento_revertido_por_id');
+                if ($tipoCanjeId > 0) {
+                    $q->where('tipotransaccion_caja_id', $tipoCanjeId);
+                } else {
+                    $q->whereHas('tipotransaccioncajas', function ($q2) {
+                        $q2->whereRaw('UPPER(TRIM(abreviatura)) = ?', [IngresoEgresoCanjeChequeSupport::ABREV_CANJE])
+                            ->whereNull('deleted_at');
+                    });
+                }
+            });
+
+        $filas = [];
+        $beneficiarios = [];
+        $omitidas = [];
+        $tipoOpg = $extras[0] ?? 'IEV';
+
+        foreach ($query->orderBy('numerocheque')->get() as $ch) {
+            $nroCh = (int) ($ch->numerocheque ?? 0);
+            $imp = round(abs((float) ($ch->monto ?? 0)), 2);
+            if ($nroCh <= 0 || $imp < 0.005) {
+                continue;
+            }
+            if (isset($yaCheques[$nroCh])) {
+                continue;
+            }
+
+            $mov = $ch->caja_movimientos;
+            $rec = (int) ($mov->numerotransaccion ?? 0);
+            $claveOp = $this->claveOp($tipoOpg, $rec);
+            if ($rec > 0 && isset($opsAnita[$claveOp])) {
+                continue;
+            }
+
+            $prov = $ch->proveedores;
+            $cuit = MacroArchivoPagoFormatoSupport::cuit11((string) ($prov->nroinscripcion ?? ''));
+            $nombre = trim((string) ($prov->nombre ?? ''));
+            if ($nombre === '') {
+                $nombre = trim((string) ($ch->anombrede ?? ''));
+            }
+            if ($cuit === '' && $nombre === '') {
+                $omitidas[] = [
+                    'origen' => 'ERP-CANJE',
+                    'tipo' => $tipoOpg,
+                    'numero' => $rec,
+                    'proveedor' => (string) ($ch->anombrede ?? ''),
+                    'motivo' => 'Cheque canje '.$nroCh.' sin proveedor/CUIT',
+                ];
+
+                continue;
+            }
+
+            $codigo = InterbankingArchivoPagoAnitaReader::padProveedor((string) ($prov->codigo ?? ''));
+            $suc = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) ($mov->empresa_id ?? $empresaId))
+                ?: $empresaAnita;
+            $fecha = self::fechaYmd($mov->fecha ?? $ch->fechaemision);
+            $modalidad = MacroArchivoPagoFormatoSupport::modalidadCheque(
+                self::fechaYmd($ch->fechaemision) ?? '',
+                self::fechaYmd($ch->fechapago) ?? ''
+            );
+            $paraDep = strtoupper(substr(trim((string) ($ch->para_dep ?? '')), 0, 1));
+            $orden = MacroArchivoPagoFormatoSupport::ordenPagoCheque($tipoOpg, $suc, max($rec, 0), $nroCh);
+
+            $filas[] = [
+                'origen' => 'ERP-CANJE',
+                'medio' => 'cheque',
+                'proveedor_codigo' => $codigo,
+                'proveedor_nombre' => $nombre !== '' ? $nombre : 'SIN NOMBRE',
+                'cuit' => $cuit,
+                'tipo' => $tipoOpg,
+                'sucursal' => $suc,
+                'numero' => $rec,
+                'fecha' => $fecha,
+                'fecha_cheque' => self::fechaYmd($ch->fechapago),
+                'cbu' => '',
+                'importe' => $imp,
+                'orden_pago' => $orden,
+                'cuenta_debito' => $cuentaDebito,
+                'referencia_cbu_o_cheque' => (string) $nroCh,
+                'modalidad' => $modalidad,
+                'flag_entrega' => $paraDep === 'E' ? 1 : 2,
+                'sucursal_banco' => $sucursalBanco,
+            ];
+            $yaCheques[$nroCh] = true;
+
+            if ($cuit !== '' && $prov) {
+                $beneficiarios[$cuit] = $this->beneficiarioDesdeProveedorErp(
+                    $prov,
+                    $cuit,
+                    $codigo,
+                    $nombre !== '' ? $nombre : (string) ($prov->nombre ?? '')
+                );
+            }
+        }
+
+        return [$filas, $beneficiarios, $omitidas];
     }
 
     private function filaIeOppMacro(

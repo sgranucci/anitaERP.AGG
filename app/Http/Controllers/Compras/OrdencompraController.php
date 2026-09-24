@@ -1085,9 +1085,15 @@ class OrdencompraController extends Controller
         if (! $oc) {
             abort(404);
         }
-        $factura = OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
+
+        $precargaId = (int) $request->query('precarga', 0);
+        $factura = $precargaId > 0
+            ? OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdfPorId($oc, $precargaId)
+            : OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
         if (! $factura) {
-            abort(404, 'El legajo no tiene factura PDF.');
+            abort(404, $precargaId > 0
+                ? 'El comprobante PDF no pertenece a este legajo.'
+                : 'El legajo no tiene factura PDF.');
         }
 
         $path = app(PrecargaFacturaScanPathResolver::class)->resolve($factura->rutaalmacenamiento);

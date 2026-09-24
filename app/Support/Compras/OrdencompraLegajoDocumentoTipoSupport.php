@@ -156,6 +156,30 @@ final class OrdencompraLegajoDocumentoTipoSupport
         };
     }
 
+    /** Título largo para portal / bandeja (ej. NOTA DE CRÉDITO (NC)). */
+    public static function etiquetaTitulo(string $tipoGenerico): string
+    {
+        return match (self::etiquetaCorta($tipoGenerico)) {
+            'NC' => 'NOTA DE CRÉDITO (NC)',
+            'ND' => 'NOTA DE DÉBITO (ND)',
+            'REC' => 'RECIBO (REC)',
+            'REM' => 'REMITO (REM)',
+            default => 'FACTURA (FC)',
+        };
+    }
+
+    /** Prefijo corto de número (FAC / NC / ND). */
+    public static function prefijoNumero(string $tipoGenerico): string
+    {
+        return match (self::etiquetaCorta($tipoGenerico)) {
+            'NC' => 'NC',
+            'ND' => 'ND',
+            'REC' => 'REC',
+            'REM' => 'REM',
+            default => 'FAC',
+        };
+    }
+
     /** Prioridad de carga: FC/ND antes que NC. */
     public static function prioridadCarga(string $tipoGenerico): int
     {

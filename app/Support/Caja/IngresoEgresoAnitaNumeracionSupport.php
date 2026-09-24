@@ -11,7 +11,7 @@ use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Numeración IE (OPP/OPA/EGR/ING/TRA) alineada a Anita ventas.numerador (num_clave por empresa).
+ * Numeración IE (OPP/OPA/EGR/ING/TRA/CANJE→IEV) alineada a Anita ventas.numerador (num_clave por empresa).
  *
  * Semillas default (num_clave AGG):
  * - OPP: 223/224/225 (emp 1/2/3) — misma semilla que OP MultiEmpresa O1/O2/O3
@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Log;
  * - EGR: 361/362/363
  * - ING: 346/347/348
  * - TRA: 334/335/336
+ * - CANJE: 334/335/336 — misma serie IEV (tctes X1/X2/X3); en Anita el comprobante es IEV
  *
  * Solo Ferli (no usa esas semillas):
  * - OPP: t_comp OPP
@@ -82,7 +83,9 @@ final class IngresoEgresoAnitaNumeracionSupport
             'OPA' => [1 => 223, 2 => 224, 3 => 225],
             'EGR' => [1 => 361, 2 => 362, 3 => 363],
             'ING' => [1 => 346, 2 => 347, 3 => 348],
+            // Misma serie Anita que IEV MultiEmpresa (tctes X1/X2/X3 → 334/335/336).
             'TRA' => [1 => 334, 2 => 335, 3 => 336],
+            'CANJE' => [1 => 334, 2 => 335, 3 => 336],
         ];
     }
 
@@ -123,6 +126,14 @@ final class IngresoEgresoAnitaNumeracionSupport
             $desdeTcomp = self::claveNumeradorOpDesdeTComp($empresaId, $abrev);
             if ($desdeTcomp > 0) {
                 return $desdeTcomp;
+            }
+        }
+
+        // Canje: en Anita es IEV (tctes IEV / X1·X2·X3), no "CAN".
+        if ($abrev === IngresoEgresoCanjeChequeSupport::ABREV_CANJE && EntornoEmpresaSupport::esFerli()) {
+            $desdeIev = self::claveNumeradorDesdeTctes(IngresoEgresoCanjeChequeSupport::TIPO_ANITA);
+            if ($desdeIev > 0) {
+                return $desdeIev;
             }
         }
 

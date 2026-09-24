@@ -418,49 +418,61 @@ final class OrdencompraLegajoGastronomiaSupport
             'ordencompra_articulos.articulos:id,sku,descripcion',
         ]);
 
-        $factura = OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
-        if ($factura) {
-            $factura->loadMissing([
-                'proveedores:id,nombre',
-            ]);
-        }
-
         $hash = trim((string) $hash);
         $ocId = (int) $oc->id;
-        $urlPdf = null;
         $urlPdfOc = null;
         if ($hash !== '') {
-            if ($factura) {
-                $urlPdf = route('visualizar_factura_legajo_ordencompra', [
-                    'id' => $ocId,
-                    'hash' => $hash,
-                ]).'?inline=1';
-            }
             $urlPdfOc = route('visualizar_oc_pdf_legajo_ordencompra', [
                 'id' => $ocId,
                 'hash' => $hash,
             ]).'?inline=1';
         }
 
+        $precargas = OrdencompraEnvioCuentasAPagarGateSupport::precargasConPdfDelLegajo($oc);
+        $comprobantes = [];
+        foreach ($precargas as $pre) {
+            $urlPdf = null;
+            if ($hash !== '') {
+                $urlPdf = route('visualizar_factura_legajo_ordencompra', [
+                    'id' => $ocId,
+                    'hash' => $hash,
+                ]).'?inline=1&precarga='.(int) $pre->id;
+            }
+            $comprobantes[] = self::resumenComprobante($pre, $urlPdf);
+        }
+        $comprobantes = self::ordenarComprobantesPortal($comprobantes);
+
+        // Compat: "factura" = FC principal (o el primero si no hay FC) para totales / vistas viejas.
+        $factura = self::elegirComprobantePrincipal($comprobantes);
         $recepciones = self::resumenRecepciones($ocId, $hash !== '' ? $hash : null);
         $importeCom = self::sumaImporteRecepciones($recepciones);
-        $facturaConTotalUsable = $factura && ComprobanteProveedorPrecargaTotalSupport::precargaTieneTotalUsable($factura);
+        $facturaConTotalUsable = is_array($factura)
+            && empty($factura['importes_desde_recepcion'])
+            && $factura['total'] !== null;
 
-        $resumenFactura = $factura ? self::resumenFactura($factura, $urlPdf) : null;
-        if ($resumenFactura && ! $facturaConTotalUsable && $importeCom > 0) {
-            $resumenFactura = self::aplicarImportesDesdeRecepcion($resumenFactura, $importeCom);
+        if ($factura && ! $facturaConTotalUsable && $importeCom > 0
+            && OrdencompraLegajoDocumentoTipoSupport::exigeCom((string) ($factura['tipo'] ?? 'FC'))) {
+            $factura = self::aplicarImportesDesdeRecepcion($factura, $importeCom);
+            foreach ($comprobantes as $i => $comp) {
+                if ((int) ($comp['id'] ?? 0) === (int) ($factura['id'] ?? 0)) {
+                    $comprobantes[$i] = $factura;
+                    break;
+                }
+            }
         }
 
         $subtotalOc = self::subtotalItemsOc($oc);
-        $importesDesdeRecepcion = is_array($resumenFactura)
-            && ! empty($resumenFactura['importes_desde_recepcion']);
-        if ($facturaConTotalUsable) {
-            $importeTotal = (float) ($resumenFactura['total'] ?? 0);
+        $importesDesdeRecepcion = is_array($factura)
+            && ! empty($factura['importes_desde_recepcion']);
+        if ($facturaConTotalUsable || (is_array($factura) && $factura['total'] !== null && ! $importesDesdeRecepcion)) {
+            $importeTotal = (float) ($factura['total'] ?? 0);
         } elseif ($importeCom > 0) {
             $importeTotal = $importeCom;
         } else {
             $importeTotal = $subtotalOc;
         }
+
+        $notaLegajo = trim((string) ($oc->nota_legajo ?? ''));
 
         return [
             'cabecera' => [
@@ -478,7 +490,9 @@ final class OrdencompraLegajoGastronomiaSupport
                     : 'IMPORTE TOTAL (CON IVA)',
                 'importes_desde_recepcion' => $importesDesdeRecepcion,
             ],
-            'factura' => $resumenFactura,
+            'factura' => $factura,
+            'comprobantes' => $comprobantes,
+            'nota_legajo' => $notaLegajo !== '' ? $notaLegajo : null,
             'ordencompra' => self::resumenOrdencompra($oc, $subtotalOc, $urlPdfOc),
             'recepciones' => $recepciones,
             'url_pdf_oc' => $urlPdfOc,
@@ -591,22 +605,27 @@ final class OrdencompraLegajoGastronomiaSupport
     /**
      * @return array<string, mixed>
      */
-    private static function resumenFactura(Precarga_Comprobante_Proveedor $factura, ?string $urlPdf): array
+    private static function resumenComprobante(Precarga_Comprobante_Proveedor $factura, ?string $urlPdf): array
     {
+        $tipo = OrdencompraLegajoDocumentoTipoSupport::desdePrecarga($factura);
+        $abrev = strtoupper(trim((string) ($factura->tipotransaccion_compras->abreviatura ?? '')));
         $suc = ltrim((string) ($factura->sucursal ?? ''), '0');
         $nro = ltrim((string) ($factura->numerocomprobante ?? ''), '0');
         $numeroCorto = trim($suc.'-'.$nro, '-');
-        $numero = $numeroCorto !== '' ? 'FAC '.$numeroCorto : ('Precarga #'.$factura->id);
+        $prefijo = OrdencompraLegajoDocumentoTipoSupport::prefijoNumero($tipo);
+        $numero = $numeroCorto !== ''
+            ? $prefijo.' '.$numeroCorto
+            : ('Precarga #'.$factura->id);
 
         $tieneTotalUsable = ComprobanteProveedorPrecargaTotalSupport::precargaTieneTotalUsable($factura);
         $neto = $tieneTotalUsable && $factura->subtotal !== null ? (float) $factura->subtotal : null;
         $total = $tieneTotalUsable && $factura->total !== null ? (float) $factura->total : null;
         $iva = null;
         $ivaLabel = 'IVA';
-        if ($neto !== null && $total !== null && $total >= $neto) {
+        if ($neto !== null && $total !== null && abs($total) >= abs($neto)) {
             $iva = round($total - $neto, 2);
-            if ($neto > 0.0001) {
-                $alicuota = round(($iva / $neto) * 100);
+            if (abs($neto) > 0.0001) {
+                $alicuota = round((abs($iva) / abs($neto)) * 100);
                 if ($alicuota > 0) {
                     $ivaLabel = 'IVA '.$alicuota.'%';
                 }
@@ -614,9 +633,19 @@ final class OrdencompraLegajoGastronomiaSupport
         }
 
         $cuit = trim((string) ($factura->identificacion_proveedor_cuit ?? ''));
+        $totalLabel = match (OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo)) {
+            'NC' => 'Total nota de crédito',
+            'ND' => 'Total nota de débito',
+            'REC' => 'Total recibo',
+            default => 'Total factura',
+        };
 
         return [
             'id' => (int) $factura->id,
+            'tipo' => $tipo,
+            'tipo_abrev' => $abrev !== '' ? $abrev : OrdencompraLegajoDocumentoTipoSupport::etiquetaCorta($tipo),
+            'tipo_titulo' => OrdencompraLegajoDocumentoTipoSupport::etiquetaTitulo($tipo),
+            'exige_com' => OrdencompraLegajoDocumentoTipoSupport::exigeCom($tipo),
             'numero' => $numero,
             'fecha' => $factura->fechafactura?->format('d/m/Y'),
             'cuit' => $cuit !== '' ? $cuit : null,
@@ -624,9 +653,47 @@ final class OrdencompraLegajoGastronomiaSupport
             'iva' => $iva,
             'iva_label' => $ivaLabel,
             'total' => $total,
+            'total_label' => $totalLabel,
             'url_pdf' => $urlPdf,
             'importes_desde_recepcion' => false,
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $comprobantes
+     * @return list<array<string, mixed>>
+     */
+    private static function ordenarComprobantesPortal(array $comprobantes): array
+    {
+        usort($comprobantes, static function (array $a, array $b): int {
+            $pa = OrdencompraLegajoDocumentoTipoSupport::prioridadCarga((string) ($a['tipo'] ?? 'FC'));
+            $pb = OrdencompraLegajoDocumentoTipoSupport::prioridadCarga((string) ($b['tipo'] ?? 'FC'));
+            if ($pa !== $pb) {
+                return $pa <=> $pb;
+            }
+
+            return ((int) ($b['id'] ?? 0)) <=> ((int) ($a['id'] ?? 0));
+        });
+
+        return array_values($comprobantes);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $comprobantes
+     * @return array<string, mixed>|null
+     */
+    private static function elegirComprobantePrincipal(array $comprobantes): ?array
+    {
+        if ($comprobantes === []) {
+            return null;
+        }
+        foreach ($comprobantes as $comp) {
+            if (OrdencompraLegajoDocumentoTipoSupport::exigeCom((string) ($comp['tipo'] ?? 'FC'))) {
+                return $comp;
+            }
+        }
+
+        return $comprobantes[0];
     }
 
     /**

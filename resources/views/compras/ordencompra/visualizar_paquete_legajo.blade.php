@@ -5,12 +5,12 @@
 
 @push('styles')
 <style>
-    .portal-wrap { max-width: 1100px; }
+    .portal-wrap { max-width: 1180px; }
     .legajo-hub-header {
-        background: #1e3a5f;
+        background: linear-gradient(135deg, #1e3a5f 0%, #2a4f7a 100%);
         color: #fff;
         border-radius: .35rem .35rem 0 0;
-        padding: .85rem 1.1rem;
+        padding: .95rem 1.15rem;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -18,9 +18,10 @@
         gap: .5rem;
     }
     .legajo-hub-header h1 {
-        font-size: 1.15rem;
+        font-size: 1.2rem;
         font-weight: 700;
         margin: 0;
+        letter-spacing: .01em;
     }
     .legajo-badge {
         background: #fff;
@@ -35,7 +36,7 @@
     .legajo-meta {
         background: #f1f3f5;
         border-bottom: 1px solid #dee2e6;
-        padding: .85rem 1rem;
+        padding: .9rem 1.1rem;
     }
     .legajo-meta .meta-label {
         display: block;
@@ -59,26 +60,76 @@
         font-weight: 700;
         font-size: .85rem;
     }
+    .legajo-section-title {
+        font-size: .72rem;
+        font-weight: 700;
+        letter-spacing: .06em;
+        color: #6c757d;
+        text-transform: uppercase;
+        margin: 0 0 .65rem;
+    }
+    .legajo-nota {
+        background: #fff8e6;
+        border: 1px solid #f0d78c;
+        border-left: 4px solid #c9921a;
+        border-radius: .35rem;
+        padding: .75rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .legajo-nota .nota-label {
+        display: block;
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .05em;
+        color: #8a6a12;
+        margin-bottom: .3rem;
+    }
+    .legajo-nota .nota-body {
+        font-size: .92rem;
+        color: #3d3208;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 0;
+        line-height: 1.45;
+    }
     .legajo-doc-card {
         background: #fff;
         border: 1px solid #dee2e6;
-        border-radius: .4rem;
+        border-radius: .45rem;
         height: 100%;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 1px 2px rgba(0,0,0,.04);
+        box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        overflow: hidden;
     }
+    .legajo-doc-card.is-nc { border-color: #b8d4c0; }
+    .legajo-doc-card.is-nd { border-color: #e0c4a8; }
+    .legajo-doc-card.is-fc { border-color: #c5daf0; }
     .legajo-doc-card .doc-head {
-        padding: .85rem 1rem .4rem;
+        padding: .75rem 1rem;
         font-weight: 700;
-        color: #1e3a5f;
-        font-size: .95rem;
+        font-size: .88rem;
         display: flex;
         align-items: center;
         gap: .45rem;
+        border-bottom: 1px solid rgba(0,0,0,.06);
+    }
+    .legajo-doc-card.is-fc .doc-head { background: #eef5fc; color: #1e3a5f; }
+    .legajo-doc-card.is-nc .doc-head { background: #eef7f0; color: #1f5c38; }
+    .legajo-doc-card.is-nd .doc-head { background: #faf0e6; color: #8a4b12; }
+    .legajo-doc-card.is-oc .doc-head,
+    .legajo-doc-card.is-com .doc-head { background: #f4f6f8; color: #1e3a5f; }
+    .legajo-tipo-pill {
+        margin-left: auto;
+        font-size: .65rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        padding: .15rem .45rem;
+        border-radius: 999px;
+        background: rgba(255,255,255,.75);
     }
     .legajo-doc-card .doc-body {
-        padding: .25rem 1rem 1rem;
+        padding: .75rem 1rem 1rem;
         flex: 1 1 auto;
         font-size: .88rem;
     }
@@ -117,6 +168,12 @@
         font-size: .88rem;
         text-decoration: none !important;
     }
+    .legajo-doc-card.is-nc .btn-legajo-pdf {
+        background: #e8f5ec;
+        color: #1f5c38;
+        border-color: #b8d4c0;
+    }
+    .legajo-doc-card.is-nc .btn-legajo-pdf:hover { background: #d5ecdc; color: #16462b; }
     .btn-legajo-pdf:hover { background: #d6e8f8; color: #142849; }
     .btn-legajo-link {
         display: inline-block;
@@ -125,6 +182,11 @@
         font-size: .88rem;
     }
     .legajo-empty { color: #868e96; font-size: .88rem; padding: .5rem 0; }
+    .legajo-hint {
+        font-size: .78rem;
+        color: #6c757d;
+        margin: -.25rem 0 .85rem;
+    }
 </style>
 @endpush
 
@@ -133,10 +195,13 @@
     $oc = $ordencompra;
     $paquete = $paquete_legajo ?? [];
     $cab = $paquete['cabecera'] ?? [];
-    $factura = $paquete['factura'] ?? null;
+    $comprobantes = $paquete['comprobantes'] ?? [];
+    if ($comprobantes === [] && ! empty($paquete['factura'])) {
+        $comprobantes = [$paquete['factura']];
+    }
     $ocCard = $paquete['ordencompra'] ?? [];
     $coms = $paquete['recepciones'] ?? [];
-    $com = $coms[0] ?? null;
+    $notaLegajo = trim((string) ($paquete['nota_legajo'] ?? ''));
     $fmt = static function ($n) {
         if ($n === null) {
             return '—';
@@ -144,6 +209,18 @@
 
         return '$ '.number_format((float) $n, 2, ',', '.');
     };
+    $claseTipo = static function (?string $tipo): string {
+        $t = strtoupper(trim((string) $tipo));
+        if ($t === 'NC') {
+            return 'is-nc';
+        }
+        if ($t === 'ND') {
+            return 'is-nd';
+        }
+
+        return 'is-fc';
+    };
+    $colComp = count($comprobantes) >= 3 ? 'col-md-4' : (count($comprobantes) === 2 ? 'col-md-6' : 'col-md-6 col-lg-5');
 @endphp
 <div class="card portal-card mb-3 border-0 shadow-sm overflow-hidden">
     <div class="legajo-hub-header">
@@ -171,45 +248,90 @@
         </div>
     </div>
     <div class="card-body bg-light">
+        @if ($notaLegajo !== '')
+            <div class="legajo-nota">
+                <span class="nota-label">NOTA DEL LEGAJO (COMPRAS)</span>
+                <p class="nota-body">{{ $notaLegajo }}</p>
+            </div>
+        @endif
+
+        <h2 class="legajo-section-title">Comprobantes del proveedor</h2>
+        @if (count($comprobantes) > 1)
+            <p class="legajo-hint">Este legajo tiene {{ count($comprobantes) }} comprobantes (factura, NC, ND). Revisá cada PDF antes de autorizar.</p>
+        @endif
         <div class="row">
-            <div class="col-md-4 mb-3">
-                <div class="legajo-doc-card">
-                    <div class="doc-head">
-                        <i class="fa fa-file-text-o"></i>
-                        <span>FACTURA (FC)</span>
-                    </div>
-                    <div class="doc-body">
-                        @if ($factura)
-                            <div class="font-weight-bold mb-2" style="color:#1e3a5f;">{{ $factura['numero'] }}</div>
-                            <div class="doc-row"><span class="doc-k">Fecha emisión</span><span class="doc-v">{{ $factura['fecha'] ?? '—' }}</span></div>
-                            <div class="doc-row"><span class="doc-k">CUIT proveedor</span><span class="doc-v">{{ $factura['cuit'] ?? '—' }}</span></div>
-                            @if (!empty($factura['importes_desde_recepcion']))
+            @forelse ($comprobantes as $comp)
+                @php
+                    $tipo = (string) ($comp['tipo'] ?? 'FC');
+                    $titulo = (string) ($comp['tipo_titulo'] ?? 'FACTURA (FC)');
+                    $btnPdf = match (strtoupper($tipo)) {
+                        'NC' => 'Ver nota de crédito (PDF)',
+                        'ND' => 'Ver nota de débito (PDF)',
+                        default => 'Ver factura (PDF)',
+                    };
+                @endphp
+                <div class="{{ $colComp }} mb-3">
+                    <div class="legajo-doc-card {{ $claseTipo($tipo) }}">
+                        <div class="doc-head">
+                            <i class="fa fa-file-text-o"></i>
+                            <span>{{ $titulo }}</span>
+                            <span class="legajo-tipo-pill">{{ $comp['tipo_abrev'] ?? $tipo }}</span>
+                        </div>
+                        <div class="doc-body">
+                            <div class="font-weight-bold mb-2" style="color:#1e3a5f;">{{ $comp['numero'] ?? '—' }}</div>
+                            <div class="doc-row"><span class="doc-k">Fecha emisión</span><span class="doc-v">{{ $comp['fecha'] ?? '—' }}</span></div>
+                            <div class="doc-row"><span class="doc-k">CUIT proveedor</span><span class="doc-v">{{ $comp['cuit'] ?? '—' }}</span></div>
+                            @if (!empty($comp['importes_desde_recepcion']))
                                 <p class="mb-2" style="font-size:.78rem;color:#856404;background:#fff3cd;border:1px solid #ffeeba;border-radius:.25rem;padding:.35rem .5rem;">
                                     Importes tomados de la recepción (factura aún no cargada).
                                 </p>
                             @endif
-                            <div class="doc-row"><span class="doc-k">Neto gravado</span><span class="doc-v">{{ $fmt($factura['neto'] ?? null) }}</span></div>
-                            <div class="doc-row"><span class="doc-k">{{ $factura['iva_label'] ?? 'IVA' }}</span><span class="doc-v">{{ $fmt($factura['iva'] ?? null) }}</span></div>
+                            <div class="doc-row"><span class="doc-k">Neto gravado</span><span class="doc-v">{{ $fmt($comp['neto'] ?? null) }}</span></div>
+                            <div class="doc-row"><span class="doc-k">{{ $comp['iva_label'] ?? 'IVA' }}</span><span class="doc-v">{{ $fmt($comp['iva'] ?? null) }}</span></div>
                             <div class="doc-total">
-                                <span>{{ !empty($factura['importes_desde_recepcion']) ? 'Total (provisión COM)' : 'Total factura' }}</span>
-                                <span>{{ $fmt($factura['total'] ?? null) }}</span>
+                                <span>
+                                    @if (!empty($comp['importes_desde_recepcion']))
+                                        Total (provisión COM)
+                                    @else
+                                        {{ $comp['total_label'] ?? 'Total' }}
+                                    @endif
+                                </span>
+                                <span>{{ $fmt($comp['total'] ?? null) }}</span>
                             </div>
-                        @else
-                            <p class="legajo-empty mb-0">No hay factura PDF asociada al legajo.</p>
-                        @endif
-                    </div>
-                    <div class="doc-foot">
-                        @if (!empty($factura['url_pdf']))
-                            <a href="{{ $factura['url_pdf'] }}" class="btn-legajo-pdf" target="_blank" rel="noopener noreferrer">
-                                Ver factura (PDF) <i class="fa fa-external-link"></i>
-                            </a>
-                        @endif
+                            @if (empty($comp['exige_com']) && in_array(strtoupper($tipo), ['NC', 'ND'], true))
+                                <p class="mb-0 mt-2" style="font-size:.75rem;color:#1f5c38;">
+                                    No requiere recepción COM.
+                                </p>
+                            @endif
+                        </div>
+                        <div class="doc-foot">
+                            @if (!empty($comp['url_pdf']))
+                                <a href="{{ $comp['url_pdf'] }}" class="btn-legajo-pdf" target="_blank" rel="noopener noreferrer">
+                                    {{ $btnPdf }} <i class="fa fa-external-link"></i>
+                                </a>
+                            @endif
+                        </div>
                     </div>
                 </div>
-            </div>
+            @empty
+                <div class="col-12 mb-3">
+                    <div class="legajo-doc-card is-fc">
+                        <div class="doc-head">
+                            <i class="fa fa-file-text-o"></i>
+                            <span>COMPROBANTES</span>
+                        </div>
+                        <div class="doc-body">
+                            <p class="legajo-empty mb-0">No hay comprobantes PDF asociados al legajo.</p>
+                        </div>
+                    </div>
+                </div>
+            @endforelse
+        </div>
 
-            <div class="col-md-4 mb-3">
-                <div class="legajo-doc-card">
+        <h2 class="legajo-section-title mt-2">Orden de compra y recepción</h2>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <div class="legajo-doc-card is-oc">
                     <div class="doc-head">
                         <i class="fa fa-file-text-o"></i>
                         <span>ORDEN DE COMPRA (OC)</span>
@@ -243,13 +365,17 @@
                 </div>
             </div>
 
-            <div class="col-md-4 mb-3">
-                <div class="legajo-doc-card">
+            <div class="col-md-6 mb-3">
+                <div class="legajo-doc-card is-com">
                     <div class="doc-head">
                         <i class="fa fa-truck"></i>
                         <span>RECEPCIÓN (COM)</span>
+                        @if (count($coms) > 1)
+                            <span class="legajo-tipo-pill">{{ count($coms) }}</span>
+                        @endif
                     </div>
                     <div class="doc-body">
+                        @php $com = $coms[0] ?? null; @endphp
                         @if ($com)
                             <div class="font-weight-bold mb-2" style="color:#1e3a5f;">{{ $com['numero'] }}</div>
                             <div class="doc-row"><span class="doc-k">Fecha recepción</span><span class="doc-v">{{ $com['fecha'] ?? '—' }}</span></div>

@@ -82,7 +82,9 @@ final class IngresoEgresoAnitaTesmovSupport
             'movimientoOrigen.tipotransaccioncajas:id,abreviatura',
         ]);
 
-        $tipoErp = strtoupper(substr(trim((string) ($movimiento->tipotransaccioncajas->abreviatura ?? '')), 0, 3));
+        $tipoAnitaCanje = IngresoEgresoCanjeChequeSupport::tipoAnita($movimiento->tipotransaccioncajas);
+        $tipoErp = $tipoAnitaCanje
+            ?? strtoupper(substr(trim((string) ($movimiento->tipotransaccioncajas->abreviatura ?? '')), 0, 3));
         $nroErp = (int) $movimiento->numerotransaccion;
         $origenId = (int) ($movimiento->caja_movimiento_origen_id ?? 0);
 
@@ -105,12 +107,6 @@ final class IngresoEgresoAnitaTesmovSupport
 
     public static function grabarDesdeMovimiento(Caja_Movimiento $movimiento): void
     {
-        $movimiento->loadMissing(['tipotransaccioncajas']);
-        // Canje/reemplazo: por ahora solo ERP (no hay tipo Anita canónico; "CAN" truncado es inválido).
-        if (IngresoEgresoCanjeChequeSupport::esCanje($movimiento->tipotransaccioncajas)) {
-            return;
-        }
-
         self::grabarInterno($movimiento, 1.0, null, null, null);
     }
 
@@ -228,11 +224,9 @@ final class IngresoEgresoAnitaTesmovSupport
             'cheques.cuentacajas',
             'cheques.proveedores',
             'cheques.chequeras',
+            'cheques.chequeReemplazado.cuentacajas',
+            'cheques.chequeReemplazado.proveedores',
         ]);
-
-        if (IngresoEgresoCanjeChequeSupport::esCanje($movimiento->tipotransaccioncajas)) {
-            return;
-        }
 
         $ctx = self::contexto($movimiento, $refOverride);
         if ($ctx === null) {
@@ -342,6 +336,19 @@ final class IngresoEgresoAnitaTesmovSupport
             if (strtoupper((string) $cheque->origen) !== 'E') {
                 continue;
             }
+            // Canje: anula en cpromae el cheque reemplazado; el nuevo se graba abajo.
+            $anuladoId = (int) ($cheque->cheque_reemplaza_id ?? 0);
+            if ($anuladoId > 0) {
+                $anulado = $cheque->chequeReemplazado;
+                if ($anulado === null) {
+                    $anulado = Cheque::query()
+                        ->with(['cuentacajas', 'proveedores'])
+                        ->find($anuladoId);
+                }
+                if ($anulado !== null) {
+                    self::marcarFechaAnulaCpromae($anulado, (string) $ctx['fecha']);
+                }
+            }
             self::grabarChequePropio($movimiento, $cheque, $ctx);
         }
     }
@@ -356,10 +363,6 @@ final class IngresoEgresoAnitaTesmovSupport
             'tipotransaccioncajas',
             'cheques.cuentacajas',
         ]);
-
-        if (IngresoEgresoCanjeChequeSupport::esCanje($movimiento->tipotransaccioncajas)) {
-            return;
-        }
 
         $ctx = self::contexto($movimiento);
         if ($ctx === null) {
@@ -744,7 +747,9 @@ final class IngresoEgresoAnitaTesmovSupport
     /** @param  array{tipo: string, nro: int}|null  $refOverride */
     private static function contexto(Caja_Movimiento $movimiento, ?array $refOverride = null): ?array
     {
-        $tipo = strtoupper(substr(trim((string) ($movimiento->tipotransaccioncajas->abreviatura ?? '')), 0, 3));
+        $tipoAnitaCanje = IngresoEgresoCanjeChequeSupport::tipoAnita($movimiento->tipotransaccioncajas);
+        $tipo = $tipoAnitaCanje
+            ?? strtoupper(substr(trim((string) ($movimiento->tipotransaccioncajas->abreviatura ?? '')), 0, 3));
         if ($tipo === '') {
             $tipo = 'OPP';
         }
@@ -781,6 +786,22 @@ final class IngresoEgresoAnitaTesmovSupport
         if ($movimiento->proveedores) {
             $proveedorCodigo = str_pad((string) $movimiento->proveedores->codigo, 6, '0', STR_PAD_LEFT);
             $entregadoA = self::recortar((string) ($movimiento->proveedores->nombre ?? ''), 30);
+        }
+        // Canje: el proveedor suele venir en el cheque de reemplazo, no en la cabecera.
+        if ($proveedorCodigo === '000000' || $entregadoA === '') {
+            foreach ($movimiento->cheques as $chequeCtx) {
+                if ($chequeCtx->proveedores) {
+                    $proveedorCodigo = str_pad((string) $chequeCtx->proveedores->codigo, 6, '0', STR_PAD_LEFT);
+                    if ($entregadoA === '') {
+                        $entregadoA = self::recortar((string) ($chequeCtx->proveedores->nombre ?? ''), 30);
+                    }
+                    break;
+                }
+                $anombre = trim((string) ($chequeCtx->anombrede ?? ''));
+                if ($entregadoA === '' && $anombre !== '') {
+                    $entregadoA = self::recortar($anombre, 30);
+                }
+            }
         }
 
         $total = 0.0;
@@ -1702,6 +1723,41 @@ final class IngresoEgresoAnitaTesmovSupport
     }
 
     /**
+     * Solo marca cpro_fecha_anula (canje: el cheque viejo queda anulado sin CHP negativo
+     * bajo el IEV; el archivo Macro debe llevar solo el cheque nuevo).
+     */
+    private static function marcarFechaAnulaCpromae(Cheque $cheque, string $fechaYmd): void
+    {
+        $cuenta = $cheque->cuentacajas;
+        $codigoCuenta = $cuenta ? trim((string) $cuenta->codigo) : '';
+        $nroCheque = (int) preg_replace('/\D/', '', (string) $cheque->numerocheque);
+        if ($nroCheque <= 0) {
+            $nroCheque = (int) $cheque->numerocheque;
+        }
+        if ($codigoCuenta === '' || $nroCheque <= 0) {
+            return;
+        }
+
+        $cuentaPad = str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT);
+        $fechaAnula = preg_replace('/\D/', '', $fechaYmd) ?: date('Ymd');
+        $raw = (new ApiAnita)->apiCallEscritura([
+            'tabla' => 'cpromae',
+            'acc' => 'update',
+            'sistema' => self::sistema(),
+            'valores' => "cpro_fecha_anula = '".$fechaAnula."'",
+            'whereArmado' => ' WHERE cpro_cuenta = '.self::escSql($cuentaPad)
+                .' AND cpro_nro_cheque = '.$nroCheque,
+        ], 'caja IE cpromae fecha_anula '.$cheque->id);
+        $err = ApiAnita::extraerMensajeError($raw);
+        if ($err !== null) {
+            Log::warning('caja.ie.anita.cpromae_fecha_anula_fail', [
+                'cheque_id' => $cheque->id,
+                'error' => $err,
+            ]);
+        }
+    }
+
+    /**
      * Reversión: marca fecha de anulación en cpromae y graba tesmov/auxpag CHP con signo invertido
      * bajo el nro de la OP de anulación.
      *
@@ -1721,25 +1777,10 @@ final class IngresoEgresoAnitaTesmovSupport
 
         $cuentaPad = str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT);
         $fechaAnula = (string) ($ctx['fecha'] ?? date('Ymd'));
+        self::marcarFechaAnulaCpromae($cheque, $fechaAnula);
         $importe = round(abs((float) $cheque->monto) * (float) ($ctx['factor'] ?? -1), 2);
         $cotizacion = (float) ($cheque->cotizacion ?: 1);
         $monedaId = (int) ($cheque->moneda_id ?: 1);
-
-        $raw = (new ApiAnita)->apiCallEscritura([
-            'tabla' => 'cpromae',
-            'acc' => 'update',
-            'sistema' => self::sistema(),
-            'valores' => "cpro_fecha_anula = '".$fechaAnula."'",
-            'whereArmado' => ' WHERE cpro_cuenta = '.self::escSql($cuentaPad)
-                .' AND cpro_nro_cheque = '.$nroCheque,
-        ], 'caja IE cpromae anula '.$cheque->id);
-        $err = ApiAnita::extraerMensajeError($raw);
-        if ($err !== null) {
-            Log::warning('caja.ie.anita.cpromae_anula_fail', [
-                'cheque_id' => $cheque->id,
-                'error' => $err,
-            ]);
-        }
 
         $proveedorCodigo = $ctx['proveedorCodigo'];
         if ($cheque->proveedores) {

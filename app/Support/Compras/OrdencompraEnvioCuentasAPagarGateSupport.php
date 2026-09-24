@@ -171,6 +171,36 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             ->first();
     }
 
+    /**
+     * Todas las precargas del legajo con PDF (más reciente primero).
+     *
+     * @return \Illuminate\Support\Collection<int, Precarga_Comprobante_Proveedor>
+     */
+    public static function precargasConPdfDelLegajo(Ordencompra $oc)
+    {
+        return self::queryPrecargaDelLegajo($oc)
+            ->whereNotNull('rutaalmacenamiento')
+            ->where('rutaalmacenamiento', '!=', '')
+            ->with(['tipotransaccion_compras:id,abreviatura,codigoafip,signo,nombre'])
+            ->get();
+    }
+
+    /**
+     * Precarga con PDF del legajo por id (portal / enlaces públicos).
+     */
+    public static function resolverPrecargaConPdfPorId(Ordencompra $oc, int $precargaId): ?Precarga_Comprobante_Proveedor
+    {
+        if ($precargaId <= 0) {
+            return null;
+        }
+
+        return self::queryPrecargaDelLegajo($oc)
+            ->whereKey($precargaId)
+            ->whereNotNull('rutaalmacenamiento')
+            ->where('rutaalmacenamiento', '!=', '')
+            ->first();
+    }
+
     public static function precargaDelLegajo(Ordencompra $oc): ?Precarga_Comprobante_Proveedor
     {
         return self::resolverPrecargaConPdf($oc)

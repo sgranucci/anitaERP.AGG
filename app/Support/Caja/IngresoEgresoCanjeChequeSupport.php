@@ -11,10 +11,14 @@ use App\Models\Caja\Tipotransaccion_Caja;
  *
  * Tipo dedicado (operación J) para el escenario de anulación + reemplazo.
  * Signo I (como TRA) para no invertir montos ni forzar proveedor/gasto.
+ * En Anita se replica como IEV (p-enviamacro / tctes X1·X2·X3), no como "CAN".
  */
 final class IngresoEgresoCanjeChequeSupport
 {
     public const ABREV_CANJE = 'CANJE';
+
+    /** Tipo de comprobante Anita (pago/auxpag/tesmov) para el canje. */
+    public const TIPO_ANITA = 'IEV';
 
     public const OPERACION = 'J';
 
@@ -40,6 +44,14 @@ final class IngresoEgresoCanjeChequeSupport
         $tipo = Tipotransaccion_Caja::query()->find($id);
 
         return self::esCanje($tipo);
+    }
+
+    /**
+     * Tipo Anita a usar en pago/auxpag (IEV). Null si no es canje.
+     */
+    public static function tipoAnita(?Tipotransaccion_Caja $tipo): ?string
+    {
+        return self::esCanje($tipo) ? self::TIPO_ANITA : null;
     }
 
     /**

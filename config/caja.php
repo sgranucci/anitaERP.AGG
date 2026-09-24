@@ -159,6 +159,12 @@ return [
             2 => (int) env('CAJA_IE_ANITA_SEMILLA_TRA_EMP2', 335),
             3 => (int) env('CAJA_IE_ANITA_SEMILLA_TRA_EMP3', 336),
         ],
+        // Canje/reemplazo → Anita IEV (tctes X1/X2/X3 = 334/335/336, misma serie MultiEmpresa).
+        'CANJE' => [
+            1 => (int) env('CAJA_IE_ANITA_SEMILLA_CANJE_EMP1', env('CAJA_IE_ANITA_SEMILLA_TRA_EMP1', 334)),
+            2 => (int) env('CAJA_IE_ANITA_SEMILLA_CANJE_EMP2', env('CAJA_IE_ANITA_SEMILLA_TRA_EMP2', 335)),
+            3 => (int) env('CAJA_IE_ANITA_SEMILLA_CANJE_EMP3', env('CAJA_IE_ANITA_SEMILLA_TRA_EMP3', 336)),
+        ],
     ],
 
     /*

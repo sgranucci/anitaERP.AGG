@@ -61,7 +61,7 @@ final class CobranzaNumeracionTransaccion
      */
     public static function abreviaturasSecuencialesAdmin(): array
     {
-        return ['COB', 'COA', 'REM', 'RMI', 'DEV', 'CANJE'];
+        return ['COB', 'COA', 'REM', 'RMI', 'DEV'];
     }
 
     public static function usaNumeracionSecuencial(int $tipotransaccionCajaId): bool
@@ -76,12 +76,12 @@ final class CobranzaNumeracionTransaccion
             return true;
         }
 
-        // Canje de cheques (CANJE / op J): serie propia ERP MAX+1, sin semilla Anita.
+        // Canje de cheques (CANJE / op J): usa semilla Anita IEV (aplicaTipoCaja) si está mapeada.
         if (IngresoEgresoCanjeChequeSupport::esCanjePorId($tipotransaccionCajaId)) {
             return true;
         }
 
-        // COB/REM/RMI/DEV/CANJE por abreviatura: Ferli usa id 12 para COB; el .env AGG (1,5,…) no aplica.
+        // COB/REM/RMI/DEV por abreviatura: Ferli usa id 12 para COB; el .env AGG (1,5,…) no aplica.
         $abrev = IngresoEgresoAnitaNumeracionSupport::abreviaturaTipo($tipotransaccionCajaId);
 
         return $abrev !== '' && in_array($abrev, self::abreviaturasSecuencialesAdmin(), true);
