@@ -148,6 +148,7 @@ use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Database\DbContencionSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
@@ -1381,6 +1382,7 @@ class FacturacionService
 
 					// Graba venta (reintento si otra emisión concurrente tomó el mismo número CAEA/manual Bierzo)
 					$intentoCreateVenta = 0;
+					$maxReintentosNumeracion = EntornoEmpresaSupport::esElBierzo() ? 3 : 1;
 					while (true) {
 						try {
 							$vta = $this->ventaRepository->create($venta);
@@ -1389,22 +1391,25 @@ class FacturacionService
 							$modoPv = (string) ($puntoventa->modofacturacion ?? '');
 							$puedeRenumerarErp = $modoPv === 'A'
 								|| ($modoPv === 'M' && EntornoEmpresaSupport::esElBierzo());
+							$esColisionNumero = VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e);
+							$esLockWait = EntornoEmpresaSupport::esElBierzo()
+								&& DbContencionSupport::esErrorReintentable($e);
 							if (
-								$intentoCreateVenta > 0
+								$intentoCreateVenta >= $maxReintentosNumeracion
 								|| ! $puedeRenumerarErp
-								|| ! VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e)
+								|| (! $esColisionNumero && ! $esLockWait)
 							) {
 								throw $e;
 							}
 
-							$numero = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
-								(int) $puntoventa->id,
-								$tipotransaccion->codigo,
+							$numero = $this->siguienteNumerocomprobanteTrasColision(
+								$puntoventa,
+								$tipotransaccion,
 								$letra,
-								(int) ($puntoventa->empresa_id ?? 0) ?: null,
-								$cliente->modoFacturacion ?? null,
-								abs((float) $totalComprobante),
-							) + 1;
+								$cliente,
+								$totalComprobante,
+								(int) ($venta['numerocomprobante'] ?? 0),
+							);
 
 							$venta['numerocomprobante'] = $numero;
 							$venta['codigo'] = $tipoAnita.' '.$letra.'-'
@@ -1426,6 +1431,8 @@ class FacturacionService
 								'pedido_id' => $pedido_id ?? null,
 								'puntoventa_id' => $puntoventa->id,
 								'numerocomprobante' => $numero,
+								'intento' => $intentoCreateVenta,
+								'lock_wait' => $esLockWait && ! $esColisionNumero,
 							]);
 						}
 					}
@@ -4627,6 +4634,7 @@ class FacturacionService
 
 			// Graba venta
 			$intentoCreateVenta = 0;
+			$maxReintentosNumeracion = EntornoEmpresaSupport::esElBierzo() ? 3 : 1;
 			while (true) {
 				try {
 					$vta = $this->ventaRepository->create($venta);
@@ -4635,22 +4643,25 @@ class FacturacionService
 					$modoPv = (string) ($puntoventa->modofacturacion ?? '');
 					$puedeRenumerarErp = $modoPv === 'A'
 						|| ($modoPv === 'M' && EntornoEmpresaSupport::esElBierzo());
+					$esColisionNumero = VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e);
+					$esLockWait = EntornoEmpresaSupport::esElBierzo()
+						&& DbContencionSupport::esErrorReintentable($e);
 					if (
-						$intentoCreateVenta > 0
+						$intentoCreateVenta >= $maxReintentosNumeracion
 						|| ! $puedeRenumerarErp
-						|| ! VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e)
+						|| (! $esColisionNumero && ! $esLockWait)
 					) {
 						throw $e;
 					}
 
-					$numero = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
-						(int) $puntoventa->id,
-						$tipotransaccion->codigo,
+					$numero = $this->siguienteNumerocomprobanteTrasColision(
+						$puntoventa,
+						$tipotransaccion,
 						$letra,
-						(int) ($puntoventa->empresa_id ?? 0) ?: null,
-						$cliente->modoFacturacion ?? null,
-						abs((float) $totalComprobante),
-					) + 1;
+						$cliente,
+						$totalComprobante,
+						(int) ($venta['numerocomprobante'] ?? 0),
+					);
 
 					$venta['numerocomprobante'] = $numero;
 					$venta['codigo'] = $tipoAnita.' '.$letra.'-'
@@ -4665,6 +4676,8 @@ class FacturacionService
 					Log::warning('facturacion.grabaFacturaERP.numeracion_duplicada_reintento', [
 						'puntoventa_id' => $puntoventa->id,
 						'numerocomprobante' => $numero,
+						'intento' => $intentoCreateVenta,
+						'lock_wait' => $esLockWait && ! $esColisionNumero,
 					]);
 				}
 			}
@@ -7256,6 +7269,55 @@ class FacturacionService
 		);
 
 		return $mensaje !== null ? ['error' => $mensaje] : null;
+	}
+
+	/**
+	 * Tras colisión / lock wait al INSERT de venta: pide el siguiente número.
+	 * El Bierzo (CAEA): reserva atómica en venta_serie_numerador.
+	 * Resto: max ERP + 1 (sin cambiar el comportamiento AGG).
+	 */
+	private function siguienteNumerocomprobanteTrasColision(
+		object $puntoventa,
+		object $tipotransaccion,
+		string $letra,
+		?object $cliente,
+		$totalComprobante,
+		int $numeroColisionado = 0,
+	): int {
+		$empresaId = (int) ($puntoventa->empresa_id ?? 0) ?: null;
+		$modoCliente = is_object($cliente) ? ($cliente->modoFacturacion ?? $cliente->modofacturacion ?? null) : null;
+		$totalAbs = abs((float) $totalComprobante);
+
+		if (EntornoEmpresaSupport::esElBierzo()) {
+			$tipo = $tipotransaccion instanceof Tipotransaccion
+				? $tipotransaccion
+				: Tipotransaccion::query()->find((int) ($tipotransaccion->id ?? 0));
+			if ($tipo instanceof Tipotransaccion) {
+				$numero = CaeaEmisionNumeracionSupport::reservarSiguienteNumeroErp(
+					(int) ($puntoventa->id ?? 0),
+					$tipo,
+					$letra,
+					$empresaId,
+					$modoCliente,
+					$totalAbs,
+				);
+				if ($numero > 0) {
+					return max($numero, $numeroColisionado + 1);
+				}
+			}
+		}
+
+		return max(
+			VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+				(int) ($puntoventa->id ?? 0),
+				$tipotransaccion->codigo ?? 0,
+				$letra,
+				$empresaId,
+				$modoCliente,
+				$totalAbs,
+			) + 1,
+			$numeroColisionado + 1,
+		);
 	}
 
 	/**

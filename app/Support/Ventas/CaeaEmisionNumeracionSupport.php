@@ -7,6 +7,7 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
+use App\Support\Ventas\VentaNumeradorFiscalSupport;
 use InvalidArgumentException;
 
 /**
@@ -100,6 +101,17 @@ final class CaeaEmisionNumeracionSupport
                 $path,
             );
             $ultimoErp = max($ultimoErp, $ultimoAnita);
+
+            // Reserva atómica en venta_serie_numerador (no max()+1 suelto).
+            // Solo El Bierzo: AGG POS/gastronomía sigue con max ERP + Redis lock.
+            $piso = self::aplicarPisoCaea($puntoventaId, $ultimoErp, $codigoAfip);
+
+            return VentaNumeradorFiscalSupport::reservarSiguiente(
+                $puntoventaId,
+                $codigoAfip,
+                $empresaId,
+                $piso,
+            );
         }
 
         return self::aplicarPisoCaea($puntoventaId, $ultimoErp, $codigoAfip) + 1;

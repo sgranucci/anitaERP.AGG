@@ -16,7 +16,9 @@ use RuntimeException;
  * Numerador fiscal local: serie = codigo_afip (tipo ARCA) + puntoventa.
  * FAC A=001 y FAC B=006 son series distintas. La letra no es clave.
  *
- * Los facturadores no lo llaman hasta config facturacion.NUMERADOR_FISCAL_EN_USO.
+ * Emisión El Bierzo (CAEA): CaeaEmisionNumeracionSupport llama reservarSiguiente()
+ * aunque NUMERADOR_FISCAL_EN_USO esté en false (ese flag solo afecta preview POS).
+ * AGG POS/gastronomía no usa esta tabla.
  */
 final class VentaNumeradorFiscalSupport
 {
@@ -43,19 +45,26 @@ final class VentaNumeradorFiscalSupport
     }
 
     /**
-     * Reserva el siguiente número de la serie. No usar desde facturadores
-     * mientras estaEnUso() sea false.
+     * Reserva el siguiente número de la serie (lockForUpdate atómico).
+     *
+     * $pisoExterno: máximo ya conocido (ERP / Anita / CAEA) para no quedar atrás
+     * si la fila aún no está sembrada. El avance queda persistido aunque falle
+     * el INSERT posterior: evita colisiones entre emisiones concurrentes.
+     *
+     * El Bierzo lo usa desde CaeaEmisionNumeracionSupport sin depender del flag
+     * NUMERADOR_FISCAL_EN_USO (ese flag solo afecta preview POS / listados).
      */
     public static function reservarSiguiente(
         int $puntoventaId,
         int $codigoAfip,
         ?int $empresaId = null,
+        int $pisoExterno = 0,
     ): int {
         if ($puntoventaId <= 0 || $codigoAfip <= 0) {
             throw new InvalidArgumentException('Serie fiscal inválida (PV y tipo ARCA son obligatorios).');
         }
 
-        return (int) DB::transaction(function () use ($puntoventaId, $codigoAfip, $empresaId): int {
+        return (int) DB::transaction(function () use ($puntoventaId, $codigoAfip, $empresaId, $pisoExterno): int {
             $row = Venta_Serie_Numerador::query()
                 ->where('puntoventa_id', $puntoventaId)
                 ->where('codigo_afip', $codigoAfip)
@@ -76,7 +85,10 @@ final class VentaNumeradorFiscalSupport
                     ->firstOrFail();
             }
 
-            $siguiente = self::proximoNumero((int) $row->ultimo_numero, (int) $row->piso);
+            $siguiente = self::proximoNumero(
+                (int) $row->ultimo_numero,
+                max((int) $row->piso, max(0, $pisoExterno)),
+            );
             $row->ultimo_numero = $siguiente;
             if ($empresaId !== null && $empresaId > 0 && (int) $row->empresa_id !== $empresaId) {
                 $row->empresa_id = $empresaId;
