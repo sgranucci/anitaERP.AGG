@@ -23,6 +23,7 @@ use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
+use App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport;
 use Auth;
 use DB;
 use Illuminate\Support\Facades\Log;
@@ -224,6 +225,18 @@ class MovimientoStockService
 				$colores = $this->normalizarArrayLineasFormulario($data['colores_id'] ?? []);
 				$talles = $this->normalizarArrayLineasFormulario($data['talles_id'] ?? []);
 				$fechaPrecio = ! empty($data['fecha']) ? \Carbon\Carbon::parse($data['fecha']) : \Carbon\Carbon::today();
+
+				// Ferli: si hay JSON de medidas, la suma de pares alinea cantidades[] (evita desfase vs talles).
+				if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+					foreach ($articulos as $iLinea => $_art) {
+						$sumaMed = TransferenciaMercaderiaDetalleFerliSupport::sumaCantidadDesdeMedidas($medidas[$iLinea] ?? '');
+						if ($sumaMed <= 0.000001) {
+							continue;
+						}
+						$signoCant = (float) ($cantidades[$iLinea] ?? 0);
+						$cantidades[$iLinea] = $signoCant < 0 ? -abs($sumaMed) : abs($sumaMed);
+					}
+				}
 
 				if (! MovimientoStockFerliSupport::esCalzadosFerli()) {
 					MovimientoStockColorTalleExclusividadSupport::validarLineas($articulos, $colores, $talles);
@@ -511,6 +524,18 @@ class MovimientoStockService
 			}
 			$extra .= '.';
 			$resultado['mensaje'] = ($resultado['mensaje'] ?? 'Movimiento de stock creado con éxito').$extra;
+		}
+
+		if ($funcion === 'update' && (int) $movimientostock_id > 0) {
+			try {
+				app(TransferenciaMercaderiaService::class)
+					->sincronizarCantidadesDesdeMovimientoStock((int) $movimientostock_id);
+			} catch (\Throwable $syncTm) {
+				Log::warning('MovimientoStock: no se pudo sincronizar cantidades TM tras update', [
+					'movimientostock_id' => $movimientostock_id,
+					'mensaje' => $syncTm->getMessage(),
+				]);
+			}
 		}
 
 		return $resultado;

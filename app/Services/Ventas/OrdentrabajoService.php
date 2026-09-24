@@ -407,20 +407,22 @@ class OrdentrabajoService
 							if ($deposito_id == null)
 								$deposito_id = 1;
 
+							// Alta cliente STOCK: lote=0 (bucket OT). Consumo OT stock: lote=código origen.
+							$esConsumoOtStock = $ordentrabajo_stock_codigo > 0 && $checkOtStock == 'on'
+								&& $cliente->id != config("consprod.CLIENTE_STOCK");
 							$dataArticuloMovimiento = [
 									'fecha' => Carbon::now(),
 									'fechajornada' => Carbon::now(),
-									'tipotransaccion_id' => $ordentrabajo_stock_codigo > 0 && $checkOtStock == 'on' &&
-														$cliente->id != config("consprod.CLIENTE_STOCK") ? 
-														config("consprod.TIPOTRANSACCION_CONSUME_OT") :
-														config("consprod.TIPOTRANSACCION_ALTA_PRODUCCION"),
+									'tipotransaccion_id' => $esConsumoOtStock
+														? config("consprod.TIPOTRANSACCION_CONSUME_OT")
+														: config("consprod.TIPOTRANSACCION_ALTA_PRODUCCION"),
 									'pedido_combinacion_id' => $ids[$i],
 									'ordentrabajo_id' => $ordentrabajo_id,
-									'lote' => $ordentrabajo_stock_codigo > 0 ? $ordentrabajo_stock_codigo : $nro_orden,
+									'lote' => $esConsumoOtStock ? $ordentrabajo_stock_codigo : 0,
 									'articulo_id' => $articulo->id,
 									'combinacion_id' => $combinacion->id,
 									'modulo_id' => $pedido_combinacion->modulo_id,
-									'concepto' => $ordentrabajo_stock_codigo > 0 ? 'Consumo de OT' : 'Alta de produccion',
+									'concepto' => $esConsumoOtStock ? 'Consumo de OT' : 'Alta de produccion',
 									'cantidad' => $pedido_combinacion->cantidad,
 									'precio' => $pedido_combinacion->precio,
 									'costo' => 0,

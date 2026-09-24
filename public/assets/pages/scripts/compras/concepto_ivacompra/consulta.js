@@ -13,6 +13,11 @@ function urlAppComprasConceptoIva(path) {
 
 function tipotransaccionCompraIdConsultaConcepto() {
     var v = parseInt(String($('#tipotransaccion_compra_id').val() || '0'), 10);
+    if (v > 0) {
+        return v;
+    }
+    // Ingresos/egresos: tipo de comprobante vive en el modal IVA (no en #tipotransaccion_compra_id)
+    v = parseInt(String($('#ie-cp-tipotransaccion-compra-id').val() || '0'), 10);
     return v > 0 ? v : 0;
 }
 
@@ -38,7 +43,7 @@ function actualizarAvisoModalConceptoIva(tipoId) {
             + '.'
         );
     } else {
-        $aviso.text('Seleccione el tipo de comprobante en Datos principales.');
+        $aviso.text('Seleccione el tipo de comprobante.');
     }
 }
 

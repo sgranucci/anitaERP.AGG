@@ -9,13 +9,9 @@
 				</div>
 			</div>
 			<div class="form-group row">
-				@if ($tipoalta != 'P')
-					<label for="nroIIBB" class="col-lg-4 col-form-label requerido">Nro.IIBB</label>
-				@else
-					<label for="nroIIBB" class="col-lg-4 col-form-label">Nro.IIBB</label>
-				@endif
+				<label for="nroIIBB" class="col-lg-4 col-form-label">Nro.IIBB</label>
 				<div class="col-lg-3">
-					<input type="text" name="nroIIBB" id="nroIIBB" class="form-control" value="{{old('nroIIBB', $data->nroIIBB ?? '')}}" @if ($tipoalta != 'P') required @endif readonly/>
+					<input type="text" name="nroIIBB" id="nroIIBB" class="form-control" value="{{old('nroIIBB', $data->nroIIBB ?? '')}}" readonly/>
 				</div>
 			</div>
 			<div class="form-group row">

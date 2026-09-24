@@ -51,6 +51,7 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             DB::raw('MAX(pedido_combinacion.pedido_id) as pedido'),
             DB::raw('MAX(articulo_movimiento.id) as id'),
             DB::raw('MAX(articulo_movimiento_talle.id) as idmov'),
+            DB::raw("MAX(CASE WHEN articulo_movimiento.concepto LIKE 'Reemplazo stock Excel Ferli L12 (ALTAP%' THEN 1 ELSE 0 END) as es_altap_excel"),
         ];
 
         if ($agrupaModulo) {

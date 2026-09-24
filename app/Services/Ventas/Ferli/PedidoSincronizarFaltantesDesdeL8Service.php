@@ -316,8 +316,9 @@ class PedidoSincronizarFaltantesDesdeL8Service
 
         $tarea12PorClave = [];
         $tarea12Ids = [];
-        foreach (DB::table('ordentrabajo_tarea')->get(['id', 'ordentrabajo_id', 'tarea_id']) as $r) {
-            $tarea12PorClave[(int) $r->ordentrabajo_id.'|'.(int) $r->tarea_id] = (int) $r->id;
+        foreach (DB::table('ordentrabajo_tarea')->get(['id', 'ordentrabajo_id', 'tarea_id', 'pedido_combinacion_id']) as $r) {
+            $pc = max(0, (int) ($r->pedido_combinacion_id ?? 0));
+            $tarea12PorClave[(int) $r->ordentrabajo_id.'|'.(int) $r->tarea_id.'|'.$pc] = (int) $r->id;
             $tarea12Ids[(int) $r->id] = true;
         }
         foreach ($l8->table('ordentrabajo_tarea')->cursor() as $r) {
@@ -325,7 +326,8 @@ class PedidoSincronizarFaltantesDesdeL8Service
             if (! isset($ot12Ids[$otId]) && ! isset($otIdsL8PorInsertar[$otId])) {
                 continue;
             }
-            $clave = $otId.'|'.(int) $r->tarea_id;
+            $pc = max(0, (int) ($r->pedido_combinacion_id ?? 0));
+            $clave = $otId.'|'.(int) $r->tarea_id.'|'.$pc;
             if (isset($tarea12PorClave[$clave])) {
                 continue;
             }
@@ -590,7 +592,19 @@ class PedidoSincronizarFaltantesDesdeL8Service
             if ($otId <= 0 || $tareaId <= 0) {
                 continue;
             }
-            if (DB::table('ordentrabajo_tarea')->where('ordentrabajo_id', $otId)->where('tarea_id', $tareaId)->exists()) {
+            $pcId = max(0, (int) ($clean['pedido_combinacion_id'] ?? 0));
+            $qExiste = DB::table('ordentrabajo_tarea')
+                ->where('ordentrabajo_id', $otId)
+                ->where('tarea_id', $tareaId);
+            if ($pcId > 0) {
+                $qExiste->where('pedido_combinacion_id', $pcId);
+            } else {
+                $qExiste->where(function ($w) {
+                    $w->whereNull('pedido_combinacion_id')
+                        ->orWhere('pedido_combinacion_id', 0);
+                });
+            }
+            if ($qExiste->exists()) {
                 continue;
             }
             $id = (int) ($clean['id'] ?? 0);

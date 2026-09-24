@@ -214,7 +214,7 @@ class PedidoImportarTareasDesdeL8Service
             $tareasNuevas = $this->filtrarTareasFaltantesEnL12($tareasPayload);
 
             if ($dryRun) {
-                // Cuenta también las que chocan por id pero faltan por (OT, tarea_id).
+                // Cuenta también las que chocan por id pero faltan por (OT, tarea_id, pc).
                 $faltanClave = $this->tareasQueFaltanPorClaveNatural($tareasPayload);
                 $stats['insert_tarea'] += count($faltanClave);
                 if ($actualizarTareasExistentes) {
@@ -236,8 +236,10 @@ class PedidoImportarTareasDesdeL8Service
                 $stats['update_oct'] += $updOct;
 
                 if ($actualizarTareasExistentes && ! $soloActualizarFechasTarea) {
-                    // Pedido puntual: sincroniza por id o por (OT, tarea_id); si el id
-                    // L8 ya pertenece a otra OT en L12, inserta con id nuevo.
+                    // Pedido puntual: sincroniza por id o por (OT, tarea_id, pc).
+                    // OT compartida (misma combinación en N pedidos) tiene Empaque/Terminada
+                    // por cada pedido_combinacion_id; no colapsar a una sola fila por OT+tarea.
+                    // Si el id L8 ya pertenece a otra OT en L12, inserta con id nuevo.
                     [$insT, $updT] = $this->upsertTareasConColision($tareasPayload);
                     $stats['insert_tarea'] += $insT;
                     $stats['update_tarea'] += $updT;
@@ -778,7 +780,37 @@ class PedidoImportarTareasDesdeL8Service
     }
 
     /**
-     * Tareas L8 que aún no existen en L12 para esa OT+tarea_id (aunque el id L8 esté ocupado).
+     * Clave natural de tarea en OT compartida: OT + tarea + pedido_combinacion.
+     * pc null/0 = tarea de cabecera OT (aplica a todos los pedidos ligados).
+     */
+    private function pedidoCombinacionKey(mixed $pc): int
+    {
+        return max(0, (int) ($pc ?? 0));
+    }
+
+    /**
+     * @return object|null
+     */
+    private function buscarTareaPorClaveNatural(int $otId, int $tareaId, int $pcId)
+    {
+        $q = DB::table('ordentrabajo_tarea')
+            ->where('ordentrabajo_id', $otId)
+            ->where('tarea_id', $tareaId);
+        if ($pcId > 0) {
+            $q->where('pedido_combinacion_id', $pcId);
+        } else {
+            $q->where(function ($w) {
+                $w->whereNull('pedido_combinacion_id')
+                    ->orWhere('pedido_combinacion_id', 0);
+            });
+        }
+
+        return $q->orderBy('id')->first();
+    }
+
+    /**
+     * Tareas L8 que aún no existen en L12 para esa OT+tarea_id+pc
+     * (aunque el id L8 esté ocupado o ya exista la misma tarea para otro pc de la OT).
      *
      * @param  list<array<string, mixed>>  $tareas
      * @return list<array<string, mixed>>
@@ -792,11 +824,8 @@ class PedidoImportarTareasDesdeL8Service
             if ($otId <= 0 || $tareaId <= 0) {
                 continue;
             }
-            $existe = DB::table('ordentrabajo_tarea')
-                ->where('ordentrabajo_id', $otId)
-                ->where('tarea_id', $tareaId)
-                ->exists();
-            if (! $existe) {
+            $pcId = $this->pedidoCombinacionKey($row['pedido_combinacion_id'] ?? 0);
+            if (! $this->buscarTareaPorClaveNatural($otId, $tareaId, $pcId)) {
                 $faltan[] = $row;
             }
         }
@@ -824,16 +853,20 @@ class PedidoImportarTareasDesdeL8Service
             if ($otId <= 0 || $tareaId <= 0) {
                 continue;
             }
+            $pcId = $this->pedidoCombinacionKey($clean['pedido_combinacion_id'] ?? 0);
 
-            // Preferir la fila ya ligada a esta OT (misma clave natural).
-            $porClave = DB::table('ordentrabajo_tarea')
-                ->where('ordentrabajo_id', $otId)
-                ->where('tarea_id', $tareaId)
-                ->orderBy('id')
-                ->first();
+            // Misma OT + tarea + pc (OT compartida: un Empaque por pedido).
+            $porClave = $this->buscarTareaPorClaveNatural($otId, $tareaId, $pcId);
             if ($porClave) {
                 $data = $clean;
                 unset($data['id'], $data['created_at']);
+                // No pisar venta_id ya facturada en L12 si L8 viene sin ella.
+                if (
+                    empty($data['venta_id'])
+                    && ! empty($porClave->venta_id)
+                ) {
+                    unset($data['venta_id']);
+                }
                 DB::table('ordentrabajo_tarea')->where('id', (int) $porClave->id)->update($data);
                 $upd++;
                 continue;
@@ -842,14 +875,24 @@ class PedidoImportarTareasDesdeL8Service
             if ($id > 0) {
                 $porId = DB::table('ordentrabajo_tarea')->where('id', $id)->first();
                 if ($porId) {
-                    // Id L8 ocupado por otra OT → no pisar; insertar con id nuevo.
-                    if ((int) ($porId->ordentrabajo_id ?? 0) === $otId) {
+                    $mismoOt = (int) ($porId->ordentrabajo_id ?? 0) === $otId;
+                    $mismoPc = $this->pedidoCombinacionKey($porId->pedido_combinacion_id ?? 0) === $pcId;
+                    $mismaTarea = (int) ($porId->tarea_id ?? 0) === $tareaId;
+                    // Id L8 ya es exactamente esta fila → actualizar.
+                    if ($mismoOt && $mismaTarea && $mismoPc) {
                         $data = $clean;
                         unset($data['id'], $data['created_at']);
+                        if (
+                            empty($data['venta_id'])
+                            && ! empty($porId->venta_id)
+                        ) {
+                            unset($data['venta_id']);
+                        }
                         DB::table('ordentrabajo_tarea')->where('id', $id)->update($data);
                         $upd++;
                         continue;
                     }
+                    // Id ocupado por otra OT/tarea/pc → no pisar; insertar con id nuevo.
                     unset($clean['id']);
                 }
             } else {

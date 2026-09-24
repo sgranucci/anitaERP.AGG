@@ -310,6 +310,121 @@ final class ComprobanteProveedorUnicidadSupport
     }
 
     /**
+     * Consulta temprana (UI) sin lanzar: ERP (comprobante) y precarga.
+     * Anita se consulta aparte (bridge).
+     *
+     * @return array{
+     *   listo: bool,
+     *   duplicado: bool,
+     *   fuente: 'erp'|'precarga'|null,
+     *   mensaje: string|null,
+     *   comprobante_id: int|null,
+     *   precarga_id: int|null,
+     *   codigo_afip: string|null
+     * }
+     */
+    public static function consultarDuplicadoCabecera(
+        int $empresaId,
+        int $tipotransaccionCompraId,
+        string $letra,
+        int $sucursal,
+        int $numerocomprobante,
+        ?int $proveedorId,
+        ?string $documentoEventual = null,
+        ?int $excluirComprobanteId = null,
+        ?int $excluirPrecargaId = null,
+    ): array {
+        $vacio = [
+            'listo' => false,
+            'duplicado' => false,
+            'fuente' => null,
+            'mensaje' => null,
+            'comprobante_id' => null,
+            'precarga_id' => null,
+            'codigo_afip' => null,
+        ];
+
+        $letraNorm = strtoupper(substr(trim($letra), 0, 1));
+        if ($empresaId <= 0
+            || $tipotransaccionCompraId <= 0
+            || $letraNorm === ''
+            || $sucursal < 0
+            || $numerocomprobante <= 0
+        ) {
+            return $vacio;
+        }
+
+        $cuit = self::resolverCuitDigitos($proveedorId, $documentoEventual);
+        $codigoAfip = self::codigoAfipDesdeTipoId($tipotransaccionCompraId);
+        if ($cuit === '' || $codigoAfip === '') {
+            return $vacio;
+        }
+
+        $duplicado = self::findDuplicadoPorAfip(
+            $empresaId,
+            $codigoAfip,
+            $letraNorm,
+            $sucursal,
+            $numerocomprobante,
+            $cuit,
+            $excluirComprobanteId,
+        );
+        if ($duplicado === null) {
+            $duplicado = self::findDuplicadoPorClaveUnica(
+                $empresaId,
+                $tipotransaccionCompraId,
+                $letraNorm,
+                $sucursal,
+                $numerocomprobante,
+                $cuit,
+                $excluirComprobanteId,
+            );
+        }
+        if ($duplicado !== null) {
+            return [
+                'listo' => true,
+                'duplicado' => true,
+                'fuente' => 'erp',
+                'mensaje' => self::mensajeDuplicado($duplicado, $codigoAfip),
+                'comprobante_id' => (int) $duplicado->id,
+                'precarga_id' => null,
+                'codigo_afip' => $codigoAfip,
+            ];
+        }
+
+        $dupPrecarga = self::findDuplicadoPrecargaPorAfip(
+            $empresaId,
+            $codigoAfip,
+            $letraNorm,
+            $sucursal,
+            $numerocomprobante,
+            $cuit,
+            $excluirPrecargaId,
+        );
+        if ($dupPrecarga !== null) {
+            return [
+                'listo' => true,
+                'duplicado' => true,
+                'fuente' => 'precarga',
+                'mensaje' => self::mensajeDuplicadoPrecarga($dupPrecarga, $codigoAfip),
+                'comprobante_id' => null,
+                'precarga_id' => (int) $dupPrecarga->id,
+                'codigo_afip' => $codigoAfip,
+            ];
+        }
+
+        return [
+            'listo' => true,
+            'duplicado' => false,
+            'fuente' => null,
+            'mensaje' => null,
+            'comprobante_id' => null,
+            'precarga_id' => null,
+            'codigo_afip' => $codigoAfip,
+        ];
+    }
+
+    /**
      * Misma clave que el índice único uq_comprobante_proveedor_por_cuit
      * (empresa + tipo interno + letra + sucursal + número + CUIT).
      */

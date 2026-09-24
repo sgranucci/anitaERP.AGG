@@ -893,7 +893,13 @@ class TransferenciaMercaderiaService
 
         foreach ($lineas as $linea) {
             $articuloId = (int) ($linea['articulo_id'] ?? 0);
+            $medidasRaw = $linea['medidas'] ?? '';
+            $sumaMedidas = TransferenciaMercaderiaDetalleFerliSupport::sumaCantidadDesdeMedidas($medidasRaw);
             $cantidad = (float) ($linea['cantidad'] ?? 0);
+            // Ferli: si hay desglose por talle, la suma de pares manda (evita total desfasado vs detalle).
+            if ($sumaMedidas > 0.000001) {
+                $cantidad = $sumaMedidas;
+            }
             if ($articuloId <= 0 || $cantidad <= 0) {
                 continue;
             }
@@ -925,7 +931,7 @@ class TransferenciaMercaderiaService
             $unidades = UnidadesCajaPiezaSupport::extraerDeLinea($linea);
             $combinacionId = (int) ($linea['combinacion_id'] ?? 0);
             $moduloId = (int) ($linea['modulo_id'] ?? 0);
-            $medidas = $linea['medidas'] ?? '';
+            $medidas = $medidasRaw;
             if (is_array($medidas)) {
                 $medidas = json_encode($medidas, JSON_UNESCAPED_UNICODE) ?: '';
             }
@@ -1430,6 +1436,81 @@ class TransferenciaMercaderiaService
             ->where('transferencia_mercaderia_id', $transferencia->id)
             ->whereNull('usado_el')
             ->update(['usado_el' => now()]);
+    }
+
+    /**
+     * Tras editar el movimiento de stock vinculado a una TM, alinea cantidad_origen/destino
+     * con el movimiento (y suma de talles Ferli si hay).
+     */
+    public function sincronizarCantidadesDesdeMovimientoStock(int $movimientoId): void
+    {
+        if ($movimientoId <= 0) {
+            return;
+        }
+
+        $transferencia = Transferencia_Mercaderia::query()
+            ->with('articulos')
+            ->where(function ($q) use ($movimientoId) {
+                $q->where('movimientostock_salida_id', $movimientoId)
+                    ->orWhere('movimientostock_entrada_id', $movimientoId);
+            })
+            ->first();
+        if ($transferencia === null) {
+            return;
+        }
+
+        $esSalida = (int) ($transferencia->movimientostock_salida_id ?? 0) === $movimientoId;
+        $mov = MovimientoStock::query()
+            ->with(['articulos_movimiento.articulo_movimiento_talles'])
+            ->find($movimientoId);
+        if ($mov === null) {
+            return;
+        }
+
+        $ams = $mov->articulos_movimiento->values();
+        foreach ($transferencia->articulos as $idx => $linea) {
+            $articuloIdEsperado = $esSalida
+                ? (int) $linea->articulo_origen_id
+                : (int) $linea->articulo_destino_id;
+            $am = $ams[$idx] ?? null;
+            if ($am === null || (int) $am->articulo_id !== $articuloIdEsperado) {
+                $am = $ams->first(static fn ($row) => (int) $row->articulo_id === $articuloIdEsperado);
+            }
+            if ($am === null) {
+                continue;
+            }
+
+            $cant = abs((float) $am->cantidad);
+            $sumaTalles = 0.0;
+            foreach ($am->articulo_movimiento_talles ?? [] as $talle) {
+                $sumaTalles += abs((float) ($talle->cantidad ?? 0));
+            }
+            if ($sumaTalles > 0.000001) {
+                $cant = $sumaTalles;
+            }
+            if ($cant <= 0.000001) {
+                continue;
+            }
+
+            if ($esSalida) {
+                $linea->cantidad_origen = $cant;
+                if (! (bool) ($linea->fl_conversion_formula ?? false)) {
+                    $linea->cantidad_destino = $cant;
+                } else {
+                    $coef = (float) ($linea->coeficienteconversion ?? 1.0);
+                    if ($coef <= 0) {
+                        $coef = 1.0;
+                    }
+                    $linea->cantidad_destino = round($cant * $coef, 6);
+                }
+            } else {
+                $linea->cantidad_destino = $cant;
+                if (! (bool) ($linea->fl_conversion_formula ?? false)) {
+                    $linea->cantidad_origen = $cant;
+                }
+            }
+            $linea->save();
+        }
     }
 
     private function actualizarStkmaePrecioDestino(Transferencia_Mercaderia $transferencia): void

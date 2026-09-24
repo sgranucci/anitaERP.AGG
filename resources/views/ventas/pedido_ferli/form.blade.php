@@ -270,6 +270,7 @@
 									'pickingFacturado' => ((optional($pedidoitem)->picking_facturado ?? 'N') === 'S'),
 									'pickingLote' => old('picking_lote.'.$loop->index, optional($pedidoitem)->picking_lote_codigo ?? ''),
 									'pickingDep' => (int) old('picking_deposito.'.$loop->index, optional($pedidoitem)->picking_deposito_id ?? 0),
+									'pickingOtId' => (int) old('picking_ot.'.$loop->index, optional($pedidoitem)->picking_ordentrabajo_id ?? 0),
 									'depositosPicking' => $depositos_picking_query ?? collect(),
 								])
                 			</td>

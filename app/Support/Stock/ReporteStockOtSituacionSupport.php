@@ -141,6 +141,68 @@ final class ReporteStockOtSituacionSupport
     }
 
     /**
+     * Situación de una fila del reporte Stock por OT.
+     *
+     * - Overlay sin movimiento: EN PRODUCCION forzada.
+     * - ALTAP del import Excel con depósito: ENTREGA INMEDIATA (aunque la OT no tenga cierre).
+     * - OT con avance de planta sin Terminada: EN PRODUCCION (aunque haya Alta/Restaura con depósito).
+     * - Resto con depósito: ENTREGA INMEDIATA.
+     *
+     * @param  array{situacion?: string, en_produccion?: bool}|null  $metaOt
+     * @return array{situacion: string, en_produccion: bool}
+     */
+    public static function situacionFila(
+        bool $enProduccionForzada,
+        int $depositoId,
+        ?array $metaOt,
+        bool $esAltapExcel = false
+    ): array {
+        if ($enProduccionForzada) {
+            return [
+                'situacion' => self::EN_PRODUCCION,
+                'en_produccion' => true,
+            ];
+        }
+
+        $otEnProduccion = $metaOt && ! empty($metaOt['en_produccion']);
+
+        // Import Excel listo en estantería: depósito manda (caso identificador 8021).
+        if ($depositoId > 0 && $esAltapExcel) {
+            return [
+                'situacion' => self::ENTREGA_INMEDIATA,
+                'en_produccion' => false,
+            ];
+        }
+
+        // OT todavía en planta (APARADO, etc.): no mentir ENTREGA por tener Alta/Restaura.
+        if ($otEnProduccion) {
+            return [
+                'situacion' => self::EN_PRODUCCION,
+                'en_produccion' => true,
+            ];
+        }
+
+        if ($depositoId > 0) {
+            return [
+                'situacion' => self::ENTREGA_INMEDIATA,
+                'en_produccion' => false,
+            ];
+        }
+
+        if ($metaOt !== null) {
+            return [
+                'situacion' => (string) ($metaOt['situacion'] ?? self::ENTREGA_INMEDIATA),
+                'en_produccion' => (bool) ($metaOt['en_produccion'] ?? false),
+            ];
+        }
+
+        return [
+            'situacion' => self::ENTREGA_INMEDIATA,
+            'en_produccion' => false,
+        ];
+    }
+
+    /**
      * Descripción artesanal: "1-NEGRO"
      */
     public static function descripcionCombinacion(mixed $codigo, mixed $nombre): string

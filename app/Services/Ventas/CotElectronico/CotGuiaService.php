@@ -12,6 +12,7 @@ use App\Models\Ventas\Transporte;
 use App\Models\Ventas\Venta;
 use App\Repositories\Ventas\CotGuiaRepository;
 use App\Support\Ventas\CotGuiaFacturaIdentidadSupport;
+use App\Support\Ventas\CotGuiaSuburbanoSupport;
 use App\Support\Ventas\CotImporteRemitoSupport;
 use App\Support\Ventas\CuitFormatoValidacionSupport;
 use Carbon\Carbon;
@@ -91,24 +92,47 @@ class CotGuiaService
     /**
      * Facturas/remitos del día aún no enviados a COT (ni ya en la guía opcional).
      *
-     * @return list<array<string, mixed>>
+     * En modo guía Ferli la cabecera suele ser SUBURBANO (vehículo ARBA), mientras cada
+     * remito lleva su expreso real: no filtrar pendientes por ese transporte de cabecera.
+     *
+     * @return array{
+     *   filas: list<array<string, mixed>>,
+     *   cantidad_total_dia: int,
+     *   cantidad_emitidas: int,
+     *   cantidad_sin_importe: int,
+     *   cantidad_en_guia: int
+     * }
      */
     public function facturasPendientesDelDia(Carbon $fecha, ?int $transporteId = null, ?int $guiaId = null): array
     {
-        $repartos = $this->repartosParaConsulta($transporteId);
+        $transporteFiltro = $this->transporteFiltroPendientes($transporteId);
+        $repartos = $this->repartosParaConsulta($transporteFiltro);
         if ($repartos === []) {
-            return [];
+            return [
+                'filas' => [],
+                'cantidad_total_dia' => 0,
+                'cantidad_emitidas' => 0,
+                'cantidad_sin_importe' => 0,
+                'cantidad_en_guia' => 0,
+            ];
         }
 
         $filas = $this->consultaService->listarRemitosDelDia($fecha, $repartos);
         $clavesEnGuia = $this->clavesFacturaEnGuia($guiaId);
 
         $pendientes = [];
+        $emitidas = 0;
+        $sinImporte = 0;
+        $enGuia = 0;
         foreach ($filas as $fila) {
             if (! empty($fila['ya_enviado'])) {
+                $emitidas++;
+
                 continue;
             }
             if (empty($fila['importe_ok'])) {
+                $sinImporte++;
+
                 continue;
             }
 
@@ -132,6 +156,8 @@ class CotGuiaService
                 (int) $linea['numero'],
             );
             if (isset($clavesEnGuia[$claveFactura])) {
+                $enGuia++;
+
                 continue;
             }
 
@@ -144,7 +170,30 @@ class CotGuiaService
             ]);
         }
 
-        return $pendientes;
+        return [
+            'filas' => $pendientes,
+            'cantidad_total_dia' => count($filas),
+            'cantidad_emitidas' => $emitidas,
+            'cantidad_sin_importe' => $sinImporte,
+            'cantidad_en_guia' => $enGuia,
+        ];
+    }
+
+    /**
+     * El expreso de cabecera suburbano no filtra remitos (van con su expreso real).
+     */
+    private function transporteFiltroPendientes(?int $transporteId): ?int
+    {
+        if ($transporteId === null || $transporteId < 1) {
+            return null;
+        }
+
+        $transporte = Transporte::query()->find($transporteId);
+        if ($transporte !== null && CotGuiaSuburbanoSupport::esSuburbano($transporte)) {
+            return null;
+        }
+
+        return $transporteId;
     }
 
     /**

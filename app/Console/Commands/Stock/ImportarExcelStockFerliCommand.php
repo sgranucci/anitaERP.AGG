@@ -51,6 +51,7 @@ class ImportarExcelStockFerliCommand extends Command
             ['Filas leídas (SKU)', $plan['filas_excel']],
             ['Omitidas EN PRODUCCION / rojo', $plan['omitidas']['en_produccion']],
             ['Pares omitidos (producción)', number_format($plan['pares_en_produccion'], 0, ',', '.')],
+            ['Lotes/OT protegidos (no CONOT)', $plan['lotes_protegidos_en_produccion_count'] ?? 0],
             ['Omitidas sin depósito', $plan['omitidas']['sin_deposito']],
             ['Omitidas con error de resolución', $plan['omitidas']['errores']],
             ['ALTAP filas OK', $plan['altap_filas']],
@@ -69,7 +70,7 @@ class ImportarExcelStockFerliCommand extends Command
         $this->table(['Depósito', 'Pares'], $depRows);
 
         $this->newLine();
-        $this->info('CONOT / ajuste stock actual (lote > 0, saldo neto ≠ 0)');
+        $this->info('CONOT / ajuste stock actual (lote > 0, saldo neto ≠ 0; excluye EN PRODUCCION)');
         $this->table(['Métrica', 'Valor'], [
             ['Grupos a anular', $plan['conot']['grupos_count']],
             ['CONOT (saldos positivos)', number_format($plan['conot']['pares_positivos'] ?? $plan['conot']['pares'], 0, ',', '.')],
@@ -78,6 +79,8 @@ class ImportarExcelStockFerliCommand extends Command
             ['Grupos ajuste', $plan['conot']['grupos_ajuste'] ?? ''],
             ['Neto lote>0 (debe ir a 0)', number_format($plan['conot']['pares'], 0, ',', '.')],
             ['Saldo lote=0 (no se toca)', number_format($plan['conot']['pares_lote_cero'] ?? 0, 0, ',', '.')],
+            ['Grupos NO anulados (protegidos EN PRODUCCION)', $plan['conot']['grupos_omitidos_protegidos'] ?? 0],
+            ['Pares protegidos (no CONOT)', number_format($plan['conot']['pares_omitidos_protegidos'] ?? 0, 0, ',', '.')],
         ]);
         $conotDep = [];
         foreach ($plan['conot']['por_deposito'] as $cod => $pares) {

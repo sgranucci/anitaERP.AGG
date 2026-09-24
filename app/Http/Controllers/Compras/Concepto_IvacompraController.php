@@ -279,11 +279,7 @@ class Concepto_IvacompraController extends Controller
 
     public function consultaConceptoIvacompra(Request $request)
     {
-        if (! can('listar-concepto-iva-compra', false)
-            && ! can('crear-comprobante-proveedor', false)
-            && ! can('editar-comprobante-proveedor', false)
-            && ! can('crear-precarga-proveedores', false)
-            && ! can('editar-precarga-proveedores', false)) {
+        if (! $this->puedeConsultarConceptoIvacompraOperativo()) {
             abort(403);
         }
 
@@ -341,11 +337,7 @@ class Concepto_IvacompraController extends Controller
 
     public function resolverConceptoIvacompra(Request $request)
     {
-        if (! can('listar-concepto-iva-compra', false)
-            && ! can('crear-comprobante-proveedor', false)
-            && ! can('editar-comprobante-proveedor', false)
-            && ! can('crear-precarga-proveedores', false)
-            && ! can('editar-precarga-proveedores', false)) {
+        if (! $this->puedeConsultarConceptoIvacompraOperativo()) {
             abort(403);
         }
 
@@ -409,5 +401,17 @@ class Concepto_IvacompraController extends Controller
                 ? ConceptoIvacompraFormulaSupport::tasaPorcentajeDesdeFormula($formula)
                 : round((float) ($concepto->impuestos->valor ?? 0), 3),
         ]);
+    }
+
+    /** Modal/resolver de concepto IVA desde CP, precarga o ingresos/egresos. */
+    private function puedeConsultarConceptoIvacompraOperativo(): bool
+    {
+        return can('listar-concepto-iva-compra', false)
+            || can('crear-comprobante-proveedor', false)
+            || can('editar-comprobante-proveedor', false)
+            || can('crear-precarga-proveedores', false)
+            || can('editar-precarga-proveedores', false)
+            || can('crear-ingresos-egresos-caja', false)
+            || can('editar-ingresos-egresos-caja', false);
     }
 }

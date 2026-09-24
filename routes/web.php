@@ -3613,6 +3613,10 @@ Route::post('compras/proveedor/{id}/validar-arca-apoc', 'Compras\ProveedorContro
 Route::put('compras/proveedor/{id}', 'Compras\ProveedorController@actualizar')->name('actualizar_proveedor');
 Route::delete('compras/proveedor/{id}', 'Compras\ProveedorController@eliminar')->name('eliminar_proveedor');
 
+Route::post('compras/proveedor/workbench/vista', 'Compras\ProveedorController@guardarVistaListado')->name('guardar_vista_listado_proveedor');
+Route::delete('compras/proveedor/workbench/vista/{id}', 'Compras\ProveedorController@eliminarVistaListado')->name('eliminar_vista_listado_proveedor');
+Route::post('compras/proveedor/workbench/columnas', 'Compras\ProveedorController@guardarColumnasListado')->name('guardar_columnas_listado_proveedor');
+Route::post('compras/proveedor/workbench/etiquetas', 'Compras\ProveedorController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_proveedor');
 Route::post('compras/proveedor/consultaproveedor', 'Compras\ProveedorController@consultaProveedor')->name('consulta_proveedor');
 Route::get('compras/proveedor/{id}/cbus-pago', 'Compras\ProveedorController@cbusPago')->name('cbus_pago_proveedor');
 Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@leeProveedor')->name('leer_proveedor');
@@ -3697,6 +3701,7 @@ Route::get('compras/lista_comprobante_proveedor/{formato?}/{busqueda?}', 'Compra
 Route::get('compras/comprobante-proveedor/crear', 'Compras\Comprobante_ProveedorController@crear')->name('crear_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/api/cotizacion-moneda-fecha', 'Compras\Comprobante_ProveedorController@apiCotizacionMonedaFecha')->name('comprobante_proveedor_cotizacion_moneda_fecha');
 Route::get('compras/comprobante-proveedor/api/aviso-factura-anita', 'Compras\Comprobante_ProveedorController@apiAvisoFacturaYaEnAnita')->name('comprobante_proveedor_aviso_factura_anita');
+Route::get('compras/comprobante-proveedor/api/verificar-duplicado-cabecera', 'Compras\Comprobante_ProveedorController@apiVerificarDuplicadoCabecera')->name('comprobante_proveedor_verificar_duplicado_cabecera');
 Route::get('compras/comprobante-proveedor/api/sincronizar-oc-com', 'Compras\Comprobante_ProveedorController@apiSincronizarOcComAlta')->name('comprobante_proveedor_sincronizar_oc_com');
 Route::post('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorController@guardar')->name('guardar_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/{id}/editar', 'Compras\Comprobante_ProveedorController@editar')->name('editar_comprobante_proveedor');

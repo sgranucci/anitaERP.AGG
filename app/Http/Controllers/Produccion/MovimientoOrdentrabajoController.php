@@ -4,14 +4,11 @@ namespace App\Http\Controllers\Produccion;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Http\Requests\ValidacionMovimientoOrdentrabajo;
 use App\Services\Produccion\MovimientoOrdentrabajoService;
 use App\Repositories\Produccion\TareaRepositoryInterface;
 use App\Repositories\Produccion\OperacionRepositoryInterface;
 use App\Repositories\Produccion\EmpleadoRepositoryInterface;
-use Exception;
 
 class MovimientoOrdentrabajoController extends Controller
 {
@@ -79,23 +76,23 @@ class MovimientoOrdentrabajoController extends Controller
 		{
 			$data = $this->movimientoOrdentrabajoService->guardaMovimientoOrdenTrabajo($request->all(), 'create');
 
-            if (isset($data['errores']))
-                throw new ModelNotFoundException($data['errores']);
+            if (is_array($data) && isset($data['errores'])) {
+                $errores = $data['errores'];
+                if (is_array($errores)) {
+                    $errores = implode(' ', array_map('strval', $errores));
+                }
 
-			if (is_array($data))
-				$mensaje = "Movimiento de OT creado con exito";
-			else
-				if ($data)
-					$mensaje = $data;
-		} catch (\Exception $e)
-		{
-			$mensaje = $e->getMessage();
-		    return back()->with('mensaje', [$mensaje]);
+                return back()->withInput()->with('mensaje-error', (string) $errores);
+            }
+
+			if (is_array($data)) {
+				$mensaje = 'Movimiento de OT creado con exito';
+			} elseif ($data) {
+				$mensaje = (string) $data;
+			}
+		} catch (\Exception $e) {
+		    return back()->withInput()->with('mensaje-error', (string) $e->getMessage());
 		}
-
-		$this->armarTablasVista($tarea_query, $operacion_query, $empleado_query);
-
-        //return view('produccion.movimientoordentrabajo.crear', compact('tarea_query', 'operacion_query', 'empleado_query'));
 
         return redirect('produccion/movimientoordentrabajo/crear')->with('mensaje', $mensaje);
     }
@@ -134,22 +131,25 @@ class MovimientoOrdentrabajoController extends Controller
 		{
             $data = $this->movimientoOrdentrabajoService->guardaMovimientoOrdenTrabajo($request->all(), 'update', $id);
 
-            if (isset($data['errores']))
-                throw new Exception($data['errores']);
+            if (is_array($data) && isset($data['errores'])) {
+                $errores = $data['errores'];
+                if (is_array($errores)) {
+                    $errores = implode(' ', array_map('strval', $errores));
+                }
 
-			if (is_array($data))
-				$mensaje = "Movimiento de OT actualizado con exito";
-			else
-				if ($data)
-					$mensaje = $data;
-		} catch (\Exception $e)
-		{
-			$mensaje = $e->getMessage();
+                return back()->withInput()->with('mensaje-error', (string) $errores);
+            }
 
-		    return back()->with('mensaje', $mensaje);
+			if (is_array($data)) {
+				$mensaje = 'Movimiento de OT actualizado con exito';
+			} elseif ($data) {
+				$mensaje = (string) $data;
+			}
+		} catch (\Exception $e) {
+		    return back()->withInput()->with('mensaje-error', (string) $e->getMessage());
 		}
 
-        return redirect('produccion/movimientoordentrabajo')->with('mensaje', 'Movimiento de OT actualizado con exito');
+        return redirect('produccion/movimientoordentrabajo')->with('mensaje', $mensaje ?: 'Movimiento de OT actualizado con exito');
     }
 
     /**

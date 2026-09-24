@@ -22,6 +22,7 @@
         @include('compras.comprobante_proveedor.partials.aviso_error_contabilizar')
         @include('includes.mensaje')
         @include('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita')
+        <div id="cp-aviso-duplicado-cabecera-slot"></div>
         <div id="cp-aviso-anita-async-slot"></div>
         <div id="cp-sync-oc-com-banner" class="alert alert-info py-2 d-none" role="status">
             <i class="fa fa-spinner fa-spin"></i>
@@ -141,6 +142,7 @@
                 data-numero-oc="{{ $data->ordencompras->numeroordencompra ?? (optional($data->precarga_comprobante_proveedores)->numeroordencompra ?? '') }}"
                 data-anita-nro="{{ (int) ($data->anita_nro_interno ?? 0) }}"
                 data-aviso-anita-url="{{ route('comprobante_proveedor_aviso_factura_anita') }}"
+                data-verificar-duplicado-url="{{ route('comprobante_proveedor_verificar_duplicado_cabecera') }}"
                 data-sync-oc-com-url="{{ route('comprobante_proveedor_sincronizar_oc_com') }}"
                 data-precarga-cargada-url="{{ route('precarga_comprobante_proveedor', ['estado' => \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA]) }}">
                 @csrf

@@ -16,7 +16,6 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Caja\ChequeraRepositoryInterface;
 use App\Repositories\Caja\ChequeRepositoryInterface;
-use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Models\Caja\Cheque;
@@ -60,7 +59,6 @@ class IngresoEgresoController extends Controller
     private $chequeraRepository;
     private $chequeRepository;
     private $tipotransaccionCompraRepository;
-    private $conceptoIvacompraRepository;
     private $condicionivaRepository;
     private $comprobanteIvaService;
     private $comprobanteIvaPdfIaService;
@@ -80,7 +78,6 @@ class IngresoEgresoController extends Controller
                                 ChequeraRepositoryInterface $chequerarepository,
                                 ChequeRepositoryInterface $chequeRepository,
                                 Tipotransaccion_CompraRepositoryInterface $tipotransaccionCompraRepository,
-                                Concepto_IvacompraRepositoryInterface $conceptoIvacompraRepository,
                                 CondicionivaRepositoryInterface $condicionivaRepository,
                                 IngresoEgresoComprobanteIvaService $comprobanteIvaService,
                                 IngresoEgresoComprobanteIvaPdfIaService $comprobanteIvaPdfIaService,
@@ -101,7 +98,6 @@ class IngresoEgresoController extends Controller
         $this->chequeraRepository = $chequerarepository;
         $this->chequeRepository = $chequeRepository;
         $this->tipotransaccionCompraRepository = $tipotransaccionCompraRepository;
-        $this->conceptoIvacompraRepository = $conceptoIvacompraRepository;
         $this->condicionivaRepository = $condicionivaRepository;
         $this->comprobanteIvaService = $comprobanteIvaService;
         $this->comprobanteIvaPdfIaService = $comprobanteIvaPdfIaService;
@@ -724,7 +720,6 @@ class IngresoEgresoController extends Controller
     private function datosComprobantesIva(?int $cajaMovimientoId): array
     {
         $tipotransaccion_compra_query = $this->tipotransaccionCompraRepository->all('*');
-        $concepto_ivacompra_query = $this->conceptoIvacompraRepository->all();
         $condicioniva_query = $this->condicionivaRepository->all();
         $tipos_tesoreria = ComprobanteProveedorTipoTesoreria::todos();
 
@@ -737,6 +732,7 @@ class IngresoEgresoController extends Controller
 
                 return [
                     (string) $c->id => [
+                        'codigo' => (string) $c->codigo,
                         'nombre' => $c->nombre,
                         'tipoconcepto' => $c->tipoconcepto,
                         'cuenta_debe_id' => (int) ($c->cuentacontabledebe_id ?? ($primeraClave !== null ? ($mapa[$primeraClave] ?? 0) : 0)),
@@ -753,7 +749,6 @@ class IngresoEgresoController extends Controller
 
         return compact(
             'tipotransaccion_compra_query',
-            'concepto_ivacompra_query',
             'condicioniva_query',
             'tipos_tesoreria',
             'conceptos_cuenta_meta',

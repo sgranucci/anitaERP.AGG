@@ -95,6 +95,7 @@ use App\Support\Ventas\ArcaFceNcMostradorSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\AnitaComprobDescuentoSupport;
+use App\Support\Ventas\AnitaVengravCodigoTasaSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 use App\Support\Ventas\FacturaAsientoDescuentoPieSupport;
 use App\Support\Ventas\FacturaBTotalesImpresionSupport;
@@ -5443,7 +5444,11 @@ class FacturacionService
 				$letra,
 				$puntoventaCodigo,
 				$venta['numerocomprobante'],
-				$concepto['codigo'],
+				AnitaVengravCodigoTasaSupport::resolver(
+					$concepto['codigo'] ?? null,
+					$concepto['codigoarca'] ?? null,
+					(float) ($concepto['tasa'] ?? 0),
+				),
 				$concepto['baseimponible'],
 				$concepto['importe'],
 				0,
@@ -5875,6 +5880,11 @@ class FacturacionService
 
 			$apiAnitaVengrav = new ApiAnita();
 			$sobreTasa = 0;
+			$codigoTasaAnita = AnitaVengravCodigoTasaSupport::resolver(
+				$concepto['codigo'] ?? null,
+				$concepto['codigoarca'] ?? null,
+				(float) ($concepto['tasa'] ?? 0),
+			);
 			$dataVengrav = [
 				'tabla' => 'vengrav',
 				'acc' => 'insert',
@@ -5886,7 +5896,7 @@ class FacturacionService
 									'".$letra."',
 									'".$puntoventa."',
 									'".$venta['numerocomprobante']."',
-									'".$concepto['codigo']."',
+									'".$codigoTasaAnita."',
 									'".$concepto['baseimponible']."',
 									'".$concepto['importe']."',
 									'".$sobreTasa."',

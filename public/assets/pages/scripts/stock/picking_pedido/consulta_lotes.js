@@ -264,6 +264,8 @@
             var $btn = $('<button type="button" class="btn btn-warning btn-sm eligeconsultalotesstockpicking">Elegir</button>');
             $btn.attr('data-lote', fila.lote || '');
             $btn.attr('data-deposito-id', parseInt(fila.deposito_id, 10) || 0);
+            $btn.attr('data-origen', fila.origen === 'OT' ? 'OT' : 'L');
+            $btn.attr('data-ordentrabajo-id', parseInt(fila.ordentrabajo_id, 10) || 0);
             $tr.append($('<td class="text-nowrap"/>').append($btn));
             $tbody.append($tr);
         });
@@ -332,7 +334,7 @@
         buscarLotesStock('');
     }
 
-    function aplicarLoteElegido(lote, depositoId) {
+    function aplicarLoteElegido(lote, depositoId, ordentrabajoId) {
         if (!$filaPickingLoteActiva || !$filaPickingLoteActiva.length) {
             return;
         }
@@ -347,6 +349,10 @@
             return;
         }
         $filaPickingLoteActiva.find('.picking-lote').val(lote || '');
+        // OT bucket (lote=0 en stock): guardar id; lote importado: vacío.
+        $filaPickingLoteActiva.find('.picking-ordentrabajo-id').val(
+            ordentrabajoId > 0 ? String(ordentrabajoId) : ''
+        );
         if (depositoId > 0) {
             $filaPickingLoteActiva.find('.picking-deposito').val(String(depositoId));
         }
@@ -392,7 +398,9 @@
         .on('click.eligeLoteStockPicking', '.eligeconsultalotesstockpicking', function () {
             var lote = $(this).attr('data-lote') || '';
             var depositoId = parseInt($(this).attr('data-deposito-id'), 10) || 0;
-            aplicarLoteElegido(lote, depositoId);
+            var origen = $(this).attr('data-origen') || 'L';
+            var otId = origen === 'OT' ? (parseInt($(this).attr('data-ordentrabajo-id'), 10) || 0) : 0;
+            aplicarLoteElegido(lote, depositoId, otId);
             $('#consultalotesstockpickingModal').modal('hide');
         });
 
@@ -444,6 +452,13 @@
         document.addEventListener('keydown', manejarF1PickingLote, true);
         window.__pickingLoteF1CaptureActivo = true;
     }
+
+    // Tipeo manual del código: ya no sabemos si era L u OT del modal.
+    $(document)
+        .off('input.pickingLoteManual', '.picking-lote')
+        .on('input.pickingLoteManual', '.picking-lote', function () {
+            $(this).closest('.picking-box').find('.picking-ordentrabajo-id').val('');
+        });
 
     window.abrirModalConsultaLotesStockPicking = abrirModalConsultaLotes;
 })(jQuery);

@@ -13,6 +13,55 @@ use Illuminate\Support\Collection;
 final class TransferenciaMercaderiaDetalleFerliSupport
 {
     /**
+     * Suma de pares desde el JSON de medidas del formulario / payload.
+     * Si hay desglose por talle, esa suma manda sobre el campo cantidad suelto.
+     */
+    public static function sumaCantidadDesdeMedidas(mixed $medidas): float
+    {
+        if (is_string($medidas)) {
+            $medidas = trim($medidas);
+            if ($medidas === '') {
+                return 0.0;
+            }
+            $decoded = json_decode($medidas, true);
+            $medidas = is_array($decoded) ? $decoded : [];
+        }
+        if (! is_array($medidas)) {
+            return 0.0;
+        }
+
+        $suma = 0.0;
+        foreach ($medidas as $m) {
+            if (is_array($m)) {
+                $suma += abs((float) ($m['cantidad'] ?? 0));
+            } elseif (is_object($m)) {
+                $suma += abs((float) ($m->cantidad ?? 0));
+            }
+        }
+
+        return $suma;
+    }
+
+    /**
+     * Cantidad de línea preferida: suma de talles del detalle Ferli si hay; si no, cantidad de cabecera.
+     *
+     * @param  array{medidas?:list<array{cantidad?:float}},medidas_txt?:string}|null  $detalleFerli
+     */
+    public static function cantidadLineaPreferida(float $cantidadCabecera, ?array $detalleFerli): float
+    {
+        $cab = abs($cantidadCabecera);
+        if ($detalleFerli === null) {
+            return $cab;
+        }
+        $suma = 0.0;
+        foreach ($detalleFerli['medidas'] ?? [] as $m) {
+            $suma += abs((float) ($m['cantidad'] ?? 0));
+        }
+
+        return $suma > 0.000001 ? $suma : $cab;
+    }
+
+    /**
      * @return array<int, array{
      *     combinacion_id:?int,
      *     combinacion_etiqueta:string,

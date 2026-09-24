@@ -294,11 +294,16 @@ class CotElectronicoController extends Controller
         $fecha = Carbon::parse($request->input('fecha', now()->format('Y-m-d')));
         $transporteId = $request->integer('transporte_id') ?: null;
         $guiaId = $request->integer('guia_id') ?: null;
-        $filas = $this->guiaService->facturasPendientesDelDia($fecha, $transporteId, $guiaId);
+        $resultado = $this->guiaService->facturasPendientesDelDia($fecha, $transporteId, $guiaId);
+        $filas = $resultado['filas'];
 
         return response()->json([
             'ok' => true,
             'cantidad' => count($filas),
+            'cantidad_total_dia' => (int) ($resultado['cantidad_total_dia'] ?? 0),
+            'cantidad_emitidas' => (int) ($resultado['cantidad_emitidas'] ?? 0),
+            'cantidad_sin_importe' => (int) ($resultado['cantidad_sin_importe'] ?? 0),
+            'cantidad_en_guia' => (int) ($resultado['cantidad_en_guia'] ?? 0),
             'filas' => $filas,
         ]);
     }

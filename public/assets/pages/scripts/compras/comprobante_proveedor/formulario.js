@@ -2373,6 +2373,23 @@ $(function () {
                 if (!validarCampoCabeceraAntesDeAvanzar(target)) {
                     return;
                 }
+                // Número: verificar duplicado (ERP/Anita) antes de avanzar, como en Anita.
+                if (target.id === 'numerocomprobante'
+                    && typeof window.cpVerificarDuplicadoCabecera === 'function') {
+                    window.cpOmitirBlurDuplicadoCabecera = true;
+                    window.cpVerificarDuplicadoCabecera({ alertar: true }).done(function (res) {
+                        if (res && res.duplicado) {
+                            try {
+                                target.focus();
+                            } catch (errFocusDup) {
+                                // ignore
+                            }
+                            return;
+                        }
+                        focusSiguienteCampoCp(target);
+                    });
+                    return;
+                }
                 focusSiguienteCampoCp(target);
             }, true);
         }
@@ -2497,6 +2514,137 @@ $(function () {
 
         // Al abrir: traer cotización del día (hint + campo si falta).
         refrescarCotizacionDia({ forzarCampo: false });
+    })();
+
+    (function initVerificarDuplicadoCabecera() {
+        if (contabilizado) {
+            return;
+        }
+        var verificarUrl = String($form.attr('data-verificar-duplicado-url') || '').trim();
+        if (!verificarUrl) {
+            return;
+        }
+
+        var ultimoAvisoKey = '';
+        var seqDup = 0;
+
+        function payloadCabecera() {
+            var precargaId = parseInt($form.attr('data-precarga-id') || '0', 10) || 0;
+            var anitaNro = parseInt($form.attr('data-anita-nro') || '0', 10) || 0;
+            return {
+                empresa_id: parseInt($('#empresa_id').val() || '0', 10) || 0,
+                proveedor_id: parseInt($('#proveedor_id').val() || '0', 10) || 0,
+                tipotransaccion_compra_id: parseInt($('#tipotransaccion_compra_id').val() || '0', 10) || 0,
+                letra: String($('#letra').val() || '').toUpperCase().trim().charAt(0) || '',
+                sucursal: parseInt($('#sucursal').val() || '0', 10) || 0,
+                numerocomprobante: parseInt($('#numerocomprobante').val() || '0', 10) || 0,
+                excluir_comprobante_id: comprobanteId > 0 ? comprobanteId : undefined,
+                excluir_precarga_id: precargaId > 0 ? precargaId : undefined,
+                excluir_anita_nro_interno: anitaNro > 0 ? anitaNro : undefined
+            };
+        }
+
+        function clavePayload(p) {
+            return [
+                p.empresa_id,
+                p.proveedor_id,
+                p.tipotransaccion_compra_id,
+                p.letra,
+                p.sucursal,
+                p.numerocomprobante
+            ].join('|');
+        }
+
+        function limpiarAvisoDup() {
+            $('#cp-aviso-duplicado-cabecera-slot').empty();
+            if (!$('#cp-aviso-anita-async-slot').children().length) {
+                $('.js-cp-contabilizar').prop('disabled', false).removeAttr('title');
+            }
+            ultimoAvisoKey = '';
+            $('#numerocomprobante').removeAttr('data-cp-duplicado-key');
+        }
+
+        function aplicarDuplicado(res, opts) {
+            opts = opts || {};
+            var key = opts.key || '';
+            if (!res || !res.duplicado) {
+                limpiarAvisoDup();
+                return false;
+            }
+            if (res.html) {
+                if (res.fuente === 'anita') {
+                    $('#cp-aviso-anita-async-slot').html(res.html);
+                    $('#cp-aviso-duplicado-cabecera-slot').empty();
+                } else {
+                    $('#cp-aviso-duplicado-cabecera-slot').html(res.html);
+                }
+            }
+            if (res.bloquea_contabilizar) {
+                $('.js-cp-contabilizar').prop('disabled', true)
+                    .attr('title', 'Factura duplicada: no se puede contabilizar');
+            }
+            if (opts.alertar !== false && key && key !== ultimoAvisoKey) {
+                ultimoAvisoKey = key;
+                $('#numerocomprobante').attr('data-cp-duplicado-key', key);
+                setTimeout(function () {
+                    alert(res.mensaje || 'Esta factura ya está cargada.');
+                }, 0);
+            }
+            return true;
+        }
+
+        window.cpVerificarDuplicadoCabecera = function (opts) {
+            opts = opts || {};
+            var p = payloadCabecera();
+            var key = clavePayload(p);
+            if (!(p.empresa_id > 0
+                && p.proveedor_id > 0
+                && p.tipotransaccion_compra_id > 0
+                && p.letra
+                && p.numerocomprobante > 0)) {
+                return $.Deferred().resolve({ ok: true, listo: false, duplicado: false }).promise();
+            }
+            var mySeq = ++seqDup;
+            var deferred = $.Deferred();
+            $.getJSON(verificarUrl, p)
+                .done(function (res) {
+                    if (mySeq === seqDup) {
+                        aplicarDuplicado(res, { alertar: opts.alertar !== false, key: key });
+                    }
+                    deferred.resolve(res || { ok: true, duplicado: false });
+                })
+                .fail(function () {
+                    deferred.resolve({ ok: true, listo: false, duplicado: false });
+                });
+            return deferred.promise();
+        };
+
+        $('#numerocomprobante, #letra, #sucursal').on('input', function () {
+            var keyActual = clavePayload(payloadCabecera());
+            var keyMarcada = String($('#numerocomprobante').attr('data-cp-duplicado-key') || '');
+            if (keyMarcada && keyMarcada !== keyActual) {
+                limpiarAvisoDup();
+            }
+        });
+
+        $('#numerocomprobante').on('blur', function () {
+            if (window.cpOmitirBlurDuplicadoCabecera) {
+                window.cpOmitirBlurDuplicadoCabecera = false;
+                return;
+            }
+            window.cpVerificarDuplicadoCabecera({ alertar: true });
+        });
+
+        $('#letra, #sucursal, #empresa_id, #proveedor_id, #tipotransaccion_compra_id').on('change', function () {
+            if (parseInt($('#numerocomprobante').val() || '0', 10) > 0) {
+                window.cpVerificarDuplicadoCabecera({ alertar: true });
+            }
+        });
+        $(document).on('change.cpProveedorCargado', '#proveedor_id', function () {
+            if (parseInt($('#numerocomprobante').val() || '0', 10) > 0) {
+                window.cpVerificarDuplicadoCabecera({ alertar: true });
+            }
+        });
     })();
 
     (function initAvisoAnitaYSyncOcCom() {

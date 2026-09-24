@@ -15,6 +15,7 @@ use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportBridgeReader
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportClaveSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportFormatoSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportVentaMatchSupport;
+use App\Support\Ventas\ClienteCuentacorrienteDeudaAlcanceSupport;
 use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -27,11 +28,14 @@ use RuntimeException;
  * CC de lo abierto queda con el saldo pendiente.
  * Si la factura del ERP ya está aplicada en Anita, entra también el COA que la
  * aplica (contrapartida en la ficha). No hace falta el APA ni la NCI.
+ * Por defecto también salda CC del ERP que Anita ya no tiene abiertas
+ * (canceladas / monto = cobrado): aplica NCP/COA faltantes de aplmov y, si
+ * queda remanente, una aplicación sintética de cierre.
  * No escribe Anita.
  */
 class ClienteCuentacorrienteImportarDesdeAnitaService
 {
-    /** Cierre viejo: aplicación sin movimiento. La ficha no lo ve y no cierra con la deuda. */
+    /** Cierre cuando Anita ya no tiene la deuda abierta y no hay contrapartida importable. */
     public const ETIQUETA_CIERRE_SIN_CONTRAPARTIDA = 'Anita sync (sin deuda Anita)';
     public function __construct(
         private readonly ClienteCuentacorrienteAnitaImportBridgeReader $reader = new ClienteCuentacorrienteAnitaImportBridgeReader,
@@ -52,7 +56,7 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
         ?int $limite = null,
         int $usuarioId = 1,
         bool $importarVentasFaltantes = true,
-        bool $cerrarSinDeudaAnita = false,
+        bool $cerrarSinDeudaAnita = true,
     ): array {
         $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
         $desdeYmd = $desdeIso ? ClienteCuentacorrienteAnitaImportClaveSupport::fechaAnitaDesdeIso($desdeIso) : null;
@@ -515,11 +519,12 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             $empresaCodigo,
             true,
         );
-        // clienteAnita|tipo|letra|suc|nro → evita colisiones entre clientes
+        // clienteAnita|tipo|letra|suc|nro → evita colisiones entre clientes.
+        // Incluye COB/REC/etc.: si Anita aún los tiene abiertos, no son “extras”.
         $clavesAbiertas = [];
         foreach ($climovsAbiertos as $climov) {
             $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo((string) ($climov['cliv_tipo'] ?? ''));
-            if ($tipo === '' || ClienteCuentacorrienteAnitaImportFormatoSupport::esTipoNoDeuda($tipo, $perfil)) {
+            if ($tipo === '') {
                 continue;
             }
             $cliAnita = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoAnita(
@@ -542,6 +547,8 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc())
             ->orderBy('cliente_id')
             ->orderBy('id');
+        // Solo deuda comercial (FAC/NC/ND/COA…): no cerrar COB/REC de la ficha.
+        ClienteCuentacorrienteDeudaAlcanceSupport::aplicar($query);
         if ($clienteIds !== null) {
             $query->whereIn('cliente_id', $clienteIds);
         }
@@ -600,9 +607,9 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
     }
 
     /**
-     * Factura del ERP que Anita ya no tiene abierta: la contrapartida es el COA
-     * de aplmov, como movimiento de cuenta corriente. Una aplicación sola no
-     * entra en la ficha y el saldo deja de coincidir con la deuda.
+     * CC del ERP con saldo cuya clave ya no está en climov abierto de Anita.
+     * 1) Aplica NCP/COA/… de aplmov que aún no están en el ERP.
+     * 2) Si sigue el saldo, graba aplicación sintética de cierre (Anita ya canceló).
      *
      * @param  array<string, mixed>  $extra
      * @param  array<string, mixed>  $perfil
@@ -615,7 +622,169 @@ class ClienteCuentacorrienteImportarDesdeAnitaService
             return ['aplicaciones' => 0, 'errores' => ['CC #'.$extra['cc_id'].' no existe.']];
         }
 
-        return $this->materializarContrapartidaCoa($cc, $perfil, false, 1);
+        $tolerancia = (float) $perfil['tolerancia_aplicado'];
+        $errores = [];
+        $aplicaciones = 0;
+
+        $mat = $this->aplicarAplmovFaltanteSobreSaldo($cc, $perfil, 1);
+        $aplicaciones += $mat['aplicaciones'];
+        foreach ($mat['errores'] as $err) {
+            $errores[] = $err;
+        }
+
+        $cc->refresh();
+        $aplicado = round((float) Cliente_Cuentacorriente_Aplicacion::query()
+            ->where('cliente_cuentacorriente_id', $cc->id)
+            ->sum('total'), 4);
+        $saldo = ClienteCuentacorrienteGrillaSupport::saldoPendiente((float) $cc->total, $aplicado);
+        if (abs($saldo) <= $tolerancia) {
+            return ['aplicaciones' => $aplicaciones, 'errores' => $errores];
+        }
+
+        $ajuste = round(-1 * $saldo, 4);
+        $fecha = (string) ($extra['fecha'] ?? '');
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            $fecha = $cc->fecha instanceof \DateTimeInterface
+                ? $cc->fecha->format('Y-m-d')
+                : date('Y-m-d');
+        }
+
+        if (! $this->aplicacionYaExistePorEtiqueta((int) $cc->id, self::ETIQUETA_CIERRE_SIN_CONTRAPARTIDA, $ajuste)) {
+            Cliente_Cuentacorriente_Aplicacion::query()->create([
+                'fecha' => $fecha,
+                'cliente_cuentacorriente_id' => $cc->id,
+                'total' => $ajuste,
+                'moneda_id' => $cc->moneda_id,
+                'cotizacion' => ((float) ($cc->cotizacion ?? 1)) ?: 1.0,
+                'ventaaplicado_id' => null,
+                'cobranza_id' => null,
+                'comprobanteaplicado' => self::ETIQUETA_CIERRE_SIN_CONTRAPARTIDA,
+                'empresa_id' => $cc->empresa_id,
+                'cliente_cuentacorriente_aplicado_id' => null,
+            ]);
+            $aplicaciones++;
+        }
+
+        return ['aplicaciones' => $aplicaciones, 'errores' => $errores];
+    }
+
+    /**
+     * Aplica pares aplmov (NCP/COA/…) que faltan sobre el saldo pendiente del CC.
+     *
+     * @param  array<string, mixed>  $perfil
+     * @return array{aplicaciones:int, errores:list<string>}
+     */
+    private function aplicarAplmovFaltanteSobreSaldo(
+        Cliente_Cuentacorriente $cc,
+        array $perfil,
+        int $usuarioId,
+    ): array {
+        $etiquetaDeuda = (string) ($cc->ventas->codigo ?? '');
+        $claveDeuda = ClienteCuentacorrienteAnitaImportClaveSupport::claveDesdeCodigoVenta($etiquetaDeuda);
+        $out = ['aplicaciones' => 0, 'errores' => []];
+        if ($claveDeuda === null) {
+            return $out;
+        }
+
+        $tolerancia = (float) $perfil['tolerancia_aplicado'];
+        $aplicado = round((float) Cliente_Cuentacorriente_Aplicacion::query()
+            ->where('cliente_cuentacorriente_id', $cc->id)
+            ->sum('total'), 4);
+        $saldo = ClienteCuentacorrienteGrillaSupport::saldoPendiente((float) $cc->total, $aplicado);
+        $aCubrir = round(abs($saldo), 4);
+        if ($aCubrir <= $tolerancia) {
+            return $out;
+        }
+
+        $signoPorTipo = $this->mapaSignoTipos();
+        $lineas = $this->lineasContrapartidaCoa(
+            $this->reader->listarAplmovPorDeudas([$claveDeuda]),
+            $claveDeuda,
+            $signoPorTipo,
+            (bool) $perfil['aplmov_fallback_ref_como_cob']
+        );
+        if ($lineas === []) {
+            return $out;
+        }
+
+        $codigoCliente = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoAnita(
+            (string) ($cc->clientes->codigo ?? '')
+        );
+        $climovPorClave = $this->indexarClimovPorClave(array_column($lineas, 'clave'));
+        $restante = $aCubrir;
+
+        foreach ($lineas as $linea) {
+            if ($restante <= $tolerancia) {
+                break;
+            }
+            $etiquetaCredito = (string) $linea['etiqueta'];
+            // Ya está en el ERP (cualquier importe): no reaplicar ni fraccionar.
+            if (Cliente_Cuentacorriente_Aplicacion::query()
+                ->where('cliente_cuentacorriente_id', $cc->id)
+                ->where('comprobanteaplicado', $etiquetaCredito)
+                ->exists()) {
+                continue;
+            }
+
+            $monto = round(min((float) $linea['monto'], $restante), 4);
+            if ($monto <= $tolerancia) {
+                continue;
+            }
+
+            $climov = $this->elegirClimov($climovPorClave[$linea['clave']] ?? [], $codigoCliente);
+            if ($climov === null) {
+                $out['errores'][] = $etiquetaDeuda.': no está el climov de '.$etiquetaCredito.'.';
+
+                continue;
+            }
+
+            try {
+                $cabecera = $this->ventaImport->asegurarCabeceraDesdeClimov(
+                    $climov,
+                    (int) $cc->cliente_id,
+                    false,
+                    $usuarioId
+                );
+                if ($cabecera['error'] !== null || (int) ($cabecera['venta_id'] ?? 0) <= 0) {
+                    $out['errores'][] = $etiquetaDeuda.': '.($cabecera['error'] ?? 'no se creó '.$etiquetaCredito);
+
+                    continue;
+                }
+                $ccCredito = $this->asegurarCcContrapartida(
+                    $cc,
+                    $cabecera,
+                    $climov,
+                    $linea,
+                    $this->montoDocumentoClimov($climovPorClave[$linea['clave']] ?? [$climov], $codigoCliente)
+                );
+                if ($saldo >= 0) {
+                    $this->grabarParAplicacion(
+                        $cc,
+                        $ccCredito,
+                        $monto,
+                        (string) $linea['fecha'],
+                        (string) $cabecera['etiqueta'],
+                        $etiquetaDeuda
+                    );
+                } else {
+                    // Crédito ERP (NCD) con saldo a favor: la contrapartida es la deuda aplicada.
+                    $this->grabarParAplicacion(
+                        $ccCredito,
+                        $cc,
+                        $monto,
+                        (string) $linea['fecha'],
+                        $etiquetaDeuda,
+                        (string) $cabecera['etiqueta']
+                    );
+                }
+                $out['aplicaciones']++;
+                $restante = round($restante - $monto, 4);
+            } catch (\Throwable $e) {
+                $out['errores'][] = $etiquetaDeuda.': '.$e->getMessage();
+            }
+        }
+
+        return $out;
     }
 
     /**

@@ -181,17 +181,23 @@ class MovimientoOrdentrabajoService
 						
 						if ($tipooperacionEnum[$operacion->tipooperacion] == 'Fin')
 						{
-							if (count($ordentrabajo_tarea_filtrada) == 0 && $data['tarea_id'] != config('consprod.TAREA_CORTADO_DE_FORRO'))
-								throw new ModelNotFoundException("La tarea no fue iniciada");
+							$esCortadoForro = (int) $data['tarea_id'] === (int) config('consprod.TAREA_CORTADO_DE_FORRO');
 
-							if ($ordentrabajo_tarea_filtrada[0]->empleado_id != $data['empleado_id'])
-								throw new ModelNotFoundException("No puede grabar tarea iniciada por otro empleado");
-							
-							// Actualiza la tarea si es cortado de forro y no existe la crea cargando fin
-							if (count($ordentrabajo_tarea_filtrada) == 0 && $data['tarea_id'] == config('consprod.TAREA_CORTADO_DE_FORRO'))
+							if (count($ordentrabajo_tarea_filtrada) == 0) {
+								if (! $esCortadoForro) {
+									throw new ModelNotFoundException("La tarea no fue iniciada");
+								}
+								// Cortado de forro: permite alta directa con fin
 								$accion = 'create';
-							else
+							} else {
+								if ((int) $ordentrabajo_tarea_filtrada[0]->empleado_id !== (int) $data['empleado_id']) {
+									throw new ModelNotFoundException("No puede grabar tarea iniciada por otro empleado");
+								}
+								if ($ordentrabajo_tarea_filtrada[0]->hastafecha != null) {
+									throw new ModelNotFoundException("La tarea ya fue finalizada");
+								}
 								$accion = 'update';
+							}
 						}
 					}
 					else

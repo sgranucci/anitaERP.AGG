@@ -28,11 +28,27 @@ class StockLocalInformeController extends Controller
         $filtros = StockLocalInformeListadoFiltros::resolverDesdeRequest($request);
         $filtrosQuery = StockLocalInformeListadoFiltros::paraQueryString($filtros);
         $consultado = $request->boolean('consultar');
-        $locales = LocalVenta::query()->where('activo', true)->orderBy('codigo')->get();
+        $locales = LocalVenta::query()
+            ->with('deposito:id,codigo,nombre')
+            ->where('activo', true)
+            ->orderBy('codigo')
+            ->get();
 
-        if (empty($filtros['local_venta_id']) && $locales->isNotEmpty()) {
-            $filtros['local_venta_id'] = (int) $locales->first()->id;
-        }
+        $depositosErp = $locales
+            ->filter(static fn ($loc) => (int) ($loc->deposito_id ?? 0) > 0)
+            ->unique('deposito_id')
+            ->map(static function ($loc) {
+                $dep = $loc->deposito;
+
+                return (object) [
+                    'id' => (int) $loc->deposito_id,
+                    'etiqueta' => $dep
+                        ? trim((string) (($dep->codigo ?? '').' — '.($dep->nombre ?? '')))
+                        : 'Depósito #'.$loc->deposito_id,
+                ];
+            })
+            ->sortBy('etiqueta')
+            ->values();
 
         $medidas = [];
         $filas = null;
@@ -40,6 +56,7 @@ class StockLocalInformeController extends Controller
         $subtitulo = '';
         $error = null;
         $depositoAnita = null;
+        $depositoErpId = null;
 
         if ($consultado) {
             ini_set('memory_limit', '512M');
@@ -53,6 +70,7 @@ class StockLocalInformeController extends Controller
             $totales = $resultado['totales'] ?? null;
             $subtitulo = (string) ($resultado['subtitulo'] ?? '');
             $depositoAnita = $resultado['deposito_anita'] ?? null;
+            $depositoErpId = $resultado['deposito_erp_id'] ?? null;
             if ($filas instanceof \Illuminate\Pagination\LengthAwarePaginator) {
                 $filas->appends($filtrosQuery);
             }
@@ -63,12 +81,14 @@ class StockLocalInformeController extends Controller
             'filtrosQuery' => $filtrosQuery,
             'consultado' => $consultado,
             'locales' => $locales,
+            'depositosErp' => $depositosErp,
             'medidas' => $medidas,
             'filas' => $filas,
             'totales' => $totales,
             'subtitulo' => $subtitulo,
             'error' => $error,
             'depositoAnita' => $depositoAnita,
+            'depositoErpId' => $depositoErpId,
             'puede_ver_articulo' => can('editar-articulos', false) || can('listar-articulos', false),
         ]);
     }

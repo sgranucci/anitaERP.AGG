@@ -7,6 +7,7 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Ventas\LocalVenta;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
+use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -50,15 +51,18 @@ final class StockLocalInformeService
     public function consultar(array $filtros, bool $paginar = true, int $porPagina = 40): array
     {
         $local = $this->resolverLocal($filtros);
-        if ($local === null) {
-            return $this->resultadoError('Seleccione un local válido.', $paginar, $porPagina);
-        }
-
         $origen = (string) ($filtros['origen'] ?? StockLocalInformeListadoFiltros::ORIGEN_ERP);
         $depositoAnita = 0;
         $depositoErpId = 0;
 
         if ($origen === StockLocalInformeListadoFiltros::ORIGEN_ANITA) {
+            if ($local === null) {
+                return $this->resultadoError(
+                    'Para Anita Local seleccione un local concreto (no «Todos»).',
+                    $paginar,
+                    $porPagina
+                );
+            }
             $depositoAnita = (int) ($filtros['deposito_anita'] ?? 0);
             if ($depositoAnita <= 0) {
                 $depositoAnita = (int) ($local->anita_deposito ?: 0);
@@ -72,14 +76,29 @@ final class StockLocalInformeService
                 );
             }
         } else {
-            $depositoErpId = (int) ($local->deposito_id ?: 0);
+            $depositoErpId = (int) ($filtros['deposito_erp_id'] ?? 0);
+            if ($depositoErpId <= 0 && $local !== null) {
+                $depositoErpId = (int) ($local->deposito_id ?: 0);
+            }
             if ($depositoErpId <= 0) {
                 return $this->resultadoError(
-                    'El local no tiene depósito ERP configurado (deposito_id).',
+                    'Indique un depósito ERP, o elija un local que tenga depósito configurado.',
                     $paginar,
                     $porPagina,
                     $local
                 );
+            }
+            // «Todos» + depósito: anclar a un local del mismo depósito solo para metadatos.
+            if ($local === null) {
+                $local = LocalVenta::query()
+                    ->where('activo', true)
+                    ->where('deposito_id', $depositoErpId)
+                    ->orderBy('codigo')
+                    ->first()
+                    ?? LocalVenta::query()->where('activo', true)->orderBy('codigo')->first();
+            }
+            if ($local === null) {
+                return $this->resultadoError('No hay locales activos configurados.', $paginar, $porPagina);
             }
         }
 
@@ -146,7 +165,11 @@ final class StockLocalInformeService
         $local ??= $this->resolverLocal($filtros);
         $parts = [];
         if ($local) {
-            $parts[] = 'Local '.$local->codigo.' '.$local->nombre;
+            if (empty($filtros['local_venta_id'])) {
+                $parts[] = 'Locales: todos (dep. ERP '.$depositoErpId.')';
+            } else {
+                $parts[] = 'Local '.$local->codigo.' '.$local->nombre;
+            }
         }
         $origen = (string) ($filtros['origen'] ?? StockLocalInformeListadoFiltros::ORIGEN_ERP);
         $parts[] = StockLocalInformeListadoFiltros::etiquetaOrigen($origen);
@@ -156,7 +179,9 @@ final class StockLocalInformeService
                 $parts[] = 'Depósito Anita '.$dep;
             }
         } else {
-            $depErp = $depositoErpId ?? (int) ($local->deposito_id ?? 0);
+            $depErp = (int) ($depositoErpId
+                ?: ($filtros['deposito_erp_id'] ?? 0)
+                ?: ($local->deposito_id ?? 0));
             if ($depErp > 0) {
                 $parts[] = 'Depósito ERP id '.$depErp;
             }
@@ -306,70 +331,55 @@ final class StockLocalInformeService
         $grupos = [];
         $medidasVistas = [];
 
-        foreach (array_chunk($articuloIds, 500) as $chunk) {
-            $query = DB::table('articulo_movimiento as am')
-                ->leftJoin('combinacion as c', 'c.id', '=', 'am.combinacion_id')
-                ->leftJoin('color as col', 'col.id', '=', 'am.color_id')
-                ->leftJoin('talle as t', 't.id', '=', 'am.talle_id')
-                ->where('am.deposito_id', $depositoId)
-                ->whereIn('am.articulo_id', $chunk)
-                ->whereDate('am.fecha', '<=', $fechaHasta)
-                ->whereNotNull('am.articulo_id');
+        $rows = StockLocalErpMovimientosSupport::filasPorDepositoYArticulos(
+            $depositoId,
+            $articuloIds,
+            $fechaHasta
+        );
 
-            $rows = $query->select([
-                'am.articulo_id',
-                'am.combinacion_id',
-                'am.color_id',
-                'am.cantidad',
-                'am.fecha',
-                'c.codigo as combinacion_codigo',
-                'c.nombre as combinacion_nombre',
-                'col.codigo as color_codigo_m',
-                'col.nombre as color_nombre',
-                't.codigo as medida',
-            ])->get();
+        foreach ($rows as $row) {
+            $articuloId = (int) $row->articulo_id;
+            $cantidad = (float) $row->cantidad;
+            if (abs($cantidad) < 0.000001) {
+                continue;
+            }
+            $medidaNorm = StockLocalErpMovimientosSupport::normalizarMedida(
+                $row->medida ?? null,
+                $row->medida_nombre ?? null
+            );
+            $medida = is_numeric($medidaNorm) ? (int) $medidaNorm : 0;
+            if (! is_numeric($medidaNorm) && $medidaNorm !== 0 && $medidaNorm !== '0') {
+                // Medida no numérica: usar hash estable en string key, columna como 0 en orden
+                $medidaKey = (string) $medidaNorm;
+            } else {
+                $medidaKey = (string) ($medida > 0 ? $medida : 0);
+                $medida = (int) $medidaKey;
+            }
+            $medidasVistas[$medida] = true;
 
-            foreach ($rows as $row) {
-                $articuloId = (int) $row->articulo_id;
-                $cantidad = (float) $row->cantidad;
-                if (abs($cantidad) < 0.000001) {
-                    continue;
-                }
-                $medida = (int) ($row->medida ?? 0);
-                $medidasVistas[$medida > 0 ? $medida : 0] = true;
+            [$colorCodigo, $colorDesc] = StockLocalErpMovimientosSupport::colorDesdeFila($row);
 
-                $colorCodigo = trim((string) ($row->combinacion_codigo ?? ''));
-                $colorDesc = trim((string) ($row->combinacion_nombre ?? ''));
-                if ($colorCodigo === '') {
-                    $colorCodigo = trim((string) ($row->color_codigo_m ?? ''));
-                    $colorDesc = trim((string) ($row->color_nombre ?? ''));
-                }
-                if ($colorCodigo === '') {
-                    $colorCodigo = '0';
-                }
+            $clave = $articuloId.'|'.$colorCodigo;
+            if (! isset($grupos[$clave])) {
+                $grupos[$clave] = [
+                    'articulo_id' => $articuloId,
+                    'color_codigo' => $colorCodigo,
+                    'color_desc' => $colorDesc,
+                    'ingresos' => [],
+                    'egresos' => [],
+                    'stock' => [],
+                ];
+            }
+            $kMed = $medidaKey;
+            $grupos[$clave]['stock'][$kMed] = ($grupos[$clave]['stock'][$kMed] ?? 0.0) + $cantidad;
 
-                $clave = $articuloId.'|'.$colorCodigo;
-                if (! isset($grupos[$clave])) {
-                    $grupos[$clave] = [
-                        'articulo_id' => $articuloId,
-                        'color_codigo' => $colorCodigo,
-                        'color_desc' => $colorDesc,
-                        'ingresos' => [],
-                        'egresos' => [],
-                        'stock' => [],
-                    ];
-                }
-                $kMed = (string) ($medida > 0 ? $medida : 0);
-                $grupos[$clave]['stock'][$kMed] = ($grupos[$clave]['stock'][$kMed] ?? 0.0) + $cantidad;
-
-                if ($modo === StockLocalInformeListadoFiltros::MODO_APERTURA) {
-                    $fechaMov = substr((string) $row->fecha, 0, 10);
-                    if ($fechaMov >= $fechaDesde) {
-                        if ($cantidad > 0) {
-                            $grupos[$clave]['ingresos'][$kMed] = ($grupos[$clave]['ingresos'][$kMed] ?? 0.0) + $cantidad;
-                        } else {
-                            $grupos[$clave]['egresos'][$kMed] = ($grupos[$clave]['egresos'][$kMed] ?? 0.0) + abs($cantidad);
-                        }
+            if ($modo === StockLocalInformeListadoFiltros::MODO_APERTURA) {
+                $fechaMov = substr((string) $row->fecha, 0, 10);
+                if ($fechaMov >= $fechaDesde) {
+                    if ($cantidad > 0) {
+                        $grupos[$clave]['ingresos'][$kMed] = ($grupos[$clave]['ingresos'][$kMed] ?? 0.0) + $cantidad;
+                    } else {
+                        $grupos[$clave]['egresos'][$kMed] = ($grupos[$clave]['egresos'][$kMed] ?? 0.0) + abs($cantidad);
                     }
                 }
             }

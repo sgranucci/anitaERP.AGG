@@ -2197,22 +2197,50 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             $filtros = ProveedorListadoFiltros::filtrosVacios();
         }
 
-        $proveedor = $this->model->select('proveedor.id as id',
+        $proveedor = $this->model->select(
+                                        'proveedor.id as id',
                                         'proveedor.nombre as nombre',
 										'proveedor.fantasia as fantasia',
 										'proveedor.nroinscripcion as numerodocumento',
                                         'proveedor.domicilio as domicilio',
 										'proveedor.codigo as codigo',
                                         'proveedor.empresa_id as empresa_id',
+                                        'proveedor.contacto as contacto',
+                                        'proveedor.email as email',
+                                        'proveedor.emailoc as emailoc',
+                                        'proveedor.telefono as telefono',
+                                        'proveedor.urlweb as urlweb',
+                                        'proveedor.codigopostal as codigopostal',
+                                        'proveedor.nroIIBB as nroIIBB',
+                                        'proveedor.regimenfacturacion as regimenfacturacion',
+                                        'proveedor.leyenda as leyenda',
+                                        'proveedor.tipoalta as tipoalta',
+                                        'proveedor.semaforo as semaforo',
                                         'empresa.nombre as nombreempresa',
                                         'localidad.nombre as nombrelocalidad',
 										'provincia.nombre as nombreprovincia',
+                                        'pais.nombre as nombrepais',
+                                        'tipoempresa.nombre as nombretipoempresa',
+                                        'condicioniva.nombre as nombrecondicioniva',
+                                        'condicionpago.nombre as nombrecondicionpago',
+                                        'condicionentrega.nombre as nombrecondicionentrega',
+                                        'condicioncompra.nombre as nombrecondicioncompra',
+                                        'tiposervicio_proveedor.nombre as nombretiposervicio',
+                                        'tiposuspensionproveedor.nombre as nombretiposuspension',
 										'proveedor.estado as estado',
                                         'proveedor.facturas_apocrifas as facturas_apocrifas',
                                         'proveedor.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at')
                                 ->leftjoin('localidad', 'localidad.id', 'proveedor.localidad_id')
 								->leftjoin('provincia', 'provincia.id', 'proveedor.provincia_id')
-                                ->leftJoin('empresa', 'empresa.id', '=', 'proveedor.empresa_id');
+                                ->leftJoin('pais', 'pais.id', '=', 'proveedor.pais_id')
+                                ->leftJoin('empresa', 'empresa.id', '=', 'proveedor.empresa_id')
+                                ->leftJoin('tipoempresa', 'tipoempresa.id', '=', 'proveedor.tipoempresa_id')
+                                ->leftJoin('condicioniva', 'condicioniva.id', '=', 'proveedor.condicioniva_id')
+                                ->leftJoin('condicionpago', 'condicionpago.id', '=', 'proveedor.condicionpago_id')
+                                ->leftJoin('condicionentrega', 'condicionentrega.id', '=', 'proveedor.condicionentrega_id')
+                                ->leftJoin('condicioncompra', 'condicioncompra.id', '=', 'proveedor.condicioncompra_id')
+                                ->leftJoin('tiposervicio_proveedor', 'tiposervicio_proveedor.id', '=', 'proveedor.tiposervicio_proveedor_id')
+                                ->leftJoin('tiposuspensionproveedor', 'tiposuspensionproveedor.id', '=', 'proveedor.tiposuspension_id');
 
         ProveedorListadoFiltros::aplicar($proveedor, $filtros);
 

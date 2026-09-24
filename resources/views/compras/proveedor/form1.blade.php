@@ -20,10 +20,10 @@
     				</div>
 				</div>
 				<div class="form-group row">
-    				<label for="telefono" class="col-lg-2 col-form-label requerido">Telefono</label>
+    				<label for="telefono" class="col-lg-2 col-form-label">Telefono</label>
                     <span class="input-group-text"><i class="fas fa-phone"></i></span>
     				<div class="col-lg-5">
-    					<input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}" required/>
+    					<input type="text" name="telefono" id="telefono" class="form-control" value="{{old('telefono', $data->telefono ?? '')}}"/>
     				</div>
 					<label for="tiposervicio_proveedor" class="col-lg-2 col-form-label">Tipo de Servicio</label>
 					<select name="tiposervicio_proveedor_id" id="tiposervicio_proveedor_id" data-placeholder="Tipo de servicio" class="col-lg-2 form-control" data-fouc>

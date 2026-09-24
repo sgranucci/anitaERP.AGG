@@ -16,19 +16,13 @@ class ProveedorListadoFiltros
 
     public const MODO_CAMPO = 'campo';
 
-    /** @var array<string, array{column: string, type: string, label: string}> */
-    public const CAMPOS = [
-        'id' => ['column' => 'proveedor.id', 'type' => 'entero', 'label' => 'ID'],
-        'nombre' => ['column' => 'proveedor.nombre', 'type' => 'texto', 'label' => 'Nombre'],
-        'fantasia' => ['column' => 'proveedor.fantasia', 'type' => 'texto', 'label' => 'Nombre de fantasía'],
-        'numerodocumento' => ['column' => 'proveedor.nroinscripcion', 'type' => 'texto', 'label' => 'C.U.I.T.'],
-        'domicilio' => ['column' => 'proveedor.domicilio', 'type' => 'texto', 'label' => 'Domicilio'],
-        'localidad' => ['column' => 'localidad.nombre', 'type' => 'texto', 'label' => 'Localidad'],
-        'provincia' => ['column' => 'provincia.nombre', 'type' => 'texto', 'label' => 'Provincia'],
-        'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
-        'codigo' => ['column' => 'proveedor.codigo', 'type' => 'texto', 'label' => 'Código'],
-        'estado' => ['column' => 'proveedor.estado', 'type' => 'texto', 'label' => 'Estado'],
-    ];
+    public const MODO_QBE = 'qbe';
+
+    /**
+     * @deprecated Usar campos() — se mantiene alias para código legacy.
+     * @var array<string, array{column: string, type: string, label: string}>
+     */
+    public const CAMPOS = [];
 
     /** @var list<string> */
     private const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
@@ -36,9 +30,20 @@ class ProveedorListadoFiltros
         'proveedor.fantasia',
         'proveedor.domicilio',
         'proveedor.nroinscripcion',
+        'proveedor.contacto',
+        'proveedor.email',
+        'proveedor.emailoc',
+        'proveedor.telefono',
+        'proveedor.leyenda',
         'localidad.nombre',
         'provincia.nombre',
+        'pais.nombre',
         'empresa.nombre',
+        'tipoempresa.nombre',
+        'condicioniva.nombre',
+        'condicionpago.nombre',
+        'condicionentrega.nombre',
+        'condicioncompra.nombre',
     ];
 
     public static function filtroEmpresaActivo(): bool
@@ -46,21 +51,48 @@ class ProveedorListadoFiltros
         return (bool) config('proveedor.filtro_empresa', false);
     }
 
+    /**
+     * Catálogo de campos filtrables (sincronizado con columnas del workbench).
+     *
+     * @return array<string, array{column: string, type: string, label: string, formapago?: bool}>
+     */
+    public static function campos(): array
+    {
+        $out = [];
+        foreach (ProveedorListadoColumnas::camposFiltrables() as $key => $meta) {
+            $out[$key] = [
+                'column' => $meta['column'],
+                'type' => $meta['type'],
+                'label' => $meta['label'],
+                'formapago' => ! empty($meta['formapago']),
+            ];
+        }
+
+        return $out;
+    }
+
     /** @var array<string, string> */
     public const OPERADORES_TEXTO = [
-        'contiene' => 'Contiene (en cualquier parte)',
+        'contiene' => 'Contiene',
         'empieza' => 'Empieza con',
         'termina' => 'Termina con',
-        'igual' => 'Igual a',
+        'igual' => 'Es igual a',
         'distinto' => 'Distinto de',
-        'vacio' => 'Vacío',
+        'vacio' => 'Está vacío',
     ];
 
     /** @var array<string, string> */
     public const OPERADORES_ENTERO = [
-        'igual' => 'Igual a',
+        'igual' => 'Es igual a',
         'mayor' => 'Mayor que',
         'menor' => 'Menor que',
+        'vacio' => 'Está vacío',
+    ];
+
+    /** @var array<string, string> */
+    public const OPERADORES_BOOLEANO = [
+        'igual' => 'Es',
+        'vacio' => 'Sin dato',
     ];
 
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
@@ -79,16 +111,20 @@ class ProveedorListadoFiltros
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
         $busquedaRapida = $request->boolean('filtro_busqueda_rapida');
 
+        $qbe = self::resolverQbeDesdeRequest($request);
+
         $modo = (string) $request->input('filtro_modo', self::MODO_TODOS);
-        if (! in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO], true)) {
+        if (! in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO, self::MODO_QBE], true)) {
             $modo = self::MODO_TODOS;
         }
 
-        $campo = (string) $request->input('filtro_campo', 'nombre');
-        if (! isset(self::CAMPOS[$campo])) {
-            $campo = 'nombre';
+        if ($qbe !== []) {
+            $modo = self::MODO_QBE;
         }
-        if ($campo === 'empresa' && ! self::filtroEmpresaActivo()) {
+
+        $campo = (string) $request->input('filtro_campo', 'nombre');
+        $campos = self::campos();
+        if (! isset($campos[$campo])) {
             $campo = 'nombre';
         }
 
@@ -97,9 +133,14 @@ class ProveedorListadoFiltros
         if ($busquedaRapida) {
             $modo = self::MODO_TODOS;
             $operador = 'contiene';
+            $qbe = [];
         }
 
-        $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'nombre');
+        if ($modo !== self::MODO_QBE) {
+            $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'nombre');
+        } else {
+            $operador = 'contiene';
+        }
 
         return [
             'modo' => $modo,
@@ -109,9 +150,70 @@ class ProveedorListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
+            'qbe' => $qbe,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
         ];
+    }
+
+    /**
+     * Criterios Advanced Find: lista de {campo, op, valor}.
+     * Acepta también el formato plano legacy qbe[campo]=valor.
+     *
+     * @return list<array{campo: string, op: string, valor: string}>
+     */
+    public static function resolverQbeDesdeRequest(Request $request): array
+    {
+        $raw = $request->input('qbe', []);
+        if (! is_array($raw)) {
+            $raw = [];
+        }
+
+        $campos = self::campos();
+        $criterios = [];
+
+        $esLista = $raw !== [] && array_is_list($raw);
+        if ($esLista || (isset($raw[0]) && is_array($raw[0] ?? null))) {
+            foreach ($raw as $fila) {
+                if (! is_array($fila)) {
+                    continue;
+                }
+                $campo = (string) ($fila['campo'] ?? '');
+                if (! isset($campos[$campo])) {
+                    continue;
+                }
+                $op = self::normalizarOperador((string) ($fila['op'] ?? 'contiene'), $campo);
+                $valor = trim((string) ($fila['valor'] ?? ''));
+                if ($op === 'vacio' || $valor !== '') {
+                    $criterios[] = ['campo' => $campo, 'op' => $op, 'valor' => $valor];
+                }
+            }
+
+            return $criterios;
+        }
+
+        // Legacy: qbe[nombre]=acme
+        foreach ($raw as $key => $valor) {
+            $key = (string) $key;
+            if (! isset($campos[$key])) {
+                continue;
+            }
+            $valor = trim((string) $valor);
+            if ($valor === '') {
+                continue;
+            }
+            $criterios[] = ['campo' => $key, 'op' => 'contiene', 'valor' => $valor];
+        }
+
+        return $criterios;
+    }
+
+    /**
+     * @return array<string, array{column: string, type: string, label: string}>
+     */
+    public static function camposQbeDisponibles(): array
+    {
+        return self::campos();
     }
 
     /**
@@ -134,6 +236,22 @@ class ProveedorListadoFiltros
 
     public static function tieneCriteriosTexto(array $filtros): bool
     {
+        foreach ((array) ($filtros['qbe'] ?? []) as $criterio) {
+            if (is_array($criterio)) {
+                $op = (string) ($criterio['op'] ?? '');
+                $valor = trim((string) ($criterio['valor'] ?? ''));
+                if ($op === 'vacio' || $valor !== '') {
+                    return true;
+                }
+            } elseif (trim((string) $criterio) !== '') {
+                return true;
+            }
+        }
+
+        if (($filtros['modo'] ?? '') === self::MODO_QBE && ! empty($filtros['qbe'])) {
+            return true;
+        }
+
         if (($filtros['operador'] ?? '') === 'vacio') {
             return true;
         }
@@ -163,7 +281,7 @@ class ProveedorListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, empresa_id: ?int, empresa_scope: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, qbe: list<array{campo: string, op: string, valor: string}>, empresa_id: ?int, empresa_scope: string}
      */
     public static function filtrosVacios(): array
     {
@@ -174,6 +292,7 @@ class ProveedorListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'busqueda' => '',
+            'qbe' => [],
             'empresa_id' => null,
             'empresa_scope' => 'una',
         ];
@@ -198,15 +317,41 @@ class ProveedorListadoFiltros
     }
 
     /**
-     * @return array<string, string|int|bool>
+     * @return array<string, mixed>
      */
     public static function paraQueryString(array $filtros): array
     {
         $params = self::paraQueryStringEmpresa($filtros);
-        if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
-            $params['filtro_modo'] = $filtros['modo'];
+        $modo = $filtros['modo'] ?? self::MODO_TODOS;
+
+        if ($modo === self::MODO_QBE) {
+            $params['filtro_modo'] = self::MODO_QBE;
+            $i = 0;
+            foreach ((array) ($filtros['qbe'] ?? []) as $criterio) {
+                if (! is_array($criterio)) {
+                    continue;
+                }
+                $campo = (string) ($criterio['campo'] ?? '');
+                $op = (string) ($criterio['op'] ?? 'contiene');
+                $valor = trim((string) ($criterio['valor'] ?? ''));
+                if ($campo === '' || ($op !== 'vacio' && $valor === '')) {
+                    continue;
+                }
+                $params['qbe'][$i] = [
+                    'campo' => $campo,
+                    'op' => $op,
+                    'valor' => $valor,
+                ];
+                $i++;
+            }
+
+            return $params;
         }
-        if (($filtros['modo'] ?? '') === self::MODO_CAMPO) {
+
+        if ($modo !== self::MODO_TODOS) {
+            $params['filtro_modo'] = $modo;
+        }
+        if ($modo === self::MODO_CAMPO) {
             $params['filtro_campo'] = $filtros['campo'] ?? 'nombre';
             $params['filtro_operador'] = $filtros['operador'] ?? 'contiene';
         } elseif (($filtros['operador'] ?? 'contiene') !== 'contiene') {
@@ -220,6 +365,60 @@ class ProveedorListadoFiltros
         }
 
         return $params;
+    }
+
+    /**
+     * @param  array<string, mixed>  $base
+     * @param  array<string, mixed>  $desdeVista
+     * @return array<string, mixed>
+     */
+    public static function fusionarDesdeVista(array $base, array $desdeVista): array
+    {
+        if (self::tieneCriteriosAplicados($base)) {
+            return $base;
+        }
+
+        $qbeRaw = (array) ($desdeVista['qbe'] ?? []);
+        $qbe = [];
+        if ($qbeRaw !== [] && (array_is_list($qbeRaw) || isset($qbeRaw[0]))) {
+            foreach ($qbeRaw as $fila) {
+                if (! is_array($fila)) {
+                    continue;
+                }
+                $campo = (string) ($fila['campo'] ?? '');
+                if ($campo === '') {
+                    continue;
+                }
+                $op = self::normalizarOperador((string) ($fila['op'] ?? 'contiene'), $campo);
+                $valor = trim((string) ($fila['valor'] ?? ''));
+                if ($op === 'vacio' || $valor !== '') {
+                    $qbe[] = ['campo' => $campo, 'op' => $op, 'valor' => $valor];
+                }
+            }
+        } else {
+            foreach ($qbeRaw as $k => $v) {
+                $v = trim((string) $v);
+                if ($v === '' || ! is_string($k)) {
+                    continue;
+                }
+                $qbe[] = ['campo' => $k, 'op' => 'contiene', 'valor' => $v];
+            }
+        }
+
+        $modo = (string) ($desdeVista['modo'] ?? self::MODO_TODOS);
+        if ($qbe !== []) {
+            $modo = self::MODO_QBE;
+        }
+
+        return array_merge($base, [
+            'modo' => $modo,
+            'campo' => (string) ($desdeVista['campo'] ?? $base['campo']),
+            'operador' => (string) ($desdeVista['operador'] ?? $base['operador']),
+            'valor' => (string) ($desdeVista['valor'] ?? ''),
+            'valor_hasta' => (string) ($desdeVista['valor_hasta'] ?? ''),
+            'busqueda' => (string) ($desdeVista['valor'] ?? $desdeVista['busqueda'] ?? ''),
+            'qbe' => $qbe,
+        ]);
     }
 
     /**
@@ -239,8 +438,15 @@ class ProveedorListadoFiltros
             return;
         }
 
-        $valor = trim((string) ($filtros['valor'] ?? ''));
         $modo = $filtros['modo'] ?? self::MODO_TODOS;
+
+        if ($modo === self::MODO_QBE) {
+            self::aplicarQbe($query, (array) ($filtros['qbe'] ?? []));
+
+            return;
+        }
+
+        $valor = trim((string) ($filtros['valor'] ?? ''));
         $operador = $filtros['operador'] ?? 'contiene';
 
         if ($modo === self::MODO_CAMPO) {
@@ -250,6 +456,38 @@ class ProveedorListadoFiltros
         }
 
         self::aplicarBusquedaGlobal($query, $operador, $valor);
+    }
+
+    /**
+     * Advanced Find: AND de criterios (campo + operador + valor).
+     *
+     * @param  Builder<\App\Models\Compras\Proveedor>  $query
+     * @param  list<array{campo?: string, op?: string, valor?: string}>|array<string, string>  $qbe
+     */
+    private static function aplicarQbe(Builder $query, array $qbe): void
+    {
+        $campos = self::campos();
+        foreach ($qbe as $key => $criterio) {
+            if (is_array($criterio) && isset($criterio['campo'])) {
+                $campo = (string) $criterio['campo'];
+                $op = (string) ($criterio['op'] ?? 'contiene');
+                $valor = trim((string) ($criterio['valor'] ?? ''));
+            } else {
+                // legacy plano
+                $campo = (string) $key;
+                $op = 'contiene';
+                $valor = trim((string) $criterio);
+            }
+
+            if (! isset($campos[$campo])) {
+                continue;
+            }
+            $op = self::normalizarOperador($op, $campo);
+            if ($op !== 'vacio' && $valor === '') {
+                continue;
+            }
+            self::aplicarEnCampo($query, $campo, $op, $valor, '');
+        }
     }
 
     /**
@@ -305,6 +543,15 @@ class ProveedorListadoFiltros
                     );
                 }
             }
+            $q->orWhereExists(function ($sub) use ($like) {
+                $sub->selectRaw('1')
+                    ->from('proveedor_formapago')
+                    ->whereColumn('proveedor_formapago.proveedor_id', 'proveedor.id')
+                    ->where(function ($w) use ($like) {
+                        $w->where('proveedor_formapago.cbu', 'like', $like)
+                            ->orWhere('proveedor_formapago.alias_cbu', 'like', $like);
+                    });
+            });
         });
     }
 
@@ -318,16 +565,111 @@ class ProveedorListadoFiltros
      */
     private static function aplicarEnCampo(Builder $query, string $campoKey, string $operador, string $valor, string $valorHasta): void
     {
-        $def = self::CAMPOS[$campoKey] ?? self::CAMPOS['nombre'];
+        $campos = self::campos();
+        $def = $campos[$campoKey] ?? $campos['nombre'] ?? null;
+        if ($def === null) {
+            return;
+        }
+
+        if (! empty($def['formapago'])) {
+            self::aplicarFormapago($query, $campoKey, $operador, $valor);
+
+            return;
+        }
+
         $type = $def['type'];
 
+        if ($type === 'booleano') {
+            self::aplicarBooleano($query, (string) $def['column'], $operador, $valor);
+
+            return;
+        }
+
         if ($type === 'entero') {
+            if ($operador === 'vacio') {
+                $query->where(function ($q) use ($def) {
+                    $q->whereNull($def['column']);
+                });
+
+                return;
+            }
             self::aplicarEntero($query, (string) $def['column'], $operador, $valor);
 
             return;
         }
 
         self::aplicarTexto($query, (string) $def['column'], $operador, $valor);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Compras\Proveedor>  $query
+     */
+    private static function aplicarBooleano(Builder $query, string $column, string $operador, string $valor): void
+    {
+        if ($operador === 'vacio') {
+            $query->where(function ($q) use ($column) {
+                $q->whereNull($column)->orWhere($column, 0)->orWhere($column, false);
+            });
+
+            return;
+        }
+
+        $truthy = in_array(strtolower($valor), ['1', 'si', 'sí', 'true', 's', 'yes'], true);
+        $query->where($column, $truthy ? 1 : 0);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Compras\Proveedor>  $query
+     */
+    private static function aplicarFormapago(Builder $query, string $campoKey, string $operador, string $valor): void
+    {
+        $column = $campoKey === 'alias_cbu' ? 'alias_cbu' : 'cbu';
+
+        if ($operador === 'vacio') {
+            $query->whereNotExists(function ($sub) use ($column) {
+                $sub->selectRaw('1')
+                    ->from('proveedor_formapago')
+                    ->whereColumn('proveedor_formapago.proveedor_id', 'proveedor.id')
+                    ->whereNotNull('proveedor_formapago.'.$column)
+                    ->where('proveedor_formapago.'.$column, '!=', '');
+            });
+
+            return;
+        }
+
+        if ($valor === '') {
+            return;
+        }
+
+        if ($operador === 'igual') {
+            $query->whereExists(function ($sub) use ($column, $valor) {
+                $sub->selectRaw('1')
+                    ->from('proveedor_formapago')
+                    ->whereColumn('proveedor_formapago.proveedor_id', 'proveedor.id')
+                    ->where('proveedor_formapago.'.$column, '=', $valor);
+            });
+
+            return;
+        }
+
+        if ($operador === 'distinto') {
+            $query->whereNotExists(function ($sub) use ($column, $valor) {
+                $sub->selectRaw('1')
+                    ->from('proveedor_formapago')
+                    ->whereColumn('proveedor_formapago.proveedor_id', 'proveedor.id')
+                    ->where('proveedor_formapago.'.$column, '=', $valor);
+            });
+
+            return;
+        }
+
+        $like = self::patronLike($operador, $valor);
+        $query->whereExists(function ($sub) use ($column, $like) {
+            $sub->selectRaw('1')
+                ->from('proveedor_formapago')
+                ->whereColumn('proveedor_formapago.proveedor_id', 'proveedor.id')
+                ->where('proveedor_formapago.'.$column, 'like', $like);
+        });
     }
 
     /**
@@ -420,9 +762,10 @@ class ProveedorListadoFiltros
 
     private static function normalizarOperador(string $operador, string $campoKey): string
     {
-        $type = self::CAMPOS[$campoKey]['type'] ?? 'texto';
+        $type = self::campos()[$campoKey]['type'] ?? 'texto';
         $permitidos = match ($type) {
             'entero' => array_keys(self::OPERADORES_ENTERO),
+            'booleano' => array_keys(self::OPERADORES_BOOLEANO),
             default => array_keys(self::OPERADORES_TEXTO),
         };
 
@@ -438,10 +781,11 @@ class ProveedorListadoFiltros
      */
     public static function operadoresParaCampo(string $campoKey): array
     {
-        $type = self::CAMPOS[$campoKey]['type'] ?? 'texto';
+        $type = self::campos()[$campoKey]['type'] ?? 'texto';
 
         return match ($type) {
             'entero' => self::OPERADORES_ENTERO,
+            'booleano' => self::OPERADORES_BOOLEANO,
             default => self::OPERADORES_TEXTO,
         };
     }

@@ -461,6 +461,7 @@ class IngresoEgresoComprobanteIvaService
 
                 return [
                     'concepto_ivacompra_id' => (int) $linea->concepto_ivacompra_id,
+                    'concepto_codigo' => $linea->concepto_ivacompras?->codigo,
                     'concepto_nombre' => $linea->concepto_ivacompras?->nombre,
                     'monto' => (float) $linea->monto,
                     'cuentacontabledebe_id' => $linea->cuentacontabledebe_id,

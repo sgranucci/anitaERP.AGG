@@ -46,10 +46,10 @@
                     @endphp
 
                     <div class="form-group row">
-                        <label for="local_venta_id" class="{{ $colLabel }} requerido">Local</label>
+                        <label for="local_venta_id" class="{{ $colLabel }}">Local</label>
                         <div class="{{ $colInput }}">
-                            <select name="local_venta_id" id="local_venta_id" class="form-control" required>
-                                <option value="">— Seleccione —</option>
+                            <select name="local_venta_id" id="local_venta_id" class="form-control">
+                                <option value="">— Todos —</option>
                                 @foreach ($locales as $loc)
                                     <option value="{{ $loc->id }}"
                                         data-deposito="{{ (int) ($loc->anita_deposito ?? 0) }}"
@@ -65,6 +65,7 @@
                             @if ($locales->isEmpty())
                                 <small class="form-text text-danger">No hay locales activos. Cree uno en Locales.</small>
                             @endif
+                            <small class="form-text text-muted">«Todos» requiere elegir depósito ERP abajo.</small>
                         </div>
                         <label class="{{ $colLabel }}">Origen de datos</label>
                         <div class="{{ $colInput }} pt-2">
@@ -78,6 +79,22 @@
                                 </label>
                             </div>
                             <small class="form-text text-muted">Sin tilde = ERP. Con tilde = bridge Anita Local.</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group row" id="fila-deposito-erp" style="{{ $origenAnita ? 'display:none;' : '' }}">
+                        <label for="deposito_erp_id" class="{{ $colLabel }}">Depósito ERP</label>
+                        <div class="{{ $colInput }}">
+                            <select name="deposito_erp_id" id="deposito_erp_id" class="form-control">
+                                <option value="">— Del local seleccionado —</option>
+                                @foreach ($depositosErp ?? [] as $dep)
+                                    <option value="{{ $dep->id }}"
+                                        @selected((int) ($filtros['deposito_erp_id'] ?? ($depositoErpId ?? 0)) === (int) $dep->id)>
+                                        {{ $dep->etiqueta }} (id {{ $dep->id }})
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="form-text text-muted">Varias sucursales pueden descontar del mismo depósito.</small>
                         </div>
                     </div>
 
@@ -126,13 +143,23 @@
                     <div class="form-group row">
                         <label for="desde_sku" class="{{ $colLabel }}">Desde SKU</label>
                         <div class="{{ $colInput }}">
-                            <input type="text" name="desde_sku" id="desde_sku" class="form-control"
-                                value="{{ $filtros['desde_sku'] ?? '' }}" autocomplete="off">
+                            <div class="input-group">
+                                <input type="text" name="desde_sku" id="desde_sku" class="form-control"
+                                    value="{{ $filtros['desde_sku'] ?? '' }}" autocomplete="off">
+                                <div class="input-group-append">
+                                    <span class="input-group-text text-muted small" id="desde_sku_nombre" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                                </div>
+                            </div>
                         </div>
                         <label for="hasta_sku" class="{{ $colLabel }}">Hasta SKU</label>
                         <div class="{{ $colInput }}">
-                            <input type="text" name="hasta_sku" id="hasta_sku" class="form-control"
-                                value="{{ $filtros['hasta_sku'] ?? '' }}" autocomplete="off">
+                            <div class="input-group">
+                                <input type="text" name="hasta_sku" id="hasta_sku" class="form-control"
+                                    value="{{ $filtros['hasta_sku'] ?? '' }}" autocomplete="off">
+                                <div class="input-group-append">
+                                    <span class="input-group-text text-muted small" id="hasta_sku_nombre" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -229,14 +256,21 @@
     var form = document.getElementById('form-stock-local-informe');
     var overlay = document.getElementById('sli-overlay');
     var selectLocal = document.getElementById('local_venta_id');
-    var inputDep = document.getElementById('deposito_anita');
+    var inputDepAnita = document.getElementById('deposito_anita');
+    var selectDepErp = document.getElementById('deposito_erp_id');
     var checkAnita = document.getElementById('origen_anita');
     var filaAnita = document.getElementById('fila-deposito-anita');
+    var filaErp = document.getElementById('fila-deposito-erp');
+    var urlSku = @json(url('stock/leerunarticuloporsku'));
+    var carpeta = (typeof carpetaBase !== 'undefined' && carpetaBase) ? carpetaBase : '';
 
-    function toggleAnita() {
+    function toggleOrigen() {
         var on = checkAnita && checkAnita.checked;
         if (filaAnita) {
             filaAnita.style.display = on ? '' : 'none';
+        }
+        if (filaErp) {
+            filaErp.style.display = on ? 'none' : '';
         }
     }
 
@@ -257,24 +291,88 @@
         overlay.setAttribute('aria-hidden', 'true');
     }
 
-    if (checkAnita) {
-        checkAnita.addEventListener('change', toggleAnita);
-        toggleAnita();
+    function resolverSku(inputId, nombreId) {
+        var input = document.getElementById(inputId);
+        var span = document.getElementById(nombreId);
+        if (!input || !span) return;
+        var sku = (input.value || '').trim();
+        if (sku === '') {
+            span.textContent = '';
+            return;
+        }
+        var base = urlSku || (carpeta + '/stock/leerunarticuloporsku');
+        fetch(base.replace(/\/$/, '') + '/' + encodeURIComponent(sku), {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (r) { return r.json().catch(function () { return null; }); })
+            .then(function (data) {
+                if (!data) {
+                    span.textContent = '';
+                    return;
+                }
+                var nombre = data.descripcion || data.nombre || data.articulo || '';
+                if (!nombre && data.data) {
+                    nombre = data.data.descripcion || data.data.nombre || '';
+                }
+                span.textContent = nombre || (data.error ? '—' : '');
+                span.title = nombre || '';
+            }).catch(function () {
+                span.textContent = '';
+            });
     }
 
-    if (selectLocal && inputDep) {
+    if (checkAnita) {
+        checkAnita.addEventListener('change', toggleOrigen);
+        toggleOrigen();
+    }
+
+    if (selectLocal) {
         selectLocal.addEventListener('change', function () {
             var opt = selectLocal.options[selectLocal.selectedIndex];
-            var dep = opt ? parseInt(opt.getAttribute('data-deposito') || '0', 10) : 0;
-            if (!inputDep.value && dep > 0) {
-                inputDep.value = dep;
+            var depAnita = opt ? parseInt(opt.getAttribute('data-deposito') || '0', 10) : 0;
+            var depErp = opt ? parseInt(opt.getAttribute('data-deposito-erp') || '0', 10) : 0;
+            if (inputDepAnita && !inputDepAnita.value && depAnita > 0) {
+                inputDepAnita.value = depAnita;
+            }
+            if (selectDepErp && depErp > 0) {
+                selectDepErp.value = String(depErp);
             }
         });
     }
 
+    ['desde_sku', 'hasta_sku'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        var nombreId = id + '_nombre';
+        el.addEventListener('blur', function () { resolverSku(id, nombreId); });
+        el.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                resolverSku(id, nombreId);
+                if (id === 'desde_sku') {
+                    var hasta = document.getElementById('hasta_sku');
+                    if (hasta) {
+                        if (!hasta.value) hasta.value = el.value;
+                        hasta.focus();
+                        resolverSku('hasta_sku', 'hasta_sku_nombre');
+                    }
+                }
+            }
+        });
+        if ((el.value || '').trim() !== '') {
+            resolverSku(id, nombreId);
+        }
+    });
+
     if (form) {
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (ev) {
             if (!form.checkValidity()) {
+                return;
+            }
+            var localVal = selectLocal ? (selectLocal.value || '') : '';
+            var depErpVal = selectDepErp ? (selectDepErp.value || '') : '';
+            if ((!checkAnita || !checkAnita.checked) && !localVal && !depErpVal) {
+                ev.preventDefault();
+                alert('Elija un local o un depósito ERP.');
                 return;
             }
             var msg = (checkAnita && checkAnita.checked)

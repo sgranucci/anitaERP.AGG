@@ -51,7 +51,12 @@ class ComprobanteProveedorAltaSinBloqueoAnitaTest extends TestCase
         $controller = new ReflectionClass(Comprobante_ProveedorController::class);
         $this->assertTrue($controller->hasMethod('apiAvisoFacturaYaEnAnita'));
         $this->assertTrue($controller->hasMethod('apiSincronizarOcComAlta'));
+        $this->assertTrue($controller->hasMethod('apiVerificarDuplicadoCabecera'));
         $this->assertTrue($controller->hasMethod('avisoFacturaYaMarcadaEnErpDesdePrefill'));
+        $this->assertTrue(method_exists(
+            \App\Support\Compras\ComprobanteProveedorUnicidadSupport::class,
+            'consultarDuplicadoCabecera'
+        ));
     }
 
     public function test_carga_con_oc_no_toma_com_de_otra_oc(): void

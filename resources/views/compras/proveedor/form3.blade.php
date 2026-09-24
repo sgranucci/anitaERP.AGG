@@ -25,8 +25,7 @@
 		<h3>Formas de pago</h3>
 		<p class="text-muted small mb-2">
 			En cada rengl&oacute;n con datos son obligatorios: Nombre, Forma de pago y Moneda.
-			El TC (tipo de cuenta) es obligatorio solo cuando la Forma de pago es Transferencia.
-			CBU, C.U.I.T., N&uacute;mero de cuenta, Banco y Medio de pago son opcionales.
+			TC, CBU, Alias CBU, C.U.I.T., N&uacute;mero de cuenta, Banco y Medio de pago son opcionales.
 		</p>
     	<table class="table" id="formapago-table">
     		<thead>
@@ -36,7 +35,7 @@
     				<th style="width: 10%;">Forma de pago <span class="text-danger">*</span></th>
     				<th style="width: 10%;">CBU</th>
     				<th style="width: 8%;">Alias CBU</th>
-    				<th style="width: 5%;">TC <small class="text-muted">(transf.)</small></th>
+    				<th style="width: 5%;">TC</th>
     				<th>Moneda <span class="text-danger">*</span></th>
     				<th style="width: 10%;">N&uacute;mero de cuenta</th>
 					<th style="width: 10%;">C.U.I.T.</th>

@@ -178,6 +178,7 @@ class PickingPedidoFerliController extends Controller
         $id = (int) $request->input('pedido_combinacion_id', 0);
         $lote = (string) $request->input('picking_lote_codigo', '');
         $depositoId = (int) $request->input('picking_deposito_id', 0);
+        $ordentrabajoId = (int) $request->input('picking_ordentrabajo_id', 0);
         $pickingId = (int) $request->input('picking_id', 0);
         $pickingCodigo = (int) $request->input('picking_codigo', 0);
 
@@ -187,6 +188,7 @@ class PickingPedidoFerliController extends Controller
             $depositoId > 0 ? $depositoId : null,
             $pickingId > 0 ? $pickingId : null,
             $pickingCodigo > 0 ? $pickingCodigo : null,
+            $ordentrabajoId > 0 ? $ordentrabajoId : null,
         );
 
         if (! empty($result['error'])) {

@@ -202,13 +202,15 @@ class CotRemitoConsultaService
     {
         $codigosSql = implode(',', array_map('intval', $codigosReparto));
         $api = new ApiAnita();
+        // Ferli no tiene penm_neto / penm_tot_seguro (sí Bierzo). El importe COT
+        // se completa desde factura Anita/ERP; no pedir columnas que rompen el UNLOAD.
         $data = [
             'acc' => 'list',
             'sistema' => 'ventas',
             'tabla' => 'pendmae',
             'campos' => '
                 penm_tipo, penm_letra, penm_sucursal, penm_nro, penm_cliente,
-                penm_fecha, penm_expreso, penm_ref_tipo, penm_neto, penm_tot_seguro
+                penm_fecha, penm_expreso, penm_ref_tipo
             ',
             'whereArmado' => " WHERE penm_tipo = 'REM' AND penm_fecha = ".$fechaAnita
                 .' AND penm_expreso IN ('.$codigosSql.') '

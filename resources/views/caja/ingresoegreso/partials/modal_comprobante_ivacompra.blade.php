@@ -40,18 +40,20 @@
                             <i class="fa fa-plus"></i> Agregar concepto
                         </button>
                         <template id="ie-cp-template-concepto">
-                            <tr class="ie-cp-fila-concepto">
+                            <tr class="ie-cp-fila-concepto item-concepto">
                                 <td>
-                                    <select class="form-control form-control-sm ie-cp-concepto-id">
-                                        <option value="">-- Concepto --</option>
-                                        @foreach ($concepto_ivacompra_query ?? [] as $concepto)
-                                            <option value="{{ $concepto->id }}"
-                                                data-cuenta-debe="{{ $concepto->cuentacontabledebe_id ?? '' }}"
-                                                data-tipoconcepto="{{ $concepto->tipoconcepto }}">
-                                                {{ $concepto->codigo }} — {{ $concepto->nombre }}
-                                            </option>
-                                        @endforeach
-                                    </select>
+                                    <input type="hidden" class="concepto_ivacompra_id ie-cp-concepto-id" value="">
+                                    <div class="d-flex flex-wrap align-items-center">
+                                        <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
+                                               value="" style="width:5.5rem;" autocomplete="off"
+                                               title="C&oacute;digo + Enter &middot; F1 consulta" placeholder="C&oacute;d.">
+                                        <input type="text" class="form-control form-control-sm nombre_concepto_ivacompra mr-1"
+                                               value="" readonly style="min-width:7rem;flex:1;" placeholder="Descripci&oacute;n">
+                                        <button type="button" class="btn btn-outline-primary btn-sm consultaconcepto_ivacompra tooltipsC flex-shrink-0"
+                                                title="Consulta conceptos (F1)">
+                                            <i class="fa fa-search"></i>
+                                        </button>
+                                    </div>
                                 </td>
                                 <td>
                                     <div class="input-group input-group-sm">

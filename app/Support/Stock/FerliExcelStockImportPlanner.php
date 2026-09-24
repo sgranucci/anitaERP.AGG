@@ -43,11 +43,16 @@ final class FerliExcelStockImportPlanner
         $errores = [];
         $paresAltap = 0.0;
         $paresProduccion = 0.0;
+        /** @var array<int, true> Lote/OT del Excel en rojo o EN PRODUCCION: CONOT no debe anularlos. */
+        $lotesProtegidosEnProduccion = [];
 
         foreach ($filas as $fila) {
             if ($fila['en_produccion'] || $fila['omitir'] === 'en_produccion') {
                 $omitidas['en_produccion']++;
                 $paresProduccion += (float) $fila['pares'];
+                foreach (self::identificadoresNumericosFila($fila) as $ident) {
+                    $lotesProtegidosEnProduccion[$ident] = true;
+                }
                 continue;
             }
             if ($fila['omitir'] === 'sin_deposito' || empty($fila['deposito_codigo'])) {
@@ -86,12 +91,15 @@ final class FerliExcelStockImportPlanner
                 ->unique()
                 ->values()
                 ->all();
-        $conot = self::planConot($articuloIdsAltap);
+        $lotesProtegidos = array_keys($lotesProtegidosEnProduccion);
+        $conot = self::planConot($articuloIdsAltap, $lotesProtegidos);
 
         return [
             'filas_excel' => count($filas),
             'omitidas' => $omitidas,
             'pares_en_produccion' => $paresProduccion,
+            'lotes_protegidos_en_produccion' => $lotesProtegidos,
+            'lotes_protegidos_en_produccion_count' => count($lotesProtegidos),
             'altap_filas' => count($altap),
             'altap_pares' => $paresAltap,
             'altap_por_deposito' => self::sumarPor($altap, 'deposito_codigo', 'pares'),
@@ -105,6 +113,31 @@ final class FerliExcelStockImportPlanner
             'altap' => $altap,
             'lotes_inventados' => $lotesInventados,
         ];
+    }
+
+    /**
+     * Números de lote/OT en la fila Excel (identificador puede traer varios).
+     *
+     * @param  array<string, mixed>  $fila
+     * @return list<int>
+     */
+    public static function identificadoresNumericosFila(array $fila): array
+    {
+        $out = [];
+        $raw = trim((string) ($fila['identificador'] ?? ''));
+        if ($raw === '') {
+            return [];
+        }
+        if (preg_match_all('/\d+/', $raw, $m)) {
+            foreach ($m[0] as $n) {
+                $v = (int) $n;
+                if ($v > 0) {
+                    $out[$v] = $v;
+                }
+            }
+        }
+
+        return array_values($out);
     }
 
     /**
@@ -442,23 +475,35 @@ final class FerliExcelStockImportPlanner
 
     /**
      * @param  list<int>  $articuloIds  Obligatorio: solo anula saldos de esos artículos (los del Excel). Vacío = no tocar nada.
+     * @param  list<int>  $lotesProtegidos  Lotes/OT omitidos EN PRODUCCION: no anular (evita saldo 0 en ERP mientras el Excel sigue en rojo).
      * @return array<string, mixed>
      */
-    private static function planConot(array $articuloIds = []): array
+    private static function planConot(array $articuloIds = [], array $lotesProtegidos = []): array
     {
+        $vacio = [
+            'grupos' => [],
+            'grupos_count' => 0,
+            'pares' => 0.0,
+            'por_deposito' => [],
+            'muestra' => [],
+            'pares_lote_cero' => 0.0,
+            'pares_positivos' => 0.0,
+            'pares_negativos' => 0.0,
+            'grupos_conot' => 0,
+            'grupos_ajuste' => 0,
+            'grupos_omitidos_protegidos' => 0,
+            'pares_omitidos_protegidos' => 0.0,
+        ];
         if ($articuloIds === []) {
-            return [
-                'grupos' => [],
-                'grupos_count' => 0,
-                'pares' => 0.0,
-                'por_deposito' => [],
-                'muestra' => [],
-                'pares_lote_cero' => 0.0,
-                'pares_positivos' => 0.0,
-                'pares_negativos' => 0.0,
-                'grupos_conot' => 0,
-                'grupos_ajuste' => 0,
-            ];
+            return $vacio;
+        }
+
+        $protegidos = [];
+        foreach ($lotesProtegidos as $lote) {
+            $n = (int) $lote;
+            if ($n > 0) {
+                $protegidos[$n] = true;
+            }
         }
 
         $rows = DB::table('articulo_movimiento as am')
@@ -507,9 +552,17 @@ final class FerliExcelStockImportPlanner
         $paresPos = 0.0;
         $paresNeg = 0.0;
         $porDep = [];
+        $omitidosProtegidos = 0;
+        $paresOmitidosProtegidos = 0.0;
         foreach ($rows as $row) {
             $cant = (float) $row->cantidad;
             if (abs($cant) <= 0.0001) {
+                continue;
+            }
+            $loteNum = (int) $row->lote;
+            if (isset($protegidos[$loteNum])) {
+                $omitidosProtegidos++;
+                $paresOmitidosProtegidos += abs($cant);
                 continue;
             }
             $key = implode('|', [$row->lote, $row->articulo_id, $row->combinacion_id, $row->deposito_id]);
@@ -554,6 +607,8 @@ final class FerliExcelStockImportPlanner
             'pares_negativos' => $paresNeg,
             'grupos_conot' => count(array_filter($grupos, fn ($g) => ($g['pares'] ?? 0) > 0)),
             'grupos_ajuste' => count(array_filter($grupos, fn ($g) => ($g['pares'] ?? 0) < 0)),
+            'grupos_omitidos_protegidos' => $omitidosProtegidos,
+            'pares_omitidos_protegidos' => $paresOmitidosProtegidos,
         ];
     }
 

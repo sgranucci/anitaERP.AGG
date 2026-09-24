@@ -1,0 +1,301 @@
+/* Workbench listados (prototipo proveedores) — AdminLTE + acento ERP #85C1E9 */
+.lw-workbench {
+  --lw-accent: #2471A3;
+  --lw-accent-soft: #85C1E9;
+  --lw-ink: #17202A;
+  --lw-muted: #5D6D7E;
+  --lw-surface: #F4F8FB;
+  --lw-border: #D5E1EA;
+  --lw-chip: #D6EAF8;
+}
+
+.lw-workbench .card-header.lw-header {
+  background: linear-gradient(135deg, #1B4F72 0%, #2471A3 55%, #85C1E9 140%);
+  color: #fff;
+  border-bottom: 0;
+  padding: 0.85rem 1.1rem;
+}
+
+.lw-workbench .lw-header .card-title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0;
+}
+
+.lw-workbench .lw-header .btn-outline-light {
+  border-color: rgba(255,255,255,0.45);
+  color: #fff;
+}
+.lw-workbench .lw-header .btn-outline-light:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+.lw-workbench .lw-header .btn-light {
+  color: var(--lw-accent);
+  font-weight: 600;
+}
+
+.lw-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--lw-surface);
+  border-bottom: 1px solid var(--lw-border);
+}
+
+.lw-toolbar-left,
+.lw-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.lw-vista-select {
+  min-width: 180px;
+  border-radius: 999px;
+  border-color: var(--lw-border);
+  font-size: 0.875rem;
+}
+
+.lw-search-rapida {
+  min-width: min(280px, 100%);
+  border-radius: 999px;
+  border: 1px solid var(--lw-border);
+  padding-left: 2.2rem;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%235D6D7E' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3-3'/%3E%3C/svg%3E") 0.75rem center no-repeat;
+}
+
+.lw-qbe {
+  background: #fff;
+  border-bottom: 1px solid var(--lw-border);
+  padding: 0.85rem 1rem 1rem;
+}
+
+.lw-qbe-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.lw-qbe-title h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--lw-ink);
+  font-weight: 600;
+}
+
+.lw-qbe-title .lw-hint {
+  font-size: 0.78rem;
+  color: var(--lw-muted);
+}
+
+.lw-qbe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.55rem 0.65rem;
+}
+
+.lw-qbe-grid .form-group {
+  margin: 0;
+}
+
+.lw-qbe-grid label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--lw-muted);
+  margin-bottom: 0.2rem;
+}
+
+.lw-qbe-grid .form-control {
+  border-radius: 0.4rem;
+  border-color: var(--lw-border);
+  font-size: 0.875rem;
+  height: calc(1.8rem + 2px);
+  padding: 0.25rem 0.5rem;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.lw-qbe-grid .form-control:focus {
+  border-color: var(--lw-accent-soft);
+  box-shadow: 0 0 0 0.15rem rgba(133, 193, 233, 0.45);
+}
+
+.lw-qbe-grid .form-control.lw-filled {
+  background: #EBF5FB;
+  border-color: var(--lw-accent-soft);
+}
+
+.lw-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  background: #fff;
+  border-bottom: 1px solid var(--lw-border);
+  min-height: 0;
+}
+
+.lw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--lw-chip);
+  color: var(--lw-ink);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.lw-chip strong {
+  font-weight: 700;
+  color: var(--lw-accent);
+}
+
+.lw-table-wrap {
+  position: relative;
+}
+
+/* Vista estándar / pocas columnas: ocupa el ancho útil sin scroll lateral. */
+.lw-workbench .lw-table-fit {
+  overflow-x: auto; /* solo si el viewport es más chico que el piso legible */
+}
+.lw-workbench .lw-table-fit .lw-tabla-grilla {
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* Muchas columnas (pisos de legibilidad > presupuesto): scroll horizontal. */
+.lw-workbench .lw-table-scroll {
+  overflow-x: auto;
+}
+.lw-workbench .lw-table-scroll .lw-tabla-grilla {
+  width: max-content;
+  min-width: 100%;
+  table-layout: fixed;
+}
+
+.lw-workbench #tabla-paginada {
+  margin-bottom: 0;
+}
+
+.lw-workbench #tabla-paginada thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  border-bottom-width: 2px;
+}
+
+.lw-workbench #tabla-paginada th.lw-col,
+.lw-workbench #tabla-paginada td.lw-col {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 0; /* fuerza ellipsis con table-layout:fixed */
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+}
+
+.lw-workbench #tabla-paginada .lw-celda-texto {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lw-workbench #tabla-paginada th.lw-col-acciones,
+.lw-workbench #tabla-paginada td.lw-col-acciones {
+  width: 76px;
+  min-width: 76px;
+  max-width: 90px;
+  white-space: nowrap;
+  overflow: visible;
+  text-align: center;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
+.lw-workbench #tabla-paginada tbody td {
+  font-size: 0.8125rem;
+  vertical-align: middle;
+}
+
+.lw-workbench #tabla-paginada tbody tr {
+  transition: background-color .12s;
+}
+
+.lw-workbench #tabla-paginada tbody tr:hover {
+  background: #EBF5FB !important;
+}
+
+.lw-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--lw-muted);
+}
+
+.lw-empty i {
+  font-size: 2rem;
+  color: var(--lw-accent-soft);
+  margin-bottom: 0.5rem;
+}
+
+.lw-modal .modal-header {
+  background: linear-gradient(135deg, #1B4F72, #2471A3);
+  color: #fff;
+  border-bottom: 0;
+}
+
+.lw-modal .modal-header .close {
+  color: #fff;
+  opacity: 0.85;
+  text-shadow: none;
+}
+
+.lw-col-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.45rem 0.35rem;
+  border-bottom: 1px solid #eef2f5;
+}
+
+.lw-col-row:last-child {
+  border-bottom: 0;
+}
+
+.lw-col-row .custom-control {
+  min-width: 11rem;
+}
+
+.lw-col-row input[type="text"] {
+  flex: 1;
+}
+
+.lw-aviso-migracion {
+  margin: 0.75rem 1rem 0;
+}
+
+@media (max-width: 767.98px) {
+  .lw-search-rapida {
+    min-width: 100%;
+  }
+  .lw-toolbar {
+    align-items: stretch;
+  }
+  .lw-toolbar-left,
+  .lw-toolbar-right {
+    width: 100%;
+  }
+}

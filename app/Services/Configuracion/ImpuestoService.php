@@ -19,6 +19,7 @@ use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Ventas\AnitaComprobDescuentoSupport;
+use App\Support\Ventas\AnitaVengravCodigoTasaSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use App\Support\Ventas\AbastoBierzoSupport;
@@ -282,8 +283,12 @@ class ImpuestoService extends FacturacionService
 						$impuestoArticulo = Impuesto::findOrFail($item['impuesto_id']);
 						$tasaDivision = (float) ($this->tasaImpuesto ?? 0);
 						$impuesto_id = $impuestoArticulo->id;
-						$impuesto_codigo = $impuestoArticulo->codigo;
 						$impuesto_codigoarca = $impuestoArticulo->codigoarca;
+						$impuesto_codigo = AnitaVengravCodigoTasaSupport::normalizarCodigoMaestro(
+							$impuestoArticulo->codigo,
+							$impuesto_codigoarca,
+							(float) $impuestoArticulo->valor,
+						);
 						$impuesto = true;
 
 						if ((float) $impuestoArticulo->valor <= 0) {
@@ -301,8 +306,12 @@ class ImpuestoService extends FacturacionService
 						$valorTasaImpuesto = $impuesto->valor;
 
 						$impuesto_id = $impuesto->id;
-						$impuesto_codigo = $impuesto->codigo;
 						$impuesto_codigoarca = $impuesto->codigoarca;
+						$impuesto_codigo = AnitaVengravCodigoTasaSupport::normalizarCodigoMaestro(
+							$impuesto->codigo,
+							$impuesto_codigoarca,
+							(float) $valorTasaImpuesto,
+						);
 						$conceptoNeto = ($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%');
 					}
 
@@ -921,8 +930,12 @@ class ImpuestoService extends FacturacionService
 				$valorTasaImpuesto = $impuesto->valor;
 
 				$impuesto_id = $impuesto->id;
-				$impuesto_codigo = $impuesto->codigo;
 				$impuesto_codigoarca = $impuesto->codigoarca;
+				$impuesto_codigo = AnitaVengravCodigoTasaSupport::normalizarCodigoMaestro(
+					$impuesto->codigo,
+					$impuesto_codigoarca,
+					(float) $valorTasaImpuesto,
+				);
 			}
 
 			// Asume que no tiene impuesto incluido si el cliente no lleva iva

@@ -1934,6 +1934,7 @@
 
 		var lote = ($tr.find('.picking-lote').val() || '').trim();
 		var depositoId = parseInt($tr.find('.picking-deposito').val(), 10) || 0;
+		var ordentrabajoId = parseInt($tr.find('.picking-ordentrabajo-id').val(), 10) || 0;
 		var token = $('#csrf_token').val();
 		$btn.prop('disabled', true);
 
@@ -1952,6 +1953,7 @@
 				pedido_combinacion_id: pedidoCombinacionId,
 				picking_lote_codigo: lote,
 				picking_deposito_id: depositoId,
+				picking_ordentrabajo_id: ordentrabajoId,
 				picking_id: parseInt($('#picking_activo_id').val(), 10) || 0,
 				picking_codigo: parseInt($('#picking_activo_codigo').val(), 10) || 0,
 				_token: token

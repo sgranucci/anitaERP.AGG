@@ -568,7 +568,24 @@
                 var filas = (resp && resp.filas) || [];
                 var html = '';
                 if (!filas.length) {
-                    html = '<tr><td colspan="5" class="text-center text-muted">No hay pendientes para la fecha</td></tr>';
+                    var emitidas = Number((resp && resp.cantidad_emitidas) || 0);
+                    var enGuia = Number((resp && resp.cantidad_en_guia) || 0);
+                    var sinImporte = Number((resp && resp.cantidad_sin_importe) || 0);
+                    var totalDia = Number((resp && resp.cantidad_total_dia) || 0);
+                    var msg = 'No hay pendientes para la fecha';
+                    if (emitidas > 0) {
+                        msg = 'Las ' + emitidas + ' factura(s) del día ya tienen COT emitido';
+                        if (enGuia > 0) {
+                            msg += ' (o ya están en esta guía)';
+                        }
+                    } else if (enGuia > 0) {
+                        msg = 'Las facturas del día ya están en esta guía';
+                    } else if (sinImporte > 0 && totalDia > 0) {
+                        msg = 'Hay remitos del día sin importe de factura utilizable para COT';
+                    } else if (totalDia === 0) {
+                        msg = 'No hay remitos/facturas Anita ni ERP para la fecha';
+                    }
+                    html = '<tr><td colspan="5" class="text-center text-muted">' + msg + '</td></tr>';
                 } else {
                     filas.forEach(function (f, idx) {
                         html += '<tr class="fila-pendiente" data-idx="' + idx + '">'

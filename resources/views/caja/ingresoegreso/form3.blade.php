@@ -42,6 +42,7 @@
 </div>
 
 @include('caja.ingresoegreso.partials.modal_comprobante_ivacompra')
+@include('includes.compras.modalconsultaconcepto_ivacompra')
 
 @php
     $ieConceptosCuentaMetaJson = $conceptos_cuenta_meta ?? [];

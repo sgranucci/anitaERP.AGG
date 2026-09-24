@@ -177,31 +177,17 @@
         actualizaRenglonesFormapago();
     }
 
-    function esFilaFormapagoTransferencia($tr) {
-        var $fp = $tr.find('.fp-formapago').first();
-        if (!$fp.length) {
-            return false;
-        }
-        var $opt = $fp.find('option:selected');
-        var abrev = (($opt.attr('data-abreviatura') || '') + '').trim().toUpperCase();
-        return abrev === 'T';
-    }
-
     function sincronizarRequiredFormapago() {
         $('#tbody-formapago-table tr.item-formapago').each(function () {
             var $tr = $(this);
             var activo = renglonFormapagoTieneDatos($tr);
 
-            // El TC (tipo de cuenta) es obligatorio solo si la forma de pago es transferencia.
+            // TC nunca es obligatorio (tipocuentacaja_id nullable); solo Nombre / Forma / Moneda.
             var $tc = $tr.find('.fp-tipocuentacaja').first();
             if ($tc.length) {
-                if (esFilaFormapagoTransferencia($tr)) {
-                    $tc.addClass('fp-requerido');
-                } else {
-                    $tc.removeClass('fp-requerido').removeClass('required').removeAttr('required');
-                    if (typeof marcarCampoObligatorio === 'function') {
-                        marcarCampoObligatorio($tc[0], false);
-                    }
+                $tc.removeClass('fp-requerido').removeClass('required').removeAttr('required');
+                if (typeof marcarCampoObligatorio === 'function') {
+                    marcarCampoObligatorio($tc[0], false);
                 }
             }
 

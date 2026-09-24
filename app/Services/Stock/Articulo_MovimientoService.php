@@ -497,6 +497,9 @@ class Articulo_MovimientoService
 			if (! isset($agrupados[$clave])) {
 				$agrupados[$clave] = [
 					'lote' => $numero,
+					// L = lote importado (columna lote); OT = stock por ordentrabajo_id con lote=0
+					'origen' => str_starts_with($clave, 'OT:') ? 'OT' : 'L',
+					'ordentrabajo_id' => str_starts_with($clave, 'OT:') ? $otIdMov : 0,
 					'modulo_id' => 0,
 					'modulo' => '',
 					'saldo' => 0.0,
@@ -722,29 +725,17 @@ class Articulo_MovimientoService
 	 */
 	private function situacionFilaReporteStockOt($movimiento, array $situacionesPorOt): array
 	{
-		if (! empty($movimiento['en_produccion_forzada'])) {
-			return [
-				'situacion' => ReporteStockOtSituacionSupport::EN_PRODUCCION,
-				'en_produccion' => true,
-			];
-		}
-
-		// Stock ya en depósito (import Excel / estantería) = ENTREGA INMEDIATA,
-		// aunque la OT vinculada siga sin tarea de cierre (ej. identificador 8021).
-		$depositoId = (int) ($movimiento['deposito_id'] ?? 0);
-		if ($depositoId > 0) {
-			return [
-				'situacion' => ReporteStockOtSituacionSupport::ENTREGA_INMEDIATA,
-				'en_produccion' => false,
-			];
-		}
-
 		$otId = (int) ($movimiento['ordentrabajo_id'] ?? 0);
-		if ($otId > 0 && isset($situacionesPorOt[$otId])) {
-			return $situacionesPorOt[$otId];
-		}
+		$metaOt = ($otId > 0 && isset($situacionesPorOt[$otId]))
+			? $situacionesPorOt[$otId]
+			: null;
 
-		return ReporteStockOtSituacionSupport::desdeTareaIds([]);
+		return ReporteStockOtSituacionSupport::situacionFila(
+			! empty($movimiento['en_produccion_forzada']),
+			(int) ($movimiento['deposito_id'] ?? 0),
+			$metaOt,
+			(int) ($movimiento['es_altap_excel'] ?? 0) === 1
+		);
 	}
 
 	/**

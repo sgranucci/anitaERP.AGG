@@ -13,6 +13,7 @@ use App\Services\Stock\PrecioServiceFerli;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\PrecioListaLocalMapeoSupport;
+use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -287,22 +288,11 @@ final class StockLocalConsultaService
 
         $depCodigo = (string) ($local->deposito?->codigo ?? $depositoId);
 
-        $rows = DB::table('articulo_movimiento as am')
-            ->leftJoin('combinacion as c', 'c.id', '=', 'am.combinacion_id')
-            ->leftJoin('color as col', 'col.id', '=', 'am.color_id')
-            ->leftJoin('talle as t', 't.id', '=', 'am.talle_id')
-            ->where('am.deposito_id', $depositoId)
-            ->where('am.articulo_id', (int) $articulo->id)
-            ->select([
-                'am.cantidad',
-                'c.codigo as combinacion_codigo',
-                'c.nombre as combinacion_nombre',
-                'col.codigo as color_codigo_m',
-                'col.nombre as color_nombre',
-                't.codigo as medida',
-                't.nombre as medida_nombre',
-            ])
-            ->get();
+        $rows = StockLocalErpMovimientosSupport::filasPorDepositoYArticulos(
+            $depositoId,
+            [(int) $articulo->id],
+            null
+        );
 
         if (! $matriz) {
             /** @var array<string, array{deposito:string,color:string,color_desc:string,medida:int|string,cantidad:float}> $porClave */
@@ -313,8 +303,11 @@ final class StockLocalConsultaService
                 if (abs($cant) < 0.000001) {
                     continue;
                 }
-                [$colorCodigo, $colorDesc] = $this->colorDesdeMovimientoErp($row);
-                $medida = $this->medidaDesdeMovimientoErp($row);
+                [$colorCodigo, $colorDesc] = StockLocalErpMovimientosSupport::colorDesdeFila($row);
+                $medida = StockLocalErpMovimientosSupport::normalizarMedida(
+                    $row->medida ?? null,
+                    $row->medida_nombre ?? null
+                );
                 $clave = $colorCodigo.'|'.$medida;
                 if (! isset($porClave[$clave])) {
                     $porClave[$clave] = [
@@ -346,9 +339,12 @@ final class StockLocalConsultaService
             if (abs($cant) < 0.000001) {
                 continue;
             }
-            [$colorCodigo, $colorDesc] = $this->colorDesdeMovimientoErp($row);
-            $medida = $this->medidaDesdeMovimientoErp($row);
-            $medidasVistas[(int) $medida] = true;
+            [$colorCodigo, $colorDesc] = StockLocalErpMovimientosSupport::colorDesdeFila($row);
+            $medida = StockLocalErpMovimientosSupport::normalizarMedida(
+                $row->medida ?? null,
+                $row->medida_nombre ?? null
+            );
+            $medidasVistas[is_int($medida) ? $medida : (string) $medida] = true;
             $clave = $colorCodigo;
             if (! isset($porClave[$clave])) {
                 $porClave[$clave] = [
@@ -367,7 +363,10 @@ final class StockLocalConsultaService
 
         $medidas = $medidasBase !== []
             ? $medidasBase
-            : array_values(array_map('intval', array_keys($medidasVistas)));
+            : array_values(array_map(
+                static fn ($m) => is_numeric($m) ? (int) $m : $m,
+                array_keys($medidasVistas)
+            ));
         sort($medidas, SORT_NUMERIC);
 
         $filas = array_values(array_filter(
@@ -390,17 +389,7 @@ final class StockLocalConsultaService
      */
     private function colorDesdeMovimientoErp(object $row): array
     {
-        $colorCodigo = trim((string) ($row->combinacion_codigo ?? ''));
-        $colorDesc = trim((string) ($row->combinacion_nombre ?? ''));
-        if ($colorCodigo === '') {
-            $colorCodigo = trim((string) ($row->color_codigo_m ?? ''));
-            $colorDesc = trim((string) ($row->color_nombre ?? ''));
-        }
-        if ($colorCodigo === '') {
-            $colorCodigo = '0';
-        }
-
-        return [$colorCodigo, $colorDesc];
+        return StockLocalErpMovimientosSupport::colorDesdeFila($row);
     }
 
     /**
@@ -408,19 +397,7 @@ final class StockLocalConsultaService
      */
     private function medidaDesdeMovimientoErp(object $row): int|string
     {
-        $medida = trim((string) ($row->medida ?? ''));
-        if ($medida !== '' && ctype_digit($medida)) {
-            return (int) $medida;
-        }
-        if ($medida !== '') {
-            return $medida;
-        }
-        $nombre = trim((string) ($row->medida_nombre ?? ''));
-        if ($nombre !== '' && ctype_digit($nombre)) {
-            return (int) $nombre;
-        }
-
-        return 0;
+        return StockLocalErpMovimientosSupport::normalizarMedida($row->medida ?? null, $row->medida_nombre ?? null);
     }
 
     private function resolverArticulo(string $busqueda): ?Articulo
@@ -613,6 +590,7 @@ final class StockLocalConsultaService
     private function preciosPorListasErp(Articulo $articulo): array
     {
         $fecha = now()->format('Y-m-d');
+        $codigosLocales = PrecioListaLocalMapeoSupport::codigosErp();
         $rows = Precio::query()
             ->with('listaprecios:id,codigo,nombre')
             ->where('articulo_id', (int) $articulo->id)
@@ -629,6 +607,11 @@ final class StockLocalConsultaService
                 continue;
             }
             $lista = $row->listaprecios;
+            $codigoLista = PrecioListaLocalMapeoSupport::normalizarCodigo($lista->codigo ?? '');
+            // Solo listas de locales / canal (WEB, OFERTA WEB, LUGANO, …); no fábrica 1–5.
+            if ($codigosLocales !== [] && ($codigoLista === '' || ! in_array($codigoLista, $codigosLocales, true))) {
+                continue;
+            }
             $porLista[$listaId] = [
                 'listaprecio_id' => $listaId,
                 'lista' => $lista

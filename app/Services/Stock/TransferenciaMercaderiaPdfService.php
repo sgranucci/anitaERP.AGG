@@ -40,16 +40,24 @@ class TransferenciaMercaderiaPdfService
         $origen = TransferenciaBienUsoSupport::etiquetaOrigenTransferencia($transferencia);
         $destino = TransferenciaBienUsoSupport::etiquetaDestinoTransferencia($transferencia);
 
-        $totalOrigen = 0.0;
-        $totalDestino = 0.0;
-        foreach ($transferencia->articulos as $linea) {
-            $totalOrigen += abs((float) $linea->cantidad_origen);
-            $totalDestino += abs((float) $linea->cantidad_destino);
-        }
-
         $detalleFerliPorItem = TransferenciaMercaderiaDetalleFerliSupport::porItemDesdeSalida($transferencia);
         $mostrarDetalleFerli = MovimientoStockFerliSupport::esCalzadosFerli();
         $ocultarColumnasDestinoFerli = $mostrarDetalleFerli;
+
+        $totalOrigen = 0.0;
+        $totalDestino = 0.0;
+        $cantidadOrigenPorItem = [];
+        foreach ($transferencia->articulos as $linea) {
+            $item = (int) $linea->item;
+            $det = $detalleFerliPorItem[$item] ?? null;
+            $cantOrigen = TransferenciaMercaderiaDetalleFerliSupport::cantidadLineaPreferida(
+                (float) $linea->cantidad_origen,
+                $det
+            );
+            $cantidadOrigenPorItem[$item] = $cantOrigen;
+            $totalOrigen += $cantOrigen;
+            $totalDestino += abs((float) $linea->cantidad_destino);
+        }
 
         $html = view('stock.movimientostock.transferencia_com_pdf', compact(
             'transferencia',
@@ -60,6 +68,7 @@ class TransferenciaMercaderiaPdfService
             'totalOrigen',
             'totalDestino',
             'detalleFerliPorItem',
+            'cantidadOrigenPorItem',
             'mostrarDetalleFerli',
             'ocultarColumnasDestinoFerli',
         ))->render();

@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use App\Models\Compras\Tiposervicio_Proveedor;
-use App\Models\Ventas\Formapago;
 use App\Rules\Compras\RuleProveedor;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use Illuminate\Foundation\Http\FormRequest;
@@ -104,9 +103,8 @@ class ValidacionProveedor extends FormRequest
     }
 
     /**
-     * Si el renglón tiene algún dato, exige los datos obligatorios de proveedor_formapago:
-     * nombre, formapago_id y moneda_id siempre; el tipo de cuenta (TC) solo cuando la
-     * forma de pago es transferencia (para cheques/efectivo no se sabe dónde se deposita).
+     * Si el renglón tiene algún dato, exige nombre, formapago_id y moneda_id.
+     * TC, CBU y resto de campos bancarios son opcionales (tipocuentacaja_id es nullable).
      */
     private function validarRenglonesFormapago(Validator $validator): void
     {
@@ -114,8 +112,6 @@ class ValidacionProveedor extends FormRequest
         if ($nombres === []) {
             return;
         }
-
-        $idsTransferencia = Formapago::idsTransferencia();
 
         $formapagoIds = (array) $this->input('formapago_ids', []);
         $tipoCuentaIds = (array) $this->input('tipocuentacaja_ids', []);
@@ -167,10 +163,6 @@ class ValidacionProveedor extends FormRequest
             $formapagoId = (int) trim((string) ($formapagoIds[$i] ?? ''));
             if ($formapagoId <= 0) {
                 $validator->errors()->add('formapago_ids.'.$i, "Formas de pago renglón {$nro}: la Forma de pago es obligatoria.");
-            }
-            $esTransferencia = $formapagoId > 0 && in_array($formapagoId, $idsTransferencia, true);
-            if ($esTransferencia && trim((string) ($tipoCuentaIds[$i] ?? '')) === '') {
-                $validator->errors()->add('tipocuentacaja_ids.'.$i, "Formas de pago renglón {$nro}: el Tipo de cuenta (TC) es obligatorio para transferencias.");
             }
             if (trim((string) ($monedaIds[$i] ?? '')) === '') {
                 $validator->errors()->add('moneda_ids.'.$i, "Formas de pago renglón {$nro}: la Moneda es obligatoria.");

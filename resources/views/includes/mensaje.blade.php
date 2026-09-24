@@ -3,7 +3,9 @@
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
         <h4><i class="icon fa fa-check"></i> Mensaje sistema Anita ERP</h4>
         <ul>
-            <li>{{ session("mensaje") }}</li>
+            @foreach (\Illuminate\Support\Arr::wrap(session("mensaje")) as $textoMensaje)
+                <li>{{ is_array($textoMensaje) ? implode(' ', array_map('strval', $textoMensaje)) : $textoMensaje }}</li>
+            @endforeach
             @php
                 $urlImprimir = session('imprimir_pagoproveedor_url') ?: session('imprimir_comprobante_url');
                 $labelImprimir = session('imprimir_comprobante_label') ?: 'Imprimir comprobante';
@@ -23,7 +25,9 @@
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
         <h4><i class="icon fa fa-warning"></i> Aviso</h4>
         <ul class="mb-0">
-            <li>{{ session("mensaje-aviso") ?? session("mensaje_aviso") }}</li>
+            @foreach (\Illuminate\Support\Arr::wrap(session("mensaje-aviso") ?? session("mensaje_aviso")) as $textoAviso)
+                <li>{{ is_array($textoAviso) ? implode(' ', array_map('strval', $textoAviso)) : $textoAviso }}</li>
+            @endforeach
         </ul>
     </div>
 @endif
@@ -32,7 +36,9 @@
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
         <h4><i class="icon fa fa-times"></i> Error</h4>
         <ul class="mb-0">
-            <li>{{ session("mensaje-error") ?? session("mensaje_error") ?? session("error") }}</li>
+            @foreach (\Illuminate\Support\Arr::wrap(session("mensaje-error") ?? session("mensaje_error") ?? session("error")) as $textoError)
+                <li>{{ is_array($textoError) ? implode(' ', array_map('strval', $textoError)) : $textoError }}</li>
+            @endforeach
         </ul>
     </div>
 @endif

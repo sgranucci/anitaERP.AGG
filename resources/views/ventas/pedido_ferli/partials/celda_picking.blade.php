@@ -3,6 +3,7 @@
     $pickingFacturado = ($pickingFacturado ?? false) === true || ($pickingFacturado ?? 'N') === 'S';
     $pickingLote = (string) ($pickingLote ?? '');
     $pickingDep = (int) ($pickingDep ?? 0);
+    $pickingOtId = (int) ($pickingOtId ?? 0);
     $depositosPicking = $depositosPicking ?? ($depositos_picking_query ?? collect());
     if ($pickingFacturado) {
         $estadoPicking = 'facturado';
@@ -41,6 +42,8 @@
             </button>
         </div>
     </div>
+    {{-- Bucket del modal: OT (lote=0) si >0; lote importado si vac&iacute;o. --}}
+    <input type="hidden" class="picking-ordentrabajo-id" value="{{ $pickingOtId > 0 ? $pickingOtId : '' }}">
     <select class="form-control form-control-sm picking-deposito mb-1"
             title="Dep&oacute;sito con saldo del lote (usar F1 / Elegir)"
             @if ($pickingFacturado || $pickingMarcado) disabled @endif>

@@ -27,6 +27,7 @@ final class StockLocalInformeListadoFiltros
      * @return array{
      *   local_venta_id: ?int,
      *   deposito_anita: ?int,
+     *   deposito_erp_id: ?int,
      *   origen: string,
      *   modo: string,
      *   orden: string,
@@ -59,6 +60,7 @@ final class StockLocalInformeListadoFiltros
         $filtros = [
             'local_venta_id' => self::enteroOpcional($request->input('local_venta_id')),
             'deposito_anita' => self::enteroOpcional($request->input('deposito_anita')),
+            'deposito_erp_id' => self::enteroOpcional($request->input('deposito_erp_id')),
             'origen' => $origen,
             'modo' => $modo,
             'orden' => $orden,
@@ -86,6 +88,7 @@ final class StockLocalInformeListadoFiltros
         return array_filter([
             'local_venta_id' => $filtros['local_venta_id'] ?? null,
             'deposito_anita' => $filtros['deposito_anita'] ?? null,
+            'deposito_erp_id' => $filtros['deposito_erp_id'] ?? null,
             'origen_anita' => $origenAnita ? '1' : '0',
             'modo' => $filtros['modo'] ?? self::MODO_SALDO,
             'orden' => $filtros['orden'] ?? self::ORDEN_ARTICULO,
@@ -104,6 +107,7 @@ final class StockLocalInformeListadoFiltros
     {
         return ! empty($filtros['local_venta_id'])
             || ! empty($filtros['deposito_anita'])
+            || ! empty($filtros['deposito_erp_id'])
             || ($filtros['origen'] ?? self::ORIGEN_ERP) !== self::ORIGEN_ERP
             || ($filtros['modo'] ?? self::MODO_SALDO) !== self::MODO_SALDO
             || ($filtros['orden'] ?? self::ORDEN_ARTICULO) !== self::ORDEN_ARTICULO

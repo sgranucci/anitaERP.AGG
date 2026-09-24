@@ -99,7 +99,16 @@
     function agregarFilaConcepto(data) {
         var $tpl = $($('#ie-cp-template-concepto').html());
         if (data) {
-            $tpl.find('.ie-cp-concepto-id').val(data.concepto_ivacompra_id || '');
+            var conceptoId = parseInt(data.concepto_ivacompra_id || '0', 10) || 0;
+            var meta = conceptosMeta[String(conceptoId)] || {};
+            var codigo = data.concepto_codigo || meta.codigo || '';
+            var nombre = data.concepto_nombre || meta.nombre || '';
+            $tpl.find('.concepto_ivacompra_id').val(conceptoId > 0 ? String(conceptoId) : '');
+            $tpl.find('.codigo_concepto_ivacompra').val(codigo);
+            if (codigo) {
+                $tpl.find('.codigo_concepto_ivacompra').data('codigo-resuelto', codigo);
+            }
+            $tpl.find('.nombre_concepto_ivacompra').val(nombre);
             $tpl.find('.ie-cp-monto').val(data.monto || 0);
             if (data.cuentacontabledebe_id) {
                 $tpl.find('.ie-cp-cuenta-id').val(data.cuentacontabledebe_id);
@@ -111,7 +120,7 @@
     }
 
     function refrescarCuentaFila($row) {
-        var conceptoId = parseInt($row.find('.ie-cp-concepto-id').val() || '0', 10);
+        var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
         var meta = conceptosMeta[String(conceptoId)] || {};
         var cuentaId = parseInt($row.find('.ie-cp-cuenta-id').val() || '0', 10);
         if (cuentaId <= 0) {
@@ -204,7 +213,7 @@
         var conceptos = [];
         $('#ie-cp-tbody-conceptos .ie-cp-fila-concepto').each(function () {
             var $row = $(this);
-            var conceptoId = parseInt($row.find('.ie-cp-concepto-id').val() || '0', 10);
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
             var monto = parseFloat($row.find('.ie-cp-monto').val() || '0');
             if (conceptoId <= 0 || monto === 0) {
                 return;
@@ -253,7 +262,7 @@
         var conceptos = [];
         $('#ie-cp-tbody-conceptos .ie-cp-fila-concepto').each(function () {
             var $row = $(this);
-            var conceptoId = parseInt($row.find('.ie-cp-concepto-id').val() || '0', 10);
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
             var monto = parseFloat($row.find('.ie-cp-monto').val() || '0');
             if (conceptoId <= 0 || monto === 0) {
                 return;
@@ -524,9 +533,27 @@
             iaDecisionPendienteModal = false;
         });
 
-        $(document).on('change input', '#ie-cp-tbody-conceptos .ie-cp-concepto-id, #ie-cp-tbody-conceptos .ie-cp-monto, #ie-cp-total', function () {
+        $(document).on('change input', '#ie-cp-tbody-conceptos .concepto_ivacompra_id, #ie-cp-tbody-conceptos .ie-cp-monto, #ie-cp-total', function () {
             var $row = $(this).closest('.ie-cp-fila-concepto');
             if ($row.length) {
+                refrescarCuentaFila($row);
+            }
+            programarPreview();
+        });
+
+        $(document).on('cp:concepto-ivacompra-elegido', function (e, data) {
+            var $row = null;
+            if (data && data.id && ptrConceptoIvacompraId && ptrConceptoIvacompraId.length) {
+                $row = ptrConceptoIvacompraId.closest('.ie-cp-fila-concepto');
+            }
+            if (!$row || !$row.length) {
+                $row = $('#ie-cp-tbody-conceptos .ie-cp-fila-concepto').filter(function () {
+                    return parseInt($(this).find('.concepto_ivacompra_id').val() || '0', 10) > 0;
+                }).last();
+            }
+            if ($row && $row.length) {
+                // Al cambiar concepto, recalcular cuenta DEBE por defecto del maestro
+                $row.find('.ie-cp-cuenta-id').val('');
                 refrescarCuentaFila($row);
             }
             programarPreview();

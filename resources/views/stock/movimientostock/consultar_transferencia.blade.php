@@ -121,7 +121,17 @@ Transferencia {{ $transferencia->codigo }}
                                     <td>{{ $det['combinacion_etiqueta'] ?? '—' }}</td>
                                     <td>{{ $det['medidas_txt'] ?? '—' }}</td>
                                 @endif
-                                <td class="text-right">{{ number_format((float) $item->cantidad_origen, 2, ',', '.') }}</td>
+                                <td class="text-right">
+                                    {{ number_format(
+                                        \App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport::cantidadLineaPreferida(
+                                            (float) $item->cantidad_origen,
+                                            $det
+                                        ),
+                                        2,
+                                        ',',
+                                        '.'
+                                    ) }}
+                                </td>
                                 @if (empty($ocultarColumnasDestinoFerli))
                                     <td class="text-right">{{ number_format((float) $item->precio_costo_origen, 4, ',', '.') }}</td>
                                     <td>

@@ -53,6 +53,7 @@
 				'pickingFacturado' => false,
 				'pickingLote' => '',
 				'pickingDep' => 0,
+				'pickingOtId' => 0,
 				'depositosPicking' => $depositos_picking_query ?? collect(),
 			])
         </td>

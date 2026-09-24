@@ -1309,19 +1309,27 @@ class PedidoServiceFerli
 	private function generaMovimientoStock($fecha, $pedido_combinacion, $ordentrabajo, $articulo, $combinacion,
 											$ordentrabajo_stock_id, $deposito_id)
 	{
+		// Alta cliente STOCK: lote=0 + ordentrabajo_id (mismo bucket que Excel / Terminada).
+		// Consumo desde OT stock: lote = código/id de la OT de origen.
+		$esConsumo = $ordentrabajo_stock_id > 0;
+		$depositoId = (int) $deposito_id;
+		if ($depositoId <= 0) {
+			$depositoId = 1;
+		}
+
 		$dataArticuloMovimiento = [
 			'fecha' => $fecha,
 			'fechajornada' => $fecha,
-			'tipotransaccion_id' => $ordentrabajo_stock_id > 0? 
-									config("consprod.TIPOTRANSACCION_CONSUME_OT") :
-									config("consprod.TIPOTRANSACCION_ALTA_PRODUCCION"),
+			'tipotransaccion_id' => $esConsumo
+									? config("consprod.TIPOTRANSACCION_CONSUME_OT")
+									: config("consprod.TIPOTRANSACCION_ALTA_PRODUCCION"),
 			'pedido_combinacion_id' => $pedido_combinacion->id,
 			'ordentrabajo_id' => $ordentrabajo ? $ordentrabajo->id : 0,
-			'lote' => $ordentrabajo_stock_id > 0 ? $ordentrabajo_stock_id : $ordentrabajo->codigo,
+			'lote' => $esConsumo ? $ordentrabajo_stock_id : 0,
 			'articulo_id' => $articulo->id,
 			'combinacion_id' => $combinacion->id,
 			'modulo_id' => $pedido_combinacion->modulo_id,
-			'concepto' => $ordentrabajo_stock_id > 0 ? 'Consumo de OT' : 'Alta de produccion',
+			'concepto' => $esConsumo ? 'Consumo de OT' : 'Alta de produccion',
 			'cantidad' => $pedido_combinacion->cantidad,
 			'precio' => $pedido_combinacion->precio,
 			'costo' => 0,
@@ -1330,7 +1338,7 @@ class PedidoServiceFerli
 			'moneda_id' => $pedido_combinacion->moneda_id,
 			'incluyeimpuesto' => $pedido_combinacion->incluyeimpuesto,
 			'listaprecio_id' => $pedido_combinacion->listaprecio_id,
-			'deposito_id' => $deposito_id
+			'deposito_id' => $depositoId
 		];
 		$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository->findporpedido_combinacion($pedido_combinacion->id);
 

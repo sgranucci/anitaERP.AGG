@@ -27,8 +27,8 @@ class Pedido_Combinacion extends Model
     protected $fillable = ['pedido_id', 'combinacion_id', 'articulo_id', 'numeroitem', 'modulo_id', 'cantidad', 
 		'precio', 'incluyeimpuesto', 'listaprecio_id', 'moneda_id', 'descuento', 'descuentointegrado', 
 		'categoria_id', 'subcategoria_id', 'linea_id', 'ot_id', 'lote_id', 'observacion', 'estado',
-		'picking', 'picking_id', 'picking_lote_codigo', 'picking_deposito_id', 'picking_at', 'picking_usuario_id',
-		'picking_facturado', 'picking_venta_id'];
+		'picking', 'picking_id', 'picking_lote_codigo', 'picking_deposito_id', 'picking_ordentrabajo_id',
+		'picking_at', 'picking_usuario_id', 'picking_facturado', 'picking_venta_id'];
     protected $table = 'pedido_combinacion';
     protected $tableAnita = 'pendmov';
     protected $keyField = 'id';

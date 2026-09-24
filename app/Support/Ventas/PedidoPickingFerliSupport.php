@@ -195,7 +195,8 @@ final class PedidoPickingFerliSupport
         string $loteCodigo,
         ?int $depositoId = null,
         ?int $pickingId = null,
-        ?int $pickingCodigo = null
+        ?int $pickingCodigo = null,
+        ?int $ordentrabajoId = null
     ): array {
         $linea = Pedido_Combinacion::query()->with(['pedidos', 'pedido_combinacion_talles'])->find($pedidoCombinacionId);
         if (! $linea) {
@@ -214,7 +215,13 @@ final class PedidoPickingFerliSupport
         }
 
         $depositoId = $depositoId && $depositoId > 0 ? $depositoId : null;
-        $validacionStock = self::validarSaldoLoteDepositoParaMarcar($linea, $loteCodigo, $depositoId);
+        $ordentrabajoId = $ordentrabajoId && $ordentrabajoId > 0 ? $ordentrabajoId : null;
+        $validacionStock = self::validarSaldoLoteDepositoParaMarcar(
+            $linea,
+            $loteCodigo,
+            $depositoId,
+            $ordentrabajoId
+        );
         if (! empty($validacionStock['error'])) {
             return $validacionStock;
         }
@@ -226,11 +233,12 @@ final class PedidoPickingFerliSupport
         $picking = self::resolverPickingParaMarcar($pickingId, $pickingCodigo);
 
         try {
-            DB::transaction(function () use ($linea, $picking, $loteCodigo, $depositoId) {
+            DB::transaction(function () use ($linea, $picking, $loteCodigo, $depositoId, $ordentrabajoId) {
                 $linea->picking = self::MARCADO;
                 $linea->picking_id = $picking->id;
                 $linea->picking_lote_codigo = $loteCodigo;
                 $linea->picking_deposito_id = $depositoId;
+                $linea->picking_ordentrabajo_id = $ordentrabajoId;
                 $linea->picking_at = now();
                 $linea->picking_usuario_id = Auth::id();
                 $linea->save();
@@ -241,7 +249,8 @@ final class PedidoPickingFerliSupport
                     now()->toDateString(),
                     0,
                     $loteCodigo,
-                    $depositoId
+                    $depositoId,
+                    $ordentrabajoId
                 );
             });
         } catch (\Throwable $e) {
@@ -258,19 +267,21 @@ final class PedidoPickingFerliSupport
             'picking_codigo' => (int) $picking->codigo,
             'picking_lote_codigo' => $linea->picking_lote_codigo,
             'picking_deposito_id' => $linea->picking_deposito_id,
+            'picking_ordentrabajo_id' => $linea->picking_ordentrabajo_id,
             'aviso' => 'Línea preparada y stock descontado del lote/OT (queda reservado hasta facturar o quitar picking).',
         ];
     }
 
     /**
-     * Exige depósito con saldo neto del lote/OT (mismo criterio que el modal de consulta).
+     * Exige depósito con saldo neto del bucket elegido (OT lote=0 o lote importado).
      *
      * @return array{error?: string, saldo?: float, deposito_id?: int}
      */
     public static function validarSaldoLoteDepositoParaMarcar(
         Pedido_Combinacion $linea,
         string $loteCodigo,
-        ?int $depositoId
+        ?int $depositoId,
+        ?int $ordentrabajoId = null
     ): array {
         $articuloId = (int) ($linea->articulo_id ?? 0);
         $combinacionId = (int) ($linea->combinacion_id ?? 0);
@@ -282,14 +293,21 @@ final class PedidoPickingFerliSupport
             return ['error' => 'Seleccione el depósito de salida (use F1 / lupa y Elegir el lote con su depósito)'];
         }
 
-        $saldos = self::saldosNetosLotePorDeposito($articuloId, $combinacionId, $loteCodigo);
-        $saldoElegido = (float) ($saldos[$depositoId]['saldo'] ?? 0);
+        $bucket = self::resolverBucketConsumoAsignado(
+            $articuloId,
+            $combinacionId,
+            $loteCodigo,
+            $depositoId,
+            $ordentrabajoId
+        );
+        $saldoElegido = (float) ($bucket['saldo'] ?? 0);
         $cantidadLinea = (float) ($linea->cantidad ?? 0);
         if ($cantidadLinea <= 0) {
             $cantidadLinea = (float) $linea->pedido_combinacion_talles->sum('cantidad');
         }
 
         if ($saldoElegido <= 0.0001) {
+            $saldos = self::saldosNetosLotePorDeposito($articuloId, $combinacionId, $loteCodigo);
             $sugerencias = self::formatearSugerenciasDepositosConSaldo($saldos);
             $depTxt = self::etiquetaDeposito($depositoId);
             $msg = "El lote/OT {$loteCodigo} no tiene saldo en el depósito {$depTxt}.";
@@ -316,7 +334,7 @@ final class PedidoPickingFerliSupport
 
         $faltaTalle = self::mensajeSiStockNoCubreNumeracionPedido(
             $linea,
-            $saldos[$depositoId]['talles'] ?? []
+            $bucket['talles'] ?? []
         );
         if ($faltaTalle !== null) {
             return [
@@ -330,9 +348,10 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * Saldo neto por depósito del lote importado o OT (código).
+     * Saldo neto por depósito del bucket preferido (lote importado vs OT lote=0).
+     * No suma buckets distintos: el modal / Excel los muestran separados.
      *
-     * @return array<int, array{saldo: float, talles: array<string, float>, codigo: string, nombre: string}>
+     * @return array<int, array{saldo: float, talles: array<string, float>, codigo: string, nombre: string, lote: int|string, ordentrabajo_id: int}>
      */
     public static function saldosNetosLotePorDeposito(
         int $articuloId,
@@ -345,7 +364,171 @@ final class PedidoPickingFerliSupport
         }
 
         $otId = (int) (Ordentrabajo::query()->where('codigo', $loteCodigo)->value('id') ?? 0);
+        $porDeposito = self::bucketsSaldoLotePorDeposito($articuloId, $combinacionId, $loteCodigo, $otId);
 
+        $out = [];
+        foreach ($porDeposito as $depId => $info) {
+            $elegido = self::elegirBucketConsumoDesdeSaldos($info['buckets'], $loteCodigo, $otId);
+            $out[$depId] = [
+                'saldo' => (float) $elegido['saldo'],
+                'talles' => $elegido['talles'],
+                'codigo' => (string) ($info['codigo'] ?? ''),
+                'nombre' => (string) ($info['nombre'] ?? ''),
+                'lote' => $elegido['lote'],
+                'ordentrabajo_id' => (int) $elegido['ordentrabajo_id'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Elige el bucket donde realmente hay saldo visible (misma clave que Stock por OT / modal).
+     * Prefiere OT con lote=0; si no, lote=código.
+     *
+     * @param  list<array{lote: int|string, ordentrabajo_id: int, saldo: float, talles?: array<string, float>}>  $buckets
+     * @return array{lote: int|string, ordentrabajo_id: int, saldo: float, talles: array<string, float>}
+     */
+    public static function elegirBucketConsumoDesdeSaldos(array $buckets, string $loteCodigo, int $otId): array
+    {
+        $loteCodigo = trim($loteCodigo);
+        $positivos = [];
+        foreach ($buckets as $b) {
+            if ((float) ($b['saldo'] ?? 0) > 0.0001) {
+                $positivos[] = $b;
+            }
+        }
+
+        $pick = null;
+        if ($otId > 0) {
+            foreach ($positivos as $b) {
+                if ((int) ($b['ordentrabajo_id'] ?? 0) === $otId
+                    && ! ReporteStockOtSituacionSupport::esLoteImportado($b['lote'] ?? 0)) {
+                    $pick = $b;
+                    break;
+                }
+            }
+        }
+        if ($pick === null) {
+            foreach ($positivos as $b) {
+                if (trim((string) ($b['lote'] ?? '')) === $loteCodigo) {
+                    $pick = $b;
+                    break;
+                }
+            }
+        }
+        if ($pick === null && $positivos !== []) {
+            usort($positivos, static fn ($a, $b) => (float) ($b['saldo'] ?? 0) <=> (float) ($a['saldo'] ?? 0));
+            $pick = $positivos[0];
+        }
+
+        if ($pick === null) {
+            return [
+                'lote' => $otId > 0 ? 0 : $loteCodigo,
+                'ordentrabajo_id' => $otId,
+                'saldo' => 0.0,
+                'talles' => [],
+            ];
+        }
+
+        $lote = $pick['lote'] ?? 0;
+        if (! ReporteStockOtSituacionSupport::esLoteImportado($lote)) {
+            $lote = 0;
+        }
+
+        return [
+            'lote' => $lote,
+            'ordentrabajo_id' => (int) ($pick['ordentrabajo_id'] ?? 0),
+            'saldo' => (float) ($pick['saldo'] ?? 0),
+            'talles' => is_array($pick['talles'] ?? null) ? $pick['talles'] : [],
+        ];
+    }
+
+    /**
+     * Bucket a consumir: el asignado en el modal (OT id) o lote importado; si tipeó a mano, heurística.
+     *
+     * @return array{lote: int|string, ordentrabajo_id: int, saldo: float, talles: array<string, float>}
+     */
+    public static function resolverBucketConsumoAsignado(
+        int $articuloId,
+        int $combinacionId,
+        string $loteCodigo,
+        int $depositoId,
+        ?int $ordentrabajoIdAsignado = null
+    ): array {
+        $loteCodigo = trim($loteCodigo);
+        $otAsignado = (int) ($ordentrabajoIdAsignado ?? 0);
+        $otIdCodigo = (int) (Ordentrabajo::query()->where('codigo', $loteCodigo)->value('id') ?? 0);
+        $porDeposito = self::bucketsSaldoLotePorDeposito($articuloId, $combinacionId, $loteCodigo, $otIdCodigo);
+        $buckets = $porDeposito[$depositoId]['buckets'] ?? [];
+
+        // Modal eligió OT (lote=0): usar ese bucket directo.
+        if ($otAsignado > 0) {
+            foreach ($buckets as $b) {
+                if ((int) ($b['ordentrabajo_id'] ?? 0) === $otAsignado
+                    && ! ReporteStockOtSituacionSupport::esLoteImportado($b['lote'] ?? 0)) {
+                    return [
+                        'lote' => 0,
+                        'ordentrabajo_id' => $otAsignado,
+                        'saldo' => (float) ($b['saldo'] ?? 0),
+                        'talles' => is_array($b['talles'] ?? null) ? $b['talles'] : [],
+                    ];
+                }
+            }
+
+            return [
+                'lote' => 0,
+                'ordentrabajo_id' => $otAsignado,
+                'saldo' => 0.0,
+                'talles' => [],
+            ];
+        }
+
+        // Modal eligió lote importado (u ot id vacío): bucket L:codigo.
+        foreach ($buckets as $b) {
+            if (trim((string) ($b['lote'] ?? '')) === $loteCodigo) {
+                return [
+                    'lote' => $loteCodigo,
+                    'ordentrabajo_id' => (int) ($b['ordentrabajo_id'] ?? 0),
+                    'saldo' => (float) ($b['saldo'] ?? 0),
+                    'talles' => is_array($b['talles'] ?? null) ? $b['talles'] : [],
+                ];
+            }
+        }
+
+        // Tipeo manual sin origen: misma heurística (preferir OT con saldo).
+        return self::elegirBucketConsumoDesdeSaldos($buckets, $loteCodigo, $otIdCodigo);
+    }
+
+    /**
+     * @return array{lote: int|string, ordentrabajo_id: int, saldo: float, talles: array<string, float>}
+     */
+    public static function resolverBucketConsumoStock(
+        int $articuloId,
+        int $combinacionId,
+        string $loteCodigo,
+        int $depositoId
+    ): array {
+        return self::resolverBucketConsumoAsignado(
+            $articuloId,
+            $combinacionId,
+            $loteCodigo,
+            $depositoId,
+            null
+        );
+    }
+
+    /**
+     * Buckets (lote importado vs OT) por depósito — mismos cortes que el reporte / modal.
+     *
+     * @return array<int, array{codigo: string, nombre: string, buckets: list<array{lote: int|string, ordentrabajo_id: int, saldo: float, talles: array<string, float>}>}>
+     */
+    private static function bucketsSaldoLotePorDeposito(
+        int $articuloId,
+        int $combinacionId,
+        string $loteCodigo,
+        int $otId
+    ): array {
         $rows = DB::table('articulo_movimiento as am')
             ->join('articulo_movimiento_talle as amt', 'amt.articulo_movimiento_id', '=', 'am.id')
             ->join('talle as t', 't.id', '=', 'amt.talle_id')
@@ -358,11 +541,13 @@ final class PedidoPickingFerliSupport
                     $q->orWhere('am.ordentrabajo_id', $otId);
                 }
             })
-            ->groupBy('am.deposito_id', 'd.codigo', 'd.nombre', 't.nombre')
+            ->groupBy('am.deposito_id', 'd.codigo', 'd.nombre', 'am.lote', 'am.ordentrabajo_id', 't.nombre')
             ->select([
                 'am.deposito_id',
                 'd.codigo as deposito_codigo',
                 'd.nombre as deposito_nombre',
+                'am.lote',
+                'am.ordentrabajo_id',
                 't.nombre as talle',
                 DB::raw('SUM(amt.cantidad) as saldo'),
             ])
@@ -376,18 +561,46 @@ final class PedidoPickingFerliSupport
             }
             if (! isset($out[$depId])) {
                 $out[$depId] = [
-                    'saldo' => 0.0,
-                    'talles' => [],
                     'codigo' => (string) ($row->deposito_codigo ?? ''),
                     'nombre' => (string) ($row->deposito_nombre ?? ''),
+                    'buckets' => [],
+                ];
+            }
+
+            $loteRaw = $row->lote ?? 0;
+            $loteKey = ReporteStockOtSituacionSupport::esLoteImportado($loteRaw)
+                ? trim((string) $loteRaw)
+                : '0';
+            $otKey = (int) ($row->ordentrabajo_id ?? 0);
+            // Misma clave visual que reporte/modal: lote importado ignora ot_id en el corte L:
+            $clave = ReporteStockOtSituacionSupport::claveAgrupacion($loteRaw, $otKey, 0);
+            if (! isset($out[$depId]['buckets'][$clave])) {
+                // Lote importado: ot_id solo si es la OT del código (mismo efecto visual L:codigo).
+                // OT (lote=0): siempre el ordentrabajo_id del movimiento.
+                $otWrite = 0;
+                if ($loteKey === '0') {
+                    $otWrite = $otKey;
+                } elseif ($otKey === $otId && $otId > 0) {
+                    $otWrite = $otKey;
+                }
+                $out[$depId]['buckets'][$clave] = [
+                    'lote' => $loteKey === '0' ? 0 : $loteKey,
+                    'ordentrabajo_id' => $otWrite,
+                    'saldo' => 0.0,
+                    'talles' => [],
                 ];
             }
             $cant = (float) ($row->saldo ?? 0);
-            $out[$depId]['saldo'] += $cant;
+            $out[$depId]['buckets'][$clave]['saldo'] += $cant;
             $talleNom = trim((string) ($row->talle ?? ''));
             if ($talleNom !== '' && abs($cant) > 0.0001) {
-                $out[$depId]['talles'][$talleNom] = (float) (($out[$depId]['talles'][$talleNom] ?? 0) + $cant);
+                $out[$depId]['buckets'][$clave]['talles'][$talleNom] =
+                    (float) (($out[$depId]['buckets'][$clave]['talles'][$talleNom] ?? 0) + $cant);
             }
+        }
+
+        foreach ($out as $depId => $info) {
+            $out[$depId]['buckets'] = array_values($info['buckets']);
         }
 
         return $out;
@@ -470,6 +683,7 @@ final class PedidoPickingFerliSupport
                 $linea->picking_id = null;
                 $linea->picking_lote_codigo = null;
                 $linea->picking_deposito_id = null;
+                $linea->picking_ordentrabajo_id = null;
                 $linea->picking_at = null;
                 $linea->picking_usuario_id = null;
                 $linea->save();
@@ -629,6 +843,7 @@ final class PedidoPickingFerliSupport
                 'picking_id' => null,
                 'picking_lote_codigo' => null,
                 'picking_deposito_id' => null,
+                'picking_ordentrabajo_id' => null,
                 'picking_at' => null,
                 'picking_usuario_id' => null,
                 'updated_at' => now(),
@@ -952,19 +1167,19 @@ final class PedidoPickingFerliSupport
             $depositoId = 1;
         }
 
-        $otId = (int) ($ordentrabajoId ?? $linea->ot_id ?? 0);
-        $loteMovimiento = $loteCodigo;
-        $otOrigen = Ordentrabajo::query()->where('codigo', $loteCodigo)->first();
-        $hayLoteImportado = Articulo_Movimiento::query()
-            ->where('articulo_id', $articulo->id)
-            ->where('combinacion_id', $combinacion->id)
-            ->where('lote', $loteCodigo)
-            ->where('lote', '>', 0)
-            ->exists();
-        if (! $hayLoteImportado && $otOrigen) {
-            $loteMovimiento = 0;
-            $otId = (int) $otOrigen->id;
-        }
+        // Bucket del modal (picking_ordentrabajo_id) o, si tipeó a mano, heurística.
+        $otAsignado = $ordentrabajoId !== null
+            ? (int) $ordentrabajoId
+            : (int) ($linea->picking_ordentrabajo_id ?? 0);
+        $bucket = self::resolverBucketConsumoAsignado(
+            (int) $articulo->id,
+            (int) $combinacion->id,
+            $loteCodigo,
+            $depositoId,
+            $otAsignado > 0 ? $otAsignado : null
+        );
+        $loteMovimiento = $bucket['lote'];
+        $otId = (int) $bucket['ordentrabajo_id'];
 
         $dataArticuloMovimiento = [
             'fecha' => $fecha,

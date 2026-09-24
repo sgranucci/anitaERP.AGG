@@ -394,7 +394,149 @@ class Comprobante_ProveedorController extends Controller
     }
 
     /**
-     * Cotización venta del día (tabla cotización / cron BNA) para moneda y fecha de comprobante.
+     * Aviso temprano (como Anita): al completar letra/sucursal/número verifica ERP + Anita
+     * sin esperar a Guardar/Contabilizar. Pensado para carga sin OC (y también con datos editables).
+     */
+    public function apiVerificarDuplicadoCabecera(Request $request): JsonResponse
+    {
+        if (! can('crear-comprobante-proveedor', false)
+            && ! can('editar-comprobante-proveedor', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $tipoId = (int) $request->input('tipotransaccion_compra_id', 0);
+        $letra = strtoupper(substr(trim((string) $request->input('letra', '')), 0, 1));
+        $sucursal = (int) $request->input('sucursal', 0);
+        $numero = (int) $request->input('numerocomprobante', 0);
+        $proveedorId = (int) $request->input('proveedor_id', 0) ?: null;
+        $documentoEventual = trim((string) $request->input('proveedor_documento_eventual', ''));
+        $excluirComprobanteId = (int) $request->input('excluir_comprobante_id', 0) ?: null;
+        $excluirPrecargaId = (int) $request->input('excluir_precarga_id', 0) ?: null;
+        $excluirAnitaNro = (int) $request->input('excluir_anita_nro_interno', 0) ?: null;
+
+        $erp = ComprobanteProveedorUnicidadSupport::consultarDuplicadoCabecera(
+            $empresaId,
+            $tipoId,
+            $letra,
+            $sucursal,
+            $numero,
+            $proveedorId,
+            $documentoEventual !== '' ? $documentoEventual : null,
+            $excluirComprobanteId,
+            $excluirPrecargaId,
+        );
+
+        if (! ($erp['listo'] ?? false)) {
+            return response()->json([
+                'ok' => true,
+                'listo' => false,
+                'duplicado' => false,
+                'fuente' => null,
+                'mensaje' => null,
+                'html' => '',
+                'url_editar' => null,
+            ]);
+        }
+
+        if ($erp['duplicado'] ?? false) {
+            $comprobanteIdDup = (int) ($erp['comprobante_id'] ?? 0);
+            $urlEditar = $comprobanteIdDup > 0
+                ? route('editar_comprobante_proveedor', ['id' => $comprobanteIdDup])
+                : null;
+            $html = view('compras.comprobante_proveedor.partials.aviso_duplicado_cabecera', [
+                'fuente' => $erp['fuente'],
+                'mensaje' => $erp['mensaje'],
+                'comprobanteId' => $comprobanteIdDup ?: null,
+                'precargaId' => (int) ($erp['precarga_id'] ?? 0) ?: null,
+                'urlEditar' => $urlEditar,
+            ])->render();
+
+            return response()->json([
+                'ok' => true,
+                'listo' => true,
+                'duplicado' => true,
+                'fuente' => $erp['fuente'],
+                'mensaje' => $erp['mensaje'],
+                'comprobante_id' => $comprobanteIdDup ?: null,
+                'precarga_id' => (int) ($erp['precarga_id'] ?? 0) ?: null,
+                'url_editar' => $urlEditar,
+                'html' => $html,
+                'bloquea_contabilizar' => true,
+            ]);
+        }
+
+        // Anita: no cortar la UI si el bridge falla; el contabilizar sigue validando en duro.
+        $avisoAnita = null;
+        $htmlAnita = '';
+        if ($proveedorId !== null && $proveedorId > 0 && $tipoId > 0 && $letra !== '' && $numero > 0) {
+            try {
+                $fila = ComprobanteProveedorAnitaCompraExistenciaSupport::buscar(
+                    $empresaId,
+                    $proveedorId,
+                    $tipoId,
+                    $letra,
+                    $sucursal,
+                    $numero,
+                    $excluirAnitaNro,
+                );
+                if ($fila !== null) {
+                    $tipoArca = ComprobanteProveedorAnitaCompraExistenciaSupport::tipoArcaDesdeTipoId($tipoId, $letra);
+                    $mensaje = ComprobanteProveedorAnitaCompraExistenciaSupport::mensajeDuplicado(
+                        $fila,
+                        $letra,
+                        $sucursal,
+                        $numero,
+                        $tipoArca,
+                    );
+                    $avisoAnita = [
+                        'mensaje' => $mensaje,
+                        'nro_interno' => ((int) ($fila['com_nro_interno'] ?? 0)) ?: null,
+                        'fila' => $fila,
+                        'ya_marcada' => false,
+                        'comprobante_id' => $excluirComprobanteId,
+                    ];
+                    $htmlAnita = view('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita', [
+                        'facturaYaEnAnita' => $avisoAnita,
+                    ])->render();
+                }
+            } catch (\Throwable $e) {
+                Log::warning('comprobante_proveedor.verificar_duplicado_anita_error', [
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($avisoAnita !== null) {
+            return response()->json([
+                'ok' => true,
+                'listo' => true,
+                'duplicado' => true,
+                'fuente' => 'anita',
+                'mensaje' => $avisoAnita['mensaje'],
+                'comprobante_id' => null,
+                'precarga_id' => null,
+                'url_editar' => null,
+                'html' => $htmlAnita,
+                'bloquea_contabilizar' => true,
+                'aviso' => $avisoAnita,
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'listo' => true,
+            'duplicado' => false,
+            'fuente' => null,
+            'mensaje' => null,
+            'html' => '',
+            'url_editar' => null,
+            'bloquea_contabilizar' => false,
+        ]);
+    }
+
+    /**
+     * Aviso al abrir edición/alta con comprobante o precarga ya conocidos (AJAX).
      */
     public function apiAvisoFacturaYaEnAnita(Request $request): JsonResponse
     {
