@@ -80,6 +80,9 @@ final class MacroArchivoPagoFormatoSupport
     /**
      * BNF: tipo 10 + CUIT + cond. IIBB/Gan/IVA + nombre + domicilio + CP + email.
      *
+     * Diseño Macro (16 columnas TAB): condiciones fiscales exactamente 2 dígitos,
+     * razón social máx. 40 bytes, CP numérico 4 (default 1001).
+     *
      * @param  list<array{
      *   cuit:string,
      *   ing_bruto:int,
@@ -98,22 +101,26 @@ final class MacroArchivoPagoFormatoSupport
         $sep = self::SEP;
         foreach ($filas as $f) {
             $cuit = self::cuit11((string) ($f['cuit'] ?? ''));
-            if ($cuit === '') {
+            // Macro: bnf_numdoc 11 numérico obligatorio
+            if (strlen($cuit) !== 11) {
                 continue;
             }
-            $nombre = self::pad((string) ($f['nombre'] ?? ''), 30);
-            $prov = self::pad((string) ($f['proveedor_codigo'] ?? ''), 6);
-            $dom = self::pad((string) ($f['domicilio'] ?? 'NO INFORMADA'), 60);
-            $cp = self::pad((string) ($f['cod_postal'] ?? ''), 4);
-            $email = self::padLeft((string) ($f['email'] ?? ''), 40);
+            // Truncado por bytes (como %30.30s / %6.6s de Anita), no por caracteres UTF-8:
+            // si no, razón social (máx. 40) se pasa con tildes/ñ y el banco rechaza el registro.
+            $nombre = self::padBytes((string) ($f['nombre'] ?? ''), 30);
+            $prov = self::padBytes((string) ($f['proveedor_codigo'] ?? ''), 6);
+            $domRaw = trim(self::sanitizarCampoArchivo((string) ($f['domicilio'] ?? '')));
+            $dom = self::padBytes($domRaw !== '' ? $domRaw : 'NO INFORMADA', 60);
+            $cp = self::codigoPostal4((string) ($f['cod_postal'] ?? ''));
+            $email = self::padBytes((string) ($f['email'] ?? ''), 40);
 
             // fprintf Anita:
             // "%d%c%s%c%02d%c%02d%c%02d%c%30.30s %6.6s   %c%60.60s%c%c%c%4.4s%c%c%-40.40s%c%c%c%c\n"
             $out .= '10'.$sep
                 .$cuit.$sep
-                .sprintf('%02d', (int) ($f['ing_bruto'] ?? 999)).$sep
-                .sprintf('%02d', (int) ($f['ganancia'] ?? 2)).$sep
-                .sprintf('%02d', (int) ($f['iva'] ?? 1)).$sep
+                .self::codigoFiscal2((int) ($f['ing_bruto'] ?? 2), 2).$sep
+                .self::codigoFiscal2((int) ($f['ganancia'] ?? 2), 2).$sep
+                .self::codigoFiscal2((int) ($f['iva'] ?? 1), 1).$sep
                 .$nombre.' '.$prov.'   '.$sep
                 .$dom.$sep
                 .$sep
@@ -373,11 +380,12 @@ final class MacroArchivoPagoFormatoSupport
             '1', '2', '3', '4' => 1, // convenio / local / conv sin bsas / caba (valores típicos Anita)
             'E' => 3, // exento
             'N' => 2, // no retiene
-            default => match (true) {
+                default => match (true) {
                 in_array($retIbr, ['C', 'L', 'S', 'A'], true) => 1,
                 $retIbr === 'X' => 3,
                 $retIbr === '0' => 2,
-                default => 999,
+                // Evitar 999: Macro exige cib_id de 2 dígitos; %02d de 999 sale "999" y rompe el diseño.
+                default => 2,
             },
         };
 
@@ -388,7 +396,7 @@ final class MacroArchivoPagoFormatoSupport
                 1, 2, 3, 4 => 1,
                 5 => 3, // exento approx
                 6 => 2,
-                default => (int) $retIbr > 0 ? (int) $retIbr : 999,
+                default => 2,
             };
         }
 
@@ -422,14 +430,59 @@ final class MacroArchivoPagoFormatoSupport
         return $out;
     }
 
-    private static function pad(string $valor, int $len): string
+    /**
+     * CP Macro: 4 numérico obligatorio (diseño fija default "1001").
+     */
+    public static function codigoPostal4(string $cp): string
     {
-        return str_pad(mb_substr($valor, 0, $len), $len, ' ', STR_PAD_RIGHT);
+        $digits = preg_replace('/\D+/', '', $cp) ?? '';
+        if ($digits === '') {
+            return '1001';
+        }
+
+        return str_pad(substr($digits, 0, 4), 4, '0', STR_PAD_LEFT);
     }
 
-    private static function padLeft(string $valor, int $len): string
+    /**
+     * Condiciones IIBB/Gan/IVA: exactamente 2 dígitos (0–99). Fuera de rango → default.
+     */
+    public static function codigoFiscal2(int $codigo, int $default): string
     {
-        // Anita usa %-40.40s (pad derecha) para email
-        return self::pad($valor, $len);
+        if ($codigo < 0 || $codigo > 99) {
+            $codigo = $default;
+        }
+
+        return sprintf('%02d', $codigo);
+    }
+
+    /**
+     * Quita TAB/CR/LF (rompen columnas) y controles; deja UTF-8 printable.
+     */
+    public static function sanitizarCampoArchivo(string $texto): string
+    {
+        $texto = str_replace(["\t", "\r", "\n", "\0"], ' ', $texto);
+        $texto = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', ' ', $texto) ?? $texto;
+
+        return $texto;
+    }
+
+    private static function pad(string $valor, int $len): string
+    {
+        return self::padBytes($valor, $len);
+    }
+
+    /**
+     * Pad/truncate por bytes (espejo de %.Ns de Anita), no por caracteres mb.
+     */
+    private static function padBytes(string $valor, int $len): string
+    {
+        $valor = self::sanitizarCampoArchivo($valor);
+        if (strlen($valor) > $len) {
+            $valor = function_exists('mb_strcut')
+                ? (string) mb_strcut($valor, 0, $len, 'UTF-8')
+                : substr($valor, 0, $len);
+        }
+
+        return str_pad($valor, $len, ' ', STR_PAD_RIGHT);
     }
 }

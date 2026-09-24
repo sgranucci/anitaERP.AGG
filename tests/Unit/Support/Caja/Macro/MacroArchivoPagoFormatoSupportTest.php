@@ -60,8 +60,49 @@ class MacroArchivoPagoFormatoSupportTest extends TestCase
         $this->assertSame('10', $campos[0]);
         $this->assertSame('20123456789', $campos[1]);
         $this->assertSame('01', $campos[2]);
+        $this->assertSame(16, count($campos));
+        $this->assertSame('1870', $campos[9]);
+        $this->assertSame(40, strlen($campos[5]));
         $this->assertStringContainsString('JUAN PEREZ', $campos[5]);
         $this->assertStringContainsString('001234', $campos[5]);
+    }
+
+    public function test_bnf_cp_vacio_usa_1001_y_ib_999_queda_en_2_digitos(): void
+    {
+        $bnf = MacroArchivoPagoFormatoSupport::generarBnf([[
+            'cuit' => '30710115296',
+            'ing_bruto' => 999,
+            'ganancia' => 2,
+            'iva' => 1,
+            'nombre' => str_repeat('Ñ', 30),
+            'proveedor_codigo' => '99',
+            'domicilio' => "CALLE\tCON\nTAB",
+            'cod_postal' => '',
+            'email' => 'a@b.com',
+        ]]);
+
+        $campos = explode("\t", rtrim($bnf, "\n"));
+        $this->assertCount(16, $campos);
+        $this->assertSame('02', $campos[2]); // 999 → default 02 (máx 2 dígitos)
+        $this->assertSame('1001', $campos[9]);
+        $this->assertSame(40, strlen($campos[5]));
+        $this->assertStringNotContainsString("\t", $campos[6]);
+    }
+
+    public function test_bnf_omite_cuit_corto(): void
+    {
+        $bnf = MacroArchivoPagoFormatoSupport::generarBnf([[
+            'cuit' => '20123456',
+            'ing_bruto' => 1,
+            'ganancia' => 1,
+            'iva' => 1,
+            'nombre' => 'X',
+            'proveedor_codigo' => '1',
+            'cod_postal' => '1001',
+            'email' => 'a@b.com',
+        ]]);
+
+        $this->assertSame('', $bnf);
     }
 
     public function test_modalidad_macro_vs_otros(): void

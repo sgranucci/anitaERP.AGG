@@ -1112,17 +1112,22 @@ class MacroArchivoPagoService
             'nombre' => $nombre,
             'proveedor_codigo' => $proCod,
             'domicilio' => 'NO INFORMADA',
-            'cod_postal' => trim((string) ($prom?->prom_cod_postal ?? '')),
+            // Macro: CP 4 numérico obligatorio (default diseño 1001).
+            'cod_postal' => MacroArchivoPagoFormatoSupport::codigoPostal4(
+                (string) ($prom?->prom_cod_postal ?? '')
+            ),
             'email' => $email,
         ];
     }
 
     private function beneficiarioDesdeProveedorErp(?Proveedor $prov, string $cuit, string $codigo, string $nombre): array
     {
-        $email = trim((string) ($prov->email ?? ''));
+        $email = trim((string) ($prov?->email ?? ''));
         if ($email === '' || ! str_contains($email, '@')) {
             $email = 'proveedores@grupoagg.com';
         }
+        $cpDigits = preg_replace('/\D+/', '', (string) ($prov?->codigopostal ?? '')) ?? '';
+        $dom = trim((string) ($prov?->domicilio ?? ''));
 
         return [
             'cuit' => $cuit,
@@ -1131,8 +1136,9 @@ class MacroArchivoPagoService
             'iva' => 1,
             'nombre' => $nombre,
             'proveedor_codigo' => $codigo,
-            'domicilio' => 'NO INFORMADA',
-            'cod_postal' => '',
+            // Macro exige CP 4 numérico; vacío → 1001 (default del diseño).
+            'domicilio' => $dom !== '' ? $dom : 'NO INFORMADA',
+            'cod_postal' => $cpDigits !== '' ? substr($cpDigits, 0, 4) : '1001',
             'email' => $email,
         ];
     }
