@@ -68,11 +68,70 @@ final class PedidoEstadosInterforming
         ];
     }
 
-    public static function etiquetaCabecera(?string $estado): string
+    /**
+     * Normaliza código Anita (0–8), etiqueta ERP («Facturado») o letra ERP (F/P/A…).
+     */
+    public static function normalizarCodigoCabecera(?string $estadopedido, ?string $estadoErp = null): string
     {
-        $estado = (string) $estado;
+        $raw = trim((string) $estadopedido);
+        $etiquetas = self::etiquetasCabecera();
+        if ($raw !== '' && array_key_exists($raw, $etiquetas)) {
+            return $raw;
+        }
 
-        return self::etiquetasCabecera()[$estado] ?? $estado;
+        $porEtiqueta = array_flip($etiquetas);
+        if ($raw !== '' && isset($porEtiqueta[$raw])) {
+            return (string) $porEtiqueta[$raw];
+        }
+
+        $erp = strtoupper(trim((string) ($estadoErp ?? '')));
+        return match ($erp) {
+            PedidoEstadoErpSupport::FACTURADO => self::CAB_FACTURADO,
+            PedidoEstadoErpSupport::ANULADO => self::CAB_ANULADO,
+            PedidoEstadoErpSupport::ENTREGADO => self::CAB_ENTREGADO,
+            PedidoEstadoErpSupport::TRANSFERIDO => self::CAB_UNIFICADO,
+            default => $raw !== '' ? $raw : self::CAB_PENTREGAR,
+        };
+    }
+
+    public static function etiquetaCabecera(?string $estado, ?string $estadoErp = null): string
+    {
+        $codigo = self::normalizarCodigoCabecera($estado, $estadoErp);
+        $etiquetas = self::etiquetasCabecera();
+
+        return $etiquetas[$codigo] ?? (trim((string) $estado) !== '' ? (string) $estado : '—');
+    }
+
+    public static function badgeClassEstadoCabecera(?string $estadopedido, ?string $estadoErp = null): string
+    {
+        $codigo = self::normalizarCodigoCabecera($estadopedido, $estadoErp);
+
+        return match ($codigo) {
+            self::CAB_FACTURADO, self::CAB_REFACTURA => 'badge badge-success',
+            self::CAB_ENTREGADO => 'badge badge-primary',
+            self::CAB_ENTRPARC => 'badge badge-info',
+            self::CAB_SUSPENDIDO => 'badge badge-warning',
+            self::CAB_ANULADO => 'badge badge-danger',
+            self::CAB_RESERVA, self::CAB_UNIFICADO => 'badge badge-secondary',
+            self::CAB_PENTREGAR => 'badge badge-light border text-dark',
+            default => 'badge badge-secondary',
+        };
+    }
+
+    public static function esCabeceraNoFacturable(?string $estadopedido, ?string $estadoErp = null): bool
+    {
+        $codigo = self::normalizarCodigoCabecera($estadopedido, $estadoErp);
+        if (in_array($codigo, [self::CAB_FACTURADO, self::CAB_SUSPENDIDO, self::CAB_ANULADO], true)) {
+            return true;
+        }
+
+        $erp = PedidoEstadoErpSupport::normalizarEstadoCabecera($estadoErp, $estadopedido);
+
+        return in_array($erp, [
+            PedidoEstadoErpSupport::FACTURADO,
+            PedidoEstadoErpSupport::ANULADO,
+            PedidoEstadoErpSupport::TRANSFERIDO,
+        ], true);
     }
 
     public static function etiquetaItem(?string $estado): string

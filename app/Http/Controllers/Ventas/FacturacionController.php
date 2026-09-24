@@ -456,14 +456,22 @@ class FacturacionController extends Controller
             $params['enviar_impresora'] = 1;
         }
         $retorno = (string) request()->query('retorno', '');
-        if ($retorno !== '') {
-            $params['retorno'] = $retorno;
-        }
         if (request()->boolean('con_envios')) {
             $params['con_envios'] = 1;
         }
 
-        return redirect()->route('sesion_impresion_factura', $params);
+        // route() con APP_URL sin carpeta → 404 bajo /anitaERP/public.
+        $generada = route('sesion_impresion_factura', $params);
+        $parts = parse_url($generada) ?: [];
+        $path = (string) ($parts['path'] ?? '');
+        $query = (string) ($parts['query'] ?? '');
+        $carpeta = rtrim((string) config('app.app_carpeta', ''), '/');
+        if ($carpeta !== '' && ! ($path === $carpeta || str_starts_with($path, $carpeta.'/'))) {
+            $path = urlAppCarpeta(ltrim($path, '/'));
+        }
+        $url = $query !== '' ? $path.'?'.$query : $path;
+
+        return redirect(\App\Support\Ventas\ComprobanteImpresionSesionUrlSupport::anexarRetorno($url, $retorno));
     }
 
     public function generaNotaDeCredito($id)

@@ -48,7 +48,12 @@ class PedidoInterforming extends Pedido
 
     public function etiquetaEstado(): string
     {
-        return PedidoEstadosInterforming::etiquetaCabecera($this->estadopedido);
+        return PedidoEstadosInterforming::etiquetaCabecera($this->estadopedido, $this->estado);
+    }
+
+    public function badgeClassEstado(): string
+    {
+        return PedidoEstadosInterforming::badgeClassEstadoCabecera($this->estadopedido, $this->estado);
     }
 
     public function etiquetaAprobacion(): string

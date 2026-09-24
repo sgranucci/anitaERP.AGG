@@ -27,12 +27,11 @@ final class PedidoInterformingFacturacionSupport
             return false;
         }
 
-        $estadoCab = trim((string) ($pedido->estadopedido ?? ''));
-        if (in_array($estadoCab, [
-            PedidoEstadosInterforming::CAB_FACTURADO,
-            PedidoEstadosInterforming::CAB_SUSPENDIDO,
-            PedidoEstadosInterforming::CAB_ANULADO,
-        ], true)) {
+        // Acepta código Anita (3), etiqueta ERP («Facturado») y letra ERP (F).
+        if (PedidoEstadosInterforming::esCabeceraNoFacturable(
+            $pedido->estadopedido ?? null,
+            $pedido->estado ?? null
+        )) {
             return false;
         }
 
@@ -43,6 +42,37 @@ final class PedidoInterformingFacturacionSupport
         }
 
         return false;
+    }
+
+    /**
+     * Facturas emitidas del pedido (para imprimir desde el index).
+     *
+     * @return list<array{id:int, codigo:string, fecha:string, total:float, cae:?string}>
+     */
+    public static function facturasEmitidas($pedido): array
+    {
+        $out = [];
+        foreach ($pedido->ventas ?? [] as $venta) {
+            $id = (int) ($venta->id ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $fecha = $venta->fecha ?? null;
+            if ($fecha instanceof \DateTimeInterface) {
+                $fechaStr = $fecha->format('d/m/Y');
+            } else {
+                $fechaStr = substr((string) $fecha, 0, 10);
+            }
+            $out[] = [
+                'id' => $id,
+                'codigo' => (string) ($venta->codigo ?? ''),
+                'fecha' => $fechaStr,
+                'total' => (float) ($venta->total ?? 0),
+                'cae' => $venta->cae !== null && $venta->cae !== '' ? (string) $venta->cae : null,
+            ];
+        }
+
+        return $out;
     }
 
     public static function esItemFacturable($item): bool

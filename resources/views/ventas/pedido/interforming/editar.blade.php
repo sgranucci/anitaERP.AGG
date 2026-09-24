@@ -9,6 +9,7 @@ Editar pedido Interforming
     $politicaCliente = isset($pedido) && $pedido->clientes
         ? \App\Support\Ventas\ClientePoliticaComercialSupport::payload($pedido->clientes)
         : null;
+    $facturasPedido = \App\Support\Ventas\PedidoInterformingFacturacionSupport::facturasEmitidas($pedido);
 @endphp
 @include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido', 'politicaCliente' => $politicaCliente])
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}" type="text/javascript"></script>
@@ -17,6 +18,7 @@ Editar pedido Interforming
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/interforming/form.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/interforming/index.js')) ?: time() }}" type="text/javascript"></script>
 @if (!empty($mostrarFacturarPedido))
 <script>window.pedidoModoIndexFacturacion = true;</script>
 <script>window.pedidoSinRemitoObligatorio = true;</script>
@@ -43,7 +45,19 @@ Editar pedido Interforming
             <div class="card-header">
                 <h3 class="card-title">Pedido {{ $pedido->codigo }} (Interforming)</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center">
+                    @include('ventas.pedido.interforming.partials.badge_estado', ['pedido' => $pedido])
+                    <span class="mx-1"></span>
                     @include('ventas.pedido.interforming.partials.badge_aprobacion', ['pedido' => $pedido])
+                    @if (count($facturasPedido) > 0 && can('listar-factura', false))
+                        <a href="#"
+                           class="btn btn-outline-primary btn-sm ml-2 btn-imprimir-facturas-pedido-index"
+                           data-pedido-id="{{ $pedido->id }}"
+                           data-pedido-codigo="{{ $pedido->codigo }}"
+                           data-facturas='@json($facturasPedido)'
+                           title="{{ count($facturasPedido) === 1 ? 'Imprimir factura' : 'Imprimir facturas' }}">
+                            <i class="fa fa-print"></i> Imprimir factura{{ count($facturasPedido) > 1 ? 's' : '' }}
+                        </a>
+                    @endif
                     @if (!empty($mostrarFacturarPedido))
                         <a href="#"
                            class="btn btn-success btn-sm ml-2 btn-facturar-pedido-index"
@@ -102,6 +116,16 @@ Editar pedido Interforming
                         <i class="fa fa-save"></i> Actualizar
                     </button>
                 @endif
+                @if (count($facturasPedido) > 0 && can('listar-factura', false))
+                    <a href="#"
+                       class="btn btn-outline-primary btn-imprimir-facturas-pedido-index"
+                       data-pedido-id="{{ $pedido->id }}"
+                       data-pedido-codigo="{{ $pedido->codigo }}"
+                       data-facturas='@json($facturasPedido)'
+                       title="Imprimir factura">
+                        <i class="fa fa-print"></i> Imprimir factura{{ count($facturasPedido) > 1 ? 's' : '' }}
+                    </a>
+                @endif
                 @if (!empty($mostrarFacturarPedido))
                     <a href="#"
                        class="btn btn-success btn-facturar-pedido-index"
@@ -121,6 +145,7 @@ Editar pedido Interforming
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultadeposito')
 @include('includes.proceso-overlay-pedido')
+@include('ventas.pedido.interforming.partials.modal_imprimir_facturas')
 @if (!empty($mostrarFacturarPedido))
     @include('ventas.pedido.partials.facturar_desde_index', ['incluirModalEntrega' => false])
 @endif

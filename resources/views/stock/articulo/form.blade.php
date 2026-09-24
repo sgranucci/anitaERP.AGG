@@ -69,9 +69,22 @@
             </div>
         </div>
         <div class="form-group row">
-            <label for="detalle" class="col-lg-2 col-form-label text-right pr-2">Descripci&oacute;n detallada</label>
+            @php
+                $etiquetaDetalleArticulo = \App\Support\Configuracion\EntornoEmpresaSupport::esInterforming()
+                    ? 'Descripci&oacute;n exportaci&oacute;n'
+                    : 'Descripci&oacute;n detallada';
+            @endphp
+            <label for="detalle" class="col-lg-2 col-form-label text-right pr-2">{!! $etiquetaDetalleArticulo !!}</label>
             <div class="col-lg-8">
-                <input type="text" name="detalle" id="detalle" class="form-control" value="{{old('detalle', $producto->detalle ?? '')}}"/>
+                <input type="text" name="detalle" id="detalle" class="form-control" value="{{old('detalle', $producto->detalle ?? '')}}"
+                    @if (\App\Support\Configuracion\EntornoEmpresaSupport::esInterforming())
+                        title="Texto que figura en DETALLE de la Factura de Exportaci&oacute;n (FAE)"
+                        placeholder="Ej. LAM PEAD APM NEGRO GOF SUAVE CH 1250x1000x4"
+                    @endif
+                />
+                @if (\App\Support\Configuracion\EntornoEmpresaSupport::esInterforming())
+                    <small class="form-text text-muted">En FAE se imprime este campo (no la descripci&oacute;n corta).</small>
+                @endif
             </div>
         </div>
         <div class="row">

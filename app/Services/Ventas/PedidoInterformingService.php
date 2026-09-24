@@ -36,6 +36,7 @@ class PedidoInterformingService
                 'pedido_articulos.monedas',
                 'pedido_articulos.unidadmedida',
                 'pedido_articulos.unidadmedidaAlter',
+                'ventas:id,pedido_id,codigo,fecha,total,cae',
             ])
             ->find($id);
     }
@@ -61,7 +62,13 @@ class PedidoInterformingService
         }
 
         $q = PedidoInterforming::query()
-            ->with(['clientes', 'vendedores', 'transportes', 'pedido_articulos'])
+            ->with([
+                'clientes',
+                'vendedores',
+                'transportes',
+                'pedido_articulos',
+                'ventas:id,pedido_id,codigo,fecha,total,cae',
+            ])
             ->orderByDesc('id');
 
         if (PedidoInterformingListadoFiltros::tieneCriteriosAplicados($filtros)) {

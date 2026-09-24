@@ -16,7 +16,8 @@
         </p>
         @if ($faltantePapel)
             <div class="alert alert-warning py-2 mb-2" role="alert">
-                Hay copias de papel sin impresora. Elegí la tuya antes de imprimir; si no, no se envía a ninguna cola.
+                No tenés impresora de papel seteada. Se puede descargar el PDF;
+                para enviar a cola, elegí una en este panel y guardala.
             </div>
         @endif
         <div class="form-row align-items-end">

@@ -188,6 +188,21 @@
             });
         });
 
+        if (window.impresionSesionAutoDescargarPdf) {
+            var linkPdf = document.getElementById('link-descargar-pdf-sesion');
+            if (linkPdf && linkPdf.getAttribute('href')) {
+                var urlPdf = new URL(linkPdf.getAttribute('href'), window.location.href);
+                checks().forEach(function (c) {
+                    if (c.checked) {
+                        urlPdf.searchParams.append('pack_idx[]', c.value);
+                    }
+                });
+                // Sin impresora de papel: entregar el PDF en lugar de alert de error.
+                window.location = urlPdf.toString();
+                return;
+            }
+        }
+
         if (window.impresionSesionAuto) {
             sincronizarEnviarImpresora();
             var ocultoAuto = document.getElementById('input-enviar-impresora');
@@ -195,7 +210,7 @@
                 return;
             }
             if (window.impresionSesionFaltaImpresora) {
-                window.alert('Elegí tu impresora en Mi impresora antes de imprimir las copias de papel.');
+                // Fallback: ya se manejó arriba con autoDescargarPdf; no alertar.
                 return;
             }
             mostrarOverlay();

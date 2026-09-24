@@ -7,7 +7,7 @@ Pedidos Interforming
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/filtro.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/interforming/index.js')) ?: time() }}" type="text/javascript"></script>
 @if (can('ejecutar-importar-pedido-anita', false))
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/interforming/importar_anita.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/interforming/importar_anita.js')) ?: time() }}" type="text/javascript"></script>
 @endif
@@ -103,14 +103,27 @@ use App\Support\Ventas\PedidoInterformingListadoFiltros;
                                 <td>{{ optional($pedido->fechaentrega)->format('d/m/Y') ?? substr((string) $pedido->fechaentrega, 0, 10) }}</td>
                                 <td>{{ $pedido->clientes->codigo ?? '' }} — {{ $pedido->clientes->nombre ?? '' }}</td>
                                 <td>{{ $pedido->orden_compra }}</td>
-                                <td>{{ $pedido->etiquetaEstado() }}</td>
+                                <td>@include('ventas.pedido.interforming.partials.badge_estado', ['pedido' => $pedido])</td>
                                 <td>@include('ventas.pedido.interforming.partials.badge_aprobacion', ['pedido' => $pedido])</td>
                                 <td>{{ $pedido->vendedores->nombre ?? '' }}</td>
                                 <td class="text-nowrap">
+                                    @php
+                                        $facturasPedido = PedidoInterformingFacturacionSupport::facturasEmitidas($pedido);
+                                    @endphp
                                     <a href="{{ route('listar_pedido_pdf', $pedido->id) }}"
                                        class="btn-accion-tabla tooltipsC" title="PDF" target="_blank" rel="noopener">
                                         <i class="fa fa-file-pdf text-danger"></i>
                                     </a>
+                                    @if (count($facturasPedido) > 0 && can('listar-factura', false))
+                                        <a href="#"
+                                           class="btn-accion-tabla tooltipsC btn-imprimir-facturas-pedido-index"
+                                           data-pedido-id="{{ $pedido->id }}"
+                                           data-pedido-codigo="{{ $pedido->codigo }}"
+                                           data-facturas='@json($facturasPedido)'
+                                           title="{{ count($facturasPedido) === 1 ? 'Imprimir factura' : 'Imprimir facturas ('.count($facturasPedido).')' }}">
+                                            <i class="fa fa-print text-primary"></i>
+                                        </a>
+                                    @endif
                                     @if (!empty($puedeFacturarIndex) && PedidoInterformingFacturacionSupport::puedeFacturar($pedido))
                                         <a href="#"
                                            class="btn-accion-tabla tooltipsC btn-facturar-pedido-index"
@@ -153,6 +166,7 @@ use App\Support\Ventas\PedidoInterformingListadoFiltros;
 @if (!empty($puedeFacturarIndex))
     @include('ventas.pedido.partials.facturar_desde_index')
 @endif
+@include('ventas.pedido.interforming.partials.modal_imprimir_facturas')
 @if (can('ejecutar-importar-pedido-anita', false))
     @include('ventas.pedido.interforming.partials.modal_importar_anita')
 @endif

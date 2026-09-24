@@ -10,6 +10,7 @@
 @section('scripts')
 <script>
 window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
+window.impresionSesionAutoDescargarPdf = @json((bool) ($autoDescargarPdf ?? false));
 window.impresionSesionFaltaImpresora = @json(! empty($sesion['faltante_impresora_papel']));
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/programa_impresion/sesion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/programa_impresion/sesion.js')) ?: time() }}" type="text/javascript"></script>

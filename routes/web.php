@@ -2609,6 +2609,7 @@ Route::get('ventas/impresion-sesion/factura/{id}', 'Ventas\ComprobanteImpresionS
 Route::get('ventas/impresion-sesion/reparto/{transporteId}', 'Ventas\ComprobanteImpresionSesionController@reparto')->name('sesion_impresion_reparto');
 Route::get('ventas/impresion-sesion/reparto-pedidos/{transporteId}', 'Ventas\ComprobanteImpresionSesionController@repartoPedidos')->name('sesion_impresion_reparto_pedidos');
 Route::get('ventas/impresion-sesion/pedido/{id}', 'Ventas\ComprobanteImpresionSesionController@pedido')->name('sesion_impresion_pedido');
+Route::get('ventas/impresion-sesion/pedido-facturas/{pedidoId}', 'Ventas\ComprobanteImpresionSesionController@pedidoFacturas')->name('sesion_impresion_pedido_facturas')->where('pedidoId', '[0-9]+');
 Route::get('ventas/impresion-sesion/remito/{id}', 'Ventas\ComprobanteImpresionSesionController@remito')->name('sesion_impresion_remito');
 Route::get('ventas/impresion-sesion/cot/{id}', 'Ventas\ComprobanteImpresionSesionController@cot')->name('sesion_impresion_cot')->where('id', '[0-9]+');
 Route::post('ventas/impresion-sesion/ejecutar', 'Ventas\ComprobanteImpresionSesionController@ejecutar')->name('ejecutar_impresion_sesion');

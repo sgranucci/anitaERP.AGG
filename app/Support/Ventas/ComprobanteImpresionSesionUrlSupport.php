@@ -22,20 +22,20 @@ final class ComprobanteImpresionSesionUrlSupport
 
         $url = null;
         if ($ventaId > 0 && PedidoFacturaAnitaArchivosSupport::esVentaIdVisible($ventaId)) {
-            $url = route('sesion_impresion_factura', ['id' => $ventaId] + $flags);
+            $url = self::urlSesionConCarpeta('sesion_impresion_factura', ['id' => $ventaId] + $flags);
         } elseif ($remitoId > 0) {
-            $url = route('sesion_impresion_remito', [
+            $url = self::urlSesionConCarpeta('sesion_impresion_remito', [
                 'id' => $remitoId,
                 'pack' => 1,
             ] + $flags);
         } elseif ($pedidoId > 0) {
-            $url = route('sesion_impresion_pedido', [
+            $url = self::urlSesionConCarpeta('sesion_impresion_pedido', [
                 'id' => $pedidoId,
                 'pack' => 1,
             ] + $flags);
         }
 
-        if ($url === null) {
+        if ($url === null || $url === '') {
             return null;
         }
 
@@ -45,6 +45,28 @@ final class ComprobanteImpresionSesionUrlSupport
         }
 
         return self::anexarRetorno($url, $retornoPath);
+    }
+
+    /**
+     * Path de sesión con APP_CARPETA, conservando query (auto, enviar_impresora, …).
+     *
+     * @param  array<string, mixed>  $params
+     */
+    private static function urlSesionConCarpeta(string $routeName, array $params): string
+    {
+        $generada = route($routeName, $params);
+        $parts = parse_url($generada) ?: [];
+        $path = (string) ($parts['path'] ?? '');
+        $query = (string) ($parts['query'] ?? '');
+        $carpeta = rtrim((string) config('app.app_carpeta', ''), '/');
+        if ($carpeta !== '' && ! ($path === $carpeta || str_starts_with($path, $carpeta.'/'))) {
+            $path = urlAppCarpeta(ltrim($path, '/'));
+        }
+        if ($query !== '') {
+            return $path.'?'.$query;
+        }
+
+        return $path;
     }
 
     /**
@@ -73,7 +95,7 @@ final class ComprobanteImpresionSesionUrlSupport
         ];
         $auto = ComprobanteImpresionResolverSupport::enviarAutomaticoAlFacturar($ventaId, 0, 0);
         if ($auto) {
-            $url = route('sesion_impresion_reparto_pedidos', $base + [
+            $url = self::urlSesionConCarpeta('sesion_impresion_reparto_pedidos', $base + [
                 'pack_completo' => 1,
                 'auto' => 1,
                 'enviar_impresora' => 1,
@@ -85,7 +107,7 @@ final class ComprobanteImpresionSesionUrlSupport
             ];
         }
 
-        $url = route('sesion_impresion_reparto_pedidos', $base + [
+        $url = self::urlSesionConCarpeta('sesion_impresion_reparto_pedidos', $base + [
             'pack_completo' => 1,
             'elegir' => 1,
         ]);

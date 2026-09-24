@@ -124,6 +124,64 @@ class ComprobanteImpresionSesionController extends Controller
         return $this->mostrar($request, $sesion);
     }
 
+    /**
+     * Impresión de una o varias facturas de un pedido (lote tipo reparto).
+     * Query: venta_ids=1,2,3 (vacío = todas las del pedido), auto=1, enviar_impresora=1.
+     */
+    public function pedidoFacturas(Request $request, int $pedidoId)
+    {
+        can('listar-factura');
+
+        $pedido = Pedido::query()->findOrFail($pedidoId);
+        $idsQuery = trim((string) $request->query('venta_ids', ''));
+        if ($idsQuery !== '') {
+            $ids = array_values(array_filter(array_map('intval', explode(',', $idsQuery))));
+            $ids = array_values(array_filter(
+                $ids,
+                static fn (int $id): bool => Venta::query()
+                    ->whereKey($id)
+                    ->where('pedido_id', $pedidoId)
+                    ->exists()
+            ));
+        } else {
+            $ids = Venta::query()
+                ->where('pedido_id', $pedidoId)
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+        }
+
+        $retornoPath = ComprobanteImpresionSesionUrlSupport::sanitizarRetornoPath(
+            (string) $request->query('retorno', '')
+        );
+        if ($retornoPath === '') {
+            $retornoPath = '/ventas/pedido';
+        }
+
+        try {
+            $sesion = $this->sesionService->armarDesdeReparto(
+                $ids,
+                $this->modo($request),
+                'Pedido '.((string) ($pedido->codigo ?? $pedidoId)),
+                [],
+                false,
+                true
+            );
+        } catch (\InvalidArgumentException $e) {
+            return redirect()
+                ->to($retornoPath !== '' ? $retornoPath : route('pedido'))
+                ->with('errores', [$e->getMessage()]);
+        }
+
+        if ($retornoPath !== '') {
+            $sesion['retorno'] = $retornoPath;
+        }
+        $sesion['lote_origen'] = 'pedido_facturas';
+
+        return $this->mostrar($request, $sesion);
+    }
+
     public function remito(Request $request, int $id)
     {
         $remito = Remito::query()->findOrFail($id);
@@ -285,11 +343,14 @@ class ComprobanteImpresionSesionController extends Controller
             $request->session()->forget('comprobante_impresion_sesion_resultado');
         }
         $faltanteImpresora = ! empty($sesion['faltante_impresora_papel']);
-        $autoEjecutar = (! $esLote || $lotePackCompleto)
-            && $request->boolean('auto')
+        $autoPedido = $request->boolean('auto')
+            && (! $esLote || $lotePackCompleto)
+            && ! empty($sesion['pack']);
+        $autoEjecutar = $autoPedido
             && $enviarImpresora
-            && ! empty($sesion['pack'])
             && ! $faltanteImpresora;
+        // Sin impresora de papel: al venir con auto=1 abrir PDF (no alert de error).
+        $autoDescargarPdf = $autoPedido && ($faltanteImpresora || $request->boolean('pdf'));
         $impresora = $sesion['impresora_usuario'] ?? [];
         $programaSeteo = ComprobanteImpresionSalidaUsuarioSupport::programaUnificado();
 
@@ -305,6 +366,7 @@ class ComprobanteImpresionSesionController extends Controller
             'resultado' => $resultado,
             'programaSeteo' => $programaSeteo,
             'autoEjecutar' => $autoEjecutar,
+            'autoDescargarPdf' => $autoDescargarPdf,
             'enviarImpresora' => $enviarImpresora,
             'volverUrl' => $this->urlVolver($sesion, $request),
             'salidasUsuario' => $this->salidaRepository->paraProgramaSeteo(

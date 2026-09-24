@@ -155,8 +155,9 @@
             <input type="date" name="fecha" id="fecha" class="col-lg-3 form-control"
                    value="{{ substr(old('fecha', $pedido->fecha ?? date('Y-m-d')), 0, 10) }}" readonly>
             <label class="col-lg-2 col-form-label">Estado</label>
-            <input type="text" class="col-lg-3 form-control" readonly
-                   value="{{ $estadosCabecera[$pedido->estadopedido ?? '0'] ?? ($pedido->estadopedido ?? '') }}">
+            <div class="col-lg-3 d-flex align-items-center">
+                @include('ventas.pedido.interforming.partials.badge_estado', ['pedido' => $pedido])
+            </div>
         </div>
         <div class="form-group row">
             <label class="col-lg-3 col-form-label">Aprobación</label>

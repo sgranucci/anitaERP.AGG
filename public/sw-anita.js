@@ -1,5 +1,5 @@
-/* Anita ERP — service worker mínimo (PWA). No cachea datos de negocio. */
-const CACHE = 'anita-pwa-shell-v1';
+/* Anita ERP — service worker mínimo (PWA). No cachea scripts ni datos de negocio. */
+const CACHE = 'anita-pwa-shell-v2';
 const SHELL = [
   './assets/pwa/icon-192.png',
   './assets/pwa/icon-512.png',
@@ -24,11 +24,21 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Solo assets estáticos del mismo origen; el ERP siempre va a red.
   if (url.origin !== self.location.origin) return;
-  if (!url.pathname.includes('/assets/') && !url.pathname.endsWith('manifest.webmanifest')) {
+
+  // Scripts/CSS de páginas: siempre red (evita JS viejo sin APP_CARPETA → 404 en impresión).
+  if (/\.(js|css)(\?|$)/i.test(url.pathname) || url.pathname.includes('/assets/pages/')) {
     return;
   }
+
+  // Solo iconos / manifest del shell.
+  const esShell =
+    url.pathname.endsWith('manifest.webmanifest') ||
+    url.pathname.includes('/assets/pwa/');
+  if (!esShell) {
+    return;
+  }
+
   event.respondWith(
     caches.match(req).then((cached) =>
       cached ||

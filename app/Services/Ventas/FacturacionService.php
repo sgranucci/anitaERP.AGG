@@ -1454,7 +1454,8 @@ class FacturacionService
 							'incoterm_id' => $this->incoterm_id,
 							'formapago_id' => $this->formapago_id,
 							'mercaderia' => $this->mercaderiaExportacion,  
-							'leyendaexportacion' => $this->leyendaExportacion
+							'leyendaexportacion' => $this->leyendaExportacion,
+							'peso_neto' => $this->pesoNetoExportacion > 0 ? $this->pesoNetoExportacion : null,
 						];
 
 						$vtaExportacion = $this->venta_exportacionRepository->create($ventaExportacion);
@@ -1546,6 +1547,13 @@ class FacturacionService
 							$articulo_movimiento = $this->articulo_movimientoService->
 											guardaArticuloMovimiento('create',
 											$dataFirmado, null);
+						}
+
+						if (EntornoEmpresaSupport::esInterforming()) {
+							$this->acumularCantidadFacturadaPedidoArticulo(
+								(int) ($item['pedido_articulo_id'] ?? 0),
+								(float) ($item['cantidad'] ?? 0)
+							);
 						}
 					}
 					PedidoFacturacionProfiler::etapa('items_stock_fin');
@@ -1853,6 +1861,19 @@ class FacturacionService
 	private function resultadoFacturaPedidoConError($retorno): bool
 	{
 		return is_array($retorno) && ! empty($retorno['error']);
+	}
+
+	private function acumularCantidadFacturadaPedidoArticulo(int $pedidoArticuloId, float $cantidad): void
+	{
+		if ($pedidoArticuloId <= 0 || abs($cantidad) < 0.00001) {
+			return;
+		}
+		$item = \App\Models\Ventas\PedidoArticuloInterforming::query()->find($pedidoArticuloId);
+		if (! $item) {
+			return;
+		}
+		$item->cantidad_facturada = round((float) ($item->cantidad_facturada ?? 0) + $cantidad, 6);
+		$item->save();
 	}
 
 	private function omiteDescuentoPieVillafranca(): bool
@@ -2319,7 +2340,8 @@ class FacturacionService
 							'incoterm_id' => $this->incoterm_id,
 							'formapago_id' => $this->formapago_id,
 							'mercaderia' => $this->mercaderiaExportacion,  
-							'leyendaexportacion' => $this->leyendaExportacion
+							'leyendaexportacion' => $this->leyendaExportacion,
+							'peso_neto' => $this->pesoNetoExportacion > 0 ? $this->pesoNetoExportacion : null,
 						];
 
 						$vtaExportacion = $this->venta_exportacionRepository->create($ventaExportacion);
@@ -4115,7 +4137,8 @@ class FacturacionService
 							'incoterm_id' => $this->incoterm_id,
 							'formapago_id' => $this->formapago_id,
 							'mercaderia' => $this->mercaderiaExportacion,  
-							'leyendaexportacion' => $this->leyendaExportacion
+							'leyendaexportacion' => $this->leyendaExportacion,
+							'peso_neto' => $this->pesoNetoExportacion > 0 ? $this->pesoNetoExportacion : null,
 						];
 
 						$vtaExportacion = $this->venta_exportacionRepository->create($ventaExportacion);
@@ -4696,7 +4719,8 @@ class FacturacionService
 					'incoterm_id' => $this->incoterm_id,
 					'formapago_id' => $this->formapago_id,
 					'mercaderia' => $this->mercaderiaExportacion,  
-					'leyendaexportacion' => $this->leyendaExportacion
+					'leyendaexportacion' => $this->leyendaExportacion,
+					'peso_neto' => $this->pesoNetoExportacion > 0 ? $this->pesoNetoExportacion : null,
 				];
 
 				$vtaExportacion = $this->venta_exportacionRepository->create($ventaExportacion);
@@ -8775,13 +8799,17 @@ class FacturacionService
 			'remitos.puntoventas',
 			'remitos.remito_articulos',
 			'puntoventaremito',
-			'puntoventas.empresas',
+			'puntoventas.empresas.localidad',
+			'puntoventas.empresas.provincia',
 			'puntoventas.localidades',
 			'puntoventas.provincias',
 			'localidades',
 			'provincias',
 			'paises',
 			'monedas',
+			'tipotransacciones',
+			'venta_exportaciones.incoterms',
+			'venta_exportaciones.formapagos',
 		]);
 
 		// SoftDeletes + deleted_at '0000-00-00' ocultan el cliente; para reimpresión hay que traerlo igual.
@@ -8840,12 +8868,21 @@ class FacturacionService
 			$articuloItem = $ventaItem->articulos;
 			$conceptoItem = $ventaItem->conceptoVenta;
 			$leyendaItem = '';
+			$esExportacionIf = \App\Support\Ventas\InterformingFacturaExportacionPdfSupport::corresponde($venta);
 			if ($articuloItem) {
 				$sku = $articuloItem->sku;
-				$detalle = $articuloItem->descripcion;
-				$detalleEmision = trim((string) ($ventaItem->detalle ?? ''));
-				if ($detalleEmision !== '' && $detalleEmision !== trim((string) $detalle)) {
-					$leyendaItem = $detalleEmision;
+				if ($esExportacionIf) {
+					$detalle = \App\Support\Ventas\InterformingFacturaExportacionPdfSupport::detalleLineaExportacion(
+						$articuloItem,
+						(string) ($ventaItem->detalle ?? '')
+					);
+					$leyendaItem = '';
+				} else {
+					$detalle = $articuloItem->descripcion;
+					$detalleEmision = trim((string) ($ventaItem->detalle ?? ''));
+					if ($detalleEmision !== '' && $detalleEmision !== trim((string) $detalle)) {
+						$leyendaItem = $detalleEmision;
+					}
 				}
 			} else {
 				$sku = $conceptoItem->codigo ?? '';
@@ -9110,6 +9147,7 @@ class FacturacionService
 		if (! is_dir($dir)) {
 			mkdir($dir, 0775, true);
 		}
+		$this->asegurarDestinoPdfEscribible($destino);
 		$pdf = App::make('dompdf.wrapper');
 		$pdf->setOptions([
 			'isRemoteEnabled' => false,
@@ -9121,6 +9159,26 @@ class FacturacionService
 		return $destino;
 	}
 
+	/**
+	 * Si un PDF previo quedó de root/artisan (664), Apache (nobody) no puede sobrescribirlo.
+	 * En directorios 777 sin sticky se puede unlink y recrear.
+	 */
+	private function asegurarDestinoPdfEscribible(string $destino): void
+	{
+		if (! is_file($destino)) {
+			return;
+		}
+		if (is_writable($destino)) {
+			return;
+		}
+		if (! @unlink($destino)) {
+			throw new \RuntimeException(
+				'No se puede sobrescribir el PDF (permiso denegado): '.$destino
+				.'. Ejecutá: sudo chown -R nobody:nogroup '.dirname($destino)
+			);
+		}
+	}
+
 	private function contarPaginasPdf(string $ruta): int
 	{
 		$fpdi = new Fpdi;
@@ -9129,6 +9187,7 @@ class FacturacionService
 
 	private function extraerPaginasPdf(string $origen, int $desde, int $hasta, string $destino): void
 	{
+		$this->asegurarDestinoPdfEscribible($destino);
 		$fpdi = new Fpdi;
 		$fpdi->setSourceFile($origen);
 		for ($i = $desde; $i <= $hasta; $i++) {

@@ -16,6 +16,7 @@
 
     $facturaPdfEsElBierzo = config('app.empresa') === 'EL BIERZO';
     $facturaPdfEsFerli = \App\Support\Configuracion\EntornoEmpresaSupport::esFerli();
+    $facturaPdfEsInterformingExport = \App\Support\Ventas\InterformingFacturaExportacionPdfSupport::corresponde($venta);
     $esRinFerli = \App\Support\Ventas\FerliRinNumeracionSupport::esVentaRin($venta);
     $facturaPdfCeldaTotales = 'background-color: #e9ecef; border: 1px solid #dee2e6;';
     $facturaPdfPieCentroTieneTexto = ($letra === 'B') || $facturaPdfEsElBierzo || $facturaPdfEsFerli || $esRinFerli;
@@ -93,13 +94,19 @@
         $facturaPdfEsFerli ? 'remito_ferli' : 'remito'
     );
     $mostrarHojaFactura = ! ($facturaPdfSoloHojaRemito ?? false);
-    $mostrarHojaRemito = FacturaPdfHojaRemitoSupport::mostrarParaVenta(
-        $venta,
-        (bool) ($facturaPdfOmitirHojaRemito ?? false),
-        (bool) ($facturaPdfSoloHojaRemito ?? false),
-        $facturaPdfEsElBierzo,
-        $facturaPdfEsFerli
-    );
+    // FAE Interforming: solo hoja factura (sin remito), layout Anita.
+    $mostrarHojaRemito = $facturaPdfEsInterformingExport
+        ? false
+        : FacturaPdfHojaRemitoSupport::mostrarParaVenta(
+            $venta,
+            (bool) ($facturaPdfOmitirHojaRemito ?? false),
+            (bool) ($facturaPdfSoloHojaRemito ?? false),
+            $facturaPdfEsElBierzo,
+            $facturaPdfEsFerli
+        );
+    $interformingExport = $facturaPdfEsInterformingExport
+        ? \App\Support\Ventas\InterformingFacturaExportacionPdfSupport::contextoVista($venta)
+        : null;
     $valorAsegurado = \App\Support\Ventas\RemitoValorAseguradoSupport::desdeRemitoOItemsFactura(
         $venta->remitos?->remito_articulos,
         $itemsOrigen
@@ -128,17 +135,25 @@
                 $salto = ($facturaPdfSaltoAntes ?? false) || $pagIdx > 0;
             @endphp
             <div class="page factura-pagina {{ $salto ? 'salto-pagina' : '' }}">
-                @include('exports.ventas.partials.formulariofactura_encabezado', ['esRemitoHoja' => false])
-                @include('exports.ventas.partials.formulariofactura_items', [
-                    'itemsPagina' => $itemsPagina,
-                    'mostrarPrecios' => true,
-                    'mostrarBonificacion' => $facturaPdfEsElBierzo,
-                    'mostrarTotalesFila' => $esUltima,
-                    'totalesDocumento' => $totalesDocumento,
-                    'facturaPdfEsLocal' => $facturaPdfEsLocal,
-                ])
-                @if ($esUltima)
-                    @include('exports.ventas.partials.formulariofactura_pie')
+                @if ($facturaPdfEsInterformingExport)
+                    @include('exports.ventas.partials.formulariofactura_interforming_export', [
+                        'itemsPagina' => $itemsPagina,
+                        'esUltima' => $esUltima,
+                        'interformingExport' => $interformingExport,
+                    ])
+                @else
+                    @include('exports.ventas.partials.formulariofactura_encabezado', ['esRemitoHoja' => false])
+                    @include('exports.ventas.partials.formulariofactura_items', [
+                        'itemsPagina' => $itemsPagina,
+                        'mostrarPrecios' => true,
+                        'mostrarBonificacion' => $facturaPdfEsElBierzo,
+                        'mostrarTotalesFila' => $esUltima,
+                        'totalesDocumento' => $totalesDocumento,
+                        'facturaPdfEsLocal' => $facturaPdfEsLocal,
+                    ])
+                    @if ($esUltima)
+                        @include('exports.ventas.partials.formulariofactura_pie')
+                    @endif
                 @endif
             </div>
         @endforeach

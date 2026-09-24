@@ -252,7 +252,7 @@
                 <script>
                 (function () {
                     if (!('serviceWorker' in navigator)) return;
-                    var swUrl = @json(asset('sw-anita.js'));
+                    var swUrl = @json(asset('sw-anita.js')).replace(/\/$/, '') + '?v={{ @filemtime(public_path('sw-anita.js')) ?: time() }}';
                     window.addEventListener('load', function () {
                         navigator.serviceWorker.register(swUrl).catch(function () {});
                     });
