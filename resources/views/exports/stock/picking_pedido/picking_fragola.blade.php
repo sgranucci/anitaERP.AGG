@@ -2,7 +2,7 @@
     $desdeMedida = (int) ($desdeMedida ?? config('consprod.DESDE_MEDIDA'));
     $hastaMedida = (int) ($hastaMedida ?? config('consprod.HASTA_MEDIDA'));
     $conFoto = (bool) ($conFoto ?? true);
-    $totalColumnas = (int) ($totalColumnas ?? (($conFoto ? 1 : 0) + 3 + ($hastaMedida - $desdeMedida + 1) + 9));
+    $totalColumnas = (int) ($totalColumnas ?? (($conFoto ? 1 : 0) + 5 + ($hastaMedida - $desdeMedida + 1) + 9));
     $lineasMeta = $lineasMeta ?? [];
 @endphp
 <table>
@@ -36,6 +36,8 @@
             <th>Linea</th>
             <th>Art</th>
             <th>Descripcion</th>
+            <th>Cliente</th>
+            <th>Pedido</th>
             @for ($ii = $desdeMedida; $ii <= $hastaMedida; $ii++)
                 <th>{{ $ii }}</th>
             @endfor
@@ -67,6 +69,8 @@
                 <td>{{ $fila['nombrelinea'] ?? '' }}</td>
                 <td>{{ $fila['sku'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
+                <td>{{ $fila['cliente'] ?? '' }}</td>
+                <td>{{ $fila['pedido_codigo'] ?? '' }}</td>
                 @for ($ii = $desdeMedida; $ii <= $hastaMedida; $ii++)
                     @php $cant = $medidas[(string) $ii] ?? ($medidas[$ii] ?? null); @endphp
                     <td>

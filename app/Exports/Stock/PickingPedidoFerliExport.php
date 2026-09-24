@@ -95,6 +95,8 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnFo
         $widths[$col++] = 14; // Linea
         $widths[$col++] = 12; // Art
         $widths[$col++] = 28; // Descripcion
+        $widths[$col++] = 22; // Cliente
+        $widths[$col++] = 10; // Pedido
 
         $desde = (int) config('consprod.DESDE_MEDIDA');
         $hasta = (int) config('consprod.HASTA_MEDIDA');
@@ -235,9 +237,11 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnFo
     {
         $colObs = Coordinate::stringFromColumnIndex($this->indiceColumnaObservacion());
         $colSku = Coordinate::stringFromColumnIndex($this->conFoto ? 3 : 2);
+        $colPedido = Coordinate::stringFromColumnIndex($this->conFoto ? 6 : 5);
 
         return [
             $colSku => NumberFormat::FORMAT_TEXT,
+            $colPedido => NumberFormat::FORMAT_TEXT,
             $colObs => NumberFormat::FORMAT_TEXT,
         ];
     }
@@ -257,6 +261,8 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnFo
             $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['nombrelinea'] ?? ''));
             $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['sku'] ?? ''));
             $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['descripcion'] ?? ''));
+            $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['cliente'] ?? ''));
+            $this->celdaTexto($sheet, $c++, $excelRow, (string) ($fila['pedido_codigo'] ?? ''));
 
             $medidas = $fila['medidas'] ?? [];
             for ($i = $desde; $i <= $hasta; $i++) {
@@ -299,8 +305,8 @@ class PickingPedidoFerliExport implements FromView, ShouldAutoSize, WithColumnFo
         $hasta = (int) config('consprod.HASTA_MEDIDA');
         $colsMedidas = ($hasta - $desde) + 1;
 
-        // Foto? + Linea Art Desc + medidas + T QM TT Precio SITUACION NUMERO OT deposito Observacion Bultos
-        return ($this->conFoto ? 1 : 0) + 3 + $colsMedidas + 9;
+        // Foto? + Linea Art Desc Cliente Pedido + medidas + T QM TT Precio SITUACION NUMERO OT deposito Observacion Bultos
+        return ($this->conFoto ? 1 : 0) + 5 + $colsMedidas + 9;
     }
 
     private function indiceColumnaObservacion(): int

@@ -1061,7 +1061,7 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * Filas para Excel de picking (Linea, Art, Descripcion, talles, T, QM, TT, Precio, Situacion, OT, deposito, Observacion, Bultos).
+     * Filas para Excel de picking (Linea, Art, Descripcion, Cliente, Pedido, talles, T, QM, TT, Precio, Situacion, OT, deposito, Observacion, Bultos).
      *
      * @param  Collection<int, Pedido_Combinacion>  $lineas
      * @return list<array<string, mixed>>
