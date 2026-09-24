@@ -712,13 +712,12 @@ class ChequeRepository implements ChequeRepositoryInterface
                 throw new Exception('Cheque a anular no encontrado (id '.$anuladoId.').');
             }
 
-            $anulado->estado = 'A';
-            $anulado->save();
-
             $montoReemplazo = (float) ($montosReemplazo[$i] ?? $anulado->monto);
             $numeroReemplazo = trim((string) ($numerosReemplazo[$i] ?? ''));
             if ($numeroReemplazo === '' || $montoReemplazo <= 0) {
-                continue;
+                throw new Exception(
+                    'Complete número e importe del cheque de reemplazo (cheque anulado '.$anulado->numerocheque.').'
+                );
             }
 
             $tipoReemplazo = strtoupper((string) ($origenReemplazo[$i] ?? 'E'));
@@ -730,7 +729,15 @@ class ChequeRepository implements ChequeRepositoryInterface
 
             if ($tipoReemplazo === 'E') {
                 $cuentacajaId = (int) ($cuentacajaReemplazo[$i] ?? $anulado->cuentacaja_id ?? 0);
+                if ($cuentacajaId <= 0) {
+                    throw new Exception(
+                        'Indique la cuenta de tesorería del cheque de reemplazo emitido (anulado '.$anulado->numerocheque.').'
+                    );
+                }
                 $cuentacaja = $this->cuentacajaRepository->find($cuentacajaId);
+                if ($cuentacaja === null) {
+                    throw new Exception('Cuenta de caja del reemplazo no encontrada (id '.$cuentacajaId.').');
+                }
                 $chequeraId = ($chequeraReemplazo[$i] ?? '') !== '' ? (int) $chequeraReemplazo[$i] : $anulado->chequera_id;
                 $chequera = $chequeraId ? $this->chequeraRepository->find($chequeraId) : null;
                 $negociable = ChequePropioInstrumentoSupport::negociable(
@@ -767,6 +774,12 @@ class ChequeRepository implements ChequeRepositoryInterface
                     'banco_id' => (int) ($cuentacaja->banco_id ?? $anulado->banco_id),
                 ];
             } else {
+                $bancoId = (int) ($bancoReemplazo[$i] ?? $anulado->banco_id ?? 0);
+                if ($bancoId <= 0) {
+                    throw new Exception(
+                        'Indique el banco del cheque de reemplazo recibido (anulado '.$anulado->numerocheque.').'
+                    );
+                }
                 $sucursal = trim((string) ($sucursalReemplazo[$i] ?? ''));
                 if ($sucursal === '') {
                     $sucursal = (string) ($anulado->sucursalpago ?? '');
@@ -789,11 +802,14 @@ class ChequeRepository implements ChequeRepositoryInterface
                     'moneda_id' => (int) ($monedaReemplazo[$i] ?? $anulado->moneda_id),
                     'monto' => $montoReemplazo,
                     'cotizacion' => (float) ($cotizReemplazo[$i] ?? $anulado->cotizacion),
-                    'banco_id' => (int) ($bancoReemplazo[$i] ?? $anulado->banco_id),
+                    'banco_id' => $bancoId,
                     'sucursalpago' => $sucursal,
                     'cuentalibradora' => $cuentalibradora,
                 ];
             }
+
+            $anulado->estado = 'A';
+            $anulado->save();
 
             $cheque = $this->model->create($payload);
             $ids[] = (int) $cheque->id;

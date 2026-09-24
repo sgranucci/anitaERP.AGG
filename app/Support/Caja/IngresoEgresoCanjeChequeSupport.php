@@ -43,6 +43,60 @@ final class IngresoEgresoCanjeChequeSupport
     }
 
     /**
+     * Exige al menos un renglón de anulación/reemplazo completo.
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function assertTieneReemplazos(array $data): void
+    {
+        if (! self::esCanjePorId($data['tipotransaccion_caja_id'] ?? null)) {
+            return;
+        }
+
+        $anulados = array_values((array) ($data['cheque_anulado_ids'] ?? []));
+        $numeros = array_values((array) ($data['numerocheque_reemplazo'] ?? []));
+        $montos = array_values((array) ($data['montocheque_reemplazo'] ?? []));
+        $origenes = array_values((array) ($data['origen_reemplazo'] ?? []));
+        $cuentas = array_values((array) ($data['cuentacaja_reemplazo_ids'] ?? []));
+        $bancos = array_values((array) ($data['banco_reemplazo_ids'] ?? []));
+
+        $completos = 0;
+        $n = max(count($anulados), count($numeros), count($montos));
+        for ($i = 0; $i < $n; $i++) {
+            if ((int) ($anulados[$i] ?? 0) <= 0) {
+                continue;
+            }
+            $nro = trim((string) ($numeros[$i] ?? ''));
+            $monto = is_numeric($montos[$i] ?? null) ? (float) $montos[$i] : 0.0;
+            if ($nro === '' || $monto <= 0) {
+                throw new \InvalidArgumentException(
+                    'Complete número e importe del cheque de reemplazo en cada renglón de anulación.'
+                );
+            }
+            $origen = strtoupper(trim((string) ($origenes[$i] ?? 'R')));
+            if ($origen === 'E' && (int) ($cuentas[$i] ?? 0) <= 0) {
+                throw new \InvalidArgumentException(
+                    'Indique la cuenta de tesorería del cheque de reemplazo emitido.'
+                );
+            }
+            if ($origen !== 'E' && (int) ($bancos[$i] ?? 0) <= 0) {
+                throw new \InvalidArgumentException(
+                    'Indique el banco del cheque de reemplazo recibido.'
+                );
+            }
+            $completos++;
+        }
+
+        if ($completos === 0) {
+            throw new \InvalidArgumentException(
+                'Canje de cheques: cargue al menos un cheque a anular con su reemplazo.'
+            );
+        }
+    }
+
+    /**
      * Frase determinística de detalle a partir de los cheques a canjear.
      *
      * @param  list<array<string, mixed>>  $cheques

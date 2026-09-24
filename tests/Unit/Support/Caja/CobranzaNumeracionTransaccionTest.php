@@ -58,4 +58,9 @@ class CobranzaNumeracionTransaccionTest extends TestCase
 
         $this->assertTrue(CobranzaNumeracionTransaccion::esViolacionUnicidadNumeracion($e));
     }
+
+    public function test_abreviaturas_admin_incluye_canje(): void
+    {
+        $this->assertContains('CANJE', CobranzaNumeracionTransaccion::abreviaturasSecuencialesAdmin());
+    }
 }

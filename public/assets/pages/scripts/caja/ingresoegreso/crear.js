@@ -239,6 +239,10 @@ var montoPendienteSp = 0;
 				}
 			});
 
+			if (!flError && esCanjeChequesIngresoEgreso() && !validarReemplazosCanjeChequesIe()) {
+				flError = true;
+			}
+
 			sumaMonto();
 
 			if (esTransferenciaIngresoEgreso()) {
@@ -1587,6 +1591,53 @@ var montoPendienteSp = 0;
 		var abr = String($opt.data('abreviatura') || '').toUpperCase();
 		var op = String($opt.data('operacion') || '').toUpperCase();
 		return abr === ABREV_CANJE_CHEQUE_IE || op === 'J';
+	}
+
+	function validarReemplazosCanjeChequesIe()
+	{
+		var completos = 0;
+		var mensaje = '';
+		$('#tbody-cheque-reemplazo-table tr.item-cheque-reemplazo').each(function () {
+			var $tr = $(this);
+			var idAnulado = parseInt($tr.find('.cheque_anulado_id').val() || '0', 10) || 0;
+			if (idAnulado <= 0) {
+				return;
+			}
+			var nro = String($tr.find('.numerocheque_reemplazo').val() || '').trim();
+			var monto = parseTotalAsientoCampo($tr.find('.montocheque_reemplazo').val());
+			var origen = String($tr.find('.origen_reemplazo').val() || 'R').toUpperCase();
+			if (nro === '' || !(monto > 0.000001)) {
+				mensaje = 'Complete número e importe del cheque de reemplazo en cada renglón de anulación.';
+				if (typeof enfocarCampoCheque === 'function') {
+					enfocarCampoCheque($tr.find(nro === '' ? '.numerocheque_reemplazo' : '.montocheque_reemplazo')[0]);
+				}
+				return false;
+			}
+			if (origen === 'E' && !(parseInt($tr.find('.cuentacaja_reemplazo_id').val() || '0', 10) > 0)) {
+				mensaje = 'Indique la cuenta de tesorería del cheque de reemplazo emitido.';
+				if (typeof enfocarCampoCheque === 'function') {
+					enfocarCampoCheque($tr.find('.codigo_reemplazo')[0]);
+				}
+				return false;
+			}
+			if (origen !== 'E' && !(parseInt($tr.find('.banco_reemplazo_id').val() || '0', 10) > 0)) {
+				mensaje = 'Indique el banco del cheque de reemplazo recibido.';
+				if (typeof enfocarCampoCheque === 'function') {
+					enfocarCampoCheque($tr.find('.codigobanco_reemplazo')[0]);
+				}
+				return false;
+			}
+			completos++;
+		});
+		if (mensaje) {
+			alert(mensaje);
+			return false;
+		}
+		if (completos === 0) {
+			alert('Canje de cheques: cargue al menos un cheque a anular con su reemplazo.');
+			return false;
+		}
+		return true;
 	}
 
 	function esPagoSolicitudPagoIe()

@@ -105,6 +105,12 @@ final class IngresoEgresoAnitaTesmovSupport
 
     public static function grabarDesdeMovimiento(Caja_Movimiento $movimiento): void
     {
+        $movimiento->loadMissing(['tipotransaccioncajas']);
+        // Canje/reemplazo: por ahora solo ERP (no hay tipo Anita canónico; "CAN" truncado es inválido).
+        if (IngresoEgresoCanjeChequeSupport::esCanje($movimiento->tipotransaccioncajas)) {
+            return;
+        }
+
         self::grabarInterno($movimiento, 1.0, null, null, null);
     }
 
@@ -223,6 +229,10 @@ final class IngresoEgresoAnitaTesmovSupport
             'cheques.proveedores',
             'cheques.chequeras',
         ]);
+
+        if (IngresoEgresoCanjeChequeSupport::esCanje($movimiento->tipotransaccioncajas)) {
+            return;
+        }
 
         $ctx = self::contexto($movimiento, $refOverride);
         if ($ctx === null) {
@@ -346,6 +356,10 @@ final class IngresoEgresoAnitaTesmovSupport
             'tipotransaccioncajas',
             'cheques.cuentacajas',
         ]);
+
+        if (IngresoEgresoCanjeChequeSupport::esCanje($movimiento->tipotransaccioncajas)) {
+            return;
+        }
 
         $ctx = self::contexto($movimiento);
         if ($ctx === null) {

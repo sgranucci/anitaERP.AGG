@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
 use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
@@ -68,6 +69,12 @@ class ValidacionIngresoEgreso extends FormRequest
                 IngresoEgresoTransferenciaSupport::assertBalanceado($this->all());
             } catch (InvalidArgumentException $e) {
                 $validator->errors()->add('tipotransaccion_caja_id', $e->getMessage());
+            }
+
+            try {
+                IngresoEgresoCanjeChequeSupport::assertTieneReemplazos($this->all());
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('cheque_anulado_ids', $e->getMessage());
             }
 
             try {

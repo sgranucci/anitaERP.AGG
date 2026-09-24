@@ -36,6 +36,7 @@ use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Caja\IngresoEgresoEdicionCandadoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
+use App\Support\Caja\IngresoEgresoCanjeChequeSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Models\Solicitudpago\Solicitudpago;
@@ -113,6 +114,7 @@ class IngresoEgresoService
 			$this->normalizarImportesEnDataYRequest($request, $data);
 			$this->aplicarCbuPagoEnRequest($request, $data);
 			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
+			IngresoEgresoCanjeChequeSupport::assertTieneReemplazos($data);
 			IngresoEgresoCuadreCajaAsientoSupport::prepararYAssertCuadre($data);
 			if (array_key_exists('montos', $data)) {
 				$request->merge(['montos' => $data['montos']]);
@@ -297,6 +299,7 @@ class IngresoEgresoService
 			$this->normalizarImportesEnDataYRequest($request, $data);
 			$this->aplicarCbuPagoEnRequest($request, $data);
 			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
+			IngresoEgresoCanjeChequeSupport::assertTieneReemplazos($data);
 			IngresoEgresoCuadreCajaAsientoSupport::prepararYAssertCuadre($data);
 			if (array_key_exists('montos', $data)) {
 				$request->merge(['montos' => $data['montos']]);
