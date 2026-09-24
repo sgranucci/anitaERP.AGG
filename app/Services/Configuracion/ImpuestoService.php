@@ -84,6 +84,12 @@ class ImpuestoService extends FacturacionService
 		if (!isset($flGrabaComprobanteDividido))
 			$flGrabaComprobanteDividido = false;
 
+		// Tasa del coeficiente de división (Villafranca). Vive en FacturacionService;
+		// hay que recibirla: ImpuestoService es otra instancia IoC.
+		if (array_key_exists('tasa_impuesto_division', $dataCliente)) {
+			$this->tasaImpuesto = (float) $dataCliente['tasa_impuesto_division'];
+		}
+
 		$omitirPercepciones = ! empty($dataCliente['omitir_percepciones']);
 		$aplicarPercNoCategorizado = ! $omitirPercepciones
 			|| ! empty($dataCliente['aplicar_percepcion_no_categorizado']);
@@ -264,11 +270,26 @@ class ImpuestoService extends FacturacionService
 
 					// Lee tasa impuesto del item
 					$impuesto_id = $impuesto_codigo = $impuesto_codigoarca = null;
+					$conceptoNeto = null;
 					if ($flGrabaComprobanteDividido)
 					{
-						$valorTasaImpuesto = $this->tasaImpuesto ?? 0;
-
+						// Anita procesa_division: tasa_inscripto = coef_tasa (IVA), pero
+						// Gravado/Exento sigue el tipo_iva del artículo. Si el artículo es
+						// gravado y coef_tasa=0 → "Gravado al 0%" (base de logística).
+						$impuestoArticulo = Impuesto::findOrFail($item['impuesto_id']);
+						$tasaDivision = (float) ($this->tasaImpuesto ?? 0);
+						$impuesto_id = $impuestoArticulo->id;
+						$impuesto_codigo = $impuestoArticulo->codigo;
+						$impuesto_codigoarca = $impuestoArticulo->codigoarca;
 						$impuesto = true;
+
+						if ((float) $impuestoArticulo->valor <= 0) {
+							$valorTasaImpuesto = 0;
+							$conceptoNeto = 'Exento';
+						} else {
+							$valorTasaImpuesto = $tasaDivision;
+							$conceptoNeto = 'Gravado al '.$valorTasaImpuesto.'%';
+						}
 					}
 					else
 					{
@@ -279,6 +300,7 @@ class ImpuestoService extends FacturacionService
 						$impuesto_id = $impuesto->id;
 						$impuesto_codigo = $impuesto->codigo;
 						$impuesto_codigoarca = $impuesto->codigoarca;
+						$conceptoNeto = ($valorTasaImpuesto == 0. ? 'Exento' : 'Gravado al '.$valorTasaImpuesto.'%');
 					}
 
 					$totalNeto = VentaImporteDosDecimalesSupport::redondear($neto['totalConDescuento']);
@@ -293,7 +315,7 @@ class ImpuestoService extends FacturacionService
 					}
 
 					// Acumula netos por tasa de impuesto
-					self::agregaItemTotales(($valorTasaImpuesto == 0. ? "Exento" : "Gravado al ".$valorTasaImpuesto."%"), $valorTasaImpuesto, 
+					self::agregaItemTotales($conceptoNeto, $valorTasaImpuesto,
 						$totalNeto, $impuesto_id, $impuesto_codigo, $impuesto_codigoarca, $netos);
 
 					// Acumula bruto con IVA incluido por tasa, para cerrar el IVA sin arrastrar redondeos.
@@ -329,8 +351,13 @@ class ImpuestoService extends FacturacionService
 		// División Villafranca (flGrabaComprobanteDividido): también aplica.
 		// a-comprob procesa_division() → calcula() sobre el gravado ya prorrateado;
 		// IIBB/percepciones se omiten en división, la logística no.
+		// Con coef_tasa=0 la mercadería queda "Gravado al 0%": base vía
+		// gravadoDesdeNetosDivision; IVA de la logística = tasa del coeficiente
+		// (0 en Villafranca típica), no el 21 % del impuesto logística.
 		if (EntornoEmpresaSupport::esElBierzo() && $porcentajeLogistica) {
-			$baseGravadoLogistica = LogisticaBierzoSupport::gravadoDesdeNetos($netos);
+			$baseGravadoLogistica = $flGrabaComprobanteDividido
+				? LogisticaBierzoSupport::gravadoDesdeNetosDivision($netos)
+				: LogisticaBierzoSupport::gravadoDesdeNetos($netos);
 			$totalLogistica = LogisticaBierzoSupport::importe(
 				$baseGravadoLogistica,
 				(float) $porcentajeLogistica,
@@ -339,9 +366,12 @@ class ImpuestoService extends FacturacionService
 			$impuesto = Impuesto::findOrFail(config('facturacion.IMPUESTO_LOGISTICA_ID'));
 
 			if ($impuesto && $totalLogistica >= 0.01) {
+				$tasaLogistica = $flGrabaComprobanteDividido
+					? (float) ($this->tasaImpuesto ?? 0)
+					: (float) $impuesto->valor;
 				self::agregaItemTotales(
 					LogisticaBierzoSupport::CONCEPTO,
-					(float) $impuesto->valor,
+					$tasaLogistica,
 					$totalLogistica,
 					$impuesto->id,
 					$impuesto->codigo,

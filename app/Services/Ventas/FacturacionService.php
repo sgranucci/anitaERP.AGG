@@ -702,6 +702,7 @@ class FacturacionService
 							"id" => $cliente->id,
 							"abasto_id" => $cliente->abasto_id,
 							"porcentajelogistica" => $cliente->porcentajelogistica,
+							"tasa_impuesto_division" => (float) ($this->tasaImpuesto ?? 0),
 							"empresa_id" => $data['empresa_id'] ?? null,
 							];
 		else
@@ -3019,6 +3020,7 @@ class FacturacionService
 							"id" => $cliente->id,
 							"abasto_id" => $cliente->abasto_id,
 							"porcentajelogistica" => $cliente->porcentajelogistica,
+							"tasa_impuesto_division" => (float) ($this->tasaImpuesto ?? 0),
 							"empresa_id" => $data['empresa_id'] ?? null,
 							];
 		else
@@ -10011,6 +10013,7 @@ class FacturacionService
 			'id' => $cliente->id,
 			'abasto_id' => $cliente->abasto_id,
 			'porcentajelogistica' => $cliente->porcentajelogistica,
+			'tasa_impuesto_division' => (float) ($this->tasaImpuesto ?? 0),
 			'empresa_id' => $data['empresa_id'] ?? $remito->empresa_id ?? null,
 		];
 

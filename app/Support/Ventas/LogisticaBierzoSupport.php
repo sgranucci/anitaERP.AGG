@@ -19,7 +19,9 @@ namespace App\Support\Ventas;
  * va aparte (así ven_gravado Anita = Gravado + Logistica sin doblar).
  *
  * FAC Villafranca (división): misma fórmula sobre el gravado ya prorrateado
- * por coef_porc_div (a-comprob procesa_division → calcula).
+ * por coef_porc_div (a-comprob procesa_division → calcula). Con coef_tasa=0
+ * la mercadería gravable queda "Gravado al 0%" y entra a la base vía
+ * gravadoDesdeNetosDivision (Anita la deja en tot_grav aunque IVA sea 0).
  */
 final class LogisticaBierzoSupport
 {
@@ -39,6 +41,36 @@ final class LogisticaBierzoSupport
             }
 
             if (self::esConceptoLogistica($fila['concepto'] ?? '')) {
+                continue;
+            }
+
+            $gravado += (float) ($fila['importe'] ?? 0);
+        }
+
+        return VentaImporteDosDecimalesSupport::redondear($gravado);
+    }
+
+    /**
+     * Base de logística en FAC Villafranca (procesa_division).
+     *
+     * En Anita, coef_tasa=0 pone tasa_inscripto en 0 pero la mercadería con tipo_iva
+     * gravado sigue en tot_grav (y ahí aplica clim_logistica). En el ERP esa
+     * mercadería queda como "Gravado al 0%" — hay que sumarla aunque tasa sea 0.
+     * No usa Exento (artículos verdaderamente exentos no llevan logística).
+     *
+     * @param  list<array{concepto?: string, tasa?: float|int|string, importe?: float|int|string}>  $netos
+     */
+    public static function gravadoDesdeNetosDivision(array $netos): float
+    {
+        $gravado = 0.0;
+
+        foreach ($netos as $fila) {
+            if (self::esConceptoLogistica($fila['concepto'] ?? '')) {
+                continue;
+            }
+
+            $concepto = trim((string) ($fila['concepto'] ?? ''));
+            if (! preg_match('/^Gravado/i', $concepto)) {
                 continue;
             }
 

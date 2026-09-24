@@ -43,6 +43,20 @@ final class LogisticaBierzoSupportTest extends TestCase
         $this->assertSame(15.0, LogisticaBierzoSupport::importe(1000.0, 1.5));
     }
 
+    public function test_division_incluye_gravado_tasa_cero_excluye_exento(): void
+    {
+        // Villafranca coef_tasa=0: mercadería gravable → "Gravado al 0%".
+        $netos = [
+            ['concepto' => 'Exento', 'tasa' => 0, 'importe' => 500.0],
+            ['concepto' => 'Gravado al 0%', 'tasa' => 0, 'importe' => 166083.47],
+            ['concepto' => 'Total Logistica', 'tasa' => 0, 'importe' => 2491.25],
+        ];
+
+        $this->assertSame(0.0, LogisticaBierzoSupport::gravadoDesdeNetos($netos));
+        $this->assertSame(166083.47, LogisticaBierzoSupport::gravadoDesdeNetosDivision($netos));
+        $this->assertSame(2491.25, LogisticaBierzoSupport::importe(166083.47, 1.5));
+    }
+
     public function test_no_suma_la_propia_logistica(): void
     {
         $netos = [
