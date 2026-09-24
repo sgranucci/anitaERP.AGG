@@ -55,7 +55,7 @@
 			<input type="hidden" name="descuentoventaanterior_ids[]" class="form-control descuentoventaanterior_id" value="" />
 		</td>
         <td>
-        	<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" value="" readonly/>
+        	<input type="text" style="text-align: right;" name="precios[]" class="form-control precio remito-carga-bloqueable" value="" @if (! ($puedeModificarPrecioRemito ?? false)) readonly @endif/>
         </td>
         <td>
 			<button type="button" title="Anula Item" style="padding:0;" class="btn-accion-tabla anulaitem tooltipsC">

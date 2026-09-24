@@ -1593,6 +1593,9 @@
         var renglon = $('#template-renglon').html();
 
         $("#tbody-tabla").append(renglon);
+        if (!window.remitoPuedeModificarPrecio) {
+            $("#tbody-tabla").find('tr').last().find('.precio').prop('readonly', true);
+        }
         actualizaRenglones();
 
 		activa_eventos(false);

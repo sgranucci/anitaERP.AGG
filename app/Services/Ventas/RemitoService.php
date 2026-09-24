@@ -199,6 +199,16 @@ class RemitoService
             return $errorListaprecio;
         }
 
+        $lineasExistentesPrecio = [];
+        if ($funcion === 'update' && $id) {
+            $lineasExistentesPrecio = $this->remito_articuloRepository->findPorRemitoId($id)->toArray();
+        }
+        $data = \App\Support\Ventas\RemitoPrecioEditableSupport::aplicarPreciosSegunPermiso(
+            $data,
+            $funcion,
+            $lineasExistentesPrecio
+        );
+
         $entregasCliente = $this->cliente_entregaRepository->leeClienteEntrega($data['cliente_id']);
         $entrega = $entregasCliente->firstWhere('id', (int) ($data['cliente_entrega_id'] ?? 0));
         if ($entrega) {

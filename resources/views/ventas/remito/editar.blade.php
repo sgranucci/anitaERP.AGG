@@ -34,6 +34,7 @@
     var PROFORMA = "{{ config('cliente.PROFORMA') }}";
     var MOROSO = "{{ config('cliente.MOROSO') }}";
     var NO_FACTURAR = "{{ config('cliente.NO_FACTURAR') }}";
+    window.remitoPuedeModificarPrecio = @json($puedeModificarPrecioRemito ?? false);
 
 	function sub()
 	{

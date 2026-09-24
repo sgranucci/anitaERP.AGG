@@ -25,6 +25,7 @@
 <script src="{{ asset('assets/pages/scripts/ventas/remito/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/remito/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
+    window.remitoPuedeModificarPrecio = @json($puedeModificarPrecioRemito ?? false);
 	function sub()
 	{
         if (window.AnitaGrabacion && window.AnitaGrabacion.enCurso()) {

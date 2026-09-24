@@ -212,7 +212,7 @@
 								<input type="hidden" name="descuentoventaanterior_ids[]" class="form-control descuentoventaanterior_id" value="{{$remitoitem->descuentoventa_id}}" />
 							</td>				
                 			<td>
-                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{number_format($remitoitem->precio,2,'.','')}}" />
+                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio remito-carga-bloqueable" @if (! ($puedeModificarPrecioRemito ?? false)) readonly @endif value="{{number_format($remitoitem->precio,2,'.','')}}" />
                 			</td>
                 			<td>
 								@if ($remitoitem->estado == 'A')

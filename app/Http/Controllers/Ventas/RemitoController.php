@@ -243,6 +243,7 @@ class RemitoController extends Controller
         $incoterm_query = $this->incotermRepository->all();
         $descuentoventa_query = $this->descuentoventaRepository->all();
         $actividad_arca_query = $this->actividad_arcaRepository->all();
+        $puedeModificarPrecioRemito = \App\Support\Ventas\RemitoPrecioEditableSupport::puedeModificarPrecio();
 
         return view('ventas.remito.crear', compact(
             'cliente_query',
@@ -262,7 +263,8 @@ class RemitoController extends Controller
             'incoterm_query',
             'descuentoventa_query',
             'unidadmedida_query',
-            'actividad_arca_query'
+            'actividad_arca_query',
+            'puedeModificarPrecioRemito'
         ));
     }
 
@@ -339,6 +341,7 @@ class RemitoController extends Controller
         $puedeActualizarRemito = can('actualizar-remitos', false);
         $mostrarFacturarRemito = RemitoEstadosSupport::puedeFacturarCabecera($remito)
             && ! ClienteDespachoSupport::esPedidoDespacho((int) ($remito->cliente_id ?? 0));
+        $puedeModificarPrecioRemito = \App\Support\Ventas\RemitoPrecioEditableSupport::puedeModificarPrecio();
 
         return view('ventas.remito.editar', compact(
             'remito',
@@ -363,7 +366,8 @@ class RemitoController extends Controller
             'soloConsulta',
             'ocultarVolver',
             'puedeActualizarRemito',
-            'mostrarFacturarRemito'
+            'mostrarFacturarRemito',
+            'puedeModificarPrecioRemito'
         ));
     }
 
