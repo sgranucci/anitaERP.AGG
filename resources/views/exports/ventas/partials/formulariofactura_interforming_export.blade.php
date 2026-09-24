@@ -58,8 +58,19 @@
     .fae-if .tr { text-align: right; }
     .fae-if .tc { text-align: center; }
     .fae-if .tl { text-align: left; }
+    {{-- Pie anclado abajo como FAE Anita (INCOTERMS + cajas + web) --}}
+    .fae-if-hoja {
+        position: relative;
+        min-height: 255mm;
+    }
+    .fae-if-pie {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+    }
 </style>
-<div class="fae-if">
+<div class="fae-if fae-if-hoja">
     {{-- Fila 1: logo/empresa | E | título+nro --}}
     <table>
         <tr>
@@ -213,68 +224,70 @@
     </table>
 
     @if ($esUltima ?? true)
-        <div style="margin-top:16px;min-height:40px;">
-            @if ($incotermAbr !== '')
-                <div>INCOTERMS {{ $incotermAbr }}{{ $lugarIncoterm !== '' ? ' '.$lugarIncoterm : '' }}</div>
-            @endif
-            @if (!empty($venta->leyenda))
-                <div>{{ $venta->leyenda }}</div>
-            @elseif (!empty($ifExp['exportacion']->leyendaexportacion))
-                <div>{{ $ifExp['exportacion']->leyendaexportacion }}</div>
-            @elseif (!empty($ifExp['exportacion']->mercaderia))
-                <div>{{ $ifExp['exportacion']->mercaderia }}</div>
+        <div class="fae-if-pie">
+            <div style="margin-bottom:8px;">
+                @if ($incotermAbr !== '')
+                    <div>INCOTERMS {{ $incotermAbr }}{{ $lugarIncoterm !== '' ? ' '.$lugarIncoterm : '' }}</div>
+                @endif
+                @if (!empty($venta->leyenda))
+                    <div>{{ $venta->leyenda }}</div>
+                @elseif (!empty($ifExp['exportacion']->leyendaexportacion))
+                    <div>{{ $ifExp['exportacion']->leyendaexportacion }}</div>
+                @elseif (!empty($ifExp['exportacion']->mercaderia))
+                    <div>{{ $ifExp['exportacion']->mercaderia }}</div>
+                @endif
+            </div>
+
+            <table>
+                <tr>
+                    <td style="width:48%;padding-right:8px;">
+                        <div class="caja">
+                            <table>
+                                <tr>
+                                    <td>CANT.DE BULTOS</td>
+                                    <td class="tr">{{ number_format($ifExp['bultos'], 2, ',', '.') }}</td>
+                                </tr>
+                                <tr>
+                                    <td>PESO NETO</td>
+                                    <td class="tr">{{ number_format($ifExp['peso_neto'], 2, ',', '.') }}</td>
+                                </tr>
+                                <tr>
+                                    <td>TRANSPORTE</td>
+                                    <td class="tr">{{ $venta->transportes->nombre ?? '' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        @if ($qrDataUri !== '')
+                            <div style="margin-top:8px;">
+                                <img src="{{ $qrDataUri }}" width="70" height="70" alt="QR">
+                            </div>
+                        @endif
+                    </td>
+                    <td style="width:52%;">
+                        <div class="caja">
+                            <table>
+                                <tr>
+                                    <td>SUBTOTAL {{ $incotermAbr }} {{ $abrevMon }}</td>
+                                    <td class="tr">{{ number_format($totalDoc, 2, ',', '.') }}</td>
+                                </tr>
+                                <tr>
+                                    <td style="font-weight:bold;padding-top:4px;border-top:1px solid #111;">TOTAL {{ $incotermAbr }} {{ $abrevMon }}</td>
+                                    <td class="tr" style="font-weight:bold;padding-top:4px;border-top:1px solid #111;">{{ number_format($totalDoc, 2, ',', '.') }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div style="padding-top:8px;font-size:8px;">
+                            CAE Nro.: {{ $venta->cae }}<br>
+                            Fecha de vto. de CAE:
+                            {{ $venta->fechavencimientocae ? date('d/m/y', strtotime($venta->fechavencimientocae)) : '' }}
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            @if ($ifExp['web'] !== '')
+                <div class="tc" style="margin-top:10px;font-size:8px;">{{ $ifExp['web'] }}</div>
             @endif
         </div>
-
-        <table style="margin-top:8px;">
-            <tr>
-                <td style="width:48%;padding-right:8px;">
-                    <div class="caja">
-                        <table>
-                            <tr>
-                                <td>CANT.DE BULTOS</td>
-                                <td class="tr">{{ number_format($ifExp['bultos'], 2, ',', '.') }}</td>
-                            </tr>
-                            <tr>
-                                <td>PESO NETO</td>
-                                <td class="tr">{{ number_format($ifExp['peso_neto'], 2, ',', '.') }}</td>
-                            </tr>
-                            <tr>
-                                <td>TRANSPORTE</td>
-                                <td class="tr">{{ $venta->transportes->nombre ?? '' }}</td>
-                            </tr>
-                        </table>
-                    </div>
-                    @if ($qrDataUri !== '')
-                        <div style="margin-top:8px;">
-                            <img src="{{ $qrDataUri }}" width="70" height="70" alt="QR">
-                        </div>
-                    @endif
-                </td>
-                <td style="width:52%;">
-                    <div class="caja">
-                        <table>
-                            <tr>
-                                <td>SUBTOTAL {{ $incotermAbr }} {{ $abrevMon }}</td>
-                                <td class="tr">{{ number_format($totalDoc, 2, ',', '.') }}</td>
-                            </tr>
-                            <tr>
-                                <td style="font-weight:bold;padding-top:4px;border-top:1px solid #111;">TOTAL {{ $incotermAbr }} {{ $abrevMon }}</td>
-                                <td class="tr" style="font-weight:bold;padding-top:4px;border-top:1px solid #111;">{{ number_format($totalDoc, 2, ',', '.') }}</td>
-                            </tr>
-                        </table>
-                    </div>
-                    <div style="padding-top:8px;font-size:8px;">
-                        CAE Nro.: {{ $venta->cae }}<br>
-                        Fecha de vto. de CAE:
-                        {{ $venta->fechavencimientocae ? date('d/m/y', strtotime($venta->fechavencimientocae)) : '' }}
-                    </div>
-                </td>
-            </tr>
-        </table>
-
-        @if ($ifExp['web'] !== '')
-            <div class="tc" style="margin-top:10px;font-size:8px;">{{ $ifExp['web'] }}</div>
-        @endif
     @endif
 </div>

@@ -30,10 +30,15 @@ final class InterformingFacturaExportacionPdfSupport
     }
 
     /**
-     * Descripción de línea en FAE: articulo.detalle (ABM), con fallback a descripcion / snapshot.
+     * Descripción de línea en FAE: articulo.descripcion_exportacion (Anita stkley 100).
+     * Fallback: detalle → descripción corta → snapshot de emisión.
      */
     public static function detalleLineaExportacion(?object $articulo, string $detalleEmision = ''): string
     {
+        $export = trim((string) ($articulo->descripcion_exportacion ?? ''));
+        if ($export !== '') {
+            return $export;
+        }
         $detalleAbm = trim((string) ($articulo->detalle ?? ''));
         if ($detalleAbm !== '') {
             return $detalleAbm;

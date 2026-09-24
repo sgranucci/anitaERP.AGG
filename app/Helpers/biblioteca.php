@@ -601,16 +601,23 @@ if (! function_exists('urlAppDesdeRoute')) {
     /**
      * Path bajo APP_CARPETA a partir de una ruta nombrada (AJAX / navegación interna).
      * En petición HTTP, route() puede devolver el path ya prefijado con APP_CARPETA.
+     * Conserva query string (filtros de listado / retorno impresión).
      */
     function urlAppDesdeRoute(string $routeName, array $params = []): string
     {
-        $path = parse_url(route($routeName, $params), PHP_URL_PATH) ?: '';
+        $generada = route($routeName, $params);
+        $parts = parse_url($generada) ?: [];
+        $path = (string) ($parts['path'] ?? '');
+        $query = (string) ($parts['query'] ?? '');
         $carpeta = rtrim((string) config('app.app_carpeta', ''), '/');
-        if ($carpeta !== '' && ($path === $carpeta || str_starts_with($path, $carpeta.'/'))) {
-            return $path;
+        if ($carpeta !== '' && ! ($path === $carpeta || str_starts_with($path, $carpeta.'/'))) {
+            $path = urlAppCarpeta(ltrim($path, '/'));
+        }
+        if ($query !== '') {
+            return $path.'?'.$query;
         }
 
-        return urlAppCarpeta(ltrim($path, '/'));
+        return $path;
     }
 }
 

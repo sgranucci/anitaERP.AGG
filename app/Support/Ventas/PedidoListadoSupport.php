@@ -24,7 +24,7 @@ final class PedidoListadoSupport
     public static function pathRetornoIndex(array $filtrosQuery = []): string
     {
         return ComprobanteImpresionSesionUrlSupport::sanitizarRetornoPath(
-            route('pedido', $filtrosQuery)
+            urlAppDesdeRoute('pedido', $filtrosQuery)
         );
     }
 

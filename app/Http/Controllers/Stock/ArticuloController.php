@@ -47,6 +47,7 @@ use App\Services\Stock\StkdepSaldoAnitaService;
 use App\Support\Compras\ArticuloProveedorMatchSupport;
 use App\Support\Compras\ArticuloProveedorOperativoSupport;
 use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\QueryRetornoListado;
@@ -60,6 +61,7 @@ use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Stock\ArticuloProveedorLineasSupport;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
 use App\Support\Stock\ArticuloSimilaresDescripcionSupport;
+use App\Support\Stock\ArticuloStkleyAnitaBridgeSupport;
 use App\Support\Stock\ArticuloUltimoCreatePrefill;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
 use App\Support\Stock\PrecioListaVigenteSupport;
@@ -985,6 +987,14 @@ class ArticuloController extends Controller
                 }
             }
 
+            if (EntornoEmpresaSupport::esInterforming()) {
+                $producto->refresh();
+                $stk = ArticuloStkleyAnitaBridgeSupport::grabarLeyendaExportacion($producto);
+                if (! $stk['ok']) {
+                    throw new Exception('Error en Anita stkley (descripción exportación): '.implode('; ', $stk['errores']));
+                }
+            }
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
@@ -1173,6 +1183,14 @@ class ArticuloController extends Controller
             if (isset($anita['error'])) {
                 if (str_contains($anita['error'], 'Error')) {
                     throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+                }
+            }
+
+            if (EntornoEmpresaSupport::esInterforming()) {
+                $producto->refresh();
+                $stk = ArticuloStkleyAnitaBridgeSupport::grabarLeyendaExportacion($producto);
+                if (! $stk['ok']) {
+                    throw new Exception('Error en Anita stkley (descripción exportación): '.implode('; ', $stk['errores']));
                 }
             }
 

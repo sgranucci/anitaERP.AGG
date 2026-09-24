@@ -155,6 +155,43 @@ final class ComprobanteImpresionSesionUrlSupport
 
         $sep = str_contains($url, '?') ? '&' : '?';
 
-        return $url.$sep.'retorno='.rawurlencode($retornoPath);
+        return $url.$sep.'retorno='.rawurlencode(self::pathConCarpeta($retornoPath));
+    }
+
+    /**
+     * Asegura APP_CARPETA en un path de retorno (/ventas/pedido → /anitaERP/public/ventas/pedido).
+     */
+    public static function pathConCarpeta(string $retornoPath): string
+    {
+        $retornoPath = self::sanitizarRetornoPath($retornoPath);
+        if ($retornoPath === '') {
+            return '';
+        }
+
+        $path = $retornoPath;
+        $query = '';
+        if (str_contains($retornoPath, '?')) {
+            [$path, $query] = explode('?', $retornoPath, 2);
+        }
+
+        $carpeta = rtrim((string) config('app.app_carpeta', ''), '/');
+        if ($carpeta !== '' && ! ($path === $carpeta || str_starts_with($path, $carpeta.'/'))) {
+            $path = urlAppCarpeta(ltrim($path, '/'));
+        }
+
+        return $query !== '' ? $path.'?'.$query : $path;
+    }
+
+    /**
+     * URL absoluta usable en redirect / href "Volver" (con APP_CARPETA).
+     */
+    public static function urlAbsolutaRetorno(string $retornoPath): string
+    {
+        $path = self::pathConCarpeta($retornoPath);
+        if ($path === '') {
+            return url(urlAppDesdeRoute('pedido'));
+        }
+
+        return url($path);
     }
 }

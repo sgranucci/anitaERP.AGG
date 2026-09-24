@@ -63,6 +63,8 @@ class ValidacionArticulo extends FormRequest
         $rules = [
             'sku' => 'required|max:20|unique:articulo,sku,' . $this->route('id'),
             'descripcion' => 'required|max:100|',
+            'detalle' => 'nullable|max:255',
+            'descripcion_exportacion' => 'nullable|max:255',
             'codigobarra' => 'nullable|max:50',
             'categoria_id' => 'required|numeric',
             'tipoarticulo_id' => 'required|numeric|exists:tipoarticulo,id',

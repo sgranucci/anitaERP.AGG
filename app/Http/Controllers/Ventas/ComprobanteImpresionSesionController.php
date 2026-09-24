@@ -44,7 +44,7 @@ class ComprobanteImpresionSesionController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()
-                ->route('factura')
+                ->to(url(urlAppDesdeRoute('factura')))
                 ->with('errores', [$e->getMessage()]);
         }
 
@@ -79,7 +79,7 @@ class ComprobanteImpresionSesionController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()
-                ->route('factura', FacturaListadoFiltros::paraQueryString($filtros))
+                ->to(url(urlAppDesdeRoute('factura', FacturaListadoFiltros::paraQueryString($filtros))))
                 ->with('errores', [$e->getMessage()]);
         }
 
@@ -99,7 +99,9 @@ class ComprobanteImpresionSesionController extends Controller
             : $this->pedidoQuery->ventaIdsIndexPorReparto($filtros, $transporteId);
 
         $retornoQs = PedidoListadoFiltros::paraQueryString($filtros);
-        $retornoPath = (string) $request->query('retorno', PedidoListadoSupport::pathRetornoIndex($retornoQs));
+        $retornoPath = ComprobanteImpresionSesionUrlSupport::pathConCarpeta(
+            (string) $request->query('retorno', PedidoListadoSupport::pathRetornoIndex($retornoQs))
+        );
 
         try {
             $sesion = $this->sesionService->armarDesdeReparto(
@@ -112,7 +114,9 @@ class ComprobanteImpresionSesionController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()
-                ->to($retornoPath !== '' ? $retornoPath : route('pedido', $retornoQs))
+                ->to(ComprobanteImpresionSesionUrlSupport::urlAbsolutaRetorno(
+                    $retornoPath !== '' ? $retornoPath : urlAppDesdeRoute('pedido', $retornoQs)
+                ))
                 ->with('errores', [$e->getMessage()]);
         }
 
@@ -152,11 +156,11 @@ class ComprobanteImpresionSesionController extends Controller
                 ->all();
         }
 
-        $retornoPath = ComprobanteImpresionSesionUrlSupport::sanitizarRetornoPath(
+        $retornoPath = ComprobanteImpresionSesionUrlSupport::pathConCarpeta(
             (string) $request->query('retorno', '')
         );
         if ($retornoPath === '') {
-            $retornoPath = '/ventas/pedido';
+            $retornoPath = urlAppDesdeRoute('pedido');
         }
 
         try {
@@ -170,7 +174,7 @@ class ComprobanteImpresionSesionController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()
-                ->to($retornoPath !== '' ? $retornoPath : route('pedido'))
+                ->to(ComprobanteImpresionSesionUrlSupport::urlAbsolutaRetorno($retornoPath))
                 ->with('errores', [$e->getMessage()]);
         }
 
@@ -383,22 +387,20 @@ class ComprobanteImpresionSesionController extends Controller
     {
         $retorno = $this->resolverRetornoPath($request, $sesion);
         if ($retorno !== '') {
-            return url($retorno);
+            return ComprobanteImpresionSesionUrlSupport::urlAbsolutaRetorno($retorno);
         }
 
         if (($sesion['origen_tipo'] ?? '') === 'REPARTO') {
             $retorno = is_array($sesion['lote_retorno'] ?? null) ? $sesion['lote_retorno'] : [];
 
-            return route('factura', $retorno);
+            return url(urlAppDesdeRoute('factura', $retorno));
         }
 
         return match ($sesion['origen_tipo'] ?? '') {
-            'PEDIDO' => route('pedido'),
-            'REMITO' => route('remito'),
-            'COT' => route('cot_electronico', array_filter([
-                'sesion_id' => (int) ($sesion['origen_id'] ?? 0) ?: null,
-            ])),
-            default => route('factura'),
+            'PEDIDO' => url(urlAppDesdeRoute('pedido')),
+            'REMITO' => url(urlAppDesdeRoute('remito')),
+            'COT' => $this->urlRetornoCot((int) ($sesion['origen_id'] ?? 0)),
+            default => url(urlAppDesdeRoute('factura')),
         };
     }
 
@@ -619,7 +621,7 @@ class ComprobanteImpresionSesionController extends Controller
     private function resolverRetornoPath(Request $request, array $sesion): string
     {
         foreach ([$request->query('retorno', ''), $request->input('retorno', ''), $sesion['retorno'] ?? ''] as $candidato) {
-            $path = ComprobanteImpresionSesionUrlSupport::sanitizarRetornoPath((string) $candidato);
+            $path = ComprobanteImpresionSesionUrlSupport::pathConCarpeta((string) $candidato);
             if ($path !== '') {
                 return $path;
             }
@@ -631,7 +633,8 @@ class ComprobanteImpresionSesionController extends Controller
     private function urlRetornoCot(int $sesionId): string
     {
         $params = array_filter(['sesion_id' => $sesionId > 0 ? $sesionId : null]);
+        $base = url(urlAppDesdeRoute('cot_electronico', $params));
 
-        return route('cot_electronico', $params).($sesionId > 0 ? '#sesion-detalle' : '');
+        return $base.($sesionId > 0 ? '#sesion-detalle' : '');
     }
 }

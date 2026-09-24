@@ -69,22 +69,21 @@
             </div>
         </div>
         <div class="form-group row">
-            @php
-                $etiquetaDetalleArticulo = \App\Support\Configuracion\EntornoEmpresaSupport::esInterforming()
-                    ? 'Descripci&oacute;n exportaci&oacute;n'
-                    : 'Descripci&oacute;n detallada';
-            @endphp
-            <label for="detalle" class="col-lg-2 col-form-label text-right pr-2">{!! $etiquetaDetalleArticulo !!}</label>
+            <label for="detalle" class="col-lg-2 col-form-label text-right pr-2">Descripci&oacute;n detallada</label>
             <div class="col-lg-8">
-                <input type="text" name="detalle" id="detalle" class="form-control" value="{{old('detalle', $producto->detalle ?? '')}}"
-                    @if (\App\Support\Configuracion\EntornoEmpresaSupport::esInterforming())
-                        title="Texto que figura en DETALLE de la Factura de Exportaci&oacute;n (FAE)"
-                        placeholder="Ej. LAM PEAD APM NEGRO GOF SUAVE CH 1250x1000x4"
-                    @endif
-                />
-                @if (\App\Support\Configuracion\EntornoEmpresaSupport::esInterforming())
-                    <small class="form-text text-muted">En FAE se imprime este campo (no la descripci&oacute;n corta).</small>
-                @endif
+                <input type="text" name="detalle" id="detalle" class="form-control" maxlength="255"
+                    value="{{old('detalle', $producto->detalle ?? '')}}"
+                    placeholder="Descripci&oacute;n interna / detallada del art&iacute;culo"/>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="descripcion_exportacion" class="col-lg-2 col-form-label text-right pr-2">Descripci&oacute;n exportaci&oacute;n</label>
+            <div class="col-lg-8">
+                <input type="text" name="descripcion_exportacion" id="descripcion_exportacion" class="form-control" maxlength="255"
+                    value="{{old('descripcion_exportacion', $producto->descripcion_exportacion ?? '')}}"
+                    title="Texto DETALLE de la Factura de Exportaci&oacute;n (Anita stkley l&iacute;nea 100)"
+                    placeholder="Ej. PLACA PEAD APM NEGRO GOFRADA MED. 1250X1000X4MM"/>
+                <small class="form-text text-muted">En FAE se imprime este campo (Anita stkley l&iacute;nea 100). No confundir con la descripci&oacute;n corta ni la detallada.</small>
             </div>
         </div>
         <div class="row">

@@ -55,7 +55,7 @@ class Articulo extends Model implements Auditable
 
         if (config('app.empresa') == 'FRASLE') {
             $this->fillable = ['sku', 'descripcion',
-                'detalle', 'empresa_id', 'unidadesxenvase', 'skualternativo', 'categoria_id', 'subcategoria_id', 'linea_id', 'mventa_id', 'peso',
+                'detalle', 'descripcion_exportacion', 'empresa_id', 'unidadesxenvase', 'skualternativo', 'categoria_id', 'subcategoria_id', 'linea_id', 'mventa_id', 'peso',
                 'nofactura', 'impuesto_id', 'formula', 'nomenclador', 'foto', 'unidadmedida_id', 'unidadmedidaalternativa_id', 'cuentacontableventa_id',
                 'cuentacontablecompra_id', 'cuentacontableimpinterno_id', 'ppp', 'fl_precio_promedio_transferencia', 'usoarticulo_id', 'material_id', 'tipocorte_id', 'puntera_id',
                 'contrafuerte_id', 'tipocorteforro_id', 'forro_id', 'compfondo_id', 'fondo_id', 'leyenda',
@@ -73,7 +73,7 @@ class Articulo extends Model implements Auditable
             ];
         } else {
             $this->fillable = ['sku', 'descripcion',
-                'detalle', 'empresa_id', 'unidadesxenvase', 'skualternativo', 'categoria_id', 'subcategoria_id', 'linea_id', 'mventa_id', 'peso',
+                'detalle', 'descripcion_exportacion', 'empresa_id', 'unidadesxenvase', 'skualternativo', 'categoria_id', 'subcategoria_id', 'linea_id', 'mventa_id', 'peso',
                 'nofactura', 'impuesto_id', 'formula', 'nomenclador', 'foto', 'unidadmedida_id', 'unidadmedidaalternativa_id', 'cuentacontableventa_id',
                 'cuentacontablecompra_id', 'cuentacontableimpinterno_id', 'ppp', 'fl_precio_promedio_transferencia', 'usoarticulo_id', 'material_id', 'tipocorte_id', 'puntera_id',
                 'contrafuerte_id', 'tipocorteforro_id', 'forro_id', 'compfondo_id', 'fondo_id', 'leyenda',
