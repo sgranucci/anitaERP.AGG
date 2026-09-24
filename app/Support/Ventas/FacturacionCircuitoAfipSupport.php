@@ -7,11 +7,13 @@ namespace App\Support\Ventas;
  *
  * POS gastronomía, estacionamiento y facturación local sí pueden pasar por
  * {@see \App\Services\Ventas\FacturacionService::generaComprobanteGeneral}, pero
- * {@see \App\Services\Ventas\FacturacionService} omite esta guarda vía esEmisionPos.
+ * {@see \App\Services\Ventas\FacturacionService} omite esta matriz vía esEmisionPos.
  *
  * Matriz:
- * - Exportación: cliente letra E y/o doc PEX → PV modo E (WSFEX) + tipo FAE/NCE/NDE (AFIP 19/21/20)
- * - Local: resto → no usar PV exportación ni tipos FAE/export
+ * - Exportación: cliente letra E y/o doc PEX/FAE/FAF → PV modo E (WSFEX)
+ *   + tipo factura FAE (Interforming) / FAF (Ferli)
+ *   + NC/ND NCE/NDE (Interforming) o NCD en PV export (Ferli; NCD también es local)
+ * - Local: resto → no usar PV exportación ni tipos exclusivos de export (FAE/FAF/NCE/NDE)
  */
 final class FacturacionCircuitoAfipSupport
 {
@@ -19,11 +21,26 @@ final class FacturacionCircuitoAfipSupport
 
     public const CIRCUITO_LOCAL = 'local';
 
-    /** @var list<string> */
-    private const ABREV_EXPORT_FACTURA = ['FAE'];
+    /**
+     * Facturas solo de exportación (no aparecen en circuito local).
+     *
+     * @var list<string>
+     */
+    private const ABREV_EXPORT_FACTURA = ['FAE', 'FAF'];
 
-    /** @var list<string> */
+    /**
+     * NC/ND exclusivas de exportación (no FCE MiPyME 203+).
+     *
+     * @var list<string>
+     */
     private const ABREV_EXPORT_NC_ND = ['NCE', 'NDE'];
+
+    /**
+     * NC/ND que Ferli usa en exportación y también en local (no filtrar del circuito local).
+     *
+     * @var list<string>
+     */
+    private const ABREV_NC_COMPATIBLE_EXPORT = ['NCD'];
 
     /** @var list<int> */
     private const CODIGOS_AFIP_EXPORT = [19, 20, 21];
@@ -68,9 +85,13 @@ final class FacturacionCircuitoAfipSupport
             || str_contains($codigo, 'PEX')
             || str_starts_with($codigo, 'REX')
             || str_contains($codigo, '-REX')
-            || str_starts_with($codigo, 'FAE');
+            || str_starts_with($codigo, 'FAE')
+            || str_starts_with($codigo, 'FAF');
     }
 
+    /**
+     * Tipo exclusivo de exportación (sale del select en circuito local).
+     */
     public static function esTipoExportacion(?object $tipo): bool
     {
         if (! $tipo) {
@@ -94,6 +115,24 @@ final class FacturacionCircuitoAfipSupport
         }
 
         return false;
+    }
+
+    /**
+     * Tipo admitido al emitir en circuito exportación (incluye NCD Ferli).
+     */
+    public static function esTipoPermitidoEnExportacion(?object $tipo): bool
+    {
+        if (self::esTipoExportacion($tipo)) {
+            return true;
+        }
+
+        if (! $tipo) {
+            return false;
+        }
+
+        $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+
+        return in_array($abrev, self::ABREV_NC_COMPATIBLE_EXPORT, true);
     }
 
     public static function esPuntoventaExportacion(?object $puntoventa): bool
@@ -142,8 +181,8 @@ final class FacturacionCircuitoAfipSupport
                     .($pvLabel !== ' ' ? " (no «{$pvLabel}»)." : '.');
             }
 
-            if (! self::esTipoExportacion($tipotransaccion)) {
-                return 'Circuito exportación: use tipo FAE / NCE / NDE (AFIP 19/21/20),'
+            if (! self::esTipoPermitidoEnExportacion($tipotransaccion)) {
+                return 'Circuito exportación: use tipo FAE/FAF o NCE/NDE/NCD,'
                     ." no «{$tipoLabel}».";
             }
 
@@ -161,7 +200,7 @@ final class FacturacionCircuitoAfipSupport
         }
 
         if (self::esTipoExportacion($tipotransaccion)) {
-            return "Circuito local: no use tipo de exportación «{$tipoLabel}» (reserve FAE/NCE/NDE para letra E).";
+            return "Circuito local: no use tipo de exportación «{$tipoLabel}» (reserve FAE/FAF/NCE/NDE para letra E).";
         }
 
         return null;
@@ -192,8 +231,12 @@ final class FacturacionCircuitoAfipSupport
     {
         $out = [];
         foreach ($tipos as $tipo) {
-            $esExp = self::esTipoExportacion($tipo);
-            if ($circuito === self::CIRCUITO_EXPORTACION ? $esExp : ! $esExp) {
+            if ($circuito === self::CIRCUITO_EXPORTACION) {
+                if (self::esTipoPermitidoEnExportacion($tipo)) {
+                    $out[] = $tipo;
+                }
+            } elseif (! self::esTipoExportacion($tipo)) {
+                // Local: excluye FAE/FAF/NCE/NDE; deja NCD (dual Ferli)
                 $out[] = $tipo;
             }
         }
