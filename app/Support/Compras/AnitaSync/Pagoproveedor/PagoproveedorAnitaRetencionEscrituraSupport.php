@@ -10,6 +10,7 @@ use App\Models\Configuracion\Provincia;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
+use App\Support\Compras\PagoproveedorImputacionApSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
@@ -45,6 +46,13 @@ final class PagoproveedorAnitaRetencionEscrituraSupport
         }
 
         if ((string) $pago->estado === 'PRE CARGA') {
+            return;
+        }
+
+        // Stubs importados solo para documento/impresión: no espejar de vuelta a Anita.
+        if (PagoproveedorImputacionApSupport::marcaImportAnitaSinCc($pago->detalle)
+            && (int) ($pago->asiento_id ?? 0) <= 0
+        ) {
             return;
         }
 

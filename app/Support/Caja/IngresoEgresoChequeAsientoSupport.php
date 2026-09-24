@@ -201,15 +201,17 @@ final class IngresoEgresoChequeAsientoSupport
         $debe = $d_h === 'D' ? $monto : '';
         $haber = $d_h === 'H' ? $monto : '';
 
-        for ($i = 0, $flExiste = false; $i < count($asiento) && ! $flExiste; $i++) {
+        $indice = null;
+        for ($i = 0; $i < count($asiento); $i++) {
             if ((int) $asiento[$i]['cuentacontable_id'] === $cuentacontableId
                 && (int) $asiento[$i]['moneda_id'] === $monedaId
                 && (float) $asiento[$i]['cotizacion'] === (float) $cotizacion) {
-                $flExiste = true;
+                $indice = $i;
+                break;
             }
         }
 
-        if (! $flExiste) {
+        if ($indice === null) {
             $cuentacontable = $cuentacontableRepository->find($cuentacontableId);
             if ($cuentacontable === null) {
                 return;
@@ -233,10 +235,10 @@ final class IngresoEgresoChequeAsientoSupport
         }
 
         if ($debe !== '') {
-            $asiento[$i]['debe'] = (float) ($asiento[$i]['debe'] ?: 0) + $debe;
+            $asiento[$indice]['debe'] = (float) ($asiento[$indice]['debe'] ?: 0) + $debe;
         }
         if ($haber !== '') {
-            $asiento[$i]['haber'] = (float) ($asiento[$i]['haber'] ?: 0) + $haber;
+            $asiento[$indice]['haber'] = (float) ($asiento[$indice]['haber'] ?: 0) + $haber;
         }
     }
 }

@@ -145,7 +145,6 @@ class PagoproveedorComprobantePdfService
         $logo = EmpresaLogoArchivo::dataUriDesdeNombre($empresa->nombre ?? null);
 
         $aplicaciones = $this->armarAplicaciones($pago);
-        $lineasRetencionPorId = $this->armarLineasCertificadoRetencion($pago, $aplicaciones);
         $mediosCaja = $this->armarMediosCaja($pago);
         $cheques = ($pago->cheques ?? collect())->map(function ($cheque) {
             $fecha = $cheque->fechapago ?: $cheque->fechaemision;
@@ -168,6 +167,22 @@ class PagoproveedorComprobantePdfService
                 'anombrede' => (string) ($cheque->anombrede ?? ''),
             ];
         })->values();
+
+        // Stub Anita: snapshot de auxpag si no hay apps/medios ERP.
+        $snap = is_array($pago->anita_impresion_json) ? $pago->anita_impresion_json : null;
+        if (is_array($snap)) {
+            if ($aplicaciones->isEmpty() && ! empty($snap['aplicaciones']) && is_array($snap['aplicaciones'])) {
+                $aplicaciones = collect($snap['aplicaciones']);
+            }
+            if ($mediosCaja->isEmpty() && ! empty($snap['medios_caja']) && is_array($snap['medios_caja'])) {
+                $mediosCaja = collect($snap['medios_caja']);
+            }
+            if ($cheques->isEmpty() && ! empty($snap['cheques']) && is_array($snap['cheques'])) {
+                $cheques = collect($snap['cheques'])->map(fn ($c) => (object) $c)->values();
+            }
+        }
+
+        $lineasRetencionPorId = $this->armarLineasCertificadoRetencion($pago, $aplicaciones);
         $retenciones = ($pago->pagoproveedor_retenciones ?? collect())
             ->filter(fn ($r) => (float) $r->importe > 0)
             ->values();

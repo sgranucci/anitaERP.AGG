@@ -30,6 +30,7 @@ class Pagoproveedor extends Model implements Auditable
     protected $fillable = [
         'empresa_id', 'tipotransaccion_caja_id', 'tipocomprobante', 'letra', 'sucursal',
         'numerotransaccion', 'fecha', 'caja_id', 'proveedor_id', 'detalle', 'estado',
+        'anita_impresion_json',
         'monto', 'cotizacion', 'moneda_id', 'modo_cotizacion', 'usuario_id',
         'asiento_id', 'caja_movimiento_id',
         'propuesta_pago_id', 'pagoproveedor_origen_id', 'pagoproveedor_revertido_por_id',
@@ -45,6 +46,7 @@ class Pagoproveedor extends Model implements Auditable
         'monto' => 'float',
         'cotizacion' => 'float',
         'bloqueado_banco' => 'boolean',
+        'anita_impresion_json' => 'array',
     ];
 
     public function empresas()

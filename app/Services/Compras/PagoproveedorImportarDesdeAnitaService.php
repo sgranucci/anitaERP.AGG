@@ -165,6 +165,19 @@ class PagoproveedorImportarDesdeAnitaService
             }
         }
 
+        if (! $dryRun && $stats['creados'] > 0) {
+            $imp = app(PagoproveedorAnitaImpresionBackfillService::class)
+                ->backfill($desdeIso, $hastaIso, false);
+            $stats['impresion_actualizadas'] = $imp['actualizadas'] ?? 0;
+            $stats['impresion_retenciones'] = $imp['retenciones_creadas'] ?? 0;
+            foreach (array_slice($imp['errores'] ?? [], 0, 10) as $e) {
+                $stats['errores'][] = 'impresión: '.$e;
+            }
+            foreach (array_slice($imp['errores_bridge'] ?? [], 0, 5) as $e) {
+                $stats['errores_bridge'][] = $e;
+            }
+        }
+
         return $stats;
     }
 

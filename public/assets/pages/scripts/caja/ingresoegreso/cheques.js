@@ -921,9 +921,15 @@ function aplicarChequeAnuladoEnFilaReemplazo(row, cheque) {
             extras.diferido = tipo === 'D' ? 1 : 0;
         }
         cargarEmisionChequeReemplazo(row, extras, function () {
+            if (typeof sumaMonto === 'function') {
+                sumaMonto();
+            }
             enfocarCampoCheque(row.find('.numerocheque_reemplazo')[0]);
         });
     } else {
+        if (typeof sumaMonto === 'function') {
+            sumaMonto();
+        }
         enfocarCampoCheque(row.find('.numerocheque_reemplazo')[0]);
     }
 }
@@ -1083,6 +1089,23 @@ function sumaMontosChequesIngresoEgreso() {
         var cot = $(this).closest('tr').find('.cotizacioncheque_recibido').val();
         var coef = calculaCoeficienteMoneda(monedaDefault, moneda, cot);
         extraDebe += monto * coef;
+    });
+
+    // Canje / anulación+reemplazo: el asiento sale de estos renglones (sin cuentas de caja).
+    $("#tbody-cheque-reemplazo-table tr.item-cheque-reemplazo").each(function () {
+        var idAnulado = parseInt($(this).find('.cheque_anulado_id').val() || '0', 10) || 0;
+        if (idAnulado <= 0) return;
+        var monto = parseFloat($(this).find('.montocheque_reemplazo').val()) || 0;
+        if (monto <= 0) return;
+        var origen = String($(this).find('.origen_reemplazo').val() || 'R').toUpperCase();
+        var moneda = $(this).find('.moneda_reemplazo_id').val();
+        var cot = $(this).find('.cotizacioncheque_reemplazo').val();
+        var coef = calculaCoeficienteMoneda(monedaDefault, moneda, cot);
+        if (origen === 'E') {
+            extraHaber += monto * coef;
+        } else {
+            extraDebe += monto * coef;
+        }
     });
 
     return { extraDebe: extraDebe, extraHaber: extraHaber };

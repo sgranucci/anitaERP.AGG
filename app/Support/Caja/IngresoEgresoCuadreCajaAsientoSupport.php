@@ -160,6 +160,69 @@ final class IngresoEgresoCuadreCajaAsientoSupport
             }
         }
 
+        // Canje / anulación+reemplazo: sin cuentas de caja; el importe vive en estos renglones.
+        $totalesReemplazo = self::totalesChequesReemplazo($data);
+        $debe += $totalesReemplazo['debe'];
+        $haber += $totalesReemplazo['haber'];
+
+        return ['debe' => round($debe, 2), 'haber' => round($haber, 2)];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{debe: float, haber: float}
+     */
+    public static function totalesChequesReemplazo(array $data): array
+    {
+        $debe = 0.0;
+        $haber = 0.0;
+
+        $montos = array_values((array) ($data['montocheque_reemplazo'] ?? []));
+        $origenes = array_values((array) ($data['origen_reemplazo'] ?? []));
+        $anulados = array_values((array) ($data['cheque_anulado_ids'] ?? []));
+        $n = max(count($montos), count($origenes), count($anulados));
+
+        for ($i = 0; $i < $n; $i++) {
+            if ((int) ($anulados[$i] ?? 0) <= 0) {
+                continue;
+            }
+            $v = NumeroDecimalLocalSupport::aFloat($montos[$i] ?? 0);
+            if ($v <= 0) {
+                continue;
+            }
+            $origen = strtoupper(trim((string) ($origenes[$i] ?? 'R')));
+            if ($origen === 'E') {
+                $haber += $v;
+            } else {
+                $debe += $v;
+            }
+        }
+
+        // Fallback si solo viene el JSON usado en preview de asiento.
+        if ($debe <= 0.000001 && $haber <= 0.000001) {
+            $raw = $data['datoscheques_reemplazo'] ?? null;
+            $pares = is_string($raw) ? (json_decode($raw, true) ?: []) : (is_array($raw) ? $raw : []);
+            foreach ($pares as $par) {
+                if (! is_array($par) && ! is_object($par)) {
+                    continue;
+                }
+                $par = (array) $par;
+                if ((int) ($par['cheque_anulado_id'] ?? 0) <= 0) {
+                    continue;
+                }
+                $v = NumeroDecimalLocalSupport::aFloat($par['monto_reemplazo'] ?? $par['monto_anulado'] ?? 0);
+                if ($v <= 0) {
+                    continue;
+                }
+                $origen = strtoupper(trim((string) ($par['origen_reemplazo'] ?? 'R')));
+                if ($origen === 'E') {
+                    $haber += $v;
+                } else {
+                    $debe += $v;
+                }
+            }
+        }
+
         return ['debe' => round($debe, 2), 'haber' => round($haber, 2)];
     }
 
