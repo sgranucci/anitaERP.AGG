@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Mail\Compras\PagoproveedorImputacionApDiaria;
 use App\Models\Compras\Pagoproveedor;
+use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Models\Configuracion\Empresa;
@@ -84,7 +85,9 @@ final class PagoproveedorImputacionApDiariaService
             })
             ->values();
 
-        $filas = $this->armarFilas($pagos, $tolerancia);
+        $armado = $this->armarFilas($pagos, $tolerancia);
+        $filas = $armado['filas'];
+        $cabecerasAnita = $armado['cabeceras_anita'];
         $partes = PagoproveedorImputacionApSupport::particionarControlDiario($filas);
         $desvios = $partes['desvios'];
         $borradores = $partes['borradores'];
@@ -94,6 +97,7 @@ final class PagoproveedorImputacionApDiariaService
             'ok' => count($partes['ok']),
             'con_desvio' => count($desvios),
             'en_borrador' => count($borradores),
+            'cabecera_anita' => count($cabecerasAnita),
             'sin_cc' => 0,
             'sin_asiento' => 0,
             'sin_promov' => 0,
@@ -146,6 +150,9 @@ final class PagoproveedorImputacionApDiariaService
             'borradores' => $borradores,
             'borradores_mail' => array_slice($borradores, 0, $maxFilasMail),
             'borradores_omitidos' => max(0, count($borradores) - $maxFilasMail),
+            'cabeceras_anita' => $cabecerasAnita,
+            'cabeceras_anita_mail' => array_slice($cabecerasAnita, 0, $maxFilasMail),
+            'cabeceras_anita_omitidas' => max(0, count($cabecerasAnita) - $maxFilasMail),
             'errores' => $errores,
             'requiere_alerta' => $errores !== [] || $totales['con_desvio'] > 0,
             'mail_enviado' => false,
@@ -154,7 +161,8 @@ final class PagoproveedorImputacionApDiariaService
             'notas' => [
                 'Cada OP compara la CC ERP (valor libro de las facturas aplicadas) vs el trío AP/anticipo del asiento vs ctamov Anita.',
                 'Promov Anita se controla contra el total de la OP (cabecera), no contra el AP: en cruzada ME la DC va a P&L.',
-                'Solo OP de proveedores (CC / trío AP). Excluye REVERTIDA/BAJA, I/E (SP / ING / EGR / TRA) y OPP de tesorería sin AP.',
+                'Solo OP de proveedores (CC / trío AP). Excluye REVERTIDA/BAJA, I/E (SP / ING / EGR / TRA), OPP de tesorería sin AP y cabeceras Anita sin CC/asiento.',
+                'Las cabeceras importadas desde Anita (documento sin cuenta corriente) no se exigen en ERP: la contabilidad vive en Anita.',
                 'OPP/OPA son crédito (Haber−Debe negativo). AOP invierte el signo.',
                 'El residual a anticipo entra al trío. Se controla aparte vs ctamov.',
                 'Importes en $: CC al TC de la factura; promov al TC del pago. Haber suma, Debe resta.',
@@ -170,15 +178,23 @@ final class PagoproveedorImputacionApDiariaService
 
     /**
      * @param  \Illuminate\Support\Collection<int, Pagoproveedor>  $pagos
-     * @return list<array<string, mixed>>
+     * @return array{filas: list<array<string, mixed>>, cabeceras_anita: list<array<string, mixed>>}
      */
     private function armarFilas($pagos, float $tolerancia): array
     {
         if ($pagos->isEmpty()) {
-            return [];
+            return ['filas' => [], 'cabeceras_anita' => []];
         }
 
         $pagoIds = $pagos->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $obsImportPorPago = Pagoproveedor_Estado::query()
+            ->whereIn('pagoproveedor_id', $pagoIds)
+            ->where('observacion', 'like', '%Importado desde Anita%sin cuenta corriente%')
+            ->orderBy('id')
+            ->get(['pagoproveedor_id', 'observacion'])
+            ->groupBy('pagoproveedor_id')
+            ->map(static fn ($filas) => (string) ($filas->first()->observacion ?? ''));
+
         $ccPorPago = Proveedor_Cuentacorriente::query()
             ->whereIn('pagoproveedor_id', $pagoIds)
             ->get([
@@ -252,6 +268,7 @@ final class PagoproveedorImputacionApDiariaService
         $promovPorOp = $this->promov->sumarPorOp($clavesPromov);
 
         $out = [];
+        $cabecerasAnita = [];
         foreach ($pagos as $pago) {
             $fecha = $this->fechaYmd($pago->fecha);
             $tipo = PagoproveedorImputacionApSupport::tipoDesdeComprobante((string) $pago->tipocomprobante);
@@ -311,6 +328,29 @@ final class PagoproveedorImputacionApDiariaService
                 'OP #'.$pago->id
             );
 
+            if (PagoproveedorImputacionApSupport::esCabeceraAnitaSinContabilidad(
+                $tieneCc,
+                $tieneAsiento,
+                (string) ($pago->detalle ?? ''),
+                (string) ($obsImportPorPago->get($pago->id) ?? ''),
+            )) {
+                $cabecerasAnita[] = [
+                    'id' => (int) $pago->id,
+                    'tipo' => $tipo,
+                    'tipo_etiqueta' => PagoproveedorImputacionApSupport::etiquetaTipo($tipo),
+                    'fecha' => $fecha,
+                    'empresa_id' => (int) $pago->empresa_id,
+                    'nombreempresa' => (string) ($pago->empresas?->nombre ?? ''),
+                    'nombre_proveedor' => (string) ($pago->proveedores?->nombre ?? ''),
+                    'etiqueta' => $pago->etiquetaComprobante(),
+                    'estado' => (string) ($pago->estado ?? ''),
+                    'total_origen' => round((float) ($pago->monto ?? 0), 2),
+                    'promov_ars' => $promovArs,
+                    'tiene_promov' => $tienePromov,
+                ];
+                continue;
+            }
+
             if (PagoproveedorImputacionApSupport::esPagoSinTrioAp($tieneCc, $tieneAsiento, $asientoArs, $tolerancia)) {
                 continue;
             }
@@ -369,7 +409,7 @@ final class PagoproveedorImputacionApDiariaService
             ];
         }
 
-        return $out;
+        return ['filas' => $out, 'cabeceras_anita' => $cabecerasAnita];
     }
 
     /**

@@ -34,6 +34,10 @@
         <td>En pre carga (sin confirmar)</td>
         <td align="right">{{ (int) ($informe['totales']['en_borrador'] ?? 0) }}</td>
     </tr>
+    <tr style="background:{{ ((int) ($informe['totales']['cabecera_anita'] ?? 0)) > 0 ? '#e8daef' : '#fff' }};">
+        <td>Solo documento Anita (sin CC/asiento ERP)</td>
+        <td align="right">{{ (int) ($informe['totales']['cabecera_anita'] ?? 0) }}</td>
+    </tr>
     <tr style="background:{{ ((int) ($informe['totales']['con_desvio'] ?? 0)) > 0 ? '#fadbd8' : '#d5f5e3' }};">
         <td><strong>Con desvío</strong></td>
         <td align="right"><strong>{{ (int) ($informe['totales']['con_desvio'] ?? 0) }}</strong></td>
@@ -92,6 +96,38 @@
     @if ((int) ($informe['borradores_omitidos'] ?? 0) > 0)
         <p style="margin:8px 0; color:#555; font-size:12px;">
             Y {{ (int) $informe['borradores_omitidos'] }} OP más en pre carga (no caben en el mail).
+        </p>
+    @endif
+@endif
+
+@if (! empty($informe['cabeceras_anita_mail']))
+    <h3 style="margin:18px 0 6px 0;">Solo documento Anita</h3>
+    <p style="margin:0 0 8px 0; color:#555; font-size:12px;">
+        Cabeceras importadas sin cuenta corriente ni asiento ERP. No son desvío: la contabilidad vive en Anita.
+    </p>
+    <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
+        <tr style="background:#d7bde2; color:#17202A;">
+            <th align="left">Empresa</th>
+            <th align="left">OP</th>
+            <th align="left">Proveedor</th>
+            <th align="left">Fecha</th>
+            <th align="right">Total $</th>
+            <th align="right">promov $</th>
+        </tr>
+        @foreach ($informe['cabeceras_anita_mail'] as $fila)
+            <tr>
+                <td>{{ $fila['nombreempresa'] ?? '' }}</td>
+                <td>{{ $fila['etiqueta'] ?? '' }}</td>
+                <td>{{ $fila['nombre_proveedor'] ?? '' }}</td>
+                <td>{{ $fila['fecha'] ?? '' }}</td>
+                <td align="right">{{ number_format((float) ($fila['total_origen'] ?? 0), 2, ',', '.') }}</td>
+                <td align="right">{{ number_format((float) ($fila['promov_ars'] ?? 0), 2, ',', '.') }}</td>
+            </tr>
+        @endforeach
+    </table>
+    @if ((int) ($informe['cabeceras_anita_omitidas'] ?? 0) > 0)
+        <p style="margin:8px 0; color:#555; font-size:12px;">
+            Y {{ (int) $informe['cabeceras_anita_omitidas'] }} cabeceras más (no caben en el mail).
         </p>
     @endif
 @endif

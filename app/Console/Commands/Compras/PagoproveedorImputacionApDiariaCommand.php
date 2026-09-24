@@ -52,6 +52,7 @@ class PagoproveedorImputacionApDiariaCommand extends Command
                 ['OP', (string) ($totales['total_filas'] ?? 0)],
                 ['OK', (string) ($totales['ok'] ?? 0)],
                 ['En pre carga', (string) ($totales['en_borrador'] ?? 0)],
+                ['Solo doc. Anita', (string) ($totales['cabecera_anita'] ?? 0)],
                 ['Con desvío', (string) ($totales['con_desvio'] ?? 0)],
                 ['Sin CC', (string) ($totales['sin_cc'] ?? 0)],
                 ['Sin asiento', (string) ($totales['sin_asiento'] ?? 0)],
@@ -70,6 +71,16 @@ class PagoproveedorImputacionApDiariaCommand extends Command
                 (string) ($fila['nombreempresa'] ?? ''),
                 (string) ($fila['etiqueta'] ?? '#'.($fila['id'] ?? '')),
                 number_format((float) ($fila['total_origen'] ?? 0), 2, ',', '.'),
+            ));
+        }
+
+        foreach (array_slice($informe['cabeceras_anita'] ?? [], 0, 20) as $fila) {
+            $this->comment(sprintf(
+                'Doc. Anita · %s %s | $ %s | promov %s',
+                (string) ($fila['nombreempresa'] ?? ''),
+                (string) ($fila['etiqueta'] ?? '#'.($fila['id'] ?? '')),
+                number_format((float) ($fila['total_origen'] ?? 0), 2, ',', '.'),
+                number_format((float) ($fila['promov_ars'] ?? 0), 2, ',', '.'),
             ));
         }
 

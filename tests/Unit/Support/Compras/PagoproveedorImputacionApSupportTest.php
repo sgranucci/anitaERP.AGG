@@ -162,6 +162,38 @@ class PagoproveedorImputacionApSupportTest extends TestCase
         $this->assertFalse(PagoproveedorImputacionApSupport::esPagoSinTrioAp(false, false, 0.0));
     }
 
+    public function test_cabecera_anita_sin_contabilidad_sale_del_control(): void
+    {
+        $this->assertTrue(PagoproveedorImputacionApSupport::esCabeceraAnitaSinContabilidad(
+            false,
+            false,
+            'Importado desde Anita — OPP documento (sin cuenta corriente)',
+            null
+        ));
+        $this->assertTrue(PagoproveedorImputacionApSupport::esCabeceraAnitaSinContabilidad(
+            false,
+            false,
+            'PAGO LOTERIA',
+            'Importado desde Anita (OPP sin cuenta corriente)'
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::esCabeceraAnitaSinContabilidad(
+            true,
+            false,
+            'Importado desde Anita — OPP documento (sin cuenta corriente)',
+            null
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::esCabeceraAnitaSinContabilidad(
+            false,
+            false,
+            'OPP nativa sin marker',
+            null
+        ));
+        $this->assertTrue(PagoproveedorImputacionApSupport::marcaImportAnitaSinCc(
+            'Importado desde Anita (OPA sin cuenta corriente)'
+        ));
+        $this->assertFalse(PagoproveedorImputacionApSupport::marcaImportAnitaSinCc('Importado desde Anita'));
+    }
+
     public function test_sin_cc_con_trio_ap_sigue_siendo_desvio(): void
     {
         $eval = PagoproveedorImputacionApSupport::evaluarCuatroPatas(

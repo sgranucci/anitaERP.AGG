@@ -85,6 +85,35 @@ final class PagoproveedorImputacionApSupport
     }
 
     /**
+     * Cabecera importada desde Anita solo como documento (sin CC / asiento ERP).
+     * La contabilidad vive en Anita; no es un desvío de las cuatro patas ERP.
+     */
+    public static function esCabeceraAnitaSinContabilidad(
+        bool $tieneCc,
+        bool $tieneAsiento,
+        ?string $detalle = null,
+        ?string $observacionEstado = null,
+    ): bool {
+        if ($tieneCc || $tieneAsiento) {
+            return false;
+        }
+
+        return self::marcaImportAnitaSinCc($detalle)
+            || self::marcaImportAnitaSinCc($observacionEstado);
+    }
+
+    public static function marcaImportAnitaSinCc(?string $texto): bool
+    {
+        $t = mb_strtolower(trim((string) $texto));
+        if ($t === '') {
+            return false;
+        }
+
+        return str_contains($t, 'importado desde anita')
+            && str_contains($t, 'sin cuenta corriente');
+    }
+
+    /**
      * @return array{
      *     ok: bool,
      *     alertas: list<string>,
