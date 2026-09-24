@@ -33,6 +33,16 @@
         @endif
         <div class="form-row align-items-end">
             <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="fecha_desde">Desde</label>
+                <input type="date" name="fecha_desde" id="fecha_desde" class="form-control form-control-sm"
+                       value="{{ $f['fecha_desde'] ?? '' }}">
+            </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="fecha_hasta">Hasta</label>
+                <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control form-control-sm"
+                       value="{{ $f['fecha_hasta'] ?? '' }}">
+            </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="filtro_modo">Buscar en</label>
                 <select name="filtro_modo" id="filtro_modo" class="form-control form-control-sm">
                     <option value="{{ PagoproveedorListadoFiltros::MODO_TODOS }}" {{ $modo === PagoproveedorListadoFiltros::MODO_TODOS ? 'selected' : '' }}>Cualquier campo</option>

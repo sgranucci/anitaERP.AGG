@@ -4,6 +4,8 @@
     var MODO_CAMPO = 'campo';
     var operadoresPorCampo = {};
     var LF = window.ListadoFiltros;
+    var FORM_ID = '#form-filtros-pagoproveedor';
+    var PANEL_ID = '#panel-filtros-pagoproveedor';
 
     function $valorPrincipal() {
         return $('#filtro_valor');
@@ -50,15 +52,15 @@
             $('.filtro-campo-wrap').hide();
         }
 
-        var esVacio = operador === 'vacio';
-
-        if (esVacio) {
+        if (operador === 'vacio') {
             $valorPrincipal().val('');
             $valorPanel().val('');
         }
 
         if (tipo === 'entero') {
             setPlaceholderValor('Número entero');
+        } else if (tipo === 'fecha') {
+            setPlaceholderValor('Fecha (AAAA-MM-DD)');
         } else {
             setPlaceholderValor('Texto o número');
         }
@@ -82,7 +84,7 @@
     }
 
     $(function () {
-        if (!$('#form-filtros-cuentacaja').length) {
+        if (!$(FORM_ID).length) {
             return;
         }
 
@@ -91,7 +93,7 @@
         LF.sincronizarValorPrincipal('#filtro_valor', '#filtro_valor_panel');
 
         function sincronizarValorAntesDeEnviar() {
-            var $panel = $('#panel-filtros-cuentacaja');
+            var $panel = $(PANEL_ID);
             var panelAbierto = $panel.hasClass('show') || $panel.hasClass('in');
             if (panelAbierto) {
                 $valorPrincipal().val($valorPanel().val());
@@ -100,16 +102,16 @@
             }
         }
 
-        $('#form-filtros-cuentacaja').on('click', '[data-aplicar-filtros-panel]', function () {
+        $(FORM_ID).on('click', '[data-aplicar-filtros-panel]', function () {
             $valorPrincipal().val($valorPanel().val());
         });
 
-        $('#form-filtros-cuentacaja').on('submit.listadoFiltrosSync', function () {
+        $(FORM_ID).on('submit.listadoFiltrosSync', function () {
             sincronizarValorAntesDeEnviar();
         });
 
-        LF.initSubmitBusquedaRapida($('#form-filtros-cuentacaja'), {
-            selectorPanel: '#panel-filtros-cuentacaja'
+        LF.initSubmitBusquedaRapida($(FORM_ID), {
+            selectorPanel: PANEL_ID
         });
 
         $('#filtro_modo, #filtro_campo').on('change', function () {

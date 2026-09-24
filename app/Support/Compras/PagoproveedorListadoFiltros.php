@@ -104,6 +104,8 @@ class PagoproveedorListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
+            'fecha_desde' => trim((string) $request->input('fecha_desde', '')),
+            'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
         ];
     }
 
@@ -149,6 +151,8 @@ class PagoproveedorListadoFiltros
             'busqueda' => '',
             'empresa_id' => null,
             'empresa_scope' => 'una',
+            'fecha_desde' => '',
+            'fecha_hasta' => '',
         ];
     }
 
@@ -173,6 +177,12 @@ class PagoproveedorListadoFiltros
         }
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
+        }
+        if (! empty($filtros['fecha_desde'])) {
+            $params['fecha_desde'] = $filtros['fecha_desde'];
+        }
+        if (! empty($filtros['fecha_hasta'])) {
+            $params['fecha_hasta'] = $filtros['fecha_hasta'];
         }
 
         return $params;
@@ -204,7 +214,14 @@ class PagoproveedorListadoFiltros
             $query->where('pagoproveedor.empresa_id', (int) $filtros['empresa_id']);
         }
 
-        if (! self::tieneCriteriosTexto($filtros)) {
+        if (($filtros['fecha_desde'] ?? '') !== '') {
+            $query->whereDate('pagoproveedor.fecha', '>=', $filtros['fecha_desde']);
+        }
+        if (($filtros['fecha_hasta'] ?? '') !== '') {
+            $query->whereDate('pagoproveedor.fecha', '<=', $filtros['fecha_hasta']);
+        }
+
+        if (! self::tieneCriteriosTextoParaBusqueda($filtros)) {
             return;
         }
 
@@ -222,6 +239,21 @@ class PagoproveedorListadoFiltros
     }
 
     public static function tieneCriteriosTexto(array $filtros): bool
+    {
+        if (trim((string) ($filtros['fecha_desde'] ?? '')) !== '') {
+            return true;
+        }
+        if (trim((string) ($filtros['fecha_hasta'] ?? '')) !== '') {
+            return true;
+        }
+
+        return self::tieneCriteriosTextoParaBusqueda($filtros);
+    }
+
+    /**
+     * Criterios de texto/campo (sin rango de fechas, que se aplica aparte).
+     */
+    public static function tieneCriteriosTextoParaBusqueda(array $filtros): bool
     {
         if (($filtros['operador'] ?? '') === 'vacio') {
             return true;

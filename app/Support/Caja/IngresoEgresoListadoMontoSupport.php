@@ -7,6 +7,8 @@ namespace App\Support\Caja;
 /**
  * Monto y leyendas del index/export IE: cuentas de caja + cheques.
  * Sin cheques el listado quedaba en 0 cuando el pago era solo CHP.
+ * Canje banco→banco: no hay cuentacaja; el único cheque del movimiento es el
+ * de reemplazo (tiene cheque_reemplaza_id) y hay que mostrar una pata.
  */
 final class IngresoEgresoListadoMontoSupport
 {
@@ -18,6 +20,7 @@ final class IngresoEgresoListadoMontoSupport
         $ingreso = 0.0;
         $egreso = 0.0;
         $lineas = [];
+        $chequesReemplazo = [];
 
         foreach ($movimiento->caja_movimiento_cuentacajas ?? [] as $linea) {
             $coef = self::coeficiente($linea->moneda_id ?? 1, $linea->cotizacion ?? 1);
@@ -33,6 +36,7 @@ final class IngresoEgresoListadoMontoSupport
 
         foreach ($movimiento->cheques ?? [] as $cheque) {
             if (! empty($cheque->cheque_reemplaza_id)) {
+                $chequesReemplazo[] = $cheque;
                 continue;
             }
             $origen = strtoupper(trim((string) ($cheque->origen ?? '')));
@@ -49,6 +53,33 @@ final class IngresoEgresoListadoMontoSupport
             } elseif ($origen === 'R') {
                 $ingreso += $montoAbs * $coef;
                 $lineas[] = trim('CHT '.$nro.' '.$cuenta.' '.self::fmt($montoAbs));
+            }
+        }
+
+        // Canje: sin caja ni cheques “normales”; una pata = monto del cheque nuevo.
+        if (abs($ingreso) < 0.000001 && abs($egreso) < 0.000001 && $chequesReemplazo !== []) {
+            foreach ($chequesReemplazo as $cheque) {
+                $coef = self::coeficiente($cheque->moneda_id ?? 1, $cheque->cotizacion ?? 1);
+                $montoAbs = abs((float) ($cheque->monto ?? 0));
+                if ($montoAbs < 0.000001) {
+                    continue;
+                }
+                $egreso += $montoAbs * $coef;
+                $nroNuevo = trim((string) ($cheque->numerocheque ?? ''));
+                $nroAnulado = trim((string) (
+                    $cheque->chequeReemplazado->numerocheque
+                    ?? $cheque->cheque_reemplazado->numerocheque
+                    ?? ''
+                ));
+                $cuenta = trim((string) ($cheque->cuentacajas->nombre ?? ''));
+                $etiqueta = 'Canje';
+                if ($nroAnulado !== '') {
+                    $etiqueta .= ' CHP '.$nroAnulado.' →';
+                }
+                if ($nroNuevo !== '') {
+                    $etiqueta .= ' CHP '.$nroNuevo;
+                }
+                $lineas[] = trim($etiqueta.' '.$cuenta.' '.self::fmt($montoAbs));
             }
         }
 

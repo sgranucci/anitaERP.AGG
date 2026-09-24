@@ -105,7 +105,7 @@ class PagoproveedorController extends Controller
             return response()->file($path);
         }
 
-        $export = app(PagoproveedorListadoExport::class)->parametros($filtros);
+        $export = app(PagoproveedorListadoExport::class)->parametros($filtros, $formato === 'CSV');
         $nombre = 'pagoproveedor_'.date('Ymd_His');
 
         if ($formato === 'CSV') {

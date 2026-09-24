@@ -1,3 +1,19 @@
+@php
+    $esExcel = ! empty($esExcel);
+    $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
+    $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
+    $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {
+        $n = (float) $v;
+        if ($esExcel && $autoExcelNum) {
+            return number_format($n, 2, '.', '');
+        }
+        if ($esExcel) {
+            return \App\Support\Export\ExcelFormatoNumero::formatearTexto($n, $formatoNumero, 2);
+        }
+
+        return number_format($n, 2, ',', '.');
+    };
+@endphp
 <table>
 @if (!empty($reservarFilaLogoExcel))
     <tr><td colspan="8" style="height:52px;"></td></tr>
@@ -34,7 +50,7 @@
                         {{ implode(' | ', $fila->cuentasCajaLista()) }}
                     @endif
                 </td>
-                <td>{{ number_format((float)$fila->monto, 2, ',', '.') }}</td>
+                <td>{{ $fmtMonto($fila->monto) }}</td>
                 <td>{{ $fila->estado }}</td>
                 <td>{{ $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
                     ? $fila->detalleIndicativo()

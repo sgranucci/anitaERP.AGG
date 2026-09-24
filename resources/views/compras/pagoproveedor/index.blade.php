@@ -131,7 +131,7 @@
                                         </ul>
                                     @endif
                                 </td>
-                                <td class="text-right">{{ number_format((float)$fila->monto, 2, ',', '.') }} {{ $fila->monedas->abreviatura ?? '' }}</td>
+                                <td class="text-right text-nowrap">{{ number_format((float)$fila->monto, 2, ',', '.') }} {{ $fila->monedas->abreviatura ?? '' }}</td>
                                 <td>{{ $fila->estado }}</td>
                                 <td class="text-nowrap">
                                     @php

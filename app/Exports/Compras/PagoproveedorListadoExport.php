@@ -4,6 +4,7 @@ namespace App\Exports\Compras;
 
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -25,12 +26,16 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
 
     private const COL_ULTIMA = 'H';
 
+    private const COL_MONTO = 'F';
+
     private PagoproveedorRepositoryInterface $pagoproveedorRepository;
 
     /** @var array<string, mixed>|null */
     private $filtros;
 
     private bool $flDesdeIndex = false;
+
+    private bool $esCsv = false;
 
     private bool $hayFilaLogos = false;
 
@@ -48,10 +53,11 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
         $this->pagoproveedorRepository = $pagoproveedorRepository;
     }
 
-    public function parametros(array $filtros): self
+    public function parametros(array $filtros, bool $esCsv = false): self
     {
         $this->filtros = $filtros;
         $this->flDesdeIndex = true;
+        $this->esCsv = $esCsv;
 
         return $this;
     }
@@ -69,6 +75,8 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
         return view('exports.compras.pagoproveedorindex', [
             'datas' => $datas,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
+            'esExcel' => true,
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
         ]);
     }
 
@@ -78,6 +86,7 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
         foreach (range('A', self::COL_ULTIMA) as $c) {
             $cols[$c] = NumberFormat::FORMAT_TEXT;
         }
+        $cols[self::COL_MONTO] = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
 
         return $cols;
     }
@@ -132,8 +141,19 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(16)->setBold(true);
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->getColor()->setRGB('17202A');
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
+                $ultimaFila = max($this->filaPrimeraDatosExcel, (int) $sheet->getHighestRow());
+                $sheet->getStyle(self::COL_MONTO.$this->filaCabecerasExcel.':'.self::COL_MONTO.$ultimaFila)
+                    ->getAlignment()
+                    ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 }

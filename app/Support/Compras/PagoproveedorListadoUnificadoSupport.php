@@ -535,13 +535,14 @@ final class PagoproveedorListadoUnificadoSupport
             $query->where($cols['empresa_id'], (int) $filtros['empresa_id']);
         }
 
-        if (! PagoproveedorListadoFiltros::tieneCriteriosTexto($filtros)
-            && ! PagoproveedorListadoFiltros::tieneCriteriosAplicados($filtros)
-        ) {
-            return;
+        if (($filtros['fecha_desde'] ?? '') !== '') {
+            $query->whereDate($cols['fecha'], '>=', $filtros['fecha_desde']);
+        }
+        if (($filtros['fecha_hasta'] ?? '') !== '') {
+            $query->whereDate($cols['fecha'], '<=', $filtros['fecha_hasta']);
         }
 
-        if (! PagoproveedorListadoFiltros::tieneCriteriosTexto($filtros)) {
+        if (! PagoproveedorListadoFiltros::tieneCriteriosTextoParaBusqueda($filtros)) {
             return;
         }
 
