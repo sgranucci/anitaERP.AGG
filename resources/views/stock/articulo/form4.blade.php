@@ -93,9 +93,42 @@
     			</tr>
     		</thead>
     		<tbody id="tbody-cuentacontable-table">
-				@if ($producto->articulo_cuentacontables ?? '')
-				@if (count($producto->articulo_cuentacontables) > 0)
-					@foreach (old('tasa', $producto->articulo_cuentacontables->count() ? $producto->articulo_cuentacontables : ['']) as $cuentacontable)
+				@php
+					// Solo empresas asignadas al usuario (si no tiene ninguna = acceso total: muestra todas).
+					// Deduplica art+emp+tipo para no repetir filas gemelas en pantalla.
+					$empresasAsignadasIds = collect($empresa_query ?? [])->pluck('id')->map(fn ($id) => (int) $id)->all();
+					if (old('empresa_ids') !== null) {
+						$cuentasContablesVisibles = collect(old('empresa_ids', []))
+							->map(function ($empresaId, $i) {
+								return (object) [
+									'empresa_id' => $empresaId,
+									'tipoimputacion' => old('tipoimputaciones.'.$i),
+									'cuentacontable_id' => old('cuentacontable_ids.'.$i),
+									'creousuario_id' => old('creousuario_cuentacontable_ids.'.$i),
+									'cuentacontables' => (object) [
+										'codigo' => old('codigos.'.$i),
+										'nombre' => old('nombres.'.$i),
+									],
+								];
+							})
+							->when(
+								count($empresasAsignadasIds) >= 1,
+								fn ($c) => $c->filter(fn ($r) => in_array((int) ($r->empresa_id ?? 0), $empresasAsignadasIds, true))
+							)
+							->unique(fn ($r) => ((int) ($r->empresa_id ?? 0)).'|'.(string) ($r->tipoimputacion ?? ''))
+							->values();
+					} else {
+						$cuentasContablesVisibles = collect($producto->articulo_cuentacontables ?? [])
+							->when(
+								count($empresasAsignadasIds) >= 1,
+								fn ($c) => $c->filter(fn ($r) => in_array((int) ($r->empresa_id ?? 0), $empresasAsignadasIds, true))
+							)
+							->unique(fn ($r) => ((int) ($r->empresa_id ?? 0)).'|'.(string) ($r->tipoimputacion ?? ''))
+							->values();
+					}
+				@endphp
+				@if ($cuentasContablesVisibles->count() > 0)
+					@foreach ($cuentasContablesVisibles as $cuentacontable)
             			<tr class="item-cuentacontable">
 							<td>
 								@include('includes.form-empresa-asignada-control', [
@@ -145,7 +178,6 @@
                 			</td>
                 		</tr>
            			@endforeach
-				@endif
 				@endif
        		</tbody>
        	</table>

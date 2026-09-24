@@ -1,6 +1,10 @@
 {{--
     Solo el control (hidden/readonly/select), sin form-group. Para tablas o layouts custom.
     Mismas variables que form-empresa-asignada + $select_class (clases extra del select).
+
+    Si el registro ya tiene empresa_id fuera de las asignadas del usuario (ej. filas
+    contables de otra empresa), se conserva en hidden+readonly: un <select> filtrado
+    no incluye esa opción y el browser envía vacío → FK rota al guardar.
 --}}
 @php
     $empresasDisponibles = collect($empresa_query ?? []);
@@ -26,8 +30,18 @@
             return (int) ($emp->id ?? 0) === $empresaIdValorInt;
         })
         : null;
+    // Empresa del registro no está en las asignadas del usuario → no editable, sí preservada
+    $empresaFueraAsignacion = $empresaIdValorInt > 0 && $empresaRegistro === null;
+    if ($empresaFueraAsignacion) {
+        $empresaFueraNombre = \App\Models\Configuracion\Empresa::query()
+            ->whereKey($empresaIdValorInt)
+            ->value('nombre') ?? ('Empresa #'.$empresaIdValorInt);
+    }
 @endphp
-@if ($bloqueado && $empresaIdValorInt > 0)
+@if ($empresaFueraAsignacion)
+    <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="{{ $select_class ?? '' }}" value="{{ $empresaIdValorInt }}"/>
+    <input type="text" class="form-control" readonly value="{{ $empresaFueraNombre }}" title="Empresa no asignada a tu usuario; se conserva al guardar"/>
+@elseif ($bloqueado && $empresaIdValorInt > 0)
     <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="{{ $select_class ?? '' }}" value="{{ $empresaIdValorInt }}"/>
     <input type="text" class="form-control" readonly value="{{ $empresaRegistro->nombre ?? '—' }}"/>
 @elseif ($bloqueado && $empresaUnicaRegistro)
