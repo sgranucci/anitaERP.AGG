@@ -89,8 +89,8 @@
                         <div class="input-group input-group-sm">
                             <input type="text" name="cuenta_hasta" id="cuenta_hasta_codigo"
                                 class="form-control codigocuentacontable mpc-cuenta-codigo-input"
-                                placeholder="111010-999 (vac&iacute;o = solo desde)" autocomplete="off"
-                                title="C&oacute;digo hasta. F1 = consulta"
+                                placeholder="vac&iacute;o = hasta el final" autocomplete="off"
+                                title="C&oacute;digo hasta. Vac&iacute;o = hasta la &uacute;ltima cuenta. F1 = consulta"
                                 value="{{ $cuenta_hasta_meta['codigo'] ?? '' }}">
                             <input type="text" class="form-control nombrecuentacontable mpc-cuenta-nombre-input" readonly
                                 placeholder="Nombre cuenta" value="{{ $cuenta_hasta_meta['nombre'] ?? '' }}">
@@ -104,7 +104,9 @@
                 </div>
             </div>
             <p class="text-muted small mb-0 mt-2">
-                Sin selecci&oacute;n se incluyen todas las cuentas con movimiento. Las cuentas puntuales y el rango se suman.
+                Sin selecci&oacute;n se incluyen todas las cuentas con movimiento.
+                Con solo <strong>Desde</strong> se toma desde esa cuenta hasta el final.
+                Las cuentas puntuales y el rango se suman.
             </p>
         </div>
     </div>

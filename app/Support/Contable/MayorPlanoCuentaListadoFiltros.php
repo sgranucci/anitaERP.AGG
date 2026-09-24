@@ -40,12 +40,10 @@ class MayorPlanoCuentaListadoFiltros
         $cuentaDesde = MayorPlanoCuenta\MayorPlanoCuentaSupport::parsearCodigoCuenta(
             (string) $request->input('cuenta_desde', ''),
         );
+        // Hasta vacío = sin tope (desde esa cuenta hasta el final del plan).
         $cuentaHasta = MayorPlanoCuenta\MayorPlanoCuentaSupport::parsearCodigoCuenta(
             (string) $request->input('cuenta_hasta', ''),
         );
-        if ($cuentaDesde > 0 && $cuentaHasta <= 0) {
-            $cuentaHasta = $cuentaDesde;
-        }
 
         $cuentas = self::parsearCuentasCsv((string) $request->input('cuentas', ''));
         $centrocostos = MayorPlanoCuentaCentrocostoFiltroSupport::parsearCodigos(

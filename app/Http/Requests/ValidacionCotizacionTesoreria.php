@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class ValidacionCotizacionTesoreria extends FormRequest
 {
@@ -37,6 +39,16 @@ class ValidacionCotizacionTesoreria extends FormRequest
         }
 
         return $rules;
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $v) {
+            $empresaId = (int) $this->input('empresa_id');
+            if ($empresaId > 0 && ! app(EmpresaRepositoryInterface::class)->empresaIdPermitida($empresaId)) {
+                $v->errors()->add('empresa_id', 'La empresa no está asignada al usuario.');
+            }
+        });
     }
 
     /**

@@ -2,7 +2,7 @@
     use App\Support\Caja\CotizacionTesoreriaMonedasSupport;
     $monedasColumnas = $monedasColumnas ?? CotizacionTesoreriaMonedasSupport::monedasParaColumnas();
     $fechaValor = old('fecha', isset($data) && $data->fecha ? $data->fecha->format('Y-m-d') : date('Y-m-d'));
-    $empresaIdValor = old('empresa_id', $data->empresa_id ?? 1);
+    $empresaIdValor = old('empresa_id', $data->empresa_id ?? null);
 @endphp
 @include('includes.form-empresa-asignada', [
     'empresa_query' => $empresa_query ?? collect(),

@@ -44,4 +44,18 @@ class MayorPlanoCuentaListadoFiltrosTest extends TestCase
             MayorPlanoCuentaListadoFiltros::paraQueryString($filtros)['incluye_subdiario']
         );
     }
+
+    public function test_cuenta_hasta_vacio_no_iguala_a_desde(): void
+    {
+        $filtros = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest(
+            Request::create('/contable/mayor-plano-cuenta', 'GET', [
+                'cuenta_desde' => '211010-001',
+                'cuenta_hasta' => '',
+            ])
+        );
+
+        $this->assertSame(211010001, $filtros['cuenta_desde']);
+        $this->assertSame(0, $filtros['cuenta_hasta']);
+        $this->assertTrue(MayorPlanoCuentaListadoFiltros::tieneSeleccionParticularCuentas($filtros));
+    }
 }

@@ -86,10 +86,11 @@ class CotizacionTesoreriaController extends Controller
     {
         can('crear-cotizacion-tesoreria');
 
-        $data = new CotizacionTesoreria(['empresa_id' => 1]);
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresaId = $this->resolverEmpresaIdParaAlta($request, $empresa_query);
+        $data = new CotizacionTesoreria(['empresa_id' => $empresaId]);
         $monedasColumnas = CotizacionTesoreriaMonedasSupport::monedasParaColumnas();
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, CotizacionTesoreriaListadoFiltros::class);
-        $empresa_query = $this->empresaRepository->allFiltrado();
 
         return view('caja.cotizacion_tesoreria.crear', compact('data', 'monedasColumnas', 'filtrosQuery', 'empresa_query'));
     }
@@ -214,5 +215,21 @@ class CotizacionTesoreriaController extends Controller
         $first = $empresaQuery->first();
 
         return $first !== null ? (int) $first->id : 0;
+    }
+
+    /**
+     * Empresa inicial al crear: query string si está permitida; si no, primera asignada.
+     * No hardcodear Biyemas (1): usuarios de otra sede (ej. Kandiko) verían BIYEMAS por el partial.
+     */
+    private function resolverEmpresaIdParaAlta(Request $request, $empresaQuery): ?int
+    {
+        $desdeRequest = (int) $request->input('empresa_id', 0);
+        if ($desdeRequest > 0 && $this->empresaRepository->empresaIdPermitida($desdeRequest)) {
+            return $desdeRequest;
+        }
+
+        $default = $this->resolverEmpresaDefaultId($empresaQuery);
+
+        return $default > 0 ? $default : null;
     }
 }
