@@ -1,0 +1,27 @@
+---
+description: Descuento cabecera Factura B/C como a-comprob (admin, todas las empresas)
+globs: app/Services/Configuracion/ImpuestoService.php,app/Services/Ventas/FacturacionService.php,app/Support/Ventas/AnitaComprobDescuentoSupport.php
+alwaysApply: false
+---
+
+# Descuento de cabecera: a-comprob (admin)
+
+Punto único: `App\Support\Ventas\AnitaComprobDescuentoSupport`.
+
+## Dónde aplica
+
+| Circuito | ¿Dto sobre bruto (letra ≠ A)? |
+|---|---|
+| Mostrador / pedido / remito (AGG, Bierzo, Ferli, …) | **Sí** |
+| POS gastronomía / estacionamiento / facturación local | **No** (`FLAG_OMITIR_CIRCUITO_POS`) |
+
+## a-comprob.c `calcula()`
+
+1. `tot_dto` sobre neto; se netea gravado.
+2. IVA sobre gravado ya descontado.
+3. Si letra ≠ `A`: `tot_dto *= (1 + tasa_iva/100)` → importe de “Descuento Gral.” / `ven_monto_desc` con IVA.
+
+## Prohibido
+
+- Reimplementar el ×(1+IVA) en gastronomía / locales.
+- Expresar dto sobre bruto en POS (rompe tickets CF).

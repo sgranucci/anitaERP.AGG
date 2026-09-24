@@ -6,6 +6,7 @@ namespace App\Services\Ventas;
 
 use App\ApiAnita;
 use App\Services\Arca\ArcaMtxcaFacturaElectronicaService;
+use App\Support\Ventas\AnitaComprobDescuentoSupport;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
@@ -393,8 +394,18 @@ final class AlinearFacturaAnitaArcaService
 
         // Descuento de cabecera: se mantiene ven_porc_desc; se recalcula ven_monto_desc
         // sobre el gravado ARCA (base neta = gravado / (1 - porc/100)).
+        // a-comprob.c letra != A: tot_dto *= (1 + tasa_iva/100) — dto expresado sobre bruto.
         $porcDesc = round((float) ($venta['ven_porc_desc'] ?? 0), 4);
         $montoDescNuevo = $this->montoDescuentoDesdeGravadoYPorcentaje($gravado, $porcDesc);
+        $letraNorm = strtoupper(trim($letra));
+        if ($letraNorm !== 'A' && $montoDescNuevo > 0.00001 && $gravado > 0.00001) {
+            $tasaIva = round($iva / $gravado * 100.0, 4);
+            $montoDescNuevo = AnitaComprobDescuentoSupport::expresarImporte(
+                $letraNorm,
+                $montoDescNuevo,
+                $tasaIva
+            );
+        }
 
         // --- venta ---
         $plan[] = [

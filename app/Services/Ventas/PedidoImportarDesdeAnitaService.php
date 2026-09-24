@@ -128,6 +128,7 @@ class PedidoImportarDesdeAnitaService
     /**
      * @param  array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string}  $filtros
      * @param  bool  $soloNuevos  Si true, no pisa cabeceras; crea faltantes y trae pesada solo si el ERP no la tiene.
+     * @param  bool  $forzarPisar  Si true (botón index), pisa cabecera/líneas aunque el pedido esté facturado/transferido/anulado.
      * @return array{
      *   creados: int,
      *   actualizados: int,
@@ -139,7 +140,7 @@ class PedidoImportarDesdeAnitaService
      *   detalle: list<array{codigo: string, estado: string, mensaje: string|null}>
      * }
      */
-    public function importar(array $filtros, ?int $usuarioId = null, bool $soloNuevos = false): array
+    public function importar(array $filtros, ?int $usuarioId = null, bool $soloNuevos = false, bool $forzarPisar = false): array
     {
         $this->assertElBierzo();
 
@@ -163,7 +164,7 @@ class PedidoImportarDesdeAnitaService
         foreach ($cabeceras as $cab) {
             $codigo = $this->codigoErpDesdeCabecera($cab);
             try {
-                $resultado = $this->importarUno($cab, $usuarioId, $soloNuevos);
+                $resultado = $this->importarUno($cab, $usuarioId, $soloNuevos, $forzarPisar);
                 if ($resultado['estado'] === 'creado') {
                     $resumen['creados']++;
                 } elseif ($resultado['estado'] === 'actualizado') {
@@ -198,7 +199,7 @@ class PedidoImportarDesdeAnitaService
     /**
      * @return array{estado: string, mensaje: string|null, pedido_id: int|null}
      */
-    private function importarUno(object $cab, int $usuarioId, bool $soloNuevos = false): array
+    private function importarUno(object $cab, int $usuarioId, bool $soloNuevos = false, bool $forzarPisar = false): array
     {
         $codigo = $this->codigoErpDesdeCabecera($cab);
         $fechaAnita = (int) ($cab->penm_fecha ?? 0);
@@ -242,7 +243,7 @@ class PedidoImportarDesdeAnitaService
         }
 
         $pedidoExistente = Pedido::query()->where('codigo', $codigo)->first();
-        if ($pedidoExistente) {
+        if ($pedidoExistente && ! $forzarPisar) {
             $motivo = $this->motivoOmitirReimport($pedidoExistente);
             if ($motivo !== null) {
                 return [
@@ -279,8 +280,7 @@ class PedidoImportarDesdeAnitaService
 
         $zonavtaId = $this->resolverZonavtaId($cab->penm_zonavta ?? null);
 
-        // Pedidos nuevos (o pendientes sin factura) entran como pendientes para pesada/facturar en ERP.
-        // Los que ya tienen FAC / Facturado / Transferido / Anulado no llegan acá.
+        // Pendiente de pesada/facturar. Con forzarPisar también se reaplica sobre facturados/transferidos.
         $mapeoEstado = PedidoEstadoErpSupport::cabeceraPendiente();
 
         $campos = [
@@ -303,7 +303,7 @@ class PedidoImportarDesdeAnitaService
         ];
 
         $cajaRealesAnita = self::enteroDesdeAnita($cab->penm_caja_reales ?? null);
-        if ($cajaRealesAnita > 0 || $pedidoExistente === null) {
+        if ($cajaRealesAnita > 0 || $pedidoExistente === null || $forzarPisar) {
             $campos['caja_reales'] = $cajaRealesAnita;
         }
 
@@ -314,7 +314,7 @@ class PedidoImportarDesdeAnitaService
             (int) ($cab->penm_nro ?? 0)
         );
 
-        return DB::transaction(function () use ($codigo, $campos, $lineasAnita) {
+        return DB::transaction(function () use ($codigo, $campos, $lineasAnita, $forzarPisar) {
             $pedido = Pedido::query()->where('codigo', $codigo)->first();
             $esNuevo = $pedido === null;
 
@@ -326,21 +326,74 @@ class PedidoImportarDesdeAnitaService
                 $pedido->save();
             }
 
-            $pesada = $this->grabarLineas((int) $pedido->id, $lineasAnita, ! $esNuevo);
+            $facDesvinculadas = 0;
+            if ($forzarPisar && ! $esNuevo) {
+                $facDesvinculadas = $this->desvincularFacturasEmitidas((int) $pedido->id);
+            }
+
+            // Index forzado: no conservar pesada/estado de líneas ERP; traer Anita tal cual.
+            $conservarPesadaErp = ! $esNuevo && ! $forzarPisar;
+            $pesada = $this->grabarLineas((int) $pedido->id, $lineasAnita, $conservarPesadaErp, $forzarPisar);
 
             Log::info('pedido.importar_anita.pedido', [
                 'codigo' => $codigo,
                 'estado' => $esNuevo ? 'creado' : 'actualizado',
+                'forzar_pisar' => $forzarPisar,
+                'fac_desvinculadas' => $facDesvinculadas,
                 'lineas_anita' => count($lineasAnita),
                 'pesada' => $pesada,
             ]);
 
+            $mensaje = null;
+            if ($pesada > 0) {
+                $mensaje = 'Pesada Anita '.number_format($pesada, 2, ',', '.').' kg';
+            }
+            if ($facDesvinculadas > 0) {
+                $extra = $facDesvinculadas.' FAC desvinculada'.($facDesvinculadas === 1 ? '' : 's');
+                $mensaje = $mensaje !== null ? $mensaje.'; '.$extra : $extra;
+            }
+
             return [
                 'estado' => $esNuevo ? 'creado' : 'actualizado',
-                'mensaje' => $pesada > 0 ? ('Pesada Anita '.number_format($pesada, 2, ',', '.').' kg') : null,
+                'mensaje' => $mensaje,
                 'pedido_id' => (int) $pedido->id,
             ];
         });
+    }
+
+    /**
+     * Quita el vínculo pedido_id de FAC emitidas para permitir re-facturar tras import forzado.
+     * No borra ni anula la venta: queda histórica sin pedido.
+     */
+    private function desvincularFacturasEmitidas(int $pedidoId): int
+    {
+        if ($pedidoId <= 0) {
+            return 0;
+        }
+
+        $ids = Venta::query()
+            ->where('pedido_id', $pedidoId)
+            ->where('codigo', 'like', 'FAC%')
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        if ($ids === []) {
+            return 0;
+        }
+
+        $actualizados = 0;
+        foreach ($ids as $ventaId) {
+            $venta = Venta::query()->whereKey($ventaId)->first();
+            if ($venta === null) {
+                continue;
+            }
+            $venta->pedido_id = null;
+            $venta->save();
+            $actualizados++;
+        }
+
+        return $actualizados;
     }
 
     /**
@@ -467,7 +520,7 @@ class PedidoImportarDesdeAnitaService
     /**
      * @param  list<object>  $lineasAnita
      */
-    private function grabarLineas(int $pedidoId, array $lineasAnita, bool $conservarPesadaErp): float
+    private function grabarLineas(int $pedidoId, array $lineasAnita, bool $conservarPesadaErp, bool $forzarEstadoPendiente = false): float
     {
         $existentes = Pedido_Articulo::query()
             ->where('pedido_id', $pedidoId)
@@ -543,7 +596,9 @@ class PedidoImportarDesdeAnitaService
                 'descuento' => $descuento,
                 'observacion' => $observacion !== '' ? $observacion : null,
                 'unidadmedida_id' => $articulo->unidadmedida_id ?? null,
-                'estado' => $existente !== null ? (string) ($existente->estado ?? 'P') : 'P',
+                'estado' => ($forzarEstadoPendiente || $existente === null)
+                    ? PedidoEstadoErpSupport::PENDIENTE
+                    : (string) ($existente->estado ?? PedidoEstadoErpSupport::PENDIENTE),
             ];
 
             if ($existente) {

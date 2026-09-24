@@ -24,8 +24,10 @@
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
                         Trae pedidos de Anita (<code>pendmae</code>/<code>pendmov</code>) a anitaERP
-                        por fecha de entrega y repartos. Crea los faltantes y actualiza los existentes
-                        que aún no estén facturados.
+                        por fecha de entrega y repartos. Crea los faltantes y <strong>pisa</strong> los
+                        existentes del filtro (también facturados/transferidos/anulados): cabecera en
+                        pendiente, líneas y pesada desde Anita.
+                        Las FAC previas se <strong>desvinculan</strong> del pedido (no se borran) para poder re-facturar.
                     </p>
                     <div class="form-group">
                         <label for="import_anita_fecha_entrega" class="requerido">Fecha de entrega</label>
