@@ -164,13 +164,14 @@
 			return;
 		}
 		var fl_todas_las_combinaciones = $tr.find('input:checkbox.checkCombinacion:checked').val();
-		var fl_todos_los_articulos = $tr.find('input:checkbox.checkSinFiltro:checked').val();
 		var selectedId = combinacion_id ? String(combinacion_id) : '';
 		if (!selectedId) {
 			selectedId = String($tr.find('.combinacion_id_previa').val() || '');
 		}
 
-		if (fl_todas_las_combinaciones == 'on' || fl_todos_los_articulos == 'on' || flsinfiltro) {
+		// Solo el flag C (Todas las combinaciones) amplía a inactivas.
+		// El flag A (Todos los artículos) no debe mezclarse con el filtro de combinaciones.
+		if (fl_todas_las_combinaciones == 'on' || flsinfiltro) {
 			var url_comb = carpetaBase+'/stock/leercombinaciones/'+articulo_id;
 		} else {
 			var url_comb = carpetaBase+'/stock/leercombinacionesactivas/'+articulo_id;

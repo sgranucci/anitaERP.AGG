@@ -87,6 +87,11 @@
                 </h3>
 				&nbsp;- ID: {{ $movimientostock->id }} - Movimiento: {{$movimientostock->codigo}}
                 <div class="card-tools">
+                    @if (can('listar-transferencias-pendientes', false))
+                        <a href="{{ url('mis-aprobaciones') }}?fuente=transferencia" class="btn btn-warning btn-sm mr-1" title="Transferencias pendientes de recepci&oacute;n">
+                            <i class="fa fa-inbox"></i> Pendientes TRA
+                        </a>
+                    @endif
                     @include('stock.movimientostock.partials.boton_imprimir_com_pdf', [
                         'movimientoStockId' => $movimientostock->id,
                     ])

@@ -78,6 +78,11 @@
                     @endif
                 </h3>
                 <div class="card-tools">
+                    @if (can('listar-transferencias-pendientes', false))
+                        <a href="{{ url('mis-aprobaciones') }}?fuente=transferencia" class="btn btn-warning btn-sm mr-1" title="Transferencias pendientes de recepci&oacute;n">
+                            <i class="fa fa-inbox"></i> Pendientes TRA
+                        </a>
+                    @endif
                     <a href="{{ route($ruta_index_movimientostock ?? 'movimientostock') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>

@@ -123,6 +123,7 @@ final class MovimientoStockFerliSupport
 
     /**
      * Listado compacto para el select de marca / data-articulo.
+     * Solo activos del canal del depósito (calzado con comb. activa + insumos).
      *
      * @return Collection<int, object{id:int,sku:string,descripcion:string,mventa_id:?int}>
      */
@@ -136,6 +137,31 @@ final class MovimientoStockFerliSupport
             ->where(function ($q) use ($depositoId, $idsExtra) {
                 $q->where(function ($qActivos) use ($depositoId) {
                     self::aplicarFiltroCatalogo($qActivos, $depositoId);
+                });
+                if ($idsExtra !== []) {
+                    $q->orWhereIn('id', $idsExtra);
+                }
+            });
+
+        return $query->get();
+    }
+
+    /**
+     * Listado amplio para el flag «Todos los artículos» (checkbox A):
+     * activos operativos sin filtro de canal/combinación.
+     *
+     * @return Collection<int, object{id:int,sku:string,descripcion:string,mventa_id:?int}>
+     */
+    public static function listadoParaSelectorTodos(array $idsExtra = []): Collection
+    {
+        $idsExtra = array_values(array_filter(array_map('intval', $idsExtra)));
+
+        $query = Articulo::query()
+            ->select('id', 'sku', 'descripcion', 'mventa_id')
+            ->orderBy('descripcion', 'ASC')
+            ->where(function ($q) use ($idsExtra) {
+                $q->where(function ($qActivos) {
+                    ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo($qActivos);
                 });
                 if ($idsExtra !== []) {
                     $q->orWhereIn('id', $idsExtra);

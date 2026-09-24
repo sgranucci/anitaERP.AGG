@@ -195,16 +195,30 @@ final class ArticuloEstadoCanalSupport
             return ArticuloCanalSupport::scopeArticulosCanalLocal($query);
         }
 
+        // Fábrica: estado_fabrica ACTIVO. Si hay pivote FABRICA, exige ese canal
+        // o artículos sin ningún canal (legacy / insumos). No excluir el catálogo
+        // entero cuando el pivote FABRICA aún no está poblado.
         $canalId = ArticuloCanalSupport::canalIdPorCodigo($codigoCanal);
         if (! $canalId) {
-            return $query->whereRaw('1 = 0');
+            return $query;
         }
 
-        return $query->whereExists(function ($q) use ($canalId) {
-            $q->selectRaw('1')
-                ->from('articulo_canal')
-                ->whereColumn('articulo_canal.articulo_id', 'articulo.id')
-                ->where('articulo_canal.canal_id', $canalId);
+        $hayPivotCanal = DB::table('articulo_canal')->where('canal_id', $canalId)->exists();
+        if (! $hayPivotCanal) {
+            return $query;
+        }
+
+        return $query->where(function ($outer) use ($canalId) {
+            $outer->whereExists(function ($q) use ($canalId) {
+                $q->selectRaw('1')
+                    ->from('articulo_canal')
+                    ->whereColumn('articulo_canal.articulo_id', 'articulo.id')
+                    ->where('articulo_canal.canal_id', $canalId);
+            })->orWhereNotExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('articulo_canal')
+                    ->whereColumn('articulo_canal.articulo_id', 'articulo.id');
+            });
         });
     }
 

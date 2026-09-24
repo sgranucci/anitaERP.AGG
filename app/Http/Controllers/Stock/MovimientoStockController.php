@@ -805,12 +805,14 @@ class MovimientoStockController extends Controller
         $ambito = MovimientoStockFerliSupport::ambitoCatalogo($depositoId > 0 ? $depositoId : null);
         $canal = MovimientoStockFerliSupport::codigoCanal($depositoId > 0 ? $depositoId : null);
         $arts = MovimientoStockFerliSupport::listadoParaSelector($depositoId > 0 ? $depositoId : null);
+        $artsTodos = MovimientoStockFerliSupport::listadoParaSelectorTodos();
 
         return response()->json([
             'deposito_id' => $depositoId,
             'ambito' => $ambito,
             'canal' => $canal,
             'articulos' => $arts->values()->all(),
+            'articulos_todos' => $artsTodos->values()->all(),
         ]);
     }
 
@@ -1025,9 +1027,8 @@ class MovimientoStockController extends Controller
             $articulo_ids
         );
 
-        // Misma base: en Ferli el “todos” ya no trae fábrica si el depósito es local (y viceversa).
-        $articuloall_query = \App\Support\Stock\MovimientoStockFerliSupport::listadoParaSelector(
-            $depositoOperativoId > 0 ? $depositoOperativoId : null,
+        // Checkbox A: catálogo amplio (activos operativos, sin filtro de canal).
+        $articuloall_query = \App\Support\Stock\MovimientoStockFerliSupport::listadoParaSelectorTodos(
             $articulo_ids
         );
 

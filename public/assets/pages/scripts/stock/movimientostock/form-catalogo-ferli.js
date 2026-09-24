@@ -30,15 +30,16 @@
         }
     }
 
-    function msActualizarDatasetMarca(articulos) {
+    function msActualizarDatasetMarca(articulos, articulosTodos) {
         var $marca = $('#marca');
         if (!$marca.length) {
             return;
         }
         var lista = Array.isArray(articulos) ? articulos : [];
+        var listaTodos = Array.isArray(articulosTodos) ? articulosTodos : lista;
         try {
             $marca.attr('data-articulo', JSON.stringify(lista));
-            $marca.attr('data-articuloall', JSON.stringify(lista));
+            $marca.attr('data-articuloall', JSON.stringify(listaTodos));
         } catch (e) {
             // ignore
         }
@@ -59,7 +60,7 @@
                     return;
                 }
                 msAplicarMetaCatalogo(data.ambito, data.canal, depId);
-                msActualizarDatasetMarca(data.articulos || []);
+                msActualizarDatasetMarca(data.articulos || [], data.articulos_todos || data.articulos || []);
             });
     }
 

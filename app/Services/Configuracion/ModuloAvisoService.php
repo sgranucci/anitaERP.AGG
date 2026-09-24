@@ -31,6 +31,12 @@ class ModuloAvisoService
                 ->first();
 
             if (! $tipo) {
+                Log::info('ModuloAvisoService: tipo de aviso inexistente o inactivo', [
+                    'modulo' => $modulo,
+                    'codigo' => $codigo,
+                    'entity_id' => $entityId,
+                ]);
+
                 return;
             }
 

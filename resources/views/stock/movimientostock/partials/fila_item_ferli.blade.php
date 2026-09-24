@@ -26,8 +26,8 @@
             <input type="hidden" name="precios[]" class="precio" value="{{ $precio ?? '0.00' }}" />
         </td>
         <td class="align-middle text-center">
-            <input name="checkssinfiltro[]" class="checkSinFiltro" title="Todos los art&iacute;culos" type="checkbox" autocomplete="off">
+            <input name="checkssinfiltro[]" class="checkSinFiltro" title="Todos los art&iacute;culos (sin filtro de canal / local)" type="checkbox" autocomplete="off">
         </td>
         <td class="align-middle text-center">
-            <input name="checkscomb[]" class="checkCombinacion" title="Todas las combinaciones" type="checkbox" autocomplete="off">
+            <input name="checkscomb[]" class="checkCombinacion" title="Todas las combinaciones (incluye inactivas). Sin marcar = solo activas del canal" type="checkbox" autocomplete="off">
         </td>

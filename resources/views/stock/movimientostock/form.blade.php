@@ -399,8 +399,8 @@
     				<th class="col-comb">Combinaci&oacute;n</th>
     				<th class="col-mod">M&oacute;dulo</th>
     				<th class="col-qty text-right">Cantidad</th>
-					<th class="col-flag" title="Todos los art&iacute;culos">A</th>
-    				<th class="col-flag" title="Todas las combinaciones">C</th>
+					<th class="col-flag" title="Marcar para listar todos los art&iacute;culos (sin filtro de canal / local)">A</th>
+    				<th class="col-flag" title="Marcar para listar tambi&eacute;n combinaciones inactivas (por defecto solo activas del canal)">C</th>
                     @else
                     <th class="col-color ms-col-color-talle" style="display:none;">Color</th>
                     <th class="col-talle ms-col-color-talle" style="display:none;">Talle</th>

@@ -81,6 +81,11 @@ $nuevoCan = can('crear-movimientos-de-stock', false)
                     @endif
                 </h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('listar-transferencias-pendientes', false))
+                        <a href="{{ url('mis-aprobaciones') }}?fuente=transferencia" class="btn btn-warning btn-sm mr-1" title="Transferencias pendientes de recepci&oacute;n">
+                            <i class="fa fa-inbox"></i> Pendientes TRA
+                        </a>
+                    @endif
                     @include('includes.stock.boton-manual-recepcion-movstock')
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-movimientostock',
