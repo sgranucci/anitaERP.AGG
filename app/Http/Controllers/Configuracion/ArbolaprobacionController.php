@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Configuracion;
 
+use App\Exports\Configuracion\ArbolaprobacionListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionArbolaprobacion;
 use App\Models\Compras\Requisicion_Estado;
@@ -29,6 +30,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Maatwebsite\Excel\Excel as ExcelFormat;
 
 class ArbolaprobacionController extends Controller
 {
@@ -97,7 +99,62 @@ class ArbolaprobacionController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => ArbolaprobacionListadoFiltros::paraQueryString($filtros),
             'empresa_query' => $empresa_query,
+            'tipoarbol_opciones' => ArbolaprobacionListadoFiltros::opcionesTipoArbol(),
+            'estado_opciones' => ArbolaprobacionListadoFiltros::opcionesEstado(),
         ]);
+    }
+
+    /**
+     * Reporte / exportación del listado (mismo módulo, sin menú aparte).
+     *
+     * @param  string|null  $formato
+     * @return \Illuminate\Http\Response|\Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\RedirectResponse
+     */
+    public function listar(Request $request, $formato = null)
+    {
+        can('lista-arbol-de-aprobacion');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresaDefault = optional($empresa_query->first())->id;
+        $filtros = ArbolaprobacionListadoFiltros::resolverDesdeRequest(
+            $request,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->arbolaprobacionRepository->leeArbolaprobacion($filtros);
+                $view = \View::make('configuracion.arbolaprobacion.listado', [
+                    'datas' => $datas,
+                    'filtros' => $filtros,
+                ])->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'listado_arbolaprobacion';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+                return (new ArbolaprobacionListadoExport($this->arbolaprobacionRepository))
+                    ->parametros($filtros)
+                    ->download('arboles_aprobacion.xlsx');
+
+            case 'CSV':
+                return (new ArbolaprobacionListadoExport($this->arbolaprobacionRepository))
+                    ->parametros($filtros)
+                    ->download('arboles_aprobacion.csv', ExcelFormat::CSV);
+        }
+
+        return redirect()->route('consulta_arbolaprobacion', ArbolaprobacionListadoFiltros::paraQueryString($filtros));
     }
 
     /**

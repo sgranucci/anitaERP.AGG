@@ -36,8 +36,14 @@
 
             <div class="anita-arbol-panel p-0 overflow-hidden">
                 @include('configuracion.arbolaprobacion.partials.filtros_externos')
+                <div class="px-3 pt-2">
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'lista_arbolaprobacion',
+                        'queryparams' => $filtrosQuery ?? [],
+                    ])
+                </div>
                 <div class="table-responsive">
-                    <table class="table table-hover table-striped mb-0" id="tabla-data">
+                    <table class="table table-hover table-striped mb-0" id="tabla-paginada">
                         <thead>
                             <tr>
                                 <th class="width20">ID</th>

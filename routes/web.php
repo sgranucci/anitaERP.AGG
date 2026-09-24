@@ -1037,6 +1037,7 @@ Route::put('configuracion/modulo-aviso/{id}', 'Configuracion\ModuloAvisoControll
  */
 
 Route::get('configuracion/arbolaprobacion', 'Configuracion\ArbolaprobacionController@index')->name('consulta_arbolaprobacion');
+Route::get('configuracion/lista-arbolaprobacion/{formato?}', 'Configuracion\ArbolaprobacionController@listar')->name('lista_arbolaprobacion');
 Route::get('configuracion/arbolaprobacion/crear', 'Configuracion\ArbolaprobacionController@crear')->name('crea_arbolaprobacion');
 Route::post('configuracion/arbolaprobacion', 'Configuracion\ArbolaprobacionController@guardar')->name('guarda_arbolaprobacion');
 Route::get('configuracion/arbolaprobacion/{id}/editar', 'Configuracion\ArbolaprobacionController@editar')->name('edita_arbolaprobacion');
