@@ -94,6 +94,7 @@ use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use App\Support\Ventas\ArcaFceNcMostradorSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
+use App\Support\Ventas\AnitaComprobDescuentoSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 use App\Support\Ventas\FacturaAsientoDescuentoPieSupport;
 use App\Support\Ventas\FacturaBTotalesImpresionSupport;
@@ -3062,6 +3063,10 @@ class FacturacionService
 			$data,
 			! $this->esEmisionPos($data)
 		);
+		// POS gastro/estacionamiento/locales: dto pie queda en neto (no a-comprob sobre bruto).
+		if ($this->esEmisionPos($data)) {
+			$datosCliente[AnitaComprobDescuentoSupport::FLAG_OMITIR_CIRCUITO_POS] = true;
+		}
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, 
 																			$this->flGrabaComprobanteDividido);

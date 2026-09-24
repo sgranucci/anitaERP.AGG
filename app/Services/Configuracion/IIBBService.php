@@ -284,6 +284,12 @@ class IIBBService
 						}
 					}
 				}
+				// a-comprob / Anita: en B forzada CABA no corta por minimopercepcion de
+				// provincia_tasaiibb (hoy 3000) — deja el mínimo del .env (0).
+				if ($forzarCaba && ElBierzoFacturaBPercepcionCabaSupport::esJurisdiccionCaba($jurisdiccionesPercepcion[$i])) {
+					$minimaCfg = array_map('trim', explode(',', (string) config('anita.minima_percepcion_iibb', '0')));
+					$minimaPercepcion[$i] = (float) ($minimaCfg[0] ?? 0);
+				}
 				// Verifica si tiene CM05 o no en la jurisdiccion
 				$provinciaCm05 = $cm05 instanceof \Illuminate\Support\Collection
 					? $cm05->firstWhere('provincia_id', $provincia->id)

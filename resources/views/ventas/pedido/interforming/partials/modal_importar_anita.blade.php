@@ -24,7 +24,9 @@
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
                         Trae pedidos Anita (<code>pendmae</code>/<code>pendmov</code>) por fecha de pedido
-                        (<code>penm_fecha</code> y tipo PED/PEX. No importa remitos.
+                        <code>penm_fecha</code> y tipo PED/PEX. Crea faltantes y <strong>pisa</strong>
+                        existentes del filtro (también facturados/anulados). No importa remitos.
+                        No borra ventas ya emitidas en ERP.
                     </p>
                     <div class="form-group">
                         <label for="import_anita_fecha" class="requerido">Fecha de pedido</label>

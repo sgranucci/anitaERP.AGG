@@ -123,10 +123,11 @@ class PedidoImportarAnitaController extends Controller
         ]);
 
         $filtros = ListadoRepartoFechaEntregaSupport::resolverDesdeRequest($request);
-        $resumen = $this->service->importar($filtros, (int) (auth()->id() ?: 0));
+        // Botón del index: pisa cabecera/líneas existentes (incl. facturados) con Anita.
+        $resumen = $this->service->importar($filtros, (int) (auth()->id() ?: 0), false, true);
 
         $mensaje = sprintf(
-            'Importación Anita: %d creados, %d actualizados, %d omitidos (ya facturados/procesados), %d DESPACHO cerrados en Anita (sin importar), %d con error (total %d).',
+            'Importación Anita (forzada desde index): %d creados, %d actualizados, %d omitidos, %d DESPACHO cerrados en Anita (sin importar), %d con error (total %d).',
             $resumen['creados'],
             $resumen['actualizados'],
             $resumen['omitidos'] ?? 0,
@@ -228,10 +229,10 @@ class PedidoImportarAnitaController extends Controller
             'tipo' => $tipo,
         ];
 
-        $resumen = $this->serviceInterforming->importar($filtros, (int) (auth()->id() ?: 0));
+        $resumen = $this->serviceInterforming->importar($filtros, (int) (auth()->id() ?: 0), true);
 
         $mensaje = sprintf(
-            'Importación Anita Interforming: %d creados, %d actualizados, %d omitidos, %d con error (total %d).',
+            'Importación Anita Interforming (forzada desde index): %d creados, %d actualizados, %d omitidos, %d con error (total %d).',
             $resumen['creados'],
             $resumen['actualizados'],
             $resumen['omitidos'],

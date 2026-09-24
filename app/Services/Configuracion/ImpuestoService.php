@@ -18,6 +18,7 @@ use App\Support\Configuracion\PercepcionIvaSujetoSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
+use App\Support\Ventas\AnitaComprobDescuentoSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use App\Support\Ventas\AbastoBierzoSupport;
@@ -75,6 +76,8 @@ class ImpuestoService extends FacturacionService
 		$totalFinal = 0.;
 		$descuentoItem = 0.;
 		$descuentoFinal = 0.;
+		/** @var array<string, float> tasa IVA => dto cabecera sobre neto (a-comprob tot_dto) */
+		$descuentoCabeceraPorTasa = [];
 		$totalBruto = 0.;
 		$numerodocumento = "";
 		$condicioniibb_id = "";
@@ -305,6 +308,14 @@ class ImpuestoService extends FacturacionService
 
 					$totalNeto = VentaImporteDosDecimalesSupport::redondear($neto['totalConDescuento']);
 
+					// a-comprob: tot_dto por alícuota (21 % vs 10,5 %) para expresar dto en B.
+					$descCabeceraItem = (float) ($neto['totalDescuentoCabecera'] ?? 0);
+					if (abs($descCabeceraItem) >= 0.00001) {
+						$tasaDtoKey = (string) (float) $valorTasaImpuesto;
+						$descuentoCabeceraPorTasa[$tasaDtoKey] = ($descuentoCabeceraPorTasa[$tasaDtoKey] ?? 0.)
+							+ $descCabeceraItem;
+					}
+
 					// Asigna total neto para calculos posteriores
 					$dataItem[$off-1]['totalcondescuento'] = $totalNeto;
 
@@ -387,10 +398,28 @@ class ImpuestoService extends FacturacionService
 				$detalle = "Descuento Gral. ".$porcDescuento.'%';
 			else
 				$detalle = "Descuento";
-			
+
+			// a-comprob.c: letra != A → tot_dto *= (1 + tasa/100) (dto sobre bruto).
+			// Circuito admin (mostrador/pedido/remito, todas las empresas). POS: omitir.
+			$letraComprobante = $condicioniva ? (string) ($condicioniva->letra ?? 'A') : 'A';
+			if (AnitaComprobDescuentoSupport::debeExpresarSobreBruto($dataCliente, $letraComprobante)
+				&& $descuentoCabeceraPorTasa !== []) {
+				$descuentoExpresado = AnitaComprobDescuentoSupport::expresarParaLetra(
+					$letraComprobante,
+					$descuentoCabeceraPorTasa
+				);
+				// Suma descuentos de línea (ya van en neto de renglón; se muestran en el pie si hay).
+				$descuentoLineaPie = round($descuentoFinal - array_sum($descuentoCabeceraPorTasa), 2);
+				if (abs($descuentoLineaPie) >= 0.01) {
+					$descuentoExpresado = round($descuentoExpresado + $descuentoLineaPie, 2);
+				}
+			} else {
+				$descuentoExpresado = round($descuentoFinal, 2);
+			}
+
 			$totalNeto -= $descuentoFinal;
 
-			self::agregaItemTotales($detalle, $porcDescuento, -$descuentoFinal, 0, 0, 0, $subtotales);
+			self::agregaItemTotales($detalle, $porcDescuento, -$descuentoExpresado, 0, 0, 0, $subtotales);
 		}
 
 		// Agrega impuestos nacionales (IVA consolidado por alícuota: logística + gravado juntos).
@@ -861,6 +890,7 @@ class ImpuestoService extends FacturacionService
 		$importeSinDto = 0.;
 		$totalNeto = $totalDescuento = $porcentajeDescuento = 0.;
 		$totalDescuentoItem = 0.;
+		$totalDescuentoCabecera = 0.;
 
 		// Coeficiente de impuesto interno por unidad del item (0..1). El monto del impuesto
 		// interno se descuenta del precio bruto del renglón antes de calcular neto e IVA, para
@@ -942,8 +972,10 @@ class ImpuestoService extends FacturacionService
 				// Agrega descuento final
 				if (($item['descuentofinal']+$porcentajeDescuentoImportePie) != 0.)
 				{
-					$totalDescuento = ($totalNeto * ($item['descuentofinal'] +
+					$totalDescuentoCabecera = ($totalNeto * ($item['descuentofinal'] +
 										$porcentajeDescuentoImportePie) / 100.);
+
+					$totalDescuento = $totalDescuentoCabecera;
 
 					$totalNeto *= (1. - (($item['descuentofinal']+$porcentajeDescuentoImportePie) / 100.));
 					$porcentajeDescuento = ($item['descuentofinal']+$porcentajeDescuentoImportePie);
@@ -966,6 +998,7 @@ class ImpuestoService extends FacturacionService
 			'totalSinDescuento' => $importeSinDto,
 			'totalConDescuento' => $totalNeto,
 			'totalDescuento' => $totalDescuento,
+			'totalDescuentoCabecera' => $totalDescuentoCabecera,
 			'porcentajeDescuento' => $porcentajeDescuento,
 			'impuestoInternoCoeficiente' => $coefImpuestoInterno,
 			'impuestoInternoMonto' => $montoImpuestoInternoItem,

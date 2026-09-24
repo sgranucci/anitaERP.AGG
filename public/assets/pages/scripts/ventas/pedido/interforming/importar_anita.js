@@ -52,8 +52,8 @@
                 }
                 var fecha = $.trim($('#import_anita_fecha').val() || '');
                 var tipo = $.trim($('#import_anita_tipo').val() || 'TODOS');
-                var msg = 'Se importarán/actualizarán los pedidos Anita con fecha ' + fecha
-                    + ' (tipo ' + tipo + '). ¿Continuar?';
+                var msg = 'Se importarán y PISARÁN en ERP los pedidos Anita con fecha ' + fecha
+                    + ' (tipo ' + tipo + '), incluidos facturados/anulados. Las ventas emitidas no se borran. ¿Continuar?';
                 if (!window.confirm(msg)) {
                     e.preventDefault();
                     return;

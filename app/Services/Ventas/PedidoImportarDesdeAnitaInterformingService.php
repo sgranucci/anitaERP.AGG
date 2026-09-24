@@ -108,6 +108,7 @@ class PedidoImportarDesdeAnitaInterformingService
 
     /**
      * @param  array{fecha_desde?: string, fecha_hasta?: string, tipo?: string}  $filtros
+     * @param  bool  $forzarPisar  Si true (botón index), pisa aunque esté facturado/anulado o tenga venta.
      * @return array{
      *   creados: int,
      *   actualizados: int,
@@ -117,7 +118,7 @@ class PedidoImportarDesdeAnitaInterformingService
      *   detalle: list<array{codigo: string, estado: string, mensaje: string|null}>
      * }
      */
-    public function importar(array $filtros, ?int $usuarioId = null): array
+    public function importar(array $filtros, ?int $usuarioId = null, bool $forzarPisar = false): array
     {
         $this->assertInterforming();
 
@@ -139,7 +140,7 @@ class PedidoImportarDesdeAnitaInterformingService
         foreach ($cabeceras as $cab) {
             $codigo = $this->codigoErpDesdeCabecera($cab);
             try {
-                $resultado = $this->importarUno($cab, $usuarioId);
+                $resultado = $this->importarUno($cab, $usuarioId, $forzarPisar);
                 if ($resultado['estado'] === 'creado') {
                     $resumen['creados']++;
                 } elseif ($resultado['estado'] === 'actualizado') {
@@ -174,6 +175,7 @@ class PedidoImportarDesdeAnitaInterformingService
             'omitidos' => $resumen['omitidos'],
             'errores' => $resumen['errores'],
             'total' => $resumen['total'],
+            'forzar_pisar' => $forzarPisar,
         ]);
 
         return $resumen;
@@ -182,7 +184,7 @@ class PedidoImportarDesdeAnitaInterformingService
     /**
      * @return array{estado: string, mensaje: string|null, pedido_id: int|null}
      */
-    private function importarUno(object $cab, int $usuarioId): array
+    private function importarUno(object $cab, int $usuarioId, bool $forzarPisar = false): array
     {
         $codigo = $this->codigoErpDesdeCabecera($cab);
         $tipo = strtoupper(trim((string) ($cab->penm_tipo ?? '')));
@@ -204,7 +206,7 @@ class PedidoImportarDesdeAnitaInterformingService
         }
 
         $pedidoExistente = PedidoInterforming::query()->where('codigo', $codigo)->first();
-        if ($pedidoExistente) {
+        if ($pedidoExistente && ! $forzarPisar) {
             $motivo = $this->motivoOmitirReimport($pedidoExistente);
             if ($motivo !== null) {
                 return [
@@ -284,7 +286,7 @@ class PedidoImportarDesdeAnitaInterformingService
             'numero_comprobante' => $nro,
         ];
 
-        return DB::transaction(function () use ($codigo, $campos, $lineasPreparadas) {
+        return DB::transaction(function () use ($codigo, $campos, $lineasPreparadas, $forzarPisar) {
             $pedido = PedidoInterforming::query()->where('codigo', $codigo)->first();
             $esNuevo = $pedido === null;
 
@@ -296,20 +298,62 @@ class PedidoImportarDesdeAnitaInterformingService
                 $pedido->save();
             }
 
+            $ventasDesvinculadas = 0;
+            if ($forzarPisar && ! $esNuevo) {
+                $ventasDesvinculadas = $this->desvincularVentasDelPedido((int) $pedido->id);
+            }
+
             $this->grabarLineas((int) $pedido->id, $lineasPreparadas['lineas']);
 
             Log::info('pedido.importar_anita_interforming.pedido', [
                 'codigo' => $codigo,
                 'estado' => $esNuevo ? 'creado' : 'actualizado',
+                'forzar_pisar' => $forzarPisar,
+                'ventas_desvinculadas' => $ventasDesvinculadas,
                 'lineas' => count($lineasPreparadas['lineas']),
             ]);
 
             return [
                 'estado' => $esNuevo ? 'creado' : 'actualizado',
-                'mensaje' => null,
+                'mensaje' => $ventasDesvinculadas > 0
+                    ? ($ventasDesvinculadas.' venta'.($ventasDesvinculadas === 1 ? '' : 's').' desvinculada'.($ventasDesvinculadas === 1 ? '' : 's'))
+                    : null,
                 'pedido_id' => (int) $pedido->id,
             ];
         });
+    }
+
+    /**
+     * Desvincula ventas del pedido (pedido_id = null) para permitir re-facturar tras import forzado.
+     */
+    private function desvincularVentasDelPedido(int $pedidoId): int
+    {
+        if ($pedidoId <= 0) {
+            return 0;
+        }
+
+        $ids = Venta::query()
+            ->where('pedido_id', $pedidoId)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        if ($ids === []) {
+            return 0;
+        }
+
+        $actualizados = 0;
+        foreach ($ids as $ventaId) {
+            $venta = Venta::query()->whereKey($ventaId)->first();
+            if ($venta === null) {
+                continue;
+            }
+            $venta->pedido_id = null;
+            $venta->save();
+            $actualizados++;
+        }
+
+        return $actualizados;
     }
 
     /**
