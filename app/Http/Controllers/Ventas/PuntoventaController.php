@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Ventas;
 
+use App\Exports\Ventas\PuntoventaListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPuntoventa;
 use App\Models\Configuracion\Empresa;
@@ -13,7 +14,10 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Services\Arca\ArcaPuntosVentaCatalogoService;
 use App\Services\Arca\ArcaTiposComprobanteCatalogoService;
+use App\Services\Arca\ConstanciaInscripcionService;
 use App\Services\Ventas\PuntoventaAnitaSyncService;
+use App\Support\Listado\QueryRetornoListado;
+use App\Support\Ventas\PuntoventaListadoFiltros;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +36,7 @@ class PuntoventaController extends Controller
         private EmpresaRepositoryInterface $empresaRepository,
         private PuntoventaAnitaSyncService $puntoventaAnitaSyncService,
         private ArcaPuntosVentaCatalogoService $arcaPuntosVentaCatalogo,
+        private ConstanciaInscripcionService $constanciaInscripcion,
     ) {
         $this->repository = $repository;
         $this->actividad_arcaRepository = $actividad_arcaRepository;
@@ -42,12 +47,11 @@ class PuntoventaController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-puntos-de-venta');
 
-        $datas = Puntoventa::orderBy('id')->get();
-        $sinPuntosCargados = $datas->isEmpty();
+        $sinPuntosCargados = Puntoventa::query()->doesntExist();
 
         if ($sinPuntosCargados && config('app.anita_sync_puntoventa_index')) {
             try {
@@ -57,19 +61,64 @@ class PuntoventaController extends Controller
             }
         }
 
-        $datas = $this->repository->all();
+        $filtros = PuntoventaListadoFiltros::resolverDesdeRequest($request);
+        $datas = $this->repository->leePuntoventa($filtros, true);
 
         $estadoEnum = Puntoventa::$enumEstado;
         $modofacturacionEnum = Puntoventa::$enumModoFacturacion;
         $empresasArca = $this->empresasArcaQuery();
+        $filtrosQuery = PuntoventaListadoFiltros::paraQueryString($filtros);
+        $camposFiltro = PuntoventaListadoFiltros::CAMPOS;
 
         return view('ventas.puntoventa.index', compact(
             'datas',
             'modofacturacionEnum',
             'estadoEnum',
             'sinPuntosCargados',
-            'empresasArca'
+            'empresasArca',
+            'filtros',
+            'filtrosQuery',
+            'camposFiltro'
         ));
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-puntos-de-venta');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = PuntoventaListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->repository->leePuntoventa($filtros, false);
+                $view = \View::make('ventas.puntoventa.listado', compact('datas'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'listado_puntoventa';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+                return (new PuntoventaListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('puntoventa.xlsx');
+
+            case 'CSV':
+                return (new PuntoventaListadoExport($this->repository))
+                    ->parametros($filtros)
+                    ->download('puntoventa.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return redirect()->route('puntoventa', PuntoventaListadoFiltros::paraQueryString($filtros));
     }
 
     /**
@@ -77,11 +126,16 @@ class PuntoventaController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-puntos-de-venta');
 
-        return view('ventas.puntoventa.crear', $this->datosFormulario());
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, PuntoventaListadoFiltros::class);
+
+        return view('ventas.puntoventa.crear', array_merge(
+            $this->datosFormulario(),
+            compact('filtrosQuery')
+        ));
     }
 
     /**
@@ -94,7 +148,9 @@ class PuntoventaController extends Controller
     {
         $this->repository->create($request->all());
 
-        return redirect('ventas/puntoventa')->with('mensaje', 'Punto de venta creado con exito');
+        return redirect()
+            ->route('puntoventa', QueryRetornoListado::desdeRequest($request, PuntoventaListadoFiltros::class))
+            ->with('mensaje', 'Punto de venta creado con exito');
     }
 
     /**
@@ -115,12 +171,14 @@ class PuntoventaController extends Controller
         }
 
         $data = $this->repository->findOrFail($id);
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, PuntoventaListadoFiltros::class);
 
         return view('ventas.puntoventa.editar', array_merge(
             [
                 'data' => $data,
                 'solo_consulta' => $soloConsulta,
                 'puede_actualizar' => can('actualizar-puntos-de-venta', false),
+                'filtrosQuery' => $filtrosQuery,
             ],
             $this->datosFormulario($data)
         ));
@@ -138,7 +196,9 @@ class PuntoventaController extends Controller
         can('actualizar-puntos-de-venta');
         $this->repository->update($request->all(), $id);
 
-        return redirect('ventas/puntoventa')->with('mensaje', 'Punto de venta actualizado con éxito');
+        return redirect()
+            ->route('puntoventa', QueryRetornoListado::desdeRequest($request, PuntoventaListadoFiltros::class))
+            ->with('mensaje', 'Punto de venta actualizado con éxito');
     }
 
     /**
@@ -149,7 +209,7 @@ class PuntoventaController extends Controller
      */
     public function eliminar(Request $request, $id)
     {
-        can('borrar-puntos-de-venta]');
+        can('borrar-puntos-de-venta');
 
         if ($request->ajax()) {
             if ($this->repository->delete($id)) {
@@ -197,6 +257,81 @@ class PuntoventaController extends Controller
             return redirect()->route('puntoventa')->with('errores', [
                 'No se completó la sincronización desde Anita. Si el error fue por tiempo de espera (504), ejecute en el servidor: php artisan puntoventa:sincronizar-anita — Detalle: '.$e->getMessage(),
             ]);
+        }
+    }
+
+    /**
+     * Domicilio fiscal de la CUIT de la empresa (padrón ARCA / constancia de inscripción).
+     * No es el domicilio del PV en el portal AFIP (ese dato no viene en FEParamGetPtosVenta).
+     */
+    public function domicilioFiscalArca(Request $request): JsonResponse
+    {
+        if (! can('listar-puntos-de-venta', false)
+            && ! can('crear-puntos-de-venta', false)
+            && ! can('editar-puntos-de-venta', false)) {
+            abort(403, 'No tiene permiso');
+        }
+
+        $request->validate([
+            'empresa_id' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $empresa = $this->empresaAsignadaConCuit($empresaId);
+        if ($empresa === null) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Empresa no encontrada o sin acceso.',
+            ], 404);
+        }
+
+        $cuit = preg_replace('/\D+/', '', (string) ($empresa->nroinscripcion ?? '')) ?? '';
+        if (strlen($cuit) !== 11) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'La empresa no tiene CUIT válido en nroinscripcion (se necesitan 11 dígitos).',
+            ], 422);
+        }
+
+        try {
+            $data = $this->constanciaInscripcion->getPersonaV2($cuit);
+
+            if (! empty($data['error'])) {
+                return response()->json([
+                    'ok' => false,
+                    'message' => (string) $data['error'],
+                    'cuit' => $cuit,
+                    'empresa_id' => $empresaId,
+                    'empresa_nombre' => (string) $empresa->nombre,
+                ], 422);
+            }
+
+            $domicilio = is_array($data['domicilioFiscal'] ?? null) ? $data['domicilioFiscal'] : [];
+
+            return response()->json([
+                'ok' => true,
+                'empresa_id' => $empresaId,
+                'empresa_nombre' => (string) $empresa->nombre,
+                'cuit' => $cuit,
+                'razon_social' => $data['nombre'] ?? $data['razonSocial'] ?? null,
+                'domicilioFiscal' => [
+                    'direccion' => $domicilio['direccion'] ?? null,
+                    'localidad' => $domicilio['localidad'] ?? null,
+                    'provincia' => $domicilio['provincia'] ?? null,
+                    'codPostal' => $domicilio['codPostal'] ?? null,
+                    'texto' => $domicilio['texto'] ?? null,
+                    'provincia_id' => $domicilio['provincia_id'] ?? null,
+                    'localidad_id' => $domicilio['localidad_id'] ?? null,
+                ],
+                'pais_id' => (int) config('puntoventa_anita.default_pais_id', 1),
+            ]);
+        } catch (Exception $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => $e->getMessage(),
+                'cuit' => $cuit,
+                'empresa_id' => $empresaId,
+            ], 500);
         }
     }
 
@@ -508,6 +643,18 @@ class PuntoventaController extends Controller
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'id');
 
         return $query->get(['id', 'nombre']);
+    }
+
+    private function empresaAsignadaConCuit(int $empresaId): ?Empresa
+    {
+        if ($empresaId < 1) {
+            return null;
+        }
+
+        $query = Empresa::query()->whereKey($empresaId);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'id');
+
+        return $query->first(['id', 'nombre', 'nroinscripcion']);
     }
 
     /**

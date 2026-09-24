@@ -1,18 +1,27 @@
 /**
- * Puntos de venta: catálogo ARCA/AFIP para el campo codigo.
+ * Puntos de venta: catálogo ARCA (códigos) + domicilio fiscal del padrón.
  */
 (function () {
 	'use strict';
 
 	var STORAGE_KEY = 'arca_ptos_venta_v1';
 
+	function root() {
+		return document.getElementById('puntoventa-form-root');
+	}
+
 	function panel() {
-		return document.getElementById('puntoventa-arca-panel');
+		return document.getElementById('puntoventa-arca-panel') || root();
 	}
 
 	function urlPuntos() {
-		var p = panel();
-		return p ? p.getAttribute('data-url-puntos') : '';
+		var el = root() || panel();
+		return el ? el.getAttribute('data-url-puntos') : '';
+	}
+
+	function urlDomicilio() {
+		var el = root();
+		return el ? el.getAttribute('data-url-domicilio') : '';
 	}
 
 	function empresaId() {
@@ -105,20 +114,41 @@
 		});
 	}
 
+	function byId(id) {
+		return document.getElementById(id);
+	}
+
+	function setVal(id, value) {
+		var el = byId(id);
+		if (!el) {
+			return;
+		}
+		el.value = value == null ? '' : String(value);
+	}
+
 	function elementosUi() {
 		return {
-			btn: document.getElementById('btn-actualizar-ptos-arca'),
-			icono: document.getElementById('btn-actualizar-ptos-arca-icono'),
-			spinner: document.getElementById('btn-actualizar-ptos-arca-spinner'),
-			estado: document.getElementById('puntoventa-arca-estado'),
-			hint: document.getElementById('puntoventa-webservice-arca'),
+			btn: byId('btn-actualizar-ptos-arca'),
+			icono: byId('btn-actualizar-ptos-arca-icono'),
+			spinner: byId('btn-actualizar-ptos-arca-spinner'),
+			estado: byId('puntoventa-arca-estado'),
+			hint: byId('puntoventa-webservice-arca'),
+		};
+	}
+
+	function elementosDomicilioUi() {
+		return {
+			btn: byId('btn-traer-domicilio-arca'),
+			icono: byId('btn-traer-domicilio-arca-icono'),
+			spinner: byId('btn-traer-domicilio-arca-spinner'),
+			estado: byId('puntoventa-domicilio-arca-estado'),
 		};
 	}
 
 	function mostrarProgreso(mensaje, tipo) {
 		var ui = elementosUi();
 		if (ui.estado) {
-			ui.estado.className = 'alert py-2 px-3 mt-2 mb-0 alert-' + (tipo || 'info');
+			ui.estado.className = 'alert py-2 px-3 mt-3 mb-0 alert-' + (tipo || 'info');
 			ui.estado.innerHTML =
 				'<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> ' + mensaje;
 			ui.estado.classList.remove('d-none');
@@ -156,14 +186,62 @@
 					: tipo === 'warning'
 						? 'fa-exclamation-triangle'
 						: 'fa-times-circle';
-			ui.estado.className = 'alert py-2 px-3 mt-2 mb-0 alert-' + (tipo || 'info');
+			ui.estado.className = 'alert py-2 px-3 mt-3 mb-0 alert-' + (tipo || 'info');
 			ui.estado.innerHTML = '<i class="fa ' + icono + '" aria-hidden="true"></i> ' + mensaje;
 			ui.estado.classList.remove('d-none');
 		}
 	}
 
+	function mostrarDomicilioProgreso(mensaje) {
+		var ui = elementosDomicilioUi();
+		if (ui.estado) {
+			ui.estado.className = 'alert alert-info py-2 px-3 mb-0';
+			ui.estado.innerHTML =
+				'<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> ' + mensaje;
+			ui.estado.classList.remove('d-none');
+		}
+		if (ui.btn) {
+			ui.btn.disabled = true;
+		}
+		if (ui.icono) {
+			ui.icono.classList.add('d-none');
+		}
+		if (ui.spinner) {
+			ui.spinner.classList.remove('d-none');
+		}
+	}
+
+	function ocultarDomicilioProgreso() {
+		var ui = elementosDomicilioUi();
+		if (ui.btn) {
+			ui.btn.disabled = false;
+		}
+		if (ui.icono) {
+			ui.icono.classList.remove('d-none');
+		}
+		if (ui.spinner) {
+			ui.spinner.classList.add('d-none');
+		}
+	}
+
+	function mostrarDomicilioEstado(mensaje, tipo) {
+		var ui = elementosDomicilioUi();
+		if (!ui.estado) {
+			return;
+		}
+		var icono =
+			tipo === 'success'
+				? 'fa-check-circle'
+				: tipo === 'warning'
+					? 'fa-exclamation-triangle'
+					: 'fa-times-circle';
+		ui.estado.className = 'alert py-2 px-3 mb-0 alert-' + (tipo || 'info');
+		ui.estado.innerHTML = '<i class="fa ' + icono + '" aria-hidden="true"></i> ' + mensaje;
+		ui.estado.classList.remove('d-none');
+	}
+
 	function poblarSelect(puntos, codigoPreservar) {
-		var sel = document.getElementById('codigo');
+		var sel = byId('codigo');
 		if (!sel) {
 			return;
 		}
@@ -318,15 +396,147 @@
 			});
 	}
 
+	function aplicarDomicilioFiscal(body) {
+		var df = body.domicilioFiscal || {};
+		var avisos = [];
+
+		if (body.pais_id) {
+			setVal('pais_id', body.pais_id);
+			if (window.jQuery && jQuery.fn.select2) {
+				jQuery('#pais_id').trigger('change.select2');
+			}
+		}
+
+		if (df.direccion) {
+			setVal('domicilio', df.direccion);
+		} else if (df.texto) {
+			setVal('domicilio', df.texto);
+			avisos.push('Se usó el texto completo del padrón (sin calle separada).');
+		}
+
+		if (df.codPostal) {
+			setVal('codigopostal', df.codPostal);
+		}
+
+		if (df.provincia) {
+			setVal('desc_provincia', df.provincia);
+		}
+		if (df.localidad) {
+			setVal('desc_localidad', df.localidad);
+		}
+
+		if (df.provincia_id) {
+			setVal('provincia_id', df.provincia_id);
+			if (window.jQuery && jQuery.fn.select2) {
+				jQuery('#provincia_id').trigger('change.select2');
+			}
+
+			var locId = df.localidad_id || '';
+			setVal('localidad_id_previa', locId);
+
+			if (window.LocalidadCascada && window.jQuery) {
+				window.LocalidadCascada.completar(
+					jQuery('#localidad_id'),
+					df.provincia_id,
+					locId,
+					df.localidad || '',
+					'localidad_id'
+				);
+			} else if (locId) {
+				setVal('localidad_id', locId);
+			}
+		} else if (df.provincia) {
+			avisos.push('No se pudo vincular la provincia «' + df.provincia + '» con el maestro.');
+		}
+
+		if (df.localidad && !df.localidad_id) {
+			avisos.push('No se pudo vincular la localidad «' + df.localidad + '» con el maestro.');
+		}
+
+		return avisos;
+	}
+
+	function cargarDomicilioFiscal() {
+		var url = urlDomicilio();
+		var empId = empresaId();
+		if (!url) {
+			mostrarDomicilioEstado('No hay endpoint de domicilio ARCA configurado.', 'danger');
+			return;
+		}
+		if (!empId) {
+			mostrarDomicilioEstado('Seleccioná una empresa para consultar el padrón ARCA.', 'warning');
+			return;
+		}
+
+		mostrarDomicilioProgreso('Consultando domicilio fiscal en padrón ARCA…');
+
+		var params = new URLSearchParams({ empresa_id: String(empId) });
+
+		fetch(url + '?' + params.toString(), {
+			headers: {
+				Accept: 'application/json',
+				'X-Requested-With': 'XMLHttpRequest',
+			},
+			credentials: 'same-origin',
+		})
+			.then(function (res) {
+				return res.json().then(function (body) {
+					return { ok: res.ok, body: body };
+				});
+			})
+			.then(function (result) {
+				if (!result.ok || !result.body.ok) {
+					throw new Error(
+						(result.body && result.body.message) ||
+							'No se pudo obtener el domicilio fiscal desde ARCA.'
+					);
+				}
+
+				var body = result.body;
+				var avisos = aplicarDomicilioFiscal(body);
+				var texto =
+					'Domicilio fiscal precargado' +
+					(body.razon_social ? ' (' + body.razon_social + ')' : '') +
+					(body.cuit ? ' — CUIT ' + body.cuit : '') +
+					'.';
+				if (avisos.length) {
+					texto += ' ' + avisos.join(' ');
+					mostrarDomicilioEstado(texto, 'warning');
+				} else {
+					mostrarDomicilioEstado(texto, 'success');
+				}
+				if (window.toastr) {
+					toastr.success('Domicilio fiscal traído desde ARCA');
+				}
+			})
+			.catch(function (err) {
+				var msg = err.message || String(err);
+				mostrarDomicilioEstado(msg, 'danger');
+				if (window.toastr) {
+					toastr.error(msg);
+				}
+			})
+			.finally(function () {
+				ocultarDomicilioProgreso();
+			});
+	}
+
 	function init() {
-		var btn = document.getElementById('btn-actualizar-ptos-arca');
-		var empSel = document.getElementById('empresa_id');
-		var modoSel = document.getElementById('modofacturacion');
-		var wsSel = document.getElementById('webservice');
+		var btn = byId('btn-actualizar-ptos-arca');
+		var btnDom = byId('btn-traer-domicilio-arca');
+		var empSel = byId('empresa_id');
+		var modoSel = byId('modofacturacion');
+		var wsSel = byId('webservice');
 
 		if (btn) {
 			btn.addEventListener('click', function () {
 				cargarPuntos(true, false);
+			});
+		}
+
+		if (btnDom) {
+			btnDom.addEventListener('click', function () {
+				cargarDomicilioFiscal();
 			});
 		}
 
@@ -348,7 +558,7 @@
 			});
 		}
 
-		var sel = document.getElementById('codigo');
+		var sel = byId('codigo');
 		if (sel && empresaId() > 0 && sel.options.length <= 2) {
 			cargarPuntos(false, true);
 		} else if (sel && window.jQuery && jQuery.fn.select2) {

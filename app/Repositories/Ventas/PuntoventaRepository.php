@@ -7,6 +7,7 @@ use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Ventas\PuntoventaListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class PuntoventaRepository implements PuntoventaRepositoryInterface
@@ -38,6 +39,50 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query);
 
         return $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection<int, Puntoventa>
+     */
+    public function leePuntoventa($filtros, bool $paginar = false)
+    {
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => PuntoventaListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = PuntoventaListadoFiltros::filtrosVacios();
+        }
+
+        $query = $this->model->newQuery()
+            ->select('puntoventa.*')
+            ->leftJoin('empresa', 'empresa.id', '=', 'puntoventa.empresa_id')
+            ->leftJoin('localidad', 'localidad.id', '=', 'puntoventa.localidad_id')
+            ->leftJoin('provincia', 'provincia.id', '=', 'puntoventa.provincia_id')
+            ->with([
+                'empresas:id,nombre',
+                'localidades:id,nombre',
+                'provincias:id,nombre',
+            ]);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'puntoventa.empresa_id');
+
+        if (PuntoventaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            PuntoventaListadoFiltros::aplicar($query, $filtros);
+        }
+
+        $query->orderBy('puntoventa.codigo')->orderBy('puntoventa.id');
+
+        return $paginar
+            ? $query->paginate(15)->appends(PuntoventaListadoFiltros::paraQueryString($filtros))
+            : $query->get();
     }
 
     public function create(array $data, ?bool $syncAnita = null)

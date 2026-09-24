@@ -2403,7 +2403,9 @@ Route::get('ventas/lista-numerador-fiscal/{formato?}/{busqueda?}', 'Ventas\Venta
 Route::post('ventas/numerador-fiscal/sembrar', 'Ventas\VentaSerieNumeradorController@sembrar')->name('sembrar_venta_serie_numerador');
 
 Route::get('ventas/puntoventa', 'Ventas\PuntoventaController@index')->name('puntoventa');
+Route::get('ventas/listar-puntoventa/{formato?}/{busqueda?}', 'Ventas\PuntoventaController@listar')->name('lista_puntoventa');
 Route::get('ventas/puntoventa/arca-puntos-venta', 'Ventas\PuntoventaController@puntosVentaArca')->name('puntoventa_arca_puntos_venta');
+Route::get('ventas/puntoventa/arca-domicilio-fiscal', 'Ventas\PuntoventaController@domicilioFiscalArca')->name('puntoventa_arca_domicilio_fiscal');
 Route::post('ventas/puntoventa/sincronizar-anita', 'Ventas\PuntoventaController@sincronizarDesdeAnita')->name('sincronizar_puntoventa_anita');
 Route::post('ventas/puntoventa/consultapuntoventa', 'Ventas\PuntoventaController@consultaPuntoventa')->name('consulta_puntoventa');
 Route::get('ventas/puntoventa/resolverpuntoventa', 'Ventas\PuntoventaController@resolverPuntoventa')->name('resolver_puntoventa');
