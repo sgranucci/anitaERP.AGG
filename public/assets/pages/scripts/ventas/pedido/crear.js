@@ -2237,6 +2237,96 @@
 		$('#factura_pedido_moneda_etiqueta').val(etiqueta);
 	}
 
+	/** Guarda campos del modal para reintentar tras error WSFEX/ARCA sin perder bultos/cotiz/etc. */
+	function capturarEstadoModalFacturaPedido() {
+		var $m = $('#facturarPedidoModal');
+		if (!$m.length) {
+			return;
+		}
+		sincronizarMonedaCotizacionFacturaPedidoDesdeModal($m);
+		window._facturaPedidoModalPreservar = {
+			fechafactura: String($m.find('#fechafactura').val() || ''),
+			tipotransaccion_id: String($m.find('#tipotransaccion_id').val() || ''),
+			puntoventa_id: String($m.find('#puntoventa_id').val() || ''),
+			puntoventaremito_id: String($m.find('#puntoventaremito_id').val() || ''),
+			actividad_arca_id: String($m.find('#actividad_arca_id').val() || ''),
+			descuentopie: String($m.find('#descuentopie').val() || ''),
+			descuentolinea: String($m.find('#descuentolinea').val() || ''),
+			descuentoimportepie: String($m.find('#descuentoimportepie').val() || ''),
+			cantidadbulto: String($m.find('#cantidadbulto').val() || ''),
+			peso_neto: String($m.find('#peso_neto').val() || ''),
+			moneda_id: String($m.find('#factura_pedido_moneda_id_modal').val() || ''),
+			cotizacion: String($m.find('#factura_pedido_cotizacion_modal').val() || ''),
+			formapago_id: String($m.find('#formapago_id').val() || ''),
+			incoterm_id: String($m.find('#incoterm_id').val() || ''),
+			mercaderia: String($m.find('#mercaderia').val() || ''),
+			leyendafactura: String($m.find('#leyendafactura').val() || ''),
+			leyendaexportacion: String($m.find('#leyendaexportacion').val() || ''),
+			cliente_entrega_id: String($m.find('#factura_pedido_cliente_entrega_id').val() || ''),
+			lugarentrega: String($m.find('#factura_pedido_lugarentrega').val() || '')
+		};
+	}
+
+	function limpiarEstadoModalFacturaPedidoPreservado() {
+		window._facturaPedidoModalPreservar = null;
+	}
+
+	function restaurarEstadoModalFacturaPedido($modal) {
+		var e = window._facturaPedidoModalPreservar;
+		if (!e || !$modal || !$modal.length) {
+			return false;
+		}
+		if (e.fechafactura) {
+			$modal.find('#fechafactura').val(e.fechafactura);
+		}
+		if (e.tipotransaccion_id && $modal.find('#tipotransaccion_id option[value="' + e.tipotransaccion_id + '"]').length) {
+			$modal.find('#tipotransaccion_id').val(e.tipotransaccion_id);
+		}
+		if (e.puntoventa_id && $modal.find('#puntoventa_id option[value="' + e.puntoventa_id + '"]').length) {
+			$modal.find('#puntoventa_id').val(e.puntoventa_id);
+		}
+		if (e.puntoventaremito_id && $modal.find('#puntoventaremito_id option[value="' + e.puntoventaremito_id + '"]').length) {
+			$modal.find('#puntoventaremito_id').val(e.puntoventaremito_id);
+		}
+		if (e.actividad_arca_id) {
+			$modal.find('#actividad_arca_id').val(e.actividad_arca_id);
+		}
+		$modal.find('#descuentopie').val(e.descuentopie);
+		$modal.find('#descuentolinea').val(e.descuentolinea);
+		$modal.find('#descuentoimportepie').val(e.descuentoimportepie);
+		$modal.find('#cantidadbulto').val(e.cantidadbulto);
+		$modal.find('#peso_neto').val(e.peso_neto);
+		if (e.formapago_id && $modal.find('#formapago_id option[value="' + e.formapago_id + '"]').length) {
+			$modal.find('#formapago_id').val(e.formapago_id);
+		}
+		if (e.incoterm_id && $modal.find('#incoterm_id option[value="' + e.incoterm_id + '"]').length) {
+			$modal.find('#incoterm_id').val(e.incoterm_id);
+		}
+		$modal.find('#mercaderia').val(e.mercaderia);
+		$modal.find('#leyendafactura').val(e.leyendafactura);
+		$modal.find('#leyendaexportacion').val(e.leyendaexportacion);
+		if (e.cliente_entrega_id && $modal.find('#factura_pedido_cliente_entrega_id option[value="' + e.cliente_entrega_id + '"]').length) {
+			$modal.find('#factura_pedido_cliente_entrega_id').val(e.cliente_entrega_id);
+		}
+		if (e.lugarentrega !== undefined) {
+			$modal.find('#factura_pedido_lugarentrega').val(e.lugarentrega);
+		}
+		if (window.pedidoSinRemitoObligatorio) {
+			var $selMoneda = $modal.find('#factura_pedido_moneda_id_modal');
+			if (e.moneda_id && $selMoneda.find('option[value="' + e.moneda_id + '"]').length) {
+				$selMoneda.val(e.moneda_id);
+			}
+			if (e.cotizacion !== '') {
+				$modal.find('#factura_pedido_cotizacion_modal').val(e.cotizacion);
+			}
+			sincronizarMonedaCotizacionFacturaPedidoDesdeModal($modal);
+		}
+		if (e.puntoventa_id) {
+			leePuntoVenta(e.puntoventa_id);
+		}
+		return true;
+	}
+
 	function leerMonedaCotizacionFacturaPedidoParaEmitir() {
 		sincronizarMonedaCotizacionFacturaPedidoDesdeModal($('#facturarPedidoModal'));
 		return {
@@ -2444,7 +2534,10 @@
 
 		aplicarColumnasFacturaInterforming(modal);
 
-		if (typeof asignarCantidadBultoDesdePedido === 'function') {
+		var preservarModal = window._facturaPedidoModalPreservar;
+		if (preservarModal) {
+			// Reintento tras error: no pisar bultos con totales de cajas.
+		} else if (typeof asignarCantidadBultoDesdePedido === 'function') {
 			asignarCantidadBultoDesdePedido(totalcajaspedido);
 		} else {
 			$('#cantidadbulto').val(parseInt(totalcajaspedido, 10) || 0);
@@ -2533,6 +2626,11 @@
 		});
 
 		hidratarLugarEntregaFacturaPedido(modal);
+
+		if (window._facturaPedidoModalPreservar) {
+			restaurarEstadoModalFacturaPedido(modal);
+			programarRecalculoPreviewFacturaPedido();
+		}
 
 	});
 
@@ -2877,6 +2975,10 @@
 		if ($('#div_leyendafacturacion').is(':hidden') && !String(leyendafactura || '').trim()) {
 			leyendafactura = leyendaexportacion;
 		}
+		let cliente_id = $('#cliente_id').val();
+		let actividad_arca_id = $('#actividad_arca_id').val();
+		let pedido_id = $('#pedido_id').val();
+		let estadoPedido = $('#estadopedido').val();
 
 		if (estadoPedido != 'Pendiente' && !window.pedidoSinRemitoObligatorio)
 		{
@@ -3086,6 +3188,7 @@
 			}
 		}
 		
+		capturarEstadoModalFacturaPedido();
 		$('#facturarPedidoModal').modal('hide');
 
 		iniciarProcesoFacturaPedido();
@@ -3127,10 +3230,12 @@
 				if (!resumen.exito) {
 					mostrarResultadoFacturaPedidoEnOverlay(resumen, function () {
 						liberarEmisionComprobantePedido();
+						$('#facturarPedidoModal').modal('show');
 					});
 					return;
 				}
 
+				limpiarEstadoModalFacturaPedidoPreservado();
 				$('#facturarPedidoModal').modal('hide');
 				$('#estadopedido').val('Facturado');
 				TotalPedido();
@@ -3168,6 +3273,7 @@
 					codigosOk: [],
 				}, function () {
 					liberarEmisionComprobantePedido();
+					$('#facturarPedidoModal').modal('show');
 				});
 			});
 	}
