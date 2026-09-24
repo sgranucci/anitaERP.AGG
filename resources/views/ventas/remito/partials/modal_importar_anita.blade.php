@@ -23,10 +23,21 @@
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        Trae remitos de Anita (<code>pendmae</code>/<code>pendmov</code>) tipo
-                        <strong>REM R 1</strong> a anitaERP por fecha y repartos.
-                        Crea los faltantes y actualiza los existentes que aún no estén facturados.
+                        Trae remitos de Anita (<code>pendmae</code>/<code>pendmov</code>) a anitaERP
+                        por fecha y repartos. Bierzo = <strong>REM R 1</strong>; Surmar =
+                        <strong>REM R 6</strong> (cliente por CUIT).
+                        Crea los faltantes y actualiza los no facturados.
                     </p>
+                    <div class="form-group">
+                        <label for="import_anita_remito_fuente" class="requerido">Origen Anita</label>
+                        <select name="fuente"
+                               id="import_anita_remito_fuente"
+                               class="form-control"
+                               required>
+                            <option value="bierzo" selected>Bierzo (REM R 1)</option>
+                            <option value="surmar">Surmar (REM R 6)</option>
+                        </select>
+                    </div>
                     <div class="form-group">
                         <label for="import_anita_remito_fecha" class="requerido">Fecha</label>
                         <input type="date"

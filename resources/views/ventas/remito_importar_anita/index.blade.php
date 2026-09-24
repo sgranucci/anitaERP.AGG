@@ -28,12 +28,30 @@
                 <input type="hidden" name="consultar" value="1">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Consulta remitos de Anita (<code>pendmae</code>) tipo <strong>REM R 1</strong>
-                        por fecha del comprobante y reparto (transporte <code>penm_expreso</code>).
-                        Luego puede importarlos al ERP: crea los faltantes y actualiza cabecera y líneas de los existentes
-                        que aún no estén facturados.
-                        El cliente interno DESPACHO no se importa.
+                        Consulta remitos de Anita (<code>pendmae</code>) por fecha del comprobante y reparto
+                        (<code>penm_expreso</code>). Origen Bierzo = <strong>REM R 1</strong>
+                        (<code>/usr2/bierzo</code>); Surmar = <strong>REM R 6</strong>
+                        (<code>/usr2/surmar</code>, cliente por CUIT).
+                        Importa al ERP: crea faltantes y actualiza los no facturados. DESPACHO no se importa.
                     </p>
+
+                    <div class="form-group row">
+                        <label for="fuente" class="col-lg-2 control-label text-right pr-2 requerido">
+                            Origen Anita
+                        </label>
+                        <div class="col-lg-3">
+                            <select name="fuente" id="fuente" class="form-control" required>
+                                <option value="bierzo"
+                                    @if (($filtros['fuente'] ?? 'bierzo') === 'bierzo') selected @endif>
+                                    Bierzo (REM R 1)
+                                </option>
+                                <option value="surmar"
+                                    @if (($filtros['fuente'] ?? '') === 'surmar') selected @endif>
+                                    Surmar (REM R 6)
+                                </option>
+                            </select>
+                        </div>
+                    </div>
 
                     <div class="form-group row">
                         <label for="fecha_entrega_desde" class="col-lg-2 control-label text-right pr-2 requerido">
@@ -94,8 +112,9 @@
                           action="{{ route('ejecutar_importar_remito_anita') }}"
                           id="form-importar-remito-anita-ejecutar"
                           class="d-inline"
-                          onsubmit="return confirm('Se importarán/actualizarán todos los remitos REM R 1 del filtro. ¿Continuar?');">
+                          onsubmit="return confirm('Se importarán/actualizarán todos los remitos {{ $etiquetaFuente ?? 'Anita' }} del filtro. ¿Continuar?');">
                         @csrf
+                        <input type="hidden" name="fuente" value="{{ $filtros['fuente'] ?? 'bierzo' }}">
                         <input type="hidden" name="fecha_entrega_desde" value="{{ $filtros['fecha_entrega_desde'] ?? date('Y-m-d') }}">
                         <input type="hidden" name="fecha_entrega_hasta" value="{{ $filtros['fecha_entrega_hasta'] ?? date('Y-m-d') }}">
                         <input type="hidden" name="filtro_reparto" value="{{ $filtros['filtro_reparto'] ?? '' }}">
@@ -150,6 +169,8 @@
                                                 <span class="badge badge-info">DESPACHO: no importa</span>
                                             @elseif (($fila['estado_erp'] ?? '') === 'omitido_facturado')
                                                 <span class="badge badge-secondary">Facturado: no se pisa</span>
+                                            @elseif (($fila['estado_erp'] ?? '') === 'sin_cliente')
+                                                <span class="badge badge-danger">Sin cliente ERP</span>
                                             @else
                                                 <span class="badge badge-success">Nuevo</span>
                                             @endif
@@ -158,7 +179,7 @@
                                 @empty
                                     <tr>
                                         <td colspan="9" class="text-center text-muted py-4">
-                                            No hay remitos Anita REM R 1 para el filtro indicado.
+                                            No hay remitos Anita {{ $etiquetaFuente ?? 'REM R' }} para el filtro indicado.
                                         </td>
                                     </tr>
                                 @endforelse

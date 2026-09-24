@@ -22,7 +22,7 @@ class RemitoImportarAnitaController extends Controller
             abort(404);
         }
 
-        $filtros = ListadoRepartoFechaEntregaSupport::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltros($request);
         $consultar = $request->boolean('consultar');
         $filas = [];
 
@@ -34,10 +34,11 @@ class RemitoImportarAnitaController extends Controller
 
         return view('ventas.remito_importar_anita.index', [
             'filtros' => $filtros,
-            'filtrosQuery' => ListadoRepartoFechaEntregaSupport::paraQueryString($filtros),
+            'filtrosQuery' => $this->paraQueryString($filtros),
             'consultar' => $consultar,
             'filas' => $filas,
             'puedeEjecutar' => can('ejecutar-importar-remito-anita', false),
+            'etiquetaFuente' => RemitoImportarDesdeAnitaService::etiquetaFuente($filtros['fuente']),
         ]);
     }
 
@@ -49,11 +50,13 @@ class RemitoImportarAnitaController extends Controller
             abort(404);
         }
 
-        $filtros = ListadoRepartoFechaEntregaSupport::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltros($request);
         $resumen = $this->service->importar($filtros);
+        $etiqueta = RemitoImportarDesdeAnitaService::etiquetaFuente($filtros['fuente']);
 
         $mensaje = sprintf(
-            'Importación finalizada: %d creados, %d actualizados, %d omitidos (DESPACHO o ya facturados), %d con error (total %d).',
+            'Importación %s finalizada: %d creados, %d actualizados, %d omitidos (DESPACHO o ya facturados), %d con error (total %d).',
+            $etiqueta,
             $resumen['creados'],
             $resumen['actualizados'],
             $resumen['omitidos'] ?? 0,
@@ -62,7 +65,7 @@ class RemitoImportarAnitaController extends Controller
         );
 
         $query = array_merge(
-            ListadoRepartoFechaEntregaSupport::paraQueryString($filtros),
+            $this->paraQueryString($filtros),
             ['consultar' => 1]
         );
 
@@ -103,13 +106,16 @@ class RemitoImportarAnitaController extends Controller
             'fecha_entrega_desde' => $fecha,
             'fecha_entrega_hasta' => $fecha,
             'filtro_reparto' => trim((string) $request->input('filtro_reparto', '')),
+            'fuente' => $request->input('fuente'),
         ]);
 
-        $filtros = ListadoRepartoFechaEntregaSupport::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltros($request);
         $resumen = $this->service->importar($filtros, (int) (auth()->id() ?: 0));
+        $etiqueta = RemitoImportarDesdeAnitaService::etiquetaFuente($filtros['fuente']);
 
         $mensaje = sprintf(
-            'Importación Anita: %d creados, %d actualizados, %d omitidos (DESPACHO o ya facturados), %d con error (total %d).',
+            'Importación %s: %d creados, %d actualizados, %d omitidos (DESPACHO o ya facturados), %d con error (total %d).',
+            $etiqueta,
             $resumen['creados'],
             $resumen['actualizados'],
             $resumen['omitidos'] ?? 0,
@@ -132,5 +138,33 @@ class RemitoImportarAnitaController extends Controller
         }
 
         return $redirect;
+    }
+
+    /**
+     * @return array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string, fuente: string}
+     */
+    private function resolverFiltros(Request $request): array
+    {
+        $base = ListadoRepartoFechaEntregaSupport::resolverDesdeRequest($request);
+        $base['fuente'] = RemitoImportarDesdeAnitaService::normalizarFuente(
+            (string) $request->input('fuente', RemitoImportarDesdeAnitaService::FUENTE_BIERZO)
+        );
+
+        return $base;
+    }
+
+    /**
+     * @param  array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string, fuente: string}  $filtros
+     * @return array<string, string>
+     */
+    private function paraQueryString(array $filtros): array
+    {
+        $params = ListadoRepartoFechaEntregaSupport::paraQueryString($filtros);
+        $fuente = RemitoImportarDesdeAnitaService::normalizarFuente($filtros['fuente'] ?? null);
+        if ($fuente !== RemitoImportarDesdeAnitaService::FUENTE_BIERZO) {
+            $params['fuente'] = $fuente;
+        }
+
+        return $params;
     }
 }

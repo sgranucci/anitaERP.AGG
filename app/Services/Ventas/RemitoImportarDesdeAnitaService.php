@@ -15,6 +15,7 @@ use App\Models\Ventas\Zonavta;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
+use App\Support\Ventas\ClienteDocumentoAnitaSupport;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
 use App\Support\Ventas\RemitoEstadosSupport;
 use Carbon\Carbon;
@@ -23,12 +24,16 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Importa remitos Anita REM R sucursal 1 (pendmae/pendmov) a ERP
- * filtrados por fecha del comprobante y transporte/reparto.
+ * Importa remitos Anita REM R a ERP filtrados por fecha y transporte/reparto.
+ * Fuentes: Bierzo (sucursal 1, /usr2/bierzo) o Surmar (sucursal 6, /usr2/surmar).
  * Solo EL BIERZO.
  */
 class RemitoImportarDesdeAnitaService
 {
+    public const FUENTE_BIERZO = 'bierzo';
+
+    public const FUENTE_SURMAR = 'surmar';
+
     private const LISTAPRECIO_DEFAULT = 1;
 
     private const MONEDA_DEFAULT = 1;
@@ -37,7 +42,15 @@ class RemitoImportarDesdeAnitaService
 
     private const LETRA_ANITA = 'R';
 
+    private const SUCURSAL_BIERZO = 1;
+
+    private const SUCURSAL_SURMAR = 6;
+
+    /** @deprecated Usar SUCURSAL_BIERZO */
     private const SUCURSAL_ANITA = 1;
+
+    /** @var string */
+    private $fuente = self::FUENTE_BIERZO;
 
     public static function esElBierzo(): bool
     {
@@ -51,31 +64,53 @@ class RemitoImportarDesdeAnitaService
         }
     }
 
+    public static function normalizarFuente(?string $fuente): string
+    {
+        $fuente = strtolower(trim((string) $fuente));
+
+        return $fuente === self::FUENTE_SURMAR ? self::FUENTE_SURMAR : self::FUENTE_BIERZO;
+    }
+
+    public static function etiquetaFuente(string $fuente): string
+    {
+        return self::normalizarFuente($fuente) === self::FUENTE_SURMAR
+            ? 'Surmar (REM R 6)'
+            : 'Bierzo (REM R 1)';
+    }
+
     /**
-     * @param  array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string}  $filtros
+     * @param  array{filtro_reparto?: string, fecha_entrega_desde?: string, fecha_entrega_hasta?: string, fuente?: string}  $filtros
      * @return list<array<string, mixed>>
      */
     public function listarPreview(array $filtros): array
     {
         $this->assertElBierzo();
+        $this->fuente = self::normalizarFuente($filtros['fuente'] ?? null);
 
         $cabeceras = $this->listarCabecerasAnita($filtros);
         if ($cabeceras === []) {
             return [];
         }
 
-        $puntoventa = $this->resolverPuntoventaSucursalUno();
+        $puntoventa = $this->resolverPuntoventaFuente();
         $existentes = $this->indexarRemitosExistentes($cabeceras, $puntoventa);
 
         $clientesCache = [];
+        $nombresSurmarCache = [];
         $out = [];
 
         foreach ($cabeceras as $cab) {
             $codigo = $this->codigoErpDesdeCabecera($cab, $puntoventa);
-            $codigoCliente = ltrim(trim((string) ($cab->penm_cliente ?? '')), '0');
-            $nombreCliente = $this->nombreCliente($codigoCliente, $clientesCache);
+            $codigoClienteAnita = ltrim(trim((string) ($cab->penm_cliente ?? '')), '0');
+            $clienteErp = $this->resolverClienteParaFuente(trim((string) ($cab->penm_cliente ?? '')));
+            $codigoCliente = $clienteErp
+                ? (string) $clienteErp->codigo
+                : $codigoClienteAnita;
+            $nombreCliente = $clienteErp
+                ? (string) ($clienteErp->nombre ?? '')
+                : $this->nombreClienteParaFuente($codigoClienteAnita, $clientesCache, $nombresSurmarCache);
             $existente = $existentes[$this->claveCabecera($cab)] ?? null;
-            $esDespacho = ClienteDespachoSupport::esCodigoAnita($codigoCliente);
+            $esDespacho = ClienteDespachoSupport::esCodigoAnita($codigoClienteAnita);
             $facturado = $existente !== null && $this->remitoYaFacturado($existente);
 
             $estadoErp = 'nuevo';
@@ -85,14 +120,18 @@ class RemitoImportarDesdeAnitaService
                 $estadoErp = 'omitido_facturado';
             } elseif ($existente !== null) {
                 $estadoErp = 'existe';
+            } elseif ($clienteErp === null && ! $esDespacho) {
+                $estadoErp = 'sin_cliente';
             }
 
             $out[] = [
                 'codigo' => $codigo,
-                'sucursal' => (int) ($cab->penm_sucursal ?? self::SUCURSAL_ANITA),
+                'fuente' => $this->fuente,
+                'sucursal' => (int) ($cab->penm_sucursal ?? $this->sucursalAnita()),
                 'nro' => (int) ($cab->penm_nro ?? 0),
                 'letra' => trim((string) ($cab->penm_letra ?? self::LETRA_ANITA)),
                 'codigo_cliente' => $codigoCliente,
+                'codigo_cliente_anita' => $codigoClienteAnita,
                 'nombre_cliente' => $nombreCliente,
                 'fecha' => $this->formatearFechaAnita($cab->penm_fecha ?? null),
                 'fecha_entrega' => $this->formatearFechaAnita($cab->penm_fecha_ent ?? null),
@@ -108,26 +147,28 @@ class RemitoImportarDesdeAnitaService
     }
 
     /**
-     * @param  array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string}  $filtros
+     * @param  array{filtro_reparto?: string, fecha_entrega_desde?: string, fecha_entrega_hasta?: string, fuente?: string}  $filtros
      * @return array{
      *   creados: int,
      *   actualizados: int,
      *   omitidos: int,
      *   errores: int,
      *   total: int,
+     *   fuente: string,
      *   detalle: list<array{codigo: string, estado: string, mensaje: string|null}>
      * }
      */
     public function importar(array $filtros, ?int $usuarioId = null): array
     {
         $this->assertElBierzo();
+        $this->fuente = self::normalizarFuente($filtros['fuente'] ?? null);
 
         ini_set('max_execution_time', '600');
         ini_set('memory_limit', '512M');
 
         $usuarioId = $usuarioId ?: (int) (Auth::id() ?: 0);
         $cabeceras = $this->listarCabecerasAnita($filtros);
-        $puntoventa = $this->resolverPuntoventaSucursalUno();
+        $puntoventa = $this->resolverPuntoventaFuente();
 
         $resumen = [
             'creados' => 0,
@@ -135,6 +176,7 @@ class RemitoImportarDesdeAnitaService
             'omitidos' => 0,
             'errores' => 0,
             'total' => count($cabeceras),
+            'fuente' => $this->fuente,
             'detalle' => [],
         ];
 
@@ -175,9 +217,12 @@ class RemitoImportarDesdeAnitaService
     private function importarUno(object $cab, int $usuarioId, ?Puntoventa $puntoventa): array
     {
         if (! $puntoventa) {
+            $suc = $this->sucursalAnita();
+
             return [
                 'estado' => 'error',
-                'mensaje' => 'No hay punto de venta ERP con código 1 (sucursal Anita de REM R 1).',
+                'mensaje' => 'No hay punto de venta ERP con código '.$suc
+                    .' (sucursal Anita de REM R '.$suc.' / '.self::etiquetaFuente($this->fuente).').',
                 'remito_id' => null,
             ];
         }
@@ -188,11 +233,13 @@ class RemitoImportarDesdeAnitaService
             return ['estado' => 'error', 'mensaje' => 'Fecha de remito anterior a 2023.', 'remito_id' => null];
         }
 
-        $cliente = $this->resolverCliente(trim((string) ($cab->penm_cliente ?? '')));
+        $clienteAnita = trim((string) ($cab->penm_cliente ?? ''));
+        $cliente = $this->resolverClienteParaFuente($clienteAnita);
         if (! $cliente) {
             return [
                 'estado' => 'error',
-                'mensaje' => 'Cliente Anita '.trim((string) ($cab->penm_cliente ?? '')).' no existe en ERP.',
+                'mensaje' => 'Cliente Anita '.$clienteAnita.' no existe en ERP'
+                    .($this->esSurmar() ? ' (buscar por CUIT Surmar).' : '.'),
                 'remito_id' => null,
             ];
         }
@@ -232,7 +279,7 @@ class RemitoImportarDesdeAnitaService
             ->where('codigo', (string) (int) ($cab->penm_expreso ?? 0))
             ->first();
 
-        $sucursal = (int) ($cab->penm_sucursal ?? self::SUCURSAL_ANITA);
+        $sucursal = (int) ($cab->penm_sucursal ?? $this->sucursalAnita());
         $mventaId = $sucursal > 5 ? 1 : max(1, $sucursal);
         $zonavtaId = $this->resolverZonavtaId($cab->penm_zonavta ?? null);
         $pedidoId = $this->resolverPedidoId($cab);
@@ -261,7 +308,7 @@ class RemitoImportarDesdeAnitaService
             'puntoventa_id' => (int) $puntoventa->id,
             'numero' => $numero,
             'pedido_id' => $pedidoId,
-            'origen' => 'anita',
+            'origen' => $this->esSurmar() ? 'anita_surmar' : 'anita',
         ];
 
         $lineasAnita = $this->leerPendmov(
@@ -370,7 +417,7 @@ class RemitoImportarDesdeAnitaService
     }
 
     /**
-     * @param  array{filtro_reparto: string, fecha_entrega_desde: string, fecha_entrega_hasta: string}  $filtros
+     * @param  array{filtro_reparto?: string, fecha_entrega_desde?: string, fecha_entrega_hasta?: string, fuente?: string}  $filtros
      * @return list<object>
      */
     private function listarCabecerasAnita(array $filtros): array
@@ -384,16 +431,16 @@ class RemitoImportarDesdeAnitaService
             [$desde, $hasta] = [$hasta, $desde];
         }
 
+        $sucursal = $this->sucursalAnita();
         $where = " WHERE penm_tipo='".self::TIPO_ANITA."' AND penm_letra='".self::LETRA_ANITA."'"
-            .' AND penm_sucursal='.self::SUCURSAL_ANITA
+            .' AND penm_sucursal='.$sucursal
             ." AND penm_fecha BETWEEN {$desde} AND {$hasta}"
             ." AND penm_ref_tipo <> 'Z  '";
         $where .= $this->whereRepartoAnita((string) ($filtros['filtro_reparto'] ?? ''));
 
         $api = new ApiAnita();
-        $data = [
+        $data = array_merge($this->parametrosBridge(), [
             'acc' => 'list',
-            'sistema' => 'ventas',
             'tabla' => 'pendmae',
             'campos' => '
                 penm_cliente, penm_tipo, penm_letra, penm_sucursal, penm_nro,
@@ -402,7 +449,7 @@ class RemitoImportarDesdeAnitaService
                 penm_dto_integrado, penm_ref_tipo, penm_ref_letra, penm_ref_sucursal, penm_ref_nro
             ',
             'whereArmado' => $where,
-        ];
+        ]);
 
         $rows = json_decode($api->apiCall($data));
 
@@ -459,9 +506,8 @@ class RemitoImportarDesdeAnitaService
     private function leerPendmov(string $tipo, string $letra, int $sucursal, int $nro): array
     {
         $api = new ApiAnita();
-        $data = [
+        $data = array_merge($this->parametrosBridge(), [
             'acc' => 'list',
-            'sistema' => 'ventas',
             'tabla' => 'pendmov',
             'campos' => '
                 penv_cliente, penv_tipo, penv_letra, penv_sucursal, penv_nro, penv_orden,
@@ -471,7 +517,7 @@ class RemitoImportarDesdeAnitaService
             ',
             'whereArmado' => " WHERE penv_tipo='".$this->esc($tipo)."' AND penv_letra='".$this->esc($letra)
                 ."' AND penv_sucursal=".$sucursal.' AND penv_nro='.$nro.' ',
-        ];
+        ]);
         $rows = json_decode($api->apiCall($data));
         if (! is_array($rows)) {
             return [];
@@ -574,11 +620,12 @@ class RemitoImportarDesdeAnitaService
         ], true);
     }
 
-    private function resolverPuntoventaSucursalUno(): ?Puntoventa
+    private function resolverPuntoventaFuente(): ?Puntoventa
     {
-        $codigoNorm = Puntoventa::normalizarCodigoArca((string) self::SUCURSAL_ANITA);
+        $sucursal = $this->sucursalAnita();
+        $codigoNorm = Puntoventa::normalizarCodigoArca((string) $sucursal);
         $variantes = array_values(array_unique(array_filter([
-            (string) self::SUCURSAL_ANITA,
+            (string) $sucursal,
             $codigoNorm,
         ])));
 
@@ -588,11 +635,17 @@ class RemitoImportarDesdeAnitaService
             ->first();
     }
 
+    /** @deprecated Usar resolverPuntoventaFuente */
+    private function resolverPuntoventaSucursalUno(): ?Puntoventa
+    {
+        return $this->resolverPuntoventaFuente();
+    }
+
     private function codigoErpDesdeCabecera(object $cab, ?Puntoventa $puntoventa): string
     {
         $pvCodigo = $puntoventa
             ? (string) $puntoventa->codigo
-            : (string) (int) ($cab->penm_sucursal ?? self::SUCURSAL_ANITA);
+            : (string) (int) ($cab->penm_sucursal ?? $this->sucursalAnita());
 
         return self::TIPO_ANITA.' '.self::LETRA_ANITA.' '.$pvCodigo.'-'
             .(int) ($cab->penm_nro ?? 0);
@@ -600,7 +653,7 @@ class RemitoImportarDesdeAnitaService
 
     private function claveCabecera(object $cab): string
     {
-        return (int) ($cab->penm_sucursal ?? self::SUCURSAL_ANITA).'-'.(int) ($cab->penm_nro ?? 0);
+        return (int) ($cab->penm_sucursal ?? $this->sucursalAnita()).'-'.(int) ($cab->penm_nro ?? 0);
     }
 
     private function resolverPedidoId(object $cab): ?int
@@ -644,6 +697,143 @@ class RemitoImportarDesdeAnitaService
                 }
             })
             ->first();
+    }
+
+    private function resolverClienteParaFuente(string $codigoAnita): ?Cliente
+    {
+        if ($this->esSurmar()) {
+            $porCuit = $this->resolverClienteSurmarPorCuit($codigoAnita);
+            if ($porCuit) {
+                return $porCuit;
+            }
+        }
+
+        return $this->resolverCliente($codigoAnita);
+    }
+
+    private function resolverClienteSurmarPorCuit(string $codigoAnita): ?Cliente
+    {
+        $cuit = $this->cuitClienteSurmar($codigoAnita);
+        if ($cuit === '') {
+            return null;
+        }
+
+        $parsed = ClienteDocumentoAnitaSupport::desdeClimCuit($cuit);
+        $numero = trim((string) ($parsed['numerodocumento'] ?? ''));
+        if ($numero === '') {
+            return null;
+        }
+
+        $digitos = preg_replace('/\D+/', '', $numero) ?? '';
+        $variantes = array_values(array_unique(array_filter([$numero, $digitos])));
+
+        return Cliente::query()
+            ->where(function ($q) use ($variantes, $digitos) {
+                $q->whereIn('numerodocumento', $variantes);
+                if ($digitos !== '' && strlen($digitos) >= 7) {
+                    $q->orWhereRaw(
+                        "REPLACE(REPLACE(REPLACE(COALESCE(numerodocumento,''), '-', ''), '.', ''), ' ', '') = ?",
+                        [$digitos]
+                    );
+                }
+            })
+            ->orderBy('id')
+            ->first();
+    }
+
+    private function cuitClienteSurmar(string $codigoAnita): string
+    {
+        $codigoNum = (int) ltrim(trim($codigoAnita), '0');
+        if ($codigoNum <= 0) {
+            return '';
+        }
+
+        $api = new ApiAnita();
+        $data = array_merge($this->parametrosBridge(), [
+            'acc' => 'list',
+            'tabla' => 'climae',
+            'campos' => 'clim_cliente,clim_nombre,clim_cuit',
+            'whereArmado' => ' WHERE clim_cliente='.$codigoNum,
+        ]);
+        $rows = json_decode($api->apiCall($data));
+        if (! is_array($rows) || $rows === []) {
+            return '';
+        }
+
+        return trim((string) ($rows[0]->clim_cuit ?? ''));
+    }
+
+    private function nombreClienteSurmar(string $codigoCliente, array &$cache): string
+    {
+        if ($codigoCliente === '') {
+            return '';
+        }
+        if (array_key_exists($codigoCliente, $cache)) {
+            return $cache[$codigoCliente];
+        }
+
+        $codigoNum = (int) $codigoCliente;
+        if ($codigoNum <= 0) {
+            $cache[$codigoCliente] = '';
+
+            return '';
+        }
+
+        $api = new ApiAnita();
+        $data = array_merge($this->parametrosBridge(), [
+            'acc' => 'list',
+            'tabla' => 'climae',
+            'campos' => 'clim_cliente,clim_nombre,clim_cuit',
+            'whereArmado' => ' WHERE clim_cliente='.$codigoNum,
+        ]);
+        $rows = json_decode($api->apiCall($data));
+        $nombre = '';
+        if (is_array($rows) && $rows !== []) {
+            $nombre = trim((string) ($rows[0]->clim_nombre ?? ''));
+        }
+        $cache[$codigoCliente] = $nombre;
+
+        return $nombre;
+    }
+
+    /**
+     * @param  array<string, string>  $cacheErp
+     * @param  array<string, string>  $cacheSurmar
+     */
+    private function nombreClienteParaFuente(string $codigoCliente, array &$cacheErp, array &$cacheSurmar): string
+    {
+        if ($this->esSurmar()) {
+            $nombre = $this->nombreClienteSurmar($codigoCliente, $cacheSurmar);
+            if ($nombre !== '') {
+                return $nombre;
+            }
+        }
+
+        return $this->nombreCliente($codigoCliente, $cacheErp);
+    }
+
+    private function esSurmar(): bool
+    {
+        return $this->fuente === self::FUENTE_SURMAR;
+    }
+
+    private function sucursalAnita(): int
+    {
+        return $this->esSurmar() ? self::SUCURSAL_SURMAR : self::SUCURSAL_BIERZO;
+    }
+
+    /**
+     * @return array{sistema: string, path_sistema?: string}
+     */
+    private function parametrosBridge(): array
+    {
+        $params = ['sistema' => 'ventas'];
+        if ($this->esSurmar()) {
+            $path = rtrim((string) config('anita.surmar_path', '/usr2/surmar'), '/');
+            $params['path_sistema'] = $path !== '' ? $path : '/usr2/surmar';
+        }
+
+        return $params;
     }
 
     private function resolverArticulo(string $skuRaw): ?Articulo

@@ -33,7 +33,9 @@
             }
             var fecha = $.trim($('#import_anita_remito_fecha').val() || '');
             var reparto = $.trim($('#import_anita_remito_filtro_reparto').val() || '');
-            var msg = 'Se importarán/actualizarán los remitos Anita REM R 1 de la fecha ' + fecha;
+            var fuente = $.trim($('#import_anita_remito_fuente').val() || 'bierzo');
+            var etiqueta = fuente === 'surmar' ? 'Surmar (REM R 6)' : 'Bierzo (REM R 1)';
+            var msg = 'Se importarán/actualizarán los remitos Anita ' + etiqueta + ' de la fecha ' + fecha;
             if (reparto !== '') {
                 msg += ' y repartos ' + reparto;
             } else {

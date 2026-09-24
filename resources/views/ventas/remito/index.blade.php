@@ -67,7 +67,7 @@ function eliminarRemito(event) {
                                 class="btn btn-outline-light btn-sm ml-1"
                                 data-toggle="modal"
                                 data-target="#modalImportarRemitoAnita"
-                                title="Importar remitos Anita REM R 1 por fecha y repartos">
+                                title="Importar remitos Anita Bierzo (REM R 1) o Surmar (REM R 6) por fecha">
                             <i class="fa fa-fw fa-download"></i> Importar Anita
                         </button>
                     @endif
