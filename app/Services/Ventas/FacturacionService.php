@@ -7168,7 +7168,8 @@ class FacturacionService
 
 	/**
 	 * Guarda de circuito AFIP (export vs local) para fact admin / pedido / remito.
-	 * No se invoca desde POS Ferli local ni gastro/estacionamiento AGG.
+	 * POS gastronomía, estacionamiento y facturación local pasan por generaComprobanteGeneral
+	 * pero no aplican esta matriz (WSFE local / CF).
 	 *
 	 * @return array{error: string}|null
 	 */
@@ -7178,6 +7179,10 @@ class FacturacionService
 		?object $tipotransaccion,
 		?string $codigoDocumento = null,
 	): ?array {
+		if ($this->esEmisionPos($data)) {
+			return null;
+		}
+
 		$puntoventa = $this->puntoventaRepository->find($data['puntoventa_id'] ?? 0);
 		$letra = FacturacionCircuitoAfipSupport::letraClienteDesdeModelo($cliente);
 		if ($letra === '' && $cliente && ! empty($cliente->condicioniva_id)) {

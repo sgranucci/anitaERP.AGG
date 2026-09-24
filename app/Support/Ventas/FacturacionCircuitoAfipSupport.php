@@ -5,9 +5,9 @@ namespace App\Support\Ventas;
 /**
  * Circuito AFIP exportación vs local para facturación admin, pedidos y remitos.
  *
- * No aplica a POS Ferli local ({@see FacturacionLocal\*}) ni a gastronomía /
- * estacionamiento AGG (servicios propios): esos no pasan por
- * {@see \App\Services\Ventas\FacturacionService}.
+ * POS gastronomía, estacionamiento y facturación local sí pueden pasar por
+ * {@see \App\Services\Ventas\FacturacionService::generaComprobanteGeneral}, pero
+ * {@see \App\Services\Ventas\FacturacionService} omite esta guarda vía esEmisionPos.
  *
  * Matriz:
  * - Exportación: cliente letra E y/o doc PEX → PV modo E (WSFEX) + tipo FAE/NCE/NDE (AFIP 19/21/20)
