@@ -54,9 +54,13 @@ use App\Mail\Ventas\ClienteDefinitivo;
 use App\Exports\Ventas\ClienteExport;
 use App\Exports\Ventas\ClienteListadoExport;
 use App\Exports\Ventas\ClienteCuentacorrienteListadoExport;
+use App\Support\Ventas\ClienteListadoColumnas;
 use App\Support\Ventas\ClienteListadoFiltros;
+use App\Support\Ventas\ClienteListadoPreferenciasUsuario;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\QueryRetornoListado;
-use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
@@ -148,51 +152,69 @@ class ClienteController extends Controller
     {
         can('listar-clientes');
 
-        // Por si se necesita traer un cliente que no esta en ERP
-        //$this->clienteRepository->traerRegistroDeAnita("000105", true);
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(ClienteListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                ClienteListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->has('filtro_codigo')
+            && ! $request->boolean('limpiar_filtros')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ClienteListadoColumnas::RECURSO, $usuarioId);
+        }
 
         $filtros = ClienteListadoFiltros::resolverDesdeRequest($request);
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = ClienteListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+
+        $catalogo = ClienteListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ClienteListadoColumnas::RECURSO,
+            $catalogo
+        );
+
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = ClienteListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = ClienteListadoPreferenciasUsuario::grillaEstandar();
+        }
+
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
 
         $clientes = $this->clienteRepository->leeCliente($filtros, true);
-        $esAjax = $request->boolean('ajax') || $request->ajax();
 
-        if (! $esAjax && $clientes->isEmpty() && ! ClienteListadoFiltros::tieneCriteriosAplicados($filtros))
-		{
-        	$this->clienteRepository->sincronizarConAnita();
-			$this->cliente_entregaRepository->sincronizarConAnita();
-			$this->cliente_archivoRepository->sincronizarConAnita();
-	
+        if ($clientes->isEmpty() && ! ClienteListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            $this->clienteRepository->sincronizarConAnita();
+            $this->cliente_entregaRepository->sincronizarConAnita();
+            $this->cliente_archivoRepository->sincronizarConAnita();
+
             $clientes = $this->clienteRepository->leeCliente($filtros, true);
-		}
+        }
+
+        $camposFiltro = ClienteListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
 
         $filtrosQuery = ClienteListadoFiltros::paraQueryString($filtros);
-        $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery);
-        $esBierzo = EntornoEmpresaSupport::esElBierzo();
-
-        if ($esAjax) {
-            return response()->json([
-                'html' => view('ventas.cliente.partials.tabla_filas', [
-                    'clientes' => $clientes,
-                    'filtrosQuery' => $filtrosQuery,
-                    'retornoListadoQuery' => $retornoListadoQuery,
-                    'esBierzo' => $esBierzo,
-                ])->render(),
-                'paginacion' => view('ventas.cliente.partials.paginacion', [
-                    'clientes' => $clientes,
-                    'filtrosQuery' => $filtrosQuery,
-                ])->render(),
-                'export' => view('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_cliente',
-                    'queryparams' => $filtrosQuery,
-                ])->render(),
-                'filtros_query' => $filtrosQuery,
-                'tiene_criterios' => ClienteListadoFiltros::tieneCriteriosAplicados($filtros),
-                'aviso' => view('includes.listado.filtros_aviso_activos', [
-                    'tieneCriterios' => ClienteListadoFiltros::tieneCriteriosAplicados($filtros),
-                    'limpiarUrl' => route('cliente'),
-                    'showLimpiar' => true,
-                ])->render(),
-            ]);
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
         }
 
         return view('ventas.cliente.index', [
@@ -200,50 +222,183 @@ class ClienteController extends Controller
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
-            'camposFiltro' => ClienteListadoFiltros::CAMPOS,
+            'camposFiltro' => $camposFiltro,
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
         ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
-        can('listar-clientes'); 
+        can('listar-clientes');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
         $filtros = ClienteListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $columnasRequest = $request->input('columnas');
+        if (is_string($columnasRequest)) {
+            $columnasRequest = array_filter(array_map('trim', explode(',', $columnasRequest)));
+        }
+        $columnasVisibles = ClienteListadoPreferenciasUsuario::resolverColumnas(
+            is_array($columnasRequest) ? $columnasRequest : null
+        );
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ClienteListadoColumnas::RECURSO,
+            ClienteListadoColumnas::catalogoActivo()
+        );
 
-        switch($formato)
-        {
-        case 'PDF':
-            $clientes = $this->clienteRepository->leeCliente($filtros, false);
+        switch ($formato) {
+            case 'PDF':
+                $clientes = $this->clienteRepository->leeCliente($filtros, false);
 
-            $view =  \View::make('ventas.cliente.listado', compact('clientes'))
-                        ->render();
-            $path = storage_path('pdf/listados');
-            $nombre_pdf = 'listado_cliente';
+                $view = \View::make('ventas.cliente.listado', [
+                    'clientes' => $clientes,
+                    'columnasVisibles' => $columnasVisibles,
+                    'etiquetasColumnas' => $etiquetas,
+                ])->render();
+                $path = storage_path('pdf/listados');
+                $nombre_pdf = 'listado_cliente';
 
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
-            return response()->download($path.'/'.$nombre_pdf.'.pdf');
-            break;
+                return response()->download($path.'/'.$nombre_pdf.'.pdf');
 
-        case 'EXCEL':
-            return (new ClienteListadoExport($this->clienteRepository))
-                        ->parametros($filtros)
-                        ->download('cliente.xlsx');
-            break;
+            case 'EXCEL':
+                return (new ClienteListadoExport($this->clienteRepository))
+                    ->parametros($filtros, $columnasVisibles, $etiquetas)
+                    ->download('cliente.xlsx');
 
-        case 'CSV':
-            return (new ClienteListadoExport($this->clienteRepository))
-                        ->parametros($filtros)
-                        ->download('cliente.csv', \Maatwebsite\Excel\Excel::CSV);
-            break;            
+            case 'CSV':
+                return (new ClienteListadoExport($this->clienteRepository))
+                    ->parametros($filtros, $columnasVisibles, $etiquetas)
+                    ->download('cliente.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
         return redirect()->route('cliente', ClienteListadoFiltros::paraQueryString($filtros));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-clientes');
+
+        $usuarioId = (int) auth()->id();
+        $filtros = ClienteListadoFiltros::resolverDesdeRequest($request);
+        $layout = ClienteListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+
+        $vista = ListadoVistaSupport::guardar(
+            ClienteListadoColumnas::RECURSO,
+            $usuarioId,
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'campo' => $filtros['campo'],
+                'operador' => $filtros['operador'],
+                'valor' => $filtros['valor'],
+                'valor_hasta' => $filtros['valor_hasta'] ?? '',
+                'codigo' => $filtros['codigo'] ?? '',
+                'qbe' => $filtros['qbe'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+
+        if (! $vista) {
+            return redirect()->route('cliente', ClienteListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+
+        $qs = ClienteListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('cliente', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada (grilla + filtros). La Vista estándar no se modificó.');
+    }
+
+    public function eliminarVistaListado(Request $request, int $id)
+    {
+        can('listar-clientes');
+
+        $ok = ListadoVistaSupport::eliminar($id, ClienteListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('cliente', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-clientes');
+
+        $layout = ClienteListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario(
+                $vistaId,
+                ClienteListadoColumnas::RECURSO,
+                (int) auth()->id()
+            );
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            ClienteListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+
+        $filtros = ClienteListadoFiltros::resolverDesdeRequest($request);
+        $qs = ClienteListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        if ($vistaId > 0) {
+            $qs['vista_id'] = $vistaId;
+        } else {
+            $qs['vista_estandar'] = 1;
+        }
+
+        return redirect()->route('cliente', $qs)
+            ->with('mensaje', $vistaId > 0
+                ? 'Grilla de la vista actualizada.'
+                : 'Vista estándar actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-clientes');
+
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            ClienteListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(ClienteListadoColumnas::catalogoActivo())
+        );
+
+        $filtros = ClienteListadoFiltros::resolverDesdeRequest($request);
+        $qs = ClienteListadoFiltros::paraQueryString($filtros);
+        if ($request->filled('columnas')) {
+            $qs['columnas'] = (string) $request->input('columnas');
+        }
+        if ($request->filled('vista_id')) {
+            $qs['vista_id'] = (int) $request->input('vista_id');
+        }
+
+        return redirect()->route('cliente', $qs)
+            ->with('mensaje', 'Etiquetas por defecto de la instalación actualizadas.');
     }
 
 	public function leerCliente_Entrega($cliente_id)

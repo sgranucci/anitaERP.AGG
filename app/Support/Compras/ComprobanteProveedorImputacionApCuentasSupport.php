@@ -2,12 +2,15 @@
 
 namespace App\Support\Compras;
 
-use App\Models\Compras\Proveedor;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 
 /**
- * Catálogo de cuentas del trío AP MN / AP ME / anticipo (por id de cuentacontable).
+ * Catálogo de cuentas del trío AP MN / AP ME / anticipo.
+ *
+ * Solo suma lo imputado a cuenta de proveedores (códigos MN/ME de config,
+ * por empresa) y anticipo. No toma las cuentas del maestro de proveedores:
+ * ahí hay basura (gastos, MN metida en ME) que distorsiona el control.
  */
 final class ComprobanteProveedorImputacionApCuentasSupport
 {
@@ -30,22 +33,6 @@ final class ComprobanteProveedorImputacionApCuentasSupport
         $anticipo = [];
         $anticipoPorEmpresa = [];
 
-        Proveedor::query()
-            ->select(['id', 'cuentacontable_id', 'cuentacontableme_id', 'cuentacontablecompra_id'])
-            ->orderBy('id')
-            ->chunkById(400, function ($proveedores) use (&$mn, &$me) {
-                foreach ($proveedores as $p) {
-                    $idMn = (int) ($p->cuentacontable_id ?: $p->cuentacontablecompra_id ?: 0);
-                    if ($idMn > 0) {
-                        $mn[$idMn] = true;
-                    }
-                    $idMe = (int) ($p->cuentacontableme_id ?: 0);
-                    if ($idMe > 0) {
-                        $me[$idMe] = true;
-                    }
-                }
-            });
-
         $empresas = $empresaIds !== []
             ? $empresaIds
             : Empresa::query()->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -58,29 +45,42 @@ final class ComprobanteProveedorImputacionApCuentasSupport
             }
         }
 
-        $codigoMn = self::normalizarCodigo((string) config('comprobante_proveedor_anita.conciliacion_mayor_cc.cuenta_mn', 211010001));
-        $codigoMe = self::normalizarCodigo((string) config('comprobante_proveedor_anita.conciliacion_mayor_cc.cuenta_me', 211010011));
+        $codigosMn = self::codigosConfigMn();
+        $codigosMe = self::codigosConfigMe();
 
-        Cuentacontable::query()
-            ->select(['id', 'codigo'])
-            ->orderBy('id')
-            ->chunkById(500, function ($cuentas) use (&$mn, &$me, $codigoMn, $codigoMe) {
-                foreach ($cuentas as $cuenta) {
-                    $codigo = self::normalizarCodigo((string) ($cuenta->codigo ?? ''));
-                    if ($codigo === '') {
-                        continue;
+        if ($codigosMn !== [] || $codigosMe !== []) {
+            Cuentacontable::query()
+                ->select(['id', 'codigo'])
+                ->orderBy('id')
+                ->chunkById(500, function ($cuentas) use (&$mn, &$me, $codigosMn, $codigosMe) {
+                    foreach ($cuentas as $cuenta) {
+                        $codigo = self::normalizarCodigo((string) ($cuenta->codigo ?? ''));
+                        if ($codigo === '') {
+                            continue;
+                        }
+                        $id = (int) $cuenta->id;
+                        $codigoInt = (int) $codigo;
+                        if (isset($codigosMn[$codigoInt])) {
+                            $mn[$id] = true;
+                        }
+                        if (isset($codigosMe[$codigoInt])) {
+                            $me[$id] = true;
+                        }
                     }
-                    $id = (int) $cuenta->id;
-                    if ($codigoMn !== '' && $codigo === $codigoMn) {
-                        $mn[$id] = true;
-                    }
-                    if ($codigoMe !== '' && $codigo === $codigoMe) {
-                        $me[$id] = true;
-                    }
-                }
-            });
+                });
+        }
 
-        $codigos = self::codigosPorCubeta($mn, $me, $anticipo, $codigoMn, $codigoMe);
+        $codigoMnCfg = (string) (array_key_first($codigosMn) ?: '');
+        $codigoMeCfg = (string) (array_key_first($codigosMe) ?: '');
+        $codigos = self::codigosPorCubeta($mn, $me, $anticipo, $codigoMnCfg, $codigoMeCfg);
+
+        // Asegurar todos los códigos de config (aunque no haya fila en plan ERP).
+        foreach (array_keys($codigosMn) as $codigo) {
+            $codigos['mn'][(int) $codigo] = true;
+        }
+        foreach (array_keys($codigosMe) as $codigo) {
+            $codigos['me'][(int) $codigo] = true;
+        }
 
         return [
             'mn' => $mn,
@@ -91,6 +91,45 @@ final class ComprobanteProveedorImputacionApCuentasSupport
             'codigo_me' => $codigos['me'],
             'codigo_anticipo' => $codigos['anticipo'],
         ];
+    }
+
+    /**
+     * @return array<int, true>
+     */
+    public static function codigosConfigMn(): array
+    {
+        return self::mapaCodigosDesdeConfig(
+            (int) config('comprobante_proveedor_anita.conciliacion_mayor_cc.cuenta_mn', 211010001),
+            (array) config('comprobante_proveedor_anita.conciliacion_mayor_cc.cuentas_mn_extra', [])
+        );
+    }
+
+    /**
+     * @return array<int, true>
+     */
+    public static function codigosConfigMe(): array
+    {
+        return self::mapaCodigosDesdeConfig(
+            (int) config('comprobante_proveedor_anita.conciliacion_mayor_cc.cuenta_me', 211010011),
+            (array) config('comprobante_proveedor_anita.conciliacion_mayor_cc.cuentas_me_extra', [])
+        );
+    }
+
+    /**
+     * @param  list<int|string>  $extras
+     * @return array<int, true>
+     */
+    private static function mapaCodigosDesdeConfig(int $principal, array $extras): array
+    {
+        $out = [];
+        foreach (array_merge([$principal], $extras) as $codigo) {
+            $n = (int) self::normalizarCodigo((string) $codigo);
+            if ($n > 0) {
+                $out[$n] = true;
+            }
+        }
+
+        return $out;
     }
 
     /**

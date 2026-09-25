@@ -2827,60 +2827,88 @@ class ClienteRepository implements ClienteRepositoryInterface
 
         if (is_string($filtros)) {
             $texto = trim($filtros);
-            $filtros = [
+            $filtros = array_merge(ClienteListadoFiltros::filtrosVacios(), [
                 'modo' => ClienteListadoFiltros::MODO_TODOS,
                 'campo' => 'nombre',
                 'operador' => 'contiene',
                 'valor' => $texto,
                 'valor_hasta' => '',
-                'codigo' => '',
                 'busqueda' => $texto,
-            ];
+            ]);
         } elseif (! is_array($filtros)) {
             $filtros = ClienteListadoFiltros::filtrosVacios();
         }
 
-        $cliente = $this->model->select('cliente.id as id',
+        $cliente = $this->model->select(
+                                        'cliente.id as id',
                                         'cliente.nombre as nombre',
-										'transporte.codigo as ctransporte',
-										'transporte.nombre as nombretransporte',
-										'vendedor.codigo as cvendedor',
-										'vendedor.nombre as nombrevendedor',
-										'cliente.numerodocumento as numerodocumento',
+                                        'cliente.fantasia as fantasia',
+                                        'cliente.contacto as contacto',
+                                        'cliente.email as email',
+                                        'cliente.telefono as telefono',
+                                        'cliente.urlweb as urlweb',
+                                        'cliente.numerodocumento as numerodocumento',
                                         'cliente.domicilio as domicilio',
                                         'cliente.codigo as codigo',
+                                        'cliente.codigopostal as codigopostal',
+                                        'cliente.nroiibb as nroiibb',
+                                        'cliente.descuento as descuento',
+                                        'cliente.leyenda as leyenda',
+                                        'cliente.tipoalta as tipoalta',
                                         'cliente.estado as estado',
                                         'cliente.facturas_apocrifas as facturas_apocrifas',
                                         'cliente.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at',
+                                        'transporte.codigo as ctransporte',
+                                        'transporte.nombre as nombretransporte',
+                                        'vendedor.codigo as cvendedor',
+                                        'vendedor.nombre as nombrevendedor',
                                         'localidad.nombre as nombrelocalidad',
-										'provincia.nombre as nombreprovincia')
-                                ->leftjoin('localidad', 'localidad.id', 'cliente.localidad_id')
-								->leftjoin('provincia', 'provincia.id', 'cliente.provincia_id')
-								->leftjoin('transporte', 'transporte.id', 'cliente.transporte_id')
-								->leftjoin('vendedor', 'vendedor.id', 'cliente.vendedor_id');
-		
-		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();
+                                        'provincia.nombre as nombreprovincia',
+                                        'pais.nombre as nombrepais',
+                                        'condicioniva.nombre as nombrecondicioniva',
+                                        'tipoempresa_cliente.nombre as nombretipoempresa',
+                                        'zonavta.nombre as nombrezonavta',
+                                        'subzonavta.nombre as nombresubzonavta',
+                                        'cobrador.nombre as nombrecobrador',
+                                        'condicionventa.nombre as nombrecondicionventa',
+                                        'listaprecio.nombre as nombrelistaprecio',
+                                        'descuentoventa.nombre as nombredescuentoventa',
+                                        'tiposuspensioncliente.nombre as nombretiposuspension'
+                                )
+                                ->leftJoin('localidad', 'localidad.id', '=', 'cliente.localidad_id')
+                                ->leftJoin('provincia', 'provincia.id', '=', 'cliente.provincia_id')
+                                ->leftJoin('pais', 'pais.id', '=', 'cliente.pais_id')
+                                ->leftJoin('transporte', 'transporte.id', '=', 'cliente.transporte_id')
+                                ->leftJoin('vendedor', 'vendedor.id', '=', 'cliente.vendedor_id')
+                                ->leftJoin('condicioniva', 'condicioniva.id', '=', 'cliente.condicioniva_id')
+                                ->leftJoin('tipoempresa_cliente', 'tipoempresa_cliente.id', '=', 'cliente.tipoempresa_cliente_id')
+                                ->leftJoin('zonavta', 'zonavta.id', '=', 'cliente.zonavta_id')
+                                ->leftJoin('subzonavta', 'subzonavta.id', '=', 'cliente.subzonavta_id')
+                                ->leftJoin('cobrador', 'cobrador.id', '=', 'cliente.cobrador_id')
+                                ->leftJoin('condicionventa', 'condicionventa.id', '=', 'cliente.condicionventa_id')
+                                ->leftJoin('listaprecio', 'listaprecio.id', '=', 'cliente.listaprecio_id')
+                                ->leftJoin('descuentoventa', 'descuentoventa.id', '=', 'cliente.descuentoventa_id')
+                                ->leftJoin('tiposuspensioncliente', 'tiposuspensioncliente.id', '=', 'cliente.tiposuspension_id');
 
-		if (count($vendedores) > 0)
-		{
-			$cliente = $cliente->whereIn('vendedor_id', $vendedores);
-		}
+        $vendedores = $this->vendedorRepository->leeVendedoresAsociados();
 
-        if (ClienteListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            ClienteListadoFiltros::aplicar($cliente, $filtros);
+        if (count($vendedores) > 0) {
+            $cliente = $cliente->whereIn('cliente.vendedor_id', $vendedores);
         }
 
-		$cliente = $cliente->orderby('id', 'DESC');
-                                
-        if (isset($flPaginando))
-        {
-            if ($flPaginando)
+        ClienteListadoFiltros::aplicar($cliente, $filtros);
+
+        $cliente = $cliente->orderBy('cliente.id', 'DESC');
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
                 $cliente = $cliente->paginate(10);
-            else
+            } else {
                 $cliente = $cliente->get();
-        }
-        else
+            }
+        } else {
             $cliente = $cliente->get();
+        }
 
         return $cliente;
     }

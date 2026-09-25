@@ -5,7 +5,7 @@
     $campoActivo = $f['campo'] ?? 'nombre';
     $operadorActivo = $f['operador'] ?? 'contiene';
     $operadoresJson = [];
-    foreach (ClienteListadoFiltros::CAMPOS as $key => $meta) {
+    foreach (ClienteListadoFiltros::campos() as $key => $meta) {
         $operadoresJson[$key] = ClienteListadoFiltros::operadoresParaCampo($key);
     }
 @endphp
@@ -23,7 +23,7 @@
             <div class="form-group col-md-2 col-sm-6 mb-2 filtro-campo-wrap" style="{{ $modo !== ClienteListadoFiltros::MODO_CAMPO ? 'display:none' : '' }}">
                 <label class="small mb-1" for="filtro_campo">Campo</label>
                 <select name="filtro_campo" id="filtro_campo" class="form-control form-control-sm">
-                    @foreach($camposFiltro ?? ClienteListadoFiltros::CAMPOS as $key => $meta)
+                    @foreach($camposFiltro ?? ClienteListadoFiltros::campos() as $key => $meta)
                         <option value="{{ $key }}" data-type="{{ $meta['type'] }}" {{ $campoActivo === $key ? 'selected' : '' }}>{{ $meta['label'] }}</option>
                     @endforeach
                 </select>

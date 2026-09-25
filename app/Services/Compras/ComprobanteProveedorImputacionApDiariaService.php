@@ -126,7 +126,8 @@ final class ComprobanteProveedorImputacionApDiariaService
             'mail_destino' => null,
             'mail_error' => null,
             'notas' => [
-                'Cada factura compara la CC de la factura (cuotas) vs el importe de la factura, el haber AP del asiento y ctamov Anita.',
+                'Cada factura compara la CC (cuotas) vs el haber a cuenta de proveedores del asiento vs el mismo en ctamov Anita.',
+                'Solo suma líneas de proveedores MN/ME (códigos de config) y anticipo; ignora gastos/IVA del asiento.',
                 'No usa el saldo neto de CC: ignora aplicaciones/OPP posteriores; exige existencia e importe de la factura en CC.',
                 'Solo facturas de origen ERP (excluye importación desde Anita).',
                 'Los comprobantes en BORRADOR se listan aparte: todavía no se contabilizaron, no son un desvío de cuadre.',

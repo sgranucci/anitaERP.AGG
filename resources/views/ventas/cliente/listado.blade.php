@@ -27,53 +27,11 @@
     <h2>Listado de clientes</h2>
     <div style="font-size: 8px; margin-bottom: 8px;">Generado {{ date('d/m/Y H:i') }}</div>
     <table class="data">
-        @php
-            $esBierzo = \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo();
-        @endphp
-        <thead>
-            <tr>
-                @if ($esBierzo)
-                    <th style="width: 6%;">C&oacute;d.</th>
-                @else
-                    <th style="width: 5%;">ID</th>
-                @endif
-                <th style="width: 18%;">Nombre</th>
-                <th style="width: 11%;">Vendedor</th>
-                <th style="width: 11%;">C.U.I.T.</th>
-                <th style="width: 18%;">Domicilio</th>
-                <th style="width: 10%;">Localidad</th>
-                <th style="width: 10%;">Provincia</th>
-                @if (! $esBierzo)
-                    <th style="width: 6%;">C&oacute;d.</th>
-                @endif
-                @if ($esBierzo)
-                    <th style="width: 11%;">Reparto</th>
-                @endif
-            </tr>
-        </thead>
-        <tbody>
-            @foreach ($clientes as $data)
-                <tr>
-                    @if ($esBierzo)
-                        <td>{{ $data->codigo }}</td>
-                    @else
-                        <td>{{ $data->id }}</td>
-                    @endif
-                    <td>{{ $data->nombre }}</td>
-                    <td>{{ trim(($data->cvendedor ?? '').($data->nombrevendedor ? '-'.$data->nombrevendedor : '')) }}</td>
-                    <td>{{ $data->numerodocumento }}</td>
-                    <td>{{ $data->domicilio }}</td>
-                    <td>{{ $data->nombrelocalidad ?? '' }}</td>
-                    <td>{{ $data->nombreprovincia ?? '' }}</td>
-                    @if (! $esBierzo)
-                        <td>{{ $data->codigo }}</td>
-                    @endif
-                    @if ($esBierzo)
-                        <td>{{ $data->ctransporte }}-{{ $data->nombretransporte }}</td>
-                    @endif
-                </tr>
-            @endforeach
-        </tbody>
+        @include('ventas.cliente.partials.tabla_listado_export', [
+            'clientes' => $clientes,
+            'columnasVisibles' => $columnasVisibles ?? null,
+            'etiquetasColumnas' => $etiquetasColumnas ?? [],
+        ])
     </table>
 </body>
 </html>

@@ -273,6 +273,34 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         $this->assertNull(ComprobanteProveedorImputacionApSupport::clasificarCodigo(111010001, $catalogo));
     }
 
+    /**
+     * El control solo mira proveedores: un debe a gasto/honorarios no debe
+     * netearse contra el haber AP (falso desvío tipo FNS A 0001-71).
+     */
+    public function test_asiento_solo_suma_cuenta_proveedores_no_gastos(): void
+    {
+        $catalogo = $this->catalogo(320, 330, 30);
+        $imputado = ComprobanteProveedorImputacionApSupport::imputacionTrio([
+            ['cuentacontable_id' => 123, 'monto' => 1754392.5, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-09-24'],
+            ['cuentacontable_id' => 747, 'monto' => 8354250.0, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-09-24'],
+            ['cuentacontable_id' => 320, 'monto' => -10108642.5, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-09-24'],
+        ], $catalogo, 'FNS A 0001-71');
+
+        $this->assertSame(10108642.5, $imputado['ap_mn']);
+        $this->assertSame(0.0, $imputado['ap_me']);
+        $this->assertSame(10108642.5, ComprobanteProveedorImputacionApSupport::haberAp($imputado));
+
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
+            10108642.5,
+            ComprobanteProveedorImputacionApSupport::haberAp($imputado),
+            10108642.5,
+            true,
+            true,
+            true
+        );
+        $this->assertTrue($eval['ok']);
+    }
+
     public function test_borrador_no_cuenta_como_desvio(): void
     {
         $partes = ComprobanteProveedorImputacionApSupport::particionarControlDiario([

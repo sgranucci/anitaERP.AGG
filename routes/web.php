@@ -2447,6 +2447,11 @@ Route::delete('ventas/cliente/{id}', 'Ventas\ClienteController@eliminar')->name(
 Route::get('ventas/leercliente_entrega/{cliente_id}', 'Ventas\ClienteController@leerCliente_Entrega')->name('leer_cliente_entrega');
 Route::get('ventas/leercliente/{cliente_id}', 'Ventas\ClienteController@leerCliente')->name('leer_cliente');
 
+Route::post('ventas/cliente/workbench/vista', 'Ventas\ClienteController@guardarVistaListado')->name('guardar_vista_listado_cliente');
+Route::delete('ventas/cliente/workbench/vista/{id}', 'Ventas\ClienteController@eliminarVistaListado')->name('eliminar_vista_listado_cliente');
+Route::post('ventas/cliente/workbench/columnas', 'Ventas\ClienteController@guardarColumnasListado')->name('guardar_columnas_listado_cliente');
+Route::post('ventas/cliente/workbench/etiquetas', 'Ventas\ClienteController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_cliente');
+
 Route::get('ventas/listacliente/{formato?}/{busqueda?}', 'Ventas\ClienteController@listar')->name('lista_cliente');
 Route::post('ventas/consultacliente', 'Ventas\ClienteController@consultaCliente')->name('consultar_cliente');
 Route::get('ventas/leeruncliente/{cliente_id}', 'Ventas\ClienteController@leeUnCliente')->name('leer_un_cliente');

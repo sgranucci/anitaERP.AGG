@@ -36,6 +36,15 @@ return [
         // Códigos Anita / plan de cuentas ERP (PROVEEDORES MN / ME).
         'cuenta_mn' => (int) env('COMPROBANTE_PROVEEDOR_MAYOR_CC_CUENTA_MN', 211010001),
         'cuenta_me' => (int) env('COMPROBANTE_PROVEEDOR_MAYOR_CC_CUENTA_ME', 211010011),
+        // Otras cuentas de proveedores a controlar (ej. no corrientes). Separadas por coma.
+        'cuentas_mn_extra' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('COMPROBANTE_PROVEEDOR_MAYOR_CC_CUENTAS_MN_EXTRA', '222010001'))
+        ), static fn (int $c) => $c > 0)),
+        'cuentas_me_extra' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('COMPROBANTE_PROVEEDOR_MAYOR_CC_CUENTAS_ME_EXTRA', '221010004'))
+        ), static fn (int $c) => $c > 0)),
         // Empresa ERP cuyo código Anita se usa para leer el mayor (0 = primera empresa activa).
         'empresa_id' => (int) env('COMPROBANTE_PROVEEDOR_MAYOR_CC_EMPRESA_ID', 0),
         // Tipos de subdiario a sumar como “factura” (vacío = todos los movimientos del mayor).
