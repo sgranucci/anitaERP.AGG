@@ -1,4 +1,5 @@
 name: PostgreSQL lab
+# package:discover needs DB-safe Schema checks (QueryException → false) before .env exists.
 
 on:
   workflow_dispatch:

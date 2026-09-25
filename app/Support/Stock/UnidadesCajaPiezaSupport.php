@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -84,8 +85,7 @@ final class UnidadesCajaPiezaSupport
     {
         static $ok = null;
         if ($ok === null) {
-            $ok = Schema::hasColumn('articulo_movimiento', 'caja')
-                && Schema::hasColumn('articulo_movimiento', 'pieza');
+            $ok = self::schemaTieneColumnas('articulo_movimiento', ['caja', 'pieza']);
         }
 
         return $ok;
@@ -95,12 +95,35 @@ final class UnidadesCajaPiezaSupport
     {
         static $ok = null;
         if ($ok === null) {
-            $ok = Schema::hasTable('transferencia_mercaderia_articulo')
-                && Schema::hasColumn('transferencia_mercaderia_articulo', 'caja')
-                && Schema::hasColumn('transferencia_mercaderia_articulo', 'pieza');
+            $ok = self::schemaTieneColumnas('transferencia_mercaderia_articulo', ['caja', 'pieza']);
         }
 
         return $ok;
+    }
+
+    /**
+     * Sin DB (composer / package:discover en CI) no debe tirar: observe() instancia el modelo
+     * y getFillable() consulta el schema antes de existir .env.
+     *
+     * @param  list<string>  $columnas
+     */
+    private static function schemaTieneColumnas(string $tabla, array $columnas): bool
+    {
+        try {
+            if (! Schema::hasTable($tabla)) {
+                return false;
+            }
+            foreach ($columnas as $columna) {
+                if (! Schema::hasColumn($tabla, $columna)) {
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (QueryException) {
+            // Connection refused / sin .env: asumir columnas ausentes.
+            return false;
+        }
     }
 
     /**
