@@ -1736,6 +1736,7 @@ $(function () {
             $bloque.attr('data-importe-ref', String(importeRef));
         }
         var yaFacturado = parseFloat($bloque.attr('data-ya-facturado')) || 0;
+        var cupoNc = parseFloat($bloque.attr('data-cupo-nc')) || 0;
 
         var sumaCom = 0;
         var checks = 0;
@@ -1768,7 +1769,10 @@ $(function () {
         }
 
         var sumaComDisponible = Math.max(0, sumaCom - yaFacturado);
-        var diff = Math.abs(importeRef - sumaComDisponible);
+        var excesoBruto = Math.max(0, Math.round((importeRef - sumaComDisponible) * 100) / 100);
+        var cupoAplicado = Math.min(excesoBruto, Math.max(0, cupoNc));
+        var importeEfectivo = Math.round((importeRef - cupoAplicado) * 100) / 100;
+        var diff = Math.abs(importeEfectivo - sumaComDisponible);
         var pct = sumaComDisponible > 0.00001 ? (diff / Math.abs(sumaComDisponible)) * 100 : (diff > 0.05 ? 100 : 0);
         var okCentavos = diff <= 0.05;
         var okTol = okCentavos || pct <= toleranciaPct + 0.0001;
@@ -1778,11 +1782,17 @@ $(function () {
             msg += ' − ya facturado legajo <strong>' + formatearMonto(yaFacturado) +
                 '</strong> = disponible <strong>' + formatearMonto(sumaComDisponible) + '</strong>';
         }
-        msg += ' · Ref. factura: <strong>' + formatearMonto(importeRef) +
-            '</strong> · Diferencia: <strong>' + formatearMonto(diff) +
+        msg += ' · Ref. factura: <strong>' + formatearMonto(importeRef) + '</strong>';
+        if (cupoAplicado > 0.005) {
+            msg += ' · Cupo NC legajo: <strong>' + formatearMonto(cupoAplicado) + '</strong>' +
+                ' (ref. efectiva <strong>' + formatearMonto(importeEfectivo) + '</strong>)';
+        }
+        msg += ' · Diferencia: <strong>' + formatearMonto(diff) +
             '</strong> (' + formatearMonto(pct) + '%) · Tolerancia: ' + formatearMonto(toleranciaPct) + '%';
         if (!okTol) {
             msg += ' — <strong>fuera de tolerancia</strong> (al guardar se devolverá el legajo a Compras).';
+        } else if (cupoAplicado > 0.005 && excesoBruto > 0.05) {
+            msg += ' — cubierto por NC del legajo; el excedente neto se prorratea en el asiento sobre artículos OC.';
         } else if (!okCentavos && diff > 0) {
             msg += ' — dentro de tolerancia; el excedente neto se prorratea en el asiento sobre artículos COM.';
         } else {

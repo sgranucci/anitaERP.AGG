@@ -22,6 +22,7 @@ use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Compras\ComprobanteProveedorCupoNcLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorReservaComLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
@@ -372,6 +373,7 @@ class OrdencompraLegajoBandejaPaqueteService
                     $importes,
                     $etiquetasCom,
                     ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc),
+                    ComprobanteProveedorCupoNcLegajoSupport::cupoNcComparableDelLegajo($oc),
                 );
                 if ($exceso !== null) {
                     throw ValidationException::withMessages([

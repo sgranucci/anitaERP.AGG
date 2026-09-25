@@ -293,6 +293,58 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
         $this->assertStringContainsString('222.505,11', $mensaje);
     }
 
+    /** Caso captura: FC 109296.54 vs COM 98038.30 sin NC → bloquea (~11,5%). */
+    public function test_bloquea_exceso_mayor_al_5_sin_cupo_nc(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [900 => [167771]],
+            [167771 => 98038.30],
+            [900 => 109296.54],
+            [167771 => 'Nº 167771'],
+            5.0,
+            0.0,
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('167771', $mensaje);
+        $this->assertStringContainsString('98.038,30', $mensaje);
+        $this->assertStringContainsString('109.296,54', $mensaje);
+    }
+
+    /** Misma captura con NC del legajo que cubre el exceso → permite. */
+    public function test_permite_exceso_mayor_al_5_si_cupo_nc_cubre(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [900 => [167771]],
+            [167771 => 98038.30],
+            [900 => 109296.54],
+            [167771 => 'Nº 167771'],
+            5.0,
+            11258.24,
+        );
+
+        $this->assertNull($mensaje);
+    }
+
+    /** Dos FC con exceso y una sola NC: la segunda sigue bloqueada si el cupo no alcanza. */
+    public function test_cupo_nc_se_consume_entre_facturas(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [
+                901 => [100],
+                902 => [200],
+            ],
+            [100 => 100000.0, 200 => 100000.0],
+            [901 => 112000.0, 902 => 112000.0],
+            [100 => 'Nº 100', 200 => 'Nº 200'],
+            5.0,
+            12000.0,
+        );
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('factura(s)', $mensaje);
+    }
+
     /** Caso real OC 216191: malla Anita 10 FC × 16 COM no debe disparar exceso al guardar NC. */
     public function test_ignora_malla_anita_con_demasiadas_com_por_factura(): void
     {

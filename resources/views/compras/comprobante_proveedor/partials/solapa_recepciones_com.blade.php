@@ -31,6 +31,7 @@
      data-tolerancia-pct="{{ $toleranciaPct }}"
      data-importe-ref="{{ $importeRef }}"
      data-ya-facturado="{{ (float) ($legajo_ya_facturado_importe ?? 0) }}"
+     data-cupo-nc="{{ (float) ($legajo_cupo_nc_importe ?? 0) }}"
      data-cotizacion-factura="{{ $cotizacionFactura }}"
      data-es-me="{{ $esMe ? '1' : '0' }}">
     <div class="card card-outline card-info mb-3">

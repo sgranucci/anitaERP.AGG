@@ -283,6 +283,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
      * @param  array<int, float>  $provisionPorCom  recepcion_id => provisión (0/ausente = no validable)
      * @param  array<int|string, float>  $importePorFactura  precarga_id|cp-N => importe de la factura
      * @param  array<int, string>  $etiquetasCom  recepcion_id => etiqueta visible (opcional)
+     * @param  float  $cupoNcDisponible  neto comparable de NC del legajo que cubre exceso FC−COM
      */
     public static function mensajeExcesoProvisionPorCom(
         array $asignacionesPorPrecarga,
@@ -290,6 +291,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
         array $importePorFactura,
         array $etiquetasCom = [],
         float $toleranciaPct = 0.0,
+        float $cupoNcDisponible = 0.0,
     ): ?string {
         $asignadoPorCom = [];
         foreach ($asignacionesPorPrecarga as $precargaId => $recepcionIds) {
@@ -340,10 +342,12 @@ final class ComprobanteProveedorReservaComLegajoSupport
             }
 
             // Primer freno claro: el neto de la factura vs la suma de las COM elegidas.
+            // NC del legajo puede cubrir el exceso (misma regla que el control por COM).
             if ($importe > $sumaProvision
-                && ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
+                && ! ComprobanteProveedorCupoNcLegajoSupport::dentroDeToleranciaTrasCupoNc(
                     $importe,
                     $sumaProvision,
+                    $cupoNcDisponible,
                     $toleranciaPct
                 )
             ) {
@@ -370,6 +374,28 @@ final class ComprobanteProveedorReservaComLegajoSupport
             }
         }
 
+        $excesosPorCom = [];
+        foreach ($asignadoPorCom as $rid => $acumulado) {
+            $provision = abs((float) ($provisionPorCom[$rid] ?? 0));
+            if ($provision <= 0.00001) {
+                continue;
+            }
+            $asignado = (float) $acumulado['importe'];
+            $exceso = ComprobanteProveedorCupoNcLegajoSupport::excesoSobreProvision($asignado, $provision);
+            if ($exceso <= 0.00001) {
+                continue;
+            }
+            if (! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($asignado, $provision, $toleranciaPct)) {
+                continue;
+            }
+            $excesosPorCom[$rid] = $exceso;
+        }
+
+        $cupoAplicadoPorCom = ComprobanteProveedorCupoNcLegajoSupport::consumirCupoContraExcesos(
+            $cupoNcDisponible,
+            $excesosPorCom,
+        )['efectivos_reduccion'];
+
         foreach ($asignadoPorCom as $rid => $acumulado) {
             $provision = abs((float) ($provisionPorCom[$rid] ?? 0));
             if ($provision <= 0.00001) {
@@ -383,7 +409,11 @@ final class ComprobanteProveedorReservaComLegajoSupport
             if ($asignado <= $provision) {
                 continue;
             }
-            if (! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($asignado, $provision, $toleranciaPct)) {
+            $efectivo = ComprobanteProveedorCupoNcLegajoSupport::asignadoEfectivoTrasCupo(
+                $asignado,
+                (float) ($cupoAplicadoPorCom[$rid] ?? 0),
+            );
+            if (! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($efectivo, $provision, $toleranciaPct)) {
                 continue;
             }
 

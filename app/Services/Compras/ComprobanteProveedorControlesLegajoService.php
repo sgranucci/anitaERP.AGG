@@ -18,6 +18,7 @@ use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport;
+use App\Support\Compras\ComprobanteProveedorCupoNcLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorReservaComLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
@@ -496,6 +497,25 @@ class ComprobanteProveedorControlesLegajoService
             $importeComDisponible,
             $politica
         );
+        if ($sentido === ComprobanteProveedorToleranciaImporteSupport::SENTIDO_EXCESO) {
+            $cupoNc = ComprobanteProveedorCupoNcLegajoSupport::cupoNcComparableDelLegajo($ordencompra);
+            if ($cupoNc > 0.00001) {
+                $exceso = ComprobanteProveedorCupoNcLegajoSupport::excesoSobreProvision(
+                    $importeFactura,
+                    $importeComDisponible
+                );
+                $aplicado = ComprobanteProveedorCupoNcLegajoSupport::aplicarCupo($exceso, $cupoNc)['aplicado'];
+                $efectivo = ComprobanteProveedorCupoNcLegajoSupport::asignadoEfectivoTrasCupo(
+                    $importeFactura,
+                    $aplicado
+                );
+                $sentido = ComprobanteProveedorToleranciaImporteSupport::sentidoFueraDePolitica(
+                    $efectivo,
+                    $importeComDisponible,
+                    $politica
+                );
+            }
+        }
         if ($sentido === null) {
             return null;
         }

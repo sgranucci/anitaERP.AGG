@@ -16,6 +16,7 @@ use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorCuentaDebeNetoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
+use App\Support\Compras\ComprobanteProveedorCupoNcLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
@@ -584,10 +585,18 @@ class ComprobanteProveedorAsientoService
             }
 
             // Hasta 5% sobre la COM disponible: prorrateo a cuentas de artículos (no cortar la grabación).
+            // Si el % supera el tope pero hay NC en el legajo que cubre la parte fuera de banda,
+            // también se prorratea (la NC se contabiliza después y cubre esa imputación de más).
             if (ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferenciaNeto)) {
-                if (! ComprobanteProveedorAsientoCuadreSupport::diferenciaDentroDePorcentaje(
+                $cupoNc = 0.0;
+                $ocAsiento = $comprobante->ordencompras;
+                if ($ocAsiento) {
+                    $cupoNc = ComprobanteProveedorCupoNcLegajoSupport::cupoNcComparableDelLegajo($ocAsiento);
+                }
+                if (! ComprobanteProveedorCupoNcLegajoSupport::diferenciaAsientoPermitidaConCupoNc(
                     $diferenciaNeto,
-                    $totalProvision
+                    $totalProvision,
+                    $cupoNc
                 )) {
                     $pct = ComprobanteProveedorAsientoCuadreSupport::porcentajeDiferencia(
                         $diferenciaNeto,
