@@ -76,9 +76,8 @@
         <tr>
             <td style="width:40%;">
                 @if ($logoEmpresaDataUri)
-                    <img src="{{ $logoEmpresaDataUri }}" style="max-height:46px;max-width:140px;" alt="">
+                    <img src="{{ $logoEmpresaDataUri }}" style="max-height:52px;max-width:180px;" alt="">
                 @endif
-                <div style="font-size:11px;font-weight:bold;margin-top:2px;">{{ $venta->puntoventas->empresas->nombre ?? '' }}</div>
             </td>
             <td class="letra-celda tc">
                 <table class="letra-tabla" align="center">

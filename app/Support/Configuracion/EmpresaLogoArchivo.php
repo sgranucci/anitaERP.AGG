@@ -130,7 +130,14 @@ final class EmpresaLogoArchivo
 
         return match (true) {
             $slug === 'EL BIERZO' => ['logo-bierzo.png', 'Frig.El Bierzo SA.png'],
-            $slug === 'INTERFORMING' => ['INTERFORMING S.A.png', 'INTERFORMING S.A..png'],
+            $slug === 'INTERFORMING' => [
+                'INTERFORMING S.A.jpg',
+                'INTERFORMING S.A..jpg',
+                'INTERFORMING S.A.png',
+                'INTERFORMING S.A..png',
+                'INTERFORMING.jpg',
+                'INTERFORMING.png',
+            ],
             self::esSlugFerli($slug) => self::archivosLogoFerli(),
             default => [],
         };
@@ -146,6 +153,16 @@ final class EmpresaLogoArchivo
         $nombre = strtoupper(trim($nombreEmpresa));
         if (self::esSlugFerli($nombre) || str_contains($nombre, 'FERLI')) {
             return self::archivosLogoFerli();
+        }
+        if (str_contains($nombre, 'INTERFORMING')) {
+            return [
+                'INTERFORMING S.A.jpg',
+                'INTERFORMING S.A..jpg',
+                'INTERFORMING.jpg',
+                'INTERFORMING S.A.png',
+                'INTERFORMING S.A..png',
+                'INTERFORMING.png',
+            ];
         }
 
         return [];
