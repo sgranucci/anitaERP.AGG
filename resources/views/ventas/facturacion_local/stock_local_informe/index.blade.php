@@ -94,7 +94,9 @@
                                     </option>
                                 @endforeach
                             </select>
-                            <small class="form-text text-muted">Varias sucursales pueden descontar del mismo depósito.</small>
+                            <small class="form-text text-muted">
+                                Incluye depósitos de fábrica sin local (no facturan). Varias sucursales pueden compartir depósito.
+                            </small>
                         </div>
                     </div>
 
@@ -115,7 +117,9 @@
                             <select name="modo" id="modo" class="form-control">
                                 <option value="saldo" @selected(($filtros['modo'] ?? 'saldo') === 'saldo')>Solo saldo</option>
                                 <option value="apertura" @selected(($filtros['modo'] ?? '') === 'apertura')>Entrada / venta / saldo</option>
+                                <option value="detalle" @selected(($filtros['modo'] ?? '') === 'detalle')>Detalle movimientos (tipo y nro.)</option>
                             </select>
+                            <small class="form-text text-muted">Detalle: un renglón por movimiento con tipo y número de comprobante (solo ERP).</small>
                         </div>
                         <label for="orden" class="{{ $colLabel }}">Orden</label>
                         <div class="{{ $colInput }}">
@@ -131,7 +135,7 @@
                         <div class="{{ $colInput }}">
                             <input type="date" name="fecha_desde" id="fecha_desde" class="form-control"
                                 value="{{ $filtros['fecha_desde'] ?? '' }}">
-                            <small class="form-text text-muted">Solo aplica en modo entrada/venta/saldo.</small>
+                            <small class="form-text text-muted">Aplica en entrada/venta/saldo y en detalle de movimientos.</small>
                         </div>
                         <label for="fecha_hasta" class="{{ $colLabel }}">Hasta fecha</label>
                         <div class="{{ $colInput }}">
@@ -140,28 +144,31 @@
                         </div>
                     </div>
 
-                    <div class="form-group row">
-                        <label for="desde_sku" class="{{ $colLabel }}">Desde SKU</label>
-                        <div class="{{ $colInput }}">
-                            <div class="input-group">
-                                <input type="text" name="desde_sku" id="desde_sku" class="form-control"
-                                    value="{{ $filtros['desde_sku'] ?? '' }}" autocomplete="off">
-                                <div class="input-group-append">
-                                    <span class="input-group-text text-muted small" id="desde_sku_nombre" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-                                </div>
-                            </div>
-                        </div>
-                        <label for="hasta_sku" class="{{ $colLabel }}">Hasta SKU</label>
-                        <div class="{{ $colInput }}">
-                            <div class="input-group">
-                                <input type="text" name="hasta_sku" id="hasta_sku" class="form-control"
-                                    value="{{ $filtros['hasta_sku'] ?? '' }}" autocomplete="off">
-                                <div class="input-group-append">
-                                    <span class="input-group-text text-muted small" id="hasta_sku_nombre" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    @include('produccion.partials.campo_consulta_articulo', [
+                        'prefix' => 'sli_desde',
+                        'label' => 'Desde SKU',
+                        'inputName' => 'desde_articulo_id',
+                        'codigoName' => 'desde_sku',
+                        'articuloId' => '',
+                        'codigo' => $filtros['desde_sku'] ?? '',
+                        'descripcion' => '',
+                        'col_label' => $colLabel,
+                        'col_input' => $colInput,
+                        'next_focus' => '#articulo_sli_hasta_codigo',
+                        'help' => 'Vacío = desde el primero. F1 o lupa consulta por nombre; Enter resuelve SKU.',
+                    ])
+                    @include('produccion.partials.campo_consulta_articulo', [
+                        'prefix' => 'sli_hasta',
+                        'label' => 'Hasta SKU',
+                        'inputName' => 'hasta_articulo_id',
+                        'codigoName' => 'hasta_sku',
+                        'articuloId' => '',
+                        'codigo' => $filtros['hasta_sku'] ?? '',
+                        'descripcion' => '',
+                        'col_label' => $colLabel,
+                        'col_input' => $colInput,
+                        'help' => 'Vacío = hasta el último. F1 o lupa consulta por nombre; Enter resuelve SKU.',
+                    ])
 
                     <div class="form-group row">
                         <label for="desde_color" class="{{ $colLabel }}">Desde color</label>
@@ -248,9 +255,11 @@
     'titulo' => 'Consultando stock del local…',
     'subtitulo' => 'Lee el ERP (o Anita si activó el tilde). Puede demorar según el rango. Pulse Esc para ocultar el aviso.',
 ])
+@include('includes.stock.modalconsultaarticulo')
 @endsection
 
 @section('scripts')
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script>
 (function () {
     var form = document.getElementById('form-stock-local-informe');
@@ -261,8 +270,49 @@
     var checkAnita = document.getElementById('origen_anita');
     var filaAnita = document.getElementById('fila-deposito-anita');
     var filaErp = document.getElementById('fila-deposito-erp');
-    var urlSku = @json(url('stock/leerunarticuloporsku'));
-    var carpeta = (typeof carpetaBase !== 'undefined' && carpetaBase) ? carpetaBase : '';
+
+    if (typeof jQuery !== 'undefined') {
+        jQuery('#consultaarticuloModal').data('articuloCanal', 'LOCAL');
+        jQuery('#consultaarticuloModal').data('articuloOcultarPrecio', true);
+        if (typeof activa_eventos_consultaarticulo === 'function') {
+            activa_eventos_consultaarticulo();
+        }
+        // F1 en código SKU abre el mismo modal que la lupa.
+        jQuery(document)
+            .off('keydown.sliSkuF1', '#form-stock-local-informe .tm-articulo-campo .codigoarticulo')
+            .on('keydown.sliSkuF1', '#form-stock-local-informe .tm-articulo-campo .codigoarticulo', function (e) {
+                if (!(e.key === 'F1' || e.code === 'F1' || e.keyCode === 112)) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                jQuery(this).closest('.tm-articulo-campo').find('.consultaarticulo').first().trigger('click');
+            });
+        // Enter en Desde: resuelve y avanza a Hasta (copia si vacío).
+        jQuery(document)
+            .off('keydown.sliSkuEnter', '#articulo_sli_desde_codigo')
+            .on('keydown.sliSkuEnter', '#articulo_sli_desde_codigo', function (e) {
+                if (e.key !== 'Enter' && e.keyCode !== 13) {
+                    return;
+                }
+                e.preventDefault();
+                var $desde = jQuery(this);
+                $desde.trigger('change');
+                var $hasta = jQuery('#articulo_sli_hasta_codigo');
+                if ($hasta.length) {
+                    if (!($hasta.val() || '').trim() && ($desde.val() || '').trim()) {
+                        $hasta.val($desde.val()).trigger('change');
+                    }
+                    $hasta.focus();
+                }
+            });
+        // Resolver descripción si ya viene SKU en la URL.
+        jQuery('#form-stock-local-informe .tm-articulo-campo .codigoarticulo').each(function () {
+            if ((jQuery(this).val() || '').trim() !== '') {
+                jQuery(this).trigger('change');
+            }
+        });
+    }
 
     function toggleOrigen() {
         var on = checkAnita && checkAnita.checked;
@@ -291,35 +341,6 @@
         overlay.setAttribute('aria-hidden', 'true');
     }
 
-    function resolverSku(inputId, nombreId) {
-        var input = document.getElementById(inputId);
-        var span = document.getElementById(nombreId);
-        if (!input || !span) return;
-        var sku = (input.value || '').trim();
-        if (sku === '') {
-            span.textContent = '';
-            return;
-        }
-        var base = urlSku || (carpeta + '/stock/leerunarticuloporsku');
-        fetch(base.replace(/\/$/, '') + '/' + encodeURIComponent(sku), {
-            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function (r) { return r.json().catch(function () { return null; }); })
-            .then(function (data) {
-                if (!data) {
-                    span.textContent = '';
-                    return;
-                }
-                var nombre = data.descripcion || data.nombre || data.articulo || '';
-                if (!nombre && data.data) {
-                    nombre = data.data.descripcion || data.data.nombre || '';
-                }
-                span.textContent = nombre || (data.error ? '—' : '');
-                span.title = nombre || '';
-            }).catch(function () {
-                span.textContent = '';
-            });
-    }
-
     if (checkAnita) {
         checkAnita.addEventListener('change', toggleOrigen);
         toggleOrigen();
@@ -338,30 +359,6 @@
             }
         });
     }
-
-    ['desde_sku', 'hasta_sku'].forEach(function (id) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        var nombreId = id + '_nombre';
-        el.addEventListener('blur', function () { resolverSku(id, nombreId); });
-        el.addEventListener('keydown', function (ev) {
-            if (ev.key === 'Enter') {
-                ev.preventDefault();
-                resolverSku(id, nombreId);
-                if (id === 'desde_sku') {
-                    var hasta = document.getElementById('hasta_sku');
-                    if (hasta) {
-                        if (!hasta.value) hasta.value = el.value;
-                        hasta.focus();
-                        resolverSku('hasta_sku', 'hasta_sku_nombre');
-                    }
-                }
-            }
-        });
-        if ((el.value || '').trim() !== '') {
-            resolverSku(id, nombreId);
-        }
-    });
 
     if (form) {
         form.addEventListener('submit', function (ev) {

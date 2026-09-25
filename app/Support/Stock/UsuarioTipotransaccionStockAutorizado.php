@@ -4,6 +4,7 @@ namespace App\Support\Stock;
 
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Tipotransaccion_Stock;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Session;
 
@@ -89,6 +90,72 @@ final class UsuarioTipotransaccionStockAutorizado
         return Tipotransaccion_Stock::query()
             ->whereIn('id', $tipoIds)
             ->where('estado', 'A')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Resuelve tipos autorizados desde abreviaturas (y opcionalmente IDs) del ABM usuario.
+     * Si el renglón tiene abreviatura, manda la abreviatura (evita carrera blur/AJAX vs submit).
+     *
+     * @param  array<int|string|null>  $tipoIds
+     * @param  array<int|string|null>  $abreviaturas
+     * @return array<int>
+     */
+    public static function idsDesdeFormulario(array $tipoIds, array $abreviaturas): array
+    {
+        $abrevResueltas = [];
+        $idsSinAbrev = [];
+        $max = max(count($tipoIds), count($abreviaturas));
+
+        for ($i = 0; $i < $max; $i++) {
+            $abrev = strtolower(trim((string) ($abreviaturas[$i] ?? '')));
+            $id = (int) ($tipoIds[$i] ?? 0);
+
+            if ($abrev !== '') {
+                $abrevResueltas[] = $abrev;
+                continue;
+            }
+
+            if ($id > 0) {
+                $idsSinAbrev[] = $id;
+            }
+        }
+
+        $validIds = [];
+        if ($abrevResueltas !== []) {
+            $validIds = array_merge($validIds, self::idsDesdeAbreviaturas($abrevResueltas));
+        }
+        if ($idsSinAbrev !== []) {
+            $validIds = array_merge($validIds, self::idsValidos($idsSinAbrev));
+        }
+
+        return array_values(array_unique(array_map('intval', $validIds)));
+    }
+
+    /**
+     * @param  array<int|string>  $abreviaturas
+     * @return array<int>
+     */
+    public static function idsDesdeAbreviaturas(array $abreviaturas): array
+    {
+        $abreviaturas = array_values(array_unique(array_filter(array_map(
+            static fn ($abrev) => strtolower(trim((string) $abrev)),
+            $abreviaturas
+        ), static fn (string $abrev) => $abrev !== '')));
+
+        if ($abreviaturas === []) {
+            return [];
+        }
+
+        return Tipotransaccion_Stock::query()
+            ->where('estado', 'A')
+            ->where(function ($q) use ($abreviaturas) {
+                foreach ($abreviaturas as $abrev) {
+                    $q->orWhereRaw(SqlDialectSupport::lower('abreviatura').' = ?', [$abrev]);
+                }
+            })
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->all();

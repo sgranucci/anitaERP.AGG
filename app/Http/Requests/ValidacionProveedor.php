@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Compras\Tiposervicio_Proveedor;
 use App\Rules\Compras\RuleProveedor;
+use App\Rules\EmailsMultiples;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -70,6 +71,8 @@ class ValidacionProveedor extends FormRequest
             'nroinscripcion' => $nroInscripcionRules,
             'retieneiva' => ['required', new RuleProveedor('retieneiva')],
             'nroIIBB' => 'sometimes|max:100|',
+            'email' => ['nullable', 'string', 'max:255', new EmailsMultiples],
+            'emailoc' => ['nullable', 'string', 'max:255', new EmailsMultiples],
             'nombres' => 'nullable|array',
             'formapago_ids' => 'nullable|array',
             'tipocuentacaja_ids' => 'nullable|array',
@@ -80,6 +83,7 @@ class ValidacionProveedor extends FormRequest
             'banco_ids' => 'nullable|array',
             'mediopago_ids' => 'nullable|array',
             'emails' => 'nullable|array',
+            'emails.*' => ['nullable', 'string', 'max:255', new EmailsMultiples],
             'servicios_clientes' => 'nullable|array',
             'servicios_detalles' => 'nullable|array',
             'servicios_empresa_ids' => 'nullable|array',

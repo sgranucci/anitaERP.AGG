@@ -12,7 +12,8 @@ interface Articulo_MovimientoQueryInterface
                                             $apertura = 'TOTALIZADO');
 
     /**
-     * OT en planta (sin tarea de cierre) que aún no tienen movimiento de stock.
+     * OT del cliente STOCK en planta (sin cierre) que aún no tienen movimiento de stock.
+     * OT de clientes comerciales no entran.
      *
      * @param  list<int>  $ordentrabajoIdsYaIncluidos
      * @return \Illuminate\Support\Collection<int, array<string, mixed>>

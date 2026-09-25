@@ -84,6 +84,9 @@ class PickingPedidoFerliController extends Controller
             'lote_hasta' => $loteHasta,
             'picking_id' => $pickingActivo?->id ?? $pickingId,
             'picking_codigo' => $pickingActivo?->codigo ?? ($pickingCodigo > 0 ? $pickingCodigo : ''),
+            'puede_borrar_picking' => PedidoPickingFerliSupport::puedeBorrarPicking(
+                (int) ($pickingActivo?->id ?? $pickingId)
+            ),
             'cliente_query' => $cliente_query,
             'deposito_query' => $deposito_query,
             'puntoventa_query' => $puntoventa_query,
@@ -267,6 +270,25 @@ class PickingPedidoFerliController extends Controller
 
         $id = (int) $request->input('pedido_combinacion_id', 0);
         $result = PedidoPickingFerliSupport::desmarcar($id);
+
+        if (! empty($result['error'])) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json($result);
+    }
+
+    public function borrar(Request $request)
+    {
+        $this->assertFerli();
+        can('listar-reporte-picking-pedido');
+
+        $pickingId = (int) $request->input('picking_id', 0);
+        $pickingCodigo = (int) $request->input('picking_codigo', 0);
+        $result = PedidoPickingFerliSupport::borrarPicking(
+            $pickingId > 0 ? $pickingId : null,
+            $pickingCodigo > 0 ? $pickingCodigo : null,
+        );
 
         if (! empty($result['error'])) {
             return response()->json($result, 422);

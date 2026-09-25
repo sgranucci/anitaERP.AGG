@@ -16,6 +16,48 @@ class AplicacionCuentacorrienteAnitaMapperTest extends TestCase
         $this->assertSame(0.0, AplicacionCuentacorrienteAnitaLadoSupport::tPagadoDesdeSumaAplicaciones(0));
     }
 
+    public function test_t_pagado_desde_filas_aplmovp(): void
+    {
+        $filas = [
+            ['aplvp_monto' => '2536426.2', 'aplvp_fecha' => '20260903', 'aplvp_tipo_cob' => 'OPP'],
+            ['aplvp_monto' => '160373.4', 'aplvp_fecha' => '20260923', 'aplvp_tipo_cob' => 'NCB'],
+        ];
+        $this->assertSame(
+            2696799.6,
+            AplicacionCuentacorrienteAnitaLadoSupport::tPagadoDesdeFilasAplmovp($filas)
+        );
+        $this->assertSame(
+            '20260923',
+            AplicacionCuentacorrienteAnitaLadoSupport::fechaPagoYmdDesdeFilasAplmovp($filas)
+        );
+        $this->assertSame(0.0, AplicacionCuentacorrienteAnitaLadoSupport::tPagadoDesdeFilasAplmovp([]));
+        $this->assertSame('0', AplicacionCuentacorrienteAnitaLadoSupport::fechaPagoYmdDesdeFilasAplmovp([]));
+
+        // AOP anula OPP previa (caso DUPLA).
+        $conAop = [
+            ['aplvp_monto' => '1144492.17', 'aplvp_fecha' => '20260917', 'aplvp_tipo_cob' => 'OPP'],
+            ['aplvp_monto' => '1130054.94', 'aplvp_fecha' => '20260918', 'aplvp_tipo_cob' => 'OPP'],
+            ['aplvp_monto' => '14437.23', 'aplvp_fecha' => '20260921', 'aplvp_tipo_cob' => 'OPP'],
+            ['aplvp_monto' => '1144492.17', 'aplvp_fecha' => '20260921', 'aplvp_tipo_cob' => 'AOP'],
+        ];
+        $this->assertSame(
+            1144492.17,
+            AplicacionCuentacorrienteAnitaLadoSupport::tPagadoDesdeFilasAplmovp($conAop)
+        );
+    }
+
+    public function test_where_documento_aplmovp_cubre_deuda_y_credito(): void
+    {
+        $lado = AplicacionCuentacorrienteAnitaLadoSupport::armar('1831', 'FAC', 'A', 4, 31, 117763, 1);
+        $where = AplmovpAnitaMapper::whereDocumento($lado);
+        $this->assertStringContainsString("aplvp_proveedor = '001831'", $where);
+        $this->assertStringContainsString("aplvp_tipo = 'FAC'", $where);
+        $this->assertStringContainsString("aplvp_nro = '31'", $where);
+        $this->assertStringContainsString("aplvp_nro_cuota = '1'", $where);
+        $this->assertStringContainsString("aplvp_tipo_cob = 'FAC'", $where);
+        $this->assertStringContainsString("aplvp_nro_cob = '31'", $where);
+    }
+
     public function test_aplmovp_inserta_deuda_cuota_y_referencia_del_credito(): void
     {
         $deuda = AplicacionCuentacorrienteAnitaLadoSupport::armar('3593', 'FNB', 'A', 7, 857, 427700, 1, 1, '2', 1515);

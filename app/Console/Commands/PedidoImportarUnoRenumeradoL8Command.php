@@ -10,7 +10,10 @@ class PedidoImportarUnoRenumeradoL8Command extends Command
 {
     protected $signature = 'ventas:importar-pedido-l8-renumerado
                             {codigo_l8 : Código del pedido en L8}
-                            {--codigo-nuevo= : Código destino en L12 (default: max+1)}
+                            {--codigo-nuevo= : Código destino en L12 (default: max+1; con --mover-ocupante suele ser el mismo de L8)}
+                            {--mover-ocupante : Si el código destino está ocupado, lo renumera a --codigo-ocupante (o max+1)}
+                            {--codigo-ocupante= : Código nuevo para el pedido L12 que libera el número}
+                            {--conservar-ot : Reutiliza OTs L8 ya existentes en L12 (etiqueta) desvinculándolas del ocupante}
                             {--dry-run : Muestra el impacto sin grabar}
                             {--ejecutar : Persiste el pedido renumerado en L12}';
 
@@ -39,11 +42,28 @@ class PedidoImportarUnoRenumeradoL8Command extends Command
         $codigoNuevo = $this->option('codigo-nuevo');
         $codigoNuevo = is_string($codigoNuevo) && trim($codigoNuevo) !== '' ? trim($codigoNuevo) : null;
 
+        $moverOcupante = (bool) $this->option('mover-ocupante');
+        $codigoOcupante = $this->option('codigo-ocupante');
+        $codigoOcupante = is_string($codigoOcupante) && trim($codigoOcupante) !== '' ? trim($codigoOcupante) : null;
+        $conservarOt = (bool) $this->option('conservar-ot');
+
+        // Caso típico "liberar el número de L8": destino = mismo código L8.
+        if ($moverOcupante && $codigoNuevo === null) {
+            $codigoNuevo = (string) $this->argument('codigo_l8');
+        }
+        if ($moverOcupante && ! $conservarOt) {
+            $conservarOt = true;
+            $this->comment('Con --mover-ocupante se activa --conservar-ot (OTs de etiqueta).');
+        }
+
         try {
             $stats = $service->importar(
                 (string) $this->argument('codigo_l8'),
                 $codigoNuevo,
-                $dryRun
+                $dryRun,
+                $moverOcupante,
+                $codigoOcupante,
+                $conservarOt
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());

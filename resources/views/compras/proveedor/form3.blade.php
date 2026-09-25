@@ -118,7 +118,7 @@
 							</td>
 							<td>
         						<div class="form-group">
-        							<input type="text" name="emails[]" value="{{ $formapago->email ?? '' }}" class="form-control emails fp-email" placeholder="Email">
+        							<input type="text" name="emails[]" value="{{ $formapago->email ?? '' }}" class="form-control emails fp-email" placeholder="{{ \App\Support\Mail\EmailsMultiplesSupport::PLACEHOLDER }}" title="{{ \App\Support\Mail\EmailsMultiplesSupport::TITLE }}" autocomplete="off">
         						</div>
                 			</td>
                 			<td>

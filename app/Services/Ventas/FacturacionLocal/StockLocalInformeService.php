@@ -89,16 +89,23 @@ final class StockLocalInformeService
                 );
             }
             // «Todos» + depósito: anclar a un local del mismo depósito solo para metadatos.
+            // Depósitos de fábrica pueden no tener local (no facturan).
             if ($local === null) {
                 $local = LocalVenta::query()
                     ->where('activo', true)
                     ->where('deposito_id', $depositoErpId)
                     ->orderBy('codigo')
-                    ->first()
-                    ?? LocalVenta::query()->where('activo', true)->orderBy('codigo')->first();
+                    ->first();
             }
             if ($local === null) {
-                return $this->resultadoError('No hay locales activos configurados.', $paginar, $porPagina);
+                // Placeholder mínimo para construir() (ERP no usa datos del local).
+                $local = new LocalVenta([
+                    'codigo' => '',
+                    'nombre' => 'Sin local',
+                    'deposito_id' => $depositoErpId,
+                    'anita_deposito' => 0,
+                    'activo' => true,
+                ]);
             }
         }
 
@@ -166,10 +173,12 @@ final class StockLocalInformeService
         $parts = [];
         if ($local) {
             if (empty($filtros['local_venta_id'])) {
-                $parts[] = 'Locales: todos (dep. ERP '.$depositoErpId.')';
+                $parts[] = 'Sin local / todos (dep. ERP '.$depositoErpId.')';
             } else {
                 $parts[] = 'Local '.$local->codigo.' '.$local->nombre;
             }
+        } elseif (! empty($depositoErpId)) {
+            $parts[] = 'Dep. ERP '.$depositoErpId.' (sin local asignado)';
         }
         $origen = (string) ($filtros['origen'] ?? StockLocalInformeListadoFiltros::ORIGEN_ERP);
         $parts[] = StockLocalInformeListadoFiltros::etiquetaOrigen($origen);
@@ -243,6 +252,12 @@ final class StockLocalInformeService
         $modo = (string) ($filtros['modo'] ?? StockLocalInformeListadoFiltros::MODO_SALDO);
 
         if ($origen === StockLocalInformeListadoFiltros::ORIGEN_ANITA) {
+            if ($modo === StockLocalInformeListadoFiltros::MODO_DETALLE) {
+                return [
+                    'ok' => false,
+                    'error' => 'El detalle con tipo y número de comprobante solo está disponible con origen ERP (sin tilde Anita).',
+                ];
+            }
             if ($modo === StockLocalInformeListadoFiltros::MODO_APERTURA) {
                 $agg = $this->agregarDesdeStkvmed($local, $depositoAnita, $filtros, array_keys($porSkuAnita));
                 $etiquetaOrigen = 'anita_stkvmed';
@@ -270,6 +285,20 @@ final class StockLocalInformeService
                 $filtros['hasta_color'] ?? null
             );
             $medidas = $agg['medidas'] ?? [];
+        } elseif ($modo === StockLocalInformeListadoFiltros::MODO_DETALLE) {
+            $agg = $this->agregarDetalleDesdeErp($depositoErpId, $filtros, array_keys($porArticuloId));
+            if (($agg['error'] ?? null) !== null) {
+                return ['ok' => false, 'error' => $agg['error']];
+            }
+            $etiquetaOrigen = 'erp_articulo_movimiento_detalle';
+            $filas = $this->armarFilasDetalleErp(
+                $agg['movimientos'] ?? [],
+                $porArticuloId,
+                (string) ($filtros['orden'] ?? StockLocalInformeListadoFiltros::ORDEN_ARTICULO),
+                $filtros['desde_color'] ?? null,
+                $filtros['hasta_color'] ?? null
+            );
+            $medidas = $agg['medidas'] ?? [];
         } else {
             $agg = $this->agregarDesdeErp($depositoErpId, $filtros, array_keys($porArticuloId));
             if (($agg['error'] ?? null) !== null) {
@@ -291,7 +320,10 @@ final class StockLocalInformeService
         $totalStock = 0.0;
         $grupos = 0;
         foreach ($filas as $fila) {
-            if (($fila['concepto'] ?? '') === 'Stock' || ($fila['tipo_fila'] ?? '') === 'saldo') {
+            if (($fila['tipo_fila'] ?? '') === 'detalle') {
+                $totalStock += (float) ($fila['total'] ?? 0);
+                $grupos++;
+            } elseif (($fila['concepto'] ?? '') === 'Stock' || ($fila['tipo_fila'] ?? '') === 'saldo') {
                 $totalStock += (float) ($fila['total'] ?? 0);
                 $grupos++;
             }
@@ -492,6 +524,168 @@ final class StockLocalInformeService
             $ordenConcepto = ['Entradas' => 1, 'Ventas' => 2, 'Stock' => 3];
 
             return ($ordenConcepto[$a['concepto'] ?? ''] ?? 9) <=> ($ordenConcepto[$b['concepto'] ?? ''] ?? 9);
+        });
+
+        return $items;
+    }
+
+    /**
+     * Detalle ERP: un renglón por articulo_movimiento con tipo y número de comprobante.
+     *
+     * @param  list<int>  $articuloIds
+     * @param  array<string, mixed>  $filtros
+     * @return array{
+     *   movimientos: array<int, array{
+     *     am_id:int,
+     *     articulo_id:int,
+     *     color_codigo:string,
+     *     color_desc:string,
+     *     fecha:string,
+     *     tipo:string,
+     *     numero:string,
+     *     venta_id:?int,
+     *     movimientostock_id:?int,
+     *     cantidades:array<string,float>
+     *   }>,
+     *   medidas:list<int>,
+     *   error:?string
+     * }
+     */
+    private function agregarDetalleDesdeErp(int $depositoId, array $filtros, array $articuloIds): array
+    {
+        if ($depositoId <= 0 || $articuloIds === []) {
+            return ['movimientos' => [], 'medidas' => [], 'error' => null];
+        }
+
+        $fechaDesde = (string) ($filtros['fecha_desde'] ?? '1900-01-01');
+        $fechaHasta = (string) ($filtros['fecha_hasta'] ?? date('Y-m-d'));
+
+        /** @var array<int, array{am_id:int,articulo_id:int,color_codigo:string,color_desc:string,fecha:string,tipo:string,numero:string,venta_id:?int,movimientostock_id:?int,cantidades:array<string,float>}> $movimientos */
+        $movimientos = [];
+        $medidasVistas = [];
+
+        $rows = StockLocalErpMovimientosSupport::filasPorDepositoYArticulos(
+            $depositoId,
+            $articuloIds,
+            $fechaHasta,
+            $fechaDesde
+        );
+
+        foreach ($rows as $row) {
+            $amId = (int) ($row->am_id ?? 0);
+            if ($amId <= 0) {
+                continue;
+            }
+            $cantidad = (float) $row->cantidad;
+            if (abs($cantidad) < 0.000001) {
+                continue;
+            }
+            $medidaNorm = StockLocalErpMovimientosSupport::normalizarMedida(
+                $row->medida ?? null,
+                $row->medida_nombre ?? null
+            );
+            $medida = is_numeric($medidaNorm) ? (int) $medidaNorm : 0;
+            if (! is_numeric($medidaNorm) && $medidaNorm !== 0 && $medidaNorm !== '0') {
+                $medidaKey = (string) $medidaNorm;
+            } else {
+                $medidaKey = (string) ($medida > 0 ? $medida : 0);
+                $medida = (int) $medidaKey;
+            }
+            $medidasVistas[$medida] = true;
+
+            [$colorCodigo, $colorDesc] = StockLocalErpMovimientosSupport::colorDesdeFila($row);
+
+            if (! isset($movimientos[$amId])) {
+                $movimientos[$amId] = [
+                    'am_id' => $amId,
+                    'articulo_id' => (int) $row->articulo_id,
+                    'color_codigo' => $colorCodigo,
+                    'color_desc' => $colorDesc,
+                    'fecha' => substr((string) $row->fecha, 0, 10),
+                    'tipo' => StockLocalErpMovimientosSupport::tipoComprobanteDesdeFila($row),
+                    'numero' => StockLocalErpMovimientosSupport::numeroComprobanteDesdeFila($row),
+                    'venta_id' => $row->venta_id !== null ? (int) $row->venta_id : null,
+                    'movimientostock_id' => $row->movimientostock_id !== null ? (int) $row->movimientostock_id : null,
+                    'cantidades' => [],
+                ];
+            }
+            $movimientos[$amId]['cantidades'][$medidaKey] =
+                ($movimientos[$amId]['cantidades'][$medidaKey] ?? 0.0) + $cantidad;
+        }
+
+        $medidas = array_keys($medidasVistas);
+        sort($medidas, SORT_NUMERIC);
+        if (in_array(0, $medidas, true)) {
+            $medidas = array_values(array_filter($medidas, static fn ($m) => (int) $m !== 0));
+            $medidas[] = 0;
+        }
+
+        return ['movimientos' => $movimientos, 'medidas' => $medidas, 'error' => null];
+    }
+
+    /**
+     * @param  array<int, array{am_id:int,articulo_id:int,color_codigo:string,color_desc:string,fecha:string,tipo:string,numero:string,venta_id:?int,movimientostock_id:?int,cantidades:array<string,float>}>  $movimientos
+     * @param  array<int, array{id:int,sku:string,descripcion:string,categoria:string,categoria_codigo:string,sku_anita:string}>  $porArticuloId
+     * @return list<array<string, mixed>>
+     */
+    private function armarFilasDetalleErp(
+        array $movimientos,
+        array $porArticuloId,
+        string $orden,
+        ?int $desdeColor = null,
+        ?int $hastaColor = null
+    ): array {
+        $items = [];
+        foreach ($movimientos as $mov) {
+            $meta = $porArticuloId[(int) $mov['articulo_id']] ?? null;
+            if ($meta === null) {
+                continue;
+            }
+            $colorCodigo = (string) $mov['color_codigo'];
+            $colorInt = ctype_digit($colorCodigo) ? (int) $colorCodigo : 0;
+            if ($desdeColor !== null && $colorInt < $desdeColor) {
+                continue;
+            }
+            if ($hastaColor !== null && $colorInt > $hastaColor) {
+                continue;
+            }
+            $total = array_sum($mov['cantidades']);
+            if (abs($total) < 0.000001) {
+                continue;
+            }
+
+            $items[] = [
+                'tipo_fila' => 'detalle',
+                'articulo_id' => $meta['id'],
+                'sku' => $meta['sku'],
+                'sku_anita' => $meta['sku_anita'],
+                'descripcion' => $meta['descripcion'],
+                'categoria' => $meta['categoria'],
+                'categoria_codigo' => $meta['categoria_codigo'],
+                'color' => $colorCodigo,
+                'color_desc' => $mov['color_desc'],
+                'fecha' => $mov['fecha'],
+                'tipo_comprobante' => $mov['tipo'],
+                'numero_comprobante' => $mov['numero'],
+                'venta_id' => $mov['venta_id'],
+                'movimientostock_id' => $mov['movimientostock_id'],
+                'concepto' => trim($mov['tipo'].' '.$mov['numero']),
+                'cantidades' => $mov['cantidades'],
+                'total' => $total,
+                'orden_cat' => $meta['categoria_codigo'].'|'.$mov['fecha'].'|'.$meta['sku'].'|'.$colorCodigo.'|'.$mov['am_id'],
+                'orden_art' => $mov['fecha'].'|'.$meta['sku'].'|'.$colorCodigo.'|'.$mov['am_id'],
+            ];
+        }
+
+        usort($items, static function (array $a, array $b) use ($orden): int {
+            $ka = $orden === StockLocalInformeListadoFiltros::ORDEN_CATEGORIA
+                ? ($a['orden_cat'] ?? '')
+                : ($a['orden_art'] ?? '');
+            $kb = $orden === StockLocalInformeListadoFiltros::ORDEN_CATEGORIA
+                ? ($b['orden_cat'] ?? '')
+                : ($b['orden_art'] ?? '');
+
+            return strcmp($ka, $kb);
         });
 
         return $items;

@@ -18,6 +18,7 @@ final class StockLocalErpMovimientosSupport
      *
      * @param  list<int>  $articuloIds
      * @return Collection<int, object{
+     *   am_id:int,
      *   articulo_id:int|string,
      *   cantidad:float|string,
      *   fecha:mixed,
@@ -26,13 +27,23 @@ final class StockLocalErpMovimientosSupport
      *   color_codigo_m:?string,
      *   color_nombre:?string,
      *   medida:?string,
-     *   medida_nombre:?string
+     *   medida_nombre:?string,
+     *   tipo_abreviatura:?string,
+     *   tipo_nombre:?string,
+     *   tipo_venta_abreviatura:?string,
+     *   tipo_venta_nombre:?string,
+     *   venta_id:?int,
+     *   venta_codigo:?string,
+     *   movimientostock_id:?int,
+     *   movimiento_codigo:?string,
+     *   concepto:?string
      * }>
      */
     public static function filasPorDepositoYArticulos(
         int $depositoId,
         array $articuloIds,
-        ?string $fechaHasta = null
+        ?string $fechaHasta = null,
+        ?string $fechaDesde = null
     ): Collection {
         if ($depositoId <= 0 || $articuloIds === []) {
             return collect();
@@ -49,10 +60,17 @@ final class StockLocalErpMovimientosSupport
                 })
                 ->leftJoin('talle as t_amt', 't_amt.id', '=', 'amt.talle_id')
                 ->leftJoin('talle as t_am', 't_am.id', '=', 'am.talle_id')
+                ->leftJoin('tipotransaccion_stock as ts', 'ts.id', '=', 'am.tipotransaccion_stock_id')
+                ->leftJoin('tipotransaccion as tt', 'tt.id', '=', 'am.tipotransaccion_id')
+                ->leftJoin('venta as v', 'v.id', '=', 'am.venta_id')
+                ->leftJoin('movimientostock as ms', 'ms.id', '=', 'am.movimientostock_id')
                 ->where('am.deposito_id', $depositoId)
                 ->whereIn('am.articulo_id', $chunk)
                 ->whereNotNull('am.articulo_id');
 
+            if ($fechaDesde !== null && $fechaDesde !== '') {
+                $query->whereDate('am.fecha', '>=', $fechaDesde);
+            }
             if ($fechaHasta !== null && $fechaHasta !== '') {
                 $query->whereDate('am.fecha', '<=', $fechaHasta);
             }
@@ -62,6 +80,9 @@ final class StockLocalErpMovimientosSupport
                 'am.articulo_id',
                 'am.cantidad as am_cantidad',
                 'am.fecha',
+                'am.concepto',
+                'am.venta_id',
+                'am.movimientostock_id',
                 'amt.id as amt_id',
                 'amt.cantidad as amt_cantidad',
                 'c.codigo as combinacion_codigo',
@@ -72,6 +93,12 @@ final class StockLocalErpMovimientosSupport
                 't_amt.nombre as medida_nombre_amt',
                 't_am.codigo as medida_am',
                 't_am.nombre as medida_nombre_am',
+                'v.codigo as venta_codigo',
+                'tt.abreviatura as tipo_venta_abreviatura',
+                'tt.nombre as tipo_venta_nombre',
+                'ms.codigo as movimiento_codigo',
+                DB::raw('COALESCE(ts.nombre, tt.nombre) AS tipo_nombre'),
+                DB::raw('COALESCE(ts.abreviatura, tt.abreviatura) AS tipo_abreviatura'),
             ])->get();
 
             foreach ($rows as $row) {
@@ -88,6 +115,7 @@ final class StockLocalErpMovimientosSupport
                 }
 
                 $out->push((object) [
+                    'am_id' => (int) $row->am_id,
                     'articulo_id' => (int) $row->articulo_id,
                     'cantidad' => $cant,
                     'fecha' => $row->fecha,
@@ -99,6 +127,15 @@ final class StockLocalErpMovimientosSupport
                     'medida_nombre' => $row->amt_id !== null
                         ? (string) ($row->medida_nombre_amt ?? '')
                         : (string) ($row->medida_nombre_am ?? ''),
+                    'tipo_abreviatura' => $row->tipo_abreviatura,
+                    'tipo_nombre' => $row->tipo_nombre,
+                    'tipo_venta_abreviatura' => $row->tipo_venta_abreviatura,
+                    'tipo_venta_nombre' => $row->tipo_venta_nombre,
+                    'venta_id' => $row->venta_id !== null ? (int) $row->venta_id : null,
+                    'venta_codigo' => $row->venta_codigo,
+                    'movimientostock_id' => $row->movimientostock_id !== null ? (int) $row->movimientostock_id : null,
+                    'movimiento_codigo' => $row->movimiento_codigo,
+                    'concepto' => $row->concepto,
                 ]);
             }
         }
@@ -146,5 +183,36 @@ final class StockLocalErpMovimientosSupport
         }
 
         return [$colorCodigo, $colorDesc];
+    }
+
+    /**
+     * Tipo de comprobante (misma lógica que kardex / RecuentoMovimientosArticuloSupport).
+     */
+    public static function tipoComprobanteDesdeFila(object $row): string
+    {
+        $tipoVenta = trim((string) ($row->tipo_venta_abreviatura ?? $row->tipo_venta_nombre ?? ''));
+        if (! empty($row->venta_id) && $tipoVenta !== '') {
+            return $tipoVenta;
+        }
+
+        return trim((string) ($row->tipo_abreviatura ?: $row->tipo_nombre ?: '—')) ?: '—';
+    }
+
+    /**
+     * Número / código de comprobante (venta, mov. stock o concepto).
+     */
+    public static function numeroComprobanteDesdeFila(object $row): string
+    {
+        $ventaCodigo = trim((string) ($row->venta_codigo ?? ''));
+        if ($ventaCodigo !== '') {
+            return $ventaCodigo;
+        }
+        $movCodigo = trim((string) ($row->movimiento_codigo ?? ''));
+        if ($movCodigo !== '') {
+            return $movCodigo;
+        }
+        $concepto = trim((string) ($row->concepto ?? ''));
+
+        return $concepto !== '' ? $concepto : '—';
     }
 }

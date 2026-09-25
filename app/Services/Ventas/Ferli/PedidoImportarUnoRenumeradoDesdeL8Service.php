@@ -35,11 +35,19 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
      *   insert_oct: int,
      *   insert_tarea: int,
      *   ot_map: list<string>,
-     *   detalle: list<string>
+     *   detalle: list<string>,
+     *   ocupante_movido: array{pedido_id: int, codigo_antes: string, codigo_despues: string, cliente: string}|null,
+     *   ot_reutilizadas: list<int>
      * }
      */
-    public function importar(string $codigoL8, ?string $codigoNuevo = null, bool $dryRun = true): array
-    {
+    public function importar(
+        string $codigoL8,
+        ?string $codigoNuevo = null,
+        bool $dryRun = true,
+        bool $moverOcupante = false,
+        ?string $codigoOcupanteDestino = null,
+        bool $conservarOtL8 = false,
+    ): array {
         FerliL8ReaderSupport::assertFerli();
 
         $fuente = $this->reader->resolverFuente();
@@ -73,8 +81,42 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
             ? trim($codigoNuevo)
             : (string) (((int) DB::table('pedido')->selectRaw('MAX(CAST(codigo AS UNSIGNED)) m')->value('m')) + 1);
 
-        if (DB::table('pedido')->where('codigo', $codigoDestino)->exists()) {
-            throw new RuntimeException("El código destino {$codigoDestino} ya existe en L12.");
+        $ocupante = DB::table('pedido as p')
+            ->leftJoin('cliente as c', 'c.id', '=', 'p.cliente_id')
+            ->where('p.codigo', $codigoDestino)
+            ->first(['p.id', 'p.codigo', 'p.cliente_id', 'c.codigo as cli_cod', 'c.nombre as cli_nom', 'p.estadopedido']);
+
+        $ocupanteMovido = null;
+        $codigoOcupanteFinal = null;
+
+        if ($ocupante) {
+            if (! $moverOcupante) {
+                throw new RuntimeException(
+                    "El código destino {$codigoDestino} ya existe en L12"
+                    .' (id='.$ocupante->id.', '.trim((string) ($ocupante->cli_cod ?? '')).' — '.trim((string) ($ocupante->cli_nom ?? '')).').'
+                    .' Use --mover-ocupante para renumerarlo y liberar el número.'
+                );
+            }
+
+            $codigoOcupanteFinal = $codigoOcupanteDestino !== null && trim($codigoOcupanteDestino) !== ''
+                ? trim($codigoOcupanteDestino)
+                : (string) (((int) DB::table('pedido')->selectRaw('MAX(CAST(codigo AS UNSIGNED)) m')->value('m')) + 1);
+
+            if ($codigoOcupanteFinal === $codigoDestino) {
+                throw new RuntimeException('El código destino del ocupante no puede ser el mismo que se libera.');
+            }
+            if (DB::table('pedido')->where('codigo', $codigoOcupanteFinal)->exists()) {
+                throw new RuntimeException("El código destino del ocupante {$codigoOcupanteFinal} ya existe en L12.");
+            }
+
+            $ocupanteMovido = [
+                'pedido_id' => (int) $ocupante->id,
+                'codigo_antes' => (string) $ocupante->codigo,
+                'codigo_despues' => $codigoOcupanteFinal,
+                'cliente' => trim((string) ($ocupante->cli_cod ?? '')).' — '.trim((string) ($ocupante->cli_nom ?? '')),
+            ];
+        } elseif ($moverOcupante) {
+            // Nada que mover; el destino está libre.
         }
 
         $combinaciones = $l8->table('pedido_combinacion')
@@ -110,21 +152,52 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
             ? collect()
             : $l8->table('ordentrabajo_combinacion_talle')->whereIn('ordentrabajo_id', $otIdsL8)->orderBy('id')->get();
 
-        $maxOtCodigo = (int) DB::table('ordentrabajo')->selectRaw('MAX(CAST(codigo AS UNSIGNED)) m')->value('m');
         $otMapL8aL12 = [];
         $otMapDetalle = [];
+        $otReutilizadas = [];
+        $maxOtCodigo = (int) DB::table('ordentrabajo')->selectRaw('MAX(CAST(codigo AS UNSIGNED)) m')->value('m');
         $siguienteOt = $maxOtCodigo;
+
         foreach ($ots as $ot) {
+            $codigoOt = (string) $ot->codigo;
+            $otIdL8 = (int) $ot->id;
+            $existente = DB::table('ordentrabajo')
+                ->where(static function ($q) use ($codigoOt): void {
+                    $q->where('codigo', $codigoOt)->orWhere('id', (int) $codigoOt);
+                })
+                ->first();
+
+            if ($conservarOtL8 && $existente && $ocupante) {
+                // Reusa la OT de producción (etiqueta) tras desvincularla del ocupante.
+                $otL12Id = (int) $existente->id;
+                $otMapL8aL12[$otIdL8] = $otL12Id;
+                $otMapL8aL12[(int) $codigoOt] = $otL12Id;
+                $otReutilizadas[] = $otL12Id;
+                $otMapDetalle[] = sprintf('OT L8 %s → L12 %d (REUTILIZA, conserva etiqueta)', $codigoOt, $otL12Id);
+                continue;
+            }
+
             $siguienteOt++;
             while (
                 DB::table('ordentrabajo')->where('codigo', (string) $siguienteOt)->exists()
                 || DB::table('ordentrabajo')->where('id', $siguienteOt)->exists()
+                || in_array($siguienteOt, $otMapL8aL12, true)
             ) {
                 $siguienteOt++;
             }
-            $otMapL8aL12[(int) $ot->codigo] = $siguienteOt;
-            $otMapL8aL12[(int) $ot->id] = $siguienteOt;
-            $otMapDetalle[] = sprintf('OT L8 %s → L12 %d', $ot->codigo, $siguienteOt);
+            $otMapL8aL12[$otIdL8] = $siguienteOt;
+            $otMapL8aL12[(int) $codigoOt] = $siguienteOt;
+            $otMapDetalle[] = sprintf('OT L8 %s → L12 %d', $codigoOt, $siguienteOt);
+        }
+
+        $pcsOcupanteAQuitar = [];
+        if ($ocupante && $otReutilizadas !== []) {
+            $pcsOcupanteAQuitar = DB::table('pedido_combinacion')
+                ->where('pedido_id', (int) $ocupante->id)
+                ->whereIn('ot_id', $otReutilizadas)
+                ->orderBy('id')
+                ->get(['id', 'ot_id'])
+                ->all();
         }
 
         $stats = [
@@ -138,12 +211,25 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
             'insert_pedido' => 1,
             'insert_combinacion' => $combinaciones->count(),
             'insert_talle' => $talles->count(),
-            'insert_ordentrabajo' => $ots->count(),
+            'insert_ordentrabajo' => $ots->count() - count($otReutilizadas),
             'insert_oct' => $octs->count(),
-            'insert_tarea' => $tareas->count(),
+            'insert_tarea' => 0, // se calcula abajo
             'ot_map' => $otMapDetalle,
             'detalle' => [],
+            'ocupante_movido' => $ocupanteMovido,
+            'ot_reutilizadas' => $otReutilizadas,
         ];
+
+        if ($ocupanteMovido) {
+            $stats['detalle'][] = sprintf(
+                'MOVER ocupante L12 id=%d codigo %s (%s, %s) → codigo %s',
+                $ocupanteMovido['pedido_id'],
+                $ocupanteMovido['codigo_antes'],
+                $ocupanteMovido['cliente'],
+                $ocupante->estadopedido ?? '?',
+                $ocupanteMovido['codigo_despues']
+            );
+        }
 
         $stats['detalle'][] = sprintf(
             'L8 pedido id=%d codigo=%s (%s, %s) → L12 codigo=%s',
@@ -154,7 +240,7 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
             $codigoDestino
         );
         $stats['detalle'][] = sprintf(
-            'Líneas: %d comb / %d talles / %d OT / %d tareas / %d OCT',
+            'Líneas L8: %d comb / %d talles / %d OT / %d tareas / %d OCT',
             $combinaciones->count(),
             $talles->count(),
             $ots->count(),
@@ -164,9 +250,38 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
         foreach ($otMapDetalle as $line) {
             $stats['detalle'][] = $line;
         }
+
+        if ($pcsOcupanteAQuitar !== []) {
+            $stats['detalle'][] = sprintf(
+                'Del ocupante se desvinculan %d línea(s) con OT a reutilizar (pasan a Boston): pc %s',
+                count($pcsOcupanteAQuitar),
+                implode(', ', array_map(static fn ($r) => (string) $r->id, $pcsOcupanteAQuitar))
+            );
+        }
+
+        $tareasNuevas = 0;
+        foreach ($tareas as $tarea) {
+            $otL12 = $otMapL8aL12[(int) $tarea->ordentrabajo_id] ?? null;
+            if ($otL12 === null) {
+                continue;
+            }
+            $ya = DB::table('ordentrabajo_tarea')
+                ->where('ordentrabajo_id', $otL12)
+                ->where('tarea_id', (int) $tarea->tarea_id)
+                ->exists();
+            if (! $ya) {
+                $tareasNuevas++;
+            }
+        }
+        $stats['insert_tarea'] = $tareasNuevas;
         $stats['detalle'][] = sprintf(
-            'L12 pedido codigo=%s (PINAR u otro) NO se modifica.',
-            $pedidoL8->codigo
+            'Insertarán: pedido +%d · comb +%d · talles +%d · OT nuevas +%d · tareas nuevas +%d · OCT +%d',
+            $stats['insert_pedido'],
+            $stats['insert_combinacion'],
+            $stats['insert_talle'],
+            $stats['insert_ordentrabajo'],
+            $stats['insert_tarea'],
+            $stats['insert_oct']
         );
 
         if ($dryRun) {
@@ -182,15 +297,52 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
 
         DB::beginTransaction();
         try {
+            if ($ocupanteMovido) {
+                DB::table('pedido')
+                    ->where('id', $ocupanteMovido['pedido_id'])
+                    ->update([
+                        'codigo' => $ocupanteMovido['codigo_despues'],
+                        'updated_at' => now(),
+                    ]);
+            }
+
+            // Desvincular del ocupante las líneas cuya OT se reutiliza (Lilly/Boston).
+            if ($pcsOcupanteAQuitar !== []) {
+                $pcIdsQuitar = array_map(static fn ($r) => (int) $r->id, $pcsOcupanteAQuitar);
+                $pctIds = DB::table('pedido_combinacion_talle')
+                    ->whereIn('pedido_combinacion_id', $pcIdsQuitar)
+                    ->pluck('id')
+                    ->map(static fn ($id) => (int) $id)
+                    ->all();
+
+                if ($pctIds !== []) {
+                    DB::table('ordentrabajo_combinacion_talle')
+                        ->whereIn('pedido_combinacion_talle_id', $pctIds)
+                        ->delete();
+                }
+
+                DB::table('ordentrabajo_tarea')
+                    ->whereIn('pedido_combinacion_id', $pcIdsQuitar)
+                    ->update(['pedido_combinacion_id' => null]);
+
+                if ($pctIds !== []) {
+                    DB::table('pedido_combinacion_talle')->whereIn('id', $pctIds)->delete();
+                }
+                DB::table('pedido_combinacion')->whereIn('id', $pcIdsQuitar)->delete();
+            }
+
             $pedidoRow = FerliL8ImportRowSupport::normalize('pedido', (array) $pedidoL8, $colsPedido);
             unset($pedidoRow['id']);
             $pedidoRow['codigo'] = $codigoDestino;
             $pedidoL12Id = (int) DB::table('pedido')->insertGetId($pedidoRow);
             $stats['l12_pedido_id'] = $pedidoL12Id;
 
-            // OTs primero (ot_id en combinación apunta al código).
+            // OTs nuevas (las reutilizadas ya existen).
             foreach ($ots as $ot) {
                 $nuevo = $otMapL8aL12[(int) $ot->id];
+                if (in_array($nuevo, $otReutilizadas, true)) {
+                    continue;
+                }
                 $otRow = FerliL8ImportRowSupport::normalize('ordentrabajo', (array) $ot, $colsOt);
                 $otRow['id'] = $nuevo;
                 $otRow['codigo'] = (string) $nuevo;
@@ -228,18 +380,39 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
 
             foreach ($tareas as $tarea) {
                 $ottRow = FerliL8ImportRowSupport::normalize('ordentrabajo_tarea', (array) $tarea, $colsOtt);
-                unset($ottRow['id']);
                 $otL8 = (int) $ottRow['ordentrabajo_id'];
                 if (! isset($otMapL8aL12[$otL8])) {
                     throw new RuntimeException("Sin mapa OT para tarea ordentrabajo_id={$otL8}.");
                 }
-                $ottRow['ordentrabajo_id'] = $otMapL8aL12[$otL8];
+                $otL12 = $otMapL8aL12[$otL8];
                 $pcL8 = (int) ($ottRow['pedido_combinacion_id'] ?? 0);
+                $pcL12 = null;
                 if ($pcL8 > 0) {
                     if (! isset($mapaPc[$pcL8])) {
                         throw new RuntimeException("Sin mapa PC para tarea pc={$pcL8}.");
                     }
-                    $ottRow['pedido_combinacion_id'] = $mapaPc[$pcL8];
+                    $pcL12 = $mapaPc[$pcL8];
+                }
+
+                $existenteTarea = DB::table('ordentrabajo_tarea')
+                    ->where('ordentrabajo_id', $otL12)
+                    ->where('tarea_id', (int) $ottRow['tarea_id'])
+                    ->orderBy('id')
+                    ->first();
+
+                if ($existenteTarea) {
+                    $upd = ['updated_at' => now()];
+                    if ($pcL12 !== null) {
+                        $upd['pedido_combinacion_id'] = $pcL12;
+                    }
+                    DB::table('ordentrabajo_tarea')->where('id', $existenteTarea->id)->update($upd);
+                    continue;
+                }
+
+                unset($ottRow['id']);
+                $ottRow['ordentrabajo_id'] = $otL12;
+                if ($pcL12 !== null) {
+                    $ottRow['pedido_combinacion_id'] = $pcL12;
                 }
                 DB::table('ordentrabajo_tarea')->insert($ottRow);
             }
@@ -257,7 +430,6 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
                     throw new RuntimeException("Sin mapa PCT para OCT pct={$pctL8}.");
                 }
                 $octRow['pedido_combinacion_talle_id'] = $mapaPct[$pctL8];
-                // Tabla ordentrabajo_stock no existe en L12.
                 $octRow['ordentrabajo_stock_id'] = null;
                 DB::table('ordentrabajo_combinacion_talle')->insert($octRow);
             }
@@ -277,7 +449,11 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
             $stats['l12_pedido_id'],
             $codigoDestino
         );
-        Log::info('ferli.l8.importar_uno_renumerado.ok', $stats);
+        try {
+            Log::info('ferli.l8.importar_uno_renumerado.ok', $stats);
+        } catch (\Throwable) {
+            // Log opcional: no tumba el import ya commitado.
+        }
 
         return $stats;
     }

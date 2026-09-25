@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
- * Ferli: al cargar tarea Terminada (32) la OT entra a stock (ALTAP) si aún no tenía movimiento.
- * Se identifica por número de OT (ordentrabajo_id); lote queda en 0 (los lotes son importados).
+ * Ferli: al terminar (tarea 32) solo las OT del cliente STOCK entran a stock (ALTAP).
+ * OT de clientes comerciales no van al stock.
+ * Se identifica por ordentrabajo_id; lote=0 (los lotes son importados).
  * El Excel Stock por OT pasa de EN PRODUCCION a ENTREGA INMEDIATA.
  */
 final class OtTerminadaAltaStockFerliSupport
@@ -38,6 +39,14 @@ final class OtTerminadaAltaStockFerliSupport
         }
 
         $octs = $this->ordentrabajoCombinacionTalleRepository->findPorOrdenTrabajoId($ordentrabajo->id);
+        if (! $this->esOtClienteStock($octs)) {
+            Log::notice(
+                'Ferli OT '.$ordentrabajo->codigo.' terminada sin ALTAP (no es cliente STOCK)'
+            );
+
+            return;
+        }
+
         $tallesPorPedidoCombinacion = [];
         foreach ($octs as $oct) {
             $pct = $oct->pedido_combinacion_talles;
@@ -114,6 +123,26 @@ final class OtTerminadaAltaStockFerliSupport
         return Articulo_Movimiento::query()
             ->where('ordentrabajo_id', $ordentrabajo->id)
             ->exists();
+    }
+
+    /**
+     * @param  iterable<int, object>  $octs
+     */
+    private function esOtClienteStock(iterable $octs): bool
+    {
+        $vioCliente = false;
+        foreach ($octs as $oct) {
+            $clienteId = (int) ($oct->cliente_id ?? 0);
+            if ($clienteId <= 0) {
+                continue;
+            }
+            $vioCliente = true;
+            if (! ReporteStockOtSituacionSupport::esClienteStock($clienteId)) {
+                return false;
+            }
+        }
+
+        return $vioCliente;
     }
 
     private function depositoFabricaId(): int

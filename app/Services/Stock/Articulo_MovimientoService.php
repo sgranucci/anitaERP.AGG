@@ -313,11 +313,9 @@ class Articulo_MovimientoService
 			$data = $data->concat($extras);
 		}
 
+		// Incluir OT con depósito: hace falta la meta de tareas (ej. PENDIENTE vs ENTREGA).
 		$otIdsSituacion = [];
 		foreach ($data as $row) {
-			if ((int) ($row['deposito_id'] ?? 0) > 0) {
-				continue;
-			}
 			if (! empty($row['en_produccion_forzada'])) {
 				continue;
 			}

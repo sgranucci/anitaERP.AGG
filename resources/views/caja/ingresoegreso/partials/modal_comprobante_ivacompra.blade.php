@@ -56,16 +56,20 @@
                                     </div>
                                 </td>
                                 <td>
-                                    <div class="input-group input-group-sm">
-                                        <input type="hidden" class="ie-cp-cuenta-id">
-                                        <input type="text" class="form-control ie-cp-cuenta-codigo" readonly placeholder="C&oacute;d.">
-                                        <div class="input-group-append">
-                                            <button type="button" class="btn btn-outline-primary btn-sm ie-cp-consulta-cuenta" title="Elegir cuenta">
-                                                <i class="fa fa-search"></i>
-                                            </button>
-                                        </div>
+                                    {{-- Mismo patrón tm-cuentacontable-campo que facturas de proveedor (F1 / lupa / código + Enter) --}}
+                                    <div class="tm-cuentacontable-campo d-flex flex-nowrap align-items-center" style="gap:4px;">
+                                        <input type="hidden" class="cuentacontable_id ie-cp-cuenta-id" value="">
+                                        <input type="hidden" class="codigo_previo" value="">
+                                        <button type="button" title="Consulta cuenta DEBE (F1)"
+                                                class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
+                                            <i class="fa fa-search text-primary"></i>
+                                        </button>
+                                        <input type="text" class="codigocuentacontable ie-cp-cuenta-codigo form-control form-control-sm"
+                                               style="width:5rem;flex-shrink:0;" value="" placeholder="C&oacute;d." autocomplete="off"
+                                               title="C&oacute;digo + Enter &middot; F1 consulta">
+                                        <input type="text" class="nombrecuentacontable ie-cp-cuenta-nombre form-control form-control-sm text-truncate"
+                                               readonly value="" placeholder="Descripci&oacute;n" style="min-width:0;flex:1 1 auto;">
                                     </div>
-                                    <small class="text-muted ie-cp-cuenta-nombre d-block"></small>
                                 </td>
                                 <td>
                                     <input type="number" step="0.01" class="form-control form-control-sm text-right ie-cp-monto" value="0">

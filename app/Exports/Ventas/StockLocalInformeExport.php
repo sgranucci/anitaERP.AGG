@@ -162,8 +162,17 @@ class StockLocalInformeExport implements FromView, ShouldAutoSize, WithColumnFor
 
     private function resolverLayoutColumnas(): void
     {
-        // SKU, Desc, Color, Color desc, Concepto + medidas + Total
-        $this->totalColumnas = 5 + count($this->medidas) + 1;
+        $modoDetalle = false;
+        foreach ($this->filas as $fila) {
+            if (is_array($fila) && (($fila['tipo_fila'] ?? '') === 'detalle')) {
+                $modoDetalle = true;
+                break;
+            }
+        }
+        // Detalle: Fecha + SKU + Desc + Color + Color desc + Tipo + Número + medidas + Total
+        // Otros: SKU + Desc + Color + Color desc + Concepto + medidas + Total
+        $fijas = $modoDetalle ? 7 : 5;
+        $this->totalColumnas = $fijas + count($this->medidas) + 1;
         $this->colUltima = $this->indiceAColumna($this->totalColumnas);
     }
 

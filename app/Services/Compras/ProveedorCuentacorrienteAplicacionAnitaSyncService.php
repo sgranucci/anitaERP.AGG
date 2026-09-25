@@ -371,22 +371,18 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         ?array $ref,
         bool $obligatorio,
     ): void {
-        if ($this->esTipoPagoAnita((string) ($lado['tipo'] ?? ''))) {
+        // OPP/AOP cabecera: Anita deja t_pagado=0. OPA (anticipo) sí se actualiza al aplicar.
+        if ($this->omitirActualizarTPagadoPromov((string) ($lado['tipo'] ?? ''))) {
             return;
         }
 
-        $suma = (float) Proveedor_Cuentacorriente_Aplicacion::query()
-            ->where('proveedor_cuentacorriente_id', $cc->id)
-            ->sum('total');
-        $tPagado = AplicacionCuentacorrienteAnitaLadoSupport::tPagadoDesdeSumaAplicaciones($suma);
-        $ultimaFecha = Proveedor_Cuentacorriente_Aplicacion::query()
-            ->where('proveedor_cuentacorriente_id', $cc->id)
-            ->orderByDesc('fecha')
-            ->orderByDesc('id')
-            ->value('fecha');
-        $fechaYmd = $ultimaFecha
-            ? (string) ComprobanteProveedorAnitaImportClaveSupport::fechaAnitaDesdeIso((string) $ultimaFecha)
-            : '0';
+        // Verdad Anita: t_pagado = suma neta aplmovp del comprobante (no la suma de apps ERP).
+        $filasApl = $this->listarAplmovpDocumento($lado, $obligatorio);
+        if ($filasApl === null) {
+            return;
+        }
+        $tPagado = AplicacionCuentacorrienteAnitaLadoSupport::tPagadoDesdeFilasAplmovp($filasApl);
+        $fechaYmd = AplicacionCuentacorrienteAnitaLadoSupport::fechaPagoYmdDesdeFilasAplmovp($filasApl);
         if ($tPagado < 0.0001) {
             $ref = null;
             $fechaYmd = '0';
@@ -438,6 +434,50 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
                 'mensaje' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * @param  Lado  $lado
+     * @return list<array<string, mixed>>|null  null si falló la lectura y no es obligatorio
+     */
+    private function listarAplmovpDocumento(array $lado, bool $obligatorio): ?array
+    {
+        $api = new ApiAnita;
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'tabla' => (string) config('comprobante_proveedor.anita_tabla_aplmovp', 'aplmovp'),
+            'campos' => 'aplvp_monto, aplvp_fecha, aplvp_tipo, aplvp_tipo_cob',
+            'whereArmado' => AplmovpAnitaMapper::whereDocumento($lado),
+        ]));
+        if ($parsed['error_lectura'] !== null) {
+            $error = 'Anita aplmovp '.$lado['etiqueta'].': '.$parsed['error_lectura'];
+            if ($obligatorio) {
+                throw new RuntimeException($error);
+            }
+            Log::warning('anita_bridge.fallo', ['contexto' => 'aplmovp list '.$lado['etiqueta'], 'mensaje' => $error]);
+
+            return null;
+        }
+
+        $filas = [];
+        foreach ($parsed['filas'] as $fila) {
+            $filas[] = (array) $fila;
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Cabeceras OPP/AOP/etc. no llevan t_pagado. OPA (anticipo) sí refleja lo aplicado.
+     */
+    private function omitirActualizarTPagadoPromov(string $tipo): bool
+    {
+        return in_array(
+            strtoupper(substr(trim($tipo), 0, 3)),
+            ['OPP', 'AOP', 'OPV', 'APA', 'REC', 'CHP', 'ANT'],
+            true
+        );
     }
 
     private function esTipoPagoAnita(string $tipo): bool

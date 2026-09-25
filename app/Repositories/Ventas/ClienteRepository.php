@@ -35,6 +35,7 @@ use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Ventas\ClienteDocumentoAnitaSupport;
+use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
@@ -2476,10 +2477,9 @@ class ClienteRepository implements ClienteRepositoryInterface
 				$regimen = '1';
 		}
 		$localidad = Localidad::select('id', 'codigo')->where('id', $request['localidad_id'] ?? 0)->first();
-		if ($localidad)
-			$codigolocalidad = $localidad->codigo;
-		else
-			$codigolocalidad = 0;
+		$codigolocalidad = $localidad
+			? ProveedorExclusionAnitaSupport::codigoEnteroAnita($localidad->codigo)
+			: 0;
 
 		$provincia = Provincia::select('id', 'codigo')->where('id' , $request['provincia_id'])->first();
 		if ($provincia)

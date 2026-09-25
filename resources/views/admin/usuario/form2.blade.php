@@ -49,7 +49,7 @@
                                     <button type="button" title="Consulta depósitos" class="btn-accion-tabla consultadeposito tooltipsC">
                                         <i class="fa fa-search text-primary"></i>
                                     </button>
-                                    <input type="text" class="form-control form-control-sm codigodeposito" value="{{ $depModel->codigo ?? '' }}" autocomplete="off" style="max-width: 6rem;">
+                                    <input type="text" name="deposito_codigos[]" class="form-control form-control-sm codigodeposito" value="{{ $depModel->codigo ?? '' }}" autocomplete="off" style="max-width: 6rem;">
                                 </div>
                             </td>
                             <td>

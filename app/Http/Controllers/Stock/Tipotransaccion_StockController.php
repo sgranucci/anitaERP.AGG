@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTipotransaccion_Stock;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\UsuarioTipotransaccionStockAutorizado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -179,7 +180,7 @@ class Tipotransaccion_StockController extends Controller
         }
 
         $query = Tipotransaccion_Stock::query()
-            ->where('abreviatura', trim($abreviatura))
+            ->whereRaw(SqlDialectSupport::lower('abreviatura').' = ?', [strtolower(trim($abreviatura))])
             ->where('estado', 'A')
             ->whereIn('operacion', $operaciones);
 

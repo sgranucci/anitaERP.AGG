@@ -492,6 +492,10 @@ class PedidoFerliController extends Controller
     {
         can('crear-pedidos');
 
+		if ($errorL8 = \App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport::errorSiNoPuedeCrearPedido()) {
+			return redirect('ventas/pedido')->with('errores', [$errorL8['error']]);
+		}
+
 		$this->armarTablasVista($cliente_query, $condicionventa_query, $vendedor_query, 
 							$transporte_query, $mventa_query, $articulo_query, $modulo_query, 
 							$listaprecio_query, $moneda_query, $articuloall_query, $articuloxsku_query,

@@ -11,6 +11,7 @@ use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Ordentrabajo_Tarea;
+use App\Models\Ventas\Pedido;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Pedido_Combinacion_Estado;
 use App\Models\Ventas\Venta;
@@ -24,6 +25,7 @@ use App\Observers\Ventas\Ordentrabajo_TareaObserver;
 use App\Observers\Ventas\OrdentrabajoObserver;
 use App\Observers\Ventas\Pedido_Combinacion_EstadoObserver;
 use App\Observers\Ventas\Pedido_CombinacionObserver;
+use App\Observers\Ventas\PedidoObserver;
 use App\Observers\Ventas\Venta_EmisionObserver;
 use App\Observers\Ventas\VentaObserver;
 use App\Support\AyudaManuales;
@@ -148,6 +150,7 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Pedido_Combinacion::observe(Pedido_CombinacionObserver::class);
+        Pedido::observe(PedidoObserver::class);
         Ordentrabajo_Tarea::observe(Ordentrabajo_TareaObserver::class);
         Pedido_Combinacion_Estado::observe(Pedido_Combinacion_EstadoObserver::class);
         Articulo_Movimiento::observe(Articulo_MovimientoObserver::class);

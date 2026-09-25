@@ -2545,6 +2545,7 @@ class FacturacionService
 	{
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
 		VentaNotaCreditoPrecioLiteralSupport::aplicarPreciosFacturaOrigen($data);
+		VentaNotaCreditoPrecioLiteralSupport::aplicarImpuestosFacturaOrigen($data);
 		\App\Support\Ventas\FacturacionLocal\FacturacionLocalNcPrecioSupport::normalizarPayloadNc($data);
 
 		UsuarioPreferenciaFacturacionSupport::guardar($data);

@@ -487,10 +487,6 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
 
     var $ctx = $(ptrrenglon).closest('.tm-deposito-campo, .depmae-campo-consulta, tr');
     var codOriginal = cod;
-    if ($ctx.length) {
-        $ctx.find('.deposito_id').val('');
-        $ctx.find('.descripciondeposito').val('');
-    }
 
     var leerUrl = carpetaBase + '/stock/depmae/leer/' + encodeURIComponent(cod);
     var extraPayload = typeof window.payloadExtraConsultaDeposito === 'function'
@@ -515,7 +511,13 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
         .done(function (data) {
             if (!data || !data.id) {
                 if ($ctx.length) {
+                    $ctx.find('.deposito_id').val('');
+                    $ctx.find('.descripciondeposito').val('');
                     $ctx.find('.codigodeposito').val(codOriginal);
+                    if ($ctx.closest('#tbody-usuario-deposito-table').length) {
+                        $ctx.find('.empresa-deposito-nombre').val('');
+                    }
+                    actualizarLinkEditarDeposito($ctx, 0);
                 }
                 alert('Dep\u00f3sito no encontrado');
                 if (typeof onDone === 'function') {
@@ -554,7 +556,13 @@ function leerDepositoPorCodigo(codigo, ptrrenglon, onDone) {
         })
         .fail(function (xhr) {
             if ($ctx.length) {
+                $ctx.find('.deposito_id').val('');
+                $ctx.find('.descripciondeposito').val('');
                 $ctx.find('.codigodeposito').val(codOriginal);
+                if ($ctx.closest('#tbody-usuario-deposito-table').length) {
+                    $ctx.find('.empresa-deposito-nombre').val('');
+                }
+                actualizarLinkEditarDeposito($ctx, 0);
             }
             var msg = (xhr && xhr.responseJSON && xhr.responseJSON.error)
                 ? xhr.responseJSON.error

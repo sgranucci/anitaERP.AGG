@@ -86,6 +86,7 @@
                     <div class="alert alert-warning py-1 px-2 mb-0 small ml-2 mr-2" role="status">
                         <i class="fa fa-info-circle"></i>
                         Las l&iacute;neas <strong>Preparadas</strong> ya descontaron stock del lote/OT. Al facturar no se vuelve a descontar.
+                        Si se equivocaron, us&aacute; <strong>Quitar</strong> en la l&iacute;nea o <strong>Borrar picking</strong> (solo si a&uacute;n no facturaron).
                     </div>
                 </div>
                 <div class="card-footer d-flex flex-wrap align-items-center">
@@ -100,8 +101,18 @@
                             <i class="fa fa-file-excel"></i> Excel seleccionados
                         </a>
                         @if ($puede_facturar)
-                            <button type="button" class="btn btn-warning btn-sm" id="btn-facturar-picking">
+                            <button type="button" class="btn btn-warning btn-sm mr-2" id="btn-facturar-picking">
                                 <i class="fa fa-file-invoice"></i> Facturar seleccionados
+                            </button>
+                        @endif
+                        @if (! empty($puede_borrar_picking) && (int) ($picking_id ?? 0) > 0)
+                            <button type="button"
+                                    class="btn btn-outline-danger btn-sm"
+                                    id="btn-borrar-picking"
+                                    data-picking-id="{{ (int) $picking_id }}"
+                                    data-picking-codigo="{{ (int) ($picking_codigo ?? 0) }}"
+                                    title="Quita todas las l&iacute;neas preparadas, devuelve stock y elimina el picking">
+                                <i class="fa fa-trash"></i> Borrar picking
                             </button>
                         @endif
                     @endif
@@ -149,6 +160,7 @@
                                 <th>Dep&oacute;sito</th>
                                 <th>Factura</th>
                                 <th>Marcado</th>
+                                <th style="width:1%;">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -165,7 +177,7 @@
                                     $facturada = ($linea->picking_facturado ?? '') === $estadoPickingFacturado;
                                     $etiquetaFactura = \App\Support\Ventas\PedidoPickingFerliSupport::etiquetaFacturaDesdeVenta($linea->pickingVenta);
                                 @endphp
-                                <tr>
+                                <tr data-pedido-combinacion-id="{{ $linea->id }}">
                                     <td>
                                         <input type="checkbox" class="check-picking-linea"
                                             value="{{ $linea->id }}"
@@ -186,10 +198,22 @@
                                     <td>{{ $depTxt }}</td>
                                     <td>{{ $etiquetaFactura !== '' ? $etiquetaFactura : ($facturada ? 'Facturada' : '') }}</td>
                                     <td>{{ optional($linea->picking_at)->format('d/m/Y H:i') }}</td>
+                                    <td class="text-nowrap">
+                                        @if (! $facturada)
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-secondary btn-quitar-picking-linea"
+                                                    data-id="{{ $linea->id }}"
+                                                    title="Quitar preparaci&oacute;n y devolver stock al lote/OT">
+                                                <i class="fa fa-undo"></i> Quitar
+                                            </button>
+                                        @else
+                                            <span class="text-muted small">—</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="12" class="text-center text-muted py-4">No hay l&iacute;neas con los filtros indicados.</td>
+                                    <td colspan="13" class="text-center text-muted py-4">No hay l&iacute;neas con los filtros indicados.</td>
                                 </tr>
                             @endforelse
                         </tbody>

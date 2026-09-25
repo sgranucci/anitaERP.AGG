@@ -21,6 +21,7 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Ventas\QrCodePngSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
+use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
 use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
 use App\Support\Ventas\OrdentrabajoEmisionPreimpresoLayout;
 use App\Models\Configuracion\Salida;
@@ -139,6 +140,13 @@ class OrdentrabajoService
 	public function guardaOrdenTrabajo($id_items, $checkOtStock, $ordentrabajo_stock_codigo, $deposito_id,
 									$leyenda, $funcion, $id = null)
 	{
+		if ($funcion === 'create') {
+			$errorL8 = FerliL8AltasBloqueadasSupport::errorSiNoPuedeCrearOt();
+			if ($errorL8 !== null) {
+				return $errorL8;
+			}
+		}
+
 		$usuario_id = Auth::user()->id;
 
 		if (!is_array($id_items))

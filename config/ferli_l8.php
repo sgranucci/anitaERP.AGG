@@ -27,4 +27,11 @@ return [
      * En L12 dejar false (acá se consume, no se exporta la BD operativa).
      */
     'export_enabled' => filter_var(env('FERLI_L8_EXPORT_ENABLED', false), FILTER_VALIDATE_BOOLEAN),
+
+    /*
+     * Bloquear altas de pedido y OT en L8 (evitar colisiones de numerador con L12).
+     * Vacío/ausente = auto (Ferli + DB_DATABASE=anitaERP); true/false fuerza.
+     * En L12 dejar false o ausente (BD anitaERP_l12 no dispara el auto).
+     */
+    'bloquear_altas_pedido_ot' => env('FERLI_L8_BLOQUEAR_ALTAS_PEDIDO_OT'),
 ];

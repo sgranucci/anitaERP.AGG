@@ -6,7 +6,7 @@
                 <button type="button" title="Consulta tipos de transacci&oacute;n" class="btn-accion-tabla consultatipotransaccionstock tooltipsC">
                     <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" class="form-control form-control-sm abreviaturatipotransaccionstock" value="" autocomplete="off" style="max-width: 6rem;">
+                <input type="text" name="tipotransaccion_stock_abreviaturas[]" class="form-control form-control-sm abreviaturatipotransaccionstock" value="" autocomplete="off" style="max-width: 6rem;">
             </div>
         </td>
         <td>

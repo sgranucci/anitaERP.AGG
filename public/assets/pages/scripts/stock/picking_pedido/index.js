@@ -340,12 +340,96 @@
                 $tr.append($('<td class="text-right"/>').text(fila.lineas_pendientes || 0));
                 $tr.append($('<td class="text-right"/>').text(fila.clientes || 0));
                 $tr.append($('<td/>').text(fila.clientes_nombres || ''));
-                var $btn = $('<button type="button" class="btn btn-warning btn-sm eligeconsultapickingdia">Elegir</button>');
+                var $acciones = $('<td class="text-nowrap"/>');
+                var $btn = $('<button type="button" class="btn btn-warning btn-sm eligeconsultapickingdia mr-1">Elegir</button>');
                 $btn.attr('data-id', fila.id || 0);
                 $btn.attr('data-codigo', fila.codigo || 0);
-                $tr.append($('<td class="text-nowrap"/>').append($btn));
+                $acciones.append($btn);
+                if (fila.puede_borrar) {
+                    var $btnBorrar = $('<button type="button" class="btn btn-outline-danger btn-sm btn-borrar-picking-dia" title="Quitar líneas, devolver stock y eliminar picking"><i class="fa fa-trash"></i></button>');
+                    $btnBorrar.attr('data-id', fila.id || 0);
+                    $btnBorrar.attr('data-codigo', fila.codigo || 0);
+                    $acciones.append($btnBorrar);
+                }
+                $tr.append($acciones);
                 $tbody.append($tr);
             });
+        }
+
+        function borrarPicking(pickingId, pickingCodigo, $btn) {
+            var codigo = pickingCodigo || '';
+            var msg = '¿Borrar el picking' + (codigo ? (' #' + codigo) : '') + '?\n\n'
+                + 'Se quitan todas las líneas preparadas, se devuelve el stock al lote/OT y se elimina el picking.\n'
+                + 'Solo si aún no facturaron ninguna línea.';
+            if (!window.confirm(msg)) {
+                return;
+            }
+            if ($btn) {
+                $btn.prop('disabled', true);
+            }
+            $.post(carpetaBase + '/stock/picking-pedido/borrar', {
+                picking_id: pickingId || 0,
+                picking_codigo: pickingCodigo || 0,
+                _token: tokenCsrf()
+            })
+                .done(function (data) {
+                    if (data.error) {
+                        alert(data.error);
+                        if ($btn) {
+                            $btn.prop('disabled', false);
+                        }
+                        return;
+                    }
+                    alert(data.aviso || ('Picking' + (codigo ? (' #' + codigo) : '') + ' borrado'));
+                    $('#consultapickingsdiaModal').modal('hide');
+                    window.location = carpetaBase + '/stock/picking-pedido';
+                })
+                .fail(function (xhr) {
+                    alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'No se pudo borrar el picking');
+                    if ($btn) {
+                        $btn.prop('disabled', false);
+                    }
+                });
+        }
+
+        function quitarLineaPicking(pedidoCombinacionId, $btn) {
+            if (!window.confirm('¿Quitar la preparación de esta línea y devolver el stock al lote/OT?')) {
+                return;
+            }
+            if ($btn) {
+                $btn.prop('disabled', true);
+            }
+            $.post(carpetaBase + '/stock/picking-pedido/desmarcar', {
+                pedido_combinacion_id: pedidoCombinacionId,
+                _token: tokenCsrf()
+            })
+                .done(function (data) {
+                    if (data.error) {
+                        alert(data.error);
+                        if ($btn) {
+                            $btn.prop('disabled', false);
+                        }
+                        return;
+                    }
+                    var $tr = $btn ? $btn.closest('tr') : null;
+                    if ($tr && $tr.length) {
+                        $tr.fadeOut(200, function () {
+                            $(this).remove();
+                            var restantes = $('#tabla-picking-pedido tbody tr[data-pedido-combinacion-id]').length;
+                            if (restantes === 0) {
+                                window.location.reload();
+                            }
+                        });
+                    } else {
+                        window.location.reload();
+                    }
+                })
+                .fail(function (xhr) {
+                    alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'No se pudo quitar la línea');
+                    if ($btn) {
+                        $btn.prop('disabled', false);
+                    }
+                });
         }
 
         function buscarPickingsDia() {
@@ -431,6 +515,30 @@
             aplicarPickingElegido(
                 parseInt($(this).attr('data-id'), 10) || 0,
                 parseInt($(this).attr('data-codigo'), 10) || 0
+            );
+        });
+
+        $(document).on('click', '.btn-borrar-picking-dia', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            borrarPicking(
+                parseInt($(this).attr('data-id'), 10) || 0,
+                parseInt($(this).attr('data-codigo'), 10) || 0,
+                $(this)
+            );
+        });
+
+        $(document).on('click', '.btn-quitar-picking-linea', function (e) {
+            e.preventDefault();
+            quitarLineaPicking(parseInt($(this).attr('data-id'), 10) || 0, $(this));
+        });
+
+        $('#btn-borrar-picking').on('click', function (e) {
+            e.preventDefault();
+            borrarPicking(
+                parseInt($(this).attr('data-picking-id'), 10) || 0,
+                parseInt($(this).attr('data-picking-codigo'), 10) || 0,
+                $(this)
             );
         });
 

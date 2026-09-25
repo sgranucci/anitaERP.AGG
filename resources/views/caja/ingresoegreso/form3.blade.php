@@ -46,7 +46,9 @@
 
 @php
     $ieConceptosCuentaMetaJson = $conceptos_cuenta_meta ?? [];
+    $ieCuentasDetalleMetaJson = $cuentas_detalle_meta ?? [];
     $ieComprobantesInicialJson = $comprobantes_ivacompra_inicial ?? [];
 @endphp
 <script type="application/json" id="ie-conceptos-cuenta-meta">@json($ieConceptosCuentaMetaJson)</script>
+<script type="application/json" id="ie-cuentas-detalle-meta">@json($ieCuentasDetalleMetaJson)</script>
 <script type="application/json" id="ie-comprobantes-iva-inicial">@json($ieComprobantesInicialJson)</script>

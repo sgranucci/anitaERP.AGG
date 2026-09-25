@@ -223,10 +223,6 @@ function leerTipotransaccionStockPorAbreviatura(abreviatura, ptrrenglon, onDone)
 
     var $ctx = $(ptrrenglon).closest('.tm-tipotransaccion-stock-campo, tr');
     var abrevOriginal = abrev;
-    if ($ctx.length) {
-        $ctx.find('.tipotransaccion_stock_id').val('');
-        $ctx.find('.nombretipotransaccionstock').val('');
-    }
 
     var leerUrl = carpetaBase + '/stock/tipotransaccion_stock/leer/' + encodeURIComponent(abrev);
     var extraPayload = typeof window.payloadExtraConsultaTipotransaccionStock === 'function'
@@ -240,6 +236,9 @@ function leerTipotransaccionStockPorAbreviatura(abreviatura, ptrrenglon, onDone)
         .done(function (data) {
             if (!data || !data.id) {
                 if ($ctx.length) {
+                    $ctx.find('.tipotransaccion_stock_id').val('');
+                    $ctx.find('.nombretipotransaccionstock').val('');
+                    $ctx.find('.operacion-tipotransaccion-stock').val('');
                     $ctx.find('.abreviaturatipotransaccionstock').val(abrevOriginal);
                 }
                 alert('Tipo de transacci\u00f3n no encontrado');
@@ -270,6 +269,9 @@ function leerTipotransaccionStockPorAbreviatura(abreviatura, ptrrenglon, onDone)
         })
         .fail(function () {
             if ($ctx.length) {
+                $ctx.find('.tipotransaccion_stock_id').val('');
+                $ctx.find('.nombretipotransaccionstock').val('');
+                $ctx.find('.operacion-tipotransaccion-stock').val('');
                 $ctx.find('.abreviaturatipotransaccionstock').val(abrevOriginal);
             }
             if (typeof onDone === 'function') {

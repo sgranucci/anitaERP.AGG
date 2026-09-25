@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Venta;
+use App\Support\Stock\UnidadesCajaPiezaSupport;
 
 class Articulo_Movimiento extends Model
 {
@@ -18,6 +19,19 @@ class Articulo_Movimiento extends Model
                         'pedido_articulo_id', 'vianda_consumo_id'];
 
     protected $table = 'articulo_movimiento';
+
+    /**
+     * caja/pieza existen solo en EL BIERZO (migración 2025_12_20_090956).
+     * Ferli/AGG no deben mandarlos en el INSERT.
+     */
+    public function getFillable()
+    {
+        if (UnidadesCajaPiezaSupport::articuloMovimientoTieneColumnas()) {
+            return $this->fillable;
+        }
+
+        return array_values(array_diff($this->fillable, ['pieza', 'caja']));
+    }
 
     public function articulo_movimiento_talles()
 	{

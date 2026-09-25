@@ -57,6 +57,17 @@ class ProveedorExclusionAnitaSupportTest extends TestCase
         $this->assertNull(ProveedorExclusionAnitaSupport::fechaAnitaAIso(0));
     }
 
+    public function test_codigo_entero_anita_tolera_null_texto(): void
+    {
+        $this->assertSame(0, ProveedorExclusionAnitaSupport::codigoEnteroAnita(null));
+        $this->assertSame(0, ProveedorExclusionAnitaSupport::codigoEnteroAnita(''));
+        $this->assertSame(0, ProveedorExclusionAnitaSupport::codigoEnteroAnita('NULL'));
+        $this->assertSame(0, ProveedorExclusionAnitaSupport::codigoEnteroAnita('null'));
+        $this->assertSame(0, ProveedorExclusionAnitaSupport::codigoEnteroAnita('CABA'));
+        $this->assertSame(1416, ProveedorExclusionAnitaSupport::codigoEnteroAnita('1416'));
+        $this->assertSame(0, ProveedorExclusionAnitaSupport::codigoEnteroAnita(0));
+    }
+
     public function test_lineas_erp_desde_anita_proexcl_y_promae(): void
     {
         $promae = (object) [

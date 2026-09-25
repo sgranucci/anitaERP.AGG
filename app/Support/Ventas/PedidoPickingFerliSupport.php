@@ -21,6 +21,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Support\Stock\ReporteStockOtSituacionSupport;
+use App\Support\Stock\UnidadesCajaPiezaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -175,6 +176,11 @@ final class PedidoPickingFerliSupport
                 ->unique()
                 ->values();
 
+            $lineasFacturadas = (int) Pedido_Combinacion::query()
+                ->where('picking_id', $picking->id)
+                ->where('picking_facturado', self::FACTURADO)
+                ->count();
+
             $filas[] = [
                 'id' => (int) $picking->id,
                 'codigo' => (int) $picking->codigo,
@@ -182,6 +188,8 @@ final class PedidoPickingFerliSupport
                 'usuario' => $picking->usuario->nombre ?? '',
                 'observacion' => (string) ($picking->observacion ?? ''),
                 'lineas_pendientes' => $lineas->count(),
+                'lineas_facturadas' => $lineasFacturadas,
+                'puede_borrar' => $lineasFacturadas === 0,
                 'clientes' => $clientes->count(),
                 'clientes_nombres' => $clientes->take(4)->implode(', '),
             ];
@@ -696,6 +704,106 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * Borra un picking completo antes de facturar: quita todas las líneas preparadas
+     * (devuelve stock) y elimina la cabecera. No permite si alguna línea ya facturó.
+     *
+     * @return array{ok?: bool, error?: string, codigo?: int, lineas_quitadas?: int}
+     */
+    public static function borrarPicking(?int $pickingId = null, ?int $codigo = null): array
+    {
+        $picking = self::findPicking($pickingId, $codigo);
+        if (! $picking) {
+            return ['error' => 'Picking inexistente'];
+        }
+
+        $tieneFacturadas = Pedido_Combinacion::query()
+            ->where('picking_id', $picking->id)
+            ->where('picking_facturado', self::FACTURADO)
+            ->exists();
+        if ($tieneFacturadas) {
+            return [
+                'error' => 'No se puede borrar el picking #'.$picking->codigo
+                    .': ya tiene líneas facturadas. Quitá solo las pendientes una a una.',
+            ];
+        }
+
+        $lineasIds = Pedido_Combinacion::query()
+            ->where('picking_id', $picking->id)
+            ->where('picking', self::MARCADO)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        try {
+            DB::transaction(function () use ($picking, $lineasIds) {
+                foreach ($lineasIds as $lineaId) {
+                    $linea = Pedido_Combinacion::query()->lockForUpdate()->find($lineaId);
+                    if (! $linea) {
+                        continue;
+                    }
+                    if (($linea->picking_facturado ?? self::NO_MARCADO) === self::FACTURADO) {
+                        throw new RuntimeException('La línea #'.$lineaId.' ya fue facturada');
+                    }
+                    self::revertirConsumoStockPorLineaPicking((int) $linea->id);
+                    $linea->picking = self::NO_MARCADO;
+                    $linea->picking_id = null;
+                    $linea->picking_lote_codigo = null;
+                    $linea->picking_deposito_id = null;
+                    $linea->picking_ordentrabajo_id = null;
+                    $linea->picking_at = null;
+                    $linea->picking_usuario_id = null;
+                    $linea->save();
+                }
+
+                // Residuales con picking_id (p. ej. ya desmarcadas a mano).
+                Pedido_Combinacion::query()
+                    ->where('picking_id', $picking->id)
+                    ->update([
+                        'picking_id' => null,
+                        'updated_at' => now(),
+                    ]);
+
+                $picking->delete();
+            });
+        } catch (\Throwable $e) {
+            return ['error' => 'No se pudo borrar el picking: '.$e->getMessage()];
+        }
+
+        if (self::pickingActivoId() === (int) $picking->id) {
+            self::setPickingActivoId(null);
+        }
+
+        return [
+            'ok' => true,
+            'codigo' => (int) $picking->codigo,
+            'lineas_quitadas' => count($lineasIds),
+            'aviso' => 'Picking #'.$picking->codigo.' borrado'
+                .(count($lineasIds) > 0
+                    ? '; '.count($lineasIds).' línea(s) despreparadas y stock devuelto.'
+                    : '.'),
+        ];
+    }
+
+    /**
+     * ¿Se puede borrar la cabecera del picking activo? (ninguna línea facturada).
+     */
+    public static function puedeBorrarPicking(?int $pickingId): bool
+    {
+        if (! $pickingId || $pickingId <= 0) {
+            return false;
+        }
+
+        if (! Pedido_Picking::query()->whereKey($pickingId)->exists()) {
+            return false;
+        }
+
+        return ! Pedido_Combinacion::query()
+            ->where('picking_id', $pickingId)
+            ->where('picking_facturado', self::FACTURADO)
+            ->exists();
+    }
+
+    /**
      * Devuelve al stock el consumo hecho al preparar (antes de facturar).
      */
     public static function revertirConsumoStockPorLineaPicking(int $pedidoCombinacionId, ?string $fecha = null): int
@@ -897,7 +1005,7 @@ final class PedidoPickingFerliSupport
         $colorId = (int) self::valorMovimiento($mov, 'color_id', 0);
         $talleId = (int) self::valorMovimiento($mov, 'talle_id', 0);
 
-        return [
+        $payload = [
             'fecha' => $fechaYmd,
             'fechajornada' => $fechaYmd,
             'tipotransaccion_id' => $tipoVentaId > 0 ? $tipoVentaId : null,
@@ -916,8 +1024,6 @@ final class PedidoPickingFerliSupport
             'concepto' => self::conceptoDevolucionNcPicking((int) self::valorMovimiento($mov, 'id', 0)),
             'modulo_id' => $moduloId > 0 ? $moduloId : null,
             'cantidad' => -1 * (float) self::valorMovimiento($mov, 'cantidad', 0),
-            'caja' => self::valorMovimiento($mov, 'caja', null),
-            'pieza' => self::valorMovimiento($mov, 'pieza', null),
             'precio' => self::valorMovimiento($mov, 'precio', 0),
             'costo' => self::valorMovimiento($mov, 'costo', 0),
             'listaprecio_id' => $listaprecioId > 0 ? $listaprecioId : null,
@@ -928,6 +1034,14 @@ final class PedidoPickingFerliSupport
             'deposito_id' => $depositoId > 0 ? $depositoId : 1,
             'loteimportacion_id' => $loteImpId > 0 ? $loteImpId : null,
         ];
+
+        // caja/pieza solo EL BIERZO; en Ferli no existen en articulo_movimiento.
+        if (UnidadesCajaPiezaSupport::articuloMovimientoTieneColumnas()) {
+            $payload['caja'] = self::valorMovimiento($mov, 'caja', null);
+            $payload['pieza'] = self::valorMovimiento($mov, 'pieza', null);
+        }
+
+        return $payload;
     }
 
     /**

@@ -163,6 +163,71 @@ final class UsuarioDepositoAutorizado
             return [];
         }
 
+        return self::idsDesdeCodigosParaEmpresas($codigos, $empresaIds);
+    }
+
+    /**
+     * Resuelve depósitos autorizados desde códigos (y opcionalmente IDs) del ABM usuario.
+     * Si el renglón tiene código, manda el código (evita carrera blur/AJAX vs submit).
+     *
+     * @param  array<int|string|null>  $depositoIds
+     * @param  array<int|string|null>  $codigos
+     * @param  array<int|string>  $empresaIds
+     * @return array<int>
+     */
+    public static function idsDesdeFormularioParaEmpresas(array $depositoIds, array $codigos, array $empresaIds): array
+    {
+        $empresaIds = array_values(array_unique(array_filter(array_map('intval', $empresaIds))));
+        if ($empresaIds === []) {
+            return [];
+        }
+
+        $codigosResueltos = [];
+        $idsSinCodigo = [];
+        $max = max(count($depositoIds), count($codigos));
+
+        for ($i = 0; $i < $max; $i++) {
+            $codigo = trim((string) ($codigos[$i] ?? ''));
+            $id = (int) ($depositoIds[$i] ?? 0);
+
+            if ($codigo !== '') {
+                $codigosResueltos[] = $codigo;
+                continue;
+            }
+
+            if ($id > 0) {
+                $idsSinCodigo[] = $id;
+            }
+        }
+
+        $validIds = [];
+        if ($codigosResueltos !== []) {
+            $validIds = array_merge($validIds, self::idsDesdeCodigosParaEmpresas($codigosResueltos, $empresaIds));
+        }
+        if ($idsSinCodigo !== []) {
+            $validIds = array_merge($validIds, self::idsValidosParaEmpresas($idsSinCodigo, $empresaIds));
+        }
+
+        return array_values(array_unique(array_map('intval', $validIds)));
+    }
+
+    /**
+     * @param  array<int|string>  $codigos
+     * @param  array<int|string>  $empresaIds
+     * @return array<int>
+     */
+    public static function idsDesdeCodigosParaEmpresas(array $codigos, array $empresaIds): array
+    {
+        $codigos = array_values(array_unique(array_filter(array_map(
+            static fn ($codigo) => trim((string) $codigo),
+            $codigos
+        ), static fn (string $codigo) => $codigo !== '')));
+        $empresaIds = array_values(array_unique(array_filter(array_map('intval', $empresaIds))));
+
+        if ($codigos === [] || $empresaIds === []) {
+            return [];
+        }
+
         return Depmae::query()
             ->whereIn('empresa_id', $empresaIds)
             ->whereIn('codigo', $codigos)

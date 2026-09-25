@@ -723,25 +723,60 @@ class IngresoEgresoController extends Controller
         $condicioniva_query = $this->condicionivaRepository->all();
         $tipos_tesoreria = ComprobanteProveedorTipoTesoreria::todos();
 
-        $conceptos_cuenta_meta = Concepto_Ivacompra::query()
+        $conceptos = Concepto_Ivacompra::query()
             ->with(['impuestos', 'concepto_ivacompra_empresas'])
-            ->get()
-            ->mapWithKeys(static function (Concepto_Ivacompra $c) {
+            ->get();
+
+        $cuentaIds = [];
+        foreach ($conceptos as $c) {
+            $mapa = $c->mapaCuentaDebePorEmpresa();
+            foreach ($mapa as $cuentaId) {
+                if ((int) $cuentaId > 0) {
+                    $cuentaIds[(int) $cuentaId] = true;
+                }
+            }
+            $legacy = (int) ($c->cuentacontabledebe_id ?? 0);
+            if ($legacy > 0) {
+                $cuentaIds[$legacy] = true;
+            }
+        }
+
+        $cuentasDetalle = [];
+        if ($cuentaIds !== []) {
+            $filasCuenta = \App\Models\Contable\Cuentacontable::query()
+                ->whereIn('id', array_keys($cuentaIds))
+                ->get(['id', 'codigo', 'nombre']);
+            foreach ($filasCuenta as $cuenta) {
+                $cuentasDetalle[(string) $cuenta->id] = [
+                    'codigo' => (string) ($cuenta->codigo ?? ''),
+                    'nombre' => (string) ($cuenta->nombre ?? ''),
+                ];
+            }
+        }
+
+        $conceptos_cuenta_meta = $conceptos
+            ->mapWithKeys(static function (Concepto_Ivacompra $c) use ($cuentasDetalle) {
                 $mapa = $c->mapaCuentaDebePorEmpresa();
                 $primeraClave = array_key_first($mapa);
+                $cuentaDebeId = (int) ($c->cuentacontabledebe_id ?? ($primeraClave !== null ? ($mapa[$primeraClave] ?? 0) : 0));
+                $det = $cuentasDetalle[(string) $cuentaDebeId] ?? [];
 
                 return [
                     (string) $c->id => [
                         'codigo' => (string) $c->codigo,
                         'nombre' => $c->nombre,
                         'tipoconcepto' => $c->tipoconcepto,
-                        'cuenta_debe_id' => (int) ($c->cuentacontabledebe_id ?? ($primeraClave !== null ? ($mapa[$primeraClave] ?? 0) : 0)),
+                        'cuenta_debe_id' => $cuentaDebeId,
+                        'cuenta_debe_codigo' => (string) ($det['codigo'] ?? ''),
+                        'cuenta_debe_nombre' => (string) ($det['nombre'] ?? ''),
                         'cuentas_por_empresa' => $mapa,
                         'impuesto_tasa' => round((float) ($c->impuestos->valor ?? 0), 3),
                     ],
                 ];
             })
             ->all();
+
+        $cuentas_detalle_meta = $cuentasDetalle;
 
         $comprobantes_ivacompra_inicial = $cajaMovimientoId
             ? $this->comprobanteIvaService->listarPorCajaMovimiento($cajaMovimientoId)
@@ -752,6 +787,7 @@ class IngresoEgresoController extends Controller
             'condicioniva_query',
             'tipos_tesoreria',
             'conceptos_cuenta_meta',
+            'cuentas_detalle_meta',
             'comprobantes_ivacompra_inicial',
         );
     }

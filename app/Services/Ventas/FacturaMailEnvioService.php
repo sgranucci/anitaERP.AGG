@@ -5,6 +5,7 @@ namespace App\Services\Ventas;
 use App\Mail\Ventas\FacturaClienteMail;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Venta;
+use App\Support\Mail\EmailsMultiplesSupport;
 use App\Support\Ventas\FacturaMailConfiguracionSupport;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -272,15 +273,6 @@ class FacturaMailEnvioService
      */
     public static function parseEmails(string $raw): array
     {
-        $parts = preg_split('/[;,]+/', $raw) ?: [];
-        $out = [];
-        foreach ($parts as $p) {
-            $email = strtolower(trim($p));
-            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                $out[] = $email;
-            }
-        }
-
-        return array_values(array_unique($out));
+        return EmailsMultiplesSupport::parse($raw);
     }
 }

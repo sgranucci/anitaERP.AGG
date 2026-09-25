@@ -1268,10 +1268,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			? $this->localidadRepository->findPorId($localidad_id)
 			: null;
 
-		if ($localidad)
-			$codigolocalidad = $localidad->codigo;
-		else
-			$codigolocalidad = 0;
+		$codigolocalidad = $localidad
+			? ProveedorExclusionAnitaSupport::codigoEnteroAnita($localidad->codigo)
+			: 0;
 
 		$estado = '0';
 		switch($request['estado'])
@@ -1533,10 +1532,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			? $this->localidadRepository->findPorId($localidad_id)
 			: null;
 
-		if ($localidad)
-			$codigolocalidad = $localidad->codigo;
-		else
-			$codigolocalidad = 0;
+		$codigolocalidad = $localidad
+			? ProveedorExclusionAnitaSupport::codigoEnteroAnita($localidad->codigo)
+			: 0;
 
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre']);
 		$contacto = preg_replace('([^A-Za-z0-9 ])', '', $request['contacto']);
@@ -2087,11 +2085,12 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		else
 			$centrocostocompra = 0;
 
-		if ($data['conceptogasto_id'] == 66) // Sin clasificar
-			$conceptogasto = 0;
-		else
-			$conceptogasto = $data['conceptogasto_id'];
-			
+		// Sin clasificar (66) o vacío → 0. Nunca mandar '' a prom_concepto (numérico en Anita).
+		$conceptoId = $data['conceptogasto_id'] ?? null;
+		$conceptogasto = ((int) $conceptoId === 66)
+			? 0
+			: ProveedorExclusionAnitaSupport::codigoEnteroAnita($conceptoId);
+
 		$retiva = $this->retencionivaRepository->findPorId($data['retencioniva_id']);
 		if ($retiva)
 			$retencioniva = $retiva->codigo;

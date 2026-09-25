@@ -7,6 +7,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
 use App\Repositories\Compras\Ordencompra_EstadoRepositoryInterface;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Mail\EmailsMultiplesSupport;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -166,16 +167,7 @@ class OrdencompraEnvioProveedorService
      */
     public static function parseEmails(string $raw): array
     {
-        $partes = preg_split('/[\s,;]+/', trim($raw)) ?: [];
-        $emails = [];
-        foreach ($partes as $p) {
-            $p = trim($p);
-            if ($p !== '' && filter_var($p, FILTER_VALIDATE_EMAIL)) {
-                $emails[] = $p;
-            }
-        }
-
-        return array_values(array_unique($emails));
+        return EmailsMultiplesSupport::parse($raw);
     }
 
     public static function advertenciaEstadoParaEnvio(string $estado): ?string

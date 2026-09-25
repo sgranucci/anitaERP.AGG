@@ -77,6 +77,7 @@ class ArticuloConsultaDesdeModal
             || can('listar-certificado-sanitario', false)
             || can('consultar-stock-local', false)
             || can('consultar-precios-local', false)
+            || can('listar-informe-stock-local', false)
             || can('crear-ordenes-de-trabajo', false)
             || can('editar-ordenes-de-trabajo', false)
             || can('listar-ordenes-de-trabajo', false)

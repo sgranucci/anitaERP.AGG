@@ -6,6 +6,7 @@ use App\Mail\Compras\PagoproveedorOrdenPago;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Proveedor;
+use App\Support\Mail\EmailsMultiplesSupport;
 use Auth;
 use Illuminate\Support\Facades\Mail;
 
@@ -173,16 +174,7 @@ class PagoproveedorEnvioProveedorService
      */
     public static function parseEmails(string $raw): array
     {
-        $partes = preg_split('/[\s,;]+/', trim($raw)) ?: [];
-        $emails = [];
-        foreach ($partes as $p) {
-            $p = trim($p);
-            if ($p !== '' && filter_var($p, FILTER_VALIDATE_EMAIL)) {
-                $emails[] = strtolower($p);
-            }
-        }
-
-        return array_values(array_unique($emails));
+        return EmailsMultiplesSupport::parse($raw);
     }
 
     /**
@@ -192,16 +184,7 @@ class PagoproveedorEnvioProveedorService
      */
     public static function emailsInvalidos(string $raw): array
     {
-        $partes = preg_split('/[\s,;]+/', trim($raw)) ?: [];
-        $invalidos = [];
-        foreach ($partes as $p) {
-            $p = trim($p);
-            if ($p !== '' && ! filter_var($p, FILTER_VALIDATE_EMAIL)) {
-                $invalidos[] = $p;
-            }
-        }
-
-        return array_values(array_unique($invalidos));
+        return EmailsMultiplesSupport::invalidos($raw);
     }
 
     public static function advertenciaEstadoParaEnvio(string $estado): ?string

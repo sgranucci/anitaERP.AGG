@@ -11,6 +11,7 @@ use App\Repositories\Ventas\OrdentrabajoRepositoryInterface;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Ventas\PuntoventaEmpresaSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
+use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport;
 use App\Models\Ventas\Cliente_Entrega;
@@ -812,6 +813,10 @@ class PedidoServiceFerli
 		}
 
 		if ($funcion === 'create') {
+			$errorL8 = FerliL8AltasBloqueadasSupport::errorSiNoPuedeCrearPedido();
+			if ($errorL8 !== null) {
+				return $errorL8;
+			}
 			$errorPolitica = ClientePoliticaComercialSupport::errorSiNoPermite($cliente, ClientePoliticaComercialSupport::OP_PEDIDO);
 			if ($errorPolitica !== null) {
 				return $errorPolitica;

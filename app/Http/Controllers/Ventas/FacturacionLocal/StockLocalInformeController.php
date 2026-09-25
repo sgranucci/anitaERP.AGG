@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Ventas\FacturacionLocal;
 
 use App\Exports\Ventas\StockLocalInformeExport;
 use App\Http\Controllers\Controller;
+use App\Models\Stock\Depmae;
 use App\Models\Ventas\LocalVenta;
 use App\Services\Ventas\FacturacionLocal\StockLocalInformeService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
 use Illuminate\Http\Request;
 
@@ -34,20 +36,17 @@ class StockLocalInformeController extends Controller
             ->orderBy('codigo')
             ->get();
 
-        $depositosErp = $locales
-            ->filter(static fn ($loc) => (int) ($loc->deposito_id ?? 0) > 0)
-            ->unique('deposito_id')
-            ->map(static function ($loc) {
-                $dep = $loc->deposito;
-
+        // Todos los depósitos autorizados (incluye fábrica sin local de facturación).
+        $depositosErp = Depmae::query()
+            ->paraUsuarioAutorizado()
+            ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
+            ->get(['id', 'codigo', 'nombre'])
+            ->map(static function ($dep) {
                 return (object) [
-                    'id' => (int) $loc->deposito_id,
-                    'etiqueta' => $dep
-                        ? trim((string) (($dep->codigo ?? '').' — '.($dep->nombre ?? '')))
-                        : 'Depósito #'.$loc->deposito_id,
+                    'id' => (int) $dep->id,
+                    'etiqueta' => $dep->etiqueta(),
                 ];
             })
-            ->sortBy('etiqueta')
             ->values();
 
         $medidas = [];

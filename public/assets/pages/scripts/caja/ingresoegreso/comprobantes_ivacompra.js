@@ -7,6 +7,7 @@
 
     var comprobantesIva = [];
     var conceptosMeta = {};
+    var cuentasDetalleMeta = {};
     var ptrFilaCuentaConcepto = null;
     window.ptrIeCpFilaCuentaConcepto = null;
     var previewTimer = null;
@@ -48,6 +49,7 @@
 
     function init() {
         conceptosMeta = parseJsonEl('#ie-conceptos-cuenta-meta', {});
+        cuentasDetalleMeta = parseJsonEl('#ie-cuentas-detalle-meta', {});
         comprobantesIva = parseJsonEl('#ie-comprobantes-iva-inicial', []);
         renderGrilla();
         syncHidden();
@@ -96,6 +98,39 @@
         syncHidden();
     }
 
+    function setCuentaFila($row, cuentaId, codigo, nombre) {
+        var id = parseInt(cuentaId || '0', 10) || 0;
+        var cod = codigo || '';
+        var nom = nombre || '';
+        $row.find('.ie-cp-cuenta-id, .cuentacontable_id').val(id > 0 ? String(id) : '');
+        $row.find('.ie-cp-cuenta-codigo, .codigocuentacontable').val(cod);
+        $row.find('.codigo_previo').val(cod);
+        $row.find('.ie-cp-cuenta-nombre, .nombrecuentacontable').val(
+            id > 0 ? (nom || (cod ? '' : ('Cuenta #' + id))) : ''
+        );
+        if (id > 0) {
+            $row.removeClass('table-warning');
+        } else {
+            $row.addClass('table-warning');
+            $row.find('.ie-cp-cuenta-nombre, .nombrecuentacontable').attr('placeholder', 'Sin cuenta — seleccione');
+        }
+    }
+
+    function detalleCuentaMeta(meta, cuentaId) {
+        var id = parseInt(cuentaId || '0', 10) || 0;
+        if (id <= 0) {
+            return { id: 0, codigo: '', nombre: '' };
+        }
+        var det = cuentasDetalleMeta[String(id)]
+            || (meta && meta.cuentas_detalle && meta.cuentas_detalle[String(id)])
+            || {};
+        return {
+            id: id,
+            codigo: det.codigo || (meta && meta.cuenta_debe_codigo) || '',
+            nombre: det.nombre || (meta && meta.cuenta_debe_nombre) || '',
+        };
+    }
+
     function agregarFilaConcepto(data) {
         var $tpl = $($('#ie-cp-template-concepto').html());
         if (data) {
@@ -111,7 +146,13 @@
             $tpl.find('.nombre_concepto_ivacompra').val(nombre);
             $tpl.find('.ie-cp-monto').val(data.monto || 0);
             if (data.cuentacontabledebe_id) {
-                $tpl.find('.ie-cp-cuenta-id').val(data.cuentacontabledebe_id);
+                var detData = detalleCuentaMeta(meta, data.cuentacontabledebe_id);
+                setCuentaFila(
+                    $tpl,
+                    data.cuentacontabledebe_id,
+                    data.cuenta_codigo || detData.codigo || '',
+                    data.cuenta_nombre || detData.nombre || ''
+                );
             }
         }
         $('#ie-cp-tbody-conceptos').append($tpl);
@@ -123,6 +164,7 @@
         var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
         var meta = conceptosMeta[String(conceptoId)] || {};
         var cuentaId = parseInt($row.find('.ie-cp-cuenta-id').val() || '0', 10);
+        var codigoActual = $.trim($row.find('.codigocuentacontable').val() || '');
         if (cuentaId <= 0) {
             var empresaIdForm = parseInt($('#empresa_id').val() || '0', 10) || 0;
             if (meta.cuentas_por_empresa && empresaIdForm > 0 && meta.cuentas_por_empresa[empresaIdForm]) {
@@ -131,17 +173,24 @@
                 cuentaId = parseInt(meta.cuenta_debe_id, 10) || 0;
             }
             if (cuentaId > 0) {
-                $row.find('.ie-cp-cuenta-id').val(cuentaId);
+                var det = detalleCuentaMeta(meta, cuentaId);
+                setCuentaFila($row, cuentaId, det.codigo, det.nombre);
+                return;
             }
         }
         if (cuentaId <= 0) {
-            $row.find('.ie-cp-cuenta-codigo').val('');
-            $row.find('.ie-cp-cuenta-nombre').text('Sin cuenta — seleccione');
-            $row.addClass('table-warning');
-        } else {
-            $row.removeClass('table-warning');
-            $row.find('.ie-cp-cuenta-nombre').text('Cuenta #' + cuentaId);
+            setCuentaFila($row, 0, '', '');
+            return;
         }
+        // Ya hay ID: completar código/nombre desde meta si el input está vacío
+        if (!codigoActual) {
+            var detExistente = detalleCuentaMeta(meta, cuentaId);
+            if (detExistente.codigo || detExistente.nombre) {
+                setCuentaFila($row, cuentaId, detExistente.codigo, detExistente.nombre);
+                return;
+            }
+        }
+        $row.removeClass('table-warning');
     }
 
     function limpiarModal() {
@@ -564,24 +613,75 @@
             programarPreview();
         });
 
-        $(document).on('click', '.ie-cp-consulta-cuenta', function () {
+        // Lupa / F1 usan .consultacuentacontable (consulta.js → abrirModalConsultaCuentaContableDesdeContexto).
+        // Al abrir desde el modal IVA, apilar z-index y marcar fila para el hook de Elegir.
+        $(document).on('click', '#ie-cp-tbody-conceptos .consultacuentacontable', function () {
             ptrFilaCuentaConcepto = $(this).closest('.ie-cp-fila-concepto');
             window.ptrIeCpFilaCuentaConcepto = ptrFilaCuentaConcepto;
-            $('#consultacuentaModal').modal('show');
+            apilarModalCuentaSobreComprobanteIva();
+        });
+
+        $(document).on('keydown', '#ie-cp-tbody-conceptos .codigocuentacontable', function (e) {
+            if (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112) {
+                ptrFilaCuentaConcepto = $(this).closest('.ie-cp-fila-concepto');
+                window.ptrIeCpFilaCuentaConcepto = ptrFilaCuentaConcepto;
+                apilarModalCuentaSobreComprobanteIva();
+            }
+        });
+
+        $('#consultacuentaModal')
+            .off('shown.bs.modal.ieCpCuenta hidden.bs.modal.ieCpCuenta')
+            .on('shown.bs.modal.ieCpCuenta', function () {
+                if ($('#modal-ie-comprobante-iva').hasClass('show')) {
+                    apilarModalCuentaSobreComprobanteIva();
+                }
+            })
+            .on('hidden.bs.modal.ieCpCuenta', function () {
+                desapilarModalCuentaSobreComprobanteIva();
+                if ($('#modal-ie-comprobante-iva').hasClass('show')) {
+                    $('body').addClass('modal-open');
+                }
+            });
+
+        // Tras elegir cuenta (consulta.js escribe en .tm-cuentacontable-campo), refrescar preview.
+        $(document).on('change', '#ie-cp-tbody-conceptos .cuentacontable_id', function () {
+            var $row = $(this).closest('.ie-cp-fila-concepto');
+            if ($row.length) {
+                var id = parseInt($(this).val() || '0', 10) || 0;
+                if (id > 0) {
+                    $row.removeClass('table-warning');
+                } else {
+                    $row.addClass('table-warning');
+                }
+            }
+            programarPreview();
         });
 
         window.ieComprobanteIvaAplicarCuenta = function (cuentaId, codigo, nombre) {
-            if (!ptrFilaCuentaConcepto) {
+            if (!ptrFilaCuentaConcepto || !ptrFilaCuentaConcepto.length) {
                 return;
             }
-            ptrFilaCuentaConcepto.find('.ie-cp-cuenta-id').val(cuentaId);
-            ptrFilaCuentaConcepto.find('.ie-cp-cuenta-codigo').val(codigo || '');
-            ptrFilaCuentaConcepto.find('.ie-cp-cuenta-nombre').text(nombre || '');
-            ptrFilaCuentaConcepto.removeClass('table-warning');
+            setCuentaFila(ptrFilaCuentaConcepto, cuentaId, codigo, nombre);
             ptrFilaCuentaConcepto = null;
             window.ptrIeCpFilaCuentaConcepto = null;
             programarPreview();
         };
+
+        function apilarModalCuentaSobreComprobanteIva() {
+            if (!$('#modal-ie-comprobante-iva').hasClass('show')) {
+                return;
+            }
+            var $cta = $('#consultacuentaModal');
+            var zParent = parseInt($('#modal-ie-comprobante-iva').css('z-index'), 10) || 1050;
+            $cta.css('z-index', zParent + 20);
+            setTimeout(function () {
+                $('.modal-backdrop').last().css('z-index', zParent + 10);
+            }, 0);
+        }
+
+        function desapilarModalCuentaSobreComprobanteIva() {
+            $('#consultacuentaModal').css('z-index', '');
+        }
 
         window.ieComprobanteIvaAplicarProveedor = function (id, nombre) {
             if (!$('#modal-ie-comprobante-iva').hasClass('show')) {

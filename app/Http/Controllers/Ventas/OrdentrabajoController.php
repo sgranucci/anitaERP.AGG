@@ -340,6 +340,10 @@ class OrdentrabajoController extends Controller
     {
         can('crear-ordenes-de-trabajo');
 
+		if ($errorL8 = \App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport::errorSiNoPuedeCrearOt()) {
+			return redirect('ventas/ordenestrabajo')->with('errores', [$errorL8['error']]);
+		}
+
 		$mventa_query = Mventa::query()->orderBy('nombre')->get(['id', 'nombre']);
 
         return view('ventas.ordentrabajo.crear', compact('mventa_query'));

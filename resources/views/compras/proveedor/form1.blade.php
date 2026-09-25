@@ -55,14 +55,14 @@
    					<label for="email" class="col-lg-3 col-form-label">Email</label>
    					<span class="input-group-text"><i class="fas fa-envelope"></i></span>
    					<div class="col-lg-8">
-   						<input type="email" name="email" id="email" class="form-control" value="{{old('email', $data->email ?? '')}}" placeholder="Ingrese email">
+   						<input type="text" name="email" id="email" class="form-control" value="{{old('email', $data->email ?? '')}}" placeholder="{{ \App\Support\Mail\EmailsMultiplesSupport::PLACEHOLDER }}" title="{{ \App\Support\Mail\EmailsMultiplesSupport::TITLE }}" autocomplete="off" maxlength="255">
    					</div>
 				</div>
 				<div class="form-group row">
    					<label for="emailoc" class="col-lg-3 col-form-label">Email OC</label>
    					<span class="input-group-text"><i class="fas fa-envelope"></i></span>
    					<div class="col-lg-8">
-   						<input type="emailoc" name="emailoc" id="emailoc" class="form-control" value="{{old('emailoc', $data->emailoc ?? '')}}" placeholder="Ingrese email">
+   						<input type="text" name="emailoc" id="emailoc" class="form-control" value="{{old('emailoc', $data->emailoc ?? '')}}" placeholder="{{ \App\Support\Mail\EmailsMultiplesSupport::PLACEHOLDER }}" title="{{ \App\Support\Mail\EmailsMultiplesSupport::TITLE }}" autocomplete="off" maxlength="255">
    					</div>
 				</div>				
 				<div class="form-group row">

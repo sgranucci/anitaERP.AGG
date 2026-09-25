@@ -73,9 +73,22 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             ->leftJoin('depmae', 'depmae.id', 'articulo_movimiento.deposito_id')
             ->whereBetween('articulo.linea_id', [$desdelinea_id, $hastalinea_id])
             ->whereBetween('articulo.categoria_id', [$desdecategoria_id, $hastacategoria_id])
+            // Lotes importados (lote>0) o OT del cliente STOCK. OT de clientes comerciales, no.
             ->where(function ($q) {
+                $clienteStockId = ReporteStockOtSituacionSupport::clienteStockId();
                 $q->where('articulo_movimiento.lote', '>', '0')
-                    ->orWhere('articulo_movimiento.ordentrabajo_id', '>', 0);
+                    ->orWhere(function ($qOt) use ($clienteStockId) {
+                        $qOt->where('articulo_movimiento.ordentrabajo_id', '>', 0)
+                            ->whereExists(function ($sub) use ($clienteStockId) {
+                                $sub->select(DB::raw('1'))
+                                    ->from('ordentrabajo_combinacion_talle as oct_stock')
+                                    ->whereColumn(
+                                        'oct_stock.ordentrabajo_id',
+                                        'articulo_movimiento.ordentrabajo_id'
+                                    )
+                                    ->where('oct_stock.cliente_id', $clienteStockId);
+                            });
+                    });
             });
 
         if ($desdearticulo != '' && $hastaarticulo != '') {
@@ -187,6 +200,8 @@ class Articulo_MovimientoQuery implements Articulo_MovimientoQueryInterface
             ->join('combinacion', 'combinacion.id', '=', 'pc.combinacion_id')
             ->join('linea', 'linea.id', '=', 'articulo.linea_id')
             ->join('talle', 'talle.id', '=', 'pct.talle_id')
+            // Solo OT del cliente STOCK (clientes comerciales no van al stock).
+            ->where('oct.cliente_id', ReporteStockOtSituacionSupport::clienteStockId())
             // Solo fabricación real en planta (no tipoot stock, no solo «pendiente»).
             ->whereRaw("UPPER(TRIM(COALESCE(ot.tipoot, ''))) <> 'S'")
             ->whereExists(function ($sub) use ($idsSinAvance) {

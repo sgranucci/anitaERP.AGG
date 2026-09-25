@@ -295,37 +295,51 @@ class UsuarioController extends Controller
 
     private function sincronizarDepositosAutorizados(Usuario $usuario, Request $request): void
     {
-        $depositoIds = array_values(array_unique(array_filter(array_map(
-            'intval',
-            $request->input('deposito_ids', [])
-        ))));
+        $depositoIds = (array) $request->input('deposito_ids', []);
+        $codigos = (array) $request->input('deposito_codigos', []);
+        $empresaIds = (array) $request->input('empresa_ids', []);
 
-        if ($depositoIds === []) {
+        $hayFilas = false;
+        $max = max(count($depositoIds), count($codigos));
+        for ($i = 0; $i < $max; $i++) {
+            if ((int) ($depositoIds[$i] ?? 0) > 0 || trim((string) ($codigos[$i] ?? '')) !== '') {
+                $hayFilas = true;
+                break;
+            }
+        }
+
+        if (! $hayFilas) {
             $usuario->auditSync('depositosAutorizados', []);
 
             return;
         }
 
-        $empresaIds = $request->input('empresa_ids', []);
-        $validIds = UsuarioDepositoAutorizado::idsValidosParaEmpresas($depositoIds, $empresaIds);
+        $validIds = UsuarioDepositoAutorizado::idsDesdeFormularioParaEmpresas($depositoIds, $codigos, $empresaIds);
 
         $usuario->auditSync('depositosAutorizados', $validIds);
     }
 
     private function sincronizarTipotransaccionesStockAutorizadas(Usuario $usuario, Request $request): void
     {
-        $tipoIds = array_values(array_unique(array_filter(array_map(
-            'intval',
-            $request->input('tipotransaccion_stock_ids', [])
-        ))));
+        $tipoIds = (array) $request->input('tipotransaccion_stock_ids', []);
+        $abreviaturas = (array) $request->input('tipotransaccion_stock_abreviaturas', []);
 
-        if ($tipoIds === []) {
+        $hayFilas = false;
+        $max = max(count($tipoIds), count($abreviaturas));
+        for ($i = 0; $i < $max; $i++) {
+            if ((int) ($tipoIds[$i] ?? 0) > 0 || trim((string) ($abreviaturas[$i] ?? '')) !== '') {
+                $hayFilas = true;
+                break;
+            }
+        }
+
+        if (! $hayFilas) {
             $usuario->auditSync('tipotransaccionesStockAutorizadas', []);
 
             return;
         }
 
-        $validIds = UsuarioTipotransaccionStockAutorizado::idsValidos($tipoIds);
+        $validIds = UsuarioTipotransaccionStockAutorizado::idsDesdeFormulario($tipoIds, $abreviaturas);
 
         $usuario->auditSync('tipotransaccionesStockAutorizadas', $validIds);
     }

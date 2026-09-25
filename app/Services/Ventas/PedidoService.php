@@ -18,6 +18,7 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\ClienteProvinciaIibbSupport;
+use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\VillafrancaFacturacionSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
@@ -614,6 +615,10 @@ class PedidoService
 			return ['error' => 'Cliente inexistente'];
 
 		if ($funcion === 'create') {
+			$errorL8 = FerliL8AltasBloqueadasSupport::errorSiNoPuedeCrearPedido();
+			if ($errorL8 !== null) {
+				return $errorL8;
+			}
 			$errorPolitica = ClientePoliticaComercialSupport::errorSiNoPermite($cliente, ClientePoliticaComercialSupport::OP_PEDIDO);
 			if ($errorPolitica !== null) {
 				return $errorPolitica;

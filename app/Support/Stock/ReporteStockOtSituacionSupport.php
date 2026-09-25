@@ -5,18 +5,39 @@ namespace App\Support\Stock;
 /**
  * Leyendas de la columna Situación del Excel Stock por OT (Ferli).
  *
- * OT abierta con fabricación real (sin Terminada / Terminada stock / Facturada) → EN PRODUCCION.
- * Al terminar la OT → ENTREGA INMEDIATA (stock listo).
+ * Regla de negocio: al stock solo van OT del cliente STOCK (`consprod.CLIENTE_STOCK`).
+ * OT de clientes comerciales no entran al reporte ni reciben ALTAP al terminar.
  *
- * OT de stock (tipoot S o tarea Terminada stock): ya no se usan; no entran al overlay EN PRODUCCION.
- * OT solo con «Pendiente de fabricación» (sin avance de planta): tampoco — suelen ser
- * importados / stock OT incompletas (ej. Fragola 22150).
+ * | Situación | Criterio |
+ * |---|---|
+ * | PENDIENTE DE FABRICACION | Solo tarea pendiente (sin avance de planta ni cierre) |
+ * | EN PRODUCCION | Avance de planta sin Terminada / Facturada |
+ * | ENTREGA INMEDIATA | Cierre (Terminada / Terminada stock / Facturada) o lote listo en depósito |
  */
 final class ReporteStockOtSituacionSupport
 {
     public const ENTREGA_INMEDIATA = 'ENTREGA INMEDIATA';
 
     public const EN_PRODUCCION = 'EN PRODUCCION';
+
+    public const PENDIENTE_DE_FABRICACION = 'PENDIENTE DE FABRICACION';
+
+    public static function clienteStockId(): int
+    {
+        return (int) config('consprod.CLIENTE_STOCK');
+    }
+
+    public static function esClienteStock(mixed $clienteId): bool
+    {
+        $id = (int) $clienteId;
+
+        return $id > 0 && $id === self::clienteStockId();
+    }
+
+    public static function idTareaPendienteFabricacion(): int
+    {
+        return (int) config('consprod.TAREA_PENDIENTE_FABRICACION');
+    }
 
     /**
      * @return list<int>
@@ -38,7 +59,7 @@ final class ReporteStockOtSituacionSupport
     public static function idsTareasSinAvanceFabricacion(): array
     {
         return array_values(array_unique(array_filter(array_merge(
-            [(int) config('consprod.TAREA_PENDIENTE_FABRICACION')],
+            [self::idTareaPendienteFabricacion()],
             self::idsTareasCierre()
         ))));
     }
@@ -78,9 +99,20 @@ final class ReporteStockOtSituacionSupport
             }
         }
 
+        $sinAvance = self::idsTareasSinAvanceFabricacion();
+        foreach ($ids as $id) {
+            if (! in_array($id, $sinAvance, true)) {
+                return [
+                    'situacion' => self::EN_PRODUCCION,
+                    'en_produccion' => true,
+                ];
+            }
+        }
+
+        // Solo pendiente (u otras sin avance): no mentir ENTREGA / EN PRODUCCION.
         return [
-            'situacion' => self::EN_PRODUCCION,
-            'en_produccion' => true,
+            'situacion' => self::PENDIENTE_DE_FABRICACION,
+            'en_produccion' => false,
         ];
     }
 
@@ -88,7 +120,9 @@ final class ReporteStockOtSituacionSupport
     {
         return match ($estadoOt) {
             'ENTREGA' => ! $enProduccion && $situacion === self::ENTREGA_INMEDIATA,
-            'PRODUCCION' => $enProduccion || $situacion === self::EN_PRODUCCION,
+            'PRODUCCION' => $enProduccion
+                || $situacion === self::EN_PRODUCCION
+                || $situacion === self::PENDIENTE_DE_FABRICACION,
             default => true,
         };
     }
@@ -144,8 +178,9 @@ final class ReporteStockOtSituacionSupport
      * Situación de una fila del reporte Stock por OT.
      *
      * - Overlay sin movimiento: EN PRODUCCION forzada.
+     * - OT solo pendiente: PENDIENTE DE FABRICACION (aunque haya depósito / Alta / Restaura).
+     * - OT con avance de planta sin Terminada: EN PRODUCCION (aunque haya Alta/Restaura).
      * - ALTAP del import Excel con depósito: ENTREGA INMEDIATA (aunque la OT no tenga cierre).
-     * - OT con avance de planta sin Terminada: EN PRODUCCION (aunque haya Alta/Restaura con depósito).
      * - Resto con depósito: ENTREGA INMEDIATA.
      *
      * @param  array{situacion?: string, en_produccion?: bool}|null  $metaOt
@@ -164,12 +199,14 @@ final class ReporteStockOtSituacionSupport
             ];
         }
 
+        $situacionMeta = is_array($metaOt) ? (string) ($metaOt['situacion'] ?? '') : '';
         $otEnProduccion = $metaOt && ! empty($metaOt['en_produccion']);
+        $otPendiente = $situacionMeta === self::PENDIENTE_DE_FABRICACION;
 
-        // Import Excel listo en estantería: depósito manda (caso identificador 8021).
-        if ($depositoId > 0 && $esAltapExcel) {
+        // Pendiente manda sobre depósito / ALTAP excel (caso OT 30813).
+        if ($otPendiente) {
             return [
-                'situacion' => self::ENTREGA_INMEDIATA,
+                'situacion' => self::PENDIENTE_DE_FABRICACION,
                 'en_produccion' => false,
             ];
         }
@@ -179,6 +216,14 @@ final class ReporteStockOtSituacionSupport
             return [
                 'situacion' => self::EN_PRODUCCION,
                 'en_produccion' => true,
+            ];
+        }
+
+        // Import Excel listo en estantería: depósito manda (caso identificador 8021).
+        if ($depositoId > 0 && $esAltapExcel) {
+            return [
+                'situacion' => self::ENTREGA_INMEDIATA,
+                'en_produccion' => false,
             ];
         }
 

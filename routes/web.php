@@ -1645,6 +1645,7 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('stock/picking-pedido/crear', 'Stock\PickingPedidoFerliController@crearPicking')->name('crear_picking_pedido');
     Route::post('stock/picking-pedido/marcar', 'Stock\PickingPedidoFerliController@marcar')->name('marcar_picking_pedido');
     Route::post('stock/picking-pedido/desmarcar', 'Stock\PickingPedidoFerliController@desmarcar')->name('desmarcar_picking_pedido');
+    Route::post('stock/picking-pedido/borrar', 'Stock\PickingPedidoFerliController@borrar')->name('borrar_picking_pedido');
 }
 
 /*

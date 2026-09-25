@@ -13,6 +13,9 @@ final class StockLocalInformeListadoFiltros
 
     public const MODO_APERTURA = 'apertura';
 
+    /** Una fila por movimiento ERP con tipo y número de comprobante. */
+    public const MODO_DETALLE = 'detalle';
+
     public const ORDEN_ARTICULO = 'articulo';
 
     public const ORDEN_CATEGORIA = 'categoria';
@@ -43,7 +46,7 @@ final class StockLocalInformeListadoFiltros
     public static function resolverDesdeRequest(Request $request): array
     {
         $modo = strtolower(trim((string) $request->input('modo', self::MODO_SALDO)));
-        if (! in_array($modo, [self::MODO_SALDO, self::MODO_APERTURA], true)) {
+        if (! in_array($modo, [self::MODO_SALDO, self::MODO_APERTURA, self::MODO_DETALLE], true)) {
             $modo = self::MODO_SALDO;
         }
 
@@ -139,9 +142,11 @@ final class StockLocalInformeListadoFiltros
 
     public static function etiquetaModo(string $modo): string
     {
-        return $modo === self::MODO_APERTURA
-            ? 'Entrada / venta / saldo'
-            : 'Solo saldo';
+        return match ($modo) {
+            self::MODO_APERTURA => 'Entrada / venta / saldo',
+            self::MODO_DETALLE => 'Detalle movimientos (tipo y nro.)',
+            default => 'Solo saldo',
+        };
     }
 
     public static function etiquetaOrden(string $orden): string

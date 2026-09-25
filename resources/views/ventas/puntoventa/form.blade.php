@@ -231,8 +231,8 @@
         <div class="col-lg-4">
             <div class="input-group">
                 <span class="input-group-text"><i class="fas fa-envelope"></i></span>
-                <input type="email" name="email" id="email" class="form-control"
-                       value="{{ old('email', $data->email ?? '') }}" placeholder="Ingrese email">
+                <input type="text" name="email" id="email" class="form-control"
+                       value="{{ old('email', $data->email ?? '') }}" placeholder="{{ \App\Support\Mail\EmailsMultiplesSupport::PLACEHOLDER }}" title="{{ \App\Support\Mail\EmailsMultiplesSupport::TITLE }}" autocomplete="off" maxlength="255">
             </div>
         </div>
     </div>

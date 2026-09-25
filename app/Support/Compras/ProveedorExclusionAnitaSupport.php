@@ -143,6 +143,27 @@ class ProveedorExclusionAnitaSupport
     }
 
     /**
+     * Código entero para columnas numéricas de Anita (prom_cod_localidad, prom_concepto, etc.).
+     * En Ferli hay localidades con codigo literal "NULL" (texto) que disparan
+     * Informix 1213 Character to numeric conversion al armar el UPDATE de promae.
+     *
+     * @param  mixed  $valor
+     */
+    public static function codigoEnteroAnita($valor, int $default = 0): int
+    {
+        if ($valor === null || $valor === '' || $valor === false) {
+            return $default;
+        }
+
+        $s = trim((string) $valor);
+        if ($s === '' || strcasecmp($s, 'NULL') === 0 || ! is_numeric($s)) {
+            return $default;
+        }
+
+        return (int) $s;
+    }
+
+    /**
      * Convierte fecha Anita (Ymd entero o ISO) a Y-m-d para PostgreSQL.
      */
     public static function fechaAnitaAIso($fecha): ?string

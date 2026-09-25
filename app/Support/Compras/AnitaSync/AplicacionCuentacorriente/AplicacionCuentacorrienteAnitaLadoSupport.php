@@ -172,6 +172,49 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
         return round(abs($suma), 4);
     }
 
+    /**
+     * Fuente de verdad Anita: prov_t_pagado = suma neta de aplmovp del comprobante.
+     * AOP (anulación de OP) resta; el resto suma.
+     *
+     * @param  list<array<string, mixed>|object>  $filasAplmovp
+     */
+    public static function tPagadoDesdeFilasAplmovp(array $filasAplmovp): float
+    {
+        $suma = 0.0;
+        foreach ($filasAplmovp as $fila) {
+            $a = (array) $fila;
+            $monto = abs((float) ($a['aplvp_monto'] ?? 0));
+            $tipo = strtoupper(substr(trim((string) ($a['aplvp_tipo'] ?? '')), 0, 3));
+            $tipoCob = strtoupper(substr(trim((string) ($a['aplvp_tipo_cob'] ?? '')), 0, 3));
+            if ($tipo === 'AOP' || $tipoCob === 'AOP') {
+                $suma -= $monto;
+            } else {
+                $suma += $monto;
+            }
+        }
+
+        return round(max(0.0, $suma), 4);
+    }
+
+    /**
+     * Última fecha Ymd (aplvp_fecha) entre filas aplmovp; '0' si no hay.
+     *
+     * @param  list<array<string, mixed>|object>  $filasAplmovp
+     */
+    public static function fechaPagoYmdDesdeFilasAplmovp(array $filasAplmovp): string
+    {
+        $max = 0;
+        foreach ($filasAplmovp as $fila) {
+            $a = (array) $fila;
+            $ymd = (int) preg_replace('/\D/', '', (string) ($a['aplvp_fecha'] ?? '')) ?: 0;
+            if ($ymd > $max) {
+                $max = $ymd;
+            }
+        }
+
+        return $max > 0 ? (string) $max : '0';
+    }
+
     public static function decimal(float $valor): string
     {
         return number_format($valor, 4, '.', '');

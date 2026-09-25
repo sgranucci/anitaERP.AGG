@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Rules\EmailsMultiples;
 use App\Rules\Ventas\RuleTransporte;
 
 class ValidacionTransporte extends FormRequest
@@ -37,7 +38,7 @@ class ValidacionTransporte extends FormRequest
             'domicilio' => 'required|max:255',
             'provincia_id' => 'sometimes|integer',
             'localidad_id' => 'sometimes|integer',
-            'email' => 'nullable|email|max:255|unique:transporte,email,' . $this->route('id'),
+            'email' => ['nullable', 'string', 'max:255', new EmailsMultiples, 'unique:transporte,email,' . $this->route('id')],
             'nroinscripcion' => ['required', new RuleTransporte('nroinscripcion')],
             'condicioniva_id' => ['integer', 'nullable'],
             'deposito_id' => 'nullable|integer|exists:depmae,id',

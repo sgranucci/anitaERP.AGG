@@ -151,6 +151,37 @@ final class AplmovpAnitaMapper
     }
 
     /**
+     * Todas las filas aplmovp de un comprobante: como deuda (aplvp_*) o como crédito (aplvp_*_cob).
+     * Sirve para recalcular promov.prov_t_pagado = SUM(aplvp_monto).
+     *
+     * @param  Lado  $lado
+     */
+    public static function whereDocumento(array $lado): string
+    {
+        $e = static fn (string $v, int $max = 0) => AplicacionCuentacorrienteAnitaLadoSupport::esc($v, $max);
+        $prov = $e($lado['proveedor'], 6);
+        $tipo = $e($lado['tipo'], 3);
+        $letra = $e($lado['letra'], 1);
+        $suc = (int) $lado['sucursal'];
+        $nro = (int) $lado['numero'];
+        $cuota = self::nroCuota($lado);
+
+        return " WHERE aplvp_proveedor = '".$prov."'
+            AND (
+                (aplvp_tipo = '".$tipo."'
+                    AND aplvp_letra = '".$letra."'
+                    AND aplvp_sucursal = '".$suc."'
+                    AND aplvp_nro = '".$nro."'
+                    AND aplvp_nro_cuota = '".$cuota."')
+                OR
+                (aplvp_tipo_cob = '".$tipo."'
+                    AND aplvp_letra_cob = '".$letra."'
+                    AND aplvp_sucursal_cob = '".$suc."'
+                    AND aplvp_nro_cob = '".$nro."')
+            ) ";
+    }
+
+    /**
      * @param  Lado  $deuda
      * @param  Lado  $credito
      */
