@@ -5,6 +5,32 @@ namespace App\Support\Ventas;
 final class FacturaListadoSupport
 {
     /**
+     * Path del index con filtros para volver desde impresión.
+     *
+     * @param  array<string, mixed>  $filtrosQuery
+     */
+    public static function pathRetornoIndex(array $filtrosQuery = []): string
+    {
+        return ComprobanteImpresionSesionUrlSupport::sanitizarRetornoPath(
+            urlAppDesdeRoute('factura', $filtrosQuery)
+        );
+    }
+
+    public static function etiquetaMoneda($venta): string
+    {
+        $moneda = $venta->monedas ?? null;
+        if ($moneda === null) {
+            return '';
+        }
+        $abrev = trim((string) ($moneda->abreviatura ?? ''));
+        if ($abrev !== '') {
+            return $abrev;
+        }
+
+        return trim((string) ($moneda->nombre ?? ''));
+    }
+
+    /**
      * En El Bierzo, venta_emision.cantidad es kilos; pieza = unidades; caja = cajas.
      * En Ferli, venta_emision.cantidad es pares (misma columna; etiqueta vía VentasListadoEtiquetasSupport).
      *

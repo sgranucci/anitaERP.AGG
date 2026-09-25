@@ -85,6 +85,7 @@
                 <th>Empresa</th>
                 @include('ventas.factura.partials.thead_cantidades', ['claseNum' => 'num', 'etiqCantidad' => $etiqCantidad])
                 <th>{{ $etiqTransporte }}</th>
+                <th>Moneda</th>
                 <th class="num">Total</th>
             </tr>
         </thead>
@@ -103,6 +104,7 @@
                     <td>{{ $comprobante->nombreempresa }}</td>
                     @include('ventas.factura.partials.celdas_cantidades', ['totales' => $totales, 'claseNum' => 'num'])
                     <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>
+                    <td>{{ FacturaListadoSupport::etiquetaMoneda($comprobante) }}</td>
                     <td class="num">{{ number_format((float) $comprobante->total, 2, ',', '.') }}</td>
                 </tr>
                 @if (FacturaListadoSupport::esCierreReparto($comprobante, $totalesPorReparto ?? []))

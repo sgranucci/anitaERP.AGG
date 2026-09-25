@@ -67,7 +67,10 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
                         'formId' => 'form-filtros-factura',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => FacturaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('factura', FacturaListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
+                        'limpiarUrl' => route('factura', array_merge(
+                            FacturaListadoFiltros::paraQueryStringEmpresa($filtros ?? []),
+                            ['limpiar_filtros' => 1]
+                        )),
                         'placeholder' => 'Búsqueda rápida (cliente, comprobante, empresa, '.$etiqTransporteLc.')…',
                         'toggleTarget' => '#panel-filtros-factura',
                         'toggleId' => 'btn-toggle-filtros-factura',
@@ -112,6 +115,9 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
                     'ruta' => 'listar_factura',
                     'queryparams' => $filtrosQuery ?? [],
                 ])
+                @php
+                    $retornoImpresionPath = FacturaListadoSupport::pathRetornoIndex($filtrosQuery ?? []);
+                @endphp
                 <table class="table table-striped table-bordered table-hover table-sm" id="tabla-paginada" style="font-size: 0.8125rem;">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
@@ -122,6 +128,7 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 							<th>Empresa</th>
                             @include('ventas.factura.partials.thead_cantidades', ['etiqCantidad' => $etiqCantidad])
                             <th>{{ $etiqTransporte }}</th>
+                            <th>Moneda</th>
 							<th class="text-right">Total</th>
                             <th data-orderable="false">Acciones</th>
                         </tr>
@@ -141,6 +148,7 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 								<td>{{ $comprobante->puntoventas->empresas->nombre ?? '' }}</td>
                                 @include('ventas.factura.partials.celdas_cantidades', ['totales' => $totales])
                                 <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>
+                                <td>{{ FacturaListadoSupport::etiquetaMoneda($comprobante) }}</td>
 								<td class="text-right">{{ number_format($comprobante->total, 2, ',', '.') }}</td>
         						<td>
                        			@if (can('editar-factura', false))
@@ -156,13 +164,13 @@ use App\Support\Ventas\VentasListadoEtiquetasSupport;
 									@endif
 								@endif
                        			@if (can('listar-factura', false))
-                                	<a href="{{route('lista_una_factura', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Listar el comprobante por impresora">
+                                	<a href="{{route('lista_una_factura', array_filter(['id' => $comprobante->id, 'retorno' => $retornoImpresionPath]))}}" class="btn-accion-tabla tooltipsC" title="Listar el comprobante por impresora">
                                    	<i class="fa fa-print"></i>
                                 	</a>
-                                	<a href="{{route('lista_una_factura_pdf', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Listar el comprobante en PDF">
+                                	<a href="{{route('lista_una_factura_pdf', array_filter(['id' => $comprobante->id, 'retorno' => $retornoImpresionPath]))}}" class="btn-accion-tabla tooltipsC" title="Listar el comprobante en PDF">
                                    	<i class="fas fa-file-pdf text-danger"></i>
                                 	</a>
-                                	<a href="{{route('lista_una_factura_copias', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Imprimir eligiendo copias">
+                                	<a href="{{route('lista_una_factura_copias', array_filter(['id' => $comprobante->id, 'retorno' => $retornoImpresionPath]))}}" class="btn-accion-tabla tooltipsC" title="Imprimir eligiendo copias">
                                    	<i class="fa fa-copy"></i>
                                 	</a>
                                 	@if (can('enviar-factura-mail', false))

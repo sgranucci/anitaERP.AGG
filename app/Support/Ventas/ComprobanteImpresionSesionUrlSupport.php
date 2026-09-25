@@ -184,14 +184,33 @@ final class ComprobanteImpresionSesionUrlSupport
 
     /**
      * URL absoluta usable en redirect / href "Volver" (con APP_CARPETA).
+     *
+     * No usar url($path) si $path ya incluye APP_CARPETA: UrlGenerator antepone
+     * el root de la petición y queda /anitaERP/public/anitaERP/public/... → 404.
      */
     public static function urlAbsolutaRetorno(string $retornoPath): string
     {
         $path = self::pathConCarpeta($retornoPath);
         if ($path === '') {
-            return url(urlAppDesdeRoute('pedido'));
+            return route('pedido');
         }
 
-        return url($path);
+        return self::urlDesdePathApp($path);
+    }
+
+    /**
+     * Une scheme+host con un path que ya puede traer APP_CARPETA.
+     */
+    public static function urlDesdePathApp(string $path): string
+    {
+        $path = trim($path);
+        if ($path === '') {
+            return route('pedido');
+        }
+        if (preg_match('#^https?://#i', $path) === 1) {
+            return $path;
+        }
+
+        return rtrim(request()->getSchemeAndHttpHost(), '/').'/'.ltrim($path, '/');
     }
 }

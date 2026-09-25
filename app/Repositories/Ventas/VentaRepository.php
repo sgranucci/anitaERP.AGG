@@ -184,6 +184,7 @@ class VentaRepository implements VentaRepositoryInterface
                 'clientes.condicionivas',
                 'tipotransacciones',
                 'transportes',
+                'monedas',
                 'venta_emisiones',
             ]);
 

@@ -44,7 +44,7 @@ class ComprobanteImpresionSesionController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()
-                ->to(url(urlAppDesdeRoute('factura')))
+                ->route('factura')
                 ->with('errores', [$e->getMessage()]);
         }
 
@@ -79,7 +79,7 @@ class ComprobanteImpresionSesionController extends Controller
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()
-                ->to(url(urlAppDesdeRoute('factura', FacturaListadoFiltros::paraQueryString($filtros))))
+                ->route('factura', FacturaListadoFiltros::paraQueryString($filtros))
                 ->with('errores', [$e->getMessage()]);
         }
 
@@ -393,14 +393,15 @@ class ComprobanteImpresionSesionController extends Controller
         if (($sesion['origen_tipo'] ?? '') === 'REPARTO') {
             $retorno = is_array($sesion['lote_retorno'] ?? null) ? $sesion['lote_retorno'] : [];
 
-            return url(urlAppDesdeRoute('factura', $retorno));
+            return route('factura', $retorno);
         }
 
         return match ($sesion['origen_tipo'] ?? '') {
-            'PEDIDO' => url(urlAppDesdeRoute('pedido')),
-            'REMITO' => url(urlAppDesdeRoute('remito')),
+            'PEDIDO' => route('pedido'),
+            'REMITO' => route('remito'),
             'COT' => $this->urlRetornoCot((int) ($sesion['origen_id'] ?? 0)),
-            default => url(urlAppDesdeRoute('factura')),
+            // route() usa el root de la petición; url(urlAppDesdeRoute()) duplicaba APP_CARPETA → 404.
+            default => route('factura'),
         };
     }
 
@@ -633,7 +634,7 @@ class ComprobanteImpresionSesionController extends Controller
     private function urlRetornoCot(int $sesionId): string
     {
         $params = array_filter(['sesion_id' => $sesionId > 0 ? $sesionId : null]);
-        $base = url(urlAppDesdeRoute('cot_electronico', $params));
+        $base = route('cot_electronico', $params);
 
         return $base.($sesionId > 0 ? '#sesion-detalle' : '');
     }

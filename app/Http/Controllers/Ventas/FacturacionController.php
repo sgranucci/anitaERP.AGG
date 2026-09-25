@@ -38,6 +38,8 @@ use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Support\Ventas\ComprobanteReferenciaConsultaSupport;
 use App\Support\Ventas\VentaFacturasPorArticuloClienteSupport;
+use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\QueryRetornoListado;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 
 class FacturacionController extends Controller
@@ -93,7 +95,36 @@ class FacturacionController extends Controller
     {
         can('listar-factura');
 
-        $filtros = $this->filtrosListado($request);
+        if ($request->boolean('limpiar_filtros') || FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
+            FacturaListadoFiltros::olvidar();
+            $filtrosEmpresa = FacturaListadoFiltros::resolverDesdeRequest(
+                $request,
+                null,
+                $this->empresaDefaultListado()
+            );
+
+            return redirect()->route(
+                'factura',
+                FacturaListadoFiltros::paraQueryStringEmpresa($filtrosEmpresa)
+            );
+        }
+
+        if (QueryRetornoListado::requestTraeContextoIndex($request)) {
+            $filtros = $this->filtrosListado($request);
+            $filtrosQuery = FacturaListadoFiltros::paraQueryString($filtros);
+            $page = (int) $request->query('page', 0);
+            if ($page > 1) {
+                $filtrosQuery['page'] = $page;
+            }
+            FacturaListadoFiltros::persistir($filtrosQuery);
+        } else {
+            $guardados = FacturaListadoFiltros::guardados();
+            if ($guardados !== []) {
+                return redirect()->route('factura', $guardados);
+            }
+            $filtros = $this->filtrosListado($request);
+            $filtrosQuery = FacturaListadoFiltros::paraQueryString($filtros);
+        }
 
 		$ventas = $this->facturacionService->leePaginando($filtros);
         $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
@@ -107,7 +138,7 @@ class FacturacionController extends Controller
             'totalesRango' => $totalesRango,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
-            'filtrosQuery' => FacturaListadoFiltros::paraQueryString($filtros),
+            'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => FacturaListadoFiltros::camposParaVista(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
         ];
@@ -449,29 +480,28 @@ class FacturacionController extends Controller
             $params['auto'] = 1;
             $params['enviar_impresora'] = 1;
         } elseif ($destino === 'pdf') {
+            // auto=1 + pdf=1 → la sesión dispara autoDescargarPdf (sin mandar a impresora).
             $params['pdf'] = 1;
+            $params['auto'] = 1;
             $params['enviar_impresora'] = 0;
         } else {
             $params['elegir'] = 1;
             $params['enviar_impresora'] = 1;
         }
-        $retorno = (string) request()->query('retorno', '');
         if (request()->boolean('con_envios')) {
             $params['con_envios'] = 1;
         }
-
-        // route() con APP_URL sin carpeta → 404 bajo /anitaERP/public.
-        $generada = route('sesion_impresion_factura', $params);
-        $parts = parse_url($generada) ?: [];
-        $path = (string) ($parts['path'] ?? '');
-        $query = (string) ($parts['query'] ?? '');
-        $carpeta = rtrim((string) config('app.app_carpeta', ''), '/');
-        if ($carpeta !== '' && ! ($path === $carpeta || str_starts_with($path, $carpeta.'/'))) {
-            $path = urlAppCarpeta(ltrim($path, '/'));
+        $retorno = ComprobanteImpresionSesionUrlSupport::pathConCarpeta(
+            (string) request()->query('retorno', '')
+        );
+        if ($retorno !== '') {
+            $params['retorno'] = $retorno;
         }
-        $url = $query !== '' ? $path.'?'.$query : $path;
 
-        return redirect(\App\Support\Ventas\ComprobanteImpresionSesionUrlSupport::anexarRetorno($url, $retorno));
+        // redirect()->route() usa el root de la petición (con APP_CARPETA si corresponde).
+        // No armar path a mano + redirect($path): UrlGenerator::to() antepone otra vez el root
+        // → /anitaERP/public/anitaERP/public/... → 404 al click del PDF/impresora.
+        return redirect()->route('sesion_impresion_factura', $params);
     }
 
     public function generaNotaDeCredito($id)

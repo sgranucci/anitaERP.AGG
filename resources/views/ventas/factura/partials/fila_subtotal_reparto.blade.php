@@ -23,15 +23,21 @@
     ])
     <td>{{ $metaReparto->nombretransporte ?? '' }}</td>
     <td></td>
+    <td></td>
     @if ($conAcciones)
         <td class="text-nowrap">
             @if (can('listar-factura', false))
-                <a href="{{ route('sesion_impresion_reparto', FacturaListadoFiltros::paraImpresionReparto($filtrosImpresion, $transporteImpresionId)) }}"
+                @php
+                    $retornoImpresion = FacturaListadoSupport::pathRetornoIndex(
+                        FacturaListadoFiltros::paraQueryString($filtrosImpresion)
+                    );
+                @endphp
+                <a href="{{ route('sesion_impresion_reparto', FacturaListadoFiltros::paraImpresionReparto($filtrosImpresion, $transporteImpresionId, false, $retornoImpresion)) }}"
                    class="btn-accion-tabla tooltipsC"
                    title="Imprimir las facturas de este {{ $etiquetaTransporteLc }} (elige copia; respeta el filtro de fechas)">
                     <i class="fa fa-print"></i>
                 </a>
-                <a href="{{ route('sesion_impresion_reparto', FacturaListadoFiltros::paraImpresionReparto($filtrosImpresion, $transporteImpresionId, true)) }}"
+                <a href="{{ route('sesion_impresion_reparto', FacturaListadoFiltros::paraImpresionReparto($filtrosImpresion, $transporteImpresionId, true, $retornoImpresion)) }}"
                    class="btn-accion-tabla tooltipsC"
                    title="Imprimir solo copias de este {{ $etiquetaTransporteLc }}, sin original (elige copia; respeta el filtro de fechas)">
                     <i class="fa fa-copy"></i>

@@ -21,6 +21,8 @@ use Illuminate\Http\Request;
  */
 class FacturaListadoFiltros
 {
+    public const SESSION_FILTROS = 'factura_listado_filtros';
+
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
@@ -256,14 +258,46 @@ class FacturaListadoFiltros
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
-    public static function paraImpresionReparto(array $filtros, int $transporteId, bool $soloCopias = false): array
+    public static function paraImpresionReparto(array $filtros, int $transporteId, bool $soloCopias = false, string $retornoPath = ''): array
     {
         $params = ['transporteId' => $transporteId] + self::paraQueryString($filtros);
         if ($soloCopias) {
             $params['solo_copias'] = 1;
         }
+        if ($retornoPath !== '') {
+            $params['retorno'] = $retornoPath;
+        }
 
         return $params;
+    }
+
+    /**
+     * @param  array<string, string|int|bool>  $filtrosQuery
+     */
+    public static function persistir(array $filtrosQuery): void
+    {
+        if ($filtrosQuery === []) {
+            session()->forget(self::SESSION_FILTROS);
+
+            return;
+        }
+
+        session([self::SESSION_FILTROS => $filtrosQuery]);
+    }
+
+    /**
+     * @return array<string, string|int|bool>
+     */
+    public static function guardados(): array
+    {
+        $guardados = session(self::SESSION_FILTROS, []);
+
+        return is_array($guardados) ? $guardados : [];
+    }
+
+    public static function olvidar(): void
+    {
+        session()->forget(self::SESSION_FILTROS);
     }
 
     public static function filtrosVacios(): array

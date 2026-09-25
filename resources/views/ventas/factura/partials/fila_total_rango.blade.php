@@ -22,6 +22,7 @@
         'fmt' => $fmt,
     ])
     <td></td>
+    <td></td>
     <td class="{{ $claseNum }}">{{ $fmtImporte($totalesRango->total ?? 0) }}</td>
     @if ($conAcciones)
         <td></td>

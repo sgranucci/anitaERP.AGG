@@ -84,11 +84,11 @@ final class VentasListadoEtiquetasSupport
 
     /**
      * Total de columnas de la tabla (sin acciones).
-     * fijas + mercadería + transporte + total.
+     * fijas + mercadería + transporte + moneda + total.
      */
     public static function colspanTablaSinAcciones(): int
     {
-        return self::colspanAntesMercaderia() + self::cantidadColumnasMercaderia() + 2;
+        return self::colspanAntesMercaderia() + self::cantidadColumnasMercaderia() + 3;
     }
 
     public static function colspanTablaConAcciones(): int

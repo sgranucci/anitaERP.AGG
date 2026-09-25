@@ -56,8 +56,8 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
 
     private function colUltima(): string
     {
-        // detalle = 10 cols (A–J); solo cantidad = 8 cols (A–H)
-        return VentasListadoEtiquetasSupport::muestraCajaUnidad() ? 'J' : 'H';
+        // detalle = 11 cols (A–K); solo cantidad = 9 cols (A–I)
+        return VentasListadoEtiquetasSupport::muestraCajaUnidad() ? 'K' : 'I';
     }
 
     public function view(): View
@@ -102,14 +102,14 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
                 'F' => $num,
                 'G' => $num,
                 'H' => $num,
-                'J' => $num,
+                'K' => $num,
             ];
         }
 
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'F' => $num,
-            'H' => $num,
+            'I' => $num,
         ];
     }
 
@@ -134,13 +134,15 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
                 'G' => 12,
                 'H' => 12,
                 'I' => 18,
-                'J' => 14,
+                'J' => 10,
+                'K' => 14,
             ];
         }
 
         return $base + [
             'G' => 18,
-            'H' => 14,
+            'H' => 10,
+            'I' => 14,
         ];
     }
 
