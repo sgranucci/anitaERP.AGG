@@ -41,7 +41,7 @@ Proveedores
                     <i class="fa fa-address-book mr-1"></i> Proveedores
                     <small class="ml-2" style="opacity:.85;font-weight:400;">Workbench · consulta multi-campo</small>
                 </h3>
-                <div class="d-flex flex-wrap align-items-center" style="gap:.4rem;">
+                <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.4rem;">
                     @include('includes.compras.boton-manual')
                     @if (can('crear-proveedor', false))
                         <a href="{{ route('crear_proveedor', $retornoListadoQuery) }}" class="btn btn-light btn-sm">
