@@ -4,16 +4,19 @@ namespace App\Support\Compras;
 
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor;
+use App\Models\Configuracion\Condicioniva;
 use App\Models\Stock\Articulo;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Services\Configuracion\ImpuestoService;
+use App\Support\Configuracion\CondicionivaLetraComprasSupport;
 
 /**
  * Totales de orden de compra: importe por línea en moneda del primer ítem =
  * cantidad × precio × coeficiente de conversión (cotización de línea solo si la moneda difiere de la referencia).
  * Impuestos: solo IVA nacional vía {@see ImpuestoService::calculaImpuestosNacionalesItems}.
- * Si el proveedor tiene condicioniva.coniva = N (p. ej. Monotributo C), no se discrimina IVA
- * (mismo criterio que ventas): el precio cargado es el total, sin gross-up.
+ * En compras no se discrimina IVA si el proveedor es monotributista
+ * ({@see CondicionivaLetraComprasSupport::esMonotributo}, letra C) o si condicioniva.coniva = N.
+ * El precio cargado es el total a pagar, sin gross-up de IVA.
  * Descuento cabecera: % o monto ({@see OrdencompraDescuentoSupport}).
  */
 final class OrdencompraTotalesResumen
@@ -69,8 +72,8 @@ final class OrdencompraTotalesResumen
         $tipo = OrdencompraDescuentoSupport::normalizarTipo($oc->descuento_tipo ?? null);
         $subtotal = self::sumaImporteReferencia($lineas);
         $dtoPct = OrdencompraDescuentoSupport::valorAPorcentaje($valor, $tipo, $subtotal);
-        $coniva = optional(optional($oc->proveedores)->condicionivas)->coniva;
-        $flConIva = self::flConIvaDesdeConiva($coniva !== null ? (string) $coniva : null);
+        $condicioniva = optional($oc->proveedores)->condicionivas;
+        $flConIva = self::flConIvaDesdeCondicioniva($condicioniva instanceof Condicioniva ? $condicioniva : null);
         $out = self::armarSalida($lineas, $dtoPct, $impuestoService, $flConIva);
         $out['moneda_abrev'] = $abrev;
 
@@ -78,11 +81,30 @@ final class OrdencompraTotalesResumen
     }
 
     /**
-     * Igual que ventas: coniva = N → sin IVA discriminado (precio = total).
+     * coniva = N → sin IVA discriminado (precio = total).
      */
     public static function flConIvaDesdeConiva(?string $coniva): bool
     {
         return strtoupper(trim((string) $coniva)) !== 'N';
+    }
+
+    /**
+     * En compras: monotributo → sin IVA (FAC C). Si no es monotributo, coniva=N también desactiva IVA.
+     * No usar solo coniva del maestro: varios monotributistas tienen coniva=S y aun así no facturan IVA.
+     */
+    public static function flConIvaDesdeCondicioniva(?Condicioniva $condicioniva): bool
+    {
+        if ($condicioniva === null) {
+            return true;
+        }
+
+        if (CondicionivaLetraComprasSupport::esMonotributo($condicioniva)) {
+            return false;
+        }
+
+        $coniva = $condicioniva->coniva;
+
+        return self::flConIvaDesdeConiva($coniva !== null ? (string) $coniva : null);
     }
 
     public static function flConIvaDesdeProveedorId(?int $proveedorId): bool
@@ -96,9 +118,9 @@ final class OrdencompraTotalesResumen
             return true;
         }
 
-        $coniva = optional($proveedor->condicionivas)->coniva;
+        $condicioniva = $proveedor->condicionivas;
 
-        return self::flConIvaDesdeConiva($coniva !== null ? (string) $coniva : null);
+        return self::flConIvaDesdeCondicioniva($condicioniva instanceof Condicioniva ? $condicioniva : null);
     }
 
     /**
