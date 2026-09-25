@@ -200,13 +200,21 @@ class RemitoService
         }
 
         $lineasExistentesPrecio = [];
+        $puntoventaIdPrecio = (int) ($data['puntoventa_id'] ?? 0);
         if ($funcion === 'update' && $id) {
             $lineasExistentesPrecio = $this->remito_articuloRepository->findPorRemitoId($id)->toArray();
+            if ($puntoventaIdPrecio <= 0) {
+                $puntoventaIdPrecio = (int) ($this->remitoRepository->find($id)->puntoventa_id ?? 0);
+            }
+        }
+        if ($puntoventaIdPrecio <= 0 && $funcion === 'create') {
+            $puntoventaIdPrecio = (int) (UsuarioPreferenciaFacturacionSupport::leer()['puntoventaremito_id'] ?? 0);
         }
         $data = \App\Support\Ventas\RemitoPrecioEditableSupport::aplicarPreciosSegunPermiso(
             $data,
             $funcion,
-            $lineasExistentesPrecio
+            $lineasExistentesPrecio,
+            $puntoventaIdPrecio > 0 ? $puntoventaIdPrecio : null
         );
 
         $entregasCliente = $this->cliente_entregaRepository->leeClienteEntrega($data['cliente_id']);

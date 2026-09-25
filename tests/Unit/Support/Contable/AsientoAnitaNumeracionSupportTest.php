@@ -48,4 +48,58 @@ class AsientoAnitaNumeracionSupportTest extends TestCase
         $this->expectException(RuntimeException::class);
         AsientoAnitaNumeracionSupport::siguienteLibre(0, static fn () => false);
     }
+
+    public function test_where_ocupacion_solo_numero_en_bierzo(): void
+    {
+        $prev = config('app.empresa');
+        config(['app.empresa' => 'EL BIERZO']);
+        try {
+            $this->assertTrue(AsientoAnitaNumeracionSupport::usaNumeradorVentasGlobal());
+            $this->assertSame(
+                ' WHERE ctav_nro_asiento = 2124679',
+                AsientoAnitaNumeracionSupport::whereOcupacionCtamov(1, 2124679),
+            );
+            // Tras delete siempre empresa+nro
+            $this->assertSame(
+                " WHERE ctav_empresa = '1' AND ctav_nro_asiento = 2124679",
+                AsientoAnitaNumeracionSupport::whereOcupacionCtamov(1, 2124679, true),
+            );
+        } finally {
+            config(['app.empresa' => $prev]);
+        }
+    }
+
+    public function test_where_ocupacion_empresa_y_numero_en_agg(): void
+    {
+        $prev = config('app.empresa');
+        config(['app.empresa' => 'AGG']);
+        try {
+            $this->assertFalse(AsientoAnitaNumeracionSupport::usaNumeradorVentasGlobal());
+            $this->assertSame(
+                " WHERE ctav_empresa = '3' AND ctav_nro_asiento = 100",
+                AsientoAnitaNumeracionSupport::whereOcupacionCtamov(3, 100),
+            );
+        } finally {
+            config(['app.empresa' => $prev]);
+        }
+    }
+
+    public function test_where_ocupacion_solo_numero_ferli_e_interforming(): void
+    {
+        $prev = config('app.empresa');
+        try {
+            config(['app.empresa' => 'CALZADOS FERLI']);
+            $this->assertTrue(AsientoAnitaNumeracionSupport::usaNumeradorVentasGlobal());
+            $this->assertStringStartsWith(' WHERE ctav_nro_asiento =', AsientoAnitaNumeracionSupport::whereOcupacionCtamov(1, 50));
+
+            config(['app.empresa' => 'INTERFORMING']);
+            $this->assertTrue(AsientoAnitaNumeracionSupport::usaNumeradorVentasGlobal());
+            $this->assertSame(
+                ' WHERE ctav_nro_asiento = 50',
+                AsientoAnitaNumeracionSupport::whereOcupacionCtamov(1, 50),
+            );
+        } finally {
+            config(['app.empresa' => $prev]);
+        }
+    }
 }

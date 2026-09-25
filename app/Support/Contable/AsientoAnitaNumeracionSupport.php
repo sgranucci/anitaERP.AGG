@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Contable;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use RuntimeException;
 
 /**
@@ -17,6 +18,48 @@ final class AsientoAnitaNumeracionSupport
     public static function maxSaltosOcupados(): int
     {
         return max(1, (int) config('contable.asiento_numeracion_max_saltos_ocupados', 50));
+    }
+
+    /**
+     * Instalaciones con `ventas.numerador` (clave 501/500), no `shared.numabm` por empresa.
+     * El número de asiento es de secuencia global: filtrar ocupación solo por
+     * `ctav_nro_asiento` (~15 ms). Empresa+nro en Informix Bierzo hace un plan ~5 s
+     * aunque exista índice (empresa, nro_asiento, nro_linea).
+     *
+     * AGG (numabm a-ctamov.c por empresa) NO entra: el mismo nro puede coexistir
+     * en distintas empresas Anita; ahí hay que filtrar por ctav_empresa.
+     */
+    public static function usaNumeradorVentasGlobal(): bool
+    {
+        return EntornoEmpresaSupport::esElBierzo()
+            || EntornoEmpresaSupport::esFerli()
+            || EntornoEmpresaSupport::esInterforming();
+    }
+
+    /**
+     * WHERE para chequear si un nro de asiento ya tiene líneas en ctamov.
+     *
+     * @param  bool  $forzarFiltroEmpresa  true tras DELETE (verificar vacío de esa empresa);
+     *                                    false en reserva → solo nro si numerador ventas global.
+     */
+    public static function whereOcupacionCtamov(
+        int|string $codigoEmpresa,
+        int $nroAsiento,
+        bool $forzarFiltroEmpresa = false,
+    ): string {
+        $nro = (int) $nroAsiento;
+        if ($nro < 1) {
+            throw new RuntimeException('Número de asiento Anita inválido para ocupación ctamov: '.$nroAsiento);
+        }
+
+        $soloNumero = ! $forzarFiltroEmpresa && self::usaNumeradorVentasGlobal();
+        if ($soloNumero) {
+            return ' WHERE ctav_nro_asiento = '.$nro;
+        }
+
+        $empresa = str_replace("'", "''", (string) $codigoEmpresa);
+
+        return " WHERE ctav_empresa = '".$empresa."' AND ctav_nro_asiento = ".$nro;
     }
 
     /**

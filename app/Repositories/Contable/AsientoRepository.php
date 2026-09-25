@@ -1206,7 +1206,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 		for ($i = 0; $i < 3; $i++) {
 			$this->eliminarAnita($codigoEmpresa, $numeroAsiento);
 			usleep(150000);
-			if (! $this->ctamovTieneLineas($codigoEmpresa, (int) $numeroAsiento)) {
+			// Siempre empresa+nro: tras DELETE hay que confirmar vacío de ESA empresa
+			// (Interforming multi / AGG pueden compartir el mismo nro entre empresas).
+			if (! $this->ctamovTieneLineas($codigoEmpresa, (int) $numeroAsiento, true)) {
 				return;
 			}
 			Log::warning('asiento_ctamov.delete_incompleto_reintento', [
@@ -1455,57 +1457,68 @@ class AsientoRepository implements AsientoRepositoryInterface
 	}
 
 	/**
-	 * true si Informix ya tiene al menos una línea ctamov para empresa+nro.
+	 * true si Informix ya tiene al menos una línea ctamov para el nro (y empresa si aplica).
+	 *
+	 * @param  bool  $forzarFiltroEmpresa  true tras DELETE; en reserva Bierzo/Ferli/Interforming
+	 *                                    se consulta solo por nro (plan Informix rápido).
 	 */
-	private function ctamovTieneLineas(int|string $codigoEmpresa, int $nroAsiento): bool
-	{
+	private function ctamovTieneLineas(
+		int|string $codigoEmpresa,
+		int $nroAsiento,
+		bool $forzarFiltroEmpresa = false,
+	): bool {
 		$apiAnita = new ApiAnita();
 		$data = [
 			'acc' => 'list',
 			'tabla' => $this->tableAnita[0],
 			'sistema' => 'contab',
 			'campos' => 'ctav_nro_asiento',
-			'whereArmado' => " WHERE ctav_empresa = '".str_replace("'", "''", (string) $codigoEmpresa)."'"
-				." AND ctav_nro_asiento = '".(int) $nroAsiento."'",
+			'whereArmado' => AsientoAnitaNumeracionSupport::whereOcupacionCtamov(
+				$codigoEmpresa,
+				$nroAsiento,
+				$forzarFiltroEmpresa,
+			),
+			// Existencia: una fila alcanza (asiento = N líneas).
+			'limit' => 'FIRST 1',
 		];
 		if (isset($this->path_sistema)) {
 			$data['path_sistema'] = $this->path_sistema;
 		}
 
-		// Bridge bajo carga a veces lista vacío aunque el nro esté ocupado → luego Informix 239.
+		// Reintentar solo si el bridge falla (unload / error_lectura). Lista vacía = libre.
+		$max = max(1, (int) config('contable.asiento_numabm_reintentos', 3));
 		$ultimoError = null;
-		for ($intento = 1; $intento <= 3; $intento++) {
+		for ($intento = 1; $intento <= $max; $intento++) {
 			$raw = (string) $apiAnita->apiCall($data);
 			if (ApiAnita::mensajeRespuestaUnloadEnEscritura($raw) !== null) {
+				$ultimoError = 'unload en lectura';
 				Log::warning('asiento_ctamov.ocupacion_lectura_unload', [
 					'empresa' => $codigoEmpresa,
 					'numeroasiento' => $nroAsiento,
 					'intento' => $intento,
+					'forzar_empresa' => $forzarFiltroEmpresa,
 				]);
-				usleep(200000 * $intento);
+				if ($intento < $max) {
+					usleep(200000 * $intento);
+				}
 				continue;
 			}
 			$parsed = ApiAnita::parsearRespuestaLista($raw);
 			if ($parsed['error_lectura'] !== null) {
 				$ultimoError = $parsed['error_lectura'];
-				usleep(200000 * $intento);
+				if ($intento < $max) {
+					usleep(200000 * $intento);
+				}
 				continue;
 			}
-			if (count($parsed['filas']) > 0) {
-				return true;
-			}
-			if ($intento < 3) {
-				usleep(150000 * $intento);
-			}
+
+			return count($parsed['filas']) > 0;
 		}
 
-		if ($ultimoError !== null) {
-			throw new \RuntimeException(
-				'No se pudo verificar ocupación de ctamov asiento '.$nroAsiento.': '.$ultimoError
-			);
-		}
-
-		return false;
+		throw new \RuntimeException(
+			'No se pudo verificar ocupación de ctamov asiento '.$nroAsiento.': '
+			.($ultimoError ?? 'sin respuesta')
+		);
 	}
 
 	private function assertPeriodoContablePermitido(array $data): void

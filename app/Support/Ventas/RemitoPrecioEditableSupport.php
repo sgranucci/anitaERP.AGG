@@ -2,29 +2,86 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Stock\SurmarSupport;
+use Illuminate\Support\Facades\DB;
+
 /**
  * Precio editable en remitos de venta (permiso especial).
+ *
+ * En El Bierzo solo aplica a remitos del punto de venta 00006 de Surmar.
  */
 final class RemitoPrecioEditableSupport
 {
     public const PERMISO = 'modificar-precio-remito';
 
-    public static function puedeModificarPrecio(): bool
+    /** Código de PV Remitos Surmar (migración puntoventa_remitos_surmar_elbierzo). */
+    public const CODIGO_PV_SURMAR_REMITOS = '00006';
+
+    public static function codigoEsRemitosSurmar(string $codigo): bool
     {
-        return can(self::PERMISO, false);
+        return (int) $codigo === 6;
     }
 
     /**
-     * Sin permiso: conserva el precio ya grabado en líneas existentes.
+     * En El Bierzo el permiso solo vale para PV 6 Surmar.
+     * Fuera de Bierzo no hay restricción por PV (el permiso hoy solo se seedéa ahí).
+     */
+    public static function puntoventaPermiteEdicion(?int $puntoventaId): bool
+    {
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            return true;
+        }
+
+        if ($puntoventaId === null || $puntoventaId <= 0) {
+            return false;
+        }
+
+        $pv = DB::table('puntoventa')
+            ->where('id', $puntoventaId)
+            ->whereNull('deleted_at')
+            ->first(['codigo', 'empresa_id']);
+
+        if ($pv === null) {
+            return false;
+        }
+
+        if (! self::codigoEsRemitosSurmar((string) ($pv->codigo ?? ''))) {
+            return false;
+        }
+
+        return SurmarSupport::esEmpresaSurmar((int) ($pv->empresa_id ?? 0));
+    }
+
+    public static function puedeModificarPrecio(?int $puntoventaId = null): bool
+    {
+        if (! can(self::PERMISO, false)) {
+            return false;
+        }
+
+        return self::puntoventaPermiteEdicion($puntoventaId);
+    }
+
+    /**
+     * Sin permiso (o PV no habilitado en Bierzo): conserva el precio ya grabado en líneas existentes.
      * Las líneas nuevas mantienen el precio enviado (viene de lista / asignapreciocliente).
      *
      * @param  array<string, mixed>  $data
      * @param  list<array<string, mixed>>  $lineasExistentes  filas remito_articulo (update)
      * @return array<string, mixed>
      */
-    public static function aplicarPreciosSegunPermiso(array $data, string $funcion, array $lineasExistentes = []): array
-    {
-        if (self::puedeModificarPrecio()) {
+    public static function aplicarPreciosSegunPermiso(
+        array $data,
+        string $funcion,
+        array $lineasExistentes = [],
+        ?int $puntoventaId = null
+    ): array {
+        $pvId = $puntoventaId;
+        if ($pvId === null || $pvId <= 0) {
+            $pvId = isset($data['puntoventa_id']) ? (int) $data['puntoventa_id'] : null;
+        }
+
+        if (self::puedeModificarPrecio($pvId !== null && $pvId > 0 ? $pvId : null)) {
             return $data;
         }
 
