@@ -26,6 +26,7 @@ use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
 use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
+use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
@@ -180,37 +181,43 @@ class ComprobanteProveedorPersistenciaService
             (float) ($payload['total'] ?? 0),
         );
 
-        try {
-            $comprobante = $this->comprobanteRepository->create($payload);
-        } catch (Throwable $e) {
-            ComprobanteProveedorUnicidadSupport::relevarViolacionUnicidad(
-                $e,
-                (int) $payload['empresa_id'],
-                (int) $payload['tipotransaccion_compra_id'],
-                (string) $payload['letra'],
-                (int) $payload['sucursal'],
-                (int) $payload['numerocomprobante'],
-                (int) $payload['proveedor_id'],
-                null,
-            );
-            throw $e;
-        }
+        // Conceptos + debe_gasto en la misma transacción: si el assert del reparto falla,
+        // no dejar borrador huérfano sin cuenta del neto (incidente 31658).
+        $comprobante = DB::transaction(function () use ($request, $payload) {
+            try {
+                $comprobante = $this->comprobanteRepository->create($payload);
+            } catch (Throwable $e) {
+                ComprobanteProveedorUnicidadSupport::relevarViolacionUnicidad(
+                    $e,
+                    (int) $payload['empresa_id'],
+                    (int) $payload['tipotransaccion_compra_id'],
+                    (string) $payload['letra'],
+                    (int) $payload['sucursal'],
+                    (int) $payload['numerocomprobante'],
+                    (int) $payload['proveedor_id'],
+                    null,
+                );
+                throw $e;
+            }
 
-        $this->sincronizarConceptos($request, $comprobante);
-        $this->sincronizarDebeGastos($request, $comprobante);
-        $this->sincronizarArticulos($request, $comprobante);
-        $this->sincronizarCuotas($request, $comprobante);
-        $this->sincronizarRecepciones($request, $comprobante);
-        ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
-        $this->registrarEstadoInicial($comprobante);
-        $this->vincularArchivoPrecarga($comprobante);
-        $this->marcarPrecargaGenerada(
-            isset($payload['precarga_comprobante_proveedor_id'])
-                ? (int) $payload['precarga_comprobante_proveedor_id']
-                : null
-        );
-        $this->archivoRepository->sincronizarDesdeRequest($request, (int) $comprobante->id);
-        $this->marcarOrdencompraComprobanteCargado($comprobante);
+            $this->sincronizarConceptos($request, $comprobante);
+            $this->sincronizarDebeGastos($request, $comprobante);
+            $this->sincronizarArticulos($request, $comprobante);
+            $this->sincronizarCuotas($request, $comprobante);
+            $this->sincronizarRecepciones($request, $comprobante);
+            ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
+            $this->registrarEstadoInicial($comprobante);
+            $this->vincularArchivoPrecarga($comprobante);
+            $this->marcarPrecargaGenerada(
+                isset($payload['precarga_comprobante_proveedor_id'])
+                    ? (int) $payload['precarga_comprobante_proveedor_id']
+                    : null
+            );
+            $this->archivoRepository->sincronizarDesdeRequest($request, (int) $comprobante->id);
+            $this->marcarOrdencompraComprobanteCargado($comprobante);
+
+            return $comprobante;
+        });
 
         $comprobante = $comprobante->fresh([
             'comprobante_proveedor_conceptos',
@@ -314,38 +321,41 @@ class ComprobanteProveedorPersistenciaService
             (float) ($payload['total'] ?? 0),
         );
 
-        try {
-            $this->comprobanteRepository->update($payload, $id);
-        } catch (Throwable $e) {
-            ComprobanteProveedorUnicidadSupport::relevarViolacionUnicidad(
-                $e,
-                (int) $payload['empresa_id'],
-                (int) $payload['tipotransaccion_compra_id'],
-                (string) $payload['letra'],
-                (int) $payload['sucursal'],
-                (int) $payload['numerocomprobante'],
-                (int) $payload['proveedor_id'],
-                null,
-                $id,
-            );
-            throw $e;
-        }
+        DB::transaction(function () use ($request, $payload, $id) {
+            try {
+                $this->comprobanteRepository->update($payload, $id);
+            } catch (Throwable $e) {
+                ComprobanteProveedorUnicidadSupport::relevarViolacionUnicidad(
+                    $e,
+                    (int) $payload['empresa_id'],
+                    (int) $payload['tipotransaccion_compra_id'],
+                    (string) $payload['letra'],
+                    (int) $payload['sucursal'],
+                    (int) $payload['numerocomprobante'],
+                    (int) $payload['proveedor_id'],
+                    null,
+                    $id,
+                );
+                throw $e;
+            }
 
-        $comprobante = $this->comprobanteRepository->find($id);
-        $this->conceptoRepository->deletePorComprobanteProveedor($id);
-        $this->sincronizarConceptos($request, $comprobante);
-        $this->sincronizarDebeGastos($request, $comprobante);
-        $this->sincronizarArticulos($request, $comprobante);
-        Comprobante_Proveedor_Cuota::query()->where('comprobante_proveedor_id', $id)->delete();
-        $this->sincronizarCuotas($request, $comprobante);
-        $this->sincronizarRecepciones($request, $comprobante);
-        ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
-        $this->archivoRepository->sincronizarDesdeRequest($request, $id);
-        $this->marcarPrecargaGenerada(
-            isset($payload['precarga_comprobante_proveedor_id'])
-                ? (int) $payload['precarga_comprobante_proveedor_id']
-                : null
-        );
+            $comprobante = $this->comprobanteRepository->find($id);
+            $this->conceptoRepository->deletePorComprobanteProveedor($id);
+            $this->sincronizarConceptos($request, $comprobante);
+            $this->sincronizarDebeGastos($request, $comprobante);
+            $this->sincronizarArticulos($request, $comprobante);
+            Comprobante_Proveedor_Cuota::query()->where('comprobante_proveedor_id', $id)->delete();
+            $this->sincronizarCuotas($request, $comprobante);
+            $this->sincronizarRecepciones($request, $comprobante);
+            ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
+            $this->archivoRepository->sincronizarDesdeRequest($request, $id);
+            $this->marcarPrecargaGenerada(
+                isset($payload['precarga_comprobante_proveedor_id'])
+                    ? (int) $payload['precarga_comprobante_proveedor_id']
+                    : null
+            );
+            $this->marcarOrdencompraComprobanteCargado($comprobante);
+        });
 
         if ($estabaContabilizado) {
             try {
@@ -356,8 +366,7 @@ class ComprobanteProveedorPersistenciaService
             }
         }
 
-        $this->marcarOrdencompraComprobanteCargado($comprobante);
-
+        $comprobante = $this->comprobanteRepository->find($id);
         $comprobante = $comprobante->fresh([
             'comprobante_proveedor_conceptos',
             'comprobante_proveedor_cuotas',
@@ -769,7 +778,19 @@ class ComprobanteProveedorPersistenciaService
             return;
         }
 
+        // Anita suele dejar tipoconcepto N en gravado e IVA: sin inferir, el "neto"
+        // suma también la alícuota (ej. 832.700 + 174.867 = 1.007.567) y el assert falla.
+        $conceptosParaInferir = ($comprobante->comprobante_proveedor_conceptos ?? collect())
+            ->map(static fn ($l) => $l->concepto_ivacompras)
+            ->filter()
+            ->keyBy('id');
+        ConceptoIvacompraFormulaSupport::inferirTiposYTasasEnColeccion($conceptosParaInferir);
+
         $neto = ComprobanteProveedorDebeGastoSupport::totalNetoImputable($comprobante);
+        $lineas = ComprobanteProveedorDebeGastoSupport::depurarDuplicadoPanelClonado($lineas, $neto);
+        if ($lineas === []) {
+            return;
+        }
         ComprobanteProveedorDebeGastoSupport::assertSumaCuadraConNeto($lineas, $neto);
 
         foreach ($lineas as $linea) {
@@ -780,6 +801,47 @@ class ComprobanteProveedorPersistenciaService
                 'importe' => (float) $linea['importe'],
                 'centrocosto_id' => ((int) ($linea['centrocosto_id'] ?? 0)) ?: null,
             ]);
+        }
+
+        // Una sola cuenta de gasto: dejarla también en el neto del concepto para Contabilizar
+        // (si el assert fallaba antes, el borrador quedaba sin cuentacontabledebe_id).
+        $this->aplicarPrimeraCuentaDebeGastoANetosSinCuenta($comprobante, $lineas);
+    }
+
+    /**
+     * @param  list<array{cuentacontable_id:int, importe:float, centrocosto_id?:int, orden?:int}>  $lineas
+     */
+    private function aplicarPrimeraCuentaDebeGastoANetosSinCuenta(Comprobante_Proveedor $comprobante, array $lineas): void
+    {
+        $cuentaId = 0;
+        foreach ($lineas as $linea) {
+            $cid = (int) ($linea['cuentacontable_id'] ?? 0);
+            if ($cid > 0) {
+                $cuentaId = $cid;
+                break;
+            }
+        }
+        if ($cuentaId <= 0) {
+            return;
+        }
+
+        $comprobante->loadMissing(['comprobante_proveedor_conceptos.concepto_ivacompras']);
+        foreach ($comprobante->comprobante_proveedor_conceptos ?? [] as $filaConcepto) {
+            if ((int) ($filaConcepto->cuentacontabledebe_id ?? 0) > 0) {
+                continue;
+            }
+            $concepto = $filaConcepto->concepto_ivacompras;
+            $tipo = (string) ($concepto?->tipoconcepto ?? '');
+            $codigo = (string) ($concepto?->codigo ?? '');
+            if (! ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)
+                && ! ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
+                continue;
+            }
+            if (ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipo)) {
+                continue;
+            }
+            $filaConcepto->cuentacontabledebe_id = $cuentaId;
+            $filaConcepto->save();
         }
     }
 

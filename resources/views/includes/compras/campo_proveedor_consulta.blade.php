@@ -17,6 +17,7 @@
         <div class="d-flex flex-wrap align-items-center">
             <input type="text" class="form-control codigoproveedor mr-2" id="codigoproveedor" name="codigoproveedor"
                 value="{{ $codigoVal }}" style="width: 6rem;" autocomplete="off"
+                @if (! empty($autofocus) && $codigoVal === '' && (string) $proveedorIdVal === '') autofocus @endif
                 @if (! empty($solo_lectura_codigo)) readonly @endif>
             <input type="text" class="form-control nombreproveedor mr-2" id="nombreproveedor" name="nombreproveedor"
                 value="{{ $nombreVal }}" readonly style="min-width: 8rem; flex: 1;">

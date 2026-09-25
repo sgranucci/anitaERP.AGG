@@ -86,7 +86,7 @@
                     <div class="mb-2 pl-lg-2">
                         <span class="badge badge-secondary">1</span>
                         <strong class="ml-1">Filtro por vendedor</strong>
-                        <span class="text-muted small ml-1">— opcional; el listado se ordena por número de cuenta (menor a mayor)</span>
+                        <span class="text-muted small ml-1">— opcional; el listado se agrupa por vendedor y muestra el nombre arriba de cada bloque</span>
                     </div>
                     @include('ventas.cliente_cuentacorriente_reporte.partials.selector_vendedores', [
                         'filtros' => $filtros,

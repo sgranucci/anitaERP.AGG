@@ -311,9 +311,11 @@ function abrirModalConsultaCuentaContableDesdeContexto($ctx) {
     if (empresaId > 0) {
         abriendoModalCuentaContable = true;
         $('#consultaempresa_id').val(empresaId);
-        $('#consultacuentaModal').modal('show');
+        // Conservar el último texto de búsqueda y re-filtrar (no dejar texto ≠ grilla).
         clearTimeout(consultaCuentaContableTimer);
-        buscar_datos('');
+        var textoBusqueda = String($('#consultacuentacontable').val() || '').trim();
+        $('#consultacuentaModal').modal('show');
+        buscar_datos(textoBusqueda);
     } else {
         alert('Debe ingresar empresa');
     }
@@ -336,6 +338,7 @@ $(document)
             $el.hasClass('codigocuentacontable') || $el.is('#codigocuentacontable') ||
             $el.hasClass('codigoasiento') ||
             $el.is('#consultacuentacontable') ||
+            $el.is('#consultaproveedor') ||
             $el.is('#consultadeposito, #consultapuntoventa, #consultatipotransaccionventa, #consultacuentacaja, #consultalistaprecio') ||
             $el.hasClass('codigopuntoventa') ||
             $el.hasClass('codigocuentacaja') ||
@@ -413,25 +416,50 @@ $(document).off('keyup.consultactaBuscar input.consultactaBuscar', '#consultacue
 
 function elegirPrimeraCuentaContableDelModal() {
     var $btn = $('#datoscuentas .eligeconsultacuentacontable').first();
-    if ($btn.length) {
-        $btn.trigger('click');
+    if (!$btn.length) {
+        return false;
+    }
+    var el = $btn.get(0);
+    if (el && typeof el.click === 'function') {
+        el.click();
         return true;
     }
-    return false;
+    $btn.trigger('click');
+    return true;
 }
+
+/** Enter en buscador: solo si hay un único resultado. */
+function elegirUnicaCuentaContableDelModal() {
+    var $btns = $('#datoscuentas .eligeconsultacuentacontable');
+    if ($btns.length !== 1) {
+        return false;
+    }
+    return elegirPrimeraCuentaContableDelModal();
+}
+
+function manejarEnterBuscadorCuentaContable(e) {
+    if (!(e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13)) {
+        return;
+    }
+    var target = e.target;
+    if (!target || target.id !== 'consultacuentacontable') {
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+    }
+    if (!elegirUnicaCuentaContableDelModal()) {
+        programarBusquedaCuentaContable(String(target.value || ''));
+    }
+}
+
+document.addEventListener('keydown', manejarEnterBuscadorCuentaContable, true);
 
 $(document)
     .off('keydown.consultaCtaEnter', '#consultacuentacontable')
-    .on('keydown.consultaCtaEnter', '#consultacuentacontable', function (e) {
-        if (e.which !== 13 && e.key !== 'Enter') {
-            return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        if (!elegirPrimeraCuentaContableDelModal()) {
-            programarBusquedaCuentaContable($(this).val());
-        }
-    });
+    .on('keydown.consultaCtaEnter', '#consultacuentacontable', manejarEnterBuscadorCuentaContable);
 
 $(document)
     .off('submit.consultaCtaEnter', '#consultacuentaModal form')
@@ -497,11 +525,22 @@ function activa_eventos_consulta_cuentacontable()
         .off('shown.bs.modal.consultacta')
         .on('shown.bs.modal.consultacta', function () {
             abriendoModalCuentaContable = false;
-            $(this).find('[autofocus]').focus();
+            var $buscar = $('#consultacuentacontable');
+            var texto = String($buscar.val() || '').trim();
+            // Reaplicar filtro por si el show llegó antes que el POST.
+            buscar_datos(texto);
+            setTimeout(function () {
+                $buscar.trigger('focus');
+                if (texto !== '') {
+                    $buscar.trigger('select');
+                }
+            }, 0);
         })
         .off('hidden.bs.modal.consultacta')
         .on('hidden.bs.modal.consultacta', function () {
             abriendoModalCuentaContable = false;
+            clearTimeout(consultaCuentaContableTimer);
+            // Conservar texto de búsqueda para la próxima apertura (F1).
         });
 
     $('#aceptaconsultacuentaModal').off('click.consultacta').on('click.consultacta', function () {

@@ -16,11 +16,15 @@ final class ComprobanteProveedorArchivoTipos
     /** Remito u otro comprobante de entrega (p. ej. página extraída del PDF). */
     public const REMITO = 'REMITO';
 
+    /** Factura PDF cargada a mano (alta sin precarga / sin OC). */
+    public const FACTURA = 'FACTURA';
+
     /** @return list<string> */
     public static function todos(): array
     {
         return [
             self::ORIGEN_IA,
+            self::FACTURA,
             self::ADJUNTO,
             self::CONTABLE,
             self::REMITO,
@@ -31,6 +35,7 @@ final class ComprobanteProveedorArchivoTipos
     public static function subibles(): array
     {
         return [
+            self::FACTURA,
             self::REMITO,
             self::ADJUNTO,
             self::CONTABLE,
@@ -41,6 +46,7 @@ final class ComprobanteProveedorArchivoTipos
     {
         return match ($tipo) {
             self::ORIGEN_IA => 'Factura (precarga / IA)',
+            self::FACTURA => 'Factura (PDF)',
             self::REMITO => 'Remito',
             self::ADJUNTO => 'Adjunto',
             self::CONTABLE => 'Respaldo contable',

@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\CierreCajaReporteService;
 use App\Support\Caja\CierreCajaReporteFiltros;
+use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -119,10 +120,9 @@ class CierreCajaReporteController extends Controller
                     @mkdir($path, 0775, true);
                 }
                 $nombre = 'reporte_cierre_caja';
-                $pdf = \App::make('dompdf.wrapper');
-                $pdf->loadHTML($view);
-                $pdf->setPaper('legal', 'landscape');
-                $pdf->save($path.'/'.$nombre.'.pdf');
+                DompdfListadoSupport::guardarLegalLandscape($view, $path.'/'.$nombre.'.pdf', [
+                    'titulo_corto' => 'Cierre de caja',
+                ]);
 
                 return response()->download($path.'/'.$nombre.'.pdf');
 

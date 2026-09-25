@@ -48,8 +48,12 @@
     if ($deposito === '') {
         $deposito = trim((string) ($lote['deposito_nombre'] ?? ''));
     }
+    $rojoExcel = \App\Support\Stock\ReporteStockOtSituacionSupport::colorearRojoEnExcel(
+        (string) ($lote['situacion'] ?? ''),
+        ! empty($lote['en_produccion'])
+    );
 @endphp
-<tr @if(!empty($lote['en_produccion'])) style="color:#FF0000;" @endif>
+<tr @if($rojoExcel) style="color:#FF0000;" @endif>
     @if ($conFoto)
         <td></td>
     @endif

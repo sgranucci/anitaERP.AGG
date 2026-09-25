@@ -381,6 +381,7 @@ $(document).off('keydown.ocNoEnterSubmitProveedor', 'input').on('keydown.ocNoEnt
     }
     if (
         $(this).hasClass('codigoproveedor') || $(this).is('#codigoproveedor') ||
+        $(this).is('#consultaproveedor') ||
         $(this).hasClass('codigoconcepto_solicitudpago') || $(this).is('#concepto_solicitudpago_id_codigo') ||
         $(this).hasClass('codigodeposito') ||
         $(this).hasClass('sku') || $(this).hasClass('codigoarticulo')
@@ -448,9 +449,52 @@ document.addEventListener('keydown', function (e) {
     abrirModalConsultaProveedorDesdeInput($(target));
 }, true);
 
-$(document).on('keyup', '#consultaproveedor', function () {
+$(document).on('keyup', '#consultaproveedor', function (e) {
+    if (e.which === 13 || e.key === 'Enter') {
+        return;
+    }
     buscar_datos_proveedor(String($(this).val() || '').trim());
 });
+
+/**
+ * Enter en el buscador: elige la primera fila con botón Elegir.
+ * Capture phase para ganar a bloqueos globales (usuario/cuenta/admin).
+ */
+function elegirPrimerProveedorDelModal() {
+    var $btn = $('#datosproveedor a.eligeconsultaproveedor, #datosproveedor .eligeconsultaproveedor').filter(function () {
+        return $(this).closest('tr').find('td.proveedor_id').text().trim() !== '';
+    }).first();
+    if (!$btn.length) {
+        return false;
+    }
+    // click nativo: dispara el handler delegado de Elegir.
+    $btn.get(0).click();
+    return true;
+}
+
+function manejarEnterBuscadorProveedor(e) {
+    if (!(e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13)) {
+        return;
+    }
+    var target = e.target;
+    if (!target || target.id !== 'consultaproveedor') {
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') {
+        e.stopImmediatePropagation();
+    }
+    if (!elegirPrimerProveedorDelModal()) {
+        buscar_datos_proveedor(String(target.value || '').trim());
+    }
+}
+
+document.addEventListener('keydown', manejarEnterBuscadorProveedor, true);
+
+$(document)
+    .off('keydown.consultaProveedorEnter', '#consultaproveedor')
+    .on('keydown.consultaProveedorEnter', '#consultaproveedor', manejarEnterBuscadorProveedor);
 
 function activa_eventos_consultaproveedor() {
     $(document)
@@ -480,7 +524,9 @@ function activa_eventos_consultaproveedor() {
     $('#aceptaconsultaproveedorModal')
         .off('click.consultaProveedor')
         .on('click.consultaProveedor', function () {
-            $('#consultaproveedorModal').modal('hide');
+            if (!elegirPrimerProveedorDelModal()) {
+                $('#consultaproveedorModal').modal('hide');
+            }
         });
 
     $(document)

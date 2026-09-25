@@ -8,6 +8,11 @@
         $fechaCheque = (string) ($fila['fecha_rechazo'] ?? $fechaCheque);
     } elseif ($clave === 'cheques_caucion') {
         $fechaCheque = (string) ($fila['fecha_caucion'] ?? '');
+    } elseif ($clave === 'cheques_recibidos') {
+        $fechaCheque = (string) ($fila['fecha_cheque'] ?? $fechaCheque);
+        if ($fechaCheque === '') {
+            $fechaCheque = (string) ($fila['fecha'] ?? '');
+        }
     }
 @endphp
 @if ($clave === 'saldos')
@@ -42,11 +47,24 @@
         <td class="text-right">{{ number_format((float) ($fila['pago'] ?? 0), 2, ',', '.') }}</td>
     </tr>
 @else
+    @php
+        $nroCheque = (string) ($fila['numerocheque'] ?? '');
+        $nroEcheq = trim((string) ($fila['nro_echeq'] ?? ''));
+        if ($nroEcheq !== '' && $nroEcheq !== $nroCheque) {
+            $nroCheque = $nroCheque !== '' ? $nroCheque.' / E:'.$nroEcheq : 'E:'.$nroEcheq;
+        } elseif ($nroEcheq !== '' && $nroCheque === '') {
+            $nroCheque = $nroEcheq;
+        }
+        $clienteCol = (string) ($fila['cliente_codigo'] ?? '');
+        if ($clienteCol === '') {
+            $clienteCol = (string) ($fila['cliente_nombre'] ?? '');
+        }
+    @endphp
     <tr class="{{ $trClass }}">
         <td>{{ $fila['nro_interno'] ?? '' }}</td>
-        <td>{{ $fila['cliente_nombre'] ?? '' }}</td>
+        <td>{{ $clienteCol }}</td>
         <td>{{ $fechaCheque }}</td>
-        <td>{{ $fila['numerocheque'] ?? '' }}</td>
+        <td>{{ $nroCheque }}</td>
         <td>{{ $fila['banco'] ?? '' }}</td>
         <td class="text-right">{{ number_format((float) ($fila['importe'] ?? 0), 2, ',', '.') }}</td>
     </tr>

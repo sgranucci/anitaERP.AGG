@@ -74,7 +74,7 @@
                     <a href="{{ route('comprobante_proveedor', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
-                    @if ($esEdicion && filled($ruta_factura_pdf ?? null))
+                    @if ($esEdicion && (filled($ruta_factura_pdf ?? null) || ($data->comprobante_proveedor_archivos ?? collect())->contains(fn ($a) => in_array($a->tipo, [\App\Support\Compras\ComprobanteProveedorArchivoTipos::ORIGEN_IA, \App\Support\Compras\ComprobanteProveedorArchivoTipos::FACTURA], true))))
                     <a href="{{ route('comprobante_proveedor_factura_pdf', ['id' => $data->id, 'inline' => 1]) }}"
                        class="btn btn-outline-light btn-sm" target="_blank" rel="noopener noreferrer">
                         <i class="fa fa-file-pdf-o"></i> Ver PDF
@@ -227,17 +227,17 @@
                             </a>
                         </li>
                         @endif
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-archivos" data-toggle="tab"
+                               href="#cp-solapa-archivos" role="tab" aria-controls="cp-solapa-archivos" aria-selected="false">
+                                <i class="fa fa-paperclip"></i> Archivos
+                            </a>
+                        </li>
                         @if ($esEdicion)
                         <li class="nav-item">
                             <a class="nav-link cp-tab-solapa" id="cp-boton-estados" data-toggle="tab"
                                href="#cp-solapa-estados" role="tab" aria-controls="cp-solapa-estados" aria-selected="false">
                                 <i class="fa fa-history"></i> Estados e historia
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link cp-tab-solapa" id="cp-boton-archivos" data-toggle="tab"
-                               href="#cp-solapa-archivos" role="tab" aria-controls="cp-solapa-archivos" aria-selected="false">
-                                <i class="fa fa-paperclip"></i> Archivos
                             </a>
                         </li>
                         @endif
@@ -251,7 +251,7 @@
                         $errorInicial = $asientoPreview['error'] ?? null;
                         $hayAvisosIniciales = ! empty($avisosIniciales) || ! empty($errorInicial);
                     @endphp
-                    <div id="cp-asiento-avisos-banner" class="alert alert-warning py-2 mb-3 {{ $hayAvisosIniciales ? '' : 'd-none' }}" role="alert">
+                    <div id="cp-asiento-avisos-banner" class="alert alert-warning py-2 mb-3 {{ $hayAvisosIniciales ? '' : 'd-none' }}" role="status" aria-live="polite">
                         @if ($hayAvisosIniciales)
                         <strong><i class="fa fa-exclamation-triangle"></i> Asiento contable:</strong>
                         <ul class="mb-0 mt-1 pl-3">
@@ -344,10 +344,10 @@
                         <div class="tab-pane fade cp-solapa" id="cp-solapa-estados" role="tabpanel">
                             @include('compras.comprobante_proveedor.partials.solapa_estados')
                         </div>
+                        @endif
                         <div class="tab-pane fade cp-solapa" id="cp-solapa-archivos" role="tabpanel">
                             @include('compras.comprobante_proveedor.partials.solapa_archivos')
                         </div>
-                        @endif
                     </div>
                 </div>
 

@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
 use App\Models\Ventas\Ordentrabajo_Tarea;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
@@ -253,18 +254,27 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 						->orderBy('numerolegajo')
 						->orderBy('tarea_id')
 						->orderBy('numeroot');
-						
-		switch($estadoot)
-		{
+
+		switch ($estadoot) {
 		case 'CUMPLIDA':
 			$data = $data->whereBetween('ordentrabajo_tarea.hastafecha', [$desdefecha, $hastafecha]);
 			break;
 		case 'PENDIENTE':
-			$data = $data->whereBetween('ordentrabajo_tarea.desdefecha', [$desdefecha, $hastafecha])
-					->where('ordentrabajo_tarea.hastafecha', '=', null);
+			// En sección: iniciadas en el rango y aún sin cerrar.
+			$data = $data->whereBetween('ordentrabajo_tarea.desdefecha', [$desdefecha, $hastafecha]);
+			OrdentrabajoTareaFechaSupport::aplicarSinFechaFin($data, 'ordentrabajo_tarea.hastafecha');
 			break;
+		case 'TODAS':
 		default:
-			$data = $data->whereBetween('ordentrabajo_tarea.hastafecha', [$desdefecha, $hastafecha]);
+			// Cumplidas en la fecha + en sección (iniciadas en el rango sin cerrar).
+			$data = $data->where(function ($q) use ($desdefecha, $hastafecha) {
+				$q->whereBetween('ordentrabajo_tarea.hastafecha', [$desdefecha, $hastafecha])
+					->orWhere(function ($q2) use ($desdefecha, $hastafecha) {
+						$q2->whereBetween('ordentrabajo_tarea.desdefecha', [$desdefecha, $hastafecha]);
+						OrdentrabajoTareaFechaSupport::aplicarSinFechaFin($q2, 'ordentrabajo_tarea.hastafecha');
+					});
+			});
+			break;
 		}
 
 		if ($desdearticulo != '' && $hastaarticulo != '')

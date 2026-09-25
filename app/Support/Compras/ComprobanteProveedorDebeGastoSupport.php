@@ -24,13 +24,11 @@ final class ComprobanteProveedorDebeGastoSupport
             return false;
         }
         foreach ($lineas as $linea) {
-            $cuentaId = is_array($linea)
-                ? (int) ($linea['cuentacontable_id'] ?? 0)
-                : (int) ($linea->cuentacontable_id ?? 0);
             $importe = is_array($linea)
                 ? (float) ($linea['importe'] ?? 0)
                 : (float) ($linea->importe ?? 0);
-            if ($cuentaId > 0 && abs($importe) >= 0.0001) {
+            // Con importe ya hay reparto (la cuenta puede completarse después en preview).
+            if (abs($importe) >= 0.0001) {
                 return true;
             }
         }
@@ -109,7 +107,7 @@ final class ComprobanteProveedorDebeGastoSupport
         foreach ($comprobante->comprobante_proveedor_debe_gastos ?? [] as $fila) {
             $cuentaId = (int) ($fila->cuentacontable_id ?? 0);
             $importe = round((float) ($fila->importe ?? 0), 2);
-            if ($cuentaId <= 0 || abs($importe) < 0.0001) {
+            if (abs($importe) < 0.0001) {
                 continue;
             }
             $orden++;
@@ -148,7 +146,8 @@ final class ComprobanteProveedorDebeGastoSupport
         for ($i = 0; $i < $n; $i++) {
             $cuentaId = (int) ($cuentas[$i] ?? 0);
             $importe = MontoEsArSupport::parse($importes[$i] ?? 0);
-            if ($cuentaId <= 0 || abs($importe) < 0.0001) {
+            // Preview: permitir renglón sin cuenta aún (importe > 0). Al contabilizar se exige cuenta.
+            if (abs($importe) < 0.0001) {
                 continue;
             }
             $orden++;
@@ -161,6 +160,42 @@ final class ComprobanteProveedorDebeGastoSupport
         }
 
         return $out;
+    }
+
+    /**
+     * Defensa: el form renderiza el asiento en 2 paneles; un selector global leía ambas
+     * tablas y mandaba el mismo renglón (importe = neto completo) dos veces.
+     * No toca un reparto legítimo 50/50 (cada línea ≈ neto/2).
+     *
+     * @param  list<array{cuentacontable_id:int, importe:float, centrocosto_id?:int, orden?:int}>  $lineas
+     * @return list<array{cuentacontable_id:int, importe:float, centrocosto_id?:int, orden?:int}>
+     */
+    public static function depurarDuplicadoPanelClonado(array $lineas, float $netoEsperado): array
+    {
+        if (count($lineas) !== 2) {
+            return $lineas;
+        }
+        $neto = round(abs($netoEsperado), 2);
+        if ($neto < 0.0001) {
+            return $lineas;
+        }
+        $a = $lineas[0];
+        $b = $lineas[1];
+        if ((int) ($a['cuentacontable_id'] ?? 0) !== (int) ($b['cuentacontable_id'] ?? 0)) {
+            return $lineas;
+        }
+        $impA = round((float) ($a['importe'] ?? 0), 2);
+        $impB = round((float) ($b['importe'] ?? 0), 2);
+        if (abs($impA - $impB) >= 0.0001) {
+            return $lineas;
+        }
+        // Solo si cada línea es el neto completo (síntoma del doble panel).
+        if (abs($impA - $neto) > ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA) {
+            return $lineas;
+        }
+        $a['orden'] = 1;
+
+        return [$a];
     }
 
     /**

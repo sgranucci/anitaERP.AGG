@@ -84,7 +84,9 @@ final class ConceptoIvacompraFormulaSupport
             }
 
             $tipoI = strtoupper((string) ($meta[$id]['tipoconcepto'] ?? ''));
-            if (! in_array($tipoI, ['I', 'G', 'E', 'T', 'P', 'B', 'M', 'S', 'A', 'N'], true)) {
+            // Fórmula con(COD)*coef = alícuota. Anita suele dejar tipoconcepto N:
+            // forzar I (no tocar G/E/T/P/B/… ya clasificados).
+            if (! in_array($tipoI, ['I', 'G', 'E', 'T', 'P', 'B', 'M', 'S', 'A'], true)) {
                 $meta[$id]['tipoconcepto'] = 'I';
             }
             if ((float) ($meta[$id]['impuesto_tasa'] ?? 0) <= 0) {
@@ -131,7 +133,9 @@ final class ConceptoIvacompraFormulaSupport
             }
 
             $tipoI = strtoupper((string) ($concepto->tipoconcepto ?? ''));
-            if (! in_array($tipoI, ['I', 'G', 'E', 'T', 'P', 'B', 'M', 'S', 'A', 'N'], true)) {
+            // Fórmula con(COD)*coef = alícuota. Anita suele dejar tipoconcepto N:
+            // forzar I (no tocar G/E/T/P/B/… ya clasificados).
+            if (! in_array($tipoI, ['I', 'G', 'E', 'T', 'P', 'B', 'M', 'S', 'A'], true)) {
                 $concepto->setAttribute('tipoconcepto', 'I');
             }
             $concepto->setAttribute('_tasa_formula', round($parsed['coeficiente'] * 100, 3));
