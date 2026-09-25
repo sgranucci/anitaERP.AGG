@@ -12,13 +12,14 @@
     $colLabel = 'col-lg-2 control-label text-right pr-2';
     $colInput = 'col-lg-4';
     $estadoPickingFacturado = \App\Support\Ventas\PedidoPickingFerliSupport::FACTURADO;
+    $estadoFiltro = $estado ?? \App\Support\Ventas\PedidoPickingFerliSupport::ESTADO_PENDIENTES;
 @endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Picking pedidos pendientes de facturar</h3>
+                <h3 class="card-title">Picking pedidos</h3>
                 <div class="card-tools">
                     <button type="button" class="btn btn-outline-primary btn-sm" id="btn-nuevo-picking" title="Crear picking con n&uacute;mero nuevo">
                         <i class="fa fa-plus"></i> Nuevo picking
@@ -33,20 +34,37 @@
                 <input type="hidden" name="picking_id" id="picking_id" value="{{ (int) ($picking_id ?? 0) }}">
                 <div class="card-body pb-2">
                     <div class="form-group row">
+                        <label class="{{ $colLabel }}">Estado</label>
+                        <div class="{{ $colInput }}">
+                            <input type="hidden" name="estado" id="estado" value="{{ $estadoFiltro }}">
+                            <div class="btn-group btn-group-sm" role="group" aria-label="Filtro de estado">
+                                <button type="button"
+                                        class="btn picking-estado-etiq {{ $estadoFiltro === 'pendientes' ? 'btn-warning' : 'btn-outline-warning' }}"
+                                        data-estado="pendientes">Pendientes</button>
+                                <button type="button"
+                                        class="btn picking-estado-etiq {{ $estadoFiltro === 'facturados' ? 'btn-success' : 'btn-outline-success' }}"
+                                        data-estado="facturados">Facturados</button>
+                                <button type="button"
+                                        class="btn picking-estado-etiq {{ $estadoFiltro === 'todos' ? 'btn-primary' : 'btn-outline-primary' }}"
+                                        data-estado="todos">Todos</button>
+                            </div>
+                        </div>
                         <label for="picking_codigo" class="{{ $colLabel }}">N&deg; Picking</label>
                         <div class="{{ $colInput }}">
                             <div class="input-group">
                                 <input type="text" name="picking_codigo" id="picking_codigo" class="form-control"
                                        value="{{ $picking_codigo ?? '' }}"
-                                       placeholder="Ej. 8 y Consultar"
-                                       title="Escrib&iacute; el n&uacute;mero y Consultar (cualquier fecha). F1 o lupa: modal">
+                                       placeholder="Vac&iacute;o = todos los del estado"
+                                       title="Vac&iacute;o lista todos los del estado. F1 o lupa: modal de consulta">
                                 <div class="input-group-append">
-                                    <button type="button" class="btn btn-outline-secondary" id="btn-consulta-pickings-dia" title="Consultar pickings (F1). Con n&uacute;mero busca cualquier fecha">
+                                    <button type="button" class="btn btn-outline-secondary" id="btn-consulta-pickings-dia" title="Consultar pickings (F1)">
                                         <i class="fa fa-search"></i>
                                     </button>
                                 </div>
                             </div>
                         </div>
+                    </div>
+                    <div class="form-group row">
                         <label for="cliente_id" class="{{ $colLabel }}">Cliente</label>
                         <div class="{{ $colInput }}">
                             <select name="cliente_id" id="cliente_id" class="form-control">
@@ -58,8 +76,6 @@
                                 @endforeach
                             </select>
                         </div>
-                    </div>
-                    <div class="form-group row">
                         <label for="deposito_id" class="{{ $colLabel }}">Dep&oacute;sito</label>
                         <div class="{{ $colInput }}">
                             <select name="deposito_id" id="deposito_id" class="form-control">
@@ -71,6 +87,8 @@
                                 @endforeach
                             </select>
                         </div>
+                    </div>
+                    <div class="form-group row">
                         <label for="lote_desde" class="{{ $colLabel }}">Lote / OT desde</label>
                         <div class="col-lg-2">
                             <input type="text" name="lote_desde" id="lote_desde" class="form-control" value="{{ $lote_desde }}">

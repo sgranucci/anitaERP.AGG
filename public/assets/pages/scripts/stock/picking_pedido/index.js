@@ -330,20 +330,28 @@
             if (texto !== '' && /^\d+$/.test(texto)) {
                 return 'No se encontró el picking Nº ' + texto;
             }
-            return 'Sin pickings pendientes en la fecha';
+            var estado = ($('#consultapickingsdia_estado').val() || 'pendientes');
+            if (estado === 'facturados') {
+                return 'Sin pickings facturados en la fecha';
+            }
+            if (estado === 'todos') {
+                return 'Sin pickings en la fecha';
+            }
+            return 'Sin pickings pendientes';
         }
 
         function renderPickingsDia(filas) {
             var $tbody = $('#datospickingsdia');
             $tbody.empty();
             if (!filas || !filas.length) {
-                $tbody.append('<tr><td colspan="7" class="text-center text-muted">' + mensajeVacioPickingsDia() + '</td></tr>');
+                $tbody.append('<tr><td colspan="8" class="text-center text-muted">' + mensajeVacioPickingsDia() + '</td></tr>');
                 return;
             }
             $.each(filas, function (_i, fila) {
                 var $tr = $('<tr/>');
                 $tr.append($('<td/>').text(fila.codigo));
                 $tr.append($('<td/>').text(fila.fecha || ''));
+                $tr.append($('<td/>').text(fila.estado || ''));
                 $tr.append($('<td/>').text(fila.usuario || ''));
                 var pend = parseInt(fila.lineas_pendientes, 10) || 0;
                 var fact = parseInt(fila.lineas_facturadas, 10) || 0;
@@ -448,13 +456,72 @@
                 });
         }
 
+        function estadoFiltroFormulario() {
+            return ($('#estado').val() || 'pendientes');
+        }
+
+        function pintarEtiquetasEstadoForm(estado) {
+            estado = estado || 'pendientes';
+            $('#estado').val(estado);
+            $('.picking-estado-etiq').each(function () {
+                var val = $(this).attr('data-estado');
+                var activo = val === estado;
+                $(this).removeClass(
+                    'btn-warning btn-outline-warning btn-success btn-outline-success btn-primary btn-outline-primary'
+                );
+                if (val === 'pendientes') {
+                    $(this).addClass(activo ? 'btn-warning' : 'btn-outline-warning');
+                } else if (val === 'facturados') {
+                    $(this).addClass(activo ? 'btn-success' : 'btn-outline-success');
+                } else {
+                    $(this).addClass(activo ? 'btn-primary' : 'btn-outline-primary');
+                }
+            });
+        }
+
+        function consultarPickingConEstado(estado) {
+            pintarEtiquetasEstadoForm(estado);
+            // Al cambiar estado, listar todos los de ese estado (no un picking puntual).
+            $('#picking_id').val(0);
+            $('#picking_codigo').val('');
+            $('#form-picking-pedido').trigger('submit');
+        }
+
+        function pintarEtiquetasEstadoModal(estado) {
+            estado = estado || 'pendientes';
+            $('#consultapickingsdia_estado').val(estado);
+            $('.consultapickingsdia-estado-etiq').each(function () {
+                var val = $(this).attr('data-estado');
+                var activo = val === estado;
+                $(this).removeClass(
+                    'btn-warning btn-outline-warning btn-success btn-outline-success btn-primary btn-outline-primary'
+                );
+                if (val === 'pendientes') {
+                    $(this).addClass(activo ? 'btn-warning' : 'btn-outline-warning');
+                } else if (val === 'facturados') {
+                    $(this).addClass(activo ? 'btn-success' : 'btn-outline-success');
+                } else {
+                    $(this).addClass(activo ? 'btn-primary' : 'btn-outline-primary');
+                }
+            });
+        }
+
+        function actualizarUiEstadoPickings() {
+            var estado = ($('#consultapickingsdia_estado').val() || 'pendientes');
+            var usaFecha = estado !== 'pendientes';
+            $('#consultapickingsdia_fecha').prop('disabled', !usaFecha);
+            pintarEtiquetasEstadoModal(estado);
+        }
+
         function buscarPickingsDia() {
             var fecha = $('#consultapickingsdia_fecha').val() || '';
             var texto = $('#consultapickingsdia').val() || '';
-            $('#datospickingsdia').html('<tr><td colspan="7" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Buscando…</td></tr>');
+            var estado = $('#consultapickingsdia_estado').val() || 'pendientes';
+            $('#datospickingsdia').html('<tr><td colspan="8" class="text-center text-muted"><i class="fa fa-spinner fa-spin"></i> Buscando…</td></tr>');
             $.post(carpetaBase + '/stock/picking-pedido/consulta-pickings-dia', {
                 fecha: fecha,
                 texto: texto,
+                estado: estado,
                 _token: tokenCsrf()
             })
                 .done(function (data) {
@@ -469,7 +536,9 @@
             if (!$('#consultapickingsdia_fecha').val()) {
                 $('#consultapickingsdia_fecha').val(new Date().toISOString().substring(0, 10));
             }
-            $('#consultapickingsdia').val('');
+            pintarEtiquetasEstadoModal(estadoFiltroFormulario());
+            $('#consultapickingsdia').val(($('#picking_codigo').val() || '').trim());
+            actualizarUiEstadoPickings();
             $('#consultapickingsdiaModal').modal('show');
             buscarPickingsDia();
         }
@@ -526,6 +595,17 @@
         });
 
         $('#consultapickingsdia_fecha').on('change', buscarPickingsDia);
+        $(document).on('click', '.consultapickingsdia-estado-etiq', function (e) {
+            e.preventDefault();
+            pintarEtiquetasEstadoModal($(this).attr('data-estado') || 'pendientes');
+            actualizarUiEstadoPickings();
+            buscarPickingsDia();
+        });
+
+        $(document).on('click', '.picking-estado-etiq', function (e) {
+            e.preventDefault();
+            consultarPickingConEstado($(this).attr('data-estado') || 'pendientes');
+        });
 
         $(document).on('click', '.eligeconsultapickingdia', function () {
             aplicarPickingElegido(

@@ -323,13 +323,24 @@ final class SqlDialectSupport
     }
 
     /**
+     * Tolerancia de centavos al decidir si un CC cliente sigue con saldo.
+     * Evita que residuos de redondeo (ej. total 2.905.451,5644 vs aplicado 2.905.451,56)
+     * figuren como deuda pendiente.
+     */
+    public const TOLERANCIA_SALDO_CC_CLIENTE = 0.01;
+
+    /**
      * Condición WHERE portable: saldo de CC cliente aún no cancelado del todo.
+     * Usa |total + aplicaciones| > tolerancia (no comparación estricta de ABS).
      */
     public static function sqlSaldoPendienteClienteCc(): string
     {
-        return 'ABS(COALESCE((SELECT SUM(total) FROM cliente_cuentacorriente_aplicacion'
+        $tol = self::TOLERANCIA_SALDO_CC_CLIENTE;
+
+        return 'ABS(cliente_cuentacorriente.total + COALESCE((SELECT SUM(total)'
+            .' FROM cliente_cuentacorriente_aplicacion'
             .' WHERE cliente_cuentacorriente_id = cliente_cuentacorriente.id), 0))'
-            .' < ABS(cliente_cuentacorriente.total)';
+            .' > '.$tol;
     }
 
     /**

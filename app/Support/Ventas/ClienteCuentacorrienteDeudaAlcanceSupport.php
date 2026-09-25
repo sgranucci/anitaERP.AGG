@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -12,6 +13,8 @@ use Illuminate\Database\Eloquent\Builder;
  * ticket factura (TFC) y cobros adelantados (COA).
  *
  * No entran COB, AJU, APA, RIN, remitos ni otros movimientos de aplicacion.
+ * Las filas de CC con cobranza_id (imputación de cobro sobre una FAC) tampoco:
+ * la deuda se reduce por aplicaciones, no listando esa fila negativa.
  */
 final class ClienteCuentacorrienteDeudaAlcanceSupport
 {
@@ -38,12 +41,16 @@ final class ClienteCuentacorrienteDeudaAlcanceSupport
     public static function aplicar(Builder $query): void
     {
         $query->where(function (Builder $alcance) {
-            $alcance->whereHas('ventas', function (Builder $venta) {
-                $venta->where(function (Builder $tipos) {
-                    foreach (self::PREFIJOS_VENTA as $prefijo) {
-                        $tipos->orWhere('codigo', 'like', $prefijo.'%');
-                    }
-                });
+            $alcance->where(function (Builder $deudaVenta) {
+                $deudaVenta
+                    ->whereRaw(SqlDialectSupport::sqlSinCobranzaClienteCc())
+                    ->whereHas('ventas', function (Builder $venta) {
+                        $venta->where(function (Builder $tipos) {
+                            foreach (self::PREFIJOS_VENTA as $prefijo) {
+                                $tipos->orWhere('codigo', 'like', $prefijo.'%');
+                            }
+                        });
+                    });
             })->orWhereHas('cobranzas.tipotransaccioncajas', function (Builder $tipo) {
                 $tipo->whereRaw('UPPER(TRIM(abreviatura)) = ?', ['COA']);
             });

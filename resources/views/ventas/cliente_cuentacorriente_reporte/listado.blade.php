@@ -45,9 +45,18 @@
             font-weight: bold;
             color: #1b4f72;
         }
+        table.data tbody tr.cc-rep-total-general {
+            background-color: #aed6f1;
+            font-weight: bold;
+            color: #1b4f72;
+        }
         table.data tbody tr.cc-rep-total td,
         table.data tbody tr.cc-rep-total-vendedor td {
             border-top: 2px solid #b7950b;
+            font-size: 10px;
+        }
+        table.data tbody tr.cc-rep-total-general td {
+            border-top: 3px solid #1b4f72;
             font-size: 10px;
         }
         table.data thead tr { background-color: #85C1E9; }

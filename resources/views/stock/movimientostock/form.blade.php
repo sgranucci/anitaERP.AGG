@@ -309,9 +309,9 @@
                     $articuloAllQueryJson = ($articuloall_query ?? collect())->values()->toJson(JSON_UNESCAPED_UNICODE);
                 @endphp
                 <div class="form-group row mb-2" id="marca" data-articulo="{{ $articuloQueryJson }}" data-articuloall="{{ $articuloAllQueryJson }}">
-                    <label for="mventa_id" class="col-lg-4 col-form-label requerido">Marca</label>
+                    <label for="mventa_id" class="col-lg-4 col-form-label">Marca</label>
                     <div class="col-lg-8">
-                        <select name="mventa_id" id="mventa_id" data-placeholder="Marca de venta" class="form-control required" data-fouc>
+                        <select name="mventa_id" id="mventa_id" data-placeholder="Marca de venta" class="form-control" data-fouc>
                             <option value="">-- Seleccionar marca --</option>
                             @foreach($mventa_query as $key => $value)
                                 @php

@@ -87,7 +87,10 @@ final class ComprobanteProveedorDebeGastoSupport
 
                 continue;
             }
-            if (! ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)) {
+            // Mismo universo que el skip de armarPreview con hayReparto: N/G/E o EXENTO
+            // (código 1) que integra el total — aunque tipoconcepto venga vacío.
+            if (! ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)
+                && ! ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
                 continue;
             }
             $total = round($total + $monto, 2);

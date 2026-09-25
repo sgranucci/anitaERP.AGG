@@ -9,12 +9,21 @@
         </button>
       </div>
       <div class="modal-body">
-        <div class="form-group row mb-2">
-          <label for="consultapickingsdia_fecha" class="col-form-label col-auto pr-2">Fecha:</label>
+        <div class="form-group row mb-2 align-items-center">
+          <label class="col-form-label col-auto pr-2 mb-0">Estado:</label>
           <div class="col-auto">
-            <input type="date" id="consultapickingsdia_fecha" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" title="Listado del d&iacute;a (solo pendientes)">
+            <input type="hidden" id="consultapickingsdia_estado" value="pendientes">
+            <div class="btn-group btn-group-sm" role="group" aria-label="Filtro de estado">
+              <button type="button" class="btn btn-warning consultapickingsdia-estado-etiq" data-estado="pendientes">Pendientes</button>
+              <button type="button" class="btn btn-outline-success consultapickingsdia-estado-etiq" data-estado="facturados">Facturados</button>
+              <button type="button" class="btn btn-outline-primary consultapickingsdia-estado-etiq" data-estado="todos">Todos</button>
+            </div>
           </div>
-          <label for="consultapickingsdia" class="col-form-label col-auto pr-2">Buscar N&deg;:</label>
+          <label for="consultapickingsdia_fecha" class="col-form-label col-auto pr-2 mb-0">Fecha:</label>
+          <div class="col-auto">
+            <input type="date" id="consultapickingsdia_fecha" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" title="Se usa en Facturados y Todos. En Pendientes se listan todas las fechas.">
+          </div>
+          <label for="consultapickingsdia" class="col-form-label col-auto pr-2 mb-0">Buscar N&deg;:</label>
           <div class="col">
             <input type="text" id="consultapickingsdia" class="form-control form-control-sm" autocomplete="off"
                    placeholder="N&deg; picking (cualquier fecha)"
@@ -26,8 +35,10 @@
             </button>
           </div>
         </div>
-        <p class="text-muted small mb-2">
-          Con <strong>fecha</strong>: pendientes de ese d&iacute;a. Con <strong>n&uacute;mero</strong>: lo encuentra aunque sea de otro d&iacute;a o ya facturado (reimprimir).
+        <p class="text-muted small mb-2" id="consultapickingsdia-ayuda">
+          <strong>Pendientes</strong>: todos los pickings con l&iacute;neas sin facturar (cualquier fecha).
+          <strong>Facturados / Todos</strong>: filtran por la fecha.
+          Con <strong>n&uacute;mero</strong>: lo encuentra aunque sea de otro d&iacute;a.
         </p>
         <div class="table-responsive">
           <table class="table table-sm table-striped table-bordered table-hover mb-0">
@@ -35,6 +46,7 @@
               <tr>
                 <th>N&deg; Picking</th>
                 <th>Fecha</th>
+                <th>Estado</th>
                 <th>Usuario</th>
                 <th class="text-right">L&iacute;neas pend.</th>
                 <th class="text-right">Clientes</th>

@@ -3,6 +3,7 @@
 namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Contable\Tipoasiento;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
@@ -188,6 +189,7 @@ class ComprobanteProveedorAsientoService
             'ordencompras.ordencompra_articulos.articulos.articulo_cuentacontables',
             'comprobante_proveedor_recepciones.recepcion_proveedores',
         ]);
+        $this->asegurarConceptosIvaCargados($comprobante);
 
         $conceptosParaInferir = $comprobante->comprobante_proveedor_conceptos
             ->map(static fn ($l) => $l->concepto_ivacompras)
@@ -307,10 +309,13 @@ class ComprobanteProveedorAsientoService
             }
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
 
-            // Reparto multi-cuenta en Asiento: el neto (y descuentos de neto) no arma Debe 1:1.
-            if ($hayRepartoDebeGasto && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
-                $tipoConcepto,
-                $codigoConcepto
+            // Reparto multi-cuenta en Asiento: el neto no arma Debe 1:1 (lo reemplaza debe_gasto).
+            // Incluye EXENTO/código 1 aunque tipoconcepto venga vacío (si no, se duplica el Debe).
+            // Solo corre con $hayRepartoDebeGasto (sin COM/FAR/OC artículos/anticipo/contrato).
+            if ($hayRepartoDebeGasto && (
+                ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipoConcepto, $codigoConcepto)
+                || (ComprobanteProveedorConceptoIvaTipos::esExento($tipoConcepto, $codigoConcepto)
+                    && $exentoIntegraTotal)
             )) {
                 continue;
             }
@@ -1060,6 +1065,48 @@ class ComprobanteProveedorAsientoService
         }
 
         return $lineas;
+    }
+
+    /**
+     * Asegura concepto_ivacompras en líneas en memoria (preview/form) donde loadMissing
+     * no alcanza si la relación quedó en null.
+     */
+    private function asegurarConceptosIvaCargados(Comprobante_Proveedor $comprobante): void
+    {
+        $conceptos = $comprobante->comprobante_proveedor_conceptos;
+        if ($conceptos === null || $conceptos->isEmpty()) {
+            return;
+        }
+
+        $idsFaltantes = [];
+        foreach ($conceptos as $linea) {
+            if ($linea->concepto_ivacompras !== null) {
+                continue;
+            }
+            $id = (int) ($linea->concepto_ivacompra_id ?? 0);
+            if ($id > 0) {
+                $idsFaltantes[$id] = $id;
+            }
+        }
+        if ($idsFaltantes === []) {
+            return;
+        }
+
+        $porId = Concepto_Ivacompra::query()
+            ->with(['impuestos', 'concepto_ivacompra_empresas'])
+            ->whereIn('id', array_values($idsFaltantes))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($conceptos as $linea) {
+            if ($linea->concepto_ivacompras !== null) {
+                continue;
+            }
+            $concepto = $porId->get((int) ($linea->concepto_ivacompra_id ?? 0));
+            if ($concepto) {
+                $linea->setRelation('concepto_ivacompras', $concepto);
+            }
+        }
     }
 
     private function resolverTipoAsiento(): Tipoasiento

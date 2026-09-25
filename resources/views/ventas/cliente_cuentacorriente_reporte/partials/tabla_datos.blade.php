@@ -50,19 +50,23 @@
         $esTotalVend = $tipo === 'total_vendedor';
         $esHeader = $tipo === 'header_cliente';
         $esTotal = $tipo === 'total_cliente';
+        $esTotalGeneral = $tipo === 'total_general';
         $esApl = $tipo === 'aplicacion';
         $esSaldoAnt = $tipo === 'saldo_anterior';
+        $esTotalFila = $esTotal || $esTotalVend || $esTotalGeneral;
         $trClass = $esHeaderEmpresa
             ? 'cc-rep-header-empresa'
             : ($esHeaderVend
                 ? 'cc-rep-header-vendedor'
-                : ($esTotalVend
-                    ? 'cc-rep-total-vendedor'
-                    : ($esHeader
-                        ? 'cc-rep-header'
-                        : ($esTotal
-                            ? 'cc-rep-total'
-                            : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : ''))))));
+                : ($esTotalGeneral
+                    ? 'cc-rep-total-general'
+                    : ($esTotalVend
+                        ? 'cc-rep-total-vendedor'
+                        : ($esHeader
+                            ? 'cc-rep-header'
+                            : ($esTotal
+                                ? 'cc-rep-total'
+                                : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : '')))))));
     @endphp
     @if ($esHeaderEmpresa)
         <tr class="{{ $trClass }}">
@@ -92,8 +96,13 @@
                 <strong>Vendedor: {{ $fila['vendedor_nombre'] ?? '' }}</strong>
             @elseif ($esTotalVend)
                 <strong>Total vendedor {{ $fila['vendedor_nombre'] ?? '' }}</strong>
+            @elseif ($esTotalGeneral)
+                <strong>{{ $fila['cliente_nombre'] ?? 'Total cuentas a cobrar' }}</strong>
             @elseif ($esHeader)
                 <strong>{{ $fila['cliente_nombre'] ?? '' }}</strong>
+                @if (! empty($fila['vendedor_nombre']))
+                    <span class="text-muted small"> · Vendedor {{ $fila['vendedor_codigo'] ?? '' }} {{ $fila['vendedor_nombre'] }}</span>
+                @endif
             @elseif ($esTotal)
                 <strong>Total {{ $fila['cliente_nombre'] ?? '' }}</strong>
             @elseif ($esSaldoAnt)
@@ -115,21 +124,21 @@
         <td>{{ $fila['etiqueta_moneda'] ?? ($fila['abreviatura'] ?? '') }}</td>
         @if ($modoDeuda)
             <td class="text-right">
-                @if ($esTotal || $esTotalVend)
+                @if ($esTotalFila)
                     <strong>{{ $fmt($fila['importe'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['importe'] ?? null) }}
                 @endif
             </td>
             <td class="text-right">
-                @if ($esTotal || $esTotalVend)
+                @if ($esTotalFila)
                     <strong>{{ $fmt($fila['aplicado'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['aplicado'] ?? null) }}
                 @endif
             </td>
             <td class="text-right">
-                @if ($esTotal || $esTotalVend)
+                @if ($esTotalFila)
                     <strong>{{ $fmt($fila['saldo_pendiente'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['saldo_pendiente'] ?? null) }}
@@ -137,21 +146,21 @@
             </td>
         @else
             <td class="text-right">
-                @if ($esTotal || $esTotalVend)
+                @if ($esTotalFila)
                     <strong>{{ $fmt($fila['debe'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['debe'] ?? null) }}
                 @endif
             </td>
             <td class="text-right">
-                @if ($esTotal || $esTotalVend)
+                @if ($esTotalFila)
                     <strong>{{ $fmt($fila['haber'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['haber'] ?? null) }}
                 @endif
             </td>
             <td class="text-right">
-                @if ($esTotal || $esTotalVend)
+                @if ($esTotalFila)
                     <strong>{{ $fmt($fila['saldo'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['saldo'] ?? null) }}

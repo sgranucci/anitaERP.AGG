@@ -204,12 +204,27 @@ class ClienteCuentacorrienteReporteExport implements FromView, ShouldAutoSize, W
                         'color' => ['rgb' => 'F9E79F'],
                     ],
                 ];
+                $estiloTotalGeneral = [
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => '1B4F72'],
+                        'size' => 11,
+                        'name' => 'Arial',
+                    ],
+                    'fill' => [
+                        'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                        'color' => ['rgb' => 'AED6F1'],
+                    ],
+                ];
                 foreach ($this->filas as $idx => $fila) {
-                    if (($fila['tipo'] ?? '') !== 'total_cliente') {
+                    $tipo = (string) ($fila['tipo'] ?? '');
+                    if ($tipo !== 'total_cliente' && $tipo !== 'total_general') {
                         continue;
                     }
                     $excelRow = $this->filaPrimeraDatosExcel + (int) $idx;
-                    $sheet->getStyle('A'.$excelRow.':'.$colUltima.$excelRow)->applyFromArray($estiloTotalCorte);
+                    $sheet->getStyle('A'.$excelRow.':'.$colUltima.$excelRow)->applyFromArray(
+                        $tipo === 'total_general' ? $estiloTotalGeneral : $estiloTotalCorte
+                    );
                 }
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);

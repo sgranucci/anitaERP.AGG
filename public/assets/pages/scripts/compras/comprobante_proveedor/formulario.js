@@ -1246,13 +1246,25 @@ $(function () {
 
     function sincronizarDebeGastoHiddenDesdeTabla() {
         var $wrap = $('#cp-asiento-tabla-wrap');
-        if ($wrap.length && String($wrap.data('permite-reparto-gasto')) === '1') {
+        if (!$wrap.length || String($wrap.data('permite-reparto-gasto')) !== '1') {
+            return;
+        }
+        var tieneRepartoPersistido = String($wrap.data('tiene-reparto-gasto')) === '1';
+        var filasGasto = $('#tabla-asiento-comprobante-proveedor tr.cp-debe-gasto-row').length;
+        // No activar reparto con una sola línea neto_manual: el backend la arma 1:1 desde
+        // conceptos. Mandar debe_gasto en ese caso duplicaba el Debe (EXENTO + gasto).
+        // Activar solo si el usuario partió cuentas, hay N filas o ya hay reparto guardado.
+        if (debeGastoPendiente || tieneRepartoPersistido || filasGasto > 1) {
             debeGastoActivo = true;
             if (!debeGastoPendiente) {
                 escribirDebeGastoHidden(leerDebeGastoDesdeTabla());
             }
             actualizarAvisoSumaDebeGasto();
+            return;
         }
+        debeGastoActivo = false;
+        escribirDebeGastoHidden([]);
+        actualizarAvisoSumaDebeGasto();
     }
 
     function actualizarAvisoSumaDebeGasto() {

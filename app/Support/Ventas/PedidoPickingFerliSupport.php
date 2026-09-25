@@ -41,6 +41,13 @@ final class PedidoPickingFerliSupport
 
     public const FACTURADO = 'S';
 
+    /** Filtro del modal de consulta de pickings. */
+    public const ESTADO_PENDIENTES = 'pendientes';
+
+    public const ESTADO_FACTURADOS = 'facturados';
+
+    public const ESTADO_TODOS = 'todos';
+
     public const CONCEPTO_DEVOLUCION_NC_PICKING_PREFIJO = 'Devolución NC OT/lote #';
 
     /** Reverso al quitar picking (antes de facturar). */
@@ -125,33 +132,48 @@ final class PedidoPickingFerliSupport
 
     /**
      * Listado del modal de pickings.
-     * - Sin texto / texto libre: del día indicado, solo con líneas pendientes de facturar.
      * - Nº numérico: por código (único) en cualquier fecha; incluye facturados (reimpresión).
+     * - Estado pendientes: todas las fechas (no hace falta acordarse del día).
+     * - Estado facturados / todos: filtra por la fecha indicada.
      *
+     * @param  self::ESTADO_*|string|null  $estado
      * @return list<array<string, mixed>>
      */
-    public static function listarPendientesDia(?string $fechaYmd = null, ?string $texto = null): array
-    {
+    public static function listarPendientesDia(
+        ?string $fechaYmd = null,
+        ?string $texto = null,
+        ?string $estado = null
+    ): array {
         $fecha = $fechaYmd ?: now()->toDateString();
         $texto = trim((string) $texto);
         $buscaPorCodigo = $texto !== '' && ctype_digit($texto);
+        $estado = self::normalizarEstadoConsulta($estado);
 
         $q = Pedido_Picking::query()->with(['usuario:id,nombre']);
 
         if ($buscaPorCodigo) {
             $q->where('codigo', (int) $texto);
         } else {
-            $q->whereDate('fecha', $fecha)
-                ->whereHas('lineas', function ($w) {
-                    $w->where('picking', self::MARCADO)
-                        ->where(function ($f) {
-                            $f->whereNull('picking_facturado')
-                                ->orWhere('picking_facturado', '<>', self::FACTURADO);
-                        })
-                        ->where(function ($e) {
-                            $e->whereNull('estado')->orWhere('estado', '<>', 'A');
-                        });
-                });
+            if ($estado !== self::ESTADO_PENDIENTES) {
+                $q->whereDate('fecha', $fecha);
+            }
+
+            $q->whereHas('lineas', function ($w) use ($estado) {
+                $w->where('picking', self::MARCADO)
+                    ->where(function ($e) {
+                        $e->whereNull('estado')->orWhere('estado', '<>', 'A');
+                    });
+
+                if ($estado === self::ESTADO_PENDIENTES) {
+                    $w->where(function ($f) {
+                        $f->whereNull('picking_facturado')
+                            ->orWhere('picking_facturado', '<>', self::FACTURADO);
+                    });
+                } elseif ($estado === self::ESTADO_FACTURADOS) {
+                    $w->where('picking_facturado', self::FACTURADO);
+                }
+            });
+
             if ($texto !== '') {
                 $q->where('observacion', 'like', '%'.$texto.'%');
             }
@@ -174,12 +196,32 @@ final class PedidoPickingFerliSupport
                 static fn ($l) => ($l->picking_facturado ?? self::NO_MARCADO) !== self::FACTURADO
             );
             $lineasFacturadas = $lineas->count() - $lineasPendientes->count();
-            $lineasClientes = $buscaPorCodigo ? $lineas : $lineasPendientes;
+
+            if (! $buscaPorCodigo) {
+                if ($estado === self::ESTADO_PENDIENTES && $lineasPendientes->isEmpty()) {
+                    continue;
+                }
+                if ($estado === self::ESTADO_FACTURADOS && $lineasFacturadas === 0) {
+                    continue;
+                }
+            }
+
+            $lineasClientes = match (true) {
+                $buscaPorCodigo, $estado === self::ESTADO_TODOS => $lineas,
+                $estado === self::ESTADO_FACTURADOS => $lineas->filter(
+                    static fn ($l) => ($l->picking_facturado ?? self::NO_MARCADO) === self::FACTURADO
+                ),
+                default => $lineasPendientes,
+            };
 
             $clientes = $lineasClientes->map(fn ($l) => (string) ($l->pedidos->clientes->nombre ?? ''))
                 ->filter()
                 ->unique()
                 ->values();
+
+            $estadoEtiqueta = $lineasPendientes->isEmpty()
+                ? ($lineasFacturadas > 0 ? 'Facturado' : 'Vacío')
+                : ($lineasFacturadas > 0 ? 'Parcial' : 'Pendiente');
 
             $filas[] = [
                 'id' => (int) $picking->id,
@@ -187,15 +229,30 @@ final class PedidoPickingFerliSupport
                 'fecha' => $picking->fecha?->format('Y-m-d'),
                 'usuario' => $picking->usuario->nombre ?? '',
                 'observacion' => (string) ($picking->observacion ?? ''),
+                'estado' => $estadoEtiqueta,
                 'lineas_pendientes' => $lineasPendientes->count(),
                 'lineas_facturadas' => $lineasFacturadas,
-                'puede_borrar' => $lineasFacturadas === 0,
+                'puede_borrar' => $lineasFacturadas === 0 && $lineas->isNotEmpty(),
                 'clientes' => $clientes->count(),
                 'clientes_nombres' => $clientes->take(4)->implode(', '),
             ];
         }
 
         return $filas;
+    }
+
+    /**
+     * @return self::ESTADO_PENDIENTES|self::ESTADO_FACTURADOS|self::ESTADO_TODOS
+     */
+    public static function normalizarEstadoConsulta(?string $estado): string
+    {
+        $estado = strtolower(trim((string) $estado));
+
+        return match ($estado) {
+            self::ESTADO_FACTURADOS, 'facturado' => self::ESTADO_FACTURADOS,
+            self::ESTADO_TODOS, 'all', 'todas' => self::ESTADO_TODOS,
+            default => self::ESTADO_PENDIENTES,
+        };
     }
 
     public static function marcar(
@@ -1329,9 +1386,8 @@ final class PedidoPickingFerliSupport
 
     /**
      * Líneas marcadas de picking (workbench / excel).
-     * Sin picking concreto: solo pendientes de facturar.
-     * Con picking (id/código): incluye facturadas para reimprimir con factura.
      *
+     * @param  self::ESTADO_*|string|null  $estado  Si null, usa $incluirFacturadas (compat).
      * @return Collection<int, Pedido_Combinacion>
      */
     public static function lineasPendientes(
@@ -1341,8 +1397,13 @@ final class PedidoPickingFerliSupport
         ?string $loteHasta = null,
         ?int $pickingId = null,
         ?int $pickingCodigo = null,
-        bool $incluirFacturadas = false
+        bool $incluirFacturadas = false,
+        ?string $estado = null
     ): Collection {
+        $estadoNorm = $estado !== null && $estado !== ''
+            ? self::normalizarEstadoConsulta($estado)
+            : ($incluirFacturadas ? self::ESTADO_TODOS : self::ESTADO_PENDIENTES);
+
         $q = Pedido_Combinacion::query()
             ->with([
                 'pedidos.clientes',
@@ -1360,11 +1421,13 @@ final class PedidoPickingFerliSupport
                 $w->whereNull('estado')->orWhere('estado', '<>', 'A');
             });
 
-        if (! $incluirFacturadas) {
+        if ($estadoNorm === self::ESTADO_PENDIENTES) {
             $q->where(function ($w) {
                 $w->whereNull('picking_facturado')
                     ->orWhere('picking_facturado', '<>', self::FACTURADO);
             });
+        } elseif ($estadoNorm === self::ESTADO_FACTURADOS) {
+            $q->where('picking_facturado', self::FACTURADO);
         }
 
         if ($pickingId && $pickingId > 0) {

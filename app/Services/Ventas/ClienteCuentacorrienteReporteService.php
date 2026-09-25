@@ -135,12 +135,10 @@ class ClienteCuentacorrienteReporteService
 
         $movimientos = $movimientos
             ->sortBy(static function ($m) {
-                $vendCodigo = trim((string) ($m->clientes->vendedores->codigo ?? ''));
                 $cliCodigo = trim((string) ($m->clientes->codigo ?? $m->codigocliente ?? ''));
 
                 return sprintf(
-                    '%s|%s|%s|%010d',
-                    str_pad($vendCodigo !== '' ? $vendCodigo : 'zzzzzz', 20, '0', STR_PAD_LEFT),
+                    '%s|%s|%010d',
                     str_pad($cliCodigo, 20, '0', STR_PAD_LEFT),
                     (string) ($m->fecha ?? ''),
                     (int) ($m->id ?? 0)
@@ -148,9 +146,7 @@ class ClienteCuentacorrienteReporteService
             })
             ->values();
 
-        $porVendedor = $movimientos->groupBy(static function ($m) {
-            return (int) ($m->clientes->vendedor_id ?? 0);
-        });
+        $porCliente = $movimientos->groupBy(fn ($m) => (int) $m->cliente_id);
 
         $filas = [];
         $totalDebe = 0.0;
@@ -160,228 +156,209 @@ class ClienteCuentacorrienteReporteService
         $aplicacionesCount = 0;
         $cotizacionesDiaUsadas = 0;
         $clientesUnicos = [];
+        $vendedoresUnicos = [];
 
-        foreach ($porVendedor as $vendedorId => $movsVendedor) {
-            /** @var Collection<int, Cliente_Cuentacorriente> $movsVendedor */
-            $primeroVend = $movsVendedor->first();
-            $vendedorModelo = $primeroVend->clientes->vendedores ?? null;
+        foreach ($porCliente as $clienteId => $movsCliente) {
+            /** @var Collection<int, Cliente_Cuentacorriente> $movsCliente */
+            $clientesUnicos[(int) $clienteId] = true;
+            $primero = $movsCliente->first();
+            $vendedorModelo = $primero->clientes->vendedores ?? null;
+            $vendedorId = (int) ($primero->clientes->vendedor_id ?? 0);
+            $vendedoresUnicos[$vendedorId] = true;
             $vendedorCodigo = $vendedorModelo
                 ? trim((string) $vendedorModelo->codigo)
                 : '';
             $vendedorNombre = $vendedorModelo
                 ? (string) $vendedorModelo->nombre
-                : ((int) $vendedorId > 0 ? 'Vendedor #'.$vendedorId : 'Sin vendedor');
+                : ($vendedorId > 0 ? 'Vendedor #'.$vendedorId : 'Sin vendedor');
+            $clienteCodigo = trim((string) ($primero->clientes->codigo ?? $primero->codigocliente ?? ''));
+            $clienteNombre = (string) ($primero->clientes->nombre ?? $primero->nombrecliente ?? '');
+            $nombreEmpresa = $this->nombreEmpresaUnicaGrupo($movsCliente);
 
             $filas[] = [
-                'tipo' => 'header_vendedor',
-                'vendedor_id' => (int) $vendedorId,
+                'tipo' => 'header_cliente',
+                'cliente_id' => (int) $clienteId,
+                'cliente_codigo' => $clienteCodigo,
+                'cliente_nombre' => $clienteNombre,
+                'nombreempresa' => $nombreEmpresa,
+                'empresa_id' => (int) ($primero->empresa_id ?? 0),
+                'vendedor_id' => $vendedorId,
                 'vendedor_codigo' => $vendedorCodigo,
                 'vendedor_nombre' => $vendedorNombre,
-                'cliente_codigo' => $vendedorCodigo,
-                'cliente_nombre' => $vendedorNombre,
-                'comprobante' => 'Vendedor',
             ];
 
-            $subVendDebe = 0.0;
-            $subVendHaber = 0.0;
-            $subVendPendiente = 0.0;
+            $saldoCorrido = 0.0;
+            $saldoCorridoPesos = 0.0;
+            $subDebe = 0.0;
+            $subHaber = 0.0;
+            $subPendiente = 0.0;
 
-            $porCliente = $movsVendedor->groupBy(fn ($m) => (int) $m->cliente_id);
+            if ($modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA) {
+                $saldoAnterior = $this->saldoAnteriorCliente(
+                    (int) $clienteId,
+                    $filtros,
+                    $enPesos,
+                    $forzarDia
+                );
+                $saldoCorrido = $saldoAnterior['origen'];
+                $saldoCorridoPesos = $saldoAnterior['pesos'];
+                if (! $soloTotales && (abs($saldoCorrido) > 0.0001 || abs($saldoCorridoPesos) > 0.0001)) {
+                    $filas[] = [
+                        'tipo' => 'saldo_anterior',
+                        'cliente_id' => (int) $clienteId,
+                        'cliente_codigo' => $clienteCodigo,
+                        'cliente_nombre' => $clienteNombre,
+                        'nombreempresa' => $nombreEmpresa,
+                        'comprobante' => 'Saldo anterior',
+                        'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
+                        'saldo_origen' => $saldoCorrido,
+                        'saldo_pesos' => $saldoCorridoPesos,
+                        'abreviatura' => $enPesos
+                            ? CuentacorrienteSaldosPorMoneda::abreviaturaLocal()
+                            : '',
+                    ];
+                }
+            }
 
-            foreach ($porCliente as $clienteId => $movsCliente) {
-                /** @var Collection<int, Cliente_Cuentacorriente> $movsCliente */
-                $clientesUnicos[(int) $clienteId] = true;
-                $primero = $movsCliente->first();
-                $clienteCodigo = trim((string) ($primero->clientes->codigo ?? $primero->codigocliente ?? ''));
-                $clienteNombre = (string) ($primero->clientes->nombre ?? $primero->nombrecliente ?? '');
-                $nombreEmpresa = $this->nombreEmpresaUnicaGrupo($movsCliente);
+            foreach ($movsCliente as $mov) {
+                $movimientosCount++;
+                $conv = $this->convertirMovimiento($mov, $enPesos, $forzarDia);
+                if ($conv['cotizacion_origen'] === 'dia') {
+                    $cotizacionesDiaUsadas++;
+                }
 
-                $filas[] = [
-                    'tipo' => 'header_cliente',
+                $totalOrigen = (float) $mov->total;
+
+                $importeMostrar = $conv['importe'];
+                $aplicadoMostrar = $conv['aplicado'];
+                $pendienteMostrar = $conv['pendiente'];
+                $pendientePesos = $enPesos
+                    ? $pendienteMostrar
+                    : $this->convertirMovimiento($mov, true, $forzarDia)['pendiente'];
+                $importeFirmadoPesos = $conv['importe_firmado_pesos'];
+                if (! $enPesos) {
+                    $importeFirmadoPesos = $this->convertirMovimiento($mov, true, $forzarDia)['importe_firmado_pesos'];
+                }
+
+                if ($modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA) {
+                    if ($totalOrigen >= 0) {
+                        $subDebe += abs($importeMostrar);
+                        $totalDebe += abs($importeFirmadoPesos);
+                    } else {
+                        $subHaber += abs($importeMostrar);
+                        $totalHaber += abs($importeFirmadoPesos);
+                    }
+                    $saldoCorrido += $totalOrigen;
+                    $saldoCorridoPesos += $importeFirmadoPesos;
+                } else {
+                    $subPendiente += $pendienteMostrar;
+                    $totalPendiente += $pendientePesos;
+                }
+
+                if ($soloTotales) {
+                    continue;
+                }
+
+                $nombreEmpresaMov = (string) ($mov->empresas->nombre ?? '');
+                $filaMov = [
+                    'tipo' => 'movimiento',
+                    'id' => (int) $mov->id,
                     'cliente_id' => (int) $clienteId,
                     'cliente_codigo' => $clienteCodigo,
                     'cliente_nombre' => $clienteNombre,
-                    'nombreempresa' => $nombreEmpresa,
-                    'empresa_id' => (int) ($primero->empresa_id ?? 0),
-                    'vendedor_id' => (int) $vendedorId,
+                    'nombreempresa' => $nombreEmpresaMov,
+                    'empresa_id' => (int) ($mov->empresa_id ?? 0),
+                    'vendedor_id' => $vendedorId,
                     'vendedor_codigo' => $vendedorCodigo,
                     'vendedor_nombre' => $vendedorNombre,
+                    'fecha' => $this->fmtFecha($mov->fecha),
+                    'fechavencimiento' => $this->fmtFecha($mov->fechavencimiento),
+                    'comprobante' => ClienteCuentacorrienteGrillaSupport::etiquetaComprobante($mov),
+                    'venta_id' => (int) ($mov->venta_id ?? 0),
+                    'cobranza_id' => (int) ($mov->cobranza_id ?? 0),
+                    'moneda_id' => $conv['moneda_id'],
+                    'abreviatura' => $conv['abreviatura'],
+                    'etiqueta_moneda' => $conv['etiqueta_moneda'],
+                    'cotizacion' => $conv['cotizacion_usada'],
+                    'cotizacion_origen' => $conv['cotizacion_origen'],
+                    'debe' => $totalOrigen >= 0 ? abs($importeMostrar) : null,
+                    'haber' => $totalOrigen < 0 ? abs($importeMostrar) : null,
+                    'importe' => $importeMostrar,
+                    'aplicado' => abs($aplicadoMostrar) > 0.0001 ? $aplicadoMostrar : null,
+                    'saldo_pendiente' => $pendienteMostrar,
+                    'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
+                    'saldo_pesos' => $saldoCorridoPesos,
                 ];
+                $filas[] = $filaMov;
 
-                $saldoCorrido = 0.0;
-                $saldoCorridoPesos = 0.0;
-                $subDebe = 0.0;
-                $subHaber = 0.0;
-                $subPendiente = 0.0;
-
-                if ($modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA) {
-                    $saldoAnterior = $this->saldoAnteriorCliente(
-                        (int) $clienteId,
-                        $filtros,
-                        $enPesos,
-                        $forzarDia
-                    );
-                    $saldoCorrido = $saldoAnterior['origen'];
-                    $saldoCorridoPesos = $saldoAnterior['pesos'];
-                    if (! $soloTotales && (abs($saldoCorrido) > 0.0001 || abs($saldoCorridoPesos) > 0.0001)) {
-                        $filas[] = [
-                            'tipo' => 'saldo_anterior',
-                            'cliente_id' => (int) $clienteId,
-                            'cliente_codigo' => $clienteCodigo,
-                            'cliente_nombre' => $clienteNombre,
-                            'nombreempresa' => $nombreEmpresa,
-                            'comprobante' => 'Saldo anterior',
-                            'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
-                            'saldo_origen' => $saldoCorrido,
-                            'saldo_pesos' => $saldoCorridoPesos,
-                            'abreviatura' => $enPesos
-                                ? CuentacorrienteSaldosPorMoneda::abreviaturaLocal()
-                                : '',
-                        ];
-                    }
-                }
-
-                foreach ($movsCliente as $mov) {
-                    $movimientosCount++;
-                    $conv = $this->convertirMovimiento($mov, $enPesos, $forzarDia);
-                    if ($conv['cotizacion_origen'] === 'dia') {
-                        $cotizacionesDiaUsadas++;
-                    }
-
-                    $totalOrigen = (float) $mov->total;
-
-                    $importeMostrar = $conv['importe'];
-                    $aplicadoMostrar = $conv['aplicado'];
-                    $pendienteMostrar = $conv['pendiente'];
-                    $pendientePesos = $enPesos
-                        ? $pendienteMostrar
-                        : $this->convertirMovimiento($mov, true, $forzarDia)['pendiente'];
-                    $importeFirmadoPesos = $conv['importe_firmado_pesos'];
-                    if (! $enPesos) {
-                        $importeFirmadoPesos = $this->convertirMovimiento($mov, true, $forzarDia)['importe_firmado_pesos'];
-                    }
-
-                    if ($modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA) {
-                        if ($totalOrigen >= 0) {
-                            $subDebe += abs($importeMostrar);
-                            $subVendDebe += abs($importeMostrar);
-                            $totalDebe += abs($importeFirmadoPesos);
-                        } else {
-                            $subHaber += abs($importeMostrar);
-                            $subVendHaber += abs($importeMostrar);
-                            $totalHaber += abs($importeFirmadoPesos);
-                        }
-                        $saldoCorrido += $totalOrigen;
-                        $saldoCorridoPesos += $importeFirmadoPesos;
-                    } else {
-                        $subPendiente += $pendienteMostrar;
-                        $subVendPendiente += $pendienteMostrar;
-                        $totalPendiente += $pendientePesos;
-                    }
-
-                    if ($soloTotales) {
-                        continue;
-                    }
-
-                    $nombreEmpresaMov = (string) ($mov->empresas->nombre ?? '');
-                    $filaMov = [
-                        'tipo' => 'movimiento',
-                        'id' => (int) $mov->id,
+                foreach ($aplicacionesPorCc[(int) $mov->id] ?? [] as $apl) {
+                    $aplicacionesCount++;
+                    $convApl = $this->convertirAplicacion($apl, $enPesos, $forzarDia);
+                    $filas[] = [
+                        'tipo' => 'aplicacion',
+                        'id' => (int) $apl->id,
+                        'parent_id' => (int) $mov->id,
                         'cliente_id' => (int) $clienteId,
                         'cliente_codigo' => $clienteCodigo,
                         'cliente_nombre' => $clienteNombre,
                         'nombreempresa' => $nombreEmpresaMov,
-                        'empresa_id' => (int) ($mov->empresa_id ?? 0),
-                        'vendedor_id' => (int) $vendedorId,
-                        'vendedor_codigo' => $vendedorCodigo,
-                        'vendedor_nombre' => $vendedorNombre,
-                        'fecha' => $this->fmtFecha($mov->fecha),
-                        'fechavencimiento' => $this->fmtFecha($mov->fechavencimiento),
-                        'comprobante' => ClienteCuentacorrienteGrillaSupport::etiquetaComprobante($mov),
-                        'venta_id' => (int) ($mov->venta_id ?? 0),
-                        'cobranza_id' => (int) ($mov->cobranza_id ?? 0),
-                        'moneda_id' => $conv['moneda_id'],
-                        'abreviatura' => $conv['abreviatura'],
-                        'etiqueta_moneda' => $conv['etiqueta_moneda'],
-                        'cotizacion' => $conv['cotizacion_usada'],
-                        'cotizacion_origen' => $conv['cotizacion_origen'],
-                        'debe' => $totalOrigen >= 0 ? abs($importeMostrar) : null,
-                        'haber' => $totalOrigen < 0 ? abs($importeMostrar) : null,
-                        'importe' => $importeMostrar,
-                        'aplicado' => abs($aplicadoMostrar) > 0.0001 ? $aplicadoMostrar : null,
-                        'saldo_pendiente' => $pendienteMostrar,
-                        'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
-                        'saldo_pesos' => $saldoCorridoPesos,
+                        'fecha' => $this->fmtFecha($apl->fecha ?? $apl->fechaaplicacion ?? null),
+                        'fechavencimiento' => '',
+                        'comprobante' => '↳ Aplicación: '.(string) ($apl->comprobanteaplicado ?? $apl->comprobante ?? ('#'.$apl->id)),
+                        'venta_id' => (int) ($apl->ventaaplicado_id ?? 0),
+                        'cobranza_id' => (int) ($apl->cobranza_id ?? 0),
+                        'moneda_id' => $convApl['moneda_id'],
+                        'abreviatura' => $convApl['abreviatura'],
+                        'etiqueta_moneda' => $convApl['etiqueta_moneda'],
+                        'cotizacion' => $convApl['cotizacion_usada'],
+                        'cotizacion_origen' => $convApl['cotizacion_origen'],
+                        'debe' => null,
+                        'haber' => abs($convApl['importe']),
+                        'importe' => abs($convApl['importe']),
+                        'aplicado' => abs($convApl['importe']),
+                        'saldo_pendiente' => null,
+                        'saldo' => null,
+                        'saldo_pesos' => null,
                     ];
-                    $filas[] = $filaMov;
-
-                    foreach ($aplicacionesPorCc[(int) $mov->id] ?? [] as $apl) {
-                        $aplicacionesCount++;
-                        $convApl = $this->convertirAplicacion($apl, $enPesos, $forzarDia);
-                        $filas[] = [
-                            'tipo' => 'aplicacion',
-                            'id' => (int) $apl->id,
-                            'parent_id' => (int) $mov->id,
-                            'cliente_id' => (int) $clienteId,
-                            'cliente_codigo' => $clienteCodigo,
-                            'cliente_nombre' => $clienteNombre,
-                            'nombreempresa' => $nombreEmpresaMov,
-                            'fecha' => $this->fmtFecha($apl->fecha ?? $apl->fechaaplicacion ?? null),
-                            'fechavencimiento' => '',
-                            'comprobante' => '↳ Aplicación: '.(string) ($apl->comprobanteaplicado ?? $apl->comprobante ?? ('#'.$apl->id)),
-                            'venta_id' => (int) ($apl->ventaaplicado_id ?? 0),
-                            'cobranza_id' => (int) ($apl->cobranza_id ?? 0),
-                            'moneda_id' => $convApl['moneda_id'],
-                            'abreviatura' => $convApl['abreviatura'],
-                            'etiqueta_moneda' => $convApl['etiqueta_moneda'],
-                            'cotizacion' => $convApl['cotizacion_usada'],
-                            'cotizacion_origen' => $convApl['cotizacion_origen'],
-                            'debe' => null,
-                            'haber' => abs($convApl['importe']),
-                            'importe' => abs($convApl['importe']),
-                            'aplicado' => abs($convApl['importe']),
-                            'saldo_pendiente' => null,
-                            'saldo' => null,
-                            'saldo_pesos' => null,
-                        ];
-                    }
                 }
-
-                $filas[] = [
-                    'tipo' => 'total_cliente',
-                    'cliente_id' => (int) $clienteId,
-                    'cliente_codigo' => $clienteCodigo,
-                    'cliente_nombre' => $clienteNombre,
-                    'nombreempresa' => $nombreEmpresa,
-                    'vendedor_id' => (int) $vendedorId,
-                    'vendedor_codigo' => $vendedorCodigo,
-                    'vendedor_nombre' => $vendedorNombre,
-                    'comprobante' => 'Total cliente',
-                    'debe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subDebe : null,
-                    'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subHaber : null,
-                    'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
-                    'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
-                    'saldo' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA
-                        ? ($enPesos ? $saldoCorridoPesos : $saldoCorrido)
-                        : null,
-                    'saldo_pesos' => $saldoCorridoPesos,
-                    'abreviatura' => $enPesos ? CuentacorrienteSaldosPorMoneda::abreviaturaLocal() : '',
-                ];
             }
 
             $filas[] = [
-                'tipo' => 'total_vendedor',
-                'vendedor_id' => (int) $vendedorId,
+                'tipo' => 'total_cliente',
+                'cliente_id' => (int) $clienteId,
+                'cliente_codigo' => $clienteCodigo,
+                'cliente_nombre' => $clienteNombre,
+                'nombreempresa' => $nombreEmpresa,
+                'vendedor_id' => $vendedorId,
                 'vendedor_codigo' => $vendedorCodigo,
                 'vendedor_nombre' => $vendedorNombre,
-                'cliente_codigo' => $vendedorCodigo,
-                'cliente_nombre' => $vendedorNombre,
-                'comprobante' => 'Total vendedor',
-                'debe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subVendDebe : null,
-                'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subVendHaber : null,
-                'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subVendPendiente : null,
-                'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subVendPendiente : null,
+                'comprobante' => 'Total cliente',
+                'debe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subDebe : null,
+                'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subHaber : null,
+                'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
+                'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
+                'saldo' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA
+                    ? ($enPesos ? $saldoCorridoPesos : $saldoCorrido)
+                    : null,
+                'saldo_pesos' => $saldoCorridoPesos,
                 'abreviatura' => $enPesos ? CuentacorrienteSaldosPorMoneda::abreviaturaLocal() : '',
+            ];
+        }
+
+        if ($filas !== []) {
+            $filas[] = [
+                'tipo' => 'total_general',
+                'comprobante' => 'Total a cobrar',
+                'cliente_codigo' => '',
+                'cliente_nombre' => 'Total cuentas a cobrar',
+                'debe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $totalDebe : null,
+                'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $totalHaber : null,
+                'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totalPendiente : null,
+                'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totalPendiente : null,
+                'saldo' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA
+                    ? ($totalDebe - $totalHaber)
+                    : null,
+                'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
             ];
         }
 
@@ -402,7 +379,7 @@ class ClienteCuentacorrienteReporteService
             'advertencias' => $advertencias,
             'stats' => [
                 'clientes' => count($clientesUnicos),
-                'vendedores' => $porVendedor->count(),
+                'vendedores' => count($vendedoresUnicos),
                 'movimientos' => $movimientosCount,
                 'aplicaciones' => $aplicacionesCount,
             ],
@@ -787,6 +764,9 @@ class ClienteCuentacorrienteReporteService
                 'comprobante' => 'Empresa',
             ];
             foreach ($res['filas'] as $fila) {
+                if (($fila['tipo'] ?? '') === 'total_general') {
+                    continue;
+                }
                 $filas[] = $fila;
             }
             $stats['clientes'] += (int) ($res['stats']['clientes'] ?? 0);
@@ -814,6 +794,22 @@ class ClienteCuentacorrienteReporteService
                 'secciones' => [],
             ];
         }
+
+        $modo = (string) ($totales['modo'] ?? ClienteCuentacorrienteReporteFiltros::MODO_DEUDA);
+        $filas[] = [
+            'tipo' => 'total_general',
+            'comprobante' => 'Total a cobrar',
+            'cliente_codigo' => '',
+            'cliente_nombre' => 'Total cuentas a cobrar',
+            'debe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $totales['debe'] : null,
+            'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $totales['haber'] : null,
+            'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totales['pendiente'] : null,
+            'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totales['pendiente'] : null,
+            'saldo' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA
+                ? ($totales['debe'] - $totales['haber'])
+                : null,
+            'abreviatura' => (string) ($totales['abreviatura'] ?? CuentacorrienteSaldosPorMoneda::abreviaturaLocal()),
+        ];
 
         return [
             'filas' => $filas,

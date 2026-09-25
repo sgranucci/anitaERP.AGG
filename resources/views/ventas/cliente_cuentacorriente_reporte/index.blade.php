@@ -85,8 +85,8 @@
 
                     <div class="mb-2 pl-lg-2">
                         <span class="badge badge-secondary">1</span>
-                        <strong class="ml-1">Corte por vendedor</strong>
-                        <span class="text-muted small ml-1">— el listado se agrupa con encabezado y total por cada vendedor</span>
+                        <strong class="ml-1">Filtro por vendedor</strong>
+                        <span class="text-muted small ml-1">— opcional; el listado se ordena por número de cuenta (menor a mayor)</span>
                     </div>
                     @include('ventas.cliente_cuentacorriente_reporte.partials.selector_vendedores', [
                         'filtros' => $filtros,
@@ -264,8 +264,16 @@
                             border-top: 2px solid #b7950b;
                             color: #1b4f72;
                         }
-                        #tabla-cc-clientes-reporte .cc-rep-total td { font-size: 0.92rem; }
-                        #tabla-cc-clientes-reporte .cc-rep-total .text-right { font-size: 0.95rem; }
+                        #tabla-cc-clientes-reporte .cc-rep-total-general {
+                            background: #aed6f1;
+                            font-weight: 700;
+                            border-top: 3px solid #1b4f72;
+                            color: #1b4f72;
+                        }
+                        #tabla-cc-clientes-reporte .cc-rep-total td,
+                        #tabla-cc-clientes-reporte .cc-rep-total-general td { font-size: 0.92rem; }
+                        #tabla-cc-clientes-reporte .cc-rep-total .text-right,
+                        #tabla-cc-clientes-reporte .cc-rep-total-general .text-right { font-size: 0.95rem; }
                         #tabla-cc-clientes-reporte .cc-rep-apl { color: #555; font-style: italic; }
                         #tabla-cc-clientes-reporte .cc-rep-saldo-ant { background: #f4f6f7; }
                         #tabla-cc-clientes-reporte .text-right { text-align: right; }

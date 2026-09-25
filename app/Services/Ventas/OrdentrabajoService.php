@@ -25,6 +25,7 @@ use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
 use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
 use App\Support\Ventas\OrdentrabajoEmisionPreimpresoLayout;
+use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
 use App\Models\Configuracion\Salida;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
@@ -3292,10 +3293,11 @@ class OrdentrabajoService
 						}
 					}
 
-					// Predecesoras de FACTURADA (34/32/39): alcanza con que exista alguna con hastafecha
+					// Predecesoras de FACTURADA (34/32/39): alcanza con que exista alguna con hastafecha real
 					foreach ($secuenciaTareas[config("consprod.TAREA_FACTURADA")] as $secuencia)
 					{
-						if ($secuencia == $tareaOt->tarea_id && $tareaOt->hastafecha != null)
+						if ($secuencia == $tareaOt->tarea_id
+							&& OrdentrabajoTareaFechaSupport::tieneValor($tareaOt->hastafecha))
 							$flExisteSecuencia = true;
 					}
 				}

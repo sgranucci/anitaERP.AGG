@@ -59,15 +59,6 @@
             return;
         }
 
-		if (window.movimientoStockModoFerli) {
-			var mventaId = ($('#mventa_id').val() || '').trim();
-			if (!mventaId) {
-				alert('Debe seleccionar la marca antes de grabar el movimiento.');
-				$('#mventa_id').focus();
-				return;
-			}
-		}
-
         // Controla datos correctos
 		var item = 0;
 		var flError = false;
