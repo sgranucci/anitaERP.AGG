@@ -272,7 +272,8 @@ class IIBBService
 					}
 				}
 				// Letra B El Bierzo: si la condición no tiene fila (p. ej. "No Retiene"),
-				// usa la primera alícuota CABA cargada. Sin eso la perc. queda en 0.
+				// usa la primera alícuota CABA cargada (tasa + minimoneto + minimopercepcion).
+				// El tope de importe (hoy 3000) de provincia_tasaiibb se respeta siempre.
 				if ($forzarCaba && ElBierzoFacturaBPercepcionCabaSupport::esJurisdiccionCaba($jurisdiccionesPercepcion[$i])
 					&& (float) $tasasDescarte[$i] <= 0.00001) {
 					foreach ($provincia->provincia_tasaiibbs as $tasaFila) {
@@ -283,12 +284,6 @@ class IIBBService
 							break;
 						}
 					}
-				}
-				// a-comprob / Anita: en B forzada CABA no corta por minimopercepcion de
-				// provincia_tasaiibb (hoy 3000) — deja el mínimo del .env (0).
-				if ($forzarCaba && ElBierzoFacturaBPercepcionCabaSupport::esJurisdiccionCaba($jurisdiccionesPercepcion[$i])) {
-					$minimaCfg = array_map('trim', explode(',', (string) config('anita.minima_percepcion_iibb', '0')));
-					$minimaPercepcion[$i] = (float) ($minimaCfg[0] ?? 0);
 				}
 				// Verifica si tiene CM05 o no en la jurisdiccion
 				$provinciaCm05 = $cm05 instanceof \Illuminate\Support\Collection

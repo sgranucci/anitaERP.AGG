@@ -23,7 +23,7 @@ Punto único: `App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport`.
 1. Flag `forzar_percepcion_iibb_caba` desde `FacturacionService` (letra B + `esElBierzo()`).
 2. `ImpuestoService` llama `IIBBService::calculaPercepcionIIBB(..., $forzarCaba = true)` aunque `omitir_percepciones` esté prendido.
 3. Solo jurisdicción **901**. Se trata al cliente como local a CABA.
-4. Alícuota: **padrón AGIP** si hay (incluye 0). Si no está, **tasa de descarte** de `provincia_tasaiibb` (hoy 6 %, mínimo neto 3000). Si la condición IIBB no tiene fila, la primera tasa CABA cargada. Con `forzarCaba`, el **mínimo de importe** de percepción usa `ANITA_MINIMA_PERCEPCION_IIBB` (0), no `minimopercepcion` de la tabla — a-comprob cobra CABA aunque el importe sea &lt; 3000.
+4. Alícuota: **padrón AGIP** si hay (incluye 0). Si no está, **tasa de descarte** de `provincia_tasaiibb` (hoy 6 %). Si la condición IIBB no tiene fila, la primera tasa CABA cargada. El **mínimo de importe** (`minimopercepcion`, hoy 3000) de `provincia_tasaiibb` **sí aplica** en Factura B: si el importe calculado es menor, no se percibe. No alinear con a-comprob Anita en ese punto.
 5. Siguen vigentes: CM05 certificado de no retención y exclusión de la solapa del cliente.
 
 ## Correcto
