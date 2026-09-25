@@ -157,6 +157,11 @@ Proveedores
                 }
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
                 $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $anchoAcciones = LwGrilla::ANCHO_COL_ACCIONES;
+                // En modo fit, las % de datos no deben sumar 100%: hay que dejar hueco a Acciones.
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
             @endphp
             <div class="card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
                 @include('includes.exportar-tabla-queryparams', [
@@ -178,7 +183,7 @@ Proveedores
                                     if ($usaScrollHorizontal) {
                                         $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
                                     } else {
-                                        $pct = round(($ancho / $sumaAnchosPantalla) * 100, 2);
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
                                         $styleCol = 'width:'.$pct.'%;min-width:'.$minLegible.'px;';
                                     }
                                 @endphp
@@ -186,7 +191,8 @@ Proveedores
                                     {{ $tituloCol }}
                                 </th>
                             @endforeach
-                            <th class="lw-col-acciones" data-orderable="false"></th>
+                            <th class="lw-col-acciones" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -199,25 +205,28 @@ Proveedores
                                         'cfg' => $layoutPorKey[$key] ?? null,
                                     ])
                                 @endforeach
-                                <td class="lw-col-acciones text-nowrap">
-                                    @if (can('editar-proveedor', false))
-                                        <a href="{{route('editar_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                            <i class="fa fa-edit"></i>
-                                        </a>
-                                    @endif
-                                    @if (can('listar-cuentacorriente-proveedor', false))
-                                        <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente (se abre en modo consulta)">
-                                            <i class="fa fa-folder-open"></i>
-                                        </a>
-                                    @endif
-                                    @if (can('borrar-proveedor', false))
-                                        <form action="{{route('eliminar_proveedor', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
-                                            @csrf @method("delete")
-                                            <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                                <i class="fa fa-times-circle text-danger"></i>
-                                            </button>
-                                        </form>
-                                    @endif
+                                <td class="lw-col-acciones text-nowrap"
+                                    style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
+                                    <div class="lw-acciones-inner">
+                                        @if (can('editar-proveedor', false))
+                                            <a href="{{route('editar_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
+                                        @endif
+                                        @if (can('listar-cuentacorriente-proveedor', false))
+                                            <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente (se abre en modo consulta)">
+                                                <i class="fa fa-folder-open"></i>
+                                            </a>
+                                        @endif
+                                        @if (can('borrar-proveedor', false))
+                                            <form action="{{route('eliminar_proveedor', ['id' => $data->id])}}" class="d-inline-flex form-eliminar mb-0" method="POST">
+                                                @csrf @method("delete")
+                                                <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                                    <i class="fa fa-times-circle text-danger"></i>
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
                         @empty

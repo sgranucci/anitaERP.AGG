@@ -99,6 +99,7 @@ final class ClienteListadoColumnas
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
+            'alinea' => 'izquierda',
             'source' => 'cliente.numerodocumento',
             'attr' => 'numerodocumento',
             'group' => self::GRUPO_IDENTIFICACION,

@@ -214,16 +214,50 @@
   white-space: nowrap;
 }
 
+/* 3 acciones en una sola fila (editar + CC + borrar) */
 .lw-workbench #tabla-paginada th.lw-col-acciones,
 .lw-workbench #tabla-paginada td.lw-col-acciones {
-  width: 76px;
-  min-width: 76px;
-  max-width: 90px;
+  width: 9rem;
+  min-width: 9rem;
+  max-width: 9rem;
   white-space: nowrap;
   overflow: visible;
   text-align: center;
-  padding-left: 0.25rem;
-  padding-right: 0.25rem;
+  padding-left: 0.15rem;
+  padding-right: 0.15rem;
+  vertical-align: middle;
+}
+
+.lw-workbench #tabla-paginada .lw-acciones-inner {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.05rem;
+  width: max-content;
+  max-width: none;
+  margin: 0 auto;
+}
+
+/* El <form> no debe ocupar renglón propio (display:block default) */
+.lw-workbench #tabla-paginada .lw-acciones-inner .form-eliminar {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  flex: 0 0 auto;
+}
+
+.lw-workbench #tabla-paginada .lw-acciones-inner .btn-accion-tabla {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.15rem;
+  min-width: 1.6rem;
+  min-height: 1.6rem;
+  flex: 0 0 auto;
 }
 
 .lw-workbench #tabla-paginada tbody td {

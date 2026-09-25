@@ -100,6 +100,7 @@ final class ProveedorListadoColumnas
             'export' => true,
             'filterable' => true,
             'type' => 'texto',
+            'alinea' => 'izquierda',
             'source' => 'proveedor.nroinscripcion',
             'attr' => 'numerodocumento',
             'group' => self::GRUPO_IDENTIFICACION,

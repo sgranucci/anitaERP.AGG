@@ -30,6 +30,12 @@ final class ListadoGrillaConfigSupport
      */
     public const ANCHO_PRESUPUESTO_PANTALLA = 1040;
 
+    /**
+     * Ancho fijo de la columna Acciones (editar + CC + borrar).
+     * Debe coincidir con `.lw-col-acciones` en listado-workbench.css (~7.25rem).
+     */
+    public const ANCHO_COL_ACCIONES = 144;
+
     /** Piso absoluto (px) al escalar: debajo no se lee. */
     public const ANCHO_MIN_LEGIBLE = 44;
 
@@ -116,6 +122,11 @@ final class ListadoGrillaConfigSupport
             $alinea = strtolower(trim((string) ($item['alinea'] ?? $item['alineacion'] ?? $porKey[$key]['alinea'])));
             if (! in_array($alinea, self::ALINEACIONES, true)) {
                 $alinea = $porKey[$key]['alinea'];
+            }
+            // Catálogo puede fijar alineación (ej. CUIT con guiones → izquierda)
+            $alineaCatalogo = $catalogo[$key]['alinea'] ?? null;
+            if (is_string($alineaCatalogo) && in_array($alineaCatalogo, self::ALINEACIONES, true)) {
+                $alinea = $alineaCatalogo;
             }
             $ancho = (int) ($item['ancho'] ?? $porKey[$key]['ancho']);
             if ($ancho < 40) {
@@ -305,8 +316,13 @@ final class ListadoGrillaConfigSupport
      */
     private static function alineaDefault(string $key, array $meta): string
     {
+        if (isset($meta['alinea']) && in_array($meta['alinea'], self::ALINEACIONES, true)) {
+            return $meta['alinea'];
+        }
+
         $type = $meta['type'] ?? 'texto';
-        if ($type === 'entero' || in_array($key, ['numerodocumento', 'cbu', 'codigo', 'codigopostal'], true)) {
+        // numerodocumento (CUIT) lleva guiones → izquierda (fijar vía meta['alinea'] en el catálogo)
+        if ($type === 'entero' || in_array($key, ['cbu', 'codigo', 'codigopostal'], true)) {
             return self::ALINEA_DERECHA;
         }
         if (in_array($key, ['estado', 'apoc', 'semaforo', 'tipoalta'], true)) {

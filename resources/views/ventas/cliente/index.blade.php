@@ -170,6 +170,10 @@ Clientes
                 }
                 $sumaAnchosPantalla = max(1, LwGrilla::sumaAnchosVisibles($layoutPantalla));
                 $usaScrollHorizontal = $sumaAnchosPantalla > LwGrilla::ANCHO_PRESUPUESTO_PANTALLA;
+                $anchoAcciones = LwGrilla::ANCHO_COL_ACCIONES;
+                $pctDatosDisponible = $usaScrollHorizontal
+                    ? 100.0
+                    : round(100 * $sumaAnchosPantalla / ($sumaAnchosPantalla + $anchoAcciones), 2);
             @endphp
             <div class="card-body p-0 lw-table-wrap {{ $usaScrollHorizontal ? 'table-responsive lw-table-scroll' : 'lw-table-fit' }}">
                 @include('includes.exportar-tabla-queryparams', [
@@ -191,7 +195,7 @@ Clientes
                                     if ($usaScrollHorizontal) {
                                         $styleCol = 'width:'.$ancho.'px;min-width:'.$minLegible.'px;';
                                     } else {
-                                        $pct = round(($ancho / $sumaAnchosPantalla) * 100, 2);
+                                        $pct = round(($ancho / $sumaAnchosPantalla) * $pctDatosDisponible, 2);
                                         $styleCol = 'width:'.$pct.'%;min-width:'.$minLegible.'px;';
                                     }
                                 @endphp
@@ -199,7 +203,8 @@ Clientes
                                     {{ $tituloCol }}
                                 </th>
                             @endforeach
-                            <th class="lw-col-acciones" data-orderable="false"></th>
+                            <th class="lw-col-acciones" data-orderable="false"
+                                style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -212,25 +217,28 @@ Clientes
                                         'cfg' => $layoutPorKey[$key] ?? null,
                                     ])
                                 @endforeach
-                                <td class="lw-col-acciones text-nowrap">
-                                    @if (can('editar-clientes', false))
-                                        <a href="{{ route('editar_cliente', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                            <i class="fa fa-edit"></i>
-                                        </a>
-                                    @endif
-                                    @if (can('listar-cuentacorriente-cliente', false))
-                                        <a href="{{ route('listar_cuentacorriente_cliente', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
-                                            <i class="fa fa-folder-open"></i>
-                                        </a>
-                                    @endif
-                                    @if (can('borrar-clientes', false))
-                                        <form action="{{ route('eliminar_cliente', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
-                                            @csrf @method('delete')
-                                            <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                                <i class="fa fa-times-circle text-danger"></i>
-                                            </button>
-                                        </form>
-                                    @endif
+                                <td class="lw-col-acciones text-nowrap"
+                                    style="width:{{ $anchoAcciones }}px;min-width:{{ $anchoAcciones }}px;max-width:{{ $anchoAcciones }}px;">
+                                    <div class="lw-acciones-inner">
+                                        @if (can('editar-clientes', false))
+                                            <a href="{{ route('editar_cliente', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
+                                        @endif
+                                        @if (can('listar-cuentacorriente-cliente', false))
+                                            <a href="{{ route('listar_cuentacorriente_cliente', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
+                                                <i class="fa fa-folder-open"></i>
+                                            </a>
+                                        @endif
+                                        @if (can('borrar-clientes', false))
+                                            <form action="{{ route('eliminar_cliente', ['id' => $data->id]) }}" class="d-inline-flex form-eliminar mb-0" method="POST">
+                                                @csrf @method('delete')
+                                                <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
+                                                    <i class="fa fa-times-circle text-danger"></i>
+                                                </button>
+                                            </form>
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
                         @empty
