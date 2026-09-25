@@ -180,7 +180,17 @@
         @elseif ($tipo === 'total_cuenta' || $tipo === 'total_cc')
             <tr>
                 <td colspan="{{ $colSpanAntesImportes }}">
-                    {{ $tipo === 'total_cc' ? 'Total centro de costo '.(($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC') : 'Total cuenta '.($fila['cuenta_codigo'] ?? '') }}
+                    @if ($tipo === 'total_cc')
+                        Total centro de costo {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
+                        @if (! empty($fila['centrocosto_nombre']))
+                            — {{ $fila['centrocosto_nombre'] }}
+                        @endif
+                    @else
+                        Total cuenta {{ $fila['cuenta_codigo'] ?? '' }}
+                        @if (! empty($fila['cuenta_nombre']))
+                            — {{ $fila['cuenta_nombre'] }}
+                        @endif
+                    @endif
                 </td>
                 <td>{{ $fmt($fila['debe'] ?? null) }}</td>
                 <td>{{ $fmt($fila['haber'] ?? null) }}</td>

@@ -34,6 +34,15 @@
         table.data th { font-size: {{ $pdfTotalesVentas ? '10px' : '6.5px' }}; font-weight: bold; color: #17202A; }
         table.data td { font-size: {{ $pdfTotalesVentas ? '11px' : '7px' }}; }
         .text-right { text-align: right; white-space: nowrap; }
+        tr.mpc-fila-empresa td { background-color: #fff3cd; font-weight: bold; color: #7d6608; }
+        tr.mpc-fila-cuenta td { background-color: #2e86c1; font-weight: bold; color: #ffffff; }
+        tr.mpc-fila-cuenta a { color: #ffffff; text-decoration: underline; }
+        tr.mpc-fila-cc td { background-color: #d5f5e3; font-weight: bold; color: #145a32; }
+        tr.mpc-fila-saldo-inicial td { background-color: #eef2f7; color: #546e7a; font-style: italic; }
+        tr.mpc-fila-total td { background-color: #fdebd0; font-weight: bold; color: #6e2c00; border-top: 1.5px solid #e67e22; }
+        tr.mpc-fila-total-cc td { background-color: #e8f8f5; color: #0e6655; border-top-color: #16a085; }
+        tr.mpc-fila-total .mpc-importe-total { font-weight: bold; }
+        .mpc-etiqueta { text-transform: uppercase; font-size: 6px; margin-right: 4px; }
         .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 6px; }
         .listado-header td { vertical-align: middle; border: none; }
         .meta { font-size: {{ $pdfTotalesVentas ? '10px' : '7px' }}; color: #444; margin-top: 3px; }

@@ -11,6 +11,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCacheSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaClasificadoExportSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaConsultaAsyncSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCsvExportSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
@@ -85,23 +86,22 @@ class MayorPlanoCuentaController extends Controller
             }
 
             MayorPlanoCuentaRuntimeSupport::elevarLimites();
-            // Si el browser cortó a mitad de un run anterior, el cache puede estar listo.
-            if ($this->leerCache($filtros) === null) {
-                ignore_user_abort(true);
-                $this->generarYCachear($filtros);
-            }
+            // Siempre regenerar: el mayor cambia con asientos nuevos; el cache queda para paginar/export.
+            ignore_user_abort(true);
+            $this->generarYCachear($filtros);
 
             // PRG: no armar HTML en la misma request.
             return redirect()
                 ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
-                ->with('mensaje', 'Mayor listo. Mostrando resultado desde cache.');
+                ->with('mensaje', 'Mayor listo.');
         }
 
         // Tras encolar período largo: no pintar cache viejo (engañaba: flash verde 3s + grilla enorme).
         $omitirCachePantalla = (bool) session('mayor_plano_async_pendiente');
 
         if (! $omitirCachePantalla && MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            $resultado = $this->leerCache($filtros);
+            // Pantalla: solo si esta sesión acaba de consultar estos filtros (no cache viejo de disco).
+            $resultado = $this->leerCachePantalla($filtros);
             if ($resultado !== null) {
                 $consultado = true;
             }
@@ -238,10 +238,10 @@ class MayorPlanoCuentaController extends Controller
             ignore_user_abort(true);
 
             if ($formatoNorm === 'CSV') {
-                return $this->descargarCsvPlanoStream($filtros, $resultado, true);
+                return $this->descargarCsvClasificadoStream($filtros, $resultado);
             }
 
-            return $this->descargarXlsxPlano($filtros, $resultado, false);
+            return $this->descargarXlsxClasificado($filtros, $resultado);
         }
 
         $filas = $this->reporteService->aplanarFilas($resultado, $filtros, true);
@@ -302,6 +302,88 @@ class MayorPlanoCuentaController extends Controller
             MayorPlanoCuentaListadoFiltros::paraQueryString($filtros),
             ['consultar' => 1],
         ));
+    }
+
+    /**
+     * Excel clasificado (.xlsx) en streaming para volúmenes altos.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $resultado
+     */
+    private function descargarXlsxClasificado(array $filtros, array $resultado)
+    {
+        $nombre = $this->armarNombreArchivoExport($filtros, 'xlsx', 'mayor_analitico_cuenta');
+
+        $stamp = now()->format('Ymd_His');
+        $usuarioId = (int) (auth()->id() ?? 0);
+        $rutaRelativa = 'exports/mayor_plano_sync/'.$stamp.'_u'.$usuarioId.'_'.$nombre;
+        $rutaAbsoluta = storage_path('app/public/'.$rutaRelativa);
+
+        $t0 = microtime(true);
+        $export = MayorPlanoCuentaXlsxExportSupport::escribirExcelClasificado(
+            $this->reporteService,
+            $resultado,
+            $filtros,
+            $rutaAbsoluta,
+        );
+        Log::info('mayor_plano_cuenta.export_excel_clasificado_xlsx_ok', [
+            'lineas' => $export['filas'],
+            'bytes' => $export['bytes'],
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+            'archivo' => $rutaRelativa,
+        ]);
+
+        if ($export['bytes'] <= 0 || ! is_file($rutaAbsoluta)) {
+            return redirect()
+                ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje-error', 'No se pudo generar el Excel del mayor clasificado.');
+        }
+
+        return response()->download($rutaAbsoluta, $nombre, [
+            'Content-Type' => MayorPlanoCuentaXlsxExportSupport::MIME,
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
+    /**
+     * CSV clasificado en streaming para volúmenes altos.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $resultado
+     */
+    private function descargarCsvClasificadoStream(array $filtros, array $resultado)
+    {
+        $nombre = $this->armarNombreArchivoExport($filtros, 'csv', 'mayor_analitico_cuenta');
+
+        $stamp = now()->format('Ymd_His');
+        $usuarioId = (int) (auth()->id() ?? 0);
+        $rutaRelativa = 'exports/mayor_plano_sync/'.$stamp.'_u'.$usuarioId.'_'.$nombre;
+        $rutaAbsoluta = storage_path('app/public/'.$rutaRelativa);
+
+        $t0 = microtime(true);
+        $export = MayorPlanoCuentaClasificadoExportSupport::escribirCsv(
+            $this->reporteService,
+            $resultado,
+            $filtros,
+            $rutaAbsoluta,
+        );
+        Log::info('mayor_plano_cuenta.export_excel_clasificado_csv_ok', [
+            'lineas' => $export['filas'],
+            'bytes' => $export['bytes'],
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+            'archivo' => $rutaRelativa,
+        ]);
+
+        if ($export['bytes'] <= 0 || ! is_file($rutaAbsoluta)) {
+            return redirect()
+                ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje-error', 'No se pudo generar el CSV del mayor clasificado.');
+        }
+
+        return response()->download($rutaAbsoluta, $nombre, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
     }
 
     /**
@@ -453,7 +535,8 @@ class MayorPlanoCuentaController extends Controller
      */
     private function obtenerResultado(array $filtros): array
     {
-        $resultado = $this->leerCache($filtros);
+        // Excel/PDF/CSV: reutiliza el resultado de la última consulta (mismo filtro).
+        $resultado = $this->leerCacheDisco($filtros);
         if ($resultado !== null) {
             return $resultado;
         }
@@ -490,7 +573,7 @@ class MayorPlanoCuentaController extends Controller
         // Secciones gzip por archivo: evita serialize del pack completo (OOM ene–ago).
         MayorPlanoCuentaCacheSupport::guardar($resultado, $filtros);
 
-        // Solo marca de firma en sesión (el payload grande va a disco).
+        // Marca de sesión: la pantalla solo pinta si coincide con esta consulta.
         session()->forget(self::SESSION_CACHE_KEY);
         session([
             self::SESSION_CACHE_KEY => [
@@ -500,28 +583,38 @@ class MayorPlanoCuentaController extends Controller
     }
 
     /**
+     * Cache de disco para export (Excel/PDF/CSV). No exige marca de sesión.
+     *
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>|null
      */
-    private function leerCache(array $filtros): ?array
+    private function leerCacheDisco(array $filtros): ?array
+    {
+        return MayorPlanoCuentaCacheSupport::recuperar($filtros);
+    }
+
+    /**
+     * Pantalla/paginado: solo si esta sesión consultó estos filtros (evita datos viejos).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>|null
+     */
+    private function leerCachePantalla(array $filtros): ?array
     {
         $firma = MayorPlanoCuentaListadoFiltros::firma($filtros);
-        $resultado = MayorPlanoCuentaCacheSupport::recuperar($filtros);
-        if ($resultado !== null) {
-            return $resultado;
-        }
+        $marca = session(self::SESSION_CACHE_KEY);
 
         // Limpiar sesión legacy hinchada (formato viejo con resultado completo).
-        $legacy = session(self::SESSION_CACHE_KEY);
-        if (is_array($legacy) && isset($legacy['resultado'])) {
+        if (is_array($marca) && isset($marca['resultado'])) {
             session()->forget(self::SESSION_CACHE_KEY);
+            $marca = null;
         }
 
-        if (is_array($legacy) && ($legacy['firma'] ?? '') !== '' && ($legacy['firma'] ?? '') !== $firma) {
+        if (! is_array($marca) || ($marca['firma'] ?? '') !== $firma) {
             return null;
         }
 
-        return null;
+        return $this->leerCacheDisco($filtros);
     }
 
     /**

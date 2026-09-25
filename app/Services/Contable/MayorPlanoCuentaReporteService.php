@@ -306,18 +306,18 @@ class MayorPlanoCuentaReporteService
         $filtroTexto = trim((string) ($filtros['filtro_texto'] ?? ''));
 
         if ($filtroTexto !== '') {
-            return $this->paginarFilas($this->aplanarFilas($resultado, $filtros, false), $perPage);
+            return $this->paginarFilas($this->aplanarFilas($resultado, $filtros, true), $perPage);
         }
 
         $currentPage = max(1, (int) Paginator::resolveCurrentPage());
         $offset = ($currentPage - 1) * $perPage;
         $hasta = $offset + $perPage;
-        $total = $this->contarFilasEstructura($resultado, $filtros, false);
+        $total = $this->contarFilasEstructura($resultado, $filtros, true);
         $slice = [];
         $idx = 0;
 
         // Solo materializa hasta el final de la página pedida (no recorre 157k líneas al pedo).
-        $this->recorrerFilasEstructura($resultado, $filtros, false, function (array $fila) use (&$idx, &$slice, $offset, $hasta): bool {
+        $this->recorrerFilasEstructura($resultado, $filtros, true, function (array $fila) use (&$idx, &$slice, $offset, $hasta): bool {
             if ($idx >= $hasta) {
                 return false;
             }
@@ -438,46 +438,53 @@ class MayorPlanoCuentaReporteService
      */
     private function recorrerFilasEstructura(array $resultado, array $filtros, bool $conTotales, callable $onFila): void
     {
+        foreach ($this->generarFilasEstructura($resultado, $filtros, $conTotales) as $fila) {
+            if ($onFila($fila) === false) {
+                return;
+            }
+        }
+    }
+
+    /**
+     * Genera filas de estructura (headers/saldos/movimientos/totales) sin enriquecer.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     * @return \Generator<int, array<string, mixed>>
+     */
+    private function generarFilasEstructura(array $resultado, array $filtros, bool $conTotales): \Generator
+    {
         $empresaIds = $resultado['parametros']['empresa_ids'] ?? [];
         $consolidar = (bool) ($filtros['consolidar_empresas'] ?? $resultado['parametros']['consolidar_empresas'] ?? true);
         $empresaHeaderActual = 0;
-        $emit = static function (array $fila) use ($onFila): bool {
-            $r = $onFila($fila);
-
-            return $r !== false;
-        };
+        $soloTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
 
         foreach ($resultado['secciones'] ?? [] as $seccion) {
             $empresaSeccion = (int) ($seccion['empresa_id'] ?? 0);
             if (! $consolidar && $empresaSeccion > 0 && $empresaSeccion !== $empresaHeaderActual) {
                 $empresaHeaderActual = $empresaSeccion;
-                if (! $emit([
+                yield [
                     'tipo_fila' => 'header_empresa',
                     'empresa_id' => $empresaSeccion,
                     'nombreempresa' => $this->empresaRepository->find($empresaSeccion)?->nombre ?? '',
-                ])) {
-                    return;
-                }
+                ];
             }
 
             $cuenta = (int) ($seccion['cuenta'] ?? 0);
             $nombreEmpresa = $this->resolverNombreEmpresaFila($empresaIds, $empresaSeccion, $consolidar);
 
-            if (! $emit([
+            yield [
                 'tipo_fila' => 'header_cuenta',
                 'cuenta' => $cuenta,
                 'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
                 'cuenta_nombre' => $seccion['cuenta_nombre'] ?? '',
                 'nombreempresa' => $nombreEmpresa,
-            ])) {
-                return;
-            }
+            ];
 
             $gruposCc = $seccion['grupos_cc'] ?? [];
-            $soloTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
             if ($gruposCc !== []) {
                 foreach ($gruposCc as $grupoCc) {
-                    if (! $emit([
+                    yield [
                         'tipo_fila' => 'header_cc',
                         'cuenta' => $cuenta,
                         'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
@@ -485,13 +492,11 @@ class MayorPlanoCuentaReporteService
                         'centrocosto_codigo' => $grupoCc['centrocosto_codigo'] ?? '',
                         'centrocosto_nombre' => $grupoCc['centrocosto_nombre'] ?? '',
                         'nombreempresa' => $nombreEmpresa,
-                    ])) {
-                        return;
-                    }
+                    ];
                     if (! $soloTotalesVentas
                         && ((float) ($grupoCc['saldo_inicial'] ?? 0) !== 0.0 || ($grupoCc['cantidad_lineas'] ?? 0) === 0)
                     ) {
-                        if (! $emit([
+                        yield [
                             'tipo_fila' => 'saldo_inicial',
                             'cuenta' => $cuenta,
                             'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
@@ -500,19 +505,15 @@ class MayorPlanoCuentaReporteService
                             'centrocosto_nombre' => $grupoCc['centrocosto_nombre'] ?? '',
                             'saldo_ejercicio' => (float) ($grupoCc['saldo_ejercicio_inicial'] ?? $grupoCc['saldo_inicial'] ?? 0),
                             'nombreempresa' => $nombreEmpresa,
-                        ])) {
-                            return;
-                        }
+                        ];
                     }
                     if (! $soloTotalesVentas) {
                         foreach ($grupoCc['lineas'] ?? [] as $ln) {
-                            if (! $emit($ln)) {
-                                return;
-                            }
+                            yield $ln;
                         }
                     }
                     if (($grupoCc['total_debe'] ?? 0) > 0 || ($grupoCc['total_haber'] ?? 0) > 0) {
-                        if (! $emit([
+                        yield [
                             'tipo_fila' => 'total_cc',
                             'cuenta' => $cuenta,
                             'centrocosto_codigo' => $grupoCc['centrocosto_codigo'] ?? '',
@@ -520,37 +521,31 @@ class MayorPlanoCuentaReporteService
                             'debe' => (float) ($grupoCc['total_debe'] ?? 0),
                             'haber' => (float) ($grupoCc['total_haber'] ?? 0),
                             'nombreempresa' => $nombreEmpresa,
-                        ])) {
-                            return;
-                        }
+                        ];
                     }
                 }
             } elseif (! $soloTotalesVentas
                 && ((float) ($seccion['saldo_inicial'] ?? 0) !== 0.0 || ($seccion['cantidad_lineas'] ?? 0) === 0)
             ) {
-                if (! $emit([
+                yield [
                     'tipo_fila' => 'saldo_inicial',
                     'cuenta' => $cuenta,
                     'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
                     'cuenta_nombre' => $seccion['cuenta_nombre'] ?? '',
                     'saldo_ejercicio' => (float) ($seccion['saldo_ejercicio_inicial'] ?? $seccion['saldo_inicial'] ?? 0),
                     'nombreempresa' => $nombreEmpresa,
-                ])) {
-                    return;
-                }
+                ];
             }
 
             if ($gruposCc === [] && ! $soloTotalesVentas) {
                 foreach ($seccion['lineas'] ?? [] as $ln) {
-                    if (! $emit($ln)) {
-                        return;
-                    }
+                    yield $ln;
                 }
             }
 
             $incluirTotalCuenta = $conTotales || $soloTotalesVentas;
             if ($incluirTotalCuenta && (($seccion['total_debe'] ?? 0) > 0 || ($seccion['total_haber'] ?? 0) > 0)) {
-                if (! $emit([
+                yield [
                     'tipo_fila' => 'total_cuenta',
                     'cuenta' => $cuenta,
                     'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
@@ -558,9 +553,7 @@ class MayorPlanoCuentaReporteService
                     'debe' => (float) ($seccion['total_debe'] ?? 0),
                     'haber' => (float) ($seccion['total_haber'] ?? 0),
                     'nombreempresa' => $nombreEmpresa,
-                ])) {
-                    return;
-                }
+                ];
             }
         }
     }
@@ -586,13 +579,35 @@ class MayorPlanoCuentaReporteService
     }
 
     /**
-     * Recorre movimientos en lotes enriquecidos (para CSV streameado).
-     * Sin IA: el resumen de OC es determinístico (ítems); Ollama en export traba el download.
+     * Recorre el mayor clasificado (headers/saldos/movimientos/totales) en lotes enriquecidos.
      *
      * @param  array<string, mixed>  $resultado
      * @param  array<string, mixed>  $filtros
      * @return \Generator<int, array<string, mixed>>
      */
+    public function iterarFilasClasificadas(array $resultado, array $filtros = [], int $lote = 1500): \Generator
+    {
+        $lote = max(200, min(5000, $lote));
+        $buffer = [];
+
+        foreach ($this->generarFilasEstructura($resultado, $filtros, true) as $fila) {
+            $buffer[] = $fila;
+            if (count($buffer) < $lote) {
+                continue;
+            }
+            foreach ($this->enriquecerFilasPantalla($buffer, $resultado, $filtros) as $enriquecida) {
+                yield $enriquecida;
+            }
+            $buffer = [];
+        }
+
+        if ($buffer !== []) {
+            foreach ($this->enriquecerFilasPantalla($buffer, $resultado, $filtros) as $enriquecida) {
+                yield $enriquecida;
+            }
+        }
+    }
+
     public function iterarMovimientosExcelPlano(array $resultado, array $filtros = [], int $lote = 1500, bool $usarIa = false): \Generator
     {
         $lote = max(200, min(5000, $lote));

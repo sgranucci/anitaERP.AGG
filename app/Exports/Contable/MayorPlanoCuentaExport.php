@@ -516,31 +516,41 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         $desde = max(1, $this->filaPrimeraDatosExcel);
 
         $estiloEmpresa = [
-            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10],
+            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10, 'color' => ['rgb' => '7D6608']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'FFF3CD']],
         ];
         $estiloCuenta = [
-            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'D6EAF8']],
-            'borders' => [
-                'top' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => '85C1E9']],
-            ],
+            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '2E86C1']],
+        ];
+        $estiloCc = [
+            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10, 'color' => ['rgb' => '145A32']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'D5F5E3']],
         ];
         $estiloTotal = [
-            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10],
-            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'E9ECEF']],
+            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10, 'color' => ['rgb' => '6E2C00']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'FDEBD0']],
             'borders' => [
-                'top' => ['borderStyle' => Border::BORDER_THIN, 'color' => ['rgb' => 'ADB5BD']],
+                'top' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => 'E67E22']],
+                'bottom' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => 'D35400']],
+            ],
+        ];
+        $estiloTotalCc = [
+            'font' => ['bold' => true, 'name' => 'Arial', 'size' => 10, 'color' => ['rgb' => '0E6655']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'E8F8F5']],
+            'borders' => [
+                'top' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '16A085']],
+                'bottom' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '117A65']],
             ],
         ];
         $estiloSaldo = [
-            'font' => ['italic' => true, 'name' => 'Arial', 'size' => 10, 'color' => ['rgb' => '555555']],
+            'font' => ['italic' => true, 'name' => 'Arial', 'size' => 10, 'color' => ['rgb' => '546E7A']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'EEF2F7']],
         ];
 
         for ($row = $desde; $row <= $highestRow; $row++) {
             $valor = trim((string) ($sheet->getCell('A'.$row)->getValue() ?? ''));
             if ($valor === '') {
-                // Puede ser total_cuenta (colspan en A vacío en algunos parsers) — mirar texto "Total cuenta"
                 $merged = trim((string) ($sheet->getCell('A'.$row)->getCalculatedValue() ?? ''));
                 $valor = $merged;
             }
@@ -550,12 +560,12 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             } elseif (str_starts_with($valor, 'Cuenta:')) {
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCuenta);
             } elseif (str_starts_with($valor, 'Centro de costo:')) {
-                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCuenta);
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCc);
+            } elseif (str_starts_with($valor, 'Total centro de costo')) {
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloTotalCc);
             } elseif (str_starts_with($valor, 'Total cuenta')) {
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloTotal);
-            } elseif (str_starts_with($valor, 'Total centro de costo')) {
-                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloTotal);
-            } elseif ($valor === 'Saldo Inicial') {
+            } elseif (strcasecmp($valor, 'Saldo Inicial') === 0 || strcasecmp($valor, 'Saldo inicial') === 0) {
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloSaldo);
             }
         }

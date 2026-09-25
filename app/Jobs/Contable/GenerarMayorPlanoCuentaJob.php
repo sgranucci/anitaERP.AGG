@@ -73,16 +73,9 @@ class GenerarMayorPlanoCuentaJob implements ShouldBeUnique, ShouldQueue
         ]);
 
         try {
-            $resultado = MayorPlanoCuentaCacheSupport::recuperar($this->filtros, $this->usuarioId);
-            if ($resultado === null) {
-                $resultado = $reporteService->generarDesdeFiltros($this->filtros);
-                MayorPlanoCuentaCacheSupport::guardar($resultado, $this->filtros, $this->usuarioId);
-            } else {
-                Log::info('mayor_plano_cuenta.async.cache_hit', [
-                    'usuario_id' => $this->usuarioId,
-                    'lineas' => (int) ($resultado['totales']['lineas'] ?? 0),
-                ]);
-            }
+            // Siempre regenerar: el mayor cambia con asientos nuevos; el cache solo sirve al Excel del mail.
+            $resultado = $reporteService->generarDesdeFiltros($this->filtros);
+            MayorPlanoCuentaCacheSupport::guardar($resultado, $this->filtros, $this->usuarioId);
 
             $lineas = (int) ($resultado['totales']['lineas'] ?? 0);
             $stamp = now()->format('Ymd_His');

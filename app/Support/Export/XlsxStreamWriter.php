@@ -74,11 +74,12 @@ final class XlsxStreamWriter
 
     /**
      * @param  list<string|int|float|null>  $valores
+     * @param  string|null  $estiloFila  cuenta|total|total_cc|empresa|cc|saldo|null
      */
-    public function escribirFila(array $valores): void
+    public function escribirFila(array $valores, ?string $estiloFila = null): void
     {
         $this->asegurarSheetData();
-        $this->escribirFilaXml($valores, false);
+        $this->escribirFilaXml($valores, false, $estiloFila);
     }
 
     /**
@@ -128,35 +129,57 @@ final class XlsxStreamWriter
     /**
      * @param  list<string|int|float|null>  $valores
      */
-    private function escribirFilaXml(array $valores, bool $esCabecera): void
+    private function escribirFilaXml(array $valores, bool $esCabecera, ?string $estiloFila = null): void
     {
         $this->filaActual++;
         $r = $this->filaActual;
+        $valores = array_values($valores);
+        $n = max($this->columnas, count($valores));
+        $forzarCeldasVacias = $estiloFila !== null && $estiloFila !== '';
+
         $xml = '<row r="'.$r.'">';
-        foreach (array_values($valores) as $i => $valor) {
+        for ($i = 0; $i < $n; $i++) {
+            $valor = $valores[$i] ?? '';
             $col = self::columnaExcel($i + 1);
             $ref = $col.$r;
+            $estilo = $this->indiceEstiloCelda($esCabecera, $estiloFila, $i, $valor);
+            $attrEstilo = $estilo !== null ? ' s="'.$estilo.'"' : '';
+
             if ($esCabecera) {
-                $xml .= '<c r="'.$ref.'" t="inlineStr" s="1"><is><t>'
+                $xml .= '<c r="'.$ref.'" t="inlineStr"'.$attrEstilo.'><is><t>'
                     .self::xml((string) $valor).'</t></is></c>';
 
                 continue;
             }
-            if ($this->esCeldaNumerica($i, $valor)) {
-                $xml .= '<c r="'.$ref.'" t="n" s="2"><v>'.$this->numeroXml($valor).'</v></c>';
+
+            if ($this->esCeldaNumerica($i, $valor) || ($estiloFila !== null && $this->esNumeroSuelt($valor))) {
+                if ($valor === null || $valor === '') {
+                    if ($forzarCeldasVacias) {
+                        $xml .= '<c r="'.$ref.'"'.$attrEstilo.'/>';
+                    }
+
+                    continue;
+                }
+                $xml .= '<c r="'.$ref.'" t="n"'.$attrEstilo.'><v>'.$this->numeroXml($valor).'</v></c>';
 
                 continue;
             }
-            if ($this->esEnteroIdentificador($valor)) {
-                $xml .= '<c r="'.$ref.'" t="n"><v>'.(int) $valor.'</v></c>';
+
+            if ($this->esEnteroIdentificador($valor) && $estiloFila === null) {
+                $xml .= '<c r="'.$ref.'" t="n"'.$attrEstilo.'><v>'.(int) $valor.'</v></c>';
 
                 continue;
             }
+
             $texto = trim((string) ($valor ?? ''));
             if ($texto === '') {
+                if ($forzarCeldasVacias) {
+                    $xml .= '<c r="'.$ref.'"'.$attrEstilo.'/>';
+                }
+
                 continue;
             }
-            $xml .= '<c r="'.$ref.'" t="inlineStr"><is><t xml:space="preserve">'
+            $xml .= '<c r="'.$ref.'" t="inlineStr"'.$attrEstilo.'><is><t xml:space="preserve">'
                 .self::xml($texto).'</t></is></c>';
         }
         $xml .= '</row>';
@@ -166,11 +189,58 @@ final class XlsxStreamWriter
         }
     }
 
+    private function indiceEstiloCelda(bool $esCabecera, ?string $estiloFila, int $indice, mixed $valor): ?int
+    {
+        if ($esCabecera) {
+            return 1;
+        }
+
+        $esNum = $this->esCeldaNumerica($indice, $valor)
+            || ($estiloFila !== null && $this->esNumeroSuelt($valor));
+
+        return match ($estiloFila) {
+            'cuenta' => 3,
+            'total', 'total_cc' => $esNum ? 5 : 4,
+            'empresa' => 6,
+            'cc' => 7,
+            'saldo' => $esNum ? 9 : 8,
+            default => $esNum ? 2 : null,
+        };
+    }
+
+    private function esNumeroSuelt(mixed $valor): bool
+    {
+        if ($valor === null || $valor === '') {
+            return false;
+        }
+        if (is_int($valor) || is_float($valor)) {
+            return true;
+        }
+        if (! is_string($valor)) {
+            return false;
+        }
+        $valor = str_replace(',', '.', trim($valor));
+
+        return $valor !== '' && is_numeric($valor);
+    }
+
     private function esTituloNumerico(string $titulo): bool
     {
         $n = mb_strtolower(trim($titulo));
 
-        return in_array($n, ['debe', 'haber', 'cotizacion', 'cotización', 'importe'], true);
+        return in_array($n, [
+            'debe',
+            'haber',
+            'cotizacion',
+            'cotización',
+            'cotiz.',
+            'importe',
+            'mon. ref.',
+            'mon. referencia',
+            'saldo del mes',
+            'saldo ejerc.',
+            'saldo ejercicio',
+        ], true);
     }
 
     private function esCeldaNumerica(int $indice, mixed $valor): bool
@@ -237,16 +307,21 @@ final class XlsxStreamWriter
         $n = mb_strtolower(trim($titulo));
 
         return match (true) {
-            $n === 'empresa' => '9',
-            str_contains($n, 'nro.asi') => '14',
+            $n === 'empresa' || $n === 'empr.' => '9',
+            str_contains($n, 'nro.asi') || $n === 'n.asi.' => '14',
             $n === 'fecha' => '12',
+            $n === 'tip' => '6',
             $n === 'cuenta' => '14',
+            str_contains($n, 'comprobante') => '16',
             str_contains($n, 'descrip') => '28',
-            str_contains($n, 'c.costo') || str_contains($n, 'centrocosto') => '12',
+            str_contains($n, 'c.costo') || str_contains($n, 'centro de costo') || str_contains($n, 'centrocosto') => '16',
             $n === 'mon' => '8',
             str_contains($n, 'cotiz') => '12',
+            str_contains($n, 'mon. ref') => '13',
             $n === 'debe' || $n === 'haber' => '16',
+            str_contains($n, 'saldo') => '16',
             $n === 'detalle' => '42',
+            $n === 'cuit' => '14',
             str_contains($n, 'cod. emisor') => '12',
             str_contains($n, 'nombre emisor') => '28',
             $n === 'usuario' => '14',
@@ -339,21 +414,47 @@ final class XlsxStreamWriter
         $zip->addFromString('xl/styles.xml',
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            .'<fonts count="2">'
+            .'<fonts count="6">'
             .'<font><sz val="11"/><name val="Calibri"/></font>'
             .'<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF17202A"/></font>'
+            .'<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>'
+            .'<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF6E2C00"/></font>'
+            .'<font><b/><sz val="11"/><name val="Calibri"/><color rgb="FF145A32"/></font>'
+            .'<font><i/><sz val="11"/><name val="Calibri"/><color rgb="FF546E7A"/></font>'
             .'</fonts>'
-            .'<fills count="3">'
+            .'<fills count="8">'
             .'<fill><patternFill patternType="none"/></fill>'
             .'<fill><patternFill patternType="gray125"/></fill>'
             .'<fill><patternFill patternType="solid"><fgColor rgb="FF85C1E9"/><bgColor indexed="64"/></patternFill></fill>'
+            .'<fill><patternFill patternType="solid"><fgColor rgb="FF2E86C1"/><bgColor indexed="64"/></patternFill></fill>'
+            .'<fill><patternFill patternType="solid"><fgColor rgb="FFFDEBD0"/><bgColor indexed="64"/></patternFill></fill>'
+            .'<fill><patternFill patternType="solid"><fgColor rgb="FFFFF3CD"/><bgColor indexed="64"/></patternFill></fill>'
+            .'<fill><patternFill patternType="solid"><fgColor rgb="FFD5F5E3"/><bgColor indexed="64"/></patternFill></fill>'
+            .'<fill><patternFill patternType="solid"><fgColor rgb="FFEEF2F7"/><bgColor indexed="64"/></patternFill></fill>'
             .'</fills>'
             .'<borders count="1"><border/></borders>'
             .'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            .'<cellXfs count="3">'
+            .'<cellXfs count="10">'
+            // 0 default
             .'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+            // 1 header columnas
             .'<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            // 2 número detalle
             .'<xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+            // 3 cuenta (azul)
+            .'<xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            // 4 total texto (naranja)
+            .'<xf numFmtId="0" fontId="3" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            // 5 total número
+            .'<xf numFmtId="4" fontId="3" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1"/>'
+            // 6 empresa
+            .'<xf numFmtId="0" fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            // 7 centro de costo
+            .'<xf numFmtId="0" fontId="4" fillId="6" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            // 8 saldo inicial texto
+            .'<xf numFmtId="0" fontId="5" fillId="7" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            // 9 saldo inicial número
+            .'<xf numFmtId="4" fontId="5" fillId="7" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1"/>'
             .'</cellXfs>'
             .'</styleSheet>'
         );

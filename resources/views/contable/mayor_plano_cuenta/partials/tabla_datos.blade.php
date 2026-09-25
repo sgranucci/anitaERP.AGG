@@ -54,31 +54,31 @@
             $tipoFila = $fila['tipo_fila'] ?? 'detalle';
         @endphp
         @if ($tipoFila === 'header_empresa')
-            <tr class="font-weight-bold" style="background-color: #fff3cd;">
+            <tr class="mpc-fila-empresa font-weight-bold">
                 <td colspan="{{ $totalColumnas }}">
                     <i class="far fa-building mr-1"></i>
                     Empresa: {{ $fila['nombreempresa'] ?? '' }}
                 </td>
             </tr>
         @elseif ($tipoFila === 'header_cuenta')
-            <tr class="font-weight-bold" style="background-color: #d6eaf8;">
+            <tr class="mpc-fila-cuenta font-weight-bold">
                 <td colspan="{{ $totalColumnas }}">
-                    Cuenta:
+                    <span class="mpc-etiqueta">Cuenta</span>
                     @if ($puedeVerCuenta && (int) ($fila['cuentacontable_id'] ?? 0) > 0)
                         <a href="{{ route('editar_cuentacontable', ['id' => $fila['cuentacontable_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                           target="_blank" rel="noopener" class="text-primary">
+                           target="_blank" rel="noopener" class="mpc-cuenta-link">
                             {{ $fila['cuenta_codigo'] ?? '' }}
                         </a>
                     @else
-                        {{ $fila['cuenta_codigo'] ?? '' }}
+                        <span class="mpc-cuenta-codigo">{{ $fila['cuenta_codigo'] ?? '' }}</span>
                     @endif
-                    {{ $fila['cuenta_nombre'] ?? '' }}
+                    <span class="mpc-cuenta-nombre">{{ $fila['cuenta_nombre'] ?? '' }}</span>
                 </td>
             </tr>
         @elseif ($tipoFila === 'header_cc')
-            <tr class="font-weight-bold" style="background-color: #e8f8f5;">
+            <tr class="mpc-fila-cc font-weight-bold">
                 <td colspan="{{ $totalColumnas }}">
-                    Centro de costo:
+                    <span class="mpc-etiqueta">Centro de costo</span>
                     {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
                     @if (! empty($fila['centrocosto_nombre']))
                         — {{ $fila['centrocosto_nombre'] }}
@@ -86,23 +86,23 @@
                 </td>
             </tr>
         @elseif ($tipoFila === 'saldo_inicial')
-            <tr style="background-color: #f8f9fa;">
-                <td>Saldo Inicial</td>
+            <tr class="mpc-fila-saldo-inicial">
+                <td class="font-italic text-muted">Saldo inicial</td>
                 <td colspan="{{ $colSpanSaldoInicialVacias }}"></td>
-                <td class="text-right">{{ $formatearMonto($fila['saldo_ejercicio'] ?? null, true) }}</td>
+                <td class="text-right font-weight-bold">{{ $formatearMonto($fila['saldo_ejercicio'] ?? null, true) }}</td>
                 @if ($mostrarEmpresa)
                     <td></td>
                 @endif
             </tr>
         @elseif ($tipoFila === 'total_cuenta' || $tipoFila === 'total_cc')
-            <tr class="font-weight-bold" style="background-color: #e9ecef; border-top: 1px solid #adb5bd;">
+            <tr class="mpc-fila-total font-weight-bold {{ $tipoFila === 'total_cc' ? 'mpc-fila-total-cc' : 'mpc-fila-total-cuenta' }}">
                 <td colspan="{{ $colSpanAntesImportes }}" class="text-right">
                     {{ $tipoFila === 'total_cc' ? 'Total centro de costo' : 'Total cuenta' }}
                     @if ($tipoFila === 'total_cc')
                         {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
                     @elseif ($puedeVerCuenta && (int) ($fila['cuentacontable_id'] ?? 0) > 0)
                         <a href="{{ route('editar_cuentacontable', ['id' => $fila['cuentacontable_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                           target="_blank" rel="noopener" class="text-primary">
+                           target="_blank" rel="noopener" class="mpc-cuenta-link">
                             {{ $fila['cuenta_codigo'] ?? '' }}
                         </a>
                     @else
@@ -112,8 +112,8 @@
                         — {{ $fila['cuenta_nombre'] }}
                     @endif
                 </td>
-                <td class="text-right">{{ $formatearMonto($fila['debe'] ?? null) }}</td>
-                <td class="text-right">{{ $formatearMonto($fila['haber'] ?? null) }}</td>
+                <td class="text-right mpc-importe-total">{{ $formatearMonto($fila['debe'] ?? null) }}</td>
+                <td class="text-right mpc-importe-total">{{ $formatearMonto($fila['haber'] ?? null) }}</td>
                 <td></td>
                 <td></td>
                 @if ($mostrarEmpresa)
@@ -121,7 +121,7 @@
                 @endif
             </tr>
         @else
-            <tr>
+            <tr class="mpc-fila-detalle">
                 <td>{{ $fila['fecha_fmt'] ?? '' }}</td>
                 <td>
                     @if ($puedeVerAsiento && (int) ($fila['asiento_id'] ?? 0) > 0)

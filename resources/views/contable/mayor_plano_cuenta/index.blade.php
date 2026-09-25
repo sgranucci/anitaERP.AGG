@@ -57,8 +57,8 @@
 
                     <p class="text-muted small mb-2">
                         Defina el período y combine cuentas puntuales o por rango. Los centros de costo pueden filtrar el mayor sin cambiar su clasificación.
-                        El <strong>Excel plano</strong> (formato Anita) sale después de consultar: una fila por movimiento, por cuenta o por centro de costo.
-                        Baja como <strong>CSV</strong> (se abre en Excel) con emisor, OC, CAPEX y facturas — sin armar un .xlsx pesado en el servidor.
+                        <strong>Excel / CSV / PDF</strong> salen <strong>clasificados por cuenta</strong> (encabezado, saldo inicial, movimientos y total).
+                        El <strong>Excel plano</strong> es el continuo Anita: una fila por movimiento (sin cortes), con emisor, OC, CAPEX y facturas.
                         La columna de OC resume qué se compró (ítems; IA si está habilitada). Las facturas van en una sola celda; no se lista la COM.
                     </p>
 
@@ -329,7 +329,7 @@
                                 $suffixPlano = count($paramsPlano) ? '?'.http_build_query($paramsPlano) : '';
                             @endphp
                             <a href="{{ route('listar_mayor_plano_cuenta', ['formato' => 'EXCEL_PLANO']).$suffixPlano }}"
-                                class="btn btn-app bg-info" title="Excel (.xlsx): una fila por movimiento, con OC, CAPEX y facturas">
+                                class="btn btn-app bg-info" title="Excel continuo Anita: una fila por movimiento (sin cortes por cuenta)">
                                 <i class="fas fa-file-excel"></i> Excel plano
                             </a>
                         </div>
@@ -378,11 +378,115 @@
                     </div>
 
                     <style>
+                        #tabla-mayor-plano { border-collapse: separate; border-spacing: 0; }
                         #tabla-mayor-plano thead tr { background-color: #85C1E9; color: #17202A; }
-                        #tabla-mayor-plano thead th { font-weight: 600; border-color: #7fb3d5; }
+                        #tabla-mayor-plano thead th {
+                            font-weight: 700;
+                            border-color: #7fb3d5;
+                            position: sticky;
+                            top: 0;
+                            z-index: 2;
+                            box-shadow: 0 1px 0 #7fb3d5;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-detalle:nth-of-type(even) { background-color: #fafbfc; }
+                        #tabla-mayor-plano tbody tr.mpc-fila-empresa > td {
+                            background: #fff3cd !important;
+                            color: #7d6608;
+                            border-top: 2px solid #e8c46a;
+                            border-bottom: 1px solid #e8c46a;
+                            padding-top: 0.45rem !important;
+                            padding-bottom: 0.45rem !important;
+                            font-size: 0.82rem;
+                            letter-spacing: 0.01em;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-cuenta > td {
+                            background: linear-gradient(90deg, #2e86c1 0%, #5dade2 100%) !important;
+                            color: #fff !important;
+                            border-top: 3px solid #1a5276;
+                            border-bottom: 1px solid #1a5276;
+                            padding-top: 0.5rem !important;
+                            padding-bottom: 0.5rem !important;
+                            font-size: 0.84rem;
+                            letter-spacing: 0.02em;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-cuenta .mpc-etiqueta {
+                            display: inline-block;
+                            background: rgba(255,255,255,0.22);
+                            border-radius: 3px;
+                            padding: 0.05rem 0.4rem;
+                            margin-right: 0.4rem;
+                            font-size: 0.7rem;
+                            text-transform: uppercase;
+                            letter-spacing: 0.04em;
+                            font-weight: 700;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-cuenta .mpc-cuenta-codigo,
+                        #tabla-mayor-plano tbody tr.mpc-fila-cuenta .mpc-cuenta-link {
+                            font-weight: 800;
+                            margin-right: 0.35rem;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-cuenta .mpc-cuenta-link {
+                            color: #fff !important;
+                            text-decoration: underline;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-cuenta .mpc-cuenta-nombre {
+                            font-weight: 600;
+                            opacity: 0.95;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-cc > td {
+                            background: #d5f5e3 !important;
+                            color: #145a32;
+                            border-left: 4px solid #1e8449;
+                            padding-top: 0.4rem !important;
+                            padding-bottom: 0.4rem !important;
+                            font-size: 0.8rem;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-cc .mpc-etiqueta {
+                            display: inline-block;
+                            margin-right: 0.35rem;
+                            font-size: 0.68rem;
+                            text-transform: uppercase;
+                            letter-spacing: 0.03em;
+                            opacity: 0.85;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-saldo-inicial > td {
+                            background: #eef2f7 !important;
+                            border-bottom: 1px dashed #b0bec5;
+                            color: #546e7a;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-total > td {
+                            background: #fdebd0 !important;
+                            color: #6e2c00;
+                            border-top: 2px solid #e67e22;
+                            border-bottom: 2px solid #d35400;
+                            padding-top: 0.45rem !important;
+                            padding-bottom: 0.45rem !important;
+                            font-size: 0.8rem;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-total-cc > td {
+                            background: #e8f8f5 !important;
+                            color: #0e6655;
+                            border-top-color: #16a085;
+                            border-bottom-color: #117a65;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-total .mpc-importe-total {
+                            font-variant-numeric: tabular-nums;
+                            font-weight: 800;
+                            background: rgba(230, 126, 34, 0.12) !important;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-total-cc .mpc-importe-total {
+                            background: rgba(22, 160, 133, 0.12) !important;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-total .mpc-cuenta-link {
+                            color: #6e2c00 !important;
+                            text-decoration: underline;
+                        }
+                        #tabla-mayor-plano tbody tr.mpc-fila-total-cc .mpc-cuenta-link {
+                            color: #0e6655 !important;
+                        }
                     </style>
                     <div class="table-responsive">
-                        <table id="tabla-mayor-plano" class="table table-striped table-bordered table-hover table-sm mb-0" style="font-size: 0.75rem;">
+                        <table id="tabla-mayor-plano" class="table table-bordered table-hover table-sm mb-0" style="font-size: 0.75rem;">
                             @include('contable.mayor_plano_cuenta.partials.tabla_datos', [
                                 'filas' => $filasVista,
                                 'puede_ver_asiento' => $puede_ver_asiento ?? false,

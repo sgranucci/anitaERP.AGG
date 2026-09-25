@@ -6,8 +6,7 @@ use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Export\XlsxStreamWriter;
 
 /**
- * Excel plano (.xlsx) con las mismas columnas que el CSV histórico,
- * escrito en streaming para volúmenes de cierre (ene–ago, multiempresa).
+ * Excel (.xlsx) en streaming: plano (Anita) o clasificado por cuenta.
  */
 final class MayorPlanoCuentaXlsxExportSupport
 {
@@ -33,5 +32,28 @@ final class MayorPlanoCuentaXlsxExportSupport
         }
 
         return $writer->cerrar();
+    }
+
+    /**
+     * Mayor clasificado por cuenta (headers / saldo / movimientos / totales).
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     * @return array{path: string, filas: int, bytes: int}
+     */
+    public static function escribirExcelClasificado(
+        MayorPlanoCuentaReporteService $reporteService,
+        array $resultado,
+        array $filtros,
+        string $rutaAbsoluta,
+        string $nombreHoja = 'Mayor por cuenta',
+    ): array {
+        return MayorPlanoCuentaClasificadoExportSupport::escribirXlsx(
+            $reporteService,
+            $resultado,
+            $filtros,
+            $rutaAbsoluta,
+            $nombreHoja,
+        );
     }
 }
