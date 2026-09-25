@@ -13,6 +13,9 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
  * FC − provisión COM, se permite asignar/cargar/asentar: el excedente se imputa a
  * cuentas de la OC (como el camino ≤5%) y la NC se contabiliza después.
  *
+ * Las NC ya subidas al legajo sin montos (PDF/scan, subtotal/total 0) también desbloquean:
+ * el operador cargará el neto al contabilizar la NC.
+ *
  * Las NC ya vinculadas por pivot a una COM no suman cupo: ya bajan el «ya facturado».
  */
 final class ComprobanteProveedorCupoNcLegajoSupport
@@ -46,6 +49,22 @@ final class ComprobanteProveedorCupoNcLegajoSupport
     }
 
     /**
+     * Cupo efectivo: montos de NC +, si hay NC sin importe, cubre el exceso indicado.
+     */
+    public static function cupoEfectivoParaExceso(
+        float $cupoNcConImporte,
+        bool $ncPendienteSinImporte,
+        float $excesoACubrir,
+    ): float {
+        $cupo = max(0.0, round($cupoNcConImporte, 2));
+        if ($ncPendienteSinImporte && $excesoACubrir > 0.00001) {
+            $cupo = max($cupo, round($excesoACubrir, 2));
+        }
+
+        return $cupo;
+    }
+
+    /**
      * True si, tras aplicar cupo NC al exceso, el comparable efectivo queda dentro de tolerancia %.
      */
     public static function dentroDeToleranciaTrasCupoNc(
@@ -53,13 +72,15 @@ final class ComprobanteProveedorCupoNcLegajoSupport
         float $provision,
         float $cupoNcDisponible,
         float $toleranciaPct,
+        bool $ncPendienteSinImporte = false,
     ): bool {
         $exceso = self::excesoSobreProvision($asignado, $provision);
         if ($exceso <= 0.00001) {
             return true;
         }
 
-        $aplicado = self::aplicarCupo($exceso, $cupoNcDisponible)['aplicado'];
+        $cupo = self::cupoEfectivoParaExceso($cupoNcDisponible, $ncPendienteSinImporte, $exceso);
+        $aplicado = self::aplicarCupo($exceso, $cupo)['aplicado'];
         $efectivo = self::asignadoEfectivoTrasCupo($asignado, $aplicado);
 
         return ! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
@@ -71,13 +92,14 @@ final class ComprobanteProveedorCupoNcLegajoSupport
 
     /**
      * Asiento: permite prorratear far_diferencia aunque el % supere TOLERANCIA_PCT
-     * si el cupo NC cubre al menos la parte fuera de la banda %.
+     * si el cupo NC cubre al menos la parte fuera de la banda % (o hay NC sin importe).
      */
     public static function diferenciaAsientoPermitidaConCupoNc(
         float $diferenciaNeto,
         float $provision,
         float $cupoNcDisponible,
         float $porcentajeMax = ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA_PCT,
+        bool $ncPendienteSinImporte = false,
     ): bool {
         if (! ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferenciaNeto)) {
             return true;
@@ -94,6 +116,10 @@ final class ComprobanteProveedorCupoNcLegajoSupport
         // Solo sobrefacturación se cubre con NC; defecto (FC < COM) no.
         if ($diferenciaNeto <= 0) {
             return false;
+        }
+
+        if ($ncPendienteSinImporte) {
+            return true;
         }
 
         $exceso = round($diferenciaNeto, 2);
@@ -133,16 +159,15 @@ final class ComprobanteProveedorCupoNcLegajoSupport
     }
 
     /**
-     * Suma neto comparable de NC del legajo (precargas + CP, sin doble conteo).
-     * Excluye CP NC ya vinculadas a COM (entran por ya-facturado).
+     * @return array{cupo: float, nc_sin_importe: int, nc_con_importe: int}
      */
-    public static function cupoNcComparableDelLegajo(Ordencompra $oc): float
+    public static function resumenNcDelLegajo(Ordencompra $oc): array
     {
         $numero = trim((string) ($oc->numeroordencompra ?? ''));
         $empresaId = (int) ($oc->empresa_id ?? 0);
         $ocId = (int) ($oc->id ?? 0);
         if ($numero === '' || $empresaId <= 0) {
-            return 0.0;
+            return ['cupo' => 0.0, 'nc_sin_importe' => 0, 'nc_con_importe' => 0];
         }
 
         $porClave = [];
@@ -226,12 +251,37 @@ final class ComprobanteProveedorCupoNcLegajoSupport
             }
         }
 
-        $suma = 0.0;
+        $cupo = 0.0;
+        $sinImporte = 0;
+        $conImporte = 0;
         foreach ($porClave as $monto) {
-            $suma += abs((float) $monto);
+            $m = abs((float) $monto);
+            if ($m <= 0.00001) {
+                $sinImporte++;
+            } else {
+                $conImporte++;
+                $cupo += $m;
+            }
         }
 
-        return round($suma, 2);
+        return [
+            'cupo' => round($cupo, 2),
+            'nc_sin_importe' => $sinImporte,
+            'nc_con_importe' => $conImporte,
+        ];
+    }
+
+    /**
+     * Suma neto comparable de NC del legajo con importe (precargas + CP).
+     */
+    public static function cupoNcComparableDelLegajo(Ordencompra $oc): float
+    {
+        return self::resumenNcDelLegajo($oc)['cupo'];
+    }
+
+    public static function hayNcPendienteSinImporte(Ordencompra $oc): bool
+    {
+        return self::resumenNcDelLegajo($oc)['nc_sin_importe'] > 0;
     }
 
     /**

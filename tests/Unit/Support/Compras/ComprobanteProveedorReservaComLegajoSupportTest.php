@@ -326,6 +326,22 @@ class ComprobanteProveedorReservaComLegajoSupportTest extends TestCase
         $this->assertNull($mensaje);
     }
 
+    /** CGA subida al legajo sin montos (PDF): también desbloquea el exceso. */
+    public function test_permite_exceso_si_hay_nc_pendiente_sin_importe(): void
+    {
+        $mensaje = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
+            [900 => [167771]],
+            [167771 => 98038.30],
+            [900 => 109296.54],
+            [167771 => 'Nº 167771'],
+            5.0,
+            0.0,
+            true,
+        );
+
+        $this->assertNull($mensaje);
+    }
+
     /** Dos FC con exceso y una sola NC: la segunda sigue bloqueada si el cupo no alcanza. */
     public function test_cupo_nc_se_consume_entre_facturas(): void
     {

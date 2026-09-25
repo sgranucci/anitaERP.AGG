@@ -589,14 +589,19 @@ class ComprobanteProveedorAsientoService
             // también se prorratea (la NC se contabiliza después y cubre esa imputación de más).
             if (ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferenciaNeto)) {
                 $cupoNc = 0.0;
+                $ncSinImporte = false;
                 $ocAsiento = $comprobante->ordencompras;
                 if ($ocAsiento) {
-                    $cupoNc = ComprobanteProveedorCupoNcLegajoSupport::cupoNcComparableDelLegajo($ocAsiento);
+                    $resumenNc = ComprobanteProveedorCupoNcLegajoSupport::resumenNcDelLegajo($ocAsiento);
+                    $cupoNc = (float) $resumenNc['cupo'];
+                    $ncSinImporte = (int) $resumenNc['nc_sin_importe'] > 0;
                 }
                 if (! ComprobanteProveedorCupoNcLegajoSupport::diferenciaAsientoPermitidaConCupoNc(
                     $diferenciaNeto,
                     $totalProvision,
-                    $cupoNc
+                    $cupoNc,
+                    ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA_PCT,
+                    $ncSinImporte
                 )) {
                     $pct = ComprobanteProveedorAsientoCuadreSupport::porcentajeDiferencia(
                         $diferenciaNeto,

@@ -367,13 +367,15 @@ class OrdencompraLegajoBandejaPaqueteService
                     ]);
                 }
 
+                $resumenNc = ComprobanteProveedorCupoNcLegajoSupport::resumenNcDelLegajo($oc);
                 $exceso = ComprobanteProveedorReservaComLegajoSupport::mensajeExcesoProvisionPorCom(
                     $mapaProvision,
                     $provisionPorCom,
                     $importes,
                     $etiquetasCom,
                     ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc),
-                    ComprobanteProveedorCupoNcLegajoSupport::cupoNcComparableDelLegajo($oc),
+                    (float) $resumenNc['cupo'],
+                    (int) $resumenNc['nc_sin_importe'] > 0,
                 );
                 if ($exceso !== null) {
                     throw ValidationException::withMessages([

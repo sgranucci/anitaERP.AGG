@@ -1737,6 +1737,7 @@ $(function () {
         }
         var yaFacturado = parseFloat($bloque.attr('data-ya-facturado')) || 0;
         var cupoNc = parseFloat($bloque.attr('data-cupo-nc')) || 0;
+        var ncSinImporte = $bloque.attr('data-nc-sin-importe') === '1';
 
         var sumaCom = 0;
         var checks = 0;
@@ -1770,7 +1771,11 @@ $(function () {
 
         var sumaComDisponible = Math.max(0, sumaCom - yaFacturado);
         var excesoBruto = Math.max(0, Math.round((importeRef - sumaComDisponible) * 100) / 100);
-        var cupoAplicado = Math.min(excesoBruto, Math.max(0, cupoNc));
+        var cupoEfectivo = cupoNc;
+        if (ncSinImporte && excesoBruto > 0.005) {
+            cupoEfectivo = Math.max(cupoEfectivo, excesoBruto);
+        }
+        var cupoAplicado = Math.min(excesoBruto, Math.max(0, cupoEfectivo));
         var importeEfectivo = Math.round((importeRef - cupoAplicado) * 100) / 100;
         var diff = Math.abs(importeEfectivo - sumaComDisponible);
         var pct = sumaComDisponible > 0.00001 ? (diff / Math.abs(sumaComDisponible)) * 100 : (diff > 0.05 ? 100 : 0);
@@ -1784,8 +1789,12 @@ $(function () {
         }
         msg += ' · Ref. factura: <strong>' + formatearMonto(importeRef) + '</strong>';
         if (cupoAplicado > 0.005) {
-            msg += ' · Cupo NC legajo: <strong>' + formatearMonto(cupoAplicado) + '</strong>' +
-                ' (ref. efectiva <strong>' + formatearMonto(importeEfectivo) + '</strong>)';
+            if (ncSinImporte && cupoNc < excesoBruto - 0.005) {
+                msg += ' · NC del legajo pendiente de carga (sin importe) cubre el exceso';
+            } else {
+                msg += ' · Cupo NC legajo: <strong>' + formatearMonto(cupoAplicado) + '</strong>' +
+                    ' (ref. efectiva <strong>' + formatearMonto(importeEfectivo) + '</strong>)';
+            }
         }
         msg += ' · Diferencia: <strong>' + formatearMonto(diff) +
             '</strong> (' + formatearMonto(pct) + '%) · Tolerancia: ' + formatearMonto(toleranciaPct) + '%';

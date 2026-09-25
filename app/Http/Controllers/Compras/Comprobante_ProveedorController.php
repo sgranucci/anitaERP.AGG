@@ -1333,6 +1333,7 @@ class Comprobante_ProveedorController extends Controller
         $toleranciaPct = 0.0;
         $legajoYaFacturado = ['importe' => 0.0, 'cantidad' => 0, 'items' => []];
         $cupoNcLegajo = 0.0;
+        $ncPendienteSinImporte = false;
         $urlPaqueteLegajo = null;
         $cpPuedeDevolverCompras = false;
         $urlDevolverCompras = null;
@@ -1341,7 +1342,9 @@ class Comprobante_ProveedorController extends Controller
             $oc = $data->ordencompras;
             if ($oc) {
                 $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc);
-                $cupoNcLegajo = ComprobanteProveedorCupoNcLegajoSupport::cupoNcComparableDelLegajo($oc);
+                $resumenNc = ComprobanteProveedorCupoNcLegajoSupport::resumenNcDelLegajo($oc);
+                $cupoNcLegajo = (float) $resumenNc['cupo'];
+                $ncPendienteSinImporte = (int) $resumenNc['nc_sin_importe'] > 0;
                 $excluirId = (int) ($data->id ?? 0) ?: null;
                 $legajoYaFacturado = \App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
                     (int) $oc->id,
@@ -1435,6 +1438,7 @@ class Comprobante_ProveedorController extends Controller
             'com_tolerancia_pct' => $toleranciaPct,
             'legajo_ya_facturado_importe' => (float) ($legajoYaFacturado['importe'] ?? 0),
             'legajo_cupo_nc_importe' => $cupoNcLegajo,
+            'legajo_nc_sin_importe' => $ncPendienteSinImporte,
             'url_paquete_legajo' => $urlPaqueteLegajo,
             'cp_puede_devolver_compras' => $cpPuedeDevolverCompras,
             'url_devolver_compras' => $urlDevolverCompras,

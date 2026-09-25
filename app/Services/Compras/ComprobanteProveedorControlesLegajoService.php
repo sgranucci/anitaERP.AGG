@@ -498,13 +498,20 @@ class ComprobanteProveedorControlesLegajoService
             $politica
         );
         if ($sentido === ComprobanteProveedorToleranciaImporteSupport::SENTIDO_EXCESO) {
-            $cupoNc = ComprobanteProveedorCupoNcLegajoSupport::cupoNcComparableDelLegajo($ordencompra);
-            if ($cupoNc > 0.00001) {
+            $resumenNc = ComprobanteProveedorCupoNcLegajoSupport::resumenNcDelLegajo($ordencompra);
+            $cupoNc = (float) $resumenNc['cupo'];
+            $ncSinImporte = (int) $resumenNc['nc_sin_importe'] > 0;
+            if ($cupoNc > 0.00001 || $ncSinImporte) {
                 $exceso = ComprobanteProveedorCupoNcLegajoSupport::excesoSobreProvision(
                     $importeFactura,
                     $importeComDisponible
                 );
-                $aplicado = ComprobanteProveedorCupoNcLegajoSupport::aplicarCupo($exceso, $cupoNc)['aplicado'];
+                $cupoEfectivo = ComprobanteProveedorCupoNcLegajoSupport::cupoEfectivoParaExceso(
+                    $cupoNc,
+                    $ncSinImporte,
+                    $exceso
+                );
+                $aplicado = ComprobanteProveedorCupoNcLegajoSupport::aplicarCupo($exceso, $cupoEfectivo)['aplicado'];
                 $efectivo = ComprobanteProveedorCupoNcLegajoSupport::asignadoEfectivoTrasCupo(
                     $importeFactura,
                     $aplicado

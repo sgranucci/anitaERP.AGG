@@ -284,6 +284,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
      * @param  array<int|string, float>  $importePorFactura  precarga_id|cp-N => importe de la factura
      * @param  array<int, string>  $etiquetasCom  recepcion_id => etiqueta visible (opcional)
      * @param  float  $cupoNcDisponible  neto comparable de NC del legajo que cubre exceso FC−COM
+     * @param  bool  $ncPendienteSinImporte  NC ya subida sin montos (PDF/scan): también desbloquea
      */
     public static function mensajeExcesoProvisionPorCom(
         array $asignacionesPorPrecarga,
@@ -292,6 +293,7 @@ final class ComprobanteProveedorReservaComLegajoSupport
         array $etiquetasCom = [],
         float $toleranciaPct = 0.0,
         float $cupoNcDisponible = 0.0,
+        bool $ncPendienteSinImporte = false,
     ): ?string {
         $asignadoPorCom = [];
         foreach ($asignacionesPorPrecarga as $precargaId => $recepcionIds) {
@@ -348,7 +350,8 @@ final class ComprobanteProveedorReservaComLegajoSupport
                     $importe,
                     $sumaProvision,
                     $cupoNcDisponible,
-                    $toleranciaPct
+                    $toleranciaPct,
+                    $ncPendienteSinImporte
                 )
             ) {
                 return sprintf(
@@ -391,8 +394,13 @@ final class ComprobanteProveedorReservaComLegajoSupport
             $excesosPorCom[$rid] = $exceso;
         }
 
-        $cupoAplicadoPorCom = ComprobanteProveedorCupoNcLegajoSupport::consumirCupoContraExcesos(
+        $cupoParaConsumir = ComprobanteProveedorCupoNcLegajoSupport::cupoEfectivoParaExceso(
             $cupoNcDisponible,
+            $ncPendienteSinImporte,
+            array_sum($excesosPorCom),
+        );
+        $cupoAplicadoPorCom = ComprobanteProveedorCupoNcLegajoSupport::consumirCupoContraExcesos(
+            $cupoParaConsumir,
             $excesosPorCom,
         )['efectivos_reduccion'];
 

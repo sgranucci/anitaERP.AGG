@@ -117,4 +117,23 @@ class ComprobanteProveedorCupoNcLegajoSupportTest extends TestCase
             6000.0,
         ));
     }
+
+    public function test_nc_pendiente_sin_importe_desbloquea_exceso_y_asiento(): void
+    {
+        $this->assertTrue(ComprobanteProveedorCupoNcLegajoSupport::dentroDeToleranciaTrasCupoNc(
+            109296.54,
+            98038.30,
+            0.0,
+            5.0,
+            true,
+        ));
+
+        $this->assertTrue(ComprobanteProveedorCupoNcLegajoSupport::diferenciaAsientoPermitidaConCupoNc(
+            11258.24,
+            98038.30,
+            0.0,
+            5.0,
+            true,
+        ));
+    }
 }
