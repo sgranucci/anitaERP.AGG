@@ -7,6 +7,7 @@ use App\Models\Compras\Comprobante_Proveedor_Archivo;
 use App\Models\Compras\Comprobante_Proveedor_Articulo;
 use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
+use App\Models\Compras\Comprobante_Proveedor_Debe_Gasto;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
@@ -139,6 +140,9 @@ class ComprobanteProveedorEliminarService
             );
             EloquentAuditDeleteSupport::each(
                 Comprobante_Proveedor_Concepto::query()->where('comprobante_proveedor_id', $comprobante->id)
+            );
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Debe_Gasto::query()->where('comprobante_proveedor_id', $comprobante->id)
             );
             EloquentAuditDeleteSupport::each(
                 Comprobante_Proveedor_Articulo::query()->where('comprobante_proveedor_id', $comprobante->id)

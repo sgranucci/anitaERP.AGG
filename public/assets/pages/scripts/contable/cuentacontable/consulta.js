@@ -40,6 +40,21 @@ function contextoCuentaContableVivo($ctx) {
             return $vivo;
         }
     }
+    var debeIdx = 0;
+    if ($ctx && $ctx.length) {
+        debeIdx = parseInt($ctx.attr('data-debe-gasto-idx') || '0', 10) || 0;
+        if (debeIdx <= 0) {
+            debeIdx = parseInt($ctx.closest('[data-debe-gasto-idx]').attr('data-debe-gasto-idx') || '0', 10) || 0;
+        }
+    }
+    if (debeIdx > 0) {
+        var $vivoGasto = $('.cp-asiento-cuenta-editable[data-debe-gasto-idx="' + debeIdx + '"]').filter(function () {
+            return document.contains(this);
+        }).first();
+        if ($vivoGasto.length) {
+            return $vivoGasto;
+        }
+    }
     return ($ctx && $ctx.length) ? $ctx : null;
 }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ventas\FacturacionLocal;
 use App\Exports\Ventas\StockLocalInformeExport;
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Depmae;
+use App\Models\Stock\Mventa;
 use App\Models\Ventas\LocalVenta;
 use App\Services\Ventas\FacturacionLocal\StockLocalInformeService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
@@ -49,6 +50,10 @@ class StockLocalInformeController extends Controller
             })
             ->values();
 
+        $mventaQuery = Mventa::query()
+            ->orderBy('nombre')
+            ->get(['id', 'codigo', 'nombre']);
+
         $medidas = [];
         $filas = null;
         $totales = null;
@@ -81,6 +86,7 @@ class StockLocalInformeController extends Controller
             'consultado' => $consultado,
             'locales' => $locales,
             'depositosErp' => $depositosErp,
+            'mventa_query' => $mventaQuery,
             'medidas' => $medidas,
             'filas' => $filas,
             'totales' => $totales,

@@ -13,6 +13,14 @@
         return !!window.movimientoStockModoFerli;
     }
 
+    function msPidePrecio() {
+        var meta = typeof window.msTipoTransaccionMeta === 'function'
+            ? window.msTipoTransaccionMeta()
+            : {};
+
+        return !!meta.pidePrecio;
+    }
+
     function msEsLineaSimple($tr) {
         return !!($tr && $tr.length && $tr.hasClass('ms-linea-simple'));
     }
@@ -39,12 +47,49 @@
     window.msPrecioEsManual = msPrecioEsManual;
     window.msMarcarPrecioManual = msMarcarPrecioManual;
     window.msLimpiarPrecioManual = msLimpiarPrecioManual;
+    window.msPidePrecio = msPidePrecio;
+
+    /**
+     * Ferli: muestra/oculta columna Precio según tipo.pide_precio.
+     * Con pide_precio: editable y sugiere última compra; sin flag: oculto y 0 (backend completa).
+     */
+    window.msAplicarVisibilidadPrecioFerli = function () {
+        if (!msEsModoFerli()) {
+            return;
+        }
+        var pide = msPidePrecio();
+        var $tabla = $('#tabla-items-movimientostock');
+        $tabla.toggleClass('ms-pide-precio', pide);
+
+        $tabla.find('tr.item-pedido').each(function () {
+            var $tr = $(this);
+            var $precio = msCampoPrecio($tr);
+            if (!$precio.length) {
+                return;
+            }
+            if (pide) {
+                $precio.prop('readonly', false);
+                var articuloId = msFilaArticuloId($tr);
+                if (articuloId && !msPrecioEsManual($tr)) {
+                    var actual = parseFloat(String($precio.val() || '').replace(',', '.'));
+                    if (!isFinite(actual) || actual <= 0) {
+                        msResolverPrecioLinea($tr, articuloId, { forzar: true });
+                    }
+                }
+            } else {
+                $precio.prop('readonly', true);
+                if (!msPrecioEsManual($tr)) {
+                    $precio.val('0.00');
+                }
+            }
+        });
+    };
 
     /**
      * Ferli: con combinaciones = calzado (comb/módulo/medidas).
      * Cantidad de calzado sigue viniendo del modal de talles (readonly).
-     * Precio queda editable para corregir lista / última compra.
-     * Sin combinaciones = no venta → cantidad y precio editables (modo original).
+     * Precio queda editable solo si el tipo pide_precio.
+     * Sin combinaciones = no venta → cantidad editable; precio según pide_precio.
      */
     window.msAplicarModoLineaFerli = function ($tr, esArticuloVenta) {
         if (!$tr || !$tr.length || !msEsModoFerli()) {
@@ -56,26 +101,33 @@
         var $comb = $tr.find('select.combinacion');
         var $mod = $tr.find('select.modulo');
         var $flags = $tr.find('.checkSinFiltro, .checkCombinacion');
+        var pide = msPidePrecio();
 
         if (esArticuloVenta) {
             $tr.removeClass('ms-linea-simple');
             $cant.removeClass('cantidad-stock').prop('readonly', true);
-            // Ferli mov. stock: precio oculto (hidden); no editar en pantalla
-            $precio.prop('readonly', true);
+            $precio.prop('readonly', !pide);
             $comb.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
             $mod.prop('disabled', false).css('pointer-events', '').attr('tabindex', null);
             $flags.prop('disabled', false);
+            if (pide) {
+                var articuloIdVenta = msFilaArticuloId($tr);
+                if (articuloIdVenta && !msPrecioEsManual($tr)) {
+                    msResolverPrecioLinea($tr, articuloIdVenta);
+                }
+            } else if (!msPrecioEsManual($tr)) {
+                $precio.val('0.00');
+            }
         } else {
             $tr.addClass('ms-linea-simple');
             $cant.addClass('cantidad-stock').prop('readonly', false);
-            $precio.prop('readonly', true);
+            $precio.prop('readonly', !pide);
             // No disabled: deben viajar vacíos en el POST (índices de arrays).
             $comb.val('').css('pointer-events', 'none').attr('tabindex', '-1');
             $mod.val('').css('pointer-events', 'none').attr('tabindex', '-1');
             $tr.find('.combinacion_id_previa, .modulo_id_previa, .desc_combinacion, .desc_modulo, .medidas').val('');
             $flags.prop('checked', false);
-            // Ferli: no resolver precio de fábrica/lista; el backend completa costo al grabar.
-            if (!msEsModoFerli()) {
+            if (pide) {
                 var articuloId = msFilaArticuloId($tr);
                 if (articuloId && !msPrecioEsManual($tr)) {
                     msResolverPrecioLinea($tr, articuloId);
@@ -122,8 +174,8 @@
         }
         opciones = opciones || {};
         var forzar = !!opciones.forzar;
-        // En Ferli solo resuelve precio automático en líneas no venta (sin combinaciones).
-        if (msEsModoFerli() && !msEsLineaSimple($tr)) {
+        // Ferli sin pide_precio: no sugerir (backend completa al grabar).
+        if (msEsModoFerli() && !msPidePrecio()) {
             return;
         }
         if (!forzar && msPrecioEsManual($tr)) {
@@ -491,6 +543,10 @@
             $(document).on('change', '#tipotransaccion_stock_id, #fecha', function () {
                 msRefrescarPreciosTodasLasFilas();
             });
+        }
+
+        if (typeof window.msAplicarVisibilidadPrecioFerli === 'function') {
+            window.msAplicarVisibilidadPrecioFerli();
         }
     });
 }(jQuery));

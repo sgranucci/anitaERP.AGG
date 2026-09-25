@@ -304,9 +304,11 @@ class MovimientoStockService
 						$modulo = $modulos[$i];
 
 					$precioLinea = (float) str_replace(',', '', (string) ($precios[$i] ?? 0));
+					$pidePrecio = (bool) ($tipotransaccion->pide_precio ?? false);
 					$forzarUltimaCompra = (bool) ($tipotransaccion->baja_npu ?? false)
 						|| (bool) ($tipotransaccion->alta_npu ?? false);
-					if (($precioLinea <= 0 || $forzarUltimaCompra) && (int) $articulos[$i] > 0) {
+					// Con pide_precio el operador debe cargarlo; no completar en silencio.
+					if (! $pidePrecio && ($precioLinea <= 0 || $forzarUltimaCompra) && (int) $articulos[$i] > 0) {
 						$datoPrecio = ArticuloPrecioMovimientoStockSupport::resolverParaLinea(
 							(int) $articulos[$i],
 							$tipotransaccion,

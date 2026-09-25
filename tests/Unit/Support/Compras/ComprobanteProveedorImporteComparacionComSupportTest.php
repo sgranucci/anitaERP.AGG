@@ -157,6 +157,43 @@ class ComprobanteProveedorImporteComparacionComSupportTest extends TestCase
         $this->assertEqualsWithDelta(900.0, $meta['importe'], 0.001);
     }
 
+    /**
+     * Regresión #31653: solo EXENTO / NO GRAVADO (código 1) con total cabecera=1
+     * (falso positivo por tolerancia 1) no debe descartarse como «IVA duplicado».
+     */
+    public function test_solo_exento_integra_aunque_total_cabecera_sea_uno(): void
+    {
+        $this->assertTrue(
+            ComprobanteProveedorImporteComparacionComSupport::exentoIntegraComprobante(
+                1.0,
+                0.0,
+                1502212.40,
+            )
+        );
+
+        $conceptos = [
+            $this->linea('N', 1502212.40, '1'),
+        ];
+
+        $this->assertTrue(
+            ComprobanteProveedorImporteComparacionComSupport::exentoDeConceptosIntegraTotal(
+                1.0,
+                $conceptos,
+            )
+        );
+    }
+
+    public function test_exento_duplicado_de_iva_sigue_descartado_si_el_resto_cierra_el_total(): void
+    {
+        $this->assertFalse(
+            ComprobanteProveedorImporteComparacionComSupport::exentoIntegraComprobante(
+                1210.0,
+                1210.0,
+                210.0,
+            )
+        );
+    }
+
     public function test_descuento_gravado_80_resta_del_neto_comparable(): void
     {
         $conceptos = [

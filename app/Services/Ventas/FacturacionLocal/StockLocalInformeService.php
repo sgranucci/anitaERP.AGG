@@ -5,6 +5,7 @@ namespace App\Services\Ventas\FacturacionLocal;
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
+use App\Models\Stock\Mventa;
 use App\Models\Ventas\LocalVenta;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
@@ -204,6 +205,14 @@ final class StockLocalInformeService
         $hastaSku = trim((string) ($filtros['hasta_sku'] ?? ''));
         if ($desdeSku !== '' || $hastaSku !== '') {
             $parts[] = 'SKU '.$desdeSku.' / '.$hastaSku;
+        }
+        $mventaId = (int) ($filtros['mventa_id'] ?? 0);
+        if ($mventaId > 0) {
+            $nombreMarca = trim((string) ($filtros['mventa_nombre'] ?? ''));
+            if ($nombreMarca === '') {
+                $nombreMarca = (string) (Mventa::query()->whereKey($mventaId)->value('nombre') ?? '');
+            }
+            $parts[] = 'Marca '.($nombreMarca !== '' ? $nombreMarca : '#'.$mventaId);
         }
 
         return implode(' · ', $parts);
@@ -709,6 +718,11 @@ final class StockLocalInformeService
         }
         if ($hastaSku !== '') {
             $query->where('articulo.sku', '<=', $hastaSku);
+        }
+
+        $mventaId = (int) ($filtros['mventa_id'] ?? 0);
+        if ($mventaId > 0) {
+            $query->where('articulo.mventa_id', $mventaId);
         }
 
         $orden = (string) ($filtros['orden'] ?? StockLocalInformeListadoFiltros::ORDEN_ARTICULO);

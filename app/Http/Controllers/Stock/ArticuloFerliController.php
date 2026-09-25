@@ -403,9 +403,27 @@ class ArticuloFerliController extends Controller
         Storage::disk('local')->put($nombreEtiqueta, $etiqueta);
         $path = Storage::path($nombreEtiqueta);
 
-        system('lp -dzebraarriba '.$path);
+        try {
+            $comando = DB::table('salida')
+                ->where('nombre', 'Zebra Arriba Etiquetas')
+                ->value('comando');
+            $comando = is_string($comando) ? trim($comando) : '';
 
-        Storage::disk('local')->delete($nombreEtiqueta);
+            if ($comando === '' || substr_count($comando, '%s') !== 1) {
+                $comando = base_path('bin/imprimir-etiqueta-zebra.sh').' "%s" 160.132.0.240';
+            }
+
+            $exitCode = 0;
+            passthru(sprintf($comando, $path), $exitCode);
+
+            if ($exitCode !== 0) {
+                return redirect()->back()->with('errores', [
+                    'No se pudo enviar la etiqueta a Zebra Arriba. Verifique red (puerto 9100).',
+                ]);
+            }
+        } finally {
+            Storage::disk('local')->delete($nombreEtiqueta);
+        }
 
         return redirect()->back()->with('status', 'El producto seleccionado se imprimio con exito.');
     }

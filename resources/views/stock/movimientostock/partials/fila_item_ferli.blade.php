@@ -22,8 +22,9 @@
             <input type="text" name="cantidades[]" class="form-control form-control-sm cantidad text-right" readonly value="{{ $cantidad ?? '' }}" />
             <input type="hidden" name="cajas[]" class="caja" value="0">
             <input type="hidden" name="piezas[]" class="pieza" value="0">
-            {{-- Ferli: no mostrar precios en movimientos de stock; el backend completa costo si hace falta --}}
-            <input type="hidden" name="precios[]" class="precio" value="{{ $precio ?? '0.00' }}" />
+        </td>
+        <td class="align-middle ms-col-pide-precio">
+            <input type="text" style="text-align: right;" name="precios[]" class="form-control form-control-sm precio" value="{{ $precio ?? '0.00' }}" autocomplete="off" readonly>
         </td>
         <td class="align-middle text-center">
             <input name="checkssinfiltro[]" class="checkSinFiltro" title="Todos los art&iacute;culos (sin filtro de canal / local)" type="checkbox" autocomplete="off">

@@ -158,6 +158,31 @@ class ValidacionMovimientoStock extends FormRequest
                 }
             }
 
+            if ($tipo && (bool) ($tipo->pide_precio ?? false) && ! $this->validarComoTransferenciaNueva()) {
+                $articulos = $this->input('articulos_id', []);
+                $cantidades = $this->input('cantidades', []);
+                $precios = $this->input('precios', []);
+                $lineasSinPrecio = [];
+                foreach ($articulos as $i => $articuloId) {
+                    if ((int) $articuloId <= 0) {
+                        continue;
+                    }
+                    if (abs((float) ($cantidades[$i] ?? 0)) < 1e-9) {
+                        continue;
+                    }
+                    $precio = (float) str_replace(',', '', (string) ($precios[$i] ?? 0));
+                    if ($precio <= 0) {
+                        $lineasSinPrecio[] = (int) $i + 1;
+                    }
+                }
+                if ($lineasSinPrecio !== []) {
+                    $validator->errors()->add(
+                        'precios',
+                        'Este tipo de transacción exige precio mayor a cero en cada línea con artículo. Revisá: '.implode(', ', $lineasSinPrecio).'.'
+                    );
+                }
+            }
+
             if ($tipo && (bool) $tipo->maneja_contabilidad && ! $this->validarComoTransferenciaNueva()) {
                 $validator->errors()->add(
                     'tipotransaccion_stock_id',
@@ -266,6 +291,7 @@ class ValidacionMovimientoStock extends FormRequest
             'mventa_id.required' => 'Debe seleccionar la marca antes de grabar el movimiento.',
             'mventa_id.exists' => 'La marca seleccionada no es válida.',
             'mventa_id.integer' => 'La marca indicada no es válida.',
+            'precios' => 'Debe indicar el precio en cada línea con artículo.',
         ];
     }
 

@@ -124,7 +124,9 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * Pickings del día con líneas aún pendientes de facturar.
+     * Listado del modal de pickings.
+     * - Sin texto / texto libre: del día indicado, solo con líneas pendientes de facturar.
+     * - Nº numérico: por código (único) en cualquier fecha; incluye facturados (reimpresión).
      *
      * @return list<array<string, mixed>>
      */
@@ -132,29 +134,30 @@ final class PedidoPickingFerliSupport
     {
         $fecha = $fechaYmd ?: now()->toDateString();
         $texto = trim((string) $texto);
+        $buscaPorCodigo = $texto !== '' && ctype_digit($texto);
 
-        $q = Pedido_Picking::query()
-            ->with(['usuario:id,nombre'])
-            ->whereDate('fecha', $fecha)
-            ->whereHas('lineas', function ($w) {
-                $w->where('picking', self::MARCADO)
-                    ->where(function ($f) {
-                        $f->whereNull('picking_facturado')
-                            ->orWhere('picking_facturado', '<>', self::FACTURADO);
-                    })
-                    ->where(function ($e) {
-                        $e->whereNull('estado')->orWhere('estado', '<>', 'A');
-                    });
-            })
-            ->orderByDesc('codigo');
+        $q = Pedido_Picking::query()->with(['usuario:id,nombre']);
 
-        if ($texto !== '') {
-            if (ctype_digit($texto)) {
-                $q->where('codigo', (int) $texto);
-            } else {
+        if ($buscaPorCodigo) {
+            $q->where('codigo', (int) $texto);
+        } else {
+            $q->whereDate('fecha', $fecha)
+                ->whereHas('lineas', function ($w) {
+                    $w->where('picking', self::MARCADO)
+                        ->where(function ($f) {
+                            $f->whereNull('picking_facturado')
+                                ->orWhere('picking_facturado', '<>', self::FACTURADO);
+                        })
+                        ->where(function ($e) {
+                            $e->whereNull('estado')->orWhere('estado', '<>', 'A');
+                        });
+                });
+            if ($texto !== '') {
                 $q->where('observacion', 'like', '%'.$texto.'%');
             }
         }
+
+        $q->orderByDesc('codigo');
 
         $filas = [];
         foreach ($q->get() as $picking) {
@@ -162,24 +165,21 @@ final class PedidoPickingFerliSupport
                 ->with(['pedidos.clientes'])
                 ->where('picking_id', $picking->id)
                 ->where('picking', self::MARCADO)
-                ->where(function ($f) {
-                    $f->whereNull('picking_facturado')
-                        ->orWhere('picking_facturado', '<>', self::FACTURADO);
-                })
                 ->where(function ($e) {
                     $e->whereNull('estado')->orWhere('estado', '<>', 'A');
                 })
                 ->get();
 
-            $clientes = $lineas->map(fn ($l) => (string) ($l->pedidos->clientes->nombre ?? ''))
+            $lineasPendientes = $lineas->filter(
+                static fn ($l) => ($l->picking_facturado ?? self::NO_MARCADO) !== self::FACTURADO
+            );
+            $lineasFacturadas = $lineas->count() - $lineasPendientes->count();
+            $lineasClientes = $buscaPorCodigo ? $lineas : $lineasPendientes;
+
+            $clientes = $lineasClientes->map(fn ($l) => (string) ($l->pedidos->clientes->nombre ?? ''))
                 ->filter()
                 ->unique()
                 ->values();
-
-            $lineasFacturadas = (int) Pedido_Combinacion::query()
-                ->where('picking_id', $picking->id)
-                ->where('picking_facturado', self::FACTURADO)
-                ->count();
 
             $filas[] = [
                 'id' => (int) $picking->id,
@@ -187,7 +187,7 @@ final class PedidoPickingFerliSupport
                 'fecha' => $picking->fecha?->format('Y-m-d'),
                 'usuario' => $picking->usuario->nombre ?? '',
                 'observacion' => (string) ($picking->observacion ?? ''),
-                'lineas_pendientes' => $lineas->count(),
+                'lineas_pendientes' => $lineasPendientes->count(),
                 'lineas_facturadas' => $lineasFacturadas,
                 'puede_borrar' => $lineasFacturadas === 0,
                 'clientes' => $clientes->count(),

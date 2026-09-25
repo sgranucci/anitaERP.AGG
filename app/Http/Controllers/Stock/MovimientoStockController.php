@@ -1133,6 +1133,7 @@ class MovimientoStockController extends Controller
             'aviso_opcional' => (bool) $tipo->aviso_opcional,
             'baja_npu' => (bool) $tipo->baja_npu,
             'alta_npu' => (bool) $tipo->alta_npu,
+            'pide_precio' => (bool) ($tipo->pide_precio ?? false),
         ];
     }
 

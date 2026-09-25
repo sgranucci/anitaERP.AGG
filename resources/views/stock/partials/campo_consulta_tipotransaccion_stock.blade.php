@@ -23,6 +23,7 @@
     $avisoOpcional = (bool) ($aviso_opcional ?? false);
     $bajaNpu = (bool) ($baja_npu ?? false);
     $altaNpu = (bool) ($alta_npu ?? false);
+    $pidePrecio = (bool) ($pide_precio ?? false);
     $puedeAbrirAbm = can('editar-tipos-transaccion-stock', false) || can('listar-tipos-transaccion-stock', false);
     $editUrl = ($tipoId > 0 && $puedeAbrirAbm)
         ? route('editar_tipotransaccion_stock', ['id' => $tipoId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
@@ -44,6 +45,7 @@
                 data-aviso-opcional="{{ $avisoOpcional ? '1' : '0' }}"
                 data-baja-npu="{{ $bajaNpu ? '1' : '0' }}"
                 data-alta-npu="{{ $altaNpu ? '1' : '0' }}"
+                data-pide-precio="{{ $pidePrecio ? '1' : '0' }}"
                 @if ($required && ! $soloLectura) required @endif>
             @if ($soloLectura)
                 <input type="text" class="form-control abreviaturatipotransaccionstock"

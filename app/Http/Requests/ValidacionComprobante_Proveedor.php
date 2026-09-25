@@ -55,6 +55,12 @@ class ValidacionComprobante_Proveedor extends FormRequest
             'montos.*' => 'nullable|numeric',
             'cuentacontabledebe_ids' => 'nullable|array',
             'cuentacontabledebe_ids.*' => 'nullable|integer',
+            'debe_gasto_cuenta_ids' => 'nullable|array',
+            'debe_gasto_cuenta_ids.*' => 'nullable|integer',
+            'debe_gasto_importes' => 'nullable|array',
+            'debe_gasto_importes.*' => 'nullable',
+            'debe_gasto_centrocosto_ids' => 'nullable|array',
+            'debe_gasto_centrocosto_ids.*' => 'nullable|integer',
         ];
     }
 

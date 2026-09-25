@@ -109,6 +109,10 @@ final class ComprobanteProveedorImporteComparacionComSupport
      *
      * Si la suma sin esa línea ya cierra con el total y al sumarla se abre, el agente
      * duplicó el IVA en «No gravado» (tipo E). No es mercadería y no se compara con la COM.
+     *
+     * Si no hay otros conceptos (sumaSinExento ~ 0), el exento ES la mercadería: no descartar.
+     * Con tolerancia 1, total=1 y solo EXENTO daba falso positivo (abs(0-1)<=1) y el asiento
+     * quedaba vacío («No hay conceptos con monto para contabilizar»).
      */
     public static function exentoIntegraComprobante(float $total, float $sumaSinExento, float $sumaExento): bool
     {
@@ -121,6 +125,11 @@ final class ComprobanteProveedorImporteComparacionComSupport
         }
 
         $tol = self::TOLERANCIA_EXENTO_EN_TOTAL;
+        // Solo EXENTO (o descuento E): no hay base contra la que “cerrar sin exento”.
+        if (abs($sumaSinExento) <= $tol) {
+            return true;
+        }
+
         $cierraSinExento = abs($sumaSinExento - $total) <= $tol;
         $cierraConExento = abs($sumaSinExento + $sumaExento - $total) <= $tol;
 

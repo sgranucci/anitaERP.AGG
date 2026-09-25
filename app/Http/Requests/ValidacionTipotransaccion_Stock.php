@@ -27,6 +27,7 @@ class ValidacionTipotransaccion_Stock extends FormRequest
             'origen_bien_uso' => 'sometimes|boolean',
             'baja_npu' => 'sometimes|boolean',
             'alta_npu' => 'sometimes|boolean',
+            'pide_precio' => 'sometimes|boolean',
         ];
     }
 

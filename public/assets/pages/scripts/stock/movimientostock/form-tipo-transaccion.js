@@ -26,6 +26,7 @@
                 abreviatura: '',
                 bajaNpu: false,
                 altaNpu: false,
+                pidePrecio: false,
             };
         }
 
@@ -39,6 +40,7 @@
             avisoOpcional: String($h.attr('data-aviso-opcional') || '') === '1',
             bajaNpu: String($h.attr('data-baja-npu') || '') === '1',
             altaNpu: String($h.attr('data-alta-npu') || '') === '1',
+            pidePrecio: String($h.attr('data-pide-precio') || '') === '1',
             nombre: String($('#tipotransaccion_stock_id_descripcion').val() || '').trim(),
             abreviatura: String($('#tipotransaccion_stock_id_abreviatura').val() || '').trim(),
         };
@@ -82,6 +84,7 @@
         $hidden.attr('data-aviso-opcional', normalizarFlag(data.aviso_opcional) ? '1' : '0');
         $hidden.attr('data-baja-npu', normalizarFlag(data.baja_npu) ? '1' : '0');
         $hidden.attr('data-alta-npu', normalizarFlag(data.alta_npu) ? '1' : '0');
+        $hidden.attr('data-pide-precio', normalizarFlag(data.pide_precio) ? '1' : '0');
 
         $('#tipotransaccion_stock_id_abreviatura').val(data.abreviatura || '');
         $('#tipotransaccion_stock_id_descripcion').val(data.nombre || data.descripcion || '');
@@ -94,6 +97,9 @@
         }
         if (typeof window.msAplicarModoAltaNpuEnTabla === 'function') {
             window.msAplicarModoAltaNpuEnTabla();
+        }
+        if (typeof window.msAplicarVisibilidadPrecioFerli === 'function') {
+            window.msAplicarVisibilidadPrecioFerli();
         }
         if (typeof window.msSurmarEtiquetasToggle === 'function') {
             window.msSurmarEtiquetasToggle();
@@ -115,6 +121,7 @@
             aviso_opcional: false,
             baja_npu: false,
             alta_npu: false,
+            pide_precio: false,
         });
     };
 

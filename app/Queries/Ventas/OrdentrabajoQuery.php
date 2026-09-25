@@ -189,7 +189,7 @@ class OrdentrabajoQuery implements OrdentrabajoQueryInterface
 				'talle.nombre as nombretalle',
 				'pedido_combinacion_talle.cantidad as cantidadportalle',
 				'articulo_caja.caja_id as caja_id',
-				'caja.nombre as nombrecaja',
+				'cajaproducto.nombre as nombrecaja',
 				'articulo_caja.desdenro as desdenumero',
 				'articulo_caja.hastanro as hastanumero',
 				'articulo.descripcion as nombrearticulocaja')

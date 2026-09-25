@@ -598,7 +598,8 @@
 				preciosTalle = preciosTalle || [];
 				var jsonObject = [];
 				var off = 0;
-				var ocultarPreciosFerli = !!window.movimientoStockModoFerli;
+				var ocultarPreciosFerli = !!window.movimientoStockModoFerli
+					&& !(typeof window.msPidePrecio === 'function' && window.msPidePrecio());
 				for (var i = 0; i < med.length; i++) {
 					var cantTalle = cant[i] === '' || cant[i] == null ? 0 : cant[i];
 					var dato = preciosTalle[i] || {};
@@ -935,6 +936,9 @@
 		activa_eventos(false);
 
 		var $nueva = $('#tbody-tabla tr.item-pedido').last();
+		if (typeof window.msAplicarVisibilidadPrecioFerli === 'function') {
+			window.msAplicarVisibilidadPrecioFerli();
+		}
 		$nueva.find('.codigoarticulo').trigger('focus');
     }
 

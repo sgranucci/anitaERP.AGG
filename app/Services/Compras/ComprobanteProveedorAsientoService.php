@@ -16,6 +16,7 @@ use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorCuentaDebeNetoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
+use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
 use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
@@ -73,6 +74,7 @@ class ComprobanteProveedorAsientoService
         $payload = array_merge($preview['payload_asiento'], ['omitir_anita' => true]);
         unset(
             $payload['editable_cuentas'],
+            $payload['editable_importes'],
             $payload['concepto_ivacompra_ids'],
             $payload['origenes'],
         );
@@ -103,6 +105,7 @@ class ComprobanteProveedorAsientoService
         ]);
         unset(
             $payloadAnita['editable_cuentas'],
+            $payloadAnita['editable_importes'],
             $payloadAnita['concepto_ivacompra_ids'],
             $payloadAnita['origenes'],
         );
@@ -178,6 +181,7 @@ class ComprobanteProveedorAsientoService
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras.impuestos',
             'comprobante_proveedor_conceptos.concepto_ivacompras.concepto_ivacompra_empresas',
+            'comprobante_proveedor_debe_gastos.cuentacontables',
             'proveedores',
             'tipotransaccion_compras',
             'ordencompras.ordencompra_articulos.articulos.articulo_cuentacontables',
@@ -189,6 +193,10 @@ class ComprobanteProveedorAsientoService
             ->filter()
             ->keyBy('id');
         ConceptoIvacompraFormulaSupport::inferirTiposYTasasEnColeccion($conceptosParaInferir);
+
+        // Borradores con total desfasado (ej. solo EXENTO y total=1 por falso positivo):
+        // alinear Haber / exentoIntegra con la suma real de conceptos antes de armar el asiento.
+        $this->previewSupport->sincronizarTotalesDesdeConceptos($comprobante);
 
         $politicaFlujo = $this->previewSupport->politicaFlujo($comprobante);
         if ($politicaFlujo['bloquea_sin_com'] ?? false) {
@@ -235,6 +243,17 @@ class ComprobanteProveedorAsientoService
                 $tieneCapexAnticipo
             )
             : 0;
+
+        $permiteRepartoGasto = ComprobanteProveedorDebeGastoSupport::modoPermiteReparto(
+            $usaProvisionCom,
+            $netoDesdeArticulosOc,
+            $facturaAnticipada,
+            $contratoImputacionManual,
+        );
+        $lineasRepartoGasto = $permiteRepartoGasto
+            ? ComprobanteProveedorDebeGastoSupport::lineasDesdeComprobante($comprobante)
+            : [];
+        $hayRepartoDebeGasto = ComprobanteProveedorDebeGastoSupport::tieneReparto($lineasRepartoGasto);
 
         $lineasDebe = [];
         $lineasHaberExtra = [];
@@ -286,6 +305,14 @@ class ComprobanteProveedorAsientoService
                 continue;
             }
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
+
+            // Reparto multi-cuenta en Asiento: el neto (y descuentos de neto) no arma Debe 1:1.
+            if ($hayRepartoDebeGasto && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
+                continue;
+            }
 
             // Negativo permitido: se netea al neto (no se postea Debe/Haber aparte).
             if ($monto < 0) {
@@ -447,6 +474,7 @@ class ComprobanteProveedorAsientoService
                 'observacion' => $descLineaErp,
                 'origen' => $esNetoSinReferencia ? 'neto_manual' : 'impuesto',
                 'editable_cuenta' => $esNetoSinReferencia,
+                'editable_importe' => false,
                 'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
             ];
         }
@@ -611,6 +639,22 @@ class ComprobanteProveedorAsientoService
             );
         }
 
+        if ($hayRepartoDebeGasto) {
+            $netoImputable = ComprobanteProveedorDebeGastoSupport::totalNetoImputable($comprobante);
+            if (! $permitirCuentasPendientes) {
+                ComprobanteProveedorDebeGastoSupport::assertSumaCuadraConNeto(
+                    $lineasRepartoGasto,
+                    $netoImputable
+                );
+            }
+            $lineasDebeGasto = ComprobanteProveedorDebeGastoSupport::aLineasDebeAsiento(
+                $lineasRepartoGasto,
+                $centrocostoId,
+                $descLineaErp
+            );
+            $lineasDebe = array_merge($lineasDebeGasto, $lineasDebe);
+        }
+
         if ($lineasDebe === []) {
             throw new RuntimeException('No hay conceptos con monto para contabilizar.');
         }
@@ -715,6 +759,7 @@ class ComprobanteProveedorAsientoService
             'cotizaciones' => [],
             'observaciones' => [],
             'editable_cuentas' => [],
+            'editable_importes' => [],
             'concepto_ivacompra_ids' => [],
             'origenes' => [],
         ];
@@ -728,6 +773,7 @@ class ComprobanteProveedorAsientoService
             $payloadAsiento['cotizaciones'][] = $monedaFactura['cotizacion'];
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
             $payloadAsiento['editable_cuentas'][] = ! empty($linea['editable_cuenta']);
+            $payloadAsiento['editable_importes'][] = ! empty($linea['editable_importe']);
             $payloadAsiento['concepto_ivacompra_ids'][] = (int) ($linea['concepto_ivacompra_id'] ?? 0);
             $payloadAsiento['origenes'][] = (string) ($linea['origen'] ?? '');
         }
@@ -741,6 +787,7 @@ class ComprobanteProveedorAsientoService
             $payloadAsiento['cotizaciones'][] = $monedaFactura['cotizacion'];
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
             $payloadAsiento['editable_cuentas'][] = ! empty($linea['editable_cuenta']);
+            $payloadAsiento['editable_importes'][] = ! empty($linea['editable_importe']);
             $payloadAsiento['concepto_ivacompra_ids'][] = (int) ($linea['concepto_ivacompra_id'] ?? 0);
             $payloadAsiento['origenes'][] = (string) ($linea['origen'] ?? '');
         }
@@ -752,6 +799,11 @@ class ComprobanteProveedorAsientoService
             'total_haber' => $totalHaber,
             'payload_asiento' => $payloadAsiento,
             'cuentas_pendientes' => $cuentasPendientes,
+            'permite_reparto_gasto' => $permiteRepartoGasto,
+            'neto_imputable_gasto' => $permiteRepartoGasto
+                ? ComprobanteProveedorDebeGastoSupport::totalNetoImputable($comprobante)
+                : 0.0,
+            'tiene_reparto_gasto' => $hayRepartoDebeGasto,
         ];
     }
 
@@ -906,6 +958,9 @@ class ComprobanteProveedorAsientoService
                 'error' => $error,
                 'es_preview' => true,
                 'cuentas_pendientes' => ! empty($preview['cuentas_pendientes']),
+                'permite_reparto_gasto' => ! empty($preview['permite_reparto_gasto']),
+                'neto_imputable_gasto' => (float) ($preview['neto_imputable_gasto'] ?? 0),
+                'tiene_reparto_gasto' => ! empty($preview['tiene_reparto_gasto']),
                 'total_comprobante' => round(abs((float) $comprobante->total), 2),
                 'total_debe' => $preview['total_debe'],
                 'total_haber' => $preview['total_haber'],
@@ -920,6 +975,7 @@ class ComprobanteProveedorAsientoService
                 'total_comprobante' => round(abs((float) $comprobante->total), 2),
                 'lineas' => [],
                 'permite_editar_cuentas' => false,
+                'permite_reparto_gasto' => false,
             ];
         }
     }
@@ -937,6 +993,7 @@ class ComprobanteProveedorAsientoService
         $centros = $payload['centrocosto_ids'] ?? [];
         $observaciones = $payload['observaciones'] ?? [];
         $editables = $payload['editable_cuentas'] ?? [];
+        $editablesImporte = $payload['editable_importes'] ?? [];
         $conceptoIds = $payload['concepto_ivacompra_ids'] ?? [];
         $origenes = $payload['origenes'] ?? [];
 
@@ -969,6 +1026,8 @@ class ComprobanteProveedorAsientoService
             $debe = (float) ($debes[$i] ?? 0);
             $haber = (float) ($haberes[$i] ?? 0);
             $editable = ! empty($editables[$i]);
+            $editableImporte = ! empty($editablesImporte[$i]);
+            $origen = (string) ($origenes[$i] ?? '');
 
             $lineas[] = [
                 'cuentacontable_id' => $cuentaId,
@@ -979,8 +1038,10 @@ class ComprobanteProveedorAsientoService
                 'haber' => $haber > 0 ? $haber : null,
                 'observacion' => (string) ($observaciones[$i] ?? ''),
                 'editable_cuenta' => $editable,
+                'editable_importe' => $editableImporte,
                 'concepto_ivacompra_id' => (int) ($conceptoIds[$i] ?? 0),
-                'origen' => (string) ($origenes[$i] ?? ''),
+                'origen' => $origen,
+                'es_debe_gasto' => $origen === 'debe_gasto' || ($editable && $editableImporte),
             ];
         }
 

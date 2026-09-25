@@ -93,9 +93,15 @@
                 @if (old('alta_npu', $data->alta_npu ?? false)) checked @endif>
             <label class="form-check-label" for="alta_npu">Alta de NPU al confirmar (ajuste / lab / hist&oacute;rico)</label>
         </div>
+        <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="pide_precio" id="pide_precio" value="1"
+                @if (old('pide_precio', $data->pide_precio ?? false)) checked @endif>
+            <label class="form-check-label" for="pide_precio">Pide precio obligatorio en movimientos de stock</label>
+        </div>
         <small class="form-text text-muted">
             Origen y destino en bien de uso son excluyentes. La baja de NPU exige operaci&oacute;n Salida y signo Resta.
             El alta de NPU exige operaci&oacute;n Entrada y signo Suma. Baja y alta NPU son excluyentes entre s&iacute;.
+            <strong>Pide precio</strong> muestra la columna Precio en Ferli (en otras instalaciones ya se muestra) y exige precio &gt; 0 en cada l&iacute;nea.
             La aprobaci&oacute;n aplica si <code>STOCK_TRANSFERENCIA_MODO_APROBACION=tipo_transaccion</code> en .env.
             <strong>Aviso opcional</strong> solo aplica a Transferencias (T): al grabar se pregunta si env&iacute;a o no el aviso; si dice que no, la transferencia queda directa (sin aviso ni aprobaci&oacute;n).
         </small>

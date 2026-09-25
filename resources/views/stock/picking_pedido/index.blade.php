@@ -38,10 +38,10 @@
                             <div class="input-group">
                                 <input type="text" name="picking_codigo" id="picking_codigo" class="form-control"
                                        value="{{ $picking_codigo ?? '' }}"
-                                       placeholder="N&uacute;mero secuencial"
-                                       title="F1 o lupa: pickings pendientes del d&iacute;a">
+                                       placeholder="Ej. 8 y Consultar"
+                                       title="Escrib&iacute; el n&uacute;mero y Consultar (cualquier fecha). F1 o lupa: modal">
                                 <div class="input-group-append">
-                                    <button type="button" class="btn btn-outline-secondary" id="btn-consulta-pickings-dia" title="Consultar pickings pendientes del d&iacute;a (F1)">
+                                    <button type="button" class="btn btn-outline-secondary" id="btn-consulta-pickings-dia" title="Consultar pickings (F1). Con n&uacute;mero busca cualquier fecha">
                                         <i class="fa fa-search"></i>
                                     </button>
                                 </div>

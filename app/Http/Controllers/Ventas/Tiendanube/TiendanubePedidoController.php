@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Ventas\Tiendanube;
 
 use App\Http\Controllers\Controller;
 use App\Models\Stock\Depmae;
+use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TiendanubePedido;
 use App\Services\Ventas\FacturacionService;
 use App\Services\Ventas\Tiendanube\TiendanubeApiClient;
@@ -146,8 +147,13 @@ class TiendanubePedidoController extends Controller
             $pedido->load(['lineas.articulo', 'lineas.combinacion', 'lineas.talle']);
         }
 
-        $puntoventas = TiendanubePedidoMaestrosSupport::puntoventasOnline($pedido->store_id);
-        $depositos = Depmae::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']);
+        $puedeOverridePvDep = can('editar-configuracion-tiendanube', false);
+        $puntoventas = $puedeOverridePvDep
+            ? TiendanubePedidoMaestrosSupport::puntoventasOnline($pedido->store_id)
+            : collect();
+        $depositos = $puedeOverridePvDep
+            ? Depmae::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre'])
+            : collect();
         $cuentacajas = TiendanubePedidoMaestrosSupport::cuentacajasOperativas($pedido->store_id);
         $cuentacajaSugeridaId = TiendanubePedidoMaestrosSupport::sugerirCuentacajaId(
             $pedido->gateway,
@@ -155,13 +161,15 @@ class TiendanubePedidoController extends Controller
             is_array($pedido->payment_json) ? $pedido->payment_json : null,
             $pedido->store_id,
         );
-        $resuelto = TiendanubePedidoMaestrosSupport::resolverPuntoventaYDeposito(
-            $pedido->store_id,
-            $pedido->puntoventa_id_sugerido,
-            $pedido->deposito_id_sugerido,
-        );
+        $resuelto = TiendanubePedidoMaestrosSupport::defaultsFacturacion($pedido->store_id);
         $pvDefaultId = (int) $resuelto['puntoventa_id'];
         $depDefaultId = (int) $resuelto['deposito_id'];
+        $pvDefault = $pvDefaultId > 0
+            ? Puntoventa::query()->find($pvDefaultId, ['id', 'codigo', 'nombre'])
+            : null;
+        $depDefault = $depDefaultId > 0
+            ? Depmae::query()->find($depDefaultId, ['id', 'codigo', 'nombre'])
+            : null;
         $listaprecioId = TiendanubePedidoMaestrosSupport::listaprecioIdDefault($pedido->store_id);
         $puedeFacturar = can('facturar-tiendanube-pedidos', false)
             && ! $pedido->estaFacturado()
@@ -191,6 +199,9 @@ class TiendanubePedidoController extends Controller
             'cuentacajaSugeridaId',
             'pvDefaultId',
             'depDefaultId',
+            'pvDefault',
+            'depDefault',
+            'puedeOverridePvDep',
             'listaprecioId',
             'puedeFacturar',
             'domicilioDefault',
@@ -252,9 +263,29 @@ class TiendanubePedidoController extends Controller
             $letra = 'B';
         }
 
+        $defaults = TiendanubePedidoMaestrosSupport::defaultsFacturacion($pedido->store_id);
+        $pvId = (int) $defaults['puntoventa_id'];
+        $depId = (int) $defaults['deposito_id'];
+        if (can('editar-configuracion-tiendanube', false)) {
+            $reqPv = (int) $request->input('puntoventa_id');
+            $reqDep = (int) $request->input('deposito_id');
+            $idsOnline = TiendanubePedidoMaestrosSupport::puntoventasOnline($pedido->store_id)
+                ->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->all();
+            if ($reqPv > 0 && ($idsOnline === [] || in_array($reqPv, $idsOnline, true))) {
+                $pvId = $reqPv;
+                if ($reqDep > 0) {
+                    $depId = $reqDep;
+                } else {
+                    $depId = (int) (TiendanubePedidoMaestrosSupport::depositoDefault($pvId, $pedido->store_id)?->id ?? $depId);
+                }
+            }
+        }
+
         $input = [
-            'puntoventa_id' => (int) $request->input('puntoventa_id'),
-            'deposito_id' => (int) $request->input('deposito_id'),
+            'puntoventa_id' => $pvId,
+            'deposito_id' => $depId,
             'cliente_id' => (int) $request->input('cliente_id') ?: null,
             'listaprecio_id' => (int) $request->input('listaprecio_id') ?: null,
             'medios_pago' => $medios,
@@ -279,7 +310,7 @@ class TiendanubePedidoController extends Controller
             $input['lineas'] = $seleccion;
         }
 
-        // Persistir sugerencias elegidas
+        // Persistir sugerencias alineadas a lo que se emite (default tienda u override config).
         $pedido->puntoventa_id_sugerido = $input['puntoventa_id'] ?: $pedido->puntoventa_id_sugerido;
         $pedido->deposito_id_sugerido = $input['deposito_id'] ?: $pedido->deposito_id_sugerido;
         if ($receptor['numerodocumento']) {

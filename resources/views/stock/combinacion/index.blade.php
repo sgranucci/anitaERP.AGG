@@ -23,7 +23,7 @@ function cambiarEstado(id, index, ambito){
     var data = "id=" + id + "&estado=" + estado + "&ambito=" + ambito + "&_token=" + token;
     $.ajax({
         type: "post",
-        url: '/anitaERP/public/stock/combinacion/updateState',
+        url: "{{ route('combinacion.updateState') }}",
         data: data,
         success: function(response){
           var parsed = {};
@@ -172,13 +172,13 @@ function cambiarEstado(id, index, ambito){
                                     @endif
 								@endif
                        			@if (can('editar-combinaciones-disenio', false))
-          							<a href="/anitaERP/public/stock/combinacion/edit/{{ $combinacion->id }}" type="button" class="btn-xs btn-primary ml-2">Dise&ntilde;o</a>
+          							<a href="{{ route('combinacion.edit', ['id' => $combinacion->id]) }}" type="button" class="btn-xs btn-primary ml-2">Dise&ntilde;o</a>
 								@endif
                        			@if (can('editar-combinaciones-tecnica', false))
-          							<a href="/anitaERP/public/stock/combinacion/edit/{{$combinacion->id}}/tecnica" type="button" class="btn-xs btn-primary ml-2">T&eacute;cnica</a>
+          							<a href="{{ route('combinacion.edit', ['id' => $combinacion->id, 'tipo' => 'tecnica']) }}" type="button" class="btn-xs btn-primary ml-2">T&eacute;cnica</a>
 								@endif
                        			@if (can('imprimir-articulos-qr', false))
-          							<a href="/anitaERP/public/stock/product/{{$combinacion->articulos->sku}}/{{$combinacion->codigo}}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
+          							<a href="{{ route('product.download', ['sku' => $combinacion->articulos->sku, 'codigo' => $combinacion->codigo]) }}" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
                                    		<i class="fa fa-qrcode"></i>
 									</a>
 								@endif

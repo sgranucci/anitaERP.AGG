@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Archivo;
 use App\Models\Compras\Comprobante_Proveedor_Articulo;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
+use App\Models\Compras\Comprobante_Proveedor_Debe_Gasto;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Ordencompra;
@@ -18,14 +19,17 @@ use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
+use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
 use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
+use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
@@ -43,6 +47,8 @@ use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Contable\MontoEsArSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Stock\ArticuloSkuMatchSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -191,6 +197,7 @@ class ComprobanteProveedorPersistenciaService
         }
 
         $this->sincronizarConceptos($request, $comprobante);
+        $this->sincronizarDebeGastos($request, $comprobante);
         $this->sincronizarArticulos($request, $comprobante);
         $this->sincronizarCuotas($request, $comprobante);
         $this->sincronizarRecepciones($request, $comprobante);
@@ -327,6 +334,7 @@ class ComprobanteProveedorPersistenciaService
         $comprobante = $this->comprobanteRepository->find($id);
         $this->conceptoRepository->deletePorComprobanteProveedor($id);
         $this->sincronizarConceptos($request, $comprobante);
+        $this->sincronizarDebeGastos($request, $comprobante);
         $this->sincronizarArticulos($request, $comprobante);
         Comprobante_Proveedor_Cuota::query()->where('comprobante_proveedor_id', $id)->delete();
         $this->sincronizarCuotas($request, $comprobante);
@@ -662,10 +670,10 @@ class ComprobanteProveedorPersistenciaService
             'fechaiva' => $request->input('fechaiva'),
             'fechavencimiento' => $request->input('fechavencimiento'),
             'fecharecepcion' => $request->input('fecharecepcion'),
-            'subtotal' => (float) $request->input('subtotal', 0),
-            'total' => (float) $request->input('total', 0),
+            'subtotal' => MontoEsArSupport::parse($request->input('subtotal', 0)),
+            'total' => MontoEsArSupport::parse($request->input('total', 0)),
             'moneda_id' => (int) $request->input('moneda_id', 1),
-            'cotizacion' => (float) $request->input('cotizacion', 1),
+            'cotizacion' => MontoEsArSupport::parse($request->input('cotizacion', 1)) ?: 1.0,
             'numerocae' => $request->input('numerocae'),
             'tipo_autorizacion' => ComprobanteProveedorTipoAutorizacion::normalizar(
                 $request->input('tipo_autorizacion')
@@ -732,6 +740,77 @@ class ComprobanteProveedorPersistenciaService
                 'cuentacontabledebe_id' => $cuentaDebeId,
             ]);
         }
+    }
+
+    private function sincronizarDebeGastos(Request $request, Comprobante_Proveedor $comprobante): void
+    {
+        EloquentAuditDeleteSupport::each(
+            Comprobante_Proveedor_Debe_Gasto::query()->where('comprobante_proveedor_id', $comprobante->id)
+        );
+
+        $comprobante->loadMissing([
+            'comprobante_proveedor_conceptos.concepto_ivacompras',
+            'ordencompras',
+            'comprobante_proveedor_recepciones.recepcion_proveedores',
+            'tipotransaccion_compras',
+        ]);
+
+        if (! $this->modoPermiteRepartoGasto($comprobante)) {
+            return;
+        }
+
+        // Sin campos en el form → sin reparto (queda 1:1 con conceptos).
+        if (! $request->exists('debe_gasto_cuenta_ids') && ! $request->exists('debe_gasto_importes')) {
+            return;
+        }
+
+        $lineas = ComprobanteProveedorDebeGastoSupport::lineasDesdeRequest($request);
+        if ($lineas === []) {
+            return;
+        }
+
+        $neto = ComprobanteProveedorDebeGastoSupport::totalNetoImputable($comprobante);
+        ComprobanteProveedorDebeGastoSupport::assertSumaCuadraConNeto($lineas, $neto);
+
+        foreach ($lineas as $linea) {
+            Comprobante_Proveedor_Debe_Gasto::query()->create([
+                'comprobante_proveedor_id' => $comprobante->id,
+                'orden' => (int) $linea['orden'],
+                'cuentacontable_id' => (int) $linea['cuentacontable_id'],
+                'importe' => (float) $linea['importe'],
+                'centrocosto_id' => ((int) ($linea['centrocosto_id'] ?? 0)) ?: null,
+            ]);
+        }
+    }
+
+    private function modoPermiteRepartoGasto(Comprobante_Proveedor $comprobante): bool
+    {
+        $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+        $usaProvisionCom = $modoAsignaRecepcion
+            && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
+        $fechaYmd = null;
+        if ($comprobante->fechacomprobante instanceof \DateTimeInterface) {
+            $fechaYmd = $comprobante->fechacomprobante->format('Y-m-d');
+        } elseif (filled($comprobante->fechacomprobante ?? null)) {
+            $fechaYmd = substr((string) $comprobante->fechacomprobante, 0, 10);
+        }
+        $contratoImputacionManual = OrdencompraContratoRutaFacturaSupport::imputacionManual(
+            $comprobante->ordencompras,
+            $fechaYmd
+        ) && ! $modoAsignaRecepcion;
+        $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
+        $netoDesdeArticulosOc = ! $usaProvisionCom
+            && ! $facturaAnticipada
+            && ! $contratoImputacionManual
+            && (int) ($comprobante->ordencompra_id ?? 0) > 0
+            && $comprobante->ordencompras !== null;
+
+        return ComprobanteProveedorDebeGastoSupport::modoPermiteReparto(
+            $usaProvisionCom,
+            $netoDesdeArticulosOc,
+            $facturaAnticipada,
+            $contratoImputacionManual,
+        );
     }
 
     private function sincronizarArticulos(Request $request, Comprobante_Proveedor $comprobante): void

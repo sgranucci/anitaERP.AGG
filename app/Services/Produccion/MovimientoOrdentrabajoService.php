@@ -9,8 +9,10 @@ use App\Repositories\Ventas\Pedido_CombinacionRepositoryInterface;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Repositories\Produccion\MovimientoOrdentrabajoRepositoryInterface;
 use App\Repositories\Produccion\OperacionRepositoryInterface;
+use App\Support\Configuracion\CupsRemotoImpresionSupport;
 use App\Support\Stock\OtTerminadaAltaStockFerliSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
@@ -405,8 +407,11 @@ class MovimientoOrdentrabajoService
 		return ($fl_borro);
 	}
 
-	// Empaca tarea en produccion
-
+	/**
+	 * Empaca tarea en producción (fin de armado) e imprime etiqueta térmica.
+	 *
+	 * @return array{ok: bool, mensaje: string}
+	 */
 	public function empacaTarea($request)
 	{
 		$estadoEnum = self::estadoEnum();
@@ -471,130 +476,173 @@ class MovimientoOrdentrabajoService
 		} catch (\Exception $e) 
 		{
 			DB::rollback();
-			dd($e->getMessage());
-			return $e->getMessage();
+			Log::error('empacaTarea: '.$e->getMessage(), ['exception' => $e]);
+
+			return [
+				'ok' => false,
+				'mensaje' => 'No se pudo empacar la OT: '.$e->getMessage(),
+			];
 		}
-		// Imprime tarea de armado
-		// Arma nombre de archivo
-		$nombreReporte = "tmp/empaqueOT-" . $data['ordentrabajo_id'] . '.txt';
+
+		$impresion = $this->imprimirEtiquetaEmpaque($request, (int) $data['ordentrabajo_id']);
+
+		if ($impresion['ok']) {
+			return [
+				'ok' => true,
+				'mensaje' => 'OT empacada con éxito. '.$impresion['mensaje'],
+			];
+		}
+
+		return [
+			'ok' => true,
+			'mensaje' => 'OT empacada con éxito, pero la etiqueta no se imprimió: '.$impresion['mensaje'],
+		];
+	}
+
+	/**
+	 * Genera e imprime el ticket térmico de empaque (cola CUPS "calidad").
+	 *
+	 * @param  array<string, mixed>  $request
+	 * @return array{ok: bool, mensaje: string}
+	 */
+	private function imprimirEtiquetaEmpaque(array $request, int $ordentrabajoId): array
+	{
+		$nombreReporte = 'tmp/empaqueOT-'.$ordentrabajoId.'.txt';
 		$reporte = chr(27).chr(33).chr(2);
-		$reporte .= "Empaque de ORDEN DE TRABAJO NRO. ".$request['codigoordentrabajo']."\n\n";
-		
-		if (isset($request['pedido']))
-			$reporte .= "PEDIDO NRO: ".$request['pedido']."\n";
+		$reporte .= 'Empaque de ORDEN DE TRABAJO NRO. '.$request['codigoordentrabajo']."\n\n";
+
+		if (isset($request['pedido'])) {
+			$reporte .= 'PEDIDO NRO: '.$request['pedido']."\n";
+		}
 
 		$reporte .= chr(27).chr(33).chr(32).$request['cliente']."\n\n";
-		$reporte .= $request['nombretiposuspensioncliente']."\n";
+		$reporte .= ($request['nombretiposuspensioncliente'] ?? '')."\n";
 
 		$reporte .= "Articulo: \n";
 		$reporte .= chr(27).chr(33).chr(32).$request['articulo']."\n";
 
-		$reporte .= chr(27).chr(33).chr(2)."SKU: ".$request['sku']."\n\n";
-		$reporte .= "Combinacion: ".$request['combinacion']."\n\n";
+		$reporte .= chr(27).chr(33).chr(2).'SKU: '.$request['sku']."\n\n";
+		$reporte .= 'Combinacion: '.$request['combinacion']."\n\n";
 
 		$reporte .= "MEDIDAS\n";
-		$medidas = json_decode($request['medidas']);
-		
-		foreach($medidas as $medida)
-		{
-			$reporte .= "Talle: ".$medida->nombretalle." Cantidad: ".$medida->cantidad."\n";
+		$medidas = json_decode($request['medidas'] ?? '[]');
+		if (is_array($medidas) || $medidas instanceof \Traversable) {
+			foreach ($medidas as $medida) {
+				$talle = is_object($medida)
+					? ($medida->nombretalle ?? $medida->talle ?? '')
+					: '';
+				$cantidad = is_object($medida) ? ($medida->cantidad ?? '') : '';
+				$reporte .= 'Talle: '.$talle.' Cantidad: '.$cantidad."\n";
+			}
 		}
 
 		$pedido_combinacion = $this->pedido_combinacionRepository->find($request['pedido_combinacion_id']);
-		if ($pedido_combinacion)
-		{
+		if ($pedido_combinacion) {
 			$reporte .= $pedido_combinacion->observacion."\n";
-		}		
+		}
 
 		$reporte .= chr(27).chr(33).chr(32);
 		$reporte .= "\nTotal pares: ".$request['pares']."\n\n\n\n\n\n\n\n\n\n\n\n\n";
 		$reporte .= chr(27).chr(33).chr(2)."\n";
-		
+
 		Storage::disk('local')->put($nombreReporte, $reporte);
 		$path = Storage::path($nombreReporte);
-		system("lp -dcalidad ".$path);
 
-		Storage::disk('local')->delete($nombreReporte);
-		// Agrega listado de OT asociadas por lote de stock
-		if ($request['cliente'] == Config::get("consprod.NOMBRE_CLIENTE_STOCK"))
-		{
-			// Lee la OT
-			$ot = $this->ordentrabajoRepository->find($data['ordentrabajo_id']);
+		try {
+			$resultado = CupsRemotoImpresionSupport::imprimirArchivo(
+				$path,
+				(string) config('impresion_termica.cola_empaque', 'calidad')
+			);
+		} finally {
+			Storage::disk('local')->delete($nombreReporte);
+		}
 
-			// Trae las OT
-			if ($ot)
-			{
-				$otStock = $this->ordentrabajo_combinacion_talleRepository->findPorOrdentrabajoStockId($ot->codigo);
+		// OT de stock: listado de OT asociadas (misma cola)
+		if (($request['cliente'] ?? '') == Config::get('consprod.NOMBRE_CLIENTE_STOCK')) {
+			$this->imprimirOtStockAsociadas($request, $ordentrabajoId);
+		}
 
-				$anterOrdenTrabajo_id = 0;
-				$totalPares = 0;
-				foreach($otStock as $ot)
-				{
-					// Si encuentra la misma ot no la imprime
-					if ($ot->ordentrabajo_id != $data['ordentrabajo_id'])
-					{
-						if ($ot->ordentrabajo_id != $anterOrdenTrabajo_id)
-						{
-							if ($anterOrdenTrabajo_id != 0)
-							{
-								$reporte .= chr(27).chr(33).chr(32);
-								$reporte .= "\nTotal pares: ".$totalPares."\n\n\n\n\n\n\n\n\n\n\n\n\n";
-								$reporte .= chr(27).chr(33).chr(2)."\n";
-								
-								Storage::disk('local')->put($nombreReporte, $reporte);
-								$path = Storage::path($nombreReporte);
-								system("lp -dcalidad ".$path);
-						
-								Storage::disk('local')->delete($nombreReporte);
-								//dd($reporte);
-							}
-							$reporte = "";
-							$nombreReporte = "tmp/OTstock-" . $ot->ordentrabajo_id . '.txt';
-							$reporte = chr(27).chr(33).chr(2);
-							$reporte .= "ORDEN DE TRABAJO NRO. ".$ot->ordentrabajo_id."\n";
-							$reporte .= "ASOCIADA A LA OT DE STOCK NRO. ".$data['ordentrabajo_id']."\n";
-							
-							$reporte .= "PEDIDO NRO: ".$ot->pedido_combinacion_talles->pedidos_combinacion->pedido_id."\n";
-				
-							// Lee el cliente
-							$cliente = $this->clienteRepository->find($ot->cliente_id);
+		return $resultado;
+	}
 
-							if ($cliente)
-							{
-								$reporte .= chr(27).chr(33).chr(32).$cliente->nombre."\n\n";
-							}
-				
-							$reporte .= "Articulo: \n";
-							$reporte .= chr(27).chr(33).chr(32).$request['articulo']."\n";
-					
-							$reporte .= chr(27).chr(33).chr(2)."SKU: ".$request['sku']."\n\n";
-							$reporte .= "Combinacion: ".$request['combinacion']."\n\n";
-				
-							$reporte .= "MEDIDAS\n";
+	/**
+	 * @param  array<string, mixed>  $request
+	 */
+	private function imprimirOtStockAsociadas(array $request, int $ordentrabajoId): void
+	{
+		$ot = $this->ordentrabajoRepository->find($ordentrabajoId);
+		if (! $ot) {
+			return;
+		}
 
-							$anterOrdenTrabajo_id = $ot->ordentrabajo_id;
-							$totalPares = 0;
-						}
+		$otStock = $this->ordentrabajo_combinacion_talleRepository->findPorOrdentrabajoStockId($ot->codigo);
+		$anterOrdenTrabajo_id = 0;
+		$totalPares = 0;
+		$reporte = '';
+		$nombreReporte = '';
 
-						$reporte .= "Talle: ".$ot->pedido_combinacion_talles->talles->nombre.
-									" Cantidad: ".$ot->pedido_combinacion_talles->cantidad."\n";
-						$totalPares += $ot->pedido_combinacion_talles->cantidad;
-					}
-				}
+		foreach ($otStock as $otItem) {
+			if ($otItem->ordentrabajo_id == $ordentrabajoId) {
+				continue;
+			}
 
-				if ($totalPares > 0)
-				{
+			if ($otItem->ordentrabajo_id != $anterOrdenTrabajo_id) {
+				if ($anterOrdenTrabajo_id != 0 && $reporte !== '') {
 					$reporte .= chr(27).chr(33).chr(32);
 					$reporte .= "\nTotal pares: ".$totalPares."\n\n\n\n\n\n\n\n\n\n\n\n\n";
 					$reporte .= chr(27).chr(33).chr(2)."\n";
-				
-					Storage::disk('local')->put($nombreReporte, $reporte);
-					$path = Storage::path($nombreReporte);
-					system("lp -dcalidad ".$path);
+					$this->enviarTicketTermicoEmpaque($nombreReporte, $reporte);
 				}
 
-				Storage::disk('local')->delete($nombreReporte);
+				$nombreReporte = 'tmp/OTstock-'.$otItem->ordentrabajo_id.'.txt';
+				$reporte = chr(27).chr(33).chr(2);
+				$reporte .= 'ORDEN DE TRABAJO NRO. '.$otItem->ordentrabajo_id."\n";
+				$reporte .= 'ASOCIADA A LA OT DE STOCK NRO. '.$ordentrabajoId."\n";
+				$reporte .= 'PEDIDO NRO: '.$otItem->pedido_combinacion_talles->pedidos_combinacion->pedido_id."\n";
+
+				$cliente = $this->clienteRepository->find($otItem->cliente_id);
+				if ($cliente) {
+					$reporte .= chr(27).chr(33).chr(32).$cliente->nombre."\n\n";
+				}
+
+				$reporte .= "Articulo: \n";
+				$reporte .= chr(27).chr(33).chr(32).$request['articulo']."\n";
+				$reporte .= chr(27).chr(33).chr(2).'SKU: '.$request['sku']."\n\n";
+				$reporte .= 'Combinacion: '.$request['combinacion']."\n\n";
+				$reporte .= "MEDIDAS\n";
+
+				$anterOrdenTrabajo_id = $otItem->ordentrabajo_id;
+				$totalPares = 0;
 			}
+
+			$reporte .= 'Talle: '.$otItem->pedido_combinacion_talles->talles->nombre.
+						' Cantidad: '.$otItem->pedido_combinacion_talles->cantidad."\n";
+			$totalPares += $otItem->pedido_combinacion_talles->cantidad;
+		}
+
+		if ($totalPares > 0 && $reporte !== '') {
+			$reporte .= chr(27).chr(33).chr(32);
+			$reporte .= "\nTotal pares: ".$totalPares."\n\n\n\n\n\n\n\n\n\n\n\n\n";
+			$reporte .= chr(27).chr(33).chr(2)."\n";
+			$this->enviarTicketTermicoEmpaque($nombreReporte, $reporte);
+		}
+	}
+
+	private function enviarTicketTermicoEmpaque(string $nombreRelativo, string $contenido): void
+	{
+		if ($nombreRelativo === '' || $contenido === '') {
+			return;
+		}
+
+		Storage::disk('local')->put($nombreRelativo, $contenido);
+		$path = Storage::path($nombreRelativo);
+		try {
+			CupsRemotoImpresionSupport::imprimirArchivo(
+				$path,
+				(string) config('impresion_termica.cola_empaque', 'calidad')
+			);
+		} finally {
+			Storage::disk('local')->delete($nombreRelativo);
 		}
 	}
 

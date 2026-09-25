@@ -19,6 +19,7 @@ use App\Repositories\Produccion\TareaRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
+use App\Support\Configuracion\CupsRemotoImpresionSupport;
 use App\Support\Ventas\QrCodePngSupport;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
 use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
@@ -3176,9 +3177,14 @@ class OrdentrabajoService
 
 		Storage::disk('local')->put($nombreReporte, $reporte);
 		$path = Storage::path($nombreReporte);
-		system("lp -darmado ".$path." 1>&2 2>/dev/null");
-
-		Storage::disk('local')->delete($nombreReporte);
+		try {
+			CupsRemotoImpresionSupport::imprimirArchivo(
+				$path,
+				(string) config('impresion_termica.cola_armado', 'armado')
+			);
+		} finally {
+			Storage::disk('local')->delete($nombreReporte);
+		}
 	}
 	
 	// Trae el estado de la orden de trabajo segun el item del pedido y id de ot

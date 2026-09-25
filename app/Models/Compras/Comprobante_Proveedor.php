@@ -129,6 +129,13 @@ class Comprobante_Proveedor extends Model implements Auditable
             ->orderBy('orden');
     }
 
+    /** Reparto multi-cuenta del Debe de gasto (solapa Asiento). */
+    public function comprobante_proveedor_debe_gastos()
+    {
+        return $this->hasMany(Comprobante_Proveedor_Debe_Gasto::class, 'comprobante_proveedor_id')
+            ->orderBy('orden');
+    }
+
     public function comprobante_proveedor_articulos()
     {
         return $this->hasMany(Comprobante_Proveedor_Articulo::class, 'comprobante_proveedor_id')

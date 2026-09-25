@@ -40,6 +40,7 @@ final class StockLocalInformeListadoFiltros
      *   hasta_sku: string,
      *   desde_color: ?int,
      *   hasta_color: ?int,
+     *   mventa_id: ?int,
      *   solo_con_saldo: bool
      * }
      */
@@ -73,6 +74,7 @@ final class StockLocalInformeListadoFiltros
             'hasta_sku' => self::textoOpcional($request->input('hasta_sku')),
             'desde_color' => self::enteroRangoOpcional($request->input('desde_color')),
             'hasta_color' => self::enteroRangoOpcional($request->input('hasta_color')),
+            'mventa_id' => self::enteroOpcional($request->input('mventa_id')),
             'solo_con_saldo' => $request->input('solo_con_saldo', '1') !== '0',
         ];
 
@@ -101,6 +103,7 @@ final class StockLocalInformeListadoFiltros
             'hasta_sku' => $filtros['hasta_sku'] ?? null,
             'desde_color' => $filtros['desde_color'] ?? null,
             'hasta_color' => $filtros['hasta_color'] ?? null,
+            'mventa_id' => $filtros['mventa_id'] ?? null,
             'solo_con_saldo' => ($filtros['solo_con_saldo'] ?? true) ? '1' : '0',
             'consultar' => 1,
         ], static fn ($v) => $v !== null && $v !== '');
@@ -120,6 +123,7 @@ final class StockLocalInformeListadoFiltros
             || trim((string) ($filtros['hasta_sku'] ?? '')) !== ''
             || isset($filtros['desde_color'])
             || isset($filtros['hasta_color'])
+            || ! empty($filtros['mventa_id'])
             || ! ($filtros['solo_con_saldo'] ?? true);
     }
 

@@ -4,6 +4,7 @@ namespace App\Support\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Concepto;
+use App\Models\Compras\Comprobante_Proveedor_Debe_Gasto;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Ordencompra;
@@ -88,14 +89,50 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $this->construirRecepcionesDesdeRequest($request)
         );
 
+        $comprobante->setRelation(
+            'comprobante_proveedor_debe_gastos',
+            $this->construirDebeGastosDesdeRequest($request, $base)
+        );
+
         return $comprobante;
     }
 
     /**
-     * En preview on-the-fly el campo #total a veces queda desfasado del monto de conceptos
-     * (ej. al editar Perc. IIBB). El Haber del asiento usa total: alinear con la suma de líneas.
+     * @return Collection<int, Comprobante_Proveedor_Debe_Gasto>
      */
-    private function sincronizarTotalesDesdeConceptos(Comprobante_Proveedor $comprobante): void
+    private function construirDebeGastosDesdeRequest(Request $request, ?Comprobante_Proveedor $base): Collection
+    {
+        // Si el form manda el bloque (aunque vacío), manda el form; si no, usa lo persistido.
+        if (! $request->exists('debe_gasto_cuenta_ids') && ! $request->exists('debe_gasto_importes')) {
+            if ($base !== null) {
+                $base->loadMissing('comprobante_proveedor_debe_gastos');
+
+                return $base->comprobante_proveedor_debe_gastos ?? collect();
+            }
+
+            return collect();
+        }
+
+        $lineas = ComprobanteProveedorDebeGastoSupport::lineasDesdeRequest($request);
+        $out = collect();
+        foreach ($lineas as $linea) {
+            $modelo = new Comprobante_Proveedor_Debe_Gasto([
+                'orden' => (int) $linea['orden'],
+                'cuentacontable_id' => (int) $linea['cuentacontable_id'],
+                'importe' => (float) $linea['importe'],
+                'centrocosto_id' => ((int) ($linea['centrocosto_id'] ?? 0)) ?: null,
+            ]);
+            $out->push($modelo);
+        }
+
+        return $out;
+    }
+
+    /**
+     * El Haber del asiento usa total: alinear con la suma de líneas cuando el campo quedó desfasado
+     * (preview on-the-fly, borrador con total erróneo, Perc. IIBB, solo EXENTO, etc.).
+     */
+    public function sincronizarTotalesDesdeConceptos(Comprobante_Proveedor $comprobante): void
     {
         $conceptos = $comprobante->comprobante_proveedor_conceptos;
         if ($conceptos === null || $conceptos->isEmpty()) {

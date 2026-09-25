@@ -251,8 +251,9 @@ final class TiendanubePedidoSyncService
             'shipping_json' => $shipping !== [] ? $shipping : ($order['shipping'] ?? null),
             'payment_json' => $payment['raw'],
             'payload_json' => $order,
-            'puntoventa_id_sugerido' => $existente?->puntoventa_id_sugerido ?: $pvDefault?->id,
-            'deposito_id_sugerido' => $existente?->deposito_id_sugerido ?: $depDefault?->id,
+            // Siempre el default de la tienda (no conservar sugeridos viejos / erróneos).
+            'puntoventa_id_sugerido' => $pvDefault?->id,
+            'deposito_id_sugerido' => $depDefault?->id,
             'synced_at' => now(),
         ];
 

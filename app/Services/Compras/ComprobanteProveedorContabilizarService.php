@@ -8,6 +8,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
+use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorCondicionPagoNcNdSupport;
 use App\Support\Compras\ComprobanteProveedorCuotasTotalSupport;
@@ -115,6 +116,22 @@ class ComprobanteProveedorContabilizarService
 
         if ($comprobante->comprobante_proveedor_conceptos()->count() === 0) {
             throw new RuntimeException('Agregue al menos un concepto IVA antes de contabilizar.');
+        }
+
+        // Total desfasado de conceptos (ej. solo EXENTO con total=1): alinear y persistir
+        // antes de cuotas / asiento / CC.
+        $comprobante->loadMissing('comprobante_proveedor_conceptos.concepto_ivacompras');
+        $totalAntes = round(abs((float) ($comprobante->total ?? 0)), 2);
+        $subtotalAntes = round(abs((float) ($comprobante->subtotal ?? 0)), 2);
+        app(ComprobanteProveedorAsientoPreviewSupport::class)
+            ->sincronizarTotalesDesdeConceptos($comprobante);
+        $totalDespues = round(abs((float) ($comprobante->total ?? 0)), 2);
+        $subtotalDespues = round(abs((float) ($comprobante->subtotal ?? 0)), 2);
+        if (abs($totalDespues - $totalAntes) > 0.005 || abs($subtotalDespues - $subtotalAntes) > 0.005) {
+            $comprobante->forceFill([
+                'total' => $totalDespues,
+                'subtotal' => $subtotalDespues,
+            ])->save();
         }
 
         $comprobante->loadMissing('comprobante_proveedor_cuotas');

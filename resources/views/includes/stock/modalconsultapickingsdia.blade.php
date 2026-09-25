@@ -3,7 +3,7 @@
   <div class="modal-dialog modal-xl" role="document">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="consultapickingsdiaModalLabel">Pickings pendientes de facturar</h5>
+        <h5 class="modal-title" id="consultapickingsdiaModalLabel">Consultar pickings</h5>
         <button type="button" class="close" data-dismiss="modal" aria-label="Close">
           <span aria-hidden="true">&times;</span>
         </button>
@@ -12,11 +12,13 @@
         <div class="form-group row mb-2">
           <label for="consultapickingsdia_fecha" class="col-form-label col-auto pr-2">Fecha:</label>
           <div class="col-auto">
-            <input type="date" id="consultapickingsdia_fecha" class="form-control form-control-sm" value="{{ date('Y-m-d') }}">
+            <input type="date" id="consultapickingsdia_fecha" class="form-control form-control-sm" value="{{ date('Y-m-d') }}" title="Listado del d&iacute;a (solo pendientes)">
           </div>
           <label for="consultapickingsdia" class="col-form-label col-auto pr-2">Buscar N&deg;:</label>
           <div class="col">
-            <input type="text" id="consultapickingsdia" class="form-control form-control-sm" autocomplete="off" placeholder="N&uacute;mero de picking">
+            <input type="text" id="consultapickingsdia" class="form-control form-control-sm" autocomplete="off"
+                   placeholder="N&deg; picking (cualquier fecha)"
+                   title="Si ingres&aacute;s el n&uacute;mero, busca en cualquier fecha (incluye facturados para reimprimir)">
           </div>
           <div class="col-auto">
             <button type="button" class="btn btn-primary btn-sm" id="btn-buscar-pickings-dia">
@@ -24,6 +26,9 @@
             </button>
           </div>
         </div>
+        <p class="text-muted small mb-2">
+          Con <strong>fecha</strong>: pendientes de ese d&iacute;a. Con <strong>n&uacute;mero</strong>: lo encuentra aunque sea de otro d&iacute;a o ya facturado (reimprimir).
+        </p>
         <div class="table-responsive">
           <table class="table table-sm table-striped table-bordered table-hover mb-0">
             <thead style="background:#85C1E9;color:#17202A;">

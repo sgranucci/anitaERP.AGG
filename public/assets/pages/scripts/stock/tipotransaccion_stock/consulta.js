@@ -147,6 +147,7 @@ function activarCapturaEnterAbreviaturaTipotransaccionStock() {
             var avisoOpcional = $tr.find('.aviso-opcional').html() || '0';
             var bajaNpu = $tr.find('.baja-npu').html() || '0';
             var altaNpu = $tr.find('.alta-npu').html() || '0';
+            var pidePrecio = $tr.find('.pide-precio').html() || '0';
 
             if ($('#tipotransaccion_stock_id').length && ptrTipotransaccionStock_id
                 && ptrTipotransaccionStock_id.attr('id') === 'tipotransaccion_stock_id'
@@ -163,6 +164,7 @@ function activarCapturaEnterAbreviaturaTipotransaccionStock() {
                     aviso_opcional: avisoOpcional === '1',
                     baja_npu: bajaNpu === '1',
                     alta_npu: altaNpu === '1',
+                    pide_precio: pidePrecio === '1',
                 });
                 $('#consultatipotransaccionstockModal').modal('hide');
                 return;

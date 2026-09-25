@@ -98,6 +98,7 @@
                     'aviso_opcional' => (bool) ($tipoActual?->aviso_opcional ?? false),
                     'baja_npu' => (bool) ($tipoActual?->baja_npu ?? false),
                     'alta_npu' => (bool) ($tipoActual?->alta_npu ?? false),
+                    'pide_precio' => (bool) ($tipoActual?->pide_precio ?? false),
                     'col_label' => 'col-lg-4 col-form-label',
                     'col_input' => 'col-lg-8',
                 ])
@@ -399,6 +400,7 @@
     				<th class="col-comb">Combinaci&oacute;n</th>
     				<th class="col-mod">M&oacute;dulo</th>
     				<th class="col-qty text-right">Cantidad</th>
+                    <th class="col-precio text-right ms-col-pide-precio" title="Precio unitario obligatorio para este tipo de transacci&oacute;n">Precio</th>
 					<th class="col-flag" title="Marcar para listar todos los art&iacute;culos (sin filtro de canal / local)">A</th>
     				<th class="col-flag" title="Marcar para listar tambi&eacute;n combinaciones inactivas (por defecto solo activas del canal)">C</th>
                     @else
@@ -629,6 +631,10 @@
     #tabla-items-movimientostock .col-qty-dest { width: 5rem; }
     #tabla-items-movimientostock .col-umd-dest { width: 3.25rem; }
     #tabla-items-movimientostock .col-precio { width: 5.5rem; }
+    #tabla-items-movimientostock:not(.ms-pide-precio) th.ms-col-pide-precio,
+    #tabla-items-movimientostock:not(.ms-pide-precio) td.ms-col-pide-precio {
+        display: none;
+    }
     #tabla-items-movimientostock .ms-insumo-destino-sku {
         max-width: 100%;
         overflow: hidden;

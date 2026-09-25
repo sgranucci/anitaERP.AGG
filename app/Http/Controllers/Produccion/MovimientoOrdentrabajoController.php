@@ -179,11 +179,13 @@ class MovimientoOrdentrabajoController extends Controller
     {
         can('empacar-ordenes-de-trabajo');
 
-		$this->movimientoOrdentrabajoService->empacaTarea($request->all());
+		$resultado = $this->movimientoOrdentrabajoService->empacaTarea($request->all());
 
-		$mensaje = "OT empacada con éxito";
+		if (is_array($resultado) && isset($resultado['mensaje'])) {
+			return (string) $resultado['mensaje'];
+		}
 
-        return $mensaje;        
+		return is_string($resultado) ? $resultado : 'OT empacada con éxito';
     }
 
     // Lee tareas

@@ -325,11 +325,19 @@
             return $('#csrf_token').val() || $('input[name="_token"]').val() || '';
         }
 
+        function mensajeVacioPickingsDia() {
+            var texto = ($('#consultapickingsdia').val() || '').trim();
+            if (texto !== '' && /^\d+$/.test(texto)) {
+                return 'No se encontró el picking Nº ' + texto;
+            }
+            return 'Sin pickings pendientes en la fecha';
+        }
+
         function renderPickingsDia(filas) {
             var $tbody = $('#datospickingsdia');
             $tbody.empty();
             if (!filas || !filas.length) {
-                $tbody.append('<tr><td colspan="7" class="text-center text-muted">Sin pickings pendientes en la fecha</td></tr>');
+                $tbody.append('<tr><td colspan="7" class="text-center text-muted">' + mensajeVacioPickingsDia() + '</td></tr>');
                 return;
             }
             $.each(filas, function (_i, fila) {
@@ -337,7 +345,15 @@
                 $tr.append($('<td/>').text(fila.codigo));
                 $tr.append($('<td/>').text(fila.fecha || ''));
                 $tr.append($('<td/>').text(fila.usuario || ''));
-                $tr.append($('<td class="text-right"/>').text(fila.lineas_pendientes || 0));
+                var pend = parseInt(fila.lineas_pendientes, 10) || 0;
+                var fact = parseInt(fila.lineas_facturadas, 10) || 0;
+                var celdaPend = String(pend);
+                if (fact > 0 && pend === 0) {
+                    celdaPend = '0 (facturado)';
+                } else if (fact > 0) {
+                    celdaPend = pend + ' (+' + fact + ' fact.)';
+                }
+                $tr.append($('<td class="text-right"/>').text(celdaPend));
                 $tr.append($('<td class="text-right"/>').text(fila.clientes || 0));
                 $tr.append($('<td/>').text(fila.clientes_nombres || ''));
                 var $acciones = $('<td class="text-nowrap"/>');

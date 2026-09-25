@@ -184,6 +184,22 @@
                     </div>
 
                     <div class="form-group row">
+                        <label for="mventa_id" class="{{ $colLabel }}">Marca</label>
+                        <div class="{{ $colInput }}">
+                            <select name="mventa_id" id="mventa_id" class="form-control">
+                                <option value="">— Todas —</option>
+                                @foreach ($mventa_query ?? [] as $marca)
+                                    <option value="{{ $marca->id }}"
+                                        @selected((int) ($filtros['mventa_id'] ?? 0) === (int) $marca->id)>
+                                        {{ $marca->nombre }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="form-text text-muted">Vacío = todas las marcas del canal local.</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
                         <label class="{{ $colLabel }}">Opciones</label>
                         <div class="{{ $colInput }}">
                             <div class="custom-control custom-checkbox">

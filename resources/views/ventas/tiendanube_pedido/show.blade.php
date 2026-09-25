@@ -295,29 +295,47 @@
                             <div class="card-header"><strong>Emisión</strong></div>
                             <div class="card-body">
                                 <div class="form-group row">
-                                    <label class="col-lg-3 control-label text-right pr-2 requerido">Punto de venta</label>
+                                    <label class="col-lg-3 control-label text-right pr-2">Punto de venta</label>
                                     <div class="col-lg-5">
-                                        <select name="puntoventa_id" id="puntoventa_id" class="form-control" required>
-                                            <option value="">Seleccione…</option>
-                                            @foreach ($puntoventas as $pv)
-                                                <option value="{{ $pv->id }}" @if ((int) $pv->id === (int) $pvDefaultId) selected @endif>
-                                                    {{ $pv->codigo }} — {{ $pv->nombre }}
-                                                </option>
-                                            @endforeach
-                                        </select>
+                                        @if ($puedeOverridePvDep ?? false)
+                                            <select name="puntoventa_id" id="puntoventa_id" class="form-control" required>
+                                                <option value="">Seleccione…</option>
+                                                @foreach ($puntoventas as $pv)
+                                                    <option value="{{ $pv->id }}" @if ((int) $pv->id === (int) $pvDefaultId) selected @endif>
+                                                        {{ $pv->codigo }} — {{ $pv->nombre }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                            <small class="form-text text-muted">
+                                                Override (config TN). El default de la tienda se usa si no elegís.
+                                            </small>
+                                        @else
+                                            <input type="hidden" name="puntoventa_id" value="{{ (int) $pvDefaultId }}">
+                                            <input type="text" class="form-control" readonly
+                                                   value="{{ $pvDefault ? trim(($pvDefault->codigo ?? '').' — '.($pvDefault->nombre ?? ''), ' —') : 'Sin default en config de la tienda' }}">
+                                            <small class="form-text text-muted">
+                                                Fijo por tienda (Configuración → Tienda Nube). No se pide al facturar para evitar errores.
+                                            </small>
+                                        @endif
                                     </div>
                                 </div>
                                 <div class="form-group row">
-                                    <label class="col-lg-3 control-label text-right pr-2 requerido">Depósito</label>
+                                    <label class="col-lg-3 control-label text-right pr-2">Depósito</label>
                                     <div class="col-lg-5">
-                                        <select name="deposito_id" id="deposito_id" class="form-control" required>
-                                            <option value="">Seleccione…</option>
-                                            @foreach ($depositos as $dep)
-                                                <option value="{{ $dep->id }}" @if ((int) $dep->id === (int) $depDefaultId) selected @endif>
-                                                    {{ $dep->codigo }} — {{ $dep->nombre }}
-                                                </option>
-                                            @endforeach
-                                        </select>
+                                        @if ($puedeOverridePvDep ?? false)
+                                            <select name="deposito_id" id="deposito_id" class="form-control" required>
+                                                <option value="">Seleccione…</option>
+                                                @foreach ($depositos as $dep)
+                                                    <option value="{{ $dep->id }}" @if ((int) $dep->id === (int) $depDefaultId) selected @endif>
+                                                        {{ $dep->codigo }} — {{ $dep->nombre }}
+                                                    </option>
+                                                @endforeach
+                                            </select>
+                                        @else
+                                            <input type="hidden" name="deposito_id" value="{{ (int) $depDefaultId }}">
+                                            <input type="text" class="form-control" readonly
+                                                   value="{{ $depDefault ? trim(($depDefault->codigo ?? '').' — '.($depDefault->nombre ?? ''), ' —') : 'Sin default en config de la tienda' }}">
+                                        @endif
                                     </div>
                                 </div>
                             </div>

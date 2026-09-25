@@ -51,7 +51,24 @@ final class TiendanubePedidoMaestrosSupport
     }
 
     /**
+     * PV y depósito default de la tienda (configuración). Fuente de verdad para facturar sin pedir al usuario.
+     *
+     * @return array{puntoventa_id:int,deposito_id:int}
+     */
+    public static function defaultsFacturacion(?string $storeId = null): array
+    {
+        $pvId = (int) (self::puntoventaDefault($storeId)?->id ?? 0);
+        $depId = (int) (self::depositoDefault($pvId > 0 ? $pvId : null, $storeId)?->id ?? 0);
+
+        return [
+            'puntoventa_id' => $pvId,
+            'deposito_id' => $depId,
+        ];
+    }
+
+    /**
      * PV y depósito a usar en un pedido: el sugerido si pertenece a la tienda; si no, el default de esa tienda.
+     * Preferir {@see defaultsFacturacion()} en emisión (manual o lote) para no depender de sugeridos viejos.
      *
      * @return array{puntoventa_id:int,deposito_id:int}
      */

@@ -60,11 +60,7 @@ final class TiendanubePedidoListoSupport
             }
         }
 
-        $resuelto = TiendanubePedidoMaestrosSupport::resolverPuntoventaYDeposito(
-            $pedido->store_id,
-            $pedido->puntoventa_id_sugerido,
-            $pedido->deposito_id_sugerido,
-        );
+        $resuelto = TiendanubePedidoMaestrosSupport::defaultsFacturacion($pedido->store_id);
         $pvId = (int) $resuelto['puntoventa_id'];
         if ($pvId <= 0) {
             $motivos[] = 'Sin punto de venta default';
