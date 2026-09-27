@@ -887,6 +887,22 @@ class Comprobante_ProveedorController extends Controller
         $ruta = ComprobanteProveedorArchivoPathSupport::referenciaPdfPrecarga($comprobante);
         $path = $this->facturaScanPathResolver->resolve($ruta);
 
+        // 1b) Factura PDF subida a mano (tipo FACTURA en storage ERP)
+        if ($path === null || ! is_readable((string) $path)) {
+            $comprobante->loadMissing('comprobante_proveedor_archivos');
+            $facturaManual = $comprobante->comprobante_proveedor_archivos
+                ->firstWhere('tipo', ComprobanteProveedorArchivoTipos::FACTURA);
+            if ($facturaManual) {
+                $basename = basename((string) $facturaManual->nombrearchivo);
+                if ($basename !== '' && ! str_contains($basename, '..')) {
+                    $local = public_path('storage/archivos/comprobantes_proveedor/'.$id.'/'.$basename);
+                    if (is_file($local) && is_readable($local)) {
+                        $path = $local;
+                    }
+                }
+            }
+        }
+
         // 2) Convención Facturas_scan/comprobantes/{CUIT}/{Y-m}/…
         if ($path === null) {
             $path = $this->archivoPathSupport->absolutePathDesdeComprobante($comprobante);

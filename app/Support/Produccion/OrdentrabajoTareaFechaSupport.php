@@ -35,4 +35,17 @@ final class OrdentrabajoTareaFechaSupport
 
         return substr($texto, 0, 10);
     }
+
+    /**
+     * Tarea aún abierta: sin fecha de fin real (NULL / 0000-00-00 legacy Ferli).
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
+     */
+    public static function aplicarSinFechaFin($query, string $columna = 'hastafecha'): void
+    {
+        $query->where(function ($q) use ($columna) {
+            $q->whereNull($columna)
+                ->orWhere($columna, '0000-00-00');
+        });
+    }
 }

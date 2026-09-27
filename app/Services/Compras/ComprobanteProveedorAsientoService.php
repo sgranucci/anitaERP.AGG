@@ -34,8 +34,9 @@ use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Contable\PeriodoContableCierreSupport;
-use RuntimeException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class ComprobanteProveedorAsientoService
 {
@@ -256,6 +257,13 @@ class ComprobanteProveedorAsientoService
         $lineasRepartoGasto = $permiteRepartoGasto
             ? ComprobanteProveedorDebeGastoSupport::lineasDesdeComprobante($comprobante)
             : [];
+        if ($permiteRepartoGasto && $lineasRepartoGasto !== []) {
+            $netoParaDepurar = ComprobanteProveedorDebeGastoSupport::totalNetoImputable($comprobante);
+            $lineasRepartoGasto = ComprobanteProveedorDebeGastoSupport::depurarDuplicadoPanelClonado(
+                $lineasRepartoGasto,
+                $netoParaDepurar
+            );
+        }
         $hayRepartoDebeGasto = ComprobanteProveedorDebeGastoSupport::tieneReparto($lineasRepartoGasto);
 
         $lineasDebe = [];
@@ -310,13 +318,11 @@ class ComprobanteProveedorAsientoService
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
 
             // Reparto multi-cuenta en Asiento: el neto no arma Debe 1:1 (lo reemplaza debe_gasto).
-            // Incluye EXENTO/código 1 aunque tipoconcepto venga vacío (si no, se duplica el Debe).
+            // Criterio: con reparto, solo los impuestos/percepciones (I/P/B/M/T/S/A) siguen 1:1.
+            // N/G/E, EXENTO codigo 1 y tipoconcepto vacío no deben postearse otra vez.
             // Solo corre con $hayRepartoDebeGasto (sin COM/FAR/OC artículos/anticipo/contrato).
-            if ($hayRepartoDebeGasto && (
-                ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipoConcepto, $codigoConcepto)
-                || (ComprobanteProveedorConceptoIvaTipos::esExento($tipoConcepto, $codigoConcepto)
-                    && $exentoIntegraTotal)
-            )) {
+            if ($hayRepartoDebeGasto
+                && ! ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipoConcepto)) {
                 continue;
             }
 
@@ -687,6 +693,9 @@ class ComprobanteProveedorAsientoService
             $comprobante->proveedores,
             $monedaCuentaId
         );
+        if ((int) ($comprobante->proveedor_id ?? 0) <= 0) {
+            throw new RuntimeException('Seleccione un proveedor.');
+        }
         if ($cuentaProveedor <= 0) {
             throw new RuntimeException(
                 'El proveedor no tiene cuenta contable de '
@@ -719,13 +728,27 @@ class ComprobanteProveedorAsientoService
 
         $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
         $diferencia = round($totalDebe - $totalHaber, 2);
+        $avisosPreview = [];
         if (abs($diferencia) > ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA) {
-            throw new RuntimeException(
-                'Los conceptos ('.number_format($totalDebe, 2).') no coinciden con el total del comprobante ('.number_format($totalComprobante, 2).').'
-            );
+            // Preview: permitir editar importes del reparto sin tumbar la tabla (el JS
+            // avisa la suma; al contabilizar sí se exige cuadre).
+            if ($permitirCuentasPendientes && $hayRepartoDebeGasto) {
+                $avisosPreview[] = [
+                    'tipo' => 'warning',
+                    'mensaje' => 'Los importes de gasto ('.number_format($totalDebe, 2, ',', '.')
+                        .') aún no cuadran con el total del comprobante ('
+                        .number_format($totalComprobante, 2, ',', '.')
+                        .'). Ajustá las cuentas de gasto hasta que la suma coincida con el neto.',
+                ];
+            } else {
+                throw new RuntimeException(
+                    'Los conceptos ('.number_format($totalDebe, 2).') no coinciden con el total del comprobante ('.number_format($totalComprobante, 2).').'
+                );
+            }
         }
 
-        if (ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferencia)) {
+        if ($avisosPreview === []
+            && ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferencia)) {
             $lineasDebe = ComprobanteProveedorAsientoCuadreSupport::absorberCentavosEnDebe(
                 $lineasDebe,
                 round($totalHaber - $totalDebe, 2),
@@ -823,6 +846,7 @@ class ComprobanteProveedorAsientoService
                 ? ComprobanteProveedorDebeGastoSupport::totalNetoImputable($comprobante)
                 : 0.0,
             'tiene_reparto_gasto' => $hayRepartoDebeGasto,
+            'avisos' => $avisosPreview,
         ];
     }
 
@@ -976,6 +1000,7 @@ class ComprobanteProveedorAsientoService
                 'activo' => true,
                 'error' => $error,
                 'es_preview' => true,
+                'avisos' => $preview['avisos'] ?? [],
                 'cuentas_pendientes' => ! empty($preview['cuentas_pendientes']),
                 'permite_reparto_gasto' => ! empty($preview['permite_reparto_gasto']),
                 'neto_imputable_gasto' => (float) ($preview['neto_imputable_gasto'] ?? 0),
@@ -987,6 +1012,28 @@ class ComprobanteProveedorAsientoService
                 'permite_editar_cuentas' => true,
             ];
         } catch (\Throwable $e) {
+            Log::warning('comprobante_proveedor.asiento_preview_error', [
+                'comprobante_id' => (int) ($comprobante->id ?? 0),
+                'total' => (float) ($comprobante->total ?? 0),
+                'modo_carga' => (string) ($comprobante->modo_carga ?? ''),
+                'ordencompra_id' => (int) ($comprobante->ordencompra_id ?? 0),
+                'conceptos' => ($comprobante->comprobante_proveedor_conceptos ?? collect())
+                    ->filter(static fn ($l) => abs((float) ($l->monto ?? 0)) >= 0.0001)
+                    ->map(static fn ($l) => [
+                        'concepto_id' => (int) ($l->concepto_ivacompra_id ?? 0),
+                        'codigo' => (string) ($l->concepto_ivacompras?->codigo ?? ''),
+                        'tipo' => (string) ($l->concepto_ivacompras?->tipoconcepto ?? ''),
+                        'monto' => (float) ($l->monto ?? 0),
+                        'cta' => (int) ($l->cuentacontabledebe_id ?? 0),
+                    ])->values()->all(),
+                'debe_gastos' => ($comprobante->comprobante_proveedor_debe_gastos ?? collect())
+                    ->map(static fn ($g) => [
+                        'cuenta' => (int) ($g->cuentacontable_id ?? 0),
+                        'importe' => (float) ($g->importe ?? 0),
+                    ])->values()->all(),
+                'error' => $e->getMessage(),
+            ]);
+
             return [
                 'activo' => true,
                 'error' => $e->getMessage(),

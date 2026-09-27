@@ -14,10 +14,7 @@
     $netoImputableGasto = (float) ($preview['neto_imputable_gasto'] ?? 0);
     $tieneRepartoGasto = ! empty($preview['tiene_reparto_gasto']);
     $lineasDebeGastoUi = collect($preview['lineas'] ?? [])->filter(function ($l) {
-        $origen = (string) ($l['origen'] ?? '');
-        return $origen === 'debe_gasto'
-            || $origen === 'neto_manual'
-            || (! empty($l['editable_cuenta']) && ($l['debe'] ?? null) !== null);
+        return (string) ($l['origen'] ?? '') === 'debe_gasto';
     })->values();
     $cantDebeGastoUi = $lineasDebeGastoUi->count();
 @endphp
@@ -110,7 +107,8 @@
      id="cp-asiento-tabla-wrap"
      data-permite-reparto-gasto="{{ $permiteRepartoGasto ? '1' : '0' }}"
      data-neto-imputable-gasto="{{ $netoImputableGasto }}"
-     data-tiene-reparto-gasto="{{ $tieneRepartoGasto ? '1' : '0' }}">
+     data-tiene-reparto-gasto="{{ $tieneRepartoGasto ? '1' : '0' }}"
+     data-total-comprobante="{{ (float) ($preview['total_comprobante'] ?? 0) }}">
     <table class="table table-bordered table-sm" id="tabla-asiento-comprobante-proveedor">
         <thead style="background-color:#85C1E9;color:#17202A;">
             <tr>
@@ -131,8 +129,9 @@
             @forelse(($preview['lineas'] ?? []) as $linea)
             @php
                 $origenLinea = (string) ($linea['origen'] ?? '');
-                $esDebeGasto = $origenLinea === 'debe_gasto'
-                    || ($origenLinea === 'neto_manual' && $permiteRepartoGasto);
+                // Solo origen debe_gasto es reparto multi-cuenta. neto_manual NO lleva
+                // cp-debe-gasto-row: si no, el JS lo reenvía y duplica el Debe.
+                $esDebeGasto = $origenLinea === 'debe_gasto';
                 $editableCuenta = ! empty($preview['es_preview']) && ! empty($linea['editable_cuenta']);
                 $editableImporte = $permiteRepartoGasto && $esDebeGasto;
                 $cuentaLineaId = (int) ($linea['cuentacontable_id'] ?? 0);
@@ -205,8 +204,8 @@
         <tfoot>
             <tr class="font-weight-bold">
                 <td colspan="2" class="text-right">Totales</td>
-                <td class="text-right">{{ number_format((float) ($preview['total_debe'] ?? 0), 2, ',', '.') }}</td>
-                <td class="text-right">{{ number_format((float) ($preview['total_haber'] ?? 0), 2, ',', '.') }}</td>
+                <td class="text-right cp-asiento-total-debe">{{ number_format((float) ($preview['total_debe'] ?? 0), 2, ',', '.') }}</td>
+                <td class="text-right cp-asiento-total-haber">{{ number_format((float) ($preview['total_haber'] ?? 0), 2, ',', '.') }}</td>
                 <td @if($permiteRepartoGasto) colspan="2" @endif></td>
             </tr>
             @if(! empty($preview['es_preview']) && isset($preview['total_comprobante']))

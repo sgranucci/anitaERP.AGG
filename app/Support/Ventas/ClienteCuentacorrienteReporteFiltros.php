@@ -267,7 +267,7 @@ final class ClienteCuentacorrienteReporteFiltros
         return ! empty($filtros['consolidar_empresas']) || count(self::empresaIds($filtros)) <= 1;
     }
 
-    public static function armarSubtitulo(array $filtros, string $empresasTexto = ''): string
+    public static function armarSubtitulo(array $filtros, string $empresasTexto = '', string $vendedoresTexto = ''): string
     {
         $partes = [];
         if ($empresasTexto !== '') {
@@ -276,9 +276,14 @@ final class ClienteCuentacorrienteReporteFiltros
                 $partes[] = self::consolidarEmpresas($filtros) ? 'Modo: consolidado' : 'Modo: por empresa';
             }
         }
+        if ($vendedoresTexto !== '') {
+            $partes[] = 'Vendedor: '.$vendedoresTexto;
+        }
         $partes[] = self::etiquetaModo($filtros);
         $partes[] = self::etiquetaAlcance($filtros);
-        $partes[] = self::etiquetaAlcanceVendedores($filtros);
+        if ($vendedoresTexto === '') {
+            $partes[] = self::etiquetaAlcanceVendedores($filtros);
+        }
         $partes[] = 'Período: '.self::formatearPeriodoTexto($filtros);
         if (! empty($filtros['solo_totales'])) {
             $partes[] = 'Solo totales por cliente';

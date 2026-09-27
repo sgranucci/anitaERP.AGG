@@ -127,6 +127,17 @@ final class ReporteStockOtSituacionSupport
         };
     }
 
+    /**
+     * Filas en rojo en el Excel Stock por OT: no están listas para entrega inmediata.
+     * Incluye EN PRODUCCION y PENDIENTE DE FABRICACION (misma señal visual).
+     */
+    public static function colorearRojoEnExcel(string $situacion, bool $enProduccion): bool
+    {
+        return $enProduccion
+            || $situacion === self::EN_PRODUCCION
+            || $situacion === self::PENDIENTE_DE_FABRICACION;
+    }
+
     public static function esLoteImportado(mixed $lote): bool
     {
         $lote = trim((string) $lote);

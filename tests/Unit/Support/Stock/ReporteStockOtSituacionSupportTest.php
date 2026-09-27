@@ -70,4 +70,11 @@ class ReporteStockOtSituacionSupportTest extends TestCase
         self::assertTrue(S::pasaFiltroEstadoOt('ENTREGA', S::ENTREGA_INMEDIATA, false));
         self::assertTrue(S::pasaFiltroEstadoOt('PRODUCCION', S::PENDIENTE_DE_FABRICACION, false));
     }
+
+    public function test_pendiente_y_produccion_van_en_rojo_en_excel(): void
+    {
+        self::assertTrue(S::colorearRojoEnExcel(S::EN_PRODUCCION, true));
+        self::assertTrue(S::colorearRojoEnExcel(S::PENDIENTE_DE_FABRICACION, false));
+        self::assertFalse(S::colorearRojoEnExcel(S::ENTREGA_INMEDIATA, false));
+    }
 }

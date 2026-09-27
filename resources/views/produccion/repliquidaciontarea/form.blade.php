@@ -138,5 +138,9 @@
                 </option>
             @endforeach
         </select>
+        <small class="form-text text-muted">
+            <strong>Todas</strong> incluye tareas iniciadas en el rango a&uacute;n abiertas (en secci&oacute;n)
+            y las que cerraron en el rango de fechas.
+        </small>
     </div>
 </div>

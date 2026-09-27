@@ -48,7 +48,14 @@ class CierreCajaReporteService
         $chequesRecibidos = $this->chequesRecibidos($empresaIds, $desde, $hasta, $cuentaFiltro);
         $chequesRechazados = $this->chequesRechazados($empresaIds, $desde, $hasta, $cuentaFiltro);
         $chequesCaucion = $this->chequesCaucion($empresaIds, $desde, $hasta, $cuentaFiltro);
-        $cobroPago = $this->totalesCobroPago($empresaIds, $desde, $hasta, $cuentaFiltro);
+        $cobroPago = $this->totalesCobroPago(
+            $empresaIds,
+            $desde,
+            $hasta,
+            $cuentaFiltro,
+            $chequesRecibidos,
+            $chequesEmitidos
+        );
 
         $filasPreview = $this->armarFilasPlanas(
             $saldos,
@@ -617,14 +624,27 @@ class CierreCajaReporteService
     }
 
     /**
+     * Totales cobro/pago al estilo Anita lista_cobro_pago: por valor/cuenta
+     * (no solo abreviatura COB/OPP). Los e-cheqs no generan línea en
+     * caja_movimiento_cuentacaja; se suman como fila «E CHQS».
+     *
      * @param  list<int>  $empresaIds
+     * @param  list<array<string, mixed>>  $chequesRecibidos
+     * @param  list<array<string, mixed>>  $chequesEmitidos
      * @return array{cobro: float, pago: float, filas: list<array<string, mixed>>}
      */
-    private function totalesCobroPago(array $empresaIds, string $desde, string $hasta, int $cuentaFiltro): array
-    {
+    private function totalesCobroPago(
+        array $empresaIds,
+        string $desde,
+        string $hasta,
+        int $cuentaFiltro,
+        array $chequesRecibidos = [],
+        array $chequesEmitidos = []
+    ): array {
         $q = Caja_Movimiento_Cuentacaja::query()
             ->join('caja_movimiento', 'caja_movimiento.id', '=', 'caja_movimiento_cuentacaja.caja_movimiento_id')
             ->join('tipotransaccion_caja', 'tipotransaccion_caja.id', '=', 'caja_movimiento.tipotransaccion_caja_id')
+            ->leftJoin('cuentacaja', 'cuentacaja.id', '=', 'caja_movimiento_cuentacaja.cuentacaja_id')
             ->whereBetween('caja_movimiento_cuentacaja.fecha', [$desde, $hasta])
             ->whereIn('tipotransaccion_caja.abreviatura', ['COB', 'OPP', 'DEV'])
             ->where(function ($w) {
@@ -640,7 +660,12 @@ class CierreCajaReporteService
                         ->whereRaw('e.id = (select max(e2.id) from caja_movimiento_estado e2 where e2.caja_movimiento_id = caja_movimiento.id)');
                 });
             })
-            ->select('tipotransaccion_caja.abreviatura')
+            ->select(
+                'caja_movimiento_cuentacaja.cuentacaja_id',
+                'cuentacaja.codigo',
+                'cuentacaja.nombre',
+                'tipotransaccion_caja.abreviatura'
+            )
             ->selectRaw('SUM(caja_movimiento_cuentacaja.monto * CASE WHEN COALESCE(caja_movimiento_cuentacaja.moneda_id, 1) > 1 THEN CASE WHEN COALESCE(caja_movimiento_cuentacaja.cotizacion, 0) > 0 THEN caja_movimiento_cuentacaja.cotizacion ELSE 1 END ELSE 1 END) as total');
 
         if ($empresaIds !== []) {
@@ -650,23 +675,91 @@ class CierreCajaReporteService
             $q->where('caja_movimiento_cuentacaja.cuentacaja_id', $cuentaFiltro);
         }
 
+        /** @var array<string, array{aplicacion: string, cobro: float, pago: float, orden: string}> $porValor */
+        $porValor = [];
+        foreach ($q->groupBy(
+            'caja_movimiento_cuentacaja.cuentacaja_id',
+            'cuentacaja.codigo',
+            'cuentacaja.nombre',
+            'tipotransaccion_caja.abreviatura'
+        )->get() as $row) {
+            $abrev = (string) $row->abreviatura;
+            $total = abs(round((float) $row->total, 2));
+            if ($total < 0.0001) {
+                continue;
+            }
+            $codigo = trim((string) ($row->codigo ?? ''));
+            $nombre = trim((string) ($row->nombre ?? ''));
+            $etiqueta = $codigo !== ''
+                ? ($nombre !== '' ? $codigo.' — '.$nombre : $codigo)
+                : ($nombre !== '' ? $nombre : 'Sin cuenta');
+            $clave = (string) ((int) ($row->cuentacaja_id ?? 0)).'|'.$etiqueta;
+            if (! isset($porValor[$clave])) {
+                $porValor[$clave] = [
+                    'aplicacion' => $etiqueta,
+                    'cobro' => 0.0,
+                    'pago' => 0.0,
+                    'orden' => str_pad($codigo !== '' ? $codigo : 'ZZZ', 20, '0', STR_PAD_LEFT),
+                ];
+            }
+            if ($abrev === 'COB') {
+                $porValor[$clave]['cobro'] += $total;
+            } else {
+                $porValor[$clave]['pago'] += $total;
+            }
+        }
+
+        $totalEcheqs = $this->sumaImportesFilasCheque($chequesRecibidos, soloEcheq: true);
+        if ($totalEcheqs > 0.0001 && $cuentaFiltro === 0) {
+            $porValor['E_CHQS'] = [
+                'aplicacion' => 'E CHQS',
+                'cobro' => $totalEcheqs,
+                'pago' => 0.0,
+                'orden' => '0000E_CHQS',
+            ];
+        }
+
+        $totalChtPapel = $this->sumaImportesFilasCheque($chequesRecibidos, soloEcheq: false, excluirEcheq: true);
+        if ($totalChtPapel > 0.0001 && $cuentaFiltro === 0) {
+            $porValor['CHT'] = [
+                'aplicacion' => 'Cheques de terceros',
+                'cobro' => $totalChtPapel,
+                'pago' => 0.0,
+                'orden' => '0000CHT',
+            ];
+        }
+
+        $totalChp = $this->sumaImportesFilasCheque($chequesEmitidos);
+        if ($totalChp > 0.0001 && $cuentaFiltro === 0) {
+            $porValor['CHP'] = [
+                'aplicacion' => 'Cheques propios emitidos',
+                'cobro' => 0.0,
+                'pago' => $totalChp,
+                'orden' => '0000CHP',
+            ];
+        }
+
+        uasort($porValor, static function (array $a, array $b): int {
+            return strcmp($a['orden'], $b['orden']);
+        });
+
         $cobro = 0.0;
         $pago = 0.0;
         $filas = [];
-        foreach ($q->groupBy('tipotransaccion_caja.abreviatura')->get() as $row) {
-            $abrev = (string) $row->abreviatura;
-            $total = round((float) $row->total, 2);
-            if (in_array($abrev, ['COB'], true)) {
-                $cobro += abs($total);
-            } else {
-                $pago += abs($total);
+        foreach ($porValor as $valor) {
+            $cobroFila = round((float) $valor['cobro'], 2);
+            $pagoFila = round((float) $valor['pago'], 2);
+            if ($cobroFila < 0.0001 && $pagoFila < 0.0001) {
+                continue;
             }
+            $cobro += $cobroFila;
+            $pago += $pagoFila;
             $filas[] = [
                 'tipo_fila' => 'dato',
                 'seccion' => 'cobro_pago',
-                'aplicacion' => $abrev,
-                'cobro' => in_array($abrev, ['COB'], true) ? abs($total) : 0.0,
-                'pago' => ! in_array($abrev, ['COB'], true) ? abs($total) : 0.0,
+                'aplicacion' => $valor['aplicacion'],
+                'cobro' => $cobroFila,
+                'pago' => $pagoFila,
             ];
         }
         if ($filas !== []) {
@@ -684,6 +777,32 @@ class CierreCajaReporteService
             'pago' => round($pago, 2),
             'filas' => $filas,
         ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function sumaImportesFilasCheque(
+        array $filas,
+        bool $soloEcheq = false,
+        bool $excluirEcheq = false
+    ): float {
+        $total = 0.0;
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? '') !== 'dato') {
+                continue;
+            }
+            $esEcheq = ! empty($fila['es_echeq']) || trim((string) ($fila['nro_echeq'] ?? '')) !== '';
+            if ($soloEcheq && ! $esEcheq) {
+                continue;
+            }
+            if ($excluirEcheq && $esEcheq) {
+                continue;
+            }
+            $total += (float) ($fila['importe'] ?? 0);
+        }
+
+        return round($total, 2);
     }
 
     /**
@@ -754,6 +873,7 @@ class CierreCajaReporteService
         foreach ($cheques as $ch) {
             $importe = $this->importeChequeMn($ch);
             $total += $importe;
+            $nroEcheq = trim((string) ($ch->nro_echeq ?? ''));
             $filas[] = [
                 'tipo_fila' => 'dato',
                 'seccion' => $seccion,
@@ -766,6 +886,8 @@ class CierreCajaReporteService
                 'fecha_rechazo' => $this->fechaDmy($ch->fecha_rechazo),
                 'fecha_caucion' => $this->fechaDmy($ch->fecha_caucion),
                 'numerocheque' => (string) ($ch->numerocheque ?? ''),
+                'nro_echeq' => $nroEcheq,
+                'es_echeq' => $nroEcheq !== '',
                 'banco' => (string) ($ch->bancos->nombre ?? ''),
                 'importe' => $importe,
                 'nombreempresa' => (string) ($ch->empresas->nombre ?? ''),

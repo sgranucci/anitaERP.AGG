@@ -47,11 +47,12 @@
     <td></td><td></td><td></td>
 @elseif ($seccion === 'cobro_pago')
     <td>{{ $fila['aplicacion'] ?? '' }}</td>
-    <td>{{ $esTotal ? 'Total cobranzas / pagos' : 'Aplicación' }}</td>
+    <td>{{ $esTotal ? 'Total cobranzas / pagos' : 'Valor / medio' }}</td>
+    <td></td>
     <td></td>
     <td class="text-right">{{ number_format((float) ($fila['cobro'] ?? 0), 2, ',', '.') }}</td>
     <td class="text-right">{{ number_format((float) ($fila['pago'] ?? 0), 2, ',', '.') }}</td>
-    <td></td><td></td>
+    <td></td>
 @else
     {{-- recibidos / rechazados / caucion --}}
     <td>
@@ -59,17 +60,31 @@
             <a href="{{ route('editar_cheque', ['id' => $fila['id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
                class="text-primary" target="_blank" rel="noopener">{{ $fila['nro_interno'] ?? $fila['numerocheque'] ?? '' }}</a>
         @else
-            {{ $fila['nro_interno'] ?? ($fila['cliente_nombre'] ?? '') }}
+            {{ $fila['nro_interno'] ?? '' }}
         @endif
     </td>
-    <td>{{ $fila['cliente_nombre'] ?? ($fila['banco'] ?? '') }}</td>
     <td>
-        @if ($seccion === 'rechazados')
+        @if ($esTotal)
+            {{ $fila['cliente_nombre'] ?? 'Total' }}
+        @else
+            {{ trim(($fila['cliente_codigo'] ?? '').' '.($fila['cliente_nombre'] ?? '')) }}
+        @endif
+    </td>
+    <td>
+        @if ($esTotal)
+        @elseif ($seccion === 'rechazados')
             {{ $fila['fecha_rechazo'] ?? $fila['fecha'] ?? '' }}
         @elseif ($seccion === 'caucion')
             {{ $fila['fecha_caucion'] ?? '' }}
         @else
-            {{ trim(($fila['fecha'] ?? '').' '.($fila['numerocheque'] ?? '')) }}
+            @php
+                $fecChe = (string) ($fila['fecha_cheque'] ?? '');
+                $nroCh = (string) ($fila['numerocheque'] ?? '');
+                if (! empty($fila['es_echeq']) || trim((string) ($fila['nro_echeq'] ?? '')) !== '') {
+                    $nroCh = ($nroCh !== '' ? $nroCh.' · ' : '').'E CHQS';
+                }
+            @endphp
+            {{ trim($fecChe.' '.$nroCh.' '.($fila['banco'] ?? '')) }}
         @endif
     </td>
     <td class="text-right">{{ number_format((float) ($fila['importe'] ?? 0), 2, ',', '.') }}</td>

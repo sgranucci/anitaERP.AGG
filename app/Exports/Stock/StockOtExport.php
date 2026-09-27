@@ -6,6 +6,7 @@ use App\Models\Stock\Mventa;
 use App\Queries\Stock\ArticuloQueryInterface;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Support\Stock\ArticuloCombinacionFotoSupport;
+use App\Support\Stock\ReporteStockOtSituacionSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -236,7 +237,10 @@ class StockOtExport implements FromView, WithColumnFormatting, WithMapping, With
                 }
 
                 foreach ($filas as $idx => $fila) {
-                    if (empty($fila['en_produccion'])) {
+                    if (! ReporteStockOtSituacionSupport::colorearRojoEnExcel(
+                        (string) ($fila['situacion'] ?? ''),
+                        ! empty($fila['en_produccion'])
+                    )) {
                         continue;
                     }
                     $excelRow = $filaDatos + $idx;

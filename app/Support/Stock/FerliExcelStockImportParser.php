@@ -85,14 +85,36 @@ final class FerliExcelStockImportParser
         for ($c = 1; $c <= $maxC; $c++) {
             $raw = self::cellStr($ws, $c, $headerRow);
             $txt = self::norm($raw);
+            // Boaonda: DEPOSITO / título suelen estar 1–2 filas arriba del header ART.
             if ($txt === '') {
-                $txt = self::norm(self::cellStr($ws, $c, 1));
+                for ($rMeta = $headerRow - 1; $rMeta >= 1; $rMeta--) {
+                    $cand = self::cellStr($ws, $c, $rMeta);
+                    if ($cand !== '') {
+                        $txt = self::norm($cand);
+                        if ($raw === '') {
+                            $raw = $cand;
+                        }
+                        break;
+                    }
+                }
             }
-            if (preg_match('/^\d{1,2}$/', $txt) && (int) $txt >= 5 && (int) $txt <= 47) {
-                $cols['talles'][$c] = (int) $txt;
-                continue;
+            // Talle simple (35) o rango niños Boaonda (22-23 → talle 22).
+            if (preg_match('/^(\d{1,2})(?:\s*-\s*\d{1,2})?$/', $txt, $tm)) {
+                $medida = (int) $tm[1];
+                if ($medida >= 5 && $medida <= 47) {
+                    $cols['talles'][$c] = $medida;
+                    continue;
+                }
             }
-            if (preg_match('/^art\.?$/', $txt) || $txt === 'sku' || $txt === 'articulo' || $txt === 'artículo') {
+            // ART. / ART / «BOA ONDA MUJER ART» / artículo
+            if (
+                preg_match('/^art\.?$/', $txt)
+                || $txt === 'sku'
+                || $txt === 'articulo'
+                || $txt === 'artículo'
+                || preg_match('/\bart\.?$/', $txt)
+                || str_ends_with($txt, ' art')
+            ) {
                 $cols['sku'] = $c;
             } elseif ($txt === 'color') {
                 $cols['color'] = $c;
@@ -100,7 +122,16 @@ final class FerliExcelStockImportParser
                 $cols['descripcion'] = $c;
             } elseif (str_contains($txt, 'situacion') || str_contains($txt, 'situación')) {
                 $cols['situacion'] = $c;
-            } elseif (str_contains($txt, 'numero ot') || str_contains($txt, 'nro de ot') || str_contains($txt, 'nº ot') || $txt === 'ot' || str_contains($txt, 'nro ot') || str_contains($txt, 'num. ot')) {
+            } elseif (
+                str_contains($txt, 'numero ot')
+                || str_contains($txt, 'nro de ot')
+                || str_contains($txt, 'nº ot')
+                || $txt === 'ot'
+                || str_contains($txt, 'nro ot')
+                || str_contains($txt, 'num. ot')
+                || $txt === 'lote'
+                || str_starts_with($txt, 'lote ')
+            ) {
                 $sample = self::cellStr($ws, $c, $headerRow + 1);
                 $sampleN = strtoupper(self::sinAcento($sample));
                 if (str_contains($sampleN, 'ENTREGA') || self::esEnProduccion($sample)) {
@@ -110,10 +141,17 @@ final class FerliExcelStockImportParser
                 }
             } elseif (str_contains($txt, 'deposito') || str_contains($txt, 'depósito') || str_contains($txt, 'dposito')) {
                 $cols['deposito'] = $c;
+            } elseif (in_array($txt, ['modulos', 'módulos'], true)) {
+                // La cantidad de módulos está EN esta columna.
+                $cols['modulos'] = $c;
             } elseif (in_array($txt, ['x', 'q m', 'q.m', 'q.m.', 'mod', 'qm', 'c/m', 'c/m.'], true)) {
+                // «X» / «Q M»: el valor está en la columna siguiente.
                 $cols['modulos'] = $c + 1;
             } elseif (str_contains($txt, 'precio') || preg_match('/^\d{2}-\d{2}$/', $txt)) {
-                $cols['precio_cols'][] = $c;
+                // «35-40» ya se capturó como talle rango arriba; acá queda MM-AA de precios.
+                if (! preg_match('/^\d{1,2}\s*-\s*\d{1,2}$/', $txt)) {
+                    $cols['precio_cols'][] = $c;
+                }
             }
 
             $depCodigo = self::aliasDeposito($raw !== '' ? $raw : self::cellStr($ws, $c, 1));
@@ -139,6 +177,20 @@ final class FerliExcelStockImportParser
             for ($c = 1; $c <= $maxC; $c++) {
                 if (self::norm(self::cellStr($ws, $c, $headerRow)) === 'n') {
                     $cols['modulos'] = $c;
+                    break;
+                }
+            }
+        }
+        // Boaonda: columna LOTE sin título → detectar por «Lote 502530» en la 1ª fila de datos.
+        if ($cols['identificador'] === 0) {
+            $dataRow = $headerRow + 1;
+            for ($c = 1; $c <= $maxC; $c++) {
+                if (isset($cols['talles'][$c]) || $c === $cols['sku'] || $c === $cols['deposito'] || $c === $cols['modulos']) {
+                    continue;
+                }
+                $sample = self::cellStr($ws, $c, $dataRow);
+                if ($sample !== '' && preg_match('/lote\s*\d{4,}/i', $sample)) {
+                    $cols['identificador'] = $c;
                     break;
                 }
             }
@@ -398,6 +450,9 @@ final class FerliExcelStockImportParser
             'myriam tal-e2' => 'Tal-E2',
             '64-a' => '64-A',
             '64-c' => '64-C',
+            // Excel a veces trunca el código en la columna (queda «64-»).
+            '64-' => '64-A',
+            '64' => '64-A',
             '2-e2' => '2-E2',
             'tal-a' => 'Tal-A',
             'fabrica tal-a' => 'Tal-A',

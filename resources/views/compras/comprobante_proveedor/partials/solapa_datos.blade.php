@@ -182,6 +182,7 @@
             'nombre_proveedor' => ($data ?? null)?->proveedores?->nombre,
             'requerido' => true,
             'mostrar_aviso_cuenta' => true,
+            'autofocus' => ! ($esEdicion ?? false),
             'col_label' => $cpColLabel,
             'col_input' => $cpColInput,
         ])
@@ -485,50 +486,57 @@
         </div>
     </div>
     <div class="col-sm-6">
-        <div class="form-group row">
-            <label for="subtotal" class="{{ $cpColLabel }}">Subtotal</label>
-            <div class="col-lg-5">
-                <input type="text" inputmode="decimal" name="subtotal" id="subtotal"
-                    class="form-control js-monto-ar text-right bg-light"
-                    value="{{ number_format((float) old('subtotal', $data->subtotal ?? 0), 2, ',', '.') }}"
-                    readonly tabindex="-1"
-                    title="Se calcula con la suma de conceptos netos">
-                <small class="form-text text-muted mt-0">Calculado desde conceptos (neto).</small>
+        <div class="form-group row mb-2 align-items-center">
+            <label for="subtotal" class="{{ $cpColLabel }} mb-0">Importes</label>
+            <div class="col-lg-8">
+                <div class="d-flex flex-wrap align-items-center" style="gap:.5rem 1rem;">
+                    <div class="d-flex align-items-center" style="gap:.35rem;">
+                        <span class="text-muted small text-nowrap">Subtotal</span>
+                        <input type="text" inputmode="decimal" name="subtotal" id="subtotal"
+                            class="form-control form-control-sm js-monto-ar text-right bg-light"
+                            style="width:7.5rem;"
+                            value="{{ number_format((float) old('subtotal', $data->subtotal ?? 0), 2, ',', '.') }}"
+                            readonly tabindex="-1"
+                            title="Se calcula con la suma de conceptos netos">
+                    </div>
+                    <div class="d-flex align-items-center" style="gap:.35rem;">
+                        <span class="text-muted small text-nowrap">Total</span>
+                        <input type="text" inputmode="decimal" name="total" id="total"
+                            class="form-control form-control-sm js-monto-ar text-right bg-light"
+                            style="width:7.5rem;"
+                            value="{{ number_format((float) old('total', $data->total ?? 0), 2, ',', '.') }}"
+                            readonly tabindex="-1"
+                            title="Se calcula con la suma de todos los conceptos">
+                    </div>
+                </div>
+                <small class="form-text text-muted mt-1 mb-0">Calculados desde conceptos.</small>
             </div>
         </div>
-        <div class="form-group row">
-            <label for="total" class="{{ $cpColLabel }}">Total</label>
-            <div class="col-lg-5">
-                <input type="text" inputmode="decimal" name="total" id="total"
-                    class="form-control js-monto-ar text-right bg-light"
-                    value="{{ number_format((float) old('total', $data->total ?? 0), 2, ',', '.') }}"
-                    readonly tabindex="-1"
-                    title="Se calcula con la suma de todos los conceptos">
-                <small class="form-text text-muted mt-0">Calculado desde conceptos.</small>
-            </div>
-        </div>
-        <div class="form-group row">
+        <div class="form-group row mb-2">
             <label for="leyenda" class="{{ $cpColLabel }}">Leyenda</label>
             <div class="{{ $cpColInput }}">
-                <textarea name="leyenda" id="leyenda" class="form-control" rows="2">{{ old('leyenda', $data->leyenda ?? '') }}</textarea>
+                <textarea name="leyenda" id="leyenda" class="form-control form-control-sm" rows="2">{{ old('leyenda', $data->leyenda ?? '') }}</textarea>
             </div>
         </div>
-        <div class="form-group row">
-            <label for="pararevisar" class="{{ $cpColLabel }}">Para revisar</label>
-            <div class="col-lg-5">
-                <select name="pararevisar" id="pararevisar" class="form-control">
-                    <option value="0" @if (! old('pararevisar', $data->pararevisar ?? false)) selected @endif>Sin errores</option>
-                    <option value="1" @if (old('pararevisar', $data->pararevisar ?? false)) selected @endif>Para revisar</option>
-                </select>
-            </div>
-        </div>
-        <div class="form-group row">
-            <label for="es_fce" class="{{ $cpColLabel }}">FCE</label>
-            <div class="col-lg-5">
-                <select name="es_fce" id="es_fce" class="form-control">
-                    <option value="0" @if (! old('es_fce', $data->es_fce ?? false)) selected @endif>No</option>
-                    <option value="1" @if (old('es_fce', $data->es_fce ?? false)) selected @endif>Sí</option>
-                </select>
+        @php
+            $paraRevisarOn = (bool) old('pararevisar', $data->pararevisar ?? false);
+            $esFceOn = (bool) old('es_fce', $data->es_fce ?? false);
+        @endphp
+        <div class="form-group row mb-1 align-items-center">
+            <div class="{{ $cpColLabel }}"></div>
+            <div class="col-lg-8 d-flex flex-wrap align-items-center" style="gap:1rem 1.5rem;">
+                <input type="hidden" name="pararevisar" value="0">
+                <div class="custom-control custom-switch custom-control-inline mb-0">
+                    <input type="checkbox" class="custom-control-input" name="pararevisar" id="pararevisar"
+                           value="1" @checked($paraRevisarOn)>
+                    <label class="custom-control-label" for="pararevisar" title="Marcar si requiere revisi&oacute;n antes de contabilizar">Para revisar</label>
+                </div>
+                <input type="hidden" name="es_fce" value="0">
+                <div class="custom-control custom-switch custom-control-inline mb-0">
+                    <input type="checkbox" class="custom-control-input" name="es_fce" id="es_fce"
+                           value="1" @checked($esFceOn)>
+                    <label class="custom-control-label" for="es_fce" title="Factura de cr&eacute;dito electr&oacute;nica">FCE</label>
+                </div>
             </div>
         </div>
     </div>

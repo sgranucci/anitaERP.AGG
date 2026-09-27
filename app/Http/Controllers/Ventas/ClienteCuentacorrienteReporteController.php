@@ -80,7 +80,8 @@ class ClienteCuentacorrienteReporteController extends Controller
             'vendedores_iniciales' => $vendedoresIniciales,
             'subtitulo' => ClienteCuentacorrienteReporteFiltros::armarSubtitulo(
                 $filtros,
-                $this->textoEmpresas($filtros, $empresaQuery)
+                $this->textoEmpresas($filtros, $empresaQuery),
+                $this->textoVendedores($vendedoresIniciales, $resultado)
             ),
             'puede_ver_cliente' => can('editar-clientes', false) || can('listar-clientes', false),
             'puede_ver_factura' => can('listar-factura', false) || can('editar-factura', false),
@@ -108,10 +109,15 @@ class ClienteCuentacorrienteReporteController extends Controller
         $filas = $resultado['filas'] ?? [];
         $titulo = (($filtros['modo'] ?? '') === ClienteCuentacorrienteReporteFiltros::MODO_FICHA)
             ? 'Ficha cuenta corriente de clientes'
-            : 'Deuda de clientes';
+            : 'Deuda de clientes por vendedor';
+        $vendedoresTexto = $this->textoVendedores(
+            $this->vendedoresInicialesDesdeResultado($resultado, $filtros),
+            $resultado
+        );
         $subtitulo = ClienteCuentacorrienteReporteFiltros::armarSubtitulo(
             $filtros,
-            $this->textoEmpresas($filtros, $empresaQuery)
+            $this->textoEmpresas($filtros, $empresaQuery),
+            $vendedoresTexto
         );
 
         switch (strtoupper($formato)) {
@@ -361,5 +367,61 @@ class ClienteCuentacorrienteReporteController extends Controller
         }
 
         return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{id:int,codigo:string,nombre:string}>
+     */
+    private function vendedoresInicialesDesdeResultado(array $resultado, array $filtros): array
+    {
+        return $this->vendedoresInicialesParaVista($filtros, $resultado);
+    }
+
+    /**
+     * @param  list<array{id?:int,codigo?:string,nombre?:string}>  $vendedores
+     * @param  array<string, mixed>|null  $resultado
+     */
+    private function textoVendedores(array $vendedores, ?array $resultado): string
+    {
+        $etiquetas = [];
+        foreach ($vendedores as $vend) {
+            $etiqueta = trim(
+                (trim((string) ($vend['codigo'] ?? '')) !== '' ? trim((string) $vend['codigo']).' ' : '')
+                .(string) ($vend['nombre'] ?? '')
+            );
+            if ($etiqueta !== '') {
+                $etiquetas[] = $etiqueta;
+            }
+        }
+
+        if ($etiquetas === [] && is_array($resultado)) {
+            foreach ($resultado['filas'] ?? [] as $fila) {
+                if (($fila['tipo'] ?? '') !== 'header_vendedor') {
+                    continue;
+                }
+                $etiqueta = trim(
+                    (trim((string) ($fila['vendedor_codigo'] ?? '')) !== ''
+                        ? trim((string) $fila['vendedor_codigo']).' '
+                        : '')
+                    .(string) ($fila['vendedor_nombre'] ?? '')
+                );
+                if ($etiqueta !== '') {
+                    $etiquetas[$etiqueta] = $etiqueta;
+                }
+            }
+            $etiquetas = array_values($etiquetas);
+        }
+
+        if ($etiquetas === []) {
+            return '';
+        }
+
+        if (count($etiquetas) > 4) {
+            return count($etiquetas).' vendedores';
+        }
+
+        return implode(', ', $etiquetas);
     }
 }

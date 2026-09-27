@@ -135,10 +135,14 @@ class ClienteCuentacorrienteReporteService
 
         $movimientos = $movimientos
             ->sortBy(static function ($m) {
+                $vendCodigo = trim((string) ($m->clientes->vendedores->codigo ?? ''));
+                $vendId = (int) ($m->clientes->vendedor_id ?? 0);
                 $cliCodigo = trim((string) ($m->clientes->codigo ?? $m->codigocliente ?? ''));
 
                 return sprintf(
-                    '%s|%s|%010d',
+                    '%s|%010d|%s|%s|%010d',
+                    str_pad($vendCodigo !== '' ? $vendCodigo : 'ZZZZ', 20, '0', STR_PAD_LEFT),
+                    $vendId,
                     str_pad($cliCodigo, 20, '0', STR_PAD_LEFT),
                     (string) ($m->fecha ?? ''),
                     (int) ($m->id ?? 0)
@@ -158,6 +162,45 @@ class ClienteCuentacorrienteReporteService
         $clientesUnicos = [];
         $vendedoresUnicos = [];
 
+        $vendedorActualId = null;
+        $metaVendedor = [
+            'vendedor_id' => 0,
+            'vendedor_codigo' => '',
+            'vendedor_nombre' => '',
+        ];
+        $subVendDebe = 0.0;
+        $subVendHaber = 0.0;
+        $subVendPendiente = 0.0;
+
+        $flushTotalVendedor = static function () use (
+            &$filas,
+            &$vendedorActualId,
+            &$metaVendedor,
+            &$subVendDebe,
+            &$subVendHaber,
+            &$subVendPendiente,
+            $modo
+        ): void {
+            if ($vendedorActualId === null) {
+                return;
+            }
+            $filas[] = [
+                'tipo' => 'total_vendedor',
+                'vendedor_id' => (int) $metaVendedor['vendedor_id'],
+                'vendedor_codigo' => (string) $metaVendedor['vendedor_codigo'],
+                'vendedor_nombre' => (string) $metaVendedor['vendedor_nombre'],
+                'comprobante' => 'Total vendedor',
+                'debe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subVendDebe : null,
+                'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subVendHaber : null,
+                'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subVendPendiente : null,
+                'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subVendPendiente : null,
+                'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
+            ];
+            $subVendDebe = 0.0;
+            $subVendHaber = 0.0;
+            $subVendPendiente = 0.0;
+        };
+
         foreach ($porCliente as $clienteId => $movsCliente) {
             /** @var Collection<int, Cliente_Cuentacorriente> $movsCliente */
             $clientesUnicos[(int) $clienteId] = true;
@@ -174,6 +217,22 @@ class ClienteCuentacorrienteReporteService
             $clienteCodigo = trim((string) ($primero->clientes->codigo ?? $primero->codigocliente ?? ''));
             $clienteNombre = (string) ($primero->clientes->nombre ?? $primero->nombrecliente ?? '');
             $nombreEmpresa = $this->nombreEmpresaUnicaGrupo($movsCliente);
+
+            if ($vendedorActualId !== $vendedorId) {
+                $flushTotalVendedor();
+                $vendedorActualId = $vendedorId;
+                $metaVendedor = [
+                    'vendedor_id' => $vendedorId,
+                    'vendedor_codigo' => $vendedorCodigo,
+                    'vendedor_nombre' => $vendedorNombre,
+                ];
+                $filas[] = [
+                    'tipo' => 'header_vendedor',
+                    'vendedor_id' => $vendedorId,
+                    'vendedor_codigo' => $vendedorCodigo,
+                    'vendedor_nombre' => $vendedorNombre,
+                ];
+            }
 
             $filas[] = [
                 'tipo' => 'header_cliente',
@@ -343,7 +402,13 @@ class ClienteCuentacorrienteReporteService
                 'saldo_pesos' => $saldoCorridoPesos,
                 'abreviatura' => $enPesos ? CuentacorrienteSaldosPorMoneda::abreviaturaLocal() : '',
             ];
+
+            $subVendDebe += $subDebe;
+            $subVendHaber += $subHaber;
+            $subVendPendiente += $subPendiente;
         }
+
+        $flushTotalVendedor();
 
         if ($filas !== []) {
             $filas[] = [

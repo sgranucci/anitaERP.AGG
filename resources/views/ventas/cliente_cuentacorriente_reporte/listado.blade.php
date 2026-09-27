@@ -81,7 +81,27 @@
                 <div class="meta">{{ $subtitulo ?? '' }}</div>
             </td>
             <td style="width: 22%; text-align: right; font-size: 10px;">
-                @if ($totalVendedores > 0)
+                @php
+                    $vendedoresCabecera = [];
+                    foreach ($filas ?? [] as $filaCab) {
+                        if (($filaCab['tipo'] ?? '') !== 'header_vendedor') {
+                            continue;
+                        }
+                        $etiquetaVend = trim(
+                            (($filaCab['vendedor_codigo'] ?? '') !== '' ? ($filaCab['vendedor_codigo'].' ') : '')
+                            .($filaCab['vendedor_nombre'] ?? '')
+                        );
+                        if ($etiquetaVend !== '') {
+                            $vendedoresCabecera[$etiquetaVend] = $etiquetaVend;
+                        }
+                    }
+                    $vendedoresCabecera = array_values($vendedoresCabecera);
+                @endphp
+                @if (count($vendedoresCabecera) === 1)
+                    <strong>Vendedor</strong><br>{{ $vendedoresCabecera[0] }}<br>
+                @elseif (count($vendedoresCabecera) > 1 && count($vendedoresCabecera) <= 4)
+                    <strong>Vendedores</strong><br>{{ implode(', ', $vendedoresCabecera) }}<br>
+                @elseif ($totalVendedores > 0)
                     Vendedores: {{ $totalVendedores }}<br>
                 @endif
                 @if ($totalClientes > 0)

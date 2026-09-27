@@ -264,6 +264,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
             'ordencompras',
             'tipotransaccion_compras',
             'comprobante_proveedor_recepciones.recepcion_proveedores',
+            'comprobante_proveedor_debe_gastos',
         ]);
         $conceptosParaInferir = $comprobante->comprobante_proveedor_conceptos
             ->map(static fn ($l) => $l->concepto_ivacompras)
@@ -314,6 +315,17 @@ final class ComprobanteProveedorAsientoPreviewSupport
             && (int) ($comprobante->ordencompra_id ?? 0) > 0
             && $comprobante->ordencompras !== null;
 
+        $permiteRepartoGasto = ComprobanteProveedorDebeGastoSupport::modoPermiteReparto(
+            $usaProvisionCom,
+            $netoDesdeArticulosOc,
+            $facturaAnticipada,
+            $contratoImputacionManual,
+        );
+        $hayRepartoDebeGasto = $permiteRepartoGasto
+            && ComprobanteProveedorDebeGastoSupport::tieneReparto(
+                ComprobanteProveedorDebeGastoSupport::lineasDesdeComprobante($comprobante)
+            );
+
         // MN/ME: OC si hay; sin OC → moneda del comprobante.
         $resMoneda = ProveedorCuentaContableMonedaSupport::resolverMonedaParaCuentaProveedor($comprobante);
         $monedaCuentaId = (int) $resMoneda['moneda_id'];
@@ -325,7 +337,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
         if ((int) ($comprobante->proveedor_id ?? 0) <= 0) {
             $avisos[] = [
                 'tipo' => 'proveedor_sin_seleccionar',
-                'mensaje' => 'Seleccione un proveedor con cuenta contable de proveedores.',
+                'mensaje' => 'Seleccione un proveedor.',
             ];
         } elseif (ProveedorCuentaContableMonedaSupport::esMonedaExtranjera($monedaCuentaId)
             && (int) ($comprobante->proveedores?->cuentacontableme_id ?? 0) <= 0) {
@@ -435,6 +447,20 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
 
             if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
+                continue;
+            }
+
+            // Sin OC/COM: el neto va por reparto debe_gasto en Asiento → no exigir cuenta del concepto.
+            if ($hayRepartoDebeGasto && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+                $tipoConcepto,
+                $codigoConcepto
+            )) {
+                continue;
+            }
+            if ($hayRepartoDebeGasto && ComprobanteProveedorConceptoIvaTipos::esExento(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
