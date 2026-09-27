@@ -1838,6 +1838,9 @@ Route::get('ventas/listar-repkilopedido/{formato}', 'Ventas\PedidoController@lis
 Route::post('ventas/crearrepkilopedido', 'Ventas\PedidoController@crearReporteKiloPedido')->name('crear_rep_kilopedido');
 Route::get('ventas/repkilocategoria', 'Ventas\PedidoController@indexReporteKiloCategoria')->name('rep_kilocategoria');
 Route::get('ventas/listar-repkilocategoria/{formato}', 'Ventas\PedidoController@listarReporteKiloCategoria')->name('listar_rep_kilocategoria');
+Route::get('direccion/tablero', 'Direccion\TableroController@index')->name('tablero_direccion');
+Route::get('direccion/tablero/detalle', 'Direccion\TableroController@detalle')->name('tablero_direccion_detalle');
+
 Route::get('ventas/iva-ventas', 'Ventas\IvaVentasReporteController@index')->name('iva_ventas');
 Route::get('ventas/listar-iva-ventas/{formato}', 'Ventas\IvaVentasReporteController@exportar')->name('listar_iva_ventas');
 Route::get('ventas/cliente-cuentacorriente-reporte', 'Ventas\ClienteCuentacorrienteReporteController@index')->name('cliente_cuentacorriente_reporte');
