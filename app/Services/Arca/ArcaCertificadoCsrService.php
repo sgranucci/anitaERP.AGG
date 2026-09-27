@@ -39,6 +39,27 @@ class ArcaCertificadoCsrService
         self::SERVICIO_WSAPOC,
     ];
 
+    /**
+     * @return array<string, string>
+     */
+    public static function etiquetasServicio(): array
+    {
+        return [
+            self::SERVICIO_WSFE => 'Factura electrónica WSFE',
+            self::SERVICIO_WSFEX => 'Factura electrónica exportación WSFEX',
+            self::SERVICIO_MTXCA => 'Factura electrónica MTXCA',
+            self::SERVICIO_WSREMCARNE => 'Remito electrónico (wsremcarne)',
+            self::SERVICIO_PADRON => 'Padrón (constancia inscripción)',
+            self::SERVICIO_WSCDC => 'Constatación comprobantes WSCDC',
+            self::SERVICIO_WSAPOC => 'Facturas apócrifas WSAPOC',
+        ];
+    }
+
+    public static function etiquetaServicio(string $servicio): string
+    {
+        return self::etiquetasServicio()[$servicio] ?? $servicio;
+    }
+
     /** Factura electrónica + remito (pedido típico de renovación). */
     public const SERVICIOS_FACTURA_Y_REMITO = [
         self::SERVICIO_WSFE,
@@ -55,7 +76,7 @@ class ArcaCertificadoCsrService
         $filas = [];
         $filas = array_merge($filas, $this->inventarioPorEmpresa(
             self::SERVICIO_WSFE,
-            'Factura electrónica WSFE',
+            self::etiquetaServicio(self::SERVICIO_WSFE),
             (string) config('arca_wsfe.base_storage', ''),
             (array) config('arca_wsfe.empresas', []),
             (string) config('arca_wsfe.wsaa_service_id', 'wsfe'),
@@ -63,7 +84,7 @@ class ArcaCertificadoCsrService
         ));
         $filas = array_merge($filas, $this->inventarioPorEmpresa(
             self::SERVICIO_WSFEX,
-            'Factura electrónica exportación WSFEX',
+            self::etiquetaServicio(self::SERVICIO_WSFEX),
             (string) config('arca_wsfex.base_storage', ''),
             (array) config('arca_wsfex.empresas', []),
             (string) config('arca_wsfex.wsaa_service_id', 'wsfex'),
@@ -71,7 +92,7 @@ class ArcaCertificadoCsrService
         ));
         $filas = array_merge($filas, $this->inventarioPorEmpresa(
             self::SERVICIO_MTXCA,
-            'Factura electrónica MTXCA',
+            self::etiquetaServicio(self::SERVICIO_MTXCA),
             (string) config('arca_mtxca.base_storage', ''),
             (array) config('arca_mtxca.empresas', []),
             (string) config('arca_mtxca.wsaa_service_id', 'wsmtxca'),
@@ -79,7 +100,7 @@ class ArcaCertificadoCsrService
         ));
         $filas = array_merge($filas, $this->inventarioPorEmpresa(
             self::SERVICIO_WSREMCARNE,
-            'Remito electrónico (wsremcarne)',
+            self::etiquetaServicio(self::SERVICIO_WSREMCARNE),
             (string) config('arca_wsremcarne.base_storage', ''),
             (array) config('arca_wsremcarne.empresas', []),
             (string) config('arca_wsremcarne.wsaa_service_id', 'wsremcarne'),
@@ -88,7 +109,7 @@ class ArcaCertificadoCsrService
 
         $filas[] = $this->inventarioSimple(
             self::SERVICIO_PADRON,
-            'Padrón (constancia inscripción)',
+            self::etiquetaServicio(self::SERVICIO_PADRON),
             (string) config('arca.padron.cert_path', config('arca.cert_path', '')),
             (string) config('arca.padron.private_key_path', config('arca.private_key_path', '')),
             (string) config('arca.padron.private_key_passphrase', config('arca.private_key_passphrase', '')),
@@ -97,7 +118,7 @@ class ArcaCertificadoCsrService
         );
         $filas[] = $this->inventarioSimple(
             self::SERVICIO_WSCDC,
-            'Constatación comprobantes WSCDC',
+            self::etiquetaServicio(self::SERVICIO_WSCDC),
             (string) config('arca_wscdc.cert_path', ''),
             (string) config('arca_wscdc.private_key_path', ''),
             (string) config('arca_wscdc.private_key_passphrase', ''),
@@ -106,7 +127,7 @@ class ArcaCertificadoCsrService
         );
         $filas[] = $this->inventarioSimple(
             self::SERVICIO_WSAPOC,
-            'Facturas apócrifas WSAPOC',
+            self::etiquetaServicio(self::SERVICIO_WSAPOC),
             (string) config('arca_wsapoc.cert_path', ''),
             (string) config('arca_wsapoc.private_key_path', ''),
             (string) config('arca_wsapoc.private_key_passphrase', ''),
@@ -415,13 +436,17 @@ class ArcaCertificadoCsrService
         $empresaId = (int) ($entrada['empresa_id'] ?? 0);
 
         return match ($servicio) {
-            self::SERVICIO_MTXCA => $this->formatearDummy(
+            self::SERVICIO_MTXCA => $this->probarConTransporte(
+                $entrada,
+                (string) config('arca_mtxca.transporte', 'afip_php'),
                 'WSAA + MTXCA dummy',
-                app(ArcaMtxcaFacturaElectronicaService::class)->dummy($empresaId)
+                fn () => app(ArcaMtxcaFacturaElectronicaService::class)->dummy($empresaId)
             ),
-            self::SERVICIO_WSFE => $this->formatearDummy(
+            self::SERVICIO_WSFE => $this->probarConTransporte(
+                $entrada,
+                (string) config('arca_wsfe.transporte', 'afip_php'),
                 'WSAA + WSFE FEDummy',
-                app(ArcaWsfeFacturaElectronicaService::class)->feDummy($empresaId)
+                fn () => app(ArcaWsfeFacturaElectronicaService::class)->feDummy($empresaId)
             ),
             self::SERVICIO_WSFEX => $this->formatearDummy(
                 'WSAA + WSFEX FEXDummy',
@@ -438,6 +463,26 @@ class ArcaCertificadoCsrService
             self::SERVICIO_PADRON, self::SERVICIO_WSCDC => $this->probarSoloWsaa($entrada),
             default => throw new Exception("No hay prueba definida para el servicio «{$servicio}»."),
         };
+    }
+
+    /**
+     * SOAP llama al Dummy del webservice. afip.php solo pide el ticket WSAA:
+     * es el login que usa la facturación histórica.
+     *
+     * @param  array<string, mixed>  $entrada
+     * @param  callable(): array<string, mixed>  $dummy
+     * @return array{nombre: string, detalle: string}
+     */
+    private function probarConTransporte(array $entrada, string $transporte, string $nombreDummy, callable $dummy): array
+    {
+        if ($transporte === 'soap') {
+            return $this->formatearDummy($nombreDummy, $dummy());
+        }
+
+        $resultado = $this->probarSoloWsaa($entrada);
+        $resultado['detalle'] .= '. Transporte afip.php: se validó el ticket WSAA.';
+
+        return $resultado;
     }
 
     /**
@@ -791,6 +836,7 @@ class ArcaCertificadoCsrService
             $validacion['alias'] = $leido['alias'];
             $validacion['cuit'] = $leido['cuit'];
             $validacion['valid_to'] = $leido['valid_to'];
+            $validacion['avisos'] = $leido['avisos'] ?? [];
         }
         if ($hayKey) {
             $keyPem = ArcaCertificadoCsrSupport::normalizarPemClavePrivada((string) $contenidoKey);
@@ -800,14 +846,36 @@ class ArcaCertificadoCsrService
             @chmod($destinoKey, 0600);
         }
 
+        $avisos = is_array($validacion['avisos'] ?? null) ? $validacion['avisos'] : [];
+        $avisoClave = null;
         if ($hayCrt && $hayKey && ! $this->parCoincide($destinoCrt, $destinoKey, (string) ($entrada['private_key_passphrase'] ?? ''))) {
-            $aviso = 'El certificado no coincide con la clave subida; se instalaron los dos archivos igual.';
+            $avisoClave = 'El certificado no coincide con la clave subida.';
         } elseif ($hayCrt && ! $hayKey) {
             $keyVigente = (string) ($entrada['private_key_path'] ?? '');
             if ($keyVigente !== '' && is_readable($keyVigente)
                 && ! $this->parCoincide($destinoCrt, $keyVigente, (string) ($entrada['private_key_passphrase'] ?? ''))) {
-                $aviso = 'Quedó la clave privada que ya estaba en el servidor, y no coincide con este certificado.';
+                $avisoClave = 'La clave privada que ya está en el servidor no coincide con este certificado.';
             }
+        }
+        if ($avisoClave !== null) {
+            $avisos[] = $avisoClave;
+        }
+        if ($avisos !== []) {
+            $aviso = implode(' ', $avisos);
+        }
+
+        $avisosIdentidad = is_array($validacion['avisos'] ?? null) ? $validacion['avisos'] : [];
+        if ($avisosIdentidad !== [] && ! $force) {
+            return [
+                'pendiente' => true,
+                'validacion' => $validacion,
+                'dir' => $dir,
+                'hay_crt' => $hayCrt,
+                'hay_key' => $hayKey,
+                'origen' => $hayCrt && $hayKey ? 'par' : ($hayKey ? 'clave' : 'cert'),
+                'aviso' => $aviso,
+                'avisos' => $avisos,
+            ];
         }
 
         $instalado = $this->copiarRenovacionAProduccion($entrada, $dir, $hayCrt, $hayKey, $replicarIds);
@@ -818,7 +886,50 @@ class ArcaCertificadoCsrService
             'dir' => $dir,
             'origen' => $origen,
             'aviso' => $aviso,
+            'avisos' => $avisos,
+            'pendiente' => false,
         ]);
+    }
+
+    /**
+     * Copia a producción un par ya subido y dejado en espera de confirmación.
+     *
+     * @param  array<string, mixed>  $entrada
+     * @param  list<string>  $replicarIds
+     * @return array<string, mixed>
+     */
+    public function completarInstalacionSubida(array $entrada, string $dir, bool $hayCrt, bool $hayKey, array $replicarIds): array
+    {
+        $dir = $this->assertDirectorioSubida($entrada, $dir);
+        if ($hayCrt) {
+            $this->assertCertAceptable($entrada, $dir.'/cert.crt', true);
+        }
+        $instalado = $this->copiarRenovacionAProduccion($entrada, $dir, $hayCrt, $hayKey, $replicarIds);
+        $origen = $hayCrt && $hayKey ? 'par' : ($hayKey ? 'clave' : 'cert');
+
+        return array_merge($instalado, [
+            'dir' => $dir,
+            'origen' => $origen,
+            'pendiente' => false,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     */
+    public function descartarInstalacionSubida(array $entrada, string $dir): void
+    {
+        try {
+            $real = $this->assertDirectorioSubida($entrada, $dir);
+        } catch (Exception) {
+            return;
+        }
+        if (is_file($real.'/pedido.csr')) {
+            return;
+        }
+        @unlink($real.'/cert.crt');
+        @unlink($real.'/privada.key');
+        @rmdir($real);
     }
 
     /**
@@ -1042,20 +1153,21 @@ class ArcaCertificadoCsrService
     private function assertCertAceptable(array $entrada, string $certPath, bool $force): array
     {
         $nuevo = ArcaCertificadoCsrSupport::leerCertificado($certPath);
+        $avisos = [];
         $aliasEsperado = trim((string) ($entrada['alias'] ?? ''));
         if (! $force && $aliasEsperado !== '' && strcasecmp((string) $nuevo['alias'], $aliasEsperado) !== 0) {
-            throw new Exception(
-                "El certificado subido tiene alias «{$nuevo['alias']}», se esperaba «{$aliasEsperado}»."
-            );
+            $avisos[] = "El certificado subido tiene alias «{$nuevo['alias']}»; el vigente es «{$aliasEsperado}».";
         }
         $cuitEsperado = preg_replace('/\D+/', '', (string) ($entrada['cuit'] ?? '')) ?? '';
         $cuitNuevo = preg_replace('/\D+/', '', (string) ($nuevo['cuit'] ?? '')) ?? '';
         if (! $force && $cuitEsperado !== '' && $cuitNuevo !== '' && $cuitEsperado !== $cuitNuevo) {
-            throw new Exception("El CUIT del certificado es {$cuitNuevo} y el vigente es {$cuitEsperado}.");
+            $avisos[] = "El CUIT del certificado es {$cuitNuevo}; el vigente es {$cuitEsperado}.";
         }
         if ($nuevo['valid_to_ts'] !== null && $nuevo['valid_to_ts'] <= time()) {
             throw new Exception('El certificado subido ya está vencido.');
         }
+
+        $nuevo['avisos'] = $avisos;
 
         return $nuevo;
     }
@@ -1097,22 +1209,10 @@ class ArcaCertificadoCsrService
                 @copy($keyDest, $backupDir.'/'.$prefijo.'_privada.key');
             }
             if ($copiarCert) {
-                if (is_file($certDest) && ! is_writable($certDest)) {
-                    @chmod($certDest, 0664);
-                }
-                if (! @copy($nuevoCert, $certDest)) {
-                    throw new Exception("No se pudo copiar el certificado a {$certDest}");
-                }
-                @chmod($certDest, 0644);
+                $this->reemplazarArchivo($nuevoCert, $certDest, 0644, $backupDir.'/'.$prefijo.'_cert.crt');
             }
             if ($copiarKey) {
-                if (is_file($keyDest) && ! is_writable($keyDest)) {
-                    @chmod($keyDest, 0660);
-                }
-                if (! @copy($nuevaKey, $keyDest)) {
-                    throw new Exception("No se pudo copiar la clave a {$keyDest}");
-                }
-                @chmod($keyDest, 0600);
+                $this->reemplazarArchivo($nuevaKey, $keyDest, 0600, $backupDir.'/'.$prefijo.'_privada.key');
             }
             $instalados[] = [
                 'id' => (string) $dest['id'],
@@ -1128,6 +1228,39 @@ class ArcaCertificadoCsrService
             'instalados' => $instalados,
             'ta_borrados' => $taBorrados,
         ];
+    }
+
+    /**
+     * Pisa el archivo de producción. Si el vigente es de otro usuario, copy() falla
+     * aunque la carpeta sea escribible: se borra y se vuelve a copiar.
+     */
+    private function reemplazarArchivo(string $origen, string $destino, int $modo, string $backup): void
+    {
+        if (is_file($destino) && ! is_writable($destino)) {
+            @chmod($destino, $modo);
+        }
+        if (@copy($origen, $destino)) {
+            @chmod($destino, $modo);
+
+            return;
+        }
+
+        $habiaDestino = is_file($destino);
+        if ($habiaDestino && ! @unlink($destino)) {
+            throw new Exception("No se pudo reemplazar {$destino}. El archivo vigente no se puede borrar.");
+        }
+        if (@copy($origen, $destino)) {
+            @chmod($destino, $modo);
+
+            return;
+        }
+
+        if ($habiaDestino && is_file($backup)) {
+            @copy($backup, $destino);
+            @chmod($destino, $modo);
+        }
+
+        throw new Exception("No se pudo copiar el certificado a {$destino}");
     }
 
     private function parCoincide(string $certPath, string $keyPath, string $passphrase): bool
@@ -1147,6 +1280,30 @@ class ArcaCertificadoCsrService
         $padre = dirname($dir);
 
         return is_dir($padre) && is_writable($padre);
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     */
+    private function assertDirectorioSubida(array $entrada, string $dir): string
+    {
+        $dir = rtrim($dir, '/');
+        $real = realpath($dir);
+        if ($real === false || ! is_dir($real)) {
+            throw new Exception('Ya no está el certificado pendiente de confirmar. Vuelva a subirlo.');
+        }
+
+        $raices = array_filter([
+            realpath(dirname((string) $entrada['cert_path']).'/renovacion'),
+            realpath(storage_path('app/arca/renovacion/'.$this->idSeguro((string) $entrada['id']))),
+        ]);
+        foreach ($raices as $raiz) {
+            if ($real !== $raiz && str_starts_with($real.DIRECTORY_SEPARATOR, $raiz.DIRECTORY_SEPARATOR)) {
+                return $real;
+            }
+        }
+
+        throw new Exception('La carpeta del certificado a instalar no corresponde a este webservice.');
     }
 
     private function idSeguro(string $id): string

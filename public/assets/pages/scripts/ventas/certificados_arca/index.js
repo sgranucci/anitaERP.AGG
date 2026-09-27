@@ -161,6 +161,10 @@
             mostrarOverlay('Probando conexión ARCA…', 'WSAA + dummy. No cierre la página.');
             return;
         }
+        if (form.id === 'form-confirmar-reemplazo-arca') {
+            mostrarOverlay('Reemplazando certificado…', 'No cierre la página.');
+            return;
+        }
         if (form.id === 'form-instalar-crt-arca') {
             var zip = document.getElementById('par_zip');
             var crt = document.getElementById('certificado');

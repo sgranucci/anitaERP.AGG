@@ -8,7 +8,7 @@
 window.certificadosArcaFilas = @json($filasJs ?? []);
 window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
 </script>
-<script src="{{ asset('assets/pages/scripts/ventas/certificados_arca/index.js') }}?v=20260927b"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/certificados_arca/index.js') }}?v=20260927c"></script>
 @endsection
 
 @section('contenido')
@@ -23,6 +23,34 @@ window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
     <div class="col-lg-12">
         @include('includes.mensaje')
         @include('includes.form-error')
+        @if (is_array($reemplazoPendiente ?? null))
+            <div class="alert alert-warning">
+                <h4><i class="icon fa fa-warning"></i> Confirmar reemplazo</h4>
+                <p class="mb-2">
+                    El certificado de
+                    <strong>{{ $reemplazoPendiente['etiqueta'] ?? 'este webservice' }}</strong>
+                    no se modificó. El archivo subido no coincide con el vigente.
+                </p>
+                <ul class="mb-2">
+                    @foreach (($reemplazoPendiente['avisos'] ?? []) as $textoAviso)
+                        <li>{{ $textoAviso }}</li>
+                    @endforeach
+                </ul>
+                <p class="mb-2">Si este es el certificado que corresponde, confirme el reemplazo. Si no, cancele.</p>
+                @if ($puedeInstalar)
+                    <form method="post" action="{{ route('confirmar_reemplazo_certificado_arca') }}" id="form-confirmar-reemplazo-arca" class="d-inline">
+                        @csrf
+                        <input type="hidden" name="token" value="{{ $reemplazoPendiente['token'] ?? '' }}">
+                        <button type="submit" class="btn btn-warning">Reemplazar igual</button>
+                    </form>
+                    <form method="post" action="{{ route('cancelar_reemplazo_certificado_arca') }}" class="d-inline ml-1">
+                        @csrf
+                        <input type="hidden" name="token" value="{{ $reemplazoPendiente['token'] ?? '' }}">
+                        <button type="submit" class="btn btn-outline-secondary">Cancelar</button>
+                    </form>
+                @endif
+            </div>
+        @endif
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Certificados ARCA por webservice</h3>
@@ -43,6 +71,47 @@ window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
                     <li>En Clave Fiscal ARCA, crear/renovar el certificado con el <strong>mismo alias</strong> y pegar el CSR.</li>
                     <li>Descargar el <code>.crt</code> y usar <strong>Subir certificado</strong>. La clave privada es opcional: si no la sube, no se reemplaza.</li>
                 </ol>
+                @if ($puedeInstalar)
+                    <div class="card card-outline card-info mb-3">
+                        <div class="card-header py-2">
+                            <h3 class="card-title mb-0">
+                                <a class="text-dark collapsed ws-pantalla-toggle" data-toggle="collapse" href="#webservices-pantalla-arca" role="button" aria-expanded="false" aria-controls="webservices-pantalla-arca">
+                                    <i class="fa fa-chevron-right ws-ico-cerrado" aria-hidden="true"></i>
+                                    <i class="fa fa-chevron-down ws-ico-abierto" aria-hidden="true"></i>
+                                    Webservices de esta pantalla
+                                </a>
+                            </h3>
+                            <style>
+                                .ws-pantalla-toggle { cursor: pointer; }
+                                .ws-pantalla-toggle .ws-ico-abierto { display: none; }
+                                .ws-pantalla-toggle:not(.collapsed) .ws-ico-cerrado { display: none; }
+                                .ws-pantalla-toggle:not(.collapsed) .ws-ico-abierto { display: inline; }
+                                .ws-pantalla-toggle.collapsed::after { content: ' (mostrar)'; font-weight: normal; font-size: .85rem; color: #6c757d; }
+                                .ws-pantalla-toggle:not(.collapsed)::after { content: ' (ocultar)'; font-weight: normal; font-size: .85rem; color: #6c757d; }
+                            </style>
+                        </div>
+                        <div id="webservices-pantalla-arca" class="collapse">
+                        <div class="card-body py-2">
+                            <p class="small text-muted mb-2">
+                                Destilde los que no usan en esta instalación para que no aparezcan en el listado.
+                                El webservice del punto de venta sigue siendo el que tiene cargado ahí.
+                            </p>
+                            <form method="post" action="{{ route('guardar_webservices_certificado_arca') }}">
+                                @csrf
+                                @foreach ($serviciosPantalla as $ws)
+                                    <div class="custom-control custom-checkbox custom-control-inline mb-1">
+                                        <input type="checkbox" class="custom-control-input" id="ws-pantalla-{{ $ws['id'] }}" name="servicios[]" value="{{ $ws['id'] }}" @checked($ws['visible'])>
+                                        <label class="custom-control-label" for="ws-pantalla-{{ $ws['id'] }}">{{ $ws['etiqueta'] }}</label>
+                                    </div>
+                                @endforeach
+                                <div class="mt-2">
+                                    <button type="submit" class="btn btn-primary btn-sm">Guardar</button>
+                                </div>
+                            </form>
+                        </div>
+                        </div>
+                    </div>
+                @endif
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered table-hover mb-0" id="tabla-certificados-arca">
                         <thead style="background:#85C1E9;color:#17202A;">
@@ -176,6 +245,7 @@ window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
                     </p>
                     <p class="small mb-2" id="instalar_ayuda_csr">
                         Se instala lo que suba. La clave privada es opcional: si no la elige, queda la que ya está en este servidor.
+                        Si el alias o el CUIT no coinciden con el vigente, hay que confirmar el reemplazo.
                     </p>
                     <div class="form-group">
                         <label for="par_zip" class="control-label">ZIP (opcional)</label>

@@ -2391,6 +2391,9 @@ Route::post('ventas/certificados-arca/generar-csr', 'Ventas\CertificadoArcaContr
 Route::get('ventas/certificados-arca/csr', 'Ventas\CertificadoArcaController@descargarCsr')->name('descargar_csr_certificado_arca');
 Route::get('ventas/certificados-arca/exportar-par', 'Ventas\CertificadoArcaController@exportarPar')->name('exportar_par_certificado_arca');
 Route::post('ventas/certificados-arca/instalar', 'Ventas\CertificadoArcaController@instalar')->name('instalar_certificado_arca');
+Route::post('ventas/certificados-arca/webservices', 'Ventas\CertificadoArcaController@guardarWebservices')->name('guardar_webservices_certificado_arca');
+Route::post('ventas/certificados-arca/confirmar-reemplazo', 'Ventas\CertificadoArcaController@confirmarReemplazo')->name('confirmar_reemplazo_certificado_arca');
+Route::post('ventas/certificados-arca/cancelar-reemplazo', 'Ventas\CertificadoArcaController@cancelarReemplazo')->name('cancelar_reemplazo_certificado_arca');
 Route::post('ventas/certificados-arca/probar', 'Ventas\CertificadoArcaController@probar')->name('probar_certificado_arca');
 
 Route::get('ventas/factura-pdf-parametro', 'Ventas\FacturaPdfParametroController@index')->name('factura_pdf_parametro');
