@@ -30,7 +30,9 @@
 <div id="cp-bloque-recepciones-com" class="mt-2"
      data-tolerancia-pct="{{ $toleranciaPct }}"
      data-importe-ref="{{ $importeRef }}"
-     data-ya-facturado="{{ (float) ($legajo_ya_facturado_importe ?? 0) }}"
+     data-ya-facturado-por-com='@json($com_ya_facturado_por_recepcion ?? (object) [])'
+     data-anticipadas-sin-com="{{ (float) ($com_anticipadas_sin_com ?? 0) }}"
+     data-oc-anticipada="{{ ! empty($com_oc_anticipada) ? '1' : '0' }}"
      data-cupo-nc="{{ (float) ($legajo_cupo_nc_importe ?? 0) }}"
      data-nc-sin-importe="{{ ! empty($legajo_nc_sin_importe) ? '1' : '0' }}"
      data-cotizacion-factura="{{ $cotizacionFactura }}"
@@ -53,13 +55,14 @@
                 Al guardar se controla cotización (ME) y tolerancia de importe vs provisión COM
                 <em>disponible</em>
                 ({{ number_format($toleranciaPct, 2, ',', '.') }}% según centro de costo de la OC; además ±$0,05).
-                La comparación se hace en la moneda de la factura ({{ $monedaFacturaNombre }}).
-                @if ((float) ($legajo_ya_facturado_importe ?? 0) > 0.005)
-                    Se descuenta lo ya facturado en el legajo
-                    ({{ number_format((float) $legajo_ya_facturado_importe, 2, ',', '.') }}),
-                    igual que Anita resta lo aplicado en <code>aplicped</code>.
+                La comparación se hace en la moneda de la factura ({{ $monedaFacturaNombre }}),
+                contra la provisión de la <strong>COM seleccionada</strong>.
+                Si esa recepción ya tiene otras facturas, se descuenta solo ese importe.
+                Otra factura del mismo legajo imputada a otra recepción no se resta.
+                @if (! empty($com_oc_anticipada))
+                    En una OC anticipada también se descuenta la factura anticipada sin COM.
                 @endif
-                Se compara el <strong>neto gravado</strong> de la factura con la provisión de la COM.
+                Se compara el <strong>neto gravado</strong> de la factura con esa provisión.
                 El impuesto interno solo se suma si esa COM ya lo provisionó (cigarrillos).
                 Si la COM no lo lleva (p. ej. gastronomía YAFEMA), el II va a su cuenta y no dispara diferencia.
                 Al contabilizar: el asiento de la recepción no se modifica; la factura debita la provisión (neto

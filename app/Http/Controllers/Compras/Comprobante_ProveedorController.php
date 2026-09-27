@@ -1347,7 +1347,9 @@ class Comprobante_ProveedorController extends Controller
         }
 
         $toleranciaPct = 0.0;
-        $legajoYaFacturado = ['importe' => 0.0, 'cantidad' => 0, 'items' => []];
+        $yaFacturadoPorRecepcion = [];
+        $anticipadasSinCom = 0.0;
+        $ocAnticipadaForm = false;
         $cupoNcLegajo = 0.0;
         $ncPendienteSinImporte = false;
         $urlPaqueteLegajo = null;
@@ -1361,11 +1363,6 @@ class Comprobante_ProveedorController extends Controller
                 $resumenNc = ComprobanteProveedorCupoNcLegajoSupport::resumenNcDelLegajo($oc);
                 $cupoNcLegajo = (float) $resumenNc['cupo'];
                 $ncPendienteSinImporte = (int) $resumenNc['nc_sin_importe'] > 0;
-                $excluirId = (int) ($data->id ?? 0) ?: null;
-                $legajoYaFacturado = \App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
-                    (int) $oc->id,
-                    $excluirId,
-                );
                 if ((int) $oc->id > 0
                     && (can('listar-legajo-compra', false) || can('listar-ordencompra', false))) {
                     $urlPaqueteLegajo = route('ordencompra_legajo_bandeja_paquete', ['id' => (int) $oc->id]);
@@ -1420,6 +1417,36 @@ class Comprobante_ProveedorController extends Controller
             }
         }
 
+        if ($data && $data->ordencompras) {
+            $excluirYa = (int) ($data->id ?? 0) ?: null;
+            $idsYa = $recepcionesDisponibles
+                ->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->filter(static fn (int $id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+            $monedaYa = (int) ($data->moneda_id ?? 1);
+            $cotYa = (float) ($data->cotizacion ?? 1);
+            $yaFacturadoPorRecepcion = \App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport::detallePorRecepcion(
+                $idsYa,
+                $excluirYa,
+                $monedaYa,
+                $cotYa,
+                $fechaFactura,
+            );
+            $ocAnticipadaForm = ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($data->ordencompras);
+            if ($ocAnticipadaForm) {
+                $anticipadasSinCom = (float) \App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableAnticipadasSinCom(
+                    (int) $data->ordencompras->id,
+                    $excluirYa,
+                    $monedaYa,
+                    $cotYa,
+                    $fechaFactura,
+                )['importe'];
+            }
+        }
+
         $politicaValidacionAbono = [];
         $validacionAbono = null;
         $urlValidacionAbono = null;
@@ -1452,7 +1479,9 @@ class Comprobante_ProveedorController extends Controller
             'com_obligatoria' => $comObligatoria,
             'com_politica' => $comPolitica,
             'com_tolerancia_pct' => $toleranciaPct,
-            'legajo_ya_facturado_importe' => (float) ($legajoYaFacturado['importe'] ?? 0),
+            'com_ya_facturado_por_recepcion' => (object) $yaFacturadoPorRecepcion,
+            'com_anticipadas_sin_com' => $anticipadasSinCom,
+            'com_oc_anticipada' => $ocAnticipadaForm,
             'legajo_cupo_nc_importe' => $cupoNcLegajo,
             'legajo_nc_sin_importe' => $ncPendienteSinImporte,
             'url_paquete_legajo' => $urlPaqueteLegajo,

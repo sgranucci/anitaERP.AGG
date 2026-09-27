@@ -39,6 +39,12 @@ Export: Pdf, Excel, Csv, con los filtros y el orden activos.
 
 Index de diseño (`ArticuloFerliController`), distinto del estándar. Workbench propio (`RECURSO = stock.producto_ferli`): QBE, diseñador, vistas y cortes. Conserva chips de estado, canal y estado de combinación, y las acciones de fila (combinaciones, diseño, técnica, contable, QR, precios). No comparte vistas ni etiquetas con el index estándar.
 
+### Empleados de sueldos (`sueldos/empleado`)
+
+Los chips de **Estado** (Activos por defecto, Provisorios, Bajas, Todos) y **Empresa** (una empresa o Todas mis empresas) quedan **por encima** del QBE y se combinan con AND. No los reemplaza la consulta avanzada. Al cambiar de vista, limpiar el QBE o exportar, se conservan `filtro_estado`, `empresa_id` y `empresa_todas`. Una vista guardada no pisa esos filtros.
+
+Barra propia: **Sincronizar desde Anita**, **Vincular domicilios**, **Nuevo empleado**. Grilla por defecto: Legajo, Nombre, CUIL, Empresa, Estado, Categoría, Ingreso, acciones al final. El diseñador puede mostrar el resto (documento, centro de costo, lugar, fechas, sueldo básico, etc.).
+
 ### Artículos (index estándar): no perder al pasar al workbench
 
 Chips **por encima** del QBE, combinados con AND. El default de estado sigue siendo **Activos** (no listar inactivos salvo que elijan Inactivos o Todos).
@@ -114,6 +120,7 @@ Si una columna no aplica en el entorno (canal fuera de Ferli, empresa con una so
 | Proveedores | loop en `compras/proveedor/index` | `compras/proveedor/partials/workbench_celda` |
 | Artículos | `stock/articulo/partials/workbench_th` | `stock/articulo/partials/workbench_celda` |
 | Cheques | `caja/cheque/partials/workbench_th` | `caja/cheque/partials/workbench_celda` |
+| Empleados | loop en `sueldos/empleado/index` | `sueldos/empleado/partials/workbench_celda` |
 
 El listado de columnas de cheques y de artículos más arriba es el **orden por defecto**. El diseñador lo puede cambiar. Saldo de depósito (Anita) entra en ese orden visual y no entra al QBE ni a los cortes.
 

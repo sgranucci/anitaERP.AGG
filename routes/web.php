@@ -5203,6 +5203,11 @@ Route::get('sueldos/indumentaria/listar-solicitudes/{formato?}', 'Sueldos\Solici
  * Alta provisoria con aviso/autorización; baja/reincorporación con historia.
  */
 Route::get('sueldos/empleado', 'Sueldos\Empleado_SueldosController@index')->name('consultar_empleado_sueldos');
+Route::post('sueldos/empleado/workbench/vista', 'Sueldos\Empleado_SueldosController@guardarVistaListado')->name('guardar_vista_listado_empleado_sueldos');
+Route::delete('sueldos/empleado/workbench/vista/{id}', 'Sueldos\Empleado_SueldosController@eliminarVistaListado')->name('eliminar_vista_listado_empleado_sueldos');
+Route::post('sueldos/empleado/workbench/columnas', 'Sueldos\Empleado_SueldosController@guardarColumnasListado')->name('guardar_columnas_listado_empleado_sueldos');
+Route::post('sueldos/empleado/workbench/etiquetas', 'Sueldos\Empleado_SueldosController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_empleado_sueldos');
+Route::post('sueldos/empleado/workbench/preview', 'Sueldos\Empleado_SueldosController@previewWorkbench')->name('preview_workbench_empleado_sueldos');
 Route::get('sueldos/empleado-consulta/buscar', 'Sueldos\EmpleadoConsulta_SueldosController@consultar')
     ->name('consulta_operativa_empleado_sueldos');
 Route::get('sueldos/empleado-consulta/resolver', 'Sueldos\EmpleadoConsulta_SueldosController@resolver')

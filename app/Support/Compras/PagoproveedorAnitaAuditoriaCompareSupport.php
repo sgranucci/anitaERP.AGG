@@ -118,6 +118,32 @@ final class PagoproveedorAnitaAuditoriaCompareSupport
     }
 
     /**
+     * Cabecera de la OP en promov. Cualquier cuota sirve: el alta deja la 0 y un
+     * reproceso puede haber actualizado la 1.
+     *
+     * @param  iterable<mixed>  $filas
+     * @return list<string>
+     */
+    public static function discrepanciasPromov(iterable $filas, float $montoOp): array
+    {
+        $montos = [];
+        foreach ($filas as $fila) {
+            $row = is_array($fila) ? $fila : get_object_vars($fila);
+            $montos[] = abs((float) ($row['prov_monto'] ?? 0));
+        }
+        if ($montos === []) {
+            return ['Falta promov de la OP'];
+        }
+        foreach ($montos as $monto) {
+            if (self::importesCercanos($monto, abs($montoOp))) {
+                return [];
+            }
+        }
+
+        return ['promov monto '.implode('/', $montos).' ≠ OP '.abs($montoOp)];
+    }
+
+    /**
      * @param  array<string, mixed>  $esperado  salida de ChequePropioCpromaeAnitaMapper::mapear
      * @param  array<string, mixed>|object  $anita
      * @return list<string>

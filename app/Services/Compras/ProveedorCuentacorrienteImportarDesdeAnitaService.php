@@ -672,19 +672,38 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
         $cc = null;
         if ($cp) {
+            $cuotaErp = Comprobante_Proveedor_Cuota::query()
+                ->where('comprobante_proveedor_id', $cp->id)
+                ->where('numero_cuota', $cuotaNro)
+                ->first();
+            $nCuotas = (int) Comprobante_Proveedor_Cuota::query()
+                ->where('comprobante_proveedor_id', $cp->id)
+                ->count();
             $ccs = ProveedorCuentacorrienteAnitaImportCcGuardSupport::soloDeudaDocumento(
                 Proveedor_Cuentacorriente::query()
                     ->where('comprobante_proveedor_id', $cp->id)
             )
                 ->orderBy('id')
                 ->get();
-            $cc = $ccs->count() === 1
-                ? $ccs->first()
-                : ($ccs->first(static function ($row) use ($pendienteAbs, $monto) {
-                    $abs = abs((float) $row->total);
+            if ($cuotaErp && (int) $cuotaErp->proveedor_cuentacorriente_id > 0) {
+                $cc = $ccs->firstWhere('id', (int) $cuotaErp->proveedor_cuentacorriente_id);
+            }
+            if ($cc === null && $cuotaErp) {
+                $cc = $ccs->first(
+                    static fn ($row) => (int) $row->comprobante_proveedor_cuota_id === (int) $cuotaErp->id
+                );
+            }
+            // Un solo movimiento del documento solo representa esta cuota si no hay plan de cuotas.
+            // Si hay varias, reutilizar la primera pisa el saldo con la última cuota importada.
+            if ($cc === null && $nCuotas <= 1) {
+                $cc = $ccs->count() === 1
+                    ? $ccs->first()
+                    : ($ccs->first(static function ($row) use ($pendienteAbs, $monto) {
+                        $abs = abs((float) $row->total);
 
-                    return abs($abs - $pendienteAbs) < 0.02 || abs($abs - $monto) < 0.02;
-                }) ?? $ccs->values()->get($cuotaNro - 1) ?? $ccs->first());
+                        return abs($abs - $pendienteAbs) < 0.02 || abs($abs - $monto) < 0.02;
+                    }) ?? $ccs->values()->get($cuotaNro - 1) ?? $ccs->first());
+            }
         }
 
         $aplicadoErpFirmado = $cc
@@ -1020,17 +1039,14 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
 
         $ccId = $item['cc_id'] ? (int) $item['cc_id'] : null;
         if ($item['accion_cc'] === 'crear') {
-            $ccExistente = null;
-            if ($cpId) {
-                $ccExistente = ProveedorCuentacorrienteAnitaImportCcGuardSupport::soloDeudaDocumento(
-                    Proveedor_Cuentacorriente::query()
-                        ->where('comprobante_proveedor_id', $cpId)
-                )
-                    ->orderBy('id')
-                    ->first();
-            }
-            if ($ccExistente !== null) {
-                $ccId = (int) $ccExistente->id;
+            $cuotaRow = $cpId
+                ? Comprobante_Proveedor_Cuota::query()
+                    ->where('comprobante_proveedor_id', $cpId)
+                    ->where('numero_cuota', $item['cuota'])
+                    ->first()
+                : null;
+            if ($cuotaRow && (int) $cuotaRow->proveedor_cuentacorriente_id > 0) {
+                $ccId = (int) $cuotaRow->proveedor_cuentacorriente_id;
             } else {
                 $cc = Proveedor_Cuentacorriente::query()->create([
                     'fecha' => $item['fecha'],
@@ -1040,15 +1056,14 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     'moneda_id' => $item['moneda_id'],
                     'cotizacion' => $item['cotizacion'],
                     'comprobante_proveedor_id' => $cpId,
+                    'comprobante_proveedor_cuota_id' => $cuotaRow?->id,
                     'empresa_id' => $item['empresa_id'],
                 ]);
                 $ccId = (int) $cc->id;
                 $out['cc_creada'] = true;
-                if ($cpId) {
-                    Comprobante_Proveedor_Cuota::query()
-                        ->where('comprobante_proveedor_id', $cpId)
-                        ->where('numero_cuota', $item['cuota'])
-                        ->update(['proveedor_cuentacorriente_id' => $ccId]);
+                if ($cuotaRow) {
+                    $cuotaRow->proveedor_cuentacorriente_id = $ccId;
+                    $cuotaRow->save();
                 }
             }
         } elseif ($ccId && ($item['accion_saldo'] ?? '') === 'alinear' && ! $esNativo) {

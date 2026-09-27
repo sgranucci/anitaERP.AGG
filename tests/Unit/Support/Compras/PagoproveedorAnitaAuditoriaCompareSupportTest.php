@@ -22,6 +22,26 @@ class PagoproveedorAnitaAuditoriaCompareSupportTest extends TestCase
         $this->assertSame('*', PagoproveedorAnitaAuditoriaCompareSupport::normalizarChar1('*'));
     }
 
+    public function test_promov_exige_cabecera_por_el_monto_de_la_op(): void
+    {
+        $this->assertSame(
+            ['Falta promov de la OP'],
+            PagoproveedorAnitaAuditoriaCompareSupport::discrepanciasPromov([], 200000)
+        );
+        $this->assertSame(
+            [],
+            PagoproveedorAnitaAuditoriaCompareSupport::discrepanciasPromov([
+                ['prov_monto' => '200000.0', 'prov_nro_cuota' => '0'],
+            ], 200000)
+        );
+        $this->assertSame(
+            ['promov monto 300000 ≠ OP 200000'],
+            PagoproveedorAnitaAuditoriaCompareSupport::discrepanciasPromov([
+                (object) ['prov_monto' => 300000],
+            ], 200000)
+        );
+    }
+
     public function test_importes_cercanos(): void
     {
         $this->assertTrue(PagoproveedorAnitaAuditoriaCompareSupport::importesCercanos(1960396.90, '1960396.9'));

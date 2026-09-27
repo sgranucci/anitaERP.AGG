@@ -16,7 +16,7 @@
 <p style="margin:0 0 16px 0; color:#555; font-size:13px;">
     Solo OP generadas en anitaERP (con asiento). Verifica <code>pago</code>, <code>tesmov</code>,
     <code>auxpag</code>, <code>cpromae</code> (para_dep / negociable), retenciones, el asiento ERP
-    (Debe = Haber) y <code>ctamov</code> Anita. Por default solo diagnostica.
+    (Debe = Haber), <code>ctamov</code> y <code>promov</code> Anita. Por default solo diagnostica.
 </p>
 
 <h3 style="margin:18px 0 6px 0;">Resumen</h3>

@@ -173,6 +173,45 @@ class AplicacionCuentacorrienteAnitaMapperTest extends TestCase
         $this->assertStringContainsString("'146912851.5600'", $valores);
     }
 
+    public function test_aplicacion_propia_de_opa_queda_en_cuota_cero_con_apa(): void
+    {
+        $opa = AplicacionCuentacorrienteAnitaLadoSupport::armar('3593', 'OPA', 'A', 1, 124102, 0, 0, 1, '2', 1515);
+        $valores = AplmovpAnitaMapper::valoresInsertPropia($opa, 'APA', 0, 1401, '20260820', 9055.89);
+        $this->assertStringContainsString("'OPA'", $valores);
+        $this->assertStringContainsString("'0'", $valores);
+        $this->assertStringContainsString("'APA'", $valores);
+        $this->assertStringContainsString("'1401'", $valores);
+        $this->assertStringContainsString("'9055.8900'", $valores);
+
+        $where = AplmovpAnitaMapper::whereDocumento($opa);
+        $this->assertStringContainsString("aplvp_nro_cuota = '0'", $where);
+    }
+
+    public function test_aplicacion_propia_de_nota_referencia_anc(): void
+    {
+        $nota = AplicacionCuentacorrienteAnitaLadoSupport::armar('3593', 'CNB', 'A', 7, 94, 426854, 1, 1, '2', 1510);
+        $valores = AplmovpAnitaMapper::valoresInsertPropia($nota, 'ANC', 7, 94, '20260820', 10786.16);
+        $this->assertStringContainsString("'CNB'", $valores);
+        $this->assertStringContainsString("'ANC'", $valores);
+        $this->assertStringContainsString("'426854'", $valores);
+        $this->assertStringContainsString("'10786.1600'", $valores);
+    }
+
+    public function test_t_pagado_de_anticipo_no_suma_la_factura(): void
+    {
+        $filas = [
+            ['aplvp_tipo' => 'FNB', 'aplvp_tipo_cob' => 'OPA', 'aplvp_monto' => '9055.89', 'aplvp_fecha' => '20260820'],
+            ['aplvp_tipo' => 'OPA', 'aplvp_tipo_cob' => 'OPA', 'aplvp_monto' => '9055.89', 'aplvp_fecha' => '20260820'],
+        ];
+        $elegidas = AplicacionCuentacorrienteAnitaLadoSupport::filasParaTPagado($filas, 'OPA');
+        $this->assertCount(1, $elegidas);
+        $this->assertSame('OPA', $elegidas[0]['aplvp_tipo']);
+        $this->assertSame(9055.89, AplicacionCuentacorrienteAnitaLadoSupport::tPagadoDesdeFilasAplmovp($elegidas));
+
+        $soloFactura = AplicacionCuentacorrienteAnitaLadoSupport::filasParaTPagado([$filas[0]], 'OPA');
+        $this->assertSame('FNB', $soloFactura[0]['aplvp_tipo']);
+    }
+
     public function test_promov_opa_sin_interno_no_filtra_nro_interno(): void
     {
         $opa = AplicacionCuentacorrienteAnitaLadoSupport::armar('3593', 'OPA', 'A', 1, 124102);

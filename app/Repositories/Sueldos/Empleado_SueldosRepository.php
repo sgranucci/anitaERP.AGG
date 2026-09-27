@@ -13,6 +13,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Sueldos\EmpleadoDomicilioVinculador;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Sueldos\EmpleadoEstados;
+use App\Support\Sueldos\EmpleadoSueldosListadoColumnas;
 use App\Support\Sueldos\EmpleadoSueldosListadoFiltros;
 use App\Support\Sueldos\VacacionFechaAnita;
 use Illuminate\Http\UploadedFile;
@@ -146,32 +147,90 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $filtros = EmpleadoSueldosListadoFiltros::filtrosVacios();
         }
 
-        $query = $this->model->newQuery()
-            ->select('empleado_sueldos.*')
-            ->with([
-                'empresa:id,nombre',
-                'categoria:id,codigo,descripcion,origen_bases',
-                'centrocosto:id,codigo,nombre',
-            ]);
+        $query = $this->queryEmpleadoListado($filtros);
 
-        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empleado_sueldos.empresa_id');
-
-        // Los filtros externos (estado default Activo + empresa) se aplican siempre.
-        EmpleadoSueldosListadoFiltros::aplicar($query, $filtros);
-
-        $query->orderBy('empleado_sueldos.empresa_id')
-            ->orderBy('empleado_sueldos.legajo');
+        $perPage = (int) ($filtros['_per_page'] ?? 15);
+        if ($perPage < 1) {
+            $perPage = 15;
+        }
 
         $result = isset($flPaginando) && $flPaginando
-            ? $query->paginate(15)
+            ? $query->paginate($perPage)
             : $query->get();
 
         $items = method_exists($result, 'items') ? $result->items() : $result;
         foreach ($items as $row) {
-            $row->setAttribute('nombreempresa', optional($row->empresa)->nombre);
+            if (trim((string) ($row->nombreempresa ?? '')) === '') {
+                $row->setAttribute('nombreempresa', optional($row->empresa)->nombre);
+            }
+            if (trim((string) ($row->nombrecategoria ?? '')) === '') {
+                $row->setAttribute('nombrecategoria', optional($row->categoria)->descripcion);
+            }
+            if (trim((string) ($row->nombrecentrocosto ?? '')) === '') {
+                $row->setAttribute('nombrecentrocosto', optional($row->centrocosto)->nombre);
+            }
         }
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function queryEmpleadoListado(array $filtros)
+    {
+        $query = $this->model->newQuery()
+            ->select([
+                'empleado_sueldos.*',
+                'empresa.nombre as nombreempresa',
+                'categoria_sueldos.descripcion as nombrecategoria',
+                'centrocosto.nombre as nombrecentrocosto',
+                'lugartrabajo_sueldos.nombre as nombrelugartrabajo',
+                'agrupamiento_sueldos.descripcion as nombreagrupamiento',
+                'obrasocial_sueldos.descripcion as nombreobrasocial',
+                'sindicato_sueldos.descripcion as nombresindicato',
+                'localidad.nombre as nombrelocalidad',
+                'provincia.nombre as nombreprovincia',
+            ])
+            ->leftJoin('empresa', 'empresa.id', '=', 'empleado_sueldos.empresa_id')
+            ->leftJoin('categoria_sueldos', 'categoria_sueldos.id', '=', 'empleado_sueldos.categoria_id')
+            ->leftJoin('centrocosto', 'centrocosto.id', '=', 'empleado_sueldos.centrocosto_id')
+            ->leftJoin('lugartrabajo_sueldos', 'lugartrabajo_sueldos.id', '=', 'empleado_sueldos.lugartrabajo_id')
+            ->leftJoin('agrupamiento_sueldos', 'agrupamiento_sueldos.id', '=', 'empleado_sueldos.agrupamiento_id')
+            ->leftJoin('obrasocial_sueldos', 'obrasocial_sueldos.id', '=', 'empleado_sueldos.obrasocial_id')
+            ->leftJoin('sindicato_sueldos', 'sindicato_sueldos.id', '=', 'empleado_sueldos.sindicato_id')
+            ->leftJoin('localidad', 'localidad.id', '=', 'empleado_sueldos.localidad_id')
+            ->leftJoin('provincia', 'provincia.id', '=', 'empleado_sueldos.provincia_id');
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empleado_sueldos.empresa_id');
+        EmpleadoSueldosListadoFiltros::aplicar($query, $filtros);
+        EmpleadoSueldosListadoFiltros::aplicarOrden($query, $filtros);
+
+        return $query;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesEmpleado(array $filtros): array
+    {
+        $campos = EmpleadoSueldosListadoFiltros::camposOrdenables();
+        $agrupar = \App\Support\Listado\ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $etiquetas = \App\Support\Listado\ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            EmpleadoSueldosListadoColumnas::RECURSO,
+            EmpleadoSueldosListadoColumnas::catalogoActivo()
+        );
+
+        return \App\Support\Listado\ListadoCortesSupport::calcular(
+            $this->queryEmpleadoListado($filtros),
+            $agrupar,
+            $campos,
+            'empleado_sueldos.id',
+            static fn (object $row, string $key): string => EmpleadoSueldosListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => EmpleadoSueldosListadoColumnas::sqlAgrupacion($key),
+            $etiquetas
+        );
     }
 
     public function create(array $data)

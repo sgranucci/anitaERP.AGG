@@ -103,4 +103,51 @@ final class PromovPagoAnitaMapper
             prov_ref_nro = '0'
         ";
     }
+
+    /**
+     * APA: la aplicación del anticipo. Apunta a la OPA y el monto es lo aplicado.
+     *
+     * @param  Lado  $opa
+     */
+    public static function valoresInsertApa(array $opa, int $nroApa, float $monto, string $fechaYmd): string
+    {
+        $e = static fn (string $v, int $max = 0) => AplicacionCuentacorrienteAnitaLadoSupport::esc($v, $max);
+        $montoTxt = AplicacionCuentacorrienteAnitaLadoSupport::decimal(abs($monto));
+        $fecha = $e($fechaYmd, 8);
+        if ($fecha === '') {
+            $fecha = '0';
+        }
+        $codMon = MonedaAnitaCodigoSupport::normalizar($opa['cod_mon'] ?? '1');
+        $cot = AplicacionCuentacorrienteAnitaLadoSupport::decimal((float) ($opa['cotizacion'] ?? 1));
+        $comun = "
+            '".$e($opa['proveedor'], 6)."',
+            'APA',
+            '".$e($opa['letra'], 1)."',
+            '0',
+            '".$nroApa."',
+            '".$e($opa['tipo'], 3)."',
+            '".$e($opa['letra'], 1)."',
+            '".(int) $opa['sucursal']."',
+            '".(int) $opa['numero']."',
+            '".$fecha."',
+            '0',
+            '".$montoTxt."',
+            '".$codMon."',
+            '".$cot."',
+            '0',
+            '".$montoTxt."',
+            '".$fecha."',
+            '0'";
+
+        if (EntornoEmpresaSupport::esFerli()) {
+            return $comun;
+        }
+
+        return $comun.",
+            '".(int) ($opa['empresa'] ?? 0)."',
+            '0',
+            '',
+            ''
+        ";
+    }
 }

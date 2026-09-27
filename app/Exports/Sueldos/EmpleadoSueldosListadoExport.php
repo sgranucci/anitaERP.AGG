@@ -4,6 +4,9 @@ namespace App\Exports\Sueldos;
 
 use App\Repositories\Sueldos\Empleado_SueldosRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Listado\ListadoExportPresentacionSupport;
+use App\Support\Sueldos\EmpleadoSueldosListadoColumnas;
+use App\Support\Sueldos\EmpleadoSueldosListadoFiltros;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -23,9 +26,13 @@ class EmpleadoSueldosListadoExport implements FromView, ShouldAutoSize, WithColu
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'H';
-
     private Empleado_SueldosRepositoryInterface $repository;
+
+    /** @var list<string> */
+    private array $columnas = [];
+
+    /** @var array<string, string> */
+    private array $etiquetas = [];
 
     /** @var array<string, mixed>|string|null */
     private $filtros;
@@ -55,13 +62,23 @@ class EmpleadoSueldosListadoExport implements FromView, ShouldAutoSize, WithColu
 
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
+            $filtrosPdf = is_array($this->filtros) ? $this->filtros : [];
+            $filtrosPdf['orden'] = $filtrosPdf['orden'] ?? ($filtrosPdf['sort'] ?? []);
+            $subtitulo = ListadoExportPresentacionSupport::subtitulo(
+                $filtrosPdf,
+                $this->etiquetas,
+                EmpleadoSueldosListadoFiltros::camposOrdenables()
+            );
             $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-            $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+            $this->filaCabecerasExcel = $this->filaTituloExcel + 1 + ($subtitulo !== '' ? 1 : 0);
             $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
             return view('exports.sueldos.empleadoindex', [
                 'datas' => $datas,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
+                'columnasVisibles' => $this->columnas,
+                'etiquetasColumnas' => $this->etiquetas,
+                'subtitulo' => $subtitulo,
             ]);
         }
 
@@ -74,22 +91,24 @@ class EmpleadoSueldosListadoExport implements FromView, ShouldAutoSize, WithColu
         return view('exports.sueldos.empleadoindex', [
             'datas' => collect(),
             'reservarFilaLogoExcel' => false,
+            'columnasVisibles' => $this->columnas,
+            'etiquetasColumnas' => $this->etiquetas,
         ]);
     }
 
     public function columnFormats(): array
     {
         if ($this->flDesdeIndex) {
-            return [
-                'A' => NumberFormat::FORMAT_TEXT,
-                'B' => NumberFormat::FORMAT_TEXT,
-                'C' => NumberFormat::FORMAT_TEXT,
-                'D' => NumberFormat::FORMAT_TEXT,
-                'E' => NumberFormat::FORMAT_TEXT,
-                'F' => NumberFormat::FORMAT_TEXT,
-                'G' => NumberFormat::FORMAT_TEXT,
-                'H' => NumberFormat::FORMAT_TEXT,
-            ];
+            $formatos = [];
+            $catalogo = EmpleadoSueldosListadoColumnas::catalogoActivo();
+            foreach ($this->columnasExport() as $i => $key) {
+                $type = $catalogo[$key]['type'] ?? 'texto';
+                $formatos[ListadoExportPresentacionSupport::columnaLetra($i)] = $type === 'decimal'
+                    ? NumberFormat::FORMAT_NUMBER_00
+                    : NumberFormat::FORMAT_TEXT;
+            }
+
+            return $formatos;
         }
 
         return [];
@@ -164,9 +183,10 @@ class EmpleadoSueldosListadoExport implements FromView, ShouldAutoSize, WithColu
                 }
 
                 $filaTit = $this->filaTituloExcel;
-                $sheet->mergeCells('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit);
+                $ultima = $this->columnaUltima();
+                $sheet->mergeCells('A'.$filaTit.':'.$ultima.$filaTit);
                 $sheet->getRowDimension($filaTit)->setRowHeight(30);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$ultima.$filaTit)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,
@@ -186,17 +206,42 @@ class EmpleadoSueldosListadoExport implements FromView, ShouldAutoSize, WithColu
 
     public function title(): string
     {
-        return 'Vacaciones';
+        return 'Empleados';
     }
 
     /**
      * @param  array<string, mixed>|string|null  $filtros
+     * @param  list<string>|null  $columnas
+     * @param  array<string, string>|null  $etiquetas
      */
-    public function parametros($filtros)
+    public function parametros($filtros, ?array $columnas = null, ?array $etiquetas = null)
     {
         $this->filtros = $filtros;
         $this->flDesdeIndex = true;
+        $this->columnas = EmpleadoSueldosListadoColumnas::normalizarVisibles($columnas);
+        $this->etiquetas = is_array($etiquetas) ? $etiquetas : [];
 
         return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columnasExport(): array
+    {
+        $catalogo = EmpleadoSueldosListadoColumnas::catalogoActivo();
+        $columnas = array_values(array_filter(
+            $this->columnas,
+            static fn ($k) => isset($catalogo[$k]) && ! empty($catalogo[$k]['export'])
+        ));
+
+        return $columnas !== [] ? $columnas : EmpleadoSueldosListadoColumnas::defaultsVisibles();
+    }
+
+    private function columnaUltima(): string
+    {
+        $n = count($this->columnasExport());
+
+        return ListadoExportPresentacionSupport::columnaLetra(max(0, $n - 1));
     }
 }

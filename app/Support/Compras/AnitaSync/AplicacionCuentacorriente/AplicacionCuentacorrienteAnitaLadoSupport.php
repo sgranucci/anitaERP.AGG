@@ -173,6 +173,35 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
     }
 
     /**
+     * prov_t_pagado sale de las filas en las que el comprobante es la deuda
+     * (aplvp_tipo). La fila en la que solo es el crédito (la factura pagada por
+     * la OPA o la nota) no se suma: si no, el anticipo queda en el doble.
+     * Si todavía no hay fila propia, se usan las del crédito para no borrar
+     * un pagado que Anita ya tenía.
+     *
+     * @param  list<array<string, mixed>|object>  $filasAplmovp
+     * @return list<array<string, mixed>>
+     */
+    public static function filasParaTPagado(array $filasAplmovp, string $tipo): array
+    {
+        $tipo = strtoupper(substr(trim($tipo), 0, 3));
+        $propias = [];
+        $comoCredito = [];
+        foreach ($filasAplmovp as $fila) {
+            $a = (array) $fila;
+            $tipoFila = strtoupper(substr(trim((string) ($a['aplvp_tipo'] ?? '')), 0, 3));
+            $tipoCob = strtoupper(substr(trim((string) ($a['aplvp_tipo_cob'] ?? '')), 0, 3));
+            if ($tipoFila === $tipo) {
+                $propias[] = $a;
+            } elseif ($tipoCob === $tipo) {
+                $comoCredito[] = $a;
+            }
+        }
+
+        return $propias !== [] ? $propias : $comoCredito;
+    }
+
+    /**
      * Fuente de verdad Anita: prov_t_pagado = suma neta de aplmovp del comprobante.
      * AOP (anulación de OP) resta; el resto suma.
      *

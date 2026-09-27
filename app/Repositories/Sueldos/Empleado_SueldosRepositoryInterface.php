@@ -6,6 +6,12 @@ interface Empleado_SueldosRepositoryInterface extends RepositoryInterface
 {
     public function leeEmpleado($filtros, $flPaginando = null);
 
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesEmpleado(array $filtros): array;
+
     public function findOperativo(int $id);
 
     public function findOperativoPorLegajo(int $legajo, ?int $empresaId = null);

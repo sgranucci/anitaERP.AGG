@@ -1,73 +1,70 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
-    use App\Support\Sueldos\EmpleadoEstados;
-    $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datas);
-    $totalFilas = is_countable($datas) ? count($datas) : 0;
+    use App\Support\Listado\ListadoAgrupacionSupport;
+    use App\Support\Listado\ListadoExportPresentacionSupport;
+    use App\Support\Listado\ListadoPdfRapidoSupport;
+    use App\Support\Sueldos\EmpleadoSueldosListadoColumnas;
+    use App\Support\Sueldos\EmpleadoSueldosListadoFiltros;
+
+    $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datas ?? collect());
+    $etiquetas = $etiquetasColumnas ?? [];
+    $campos = EmpleadoSueldosListadoFiltros::camposOrdenables();
+    $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+    $filasSegmentadas = ListadoAgrupacionSupport::segmentar(
+        $datas ?? [],
+        $agrupar,
+        static fn ($row, string $campo): string => EmpleadoSueldosListadoColumnas::valorCelda($row, $campo),
+        $etiquetas
+    );
+    $lotesPdf = ListadoPdfRapidoSupport::lotes($filasSegmentadas);
+    $filtrosPdf = $filtros ?? [];
+    $filtrosPdf['orden'] = $filtrosPdf['orden'] ?? ($filtrosPdf['sort'] ?? []);
+    $subtitulo = ListadoExportPresentacionSupport::subtitulo($filtrosPdf, $etiquetas, $campos);
+    $estado = $filtros['estado'] ?? '';
+    if ($estado !== '') {
+        $subtitulo = trim('Estado: '.\App\Support\Sueldos\EmpleadoEstados::label($estado).($subtitulo !== '' ? ' · '.$subtitulo : ''));
+    }
+    $totalFilas = is_countable($datas ?? null) ? count($datas) : 0;
+    $columnasPdf = $columnasVisibles ?? null;
 @endphp
 <!DOCTYPE html>
 <html lang="es">
 <head>
-	<meta charset="UTF-8">
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-	<title>Empleados</title>
-	<style>
-		body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
-		table.data { border-collapse: collapse; width: 100%; table-layout: fixed; }
-		table.data td, table.data th { border: 1px solid #cccccc; text-align: left; padding: 3px; vertical-align: top; word-wrap: break-word; }
-		table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
-		table.data thead tr { background-color: #85C1E9; }
-		table.data th { font-size: 7px; font-weight: bold; color: #17202A; }
-		.listado-header { width: 100%; margin-bottom: 10px; border-bottom: 2px solid #333; padding-bottom: 6px; }
-		.listado-header td { vertical-align: middle; border: none; }
-		.meta { font-size: 8px; color: #444; margin-top: 4px; }
-	</style>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <title>Empleados</title>
+    <style>
+        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
+        table.data { border-collapse: collapse; width: 100%; table-layout: fixed; margin: 0; page-break-inside: auto; }
+        table.data thead { display: table-header-group; }
+        table.data td, table.data th {
+            border: 1px solid #cccccc;
+            text-align: left;
+            padding: 2px 3px;
+            vertical-align: top;
+        }
+        table.data thead tr.columnas > th { background-color: #85C1E9; font-size: 7px; font-weight: bold; color: #17202A; }
+        tr.lw-export-grupo td { background: #D6EAF8; font-weight: bold; color: #1B4F72; }
+        tr.lw-export-grupo-1 td { background: #EAF2F8; }
+        .meta { font-size: 8px; color: #444; margin-top: 3px; }
+    </style>
 </head>
 <body>
-	<table class="listado-header">
-		<tr>
-			<td style="width: 35%;">
-				@foreach ($logosCabecera as $logo)
-					<img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 56px; max-width: 180px; margin-right: 10px; margin-bottom: 4px; vertical-align: middle;">
-				@endforeach
-			</td>
-			<td style="width: 40%; text-align: center;">
-				<h2 style="margin: 0; font-size: 18px; font-weight: bold;">Listado de empleados</h2>
-				<div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
-			</td>
-			<td style="width: 25%; text-align: right; font-size: 8px;">
-				@if ($totalFilas > 0)
-					Registros: {{ $totalFilas }}
-				@endif
-			</td>
-		</tr>
-	</table>
-	<table class="data">
-		<thead>
-			<tr>
-				<th style="width: 8%;">Legajo</th>
-				<th style="width: 22%;">Nombre</th>
-				<th style="width: 12%;">CUIL</th>
-				<th style="width: 16%;">Empresa</th>
-				<th style="width: 10%;">Estado</th>
-				<th style="width: 14%;">Categor&iacute;a</th>
-				<th style="width: 10%;">C.Costo</th>
-				<th style="width: 8%;">Ingreso</th>
-			</tr>
-		</thead>
-		<tbody>
-			@foreach ($datas as $data)
-				<tr>
-					<td>{{ $data->legajo }}</td>
-					<td>{{ $data->nombre }}</td>
-					<td>{{ $data->cuil }}</td>
-					<td>{{ $data->nombreempresa ?? optional($data->empresa)->nombre }}</td>
-					<td>{{ EmpleadoEstados::label($data->estado ?? null) }}</td>
-					<td>{{ optional($data->categoria)->descripcion }}</td>
-					<td>{{ optional($data->centrocosto)->codigo }}</td>
-					<td>{{ optional($data->fecha_ingreso)->format('d/m/Y') }}</td>
-				</tr>
-			@endforeach
-		</tbody>
-	</table>
+    @foreach ($lotesPdf as $indiceLote => $lotePdf)
+        <table class="data">
+            @include('sueldos.empleado.partials.tabla_listado_export', [
+                'datas' => $datas ?? [],
+                'filasSegmentadas' => $lotePdf,
+                'columnasVisibles' => $columnasPdf,
+                'etiquetasColumnas' => $etiquetas,
+                'cabeceraPdf' => $indiceLote === 0 ? [
+                    'titulo' => 'Listado de empleados',
+                    'subtitulo' => $subtitulo,
+                    'logosCabecera' => $logosCabecera,
+                    'totalFilas' => $totalFilas,
+                ] : null,
+            ])
+        </table>
+    @endforeach
 </body>
 </html>

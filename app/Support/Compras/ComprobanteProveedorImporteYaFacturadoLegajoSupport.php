@@ -26,8 +26,9 @@ use Illuminate\Support\Facades\Schema;
 final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
 {
     /**
-     * Facturas contabilizadas del legajo (informativo en pantalla).
-     * No usar solo esto para comparar provisión COM (rompe Telefónica).
+     * Facturas contabilizadas de todo el legajo.
+     * No usar en el cartel ni para comparar provisión COM: resta facturas de otras
+     * recepciones y marca un falso “fuera de tolerancia”.
      *
      * @return array{
      *     importe: float,
@@ -272,13 +273,14 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
     }
 
     /**
-     * Importe ya facturado por cada COM (misma moneda destino).
-     * Un CP ligado a dos COM se suma en ambas al evaluar cada una por separado.
+     * Facturas ya imputadas a cada COM (misma moneda destino), sin la factura en edición.
+     * Un comprobante ligado a dos COM aparece en ambas; al sumar la selección hay que
+     * contarlo una sola vez.
      *
      * @param  list<int|string>  $recepcionIds
-     * @return array<int, float>
+     * @return array<int, list<array{id: int, etiqueta: string, importe: float, signo: string}>>
      */
-    public static function importePorRecepcion(
+    public static function detallePorRecepcion(
         array $recepcionIds,
         ?int $excluirComprobanteId = null,
         int $monedaDestinoId = 1,
@@ -288,7 +290,7 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
         $ids = self::normalizarIds($recepcionIds);
         $out = [];
         foreach ($ids as $id) {
-            $out[$id] = 0.0;
+            $out[$id] = [];
         }
         if ($ids === [] || ! self::hayTablaPivot()) {
             return $out;
@@ -313,25 +315,72 @@ final class ComprobanteProveedorImporteYaFacturadoLegajoSupport
         }
 
         $cps = $query->get()->keyBy('id');
+        $vistos = [];
         foreach ($pivotes as $pivote) {
             $cp = $cps->get((int) $pivote->comprobante_proveedor_id);
             if (! $cp) {
                 continue;
             }
             $rid = (int) $pivote->recepcion_proveedor_id;
-            if (! isset($out[$rid])) {
+            if (! array_key_exists($rid, $out)) {
                 continue;
             }
-            $out[$rid] = round(
-                $out[$rid] + self::comparableDeComprobante(
+            $cpId = (int) $cp->id;
+            if (isset($vistos[$rid][$cpId])) {
+                continue;
+            }
+            $vistos[$rid][$cpId] = true;
+            $signo = (string) ($cp->tipotransaccion_compras->signo ?? 'S');
+            $esNc = ComprobanteProveedorImputacionApSupport::esNotaCredito($signo);
+            $out[$rid][] = [
+                'id' => $cpId,
+                'etiqueta' => trim(sprintf(
+                    '%s %04d-%08d',
+                    $cp->letra ?: 'FC',
+                    (int) ($cp->sucursal ?? 0),
+                    (int) ($cp->numerocomprobante ?? 0)
+                )),
+                'importe' => self::comparableDeComprobante(
                     $cp,
                     $monedaDestinoId,
                     $cotizacionDestino,
                     $fechaDestino,
                     true,
                 ),
-                2
-            );
+                'signo' => $esNc ? 'R' : 'S',
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Importe ya facturado por cada COM (misma moneda destino).
+     * Un CP ligado a dos COM se suma en ambas al evaluar cada una por separado.
+     *
+     * @param  list<int|string>  $recepcionIds
+     * @return array<int, float>
+     */
+    public static function importePorRecepcion(
+        array $recepcionIds,
+        ?int $excluirComprobanteId = null,
+        int $monedaDestinoId = 1,
+        mixed $cotizacionDestino = 1.0,
+        mixed $fechaDestino = null,
+    ): array {
+        $out = [];
+        foreach (self::detallePorRecepcion(
+            $recepcionIds,
+            $excluirComprobanteId,
+            $monedaDestinoId,
+            $cotizacionDestino,
+            $fechaDestino,
+        ) as $id => $items) {
+            $suma = 0.0;
+            foreach ($items as $item) {
+                $suma += (float) ($item['importe'] ?? 0);
+            }
+            $out[(int) $id] = round($suma, 2);
         }
 
         return $out;

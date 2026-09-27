@@ -21,7 +21,7 @@ final class MayorFuenteConsultaSupport
     public const MODO_ANITA = 'anita';
 
     /** Referencia operativa (documentación / defaults legacy); ya no parte tramos. */
-    public const CORTE_DEFAULT_YMD = 20260831;
+    public const CORTE_DEFAULT_YMD = 20260927;
 
     /**
      * @return self::MODO_ERP|self::MODO_ANITA

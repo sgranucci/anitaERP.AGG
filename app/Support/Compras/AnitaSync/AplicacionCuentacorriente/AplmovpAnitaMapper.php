@@ -164,7 +164,11 @@ final class AplmovpAnitaMapper
         $letra = $e($lado['letra'], 1);
         $suc = (int) $lado['sucursal'];
         $nro = (int) $lado['numero'];
-        $cuota = self::nroCuota($lado);
+        // OPA guarda la aplicación propia en cuota 0. No subirla a 1.
+        $cuota = (int) ($lado['nro_cuota'] ?? 1);
+        if ($cuota < 0) {
+            $cuota = 1;
+        }
 
         return " WHERE aplvp_proveedor = '".$prov."'
             AND (
@@ -179,6 +183,76 @@ final class AplmovpAnitaMapper
                     AND aplvp_sucursal_cob = '".$suc."'
                     AND aplvp_nro_cob = '".$nro."')
             ) ";
+    }
+
+    /**
+     * Aplicación propia del crédito: la OPA (ref APA) o la nota de crédito (ref ANC)
+     * contra sí misma. Sin esta fila el listado de deuda sigue mostrando el crédito.
+     *
+     * @param  Lado  $credito
+     */
+    public static function valoresInsertPropia(
+        array $credito,
+        string $refTipo,
+        int $refSucursal,
+        int $refNro,
+        string $fechaYmd,
+        float $monto,
+    ): string {
+        $e = static fn (string $v, int $max = 0) => AplicacionCuentacorrienteAnitaLadoSupport::esc($v, $max);
+        $cuota = (int) ($credito['nro_cuota'] ?? 0);
+        if ($cuota < 0) {
+            $cuota = 0;
+        }
+        $interno = (int) ($credito['nro_interno'] ?? 0);
+        $refTipo = $e($refTipo, 3);
+
+        return "
+            '".$e($credito['proveedor'], 6)."',
+            '".$e($credito['tipo'], 3)."',
+            '".$e($credito['letra'], 1)."',
+            '".(int) $credito['sucursal']."',
+            '".(int) $credito['numero']."',
+            '".$cuota."',
+            '".$e($fechaYmd, 8)."',
+            '".AplicacionCuentacorrienteAnitaLadoSupport::decimal($monto)."',
+            '".$e($credito['tipo'], 3)."',
+            '".$e($credito['letra'], 1)."',
+            '".(int) $credito['sucursal']."',
+            '".(int) $credito['numero']."',
+            '".$refTipo."',
+            '".$e($credito['letra'], 1)."',
+            '".$refSucursal."',
+            '".$refNro."',
+            '".$interno."',
+            '".$interno."',
+            '".self::codMon($credito)."',
+            '".self::cotizacion($credito)."'
+        ";
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    public static function wherePropia(array $credito, string $refTipo, string $fechaYmd, float $monto): string
+    {
+        $e = static fn (string $v, int $max = 0) => AplicacionCuentacorrienteAnitaLadoSupport::esc($v, $max);
+        $cuota = (int) ($credito['nro_cuota'] ?? 0);
+        if ($cuota < 0) {
+            $cuota = 0;
+        }
+
+        return " WHERE aplvp_proveedor = '".$e($credito['proveedor'], 6)."'
+            AND aplvp_tipo = '".$e($credito['tipo'], 3)."'
+            AND aplvp_letra = '".$e($credito['letra'], 1)."'
+            AND aplvp_sucursal = '".(int) $credito['sucursal']."'
+            AND aplvp_nro = '".(int) $credito['numero']."'
+            AND aplvp_nro_cuota = '".$cuota."'
+            AND aplvp_fecha = '".$e($fechaYmd, 8)."'
+            AND aplvp_tipo_cob = '".$e($credito['tipo'], 3)."'
+            AND aplvp_nro_cob = '".(int) $credito['numero']."'
+            AND aplvp_ref_tipo = '".$e($refTipo, 3)."'
+            AND aplvp_monto = '".AplicacionCuentacorrienteAnitaLadoSupport::decimal($monto)."' ";
     }
 
     /**

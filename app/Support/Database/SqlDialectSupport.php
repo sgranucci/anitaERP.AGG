@@ -312,14 +312,20 @@ final class SqlDialectSupport
 
     /**
      * Alcance del modo «deuda» proveedor: comprobantes con saldo (FC/ND/NC)
-     * o créditos/adelantos (OPA/OPP) sin factura aún no aplicados.
-     * Sin esto, un proveedor solo con saldo acreedor (ej. pago a cuenta) no aparece.
+     * o anticipos (OPA) aún no aplicados.
+     * OPP y el resto de órdenes de pago no son documentos impagos: la deuda
+     * queda en la factura y baja por aplicaciones. Mismo criterio que COA
+     * en clientes, para todas las empresas.
      */
     public static function sqlAlcanceDeudaAbiertaProveedorCc(
         string $alias = 'proveedor_cuentacorriente'
     ): string {
-        return '('.$alias.'.comprobante_proveedor_id IS NOT NULL'
-            .' OR ('.$alias.'.pagoproveedor_id IS NOT NULL AND '.$alias.'.total < 0))';
+        return '(('.$alias.'.comprobante_proveedor_id IS NOT NULL'
+            .' AND '.$alias.'.pagoproveedor_id IS NULL)'
+            .' OR ('.$alias.'.pagoproveedor_id IS NOT NULL AND '.$alias.'.total < 0'
+            .' AND EXISTS (SELECT 1 FROM pagoproveedor pp_deuda'
+            .' WHERE pp_deuda.id = '.$alias.'.pagoproveedor_id'
+            ." AND UPPER(TRIM(pp_deuda.tipocomprobante)) = 'OPA')))";
     }
 
     /**

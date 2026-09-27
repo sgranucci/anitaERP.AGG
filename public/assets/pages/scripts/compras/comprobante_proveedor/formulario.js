@@ -2089,6 +2089,64 @@ $(function () {
         return Math.round(gravado * 100) / 100;
     }
 
+    function textoPlano(valor) {
+        return String(valor == null ? '' : valor)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    /**
+     * Ya facturado a restar de las COM marcadas: facturas de esas recepciones
+     * (una sola vez si una factura está en más de una) y, si la OC es anticipada,
+     * el anticipo sin COM. No incluye facturas del legajo ligadas a otra COM.
+     */
+    function yaFacturadoDeSeleccion($bloque) {
+        var mapa = {};
+        try {
+            mapa = JSON.parse($bloque.attr('data-ya-facturado-por-com') || '{}');
+        } catch (errMapa) {
+            mapa = {};
+        }
+        if (!mapa || typeof mapa !== 'object') {
+            mapa = {};
+        }
+        var porId = {};
+        $('.cp-com-check:checked').each(function () {
+            var id = String($(this).closest('.cp-com-fila').attr('data-recepcion-id') || '');
+            var items = mapa[id] || [];
+            if (!Array.isArray(items)) {
+                return;
+            }
+            items.forEach(function (item) {
+                var cid = parseInt(item && item.id, 10) || 0;
+                if (cid <= 0) {
+                    return;
+                }
+                porId[cid] = item;
+            });
+        });
+        var suma = 0;
+        var etiquetas = [];
+        Object.keys(porId).forEach(function (cid) {
+            suma += parseFloat(porId[cid].importe) || 0;
+            if (porId[cid].etiqueta) {
+                etiquetas.push(textoPlano(porId[cid].etiqueta));
+            }
+        });
+        var anticipadas = 0;
+        if ($bloque.attr('data-oc-anticipada') === '1') {
+            anticipadas = parseFloat($bloque.attr('data-anticipadas-sin-com')) || 0;
+        }
+        if (Math.abs(anticipadas) > 0.005) {
+            etiquetas.push('anticipo sin COM ' + formatearMonto(anticipadas));
+        }
+        return {
+            importe: Math.round((suma + anticipadas) * 100) / 100,
+            etiquetas: etiquetas
+        };
+    }
+
     function actualizarUiRecepcionesCom() {
         var $bloque = $('#cp-bloque-recepciones-com');
         if (!$bloque.length) {
@@ -2109,7 +2167,8 @@ $(function () {
         } else {
             $bloque.attr('data-importe-ref', String(importeRef));
         }
-        var yaFacturado = parseFloat($bloque.attr('data-ya-facturado')) || 0;
+        var yaSeleccion = yaFacturadoDeSeleccion($bloque);
+        var yaFacturado = yaSeleccion.importe;
         var cupoNc = parseFloat($bloque.attr('data-cupo-nc')) || 0;
         var ncSinImporte = $bloque.attr('data-nc-sin-importe') === '1';
 
@@ -2156,30 +2215,42 @@ $(function () {
         var okCentavos = diff <= 0.05;
         var okTol = okCentavos || pct <= toleranciaPct + 0.0001;
         var cls = okTol ? 'alert-success' : 'alert-danger';
-        var msg = 'Provisión COM: <strong>' + formatearMonto(sumaCom) + '</strong>';
+        var detalleYa = '';
         if (yaFacturado > 0.005) {
-            msg += ' − ya facturado legajo <strong>' + formatearMonto(yaFacturado) +
-                '</strong> = disponible <strong>' + formatearMonto(sumaComDisponible) + '</strong>';
-        }
-        msg += ' · Ref. factura: <strong>' + formatearMonto(importeRef) + '</strong>';
-        if (cupoAplicado > 0.005) {
-            if (ncSinImporte && cupoNc < excesoBruto - 0.005) {
-                msg += ' · NC del legajo pendiente de carga (sin importe) cubre el exceso';
-            } else {
-                msg += ' · Cupo NC legajo: <strong>' + formatearMonto(cupoAplicado) + '</strong>' +
-                    ' (ref. efectiva <strong>' + formatearMonto(importeEfectivo) + '</strong>)';
+            detalleYa = ' − ya facturado en esta recepción <strong>' + formatearMonto(yaFacturado) + '</strong>';
+            if (yaSeleccion.etiquetas.length) {
+                detalleYa += ' (' + yaSeleccion.etiquetas.join(', ') + ')';
             }
+            detalleYa += ' = disponible <strong>' + formatearMonto(sumaComDisponible) + '</strong>';
         }
-        msg += ' · Diferencia: <strong>' + formatearMonto(diff) +
-            '</strong> (' + formatearMonto(pct) + '%) · Tolerancia: ' + formatearMonto(toleranciaPct) + '%';
-        if (!okTol) {
-            msg += ' — <strong>fuera de tolerancia</strong> (al guardar se devolverá el legajo a Compras).';
-        } else if (cupoAplicado > 0.005 && excesoBruto > 0.05) {
-            msg += ' — cubierto por NC del legajo; el excedente neto se prorratea en el asiento sobre artículos OC.';
-        } else if (!okCentavos && diff > 0) {
-            msg += ' — dentro de tolerancia; el excedente neto se prorratea en el asiento sobre artículos COM.';
+        var msg;
+        if (okTol && okCentavos) {
+            msg = 'La factura está bien: el neto <strong>' + formatearMonto(importeRef) +
+                '</strong> coincide con la provisión de la COM seleccionada (<strong>' +
+                formatearMonto(sumaCom) + '</strong>' + detalleYa + ').';
+            if (cupoAplicado > 0.005 && excesoBruto > 0.05) {
+                msg += ' El excedente está cubierto por una NC del legajo.';
+            }
         } else {
-            msg += ' — coincide con la provisión disponible.';
+            msg = 'Provisión de la COM seleccionada: <strong>' + formatearMonto(sumaCom) + '</strong>' + detalleYa;
+            msg += ' · Neto factura: <strong>' + formatearMonto(importeRef) + '</strong>';
+            if (cupoAplicado > 0.005) {
+                if (ncSinImporte && cupoNc < excesoBruto - 0.005) {
+                    msg += ' · NC del legajo pendiente de carga (sin importe) cubre el exceso';
+                } else {
+                    msg += ' · Cupo NC legajo: <strong>' + formatearMonto(cupoAplicado) + '</strong>' +
+                        ' (neto efectivo <strong>' + formatearMonto(importeEfectivo) + '</strong>)';
+                }
+            }
+            msg += ' · Diferencia: <strong>' + formatearMonto(diff) +
+                '</strong> (' + formatearMonto(pct) + '%) · Tolerancia: ' + formatearMonto(toleranciaPct) + '%';
+            if (!okTol) {
+                msg += ' — <strong>fuera de tolerancia</strong> (al guardar se devolverá el legajo a Compras).';
+            } else if (cupoAplicado > 0.005 && excesoBruto > 0.05) {
+                msg += ' — cubierto por NC del legajo; el excedente neto se prorratea en el asiento sobre artículos OC.';
+            } else if (!okCentavos && diff > 0) {
+                msg += ' — dentro de tolerancia; el excedente neto se prorratea en el asiento sobre artículos COM.';
+            }
         }
         $resumen.removeClass('alert-secondary alert-success alert-warning alert-danger').addClass(cls).html(msg).show();
     }

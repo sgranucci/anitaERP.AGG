@@ -46,7 +46,7 @@ final class AnitaAsientoImportService
     public const ASI_MON_REF_ORIGEN_ERP = -1;
 
     /** Hasta esta fecha inclusive, Anita es fuente de verdad en colisiones. */
-    public const ANITA_FUENTE_VERDAD_HASTA = '2026-08-31';
+    public const ANITA_FUENTE_VERDAD_HASTA = '2026-09-27';
 
     /** Etiquetas momentáneas en observacion para distinguir origen en el mayor ERP. */
     public const TAG_SUBHIST = '[SUBH]';
@@ -1094,8 +1094,9 @@ final class AnitaAsientoImportService
         $parts = [];
         foreach ($movimientos as $mov) {
             $parts[] = sprintf(
-                '%d:%.4f',
+                '%d:%d:%.4f',
                 (int) ($mov['cuentacontable_id'] ?? 0),
+                (int) ($mov['moneda_id'] ?? 0),
                 round((float) ($mov['monto'] ?? 0), 4),
             );
         }
@@ -1528,7 +1529,7 @@ final class AnitaAsientoImportService
             $asientos = Asiento::query()
                 ->where('empresa_id', $empresaErpId)
                 ->whereIn('numeroasiento', $chunk)
-                ->with('asiento_movimientos:id,asiento_id,cuentacontable_id,monto')
+                ->with('asiento_movimientos:id,asiento_id,cuentacontable_id,monto,moneda_id')
                 ->get([
                     'id', 'numeroasiento', 'fecha',
                     'venta_id', 'movimientostock_id', 'cobranza_id', 'compra_id',
@@ -1562,6 +1563,7 @@ final class AnitaAsientoImportService
                     $suma += (float) $mov->monto;
                     $movs[] = [
                         'cuentacontable_id' => (int) $mov->cuentacontable_id,
+                        'moneda_id' => (int) ($mov->moneda_id ?? 0),
                         'monto' => (float) $mov->monto,
                     ];
                 }

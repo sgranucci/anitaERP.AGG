@@ -28,8 +28,18 @@ use App\Services\Sueldos\EmpleadoBaseSueldosService;
 use App\Services\Sueldos\EmpleadoIngresoService;
 use App\Services\Sueldos\LiquidacionCalculadorService;
 use App\Support\Sueldos\CategoriaOrigenBases;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Sueldos\EmpleadoEstados;
+use App\Support\Sueldos\EmpleadoSueldosListadoColumnas;
 use App\Support\Sueldos\EmpleadoSueldosListadoFiltros;
+use App\Support\Sueldos\EmpleadoSueldosListadoPreferenciasUsuario;
 use App\Support\Sueldos\Formula\FormulaException;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use Illuminate\Http\Request;
@@ -53,19 +63,118 @@ class Empleado_SueldosController extends Controller
     {
         can('listar-empleado-sueldos');
 
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
-        $filtros = EmpleadoSueldosListadoFiltros::resolverDesdeRequest($request, null, $empresaDefault ? (int) $empresaDefault : null);
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(EmpleadoSueldosListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar')
+            || $request->input('vista_modo') === 'estandar';
+
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                EmpleadoSueldosListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('limpiar_filtros')
+            && ! $request->boolean('filtro_limpiar')
+            && ! $request->has('filtro_estado')
+            && ! $request->has('empresa_id')
+            && ! $request->has('empresa_todas')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(EmpleadoSueldosListadoColumnas::RECURSO, $usuarioId);
+        }
+
+        $filtrosRequest = $this->resolverFiltrosListado($request);
+        $filtros = $filtrosRequest;
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = EmpleadoSueldosListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            if ($request->exists('group')) {
+                $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];
+            }
+            if ($request->exists('sort')) {
+                $filtros['sort'] = $filtrosRequest['sort'] ?? [];
+            }
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['sort'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
+        }
+
+        $catalogo = EmpleadoSueldosListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            EmpleadoSueldosListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = EmpleadoSueldosListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = EmpleadoSueldosListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+
         $datas = $this->repository->leeEmpleado($filtros, true);
+
+        $cortes = ['activo' => false];
+        if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], EmpleadoSueldosListadoFiltros::camposOrdenables()) !== []) {
+            $cortes = $this->repository->cortesEmpleado($filtros);
+        }
+
+        $camposFiltro = EmpleadoSueldosListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+
+        $filtrosQuery = EmpleadoSueldosListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($request->boolean('filtro_limpiar')) {
+            $filtrosQuery['filtro_limpiar'] = 1;
+        }
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
+        }
 
         return view('sueldos.empleado.index', [
             'datas' => $datas,
             'filtros' => $filtros,
-            'filtrosQuery' => EmpleadoSueldosListadoFiltros::paraQueryString($filtros),
-            'camposFiltro' => EmpleadoSueldosListadoFiltros::CAMPOS,
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => $camposFiltro,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'estadosLabels' => EmpleadoEstados::LABELS,
             'categorias' => Categoria_Sueldos::query()->orderBy('codigo')->get(['id', 'codigo', 'descripcion']),
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'etiquetasInstalacion' => $etiquetasInstalacion,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+
+        return EmpleadoSueldosListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
     }
 
     public function sincronizarAnita(Request $request)
@@ -117,35 +226,174 @@ class Empleado_SueldosController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
-        $filtros = EmpleadoSueldosListadoFiltros::resolverDesdeRequest($request, $busqueda, $empresaDefault ? (int) $empresaDefault : null);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
+        $columnasRequest = $request->input('columnas');
+        if (is_string($columnasRequest)) {
+            $columnasRequest = array_filter(array_map('trim', explode(',', $columnasRequest)));
+        }
+        $columnasVisibles = EmpleadoSueldosListadoPreferenciasUsuario::resolverColumnas(
+            is_array($columnasRequest) ? $columnasRequest : null
+        );
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            EmpleadoSueldosListadoColumnas::RECURSO,
+            EmpleadoSueldosListadoColumnas::catalogoActivo()
+        );
 
         switch ($formato) {
             case 'PDF':
                 $datas = $this->repository->leeEmpleado($filtros, false);
-                $view = \View::make('sueldos.empleado.listado', compact('datas'))->render();
-                $path = storage_path('pdf/listados');
-                if (! is_dir($path)) {
-                    @mkdir($path, 0775, true);
-                }
-                $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view)->save($path.'/listado_empleado_sueldos.pdf');
+                $view = \View::make('sueldos.empleado.listado', [
+                    'datas' => $datas,
+                    'columnasVisibles' => $columnasVisibles,
+                    'etiquetasColumnas' => $etiquetas,
+                    'filtros' => $filtros,
+                ])->render();
+                $rutaPdf = storage_path('pdf/listados/listado_empleado_sueldos.pdf');
+                DompdfListadoSupport::guardarLegalLandscape($view, $rutaPdf, [
+                    'titulo_corto' => 'Listado de empleados',
+                    'dompdf' => [
+                        'isFontSubsettingEnabled' => false,
+                        'isJavascriptEnabled' => false,
+                    ],
+                ]);
 
-                return response()->download($path.'/listado_empleado_sueldos.pdf');
+                return response()->download($rutaPdf);
 
             case 'EXCEL':
                 return app(EmpleadoSueldosListadoExport::class)
-                    ->parametros($filtros)
+                    ->parametros($filtros, $columnasVisibles, $etiquetas)
                     ->download('empleado_sueldos.xlsx');
 
             case 'CSV':
                 return app(EmpleadoSueldosListadoExport::class)
-                    ->parametros($filtros)
+                    ->parametros($filtros, $columnasVisibles, $etiquetas)
                     ->download('empleado_sueldos.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
         return redirect()->route('consultar_empleado_sueldos', EmpleadoSueldosListadoFiltros::paraQueryString($filtros));
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-empleado-sueldos');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = EmpleadoSueldosListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->repository->leeEmpleado($filtros, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            EmpleadoSueldosListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            EmpleadoSueldosListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== [] ? $this->repository->cortesEmpleado($filtrosCortes) : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => EmpleadoSueldosListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-empleado-sueldos');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $layout = EmpleadoSueldosListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $orden = $filtros['sort'] ?? [];
+        $vista = ListadoVistaSupport::guardar(
+            EmpleadoSueldosListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $orden,
+                'orden' => $orden,
+                'agrupar' => $filtros['agrupar'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('consultar_empleado_sueldos', EmpleadoSueldosListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = EmpleadoSueldosListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('consultar_empleado_sueldos', $qs)
+            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-empleado-sueldos');
+        $ok = ListadoVistaSupport::eliminar($id, EmpleadoSueldosListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('consultar_empleado_sueldos', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-empleado-sueldos');
+        $layout = EmpleadoSueldosListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, EmpleadoSueldosListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            EmpleadoSueldosListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->resolverFiltrosListado($request);
+        $qs = EmpleadoSueldosListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('consultar_empleado_sueldos', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-empleado-sueldos');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            EmpleadoSueldosListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(EmpleadoSueldosListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route(
+            'consultar_empleado_sueldos',
+            EmpleadoSueldosListadoFiltros::paraQueryString($this->resolverFiltrosListado($request))
+        )->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     public function crear()

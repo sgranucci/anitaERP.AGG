@@ -9,6 +9,7 @@ use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportClaveSupport;
 use App\Support\Ventas\AnitaImport\ClienteCuentacorrienteAnitaImportFormatoSupport;
+use App\Support\Ventas\AnitaSync\ClienteAplicacionPropiaAnitaMapper;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
@@ -24,7 +25,8 @@ use RuntimeException;
  *   etiqueta: string,
  *   empresa: int,
  *   cod_mon: string,
- *   cotizacion: float
+ *   cotizacion: float,
+ *   cliente: string
  * }
  */
 class ClienteCuentacorrienteAplicacionAnitaSyncService
@@ -58,6 +60,7 @@ class ClienteCuentacorrienteAplicacionAnitaSyncService
     {
         $par = $this->resolverPar($apl);
         $this->insertarAplmovSiFalta($par['deuda'], $par['credito'], $par['fecha_ymd'], $par['monto']);
+        $this->insertarAplicacionPropiaDelCredito($par['credito'], $par['fecha_ymd'], $par['monto']);
         // Absoluto desde ERP (evita doble +monto si se reintenta y alinea deuda + crédito/NC).
         $this->recalcularClimovDesdeErp((int) $par['deuda_cc']->id, $par['deuda'], true);
         $this->recalcularClimovDesdeErp((int) $par['credito_cc']->id, $par['credito'], false);
@@ -77,6 +80,11 @@ class ClienteCuentacorrienteAplicacionAnitaSyncService
     {
         $this->borrarAplmov(
             $snapshot['deuda'],
+            $snapshot['credito'],
+            $snapshot['fecha_ymd'],
+            (float) $snapshot['monto']
+        );
+        $this->borrarAplicacionPropiaDelCredito(
             $snapshot['credito'],
             $snapshot['fecha_ymd'],
             (float) $snapshot['monto']
@@ -180,6 +188,10 @@ class ClienteCuentacorrienteAplicacionAnitaSyncService
             $cotizacion = 1.0;
         }
 
+        $cliente = ClienteCuentacorrienteAnitaImportClaveSupport::clienteCodigoAnita(
+            (string) ($cc->clientes?->codigo ?? '')
+        );
+
         if ((int) ($cc->venta_id ?? 0) > 0 && $cc->ventas) {
             $partes = $this->partesDesdeCodigoVenta((string) ($cc->ventas->codigo ?? ''));
             if ($partes === null) {
@@ -194,11 +206,14 @@ class ClienteCuentacorrienteAplicacionAnitaSyncService
                 $empresa,
                 $codMon,
                 $cotizacion,
+                1,
+                $cliente,
             );
         }
 
         if ((int) ($cc->cobranza_id ?? 0) > 0 && $cc->cobranzas) {
             $partes = $this->partesDesdeCobranza($cc->cobranzas);
+            $cuota = $partes['tipo'] === 'COA' ? 0 : 1;
 
             return $this->armarLado(
                 $partes['tipo'],
@@ -208,6 +223,8 @@ class ClienteCuentacorrienteAplicacionAnitaSyncService
                 $empresa,
                 $codMon,
                 $cotizacion,
+                $cuota,
+                $cliente,
             );
         }
 
@@ -279,6 +296,7 @@ class ClienteCuentacorrienteAplicacionAnitaSyncService
         string $codMon,
         float $cotizacion,
         int $nroCuota = 1,
+        string $cliente = '',
     ): array {
         $tipo = ClienteCuentacorrienteAnitaImportClaveSupport::tipo($tipo);
         $letra = ClienteCuentacorrienteAnitaImportClaveSupport::letra($letra);
@@ -293,7 +311,212 @@ class ClienteCuentacorrienteAplicacionAnitaSyncService
             'empresa' => $empresa,
             'cod_mon' => $codMon,
             'cotizacion' => $cotizacion,
+            'cliente' => $cliente,
         ];
+    }
+
+    /**
+     * Anticipo (COA): climov APA + aplmov del anticipo contra sí mismo.
+     * Nota de crédito: aplmov de la nota contra sí misma, referencia ANC.
+     * Un recibo (COB) no lleva esa fila: la aplicación queda en la factura.
+     *
+     * @param  Lado  $credito
+     */
+    private function insertarAplicacionPropiaDelCredito(array $credito, string $fechaYmd, float $monto): void
+    {
+        $tipo = strtoupper(substr(trim((string) ($credito['tipo'] ?? '')), 0, 3));
+        if ($tipo === 'COA') {
+            $this->insertarAplicacionCoa($credito, $fechaYmd, $monto);
+
+            return;
+        }
+        if (str_starts_with($tipo, 'NC')) {
+            $this->insertarAplmovPropia($credito, 'ANC', (int) $credito['sucursal'], (int) $credito['numero'], 1, $fechaYmd, $monto);
+        }
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    private function borrarAplicacionPropiaDelCredito(array $credito, string $fechaYmd, float $monto): void
+    {
+        $tipo = strtoupper(substr(trim((string) ($credito['tipo'] ?? '')), 0, 3));
+        if ($tipo === 'COA') {
+            $this->borrarAplicacionCoa($credito, $fechaYmd, $monto);
+
+            return;
+        }
+        if (str_starts_with($tipo, 'NC')) {
+            $this->borrarAplmovPropia($credito, 'ANC', 1, $fechaYmd, $monto);
+        }
+    }
+
+    /**
+     * @param  Lado  $coa
+     */
+    private function insertarAplicacionCoa(array $coa, string $fechaYmd, float $monto): void
+    {
+        if ($this->existeAplmovPropia($coa, 'APA', 0, $fechaYmd, $monto)) {
+            return;
+        }
+        $cliente = trim((string) ($coa['cliente'] ?? ''));
+        if ($cliente === '') {
+            throw new RuntimeException('Anticipo '.$coa['etiqueta'].' sin cliente para grabar el APA en Anita.');
+        }
+
+        $nroApa = $this->proximoNroApa();
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $conEmpresa = (bool) $perfil['climov_tiene_empresa'];
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'tabla' => $perfil['tabla_climov'],
+            'sistema' => $perfil['sistema'],
+            'campos' => ClienteAplicacionPropiaAnitaMapper::camposClimovApa($conEmpresa),
+            'valores' => ClienteAplicacionPropiaAnitaMapper::valoresClimovApa(
+                $coa,
+                $cliente,
+                $nroApa,
+                $monto,
+                $fechaYmd,
+                $conEmpresa
+            ),
+        ], 'climov APA '.$nroApa.' de '.$coa['etiqueta']);
+        $this->insertarAplmovPropia($coa, 'APA', 0, $nroApa, 0, $fechaYmd, $monto);
+    }
+
+    /**
+     * @param  Lado  $coa
+     */
+    private function borrarAplicacionCoa(array $coa, string $fechaYmd, float $monto): void
+    {
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $api = new ApiAnita;
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => $perfil['sistema'],
+            'tabla' => $perfil['tabla_aplmov'],
+            'campos' => 'aplv_ref_nro',
+            'whereArmado' => ClienteAplicacionPropiaAnitaMapper::whereAplmov($coa, 0, 'APA', $fechaYmd, $monto),
+        ]));
+        if ($parsed['error_lectura'] !== null) {
+            throw new RuntimeException('Anita aplmov COA: '.$parsed['error_lectura']);
+        }
+        $nroApa = 0;
+        foreach ($parsed['filas'] as $fila) {
+            $nroApa = (int) ((array) $fila)['aplv_ref_nro'];
+        }
+        $this->borrarAplmovPropia($coa, 'APA', 0, $fechaYmd, $monto);
+        if ($nroApa <= 0) {
+            return;
+        }
+        $e = static fn (string $v) => str_replace("'", '', $v);
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'tabla' => $perfil['tabla_climov'],
+            'sistema' => $perfil['sistema'],
+            'whereArmado' => " WHERE cliv_tipo = 'APA' AND cliv_nro = '".$nroApa."'"
+                ." AND cliv_ref_tipo = '".$e((string) $coa['tipo'])."'"
+                ." AND cliv_ref_nro = '".(int) $coa['numero']."' ",
+        ], 'climov delete APA '.$nroApa);
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    private function insertarAplmovPropia(
+        array $credito,
+        string $refTipo,
+        int $refSucursal,
+        int $refNro,
+        int $cuota,
+        string $fechaYmd,
+        float $monto,
+    ): void {
+        if ($this->existeAplmovPropia($credito, $refTipo, $cuota, $fechaYmd, $monto)) {
+            return;
+        }
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        (new ApiAnita)->apiCallEscritura([
+            'acc' => 'insert',
+            'tabla' => $perfil['tabla_aplmov'],
+            'sistema' => $perfil['sistema'],
+            'campos' => ClienteAplicacionPropiaAnitaMapper::camposAplmov(),
+            'valores' => ClienteAplicacionPropiaAnitaMapper::valoresAplmov(
+                $credito,
+                $cuota,
+                $refTipo,
+                $refSucursal,
+                $refNro,
+                $fechaYmd,
+                $monto
+            ),
+        ], 'aplmov aplicación propia '.$credito['etiqueta'].' '.$refTipo.' '.$refNro);
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    private function existeAplmovPropia(array $credito, string $refTipo, int $cuota, string $fechaYmd, float $monto): bool
+    {
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall([
+            'acc' => 'list',
+            'sistema' => $perfil['sistema'],
+            'tabla' => $perfil['tabla_aplmov'],
+            'campos' => 'aplv_monto',
+            'whereArmado' => ClienteAplicacionPropiaAnitaMapper::whereAplmov($credito, $cuota, $refTipo, $fechaYmd, $monto),
+        ]));
+        if ($parsed['error_lectura'] !== null) {
+            throw new RuntimeException('Anita aplmov propia: '.$parsed['error_lectura']);
+        }
+
+        return $parsed['filas'] !== [];
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    private function borrarAplmovPropia(array $credito, string $refTipo, int $cuota, string $fechaYmd, float $monto): void
+    {
+        if (! $this->existeAplmovPropia($credito, $refTipo, $cuota, $fechaYmd, $monto)) {
+            return;
+        }
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        (new ApiAnita)->apiCallEscritura([
+            'acc' => 'delete',
+            'tabla' => $perfil['tabla_aplmov'],
+            'sistema' => $perfil['sistema'],
+            'whereArmado' => ClienteAplicacionPropiaAnitaMapper::whereAplmov($credito, $cuota, $refTipo, $fechaYmd, $monto),
+        ], 'aplmov delete aplicación propia '.$credito['etiqueta']);
+    }
+
+    private function proximoNroApa(): int
+    {
+        $perfil = ClienteCuentacorrienteAnitaImportFormatoSupport::perfil();
+        $api = new ApiAnita;
+        $max = 0;
+        foreach ([10000, 1000, 1] as $piso) {
+            $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+                'acc' => 'list',
+                'sistema' => $perfil['sistema'],
+                'tabla' => $perfil['tabla_climov'],
+                'campos' => 'cliv_nro',
+                'whereArmado' => " WHERE cliv_tipo = 'APA' AND cliv_nro >= ".$piso,
+            ]));
+            if ($parsed['error_lectura'] !== null) {
+                throw new RuntimeException('Anita APA cliente: '.$parsed['error_lectura']);
+            }
+            if ($parsed['filas'] === []) {
+                continue;
+            }
+            foreach ($parsed['filas'] as $fila) {
+                $max = max($max, (int) ((array) $fila)['cliv_nro']);
+            }
+            break;
+        }
+
+        return $max + 1;
     }
 
     /**

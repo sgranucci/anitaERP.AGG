@@ -11,6 +11,7 @@ use App\Models\Seguridad\Usuario;
 use App\Support\Caja\AnitaSync\CobranzaAnitaCheBanEsquemaSupport;
 use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaRetencionNumeracionSupport;
 use App\Support\Compras\PagoproveedorAnitaAuditoriaCompareSupport as Compare;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -21,7 +22,7 @@ use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
- * Auditoría diaria OP ERP → Anita (pago, tesmov, auxpag, cpromae, ctamov, retenciones, asiento).
+ * Auditoría diaria OP ERP → Anita (pago, tesmov, auxpag, cpromae, ctamov, promov, retenciones, asiento).
  * Por default solo diagnostica; --reparar reescribe tesorería Anita.
  */
 final class PagoproveedorAnitaAuditoriaDiariaService
@@ -213,6 +214,7 @@ final class PagoproveedorAnitaAuditoriaDiariaService
 
         $this->auditarAsientoErp($pago, $problemas);
         $this->auditarCtamovAnita($pago, $tipo, $nro, $empresaAnita, $problemas);
+        $this->auditarPromovAnita($pago, $tipo, $nro, $empresaAnita, $problemas);
 
         if (! IngresoEgresoAnitaTesmovSupport::estaHabilitada()) {
             $problemas[] = 'Escritura tesorería Anita deshabilitada (no se verifica pago/tesmov)';
@@ -274,6 +276,58 @@ final class PagoproveedorAnitaAuditoriaDiariaService
     /**
      * @param  list<string>  $problemas
      */
+    /**
+     * Cabecera de la OP en la cuenta corriente del proveedor. ctamov puede existir
+     * sin esta fila: la auditoría de asiento no la ve.
+     *
+     * @param  list<string>  $problemas
+     */
+    private function auditarPromovAnita(
+        Pagoproveedor $pago,
+        string $tipo,
+        int $nro,
+        int $empresaAnita,
+        array &$problemas,
+    ): void {
+        $proveedor = ComprobanteProveedorAnitaImportClaveSupport::proveedorCodigoAnita(
+            (string) ($pago->proveedores?->codigo ?? '')
+        );
+        if ($proveedor === '') {
+            $problemas[] = 'Sin proveedor para verificar promov';
+
+            return;
+        }
+
+        $letra = strtoupper(trim((string) ($pago->letra ?? '')));
+        $sucursal = (int) ($pago->sucursal ?? 0);
+        $where = ' WHERE prov_proveedor = '.$this->escSql($proveedor)
+            .' AND prov_tipo = '.$this->escSql($tipo)
+            .' AND prov_sucursal = '.$sucursal
+            .' AND prov_nro = '.$nro;
+        if ($letra !== '') {
+            $where .= ' AND prov_letra = '.$this->escSql($letra);
+        }
+        if ($empresaAnita > 0) {
+            $where .= ' AND prov_empresa = '.$empresaAnita;
+        }
+
+        $lista = $this->listar(
+            (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'promov',
+            'prov_tipo,prov_nro,prov_nro_cuota,prov_monto,prov_empresa',
+            $where,
+        );
+        if ($lista['error'] !== null) {
+            $problemas[] = 'Lectura promov Anita: '.$lista['error'];
+
+            return;
+        }
+
+        foreach (Compare::discrepanciasPromov($lista['filas'], (float) $pago->monto) as $problema) {
+            $problemas[] = $problema;
+        }
+    }
+
     private function auditarAsientoErp(Pagoproveedor $pago, array &$problemas): void
     {
         $asiento = $pago->asientos;

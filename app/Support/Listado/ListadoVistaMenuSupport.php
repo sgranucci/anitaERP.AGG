@@ -28,6 +28,11 @@ final class ListadoVistaMenuSupport
             'icono' => 'fa-bookmark',
             'etiqueta_padre' => 'Proveedores',
         ],
+        'sueldos.empleado' => [
+            'url_base' => 'sueldos/empleado',
+            'icono' => 'fa-bookmark',
+            'etiqueta_padre' => 'Empleados',
+        ],
     ];
 
     public static function columnaMenuDisponible(): bool

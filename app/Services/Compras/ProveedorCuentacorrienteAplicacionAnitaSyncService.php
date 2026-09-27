@@ -171,6 +171,7 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
     {
         $par = $this->resolverPar($apl);
         $this->insertarAplmovpSiFalta($par['deuda'], $par['credito'], $par['fecha_ymd'], $par['monto']);
+        $this->insertarAplicacionPropiaDelCredito($par['credito'], $par['fecha_ymd'], $par['monto']);
         $this->actualizarPromov($par['deuda_cc'], $par['deuda'], $par['credito'], true);
         $this->actualizarPromov($par['credito_cc'], $par['credito'], $par['deuda'], false);
     }
@@ -189,6 +190,11 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
     {
         $this->borrarAplmovp(
             $snapshot['deuda'],
+            $snapshot['credito'],
+            $snapshot['fecha_ymd'],
+            (float) $snapshot['monto']
+        );
+        $this->borrarAplicacionPropiaDelCredito(
             $snapshot['credito'],
             $snapshot['fecha_ymd'],
             (float) $snapshot['monto']
@@ -381,6 +387,10 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         if ($filasApl === null) {
             return;
         }
+        $filasApl = AplicacionCuentacorrienteAnitaLadoSupport::filasParaTPagado(
+            $filasApl,
+            (string) ($lado['tipo'] ?? '')
+        );
         $tPagado = AplicacionCuentacorrienteAnitaLadoSupport::tPagadoDesdeFilasAplmovp($filasApl);
         $fechaYmd = AplicacionCuentacorrienteAnitaLadoSupport::fechaPagoYmdDesdeFilasAplmovp($filasApl);
         if ($tPagado < 0.0001) {
@@ -466,6 +476,203 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
         }
 
         return $filas;
+    }
+
+    /**
+     * OPA: promov APA + aplmovp de la OPA contra sí misma.
+     * Nota de crédito: aplmovp de la nota contra sí misma, referencia ANC.
+     *
+     * @param  Lado  $credito
+     */
+    private function insertarAplicacionPropiaDelCredito(array $credito, string $fechaYmd, float $monto): void
+    {
+        $tipo = strtoupper(substr(trim((string) ($credito['tipo'] ?? '')), 0, 3));
+        if ($tipo === 'OPA') {
+            $this->insertarAplicacionOpa($credito, $fechaYmd, $monto);
+
+            return;
+        }
+        if (str_starts_with($tipo, 'CN')) {
+            $this->insertarAplicacionNotaCredito($credito, $fechaYmd, $monto);
+        }
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    private function borrarAplicacionPropiaDelCredito(array $credito, string $fechaYmd, float $monto): void
+    {
+        $tipo = strtoupper(substr(trim((string) ($credito['tipo'] ?? '')), 0, 3));
+        if ($tipo === 'OPA') {
+            $this->borrarAplicacionOpa($credito, $fechaYmd, $monto);
+
+            return;
+        }
+        if (str_starts_with($tipo, 'CN')) {
+            $this->borrarAplmovpPropia($credito, 'ANC', $fechaYmd, $monto);
+        }
+    }
+
+    /**
+     * @param  Lado  $opa
+     */
+    private function insertarAplicacionOpa(array $opa, string $fechaYmd, float $monto): void
+    {
+        if ($this->existeAplmovpPropia($opa, 'APA', $fechaYmd, $monto)) {
+            return;
+        }
+
+        $nroApa = $this->proximoNroApa();
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'tabla' => 'promov',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'campos' => PromovPagoAnitaMapper::camposInsert(),
+            'valores' => PromovPagoAnitaMapper::valoresInsertApa($opa, $nroApa, $monto, $fechaYmd),
+        ], 'promov APA '.$nroApa.' de '.$opa['etiqueta']);
+        $this->insertarAplmovpPropia($opa, 'APA', 0, $nroApa, $fechaYmd, $monto);
+    }
+
+    /**
+     * @param  Lado  $nota
+     */
+    private function insertarAplicacionNotaCredito(array $nota, string $fechaYmd, float $monto): void
+    {
+        if ($this->existeAplmovpPropia($nota, 'ANC', $fechaYmd, $monto)) {
+            return;
+        }
+
+        $this->insertarAplmovpPropia(
+            $nota,
+            'ANC',
+            (int) $nota['sucursal'],
+            (int) $nota['numero'],
+            $fechaYmd,
+            $monto
+        );
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    private function insertarAplmovpPropia(
+        array $credito,
+        string $refTipo,
+        int $refSucursal,
+        int $refNro,
+        string $fechaYmd,
+        float $monto,
+    ): void {
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'tabla' => (string) config('comprobante_proveedor.anita_tabla_aplmovp', 'aplmovp'),
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'campos' => AplmovpAnitaMapper::camposInsert(),
+            'valores' => AplmovpAnitaMapper::valoresInsertPropia(
+                $credito,
+                $refTipo,
+                $refSucursal,
+                $refNro,
+                $fechaYmd,
+                $monto
+            ),
+        ], 'aplmovp aplicación propia '.$credito['etiqueta'].' '.$refTipo.' '.$refNro);
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    private function existeAplmovpPropia(array $credito, string $refTipo, string $fechaYmd, float $monto): bool
+    {
+        $api = new ApiAnita;
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'tabla' => (string) config('comprobante_proveedor.anita_tabla_aplmovp', 'aplmovp'),
+            'campos' => 'aplvp_monto',
+            'whereArmado' => AplmovpAnitaMapper::wherePropia($credito, $refTipo, $fechaYmd, $monto),
+        ]));
+        if ($parsed['error_lectura'] !== null) {
+            throw new RuntimeException('Anita aplmovp propia: '.$parsed['error_lectura']);
+        }
+
+        return $parsed['filas'] !== [];
+    }
+
+    /**
+     * @param  Lado  $opa
+     */
+    private function borrarAplicacionOpa(array $opa, string $fechaYmd, float $monto): void
+    {
+        $api = new ApiAnita;
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'tabla' => (string) config('comprobante_proveedor.anita_tabla_aplmovp', 'aplmovp'),
+            'campos' => 'aplvp_ref_nro',
+            'whereArmado' => AplmovpAnitaMapper::wherePropia($opa, 'APA', $fechaYmd, $monto),
+        ]));
+        if ($parsed['error_lectura'] !== null) {
+            throw new RuntimeException('Anita aplmovp OPA: '.$parsed['error_lectura']);
+        }
+        $nroApa = 0;
+        foreach ($parsed['filas'] as $fila) {
+            $nroApa = (int) ((array) $fila)['aplvp_ref_nro'];
+        }
+        $this->borrarAplmovpPropia($opa, 'APA', $fechaYmd, $monto);
+        if ($nroApa <= 0) {
+            return;
+        }
+        $e = static fn (string $v, int $max = 0) => AplicacionCuentacorrienteAnitaLadoSupport::esc($v, $max);
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'tabla' => 'promov',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'whereArmado' => " WHERE prov_proveedor = '".$e($opa['proveedor'], 6)."'"
+                ." AND prov_tipo = 'APA' AND prov_nro = '".$nroApa."'"
+                ." AND prov_ref_tipo = '".$e($opa['tipo'], 3)."'"
+                ." AND prov_ref_nro = '".(int) $opa['numero']."' ",
+        ], 'promov delete APA '.$nroApa);
+    }
+
+    /**
+     * @param  Lado  $credito
+     */
+    private function borrarAplmovpPropia(array $credito, string $refTipo, string $fechaYmd, float $monto): void
+    {
+        if (! $this->existeAplmovpPropia($credito, $refTipo, $fechaYmd, $monto)) {
+            return;
+        }
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'delete',
+            'tabla' => (string) config('comprobante_proveedor.anita_tabla_aplmovp', 'aplmovp'),
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'whereArmado' => AplmovpAnitaMapper::wherePropia($credito, $refTipo, $fechaYmd, $monto),
+        ], 'aplmovp delete aplicación propia '.$credito['etiqueta']);
+    }
+
+    private function proximoNroApa(): int
+    {
+        $api = new ApiAnita;
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall([
+            'acc' => 'list',
+            'sistema' => (string) config('comprobante_proveedor.anita_sistema_compras', 'compras'),
+            'tabla' => 'promov',
+            'campos' => 'prov_nro',
+            'whereArmado' => " WHERE prov_tipo = 'APA' AND prov_nro >= 1400",
+        ]));
+        if ($parsed['error_lectura'] !== null) {
+            throw new RuntimeException('Anita APA: '.$parsed['error_lectura']);
+        }
+        $max = 1400;
+        foreach ($parsed['filas'] as $fila) {
+            $max = max($max, (int) ((array) $fila)['prov_nro']);
+        }
+
+        return $max + 1;
     }
 
     /**
