@@ -156,7 +156,9 @@ class GastronomiaControlMensualMedios extends Command
 
         if ((bool) $this->option('enviar-mail')) {
             $mail = $service->enviarCorreoAuditoriaMediosMensual($resumen, $fechaDesde, $fechaHasta, $tolerancia);
-            if ($mail['enviado'] ?? false) {
+            if ($mail['omitido'] ?? false) {
+                $this->warn((string) ($mail['error'] ?? 'Correo omitido'));
+            } elseif ($mail['enviado'] ?? false) {
                 $this->info('Correo enviado a '.($mail['destino'] ?? ''));
             } else {
                 $this->error('No se pudo enviar correo: '.($mail['error'] ?? 'error desconocido'));
