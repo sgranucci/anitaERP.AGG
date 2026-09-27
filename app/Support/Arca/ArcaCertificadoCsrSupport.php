@@ -382,9 +382,9 @@ final class ArcaCertificadoCsrSupport
     }
 
     /**
-     * ZIP exportado por esta pantalla: cert.crt + privada.key.
+     * ZIP exportado por esta pantalla. La clave es opcional: alcanza con cert.crt.
      *
-     * @return array{cert: string, key: string}
+     * @return array{cert: ?string, key: ?string}
      */
     public static function parDesdeZip(string $zipPath): array
     {
@@ -423,11 +423,16 @@ final class ArcaCertificadoCsrSupport
             $zip->close();
         }
 
-        if (! is_string($cert) || trim($cert) === '' || ! is_string($key) || trim($key) === '') {
-            throw new Exception('El ZIP debe contener cert.crt y privada.key (el que se exporta desde Certificados ARCA).');
+        $certOk = is_string($cert) && trim($cert) !== '';
+        $keyOk = is_string($key) && trim($key) !== '';
+        if (! $certOk && ! $keyOk) {
+            throw new Exception('El ZIP no contiene cert.crt ni privada.key.');
         }
 
-        return ['cert' => $cert, 'key' => $key];
+        return [
+            'cert' => $certOk ? $cert : null,
+            'key' => $keyOk ? $key : null,
+        ];
     }
 
     public static function certCoincideConClave(string $certPath, string $keyPath, string $passphrase = ''): bool

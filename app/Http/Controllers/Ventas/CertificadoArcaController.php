@@ -135,8 +135,8 @@ class CertificadoArcaController extends Controller
         $hayClave = $clave !== null && $clave->isValid();
         $hayCrt = $file !== null && $file->isValid();
 
-        if (! $hayZip && ! $hayCrt) {
-            return $this->volverError('Seleccione el .crt de ARCA, o el ZIP exportado desde el otro servidor (cert.crt + privada.key).');
+        if (! $hayZip && ! $hayCrt && ! $hayClave) {
+            return $this->volverError('Seleccione el certificado, la clave privada, el ZIP, o la combinación que quiera instalar.');
         }
         if ($hayZip && $zip->getSize() > 262144) {
             return $this->volverError('El ZIP es demasiado grande para un par de certificado ARCA.');
@@ -151,16 +151,25 @@ class CertificadoArcaController extends Controller
         try {
             $entrada = $this->buscarCertificadoPermitido($id);
             $replicarIds = $this->replicarIdsDesdeRequest($request, $id);
+            $crtRaw = null;
+            $keyRaw = null;
             if ($hayZip) {
-                $par = ArcaCertificadoCsrSupport::parDesdeZip($zip->getRealPath());
-                $r = $this->csrService->importarParDesdeContenido($entrada, $par['cert'], $par['key'], false, $replicarIds);
-            } elseif ($hayClave) {
-                $raw = $this->leerUpload($file);
+                $par = ArcaCertificadoCsrSupport::parDesdeZip((string) $zip->getRealPath());
+                $crtRaw = $par['cert'];
+                $keyRaw = $par['key'];
+            }
+            if ((! is_string($crtRaw) || trim($crtRaw) === '') && $hayCrt && $file instanceof UploadedFile) {
+                $crtRaw = $this->leerUpload($file);
+            }
+            if ((! is_string($keyRaw) || trim($keyRaw) === '') && $hayClave && $clave instanceof UploadedFile) {
                 $keyRaw = $this->leerUpload($clave);
-                $r = $this->csrService->importarParDesdeContenido($entrada, $raw, $keyRaw, false, $replicarIds);
+            }
+            $hayContenidoCrt = is_string($crtRaw) && trim($crtRaw) !== '';
+            $hayContenidoKey = is_string($keyRaw) && trim($keyRaw) !== '';
+            if ($hayContenidoCrt && ! $hayContenidoKey && $this->csrService->crtCoincideConCsrLocal($entrada, $crtRaw)) {
+                $r = $this->csrService->instalarDesdeUpload($entrada, $crtRaw, false, $replicarIds);
             } else {
-                $raw = $this->leerUpload($file);
-                $r = $this->csrService->instalarDesdeUpload($entrada, $raw, false, $replicarIds);
+                $r = $this->csrService->instalarLoSubido($entrada, $crtRaw, $keyRaw, false, $replicarIds);
             }
         } catch (Exception $e) {
             return $this->volverError($e->getMessage());
@@ -176,15 +185,20 @@ class CertificadoArcaController extends Controller
         $etiquetas = array_values(array_filter($etiquetas));
 
         $desdeOtro = ($r['origen'] ?? '') === 'par';
+        $soloClave = ($r['origen'] ?? '') === 'clave';
+        $que = $soloClave
+            ? 'Clave privada instalada'
+            : ('Certificado «'.$alias.'» '.($desdeOtro ? 'y clave importados' : 'instalado').($vence !== '' ? ' (vence '.$vence.')' : ''));
+        $aviso = trim((string) ($r['aviso'] ?? ''));
 
         return redirect()
             ->route('certificados_arca')
             ->with(
                 'mensaje',
-                'Certificado «'.$alias.'» '.($desdeOtro ? 'importado' : 'validado').' e instalado'.
-                ($vence !== '' ? ' (vence '.$vence.')' : '').
+                $que.
                 ' en: '.( $etiquetas !== [] ? implode(', ', $etiquetas) : $entrada['etiqueta'] ).
-                '. Backup en '.$r['backup_dir'].'.'
+                '. Backup en '.$r['backup_dir'].'.'.
+                ($aviso !== '' ? ' '.$aviso : '')
             );
     }
 

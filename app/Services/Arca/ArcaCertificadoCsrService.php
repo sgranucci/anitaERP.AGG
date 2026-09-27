@@ -249,54 +249,7 @@ class ArcaCertificadoCsrService
             );
         }
 
-        $destinos = $this->destinosInstalacion($entrada, $replicarIds);
-
-        $backupDir = $dir.'/backup_produccion_'.date('YmdHis');
-        if (! is_dir($backupDir) && ! @mkdir($backupDir, 0700, true) && ! is_dir($backupDir)) {
-            throw new Exception("No se pudo crear backup en {$backupDir}");
-        }
-
-        $instalados = [];
-        $taBorrados = [];
-        foreach ($destinos as $dest) {
-            $certDest = (string) $dest['cert'];
-            $keyDest = (string) $dest['key'];
-            $this->asegurarDirectorio(dirname($certDest));
-            $prefijo = $this->idSeguro((string) $dest['id']);
-            if (is_file($certDest)) {
-                @copy($certDest, $backupDir.'/'.$prefijo.'_cert.crt');
-            }
-            if (is_file($keyDest)) {
-                @copy($keyDest, $backupDir.'/'.$prefijo.'_privada.key');
-            }
-            if (is_file($certDest) && ! is_writable($certDest)) {
-                @chmod($certDest, 0664);
-            }
-            if (is_file($keyDest) && ! is_writable($keyDest)) {
-                @chmod($keyDest, 0660);
-            }
-            if (! @copy($nuevoCert, $certDest)) {
-                throw new Exception("No se pudo copiar el certificado a {$certDest}");
-            }
-            if (! @copy($nuevaKey, $keyDest)) {
-                throw new Exception("No se pudo copiar la clave a {$keyDest}");
-            }
-            @chmod($certDest, 0644);
-            @chmod($keyDest, 0600);
-            $instalados[] = [
-                'id' => (string) $dest['id'],
-                'etiqueta' => (string) $dest['etiqueta'],
-                'cert' => $certDest,
-                'key' => $keyDest,
-            ];
-            $taBorrados = array_merge($taBorrados, $this->borrarCacheTa($dest['entrada']));
-        }
-
-        return [
-            'backup_dir' => $backupDir,
-            'instalados' => $instalados,
-            'ta_borrados' => $taBorrados,
-        ];
+        return $this->copiarRenovacionAProduccion($entrada, $dir, true, true, $replicarIds);
     }
 
     public function parsearServicios(?string $csv): ?array
@@ -794,7 +747,93 @@ class ArcaCertificadoCsrService
             'validacion' => $validacion,
             'dir' => $dir,
             'origen' => 'par',
+            'aviso' => null,
         ]);
+    }
+
+    /**
+     * Instala solo los archivos subidos. Sin clave, no toca la privada.key vigente.
+     *
+     * @param  array<string, mixed>  $entrada
+     * @param  list<string>  $replicarIds
+     * @return array<string, mixed>
+     */
+    public function instalarLoSubido(array $entrada, ?string $contenidoCrt, ?string $contenidoKey, bool $force = false, array $replicarIds = []): array
+    {
+        $hayCrt = is_string($contenidoCrt) && trim($contenidoCrt) !== '';
+        $hayKey = is_string($contenidoKey) && trim($contenidoKey) !== '';
+        if (! $hayCrt && ! $hayKey) {
+            throw new Exception('Seleccione el certificado, la clave privada, o ambos.');
+        }
+
+        $dir = $this->directorioRenovacion($entrada, false);
+        $this->asegurarDirectorio($dir);
+        @chmod($dir, 0700);
+
+        $destinoCrt = $dir.'/cert.crt';
+        $destinoKey = $dir.'/privada.key';
+        $validacion = [
+            'ok' => true,
+            'errores' => [],
+            'alias' => $entrada['alias'] ?? null,
+            'cuit' => $entrada['cuit'] ?? null,
+            'valid_to' => $entrada['valid_to'] ?? null,
+        ];
+        $aviso = null;
+
+        if ($hayCrt) {
+            $pem = ArcaCertificadoCsrSupport::normalizarPemCertificado((string) $contenidoCrt);
+            if (@file_put_contents($destinoCrt, $pem) === false) {
+                throw new Exception('No se pudo guardar el certificado subido.');
+            }
+            @chmod($destinoCrt, 0644);
+            $leido = $this->assertCertAceptable($entrada, $destinoCrt, $force);
+            $validacion['alias'] = $leido['alias'];
+            $validacion['cuit'] = $leido['cuit'];
+            $validacion['valid_to'] = $leido['valid_to'];
+        }
+        if ($hayKey) {
+            $keyPem = ArcaCertificadoCsrSupport::normalizarPemClavePrivada((string) $contenidoKey);
+            if (@file_put_contents($destinoKey, $keyPem) === false) {
+                throw new Exception('No se pudo guardar la clave privada subida.');
+            }
+            @chmod($destinoKey, 0600);
+        }
+
+        if ($hayCrt && $hayKey && ! $this->parCoincide($destinoCrt, $destinoKey, (string) ($entrada['private_key_passphrase'] ?? ''))) {
+            $aviso = 'El certificado no coincide con la clave subida; se instalaron los dos archivos igual.';
+        } elseif ($hayCrt && ! $hayKey) {
+            $keyVigente = (string) ($entrada['private_key_path'] ?? '');
+            if ($keyVigente !== '' && is_readable($keyVigente)
+                && ! $this->parCoincide($destinoCrt, $keyVigente, (string) ($entrada['private_key_passphrase'] ?? ''))) {
+                $aviso = 'Quedó la clave privada que ya estaba en el servidor, y no coincide con este certificado.';
+            }
+        }
+
+        $instalado = $this->copiarRenovacionAProduccion($entrada, $dir, $hayCrt, $hayKey, $replicarIds);
+        $origen = $hayCrt && $hayKey ? 'par' : ($hayKey ? 'clave' : 'cert');
+
+        return array_merge($instalado, [
+            'validacion' => $validacion,
+            'dir' => $dir,
+            'origen' => $origen,
+            'aviso' => $aviso,
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     */
+    public function crtCoincideConCsrLocal(array $entrada, string $contenidoCrt): bool
+    {
+        try {
+            $pem = ArcaCertificadoCsrSupport::normalizarPemCertificado($contenidoCrt);
+        } catch (Exception) {
+            return false;
+        }
+        $pass = (string) ($entrada['private_key_passphrase'] ?? '');
+
+        return $this->buscarRenovacionQueCoincideConCert($entrada, $pem, $pass) !== null;
     }
 
     /**
@@ -994,6 +1033,101 @@ class ArcaCertificadoCsrService
         }
 
         throw new Exception('No hay un CSR generado para este certificado. Genere el pedido primero.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     * @return array<string, mixed>
+     */
+    private function assertCertAceptable(array $entrada, string $certPath, bool $force): array
+    {
+        $nuevo = ArcaCertificadoCsrSupport::leerCertificado($certPath);
+        $aliasEsperado = trim((string) ($entrada['alias'] ?? ''));
+        if (! $force && $aliasEsperado !== '' && strcasecmp((string) $nuevo['alias'], $aliasEsperado) !== 0) {
+            throw new Exception(
+                "El certificado subido tiene alias «{$nuevo['alias']}», se esperaba «{$aliasEsperado}»."
+            );
+        }
+        $cuitEsperado = preg_replace('/\D+/', '', (string) ($entrada['cuit'] ?? '')) ?? '';
+        $cuitNuevo = preg_replace('/\D+/', '', (string) ($nuevo['cuit'] ?? '')) ?? '';
+        if (! $force && $cuitEsperado !== '' && $cuitNuevo !== '' && $cuitEsperado !== $cuitNuevo) {
+            throw new Exception("El CUIT del certificado es {$cuitNuevo} y el vigente es {$cuitEsperado}.");
+        }
+        if ($nuevo['valid_to_ts'] !== null && $nuevo['valid_to_ts'] <= time()) {
+            throw new Exception('El certificado subido ya está vencido.');
+        }
+
+        return $nuevo;
+    }
+
+    /**
+     * @param  array<string, mixed>  $entrada
+     * @param  list<string>  $replicarIds
+     * @return array{backup_dir: string, instalados: list<array{id: string, etiqueta: string, cert: string, key: string}>, ta_borrados: list<string>}
+     */
+    private function copiarRenovacionAProduccion(array $entrada, string $dir, bool $copiarCert, bool $copiarKey, array $replicarIds): array
+    {
+        $dir = rtrim($dir, '/');
+        $nuevoCert = $dir.'/cert.crt';
+        $nuevaKey = $dir.'/privada.key';
+        if ($copiarCert && ! is_readable($nuevoCert)) {
+            throw new Exception('No está el certificado para instalar.');
+        }
+        if ($copiarKey && ! is_readable($nuevaKey)) {
+            throw new Exception('No está la clave privada para instalar.');
+        }
+
+        $destinos = $this->destinosInstalacion($entrada, $replicarIds);
+        $backupDir = $dir.'/backup_produccion_'.date('YmdHis');
+        if (! is_dir($backupDir) && ! @mkdir($backupDir, 0700, true) && ! is_dir($backupDir)) {
+            throw new Exception("No se pudo crear backup en {$backupDir}");
+        }
+
+        $instalados = [];
+        $taBorrados = [];
+        foreach ($destinos as $dest) {
+            $certDest = (string) $dest['cert'];
+            $keyDest = (string) $dest['key'];
+            $this->asegurarDirectorio(dirname($certDest));
+            $prefijo = $this->idSeguro((string) $dest['id']);
+            if ($copiarCert && is_file($certDest)) {
+                @copy($certDest, $backupDir.'/'.$prefijo.'_cert.crt');
+            }
+            if ($copiarKey && is_file($keyDest)) {
+                @copy($keyDest, $backupDir.'/'.$prefijo.'_privada.key');
+            }
+            if ($copiarCert) {
+                if (is_file($certDest) && ! is_writable($certDest)) {
+                    @chmod($certDest, 0664);
+                }
+                if (! @copy($nuevoCert, $certDest)) {
+                    throw new Exception("No se pudo copiar el certificado a {$certDest}");
+                }
+                @chmod($certDest, 0644);
+            }
+            if ($copiarKey) {
+                if (is_file($keyDest) && ! is_writable($keyDest)) {
+                    @chmod($keyDest, 0660);
+                }
+                if (! @copy($nuevaKey, $keyDest)) {
+                    throw new Exception("No se pudo copiar la clave a {$keyDest}");
+                }
+                @chmod($keyDest, 0600);
+            }
+            $instalados[] = [
+                'id' => (string) $dest['id'],
+                'etiqueta' => (string) $dest['etiqueta'],
+                'cert' => $certDest,
+                'key' => $keyDest,
+            ];
+            $taBorrados = array_merge($taBorrados, $this->borrarCacheTa($dest['entrada']));
+        }
+
+        return [
+            'backup_dir' => $backupDir,
+            'instalados' => $instalados,
+            'ta_borrados' => $taBorrados,
+        ];
     }
 
     private function parCoincide(string $certPath, string $keyPath, string $passphrase): bool

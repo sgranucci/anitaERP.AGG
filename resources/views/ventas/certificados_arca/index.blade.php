@@ -8,7 +8,7 @@
 window.certificadosArcaFilas = @json($filasJs ?? []);
 window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
 </script>
-<script src="{{ asset('assets/pages/scripts/ventas/certificados_arca/index.js') }}?v=20260927a"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/certificados_arca/index.js') }}?v=20260927b"></script>
 @endsection
 
 @section('contenido')
@@ -35,13 +35,13 @@ window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
                     (pueden ser el certificado de la consultora, sin delegación en las empresas del cliente).
                     Al instalar, por default solo se actualiza <strong>ese</strong> webservice; opcionalmente puede copiar el mismo certificado a otros.
                     Con el ícono de archivo ZIP puede <strong>exportar</strong> el par vigente (<code>cert.crt</code> + <code>privada.key</code>) para llevarlo a otro ERP.
-                    En el otro servidor, <strong>Subir certificado</strong> acepta ese ZIP aunque el CSR no se haya generado ahí.
+                    En el otro servidor, <strong>Subir certificado</strong> instala lo que elija: solo el <code>.crt</code>, solo la clave, o los dos. Si no sube la clave, queda la que ya está en el servidor.
                     El certificado vigente no se reemplaza hasta que suba el <code>.crt</code> o el par.
                 </p>
                 <ol class="small mb-3 pl-3">
                     <li>Generar CSR y descargarlo.</li>
                     <li>En Clave Fiscal ARCA, crear/renovar el certificado con el <strong>mismo alias</strong> y pegar el CSR.</li>
-                    <li>Descargar el <code>.crt</code> y usar <strong>Subir certificado</strong> en esta pantalla. Si el certificado se renovó en otro servidor, exporte el ZIP allá y súbalo acá: no hace falta generar el CSR en este servidor.</li>
+                    <li>Descargar el <code>.crt</code> y usar <strong>Subir certificado</strong>. La clave privada es opcional: si no la sube, no se reemplaza.</li>
                 </ol>
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered table-hover mb-0" id="tabla-certificados-arca">
@@ -175,23 +175,20 @@ window.certificadosArcaPrueba = @json(session('prueba_certificado_arca'));
                         Por default <strong>solo</strong> se reemplaza el certificado de ese webservice (con backup).
                     </p>
                     <p class="small mb-2" id="instalar_ayuda_csr">
-                        Si el CSR se generó <strong>en este servidor</strong>, alcanza con el <code>.crt</code> de ARCA.
-                        Si se renovó <strong>en otro servidor</strong>, suba el ZIP exportado desde allá (<code>cert.crt</code> + <code>privada.key</code>), o ambos archivos por separado.
+                        Se instala lo que suba. La clave privada es opcional: si no la elige, queda la que ya está en este servidor.
                     </p>
                     <div class="form-group">
-                        <label for="par_zip" class="control-label">ZIP de otro servidor</label>
+                        <label for="par_zip" class="control-label">ZIP (opcional)</label>
                         <input type="file" name="par_zip" id="par_zip" class="form-control" accept=".zip,application/zip">
-                        <small class="text-muted">El que descarga el ícono de archivo ZIP en el otro ERP. No hace falta CSR local.</small>
+                        <small class="text-muted">Puede traer solo <code>cert.crt</code>, solo <code>privada.key</code>, o los dos.</small>
                     </div>
                     <div class="form-group">
-                        <label for="certificado" class="control-label">Archivo .crt</label>
+                        <label for="certificado" class="control-label">Archivo .crt (opcional)</label>
                         <input type="file" name="certificado" id="certificado" class="form-control" accept=".crt,.pem,.cer,.txt,application/x-x509-ca-cert,application/pkix-cert">
-                        <small class="text-muted">Solo, si el CSR es de este servidor. O junto con la clave, si no usa el ZIP.</small>
                     </div>
                     <div class="form-group">
                         <label for="clave" class="control-label">Clave privada (opcional)</label>
                         <input type="file" name="clave" id="clave" class="form-control" accept=".key,.pem,.txt">
-                        <small class="text-muted">privada.key del otro servidor, si no sube el ZIP.</small>
                     </div>
                     <div class="form-group mb-0">
                         <label class="control-label d-block">También copiar a (opcional)</label>

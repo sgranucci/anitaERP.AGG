@@ -168,30 +168,33 @@
             var hayZip = zip && zip.files && zip.files.length > 0;
             var hayCrt = crt && crt.files && crt.files.length > 0;
             var hayClave = clave && clave.files && clave.files.length > 0;
-            if (!hayZip && !hayCrt) {
+            if (!hayZip && !hayCrt && !hayClave) {
                 ev.preventDefault();
-                window.alert('Seleccione el .crt de ARCA, o el ZIP exportado desde el otro servidor.');
-                return;
-            }
-            if (hayClave && !hayCrt && !hayZip) {
-                ev.preventDefault();
-                window.alert('La clave privada va junto con el .crt, o use el ZIP que ya trae los dos archivos.');
+                window.alert('Seleccione el certificado, la clave privada o el ZIP.');
                 return;
             }
             var origen = extraerTexto(document.getElementById('instalar_alias_label')) || 'este webservice';
             var destinos = etiquetasAInstalar(origen);
-            var como = hayZip || hayClave
-                ? 'Se importa el par de otro servidor (certificado + clave privada).'
-                : 'Se valida el .crt contra el CSR de este servidor.';
-            var msg = '¿Instalar este certificado?\n\n' + como +
-                '\n\nSe reemplazarán cert.crt y privada.key de:\n- ' +
+            var partes = [];
+            if (hayZip) {
+                partes.push('el contenido del ZIP');
+            }
+            if (hayCrt) {
+                partes.push('el certificado');
+            }
+            if (hayClave) {
+                partes.push('la clave privada');
+            }
+            var quedaClave = !hayZip && !hayClave;
+            var msg = '¿Instalar ' + partes.join(' y ') + '?\n\nDestino:\n- ' +
                 destinos.join('\n- ') +
+                (quedaClave ? '\n\nLa clave privada de este servidor no se modifica.' : '') +
                 '\n\nQueda backup. Los webservices no tildados no se tocan.';
             if (!window.confirm(msg)) {
                 ev.preventDefault();
                 return;
             }
-            mostrarOverlay('Validando e instalando…', 'No cierre la página.');
+            mostrarOverlay('Instalando…', 'No cierre la página.');
         }
     });
 
@@ -219,10 +222,7 @@
         });
         var ayuda = document.getElementById('instalar_ayuda_csr');
         if (ayuda) {
-            var tieneCsr = btn.getAttribute('data-tiene-csr') === '1';
-            ayuda.innerHTML = tieneCsr
-                ? 'Hay un CSR en este servidor: puede subir solo el <code>.crt</code> de ARCA. Si el certificado se renovó en otro servidor, use el ZIP (<code>cert.crt</code> + <code>privada.key</code>).'
-                : 'No hay CSR en este servidor. Suba el ZIP exportado desde el otro ERP (<code>cert.crt</code> + <code>privada.key</code>), o el .crt junto con la clave privada.';
+            ayuda.textContent = 'Se instala lo que suba. La clave privada es opcional: si no la elige, queda la que ya está en este servidor.';
         }
         armarReplicarExtras(id);
         if (window.jQuery) {

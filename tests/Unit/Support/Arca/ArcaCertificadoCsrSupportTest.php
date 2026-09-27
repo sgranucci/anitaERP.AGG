@@ -111,6 +111,26 @@ class ArcaCertificadoCsrSupportTest extends TestCase
         $this->assertSame('padronferli', ArcaCertificadoCsrSupport::leerCertificado($crtTmp)['alias']);
     }
 
+    public function test_par_desde_zip_acepta_solo_el_certificado(): void
+    {
+        $origen = $this->dir.'/solo-crt';
+        mkdir($origen, 0700, true);
+        $this->emitirCertificadoAutofirmado($origen, [
+            'commonName' => 'wscdcferli',
+            'serialNumber' => 'CUIT 30712345678',
+        ]);
+
+        $zipPath = $this->dir.'/solo.zip';
+        $zip = new \ZipArchive;
+        $this->assertTrue($zip->open($zipPath, \ZipArchive::CREATE) === true);
+        $zip->addFile($origen.'/cert.crt', 'cert.crt');
+        $zip->close();
+
+        $par = ArcaCertificadoCsrSupport::parDesdeZip($zipPath);
+        $this->assertNotNull($par['cert']);
+        $this->assertNull($par['key']);
+    }
+
     /**
      * @param  array<string, string>  $dn
      */
