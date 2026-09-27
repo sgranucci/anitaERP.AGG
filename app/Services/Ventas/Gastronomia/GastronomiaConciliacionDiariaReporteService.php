@@ -619,7 +619,7 @@ final class GastronomiaConciliacionDiariaReporteService
      * Envía por correo la auditoría mensual por medio de cobro (Z ↔ contabilizado, ERP sin ctamov).
      *
      * @param  list<array<string, mixed>>  $resumen  salida de {@see resumenMensualMediosDirecto()}
-     * @return array{enviado: bool, destino?: string, error?: string, hay_diferencias?: bool}
+     * @return array{enviado: bool, destino?: string, error?: string, hay_diferencias?: bool, omitido?: bool}
      */
     public function enviarCorreoAuditoriaMediosMensual(
         array $resumen,
@@ -632,6 +632,26 @@ final class GastronomiaConciliacionDiariaReporteService
             ?? config('gastronomia.conciliacion_diaria_reporte.email', '')));
         if ($destino === '') {
             return ['enviado' => false, 'error' => 'Sin destino de correo configurado'];
+        }
+
+        $jornadas = 0;
+        foreach ($resumen as $emp) {
+            $jornadas += (int) ($emp['jornadas'] ?? 0);
+        }
+        if ($jornadas === 0) {
+            Log::warning('gastronomia.auditoria_medios_mensual.mail_omitido', [
+                'destino' => $destino,
+                'fecha_desde' => $fechaDesde,
+                'fecha_hasta' => $fechaHasta,
+                'motivo' => 'sin_jornadas',
+            ]);
+
+            return [
+                'enviado' => false,
+                'omitido' => true,
+                'destino' => $destino,
+                'error' => 'Sin jornadas en el período; no se envía el correo',
+            ];
         }
 
         $hayDiferencias = false;
