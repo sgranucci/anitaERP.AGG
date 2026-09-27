@@ -69,7 +69,8 @@ class EstacionamientoProcesoFacturacionController extends Controller
             'cliente_descuento_codigo' => $clienteDescuento['codigo'],
             'cliente_descuento' => $clienteDescuento['cliente'],
             'wsfe_receptor_cf_umbral_monto' => ParametroSistemaSupport::topeConsumidorFinal(),
-            'wsfe_forzar_modo_caea' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::forzarModoCaea(),
+            'wsfe_forzar_modo_caea' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::forzarModoCaea(null, $empresaId),
+            'wsfe_aviso_caea' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::mensajeAvisoModoCaeaForzado(null, $empresaId),
             'wsfe_failover_automatico' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::failoverAutomaticoActivo(),
             'jornada' => $empresaId > 0
                 ? $this->jornadaService->estadoParaEmpresa($empresaId)

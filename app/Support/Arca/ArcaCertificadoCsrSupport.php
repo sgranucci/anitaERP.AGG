@@ -363,6 +363,73 @@ final class ArcaCertificadoCsrSupport
         return $pem;
     }
 
+    /**
+     * Acepta PEM de clave (RSA, PKCS#8 o cifrada).
+     */
+    public static function normalizarPemClavePrivada(string $raw): string
+    {
+        $raw = preg_replace('/^\xEF\xBB\xBF/', '', $raw) ?? $raw;
+        $raw = str_replace("\r\n", "\n", $raw);
+        $raw = trim($raw);
+        if ($raw === '') {
+            throw new Exception('El archivo de la clave privada está vacío.');
+        }
+        if (preg_match('/-----BEGIN (?:RSA |ENCRYPTED )?PRIVATE KEY-----.*?-----END (?:RSA |ENCRYPTED )?PRIVATE KEY-----/s', $raw, $m)) {
+            return $m[0]."\n";
+        }
+
+        throw new Exception('La clave privada no tiene un bloque PEM BEGIN/END PRIVATE KEY.');
+    }
+
+    /**
+     * ZIP exportado por esta pantalla: cert.crt + privada.key.
+     *
+     * @return array{cert: string, key: string}
+     */
+    public static function parDesdeZip(string $zipPath): array
+    {
+        if (! is_readable($zipPath)) {
+            throw new Exception('No se pudo leer el ZIP.');
+        }
+        $zip = new \ZipArchive;
+        if ($zip->open($zipPath) !== true) {
+            throw new Exception('No se pudo abrir el ZIP. Use el archivo que exporta Certificados ARCA.');
+        }
+
+        $cert = null;
+        $key = null;
+        try {
+            for ($i = 0; $i < $zip->numFiles; $i++) {
+                $stat = $zip->statIndex($i);
+                $name = is_array($stat) ? (string) ($stat['name'] ?? '') : '';
+                if ($name === '' || str_contains($name, '..') || str_ends_with($name, '/')) {
+                    continue;
+                }
+                $size = is_array($stat) ? (int) ($stat['size'] ?? 0) : 0;
+                if ($size > 65536) {
+                    throw new Exception('Un archivo del ZIP supera el tamaño de un certificado o una clave.');
+                }
+                $base = strtolower(basename(str_replace('\\', '/', $name)));
+                if (in_array($base, ['cert.crt', 'cert.pem', 'certificado.crt'], true)) {
+                    $contenido = $zip->getFromIndex($i);
+                    $cert = is_string($contenido) ? $contenido : null;
+                }
+                if (in_array($base, ['privada.key', 'private.key', 'privada.pem', 'key.pem'], true)) {
+                    $contenido = $zip->getFromIndex($i);
+                    $key = is_string($contenido) ? $contenido : null;
+                }
+            }
+        } finally {
+            $zip->close();
+        }
+
+        if (! is_string($cert) || trim($cert) === '' || ! is_string($key) || trim($key) === '') {
+            throw new Exception('El ZIP debe contener cert.crt y privada.key (el que se exporta desde Certificados ARCA).');
+        }
+
+        return ['cert' => $cert, 'key' => $key];
+    }
+
     public static function certCoincideConClave(string $certPath, string $keyPath, string $passphrase = ''): bool
     {
         if (! is_readable($certPath) || ! is_readable($keyPath)) {

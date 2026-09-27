@@ -76,7 +76,13 @@ final class EstacionamientoPreflightEmisionService
             $errores[] = 'Configure punto de venta CAE y/o CAEA en la configuración estacionamiento de esta terminal.';
         } else {
             try {
-                $resolucionPv = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision($pvCae, $pvCaea, false);
+                $resolucionPv = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision(
+                    $pvCae,
+                    $pvCaea,
+                    false,
+                    null,
+                    (int) $cfg->empresa_id,
+                );
                 $errores = array_merge(
                     $errores,
                     self::erroresPuntoventaEmisionInexistente($resolucionPv, $pvCae, $pvCaea),

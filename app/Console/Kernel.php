@@ -175,6 +175,11 @@ class Kernel extends ConsoleKernel
             ->dailyAt('06:30')
             ->when(fn () => config('arca.caea.pedido_automatico', true));
 
+        $schedule->command('arca:avisar-vencimiento-certificados')
+            ->dailyAt((string) config('arca.certificado_aviso.hora', '08:10'))
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/arca-certificado-vencimiento.log'));
+
         $schedule->command('arca:auditar-proveedores-facturas-apocrifas')
             ->dailyAt((string) config('arca_wsapoc.auditoria_nocturna.hora', '05:30'))
             ->runInBackground()

@@ -202,6 +202,15 @@ return [
             env('ARCA_WSFE_FORZAR_MODO_CAEA', false),
             FILTER_VALIDATE_BOOLEAN
         ),
+        /**
+         * empresa_id que facturan POS (gastronomía / estacionamiento) en CAEA fijo,
+         * sin el flag global. Vacío = nadie. Fecha hasta inclusive (Y-m-d); vacío = sin vencimiento.
+         */
+        'forzar_modo_caea_empresas' => array_values(array_filter(array_map(
+            static fn ($id) => (int) trim((string) $id),
+            explode(',', (string) env('ARCA_WSFE_FORZAR_MODO_CAEA_EMPRESAS', ''))
+        ), static fn (int $id) => $id > 0)),
+        'forzar_modo_caea_empresas_hasta' => trim((string) env('ARCA_WSFE_FORZAR_MODO_CAEA_EMPRESAS_HASTA', '')),
         'reintentar_caea_si_falla_comunicacion' => filter_var(
             env(
                 'ARCA_WSFE_REINTENTAR_CAEA_SI_FALLA_COMUNICACION',

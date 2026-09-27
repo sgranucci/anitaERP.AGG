@@ -42,6 +42,7 @@ return [
         'stock.transferencia_confirmada' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,
         'stock.transferencia_rechazada' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,
         'ventas.pedido_produccion_alarma' => App\Services\Configuracion\Handlers\VentasPedidoProduccionAvisoHandler::class,
+        'arca.certificado_vencimiento' => App\Services\Configuracion\Handlers\ArcaCertificadoVencimientoAvisoHandler::class,
         'contable.apertura_periodo_habilitada' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,
         'contable.apertura_periodo_solicitud_pendiente' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,
         'contable.apertura_periodo_recordatorio' => App\Services\Configuracion\Handlers\ContableAperturaPeriodoAvisoHandler::class,

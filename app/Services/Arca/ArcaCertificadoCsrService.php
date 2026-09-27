@@ -237,7 +237,7 @@ class ArcaCertificadoCsrService
         }
 
         $pass = (string) ($entrada['private_key_passphrase'] ?? '');
-        if (! ArcaCertificadoCsrSupport::certCoincideConClave($nuevoCert, $nuevaKey, $pass)) {
+        if (! $this->parCoincide($nuevoCert, $nuevaKey, $pass)) {
             throw new Exception('El cert.crt de ARCA no coincide con la privada.key de la renovación.');
         }
 
@@ -581,6 +581,7 @@ class ArcaCertificadoCsrService
         $fila['organizacion'] = null;
         $fila['valid_from'] = null;
         $fila['valid_to'] = null;
+        $fila['valid_to_ts'] = null;
         $fila['dias_restantes'] = null;
         $fila['fingerprint_sha256'] = null;
         $fila['subject'] = null;
@@ -600,6 +601,7 @@ class ArcaCertificadoCsrService
             $fila['organizacion'] = $leido['organizacion'];
             $fila['valid_from'] = $leido['valid_from'];
             $fila['valid_to'] = $leido['valid_to'];
+            $fila['valid_to_ts'] = $leido['valid_to_ts'];
             $fila['dias_restantes'] = $leido['dias_restantes'];
             $fila['fingerprint_sha256'] = $leido['fingerprint_sha256'];
             $fila['subject'] = ArcaCertificadoCsrSupport::formatearSubject($leido['subject']);
@@ -688,7 +690,15 @@ class ArcaCertificadoCsrService
      */
     public function instalarDesdeUpload(array $entrada, string $contenidoCrt, bool $force = false, array $replicarIds = []): array
     {
-        $dirPreferido = $this->ultimaRenovacion($entrada);
+        try {
+            $dirPreferido = $this->ultimaRenovacion($entrada);
+        } catch (Exception) {
+            throw new Exception(
+                'No hay un CSR generado en este servidor. '.
+                'Suba el ZIP exportado del otro ERP (cert.crt + privada.key), o el .crt junto con la privada.key. '.
+                'Si el pedido se hizo acá, genere el CSR primero y suba solo el .crt de ARCA.'
+            );
+        }
         $pem = ArcaCertificadoCsrSupport::normalizarPemCertificado($contenidoCrt);
         $destinoCrt = $dirPreferido.'/cert.crt';
         if (@file_put_contents($destinoCrt, $pem) === false) {
@@ -734,6 +744,56 @@ class ArcaCertificadoCsrService
         return array_merge($instalado, [
             'validacion' => $validacion,
             'dir' => $dir,
+            'origen' => 'csr',
+        ]);
+    }
+
+    /**
+     * Instala un par cert.crt + privada.key generado en otro servidor (sin CSR local).
+     *
+     * @param  array<string, mixed>  $entrada
+     * @param  list<string>  $replicarIds
+     * @return array<string, mixed>
+     */
+    public function importarParDesdeContenido(array $entrada, string $contenidoCrt, string $contenidoKey, bool $force = false, array $replicarIds = []): array
+    {
+        $pem = ArcaCertificadoCsrSupport::normalizarPemCertificado($contenidoCrt);
+        $keyPem = ArcaCertificadoCsrSupport::normalizarPemClavePrivada($contenidoKey);
+        $dir = $this->directorioRenovacion($entrada, false);
+        $this->asegurarDirectorio($dir);
+        @chmod($dir, 0700);
+
+        $destinoCrt = $dir.'/cert.crt';
+        $destinoKey = $dir.'/privada.key';
+        if (@file_put_contents($destinoCrt, $pem) === false || @file_put_contents($destinoKey, $keyPem) === false) {
+            @unlink($destinoCrt);
+            @unlink($destinoKey);
+            throw new Exception('No se pudo guardar el par importado.');
+        }
+        @chmod($destinoCrt, 0644);
+        @chmod($destinoKey, 0600);
+        @file_put_contents($dir.'/origen.txt', "Importado desde otro servidor\n".date('c')."\n");
+
+        $pass = (string) ($entrada['private_key_passphrase'] ?? '');
+        if (! $this->parCoincide($destinoCrt, $destinoKey, $pass)) {
+            @unlink($destinoCrt);
+            @unlink($destinoKey);
+            throw new Exception('El certificado no coincide con la clave privada del par (o la clave está cifrada con otra contraseña).');
+        }
+
+        $validacion = $this->validarCrtRenovacion($entrada, $dir, $force);
+        if (! $validacion['ok']) {
+            @unlink($destinoCrt);
+            @unlink($destinoKey);
+            throw new Exception(implode(' ', $validacion['errores']));
+        }
+
+        $instalado = $this->instalar($entrada, $dir, $force, $replicarIds);
+
+        return array_merge($instalado, [
+            'validacion' => $validacion,
+            'dir' => $dir,
+            'origen' => 'par',
         ]);
     }
 
@@ -843,9 +903,9 @@ class ArcaCertificadoCsrService
 
         $pass = (string) ($entrada['private_key_passphrase'] ?? '');
         if (! is_readable($keyPath)) {
-            $errores[] = 'No hay privada.key de la renovación. Genere el CSR primero.';
-        } elseif (! ArcaCertificadoCsrSupport::certCoincideConClave($certPath, $keyPath, $pass)) {
-            $errores[] = 'El certificado no coincide con la clave privada generada para este CSR (pedido '.basename($dir).').';
+            $errores[] = 'No hay privada.key de la renovación. Genere el CSR primero o suba el par completo.';
+        } elseif (! $this->parCoincide($certPath, $keyPath, $pass)) {
+            $errores[] = 'El certificado no coincide con la clave privada (pedido '.basename($dir).').';
         }
 
         $aliasEsperado = trim((string) ($entrada['alias'] ?? ''));
@@ -934,6 +994,15 @@ class ArcaCertificadoCsrService
         }
 
         throw new Exception('No hay un CSR generado para este certificado. Genere el pedido primero.');
+    }
+
+    private function parCoincide(string $certPath, string $keyPath, string $passphrase): bool
+    {
+        if (ArcaCertificadoCsrSupport::certCoincideConClave($certPath, $keyPath, $passphrase)) {
+            return true;
+        }
+
+        return $passphrase !== '' && ArcaCertificadoCsrSupport::certCoincideConClave($certPath, $keyPath, '');
     }
 
     private function directorioEscribible(string $dir): bool

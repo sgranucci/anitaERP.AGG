@@ -48,9 +48,13 @@ final class ArcaWsfeEmisionResiliencia
     /**
      * true: todas las emisiones usan el PV CAEA configurado y no llaman al WS ARCA en línea.
      */
-    public static function forzarModoCaea(?string $webservice = null): bool
+    public static function forzarModoCaea(?string $webservice = null, ?int $empresaId = null): bool
     {
         if (filter_var(config(self::configKey($webservice).'.emision.forzar_modo_caea'), FILTER_VALIDATE_BOOLEAN)) {
+            return true;
+        }
+
+        if (self::forzarModoCaeaPorEmpresa($webservice, $empresaId)) {
             return true;
         }
 
@@ -59,6 +63,28 @@ final class ArcaWsfeEmisionResiliencia
             : ArcaFailoverStore::WS_WSFE;
 
         return ArcaFailoverStore::estaActivo($failoverKey);
+    }
+
+    /**
+     * CAEA fijo por empresa (POS), con fecha tope inclusive. No aplica a WSMTXCA.
+     */
+    public static function forzarModoCaeaPorEmpresa(?string $webservice, ?int $empresaId): bool
+    {
+        if (self::esWsMtxca($webservice) || $empresaId === null || $empresaId <= 0) {
+            return false;
+        }
+
+        $ids = config('arca_wsfe.emision.forzar_modo_caea_empresas', []);
+        if (! is_array($ids) || ! in_array($empresaId, array_map('intval', $ids), true)) {
+            return false;
+        }
+
+        $hasta = trim((string) config('arca_wsfe.emision.forzar_modo_caea_empresas_hasta', ''));
+        if ($hasta !== '' && now()->toDateString() > $hasta) {
+            return false;
+        }
+
+        return true;
     }
 
     /** true si el modo CAEA viene del monitor automático (no del .env manual). */
@@ -362,8 +388,9 @@ final class ArcaWsfeEmisionResiliencia
         int $puntoventaCaeaId,
         bool $forzarCaeaTransaccion = false,
         ?string $webservice = null,
+        ?int $empresaId = null,
     ): array {
-        $usaCaea = self::forzarModoCaea($webservice) || $forzarCaeaTransaccion;
+        $usaCaea = self::forzarModoCaea($webservice, $empresaId) || $forzarCaeaTransaccion;
 
         return [
             'puntoventa_id' => $usaCaea ? $puntoventaCaeaId : $puntoventaCaeId,
@@ -447,10 +474,17 @@ final class ArcaWsfeEmisionResiliencia
         ArcaFailoverStore::registrarChequeo($failoverKey, false, $mensaje, $meta);
     }
 
-    public static function mensajeAvisoModoCaeaForzado(?string $webservice = null): ?string
+    public static function mensajeAvisoModoCaeaForzado(?string $webservice = null, ?int $empresaId = null): ?string
     {
-        if (! self::forzarModoCaea($webservice)) {
+        if (! self::forzarModoCaea($webservice, $empresaId)) {
             return null;
+        }
+
+        if (self::forzarModoCaeaPorEmpresa($webservice, $empresaId)) {
+            $hasta = trim((string) config('arca_wsfe.emision.forzar_modo_caea_empresas_hasta', ''));
+            $tope = $hasta !== '' ? ' hasta el '.$hasta.' inclusive' : '';
+
+            return 'Modo CAEA forzado para esta empresa (ARCA_WSFE_FORZAR_MODO_CAEA_EMPRESAS'.$tope.'): no se consulta el web service en línea.';
         }
 
         if (self::failoverAutomaticoActivo($webservice)) {

@@ -258,6 +258,12 @@
     <div class="col-lg-12">
         @include('includes.mensaje')
 
+        @if ($wsfe_forzar_modo_caea && empty($wsfe_failover_automatico))
+            <div class="alert alert-warning py-2" role="status">
+                {{ $wsfe_aviso_caea }}
+            </div>
+        @endif
+
         @if (!$tiene_cfg_pv)
             <div class="alert alert-warning">
                 No hay configuración de punto de venta estacionamiento para el identificador PC actual

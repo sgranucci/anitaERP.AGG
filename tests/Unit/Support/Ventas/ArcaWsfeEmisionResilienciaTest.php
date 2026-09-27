@@ -236,6 +236,24 @@ class ArcaWsfeEmisionResilienciaTest extends TestCase
         self::assertNull(R::soapTimeoutPosParaOpciones([], 'wsfev1'));
     }
 
+    public function test_forzar_modo_caea_por_empresa_hasta_fecha(): void
+    {
+        config()->set('arca_wsfe.emision.forzar_modo_caea', false);
+        config()->set('arca_wsfe.emision.forzar_modo_caea_empresas', [3]);
+        config()->set('arca_wsfe.emision.forzar_modo_caea_empresas_hasta', now()->toDateString());
+
+        self::assertTrue(R::forzarModoCaea(null, 3));
+        self::assertFalse(R::forzarModoCaea(null, 1));
+        self::assertFalse(R::forzarModoCaea('wsmtxca', 3));
+        $res = R::resolverPuntoventaEmision(10, 30, false, null, 3);
+        self::assertSame(30, $res['puntoventa_id']);
+        self::assertTrue($res['usa_caea']);
+        self::assertStringContainsString('esta empresa', (string) R::mensajeAvisoModoCaeaForzado(null, 3));
+
+        config()->set('arca_wsfe.emision.forzar_modo_caea_empresas_hasta', now()->subDay()->toDateString());
+        self::assertFalse(R::forzarModoCaea(null, 3));
+    }
+
     public function test_forzar_modo_caea_por_failover_automatico(): void
     {
         config()->set('arca_wsfe.emision.forzar_modo_caea', false);

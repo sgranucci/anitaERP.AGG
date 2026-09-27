@@ -205,6 +205,17 @@ return [
     | Recomendado en producción: ARCA_MONITOR_EMPRESA_ID, ARCA_MONITOR_PUNTOVENTA_ID
     | (PV CAE de referencia) y ARCA_MONITOR_TIPOTRANSACCION_ID o ARCA_MONITOR_CBTE_TIPO.
     */
+    /*
+    | Aviso de vencimiento de certificados ARCA (módulo de avisos).
+    | Desde dias_antes del vencimiento, el cron diario envía solo cada cada_dias
+    | (2 = día por medio), también si ya venció, hasta que se renueve.
+    */
+    'certificado_aviso' => [
+        'dias_antes' => max(1, (int) env('ARCA_CERTIFICADO_AVISO_DIAS_ANTES', 30)),
+        'cada_dias' => max(1, (int) env('ARCA_CERTIFICADO_AVISO_CADA_DIAS', 2)),
+        'hora' => env('ARCA_CERTIFICADO_AVISO_HORA', '08:10'),
+    ],
+
     'monitor_conectividad' => [
         'habilitado' => filter_var(env('ARCA_MONITOR_CONECTIVIDAD', true), FILTER_VALIDATE_BOOLEAN),
         'empresa_id' => ($v = (int) env('ARCA_MONITOR_EMPRESA_ID', 0)) > 0 ? $v : null,

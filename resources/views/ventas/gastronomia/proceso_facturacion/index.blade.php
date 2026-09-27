@@ -935,7 +935,7 @@
                                 @if (! empty($wsfe_failover_automatico))
                                     <strong>Modo CAEA — contingencia ARCA</strong>: el monitor detectó problemas de comunicación con AFIP. Las facturas usan CAEA hasta recuperar el servicio.
                                 @else
-                                    <strong>Modo CAEA forzado</strong> (<code>ARCA_WSFE_FORZAR_MODO_CAEA=true</code>): las facturas no consultan el web service ARCA en línea.
+                                    {{ $wsfe_aviso_caea ?? 'Modo CAEA forzado: las facturas no consultan el web service ARCA en línea.' }}
                                 @endif
                             </div>
                         @endif

@@ -41,6 +41,8 @@ final class GastronomiaEmisionDiagnosticoService
             (int) ($cfg->puntoventa_cae_id ?? 0),
             (int) ($cfg->puntoventa_caea_id ?? 0),
             false,
+            null,
+            (int) $cfg->empresa_id,
         );
         $puntoventaId = (int) ($pvResolucion['puntoventa_id'] ?? 0);
         if ($puntoventaId <= 0) {

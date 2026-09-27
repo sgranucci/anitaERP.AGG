@@ -82,6 +82,35 @@ class ArcaCertificadoCsrSupportTest extends TestCase
         );
     }
 
+    public function test_par_desde_zip_lee_cert_y_clave(): void
+    {
+        $origen = $this->dir.'/origen';
+        mkdir($origen, 0700, true);
+        $this->emitirCertificadoAutofirmado($origen, [
+            'commonName' => 'padronferli',
+            'serialNumber' => 'CUIT 30712345678',
+        ]);
+
+        $zipPath = $this->dir.'/par.zip';
+        $zip = new \ZipArchive;
+        $this->assertTrue($zip->open($zipPath, \ZipArchive::CREATE) === true);
+        $zip->addFile($origen.'/cert.crt', 'cert.crt');
+        $zip->addFile($origen.'/privada.key', 'privada.key');
+        $zip->addFromString('readme.txt', "Par certificado ARCA\n");
+        $zip->close();
+
+        $par = ArcaCertificadoCsrSupport::parDesdeZip($zipPath);
+        $this->assertStringContainsString('BEGIN CERTIFICATE', $par['cert']);
+        $this->assertStringContainsString('PRIVATE KEY', $par['key']);
+
+        $crtTmp = $this->dir.'/leido.crt';
+        $keyTmp = $this->dir.'/leida.key';
+        file_put_contents($crtTmp, ArcaCertificadoCsrSupport::normalizarPemCertificado($par['cert']));
+        file_put_contents($keyTmp, ArcaCertificadoCsrSupport::normalizarPemClavePrivada($par['key']));
+        $this->assertTrue(ArcaCertificadoCsrSupport::certCoincideConClave($crtTmp, $keyTmp));
+        $this->assertSame('padronferli', ArcaCertificadoCsrSupport::leerCertificado($crtTmp)['alias']);
+    }
+
     /**
      * @param  array<string, string>  $dn
      */

@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Ventas;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Arca\ArcaCertificadoCsrService;
+use App\Support\Arca\ArcaCertificadoCsrSupport;
 use Exception;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CertificadoArcaController extends Controller
@@ -126,23 +128,40 @@ class CertificadoArcaController extends Controller
             return $this->volverError('Indique el certificado.');
         }
 
+        $zip = $request->file('par_zip');
+        $clave = $request->file('clave');
         $file = $request->file('certificado');
-        if ($file === null || ! $file->isValid()) {
-            return $this->volverError('Seleccione el archivo .crt descargado de ARCA.');
+        $hayZip = $zip !== null && $zip->isValid();
+        $hayClave = $clave !== null && $clave->isValid();
+        $hayCrt = $file !== null && $file->isValid();
+
+        if (! $hayZip && ! $hayCrt) {
+            return $this->volverError('Seleccione el .crt de ARCA, o el ZIP exportado desde el otro servidor (cert.crt + privada.key).');
         }
-        if ($file->getSize() > 65536) {
+        if ($hayZip && $zip->getSize() > 262144) {
+            return $this->volverError('El ZIP es demasiado grande para un par de certificado ARCA.');
+        }
+        if ($hayCrt && $file->getSize() > 65536) {
             return $this->volverError('El archivo es demasiado grande para un certificado ARCA.');
         }
-
-        $raw = @file_get_contents($file->getRealPath());
-        if (! is_string($raw) || trim($raw) === '') {
-            return $this->volverError('No se pudo leer el archivo subido.');
+        if ($hayClave && $clave->getSize() > 65536) {
+            return $this->volverError('La clave privada es demasiado grande.');
         }
 
         try {
             $entrada = $this->buscarCertificadoPermitido($id);
             $replicarIds = $this->replicarIdsDesdeRequest($request, $id);
-            $r = $this->csrService->instalarDesdeUpload($entrada, $raw, false, $replicarIds);
+            if ($hayZip) {
+                $par = ArcaCertificadoCsrSupport::parDesdeZip($zip->getRealPath());
+                $r = $this->csrService->importarParDesdeContenido($entrada, $par['cert'], $par['key'], false, $replicarIds);
+            } elseif ($hayClave) {
+                $raw = $this->leerUpload($file);
+                $keyRaw = $this->leerUpload($clave);
+                $r = $this->csrService->importarParDesdeContenido($entrada, $raw, $keyRaw, false, $replicarIds);
+            } else {
+                $raw = $this->leerUpload($file);
+                $r = $this->csrService->instalarDesdeUpload($entrada, $raw, false, $replicarIds);
+            }
         } catch (Exception $e) {
             return $this->volverError($e->getMessage());
         }
@@ -156,14 +175,27 @@ class CertificadoArcaController extends Controller
         }
         $etiquetas = array_values(array_filter($etiquetas));
 
+        $desdeOtro = ($r['origen'] ?? '') === 'par';
+
         return redirect()
             ->route('certificados_arca')
             ->with(
                 'mensaje',
-                'Certificado «'.$alias.'» validado e instalado'.($vence !== '' ? ' (vence '.$vence.')' : '').
+                'Certificado «'.$alias.'» '.($desdeOtro ? 'importado' : 'validado').' e instalado'.
+                ($vence !== '' ? ' (vence '.$vence.')' : '').
                 ' en: '.( $etiquetas !== [] ? implode(', ', $etiquetas) : $entrada['etiqueta'] ).
                 '. Backup en '.$r['backup_dir'].'.'
             );
+    }
+
+    private function leerUpload(UploadedFile $file): string
+    {
+        $raw = @file_get_contents($file->getRealPath());
+        if (! is_string($raw) || trim($raw) === '') {
+            throw new Exception('No se pudo leer el archivo subido.');
+        }
+
+        return $raw;
     }
 
     public function probar(Request $request): RedirectResponse

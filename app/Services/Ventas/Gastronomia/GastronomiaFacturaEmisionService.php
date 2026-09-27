@@ -102,7 +102,9 @@ final class GastronomiaFacturaEmisionService
             $pvResolucion = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision(
                 (int) $cfg->puntoventa_cae_id,
                 (int) $cfg->puntoventa_caea_id,
-                false
+                false,
+                null,
+                (int) $cfg->empresa_id,
             );
             $puntoventaId = $pvResolucion['puntoventa_id'];
         } catch (InvalidArgumentException) {
@@ -202,7 +204,9 @@ final class GastronomiaFacturaEmisionService
             $pvResolucion = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision(
                 (int) $cfg->puntoventa_cae_id,
                 (int) $cfg->puntoventa_caea_id,
-                false
+                false,
+                null,
+                (int) $cfg->empresa_id,
             );
             $puntoventaId = $pvResolucion['puntoventa_id'];
         } catch (InvalidArgumentException) {
@@ -293,7 +297,9 @@ final class GastronomiaFacturaEmisionService
         $pvResolucion = ArcaWsfeEmisionResiliencia::resolverPuntoventaEmision(
             (int) $cfg->puntoventa_cae_id,
             (int) $cfg->puntoventa_caea_id,
-            $forzarPvCaea
+            $forzarPvCaea,
+            null,
+            (int) $cfg->empresa_id,
         );
         $puntoventaId = $pvResolucion['puntoventa_id'];
         $usaCaea = $pvResolucion['usa_caea'];
