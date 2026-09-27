@@ -13,6 +13,12 @@ interface ChequeRepositoryInterface extends RepositoryInterface
      */
     public function leeCheque($filtros, bool $flPaginando = true);
 
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesCheque(array $filtros): array;
+
     public function sincronizarConAnita();
 
     /**

@@ -14,10 +14,12 @@ Complementa `reportes-consulta-paginado-export.mdc` e `index-listado-paginado-ex
 
 | Elemento | Cómo |
 |---|---|
-| Encabezado (logos, título, subtítulo, contador) | Filas en `<thead>` vía `@include('includes.reportes.pdf_thead_cabecera', …)` **antes** de la fila de columnas |
-| Thead repetible | `table.data thead { display: table-header-group; }` y `tr { page-break-inside: avoid; }` |
-| Numeración | `App\Support\Reportes\DompdfListadoSupport::guardar…` (canvas `page_text` → `Hoja {PAGE_NUM} de {PAGE_COUNT}`) |
+| Encabezado (logos, título, subtítulo, contador) | Filas en `<thead>` vía `@include('includes.reportes.pdf_thead_cabecera', …)` **antes** de la fila de columnas. Fondo **blanco** (el partial ya lo fuerza en `tr`/`th`/`td`: DomPDF pinta `table.data thead tr` por encima del `th`) |
+| Nombres de columna | `<tr class="columnas">`. Celeste `#85C1E9` solo ahí: `table.data thead tr.columnas > th`. El encabezado no se pinta de celeste |
+| Thead repetible | `table.data thead { display: table-header-group; }`. No poner `page-break-inside: avoid` en cada fila de datos (DomPDF se pone lento) |
+| Numeración | `App\Support\Reportes\DompdfListadoSupport::guardar…` (canvas `page_text` → `Hoja {PAGE_NUM} de {PAGE_COUNT}`) + `titulo_corto` en cada hoja |
 | Papel reportes | `legal` + `landscape` salvo excepción documentada |
+| Volumen (miles de filas) | Opt-in: `ListadoPdfRapidoSupport::lotes()` (tablas de 200; un encabezado de grupo no queda solo al final del lote). Logos solo en el primer lote. DomPDF: `isFontSubsettingEnabled` y `isJavascriptEnabled` en false. No es automático: cada listado lo cablea |
 
 ## Correcto (controller)
 
@@ -44,7 +46,7 @@ return response()->download($ruta);
             'logosCabecera' => $logosCabecera,
             'totalFilas' => $totalFilas,
         ])
-        <tr>
+        <tr class="columnas">
             <th>…</th>
         </tr>
     </thead>
@@ -57,6 +59,8 @@ return response()->download($ruta);
 - Envolver todo el listado largo en `table.marco-pdf` (DomPDF deja la 2.ª hoja con hueco en blanco).
 - Solo `loadHTML(…).save(…)` sin numeración en listados multipágina nuevos.
 - Encabezado (logos/título) **fuera** del `<thead>`: solo aparece en la hoja 1.
+- Teñir `table.data thead tr` o `th` de `#85C1E9` sin limitar el celeste a `tr.columnas` (el título queda igual que los nombres de columna).
+- Una sola `<table>` con miles de filas y cebra `nth-child` cuando el listado ya puede partirse con `ListadoPdfRapidoSupport`.
 
 ## Overlay al exportar (pantalla)
 

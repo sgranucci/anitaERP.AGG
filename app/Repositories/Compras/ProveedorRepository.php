@@ -30,6 +30,10 @@ use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Configuracion\CondicionivaLetraComprasSupport;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Compras\ProveedorListadoFiltros;
+use App\Support\Compras\ProveedorListadoColumnas;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Models\Seguridad\Usuario;
 use App\Traits\AnitaBridgeEscritura;
@@ -2181,9 +2185,62 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = $this->normalizarFiltrosProveedor($filtros);
+        $proveedor = $this->queryProveedorListado($filtros);
+        ProveedorListadoFiltros::aplicarOrden($proveedor, $filtros);
+
+		if (isset($flPaginando)) {
+            if ($flPaginando) {
+                $perPage = (int) ($filtros['_per_page'] ?? 10);
+                $perPage = max(1, min(50, $perPage));
+                $proveedor = $proveedor->paginate($perPage);
+            } else {
+                $proveedor = $proveedor->get();
+            }
+        } else {
+            $proveedor = $proveedor->get();
+        }
+
+        return $proveedor;
+    }
+
+    /**
+     * Pack C: cortes / conteos por agrupación sobre el universo filtrado.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesProveedor(array $filtros): array
+    {
+        $filtros = $this->normalizarFiltrosProveedor($filtros);
+        $campos = ProveedorListadoFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ProveedorListadoColumnas::RECURSO,
+            ProveedorListadoColumnas::catalogoActivo()
+        );
+
+        return ListadoCortesSupport::calcular(
+            $this->queryProveedorListado($filtros),
+            $agrupar,
+            $campos,
+            'proveedor.id',
+            static fn (object $row, string $key): string => ProveedorListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => ProveedorListadoColumnas::sqlAgrupacion($key),
+            $etiquetas
+        );
+    }
+
+    /**
+     * @param  mixed  $filtros
+     * @return array<string, mixed>
+     */
+    private function normalizarFiltrosProveedor($filtros): array
+    {
         if (is_string($filtros)) {
             $texto = trim($filtros);
-            $filtros = array_merge(ProveedorListadoFiltros::filtrosVacios(), [
+
+            return array_merge(ProveedorListadoFiltros::filtrosVacios(), [
                 'modo' => ProveedorListadoFiltros::MODO_TODOS,
                 'campo' => 'nombre',
                 'operador' => 'contiene',
@@ -2192,10 +2249,22 @@ class ProveedorRepository implements ProveedorRepositoryInterface
                 'busqueda' => $texto,
                 'empresa_scope' => 'todas',
             ]);
-        } elseif (! is_array($filtros)) {
-            $filtros = ProveedorListadoFiltros::filtrosVacios();
+        }
+        if (! is_array($filtros)) {
+            return ProveedorListadoFiltros::filtrosVacios();
         }
 
+        return $filtros;
+    }
+
+    /**
+     * Query base del listado (filtros aplicados, sin ORDER ni paginación).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    private function queryProveedorListado(array $filtros)
+    {
         $proveedor = $this->model->select(
                                         'proveedor.id as id',
                                         'proveedor.nombre as nombre',
@@ -2228,7 +2297,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
                                         'tiposuspensionproveedor.nombre as nombretiposuspension',
 										'proveedor.estado as estado',
                                         'proveedor.facturas_apocrifas as facturas_apocrifas',
-                                        'proveedor.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at')
+                                        'proveedor.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at',
+                                        'proveedor.created_at as fecha_alta',
+                                        'proveedor.updated_at as fecha_modificacion')
                                 ->leftjoin('localidad', 'localidad.id', 'proveedor.localidad_id')
 								->leftjoin('provincia', 'provincia.id', 'proveedor.provincia_id')
                                 ->leftJoin('pais', 'pais.id', '=', 'proveedor.pais_id')
@@ -2242,18 +2313,6 @@ class ProveedorRepository implements ProveedorRepositoryInterface
                                 ->leftJoin('tiposuspensionproveedor', 'tiposuspensionproveedor.id', '=', 'proveedor.tiposuspension_id');
 
         ProveedorListadoFiltros::aplicar($proveedor, $filtros);
-
-		$proveedor = $proveedor->orderBy('proveedor.id', 'DESC');
-
-        if (isset($flPaginando)) {
-            if ($flPaginando) {
-                $proveedor = $proveedor->paginate(10);
-            } else {
-                $proveedor = $proveedor->get();
-            }
-        } else {
-            $proveedor = $proveedor->get();
-        }
 
         return $proveedor;
     }

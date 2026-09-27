@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Ventas;
 
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Listado\ListadoQbeSupport;
 
 /**
  * Catálogo único de columnas del workbench de clientes
@@ -406,6 +407,26 @@ final class ClienteListadoColumnas
             'attr' => 'facturas_apocrifas',
             'group' => self::GRUPO_ESTADO,
         ],
+        'fecha_alta' => [
+            'label' => 'Fecha de alta',
+            'default' => false,
+            'export' => true,
+            'filterable' => true,
+            'type' => 'fecha',
+            'source' => 'cliente.created_at',
+            'attr' => 'fecha_alta',
+            'group' => self::GRUPO_ESTADO,
+        ],
+        'fecha_modificacion' => [
+            'label' => 'Fecha de modificación',
+            'default' => false,
+            'export' => true,
+            'filterable' => true,
+            'type' => 'fecha',
+            'source' => 'cliente.updated_at',
+            'attr' => 'fecha_modificacion',
+            'group' => self::GRUPO_ESTADO,
+        ],
     ];
 
     /**
@@ -493,6 +514,29 @@ final class ClienteListadoColumnas
     }
 
     /**
+     * Campos disponibles para ORDER BY multi-criterio (P13n / Saved Search).
+     *
+     * @return array<string, array{label: string, type: string, column: string}>
+     */
+    public static function camposOrdenables(): array
+    {
+        $out = [];
+        foreach (self::catalogoActivo() as $key => $meta) {
+            $column = (string) ($meta['source'] ?? '');
+            if ($column === '' || ! \App\Support\Listado\ListadoOrdenamientoSupport::esColumnaSqlSegura($column)) {
+                continue;
+            }
+            $out[$key] = [
+                'label' => $meta['label'],
+                'type' => $meta['type'] ?? 'texto',
+                'column' => $column,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * @return array<string, array<string, array<string, mixed>>>
      */
     public static function catalogoPorGrupo(): array
@@ -539,7 +583,46 @@ final class ClienteListadoColumnas
         }
         $attr = self::catalogoActivo()[$key]['attr'] ?? $key;
         $valor = $data->{$attr} ?? '';
+        if ((self::catalogoActivo()[$key]['type'] ?? '') === 'fecha') {
+            return ListadoQbeSupport::formatearFecha($valor);
+        }
 
         return is_bool($valor) ? ($valor ? '1' : '0') : (string) $valor;
+    }
+
+    /**
+     * Expresiones SQL para Pack C (GROUP BY alineado con valorCelda).
+     *
+     * @return array{select: list<string>, groupBy: list<string>}|null
+     */
+    public static function sqlAgrupacion(string $key): ?array
+    {
+        return match ($key) {
+            'vendedor' => [
+                'select' => [
+                    'vendedor.codigo as cvendedor',
+                    'vendedor.nombre as nombrevendedor',
+                ],
+                'groupBy' => ['vendedor.codigo', 'vendedor.nombre'],
+            ],
+            'transporte' => [
+                'select' => [
+                    'transporte.codigo as ctransporte',
+                    'transporte.nombre as nombretransporte',
+                ],
+                'groupBy' => ['transporte.codigo', 'transporte.nombre'],
+            ],
+            'apoc' => [
+                'select' => [
+                    'cliente.facturas_apocrifas as facturas_apocrifas',
+                    'cliente.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at',
+                ],
+                'groupBy' => ['cliente.facturas_apocrifas', 'cliente.facturas_apocrifas_consulta_at'],
+            ],
+            default => \App\Support\Listado\ListadoCortesSupport::sqlAgrupacionDefault(
+                $key,
+                self::catalogoActivo()[$key] ?? []
+            ),
+        };
     }
 }

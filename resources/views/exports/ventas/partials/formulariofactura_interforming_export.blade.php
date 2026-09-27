@@ -202,7 +202,7 @@
 
     <table style="margin-top:10px;">
         <tr class="items-head">
-            <td class="tl" style="width:12%;">CANTIDAD</td>
+            <td class="tc" style="width:12%;">CANTIDAD</td>
             <td class="tl" style="width:52%;">DETALLE</td>
             <td class="tr" style="width:18%;">PRECIO UNITARIO</td>
             <td class="tr" style="width:18%;">PRECIO TOTAL</td>
@@ -214,7 +214,7 @@
                 $importe = round($cant * $precio, 2);
             @endphp
             <tr class="items-row">
-                <td class="tr">{{ number_format($cant, $decCant, ',', '.') }}</td>
+                <td class="tc">{{ number_format($cant, $decCant, ',', '.') }}</td>
                 <td class="tl">{{ $item['detalle'] ?? '' }}</td>
                 <td class="tr">{{ number_format($precio, 3, ',', '.') }}</td>
                 <td class="tr">{{ number_format($importe, 2, ',', '.') }}</td>

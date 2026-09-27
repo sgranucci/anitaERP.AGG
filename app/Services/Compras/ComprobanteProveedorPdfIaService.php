@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Ai\AiDecision;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Models\Compras\Proveedor;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface;
@@ -76,14 +77,22 @@ final class ComprobanteProveedorPdfIaService
 
         $numeroOc = $this->resolverNumeroOc($extraido);
         if ($numeroOc === null) {
-            return [
-                'ok' => false,
-                'oc_requerida' => true,
-                'message' => 'No se detectó orden de compra en el PDF. Ingrese el número de OC (6 dígitos) para continuar.',
-                'extraccion' => $extraido,
-                'extraccion_meta' => $extraido['_meta'] ?? [],
-                'decision_id' => $this->decisionIdDeExtraccion($extraido),
-            ];
+            try {
+                $resuelto = $this->resolverDesdeExtraccion($extraido, null);
+            } catch (RuntimeException $e) {
+                return [
+                    'ok' => false,
+                    'oc_requerida' => true,
+                    'permite_continuar_sin_oc' => false,
+                    'message' => $e->getMessage()
+                        .' Si la factura tiene OC, ingrese el número (6 dígitos) para reintentar.',
+                    'extraccion' => $extraido,
+                    'extraccion_meta' => $extraido['_meta'] ?? [],
+                    'decision_id' => $this->decisionIdDeExtraccion($extraido),
+                ];
+            }
+
+            return $this->empaquetarPreviewOk($extraido, $resuelto);
         }
 
         try {
@@ -92,6 +101,7 @@ final class ComprobanteProveedorPdfIaService
             return [
                 'ok' => false,
                 'oc_requerida' => $this->debeSolicitarOcManual($e->getMessage()),
+                'permite_continuar_sin_oc' => true,
                 'message' => $e->getMessage(),
                 'extraccion' => $extraido,
                 'extraccion_meta' => $extraido['_meta'] ?? [],
@@ -125,6 +135,22 @@ final class ComprobanteProveedorPdfIaService
     }
 
     /**
+     * Re-resuelve sin OC (CUIT empresa/proveedor + CC de compra del proveedor).
+     *
+     * @param  array<string, mixed>  $extraccion
+     * @return array<string, mixed>
+     */
+    public function resolverSinOc(array $extraccion): array
+    {
+        $this->assertHabilitado();
+
+        unset($extraccion['numero_oc'], $extraccion['numero_oc_origen']);
+        $resuelto = $this->resolverDesdeExtraccion($extraccion, null);
+
+        return $this->empaquetarPreviewOk($extraccion, $resuelto);
+    }
+
+    /**
      * @param  array<string, mixed>  $payloadConfirmacion  Datos devueltos por preview (o editados en UI)
      * @return array{precarga_id: int, message: string}
      */
@@ -143,9 +169,10 @@ final class ComprobanteProveedorPdfIaService
             throw new RuntimeException('Payload de confirmación inválido.');
         }
 
-        $numeroOc = $this->numeroOcSupport->normalizar($resuelto['numero_oc'] ?? '');
-        if ($numeroOc === '') {
-            throw new RuntimeException('Sin orden de compra no se puede procesar la precarga.');
+        $numeroOcRaw = trim((string) ($resuelto['numero_oc'] ?? ''));
+        $numeroOc = '';
+        if ($numeroOcRaw !== '') {
+            $numeroOc = $this->numeroOcSupport->normalizar($numeroOcRaw);
         }
 
         $empresaId = (int) ($resuelto['empresa_id'] ?? 0);
@@ -295,6 +322,7 @@ final class ComprobanteProveedorPdfIaService
             'numeroordencompra' => $numeroOc,
             'rutaalmacenamiento' => $rutaAlmacenamiento,
             'pararevisar' => $forzarParaRevisar === true
+                || $numeroOc === ''
                 || $this->wscdcConstatacionSupport->tieneDiscrepancias($resuelto)
                 || $this->apocConsultaSupport->tieneProblemasApoc($resuelto)
                 || empty($resuelto['fecha_factura']) ? 1 : 0,
@@ -378,10 +406,14 @@ final class ComprobanteProveedorPdfIaService
 
             $this->resolverDecisionConfirmada($payloadConfirmacion, (int) $precarga->id, $resuelto);
 
-            $mensaje = 'Precarga registrada desde PDF+IA.';
+            $mensaje = $numeroOc === ''
+                ? 'Precarga registrada desde PDF+IA (sin orden de compra).'
+                : 'Precarga registrada desde PDF+IA.';
             if ($this->wscdcConstatacionSupport->tieneDiscrepancias($resuelto)
                 || $this->apocConsultaSupport->tieneProblemasApoc($resuelto)) {
                 $mensaje .= ' Marcada con errores (para revisar) por discrepancias con ARCA.';
+            } elseif ($numeroOc === '') {
+                $mensaje .= ' Quedó marcada para revisar.';
             }
 
             return [
@@ -398,68 +430,107 @@ final class ComprobanteProveedorPdfIaService
      * @param  array<string, mixed>  $extraido
      * @return array<string, mixed>
      */
-    private function resolverDesdeExtraccion(array $extraido, string $numeroOc): array
+    private function resolverDesdeExtraccion(array $extraido, ?string $numeroOc): array
     {
-        $numeroOc = $this->numeroOcSupport->normalizar($numeroOc);
+        $numeroOc = $numeroOc !== null && trim($numeroOc) !== ''
+            ? $this->numeroOcSupport->normalizar($numeroOc)
+            : null;
 
-        $extraido = $this->alinearCuitsConOc($extraido, $numeroOc);
+        $advertencias = [];
+
+        if ($numeroOc !== null) {
+            $extraido = $this->alinearCuitsConOc($extraido, $numeroOc);
+        }
+
         $cuitProveedor = trim((string) ($extraido['cuit_proveedor'] ?? ''));
         if ($cuitProveedor === '') {
+            if ($numeroOc === null) {
+                throw new RuntimeException(
+                    'No se detectó CUIT del proveedor en el PDF. Ingrese una OC o verifique el documento.'
+                );
+            }
             $cuitProveedor = $this->resolucionSupport->resolverCuitProveedorDesdeOc($numeroOc);
             $extraido['cuit_proveedor'] = $cuitProveedor;
             $extraido['cuit_proveedor_origen'] = 'oc';
         }
 
         $cuitDestinatario = trim((string) ($extraido['cuit_destinatario'] ?? ''));
-        $advertencias = [];
         if (! empty($extraido['_advertencia_cuits_swap'])) {
             $advertencias[] = (string) $extraido['_advertencia_cuits_swap'];
             unset($extraido['_advertencia_cuits_swap']);
         }
-        if ($cuitDestinatario === '') {
-            $empresa = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
+
+        if ($numeroOc === null) {
+            if ($cuitDestinatario === '') {
+                throw new RuntimeException(
+                    'No se detectó CUIT destinatario (empresa) en el PDF. Ingrese una OC o verifique el documento.'
+                );
+            }
+            $empresa = $this->resolucionSupport->resolverEmpresaPorCuit($cuitDestinatario);
+            if (! empty($empresa['cuit_corregido'])) {
+                $advertencias[] = 'CUIT destinatario corregido por OCR: «'
+                    .($empresa['cuit_leido'] ?? $cuitDestinatario)
+                    .'» → «'.$empresa['cuit_corregido'].'» ('.$empresa['nombre'].').';
+                $extraido['cuit_destinatario'] = $empresa['cuit_corregido'];
+                $extraido['cuit_destinatario_origen'] = 'ocr_corregido';
+            }
+            $proveedor = $this->resolucionSupport->resolverProveedorPorCuit($cuitProveedor);
+            $codigoCc = $this->codigoCentroCostoCompraProveedor((int) $proveedor['proveedor_id']);
+            $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
+            $listaConceptos = $this->conceptosListaSupport->resolverSinOc(
+                $cuitProveedor,
+                $codigoCc,
+                $tipoSolicitado,
+                (int) $proveedor['proveedor_id'],
+            );
+            $advertencias[] = 'Factura sin orden de compra: tipo y conceptos según centro de costo '
+                .$codigoCc.' del proveedor.';
         } else {
-            try {
-                $empresa = $this->resolucionSupport->resolverEmpresaPorCuit($cuitDestinatario);
-                if (! empty($empresa['cuit_corregido'])) {
-                    $advertencias[] = 'CUIT destinatario corregido por OCR: «'
-                        .($empresa['cuit_leido'] ?? $cuitDestinatario)
-                        .'» → «'.$empresa['cuit_corregido'].'» ('.$empresa['nombre'].').';
-                    $extraido['cuit_destinatario'] = $empresa['cuit_corregido'];
-                    $extraido['cuit_destinatario_origen'] = 'ocr_corregido';
-                    $cuitDestinatario = $empresa['cuit_corregido'];
-                }
-            } catch (RuntimeException $e) {
-                // CUIT ilegible/errado: si hay OC, la empresa sale de ahí (misma política que sin CUIT).
+            if ($cuitDestinatario === '') {
+                $empresa = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
+            } else {
                 try {
-                    $empresa = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
-                    $advertencias[] = 'CUIT destinatario «'.$cuitDestinatario.'» no matcheó empresa; '
-                        .'se usó la empresa de la OC '.$numeroOc.' ('.$empresa['nombre'].').';
-                    $extraido['cuit_destinatario_origen'] = 'oc_fallback';
-                } catch (RuntimeException) {
-                    throw $e;
+                    $empresa = $this->resolucionSupport->resolverEmpresaPorCuit($cuitDestinatario);
+                    if (! empty($empresa['cuit_corregido'])) {
+                        $advertencias[] = 'CUIT destinatario corregido por OCR: «'
+                            .($empresa['cuit_leido'] ?? $cuitDestinatario)
+                            .'» → «'.$empresa['cuit_corregido'].'» ('.$empresa['nombre'].').';
+                        $extraido['cuit_destinatario'] = $empresa['cuit_corregido'];
+                        $extraido['cuit_destinatario_origen'] = 'ocr_corregido';
+                        $cuitDestinatario = $empresa['cuit_corregido'];
+                    }
+                } catch (RuntimeException $e) {
+                    // CUIT ilegible/errado: si hay OC, la empresa sale de ahí (misma política que sin CUIT).
+                    try {
+                        $empresa = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
+                        $advertencias[] = 'CUIT destinatario «'.$cuitDestinatario.'» no matcheó empresa; '
+                            .'se usó la empresa de la OC '.$numeroOc.' ('.$empresa['nombre'].').';
+                        $extraido['cuit_destinatario_origen'] = 'oc_fallback';
+                    } catch (RuntimeException) {
+                        throw $e;
+                    }
                 }
             }
-        }
 
-        try {
-            $empresaOc = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
-            if ((int) $empresaOc['empresa_id'] !== (int) $empresa['empresa_id']) {
-                $advertencias[] = 'El CUIT destinatario matcheó '.$empresa['nombre']
-                    .', pero la OC '.$numeroOc.' es de '.$empresaOc['nombre']
-                    .'. Se usa la empresa de la OC.';
-                $empresa = $empresaOc;
-                $extraido['cuit_destinatario_origen'] = 'oc_prevalece';
+            try {
+                $empresaOc = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
+                if ((int) $empresaOc['empresa_id'] !== (int) $empresa['empresa_id']) {
+                    $advertencias[] = 'El CUIT destinatario matcheó '.$empresa['nombre']
+                        .', pero la OC '.$numeroOc.' es de '.$empresaOc['nombre']
+                        .'. Se usa la empresa de la OC.';
+                    $empresa = $empresaOc;
+                    $extraido['cuit_destinatario_origen'] = 'oc_prevalece';
+                }
+            } catch (RuntimeException) {
+                // Sin OC local: se mantiene la empresa del CUIT.
             }
-        } catch (RuntimeException) {
-            // Sin OC local: se mantiene la empresa del CUIT.
+
+            $proveedor = $this->resolucionSupport->resolverProveedorPorOc($cuitProveedor, $numeroOc);
+
+            // FC / ND / NC (o REC/REM) desde OCR/LLM; el tipo fino (FIA, CGA…) lo arma listaConcepto + CC.
+            $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
+            $listaConceptos = $this->conceptosListaSupport->resolver($cuitProveedor, $numeroOc, $tipoSolicitado);
         }
-
-        $proveedor = $this->resolucionSupport->resolverProveedorPorOc($cuitProveedor, $numeroOc);
-
-        // FC / ND / NC (o REC/REM) desde OCR/LLM; el tipo fino (FIA, CGA…) lo arma listaConcepto + CC.
-        $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
-        $listaConceptos = $this->conceptosListaSupport->resolver($cuitProveedor, $numeroOc, $tipoSolicitado);
 
         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($listaConceptos['tipocomprobante']);
         if (! $comprobante) {
@@ -487,7 +558,7 @@ final class ComprobanteProveedorPdfIaService
             $advertencias[] = $avisoIibb;
         }
 
-        // 3) Match contra conceptos de la OC usando nombre_ia (alias).
+        // 3) Match contra conceptos (OC o CC del proveedor) usando nombre_ia (alias).
         $conceptosAsignados = $this->conceptoMatcher->matchear($listaConceptos['conceptos'], $lineasIa);
         $conceptosPermitidos = [];
         foreach ($listaConceptos['conceptos'] as $conceptoLista) {
@@ -554,7 +625,8 @@ final class ComprobanteProveedorPdfIaService
         }
 
         $resuelto = [
-            'numero_oc' => $numeroOc,
+            'numero_oc' => $numeroOc ?? '',
+            'sin_oc' => $numeroOc === null,
             'empresa_id' => $empresa['empresa_id'],
             'codigo_empresa' => $empresa['codigo'],
             'empresa_nombre' => $empresa['nombre'],
@@ -598,7 +670,8 @@ final class ComprobanteProveedorPdfIaService
                 (int) ($proveedor['proveedor_id'] ?? 0)
             ),
             'advertencias' => $advertencias,
-            'pararevisar' => $totalFactura > 0 && abs($totalAsignado - $totalFactura) > 0.05,
+            'pararevisar' => $numeroOc === null
+                || ($totalFactura > 0 && abs($totalAsignado - $totalFactura) > 0.05),
         ];
 
         $resuelto = $this->aplicarCotizacionIngresoAlResuelto($resuelto);
@@ -611,6 +684,27 @@ final class ComprobanteProveedorPdfIaService
         $resuelto = $this->wscdcConstatacionSupport->constatarYEnriquecer($extraido, $resuelto);
 
         return $this->apocConsultaSupport->consultarYEnriquecer($resuelto);
+    }
+
+    private function codigoCentroCostoCompraProveedor(int $proveedorId): string
+    {
+        $proveedor = Proveedor::query()
+            ->with('centrocostocompras:id,codigo,tipoiva')
+            ->find($proveedorId);
+        if (! $proveedor) {
+            throw new RuntimeException('Proveedor inexistente al resolver centro de costo sin OC.');
+        }
+
+        $cc = $proveedor->centrocostocompras;
+        $codigo = trim((string) ($cc->codigo ?? ''));
+        if ($codigo === '' || $codigo === '0') {
+            throw new RuntimeException(
+                'El proveedor «'.($proveedor->nombre ?? $proveedorId)
+                .'» no tiene centro de costo de compra. Cárguelo en el ABM o ingrese una OC.'
+            );
+        }
+
+        return $codigo;
     }
 
     private function assertHabilitado(): void

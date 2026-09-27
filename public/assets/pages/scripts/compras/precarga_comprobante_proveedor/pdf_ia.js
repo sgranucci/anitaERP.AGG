@@ -6,6 +6,7 @@ $(function () {
 
     var previewUrl = String($modal.data('preview-url') || '');
     var resolverOcUrl = String($modal.data('resolver-oc-url') || '');
+    var resolverSinOcUrl = String($modal.data('resolver-sin-oc-url') || '');
     var confirmarUrl = String($modal.data('confirmar-url') || '');
     var descartarUrl = String($modal.data('descartar-url') || '');
     var proveedorIdSelector = String($modal.data('proveedor-id-selector') || '');
@@ -189,6 +190,7 @@ $(function () {
         $('#precarga-pdf-ia-paso-oc-manual').addClass('d-none');
         $('#precarga-pdf-ia-paso-upload').removeClass('d-none');
         $('#precarga-pdf-ia-btn-confirmar').addClass('d-none');
+        $('#precarga-pdf-ia-btn-sin-oc').addClass('d-none').prop('disabled', false);
         $('#precarga-pdf-ia-btn-analizar').prop('disabled', false).removeClass('d-none');
         $('#precarga-pdf-ia-advertencias').addClass('d-none').empty();
         $('#precarga-pdf-ia-constatacion').addClass('d-none').empty();
@@ -196,9 +198,14 @@ $(function () {
 
     function renderPreview(data) {
         var res = data.resuelto || {};
-        $('#precarga-pdf-ia-empresa').text((res.empresa_nombre || '') + ' (CC OC: ' + (res.centro_costo_codigo || '—') + ')');
+        $('#precarga-pdf-ia-empresa').text(
+            (res.empresa_nombre || '')
+            + (res.centro_costo_codigo
+                ? ' (CC' + (res.sin_oc ? ' prov.' : ' OC') + ': ' + res.centro_costo_codigo + ')'
+                : '')
+        );
         $('#precarga-pdf-ia-proveedor').text(res.proveedor_nombre || '');
-        $('#precarga-pdf-ia-oc').text(res.numero_oc || '');
+        $('#precarga-pdf-ia-oc').text(res.numero_oc || (res.sin_oc ? 'Sin OC' : '—'));
         var tipoTxt = res.tipo_abreviatura || '';
         if (res.tipo_solicitado) {
             tipoTxt = (res.tipo_solicitado_etiqueta || res.tipo_solicitado)
@@ -347,11 +354,20 @@ $(function () {
     function mostrarPasoOcManual(data) {
         previewPayload = data;
         limpiarError();
-        $('#precarga-pdf-ia-oc-mensaje').text(data.message || 'Ingrese la orden de compra.');
+        var permiteSinOc = data && data.permite_continuar_sin_oc !== false;
+        $('#precarga-pdf-ia-oc-titulo').text(
+            permiteSinOc ? 'OC opcional.' : 'No se pudo continuar sin OC.'
+        );
+        $('#precarga-pdf-ia-oc-mensaje').text(data.message || 'Ingrese la orden de compra o continúe sin OC.');
         // No reinyectar OC inválidas del OCR (ej. 12 dígitos tipo CAE/CUIT): el input
         // maxlength=6 no trunca .val() programático y al "Continuar" reenvía basura.
         $('#precarga-pdf-ia-numero-oc-manual').val(ocManualSugerida(data));
         $('#precarga-pdf-ia-btn-aplicar-oc').prop('disabled', false);
+        if (permiteSinOc && resolverSinOcUrl) {
+            $('#precarga-pdf-ia-btn-sin-oc').removeClass('d-none').prop('disabled', false);
+        } else {
+            $('#precarga-pdf-ia-btn-sin-oc').addClass('d-none');
+        }
         $('#precarga-pdf-ia-paso-upload').addClass('d-none');
         $('#precarga-pdf-ia-paso-preview').addClass('d-none');
         $('#precarga-pdf-ia-paso-oc-manual').removeClass('d-none');
@@ -469,17 +485,66 @@ $(function () {
         });
     }
 
+    function continuarSinOc() {
+        limpiarError();
+        if (!previewPayload || !previewPayload.extraccion) {
+            mostrarError('No hay datos de extracción. Analice el PDF primero.');
+            return;
+        }
+        if (!resolverSinOcUrl) {
+            mostrarError('Continuar sin OC no está disponible.');
+            return;
+        }
+
+        var $btn = $('#precarga-pdf-ia-btn-sin-oc').prop('disabled', true);
+        var datos = agregarProveedorPortal({
+            _token: csrf,
+            extraccion: JSON.stringify(previewPayload.extraccion)
+        });
+        mostrarOverlay('Validando factura sin OC…');
+
+        $.ajax({
+            url: resolverSinOcUrl,
+            method: 'POST',
+            data: datos,
+            dataType: 'json'
+        }).done(function (data) {
+            if (data && data.ok) {
+                previewPayload = data;
+                renderPreview(data);
+                return;
+            }
+            mostrarError(mensajeAjax(data, 'No se pudo continuar sin OC.'));
+            $btn.prop('disabled', false);
+        }).fail(function (xhr) {
+            var data = xhr.responseJSON || {};
+            if (data.extraccion) {
+                previewPayload = data;
+            }
+            if (data.oc_requerida) {
+                mostrarPasoOcManual(data);
+            }
+            mostrarError(mensajeAjax(xhr, 'Error al resolver sin OC.'));
+            $btn.prop('disabled', false);
+        }).always(function () {
+            ocultarOverlay();
+        });
+    }
+
     $modal.on('hidden.bs.modal', resetModal);
 
     $('#precarga-pdf-ia-btn-analizar').on('click', analizarPdf);
 
     $('#precarga-pdf-ia-btn-aplicar-oc').on('click', aplicarOcManual);
 
+    $('#precarga-pdf-ia-btn-sin-oc').on('click', continuarSinOc);
+
     $('#precarga-pdf-ia-editar-oc').on('click', function () {
         if (previewPayload) {
             mostrarPasoOcManual({
                 oc_requerida: true,
-                message: 'Modifique la orden de compra y vuelva a validar.',
+                permite_continuar_sin_oc: true,
+                message: 'Asocie una OC (6 dígitos) o continúe sin orden de compra.',
                 extraccion: previewPayload.extraccion || previewPayload.resuelto
             });
         }

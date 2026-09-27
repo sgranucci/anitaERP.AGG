@@ -114,7 +114,7 @@
     </div>
     <form method="get" action="{{ route('cheque') }}" class="form-inline mt-2 mb-0">
         @foreach ($baseQ as $k => $v)
-            @if (! in_array($k, ['orden', 'orden_dir'], true) && $v !== null && $v !== '')
+            @if (! in_array($k, ['orden', 'orden_dir', 'sort', 'group'], true) && ! is_array($v) && $v !== null && $v !== '')
                 <input type="hidden" name="{{ $k }}" value="{{ $v }}">
             @endif
         @endforeach
@@ -134,7 +134,7 @@
     @if ($paraDepositarActiva)
     <form method="get" action="{{ route('cheque') }}" class="form-inline mt-2 mb-0">
         @foreach ($baseQ as $k => $v)
-            @if (! in_array($k, ['para_depositar', 'para_depositar_hasta'], true) && $v !== null && $v !== '')
+            @if (! in_array($k, ['para_depositar', 'para_depositar_hasta', 'sort', 'group'], true) && ! is_array($v) && $v !== null && $v !== '')
                 <input type="hidden" name="{{ $k }}" value="{{ $v }}">
             @endif
         @endforeach

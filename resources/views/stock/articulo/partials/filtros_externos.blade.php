@@ -45,7 +45,7 @@
         return route($rutaIndex, $q);
     };
 @endphp
-<div class="d-flex flex-wrap align-items-center justify-content-end" data-listado-filtros-externos>
+<div class="d-flex flex-wrap align-items-center" data-listado-filtros-externos>
     @if (ArticuloListadoFiltros::filtroEmpresaActivo() && ($empresa_query ?? collect())->count() > 1)
         <div class="mb-1 mr-3">
             <span class="text-muted small mr-2"><i class="fa fa-building"></i> Empresa:</span>

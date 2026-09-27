@@ -145,6 +145,7 @@
             @include('compras.precarga_comprobante_proveedor.partials.modal_pdf_ia', [
                 'pdfIaPreviewUrl' => route('portal_proveedores_pdf_ia_preview'),
                 'pdfIaResolverOcUrl' => route('portal_proveedores_pdf_ia_resolver_oc'),
+                'pdfIaResolverSinOcUrl' => route('portal_proveedores_pdf_ia_resolver_sin_oc'),
                 'pdfIaConfirmarUrl' => route('portal_proveedores_pdf_ia_confirmar'),
                 'pdfIaProveedorIdSelector' => '#proveedor_id',
                 'pdfIaOverlayId' => 'portal-proveedor-proceso-overlay',

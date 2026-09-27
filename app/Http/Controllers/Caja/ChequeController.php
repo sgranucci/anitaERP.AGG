@@ -34,7 +34,16 @@ use App\Support\Caja\ChequeDepositoConciliacionSupport;
 use App\Support\Caja\ChequeDepositoHistorialFiltros;
 use App\Support\Caja\ChequeDepositoHistorialSupport;
 use App\Support\Caja\ChequeConsultaChequeraSupport;
+use App\Support\Caja\ChequeListadoColumnas;
 use App\Support\Caja\ChequeListadoFiltros;
+use App\Support\Caja\ChequeListadoPreferenciasUsuario;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Caja\ChequeNdConfigSupport;
 use App\Support\Caja\ChequeReporteFiltros;
 use App\Support\Caja\ChequeReporteSupport;
@@ -89,29 +98,131 @@ class ChequeController extends Controller
     {
         can('listar-cheque');
 
-        $filtros = $this->resolverFiltrosListado($request);
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(ChequeListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar');
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                ChequeListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('limpiar_filtros')
+            && ! $request->has('cartera')
+            && ! $request->has('para_depositar')
+            && ! $request->has('origen')
+            && ! $request->has('estado')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ChequeListadoColumnas::RECURSO, $usuarioId);
+        }
+
+        $filtrosRequest = $this->resolverFiltrosListado($request);
+        $filtros = $filtrosRequest;
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = ChequeListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+
+        $catalogo = ChequeListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ChequeListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = ChequeListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = ChequeListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        if ($empresa_query->count() <= 1) {
+            $columnasVisibles = array_values(array_filter(
+                $columnasVisibles,
+                static fn ($key) => $key !== 'empresa'
+            ));
+        }
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+
         $datas = $this->repository->leeCheque($filtros, true);
-        $origen_enum = Cheque::$enumOrigen;
-        $caracter_enum = Cheque::$enumCaracter;
-        $estado_enum = Cheque::$enumEstado;
+        $cortes = ['activo' => false];
+        if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], ChequeListadoFiltros::camposOrdenables()) !== []) {
+            $cortes = $this->repository->cortesCheque($filtros);
+        }
+
+        $camposFiltro = ChequeListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+        $filtrosQuery = ChequeListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
+        }
+
         $puede_nd_cheque = can('generar-nota-de-debito-cheque', false)
             && ChequeNdConfigSupport::habilitado();
         $puede_depositar_cheque = can('editar-cheque', false) || can('actualizar-cheque', false);
-        $puede_caucionar_cheque = $puede_depositar_cheque;
 
         return view('caja.cheque.index', [
             'datas' => $datas,
-            'origen_enum' => $origen_enum,
-            'caracter_enum' => $caracter_enum,
-            'estado_enum' => $estado_enum,
+            'origen_enum' => Cheque::$enumOrigen,
+            'caracter_enum' => Cheque::$enumCaracter,
+            'estado_enum' => Cheque::$enumEstado,
             'puede_nd_cheque' => $puede_nd_cheque,
             'puede_depositar_cheque' => $puede_depositar_cheque,
-            'puede_caucionar_cheque' => $puede_caucionar_cheque,
+            'puede_caucionar_cheque' => $puede_depositar_cheque,
             'filtros' => $filtros,
-            'filtrosQuery' => ChequeListadoFiltros::paraQueryString($filtros),
-            'camposFiltro' => ChequeListadoFiltros::CAMPOS,
-            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'filtrosQuery' => $filtrosQuery,
+            'camposFiltro' => $camposFiltro,
+            'empresa_query' => $empresa_query,
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
+            'graficoCheque' => $this->graficoMontoPorEstado($filtros),
         ]);
+    }
+
+    /**
+     * Serie del gráfico simple: monto del filtro completo, agrupado por estado.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array{labels: list<string>, montos: list<float>, cantidades: list<int>, total: int, truncado: bool}
+     */
+    private function graficoMontoPorEstado(array $filtros): array
+    {
+        $consulta = $filtros;
+        $consulta['agrupar'] = ['estado'];
+        $cortes = $this->repository->cortesCheque($consulta);
+        $labels = [];
+        $montos = [];
+        $cantidades = [];
+        foreach ($cortes['filas'] ?? [] as $fila) {
+            if ((int) ($fila['nivel'] ?? 0) !== 0) {
+                continue;
+            }
+            $labels[] = (string) ($fila['valor'] ?? '');
+            $montos[] = round((float) (($fila['sumas']['monto'] ?? 0)), 2);
+            $cantidades[] = (int) ($fila['count'] ?? 0);
+        }
+
+        return [
+            'labels' => $labels,
+            'montos' => $montos,
+            'cantidades' => $cantidades,
+            'total' => (int) ($cortes['total'] ?? 0),
+            'truncado' => (bool) ($cortes['truncado'] ?? false),
+        ];
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -128,20 +239,17 @@ class ChequeController extends Controller
         switch ($formato) {
             case 'PDF':
                 $datas = $this->repository->leeCheque($filtros, false);
+                $view = \View::make('caja.cheque.listado', compact('datas', 'origen_enum', 'estado_enum'))->render();
+                $rutaPdf = storage_path('pdf/listados/listado_cheque.pdf');
+                DompdfListadoSupport::guardarLegalLandscape($view, $rutaPdf, [
+                    'titulo_corto' => 'Listado de cheques',
+                    'dompdf' => [
+                        'isFontSubsettingEnabled' => false,
+                        'isJavascriptEnabled' => false,
+                    ],
+                ]);
 
-                $view = \View::make('caja.cheque.listado', compact('datas', 'origen_enum', 'estado_enum'))
-                    ->render();
-                $path = storage_path('pdf/listados');
-                if (! is_dir($path)) {
-                    mkdir($path, 0755, true);
-                }
-                $nombre_pdf = 'listado_cheque';
-
-                $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-
-                return response()->download($path.'/'.$nombre_pdf.'.pdf');
+                return response()->download($rutaPdf);
 
             case 'EXCEL':
                 return (new ChequeListadoExport($this->repository))
@@ -1112,6 +1220,126 @@ class ChequeController extends Controller
     /**
      * @return array<string, mixed>
      */
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-cheque');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = ChequeListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->repository->leeCheque($filtros, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            ChequeListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            ChequeListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== [] ? $this->repository->cortesCheque($filtrosCortes) : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => ChequeListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-cheque');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $layout = ChequeListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vista = ListadoVistaSupport::guardar(
+            ChequeListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $filtros['sort'] ?? [],
+                'agrupar' => $filtros['agrupar'] ?? [],
+                'orden' => $filtros['orden'] ?? 'fechapago',
+                'orden_dir' => $filtros['orden_dir'] ?? 'desc',
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('cheque', ChequeListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = ChequeListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('cheque', $qs)->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-cheque');
+        $ok = ListadoVistaSupport::eliminar($id, ChequeListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('cheque', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-cheque');
+        $layout = ChequeListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, ChequeListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            ChequeListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->resolverFiltrosListado($request);
+        $qs = ChequeListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('cheque', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-cheque');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            ChequeListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(ChequeListadoColumnas::catalogoActivo())
+        );
+        $qs = ChequeListadoFiltros::paraQueryString($this->resolverFiltrosListado($request));
+
+        return redirect()->route('cheque', $qs)->with('mensaje', 'Etiquetas actualizadas.');
+    }
+
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
         $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;

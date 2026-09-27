@@ -20,5 +20,13 @@ interface ClienteRepositoryInterface extends RepositoryInterface
     public function actualizaPadronMipymePorCuit($cuit, $modo);
     public function actualizaPadronMipymeDesdePadron(string $modo): int;
 
+    /**
+     * Pack C: cortes por agrupación (universo filtrado).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesCliente(array $filtros): array;
+
 }
 

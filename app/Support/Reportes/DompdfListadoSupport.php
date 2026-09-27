@@ -38,6 +38,12 @@ final class DompdfListadoSupport
             (string) ($opciones['paper'] ?? 'legal'),
             (string) ($opciones['orientation'] ?? 'landscape')
         );
+        $extras = $opciones['dompdf'] ?? [];
+        if (is_array($extras)) {
+            foreach ($extras as $clave => $valor) {
+                $pdf->setOption((string) $clave, $valor);
+            }
+        }
         $pdf->loadHTML($html);
 
         $dompdf = $pdf->getDomPDF();

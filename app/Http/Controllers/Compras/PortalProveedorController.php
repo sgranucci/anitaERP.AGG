@@ -179,6 +179,48 @@ final class PortalProveedorController extends Controller
         }
     }
 
+    public function resolverSinOc(Request $request): JsonResponse
+    {
+        can('cargar-portal-proveedores');
+
+        $request->validate([
+            'proveedor_id' => 'required|integer|min:1',
+            'extraccion' => 'required|json',
+        ]);
+
+        $proveedorId = (int) $request->input('proveedor_id');
+        $this->assertProveedorExiste($proveedorId);
+        $extraccion = json_decode((string) $request->input('extraccion'), true);
+
+        if (! is_array($extraccion)) {
+            return response()->json(['ok' => false, 'message' => 'Extracción inválida.'], 422);
+        }
+
+        try {
+            $preview = $this->pdfIaService->resolverSinOc($extraccion);
+
+            $this->assertProveedorPreview($preview, $proveedorId);
+            $preview['portal_proveedor_id'] = $proveedorId;
+
+            return response()->json($preview);
+        } catch (RuntimeException $e) {
+            return response()->json([
+                'ok' => false,
+                'oc_requerida' => true,
+                'permite_continuar_sin_oc' => false,
+                'message' => $e->getMessage(),
+                'extraccion' => $extraccion,
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Error al validar la factura sin OC del portal.',
+            ], 500);
+        }
+    }
+
     public function confirmar(Request $request): JsonResponse
     {
         can('cargar-portal-proveedores');

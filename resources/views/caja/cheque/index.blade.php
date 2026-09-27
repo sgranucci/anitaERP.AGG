@@ -3,10 +3,73 @@
     Cheques
 @endsection
 
+@section("styles")
+<link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+@endsection
+
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/cheque/filtro.js")}}" type="text/javascript"></script>
+@php
+    $qbeGruposJs = public_path('assets/pages/scripts/listado/workbench-qbe-grupos.js');
+    $ordenJs = public_path('assets/pages/scripts/listado/workbench-orden.js');
+    $agruparJs = public_path('assets/pages/scripts/listado/workbench-agrupar.js');
+    $disenadorJs = public_path('assets/pages/scripts/listado/workbench-disenador-preview.js');
+    $vistaGuardarJs = public_path('assets/pages/scripts/listado/workbench-vista-guardar.js');
+    $chequeWorkbenchJs = public_path('assets/pages/scripts/caja/cheque/workbench.js');
+@endphp
+<script src="{{ asset('assets/pages/scripts/listado/workbench-qbe-grupos.js') }}?v={{ file_exists($qbeGruposJs) ? filemtime($qbeGruposJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ file_exists($ordenJs) ? filemtime($ordenJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-agrupar.js') }}?v={{ file_exists($agruparJs) ? filemtime($agruparJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-disenador-preview.js') }}?v={{ file_exists($disenadorJs) ? filemtime($disenadorJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-vista-guardar.js') }}?v={{ file_exists($vistaGuardarJs) ? filemtime($vistaGuardarJs) : time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cheque/workbench.js') }}?v={{ file_exists($chequeWorkbenchJs) ? filemtime($chequeWorkbenchJs) : time() }}"></script>
+@if (($graficoCheque['total'] ?? 0) > 0)
+<script src="{{ asset('assets/lte/plugins/chart.js/Chart.min.js') }}"></script>
+<script>
+(function () {
+    var datos = @json($graficoCheque ?? []);
+    var canvas = document.getElementById('cheque-grafico-estado');
+    if (!canvas || typeof Chart === 'undefined' || !datos.labels || !datos.labels.length) {
+        return;
+    }
+    new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: datos.labels,
+            datasets: [{
+                label: 'Monto',
+                data: datos.montos,
+                backgroundColor: '#85C1E9',
+                borderColor: '#2471A3',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            legend: { display: false },
+            tooltips: {
+                callbacks: {
+                    label: function (item) {
+                        var i = item.index;
+                        var monto = datos.montos[i] || 0;
+                        var cant = datos.cantidades[i] || 0;
+                        return monto.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            + ' · ' + cant + ' cheques';
+                    }
+                }
+            },
+            scales: {
+                yAxes: [{ ticks: { beginAtZero: true } }],
+                xAxes: [{ ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } }]
+            }
+        }
+    });
+})();
+</script>
+@endif
 @if ($puede_nd_cheque ?? false)
 <script>
 window.chequeRechazoNdUrls = {
@@ -49,6 +112,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
     $ordenDir = $filtros['orden_dir'] ?? 'desc';
     $urlOrden = function (string $col) use ($filtrosQuery, $ordenActual, $ordenDir) {
         $q = $filtrosQuery ?? [];
+        unset($q['sort'], $q['group']);
         $q['orden'] = $col;
         if ($ordenActual === $col) {
             $q['orden_dir'] = $ordenDir === 'asc' ? 'desc' : 'asc';
@@ -69,7 +133,7 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        <div class="card card-info">
+        <div class="card card-info lw-workbench shadow-sm">
             <div class="card-header">
                 <h3 class="card-title">Cheques</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
@@ -96,26 +160,89 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                     <a href="{{ route('echeq_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="eCheq">
                         <i class="fa fa-mobile"></i> eCheq
                     </a>
+                    <button type="button" class="btn btn-sm btn-primary mr-2" data-toggle="modal" data-target="#modal-lw-grilla"
+                            @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
+                        <i class="fa fa-th"></i> Diseñar vista
+                    </button>
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cheque',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => ChequeListadoFiltros::tieneCriteriosTexto($filtros ?? []),
                         'limpiarUrl' => $limpiarUrl,
-                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
-                        'toggleTarget' => '#panel-filtros-cheque',
+                        'placeholder' => 'Texto o número',
+                        'toggleTarget' => '#lw-qbe-panel',
                         'toggleId' => 'btn-toggle-filtros-cheque',
                         'inputId' => 'filtro_valor',
                         'nuevoRegistroUrl' => route('crear_cheque', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-cheque',
+                        'nuevoRegistroLabel' => 'Nuevo cheque',
                     ])
                 </div>
             </div>
             <form method="get" action="{{ route('cheque') }}" id="form-filtros-cheque" class="mb-0">
-                @include('caja.cheque.partials.filtros_listado', [
-                    'limpiarUrl' => $limpiarUrl,
-                ])
+                <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+                <input type="hidden" name="filtro_modo" id="filtro_modo" value="{{ $filtros['modo'] ?? 'todos' }}">
+                <input type="hidden" name="columnas" id="lw_columnas_csv" value="{{ implode(',', $columnasVisibles ?? []) }}">
+                @if (! empty($filtros['cartera']))
+                    <input type="hidden" name="cartera" value="1">
+                @endif
+                @if (! empty($filtros['para_depositar']))
+                    <input type="hidden" name="para_depositar" value="1">
+                    <input type="hidden" name="para_depositar_hasta" value="{{ $filtros['para_depositar_hasta'] ?? '' }}">
+                @endif
+                @if (($filtros['origen'] ?? '') !== '')
+                    <input type="hidden" name="origen" value="{{ $filtros['origen'] }}">
+                @endif
+                @if (array_key_exists('estado', $filtros) && $filtros['estado'] !== null && $filtros['estado'] !== '')
+                    <input type="hidden" name="estado" value="{{ $filtros['estado'] }}">
+                @endif
+                @if (($filtros['empresa_scope'] ?? '') === 'todas')
+                    <input type="hidden" name="empresa_todas" value="1">
+                @elseif (! empty($filtros['empresa_id']))
+                    <input type="hidden" name="empresa_id" value="{{ $filtros['empresa_id'] }}">
+                @endif
+                <input type="hidden" name="orden" value="{{ $filtros['orden'] ?? 'fechapago' }}">
+                <input type="hidden" name="orden_dir" value="{{ $filtros['orden_dir'] ?? 'desc' }}">
+                @if ($vistaActiva ?? null)
+                    <input type="hidden" name="vista_id" value="{{ $vistaActiva->id }}">
+                @endif
+                <div class="px-3 pt-2 d-flex flex-wrap align-items-center" style="gap:.4rem;">
+                    <select id="lw-vista-select" class="form-control form-control-sm" style="width:auto;min-width:12rem;"
+                            data-base-url="{{ route('cheque') }}" @if (! ($workbenchListo ?? false)) disabled @endif>
+                        <option value="">Vista estándar</option>
+                        @foreach (($vistasListado ?? []) as $vista)
+                            <option value="{{ $vista->id }}" @if (($vistaActiva ?? null) && (int) $vistaActiva->id === (int) $vista->id) selected @endif>
+                                {{ $vista->nombre }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+                @include('caja.cheque.partials.workbench_qbe')
             </form>
             @include('caja.cheque.partials.filtros_externos')
+            <div class="px-3 pt-2">
+                @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
+            </div>
+            <div class="px-3 pt-2 pb-1">
+                <div class="card card-outline card-info mb-0">
+                    <div class="card-header py-2">
+                        <h3 class="card-title mb-0" style="font-size:.95rem;">Monto por estado</h3>
+                        <span class="text-muted small ml-2">Universo del filtro, no solo la p&aacute;gina.</span>
+                    </div>
+                    <div class="card-body py-2">
+                        @if (($graficoCheque['total'] ?? 0) === 0)
+                            <p class="text-muted mb-0">No hay cheques en este filtro para graficar.</p>
+                        @else
+                            <div style="height:220px;">
+                                <canvas id="cheque-grafico-estado"></canvas>
+                            </div>
+                            @if (! empty($graficoCheque['truncado']))
+                                <p class="small text-muted mb-0 mt-1">El gr&aacute;fico muestra los grupos m&aacute;s grandes del filtro.</p>
+                            @endif
+                        @endif
+                    </div>
+                </div>
+            </div>
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_cheque',
@@ -129,21 +256,9 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                 <input type="checkbox" id="cheque-select-all" title="Seleccionar página" />
                             </th>
                             @endif
-                            <th style="width:3.5rem;"><a href="{{ $urlOrden('id') }}" class="text-dark">ID{{ $marcaOrden('id') }}</a></th>
-                            <th><a href="{{ $urlOrden('numerocheque') }}" class="text-dark">Número{{ $marcaOrden('numerocheque') }}</a></th>
-                            <th style="width:5rem;">Int.</th>
-                            <th style="width:5.5rem;">Origen</th>
-                            <th style="width:4.5rem;" title="Físico / e-cheq">Tipo</th>
-                            <th>Estado</th>
-                            <th style="width:6.5rem;"><a href="{{ $urlOrden('fechaemision') }}" class="text-dark">Emisión{{ $marcaOrden('fechaemision') }}</a></th>
-                            <th style="width:6.5rem;"><a href="{{ $urlOrden('fechapago') }}" class="text-dark">Pago{{ $marcaOrden('fechapago') }}</a></th>
-                            <th>Banco / Cta</th>
-                            @if (($empresa_query ?? collect())->count() > 1)
-                            <th>Empresa</th>
-                            @endif
-                            <th class="text-right" style="width:6.5rem;"><a href="{{ $urlOrden('monto') }}" class="text-dark">Monto{{ $marcaOrden('monto') }}</a></th>
-                            <th style="width:2.8rem;" title="Moneda">Mon</th>
-                            <th>Beneficiario</th>
+                            @foreach ($columnasVisibles as $keyColumna)
+                            @include('caja.cheque.partials.workbench_th', ['key' => $keyColumna])
+                            @endforeach
                             <th style="width:6rem;" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -193,64 +308,9 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                                 @endif
                             </td>
                             @endif
-                            <td>
-                                <a href="{{ route('editar_cheque', ['id' => $data->id] + $retornoListadoQuery) }}" class="text-primary" target="_blank" rel="noopener">{{ $data->id }}</a>
-                            </td>
-                            <td>{{$data->numerocheque}}</td>
-                            <td>{{$data->nro_interno_anita}}</td>
-                            <td>
-                                @if (($data->origen ?? '') === 'E')
-                                    <span class="badge badge-primary">{{ $origenLabel['nombre'] ?? 'Emitido' }}</span>
-                                @else
-                                    <span class="badge badge-info">{{ $origenLabel['nombre'] ?? 'Recibido' }}</span>
-                                @endif
-                            </td>
-                            <td>
-                                @if (strtoupper(trim((string) ($data->negociable ?? ''))) === 'E')
-                                    <span class="badge badge-warning">e-cheq</span>
-                                @else
-                                    <span class="badge badge-secondary">Físico</span>
-                                @endif
-                            </td>
-                            <td>
-                                {{ $estadoLabel['nombre'] ?? $data->estado }}
-                                @if ($enCartera)
-                                    <span class="badge badge-success">Cartera</span>
-                                @endif
-                                @if ($estaCaucionado)
-                                    <span class="badge badge-warning" title="Caución {{ $data->nro_caucion }}">Cauc.</span>
-                                @endif
-                                @if (!empty($data->fecha_deposito))
-                                    <span class="badge badge-secondary">Dep</span>
-                                @endif
-                                @if (!empty($data->fecha_acreditacion))
-                                    <span class="badge badge-success">Acr</span>
-                                @endif
-                                @if (!empty($data->venta_nd_id))
-                                    <a href="{{ route('lista_una_factura', ['id' => $data->venta_nd_id]) }}"
-                                       class="badge badge-danger text-white"
-                                       target="_blank"
-                                       rel="noopener"
-                                       title="Ver ND">
-                                        ND
-                                    </a>
-                                @endif
-                            </td>
-                            <td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechaemision) }}</td>
-                            <td>{{ \App\Support\Caja\ChequeDepositoComprobanteSupport::fechaDmy($data->fechapago) }}</td>
-                            <td>
-                                @if (($data->origen ?? '') === 'E')
-                                    {{$data->cuentacajas->nombre ?? ''}}
-                                @else
-                                    {{$data->bancos->nombre ?? ''}}
-                                @endif
-                            </td>
-                            @if (($empresa_query ?? collect())->count() > 1)
-                            <td>{{$data->empresas->nombre ?? ''}}</td>
-                            @endif
-                            <td class="text-right">{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
-                            <td class="text-center small">{{$data->monedas->abreviatura ?? ''}}</td>
-                            <td class="small">{{ \Illuminate\Support\Str::limit($data->entregado ?? $data->anombrede, 28) }}</td>
+                            @foreach ($columnasVisibles as $keyColumna)
+                            @include('caja.cheque.partials.workbench_celda', ['key' => $keyColumna])
+                            @endforeach
                             <td>
                        			@if (can('editar-cheque', false))
                                 	<a href="{{route('editar_cheque', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
@@ -330,4 +390,5 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
 @if ($puede_caucionar_cheque ?? false)
     @include('caja.cheque.modal_caucion')
 @endif
+@include('caja.cheque.partials.workbench_modales')
 @endsection

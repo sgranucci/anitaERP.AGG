@@ -11,6 +11,12 @@ interface ArticuloRepositoryInterface
      * @param  array<string, mixed>|string|null  $filtros
      */
     public function leeArticulo($filtros, $flPaginando = null);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesArticulo(array $filtros);
     public function findPorSku($sku);
     public function leeColores();
 

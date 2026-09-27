@@ -4,6 +4,10 @@ namespace App\Support\Ventas;
 
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoQbeFormulaSupport;
+use App\Support\Listado\ListadoQbeSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -55,10 +59,16 @@ class ClienteListadoFiltros
     /** @var array<string, string> */
     public const OPERADORES_TEXTO = [
         'contiene' => 'Contiene',
+        'no_contiene' => 'No contiene',
         'empieza' => 'Empieza con',
         'termina' => 'Termina con',
         'igual' => 'Es igual a',
         'distinto' => 'Distinto de',
+        'mayor' => 'Mayor (A–Z)',
+        'mayor_igual' => 'Mayor o igual (A–Z)',
+        'menor' => 'Menor (A–Z)',
+        'menor_igual' => 'Menor o igual (A–Z)',
+        'entre' => 'Entre (A–Z)',
         'vacio' => 'Está vacío',
     ];
 
@@ -66,7 +76,10 @@ class ClienteListadoFiltros
     public const OPERADORES_ENTERO = [
         'igual' => 'Es igual a',
         'mayor' => 'Mayor que',
+        'mayor_igual' => 'Mayor o igual',
         'menor' => 'Menor que',
+        'menor_igual' => 'Menor o igual',
+        'entre' => 'Entre',
         'vacio' => 'Está vacío',
     ];
 
@@ -75,6 +88,9 @@ class ClienteListadoFiltros
         'igual' => 'Es',
         'vacio' => 'Sin dato',
     ];
+
+    /** @var array<string, string> */
+    public const OPERADORES_FECHA = ListadoQbeSupport::OPERADORES_FECHA;
 
     /**
      * Catálogo de campos filtrables (sincronizado con columnas del workbench).
@@ -111,7 +127,7 @@ class ClienteListadoFiltros
             $modo = self::MODO_TODOS;
         }
 
-        if ($qbe !== []) {
+        if (ListadoQbeSupport::tieneCriterios($qbe)) {
             $modo = self::MODO_QBE;
         }
 
@@ -126,7 +142,7 @@ class ClienteListadoFiltros
         if ($busquedaRapida) {
             $modo = self::MODO_TODOS;
             $operador = 'contiene';
-            $qbe = [];
+            $qbe = ListadoQbeSupport::vacio();
         }
 
         if ($modo !== self::MODO_QBE) {
@@ -145,58 +161,32 @@ class ClienteListadoFiltros
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
             'qbe' => $qbe,
+            'orden' => ListadoOrdenamientoSupport::resolverDesdeRequest($request, self::camposOrdenables()),
+            'agrupar' => ListadoAgrupacionSupport::resolverDesdeRequest($request, self::camposOrdenables()),
         ];
     }
 
     /**
-     * Criterios Advanced Find: lista de {campo, op, valor}.
-     * Acepta también el formato plano legacy qbe[campo]=valor.
+     * @return array<string, array{label: string, type: string, column: string}>
+     */
+    public static function camposOrdenables(): array
+    {
+        return ClienteListadoColumnas::camposOrdenables();
+    }
+
+    /**
+     * Criterios Advanced Find: forma canónica con grupos AND/OR/NOT.
+     * Acepta también lista plana legacy qbe[i][campo] y qbe[campo]=valor.
      *
-     * @return list<array{campo: string, op: string, valor: string}>
+     * @return array{entre_grupos: string, grupos: list}
      */
     public static function resolverQbeDesdeRequest(Request $request): array
     {
-        $raw = $request->input('qbe', []);
-        if (! is_array($raw)) {
-            $raw = [];
-        }
-
-        $campos = self::campos();
-        $criterios = [];
-
-        $esLista = $raw !== [] && array_is_list($raw);
-        if ($esLista || (isset($raw[0]) && is_array($raw[0] ?? null))) {
-            foreach ($raw as $fila) {
-                if (! is_array($fila)) {
-                    continue;
-                }
-                $campo = (string) ($fila['campo'] ?? '');
-                if (! isset($campos[$campo])) {
-                    continue;
-                }
-                $op = self::normalizarOperador((string) ($fila['op'] ?? 'contiene'), $campo);
-                $valor = trim((string) ($fila['valor'] ?? ''));
-                if ($op === 'vacio' || $valor !== '') {
-                    $criterios[] = ['campo' => $campo, 'op' => $op, 'valor' => $valor];
-                }
-            }
-
-            return $criterios;
-        }
-
-        foreach ($raw as $key => $valor) {
-            $key = (string) $key;
-            if (! isset($campos[$key])) {
-                continue;
-            }
-            $valor = trim((string) $valor);
-            if ($valor === '') {
-                continue;
-            }
-            $criterios[] = ['campo' => $key, 'op' => 'contiene', 'valor' => $valor];
-        }
-
-        return $criterios;
+        return ListadoQbeSupport::resolverDesdeRequest(
+            $request,
+            self::campos(),
+            static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+        );
     }
 
     /**
@@ -209,19 +199,11 @@ class ClienteListadoFiltros
 
     public static function tieneCriteriosTexto(array $filtros): bool
     {
-        foreach ((array) ($filtros['qbe'] ?? []) as $criterio) {
-            if (is_array($criterio)) {
-                $op = (string) ($criterio['op'] ?? '');
-                $valor = trim((string) ($criterio['valor'] ?? ''));
-                if ($op === 'vacio' || $valor !== '') {
-                    return true;
-                }
-            } elseif (trim((string) $criterio) !== '') {
-                return true;
-            }
+        if (ListadoQbeSupport::tieneCriterios((array) ($filtros['qbe'] ?? []))) {
+            return true;
         }
 
-        if (($filtros['modo'] ?? '') === self::MODO_QBE && ! empty($filtros['qbe'])) {
+        if (($filtros['modo'] ?? '') === self::MODO_QBE && ListadoQbeSupport::tieneCriterios((array) ($filtros['qbe'] ?? []))) {
             return true;
         }
 
@@ -258,7 +240,7 @@ class ClienteListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, codigo: string, busqueda: string, qbe: list<array{campo: string, op: string, valor: string}>}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, codigo: string, busqueda: string, qbe: array{entre_grupos: string, grupos: list}, orden: list<array{campo: string, dir: string}>}
      */
     public static function filtrosVacios(): array
     {
@@ -270,7 +252,9 @@ class ClienteListadoFiltros
             'valor_hasta' => '',
             'codigo' => '',
             'busqueda' => '',
-            'qbe' => [],
+            'qbe' => ListadoQbeSupport::vacio(),
+            'orden' => [],
+            'agrupar' => [],
         ];
     }
 
@@ -288,26 +272,19 @@ class ClienteListadoFiltros
 
         if ($modo === self::MODO_QBE) {
             $params['filtro_modo'] = self::MODO_QBE;
-            $i = 0;
-            foreach ((array) ($filtros['qbe'] ?? []) as $criterio) {
-                if (! is_array($criterio)) {
-                    continue;
-                }
-                $campo = (string) ($criterio['campo'] ?? '');
-                $op = (string) ($criterio['op'] ?? 'contiene');
-                $valor = trim((string) ($criterio['valor'] ?? ''));
-                if ($campo === '' || ($op !== 'vacio' && $valor === '')) {
-                    continue;
-                }
-                $params['qbe'][$i] = [
-                    'campo' => $campo,
-                    'op' => $op,
-                    'valor' => $valor,
-                ];
-                $i++;
-            }
+            $params = array_merge($params, ListadoQbeSupport::paraQueryString(
+                ListadoQbeSupport::normalizar(
+                    $filtros['qbe'] ?? [],
+                    self::campos(),
+                    static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+                )
+            ));
 
-            return $params;
+            return array_merge($params, ListadoOrdenamientoSupport::paraQueryString(
+                ListadoOrdenamientoSupport::normalizar($filtros['orden'] ?? [], self::camposOrdenables())
+            ), ListadoAgrupacionSupport::paraQueryString(
+                ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], self::camposOrdenables())
+            ));
         }
 
         if ($modo !== self::MODO_TODOS) {
@@ -326,7 +303,11 @@ class ClienteListadoFiltros
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
 
-        return $params;
+        return array_merge($params, ListadoOrdenamientoSupport::paraQueryString(
+            ListadoOrdenamientoSupport::normalizar($filtros['orden'] ?? [], self::camposOrdenables())
+        ), ListadoAgrupacionSupport::paraQueryString(
+            ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], self::camposOrdenables())
+        ));
     }
 
     /**
@@ -336,39 +317,42 @@ class ClienteListadoFiltros
      */
     public static function fusionarDesdeVista(array $base, array $desdeVista): array
     {
+        $ordenVista = ListadoOrdenamientoSupport::normalizar(
+            $desdeVista['orden'] ?? [],
+            self::camposOrdenables()
+        );
+        $ordenBase = ListadoOrdenamientoSupport::normalizar(
+            $base['orden'] ?? [],
+            self::camposOrdenables()
+        );
+        $agruparVista = ListadoAgrupacionSupport::normalizar(
+            $desdeVista['agrupar'] ?? $desdeVista['group'] ?? [],
+            self::camposOrdenables()
+        );
+        $agruparBase = ListadoAgrupacionSupport::normalizar(
+            $base['agrupar'] ?? [],
+            self::camposOrdenables()
+        );
+
         if (self::tieneCriteriosAplicados($base)) {
+            if ($ordenBase === [] && $ordenVista !== []) {
+                $base['orden'] = $ordenVista;
+            }
+            if ($agruparBase === [] && $agruparVista !== []) {
+                $base['agrupar'] = $agruparVista;
+            }
+
             return $base;
         }
 
-        $qbeRaw = (array) ($desdeVista['qbe'] ?? []);
-        $qbe = [];
-        if ($qbeRaw !== [] && (array_is_list($qbeRaw) || isset($qbeRaw[0]))) {
-            foreach ($qbeRaw as $fila) {
-                if (! is_array($fila)) {
-                    continue;
-                }
-                $campo = (string) ($fila['campo'] ?? '');
-                if ($campo === '') {
-                    continue;
-                }
-                $op = self::normalizarOperador((string) ($fila['op'] ?? 'contiene'), $campo);
-                $valor = trim((string) ($fila['valor'] ?? ''));
-                if ($op === 'vacio' || $valor !== '') {
-                    $qbe[] = ['campo' => $campo, 'op' => $op, 'valor' => $valor];
-                }
-            }
-        } else {
-            foreach ($qbeRaw as $k => $v) {
-                $v = trim((string) $v);
-                if ($v === '' || ! is_string($k)) {
-                    continue;
-                }
-                $qbe[] = ['campo' => $k, 'op' => 'contiene', 'valor' => $v];
-            }
-        }
+        $qbe = ListadoQbeSupport::normalizar(
+            $desdeVista['qbe'] ?? [],
+            self::campos(),
+            static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+        );
 
         $modo = (string) ($desdeVista['modo'] ?? self::MODO_TODOS);
-        if ($qbe !== []) {
+        if (ListadoQbeSupport::tieneCriterios($qbe)) {
             $modo = self::MODO_QBE;
         }
 
@@ -381,7 +365,30 @@ class ClienteListadoFiltros
             'busqueda' => (string) ($desdeVista['valor'] ?? $desdeVista['busqueda'] ?? ''),
             'codigo' => (string) ($desdeVista['codigo'] ?? $base['codigo'] ?? ''),
             'qbe' => $qbe,
+            'orden' => $ordenBase !== [] ? $ordenBase : $ordenVista,
+            'agrupar' => $agruparBase !== [] ? $agruparBase : $agruparVista,
         ]);
+    }
+
+    /**
+     * Aplica ORDER BY: columnas de agrupación + multi-criterio (o id DESC).
+     *
+     * @param  Builder<\App\Models\Ventas\Cliente>  $query
+     */
+    public static function aplicarOrden(Builder $query, array $filtros): void
+    {
+        $campos = self::camposOrdenables();
+        ListadoAgrupacionSupport::aplicarOrdenPrefijo(
+            $query,
+            ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos),
+            $campos
+        );
+        ListadoOrdenamientoSupport::aplicar(
+            $query,
+            ListadoOrdenamientoSupport::normalizar($filtros['orden'] ?? [], $campos),
+            $campos,
+            ['campo' => 'id', 'dir' => ListadoOrdenamientoSupport::DIR_DESC]
+        );
     }
 
     /**
@@ -458,34 +465,50 @@ class ClienteListadoFiltros
     }
 
     /**
-     * Advanced Find: AND de criterios (campo + operador + valor).
+     * Advanced Find: grupos AND/OR/NOT (Dynamics / NetSuite / SAP P13n).
      *
      * @param  Builder<\App\Models\Ventas\Cliente>  $query
-     * @param  list<array{campo?: string, op?: string, valor?: string}>|array<string, string>  $qbe
+     * @param  array{entre_grupos?: string, grupos?: list}|list  $qbe
      */
     private static function aplicarQbe(Builder $query, array $qbe): void
     {
-        $campos = self::campos();
-        foreach ($qbe as $key => $criterio) {
-            if (is_array($criterio) && isset($criterio['campo'])) {
-                $campo = (string) $criterio['campo'];
-                $op = (string) ($criterio['op'] ?? 'contiene');
-                $valor = trim((string) ($criterio['valor'] ?? ''));
-            } else {
-                $campo = (string) $key;
-                $op = 'contiene';
-                $valor = trim((string) $criterio);
-            }
+        $norm = ListadoQbeSupport::normalizar(
+            $qbe,
+            self::campos(),
+            static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+        );
 
-            if (! isset($campos[$campo])) {
-                continue;
+        ListadoQbeSupport::aplicar(
+            $query,
+            $norm,
+            static function (Builder $q, array $criterio, string $boolean): void {
+                $formula = trim((string) ($criterio['formula'] ?? ''));
+                if ($formula !== '') {
+                    $compiled = ListadoQbeFormulaSupport::compilar($formula, self::campos());
+                    if ($compiled === null) {
+                        return;
+                    }
+                    ListadoQbeFormulaSupport::aplicarComparacion(
+                        $q,
+                        $compiled,
+                        (string) ($criterio['op'] ?? 'contiene'),
+                        trim((string) ($criterio['valor'] ?? '')),
+                        trim((string) ($criterio['valor_hasta'] ?? '')),
+                        $boolean
+                    );
+
+                    return;
+                }
+                self::aplicarEnCampo(
+                    $q,
+                    (string) $criterio['campo'],
+                    (string) ($criterio['op'] ?? 'contiene'),
+                    trim((string) ($criterio['valor'] ?? '')),
+                    trim((string) ($criterio['valor_hasta'] ?? '')),
+                    $boolean
+                );
             }
-            $op = self::normalizarOperador($op, $campo);
-            if ($op !== 'vacio' && $valor === '') {
-                continue;
-            }
-            self::aplicarEnCampo($query, $campo, $op, $valor, '');
-        }
+        );
     }
 
     /**
@@ -572,8 +595,22 @@ class ClienteListadoFiltros
     /**
      * @param  Builder<\App\Models\Ventas\Cliente>  $query
      */
-    private static function aplicarEnCampo(Builder $query, string $campoKey, string $operador, string $valor, string $valorHasta): void
-    {
+    private static function aplicarEnCampo(
+        Builder $query,
+        string $campoKey,
+        string $operador,
+        string $valor,
+        string $valorHasta,
+        string $boolean = 'and'
+    ): void {
+        if ($boolean === ListadoQbeSupport::LOGIC_OR) {
+            $query->orWhere(function (Builder $q) use ($campoKey, $operador, $valor, $valorHasta) {
+                self::aplicarEnCampo($q, $campoKey, $operador, $valor, $valorHasta, ListadoQbeSupport::LOGIC_AND);
+            });
+
+            return;
+        }
+
         $campos = self::campos();
         $def = $campos[$campoKey] ?? $campos['nombre'] ?? null;
         if ($def === null) {
@@ -596,12 +633,18 @@ class ClienteListadoFiltros
 
                 return;
             }
-            self::aplicarEntero($query, (string) $def['column'], $operador, $valor);
+            self::aplicarEntero($query, (string) $def['column'], $operador, $valor, $valorHasta);
 
             return;
         }
 
-        self::aplicarTexto($query, (string) $def['column'], $operador, $valor);
+        if ($type === 'fecha') {
+            ListadoQbeSupport::aplicarFecha($query, (string) $def['column'], $operador, $valor, $valorHasta);
+
+            return;
+        }
+
+        self::aplicarTexto($query, (string) $def['column'], $operador, $valor, $valorHasta);
     }
 
     /**
@@ -624,12 +667,32 @@ class ClienteListadoFiltros
     /**
      * @param  Builder<\App\Models\Ventas\Cliente>  $query
      */
-    private static function aplicarTexto(Builder $query, string $column, string $operador, string $valor): void
-    {
+    private static function aplicarTexto(
+        Builder $query,
+        string $column,
+        string $operador,
+        string $valor,
+        string $valorHasta = ''
+    ): void {
         if ($operador === 'vacio') {
             $query->where(function ($q) use ($column) {
                 $q->whereNull($column)->orWhere($column, '');
             });
+
+            return;
+        }
+        if ($operador === 'entre') {
+            $desde = trim($valor);
+            $hasta = trim($valorHasta);
+            if ($desde === '' && $hasta === '') {
+                return;
+            }
+            if ($desde !== '') {
+                $query->where($column, '>=', $desde);
+            }
+            if ($hasta !== '') {
+                $query->where($column, '<=', $hasta);
+            }
 
             return;
         }
@@ -648,6 +711,26 @@ class ClienteListadoFiltros
                 break;
             case 'distinto':
                 $query->where($column, '!=', $valor);
+                break;
+            case 'mayor':
+                $query->where($column, '>', $valor);
+                break;
+            case 'mayor_igual':
+                $query->where($column, '>=', $valor);
+                break;
+            case 'menor':
+                $query->where($column, '<', $valor);
+                break;
+            case 'menor_igual':
+                $query->where($column, '<=', $valor);
+                break;
+            case 'no_contiene':
+                $query->where(function ($q) use ($column, $valor) {
+                    $like = '%'.self::escapeLike($valor).'%';
+                    $q->whereNull($column)
+                        ->orWhere($column, '')
+                        ->orWhere($column, 'not like', $like);
+                });
                 break;
             case 'contiene':
             default:
@@ -674,8 +757,26 @@ class ClienteListadoFiltros
     /**
      * @param  Builder<\App\Models\Ventas\Cliente>  $query
      */
-    private static function aplicarEntero(Builder $query, string $column, string $operador, string $valor): void
-    {
+    private static function aplicarEntero(
+        Builder $query,
+        string $column,
+        string $operador,
+        string $valor,
+        string $valorHasta = ''
+    ): void {
+        if ($operador === 'entre') {
+            $desde = filter_var($valor, FILTER_VALIDATE_INT);
+            $hasta = filter_var($valorHasta, FILTER_VALIDATE_INT);
+            if ($desde !== false) {
+                $query->where($column, '>=', (int) $desde);
+            }
+            if ($hasta !== false) {
+                $query->where($column, '<=', (int) $hasta);
+            }
+
+            return;
+        }
+
         $id = filter_var($valor, FILTER_VALIDATE_INT);
         if ($id === false) {
             return;
@@ -685,8 +786,14 @@ class ClienteListadoFiltros
             case 'mayor':
                 $query->where($column, '>', $id);
                 break;
+            case 'mayor_igual':
+                $query->where($column, '>=', $id);
+                break;
             case 'menor':
                 $query->where($column, '<', $id);
+                break;
+            case 'menor_igual':
+                $query->where($column, '<=', $id);
                 break;
             case 'igual':
             default:
@@ -718,6 +825,7 @@ class ClienteListadoFiltros
         $permitidos = match ($type) {
             'entero' => array_keys(self::OPERADORES_ENTERO),
             'booleano' => array_keys(self::OPERADORES_BOOLEANO),
+            'fecha' => array_keys(self::OPERADORES_FECHA),
             default => array_keys(self::OPERADORES_TEXTO),
         };
 
@@ -738,6 +846,7 @@ class ClienteListadoFiltros
         return match ($type) {
             'entero' => self::OPERADORES_ENTERO,
             'booleano' => self::OPERADORES_BOOLEANO,
+            'fecha' => self::OPERADORES_FECHA,
             default => self::OPERADORES_TEXTO,
         };
     }

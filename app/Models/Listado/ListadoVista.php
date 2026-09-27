@@ -21,6 +21,7 @@ class ListadoVista extends Model implements Auditable
         'columnas_json',
         'es_default',
         'compartida',
+        'menu_id',
     ];
 
     protected $casts = [
@@ -28,6 +29,7 @@ class ListadoVista extends Model implements Auditable
         'columnas_json' => 'array',
         'es_default' => 'boolean',
         'compartida' => 'boolean',
+        'menu_id' => 'integer',
     ];
 
     public function usuario(): BelongsTo

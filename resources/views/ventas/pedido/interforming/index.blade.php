@@ -41,7 +41,7 @@ use App\Support\Ventas\PedidoInterformingListadoFiltros;
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @if (can('ejecutar-importar-pedido-anita', false))
                         <button type="button"
-                                class="btn btn-outline-success btn-sm mr-2"
+                                class="btn btn-success btn-sm mr-2"
                                 data-toggle="modal"
                                 data-target="#modalImportarPedidoAnita"
                                 title="Importar pedidos desde Anita">

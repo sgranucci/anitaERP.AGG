@@ -8,6 +8,7 @@ use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\ChequeAnitaSyncSupport;
+use App\Support\Caja\ChequeListadoColumnas;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Caja\ChequePropioAnitaNumeracionSupport;
 use App\Support\Caja\ChequePropioCpromaeAnitaMapper;
@@ -117,11 +118,28 @@ class ChequeRepository implements ChequeRepositoryInterface
             $filtros = ChequeListadoFiltros::filtrosVacios();
         }
 
+        $query = $this->queryChequeListado($filtros);
+
+        if ($flPaginando) {
+            $perPage = (int) ($filtros['_per_page'] ?? 15);
+
+            return $query->paginate(max(1, min(50, $perPage)));
+        }
+
+        return $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function queryChequeListado(array $filtros): \Illuminate\Database\Eloquent\Builder
+    {
         $query = $this->model->select('cheque.*')
             ->leftJoin('banco', 'banco.id', '=', 'cheque.banco_id')
             ->leftJoin('empresa', 'empresa.id', '=', 'cheque.empresa_id')
             ->leftJoin('cliente', 'cliente.id', '=', 'cheque.cliente_id')
             ->leftJoin('moneda', 'moneda.id', '=', 'cheque.moneda_id')
+            ->leftJoin('cuentacaja', 'cuentacaja.id', '=', 'cheque.cuentacaja_id')
             ->with(['empresas', 'bancos', 'clientes', 'monedas', 'cuentacajas']);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'cheque.empresa_id');
@@ -129,11 +147,32 @@ class ChequeRepository implements ChequeRepositoryInterface
         ChequeListadoFiltros::aplicar($query, $filtros);
         ChequeListadoFiltros::aplicarOrden($query, $filtros);
 
-        if ($flPaginando) {
-            return $query->paginate(15);
-        }
+        return $query;
+    }
 
-        return $query->get();
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesCheque(array $filtros): array
+    {
+        $campos = ChequeListadoFiltros::camposOrdenables();
+        $agrupar = \App\Support\Listado\ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $etiquetas = \App\Support\Listado\ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ChequeListadoColumnas::RECURSO,
+            ChequeListadoColumnas::catalogoActivo()
+        );
+
+        return \App\Support\Listado\ListadoCortesSupport::calcular(
+            $this->queryChequeListado($filtros),
+            $agrupar,
+            $campos,
+            'cheque.id',
+            static fn (object $row, string $key): string => ChequeListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => ChequeListadoColumnas::sqlAgrupacion($key),
+            $etiquetas,
+            ChequeListadoColumnas::MEDIDAS
+        );
     }
 
     /**

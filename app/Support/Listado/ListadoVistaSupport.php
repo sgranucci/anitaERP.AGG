@@ -9,7 +9,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Vistas guardadas de listados (filtros + columnas). Etapa 2/3 workbench.
+ * Vistas guardadas de listados (QBE grupos + columnas + sort + agrupación). Etapa 5/6 workbench.
  */
 final class ListadoVistaSupport
 {
@@ -55,6 +55,31 @@ final class ListadoVistaSupport
             ->first();
 
         return $vista;
+    }
+
+    /**
+     * Guarda orden y agrupación en la vista activa (el selector vuelve a aplicarlos).
+     *
+     * @param  list<array{campo: string, dir: string}>  $orden
+     * @param  list<string>  $agrupar
+     */
+    public static function recordarOrdenYAgrupar(ListadoVista $vista, array $orden, array $agrupar): void
+    {
+        if ((int) $vista->usuario_id !== (int) auth()->id()) {
+            return;
+        }
+
+        $json = is_array($vista->filtros_json) ? $vista->filtros_json : [];
+        $orden = array_values($orden);
+        $agrupar = array_values($agrupar);
+        if (($json['orden'] ?? []) == $orden && ($json['agrupar'] ?? []) == $agrupar) {
+            return;
+        }
+
+        $json['orden'] = $orden;
+        $json['agrupar'] = $agrupar;
+        $vista->filtros_json = $json;
+        $vista->save();
     }
 
     /**
@@ -130,6 +155,8 @@ final class ListadoVistaSupport
         if (! $vista) {
             return false;
         }
+
+        ListadoVistaMenuSupport::quitarAlEliminarVista($vista);
 
         return (bool) $vista->delete();
     }

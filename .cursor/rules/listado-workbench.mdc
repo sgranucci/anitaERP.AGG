@@ -1,0 +1,130 @@
+---
+description: Index workbench (QBE, diseñador de vista, cortes, PDF/Excel) al copiar clientes/proveedores
+alwaysApply: true
+---
+
+# Listado workbench
+
+Al copiar el index de **clientes** o **proveedores**. Cheques y artículos estándar ya están en este patrón. Complementa `index-listado-paginado-export.mdc`, `pdf-listado-encabezado-hojas.mdc` y `export-excel-importes-cortes.mdc`.
+
+Canónicos: `resources/views/ventas/cliente/index.blade.php`, `compras/proveedor/index.blade.php`, `app/Support/Listado/*`, `public/assets/pages/scripts/listado/`, `public/assets/css/listado-workbench.css`.
+
+## Pantalla
+
+- Botón **Diseñar vista** (modal «Diseñador de vista»). No «Configurar grilla».
+- Botón **Nuevo {recurso}** (Nuevo cliente, Nuevo proveedor, Nuevo cheque).
+- La consulta se llama **Consulta avanzada** en pantalla y **QBE** en código, vistas guardadas y el botón.
+- CSS/JS del workbench con `?v=filemtime`.
+- Conservar el index de cheques tal como está operando (captura de referencia). No reemplazar estos controles por el QBE: el QBE se suma debajo.
+
+### Cheques: no perder al pasar al workbench
+
+Barra azul: **Importar**, **Reporte**, **Aging**, **Depósitos**, **Conciliación**, **Cashflow**, **eCheq**, botón **Filtros** (abre la consulta), búsqueda «Texto o número», **Nuevo cheque**.
+
+Vista rápida (chips, por encima del QBE, AND): **Para depositar** (con fecha de corte «Fecha cheque ≤»), **Cartera**, **Todos**, **Emitidos**, **Recibidos**, **Rechazados**. Si hay más de una empresa, botones de empresa.
+
+Selección: checkbox de página y de fila, **Depositar sel.**, **Caucionar sel.**, resumen de selección.
+
+Orden visible: **Fecha de cheque** / dirección / **Aplicar orden**, y el texto «El PDF y el Excel salen con este orden.» El diseñador puede sumar orden múltiple; ese dropdown sigue existiendo.
+
+Grilla (orden por defecto; el diseñador lo cambia, ver «Orden físico de las columnas»): checkbox fijo, ID (link), Número, Int., Origen (badge), Tipo (e-cheq / Físico), Estado (nombre + badges Cartera, Cauc., Dep, Acr, ND), Emisión, Pago, Banco / Cta, Empresa (solo si hay más de una), Monto, Mon, Beneficiario, acciones fijas al final.
+
+Acciones de fila: Editar, Depositar, PDF de boleta si está depositado, Caucionar, Liberar caución, Rechazar y emitir ND, Eliminar. Modales de depósito (consulta de cuenta de caja), caución y rechazo ND.
+
+Export: Pdf, Excel, Csv, con los filtros y el orden activos.
+
+### Artículos (index estándar): no perder al pasar al workbench
+
+Chips **por encima** del QBE, combinados con AND. El default de estado sigue siendo **Activos** (no listar inactivos salvo que elijan Inactivos o Todos).
+
+- **Empresa** (si `articulo.filtro_empresa` y hay más de una): una por empresa y «Todas mis empresas».
+- **Canal** (solo Ferli): cada canal, **Sin canal**, **Todos**. Con canal Local o Fábrica el rótulo de estado dice «local» o «fábrica» y el filtro de estado aplica a ese ámbito.
+- **Estado**: Activos, Inactivos, Todos.
+
+Barra: **Configura salida**, **Configura etiqueta**, búsqueda rápida, **Nuevo artículo**.
+
+Grilla (orden por defecto; el diseñador lo cambia, ver «Orden físico de las columnas»): SKU (badge TITO), Cód. barra, Descripción, Unidad, Categoría, Tipo, Uso, Canal (Ferli), Empresa (si el flag), Nro. parte, Ubic. parte, Saldo dep. (Anita, no es columna QBE), Facturable, Estado (en Ferli badges Fábrica/Local), acciones fijas al final.
+
+Acciones de fila, todas con su permiso: Editar, etiqueta QR (Ferli combinación/talle, o NPU, o cantidad), precios, saldos por depósito, kardex (o kardex por combinación), recepciones de proveedor, historial de precios de compra, Eliminar. Modales y overlays de impresión se conservan.
+
+Fechas de alta y modificación entran al QBE y quedan ocultas hasta que el diseñador las muestre. Cuentas contables de venta, compra y gasto siguen filtrables por código o nombre.
+- Filtros externos que ya existían se conservan y quedan **por encima** del QBE, combinados con AND. Proveedores: botones de empresa (`filtros_externos`). Clientes no tenían barra de estado (verificado en git `5fc87fd7` / proveedores `b9ef3608`): el panel «Buscar en / Campo / Condición» lo reemplaza el QBE. Una barra Activo/Suspendido/Todos estilo artículos solo si se pide.
+- Al cambiar de vista, conservar en la URL los filtros externos (`filtro_estado`, `filtro_codigo`, `empresa_id`, `empresa_todas`).
+
+## QBE
+
+- Motor: `ListadoQbeSupport` (AND/OR/NOT, máx. 8 grupos × 12 criterios) + fórmulas `ListadoQbeFormulaSupport`.
+- JS `workbench-qbe-grupos.js`: `opsMap` tiene que incluir el tipo nuevo (`fecha`, y `decimal` cuando el recurso tenga importes).
+- Fechas: `OPERADORES_FECHA` (Desde, Hasta, Posterior a, Anterior a, Es el día, Entre, Sin fecha). Al elegir un campo fecha el operador default es **Entre** (dos calendarios). Hasta vacío = desde ese día; Desde vacío = hasta ese día. Comparar por día con límites `00:00:00`, sin `DATE()` en el WHERE. Aceptar `Y-m-d` y `d/m/Y`. Mostrar `d/m/Y`.
+- En maestros, `fecha_alta` = `created_at` y `fecha_modificacion` = `updated_at`, filtrables, exportables, **ocultas** hasta que el diseñador las muestre. Agrupar una fecha con `DATE(columna)`.
+- Texto: mayor/menor/entre es orden alfabético. Entero: mayor, mayor igual, menor, menor igual, entre.
+- Importes (cheques y cualquier monto): operadores decimales en el motor y en el JS antes de publicar el QBE de ese listado. No comparar montos como texto.
+
+## Diseñador y vistas
+
+- Preview: `ListadoDisenadorPreviewSupport` (20 filas). Con el diseñador abierto no reinyectar orden/agrupación al formulario. No anteponer encabezados de grupo sin filas en la muestra.
+- Guardar: «Actualizar esta vista» vs «Guardar como nueva» (`workbench-vista-guardar.js` limpia el id al elegir nueva). Persistir columnas, QBE, orden y agrupar.
+- `fusionarDesdeVista` completa orden/agrupar vacíos del request solo si la vista guardada los tiene.
+- `recordarOrdenYAgrupar` escribe solo si la vista es del usuario actual.
+- Tablas: `listado_vista` (+ `menu_id`). En otro entorno (Ferli) correr `2026_09_24_191000_crear_tablas_listado_workbench` y `2026_09_25_203000_listado_vista_menu_id` si faltan. No hay vistas precargadas.
+- Escritura en producción: regla `base-datos-no-escribir-sin-preguntar`. No actualizar vistas existentes sin un sí explícito.
+
+## Cortes (Pack C)
+
+- Botón con texto **Cortes**. Abierto: fondo `#2471A3` y chevron abajo. Cerrado: outline y chevron a la derecha. Lo pinta el CSS con `.collapsed` (Bootstrap); el script inline del contenido corre antes que jQuery.
+- Arranca desplegado. Título «Ocultar cortes» / «Mostrar cortes» en `DOMContentLoaded`.
+- La grilla pagina: los cortes de pantalla salen de SQL (`ListadoCortesSupport`: `COUNT` y `SUM` de las medidas declaradas, p. ej. monto). El export segmenta la colección completa (`ListadoAgrupacionSupport::segmentar`). Vacío = «(vacío)».
+- Si el recurso declara medidas (monto), el corte suma esa medida. No publicar cheques solo con conteo.
+
+## Orden físico de las columnas
+
+El orden que el usuario arma en **Diseñar vista** es el orden de la grilla. Aplica en clientes, proveedores, artículos y cheques. No alcanza con mostrar u ocultar: si el diseñador pone Monto antes que Número, la tabla sale así.
+
+`$columnasVisibles` sale de `ListadoGrillaConfigSupport::keysVisibles($grillaLayout)`. Ese array ya viene en el orden del layout (vista guardada o grilla estándar). La pantalla recorre **ese** array, una vez en el thead y otra en cada fila.
+
+```blade
+@foreach ($columnasVisibles as $keyColumna)
+    @include('…partials.workbench_th', ['key' => $keyColumna])
+@endforeach
+{{-- columna de acciones, fuera del loop --}}
+
+@foreach ($columnasVisibles as $keyColumna)
+    @include('…partials.workbench_celda', ['key' => $keyColumna])
+@endforeach
+```
+
+La celda y el encabezado viven en un `@switch ($key)`, no en un `@if (isset($visibles['sku']))` escrito en orden fijo. Ese `isset` solo prende o apaga columnas y deja el orden de la plantilla. Ahí van badges, links y formatos (TITO, e-cheq, Cartera, Fab/Loc, saldo Anita). Al mover la columna se mueve la celda entera.
+
+Quedan **fuera** del loop, siempre en el mismo lugar:
+
+- Checkbox de selección (cheques), primera columna.
+- Acciones de fila (editar, depositar, etiqueta, kardex, eliminar), última columna.
+
+Si una columna no aplica en el entorno (canal fuera de Ferli, empresa con una sola compañía), se **saca de `$columnasVisibles` en el controller** antes de la vista. Un `@if` solo dentro de la celda deja el `<th>` sin `<td>` y desplaza la fila.
+
+| Pantalla | Encabezado | Celda |
+|---|---|---|
+| Clientes | loop en `ventas/cliente/index` | `ventas/cliente/partials/workbench_celda` |
+| Proveedores | loop en `compras/proveedor/index` | `compras/proveedor/partials/workbench_celda` |
+| Artículos | `stock/articulo/partials/workbench_th` | `stock/articulo/partials/workbench_celda` |
+| Cheques | `caja/cheque/partials/workbench_th` | `caja/cheque/partials/workbench_celda` |
+
+El listado de columnas de cheques y de artículos más arriba es el **orden por defecto**. El diseñador lo puede cambiar. Saldo de depósito (Anita) entra en ese orden visual y no entra al QBE ni a los cortes.
+
+Cheques suma, aparte, un gráfico de barras **Monto por estado** sobre el universo del filtro (Chart.js, `ChequeController::graficoMontoPorEstado`). No es un tablero ni cruza otros módulos.
+
+## PDF y Excel del workbench
+
+- PDF: regla `pdf-listado-encabezado-hojas` (encabezado blanco, columnas `tr.columnas` en `#85C1E9`, lotes de 200, sin subset de fuentes). Subtítulo con QBE, orden y agrupación (`ListadoExportPresentacionSupport`).
+- Excel: logos, thead `#85C1E9` / `#17202A`, freeze bajo el encabezado, importes `#,##0.00` numéricos. Grupos `#D6EAF8` (nivel 0) y `#EAF2F8` (nivel 1).
+
+## Alcance de los packs
+
+| Pack | Cuándo |
+|---|---|
+| Shell + wireframe + muestra de 20 | Siempre, al copiar el workbench |
+| Cortes (conteo y, si hay importe, suma) | Cuando el listado se agrupa |
+| Workbook liviano (un gráfico simple) | Solo en la pantalla de análisis que se pida (cheques) |
+| Dashboard, varios gráficos, joins entre módulos | Fuera de esta ola |
+
+Reportes analíticos (mayor, kilos, SICORE) no se migran en la misma pasada.

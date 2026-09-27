@@ -1479,6 +1479,11 @@ Route::post('stock/product/consultaarticulo', 'Stock\ArticuloFerliController@con
 
 // Articulos
 Route::get('stock/articulo', 'Stock\ArticuloController@index')->name('articulo');
+Route::post('stock/articulo/workbench/vista', 'Stock\ArticuloController@guardarVistaListado')->name('guardar_vista_listado_articulo');
+Route::delete('stock/articulo/workbench/vista/{id}', 'Stock\ArticuloController@eliminarVistaListado')->name('eliminar_vista_listado_articulo');
+Route::post('stock/articulo/workbench/columnas', 'Stock\ArticuloController@guardarColumnasListado')->name('guardar_columnas_listado_articulo');
+Route::post('stock/articulo/workbench/etiquetas', 'Stock\ArticuloController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_articulo');
+Route::post('stock/articulo/workbench/preview', 'Stock\ArticuloController@previewWorkbench')->name('preview_workbench_articulo');
 Route::get('stock/articulo/crear', 'Stock\ArticuloController@crear')->name('crear_articulo');
 Route::post('stock/articulo/sincronizar-anita', 'Stock\ArticuloController@sincronizarDesdeAnita')->name('sincronizar_articulo_anita');
 Route::post('stock/articulo', 'Stock\ArticuloController@guardar')->name('guardar_articulo');
@@ -2452,6 +2457,7 @@ Route::post('ventas/cliente/workbench/vista', 'Ventas\ClienteController@guardarV
 Route::delete('ventas/cliente/workbench/vista/{id}', 'Ventas\ClienteController@eliminarVistaListado')->name('eliminar_vista_listado_cliente');
 Route::post('ventas/cliente/workbench/columnas', 'Ventas\ClienteController@guardarColumnasListado')->name('guardar_columnas_listado_cliente');
 Route::post('ventas/cliente/workbench/etiquetas', 'Ventas\ClienteController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_cliente');
+Route::post('ventas/cliente/workbench/preview', 'Ventas\ClienteController@previewWorkbench')->name('preview_workbench_cliente');
 
 Route::get('ventas/listacliente/{formato?}/{busqueda?}', 'Ventas\ClienteController@listar')->name('lista_cliente');
 Route::post('ventas/consultacliente', 'Ventas\ClienteController@consultaCliente')->name('consultar_cliente');
@@ -2789,6 +2795,11 @@ Route::delete('caja/estadocheque_banco/{id}', 'Caja\Estadocheque_BancoController
  */
 
 Route::get('caja/cheque', 'Caja\ChequeController@index')->name('cheque');
+Route::post('caja/cheque/workbench/vista', 'Caja\ChequeController@guardarVistaListado')->name('guardar_vista_listado_cheque');
+Route::delete('caja/cheque/workbench/vista/{id}', 'Caja\ChequeController@eliminarVistaListado')->name('eliminar_vista_listado_cheque');
+Route::post('caja/cheque/workbench/columnas', 'Caja\ChequeController@guardarColumnasListado')->name('guardar_columnas_listado_cheque');
+Route::post('caja/cheque/workbench/etiquetas', 'Caja\ChequeController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_cheque');
+Route::post('caja/cheque/workbench/preview', 'Caja\ChequeController@previewWorkbench')->name('preview_workbench_cheque');
 Route::get('caja/listacheque/{formato?}/{busqueda?}', 'Caja\ChequeController@listar')->name('lista_cheque');
 Route::get('caja/listaagingcheque/{formato?}', 'Caja\ChequeController@listarAging')->name('lista_aging_cheque');
 Route::get('caja/listaconciliaciondepositocheque/{formato?}', 'Caja\ChequeController@listarConciliacionDeposito')->name('lista_conciliacion_deposito_cheque');
@@ -3623,6 +3634,7 @@ Route::post('compras/proveedor/workbench/vista', 'Compras\ProveedorController@gu
 Route::delete('compras/proveedor/workbench/vista/{id}', 'Compras\ProveedorController@eliminarVistaListado')->name('eliminar_vista_listado_proveedor');
 Route::post('compras/proveedor/workbench/columnas', 'Compras\ProveedorController@guardarColumnasListado')->name('guardar_columnas_listado_proveedor');
 Route::post('compras/proveedor/workbench/etiquetas', 'Compras\ProveedorController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_proveedor');
+Route::post('compras/proveedor/workbench/preview', 'Compras\ProveedorController@previewWorkbench')->name('preview_workbench_proveedor');
 Route::post('compras/proveedor/consultaproveedor', 'Compras\ProveedorController@consultaProveedor')->name('consulta_proveedor');
 Route::get('compras/proveedor/{id}/cbus-pago', 'Compras\ProveedorController@cbusPago')->name('cbus_pago_proveedor');
 Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@leeProveedor')->name('leer_proveedor');
@@ -3657,6 +3669,7 @@ Route::post('compras/aplicacion-cuentacorriente/{id}/desaplicar', 'Compras\Prove
 Route::get('compras/portal-proveedores', 'Compras\PortalProveedorController@index')->name('portal_proveedores');
 Route::post('compras/portal-proveedores/pdf-ia/preview', 'Compras\PortalProveedorController@preview')->name('portal_proveedores_pdf_ia_preview');
 Route::post('compras/portal-proveedores/pdf-ia/resolver-oc', 'Compras\PortalProveedorController@resolverOc')->name('portal_proveedores_pdf_ia_resolver_oc');
+Route::post('compras/portal-proveedores/pdf-ia/resolver-sin-oc', 'Compras\PortalProveedorController@resolverSinOc')->name('portal_proveedores_pdf_ia_resolver_sin_oc');
 Route::post('compras/portal-proveedores/pdf-ia/confirmar', 'Compras\PortalProveedorController@confirmar')->name('portal_proveedores_pdf_ia_confirmar');
 Route::get('compras/portal-proveedores/facturas/{id}', 'Compras\PortalProveedorController@verFactura')->name('portal_proveedores_factura');
 
@@ -3681,6 +3694,7 @@ Route::get('compras/precarga_comprobante_recepcion_error', 'Compras\Precarga_Com
 Route::get('compras/lista_precarga_comprobante_recepcion_error/{formato?}/{busqueda?}', 'Compras\Precarga_Comprobante_Recepcion_ErrorController@listar')->name('lista_precarga_comprobante_recepcion_error');
 Route::post('compras/precarga_comprobante_proveedor/pdf-ia/preview', 'Compras\Precarga_Comprobante_ProveedorController@previewPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_preview');
 Route::post('compras/precarga_comprobante_proveedor/pdf-ia/resolver-oc', 'Compras\Precarga_Comprobante_ProveedorController@resolverOcPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_resolver_oc');
+Route::post('compras/precarga_comprobante_proveedor/pdf-ia/resolver-sin-oc', 'Compras\Precarga_Comprobante_ProveedorController@resolverSinOcPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_resolver_sin_oc');
 Route::post('compras/precarga_comprobante_proveedor/pdf-ia/confirmar', 'Compras\Precarga_Comprobante_ProveedorController@confirmarPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_confirmar');
 Route::get('compras/precarga_comprobante_proveedor/{id}/factura-pdf', 'Compras\Precarga_Comprobante_ProveedorController@verFacturaPdf')->name('precarga_comprobante_proveedor_factura_pdf');
 Route::post('compras/precarga_comprobante_proveedor/detectar-cargadas-anita', 'Compras\Precarga_Comprobante_ProveedorController@detectarCargadasEnAnita')->name('detectar_precargas_comprobante_proveedor_cargadas_anita');

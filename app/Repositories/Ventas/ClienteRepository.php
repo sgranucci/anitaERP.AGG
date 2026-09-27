@@ -31,8 +31,13 @@ use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use App\Support\Ventas\ClienteListadoFiltros;
+use App\Support\Ventas\ClienteListadoColumnas;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoCortesSupport;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
+use App\Support\Ventas\ClienteAnitaGeoSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Ventas\ClienteDocumentoAnitaSupport;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
@@ -750,23 +755,9 @@ class ClienteRepository implements ClienteRepositoryInterface
         if (is_array($dataAnita) && count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
-			if (isset($data->clim_cod_localidad))
-				$localidad = Localidad::select('id', 'nombre')->where('codigo' , '=', $data->clim_cod_localidad)->first();
-			else
-				$localidad = Localidad::select('id', 'nombre')->where('nombre' , '=', $data->clim_localidad)->where('codigopostal','=',$data->clim_cod_postal)->first();
-			if ($localidad)
-				$localidad_id = $localidad->id;
-			else
-				$localidad_id = NULL;
-
-			if (isset($data->clim_cod_provincia))
-				$provincia = Provincia::select('id', 'nombre')->where('codigo' , '=', $data->clim_cod_provincia)->first();
-			else
-				$provincia = Provincia::select('id', 'nombre')->where('nombre' , '=', $data->clim_provincia)->first();
-			if ($provincia)
-				$provincia_id = $provincia->id;
-			else
-				$provincia_id = NULL;
+			$geoAnita = ClienteAnitaGeoSupport::resolverDesdeFilaAnita($data);
+			$localidad_id = $geoAnita['localidad_id'];
+			$provincia_id = $geoAnita['provincia_id'];
 
 			$provincia_iibb_id = ClienteAnitaZonamultSupport::provinciaIdDesdeCodigoZonamult(
 				(int) ($data->clim_zonamult ?? 0)
@@ -2825,9 +2816,72 @@ class ClienteRepository implements ClienteRepositoryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = $this->normalizarFiltrosCliente($filtros);
+        $cliente = $this->queryClienteListado($filtros);
+        ClienteListadoFiltros::aplicarOrden($cliente, $filtros);
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
+                $perPage = (int) ($filtros['_per_page'] ?? 10);
+                $perPage = max(1, min(50, $perPage));
+                $cliente = $cliente->paginate($perPage);
+            } else {
+                $cliente = $cliente->get();
+            }
+        } else {
+            $cliente = $cliente->get();
+        }
+
+        return $cliente;
+    }
+
+    /**
+     * Pack C: cortes / conteos por agrupación sobre el universo filtrado.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesCliente(array $filtros): array
+    {
+        $filtros = $this->normalizarFiltrosCliente($filtros);
+        $campos = ClienteListadoFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        if ($agrupar === []) {
+            return ListadoCortesSupport::calcular(
+                $this->queryClienteListado($filtros),
+                [],
+                $campos,
+                'cliente.id',
+                static fn (object $row, string $key): string => ClienteListadoColumnas::valorCelda($row, $key)
+            );
+        }
+
+        $etiquetas = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ClienteListadoColumnas::RECURSO,
+            ClienteListadoColumnas::catalogoActivo()
+        );
+
+        return ListadoCortesSupport::calcular(
+            $this->queryClienteListado($filtros),
+            $agrupar,
+            $campos,
+            'cliente.id',
+            static fn (object $row, string $key): string => ClienteListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => ClienteListadoColumnas::sqlAgrupacion($key),
+            $etiquetas
+        );
+    }
+
+    /**
+     * @param  mixed  $filtros
+     * @return array<string, mixed>
+     */
+    private function normalizarFiltrosCliente($filtros): array
+    {
         if (is_string($filtros)) {
             $texto = trim($filtros);
-            $filtros = array_merge(ClienteListadoFiltros::filtrosVacios(), [
+
+            return array_merge(ClienteListadoFiltros::filtrosVacios(), [
                 'modo' => ClienteListadoFiltros::MODO_TODOS,
                 'campo' => 'nombre',
                 'operador' => 'contiene',
@@ -2835,10 +2889,22 @@ class ClienteRepository implements ClienteRepositoryInterface
                 'valor_hasta' => '',
                 'busqueda' => $texto,
             ]);
-        } elseif (! is_array($filtros)) {
-            $filtros = ClienteListadoFiltros::filtrosVacios();
+        }
+        if (! is_array($filtros)) {
+            return ClienteListadoFiltros::filtrosVacios();
         }
 
+        return $filtros;
+    }
+
+    /**
+     * Query base del listado (filtros aplicados, sin ORDER ni paginación).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\Ventas\Cliente>
+     */
+    private function queryClienteListado(array $filtros)
+    {
         $cliente = $this->model->select(
                                         'cliente.id as id',
                                         'cliente.nombre as nombre',
@@ -2858,6 +2924,8 @@ class ClienteRepository implements ClienteRepositoryInterface
                                         'cliente.estado as estado',
                                         'cliente.facturas_apocrifas as facturas_apocrifas',
                                         'cliente.facturas_apocrifas_consulta_at as facturas_apocrifas_consulta_at',
+                                        'cliente.created_at as fecha_alta',
+                                        'cliente.updated_at as fecha_modificacion',
                                         'transporte.codigo as ctransporte',
                                         'transporte.nombre as nombretransporte',
                                         'vendedor.codigo as cvendedor',
@@ -2897,18 +2965,6 @@ class ClienteRepository implements ClienteRepositoryInterface
         }
 
         ClienteListadoFiltros::aplicar($cliente, $filtros);
-
-        $cliente = $cliente->orderBy('cliente.id', 'DESC');
-
-        if (isset($flPaginando)) {
-            if ($flPaginando) {
-                $cliente = $cliente->paginate(10);
-            } else {
-                $cliente = $cliente->get();
-            }
-        } else {
-            $cliente = $cliente->get();
-        }
 
         return $cliente;
     }

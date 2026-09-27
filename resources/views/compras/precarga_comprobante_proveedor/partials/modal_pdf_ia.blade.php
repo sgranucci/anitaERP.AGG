@@ -1,6 +1,7 @@
 <div class="modal fade" id="modal-precarga-pdf-ia" tabindex="-1" role="dialog" aria-labelledby="modalPrecargaPdfIaLabel" aria-hidden="true"
      data-preview-url="{{ $pdfIaPreviewUrl ?? route('precarga_comprobante_proveedor_pdf_ia_preview') }}"
      data-resolver-oc-url="{{ $pdfIaResolverOcUrl ?? route('precarga_comprobante_proveedor_pdf_ia_resolver_oc') }}"
+     data-resolver-sin-oc-url="{{ $pdfIaResolverSinOcUrl ?? route('precarga_comprobante_proveedor_pdf_ia_resolver_sin_oc') }}"
      data-confirmar-url="{{ $pdfIaConfirmarUrl ?? route('precarga_comprobante_proveedor_pdf_ia_confirmar') }}"
      data-descartar-url="{{ $pdfIaDescartarUrl ?? route('descartar_ai_decision') }}"
      data-proveedor-id-selector="{{ $pdfIaProveedorIdSelector ?? '' }}"
@@ -22,15 +23,15 @@
                 <div id="precarga-pdf-ia-paso-upload">
                     <p class="text-muted small mb-2">
                         Identifica empresa, proveedor, conceptos IVA (sin artículos), moneda y cotización.
-                        El <strong>tipo contable exacto</strong> (FGA/FIA/FCA…) lo resuelve el ERP con la OC vía API listaConcepto.
-                        Si no detecta la OC, podrá ingresarla manualmente (6 dígitos, ej. <code>214482</code>).
+                        Si hay OC, el tipo contable exacto (FGA/FIA/FCA…) lo resuelve el ERP vía listaConcepto.
+                        Sin OC, usa el centro de costo de compra del proveedor. Puede indicar OC al subir o después.
                     </p>
                     <div class="form-group">
                         <label for="precarga-pdf-ia-archivo">Archivo PDF</label>
                         <input type="file" id="precarga-pdf-ia-archivo" class="form-control-file" accept="application/pdf,.pdf">
                     </div>
                     <div class="form-group">
-                        <label for="precarga-pdf-ia-numero-oc">Orden de compra <span class="text-muted">(opcional al subir; 6 dígitos)</span></label>
+                        <label for="precarga-pdf-ia-numero-oc">Orden de compra <span class="text-muted">(opcional; 6 dígitos)</span></label>
                         <input type="text" id="precarga-pdf-ia-numero-oc" class="form-control form-control-sm" maxlength="6"
                                pattern="\d{0,6}" placeholder="Ej. 214482" inputmode="numeric">
                     </div>
@@ -38,7 +39,8 @@
 
                 <div id="precarga-pdf-ia-paso-oc-manual" class="d-none">
                     <div class="alert alert-warning">
-                        <strong>OC requerida.</strong> <span id="precarga-pdf-ia-oc-mensaje"></span>
+                        <strong id="precarga-pdf-ia-oc-titulo">OC opcional.</strong>
+                        <span id="precarga-pdf-ia-oc-mensaje"></span>
                     </div>
                     <div class="form-group row align-items-end">
                         <div class="col-md-4">
@@ -52,6 +54,11 @@
                                 <i class="fa fa-check"></i> Aplicar OC y validar
                             </button>
                         </div>
+                        <div class="col-md-4">
+                            <button type="button" class="btn btn-outline-secondary d-none" id="precarga-pdf-ia-btn-sin-oc">
+                                <i class="fa fa-forward"></i> Continuar sin OC
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -63,7 +70,7 @@
                         <div class="col-md-4"><strong>Proveedor:</strong> <span id="precarga-pdf-ia-proveedor"></span></div>
                         <div class="col-md-4">
                             <strong>OC:</strong> <span id="precarga-pdf-ia-oc"></span>
-                            <button type="button" class="btn btn-link btn-sm p-0 ml-1" id="precarga-pdf-ia-editar-oc">Cambiar</button>
+                            <button type="button" class="btn btn-link btn-sm p-0 ml-1" id="precarga-pdf-ia-editar-oc">Cambiar / asociar OC</button>
                         </div>
                     </div>
                     <div class="row mb-3">

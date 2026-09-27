@@ -16,41 +16,49 @@
         ));
     }
     $etiquetas = $etiquetasColumnas ?? [];
+    $filasRender = $filasSegmentadas ?? null;
+    if (! is_array($filasRender)) {
+        $filasRender = [];
+        foreach ($proveedores as $data) {
+            $filasRender[] = ['type' => 'row', 'row' => $data];
+        }
+    }
+    $colspan = max(1, count($columnas));
+    $cabeceraPdf = $cabeceraPdf ?? null;
 @endphp
 <thead>
-    <tr>
+    @if (is_array($cabeceraPdf))
+        @include('includes.reportes.pdf_thead_cabecera', array_merge($cabeceraPdf, ['colspan' => $colspan]))
+    @endif
+    <tr class="columnas">
         @foreach ($columnas as $key)
             <th>{{ $etiquetas[$key] ?? ($catalogo[$key]['label'] ?? $key) }}</th>
         @endforeach
     </tr>
 </thead>
 <tbody>
-    @foreach ($proveedores as $data)
-        <tr>
-            @foreach ($columnas as $key)
-                @php
-                    $valor = match ($key) {
-                        'id' => $data->id,
-                        'codigo' => $data->codigo,
-                        'nombre' => $data->nombre,
-                        'fantasia' => $data->fantasia,
-                        'numerodocumento' => $data->numerodocumento,
-                        'domicilio' => $data->domicilio,
-                        'localidad' => $data->nombrelocalidad ?? '',
-                        'provincia' => $data->nombreprovincia ?? '',
-                        'empresa' => ($data->nombreempresa ?: 'Todas'),
-                        'estado' => $data->estado,
-                        'cbu' => $data->cbu ?? '',
-                        'alias_cbu' => $data->alias_cbu ?? '',
-                        default => '',
-                    };
-                @endphp
-                @if (in_array($key, ['cbu', 'numerodocumento', 'codigo'], true))
-                    <td style="mso-number-format:'\@';"><small>{{ $valor }}</small></td>
-                @else
-                    <td><small>{{ $valor }}</small></td>
-                @endif
-            @endforeach
-        </tr>
+    @foreach ($filasRender as $filaVista)
+        @if (($filaVista['type'] ?? '') === 'header')
+            <tr class="lw-export-grupo lw-export-grupo-{{ (int) ($filaVista['nivel'] ?? 0) }}">
+                <td colspan="{{ $colspan }}">
+                    {{ $filaVista['label'] ?? '' }}: {{ $filaVista['valor'] ?? '' }}
+                    ({{ number_format((int) ($filaVista['count'] ?? 0), 0, ',', '.') }})
+                </td>
+            </tr>
+        @else
+            @php $data = $filaVista['row']; @endphp
+            <tr>
+                @foreach ($columnas as $key)
+                    @php
+                        $valor = ProveedorListadoColumnas::valorCelda($data, $key);
+                    @endphp
+                    @if (in_array($key, ['cbu', 'numerodocumento', 'codigo', 'alias_cbu'], true))
+                        <td style="mso-number-format:'\@';">{{ $valor }}</td>
+                    @else
+                        <td>{{ $valor }}</td>
+                    @endif
+                @endforeach
+            </tr>
+        @endif
     @endforeach
 </tbody>

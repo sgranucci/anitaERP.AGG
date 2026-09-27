@@ -64,8 +64,13 @@ use App\Support\Compras\ProveedorListadoBancarioSupport;
 use App\Support\Compras\ProveedorListadoColumnas;
 use App\Support\Compras\ProveedorListadoFiltros;
 use App\Support\Compras\ProveedorListadoPreferenciasUsuario;
+use App\Support\Listado\ListadoAgrupacionSupport;
 use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
 use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Reportes\DompdfListadoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use App\Support\Listado\QueryRetornoListado;
@@ -221,9 +226,23 @@ class ProveedorController extends Controller
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ProveedorListadoColumnas::RECURSO, $usuarioId);
         }
 
-        $filtros = $this->resolverFiltrosListado($request);
+        $filtrosRequest = $this->resolverFiltrosListado($request);
+        $filtros = $filtrosRequest;
         if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
             $filtros = ProveedorListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
+            if ($request->exists('group')) {
+                $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];
+            }
+            if ($request->exists('sort')) {
+                $filtros['orden'] = $filtrosRequest['orden'] ?? [];
+            }
+            ListadoVistaSupport::recordarOrdenYAgrupar(
+                $vistaActiva,
+                $filtros['orden'] ?? [],
+                $filtros['agrupar'] ?? []
+            );
         }
 
         $catalogo = ProveedorListadoColumnas::catalogoActivo();
@@ -250,6 +269,15 @@ class ProveedorController extends Controller
         if (ProveedorListadoColumnas::requiereDatosBancarios($columnasVisibles)) {
             $items = ProveedorListadoBancarioSupport::anexarResumenCbuAlias($proveedores->items());
             $proveedores->setCollection($items);
+        }
+
+        $cortes = ['activo' => false];
+        $agruparActivo = ListadoAgrupacionSupport::normalizar(
+            $filtros['agrupar'] ?? [],
+            ProveedorListadoFiltros::camposOrdenables()
+        );
+        if ($agruparActivo !== []) {
+            $cortes = $this->proveedorRepository->cortesProveedor($filtros);
         }
 
         $camposFiltro = ProveedorListadoFiltros::camposQbeDisponibles();
@@ -280,6 +308,7 @@ class ProveedorController extends Controller
             'vistasListado' => $vistas,
             'vistaActiva' => $vistaActiva,
             'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
         ]);
     }
 
@@ -315,15 +344,18 @@ class ProveedorController extends Controller
                 'proveedores' => $proveedores,
                 'columnasVisibles' => $columnasVisibles,
                 'etiquetasColumnas' => $etiquetas,
+                'filtros' => $filtros,
             ])->render();
-            $path = storage_path('pdf/listados');
-            $nombre_pdf = 'listado_proveedor';
+            $rutaPdf = storage_path('pdf/listados/listado_proveedor.pdf');
+            DompdfListadoSupport::guardarLegalLandscape($view, $rutaPdf, [
+                'titulo_corto' => 'Listado de proveedores',
+                'dompdf' => [
+                    'isFontSubsettingEnabled' => false,
+                    'isJavascriptEnabled' => false,
+                ],
+            ]);
 
-            $pdf = \App::make('dompdf.wrapper');
-            $pdf->setPaper('legal','landscape');
-            $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-
-            return response()->download($path.'/'.$nombre_pdf.'.pdf');
+            return response()->download($rutaPdf);
             break;
 
         case 'EXCEL':
@@ -340,6 +372,49 @@ class ProveedorController extends Controller
         }   
 
         return redirect()->route('proveedor', ProveedorListadoFiltros::paraQueryString($filtros));
+    }
+
+    /**
+     * Preview B del diseñador: muestra acotada con los mismos filtros + layout borrador.
+     */
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-proveedor');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = ProveedorListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+
+        $page = $this->proveedorRepository->leeProveedor($filtros, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['orden'] ?? []),
+            ProveedorListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            ProveedorListadoFiltros::camposOrdenables()
+        );
+
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== []
+            ? $this->proveedorRepository->cortesProveedor($filtrosCortes)
+            : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => ProveedorListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
     }
 
     public function guardarVistaListado(Request $request)
@@ -363,6 +438,8 @@ class ProveedorController extends Controller
                 'valor' => $filtros['valor'],
                 'valor_hasta' => $filtros['valor_hasta'] ?? '',
                 'qbe' => $filtros['qbe'] ?? [],
+                'orden' => $filtros['orden'] ?? [],
+                'agrupar' => $filtros['agrupar'] ?? [],
             ],
             $layout,
             $request->boolean('es_default'),
@@ -375,12 +452,19 @@ class ProveedorController extends Controller
                 ->with('error', 'No se pudo guardar la vista.');
         }
 
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+
         $qs = ProveedorListadoFiltros::paraQueryString($filtros);
         $qs['columnas'] = implode(',', $columnasVisibles);
         $qs['vista_id'] = $vista->id;
 
+        $msg = 'Vista «'.$vista->nombre.'» guardada (grilla + filtros).';
+        if ($request->boolean('crear_en_menu') && ListadoVistaMenuSupport::columnaMenuDisponible()) {
+            $msg .= ' Atajo de menú sincronizado.';
+        }
+
         return redirect()->route('proveedor', $qs)
-            ->with('mensaje', 'Vista «'.$vista->nombre.'» guardada (grilla + filtros). La Vista estándar no se modificó.');
+            ->with('mensaje', $msg);
     }
 
     public function eliminarVistaListado(Request $request, int $id)

@@ -35,4 +35,12 @@ interface ProveedorRepositoryInterface extends RepositoryInterface
      */
     public function sincronizarAnitaDesdeErp(int $proveedorId): string;
 
+    /**
+     * Pack C: cortes por agrupación (universo filtrado).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesProveedor(array $filtros): array;
+
 }

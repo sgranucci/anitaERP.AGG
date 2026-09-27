@@ -43,6 +43,45 @@
             $box.append('<input type="hidden" name="grilla[' + i + '][alinea]" value="' + alinea + '">');
             $box.append('<input type="hidden" name="grilla[' + i + '][orden]" value="' + i + '">');
         });
+        // Reemplazar sort del request anterior por el panel actual (filtros + orden en la vista).
+        $('#form-lw-grilla-vista').find('input[name^="sort["]').remove();
+        var si = 0;
+        $('#lw-orden-criterios .lw-orden-chip').each(function () {
+            var campo = $(this).find('.lw-orden-campo').val() || '';
+            var dir = $(this).find('.lw-orden-dir').val() || 'asc';
+            if (!campo) {
+                return;
+            }
+            $box.append('<input type="hidden" name="sort[' + si + '][campo]" value="' + $('<div/>').text(campo).html() + '">');
+            $box.append('<input type="hidden" name="sort[' + si + '][dir]" value="' + $('<div/>').text(dir).html() + '">');
+            si++;
+        });
+        // QBE actual del panel (grupos), no los hiddens stale de filtrosHidden.
+        $('#form-lw-grilla-vista').find('[name^="qbe["]').remove();
+        if (typeof window.lwQbeReindex === 'function') {
+            window.lwQbeReindex();
+        }
+        $('#lw-qbe-panel').find('input[name^="qbe["], select[name^="qbe["]').each(function () {
+            var $el = $(this);
+            var name = $el.attr('name');
+            if (!name || name.indexOf('__g__') >= 0 || name.indexOf('__i__') >= 0) {
+                return;
+            }
+            if ($el.closest('template').length) {
+                return;
+            }
+            if ($el.is(':checkbox') && !$el.prop('checked')) {
+                return;
+            }
+            var val = $el.val();
+            if (val === null || typeof val === 'undefined') {
+                val = '';
+            }
+            $box.append($('<input type="hidden">').attr('name', name).val(val));
+        });
+        if (typeof window.lwGroupCloneInto === 'function') {
+            window.lwGroupCloneInto($box);
+        }
     }
 
     $(function () {
@@ -125,6 +164,9 @@
         });
 
         $('#form-lw-grilla-vista').on('submit', function () {
+            if (typeof window.lwOrdenEnsureInForm === 'function') {
+                window.lwOrdenEnsureInForm();
+            }
             reindexGrillaRows();
             cloneGrillaIntoVistaForm();
             var n = $('#lw-grilla-config-tbody input[type=checkbox][name*="[visible]"]:checked').length;
@@ -140,107 +182,39 @@
             }
         });
 
-        // —— QBE criterios (Campo + Operador + Valor) ——
-        var $qbePanel = $('#lw-qbe-panel');
-        var qbeCampos = [];
-        var opsMap = { texto: {}, entero: {}, booleano: {} };
-        try {
-            qbeCampos = JSON.parse($qbePanel.attr('data-campos') || '[]');
-            opsMap.texto = JSON.parse($qbePanel.attr('data-ops-texto') || '{}');
-            opsMap.entero = JSON.parse($qbePanel.attr('data-ops-entero') || '{}');
-            opsMap.bool = JSON.parse($qbePanel.attr('data-ops-bool') || '{}');
-            opsMap.booleano = opsMap.bool;
-        } catch (e) {}
-
-        function opsParaTipo(tipo) {
-            return opsMap[tipo] || opsMap.texto;
-        }
-
-        function fillOps($sel, tipo, selected) {
-            var ops = opsParaTipo(tipo);
-            $sel.empty();
-            Object.keys(ops).forEach(function (k) {
-                $sel.append($('<option/>').val(k).text(ops[k]));
-            });
-            if (selected && ops[selected]) {
-                $sel.val(selected);
-            }
-        }
-
-        function toggleValor($row) {
-            var op = $row.find('.lw-qbe-op').val();
-            var $val = $row.find('.lw-qbe-valor');
-            if (op === 'vacio') {
-                $val.val('').prop('disabled', true);
-            } else {
-                $val.prop('disabled', false);
-            }
-        }
-
-        function reindexQbe() {
-            $('#lw-qbe-criterios .lw-qbe-row').each(function (i) {
-                $(this).find('select, input').each(function () {
-                    var name = $(this).attr('name');
-                    if (name) {
-                        $(this).attr('name', name.replace(/qbe\[\d+]/, 'qbe[' + i + ']'));
-                    }
-                });
-            });
-        }
-
-        $qbePanel.on('change', '.lw-qbe-campo', function () {
-            var $row = $(this).closest('.lw-qbe-row');
-            var tipo = $(this).find('option:selected').data('type') || 'texto';
-            fillOps($row.find('.lw-qbe-op'), tipo, 'contiene');
-            toggleValor($row);
-        });
-
-        $qbePanel.on('change', '.lw-qbe-op', function () {
-            toggleValor($(this).closest('.lw-qbe-row'));
-        });
-
-        $qbePanel.on('click', '.lw-qbe-remove', function () {
-            var $rows = $('#lw-qbe-criterios .lw-qbe-row');
-            if ($rows.length <= 1) {
-                $rows.find('.lw-qbe-valor').val('');
-                return;
-            }
-            $(this).closest('.lw-qbe-row').remove();
-            reindexQbe();
-        });
-
-        $('#btn-lw-add-criterio').on('click', function () {
-            var tpl = document.getElementById('lw-qbe-row-template');
-            if (!tpl) {
-                return;
-            }
-            var i = $('#lw-qbe-criterios .lw-qbe-row').length;
-            var html = tpl.innerHTML.replace(/__i__/g, String(i));
-            var $row = $(html);
-            var $campo = $row.find('.lw-qbe-campo');
-            qbeCampos.forEach(function (c) {
-                $campo.append($('<option/>').val(c.key).attr('data-type', c.type).text(c.label));
-            });
-            fillOps($row.find('.lw-qbe-op'), 'texto', 'contiene');
-            $('#lw-qbe-criterios').append($row);
-        });
-
         $('#form-filtros-cliente').on('submit', function () {
             syncColumnasHidden();
-            reindexQbe();
-            $('#lw-qbe-criterios .lw-qbe-valor:disabled').prop('disabled', false);
-            var hay = false;
-            $('#lw-qbe-criterios .lw-qbe-row').each(function () {
-                var op = $(this).find('.lw-qbe-op').val();
-                var v = $.trim($(this).find('.lw-qbe-valor').val() || '');
-                if (op === 'vacio' || v !== '') {
-                    hay = true;
-                    return false;
-                }
-            });
+            if (typeof window.lwOrdenEnsureInForm === 'function') {
+                window.lwOrdenEnsureInForm();
+            }
+            if (typeof window.lwOrdenReindex === 'function') {
+                window.lwOrdenReindex();
+            }
+            if (typeof window.lwGroupEnsureInForm === 'function') {
+                window.lwGroupEnsureInForm();
+            }
+            if (typeof window.lwGroupBeforeSubmit === 'function') {
+                window.lwGroupBeforeSubmit();
+            }
+            var hay = typeof window.lwQbeBeforeSubmit === 'function'
+                ? window.lwQbeBeforeSubmit()
+                : false;
             if (hay && $('#filtro_busqueda_rapida').val() !== '1') {
                 $('#filtro_modo').val('qbe');
             }
         });
+
+        if (typeof window.initListadoQbeGrupos === 'function') {
+            window.initListadoQbeGrupos();
+        }
+        if (typeof window.initListadoOrden === 'function') {
+            window.initListadoOrden();
+        }
+        if (typeof window.initListadoAgrupacion === 'function') {
+            window.initListadoAgrupacion();
+        }
+        if (typeof window.initListadoDisenadorPreview === 'function') {
+            window.initListadoDisenadorPreview();
+        }
     });
 })(jQuery);

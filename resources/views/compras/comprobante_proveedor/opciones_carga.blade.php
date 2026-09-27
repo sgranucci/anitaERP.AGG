@@ -105,7 +105,8 @@
                             <div class="card-body d-flex flex-column">
                                 <h5 class="card-title text-primary"><i class="fa fa-magic"></i> PDF — IA Anita</h5>
                                 <p class="card-text small flex-grow-1">
-                                    Suba el PDF; el modelo identifica empresa, proveedor, OC (obligatoria), conceptos y alícuotas.
+                                    Suba el PDF; el modelo identifica empresa, proveedor, conceptos y alícuotas.
+                                    La OC es opcional: sin OC usa el centro de costo del proveedor.
                                     Crea una precarga para revisar antes de facturar.
                                 </p>
                                 <button type="button" class="btn btn-primary btn-sm mt-auto" data-toggle="modal" data-target="#modal-precarga-pdf-ia">

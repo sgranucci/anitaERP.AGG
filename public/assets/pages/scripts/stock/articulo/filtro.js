@@ -84,7 +84,7 @@
     }
 
     $(function () {
-        if (!$('#form-filtros-articulo').length) {
+        if (!$('#form-filtros-articulo').length || !$('#panel-filtros-articulo').length) {
             return;
         }
 

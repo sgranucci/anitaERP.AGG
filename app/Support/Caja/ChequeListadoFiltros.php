@@ -4,6 +4,9 @@ namespace App\Support\Caja;
 
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoQbeSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -15,6 +18,8 @@ class ChequeListadoFiltros
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
+
+    public const MODO_QBE = 'qbe';
 
     /** @var array<string, array{column: string, type: string, label: string}> */
     public const CAMPOS = [
@@ -29,6 +34,11 @@ class ChequeListadoFiltros
         'monto' => ['column' => 'cheque.monto', 'type' => 'decimal', 'label' => 'Monto'],
         'entregado' => ['column' => 'cheque.entregado', 'type' => 'texto', 'label' => 'Entregado'],
         'anombrede' => ['column' => 'cheque.anombrede', 'type' => 'texto', 'label' => 'A nombre de'],
+        'beneficiario' => ['column' => 'cheque.entregado', 'type' => 'texto', 'label' => 'Beneficiario'],
+        'banco_cta' => ['column' => 'banco.nombre', 'type' => 'texto', 'label' => 'Banco / Cta'],
+        'tipo' => ['column' => 'cheque.negociable', 'type' => 'texto', 'label' => 'Tipo'],
+        'fechaemision' => ['column' => 'cheque.fechaemision', 'type' => 'fecha', 'label' => 'Emisión'],
+        'fechapago' => ['column' => 'cheque.fechapago', 'type' => 'fecha', 'label' => 'Pago'],
     ];
 
     /** @var array<string, array{column: string, label: string}> */
@@ -68,11 +78,21 @@ class ChequeListadoFiltros
     ];
 
     /** @var array<string, string> */
-    public const OPERADORES_DECIMAL = [
-        'igual' => 'Igual a',
-        'mayor' => 'Mayor que',
-        'menor' => 'Menor que',
-    ];
+    public const OPERADORES_DECIMAL = ListadoQbeSupport::OPERADORES_DECIMAL;
+
+    /** @var array<string, string> */
+    public const OPERADORES_FECHA = ListadoQbeSupport::OPERADORES_FECHA;
+
+    /** @var array<string, string> */
+    public const OPERADORES_BOOLEANO = [];
+
+    /**
+     * @return array<string, array{column: string, type: string, label: string}>
+     */
+    public static function camposQbeDisponibles(): array
+    {
+        return self::CAMPOS;
+    }
 
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
@@ -89,7 +109,7 @@ class ChequeListadoFiltros
         $busquedaRapida = $request->boolean('filtro_busqueda_rapida');
 
         $modo = (string) $request->input('filtro_modo', self::MODO_TODOS);
-        if (! in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO], true)) {
+        if (! in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO, self::MODO_QBE], true)) {
             $modo = self::MODO_TODOS;
         }
 
@@ -100,12 +120,25 @@ class ChequeListadoFiltros
 
         $operador = (string) $request->input('filtro_operador', 'contiene');
 
+        $qbe = ListadoQbeSupport::resolverDesdeRequest(
+            $request,
+            self::CAMPOS,
+            static fn (string $op, string $campoQbe): string => self::normalizarOperador($op, $campoQbe)
+        );
+        $sort = ListadoOrdenamientoSupport::resolverDesdeRequest($request, self::camposOrdenables());
+        $agrupar = ListadoAgrupacionSupport::resolverDesdeRequest($request, self::camposOrdenables());
+
         if ($busquedaRapida) {
             $modo = self::MODO_TODOS;
             $operador = 'contiene';
+            $qbe = ListadoQbeSupport::vacio();
+        } elseif (ListadoQbeSupport::tieneCriterios($qbe)) {
+            $modo = self::MODO_QBE;
         }
 
-        $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'numerocheque');
+        if ($modo !== self::MODO_QBE) {
+            $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'numerocheque');
+        }
 
         $cartera = $request->boolean('cartera');
         $paraDepositar = $request->boolean('para_depositar');
@@ -117,6 +150,10 @@ class ChequeListadoFiltros
             $paraDepositarHasta = date('Y-m-d');
         }
         [$orden, $ordenDir] = self::resolverOrden($request);
+        if ($sort !== [] && isset(self::ORDENES[$sort[0]['campo']])) {
+            $orden = $sort[0]['campo'];
+            $ordenDir = $sort[0]['dir'];
+        }
 
         $origen = strtoupper(trim((string) $request->input('origen', '')));
         if (! in_array($origen, ['E', 'R'], true)) {
@@ -150,6 +187,9 @@ class ChequeListadoFiltros
             'estado' => $estado,
             'orden' => $orden,
             'orden_dir' => $ordenDir,
+            'qbe' => $qbe,
+            'sort' => $sort,
+            'agrupar' => $agrupar,
         ];
     }
 
@@ -196,6 +236,10 @@ class ChequeListadoFiltros
     public static function tieneCriteriosTexto(array $filtros): bool
     {
         if (($filtros['operador'] ?? '') === 'vacio') {
+            return true;
+        }
+
+        if (($filtros['modo'] ?? '') === self::MODO_QBE && ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? [])) {
             return true;
         }
 
@@ -279,6 +323,9 @@ class ChequeListadoFiltros
             'estado' => '',
             'orden' => 'fechapago',
             'orden_dir' => 'desc',
+            'qbe' => ListadoQbeSupport::vacio(),
+            'sort' => [],
+            'agrupar' => [],
         ];
     }
 
@@ -321,6 +368,22 @@ class ChequeListadoFiltros
         }
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
+        }
+        if (($filtros['modo'] ?? '') === self::MODO_QBE) {
+            $params['filtro_modo'] = self::MODO_QBE;
+            $params = array_merge($params, ListadoQbeSupport::paraQueryString(
+                ListadoQbeSupport::normalizar(
+                    $filtros['qbe'] ?? [],
+                    self::CAMPOS,
+                    static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+                )
+            ));
+        }
+        if (($filtros['sort'] ?? []) !== []) {
+            $params = array_merge($params, ListadoOrdenamientoSupport::paraQueryString($filtros['sort']));
+        }
+        if (($filtros['agrupar'] ?? []) !== []) {
+            $params = array_merge($params, ListadoAgrupacionSupport::paraQueryString($filtros['agrupar']));
         }
 
         return $params;
@@ -401,6 +464,26 @@ class ChequeListadoFiltros
      */
     public static function aplicarOrden(Builder $query, array $filtros): void
     {
+        $sort = ListadoOrdenamientoSupport::normalizar($filtros['sort'] ?? [], self::camposOrdenables());
+        if ($sort !== []) {
+            ListadoAgrupacionSupport::aplicarOrdenPrefijo(
+                $query,
+                ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], self::camposOrdenables()),
+                self::camposOrdenables()
+            );
+            ListadoOrdenamientoSupport::aplicar($query, $sort, self::camposOrdenables(), [
+                'campo' => 'id',
+                'dir' => ListadoOrdenamientoSupport::DIR_DESC,
+            ]);
+
+            return;
+        }
+
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], self::camposOrdenables());
+        if ($agrupar !== []) {
+            ListadoAgrupacionSupport::aplicarOrdenPrefijo($query, $agrupar, self::camposOrdenables());
+        }
+
         $orden = (string) ($filtros['orden'] ?? 'fechapago');
         if (! isset(self::ORDENES[$orden])) {
             $orden = 'fechapago';
@@ -455,6 +538,28 @@ class ChequeListadoFiltros
         $valor = trim((string) ($filtros['valor'] ?? ''));
         $modo = $filtros['modo'] ?? self::MODO_TODOS;
         $operador = $filtros['operador'] ?? 'contiene';
+
+        if ($modo === self::MODO_QBE) {
+            ListadoQbeSupport::aplicar(
+                $query,
+                ListadoQbeSupport::normalizar(
+                    $filtros['qbe'] ?? [],
+                    self::CAMPOS,
+                    static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+                ),
+                static function (Builder $q, array $criterio): void {
+                    self::aplicarEnCampo(
+                        $q,
+                        (string) ($criterio['campo'] ?? 'numerocheque'),
+                        (string) ($criterio['op'] ?? 'contiene'),
+                        (string) ($criterio['valor'] ?? ''),
+                        (string) ($criterio['valor_hasta'] ?? '')
+                    );
+                }
+            );
+
+            return;
+        }
 
         if ($modo === self::MODO_CAMPO) {
             self::aplicarEnCampo($query, $filtros['campo'] ?? 'numerocheque', $operador, $valor, $filtros['valor_hasta'] ?? '');
@@ -603,7 +708,25 @@ class ChequeListadoFiltros
         }
 
         if ($type === 'decimal') {
-            self::aplicarDecimal($query, (string) $def['column'], $operador, $valor);
+            ListadoQbeSupport::aplicarDecimal($query, (string) $def['column'], $operador, $valor, $valorHasta);
+
+            return;
+        }
+
+        if ($type === 'fecha') {
+            ListadoQbeSupport::aplicarFecha($query, (string) $def['column'], $operador, $valor, $valorHasta);
+
+            return;
+        }
+
+        if ($campoKey === 'banco_cta') {
+            self::aplicarTextoEnColumnas($query, ['banco.nombre', 'cuentacaja.nombre'], $operador, $valor);
+
+            return;
+        }
+
+        if ($campoKey === 'beneficiario') {
+            self::aplicarTextoEnColumnas($query, ['cheque.entregado', 'cheque.anombrede'], $operador, $valor);
 
             return;
         }
@@ -767,25 +890,28 @@ class ChequeListadoFiltros
     /**
      * @param  Builder<\App\Models\Caja\Cheque>  $query
      */
-    private static function aplicarDecimal(Builder $query, string $column, string $operador, string $valor): void
+    /**
+     * @param  list<string>  $columnas
+     * @param  Builder<\App\Models\Caja\Cheque>  $query
+     */
+    private static function aplicarTextoEnColumnas(Builder $query, array $columnas, string $operador, string $valor): void
     {
-        $normalizado = str_replace(',', '.', trim($valor));
-        if ($normalizado === '' || ! is_numeric($normalizado)) {
+        $columnas = array_values(array_filter(
+            $columnas,
+            static fn (string $col): bool => ListadoOrdenamientoSupport::esColumnaSqlSegura($col)
+        ));
+        if ($columnas === []) {
             return;
         }
-        $num = (float) $normalizado;
-        switch ($operador) {
-            case 'mayor':
-                $query->where($column, '>', $num);
-                break;
-            case 'menor':
-                $query->where($column, '<', $num);
-                break;
-            case 'igual':
-            default:
-                $query->where($column, '=', $num);
-                break;
-        }
+
+        $query->where(function ($q) use ($columnas, $operador, $valor) {
+            foreach ($columnas as $i => $col) {
+                $metodo = $i === 0 ? 'where' : 'orWhere';
+                $q->{$metodo}(function ($w) use ($col, $operador, $valor) {
+                    self::aplicarTexto($w, $col, $operador, $valor);
+                });
+            }
+        });
     }
 
     private static function patronLike(string $operador, string $valor): string
@@ -811,6 +937,7 @@ class ChequeListadoFiltros
         $permitidos = match ($type) {
             'entero' => array_keys(self::OPERADORES_ENTERO),
             'decimal' => array_keys(self::OPERADORES_DECIMAL),
+            'fecha' => array_keys(self::OPERADORES_FECHA),
             default => array_keys(self::OPERADORES_TEXTO),
         };
 
@@ -831,7 +958,74 @@ class ChequeListadoFiltros
         return match ($type) {
             'entero' => self::OPERADORES_ENTERO,
             'decimal' => self::OPERADORES_DECIMAL,
+            'fecha' => self::OPERADORES_FECHA,
             default => self::OPERADORES_TEXTO,
         };
+    }
+
+    /**
+     * @return array<string, array{column: string, type: string, label: string, attr: string}>
+     */
+    public static function camposOrdenables(): array
+    {
+        $out = [];
+        foreach (self::CAMPOS as $key => $meta) {
+            $out[$key] = [
+                'column' => $meta['column'],
+                'type' => $meta['type'],
+                'label' => $meta['label'],
+                'attr' => $key,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * La vista rápida (empresa, cartera, origen, estado) manda sobre la vista guardada.
+     *
+     * @param  array<string, mixed>  $base
+     * @param  array<string, mixed>  $desdeVista
+     * @return array<string, mixed>
+     */
+    public static function fusionarDesdeVista(array $base, array $desdeVista): array
+    {
+        $externos = [
+            'empresa_id' => $base['empresa_id'] ?? null,
+            'empresa_scope' => $base['empresa_scope'] ?? 'una',
+            'cartera' => $base['cartera'] ?? false,
+            'para_depositar' => $base['para_depositar'] ?? false,
+            'para_depositar_hasta' => $base['para_depositar_hasta'] ?? '',
+            'origen' => $base['origen'] ?? '',
+            'estado' => $base['estado'] ?? '',
+        ];
+
+        if (self::tieneCriteriosTexto($base) || ($base['sort'] ?? []) !== [] || ($base['agrupar'] ?? []) !== []) {
+            if (($base['sort'] ?? []) === [] && ! empty($desdeVista['sort']) && is_array($desdeVista['sort'])) {
+                $base['sort'] = $desdeVista['sort'];
+            }
+            if (($base['agrupar'] ?? []) === [] && ! empty($desdeVista['agrupar']) && is_array($desdeVista['agrupar'])) {
+                $base['agrupar'] = $desdeVista['agrupar'];
+            }
+
+            return array_merge($base, $externos);
+        }
+
+        $qbe = ListadoQbeSupport::normalizar(
+            $desdeVista['qbe'] ?? [],
+            self::CAMPOS,
+            static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+        );
+        $modo = (string) ($desdeVista['modo'] ?? self::MODO_TODOS);
+        if (ListadoQbeSupport::tieneCriterios($qbe)) {
+            $modo = self::MODO_QBE;
+        }
+
+        return array_merge($base, $externos, [
+            'modo' => $modo,
+            'qbe' => $qbe,
+            'sort' => is_array($desdeVista['sort'] ?? null) ? $desdeVista['sort'] : ($base['sort'] ?? []),
+            'agrupar' => is_array($desdeVista['agrupar'] ?? null) ? $desdeVista['agrupar'] : ($base['agrupar'] ?? []),
+        ]);
     }
 }

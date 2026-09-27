@@ -31,9 +31,9 @@
 			vertical-align: top;
 			word-wrap: break-word;
 		}
-		table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
-		table.data thead tr { background-color: #85C1E9; }
-		table.data th {
+		table.data thead { display: table-header-group; }
+		table.data thead tr.columnas > th {
+			background-color: #85C1E9;
 			font-size: 7px;
 			font-weight: bold;
 			color: #17202A;
@@ -45,30 +45,26 @@
 	</style>
 </head>
 <body>
-<table class="marco-pdf"><tr>
-	<td class="marco-lat"></td>
-	<td class="marco-centro">
-	<table class="listado-header">
-		<tr>
-			<td style="width: 35%;">
-				@foreach ($logosCabecera as $logo)
-					<img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 56px; max-width: 180px; margin-right: 10px; margin-bottom: 4px; vertical-align: middle;">
-				@endforeach
-			</td>
-			<td style="width: 40%; text-align: center;">
-				<h2 style="margin: 0; font-size: 20px; font-weight: bold;">Listado de cheques</h2>
-				<div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
-			</td>
-			<td style="width: 25%; text-align: right; font-size: 8px;">
-				@if ($totalFilas > 0)
-					Registros: {{ $totalFilas }}
-				@endif
-			</td>
-		</tr>
-	</table>
-	<table class="data">
-		<thead>
-			<tr>
+@php
+    $filasPdf = [];
+    foreach ($datas as $data) {
+        $filasPdf[] = ['type' => 'row', 'row' => $data];
+    }
+    $lotesPdf = \App\Support\Listado\ListadoPdfRapidoSupport::lotes($filasPdf);
+@endphp
+@foreach ($lotesPdf as $indiceLote => $lote)
+<table class="data">
+    <thead>
+        @if ($indiceLote === 0)
+            @include('includes.reportes.pdf_thead_cabecera', [
+                'titulo' => 'Listado de cheques',
+                'subtitulo' => '',
+                'colspan' => 13,
+                'logosCabecera' => $logosCabecera,
+                'totalFilas' => $totalFilas,
+            ])
+        @endif
+        <tr class="columnas">
 				<th style="width: 4%;">ID</th>
 				<th style="width: 8%;">N&uacute;mero</th>
 				<th style="width: 6%;">Int. Anita</th>
@@ -85,7 +81,8 @@
 			</tr>
 		</thead>
 		<tbody>
-			@foreach ($datas as $data)
+			@foreach ($lote as $item)
+				@php $data = $item['row']; @endphp
 				@php
 					$origenLabel = collect($origen_enum ?? [])->firstWhere('valor', $data->origen);
 					$estadoLabel = collect($estado_enum ?? [])->firstWhere('valor', $data->estado);
@@ -114,8 +111,6 @@
 			@endforeach
 		</tbody>
 	</table>
-	</td>
-	<td class="marco-lat"></td>
-</tr></table>
+@endforeach
 </body>
 </html>

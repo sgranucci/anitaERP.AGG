@@ -57,7 +57,17 @@ use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuSupport;
 use App\Support\Stock\ArticuloEtiquetaZplSupport;
 use App\Support\Stock\ArticuloKardexCombinacionSupport;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
+use App\Support\Reportes\DompdfListadoSupport;
+use App\Support\Stock\ArticuloListadoColumnas;
 use App\Support\Stock\ArticuloListadoFiltros;
+use App\Support\Stock\ArticuloListadoPreferenciasUsuario;
 use App\Support\Stock\ArticuloProveedorLineasSupport;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
 use App\Support\Stock\ArticuloSimilaresDescripcionSupport;
@@ -195,14 +205,64 @@ class ArticuloController extends Controller
     {
         can('listar-articulos');
 
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(ArticuloListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar');
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                ArticuloListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->boolean('limpiar_filtros')
+            && ! $request->has('filtro_estado')
+            && ! $request->has('filtro_canal')
+            && ! $request->has('empresa_id')
+            && ! $request->has('empresa_todas')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ArticuloListadoColumnas::RECURSO, $usuarioId);
+        }
+
         $filtros = $this->resolverFiltrosListado($request);
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = ArticuloListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+
         $empresa_query = ArticuloListadoFiltros::filtroEmpresaActivo()
             ? $this->empresaRepository->allFiltrado()
             : collect();
 
+        $catalogo = ArticuloListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ArticuloListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = ArticuloListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = ArticuloListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        if (! ArticuloListadoFiltros::filtroCanalActivo()) {
+            $columnasVisibles = array_values(array_filter($columnasVisibles, static fn ($key) => $key !== 'canal'));
+        }
+        if (! ArticuloListadoFiltros::filtroEmpresaActivo() || $empresa_query->count() <= 1) {
+            $columnasVisibles = array_values(array_filter($columnasVisibles, static fn ($key) => $key !== 'empresa'));
+        }
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+
         $articulos = $this->articuloRepository->leeArticulo($filtros, true);
 
-        if ($articulos->isEmpty() && config('app.anita_sync_articulo_index')) {
+        if (
+            $articulos->isEmpty()
+            && config('app.anita_sync_articulo_index')
+            && ! ArticuloListadoFiltros::tieneCriteriosAplicados($filtros)
+        ) {
             $Articulo = new Articulo;
             $Articulo->sincronizarConAnita();
 
@@ -216,22 +276,42 @@ class ArticuloController extends Controller
             Log::warning('Articulo index: no se pudo consultar saldo stkdep', ['exception' => $e->getMessage()]);
         }
 
-        $camposFiltro = ArticuloListadoFiltros::CAMPOS;
-        if (! ArticuloListadoFiltros::filtroEmpresaActivo()) {
-            unset($camposFiltro['empresa']);
+        $cortes = ['activo' => false];
+        if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], ArticuloListadoFiltros::camposOrdenables()) !== []) {
+            $cortes = $this->articuloRepository->cortesArticulo($filtros);
+        }
+
+        $camposFiltro = ArticuloListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
+        $filtrosQuery = ArticuloListadoFiltros::paraQueryString($filtros);
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
         }
 
         return view('stock.articulo.index', [
             'articulos' => $articulos,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
-            'filtrosQuery' => ArticuloListadoFiltros::paraQueryString($filtros),
+            'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => $camposFiltro,
             'empresa_query' => $empresa_query,
             'canalesFiltro' => ArticuloListadoFiltros::filtroCanalActivo()
                 ? Canal::query()->where('activo', true)->orderBy('nombre')->get(['id', 'codigo', 'nombre'])
                 : collect(),
             'saldosStkdep' => $saldosStkdep,
+            'columnasVisibles' => $columnasVisibles,
+            'grillaLayout' => $grillaLayout,
+            'catalogoColumnas' => $catalogo,
+            'etiquetasColumnas' => $etiquetas,
+            'vistasListado' => $vistas,
+            'vistaActiva' => $vistaActiva,
+            'workbenchListo' => ListadoVistaSupport::tablasDisponibles(),
+            'cortes' => $cortes,
         ]);
     }
 
@@ -345,18 +425,17 @@ class ArticuloController extends Controller
         switch ($formato) {
             case 'PDF':
                 $articulos = $this->articuloRepository->leeArticulo($filtros, false);
+                $view = \View::make('stock.articulo.listado', compact('articulos'))->render();
+                $rutaPdf = storage_path('pdf/listados/listado_articulo.pdf');
+                DompdfListadoSupport::guardarLegalLandscape($view, $rutaPdf, [
+                    'titulo_corto' => 'Listado de artículos',
+                    'dompdf' => [
+                        'isFontSubsettingEnabled' => false,
+                        'isJavascriptEnabled' => false,
+                    ],
+                ]);
 
-                $view = \View::make('stock.articulo.listado', compact('articulos'))
-                    ->render();
-                $path = storage_path('pdf/listados');
-                $nombre_pdf = 'listado_articulo';
-
-                $pdf = \App::make('dompdf.wrapper');
-                $pdf->setPaper('legal', 'landscape');
-                $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-
-                return response()->download($path.'/'.$nombre_pdf.'.pdf');
-                break;
+                return response()->download($rutaPdf);
 
             case 'EXCEL':
                 return (new ArticuloExport($this->articuloRepository))
@@ -372,6 +451,124 @@ class ArticuloController extends Controller
         }
 
         return redirect()->route('articulo', ArticuloListadoFiltros::paraQueryString($filtros));
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-articulos');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = ArticuloListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->articuloRepository->leeArticulo($filtros, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            ArticuloListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            ArticuloListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== [] ? $this->articuloRepository->cortesArticulo($filtrosCortes) : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => ArticuloListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-articulos');
+
+        $filtros = $this->resolverFiltrosListado($request);
+        $layout = ArticuloListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vista = ListadoVistaSupport::guardar(
+            ArticuloListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $filtros['sort'] ?? [],
+                'agrupar' => $filtros['agrupar'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('articulo', ArticuloListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = ArticuloListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('articulo', $qs)->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-articulos');
+        $ok = ListadoVistaSupport::eliminar($id, ArticuloListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('articulo', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-articulos');
+        $layout = ArticuloListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, ArticuloListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            ArticuloListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = $this->resolverFiltrosListado($request);
+        $qs = ArticuloListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('articulo', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-articulos');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            ArticuloListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(ArticuloListadoColumnas::catalogoActivo())
+        );
+        $qs = ArticuloListadoFiltros::paraQueryString($this->resolverFiltrosListado($request));
+
+        return redirect()->route('articulo', $qs)->with('mensaje', 'Etiquetas actualizadas.');
     }
 
     public function limpiafiltro(Request $request)

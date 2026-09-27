@@ -4,6 +4,7 @@ namespace App\Repositories\Stock;
 
 use App\Models\Stock\Articulo_Caja;
 use App\Models\Stock\Articulo;
+use App\Support\Stock\ArticuloListadoColumnas;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Models\Stock\Color;
 use App\Models\Stock\Tipoliquido;
@@ -107,6 +108,27 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             $filtros['estado'] = ArticuloListadoFiltros::ESTADO_ACTIVO;
         }
 
+        $articulo = $this->queryArticuloListado($filtros);
+
+        if (isset($flPaginando)) {
+            if ($flPaginando) {
+                $perPage = (int) ($filtros['_per_page'] ?? 10);
+                if ($perPage < 1 || $perPage > 50) {
+                    $perPage = 10;
+                }
+                $articulo = $articulo->paginate($perPage);
+            } else {
+                $articulo = $articulo->get();
+            }
+        } else {
+            $articulo = $articulo->get();
+        }
+
+        return $articulo;
+    }
+
+    public function queryArticuloListado(array $filtros): \Illuminate\Database\Eloquent\Builder
+    {
         $select = [
             'articulo.id as id',
             'articulo.sku as codigoarticulo',
@@ -124,6 +146,8 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             'articulo.nofactura',
             'articulo.fl_precio_promedio_transferencia',
             'articulo.estado as estado',
+            'articulo.created_at as created_at',
+            'articulo.updated_at as updated_at',
         ];
         if (\Illuminate\Support\Facades\Schema::hasColumn('articulo', 'estado_fabrica')) {
             $select[] = 'articulo.estado_fabrica as estado_fabrica';
@@ -131,14 +155,14 @@ class ArticuloRepository implements ArticuloRepositoryInterface
         }
 
         $articulo = $this->model->select($select)
-                                ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
-                                ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
-                                ->leftJoin('tipoarticulo', 'articulo.tipoarticulo_id', '=', 'tipoarticulo.id')
-                                ->leftJoin('usoarticulo', 'articulo.usoarticulo_id', '=', 'usoarticulo.id')
-                                ->leftJoin('empresa', 'empresa.id', '=', 'articulo.empresa_id')
-                                ->orderby('articulo.sku', 'asc');
+            ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
+            ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
+            ->leftJoin('tipoarticulo', 'articulo.tipoarticulo_id', '=', 'tipoarticulo.id')
+            ->leftJoin('usoarticulo', 'articulo.usoarticulo_id', '=', 'usoarticulo.id')
+            ->leftJoin('empresa', 'empresa.id', '=', 'articulo.empresa_id');
 
         ArticuloListadoFiltros::aplicar($articulo, $filtros);
+        ArticuloListadoFiltros::aplicarOrden($articulo, $filtros);
 
         if (ArticuloListadoFiltros::filtroCanalActivo()) {
             $articulo->with(['canales' => function ($q) {
@@ -146,17 +170,31 @@ class ArticuloRepository implements ArticuloRepositoryInterface
             }]);
         }
 
-        if (isset($flPaginando)) {
-            if ($flPaginando) {
-                $articulo = $articulo->paginate(10);
-            } else {
-                $articulo = $articulo->get();
-            }
-        } else {
-            $articulo = $articulo->get();
-        }
-
         return $articulo;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function cortesArticulo(array $filtros): array
+    {
+        $campos = ArticuloListadoFiltros::camposOrdenables();
+        $agrupar = \App\Support\Listado\ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        $etiquetas = \App\Support\Listado\ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ArticuloListadoColumnas::RECURSO,
+            ArticuloListadoColumnas::catalogoActivo()
+        );
+
+        return \App\Support\Listado\ListadoCortesSupport::calcular(
+            $this->queryArticuloListado($filtros),
+            $agrupar,
+            $campos,
+            'articulo.id',
+            static fn (object $row, string $key): string => ArticuloListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => ArticuloListadoColumnas::sqlAgrupacion($key),
+            $etiquetas
+        );
     }
 
     public function leeColores()

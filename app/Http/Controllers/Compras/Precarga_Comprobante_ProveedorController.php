@@ -194,6 +194,54 @@ class Precarga_Comprobante_ProveedorController extends Controller
         }
     }
 
+    public function resolverSinOcPdfIa(Request $request)
+    {
+        can('crear-precarga-proveedores');
+
+        $request->validate([
+            'extraccion' => 'required|json',
+        ]);
+
+        $extraccion = json_decode((string) $request->input('extraccion'), true);
+        if (! is_array($extraccion)) {
+            return response()->json(['ok' => false, 'message' => 'Extracción inválida.'], 422);
+        }
+
+        try {
+            $preview = $this->pdfIaService->resolverSinOc($extraccion);
+
+            return response()->json($preview);
+        } catch (RuntimeException $e) {
+            PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                'resolver_sin_oc',
+                $e->getMessage(),
+                422,
+                [
+                    'cuit_proveedor' => $extraccion['cuit_proveedor'] ?? null,
+                    'cuit_empresa' => $extraccion['cuit_destinatario'] ?? $extraccion['cuit_empresa'] ?? null,
+                ]
+            );
+
+            return response()->json([
+                'ok' => false,
+                'oc_requerida' => true,
+                'permite_continuar_sin_oc' => false,
+                'message' => $e->getMessage(),
+                'extraccion' => $extraccion,
+            ], 422);
+        } catch (\Throwable $e) {
+            report($e);
+            PrecargaRecepcionErrorRegistrar::desdePdfIa(
+                'resolver_sin_oc',
+                'Error al resolver sin OC: '.$e->getMessage(),
+                500,
+                []
+            );
+
+            return response()->json(['ok' => false, 'message' => 'Error al resolver sin OC.'], 500);
+        }
+    }
+
     public function confirmarPdfIa(Request $request)
     {
         can('crear-precarga-proveedores');
