@@ -1209,10 +1209,10 @@ class ArcaCertificadoCsrService
                 @copy($keyDest, $backupDir.'/'.$prefijo.'_privada.key');
             }
             if ($copiarCert) {
-                $this->reemplazarArchivo($nuevoCert, $certDest, 0644, $backupDir.'/'.$prefijo.'_cert.crt');
+                $this->reemplazarArchivo($nuevoCert, $certDest, 0644, $backupDir.'/'.$prefijo.'_cert.crt', 'el certificado');
             }
             if ($copiarKey) {
-                $this->reemplazarArchivo($nuevaKey, $keyDest, 0600, $backupDir.'/'.$prefijo.'_privada.key');
+                $this->reemplazarArchivo($nuevaKey, $keyDest, 0600, $backupDir.'/'.$prefijo.'_privada.key', 'la clave');
             }
             $instalados[] = [
                 'id' => (string) $dest['id'],
@@ -1231,36 +1231,55 @@ class ArcaCertificadoCsrService
     }
 
     /**
-     * Pisa el archivo de producción. Si el vigente es de otro usuario, copy() falla
-     * aunque la carpeta sea escribible: se borra y se vuelve a copiar.
+     * Pisa el archivo de producción aunque el vigente sea de otro usuario.
+     * copy() falla si el destino no es escribible; con la carpeta escribible se borra y se renombra.
+     * Si el reemplazo falla y había archivo, se restaura desde el backup.
      */
-    private function reemplazarArchivo(string $origen, string $destino, int $modo, string $backup): void
+    private function reemplazarArchivo(string $origen, string $destino, int $modo, string $backup, string $etiqueta): void
     {
-        if (is_file($destino) && ! is_writable($destino)) {
-            @chmod($destino, $modo);
+        $dir = dirname($destino);
+        $this->asegurarDirectorio($dir);
+        $tmp = $dir.'/.'.basename($destino).'.'.bin2hex(random_bytes(4)).'.tmp';
+        if (! @copy($origen, $tmp)) {
+            throw new Exception($this->mensajeCopiaFallida($etiqueta, $destino));
         }
-        if (@copy($origen, $destino)) {
+        @chmod($tmp, $modo);
+
+        // rename pisa el destino si la carpeta es escribible, aunque el archivo sea de otro usuario.
+        if (@rename($tmp, $destino)) {
             @chmod($destino, $modo);
 
             return;
         }
 
+        if (is_file($destino) && ! is_writable($destino)) {
+            @chmod($destino, $modo | 0200);
+        }
         $habiaDestino = is_file($destino);
         if ($habiaDestino && ! @unlink($destino)) {
-            throw new Exception("No se pudo reemplazar {$destino}. El archivo vigente no se puede borrar.");
+            @unlink($tmp);
+            throw new Exception($this->mensajeCopiaFallida($etiqueta, $destino));
         }
-        if (@copy($origen, $destino)) {
-            @chmod($destino, $modo);
-
-            return;
+        if (! @rename($tmp, $destino)) {
+            if (! @copy($tmp, $destino)) {
+                @unlink($tmp);
+                if ($habiaDestino && is_file($backup)) {
+                    @copy($backup, $destino);
+                    @chmod($destino, $modo);
+                }
+                throw new Exception($this->mensajeCopiaFallida($etiqueta, $destino));
+            }
+            @unlink($tmp);
         }
+        @chmod($destino, $modo);
+    }
 
-        if ($habiaDestino && is_file($backup)) {
-            @copy($backup, $destino);
-            @chmod($destino, $modo);
-        }
+    private function mensajeCopiaFallida(string $etiqueta, string $destino): string
+    {
+        $detalle = trim((string) (error_get_last()['message'] ?? ''));
+        $extra = $detalle !== '' ? " ({$detalle})" : '';
 
-        throw new Exception("No se pudo copiar el certificado a {$destino}");
+        return "No se pudo copiar {$etiqueta} a {$destino}{$extra}";
     }
 
     private function parCoincide(string $certPath, string $keyPath, string $passphrase): bool
