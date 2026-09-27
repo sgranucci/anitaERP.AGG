@@ -26,6 +26,7 @@ use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNumeroCom
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCuitCoincidenciaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorResolucionSupport;
@@ -68,6 +69,7 @@ final class ComprobanteProveedorPdfIaService
         UploadedFile $pdf,
         ?string $numeroOcManual = null,
         bool $ejecucionSistema = false,
+        bool $sinCentroCostoQuedaParaRevisar = false,
     ): array
     {
         $this->assertHabilitado();
@@ -78,7 +80,7 @@ final class ComprobanteProveedorPdfIaService
         $numeroOc = $this->resolverNumeroOc($extraido);
         if ($numeroOc === null) {
             try {
-                $resuelto = $this->resolverDesdeExtraccion($extraido, null);
+                $resuelto = $this->resolverDesdeExtraccion($extraido, null, $sinCentroCostoQuedaParaRevisar);
             } catch (RuntimeException $e) {
                 return [
                     'ok' => false,
@@ -140,12 +142,12 @@ final class ComprobanteProveedorPdfIaService
      * @param  array<string, mixed>  $extraccion
      * @return array<string, mixed>
      */
-    public function resolverSinOc(array $extraccion): array
+    public function resolverSinOc(array $extraccion, bool $sinCentroCostoQuedaParaRevisar = false): array
     {
         $this->assertHabilitado();
 
         unset($extraccion['numero_oc'], $extraccion['numero_oc_origen']);
-        $resuelto = $this->resolverDesdeExtraccion($extraccion, null);
+        $resuelto = $this->resolverDesdeExtraccion($extraccion, null, $sinCentroCostoQuedaParaRevisar);
 
         return $this->empaquetarPreviewOk($extraccion, $resuelto);
     }
@@ -323,6 +325,7 @@ final class ComprobanteProveedorPdfIaService
             'rutaalmacenamiento' => $rutaAlmacenamiento,
             'pararevisar' => $forzarParaRevisar === true
                 || $numeroOc === ''
+                || ! empty($resuelto['sin_centro_costo_proveedor'])
                 || $this->wscdcConstatacionSupport->tieneDiscrepancias($resuelto)
                 || $this->apocConsultaSupport->tieneProblemasApoc($resuelto)
                 || empty($resuelto['fecha_factura']) ? 1 : 0,
@@ -430,13 +433,17 @@ final class ComprobanteProveedorPdfIaService
      * @param  array<string, mixed>  $extraido
      * @return array<string, mixed>
      */
-    private function resolverDesdeExtraccion(array $extraido, ?string $numeroOc): array
-    {
+    private function resolverDesdeExtraccion(
+        array $extraido,
+        ?string $numeroOc,
+        bool $sinCentroCostoQuedaParaRevisar = false,
+    ): array {
         $numeroOc = $numeroOc !== null && trim($numeroOc) !== ''
             ? $this->numeroOcSupport->normalizar($numeroOc)
             : null;
 
         $advertencias = [];
+        $sinCentroCostoProveedor = false;
 
         if ($numeroOc !== null) {
             $extraido = $this->alinearCuitsConOc($extraido, $numeroOc);
@@ -466,6 +473,14 @@ final class ComprobanteProveedorPdfIaService
                     'No se detectó CUIT destinatario (empresa) en el PDF. Ingrese una OC o verifique el documento.'
                 );
             }
+            if (! EntornoEmpresaSupport::esAgg()) {
+                $cuitDestinatario = $this->alinearDestinatarioConEmpresaLocal(
+                    $extraido,
+                    $cuitDestinatario,
+                    $cuitProveedor,
+                    $advertencias
+                );
+            }
             $empresa = $this->resolucionSupport->resolverEmpresaPorCuit($cuitDestinatario);
             if (! empty($empresa['cuit_corregido'])) {
                 $advertencias[] = 'CUIT destinatario corregido por OCR: «'
@@ -475,16 +490,30 @@ final class ComprobanteProveedorPdfIaService
                 $extraido['cuit_destinatario_origen'] = 'ocr_corregido';
             }
             $proveedor = $this->resolucionSupport->resolverProveedorPorCuit($cuitProveedor);
-            $codigoCc = $this->codigoCentroCostoCompraProveedor((int) $proveedor['proveedor_id']);
             $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
-            $listaConceptos = $this->conceptosListaSupport->resolverSinOc(
-                $cuitProveedor,
-                $codigoCc,
-                $tipoSolicitado,
-                (int) $proveedor['proveedor_id'],
-            );
-            $advertencias[] = 'Factura sin orden de compra: tipo y conceptos según centro de costo '
-                .$codigoCc.' del proveedor.';
+            $codigoCc = $sinCentroCostoQuedaParaRevisar
+                ? $this->codigoCentroCostoCompraProveedorSiExiste((int) $proveedor['proveedor_id'])
+                : $this->codigoCentroCostoCompraProveedor((int) $proveedor['proveedor_id']);
+            if ($codigoCc === null) {
+                $listaConceptos = $this->conceptosListaSupport->resolverSinOcSinCentroCosto(
+                    $cuitProveedor,
+                    $tipoSolicitado,
+                    (int) $proveedor['proveedor_id'],
+                );
+                $sinCentroCostoProveedor = true;
+                $advertencias[] = 'Sin orden de compra y el proveedor «'.($proveedor['nombre'] ?? '')
+                    .'» no tiene centro de costo de compra. La precarga queda para revisar con tipo provisorio '
+                    .$listaConceptos['tipocomprobante'].'.';
+            } else {
+                $listaConceptos = $this->conceptosListaSupport->resolverSinOc(
+                    $cuitProveedor,
+                    $codigoCc,
+                    $tipoSolicitado,
+                    (int) $proveedor['proveedor_id'],
+                );
+                $advertencias[] = 'Factura sin orden de compra: tipo y conceptos según centro de costo '
+                    .$codigoCc.' del proveedor.';
+            }
         } else {
             if ($cuitDestinatario === '') {
                 $empresa = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
@@ -530,6 +559,12 @@ final class ComprobanteProveedorPdfIaService
             // FC / ND / NC (o REC/REM) desde OCR/LLM; el tipo fino (FIA, CGA…) lo arma listaConcepto + CC.
             $tipoSolicitado = PrecargaProveedorTipoComprobanteSupport::desdeExtraccion($extraido);
             $listaConceptos = $this->conceptosListaSupport->resolver($cuitProveedor, $numeroOc, $tipoSolicitado);
+        }
+
+        $tipoProvisorio = ! empty($listaConceptos['tipo_provisorio']);
+        if ($tipoProvisorio && trim((string) ($listaConceptos['centro_costo_codigo'] ?? '')) !== '') {
+            $advertencias[] = 'Tipo provisorio '.$listaConceptos['tipocomprobante']
+                .' del maestro de esta instalación. La precarga queda para revisar.';
         }
 
         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($listaConceptos['tipocomprobante']);
@@ -634,6 +669,7 @@ final class ComprobanteProveedorPdfIaService
             'codigo_proveedor' => $proveedor['codigo'],
             'proveedor_nombre' => $proveedor['nombre'],
             'centro_costo_codigo' => $listaConceptos['centro_costo_codigo'],
+            'sin_centro_costo_proveedor' => $sinCentroCostoProveedor,
             'tipo_solicitado' => $tipoSolicitado,
             'tipo_solicitado_etiqueta' => PrecargaProveedorTipoComprobanteSupport::etiqueta($tipoSolicitado),
             'tipo_abreviatura' => $listaConceptos['tipocomprobante'],
@@ -671,6 +707,8 @@ final class ComprobanteProveedorPdfIaService
             ),
             'advertencias' => $advertencias,
             'pararevisar' => $numeroOc === null
+                || $sinCentroCostoProveedor
+                || $tipoProvisorio
                 || ($totalFactura > 0 && abs($totalAsignado - $totalFactura) > 0.05),
         ];
 
@@ -684,6 +722,45 @@ final class ComprobanteProveedorPdfIaService
         $resuelto = $this->wscdcConstatacionSupport->constatarYEnriquecer($extraido, $resuelto);
 
         return $this->apocConsultaSupport->consultarYEnriquecer($resuelto);
+    }
+
+    /**
+     * Fuera de AGG: si el CUIT leído como destinatario no es una empresa de esta
+     * instalación y el del proveedor sí, se invierten. En AGG no se llama.
+     *
+     * @param  array<string, mixed>  $extraido
+     * @param  list<string>  $advertencias
+     */
+    private function alinearDestinatarioConEmpresaLocal(
+        array &$extraido,
+        string $cuitDestinatario,
+        string $cuitProveedor,
+        array &$advertencias,
+    ): string {
+        try {
+            $this->resolucionSupport->resolverEmpresaPorCuit($cuitDestinatario);
+
+            return $cuitDestinatario;
+        } catch (RuntimeException) {
+        }
+
+        if ($cuitProveedor === '' || $cuitProveedor === $cuitDestinatario) {
+            return $cuitDestinatario;
+        }
+
+        try {
+            $empresa = $this->resolucionSupport->resolverEmpresaPorCuit($cuitProveedor);
+        } catch (RuntimeException) {
+            return $cuitDestinatario;
+        }
+
+        $extraido['cuit_destinatario'] = $cuitProveedor;
+        $extraido['cuit_proveedor'] = $cuitDestinatario;
+        $extraido['cuit_destinatario_origen'] = 'swap_empresa_local';
+        $extraido['cuit_proveedor_origen'] = 'swap_desde_destinatario';
+        $advertencias[] = 'El CUIT de '.$empresa['nombre'].' estaba leído como proveedor; se invirtieron emisor y receptor.';
+
+        return $cuitProveedor;
     }
 
     private function codigoCentroCostoCompraProveedor(int $proveedorId): string
@@ -702,6 +779,27 @@ final class ComprobanteProveedorPdfIaService
                 'El proveedor «'.($proveedor->nombre ?? $proveedorId)
                 .'» no tiene centro de costo de compra. Cárguelo en el ABM o ingrese una OC.'
             );
+        }
+
+        return $codigo;
+    }
+
+    /**
+     * Igual que codigoCentroCostoCompraProveedor, pero vacío devuelve null.
+     * Solo lo usa la precarga PDF con IA cuando se permite seguir sin CC.
+     */
+    private function codigoCentroCostoCompraProveedorSiExiste(int $proveedorId): ?string
+    {
+        $proveedor = Proveedor::query()
+            ->with('centrocostocompras:id,codigo,tipoiva')
+            ->find($proveedorId);
+        if (! $proveedor) {
+            throw new RuntimeException('Proveedor inexistente al resolver centro de costo sin OC.');
+        }
+
+        $codigo = trim((string) ($proveedor->centrocostocompras->codigo ?? ''));
+        if ($codigo === '' || $codigo === '0') {
+            return null;
         }
 
         return $codigo;

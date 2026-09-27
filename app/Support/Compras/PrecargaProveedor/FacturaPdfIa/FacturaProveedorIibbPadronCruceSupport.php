@@ -7,7 +7,7 @@ use App\Services\Configuracion\IIBBService;
 
 /**
  * Cruza percepciones IIBB detectadas con padrón ARBA (y CABA si no cierra)
- * usando el CUIT de la empresa destinataria (Biyemas/Rebisco/Kandiko).
+ * usando el CUIT de la empresa destinataria ya resuelta.
  */
 final class FacturaProveedorIibbPadronCruceSupport
 {

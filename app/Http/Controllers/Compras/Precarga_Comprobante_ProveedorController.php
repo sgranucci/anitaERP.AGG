@@ -101,7 +101,9 @@ class Precarga_Comprobante_ProveedorController extends Controller
         try {
             $preview = $this->pdfIaService->preview(
                 $request->file('pdf'),
-                $request->input('numero_oc')
+                $request->input('numero_oc'),
+                false,
+                true
             );
 
             if (! ($preview['ok'] ?? false)) {
@@ -208,7 +210,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         }
 
         try {
-            $preview = $this->pdfIaService->resolverSinOc($extraccion);
+            $preview = $this->pdfIaService->resolverSinOc($extraccion, true);
 
             return response()->json($preview);
         } catch (RuntimeException $e) {

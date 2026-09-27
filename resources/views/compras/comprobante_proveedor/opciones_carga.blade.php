@@ -107,6 +107,7 @@
                                 <p class="card-text small flex-grow-1">
                                     Suba el PDF; el modelo identifica empresa, proveedor, conceptos y alícuotas.
                                     La OC es opcional: sin OC usa el centro de costo del proveedor.
+                                    Si no tiene centro de costo, la precarga queda para revisar.
                                     Crea una precarga para revisar antes de facturar.
                                 </p>
                                 <button type="button" class="btn btn-primary btn-sm mt-auto" data-toggle="modal" data-target="#modal-precarga-pdf-ia">

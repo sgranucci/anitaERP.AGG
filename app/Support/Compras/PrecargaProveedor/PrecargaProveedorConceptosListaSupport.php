@@ -5,6 +5,7 @@ namespace App\Support\Compras\PrecargaProveedor;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\ComprobanteService;
 use App\Services\Compras\OrdencompraService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use RuntimeException;
 
 /**
@@ -117,6 +118,15 @@ final class PrecargaProveedorConceptosListaSupport
 
         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($abreviatura);
         if (! $comprobante || $comprobante->tipotransaccion_compra_concepto_ivacompras->isEmpty()) {
+            if (! EntornoEmpresaSupport::esAgg()) {
+                return $this->listaProvisoriaInstalacion(
+                    $cuitProveedor,
+                    $tipoComprobante,
+                    null,
+                    (string) ($datosOrdenCompra->prom_letra ?? 'A'),
+                    $centroCostoDestino,
+                );
+            }
             throw new RuntimeException('No hay conceptos IVA configurados para tipo «'.$abreviatura.'»');
         }
 
@@ -193,6 +203,15 @@ final class PrecargaProveedorConceptosListaSupport
 
         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($abreviatura);
         if (! $comprobante || $comprobante->tipotransaccion_compra_concepto_ivacompras->isEmpty()) {
+            if (! EntornoEmpresaSupport::esAgg()) {
+                return $this->listaProvisoriaInstalacion(
+                    $cuitProveedor,
+                    $tipoComprobante,
+                    $proveedorId,
+                    $letra,
+                    (string) ($centrocosto->codigo ?? $codigoCentroCosto),
+                );
+            }
             throw new RuntimeException('No hay conceptos IVA configurados para tipo «'.$abreviatura.'»');
         }
 
@@ -225,6 +244,132 @@ final class PrecargaProveedorConceptosListaSupport
             'tipo_item' => $tipoItem,
             'conceptos' => $conceptos,
         ];
+    }
+
+    /**
+     * Solo precarga PDF con IA, sin OC y sin centro de costo de compra del proveedor.
+     * El tipo es provisorio (el primero del maestro que tenga conceptos). No inventa un CC.
+     *
+     * @return array{
+     *   tipocomprobante: string,
+     *   letra: string,
+     *   centro_costo_codigo: string,
+     *   prorrateo_multi_cc: bool,
+     *   conceptos: list<array{id_concepto: int|string, nombre: string, descripcion_ai: string, concepto_ivacompra_id?: int}>,
+     *   es_proveedor_servicios: bool,
+     *   tipo_item: string,
+     *   provisorio_sin_centro_costo: bool
+     * }
+     */
+    public function resolverSinOcSinCentroCosto(
+        string $cuitProveedor,
+        string $tipoComprobante = 'FC',
+        ?int $proveedorId = null,
+        string $letra = 'A',
+    ): array {
+        $cuitProveedor = str_replace('-', '', $cuitProveedor);
+        $tipoItem = PrecargaProveedorTipoItemSupport::resolver([], $cuitProveedor, $proveedorId);
+        $comprobante = null;
+        $abreviatura = '';
+        foreach ($this->abreviaturasProvisoriasSinCentroCosto($tipoComprobante, $tipoItem) as $candidata) {
+            $encontrado = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($candidata);
+            if ($encontrado && $encontrado->tipotransaccion_compra_concepto_ivacompras->isNotEmpty()) {
+                $comprobante = $encontrado;
+                $abreviatura = $candidata;
+                break;
+            }
+        }
+        if (! $comprobante) {
+            throw new RuntimeException(
+                'No hay un tipo de comprobante con conceptos IVA para armar la precarga sin centro de costo.'
+            );
+        }
+
+        $conceptos = [];
+        foreach ($comprobante->tipotransaccion_compra_concepto_ivacompras as $linea) {
+            $concepto = $linea->concepto_ivacompras;
+            if (! $concepto) {
+                continue;
+            }
+            $concepto->loadMissing('impuestos');
+            $conceptos[] = [
+                'id_concepto' => (int) $concepto->codigo,
+                'concepto_ivacompra_id' => (int) $concepto->id,
+                'nombre' => (string) $concepto->nombre,
+                'descripcion_ai' => (string) ($concepto->nombre_ia ?: $concepto->nombre),
+                'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
+                'alicuota_iva' => $this->inferirAlicuotaDesdeConcepto($concepto),
+            ];
+        }
+
+        return [
+            'tipocomprobante' => $abreviatura,
+            'letra' => $letra !== '' ? $letra : 'A',
+            'centro_costo_codigo' => '',
+            'tipo_provisorio' => true,
+            'prorrateo_multi_cc' => false,
+            'es_proveedor_servicios' => PrecargaProveedorTipoItemSupport::proveedorTieneServicios(
+                $cuitProveedor,
+                $proveedorId
+            ),
+            'tipo_item' => $tipoItem,
+            'provisorio_sin_centro_costo' => true,
+            'conceptos' => $conceptos,
+        ];
+    }
+
+    /**
+     * Tipo del maestro local (FAB/FAS/…) cuando la abreviatura fina de AGG no existe.
+     * Conserva el centro de costo real si ya se conocía.
+     *
+     * @return array<string, mixed>
+     */
+    private function listaProvisoriaInstalacion(
+        string $cuitProveedor,
+        string $tipoComprobante,
+        ?int $proveedorId,
+        string $letra,
+        string $centroCostoCodigo,
+    ): array {
+        $lista = $this->resolverSinOcSinCentroCosto($cuitProveedor, $tipoComprobante, $proveedorId, $letra);
+        $lista['centro_costo_codigo'] = $centroCostoCodigo;
+        $lista['tipo_provisorio'] = true;
+        $lista['provisorio_sin_centro_costo'] = $centroCostoCodigo === '';
+
+        return $lista;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function abreviaturasProvisoriasSinCentroCosto(string $tipoComprobante, string $tipoItem): array
+    {
+        $tipo = strtoupper(trim($tipoComprobante));
+        $item = strtoupper(trim($tipoItem)) ?: 'B';
+        if (in_array($tipo, ['REC', 'REM'], true)) {
+            return [$tipo];
+        }
+
+        return match ($tipo) {
+            'ND' => match ($item) {
+                'S' => ['DIS', 'DNS', 'NDS', 'DIB', 'NDB'],
+                'L' => ['DIL', 'NDL', 'NDB'],
+                'U' => ['DIU', 'NDU', 'NDB'],
+                default => ['DIB', 'DNB', 'NDB', 'NDS'],
+            },
+            'NC' => match ($item) {
+                'S' => ['CIS', 'CNS', 'NCS', 'CIB', 'NCB'],
+                'L' => ['CIL', 'NCL', 'NCB'],
+                'U' => ['CIU', 'NCU', 'NCB'],
+                default => ['CIB', 'CNB', 'NCB', 'NCS'],
+            },
+            default => match ($item) {
+                'S' => ['FIS', 'FNS', 'FAS', 'FAB', 'FAC'],
+                'L' => ['FIL', 'FNL', 'FAL', 'FAB', 'FAC'],
+                'U' => ['FIU', 'FNU', 'FAU', 'FAB', 'FAC'],
+                default => ['FIB', 'FNB', 'FAB', 'FAS', 'FAC'],
+            },
+        };
     }
 
     private function inferirAlicuotaDesdeConcepto(object $concepto): ?float

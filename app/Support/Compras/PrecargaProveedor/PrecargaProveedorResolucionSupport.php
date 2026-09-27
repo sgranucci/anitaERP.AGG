@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\OrdencompraService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use RuntimeException;
 
 final class PrecargaProveedorResolucionSupport
@@ -30,6 +31,26 @@ final class PrecargaProveedorResolucionSupport
      */
     public function resolverEmpresaPorCuit(string $cuit): array
     {
+        if (EntornoEmpresaSupport::esAgg()) {
+            return $this->resolverEmpresaPorCuitAgg($cuit);
+        }
+
+        return $this->resolverEmpresaPorCuitInstalacion($cuit);
+    }
+
+    /**
+     * AGG: Biyemas / Rebisco / Kandiko (codigo &lt; 5). No alterar este criterio.
+     *
+     * @return array{
+     *   empresa_id: int,
+     *   codigo: string,
+     *   nombre: string,
+     *   cuit_corregido?: string,
+     *   cuit_leido?: string
+     * }
+     */
+    private function resolverEmpresaPorCuitAgg(string $cuit): array
+    {
         foreach ($this->variantesDocumento($cuit) as $documento) {
             $empresas = $this->empresaRepository->findPorDocumento($documento);
             if (! $empresas) {
@@ -47,12 +68,48 @@ final class PrecargaProveedorResolucionSupport
             }
         }
 
-        $aproximada = $this->resolverEmpresaPorCuitOcrTolerante($cuit);
+        $aproximada = $this->resolverEmpresaPorCuitOcrTolerante($cuit, true);
         if ($aproximada !== null) {
             return $aproximada;
         }
 
         throw new RuntimeException('No se encontró empresa destinatario (Biyemas/Rebisco/Kandiko) para CUIT «'.$cuit.'»');
+    }
+
+    /**
+     * Ferli y el resto: cualquier empresa de la instalación, por CUIT.
+     *
+     * @return array{
+     *   empresa_id: int,
+     *   codigo: string,
+     *   nombre: string,
+     *   cuit_corregido?: string,
+     *   cuit_leido?: string
+     * }
+     */
+    private function resolverEmpresaPorCuitInstalacion(string $cuit): array
+    {
+        foreach ($this->variantesDocumento($cuit) as $documento) {
+            $empresas = $this->empresaRepository->findPorDocumento($documento);
+            if (! $empresas) {
+                continue;
+            }
+
+            foreach ($empresas as $empresa) {
+                return [
+                    'empresa_id' => (int) $empresa->id,
+                    'codigo' => (string) $empresa->codigo,
+                    'nombre' => (string) $empresa->nombre,
+                ];
+            }
+        }
+
+        $aproximada = $this->resolverEmpresaPorCuitOcrTolerante($cuit, false);
+        if ($aproximada !== null) {
+            return $aproximada;
+        }
+
+        throw new RuntimeException('No se encontró empresa destinataria para CUIT «'.$cuit.'».');
     }
 
     /**
@@ -67,7 +124,7 @@ final class PrecargaProveedorResolucionSupport
      *   cuit_leido: string
      * }|null
      */
-    private function resolverEmpresaPorCuitOcrTolerante(string $cuit): ?array
+    private function resolverEmpresaPorCuitOcrTolerante(string $cuit, bool $soloCodigoMenorA5): ?array
     {
         $leido = preg_replace('/\D/', '', $cuit) ?? '';
         if (strlen($leido) !== 11 || ! ctype_digit($leido)) {
@@ -75,7 +132,10 @@ final class PrecargaProveedorResolucionSupport
         }
 
         $candidatos = [];
-        foreach ($this->empresasOperativasConCuit() as $empresa) {
+        $empresas = $soloCodigoMenorA5
+            ? $this->empresasOperativasConCuit()
+            : $this->empresasConCuit();
+        foreach ($empresas as $empresa) {
             $conocido = preg_replace('/\D/', '', (string) $empresa->nroinscripcion) ?? '';
             if (strlen($conocido) !== 11 || ! ctype_digit($conocido)) {
                 continue;
@@ -117,6 +177,14 @@ final class PrecargaProveedorResolucionSupport
                 return (string) ($empresa->codigo ?? '9') < '5'
                     && filled($empresa->nroinscripcion ?? null);
             })
+            ->values();
+    }
+
+    /** @return \Illuminate\Support\Collection<int, object> */
+    private function empresasConCuit()
+    {
+        return collect($this->empresaRepository->all() ?? [])
+            ->filter(fn ($empresa) => filled($empresa->nroinscripcion ?? null))
             ->values();
     }
 
