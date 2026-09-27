@@ -38,9 +38,19 @@ use App\Exports\Stock\ArticuloFerliListadoExport;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
 use App\Services\Stock\PrecioServiceFerli;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoColumnaEtiquetaSupport;
+use App\Support\Listado\ListadoCortesSupport;
+use App\Support\Listado\ListadoDisenadorPreviewSupport;
+use App\Support\Listado\ListadoGrillaConfigSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoVistaMenuSupport;
+use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloEstadoCanalSupport;
+use App\Support\Stock\ArticuloFerliListadoColumnas;
 use App\Support\Stock\ArticuloFerliListadoFiltros;
+use App\Support\Stock\ArticuloFerliListadoPreferenciasUsuario;
 use App\Support\Stock\ArticuloNofacturaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -112,19 +122,79 @@ class ArticuloFerliController extends Controller
             return redirect()->route('products.index');
         }
 
+        $usuarioId = auth()->id() ? (int) auth()->id() : null;
+        $vistas = ListadoVistaSupport::listarParaUsuario(ArticuloFerliListadoColumnas::RECURSO, $usuarioId);
+        $vistaActiva = null;
+        $forzarEstandar = $request->boolean('vista_estandar');
+        if ($request->filled('vista_id')) {
+            $vistaActiva = ListadoVistaSupport::findParaUsuario(
+                (int) $request->input('vista_id'),
+                ArticuloFerliListadoColumnas::RECURSO,
+                $usuarioId
+            );
+        } elseif (
+            ! $forzarEstandar
+            && ! $request->has('filtro_valor')
+            && ! $request->has('qbe')
+            && ! $request->has('filtro_estado')
+            && ! $request->has('filtro_canal')
+            && ! $request->has('estado_comb')
+        ) {
+            $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ArticuloFerliListadoColumnas::RECURSO, $usuarioId);
+        }
+
         $filtros = ArticuloFerliListadoFiltros::resolverDesdeRequest($request);
+        if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
+            $filtros = ArticuloFerliListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+
+        $catalogo = ArticuloFerliListadoColumnas::catalogoActivo();
+        $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(
+            ArticuloFerliListadoColumnas::RECURSO,
+            $catalogo
+        );
+        if ($vistaActiva && is_array($vistaActiva->columnas_json) && $vistaActiva->columnas_json !== []) {
+            $grillaLayout = ArticuloFerliListadoPreferenciasUsuario::normalizarLayout($vistaActiva->columnas_json);
+        } else {
+            $grillaLayout = ArticuloFerliListadoPreferenciasUsuario::grillaEstandar();
+        }
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($grillaLayout);
+        if (! ArticuloEstadoCanalSupport::uiFerliActiva()) {
+            $columnasVisibles = array_values(array_filter($columnasVisibles, static fn ($key) => $key !== 'canal'));
+        }
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($grillaLayout);
+
+        $articulos = $this->leeArticulosListado($filtros, true);
+        $cortes = ['activo' => false];
+        if (ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], ArticuloFerliListadoFiltros::camposOrdenables()) !== []) {
+            $cortes = $this->cortesProductos($filtros, $etiquetas);
+        }
+
+        $camposFiltro = ArticuloFerliListadoFiltros::camposQbeDisponibles();
+        foreach ($camposFiltro as $key => $meta) {
+            $camposFiltro[$key]['label'] = $etiquetas[$key] ?? $etiquetasInstalacion[$key] ?? $meta['label'];
+        }
         $filtrosQuery = ArticuloFerliListadoFiltros::paraQueryString($filtros);
         $page = (int) $request->input('page', 0);
         if ($page > 1) {
             $filtrosQuery['page'] = $page;
         }
+        $filtrosQuery['columnas'] = implode(',', $columnasVisibles);
+        if ($vistaActiva) {
+            $filtrosQuery['vista_id'] = $vistaActiva->id;
+        } elseif ($forzarEstandar) {
+            $filtrosQuery['vista_estandar'] = 1;
+        }
 
-        $articulos = $this->leeArticulosListado($filtros, true);
         $estadoComb = $filtros['estado_comb'] ?? ArticuloFerliListadoFiltros::ESTADO_COMB_ACTIVAS;
         $retornoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery);
         $canalesFiltro = ArticuloEstadoCanalSupport::uiFerliActiva()
             ? Canal::query()->where('activo', true)->orderBy('nombre')->get(['id', 'codigo', 'nombre'])
             : collect();
+        $workbenchListo = ListadoVistaSupport::tablasDisponibles();
+        $catalogoColumnas = $catalogo;
+        $vistasListado = $vistas;
+        $etiquetasColumnas = $etiquetas;
 
         return view('stock.product.list', compact(
             'inactive',
@@ -134,8 +204,158 @@ class ArticuloFerliController extends Controller
             'filtrosQuery',
             'estadoComb',
             'retornoQuery',
-            'canalesFiltro'
+            'canalesFiltro',
+            'columnasVisibles',
+            'grillaLayout',
+            'catalogoColumnas',
+            'etiquetasColumnas',
+            'etiquetasInstalacion',
+            'vistasListado',
+            'vistaActiva',
+            'workbenchListo',
+            'cortes',
+            'camposFiltro'
         ));
+    }
+
+    public function previewWorkbench(Request $request)
+    {
+        can('listar-articulos');
+
+        $filtros = ArticuloFerliListadoFiltros::resolverDesdeRequest($request);
+        $filtros['_per_page'] = ListadoDisenadorPreviewSupport::LIMITE_MUESTRA;
+        $layout = ArticuloFerliListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $etiquetas = ListadoGrillaConfigSupport::etiquetasDesdeLayout($layout);
+        $page = $this->leeArticulosListado($filtros, true);
+        $total = method_exists($page, 'total') ? (int) $page->total() : $page->count();
+        $filas = method_exists($page, 'getCollection') ? $page->getCollection() : $page;
+        $orden = ListadoOrdenamientoSupport::normalizar(
+            $request->input('sort', $filtros['sort'] ?? []),
+            ArticuloFerliListadoFiltros::camposOrdenables()
+        );
+        $agrupar = ListadoAgrupacionSupport::normalizar(
+            $request->input('group', $filtros['agrupar'] ?? []),
+            ArticuloFerliListadoFiltros::camposOrdenables()
+        );
+        $filtrosCortes = $filtros;
+        $filtrosCortes['agrupar'] = $agrupar;
+        $cortes = $agrupar !== [] ? $this->cortesProductos($filtrosCortes, $etiquetas) : ['activo' => false];
+
+        return response()->json(ListadoDisenadorPreviewSupport::payload(
+            $layout,
+            $orden,
+            $agrupar,
+            $filas,
+            static fn (object $row, string $key): string => ArticuloFerliListadoColumnas::valorCelda($row, $key),
+            $total,
+            $etiquetas,
+            $cortes
+        ));
+    }
+
+    public function guardarVistaListado(Request $request)
+    {
+        can('listar-articulos');
+
+        $filtros = ArticuloFerliListadoFiltros::resolverDesdeRequest($request);
+        $layout = ArticuloFerliListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vista = ListadoVistaSupport::guardar(
+            ArticuloFerliListadoColumnas::RECURSO,
+            (int) auth()->id(),
+            (string) $request->input('nombre', ''),
+            [
+                'modo' => $filtros['modo'],
+                'qbe' => $filtros['qbe'] ?? [],
+                'sort' => $filtros['sort'] ?? [],
+                'agrupar' => $filtros['agrupar'] ?? [],
+            ],
+            $layout,
+            $request->boolean('es_default'),
+            $request->boolean('compartida'),
+            $request->filled('vista_id') ? (int) $request->input('vista_id') : null
+        );
+        if (! $vista) {
+            return redirect()->route('products.index', ArticuloFerliListadoFiltros::paraQueryString($filtros))
+                ->with('error', 'No se pudo guardar la vista.');
+        }
+        ListadoVistaMenuSupport::sincronizar($vista, $request->boolean('crear_en_menu'));
+        $qs = ArticuloFerliListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs['vista_id'] = $vista->id;
+
+        return redirect()->route('products.index', $qs)->with('mensaje', 'Vista «'.$vista->nombre.'» guardada.');
+    }
+
+    public function eliminarVistaListado(int $id)
+    {
+        can('listar-articulos');
+        $ok = ListadoVistaSupport::eliminar($id, ArticuloFerliListadoColumnas::RECURSO, (int) auth()->id());
+
+        return redirect()->route('products.index', ['vista_estandar' => 1])
+            ->with($ok ? 'mensaje' : 'error', $ok ? 'Vista eliminada.' : 'No se pudo eliminar la vista.');
+    }
+
+    public function guardarColumnasListado(Request $request)
+    {
+        can('listar-articulos');
+        $layout = ArticuloFerliListadoPreferenciasUsuario::normalizarLayout($request->input('grilla'));
+        $columnasVisibles = ListadoGrillaConfigSupport::keysVisibles($layout);
+        $vistaId = $request->filled('vista_id') ? (int) $request->input('vista_id') : 0;
+        if ($vistaId > 0 && $request->boolean('actualizar_vista')) {
+            $vista = ListadoVistaSupport::findParaUsuario($vistaId, ArticuloFerliListadoColumnas::RECURSO, (int) auth()->id());
+            if ($vista && (int) $vista->usuario_id === (int) auth()->id()) {
+                $vista->columnas_json = $layout;
+                $vista->save();
+            }
+        } else {
+            ArticuloFerliListadoPreferenciasUsuario::persistirGrillaEstandar($layout);
+        }
+        $filtros = ArticuloFerliListadoFiltros::resolverDesdeRequest($request);
+        $qs = ArticuloFerliListadoFiltros::paraQueryString($filtros);
+        $qs['columnas'] = implode(',', $columnasVisibles);
+        $qs[$vistaId > 0 ? 'vista_id' : 'vista_estandar'] = $vistaId > 0 ? $vistaId : 1;
+
+        return redirect()->route('products.index', $qs)->with('mensaje', 'Grilla actualizada.');
+    }
+
+    public function guardarEtiquetasListado(Request $request)
+    {
+        can('listar-articulos');
+        $etiquetas = $request->input('etiquetas', []);
+        if (! is_array($etiquetas)) {
+            $etiquetas = [];
+        }
+        ListadoColumnaEtiquetaSupport::guardar(
+            ArticuloFerliListadoColumnas::RECURSO,
+            $etiquetas,
+            array_keys(ArticuloFerliListadoColumnas::catalogoActivo())
+        );
+
+        return redirect()->route('products.index', ArticuloFerliListadoFiltros::paraQueryString(
+            ArticuloFerliListadoFiltros::resolverDesdeRequest($request)
+        ))->with('mensaje', 'Etiquetas actualizadas.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, string>  $etiquetas
+     * @return array<string, mixed>
+     */
+    private function cortesProductos(array $filtros, array $etiquetas): array
+    {
+        $campos = ArticuloFerliListadoFiltros::camposOrdenables();
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+
+        return ListadoCortesSupport::calcular(
+            $this->queryProductosListado($filtros),
+            $agrupar,
+            $campos,
+            'articulo.id',
+            static fn (object $row, string $key): string => ArticuloFerliListadoColumnas::valorCelda($row, $key),
+            static fn (string $key): ?array => ArticuloFerliListadoColumnas::sqlAgrupacion($key),
+            $etiquetas
+        );
     }
 
     public function list(Request $request)
@@ -187,6 +407,22 @@ class ArticuloFerliController extends Controller
      */
     private function leeArticulosListado(array $filtros, bool $paginar)
     {
+        $query = $this->queryProductosListado($filtros);
+
+        if (! $paginar) {
+            return $query->get();
+        }
+
+        $perPage = (int) ($filtros['_per_page'] ?? 10);
+
+        return $query->paginate(max(1, $perPage))->withQueryString();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function queryProductosListado(array $filtros)
+    {
         $select = [
             'articulo.id as id',
             'articulo.sku as stkm_articulo',
@@ -198,6 +434,8 @@ class ArticuloFerliController extends Controller
             'articulo.usoarticulo_id',
             'articulo.nofactura',
             'articulo.estado',
+            'articulo.created_at',
+            'articulo.updated_at',
         ];
         if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
             $select[] = 'articulo.estado_fabrica';
@@ -209,8 +447,7 @@ class ArticuloFerliController extends Controller
             ->leftJoin('categoria', 'articulo.categoria_id', '=', 'categoria.id')
             ->leftJoin('unidadmedida', 'articulo.unidadmedida_id', '=', 'unidadmedida.id')
             ->leftJoin('mventa', 'articulo.mventa_id', '=', 'mventa.id')
-            ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id')
-            ->orderBy('articulo.sku');
+            ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id');
 
         if (ArticuloEstadoCanalSupport::uiFerliActiva()) {
             $query->with(['canales' => function ($q) {
@@ -219,10 +456,9 @@ class ArticuloFerliController extends Controller
         }
 
         ArticuloFerliListadoFiltros::aplicar($query, $filtros);
+        ArticuloFerliListadoFiltros::aplicarOrden($query, $filtros);
 
-        return $paginar
-            ? $query->paginate(10)->withQueryString()
-            : $query->get();
+        return $query;
     }
 
     public function limpiafiltro(Request $request)

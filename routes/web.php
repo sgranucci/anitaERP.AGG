@@ -1465,6 +1465,11 @@ Route::delete('contable/usuario_cuentacontable/{id}', 'Contable\Usuario_Cuentaco
 Route::get('stock/producto/{id}', 'Stock\ArticuloFerliController@consultaProducto')->name('consultar_producto');
 
 Route::get('stock/products', 'Stock\ArticuloFerliController@index')->name('products.index');
+Route::post('stock/products/workbench/vista', 'Stock\ArticuloFerliController@guardarVistaListado')->name('guardar_vista_listado_producto_ferli');
+Route::delete('stock/products/workbench/vista/{id}', 'Stock\ArticuloFerliController@eliminarVistaListado')->name('eliminar_vista_listado_producto_ferli');
+Route::post('stock/products/workbench/columnas', 'Stock\ArticuloFerliController@guardarColumnasListado')->name('guardar_columnas_listado_producto_ferli');
+Route::post('stock/products/workbench/etiquetas', 'Stock\ArticuloFerliController@guardarEtiquetasListado')->name('guardar_etiquetas_listado_producto_ferli');
+Route::post('stock/products/workbench/preview', 'Stock\ArticuloFerliController@previewWorkbench')->name('preview_workbench_producto_ferli');
 Route::get('stock/products/list', 'Stock\ArticuloFerliController@list')->name('products.list');
 Route::get('stock/lista-producto-ferli/{formato?}/{busqueda?}', 'Stock\ArticuloFerliController@listar')->name('lista_producto_ferli');
 Route::get('stock/product/{sku}/{codigo}', 'Stock\ArticuloFerliController@download')->name('product.download');

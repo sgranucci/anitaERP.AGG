@@ -19,7 +19,9 @@ Canónicos: `resources/views/ventas/cliente/index.blade.php`, `compras/proveedor
 
 ### Cheques: no perder al pasar al workbench
 
-Barra azul: **Importar**, **Reporte**, **Aging**, **Depósitos**, **Conciliación**, **Cashflow**, **eCheq**, botón **Filtros** (abre la consulta), búsqueda «Texto o número», **Nuevo cheque**.
+Barra azul: **Importar**, **Reporte**, **Aging**, **Depósitos**, **Conciliación**, **Cashflow**, **eCheq**, **Nuevo cheque**.
+
+Toolbar igual que clientes, proveedores y artículos: selector de vista, **Diseñar vista**, **QBE**, **Defaults instalación**, búsqueda «Texto o número».
 
 Vista rápida (chips, por encima del QBE, AND): **Para depositar** (con fecha de corte «Fecha cheque ≤»), **Cartera**, **Todos**, **Emitidos**, **Recibidos**, **Rechazados**. Si hay más de una empresa, botones de empresa.
 
@@ -32,6 +34,10 @@ Grilla (orden por defecto; el diseñador lo cambia, ver «Orden físico de las c
 Acciones de fila: Editar, Depositar, PDF de boleta si está depositado, Caucionar, Liberar caución, Rechazar y emitir ND, Eliminar. Modales de depósito (consulta de cuenta de caja), caución y rechazo ND.
 
 Export: Pdf, Excel, Csv, con los filtros y el orden activos.
+
+### Artículos Ferli (`stock/products`)
+
+Index de diseño (`ArticuloFerliController`), distinto del estándar. Workbench propio (`RECURSO = stock.producto_ferli`): QBE, diseñador, vistas y cortes. Conserva chips de estado, canal y estado de combinación, y las acciones de fila (combinaciones, diseño, técnica, contable, QR, precios). No comparte vistas ni etiquetas con el index estándar.
 
 ### Artículos (index estándar): no perder al pasar al workbench
 
@@ -111,7 +117,7 @@ Si una columna no aplica en el entorno (canal fuera de Ferli, empresa con una so
 
 El listado de columnas de cheques y de artículos más arriba es el **orden por defecto**. El diseñador lo puede cambiar. Saldo de depósito (Anita) entra en ese orden visual y no entra al QBE ni a los cortes.
 
-Cheques suma, aparte, un gráfico de barras **Monto por estado** sobre el universo del filtro (Chart.js, `ChequeController::graficoMontoPorEstado`). No es un tablero ni cruza otros módulos.
+Cheques suma, aparte, un gráfico de barras **Monto por estado** sobre el universo del filtro (Chart.js, `ChequeController::graficoMontoPorEstado`). Colapsable; arranca **colapsado**. El canvas se dibuja al abrir el panel. No es un tablero ni cruza otros módulos.
 
 ## PDF y Excel del workbench
 

@@ -728,6 +728,9 @@
   border-color: #2471A3;
   color: #fff;
 }
+.lw-grafico-toggle {
+  min-width: 12rem;
+}
 .lw-cortes-toggle:hover,
 .lw-cortes-toggle:focus {
   background: #1B4F72;

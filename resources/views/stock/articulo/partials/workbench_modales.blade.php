@@ -4,6 +4,12 @@
     use App\Support\Stock\ArticuloListadoColumnas;
     $layout = $grillaLayout ?? [];
     $catalogo = $catalogoColumnas ?? ArticuloListadoColumnas::catalogoActivo();
+    $etiquetasInstalacion = $etiquetasInstalacion ?? [];
+    $rutaGuardarColumnas = $rutaGuardarColumnas ?? 'guardar_columnas_listado_articulo';
+    $rutaGuardarVista = $rutaGuardarVista ?? 'guardar_vista_listado_articulo';
+    $rutaEliminarVista = $rutaEliminarVista ?? 'eliminar_vista_listado_articulo';
+    $rutaPreview = $rutaPreview ?? 'preview_workbench_articulo';
+    $rutaGuardarEtiquetas = $rutaGuardarEtiquetas ?? 'guardar_etiquetas_listado_articulo';
     $filtrosHidden = $filtrosQuery ?? [];
     $qbeResumen = \App\Support\Listado\ListadoQbeSupport::paraUi($filtros['qbe'] ?? []);
 @endphp
@@ -61,7 +67,7 @@
                     <div class="tab-content">
                         {{-- Tab Columnas --}}
                         <div class="tab-pane fade show active" id="pane-grilla-columnas" role="tabpanel">
-                            <form method="post" action="{{ route('guardar_columnas_listado_articulo') }}" id="form-lw-grilla-aplicar">
+                            <form method="post" action="{{ route($rutaGuardarColumnas) }}" id="form-lw-grilla-aplicar">
                                 @csrf
                                 @foreach ($filtrosHidden as $hk => $hv)
                                     @if ($hk === 'columnas')
@@ -205,7 +211,7 @@
 
                         {{-- Tab Guardar vista --}}
                         <div class="tab-pane fade" id="pane-grilla-vista" role="tabpanel">
-                            <form method="post" action="{{ route('guardar_vista_listado_articulo') }}" id="form-lw-grilla-vista"
+                            <form method="post" action="{{ route($rutaGuardarVista) }}" id="form-lw-grilla-vista"
                                   data-vista-nombre="{{ $vistaActiva->nombre ?? '' }}">
                                 @csrf
                                 @foreach ($filtrosHidden as $hk => $hv)
@@ -327,7 +333,7 @@
                                 <div class="modal-footer justify-content-between">
                                     @if ($vistaActiva && (int) ($vistaActiva->usuario_id ?? 0) === (int) auth()->id())
                                         <button type="button" class="btn btn-outline-danger btn-sm" id="btn-lw-eliminar-vista-ref"
-                                                data-action="{{ route('eliminar_vista_listado_articulo', $vistaActiva->id) }}">
+                                                data-action="{{ route($rutaEliminarVista, $vistaActiva->id) }}">
                                             Eliminar esta vista
                                         </button>
                                     @else
@@ -346,7 +352,7 @@
                                 </div>
                             </form>
                             @if ($vistaActiva && (int) ($vistaActiva->usuario_id ?? 0) === (int) auth()->id())
-                                <form method="post" action="{{ route('eliminar_vista_listado_articulo', $vistaActiva->id) }}" id="form-lw-eliminar-vista" class="d-none"
+                                <form method="post" action="{{ route($rutaEliminarVista, $vistaActiva->id) }}" id="form-lw-eliminar-vista" class="d-none"
                                       onsubmit="return confirm('¿Eliminar esta vista?');">
                                     @csrf
                                     @method('DELETE')
@@ -357,7 +363,7 @@
                 </div>
 
                 @include('includes.listado.disenador_preview', [
-                    'previewUrl' => route('preview_workbench_articulo'),
+                    'previewUrl' => route($rutaPreview),
                 ])
             </div>
         </div>
@@ -368,7 +374,7 @@
 <div class="modal fade lw-modal" id="modal-lw-etiquetas" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
         <div class="modal-content">
-            <form method="post" action="{{ route('guardar_etiquetas_listado_articulo') }}">
+            <form method="post" action="{{ route($rutaGuardarEtiquetas) }}">
                 @csrf
                 @foreach ($filtrosHidden as $hk => $hv)
                     @if ($hk === 'columnas' || is_array($hv))

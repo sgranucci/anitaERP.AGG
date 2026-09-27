@@ -9,8 +9,6 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/caja/cheque/filtro.js")}}" type="text/javascript"></script>
 @php
     $qbeGruposJs = public_path('assets/pages/scripts/listado/workbench-qbe-grupos.js');
     $ordenJs = public_path('assets/pages/scripts/listado/workbench-orden.js');
@@ -30,43 +28,54 @@
 <script>
 (function () {
     var datos = @json($graficoCheque ?? []);
-    var canvas = document.getElementById('cheque-grafico-estado');
-    if (!canvas || typeof Chart === 'undefined' || !datos.labels || !datos.labels.length) {
-        return;
-    }
-    new Chart(canvas.getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels: datos.labels,
-            datasets: [{
-                label: 'Monto',
-                data: datos.montos,
-                backgroundColor: '#85C1E9',
-                borderColor: '#2471A3',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            legend: { display: false },
-            tooltips: {
-                callbacks: {
-                    label: function (item) {
-                        var i = item.index;
-                        var monto = datos.montos[i] || 0;
-                        var cant = datos.cantidades[i] || 0;
-                        return monto.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                            + ' · ' + cant + ' cheques';
+    var grafico = null;
+    function dibujar() {
+        var canvas = document.getElementById('cheque-grafico-estado');
+        if (!canvas || typeof Chart === 'undefined' || !datos.labels || !datos.labels.length) {
+            return;
+        }
+        if (!grafico) {
+            grafico = new Chart(canvas.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: datos.labels,
+                    datasets: [{
+                        label: 'Monto',
+                        data: datos.montos,
+                        backgroundColor: '#85C1E9',
+                        borderColor: '#2471A3',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    legend: { display: false },
+                    tooltips: {
+                        callbacks: {
+                            label: function (item) {
+                                var i = item.index;
+                                var monto = datos.montos[i] || 0;
+                                var cant = datos.cantidades[i] || 0;
+                                return monto.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                    + ' · ' + cant + ' cheques';
+                            }
+                        }
+                    },
+                    scales: {
+                        yAxes: [{ ticks: { beginAtZero: true } }],
+                        xAxes: [{ ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } }]
                     }
                 }
-            },
-            scales: {
-                yAxes: [{ ticks: { beginAtZero: true } }],
-                xAxes: [{ ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } }]
-            }
+            });
+            return;
         }
-    });
+        grafico.resize();
+    }
+    var panel = document.getElementById('cheque-grafico-body');
+    if (panel && window.jQuery) {
+        window.jQuery(panel).on('shown.bs.collapse', dibujar);
+    }
 })();
 </script>
 @endif
@@ -134,54 +143,52 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info lw-workbench shadow-sm">
-            <div class="card-header">
-                <h3 class="card-title">Cheques</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+            <div class="card-header lw-header d-flex flex-wrap align-items-center justify-content-between">
+                <h3 class="card-title mb-0">
+                    <i class="fa fa-money mr-1"></i> Cheques
+                    <small class="ml-2" style="opacity:.85;font-weight:400;">Workbench · consulta multi-campo</small>
+                </h3>
+                <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end" style="gap:.4rem;">
                     @if (can('crear-cheque', false))
-                    <a href="{{ route('importar_cheque') }}" class="btn btn-outline-primary btn-sm mr-2" title="Ingreso masivo">
+                    <a href="{{ route('importar_cheque') }}" class="btn btn-outline-light btn-sm" title="Ingreso masivo">
                         <i class="fa fa-upload"></i> Importar
                     </a>
                     @endif
-                    <a href="{{ route('reporte_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Emitidos y recibidos por separado">
+                    <a href="{{ route('reporte_cheque') }}" class="btn btn-outline-light btn-sm" title="Emitidos y recibidos por separado">
                         <i class="fa fa-list-alt"></i> Reporte
                     </a>
-                    <a href="{{ route('aging_cheque_cartera') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Aging cartera">
+                    <a href="{{ route('aging_cheque_cartera') }}" class="btn btn-outline-light btn-sm" title="Aging cartera">
                         <i class="fa fa-hourglass-half"></i> Aging
                     </a>
-                    <a href="{{ route('historial_deposito_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Historial boletas de depósito">
+                    <a href="{{ route('historial_deposito_cheque') }}" class="btn btn-outline-light btn-sm" title="Historial boletas de depósito">
                         <i class="fa fa-university"></i> Depósitos
                     </a>
-                    <a href="{{ route('conciliacion_deposito_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Conciliación depósitos">
+                    <a href="{{ route('conciliacion_deposito_cheque') }}" class="btn btn-outline-light btn-sm" title="Conciliación depósitos">
                         <i class="fa fa-balance-scale"></i> Conciliación
                     </a>
-                    <a href="{{ route('cashflow_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="Cashflow semanal">
+                    <a href="{{ route('cashflow_cheque') }}" class="btn btn-outline-light btn-sm" title="Cashflow semanal">
                         <i class="fa fa-calendar"></i> Cashflow
                     </a>
-                    <a href="{{ route('echeq_cheque') }}" class="btn btn-outline-secondary btn-sm mr-2" title="eCheq">
+                    <a href="{{ route('echeq_cheque') }}" class="btn btn-outline-light btn-sm" title="eCheq">
                         <i class="fa fa-mobile"></i> eCheq
                     </a>
-                    <button type="button" class="btn btn-sm btn-primary mr-2" data-toggle="modal" data-target="#modal-lw-grilla"
-                            @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
-                        <i class="fa fa-th"></i> Diseñar vista
-                    </button>
-                    @include('includes.listado.filtros_toolbar', [
-                        'formId' => 'form-filtros-cheque',
-                        'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => ChequeListadoFiltros::tieneCriteriosTexto($filtros ?? []),
-                        'limpiarUrl' => $limpiarUrl,
-                        'placeholder' => 'Texto o número',
-                        'toggleTarget' => '#lw-qbe-panel',
-                        'toggleId' => 'btn-toggle-filtros-cheque',
-                        'inputId' => 'filtro_valor',
-                        'nuevoRegistroUrl' => route('crear_cheque', $retornoListadoQuery),
-                        'nuevoRegistroCan' => 'crear-cheque',
-                        'nuevoRegistroLabel' => 'Nuevo cheque',
-                    ])
+                    @if (can('crear-cheque', false))
+                    <a href="{{ route('crear_cheque', $retornoListadoQuery) }}" class="btn btn-light btn-sm">
+                        <i class="fa fa-plus"></i> Nuevo cheque
+                    </a>
+                    @endif
                 </div>
             </div>
+            @if (! ($workbenchListo ?? false))
+                <div class="alert alert-warning lw-aviso-migracion mb-0">
+                    <strong>Migración pendiente.</strong>
+                    Para vistas y configuración de grilla hace falta la tabla <code>listado_vista</code>.
+                </div>
+            @endif
             <form method="get" action="{{ route('cheque') }}" id="form-filtros-cheque" class="mb-0">
                 <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
                 <input type="hidden" name="filtro_modo" id="filtro_modo" value="{{ $filtros['modo'] ?? 'todos' }}">
+                <input type="hidden" name="filtro_valor" id="filtro_valor" value="{{ $filtros['valor'] ?? '' }}">
                 <input type="hidden" name="columnas" id="lw_columnas_csv" value="{{ implode(',', $columnasVisibles ?? []) }}">
                 @if (! empty($filtros['cartera']))
                     <input type="hidden" name="cartera" value="1">
@@ -206,16 +213,51 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                 @if ($vistaActiva ?? null)
                     <input type="hidden" name="vista_id" value="{{ $vistaActiva->id }}">
                 @endif
-                <div class="px-3 pt-2 d-flex flex-wrap align-items-center" style="gap:.4rem;">
-                    <select id="lw-vista-select" class="form-control form-control-sm" style="width:auto;min-width:12rem;"
-                            data-base-url="{{ route('cheque') }}" @if (! ($workbenchListo ?? false)) disabled @endif>
-                        <option value="">Vista estándar</option>
-                        @foreach (($vistasListado ?? []) as $vista)
-                            <option value="{{ $vista->id }}" @if (($vistaActiva ?? null) && (int) $vistaActiva->id === (int) $vista->id) selected @endif>
-                                {{ $vista->nombre }}
-                            </option>
-                        @endforeach
-                    </select>
+                <div class="lw-toolbar">
+                    <div class="lw-toolbar-left">
+                        <select id="lw-vista-select" class="form-control form-control-sm lw-vista-select"
+                                data-base-url="{{ route('cheque') }}"
+                                title="Vistas guardadas"
+                                @if (! ($workbenchListo ?? false)) disabled @endif>
+                            <option value="">Vista estándar</option>
+                            @foreach (($vistasListado ?? []) as $vista)
+                                <option value="{{ $vista->id }}" @if (($vistaActiva ?? null) && (int) $vistaActiva->id === (int) $vista->id) selected @endif>
+                                    {{ $vista->nombre }}
+                                    @if ($vista->es_default)
+                                        ★
+                                    @endif
+                                    @if ($vista->compartida)
+                                        (compartida)
+                                    @endif
+                                </option>
+                            @endforeach
+                        </select>
+                        <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#modal-lw-grilla"
+                                @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
+                            <i class="fa fa-th"></i> Diseñar vista
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-info collapsed" data-toggle="collapse" data-target="#lw-qbe-panel" aria-expanded="false" aria-controls="lw-qbe-panel">
+                            <i class="fa fa-filter"></i> QBE
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle="modal" data-target="#modal-lw-etiquetas"
+                                @if (! ($workbenchListo ?? false)) disabled title="Requiere migración" @endif>
+                            <i class="fa fa-font"></i> Defaults instalación
+                        </button>
+                    </div>
+                    <div class="lw-toolbar-right">
+                        <input type="search" id="lw-search-rapida" class="form-control form-control-sm lw-search-rapida"
+                               value="{{ ($filtros['modo'] ?? '') !== 'qbe' ? ($filtros['valor'] ?? '') : '' }}"
+                               placeholder="Texto o número"
+                               autocomplete="off">
+                        <button type="button" id="btn-lw-buscar-rapida" class="btn btn-sm btn-primary">
+                            <i class="fa fa-search"></i>
+                        </button>
+                        @if (ChequeListadoFiltros::tieneCriteriosTexto($filtros ?? []))
+                            <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
+                                <i class="fa fa-eraser"></i> Limpiar
+                            </a>
+                        @endif
+                    </div>
                 </div>
                 @include('caja.cheque.partials.workbench_qbe')
             </form>
@@ -224,25 +266,51 @@ use App\Support\Caja\ChequeListadoFiltros; ?>
                 @include('includes.listado.workbench_cortes', ['cortes' => $cortes ?? []])
             </div>
             <div class="px-3 pt-2 pb-1">
-                <div class="card card-outline card-info mb-0">
-                    <div class="card-header py-2">
-                        <h3 class="card-title mb-0" style="font-size:.95rem;">Monto por estado</h3>
-                        <span class="text-muted small ml-2">Universo del filtro, no solo la p&aacute;gina.</span>
+                <div class="card card-outline card-info mb-0 lw-cortes">
+                    <div class="card-header py-2 px-3 d-flex flex-wrap align-items-center justify-content-between">
+                        <button type="button" class="btn btn-sm lw-cortes-toggle lw-grafico-toggle collapsed" id="btn-cheque-grafico"
+                                data-toggle="collapse" data-target="#cheque-grafico-body"
+                                aria-expanded="false" aria-controls="cheque-grafico-body"
+                                title="Mostrar monto por estado">
+                            <i class="fa fa-chevron-down lw-cortes-ico lw-cortes-ico-abierto" aria-hidden="true"></i>
+                            <i class="fa fa-chevron-right lw-cortes-ico lw-cortes-ico-cerrado" aria-hidden="true"></i>
+                            Monto por estado
+                        </button>
+                        <span class="text-muted small">Universo del filtro, no solo la p&aacute;gina.</span>
                     </div>
-                    <div class="card-body py-2">
-                        @if (($graficoCheque['total'] ?? 0) === 0)
-                            <p class="text-muted mb-0">No hay cheques en este filtro para graficar.</p>
-                        @else
-                            <div style="height:220px;">
-                                <canvas id="cheque-grafico-estado"></canvas>
-                            </div>
-                            @if (! empty($graficoCheque['truncado']))
-                                <p class="small text-muted mb-0 mt-1">El gr&aacute;fico muestra los grupos m&aacute;s grandes del filtro.</p>
+                    <div class="collapse" id="cheque-grafico-body">
+                        <div class="card-body py-2">
+                            @if (($graficoCheque['total'] ?? 0) === 0)
+                                <p class="text-muted mb-0">No hay cheques en este filtro para graficar.</p>
+                            @else
+                                <div style="height:220px;">
+                                    <canvas id="cheque-grafico-estado"></canvas>
+                                </div>
+                                @if (! empty($graficoCheque['truncado']))
+                                    <p class="small text-muted mb-0 mt-1">El gr&aacute;fico muestra los grupos m&aacute;s grandes del filtro.</p>
+                                @endif
                             @endif
-                        @endif
+                        </div>
                     </div>
                 </div>
             </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    var panel = document.getElementById('cheque-grafico-body');
+                    var btn = document.getElementById('btn-cheque-grafico');
+                    if (!panel || !btn || typeof jQuery === 'undefined') {
+                        return;
+                    }
+                    jQuery(panel).on('shown.bs.collapse hidden.bs.collapse', function (e) {
+                        if (e.target !== panel) {
+                            return;
+                        }
+                        var abierto = e.type === 'shown';
+                        btn.title = abierto ? 'Ocultar monto por estado' : 'Mostrar monto por estado';
+                        btn.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+                    });
+                });
+            </script>
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_cheque',

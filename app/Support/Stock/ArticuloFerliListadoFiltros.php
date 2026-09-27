@@ -4,6 +4,9 @@ namespace App\Support\Stock;
 
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\ListadoAgrupacionSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use App\Support\Listado\ListadoQbeSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -17,6 +20,8 @@ class ArticuloFerliListadoFiltros
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
+
+    public const MODO_QBE = 'qbe';
 
     public const ESTADO_ACTIVO = 'ACTIVO';
 
@@ -44,6 +49,9 @@ class ArticuloFerliListadoFiltros
         'marca' => ['column' => 'mventa.nombre', 'type' => 'texto', 'label' => 'Marca'],
         'linea' => ['column' => 'linea.nombre', 'type' => 'texto', 'label' => 'Línea'],
         'nofactura' => ['column' => 'articulo.nofactura', 'type' => 'texto', 'label' => 'Facturable (0/1)'],
+        'estado' => ['column' => 'articulo.estado', 'type' => 'texto', 'label' => 'Estado'],
+        'fecha_alta' => ['column' => 'articulo.created_at', 'type' => 'fecha', 'label' => 'Fecha de alta'],
+        'fecha_modificacion' => ['column' => 'articulo.updated_at', 'type' => 'fecha', 'label' => 'Fecha de modificación'],
     ];
 
     /** @var list<string> */
@@ -83,7 +91,7 @@ class ArticuloFerliListadoFiltros
         $busquedaRapida = $request->boolean('filtro_busqueda_rapida');
 
         $modo = (string) $request->input('filtro_modo', self::MODO_TODOS);
-        if (! in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO], true)) {
+        if (! in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO, self::MODO_QBE], true)) {
             $modo = self::MODO_TODOS;
         }
 
@@ -93,13 +101,25 @@ class ArticuloFerliListadoFiltros
         }
 
         $operador = (string) $request->input('filtro_operador', 'contiene');
+        $qbe = ListadoQbeSupport::resolverDesdeRequest(
+            $request,
+            self::camposQbeDisponibles(),
+            static fn (string $op, string $campoQbe): string => self::normalizarOperador($op, $campoQbe)
+        );
+        $sort = ListadoOrdenamientoSupport::resolverDesdeRequest($request, self::camposOrdenables());
+        $agrupar = ListadoAgrupacionSupport::resolverDesdeRequest($request, self::camposOrdenables());
 
         if ($busquedaRapida) {
             $modo = self::MODO_TODOS;
             $operador = 'contiene';
+            $qbe = ListadoQbeSupport::vacio();
+        } elseif (ListadoQbeSupport::tieneCriterios($qbe)) {
+            $modo = self::MODO_QBE;
         }
 
-        $operador = self::normalizarOperador($operador);
+        if ($modo !== self::MODO_QBE) {
+            $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'descripcion');
+        }
 
         return [
             'modo' => $modo,
@@ -111,6 +131,9 @@ class ArticuloFerliListadoFiltros
             'estado' => $estado,
             'canal' => $canal,
             'estado_comb' => $estadoComb,
+            'qbe' => $qbe,
+            'sort' => $sort,
+            'agrupar' => $agrupar,
         ];
     }
 
@@ -184,6 +207,10 @@ class ArticuloFerliListadoFiltros
             return true;
         }
 
+        if (($filtros['modo'] ?? '') === self::MODO_QBE && ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? [])) {
+            return true;
+        }
+
         if (trim((string) ($filtros['valor'] ?? '')) !== '') {
             return true;
         }
@@ -213,6 +240,9 @@ class ArticuloFerliListadoFiltros
             'estado' => self::ESTADO_ACTIVO,
             'canal' => self::CANAL_TODOS,
             'estado_comb' => self::ESTADO_COMB_ACTIVAS,
+            'qbe' => ListadoQbeSupport::vacio(),
+            'sort' => [],
+            'agrupar' => [],
         ];
     }
 
@@ -247,6 +277,22 @@ class ArticuloFerliListadoFiltros
         $estadoComb = $filtros['estado_comb'] ?? self::ESTADO_COMB_ACTIVAS;
         if ($estadoComb !== self::ESTADO_COMB_ACTIVAS) {
             $params['estado_comb'] = $estadoComb;
+        }
+        if (($filtros['modo'] ?? '') === self::MODO_QBE) {
+            $params['filtro_modo'] = self::MODO_QBE;
+            $params = array_merge($params, ListadoQbeSupport::paraQueryString(
+                ListadoQbeSupport::normalizar(
+                    $filtros['qbe'] ?? [],
+                    self::camposQbeDisponibles(),
+                    static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+                )
+            ));
+        }
+        if (($filtros['sort'] ?? []) !== []) {
+            $params = array_merge($params, ListadoOrdenamientoSupport::paraQueryString($filtros['sort']));
+        }
+        if (($filtros['agrupar'] ?? []) !== []) {
+            $params = array_merge($params, ListadoAgrupacionSupport::paraQueryString($filtros['agrupar']));
         }
 
         return $params;
@@ -283,12 +329,34 @@ class ArticuloFerliListadoFiltros
             });
         }
 
+        $modo = $filtros['modo'] ?? self::MODO_TODOS;
+        if ($modo === self::MODO_QBE && ListadoQbeSupport::tieneCriterios($filtros['qbe'] ?? [])) {
+            ListadoQbeSupport::aplicar(
+                $query,
+                ListadoQbeSupport::normalizar(
+                    $filtros['qbe'] ?? [],
+                    self::camposQbeDisponibles(),
+                    static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+                ),
+                static function (Builder $q, array $criterio): void {
+                    self::aplicarEnCampo(
+                        $q,
+                        (string) ($criterio['campo'] ?? 'descripcion'),
+                        (string) ($criterio['op'] ?? 'contiene'),
+                        (string) ($criterio['valor'] ?? ''),
+                        (string) ($criterio['valor_hasta'] ?? '')
+                    );
+                }
+            );
+
+            return;
+        }
+
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio') {
             return;
         }
 
-        $modo = $filtros['modo'] ?? self::MODO_TODOS;
         $operador = $filtros['operador'] ?? 'contiene';
 
         if ($modo === self::MODO_CAMPO) {
@@ -372,9 +440,15 @@ class ArticuloFerliListadoFiltros
     /**
      * @param  Builder<\App\Models\Stock\Articulo>  $query
      */
-    private static function aplicarEnCampo(Builder $query, string $campoKey, string $operador, string $valor): void
+    private static function aplicarEnCampo(Builder $query, string $campoKey, string $operador, string $valor, string $valorHasta = ''): void
     {
         $def = self::CAMPOS[$campoKey] ?? self::CAMPOS['descripcion'];
+        if (($def['type'] ?? 'texto') === 'fecha') {
+            ListadoQbeSupport::aplicarFecha($query, (string) $def['column'], $operador, $valor, $valorHasta);
+
+            return;
+        }
+
         $column = (string) $def['column'];
 
         if ($operador === 'vacio') {
@@ -425,13 +499,109 @@ class ArticuloFerliListadoFiltros
         }
     }
 
-    private static function normalizarOperador(string $operador): string
+    private static function normalizarOperador(string $operador, string $campoKey = 'descripcion'): string
     {
-        if (! isset(self::OPERADORES_TEXTO[$operador])) {
-            return 'contiene';
+        $type = self::CAMPOS[$campoKey]['type'] ?? 'texto';
+        $permitidos = $type === 'fecha'
+            ? array_keys(ListadoQbeSupport::OPERADORES_FECHA)
+            : array_keys(self::OPERADORES_TEXTO);
+        if (in_array($operador, $permitidos, true)) {
+            return $operador;
         }
 
-        return $operador;
+        return $permitidos[0] ?? 'contiene';
+    }
+
+    /**
+     * @return array<string, array{column: string, type: string, label: string}>
+     */
+    public static function camposQbeDisponibles(): array
+    {
+        return self::CAMPOS;
+    }
+
+    /**
+     * @return array<string, array{column: string, type: string, label: string, attr: string}>
+     */
+    public static function camposOrdenables(): array
+    {
+        $out = [];
+        foreach (self::CAMPOS as $key => $meta) {
+            $out[$key] = [
+                'column' => $meta['column'],
+                'type' => $meta['type'],
+                'label' => $meta['label'],
+                'attr' => $key,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  Builder<\App\Models\Stock\Articulo>  $query
+     */
+    public static function aplicarOrden(Builder $query, array $filtros): void
+    {
+        $campos = self::camposOrdenables();
+        $sort = ListadoOrdenamientoSupport::normalizar($filtros['sort'] ?? [], $campos);
+        $agrupar = ListadoAgrupacionSupport::normalizar($filtros['agrupar'] ?? [], $campos);
+        if ($agrupar !== []) {
+            ListadoAgrupacionSupport::aplicarOrdenPrefijo($query, $agrupar, $campos);
+        }
+        if ($sort !== []) {
+            ListadoOrdenamientoSupport::aplicar($query, $sort, $campos, [
+                'campo' => 'sku',
+                'dir' => ListadoOrdenamientoSupport::DIR_ASC,
+            ]);
+
+            return;
+        }
+        $query->orderBy('articulo.sku', 'asc');
+    }
+
+    /**
+     * Estado, canal y combinaciones de la pantalla mandan sobre la vista guardada.
+     *
+     * @param  array<string, mixed>  $base
+     * @param  array<string, mixed>  $desdeVista
+     * @return array<string, mixed>
+     */
+    public static function fusionarDesdeVista(array $base, array $desdeVista): array
+    {
+        $externos = [
+            'estado' => $base['estado'] ?? self::ESTADO_ACTIVO,
+            'canal' => $base['canal'] ?? self::CANAL_TODOS,
+            'estado_comb' => $base['estado_comb'] ?? self::ESTADO_COMB_ACTIVAS,
+        ];
+
+        if (self::tieneCriteriosTexto($base) || ($base['sort'] ?? []) !== [] || ($base['agrupar'] ?? []) !== []) {
+            if (($base['sort'] ?? []) === [] && ! empty($desdeVista['sort']) && is_array($desdeVista['sort'])) {
+                $base['sort'] = $desdeVista['sort'];
+            }
+            if (($base['agrupar'] ?? []) === [] && ! empty($desdeVista['agrupar']) && is_array($desdeVista['agrupar'])) {
+                $base['agrupar'] = $desdeVista['agrupar'];
+            }
+
+            return array_merge($base, $externos);
+        }
+
+        $qbe = ListadoQbeSupport::normalizar(
+            $desdeVista['qbe'] ?? [],
+            self::camposQbeDisponibles(),
+            static fn (string $op, string $campo): string => self::normalizarOperador($op, $campo)
+        );
+        $modo = (string) ($desdeVista['modo'] ?? self::MODO_TODOS);
+        if (ListadoQbeSupport::tieneCriterios($qbe)) {
+            $modo = self::MODO_QBE;
+        }
+
+        return array_merge($base, $externos, [
+            'modo' => $modo,
+            'qbe' => $qbe,
+            'sort' => is_array($desdeVista['sort'] ?? null) ? $desdeVista['sort'] : ($base['sort'] ?? []),
+            'agrupar' => is_array($desdeVista['agrupar'] ?? null) ? $desdeVista['agrupar'] : ($base['agrupar'] ?? []),
+        ]);
     }
 
     /**
