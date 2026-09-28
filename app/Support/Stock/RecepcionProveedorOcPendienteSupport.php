@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraLineaEstados;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -392,10 +393,7 @@ final class RecepcionProveedorOcPendienteSupport
             ->leftJoinSub($recibidoSub, 'rec', function ($join) {
                 $join->on('rec.linea_id', '=', 'oa.id');
             })
-            ->whereIn('oc.estadoordencompra', [
-                OrdencompraEstados::APROBADA,
-                OrdencompraEstados::CUMPLIDA,
-            ])
+            ->whereIn('oc.estadoordencompra', self::estadosVisiblesEnConsulta())
             ->when($proveedorId !== null && $proveedorId > 0, function ($q) use ($proveedorId) {
                 $q->where('oc.proveedor_id', $proveedorId);
             })
@@ -463,6 +461,26 @@ final class RecepcionProveedorOcPendienteSupport
         }
 
         return $out;
+    }
+
+    /**
+     * AGG exige OC aprobada. El Bierzo no tiene árbol de OC: quedan PENDIENTE
+     * y hay que poder recepcionarlas (mismo criterio que Surmar).
+     *
+     * @return list<string>
+     */
+    public static function estadosVisiblesEnConsulta(): array
+    {
+        $estados = [
+            OrdencompraEstados::APROBADA,
+            OrdencompraEstados::CUMPLIDA,
+        ];
+
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            array_unshift($estados, OrdencompraEstados::PENDIENTE);
+        }
+
+        return $estados;
     }
 
     public static function etiquetaEstadoCom(float $recibida, float $pedida): string

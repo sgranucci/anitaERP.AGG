@@ -9,7 +9,12 @@
             </div>
             <div class="modal-body">
                 <p class="text-muted small mb-2">
-                    Listado desde <strong>AnitaERP</strong>: OC aprobadas sin COM o con COM parcial confirmado.
+                    Listado desde <strong>AnitaERP</strong>:
+                    @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+                        OC pendientes o aprobadas, sin COM o con COM parcial.
+                    @else
+                        OC aprobadas sin COM o con COM parcial confirmado.
+                    @endif
                     <span id="consultaocrecepcion-filtro-proveedor" class="d-none">Filtrado por proveedor del formulario.</span>
                 </p>
                 <div class="form-group row">
