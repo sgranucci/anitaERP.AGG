@@ -11,7 +11,8 @@
       <div class="modal-body">
         <p class="small text-muted mb-2">
           <i class="fa fa-info-circle"></i>
-          Eleg&iacute; lote <strong>y</strong> dep&oacute;sito con saldo. Al Preparar se descuenta el stock (queda atrapado hasta facturar o quitar).
+          Al elegir el lote o la OT, la l&iacute;nea toma el dep&oacute;sito donde est&aacute; ese stock. No hace falta volver a elegirlo al preparar.
+          Una OT de producci&oacute;n no se puede asignar a dos pedidos: si ya sali&oacute; para otro cliente, la fila queda sin Elegir.
         </p>
         <div class="form-group row mb-2">
           <label for="consultalotesstockpicking" class="col-form-label col-auto pr-2">Buscar:</label>

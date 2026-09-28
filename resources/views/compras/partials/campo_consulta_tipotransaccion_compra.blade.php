@@ -46,7 +46,7 @@
                         <i class="fa fa-edit"></i>
                     </a>
                 @endif
-                <input type="text" class="form-control abreviaturatipotransaccioncompra"
+                <input type="text" name="tipotransaccion_compra_abreviatura" class="form-control abreviaturatipotransaccioncompra"
                     id="{{ $inputId }}_abreviatura" value="{{ $abreviatura }}"
                     placeholder="Abrev." title="Abreviatura; Enter valida; F1 consulta" autocomplete="off" style="width: 5.5rem; flex-shrink: 0;">
                 <input type="text" class="form-control nombretipotransaccioncompra text-truncate"

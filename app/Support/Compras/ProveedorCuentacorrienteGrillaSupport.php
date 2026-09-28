@@ -146,18 +146,30 @@ final class ProveedorCuentacorrienteGrillaSupport
 
     /**
      * Fecha de vencimiento para grilla/PDF/export.
-     * Prioriza la cuota del movimiento (plan de pagos); luego el comprobante; cae a `cc.fechavencimiento`.
+     * Plan de varias cuotas: la de esa cuota. Una sola: el vencimiento cargado en la factura.
+     * La cuota automática a veces se grabó con la fecha del comprobante y no con ese vencimiento.
      */
     public static function fechaVencimiento(Proveedor_Cuentacorriente $fila): mixed
     {
+        $fila->loadMissing([
+            'comprobante_proveedor_cuotas',
+            'comprobante_proveedores.comprobante_proveedor_cuotas',
+        ]);
+
+        $cp = $fila->comprobante_proveedores;
         $cuota = $fila->comprobante_proveedor_cuotas;
-        if ($cuota && $cuota->fechavencimiento) {
+        $cantidad = (int) ($cp?->comprobante_proveedor_cuotas?->count() ?? 0);
+
+        if ($cantidad > 1 && $cuota && $cuota->fechavencimiento) {
             return $cuota->fechavencimiento;
         }
 
-        $cp = $fila->comprobante_proveedores;
         if ($cp && $cp->fechavencimiento) {
             return $cp->fechavencimiento;
+        }
+
+        if ($cuota && $cuota->fechavencimiento) {
+            return $cuota->fechavencimiento;
         }
 
         return $fila->fechavencimiento;

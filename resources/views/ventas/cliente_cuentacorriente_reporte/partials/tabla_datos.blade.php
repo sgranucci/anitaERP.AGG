@@ -16,7 +16,7 @@
 
         return number_format($n, 2, ',', '.');
     };
-    $colSpan = 10 + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
+    $colSpan = ($modoDeuda ? 11 : 10) + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
 @endphp
 <thead>
     <tr>
@@ -31,6 +31,7 @@
             <th class="text-right">Importe</th>
             <th class="text-right">Aplicado</th>
             <th class="text-right">Saldo pend.</th>
+            <th class="text-right" title="Saldo acumulado del cliente después de cada comprobante">Saldo</th>
         @else
             <th class="text-right">Debe</th>
             <th class="text-right">Haber</th>
@@ -144,6 +145,13 @@
                     {{ $fmt($fila['saldo_pendiente'] ?? null) }}
                 @endif
             </td>
+            <td class="text-right">
+                @if ($esTotalFila)
+                    <strong>{{ $fmt($fila['saldo_parcial'] ?? null) }}</strong>
+                @else
+                    {{ $fmt($fila['saldo_parcial'] ?? null) }}
+                @endif
+            </td>
         @else
             <td class="text-right">
                 @if ($esTotalFila)
@@ -195,7 +203,7 @@
     </tr>
 @empty
     <tr>
-        <td colspan="12" class="text-muted text-center">Sin datos.</td>
+        <td colspan="{{ $colSpan }}" class="text-muted text-center">Sin datos.</td>
     </tr>
 @endforelse
 </tbody>

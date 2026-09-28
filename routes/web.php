@@ -1643,6 +1643,8 @@ Route::get('stock/reporte-transferencias-pendientes', 'Stock\TransferenciaPendie
 Route::get('stock/listar-reporte-transferencias-pendientes/{formato?}', 'Stock\TransferenciaPendienteReporteController@exportar')->name('listar_reporte_transferencias_pendientes');
 Route::get('stock/informes-de-stock/existencias-por-deposito', 'Stock\ExistenciasDepositoReporteController@index')->name('reporte_existencias_deposito');
 Route::get('stock/listar-reporte-existencias-deposito/{formato?}', 'Stock\ExistenciasDepositoReporteController@exportar')->name('listar_reporte_existencias_deposito');
+Route::get('stock/informes-de-stock/movimientos-por-articulo', 'Stock\MovimientoStockArticuloReporteController@index')->name('reporte_movimientos_stock_articulo');
+Route::get('stock/listar-reporte-movimientos-stock-articulo/{formato?}', 'Stock\MovimientoStockArticuloReporteController@exportar')->name('listar_reporte_movimientos_stock_articulo');
 Route::get('stock/reporte-recepcion-proveedor', 'Stock\RecepcionProveedorReporteController@index')->name('reporte_recepcion_proveedor');
 Route::get('stock/listar-reporte-recepcion-proveedor/{formato?}', 'Stock\RecepcionProveedorReporteController@exportar')->name('listar_reporte_recepcion_proveedor');
 
@@ -1652,6 +1654,8 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('stock/picking-pedido/payload-factura', 'Stock\PickingPedidoFerliController@payloadFactura')->name('payload_factura_picking_pedido');
     Route::post('stock/picking-pedido/consulta-lotes-stock', 'Stock\PickingPedidoFerliController@consultaLotesStock')->name('consulta_lotes_stock_picking_pedido');
     Route::post('stock/picking-pedido/consulta-pickings-dia', 'Stock\PickingPedidoFerliController@consultaPickingsDia')->name('consulta_pickings_dia_picking_pedido');
+    Route::post('stock/picking-pedido/abiertos', 'Stock\PickingPedidoFerliController@abiertosParaAsignar')->name('abiertos_picking_pedido');
+    Route::post('stock/picking-pedido/cambiar', 'Stock\PickingPedidoFerliController@cambiarPicking')->name('cambiar_picking_pedido');
     Route::post('stock/picking-pedido/crear', 'Stock\PickingPedidoFerliController@crearPicking')->name('crear_picking_pedido');
     Route::post('stock/picking-pedido/marcar', 'Stock\PickingPedidoFerliController@marcar')->name('marcar_picking_pedido');
     Route::post('stock/picking-pedido/desmarcar', 'Stock\PickingPedidoFerliController@desmarcar')->name('desmarcar_picking_pedido');

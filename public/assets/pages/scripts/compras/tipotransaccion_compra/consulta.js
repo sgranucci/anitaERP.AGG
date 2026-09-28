@@ -43,12 +43,68 @@ $(document).on('keyup', '#consultatipotransaccioncompra', function () {
 
 var capturaEnterAbreviaturaTipotransaccionCompraActiva = false;
 
+function apuntarTipotransaccionCompraDesde(target) {
+    var $ctx = $(target).closest('.tm-tipotransaccion-compra-campo, tr');
+    ptrTipotransaccionCompra_id = $ctx.find('.tipotransaccion_compra_id');
+    ptrAbreviaturaTipotransaccionCompra = $ctx.find('.abreviaturatipotransaccioncompra');
+    ptrNombreTipotransaccionCompra = $ctx.find('.nombretipotransaccioncompra');
+    return $ctx;
+}
+
+function abreviaturaTipotransaccionCompraNormalizada(valor) {
+    return String(valor || '').trim().toUpperCase();
+}
+
+function marcarAbreviaturaTipotransaccionCompraValida($abrev, abreviatura) {
+    if ($abrev && $abrev.length && abreviatura) {
+        $abrev.data('ultima-valida', abreviatura);
+        $abrev.removeData('invalida');
+    }
+}
+
+function marcarAbreviaturasTipotransaccionCompraIniciales() {
+    $('.abreviaturatipotransaccioncompra').each(function () {
+        var $abrev = $(this);
+        if ($abrev.data('ultima-valida')) {
+            return;
+        }
+        var id = String($abrev.closest('.tm-tipotransaccion-compra-campo, tr').find('.tipotransaccion_compra_id').val() || '');
+        var abrev = String($abrev.val() || '').trim();
+        if (id !== '' && abrev !== '') {
+            $abrev.data('ultima-valida', abrev);
+        }
+    });
+}
+
+function abreviaturaTipotransaccionCompraPendiente(input) {
+    if (!input || input.readOnly || input.disabled) {
+        return false;
+    }
+    var $input = $(input);
+    var $id = $input.closest('.tm-tipotransaccion-compra-campo, tr').find('.tipotransaccion_compra_id');
+    var abrev = String(input.value || '').trim();
+    var ultima = String($input.data('ultima-valida') || '').trim();
+    if (input._tipoCompraXhr) {
+        return true;
+    }
+    if (abrev === '') {
+        return String($id.val() || '') !== '';
+    }
+    return String($id.val() || '') === ''
+        || abreviaturaTipotransaccionCompraNormalizada(ultima) !== abreviaturaTipotransaccionCompraNormalizada(abrev);
+}
+
 function aplicarTipotransaccionCompraElegido(id, abreviatura, nombre) {
     if (ptrTipotransaccionCompra_id && ptrTipotransaccionCompra_id.length) {
         var prev = String(ptrTipotransaccionCompra_id.val() || '');
         ptrTipotransaccionCompra_id.val(id || '');
         if (ptrAbreviaturaTipotransaccionCompra && ptrAbreviaturaTipotransaccionCompra.length) {
             ptrAbreviaturaTipotransaccionCompra.val(abreviatura || '');
+            if (id && abreviatura) {
+                marcarAbreviaturaTipotransaccionCompraValida(ptrAbreviaturaTipotransaccionCompra, abreviatura);
+            } else {
+                ptrAbreviaturaTipotransaccionCompra.removeData('ultima-valida');
+            }
         }
         if (ptrNombreTipotransaccionCompra && ptrNombreTipotransaccionCompra.length) {
             ptrNombreTipotransaccionCompra.val(nombre || '');
@@ -71,12 +127,39 @@ function aplicarTipotransaccionCompraElegido(id, abreviatura, nombre) {
     }
 }
 
-function leerTipotransaccionCompraPorAbreviatura(abreviatura, target, callback) {
+function terminarLecturaTipotransaccionCompra(target, data, callbacks) {
+    (callbacks || []).forEach(function (callback) {
+        if (typeof callback === 'function') {
+            callback(data);
+        }
+    });
+    if (target) {
+        target._tipoCompraXhr = null;
+        target._tipoCompraXhrAbrev = '';
+        target._tipoCompraXhrCola = [];
+    }
+}
+
+function leerTipotransaccionCompraPorAbreviatura(abreviatura, target, callback, opciones) {
     var abrev = String(abreviatura || '').trim();
+    var avisar = !opciones || opciones.avisar !== false;
+    if (target) {
+        apuntarTipotransaccionCompraDesde(target);
+    }
     if (abrev === '') {
         aplicarTipotransaccionCompraElegido('', '', '');
         if (typeof callback === 'function') {
             callback(null);
+        }
+        return;
+    }
+
+    var abrevClave = abreviaturaTipotransaccionCompraNormalizada(abrev);
+    if (target && target._tipoCompraXhr && target._tipoCompraXhrAbrev === abrevClave) {
+        target._tipoCompraXhrCola = target._tipoCompraXhrCola || [];
+        target._tipoCompraXhrCola.push(callback);
+        if (avisar) {
+            target._tipoCompraXhrAvisar = true;
         }
         return;
     }
@@ -86,35 +169,83 @@ function leerTipotransaccionCompraPorAbreviatura(abreviatura, target, callback) 
         $.extend(payload, window.payloadExtraConsultaTipotransaccionCompra());
     }
 
-    $.ajax({
+    var xhr = $.ajax({
         url: carpetaBase + '/compras/tipotransaccion_compra/leer/' + encodeURIComponent(abrev),
         type: 'GET',
         dataType: 'json',
         data: payload,
-    })
-        .done(function (data) {
+    });
+
+    if (target) {
+        target._tipoCompraXhr = xhr;
+        target._tipoCompraXhrAbrev = abrevClave;
+        target._tipoCompraXhrAvisar = avisar;
+        target._tipoCompraXhrCola = [];
+    }
+
+    xhr.done(function (data) {
+            var callbacks = [callback].concat((target && target._tipoCompraXhrCola) || []);
+            var debeAvisar = target ? !!target._tipoCompraXhrAvisar : avisar;
+            if (target && abreviaturaTipotransaccionCompraNormalizada(target.value) !== abrevClave) {
+                terminarLecturaTipotransaccionCompra(target, null, callbacks);
+                return;
+            }
+            if (target) {
+                apuntarTipotransaccionCompraDesde(target);
+            }
             if (!data || !data.id) {
-                alert('No se encontró el tipo de comprobante «' + abrev + '».');
-                aplicarTipotransaccionCompraElegido('', '', '');
+                if (debeAvisar) {
+                    alert('No se encontró el tipo de comprobante «' + abrev + '».');
+                }
+                if (ptrTipotransaccionCompra_id && ptrTipotransaccionCompra_id.length) {
+                    ptrTipotransaccionCompra_id.val('');
+                }
+                if (ptrNombreTipotransaccionCompra && ptrNombreTipotransaccionCompra.length) {
+                    ptrNombreTipotransaccionCompra.val('');
+                }
                 if (target) {
-                    $(target).val('').trigger('focus');
+                    $(target).data('invalida', abrev).removeData('ultima-valida');
+                    if (debeAvisar) {
+                        $(target).trigger('focus');
+                    }
                 }
-                if (typeof callback === 'function') {
-                    callback(null);
-                }
+                terminarLecturaTipotransaccionCompra(target, null, callbacks);
                 return;
             }
             aplicarTipotransaccionCompraElegido(data.id, data.abreviatura || abrev, data.nombre || '');
-            if (typeof callback === 'function') {
-                callback(data);
-            }
+            terminarLecturaTipotransaccionCompra(target, data, callbacks);
         })
         .fail(function () {
-            alert('Error al validar la abreviatura del tipo de comprobante.');
-            if (typeof callback === 'function') {
-                callback(null);
+            var callbacks = [callback].concat((target && target._tipoCompraXhrCola) || []);
+            var debeAvisar = target ? !!target._tipoCompraXhrAvisar : avisar;
+            if (debeAvisar) {
+                alert('Error al validar la abreviatura del tipo de comprobante.');
             }
+            terminarLecturaTipotransaccionCompra(target, null, callbacks);
         });
+}
+
+function resolverTipotransaccionCompraAntesDeEnviar(input) {
+    return new Promise(function (resolve) {
+        if (!input || input.readOnly || input.disabled) {
+            resolve(true);
+            return;
+        }
+        apuntarTipotransaccionCompraDesde(input);
+        var abrev = String(input.value || '').trim();
+        if (abrev === '') {
+            aplicarTipotransaccionCompraElegido('', '', '');
+            resolve(true);
+            return;
+        }
+        if (!abreviaturaTipotransaccionCompraPendiente(input)) {
+            resolve(true);
+            return;
+        }
+        leerTipotransaccionCompraPorAbreviatura(abrev, input, function (data) {
+            resolve(!!(data && data.id));
+        }, { avisar: true });
+    });
 }
 
 function manejarEnterAbreviaturaTipotransaccionCompra(e) {
@@ -140,10 +271,7 @@ function manejarEnterAbreviaturaTipotransaccionCompra(e) {
     e.preventDefault();
     e.stopImmediatePropagation();
 
-    var $ctx = $(target).closest('.tm-tipotransaccion-compra-campo, tr');
-    ptrTipotransaccionCompra_id = $ctx.find('.tipotransaccion_compra_id');
-    ptrAbreviaturaTipotransaccionCompra = $ctx.find('.abreviaturatipotransaccioncompra');
-    ptrNombreTipotransaccionCompra = $ctx.find('.nombretipotransaccioncompra');
+    apuntarTipotransaccionCompraDesde(target);
 
     leerTipotransaccionCompraPorAbreviatura(target.value, target, function (data) {
         if (data && typeof window.afterTipotransaccionCompraEnterOk === 'function') {
@@ -160,18 +288,81 @@ function activarCapturaEnterAbreviaturaTipotransaccionCompra() {
     capturaEnterAbreviaturaTipotransaccionCompraActiva = true;
 }
 
+var capturaSubmitTipotransaccionCompraActiva = false;
+
+function activarCapturaSubmitTipotransaccionCompra() {
+    if (capturaSubmitTipotransaccionCompraActiva) {
+        return;
+    }
+    document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!form || !form.querySelectorAll) {
+            return;
+        }
+        if (form.dataset.tipotransaccionCompraListo === '1') {
+            delete form.dataset.tipotransaccionCompraListo;
+            return;
+        }
+        var pendientes = [];
+        form.querySelectorAll('.abreviaturatipotransaccioncompra').forEach(function (input) {
+            if (abreviaturaTipotransaccionCompraPendiente(input)) {
+                pendientes.push(input);
+            }
+        });
+        if (!pendientes.length) {
+            return;
+        }
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        var submitter = e.submitter || null;
+        var cadena = Promise.resolve(true);
+        pendientes.forEach(function (input) {
+            cadena = cadena.then(function (ok) {
+                if (!ok) {
+                    return false;
+                }
+                return resolverTipotransaccionCompraAntesDeEnviar(input);
+            });
+        });
+        cadena.then(function (ok) {
+            if (!ok) {
+                return;
+            }
+            form.dataset.tipotransaccionCompraListo = '1';
+            if (typeof form.requestSubmit === 'function') {
+                try {
+                    form.requestSubmit(submitter || undefined);
+                    return;
+                } catch (err) {
+                    form.requestSubmit();
+                    return;
+                }
+            }
+            form.submit();
+        });
+    }, true);
+    capturaSubmitTipotransaccionCompraActiva = true;
+}
+
 function activa_eventos_consultatipotransaccioncompra() {
     activarCapturaEnterAbreviaturaTipotransaccionCompra();
+    activarCapturaSubmitTipotransaccionCompra();
+    marcarAbreviaturasTipotransaccionCompraIniciales();
+
+    $(document)
+        .off('mousedown.consultaTipotransaccionCompra')
+        .on('mousedown.consultaTipotransaccionCompra', '.consultatipotransaccioncompra', function () {
+            $(this).closest('.tm-tipotransaccion-compra-campo, tr')
+                .find('.abreviaturatipotransaccioncompra')
+                .data('abriendo-modal', 1);
+        });
 
     $('.consultatipotransaccioncompra')
         .off('click.consultaTipotransaccionCompra')
         .on('click.consultaTipotransaccionCompra', function () {
             var $btn = $(this);
-            var $ctx = $btn.closest('.tm-tipotransaccion-compra-campo, tr');
-
-            ptrTipotransaccionCompra_id = $ctx.find('.tipotransaccion_compra_id');
-            ptrAbreviaturaTipotransaccionCompra = $ctx.find('.abreviaturatipotransaccioncompra');
-            ptrNombreTipotransaccionCompra = $ctx.find('.nombretipotransaccioncompra');
+            apuntarTipotransaccionCompraDesde($btn);
 
             $('#consultatipotransaccioncompraModal')
                 .removeAttr('inert')
@@ -209,16 +400,35 @@ function activa_eventos_consultatipotransaccioncompra() {
         });
 
     $(document)
+        .off('input.abreviaturaTipotransaccionCompra')
+        .on('input.abreviaturaTipotransaccionCompra', '.abreviaturatipotransaccioncompra', function () {
+            var abrev = String(this.value || '').trim();
+            var ultima = String($(this).data('ultima-valida') || '').trim();
+            if (abreviaturaTipotransaccionCompraNormalizada(abrev) === abreviaturaTipotransaccionCompraNormalizada(ultima) && ultima !== '') {
+                return;
+            }
+            $(this).removeData('ultima-valida');
+            $(this).removeData('invalida');
+            var $ctx = $(this).closest('.tm-tipotransaccion-compra-campo, tr');
+            var $id = $ctx.find('.tipotransaccion_compra_id');
+            if (String($id.val() || '') !== '') {
+                $id.val('');
+            }
+            $ctx.find('.nombretipotransaccioncompra').val('');
+        });
+
+    $(document)
         .off('blur.abreviaturaTipotransaccionCompra')
-        .on('blur', '.abreviaturatipotransaccioncompra', function () {
+        .on('blur.abreviaturaTipotransaccionCompra', '.abreviaturatipotransaccioncompra', function () {
             var target = this;
             if (target.readOnly || target.disabled) {
                 return;
             }
-            var $ctx = $(target).closest('.tm-tipotransaccion-compra-campo, tr');
-            ptrTipotransaccionCompra_id = $ctx.find('.tipotransaccion_compra_id');
-            ptrAbreviaturaTipotransaccionCompra = $ctx.find('.abreviaturatipotransaccioncompra');
-            ptrNombreTipotransaccionCompra = $ctx.find('.nombretipotransaccioncompra');
+            if ($(target).data('abriendo-modal') || $('#consultatipotransaccioncompraModal').hasClass('show')) {
+                $(target).removeData('abriendo-modal');
+                return;
+            }
+            apuntarTipotransaccionCompraDesde(target);
             var actualId = String(ptrTipotransaccionCompra_id.val() || '');
             var abrev = String(target.value || '').trim();
             if (abrev === '') {
@@ -227,13 +437,10 @@ function activa_eventos_consultatipotransaccioncompra() {
                 }
                 return;
             }
-            if (actualId !== '' && String(ptrAbreviaturaTipotransaccionCompra.data('ultima-valida') || '') === abrev) {
+            var ultima = String(ptrAbreviaturaTipotransaccionCompra.data('ultima-valida') || '');
+            if (actualId !== '' && abreviaturaTipotransaccionCompraNormalizada(ultima) === abreviaturaTipotransaccionCompraNormalizada(abrev)) {
                 return;
             }
-            leerTipotransaccionCompraPorAbreviatura(abrev, target, function (data) {
-                if (data && data.abreviatura) {
-                    ptrAbreviaturaTipotransaccionCompra.data('ultima-valida', data.abreviatura);
-                }
-            });
+            leerTipotransaccionCompraPorAbreviatura(abrev, target, null, { avisar: false });
         });
 }

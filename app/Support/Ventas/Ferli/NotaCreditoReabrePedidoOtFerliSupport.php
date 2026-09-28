@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Support\Ventas\Ferli;
 
 use App\Models\Ventas\Ordentrabajo_Tarea;
+use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\Venta_Emision;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\PedidoEstadoCabeceraSupport;
@@ -36,21 +38,13 @@ final class NotaCreditoReabrePedidoOtFerliSupport
             return $vacio + ['motivo' => 'no_ferli'];
         }
 
-        if ($ventaOrigenId <= 0) {
-            return $vacio + ['motivo' => 'sin_venta_origen'];
-        }
-
         if (! is_object($tipotransaccion) || ! method_exists($tipotransaccion, 'esNotaCredito') || ! $tipotransaccion->esNotaCredito()) {
             return $vacio + ['motivo' => 'no_nc'];
         }
 
-        $ventaOrigen = Venta::query()->find($ventaOrigenId);
-        if (! $ventaOrigen) {
-            return $vacio + ['motivo' => 'venta_origen_inexistente'];
-        }
-
-        if (! self::esNcTotal($ventaOrigen, $totalNcAbsoluto, $opcionesEmision)) {
-            return $vacio + ['motivo' => 'nc_parcial'];
+        $ventaOrigen = $ventaOrigenId > 0 ? Venta::query()->find($ventaOrigenId) : null;
+        if (! $ventaOrigen || ! self::esNcTotal($ventaOrigen, $totalNcAbsoluto, $opcionesEmision)) {
+            return self::reabrirLineasPickingDeNcParcial($ventaNcId, $vacio);
         }
 
         $tareaFacturadaId = (int) config('consprod.TAREA_FACTURADA');
@@ -94,6 +88,93 @@ final class NotaCreditoReabrePedidoOtFerliSupport
             'picking_reabiertos' => $pickingReabiertos,
             'movimientos_revertidos' => $movimientosRevertidos,
         ];
+    }
+
+    /**
+     * NC parcial: si una línea del picking quedó acreditada por completo, vuelve a pendiente
+     * en el mismo picking. No se desarma el picking ni se tocan las líneas que siguen facturadas.
+     *
+     * @param  array{aplicado: bool, tareas_borradas: int, picking_reabiertos: int, movimientos_revertidos: int}  $vacio
+     * @return array{aplicado: bool, tareas_borradas: int, picking_reabiertos: int, movimientos_revertidos: int, motivo?: string}
+     */
+    private static function reabrirLineasPickingDeNcParcial(int $ventaNcId, array $vacio): array
+    {
+        $ids = self::idsLineasPickingAcreditadasPorCompleto($ventaNcId);
+        $reabiertos = PedidoPickingFerliSupport::reabrirFacturadoDeLineas($ids);
+
+        return [
+            'aplicado' => $reabiertos > 0,
+            'tareas_borradas' => 0,
+            'picking_reabiertos' => $reabiertos,
+            'movimientos_revertidos' => 0,
+            'motivo' => $reabiertos > 0 ? 'nc_parcial_linea' : 'nc_parcial',
+        ] + $vacio;
+    }
+
+    /**
+     * Líneas de picking cuya cantidad facturada quedó cubierta por esta NC.
+     *
+     * @return list<int>
+     */
+    public static function idsLineasPickingAcreditadasPorCompleto(int $ventaNcId): array
+    {
+        if ($ventaNcId <= 0) {
+            return [];
+        }
+
+        $cantidadesNc = [];
+        $emisionesNc = Venta_Emision::query()
+            ->where('venta_id', $ventaNcId)
+            ->where('pedido_combinacion_id', '>', 0)
+            ->get(['pedido_combinacion_id', 'cantidad']);
+
+        foreach ($emisionesNc as $emision) {
+            $id = (int) $emision->pedido_combinacion_id;
+            $cantidadesNc[$id] = ($cantidadesNc[$id] ?? 0) + abs((float) $emision->cantidad);
+        }
+
+        if ($cantidadesNc === []) {
+            return [];
+        }
+
+        $lineas = Pedido_Combinacion::query()
+            ->whereIn('id', array_keys($cantidadesNc))
+            ->where('picking_facturado', PedidoPickingFerliSupport::FACTURADO)
+            ->get(['id', 'picking_venta_id', 'cantidad']);
+
+        $ids = [];
+        foreach ($lineas as $linea) {
+            $facturada = self::cantidadFacturadaLinea($linea);
+            if (self::cantidadCubierta((float) ($cantidadesNc[(int) $linea->id] ?? 0), $facturada)) {
+                $ids[] = (int) $linea->id;
+            }
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  Pedido_Combinacion  $linea
+     */
+    private static function cantidadFacturadaLinea($linea): float
+    {
+        $ventaId = (int) ($linea->picking_venta_id ?? 0);
+        if ($ventaId > 0) {
+            $cantidad = (float) Venta_Emision::query()
+                ->where('venta_id', $ventaId)
+                ->where('pedido_combinacion_id', (int) $linea->id)
+                ->sum('cantidad');
+            if (abs($cantidad) > 0.0001) {
+                return abs($cantidad);
+            }
+        }
+
+        return abs((float) ($linea->cantidad ?? 0));
+    }
+
+    public static function cantidadCubierta(float $acreditada, float $facturada): bool
+    {
+        return $facturada > 0.0001 && ($acreditada + 0.0001) >= $facturada;
     }
 
     /**

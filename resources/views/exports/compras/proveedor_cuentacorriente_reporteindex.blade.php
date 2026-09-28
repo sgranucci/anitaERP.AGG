@@ -48,7 +48,7 @@
                 <th>Importe</th>
                 <th>Aplicado</th>
                 <th>Saldo pend.</th>
-                <th></th>
+                <th>Saldo</th>
                 <th></th>
             @else
                 <th>Debe</th>
@@ -99,7 +99,7 @@
                     <td>{{ isset($fila['importe']) ? number_format((float) $fila['importe'], 2, '.', '') : '' }}</td>
                     <td>{{ isset($fila['aplicado']) ? number_format((float) $fila['aplicado'], 2, '.', '') : '' }}</td>
                     <td>{{ isset($fila['saldo_pendiente']) ? number_format((float) $fila['saldo_pendiente'], 2, '.', '') : '' }}</td>
-                    <td></td>
+                    <td>{{ isset($fila['saldo_parcial']) ? number_format((float) $fila['saldo_parcial'], 2, '.', '') : '' }}</td>
                     <td></td>
                 @else
                     <td>{{ isset($fila['debe']) ? number_format((float) $fila['debe'], 2, '.', '') : '' }}</td>

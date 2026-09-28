@@ -4,6 +4,7 @@
     $pickingLote = (string) ($pickingLote ?? '');
     $pickingDep = (int) ($pickingDep ?? 0);
     $pickingOtId = (int) ($pickingOtId ?? 0);
+    $pickingCodigo = (int) ($pickingCodigo ?? 0);
     $depositosPicking = $depositosPicking ?? ($depositos_picking_query ?? collect());
     if ($pickingFacturado) {
         $estadoPicking = 'facturado';
@@ -16,7 +17,8 @@
 <div class="picking-box"
      data-estado="{{ $estadoPicking }}"
      data-picking-marcado="{{ $pickingMarcado ? 'S' : 'N' }}"
-     data-picking-facturado="{{ $pickingFacturado ? 'S' : 'N' }}">
+     data-picking-facturado="{{ $pickingFacturado ? 'S' : 'N' }}"
+     data-picking-codigo="{{ $pickingCodigo > 0 ? $pickingCodigo : '' }}">
     <div class="picking-estado mb-1">
         @if ($estadoPicking === 'facturado')
             <span class="badge badge-success picking-estado-badge">Facturado</span>
@@ -24,6 +26,11 @@
             <span class="badge badge-warning picking-estado-badge">Preparado</span>
         @else
             <span class="badge badge-secondary picking-estado-badge">Pendiente</span>
+        @endif
+    </div>
+    <div class="picking-nro small font-weight-bold text-primary mb-1{{ $pickingCodigo > 0 ? '' : ' d-none' }}">
+        @if ($pickingCodigo > 0)
+            Picking #{{ $pickingCodigo }}
         @endif
     </div>
     <div class="input-group input-group-sm picking-lote-grupo mb-1">
@@ -44,8 +51,23 @@
     </div>
     {{-- Bucket del modal: OT (lote=0) si >0; lote importado si vac&iacute;o. --}}
     <input type="hidden" class="picking-ordentrabajo-id" value="{{ $pickingOtId > 0 ? $pickingOtId : '' }}">
-    <select class="form-control form-control-sm picking-deposito mb-1"
-            title="Dep&oacute;sito con saldo del lote (usar F1 / Elegir)"
+    @php
+        $depositoAsignadoTxt = '';
+        if ($pickingDep > 0) {
+            foreach ($depositosPicking as $depAsignado) {
+                if ((int) $depAsignado->id === $pickingDep) {
+                    $depositoAsignadoTxt = trim(($depAsignado->codigo ?? '').' — '.($depAsignado->nombre ?? ''), ' —');
+                    break;
+                }
+            }
+            if ($depositoAsignadoTxt === '') {
+                $depositoAsignadoTxt = '#'.$pickingDep;
+            }
+        }
+    @endphp
+    {{-- El depósito lo trae el stock al elegir el lote/OT. El select queda oculto y solo guarda el id. --}}
+    <select class="form-control form-control-sm picking-deposito d-none"
+            title="Dep&oacute;sito del stock del lote/OT"
             @if ($pickingFacturado || $pickingMarcado) disabled @endif>
         <option value="0">Dep&oacute;sito…</option>
         @foreach ($depositosPicking as $dep)
@@ -54,6 +76,11 @@
             </option>
         @endforeach
     </select>
+    <small class="d-block text-muted picking-deposito-asignado mb-1{{ $pickingDep > 0 ? '' : ' d-none' }}">
+        @if ($pickingDep > 0)
+            Dep&oacute;sito: {{ $depositoAsignadoTxt }}
+        @endif
+    </small>
     @if ($pickingFacturado)
         <small class="text-muted d-block picking-facturado-msg">Ya facturado</small>
     @elseif ($pickingMarcado)
@@ -72,7 +99,7 @@
             <i class="fa fa-check"></i> Preparar
         </button>
         <small class="text-muted d-block picking-ayuda">
-            Al preparar descuenta stock; us&aacute; F1
+            F1 trae el lote y el dep&oacute;sito del stock
         </small>
     @endif
 </div>

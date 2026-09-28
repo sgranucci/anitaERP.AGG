@@ -1,6 +1,6 @@
 
 <tr>
- 	<td colspan="9">TOTAL {{$nombreEmpleadoActual}}</td>
+ 	<td colspan="10">TOTAL {{$nombreEmpleadoActual}}</td>
 	<td align="right">
 		{{number_format($totalCantidad['legajo'], 0)}}
 	</td>

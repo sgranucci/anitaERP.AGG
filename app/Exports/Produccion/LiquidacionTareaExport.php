@@ -78,9 +78,9 @@ class LiquidacionTareaExport implements FromView, WithColumnFormatting, WithMapp
     {
         return [
             'A' => NumberFormat::FORMAT_TEXT,
-			'J' => NumberFormat::FORMAT_NUMBER,
-			'K' => NumberFormat::FORMAT_NUMBER_00,
+			'K' => NumberFormat::FORMAT_NUMBER,
 			'L' => NumberFormat::FORMAT_NUMBER_00,
+			'M' => NumberFormat::FORMAT_NUMBER_00,
             ];
     }
 
@@ -112,8 +112,8 @@ class LiquidacionTareaExport implements FromView, WithColumnFormatting, WithMapp
             'A' => ['font' => ['bold' => true]],
             'E' => ['font' => ['bold' => true]],
             'F' => ['font' => ['bold' => true]],
-            'J' => ['font' => ['bold' => true]],
-			'L' => ['font' => ['bold' => true]],
+            'K' => ['font' => ['bold' => true]],
+			'M' => ['font' => ['bold' => true]],
         ];
     }
 

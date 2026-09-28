@@ -261,12 +261,18 @@
             $tr.append($('<td class="text-right"/>').html(
                 '<strong style="font-size:1.1rem;color:#6E2C00;">' + escaparHtml(saldoTxt) + '</strong>'
             ));
-            var $btn = $('<button type="button" class="btn btn-warning btn-sm eligeconsultalotesstockpicking">Elegir</button>');
-            $btn.attr('data-lote', fila.lote || '');
-            $btn.attr('data-deposito-id', parseInt(fila.deposito_id, 10) || 0);
-            $btn.attr('data-origen', fila.origen === 'OT' ? 'OT' : 'L');
-            $btn.attr('data-ordentrabajo-id', parseInt(fila.ordentrabajo_id, 10) || 0);
-            $tr.append($('<td class="text-nowrap"/>').append($btn));
+            if (fila.bloqueada) {
+                $tr.addClass('text-muted');
+                $tr.append($('<td class="text-nowrap small"/>').text(fila.bloqueada_motivo || 'Ya asignada a otro pedido'));
+            } else {
+                var $btn = $('<button type="button" class="btn btn-warning btn-sm eligeconsultalotesstockpicking">Elegir</button>');
+                $btn.attr('data-lote', fila.lote || '');
+                $btn.attr('data-deposito-id', parseInt(fila.deposito_id, 10) || 0);
+                $btn.attr('data-deposito-etiqueta', fila.deposito || '');
+                $btn.attr('data-origen', fila.origen === 'OT' ? 'OT' : 'L');
+                $btn.attr('data-ordentrabajo-id', parseInt(fila.ordentrabajo_id, 10) || 0);
+                $tr.append($('<td class="text-nowrap"/>').append($btn));
+            }
             $tbody.append($tr);
         });
     }
@@ -294,6 +300,7 @@
             combinacion_id: ctx.combinacionId,
             modulo_id: ctx.moduloId,
             solo_modulo_linea: soloModulo ? 1 : 0,
+            pedido_id: parseInt($('#pedidoid').val(), 10) || 0,
             texto: texto || '',
             _token: token
         })
@@ -334,7 +341,31 @@
         buscarLotesStock('');
     }
 
-    function aplicarLoteElegido(lote, depositoId, ordentrabajoId) {
+    function etiquetaDepositoVisible(depositoId, etiqueta) {
+        var texto = (etiqueta || '').trim();
+        if (!texto && depositoId > 0) {
+            texto = 'Depósito #' + depositoId;
+        }
+        return texto;
+    }
+
+    function pintarDepositoAsignado($tr, depositoId, etiqueta) {
+        var $sel = $tr.find('.picking-deposito');
+        var $lbl = $tr.find('.picking-deposito-asignado');
+        if (depositoId > 0) {
+            var val = String(depositoId);
+            if ($sel.find('option[value="' + val + '"]').length === 0) {
+                $sel.append($('<option/>').attr('value', val).text(etiquetaDepositoVisible(depositoId, etiqueta)));
+            }
+            $sel.val(val);
+            $lbl.removeClass('d-none').text('Depósito: ' + etiquetaDepositoVisible(depositoId, etiqueta));
+            return;
+        }
+        $sel.val('0');
+        $lbl.addClass('d-none').text('');
+    }
+
+    function aplicarLoteElegido(lote, depositoId, ordentrabajoId, etiqueta) {
         if (!$filaPickingLoteActiva || !$filaPickingLoteActiva.length) {
             return;
         }
@@ -353,9 +384,7 @@
         $filaPickingLoteActiva.find('.picking-ordentrabajo-id').val(
             ordentrabajoId > 0 ? String(ordentrabajoId) : ''
         );
-        if (depositoId > 0) {
-            $filaPickingLoteActiva.find('.picking-deposito').val(String(depositoId));
-        }
+        pintarDepositoAsignado($filaPickingLoteActiva, depositoId, etiqueta);
         $filaPickingLoteActiva.find('.picking-lote').trigger('focus');
     }
 
@@ -398,9 +427,10 @@
         .on('click.eligeLoteStockPicking', '.eligeconsultalotesstockpicking', function () {
             var lote = $(this).attr('data-lote') || '';
             var depositoId = parseInt($(this).attr('data-deposito-id'), 10) || 0;
+            var etiqueta = $(this).attr('data-deposito-etiqueta') || '';
             var origen = $(this).attr('data-origen') || 'L';
             var otId = origen === 'OT' ? (parseInt($(this).attr('data-ordentrabajo-id'), 10) || 0) : 0;
-            aplicarLoteElegido(lote, depositoId, otId);
+            aplicarLoteElegido(lote, depositoId, otId, etiqueta);
             $('#consultalotesstockpickingModal').modal('hide');
         });
 
@@ -457,7 +487,97 @@
     $(document)
         .off('input.pickingLoteManual', '.picking-lote')
         .on('input.pickingLoteManual', '.picking-lote', function () {
-            $(this).closest('.picking-box').find('.picking-ordentrabajo-id').val('');
+            var $tr = $(this).closest('tr');
+            $tr.find('.picking-ordentrabajo-id').val('');
+            pintarDepositoAsignado($tr, 0, '');
+        });
+
+    function filasDelLote(filas, lote) {
+        var codigo = (lote || '').trim();
+        return (filas || []).filter(function (fila) {
+            return String(fila.lote || '').trim() === codigo && !fila.bloqueada;
+        });
+    }
+
+    function consultarStockDeLote($tr, lote, done) {
+        var ctx = articuloCombinacionModuloDeFila($tr);
+        if (ctx.articuloId <= 0 || ctx.combinacionId <= 0) {
+            done([]);
+            return;
+        }
+        $.post(carpetaBase + '/stock/picking-pedido/consulta-lotes-stock', {
+            articulo_id: ctx.articuloId,
+            combinacion_id: ctx.combinacionId,
+            modulo_id: ctx.moduloId,
+            solo_modulo_linea: 0,
+            pedido_id: parseInt($('#pedidoid').val(), 10) || 0,
+            texto: lote,
+            _token: $('#csrf_token').val()
+        }).done(function (data) {
+            done(filasDelLote(data && data.filas, lote));
+        }).fail(function () {
+            done([]);
+        });
+    }
+
+    function aplicarFilaStock($tr, fila) {
+        $filaPickingLoteActiva = $tr;
+        var origen = fila.origen === 'OT' ? 'OT' : 'L';
+        var otId = origen === 'OT' ? (parseInt(fila.ordentrabajo_id, 10) || 0) : 0;
+        aplicarLoteElegido(
+            fila.lote || '',
+            parseInt(fila.deposito_id, 10) || 0,
+            otId,
+            fila.deposito || ''
+        );
+    }
+
+    /**
+     * Si el lote/OT tiene un solo depósito con saldo, lo carga en la línea.
+     * Si hay más de uno, abre el modal para elegir esa fila de stock.
+     */
+    window.completarDepositoPickingDesdeStock = function ($tr, lote, done) {
+        var actual = parseInt($tr.find('.picking-deposito').val(), 10) || 0;
+        if (actual > 0) {
+            done({
+                depositoId: actual,
+                ordentrabajoId: parseInt($tr.find('.picking-ordentrabajo-id').val(), 10) || 0
+            });
+            return;
+        }
+        consultarStockDeLote($tr, lote, function (filas) {
+            if (filas.length === 1) {
+                aplicarFilaStock($tr, filas[0]);
+                done({
+                    depositoId: parseInt(filas[0].deposito_id, 10) || 0,
+                    ordentrabajoId: filas[0].origen === 'OT' ? (parseInt(filas[0].ordentrabajo_id, 10) || 0) : 0
+                });
+                return;
+            }
+            if (filas.length > 1) {
+                $filaPickingLoteActiva = $tr;
+                $('#consultalotesstockpicking').val(lote);
+                $('#consultalotesstockpicking_solo_modulo').prop('checked', false);
+                $('#consultalotesstockpickingModal').modal('show');
+                buscarLotesStock(lote);
+            }
+            done({ depositoId: 0, varios: filas.length > 1 });
+        });
+    };
+
+    $(document)
+        .off('keydown.pickingLoteEnter', '.picking-lote')
+        .on('keydown.pickingLoteEnter', '.picking-lote', function (e) {
+            if (e.key !== 'Enter' && e.keyCode !== 13) {
+                return;
+            }
+            e.preventDefault();
+            var $tr = $(this).closest('tr');
+            var lote = ($(this).val() || '').trim();
+            if (!lote || lote === '0') {
+                return;
+            }
+            window.completarDepositoPickingDesdeStock($tr, lote, function () {});
         });
 
     window.abrirModalConsultaLotesStockPicking = abrirModalConsultaLotes;

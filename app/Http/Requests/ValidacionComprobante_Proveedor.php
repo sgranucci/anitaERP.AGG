@@ -2,6 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Tipotransaccion_Compra;
+use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
@@ -25,6 +29,58 @@ class ValidacionComprobante_Proveedor extends FormRequest
                 'letra' => strtoupper(substr(trim((string) $letra), 0, 1)),
             ]);
         }
+
+        $this->reconciliarTipotransaccionCompraDesdeAbreviatura();
+    }
+
+    /**
+     * La pantalla muestra la abreviatura (FAS) y graba el id oculto.
+     * Si el usuario cambió FAC por FAS y Actualizar salió antes de que el id se actualice,
+     * manda la abreviatura escrita.
+     */
+    private function reconciliarTipotransaccionCompraDesdeAbreviatura(): void
+    {
+        if (! $this->exists('tipotransaccion_compra_abreviatura')) {
+            return;
+        }
+
+        $abrev = strtoupper(trim((string) $this->input('tipotransaccion_compra_abreviatura', '')));
+        if ($abrev === '') {
+            return;
+        }
+
+        $id = (int) $this->input('tipotransaccion_compra_id', 0);
+        if ($abrev === $this->abreviaturaTipotransaccionCompra($id)) {
+            return;
+        }
+
+        $tipo = app(Tipotransaccion_CompraRepositoryInterface::class)
+            ->findPorAbreviaturaFiltrado($abrev, $this->centrocostoIdParaTipoComprobante());
+        if ($tipo) {
+            $this->merge(['tipotransaccion_compra_id' => (int) $tipo->id]);
+        }
+    }
+
+    private function abreviaturaTipotransaccionCompra(int $id): string
+    {
+        if ($id <= 0) {
+            return '';
+        }
+
+        return strtoupper(trim((string) Tipotransaccion_Compra::query()->whereKey($id)->value('abreviatura')));
+    }
+
+    private function centrocostoIdParaTipoComprobante(): ?int
+    {
+        $ordencompraId = (int) $this->input('ordencompra_id', 0);
+        if ($ordencompraId <= 0) {
+            return null;
+        }
+
+        $oc = Ordencompra::query()->with('ordencompra_articulos')->find($ordencompraId);
+        $centrocostoId = ComprobanteProveedorCentrocostoSupport::resolverDesdeOc($oc);
+
+        return $centrocostoId > 0 ? $centrocostoId : null;
     }
 
     public function rules(): array
@@ -77,6 +133,20 @@ class ValidacionComprobante_Proveedor extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
+            if ($this->exists('tipotransaccion_compra_abreviatura')) {
+                $abrev = strtoupper(trim((string) $this->input('tipotransaccion_compra_abreviatura', '')));
+                $id = (int) $this->input('tipotransaccion_compra_id', 0);
+                if ($abrev !== '' && $abrev !== $this->abreviaturaTipotransaccionCompra($id)) {
+                    $existe = Tipotransaccion_Compra::query()->where('abreviatura', $abrev)->exists();
+                    $validator->errors()->add(
+                        'tipotransaccion_compra_id',
+                        $existe
+                            ? 'El tipo de comprobante «'.$abrev.'» no está habilitado para el centro de costo de la orden de compra.'
+                            : 'No se encontró el tipo de comprobante «'.$abrev.'».',
+                    );
+                }
+            }
+
             if ($validator->errors()->has('fechacomprobante')) {
                 return;
             }

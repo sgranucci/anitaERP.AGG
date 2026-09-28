@@ -348,27 +348,26 @@
 		}
 	}
 
-	function asignaPrecio(Particulo_id, Ptalle_id)
+	function asignaPrecio(Particulo_id, Ptalle_id, alTerminar)
 	{
-		// Lee talles del modulo
+		dpr = [];
+		dlp = [];
+		dii = [];
+		dmo = [];
         $.get(''+carpetaBase+'/stock/asignaprecio/'+Particulo_id+'/'+Ptalle_id, function(data){
            	var prec = $.map(data, function(value, index){
                	return [value];
            	});
-			dpr=[];
-			dlp=[];
-			dii=[];
-			dmo=[];
            	$.each(prec, function(index,value){
 				dpr.push(value.precio);
 				dlp.push(value.listaprecio_id);
 				dii.push(value.incluyeimpuesto);
 				dmo.push(value.moneda_id);
 			});
+			if (typeof alTerminar === 'function') {
+				alTerminar();
+			}
 		});
-        setTimeout(() => {
-			return(precio);
-        }, 300);
 	}
 
     $(function () {
@@ -691,56 +690,43 @@
             	prec.push($(this).val());
         	});
 
-			let jsonTallesId = JSON.stringify(talleid); 
+			let jsonTallesId = JSON.stringify(talleid);
+			var filaCantidad = cantidad;
 
-			asignaPrecio(articulo_id, jsonTallesId);
+			asignaPrecio(articulo_id, jsonTallesId, function () {
+				var off = 0;
+				var jsonMedidas = [];
+				for (let i in med)
+				{
+					if (cant[i] == '')
+						cant[i] = 0;
+					jsonMedidas.push({
+						medida: med[i],
+						cantidad: cant[i],
+						precio: dpr[i],
+						listaprecio: dlp[i],
+						incluyeimpuesto: dii[i],
+						moneda: dmo[i],
+						talle_id: talleid[i]
+					});
+					if (dpr[i] > 0)
+						off = i;
+				}
 
-			off = 0;
-		    var flError = false;
-        	setTimeout(() => {
-			for (let i in med) 
-			{
-				if (cant[i] == '')
-					cant[i] = 0;
-			  	jsonObject.push({
-					medida: med[i],
-				  	cantidad: cant[i],
-				  	precio: dpr[i],
-				  	listaprecio: dlp[i],
-				  	incluyeimpuesto: dii[i],
-				  	moneda: dmo[i],
-				  	talle_id: talleid[i]
-				});
-			  	// Valida cantidades que tengan precio
-			    if (cant[i] > 0 && dpr[i] == 0)
-			  	{
-					flError = true;	  	
-					// Pedido por gaby 27/6 porque todos los articulos de la expo no tienen precio
-				    //alert('Medida '+med[i]+' Cantidad '+cant[i]+' No tiene precio asignado');
-			  	}
-				if (dpr[i] > 0)
-					off = i;		
-			}
+				$(filaCantidad).parents('tr').find('.medidas').val(JSON.stringify(jsonMedidas));
 
-			let jsonString = JSON.stringify(jsonObject); 
+				var pre = fNumero(dpr[off], 2);
+				var lis = fNumero(dlp[off], 0);
+				var inc = fNumero(dii[off], 0);
+				var mon = fNumero(dmo[off], 0);
+				if (pre === 'NaN' || pre < 0 || pre > 9999999999)
+					pre = 0;
 
-			// Asigna medidas, cantidades y precios
-			$(cantidad).parents('tr').find('.medidas').val(jsonString);
-
-			// Asigna variables de precio
-			var pre = fNumero(dpr[off], 2);
-			var lis = fNumero(dlp[off], 0);
-			var inc = fNumero(dii[off], 0);
-			var mon = fNumero(dmo[off], 0);
-			if (pre === 'NaN' || pre < 0 || pre > 9999999999)
-			  	pre = 0;
-	
-			$(cantidad).parents('tr').find('.precio').val(pre);
-			$(cantidad).parents('tr').find('.listaprecio_id').val(lis);
-			$(cantidad).parents('tr').find('.incluyeimpuesto').val(inc);
-			$(cantidad).parents('tr').find('.moneda_id').val(mon);
-	
-        	}, 300);
+				$(filaCantidad).parents('tr').find('.precio').val(pre);
+				$(filaCantidad).parents('tr').find('.listaprecio_id').val(lis);
+				$(filaCantidad).parents('tr').find('.incluyeimpuesto').val(inc);
+				$(filaCantidad).parents('tr').find('.moneda_id').val(mon);
+			});
 
 			$('#medidasModal').modal('hide');
 
@@ -1857,7 +1843,7 @@
 		}
 	}
 
-	function actualizarUiPicking($tr, estado) {
+	function actualizarUiPicking($tr, estado, codigoAsignado) {
 		var $box = $tr.find('.picking-box');
 		if (!$box.length) {
 			return;
@@ -1876,6 +1862,21 @@
 			badgeText = 'Facturado';
 		}
 		$box.find('.picking-estado').html('<span class="badge ' + badgeClass + ' picking-estado-badge">' + badgeText + '</span>');
+
+		var pickingCodigo = parseInt(codigoAsignado, 10)
+			|| parseInt($box.attr('data-picking-codigo'), 10)
+			|| parseInt($('#picking_activo_codigo').val(), 10)
+			|| 0;
+		if ((estado === 'preparado' || estado === 'facturado') && pickingCodigo > 0) {
+			$box.attr('data-picking-codigo', pickingCodigo);
+		}
+		var $nro = $box.find('.picking-nro');
+		if ((estado === 'preparado' || estado === 'facturado') && pickingCodigo > 0) {
+			$nro.removeClass('d-none').text('Picking #' + pickingCodigo);
+		} else if (estado === 'pendiente') {
+			$box.attr('data-picking-codigo', '');
+			$nro.addClass('d-none').text('');
+		}
 
 		var $lote = $box.find('.picking-lote');
 		var $dep = $box.find('.picking-deposito');
@@ -1904,7 +1905,7 @@
 			$box.append(
 				'<button type="button" title="Preparar y descontar stock del lote/OT" class="btn btn-sm btn-outline-primary btn-block guarda-picking tooltipsC">' +
 				'<i class="fa fa-check"></i> Preparar</button>' +
-				'<small class="text-muted d-block picking-ayuda">Al preparar descuenta stock; usá F1</small>'
+				'<small class="text-muted d-block picking-ayuda">F1 trae el lote y el depósito del stock</small>'
 			);
 		}
 
@@ -1915,6 +1916,189 @@
 			$tr.addClass('picking-row-facturado');
 		}
 	}
+
+	var preparacionPickingPendiente = null;
+
+	function aplicarPickingActivo(id, codigo) {
+		$('#picking_activo_id').val(id || 0);
+		$('#picking_activo_codigo').val(codigo || 0);
+		if (codigo) {
+			$('#picking_activo_etiqueta').text('Picking #' + codigo);
+		}
+	}
+
+	function postMarcarPicking($tr, $btn, lote, depositoId, ordentrabajoId, token, pickingId, pickingCodigo) {
+		$.post(carpetaBase + '/stock/picking-pedido/marcar', {
+			pedido_combinacion_id: parseInt($tr.find('.ids').val(), 10) || 0,
+			picking_lote_codigo: lote,
+			picking_deposito_id: depositoId,
+			picking_ordentrabajo_id: ordentrabajoId,
+			picking_id: pickingId || 0,
+			picking_codigo: pickingCodigo || 0,
+			_token: token
+		})
+			.done(function (data) {
+				if (data.error) {
+					pickingAviso(data.error, 'error');
+					$btn.prop('disabled', false);
+					return;
+				}
+				aplicarPickingActivo(data.picking_id, data.picking_codigo);
+				actualizarUiPicking($tr, 'preparado', data.picking_codigo);
+				pickingAviso(data.aviso || ('Línea preparada' + (data.picking_codigo ? (' en picking #' + data.picking_codigo) : '') + '. Stock descontado del lote/OT.'));
+			})
+			.fail(function (xhr) {
+				pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al marcar picking', 'error');
+				$btn.prop('disabled', false);
+			});
+	}
+
+	function renderModalAsignarPicking(filas) {
+		var $tbody = $('#modal-asignar-picking-filas');
+		$tbody.empty();
+		$.each(filas, function (_i, fila) {
+			var $tr = $('<tr/>');
+			if (fila.es_actual) {
+				$tr.addClass('table-warning');
+			}
+			$tr.append($('<td/>').text(fila.codigo || ''));
+			$tr.append($('<td/>').text(fila.fecha || ''));
+			$tr.append($('<td class="text-right"/>').text(fila.lineas_pendientes != null ? fila.lineas_pendientes : ''));
+			var clientes = fila.clientes || '';
+			if (fila.es_actual) {
+				clientes = (clientes ? clientes + ' · ' : '') + 'actual';
+			}
+			$tr.append($('<td/>').text(clientes));
+			var $btn = $('<button type="button" class="btn btn-warning btn-sm elige-asignar-picking">Elegir</button>');
+			$btn.attr('data-id', fila.id || 0);
+			$btn.attr('data-codigo', fila.codigo || 0);
+			$tr.append($('<td class="text-nowrap"/>').append($btn));
+			$tbody.append($tr);
+		});
+	}
+
+	function prepararLineaPicking($tr, $btn, lote, depositoId, ordentrabajoId, token) {
+		$.post(carpetaBase + '/stock/picking-pedido/abiertos', { _token: token })
+			.done(function (data) {
+				var filas = (data && data.filas) ? data.filas : [];
+				if (filas.length > 1) {
+					preparacionPickingPendiente = {
+						$tr: $tr,
+						$btn: $btn,
+						lote: lote,
+						depositoId: depositoId,
+						ordentrabajoId: ordentrabajoId,
+						token: token
+					};
+					renderModalAsignarPicking(filas);
+					$('#modal-asignar-picking').modal('show');
+					return;
+				}
+				var id = filas.length === 1 ? (parseInt(filas[0].id, 10) || 0) : (parseInt($('#picking_activo_id').val(), 10) || 0);
+				var codigo = filas.length === 1 ? (parseInt(filas[0].codigo, 10) || 0) : (parseInt($('#picking_activo_codigo').val(), 10) || 0);
+				postMarcarPicking($tr, $btn, lote, depositoId, ordentrabajoId, token, id, codigo);
+			})
+			.fail(function () {
+				postMarcarPicking(
+					$tr,
+					$btn,
+					lote,
+					depositoId,
+					ordentrabajoId,
+					token,
+					parseInt($('#picking_activo_id').val(), 10) || 0,
+					parseInt($('#picking_activo_codigo').val(), 10) || 0
+				);
+			});
+	}
+
+	$(document).on('click', '.elige-asignar-picking', function () {
+		if (!preparacionPickingPendiente) {
+			return;
+		}
+		var ctx = preparacionPickingPendiente;
+		preparacionPickingPendiente = null;
+		$('#modal-asignar-picking').modal('hide');
+		postMarcarPicking(
+			ctx.$tr,
+			ctx.$btn,
+			ctx.lote,
+			ctx.depositoId,
+			ctx.ordentrabajoId,
+			ctx.token,
+			parseInt($(this).attr('data-id'), 10) || 0,
+			parseInt($(this).attr('data-codigo'), 10) || 0
+		);
+	});
+
+	$(document).on('hidden.bs.modal', '#modal-asignar-picking', function () {
+		if (!preparacionPickingPendiente) {
+			return;
+		}
+		if (preparacionPickingPendiente.$btn) {
+			preparacionPickingPendiente.$btn.prop('disabled', false);
+		}
+		preparacionPickingPendiente = null;
+	});
+
+	$(document).on('keydown', '#modal-asignar-picking', function (e) {
+		if (e.key !== 'Enter' && e.keyCode !== 13) {
+			return;
+		}
+		var $elige = $('#modal-asignar-picking-filas .elige-asignar-picking').first();
+		if (!$elige.length) {
+			return;
+		}
+		e.preventDefault();
+		$elige.trigger('click');
+	});
+
+	$(document).on('click', '#btn-asignar-picking-nuevo', function () {
+		if (!preparacionPickingPendiente) {
+			return;
+		}
+		var ctx = preparacionPickingPendiente;
+		var $nuevo = $(this);
+		$nuevo.prop('disabled', true);
+		$.post(carpetaBase + '/stock/picking-pedido/crear', { _token: ctx.token })
+			.done(function (data) {
+				$nuevo.prop('disabled', false);
+				if (data.error) {
+					pickingAviso(data.error, 'error');
+					return;
+				}
+				preparacionPickingPendiente = null;
+				$('#modal-asignar-picking').modal('hide');
+				postMarcarPicking(ctx.$tr, ctx.$btn, ctx.lote, ctx.depositoId, ctx.ordentrabajoId, ctx.token, data.id, data.codigo);
+			})
+			.fail(function (xhr) {
+				$nuevo.prop('disabled', false);
+				pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'No se pudo crear el picking', 'error');
+			});
+	});
+
+	$(document).on('click', '#btn-nuevo-picking-pedido', function () {
+		var $btn = $(this);
+		$btn.prop('disabled', true);
+		$.post(carpetaBase + '/stock/picking-pedido/crear', {
+			_token: $('#csrf_token').val()
+		})
+			.done(function (data) {
+				$btn.prop('disabled', false);
+				if (data.error) {
+					pickingAviso(data.error, 'error');
+					return;
+				}
+				$('#picking_activo_id').val(data.id || 0);
+				$('#picking_activo_codigo').val(data.codigo || 0);
+				$('#picking_activo_etiqueta').text('Picking #' + (data.codigo || ''));
+				pickingAviso('Picking #' + data.codigo + ' creado. Las líneas que prepares ahora entran en ese número.');
+			})
+			.fail(function (xhr) {
+				$btn.prop('disabled', false);
+				pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'No se pudo crear el picking', 'error');
+			});
+	});
 
 	// Marca / desmarca picking en línea de pedido (AJAX)
 	$(document).on('click', '.guarda-picking', function () {
@@ -1944,40 +2128,28 @@
 				pickingAviso('Indique el número de OT stock / lote a preparar', 'error');
 				return;
 			}
-			if (depositoId <= 0) {
-				$btn.prop('disabled', false);
-				pickingAviso('Seleccione el depósito de salida (use F1 / lupa y Elegir el lote con su depósito)', 'error');
-				return;
-			}
-			$.post(carpetaBase + '/stock/picking-pedido/marcar', {
-				pedido_combinacion_id: pedidoCombinacionId,
-				picking_lote_codigo: lote,
-				picking_deposito_id: depositoId,
-				picking_ordentrabajo_id: ordentrabajoId,
-				picking_id: parseInt($('#picking_activo_id').val(), 10) || 0,
-				picking_codigo: parseInt($('#picking_activo_codigo').val(), 10) || 0,
-				_token: token
-			})
-				.done(function (data) {
-					if (data.error) {
-						pickingAviso(data.error, 'error');
-						$btn.prop('disabled', false);
+			if (depositoId <= 0 && typeof window.completarDepositoPickingDesdeStock === 'function') {
+				window.completarDepositoPickingDesdeStock($tr, lote, function (res) {
+					var dep = res && parseInt(res.depositoId, 10) || 0;
+					if (dep > 0) {
+						var ot = res && parseInt(res.ordentrabajoId, 10) || ordentrabajoId;
+						prepararLineaPicking($tr, $btn, lote, dep, ot, token);
 						return;
 					}
-					if (data.picking_id) {
-						$('#picking_activo_id').val(data.picking_id);
-					}
-					if (data.picking_codigo) {
-						$('#picking_activo_codigo').val(data.picking_codigo);
-						$('#picking_activo_etiqueta').text('Picking #' + data.picking_codigo);
-					}
-					actualizarUiPicking($tr, 'preparado');
-					pickingAviso(data.aviso || ('Línea preparada' + (data.picking_codigo ? (' en picking #' + data.picking_codigo) : '') + '. Stock descontado del lote/OT.'));
-				})
-				.fail(function (xhr) {
-					pickingAviso((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al marcar picking', 'error');
 					$btn.prop('disabled', false);
+					if (res && res.varios) {
+						return;
+					}
+					pickingAviso('Elegí el lote/OT con F1 para traer el depósito del stock', 'error');
 				});
+				return;
+			}
+			if (depositoId <= 0) {
+				$btn.prop('disabled', false);
+				pickingAviso('Elegí el lote/OT con F1 para traer el depósito del stock', 'error');
+				return;
+			}
+			prepararLineaPicking($tr, $btn, lote, depositoId, ordentrabajoId, token);
 		} else {
 			$.post(carpetaBase + '/stock/picking-pedido/desmarcar', {
 				pedido_combinacion_id: pedidoCombinacionId,
@@ -1991,6 +2163,7 @@
 					}
 					$tr.find('.picking-lote').val('');
 					$tr.find('.picking-deposito').val('0');
+					$tr.find('.picking-deposito-asignado').addClass('d-none').text('');
 					actualizarUiPicking($tr, 'pendiente');
 					pickingAviso('Picking quitado; stock devuelto al lote/OT');
 				})

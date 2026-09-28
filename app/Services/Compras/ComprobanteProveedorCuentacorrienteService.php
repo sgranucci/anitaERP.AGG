@@ -112,9 +112,10 @@ class ComprobanteProveedorCuentacorrienteService
                 );
             }
             if ($cuotas === []) {
+                $vencimientoCabecera = $comprobante->fechavencimiento?->format('Y-m-d') ?: $fechaBase;
                 $cuotas[] = [
                     'numero_cuota' => 1,
-                    'fechavencimiento' => $fechaBase,
+                    'fechavencimiento' => $vencimientoCabecera,
                     'monto' => round((float) $comprobante->total, 2),
                     'formapago_id' => 1,
                     'detalle' => null,

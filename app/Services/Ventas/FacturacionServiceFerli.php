@@ -247,6 +247,18 @@ class FacturacionServiceFerli extends FacturacionService
                 }
 
                 $precio = $this->asignaPrecioLineaItemOt($articulo, $combinacion_id, $talle, $fechaFactura);
+                if (! isset($precio[0])) {
+                    $msg = 'Articulo '.$articulo->sku.' '.$articulo->descripcion.' Linea '.$articulo->linea_id
+                        .' Talle '.$talle->nombre.' NO TIENE PRECIO';
+
+                    return ['error' => $msg];
+                }
+                // El importe es el del talle del pedido (el mismo que muestra el picking).
+                // La lista solo aporta si el talle no tiene precio, y el flag de impuesto.
+                $precioPedido = round((float) $talleLinea->precio, 4);
+                if ($precioPedido > 0) {
+                    $precio[0]['precio'] = $precioPedido;
+                }
                 if ($precio[0]['precio'] == 0) {
                     $msg = 'Articulo '.$articulo->sku.' '.$articulo->descripcion.' Linea '.$articulo->linea_id
                         .' Talle '.$talle->nombre.' NO TIENE PRECIO';

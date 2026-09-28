@@ -5,9 +5,12 @@ namespace App\Models\Ventas;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Stock\Talle;
 use App\Models\Ventas\Ordentrabajo_Combinacion_Talle;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pedido_Combinacion_Talle extends Model
+class Pedido_Combinacion_Talle extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $fillable = ['pedido_combinacion_id', 'talle_id', 'cantidad', 'precio'];
     protected $table = 'pedido_combinacion_talle';
 

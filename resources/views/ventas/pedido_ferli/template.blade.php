@@ -54,6 +54,7 @@
 				'pickingLote' => '',
 				'pickingDep' => 0,
 				'pickingOtId' => 0,
+				'pickingCodigo' => 0,
 				'depositosPicking' => $depositos_picking_query ?? collect(),
 			])
         </td>

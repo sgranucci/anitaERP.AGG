@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Ventas;
 
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
 use App\Models\Ventas\Ordentrabajo_Tarea;
@@ -57,9 +58,9 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 
     public function deleteporordentrabajo($ordentrabajo_id, $nro_orden)
     {
-    	$ordentrabajo_tarea = $this->model->where('ordentrabajo_id', $ordentrabajo_id)->delete();
-
-		return $ordentrabajo_tarea;
+    	return EloquentAuditDeleteSupport::each(
+			$this->model->where('ordentrabajo_id', $ordentrabajo_id)
+		);
     }
 
     public function find($id)
@@ -228,6 +229,8 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 						'articulo.descripcion as nombrearticulo',
 						'combinacion.nombre as nombrecombinacion',
 						'pedido.codigo as numeropedido',
+						'cliente.codigo as codigocliente',
+						'cliente.nombre as nombrecliente',
 						'ordentrabajo_tarea.desdefecha as desdefecha',
 						'ordentrabajo_tarea.hastafecha as hastafecha',
 						'articulo_costo.costo as costoporpar',
@@ -240,6 +243,7 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 						->join('pedido_combinacion_talle', 'pedido_combinacion_talle.id', 'ordentrabajo_combinacion_talle.pedido_combinacion_talle_id')
 						->join('pedido_combinacion', 'pedido_combinacion.id', 'pedido_combinacion_talle.pedido_combinacion_id')
 						->join('pedido', 'pedido.id', 'pedido_combinacion.pedido_id')
+						->leftJoin('cliente', 'cliente.id', 'pedido.cliente_id')
 						->join('articulo', 'articulo.id', 'pedido_combinacion.articulo_id')
 						->leftJoin('articulo_costo', function($join)
 						{
@@ -266,14 +270,15 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 			break;
 		case 'TODAS':
 		default:
-			// Cumplidas en la fecha + en sección (iniciadas en el rango sin cerrar).
-			$data = $data->where(function ($q) use ($desdefecha, $hastafecha) {
-				$q->whereBetween('ordentrabajo_tarea.hastafecha', [$desdefecha, $hastafecha])
-					->orWhere(function ($q2) use ($desdefecha, $hastafecha) {
-						$q2->whereBetween('ordentrabajo_tarea.desdefecha', [$desdefecha, $hastafecha]);
-						OrdentrabajoTareaFechaSupport::aplicarSinFechaFin($q2, 'ordentrabajo_tarea.hastafecha');
-					});
-			});
+			// Inicio dentro del rango. Si ya cerró, el cierre también tiene que caer ahí.
+			// Así no entran tareas que empezaron antes y solo terminaron en la fecha.
+			$data = $data->whereBetween('ordentrabajo_tarea.desdefecha', [$desdefecha, $hastafecha])
+				->where(function ($q) use ($desdefecha, $hastafecha) {
+					$q->whereBetween('ordentrabajo_tarea.hastafecha', [$desdefecha, $hastafecha])
+						->orWhere(function ($q2) {
+							OrdentrabajoTareaFechaSupport::aplicarSinFechaFin($q2, 'ordentrabajo_tarea.hastafecha');
+						});
+				});
 			break;
 		}
 

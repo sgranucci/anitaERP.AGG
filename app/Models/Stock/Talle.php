@@ -6,9 +6,12 @@ use App\ApiAnita;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Talle extends Model
+class Talle extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $table = "talle";
     protected $fillable = ['nombre', 'codigo'];
     protected $keyField = 'tall_talle';

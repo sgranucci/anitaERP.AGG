@@ -90,6 +90,7 @@ use App\Support\Ventas\TipoComprobantePreviewSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
+use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use App\Support\Ventas\ArcaFceNcMostradorSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
@@ -1146,10 +1147,11 @@ class FacturacionService
 			{
 			case 'C':
 			case 'E':
-				$numero = $this->facturaelectronicaService
-							->traeUltimoNumeroComprobante($empresa->nroinscripcion,
-															$codigoTipoTransaccion,
-															$puntoventa);
+				$numero = $this->ultimoNumeroComprobanteArca(
+					$empresa->nroinscripcion,
+					$codigoTipoTransaccion,
+					$puntoventa,
+				);
 				break;
 			case 'A':
 				$numero = $this->ultimoNumeroBaseModoCaea(
@@ -2188,10 +2190,11 @@ class FacturacionService
 			{
 				case 'C':
 				case 'E':
-					$numero = $this->facturaelectronicaService
-								->traeUltimoNumeroComprobante($empresa->nroinscripcion,
-																$codigoTipoTransaccion,
-																$puntoventa);
+					$numero = $this->ultimoNumeroComprobanteArca(
+						$empresa->nroinscripcion,
+						$codigoTipoTransaccion,
+						$puntoventa,
+					);
 					if (is_array($numero)) {
 						return $numero;
 					}
@@ -2470,7 +2473,7 @@ class FacturacionService
 						self::borraAnita(substr($venta['codigo'], 0, 3), $letra, 
 											$puntoventa->codigo, $venta['numerocomprobante'], $empresa->codigo);
 
-					return ['error' => $e->getMessage()];
+					return $this->errorFacturacionParaOperador($e);
 				}
 			}
 		}
@@ -3357,13 +3360,12 @@ class FacturacionService
 						$numero = $numeroForzado - 1;
 					} else {
 						PedidoFacturacionProfiler::etapa('arca_ultimo_numero_inicio');
-						$numero = $this->facturaelectronicaService
-									->traeUltimoNumeroComprobante(
-										$empresa->nroinscripcion,
-										$codigoTipoTransaccion,
-										$puntoventa,
-										$opcionesEmisionNumeracion,
-									);
+						$numero = $this->ultimoNumeroComprobanteArca(
+							$empresa->nroinscripcion,
+							$codigoTipoTransaccion,
+							$puntoventa,
+							$opcionesEmisionNumeracion,
+						);
 						PedidoFacturacionProfiler::etapa('arca_ultimo_numero_fin');
 						if (is_array($numero)) {
 							return $numero;
@@ -3959,10 +3961,11 @@ class FacturacionService
 			$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
 																	$puntoventa, $totalComprobante);
 
-			$numero = $this->facturaelectronicaService
-						->traeUltimoNumeroComprobante($empresa->nroinscripcion,
-														$codigoTipoTransaccion,
-														$puntoventa);
+			$numero = $this->ultimoNumeroComprobanteArca(
+				$empresa->nroinscripcion,
+				$codigoTipoTransaccion,
+				$puntoventa,
+			);
 
 			if (is_array($numero)) {
 				return $numero;
@@ -4380,7 +4383,7 @@ class FacturacionService
 						}
 					}
 
-					return ['error' => $e->getMessage()];
+					return $this->errorFacturacionParaOperador($e);
 				}
 
 				// Post-commit: ERP ya tiene CAE/venta. Fallos Anita no deben parecer "no hay factura"
@@ -5112,7 +5115,7 @@ class FacturacionService
 			if (! $transaccionExterna) {
 				DB::rollback();
 
-				return ['error' => $e->getMessage()];
+				return $this->errorFacturacionParaOperador($e);
 			}
 
 			throw $e;
@@ -9660,6 +9663,40 @@ class FacturacionService
 	}
 
 	/**
+	 * Último número en ARCA. Si el servicio no responde, devuelve un error para el operador.
+	 *
+	 * @return array{error: string}|int|string
+	 */
+	private function ultimoNumeroComprobanteArca($nroinscripcion, $codigoTipoTransaccion, $puntoventa, array $opciones = [])
+	{
+		try {
+			return $this->facturaelectronicaService->traeUltimoNumeroComprobante(
+				$nroinscripcion,
+				$codigoTipoTransaccion,
+				$puntoventa,
+				$opciones,
+			);
+		} catch (\Throwable $e) {
+			Log::warning('facturacion.arca_sin_respuesta', [
+				'msg' => $e->getMessage(),
+				'puntoventa' => is_object($puntoventa) ? ($puntoventa->codigo ?? null) : null,
+			]);
+
+			return $this->errorFacturacionParaOperador($e, 'No se pudo numerar el comprobante. '.$e->getMessage());
+		}
+	}
+
+	/**
+	 * @return array{error: string}
+	 */
+	private function errorFacturacionParaOperador(\Throwable $e, ?string $siNoEsTransporte = null): array
+	{
+		$aviso = ArcaWsfeEmisionResiliencia::mensajeOperadorSiTransporte($e->getMessage());
+
+		return ['error' => $aviso ?? ($siNoEsTransporte ?? $e->getMessage())];
+	}
+
+	/**
 	 * Tras falla de comunicación al pedir CAE: consulta último comprobante autorizado y, si coincide, recupera CAE.
 	 *
 	 * @return array{cae:string,fechavencimientocae:string}|null
@@ -9670,11 +9707,15 @@ class FacturacionService
 			return null;
 		}
 
-		$ultimo = $this->facturaelectronicaService->traeUltimoNumeroComprobante(
-			$empresa->nroinscripcion,
-			$codigoTipoTransaccion,
-			$puntoventa,
-		);
+		try {
+			$ultimo = $this->facturaelectronicaService->traeUltimoNumeroComprobante(
+				$empresa->nroinscripcion,
+				$codigoTipoTransaccion,
+				$puntoventa,
+			);
+		} catch (\Throwable $e) {
+			return null;
+		}
 
 		if ($ultimo === -1 || (int) $ultimo < $numeroComprobante) {
 			return null;

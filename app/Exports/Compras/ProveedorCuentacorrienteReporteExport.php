@@ -96,6 +96,7 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
             'H' => '#,##0.00',
             'I' => '#,##0.00',
             'J' => '#,##0.00',
+            'K' => '#,##0.00',
         ];
     }
 
@@ -130,7 +131,7 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
             'H' => 16,
             'I' => 16,
             'J' => 16,
-            'K' => 4,
+            'K' => 16,
             'L' => 4,
         ];
     }

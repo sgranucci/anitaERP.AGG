@@ -11,9 +11,12 @@ use App\ApiAnita;
 use App\Models\Seguridad\Usuario;
 use App\Support\Stock\CombinacionEstadoCanalSupport;
 use Auth;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Combinacion extends Model
+class Combinacion extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $fillable = [ 'articulo_id', 'codigo', 'nombre', 'observacion', 'forro_id', 'colorforro_id', 'plvista_id', 'plarmado_id',
             'fondo_id', 'colorfondo_id', 'horma_id', 'serigrafia_id', 'estado', 'estado_fabrica', 'estado_local',
             'plvista_16_26', 'plvista_27_33', 'plvista_34_40', 'plvista_41_47',

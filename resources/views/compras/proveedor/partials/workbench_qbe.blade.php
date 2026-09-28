@@ -21,10 +21,11 @@
      data-ops-fecha='@json($opsFecha)'
      data-ops-decimal='@json(\App\Support\Listado\ListadoQbeSupport::OPERADORES_DECIMAL)'
      data-campos='@json($camposQbeJson)'>
+    <input type="hidden" name="aplicar_qbe" id="lw-aplicar-qbe" value="">
     <div class="lw-qbe-title">
         <div>
             <h4><i class="fa fa-filter text-info"></i> Consulta avanzada</h4>
-            <div class="lw-hint">Dynamics / NetSuite / SAP: grupos Y·O·NOT · Campo / Fórmula + Operador + Valor · sort · group</div>
+            <div class="lw-hint">Los filtros de acá se guardan en la vista abierta. Para sacarlos, vaciá el valor y apretá Buscar, o usá Quitar filtros.</div>
         </div>
         <div class="d-flex" style="gap:.35rem;">
             <button type="button" class="btn btn-sm btn-outline-primary" id="btn-lw-add-criterio">

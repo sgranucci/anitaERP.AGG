@@ -6,6 +6,7 @@
     var filasFacturaPicking = [];
     var nombrecliente = '';
     var descuentoCliente = 0;
+    var descuentoLineaCliente = '';
     var offFactura = 0;
 
     function idsSeleccionados() {
@@ -215,7 +216,8 @@
                     ordentrabajo_ids = data.ordentrabajo_ids || [];
                     filasFacturaPicking = data.filas || [];
                     nombrecliente = data.nombrecliente || '';
-                    descuentoCliente = 0;
+                    descuentoCliente = (data.descuentopie != null && data.descuentopie !== '') ? data.descuentopie : 0;
+                    descuentoLineaCliente = (data.descuentolinea != null && data.descuentolinea !== '') ? data.descuentolinea : '';
                     offFactura = pedido_combinacion_ids.length;
                     $('#facturarOrdenTrabajoModal').modal('show');
                 })
@@ -232,6 +234,7 @@
             modal.find('#nombrecliente').val(nombrecliente);
             modal.find('.modal-title').text('Factura PICKING — ' + nombrecliente);
             modal.find('#descuentopie').val(descuentoCliente);
+            modal.find('#descuentolinea').val(descuentoLineaCliente);
             cargarSelectsModal(modal);
             renderMedidasFacturaPicking(filasFacturaPicking);
             alert('Va a facturar ' + offFactura + ' ítems de picking');
@@ -313,7 +316,12 @@
                 })
                 .fail(function (xhr) {
                     ocultarOverlay();
-                    alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error al facturar');
+                    var json = xhr.responseJSON || {};
+                    var msg = json.error || json.message || '';
+                    if (!msg) {
+                        msg = 'No se pudo facturar. No se emitió la factura. Si se repite, ARCA puede estar sin respuesta: reintente en unos minutos.';
+                    }
+                    alert(msg);
                 });
         });
 
@@ -624,9 +632,109 @@
             );
         });
 
+        var lineasCambioPicking = [];
+
+        function renderCambioPicking(filas) {
+            var $tbody = $('#modal-cambiar-picking-filas');
+            $tbody.empty();
+            if (!filas.length) {
+                $tbody.append('<tr><td colspan="5" class="text-center text-muted">No hay pickings abiertos</td></tr>');
+                return;
+            }
+            $.each(filas, function (_i, fila) {
+                var $tr = $('<tr/>');
+                if (fila.es_actual) {
+                    $tr.addClass('table-warning');
+                }
+                $tr.append($('<td/>').text(fila.codigo || ''));
+                $tr.append($('<td/>').text(fila.fecha || ''));
+                $tr.append($('<td class="text-right"/>').text(fila.lineas_pendientes != null ? fila.lineas_pendientes : '0'));
+                var clientes = fila.clientes || '';
+                if (fila.es_actual) {
+                    clientes = (clientes ? clientes + ' · ' : '') + 'actual';
+                }
+                $tr.append($('<td/>').text(clientes));
+                var $btn = $('<button type="button" class="btn btn-warning btn-sm elige-cambiar-picking">Elegir</button>');
+                $btn.attr('data-id', fila.id || 0);
+                $btn.attr('data-codigo', fila.codigo || 0);
+                $tr.append($('<td/>').append($btn));
+                $tbody.append($tr);
+            });
+        }
+
+        function abrirCambioPicking(ids) {
+            ids = (ids || []).filter(function (id) { return id > 0; });
+            if (!ids.length) {
+                alert('Seleccione al menos una línea');
+                return;
+            }
+            lineasCambioPicking = ids;
+            $('#modal-cambiar-picking-ayuda').text(
+                ids.length + (ids.length === 1 ? ' línea. ' : ' líneas. ') + 'Elegí el picking destino. El stock no se mueve.'
+            );
+            $('#modal-cambiar-picking-filas').html('<tr><td colspan="5" class="text-center text-muted">Buscando…</td></tr>');
+            $('#modal-cambiar-picking').modal('show');
+            $.post(carpetaBase + '/stock/picking-pedido/abiertos', { _token: tokenCsrf() })
+                .done(function (data) {
+                    renderCambioPicking((data && data.filas) ? data.filas : []);
+                })
+                .fail(function () {
+                    renderCambioPicking([]);
+                });
+        }
+
+        function aplicarCambioPicking(pickingId) {
+            $.post(carpetaBase + '/stock/picking-pedido/cambiar', {
+                pedido_combinacion_ids: lineasCambioPicking,
+                picking_id: pickingId,
+                _token: tokenCsrf()
+            })
+                .done(function (data) {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    var filtro = ($('#picking_codigo').val() || '').trim();
+                    var saleDelListado = filtro !== '' && String(data.picking_codigo) !== filtro;
+                    $.each(lineasCambioPicking, function (_i, id) {
+                        var $tr = $('#tabla-picking-pedido tr[data-pedido-combinacion-id="' + id + '"]');
+                        if (!$tr.length) {
+                            return;
+                        }
+                        if (saleDelListado) {
+                            $tr.remove();
+                        } else {
+                            $tr.find('.picking-nro-celda').text(data.picking_codigo);
+                            $tr.find('.check-picking-linea').prop('checked', false);
+                        }
+                    });
+                    $('#modal-cambiar-picking').modal('hide');
+                    alert(data.aviso || 'Listo');
+                    lineasCambioPicking = [];
+                })
+                .fail(function (xhr) {
+                    alert((xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'No se pudo cambiar el picking');
+                });
+        }
+
         $(document).on('click', '.btn-quitar-picking-linea', function (e) {
             e.preventDefault();
             quitarLineaPicking(parseInt($(this).attr('data-id'), 10) || 0, $(this));
+        });
+
+        $(document).on('click', '.btn-cambiar-picking-linea', function (e) {
+            e.preventDefault();
+            abrirCambioPicking([parseInt($(this).attr('data-id'), 10) || 0]);
+        });
+
+        $('#btn-cambiar-picking-sel').on('click', function (e) {
+            e.preventDefault();
+            abrirCambioPicking(idsSeleccionados());
+        });
+
+        $(document).on('click', '.elige-cambiar-picking', function (e) {
+            e.preventDefault();
+            aplicarCambioPicking(parseInt($(this).attr('data-id'), 10) || 0);
         });
 
         $('#btn-borrar-picking').on('click', function (e) {
@@ -638,9 +746,15 @@
             );
         });
 
-        $('#btn-nuevo-picking, #btn-nuevo-picking-modal').on('click', function (e) {
+        $('#btn-nuevo-picking, #btn-nuevo-picking-modal, .js-nuevo-picking').on('click', function (e) {
             e.preventDefault();
             crearNuevoPicking();
+        });
+
+        // El número escrito manda. Si queda el id de una elección anterior,
+        // la consulta lista ese picking y el título muestra el número nuevo.
+        $('#picking_codigo').on('input', function () {
+            $('#picking_id').val(0);
         });
 
         $('#picking_codigo').on('keydown', function (e) {

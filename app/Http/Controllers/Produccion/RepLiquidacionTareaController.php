@@ -30,7 +30,7 @@ class RepLiquidacionTareaController extends Controller
         $estadoOt_enum = [
             'CUMPLIDA' => 'OT Cumplidas (terminaron en la fecha)',
             'PENDIENTE' => 'OT Pendientes (en sección)',
-            'TODAS' => 'Todas (en sección + cumplidas en la fecha)',
+            'TODAS' => 'Todas (iniciadas en el rango)',
         ];
 
         $valores = [

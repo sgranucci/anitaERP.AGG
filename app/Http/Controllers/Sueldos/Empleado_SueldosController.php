@@ -88,11 +88,16 @@ class Empleado_SueldosController extends Controller
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(EmpleadoSueldosListadoColumnas::RECURSO, $usuarioId);
         }
 
-        $filtrosRequest = $this->resolverFiltrosListado($request);
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request),
+            $request
+        );
         $filtros = $filtrosRequest;
         if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
             $filtros = EmpleadoSueldosListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
+        unset($filtros['_qbe_explicito']);
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
         if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
             if ($request->exists('group')) {
                 $filtros['agrupar'] = $filtrosRequest['agrupar'] ?? [];

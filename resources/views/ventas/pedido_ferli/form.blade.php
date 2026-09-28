@@ -143,6 +143,9 @@
                         Sin picking activo
                     @endif
                 </span>
+                <button type="button" class="btn btn-outline-primary btn-sm mr-1" id="btn-nuevo-picking-pedido" title="Abre un n&uacute;mero nuevo. Las l&iacute;neas que prepares despu&eacute;s entran en ese picking.">
+                    <i class="fa fa-plus"></i> Nuevo picking
+                </button>
                 <a href="{{ route('picking_pedido', ['consultar' => 1]) }}" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener">
                     <i class="fa fa-dolly"></i> Workbench picking
                 </a>
@@ -184,6 +187,7 @@
 						@php
 							$pickingMarcadoRow = (old('picking.'.$loop->index, optional($pedidoitem)->picking ?? 'N') === 'S');
 							$pickingFacturadoRow = ((optional($pedidoitem)->picking_facturado ?? 'N') === 'S');
+							$pickingCodigoRow = (int) (optional(optional($pedidoitem)->pickingCabecera)->codigo ?? 0);
 							$rowPickingClass = $pickingFacturadoRow ? 'picking-row-facturado' : ($pickingMarcadoRow ? 'picking-row-preparado' : '');
 						@endphp
             			<tr class="item-pedido {{ $rowPickingClass }}">
@@ -271,6 +275,7 @@
 									'pickingLote' => old('picking_lote.'.$loop->index, optional($pedidoitem)->picking_lote_codigo ?? ''),
 									'pickingDep' => (int) old('picking_deposito.'.$loop->index, optional($pedidoitem)->picking_deposito_id ?? 0),
 									'pickingOtId' => (int) old('picking_ot.'.$loop->index, optional($pedidoitem)->picking_ordentrabajo_id ?? 0),
+									'pickingCodigo' => $pickingCodigoRow,
 									'depositosPicking' => $depositos_picking_query ?? collect(),
 								])
                 			</td>
@@ -354,5 +359,6 @@
 @include('ventas.pedido_ferli.modal3')
 @include('includes.stock.modalarticuloxsku')
 @include('includes.stock.modalconsultalotesstockpicking')
+@include('ventas.pedido_ferli.partials.modal_asignar_picking')
 @include('ventas.ordentrabajo.modalcrearordentrabajo')
 @include('ventas.ordentrabajo_ferli.modalfacturaordentrabajo')

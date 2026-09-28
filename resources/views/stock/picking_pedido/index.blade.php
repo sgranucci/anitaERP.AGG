@@ -19,12 +19,22 @@
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Picking pedidos</h3>
+                <h3 class="card-title">
+                    Picking pedidos
+                    @if (! empty($picking_actual))
+                        <span class="badge badge-warning ml-2" title="Las tareas que se preparen sin elegir otro n&uacute;mero entran ac&aacute;">Picking actual #{{ $picking_actual->codigo }}</span>
+                    @else
+                        <span class="badge badge-light ml-2">Sin picking actual</span>
+                    @endif
+                </h3>
                 <div class="card-tools">
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="btn-nuevo-picking" title="Crear picking con n&uacute;mero nuevo">
+                    <a href="{{ route('pedido') }}" class="btn btn-light btn-sm" title="Volver al listado de pedidos">
+                        <i class="fa fa-reply-all"></i> Pedidos
+                    </a>
+                    <button type="button" class="btn btn-light btn-sm js-nuevo-picking" id="btn-nuevo-picking" title="Crear picking con n&uacute;mero nuevo">
                         <i class="fa fa-plus"></i> Nuevo picking
                     </button>
-                    <a href="{{ route('picking_pedido') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
+                    <a href="{{ route('picking_pedido') }}" class="btn btn-light btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
                 </div>
@@ -108,6 +118,12 @@
                     </div>
                 </div>
                 <div class="card-footer d-flex flex-wrap align-items-center">
+                    <a href="{{ route('pedido') }}" class="btn btn-outline-info btn-sm mr-2" title="Volver al listado de pedidos">
+                        <i class="fa fa-reply-all"></i> Pedidos
+                    </a>
+                    <button type="button" class="btn btn-primary btn-sm mr-2 js-nuevo-picking" title="Crear picking con n&uacute;mero nuevo. Las tareas que se preparen despu&eacute;s entran ah&iacute;.">
+                        <i class="fa fa-plus"></i> Nuevo picking
+                    </button>
                     <button type="submit" class="btn btn-primary btn-sm mr-2">
                         <i class="fa fa-search"></i> Consultar
                     </button>
@@ -123,6 +139,9 @@
                                 <i class="fa fa-file-invoice"></i> Facturar seleccionados
                             </button>
                         @endif
+                        <button type="button" class="btn btn-outline-primary btn-sm mr-2" id="btn-cambiar-picking-sel" title="Pasa las l&iacute;neas tildadas a otro picking abierto. No mueve el stock.">
+                            <i class="fa fa-exchange"></i> Cambiar picking
+                        </button>
                         @if (! empty($puede_borrar_picking) && (int) ($picking_id ?? 0) > 0)
                             <button type="button"
                                     class="btn btn-outline-danger btn-sm"
@@ -145,6 +164,9 @@
                         L&iacute;neas ({{ $lineas->count() }})
                         @if (! empty($picking_codigo))
                             — Picking #{{ $picking_codigo }}
+                            @if (! empty($picking_no_encontrado))
+                                <span class="badge badge-warning ml-1">No existe</span>
+                            @endif
                         @endif
                     </h3>
                 </div>
@@ -205,19 +227,26 @@
                                                 disabled
                                             @endif>
                                     </td>
-                                    <td>{{ $nroPicking ?? '—' }}</td>
+                                    <td class="picking-nro-celda">{{ $nroPicking ?? '—' }}</td>
                                     <td>{{ $linea->pedidos->codigo ?? $linea->pedido_id }}</td>
                                     <td>{{ $linea->pedidos->clientes->nombre ?? '' }}</td>
                                     <td>{{ $linea->articulos->sku ?? '' }}</td>
                                     <td>{{ $linea->combinaciones->nombre ?? '' }}</td>
                                     <td class="text-right">{{ number_format((float) $linea->cantidad, 0, ',', '.') }}</td>
-                                    <td class="text-right">{{ number_format((float) $linea->precio, 2, ',', '.') }}</td>
+                                    <td class="text-right">{{ number_format(\App\Support\Ventas\PedidoPickingFerliSupport::precioUnitarioLinea($linea), 2, ',', '.') }}</td>
                                     <td>{{ $linea->picking_lote_codigo }}</td>
                                     <td>{{ $depTxt }}</td>
                                     <td>{{ $etiquetaFactura !== '' ? $etiquetaFactura : ($facturada ? 'Facturada' : '') }}</td>
                                     <td>{{ optional($linea->picking_at)->format('d/m/Y H:i') }}</td>
                                     <td class="text-nowrap">
                                         @if (! $facturada)
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-primary btn-cambiar-picking-linea"
+                                                    data-id="{{ $linea->id }}"
+                                                    data-picking-id="{{ (int) ($linea->picking_id ?? 0) }}"
+                                                    title="Pasar esta l&iacute;nea a otro picking. No mueve el stock.">
+                                                <i class="fa fa-exchange"></i> Cambiar
+                                            </button>
                                             <button type="button"
                                                     class="btn btn-sm btn-outline-secondary btn-quitar-picking-linea"
                                                     data-id="{{ $linea->id }}"
@@ -243,6 +272,40 @@
 </div>
 
 @include('includes.stock.modalconsultapickingsdia')
+<div class="modal fade" id="modal-cambiar-picking" role="dialog" aria-labelledby="modal-cambiar-picking-label" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modal-cambiar-picking-label">Cambiar de picking</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2" id="modal-cambiar-picking-ayuda">
+                    Eleg&iacute; el picking abierto que va a quedar con estas l&iacute;neas. El stock no se mueve.
+                </p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover mb-0">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th>N&deg;</th>
+                                <th>Fecha</th>
+                                <th class="text-right">L&iacute;neas pendientes</th>
+                                <th>Clientes</th>
+                                <th style="width:1%;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modal-cambiar-picking-filas"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cierra</button>
+            </div>
+        </div>
+    </div>
+</div>
 @include('ventas.ordentrabajo_ferli.modalfacturaordentrabajo')
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'picking-factura-overlay',

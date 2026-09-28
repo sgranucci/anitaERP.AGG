@@ -16,34 +16,35 @@
 
         return number_format($n, 2, ',', '.');
     };
-    $colSpan = 10 + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
-    $pdfUnaLinea = static function ($texto) use ($paraPdf) {
-        $texto = (string) $texto;
-        if (! $paraPdf || $texto === '') {
+    $colSpan = ($modoDeuda ? 11 : 10) + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
+    $pdfCortar = static function ($texto, int $max) use ($paraPdf) {
+        $texto = trim(preg_replace('/\s+/u', ' ', (string) $texto) ?? '');
+        if (! $paraPdf || $texto === '' || mb_strlen($texto) <= $max) {
             return $texto;
         }
 
-        return str_replace(' ', "\u{00A0}", $texto);
+        return mb_substr($texto, 0, max(1, $max - 1)).'…';
     };
 @endphp
 <thead>
     <tr>
         @if ($paraPdf)
-            <th class="col-nowrap" style="width: 4%;">Código</th>
-            <th class="col-texto" style="width: 22%;">Proveedor</th>
-            <th class="col-texto" style="width: 7%;">Empresa</th>
-            <th class="col-nowrap" style="width: 6.5%;">Fecha</th>
-            <th class="col-nowrap" style="width: 6.5%;">Vencimiento</th>
-            <th class="col-texto" style="width: 20%;">Comprobante</th>
-            <th class="col-nowrap" style="width: 4%;">Moneda</th>
+            <th class="col-nowrap" style="width: 5%;">Código</th>
+            <th style="width: {{ $modoDeuda ? '13%' : '16%' }};">Proveedor</th>
+            <th style="width: {{ $modoDeuda ? '10%' : '11%' }};">Empresa</th>
+            <th class="col-nowrap" style="width: {{ $modoDeuda ? '7%' : '8%' }};">Fecha</th>
+            <th class="col-nowrap" style="width: {{ $modoDeuda ? '7%' : '8%' }};">Vencimiento</th>
+            <th style="width: {{ $modoDeuda ? '18%' : '23%' }};">Comprobante</th>
+            <th class="col-nowrap" style="width: 5%;">Moneda</th>
             @if ($modoDeuda)
-                <th class="text-right" style="width: 10%;">Importe</th>
-                <th class="text-right" style="width: 9%;">Aplicado</th>
-                <th class="text-right" style="width: 11%;">Saldo pend.</th>
+                <th class="text-right" style="width: 8%;">Importe</th>
+                <th class="text-right" style="width: 8%;">Aplicado</th>
+                <th class="text-right" style="width: 9%;">Saldo pend.</th>
+                <th class="text-right" style="width: 10%;">Saldo</th>
             @else
-                <th class="text-right" style="width: 10%;">Debe</th>
-                <th class="text-right" style="width: 9%;">Haber</th>
-                <th class="text-right" style="width: 11%;">Saldo</th>
+                <th class="text-right" style="width: 8%;">Debe</th>
+                <th class="text-right" style="width: 8%;">Haber</th>
+                <th class="text-right" style="width: 8%;">Saldo</th>
             @endif
         @else
             <th>Código</th>
@@ -57,6 +58,7 @@
                 <th class="text-right">Importe</th>
                 <th class="text-right">Aplicado</th>
                 <th class="text-right">Saldo pend.</th>
+                <th class="text-right" title="Saldo acumulado del proveedor después de cada comprobante">Saldo</th>
             @else
                 <th class="text-right">Debe</th>
                 <th class="text-right">Haber</th>
@@ -81,8 +83,11 @@
             ? 'cc-rep-header-empresa'
             : ($esHeader ? 'cc-rep-header' : ($esTotal ? 'cc-rep-total' : ($esApl ? 'cc-rep-apl' : ($esSaldoAnt ? 'cc-rep-saldo-ant' : ''))));
         $clsNowrap = $paraPdf ? 'col-nowrap' : '';
-        $clsTexto = $paraPdf ? 'col-texto' : '';
+        $mostrarIdentidad = $esHeader || $esTotal || ($paraPdf && ($tipo === 'movimiento' || $esSaldoAnt));
     @endphp
+    @if ($esHeader && $paraPdf)
+        @continue
+    @endif
     @if ($esHeaderEmpresa)
         <tr class="{{ $trClass }}">
             <td colspan="{{ $colSpan }}">
@@ -93,7 +98,7 @@
     @endif
     <tr class="{{ $trClass }}">
         <td class="{{ $clsNowrap }}">
-            @if ($esHeader || $esTotal)
+            @if ($mostrarIdentidad)
                 @if ($mostrarLinks && ! empty($puede_ver_proveedor) && ! empty($fila['proveedor_id']))
                     <a class="text-primary" target="_blank" rel="noopener"
                         href="{{ route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}">
@@ -104,21 +109,23 @@
                 @endif
             @endif
         </td>
-        <td class="{{ $clsTexto }}">
+        <td>
             @if ($esHeader)
-                <strong>{{ $pdfUnaLinea($fila['proveedor_nombre'] ?? '') }}</strong>
+                <strong>{{ $fila['proveedor_nombre'] ?? '' }}</strong>
             @elseif ($esTotal)
-                <strong>{{ $pdfUnaLinea('Total '.($fila['proveedor_nombre'] ?? '')) }}</strong>
+                <strong>{{ $pdfCortar('Total '.($fila['proveedor_nombre'] ?? ''), 34) }}</strong>
+            @elseif ($paraPdf && $tipo === 'movimiento')
+                {{ $pdfCortar($fila['proveedor_nombre'] ?? '', 28) }}
             @elseif ($esSaldoAnt)
-                <em>{{ $pdfUnaLinea($fila['comprobante'] ?? 'Saldo anterior') }}</em>
+                <em>{{ $fila['comprobante'] ?? 'Saldo anterior' }}</em>
             @endif
         </td>
-        <td class="{{ $clsTexto }}">{{ ($esHeader || $esApl || $esSaldoAnt || $tipo === 'movimiento') ? $pdfUnaLinea($fila['nombreempresa'] ?? '') : '' }}</td>
+        <td>{{ ($esHeader || $esApl || $esSaldoAnt || $tipo === 'movimiento') ? $pdfCortar($fila['nombreempresa'] ?? '', 18) : '' }}</td>
         <td class="{{ $clsNowrap }}">{{ $fila['fecha'] ?? '' }}</td>
         <td class="{{ $clsNowrap }}">{{ $fila['fechavencimiento'] ?? '' }}</td>
-        <td class="{{ $clsTexto }}">
+        <td>
             @if (! $esHeader)
-                {{ $pdfUnaLinea($fila['comprobante'] ?? '') }}
+                {{ $pdfCortar($fila['comprobante'] ?? '', 42) }}
             @endif
         </td>
         <td class="{{ $clsNowrap }}">{{ $fila['etiqueta_moneda'] ?? ($fila['abreviatura'] ?? '') }}</td>
@@ -142,6 +149,13 @@
                     <strong>{{ $fmt($fila['saldo_pendiente'] ?? null) }}</strong>
                 @else
                     {{ $fmt($fila['saldo_pendiente'] ?? null) }}
+                @endif
+            </td>
+            <td class="text-right">
+                @if ($esTotal)
+                    <strong>{{ $fmt($fila['saldo_parcial'] ?? null) }}</strong>
+                @else
+                    {{ $fmt($fila['saldo_parcial'] ?? null) }}
                 @endif
             </td>
         @else
@@ -195,7 +209,7 @@
     </tr>
 @empty
     <tr>
-        <td colspan="12" class="text-muted text-center">Sin datos.</td>
+        <td colspan="{{ $colSpan }}" class="text-muted text-center">Sin datos.</td>
     </tr>
 @endforelse
 </tbody>

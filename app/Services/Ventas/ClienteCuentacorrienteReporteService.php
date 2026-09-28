@@ -171,6 +171,8 @@ class ClienteCuentacorrienteReporteService
         $subVendDebe = 0.0;
         $subVendHaber = 0.0;
         $subVendPendiente = 0.0;
+        $subVendParcial = 0.0;
+        $totalParcial = 0.0;
 
         $flushTotalVendedor = static function () use (
             &$filas,
@@ -179,6 +181,7 @@ class ClienteCuentacorrienteReporteService
             &$subVendDebe,
             &$subVendHaber,
             &$subVendPendiente,
+            &$subVendParcial,
             $modo
         ): void {
             if ($vendedorActualId === null) {
@@ -194,11 +197,13 @@ class ClienteCuentacorrienteReporteService
                 'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subVendHaber : null,
                 'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subVendPendiente : null,
                 'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subVendPendiente : null,
+                'saldo_parcial' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subVendParcial : null,
                 'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
             ];
             $subVendDebe = 0.0;
             $subVendHaber = 0.0;
             $subVendPendiente = 0.0;
+            $subVendParcial = 0.0;
         };
 
         foreach ($porCliente as $clienteId => $movsCliente) {
@@ -251,6 +256,7 @@ class ClienteCuentacorrienteReporteService
             $subDebe = 0.0;
             $subHaber = 0.0;
             $subPendiente = 0.0;
+            $saldoParcial = 0.0;
 
             if ($modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA) {
                 $saldoAnterior = $this->saldoAnteriorCliente(
@@ -312,6 +318,7 @@ class ClienteCuentacorrienteReporteService
                 } else {
                     $subPendiente += $pendienteMostrar;
                     $totalPendiente += $pendientePesos;
+                    $saldoParcial = round($saldoParcial + $pendienteMostrar, 2);
                 }
 
                 if ($soloTotales) {
@@ -345,6 +352,9 @@ class ClienteCuentacorrienteReporteService
                     'importe' => $importeMostrar,
                     'aplicado' => abs($aplicadoMostrar) > 0.0001 ? $aplicadoMostrar : null,
                     'saldo_pendiente' => $pendienteMostrar,
+                    'saldo_parcial' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA
+                        ? $saldoParcial
+                        : null,
                     'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
                     'saldo_pesos' => $saldoCorridoPesos,
                 ];
@@ -376,6 +386,7 @@ class ClienteCuentacorrienteReporteService
                         'importe' => abs($convApl['importe']),
                         'aplicado' => abs($convApl['importe']),
                         'saldo_pendiente' => null,
+                        'saldo_parcial' => null,
                         'saldo' => null,
                         'saldo_pesos' => null,
                     ];
@@ -396,6 +407,7 @@ class ClienteCuentacorrienteReporteService
                 'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $subHaber : null,
                 'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
                 'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
+                'saldo_parcial' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $saldoParcial : null,
                 'saldo' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA
                     ? ($enPesos ? $saldoCorridoPesos : $saldoCorrido)
                     : null,
@@ -406,6 +418,8 @@ class ClienteCuentacorrienteReporteService
             $subVendDebe += $subDebe;
             $subVendHaber += $subHaber;
             $subVendPendiente += $subPendiente;
+            $subVendParcial = round($subVendParcial + $saldoParcial, 2);
+            $totalParcial = round($totalParcial + $saldoParcial, 2);
         }
 
         $flushTotalVendedor();
@@ -420,6 +434,7 @@ class ClienteCuentacorrienteReporteService
                 'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $totalHaber : null,
                 'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totalPendiente : null,
                 'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totalPendiente : null,
+                'saldo_parcial' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totalParcial : null,
                 'saldo' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA
                     ? ($totalDebe - $totalHaber)
                     : null,
@@ -438,6 +453,7 @@ class ClienteCuentacorrienteReporteService
                 'debe' => $totalDebe,
                 'haber' => $totalHaber,
                 'pendiente' => $totalPendiente,
+                'parcial' => $totalParcial,
                 'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
                 'modo' => $modo,
             ],
@@ -774,6 +790,7 @@ class ClienteCuentacorrienteReporteService
             'debe' => 0.0,
             'haber' => 0.0,
             'pendiente' => 0.0,
+            'parcial' => 0.0,
             'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
             'modo' => ClienteCuentacorrienteReporteFiltros::MODO_DEUDA,
         ];
@@ -841,6 +858,7 @@ class ClienteCuentacorrienteReporteService
             $totales['debe'] += (float) ($res['totales']['debe'] ?? 0);
             $totales['haber'] += (float) ($res['totales']['haber'] ?? 0);
             $totales['pendiente'] += (float) ($res['totales']['pendiente'] ?? 0);
+            $totales['parcial'] = round($totales['parcial'] + (float) ($res['totales']['parcial'] ?? 0), 2);
             $totales['modo'] = (string) ($res['totales']['modo'] ?? $totales['modo']);
             $totales['abreviatura'] = (string) ($res['totales']['abreviatura'] ?? $totales['abreviatura']);
         }
@@ -870,6 +888,7 @@ class ClienteCuentacorrienteReporteService
             'haber' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA ? $totales['haber'] : null,
             'importe' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totales['pendiente'] : null,
             'saldo_pendiente' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? $totales['pendiente'] : null,
+            'saldo_parcial' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_DEUDA ? ($totales['parcial'] ?? 0) : null,
             'saldo' => $modo === ClienteCuentacorrienteReporteFiltros::MODO_FICHA
                 ? ($totales['debe'] - $totales['haber'])
                 : null,

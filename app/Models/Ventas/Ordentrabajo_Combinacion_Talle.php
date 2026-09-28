@@ -3,11 +3,13 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Ventas\Pedido_Combinacion_Talle;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ordentrabajo_Combinacion_Talle extends Model
+class Ordentrabajo_Combinacion_Talle extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $fillable = ['ordentrabajo_id', 'pedido_combinacion_talle_id', 'cliente_id', 'estado', 'ordentrabajo_stock_id', 'usuario_id'];
     protected $table = 'ordentrabajo_combinacion_talle';
 

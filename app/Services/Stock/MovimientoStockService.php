@@ -21,6 +21,7 @@ use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockCanjeSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\MovimientoStockFerliSupport;
+use App\Support\Stock\MovimientoStockLoteNumeracionSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
 use App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport;
@@ -197,8 +198,12 @@ class MovimientoStockService
 				$movimientostock_id = ($funcion == 'update' ? $id : $movimientostock->id);
 
 				// Borra los registros de movimientos antes de grabar nuevamente
+				$curvasNumeracionAntes = [];
 				if ($funcion == 'update')
 				{
+					if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+						$curvasNumeracionAntes = MovimientoStockLoteNumeracionSupport::leerCurvasMovimiento((int) $movimientostock_id);
+					}
 					// Surmar: revertir piqueo (consumos/hijas) antes de borrar líneas AM
 					app(MovimientoStockSurmarEtiquetaService::class)
 						->revertirEtiquetasPorMovimientos([(int) $movimientostock_id]);
@@ -419,6 +424,13 @@ class MovimientoStockService
 	  			//					0, $cantidades[$i], $precios[$i], $listaprecios[$i], $incluyeimpuestos[$i], 
 	  			//					$monedas[$i], $descuentos[$i], '', $data['leyendafactura'], 'create');
 				//	}									
+				}
+
+				if ($funcion == 'update' && ($curvasNumeracionAntes ?? []) !== []) {
+					MovimientoStockLoteNumeracionSupport::propagarTrasGuardar(
+						(int) $movimientostock_id,
+						$curvasNumeracionAntes
+					);
 				}
 
 				$resultadoAsiento = $this->omitirAsientoContable($data)

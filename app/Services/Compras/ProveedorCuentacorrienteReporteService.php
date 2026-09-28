@@ -122,6 +122,7 @@ class ProveedorCuentacorrienteReporteService
             $subDebe = 0.0;
             $subHaber = 0.0;
             $subPendiente = 0.0;
+            $saldoParcial = 0.0;
 
             if ($modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
                 $saldoAnterior = $this->saldoAnteriorProveedor(
@@ -189,6 +190,7 @@ class ProveedorCuentacorrienteReporteService
                 } else {
                     $subPendiente += $pendienteMostrar;
                     $totalPendiente += $pendientePesos;
+                    $saldoParcial = round($saldoParcial + $pendienteMostrar, 2);
                 }
 
                 if ($soloTotales) {
@@ -219,6 +221,9 @@ class ProveedorCuentacorrienteReporteService
                     'importe' => abs($importeMostrar),
                     'aplicado' => abs($aplicadoMostrar) > 0.0001 ? abs($aplicadoMostrar) : null,
                     'saldo_pendiente' => $pendienteMostrar,
+                    'saldo_parcial' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA
+                        ? $saldoParcial
+                        : null,
                     'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
                     'saldo_pesos' => $saldoCorridoPesos,
                 ];
@@ -253,6 +258,7 @@ class ProveedorCuentacorrienteReporteService
                         'importe' => abs($convApl['importe']),
                         'aplicado' => abs($convApl['importe']),
                         'saldo_pendiente' => null,
+                        'saldo_parcial' => null,
                         'saldo' => null,
                         'saldo_pesos' => null,
                     ];
@@ -270,6 +276,7 @@ class ProveedorCuentacorrienteReporteService
                 'haber' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA ? $subHaber : null,
                 'importe' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
                 'saldo_pendiente' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
+                'saldo_parcial' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $saldoParcial : null,
                 'saldo' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA
                     ? ($enPesos ? $saldoCorridoPesos : $saldoCorrido)
                     : null,

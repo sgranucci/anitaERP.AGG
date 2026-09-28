@@ -509,6 +509,7 @@ class Articulo_MovimientoService
 					'_modulos' => [],
 					'_talles' => [],
 					'_modulos_ids' => [],
+					'_depositos' => [],
 				];
 			}
 			$agrupados[$clave]['saldo'] += $cantidad;
@@ -521,6 +522,16 @@ class Articulo_MovimientoService
 			if ($talleNom !== '') {
 				$agrupados[$clave]['_talles'][$talleNom] = (float) (($agrupados[$clave]['_talles'][$talleNom] ?? 0) + $cantidad);
 			}
+			$this->acumularSaldoDepositoLote(
+				$agrupados[$clave]['_depositos'],
+				(int) ($mov->deposito_id ?? 0),
+				$cantidad,
+				$moduloMovId,
+				trim((string) (($mov->modulo_codigo ?? '').' '.($mov->modulo_nombre ?? ''))),
+				(string) ($mov->deposito_codigo ?? ''),
+				(string) ($mov->deposito_nombre ?? ''),
+				$talleNom
+			);
 			if ((int) ($mov->tipotransaccion_id ?? 0) === $tipoAlta && (int) ($mov->deposito_id ?? 0) > 0) {
 				$agrupados[$clave]['deposito_id'] = (int) $mov->deposito_id;
 				$agrupados[$clave]['deposito_codigo'] = (string) ($mov->deposito_codigo ?? '');
@@ -545,49 +556,145 @@ class Articulo_MovimientoService
 			if ($fila['saldo'] <= 0) {
 				continue;
 			}
-			if ($filtraModuloId && empty($fila['_modulos_ids'][$filtraModuloId])) {
-				continue;
+			foreach ($this->expandirFilaLotePorDeposito($fila, $filtraModuloId) as $porDeposito) {
+				$filas[] = $porDeposito;
 			}
-
-			$mejorModuloId = 0;
-			$mejorSaldo = -INF;
-			$mejorEtiqueta = '';
-			foreach ($fila['_modulos'] as $modId => $info) {
-				if ((float) $info['saldo'] > $mejorSaldo) {
-					$mejorSaldo = (float) $info['saldo'];
-					$mejorModuloId = (int) $modId;
-					$mejorEtiqueta = (string) $info['etiqueta'];
-				}
-			}
-			$fila['modulo_id'] = $mejorModuloId;
-			$fila['modulo'] = $mejorEtiqueta;
-
-			$talles = $fila['_talles'];
-			ksort($talles, SORT_NATURAL);
-			$medidas = [];
-			foreach ($talles as $nombre => $cant) {
-				if (abs((float) $cant) < 0.0001) {
-					continue;
-				}
-				$medidas[] = $nombre.':'.(int) round((float) $cant);
-			}
-			$fila['medidas'] = implode(' ', $medidas);
-			// Módulo Abierto no trae la numeración en el nombre (a diferencia de 12 C, 12 D, etc.).
-			if ($this->esModuloAbiertoPicking($mejorModuloId) && $fila['medidas'] !== '') {
-				$estilo = $this->numeracionEstiloModuloDesdeMedidas($fila['medidas']);
-				if ($estilo !== '' && stripos($fila['modulo'], $estilo) === false) {
-					$fila['modulo'] = trim($fila['modulo'].' '.$estilo);
-				}
-			}
-			unset($fila['_modulos'], $fila['_talles'], $fila['_modulos_ids']);
-			$filas[] = $fila;
 		}
 
 		usort($filas, static function (array $a, array $b) {
-			return [$a['lote'], $a['modulo_id']] <=> [$b['lote'], $b['modulo_id']];
+			return [$a['lote'], $a['deposito'] ?? '', $a['modulo_id']] <=> [$b['lote'], $b['deposito'] ?? '', $b['modulo_id']];
 		});
 
 		return $filas;
+	}
+
+	/**
+	 * @param  array<int, array{saldo: float, codigo: string, nombre: string, modulos: array<int, array{saldo: float, etiqueta: string}>, modulos_ids: array<int, bool>, talles: array<string, float>}>  $depositos
+	 */
+	private function acumularSaldoDepositoLote(
+		array &$depositos,
+		int $depositoId,
+		float $cantidad,
+		int $moduloId,
+		string $moduloEtiqueta,
+		string $depositoCodigo,
+		string $depositoNombre,
+		string $talleNom
+	): void {
+		if (! isset($depositos[$depositoId])) {
+			$depositos[$depositoId] = [
+				'saldo' => 0.0,
+				'codigo' => $depositoCodigo,
+				'nombre' => $depositoNombre,
+				'modulos' => [],
+				'modulos_ids' => [],
+				'talles' => [],
+			];
+		}
+		$depositos[$depositoId]['saldo'] += $cantidad;
+		if ($depositos[$depositoId]['codigo'] === '' && $depositoCodigo !== '') {
+			$depositos[$depositoId]['codigo'] = $depositoCodigo;
+			$depositos[$depositoId]['nombre'] = $depositoNombre;
+		}
+		$depositos[$depositoId]['modulos_ids'][$moduloId] = true;
+		$depositos[$depositoId]['modulos'][$moduloId] = [
+			'saldo' => (float) (($depositos[$depositoId]['modulos'][$moduloId]['saldo'] ?? 0) + $cantidad),
+			'etiqueta' => $moduloEtiqueta,
+		];
+		if ($talleNom !== '') {
+			$depositos[$depositoId]['talles'][$talleNom] = (float) (($depositos[$depositoId]['talles'][$talleNom] ?? 0) + $cantidad);
+		}
+	}
+
+	/**
+	 * Una fila por depósito con saldo. El depósito de la fila es el del stock, para no volver a pedirlo al preparar.
+	 *
+	 * @param  array<string, mixed>  $fila
+	 * @return list<array<string, mixed>>
+	 */
+	private function expandirFilaLotePorDeposito(array $fila, ?int $filtraModuloId): array
+	{
+		$positivos = [];
+		foreach ($fila['_depositos'] ?? [] as $depId => $info) {
+			if ((float) ($info['saldo'] ?? 0) <= 0.0001) {
+				continue;
+			}
+			if ($filtraModuloId && empty($info['modulos_ids'][$filtraModuloId])) {
+				continue;
+			}
+			$positivos[(int) $depId] = $info;
+		}
+
+		if ($positivos === []) {
+			if ($filtraModuloId && empty($fila['_modulos_ids'][$filtraModuloId])) {
+				return [];
+			}
+
+			return [$this->cerrarFilaLoteStock($fila, $fila['_modulos'] ?? [], $fila['_talles'] ?? [])];
+		}
+
+		$out = [];
+		foreach ($positivos as $depId => $info) {
+			$copia = $fila;
+			$copia['saldo'] = (float) $info['saldo'];
+			$copia['deposito_id'] = $depId;
+			$codigoDep = trim((string) ($info['codigo'] ?? ''));
+			$nombreDep = trim((string) ($info['nombre'] ?? ''));
+			$copia['deposito_codigo'] = $codigoDep;
+			$copia['deposito_nombre'] = $nombreDep;
+			if ($codigoDep !== '' && $nombreDep !== '' && strcasecmp($codigoDep, $nombreDep) !== 0) {
+				$copia['deposito'] = $codigoDep.' — '.$nombreDep;
+			} else {
+				$copia['deposito'] = $nombreDep !== '' ? $nombreDep : $codigoDep;
+			}
+			if ($copia['deposito'] === '' && $depId > 0) {
+				$copia['deposito'] = '#'.$depId;
+			}
+			$out[] = $this->cerrarFilaLoteStock($copia, $info['modulos'] ?? [], $info['talles'] ?? []);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $fila
+	 * @param  array<int, array{saldo: float, etiqueta: string}>  $modulos
+	 * @param  array<string, float>  $talles
+	 * @return array<string, mixed>
+	 */
+	private function cerrarFilaLoteStock(array $fila, array $modulos, array $talles): array
+	{
+		$mejorModuloId = 0;
+		$mejorSaldo = -INF;
+		$mejorEtiqueta = '';
+		foreach ($modulos as $modId => $info) {
+			if ((float) ($info['saldo'] ?? 0) > $mejorSaldo) {
+				$mejorSaldo = (float) $info['saldo'];
+				$mejorModuloId = (int) $modId;
+				$mejorEtiqueta = (string) ($info['etiqueta'] ?? '');
+			}
+		}
+		$fila['modulo_id'] = $mejorModuloId;
+		$fila['modulo'] = $mejorEtiqueta;
+
+		ksort($talles, SORT_NATURAL);
+		$medidas = [];
+		foreach ($talles as $nombre => $cant) {
+			if (abs((float) $cant) < 0.0001) {
+				continue;
+			}
+			$medidas[] = $nombre.':'.(int) round((float) $cant);
+		}
+		$fila['medidas'] = implode(' ', $medidas);
+		if ($this->esModuloAbiertoPicking($mejorModuloId) && $fila['medidas'] !== '') {
+			$estilo = $this->numeracionEstiloModuloDesdeMedidas($fila['medidas']);
+			if ($estilo !== '' && stripos((string) $fila['modulo'], $estilo) === false) {
+				$fila['modulo'] = trim($fila['modulo'].' '.$estilo);
+			}
+		}
+		unset($fila['_modulos'], $fila['_talles'], $fila['_modulos_ids'], $fila['_depositos']);
+
+		return $fila;
 	}
 
 	private function esModuloAbiertoPicking(int $moduloId): bool

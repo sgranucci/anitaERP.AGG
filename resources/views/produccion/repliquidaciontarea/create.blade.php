@@ -68,7 +68,8 @@
                     <p class="text-muted small mb-3">
                         Informe de liquidaci&oacute;n de tareas por empleado, OT y art&iacute;culo.
                         Los rangos vac&iacute;os (cliente, tarea, empleado, art&iacute;culo) se interpretan como
-                        <strong>todos</strong>. Use <kbd>F1</kbd> o la lupa para consultar; <kbd>Enter</kbd> resuelve el c&oacute;digo.
+                        <strong>todos</strong>. Use <kbd>F1</kbd> o la lupa para consultar; <kbd>Enter</kbd> resuelve el c&oacute;digo
+                        y pasa al campo siguiente (fechas, rangos y estado).
                         @if ($puedeImportarTareasL8)
                             El bot&oacute;n <strong>Traer tareas L8 faltantes</strong> usa el rango de fechas del formulario:
                             inserta ids que a&uacute;n no existen y actualiza <em>hastafecha</em> / <em>desdefecha</em> de las ya cargadas.

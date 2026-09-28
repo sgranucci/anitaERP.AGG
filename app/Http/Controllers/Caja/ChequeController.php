@@ -121,11 +121,16 @@ class ChequeController extends Controller
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ChequeListadoColumnas::RECURSO, $usuarioId);
         }
 
-        $filtrosRequest = $this->resolverFiltrosListado($request);
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request),
+            $request
+        );
         $filtros = $filtrosRequest;
         if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
             $filtros = ChequeListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
+        unset($filtros['_qbe_explicito']);
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
 
         $catalogo = ChequeListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(

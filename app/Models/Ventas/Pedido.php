@@ -39,7 +39,8 @@ class Pedido extends Model implements Auditable
                     ->with('pedido_combinacion_talles')
                     ->with('pedido_combinacion_estados')
                     ->with('ordenestrabajo')
-                    ->with('lotes');
+                    ->with('lotes')
+                    ->with('pickingCabecera');
 	}
 
 	public function pedido_articulos()

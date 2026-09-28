@@ -112,16 +112,56 @@
         $campo.find('.nombrecliente').first().val('');
     }
 
-    function resolverClientePorCodigo($campo, codigo, avisar) {
+    function esEnter(e) {
+        return !!(e && (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13));
+    }
+
+    function campoSiguiente(el) {
+        if (!el) {
+            return null;
+        }
+        if (el.id === 'desdefecha') {
+            return document.getElementById('hastafecha');
+        }
+        if (el.id === 'hastafecha') {
+            return document.getElementById('desdecliente_id_codigo');
+        }
+        if (el.id === 'estadoot') {
+            return null;
+        }
+        var campo = el.closest
+            ? el.closest('.tm-cliente-campo, .tm-tarea-campo, .tm-empleado-campo, .tm-articulo-campo')
+            : null;
+        if (!campo) {
+            return null;
+        }
+        var sel = campo.getAttribute('data-next-focus');
+        return sel ? document.querySelector(sel) : null;
+    }
+
+    function enfocarSiguiente(el) {
+        var next = campoSiguiente(el);
+        if (next && typeof next.focus === 'function') {
+            next.focus();
+        }
+    }
+
+    function resolverClientePorCodigo($campo, codigo, avisar, alTerminar) {
         codigo = String(codigo || '').trim();
         if (codigo === '') {
             limpiarClienteEnCampo($campo);
+            if (alTerminar) {
+                alTerminar(true);
+            }
             return;
         }
         $.get(carpetaBase + '/ventas/leerunclienteporcodigo/' + encodeURIComponent(codigo))
             .done(function (data) {
                 if (data && data.id) {
                     aplicarClienteEnCampo($campo, data);
+                    if (alTerminar) {
+                        alTerminar(true);
+                    }
                     return;
                 }
                 limpiarClienteEnCampo($campo);
@@ -131,6 +171,9 @@
                     }, 0);
                     $campo.find('.codigocliente').first().trigger('focus');
                 }
+                if (alTerminar) {
+                    alTerminar(false);
+                }
             })
             .fail(function () {
                 limpiarClienteEnCampo($campo);
@@ -139,8 +182,74 @@
                         alert('No se pudo cargar el cliente.');
                     }, 0);
                 }
+                if (alTerminar) {
+                    alTerminar(false);
+                }
             });
     }
+
+    // El Enter global de consulta de cliente escribe en #cliente_id y no salta de campo.
+    // En este formulario el código es un rango (desde/hasta): resolver acá y avanzar.
+    if (typeof manejarEnterCodigoClienteCapture === 'function') {
+        document.removeEventListener('keydown', manejarEnterCodigoClienteCapture, true);
+        document.addEventListener('keydown', function (e) {
+            var target = e.target;
+            var enEsteFormulario = target && target.closest && target.closest('#form-general');
+            if (enEsteFormulario && target.classList && target.classList.contains('codigocliente') && esEnter(e)) {
+                if (target.readOnly || target.disabled) {
+                    return;
+                }
+                if (typeof consultaClienteModalEnUso === 'function' && consultaClienteModalEnUso()) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                var $campo = $(target).closest('.tm-cliente-campo');
+                ptrClienteCampo = $campo;
+                var codigo = String(target.value || '').trim();
+                if (codigo === '') {
+                    limpiarClienteEnCampo($campo);
+                    enfocarSiguiente(target);
+                    return;
+                }
+                resolverClientePorCodigo($campo, codigo, true, function (ok) {
+                    if (ok) {
+                        enfocarSiguiente(target);
+                    }
+                });
+                return;
+            }
+            manejarEnterCodigoClienteCapture(e);
+        }, true);
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (!esEnter(e)) {
+            return;
+        }
+        var target = e.target;
+        if (!target || !target.closest || !target.closest('#form-general')) {
+            return;
+        }
+        if (target.closest('.modal')) {
+            return;
+        }
+        var tag = (target.tagName || '').toUpperCase();
+        if (tag === 'BUTTON' || target.type === 'submit') {
+            return;
+        }
+        if (target.classList && (
+            target.classList.contains('codigocliente')
+            || target.classList.contains('codigotarea')
+            || target.classList.contains('codigoempleado')
+            || target.classList.contains('codigoarticulo')
+        )) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        enfocarSiguiente(target);
+    }, true);
 
     document.addEventListener('DOMContentLoaded', function () {
         // Intercepta elección del modal compartido de cliente.
@@ -180,27 +289,20 @@
                     ptrClienteCampo = $(this).closest('.tm-cliente-campo');
                 }
             })
-            .on('keydown.liqTareaClienteEnter', '#form-general .tm-cliente-campo .codigocliente', function (e) {
-                if (e.key !== 'Enter' && e.keyCode !== 13) {
+            .on('keydown.liqTareaArtNext', '#form-general .tm-articulo-campo .codigoarticulo', function (e) {
+                if (!esEnter(e)) {
                     return;
                 }
                 e.preventDefault();
-                e.stopImmediatePropagation();
-                var $campo = $(this).closest('.tm-cliente-campo');
-                ptrClienteCampo = $campo;
-                resolverClientePorCodigo($campo, $(this).val(), true);
-                setTimeout(function () {
-                    avanzarNextFocus($campo);
-                }, 80);
-            })
-            .on('keydown.liqTareaArtNext', '#form-general .tm-articulo-campo .codigoarticulo', function (e) {
-                if (e.key !== 'Enter' && e.keyCode !== 13) {
-                    return;
+                var el = this;
+                var $campo = $(el).closest('.tm-articulo-campo');
+                var codigo = String($(el).val() || '').trim();
+                if (codigo === '') {
+                    $campo.find('.articulo_id').first().val('');
+                    $campo.find('.descripcionarticulo').first().val('');
                 }
-                var $campo = $(this).closest('.tm-articulo-campo');
-                setTimeout(function () {
-                    avanzarNextFocus($campo);
-                }, 80);
+                // Al salir, el change del código resuelve el SKU.
+                enfocarSiguiente(el);
             });
 
         var form = document.getElementById('form-general');

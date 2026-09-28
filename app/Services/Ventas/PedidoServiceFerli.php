@@ -21,6 +21,7 @@ use App\Queries\Ventas\PedidoQueryFerli;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Queries\Ventas\OrdentrabajoQueryInterface;
 use App\Models\Ventas\Pedido;
+use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Mventa;
 use App\Models\Stock\Combinacion;
@@ -1125,6 +1126,8 @@ class PedidoServiceFerli
 							throw new Exception('El item '.$item.' no tiene talles');
 						}
 
+						$this->alinearPrecioLineaConTalles($pedido_combinacion, $medidasSync);
+
 						// Graba stock si el cliente es el correspondiente
 						if (!isset($ot_stock_ids[$i_comb]))
 							$ot_stock_ids[$i_comb] = 0;
@@ -1439,5 +1442,32 @@ class PedidoServiceFerli
 		}
 
 		return $estadoPedido;
+	}
+
+	/**
+	 * La cabecera queda con el mismo precio que los talles.
+	 * Si no, el picking muestra un importe y la factura usa otro.
+	 *
+	 * @param  array<int, array{precio:mixed}>  $medidasSync
+	 */
+	private function alinearPrecioLineaConTalles($pedidoCombinacion, array $medidasSync): void
+	{
+		if (! $pedidoCombinacion instanceof Pedido_Combinacion) {
+			return;
+		}
+
+		$precio = PedidoPickingFerliSupport::precioUnicoPositivo(
+			array_column($medidasSync, 'precio')
+		);
+		if ($precio === null) {
+			return;
+		}
+
+		if (round((float) $pedidoCombinacion->precio, 4) === round($precio, 4)) {
+			return;
+		}
+
+		$pedidoCombinacion->precio = $precio;
+		$pedidoCombinacion->save();
 	}
 }

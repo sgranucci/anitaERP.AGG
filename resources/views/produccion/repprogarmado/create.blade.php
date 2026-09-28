@@ -4,6 +4,7 @@
 @endsection
 
 @section("scripts")
+<script src="{{ asset('assets/pages/scripts/produccion/repprogarmado/reporte.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/produccion/repprogarmado/reporte.js')) ?: time() }}"></script>
 <script>
     $(function () {
         $("#ordenestrabajo").focus();
@@ -21,6 +22,13 @@
 @endsection
 
 @section('contenido')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'repprogarmado-overlay',
+    'tituloId' => 'repprogarmado-overlay-titulo',
+    'subtituloId' => 'repprogarmado-overlay-subtitulo',
+    'titulo' => 'Generando reporte…',
+    'subtitulo' => 'Puede demorar según las órdenes. Pulse Esc para cerrar este aviso.',
+])
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -29,7 +37,9 @@
             <div class="card-header">
                 <h3 class="card-title">Datos Reporte Programaci&oacute;n de armado</h3>
             </div>
-            <form action="{{route('crear_repprogarmado')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            {{-- data-sin-bloqueo-grabacion: el POST descarga el archivo y no navega; el banner global quedaría pegado --}}
+            <form action="{{route('crear_repprogarmado')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off"
+                data-sin-bloqueo-grabacion="1">
                 @csrf @method("post")
                 <div class="card-body">
                     @include('produccion.repprogarmado.form')

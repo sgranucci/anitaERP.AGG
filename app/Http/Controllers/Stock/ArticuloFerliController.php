@@ -143,10 +143,15 @@ class ArticuloFerliController extends Controller
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ArticuloFerliListadoColumnas::RECURSO, $usuarioId);
         }
 
-        $filtros = ArticuloFerliListadoFiltros::resolverDesdeRequest($request);
+        $filtros = ListadoVistaSupport::prepararQbeContraVista(
+            ArticuloFerliListadoFiltros::resolverDesdeRequest($request),
+            $request
+        );
         if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
             $filtros = ArticuloFerliListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
+        unset($filtros['_qbe_explicito']);
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
 
         $catalogo = ArticuloFerliListadoColumnas::catalogoActivo();
         $etiquetasInstalacion = ListadoColumnaEtiquetaSupport::etiquetasEfectivas(

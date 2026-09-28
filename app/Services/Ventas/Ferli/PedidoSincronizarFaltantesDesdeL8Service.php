@@ -3,6 +3,7 @@
 namespace App\Services\Ventas\Ferli;
 
 use App\Support\Ventas\Ferli\FerliL8ReaderSupport;
+use App\Support\Ventas\Ferli\OrdentrabajoMezclaArticuloSupport;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -109,6 +110,7 @@ class PedidoSincronizarFaltantesDesdeL8Service
             'insert_oct' => 0,
             'delete_oct_huerfano' => 0,
             'omitidos_divergidos' => 0,
+            'omitidos_mezcla' => 0,
             'detalle' => [],
             'errores' => [],
             'acciones' => [
@@ -415,6 +417,10 @@ class PedidoSincronizarFaltantesDesdeL8Service
                 if (isset($oct12Par[$par])) {
                     continue;
                 }
+                if (OrdentrabajoMezclaArticuloSupport::talleMezclaOtroArticulo($otId, $pct12)) {
+                    $plan['omitidos_mezcla']++;
+                    continue;
+                }
                 $row = (array) $oct8;
                 $row['pedido_combinacion_talle_id'] = $pct12;
                 $plan['acciones']['octs'][] = $row;
@@ -424,7 +430,7 @@ class PedidoSincronizarFaltantesDesdeL8Service
         }
 
         $plan['detalle'][] = sprintf(
-            'OT +%d · ot_id ligar %d · PC nuevas %d · talles +%d · qty %d · extras a quitar %d · tareas +%d · mov +%d · OCT +%d · OCT huérfanos %d · líneas L8 omitidas (pedido divergido) %d.',
+            'OT +%d · ot_id ligar %d · PC nuevas %d · talles +%d · qty %d · extras a quitar %d · tareas +%d · mov +%d · OCT +%d · OCT huérfanos %d · líneas L8 omitidas (pedido divergido) %d · OCT omitidas (otro artículo) %d.',
             $plan['insert_ot'],
             $plan['link_ot'],
             $plan['insert_pc'],
@@ -435,7 +441,8 @@ class PedidoSincronizarFaltantesDesdeL8Service
             $plan['insert_movimiento'],
             $plan['insert_oct'],
             $plan['delete_oct_huerfano'],
-            $plan['omitidos_divergidos']
+            $plan['omitidos_divergidos'],
+            $plan['omitidos_mezcla']
         );
 
         foreach (array_slice($plan['acciones']['talles'], 0, 20) as $t) {
@@ -664,6 +671,13 @@ class PedidoSincronizarFaltantesDesdeL8Service
                 ->where('ordentrabajo_id', $otId)
                 ->where('pedido_combinacion_talle_id', $pctId)
                 ->exists()) {
+                continue;
+            }
+            if (OrdentrabajoMezclaArticuloSupport::talleMezclaOtroArticulo($otId, $pctId)) {
+                Log::warning('ferli.l8.sync.oct_otro_articulo', [
+                    'ordentrabajo_id' => $otId,
+                    'pedido_combinacion_talle_id' => $pctId,
+                ]);
                 continue;
             }
             $id = (int) ($clean['id'] ?? 0);

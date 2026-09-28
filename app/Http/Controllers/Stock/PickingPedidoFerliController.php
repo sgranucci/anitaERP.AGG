@@ -42,18 +42,15 @@ class PickingPedidoFerliController extends Controller
         );
         $consultar = $request->boolean('consultar');
 
-        $pickingActivo = null;
-        if ($pickingId > 0) {
-            $pickingActivo = PedidoPickingFerliSupport::findPicking($pickingId);
-            if ($pickingActivo) {
-                PedidoPickingFerliSupport::setPickingActivoId($pickingId);
-            }
-        } elseif ($pickingCodigo > 0) {
-            $pickingActivo = PedidoPickingFerliSupport::findPicking(null, $pickingCodigo);
-            if ($pickingActivo) {
-                $pickingId = (int) $pickingActivo->id;
-                PedidoPickingFerliSupport::setPickingActivoId($pickingId);
-            }
+        $resuelto = PedidoPickingFerliSupport::resolverPickingConsulta(
+            $pickingId > 0 ? $pickingId : null,
+            $pickingCodigo > 0 ? $pickingCodigo : null,
+        );
+        $pickingActivo = $resuelto['picking'];
+        $pickingId = (int) ($resuelto['id'] ?? 0);
+        $pickingCodigo = (int) ($resuelto['codigo'] ?? 0);
+        if ($pickingActivo) {
+            PedidoPickingFerliSupport::setPickingActivoId($pickingId);
         }
 
         $lineas = collect();
@@ -87,7 +84,8 @@ class PickingPedidoFerliController extends Controller
             'lote_hasta' => $loteHasta,
             'estado' => $estado,
             'picking_id' => $pickingId,
-            'picking_codigo' => $pickingCodigo > 0 ? $pickingCodigo : ($pickingActivo?->codigo ?? ''),
+            'picking_codigo' => $pickingCodigo > 0 ? $pickingCodigo : '',
+            'picking_no_encontrado' => $pickingCodigo > 0 && $pickingActivo === null,
             'puede_borrar_picking' => PedidoPickingFerliSupport::puedeBorrarPicking($pickingId),
             'cliente_query' => $cliente_query,
             'deposito_query' => $deposito_query,
@@ -97,6 +95,7 @@ class PickingPedidoFerliController extends Controller
             'incoterm_query' => $incoterm_query,
             'transporte_query' => $transporte_query,
             'puede_facturar' => can('facturar-picking-pedido', false),
+            'picking_actual' => PedidoPickingFerliSupport::findPicking(PedidoPickingFerliSupport::pickingActivoId()),
         ]);
     }
 
@@ -112,8 +111,12 @@ class PickingPedidoFerliController extends Controller
         $depositoId = (int) $request->input('deposito_id', 0);
         $loteDesde = trim((string) $request->input('lote_desde', ''));
         $loteHasta = trim((string) $request->input('lote_hasta', ''));
-        $pickingId = (int) $request->input('picking_id', 0);
-        $pickingCodigo = (int) $request->input('picking_codigo', 0);
+        $resuelto = PedidoPickingFerliSupport::resolverPickingConsulta(
+            (int) $request->input('picking_id', 0) ?: null,
+            (int) $request->input('picking_codigo', 0) ?: null,
+        );
+        $pickingId = (int) ($resuelto['id'] ?? 0);
+        $pickingCodigo = (int) ($resuelto['codigo'] ?? 0);
         $estado = PedidoPickingFerliSupport::normalizarEstadoConsulta(
             (string) $request->input('estado', PedidoPickingFerliSupport::ESTADO_PENDIENTES)
         );
@@ -145,10 +148,7 @@ class PickingPedidoFerliController extends Controller
             }
         }
 
-        $picking = PedidoPickingFerliSupport::findPicking(
-            $pickingId > 0 ? $pickingId : null,
-            $pickingCodigo > 0 ? $pickingCodigo : null,
-        );
+        $picking = $resuelto['picking'];
         $filas = PedidoPickingFerliSupport::filasExcelFragola($lineas);
         $encabezado = PedidoPickingFerliSupport::encabezadoExcel(
             $filas,
@@ -198,6 +198,32 @@ class PickingPedidoFerliController extends Controller
             $pickingCodigo > 0 ? $pickingCodigo : null,
             $ordentrabajoId > 0 ? $ordentrabajoId : null,
         );
+
+        if (! empty($result['error'])) {
+            return response()->json($result, 422);
+        }
+
+        return response()->json($result);
+    }
+
+    public function abiertosParaAsignar()
+    {
+        $this->assertFerli();
+        can('listar-reporte-picking-pedido');
+
+        return response()->json([
+            'filas' => PedidoPickingFerliSupport::pickingsAbiertosParaAsignar(),
+        ]);
+    }
+
+    public function cambiarPicking(Request $request)
+    {
+        $this->assertFerli();
+        can('listar-reporte-picking-pedido');
+
+        $ids = array_map('intval', (array) $request->input('pedido_combinacion_ids', []));
+        $pickingId = (int) $request->input('picking_id', 0);
+        $result = PedidoPickingFerliSupport::cambiarPickingLineas($ids, $pickingId);
 
         if (! empty($result['error'])) {
             return response()->json($result, 422);
@@ -258,12 +284,14 @@ class PickingPedidoFerliController extends Controller
         $moduloId = (int) $request->input('modulo_id', 0);
         $texto = trim((string) $request->input('texto', $request->input('consulta', '')));
         $soloModuloLinea = $request->boolean('solo_modulo_linea');
+        $pedidoId = (int) $request->input('pedido_id', 0);
 
         $result = PedidoPickingFerliSupport::consultaLotesStockPendientes(
             $articuloId,
             $combinacionId,
             $soloModuloLinea && $moduloId > 0 ? $moduloId : null,
             $texto !== '' ? $texto : null,
+            $pedidoId,
         );
 
         if (! empty($result['error'])) {

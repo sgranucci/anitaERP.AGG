@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Support\Ventas;
 
+use App\Support\Ventas\Ferli\NotaCreditoReabrePedidoOtFerliSupport;
 use App\Support\Ventas\PedidoPickingFerliSupport as S;
 use PHPUnit\Framework\TestCase;
 
@@ -90,6 +91,71 @@ class PedidoPickingFerliSupportTest extends TestCase
         foreach ($enc['lineas'] as $linea) {
             self::assertStringNotContainsString('Factura:', $linea);
         }
+    }
+
+    public function test_nc_parcial_cubre_la_linea_cuando_la_cantidad_acreditada_alcanza_la_facturada(): void
+    {
+        self::assertTrue(NotaCreditoReabrePedidoOtFerliSupport::cantidadCubierta(12, 12));
+        self::assertFalse(NotaCreditoReabrePedidoOtFerliSupport::cantidadCubierta(6, 12));
+        self::assertFalse(NotaCreditoReabrePedidoOtFerliSupport::cantidadCubierta(12, 0));
+    }
+
+    public function test_precio_unitario_usa_el_de_los_talles_si_la_cabecera_difiere(): void
+    {
+        $talle = (object) ['cantidad' => 12, 'precio' => 17400];
+        $linea = (object) [
+            'precio' => 24000,
+            'pedido_combinacion_talles' => [$talle],
+        ];
+
+        self::assertSame(17400.0, S::precioUnitarioLinea($linea));
+    }
+
+    public function test_precio_unitario_conserva_la_cabecera_si_los_talles_no_coinciden(): void
+    {
+        $linea = (object) [
+            'precio' => 24000,
+            'pedido_combinacion_talles' => [
+                (object) ['cantidad' => 6, 'precio' => 17400],
+                (object) ['cantidad' => 6, 'precio' => 19000],
+            ],
+        ];
+
+        self::assertSame(24000.0, S::precioUnitarioLinea($linea));
+    }
+
+    public function test_mensaje_ot_asignada_a_otro_pedido(): void
+    {
+        $msg = S::mensajeOtAsignadaAOtroPedido('30797', '5042', 'CALZADOS LOS GALLEGOS');
+
+        self::assertStringContainsString('30797', $msg);
+        self::assertStringContainsString('5042', $msg);
+        self::assertStringContainsString('CALZADOS LOS GALLEGOS', $msg);
+        self::assertStringContainsString('No se puede usar en otro pedido', $msg);
+    }
+
+    public function test_descuentos_modal_toma_el_del_cliente(): void
+    {
+        $desc = S::descuentosModalFactura(5, [5, 5], [0, 0]);
+
+        self::assertSame(5.0, $desc['descuentopie']);
+        self::assertNull($desc['descuentolinea']);
+    }
+
+    public function test_descuentos_modal_usa_el_pedido_si_el_cliente_esta_en_cero(): void
+    {
+        $desc = S::descuentosModalFactura(0, ['5.00', 5], [10, 10]);
+
+        self::assertSame(5.0, $desc['descuentopie']);
+        self::assertSame(10.0, $desc['descuentolinea']);
+    }
+
+    public function test_descuentos_modal_no_inventa_linea_si_las_combinaciones_difieren(): void
+    {
+        $desc = S::descuentosModalFactura(0, [5, 8], [10, 12]);
+
+        self::assertSame(0.0, $desc['descuentopie']);
+        self::assertNull($desc['descuentolinea']);
     }
 
     public function test_elige_bucket_ot_lote_cero_cuando_hay_saldo_visible(): void

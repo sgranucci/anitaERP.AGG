@@ -108,6 +108,37 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * Consulta del workbench: manda el número escrito.
+     * Un id oculto de una elección anterior no puede listar otro picking
+     * mientras el campo sigue mostrando el número nuevo. Número vacío = todos.
+     *
+     * @return array{picking: ?Pedido_Picking, id: ?int, codigo: ?int}
+     */
+    public static function resolverPickingConsulta(?int $pickingId, ?int $codigo): array
+    {
+        $codigo = $codigo && $codigo > 0 ? $codigo : null;
+        if ($codigo === null) {
+            return ['picking' => null, 'id' => null, 'codigo' => null];
+        }
+
+        $pickingId = $pickingId && $pickingId > 0 ? $pickingId : null;
+        if ($pickingId) {
+            $porId = self::findPicking($pickingId, null);
+            if ($porId && (int) $porId->codigo === $codigo) {
+                return ['picking' => $porId, 'id' => (int) $porId->id, 'codigo' => $codigo];
+            }
+        }
+
+        $porCodigo = self::findPicking(null, $codigo);
+
+        return [
+            'picking' => $porCodigo,
+            'id' => $porCodigo ? (int) $porCodigo->id : null,
+            'codigo' => $codigo,
+        ];
+    }
+
+    /**
      * Resuelve cabecera: id/código pedido → sesión → crea nuevo del día.
      */
     public static function resolverPickingParaMarcar(?int $pickingId = null, ?int $codigo = null): Pedido_Picking
@@ -242,6 +273,167 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * Pickings que todavía reciben tareas: tienen líneas sin facturar,
+     * o es el picking de la sesión y aún no tiene líneas.
+     * Uno facturado por completo no entra.
+     *
+     * @return list<array{id: int, codigo: int, fecha: string, lineas_pendientes: int, clientes: string, es_actual: bool}>
+     */
+    public static function pickingsAbiertosParaAsignar(): array
+    {
+        $conteo = Pedido_Combinacion::query()
+            ->where('picking', self::MARCADO)
+            ->whereNotNull('picking_id')
+            ->where('picking_id', '>', 0)
+            ->where(function ($q) {
+                $q->whereNull('estado')->orWhere('estado', '<>', 'A');
+            })
+            ->groupBy('picking_id', 'picking_facturado')
+            ->select(['picking_id', 'picking_facturado'])
+            ->selectRaw('COUNT(*) as n')
+            ->get();
+
+        $pendientes = [];
+        $totales = [];
+        foreach ($conteo as $row) {
+            $id = (int) $row->picking_id;
+            $n = (int) $row->n;
+            $totales[$id] = ($totales[$id] ?? 0) + $n;
+            if (($row->picking_facturado ?? self::NO_MARCADO) !== self::FACTURADO) {
+                $pendientes[$id] = ($pendientes[$id] ?? 0) + $n;
+            }
+        }
+
+        $ids = array_keys($pendientes);
+        $activoId = (int) (self::pickingActivoId() ?? 0);
+        if ($activoId > 0 && ! isset($pendientes[$activoId]) && (int) ($totales[$activoId] ?? 0) === 0) {
+            $ids[] = $activoId;
+            $pendientes[$activoId] = 0;
+        }
+
+        $vaciosHoy = Pedido_Picking::query()
+            ->where('fecha', now()->toDateString())
+            ->whereDoesntHave('lineas')
+            ->pluck('id');
+        foreach ($vaciosHoy as $vacioId) {
+            $vacioId = (int) $vacioId;
+            if ($vacioId > 0 && ! isset($pendientes[$vacioId]) && (int) ($totales[$vacioId] ?? 0) === 0) {
+                $ids[] = $vacioId;
+                $pendientes[$vacioId] = 0;
+            }
+        }
+
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($ids === []) {
+            return [];
+        }
+
+        $nombres = DB::table('pedido_combinacion as pc')
+            ->join('pedido as p', 'p.id', '=', 'pc.pedido_id')
+            ->leftJoin('cliente as c', 'c.id', '=', 'p.cliente_id')
+            ->whereIn('pc.picking_id', $ids)
+            ->where('pc.picking', self::MARCADO)
+            ->where(function ($q) {
+                $q->whereNull('pc.estado')->orWhere('pc.estado', '<>', 'A');
+            })
+            ->where(function ($q) {
+                $q->whereNull('pc.picking_facturado')
+                    ->orWhere('pc.picking_facturado', '<>', self::FACTURADO);
+            })
+            ->select(['pc.picking_id', 'c.nombre'])
+            ->distinct()
+            ->get()
+            ->groupBy('picking_id');
+
+        $filas = [];
+        $pickings = Pedido_Picking::query()->whereIn('id', $ids)->orderByDesc('codigo')->get();
+        foreach ($pickings as $picking) {
+            $id = (int) $picking->id;
+            $clientes = ($nombres[$id] ?? collect())
+                ->pluck('nombre')
+                ->filter()
+                ->unique()
+                ->take(4)
+                ->implode(', ');
+            $filas[] = [
+                'id' => $id,
+                'codigo' => (int) $picking->codigo,
+                'fecha' => $picking->fecha?->format('d/m/Y') ?? '',
+                'lineas_pendientes' => (int) ($pendientes[$id] ?? 0),
+                'clientes' => $clientes,
+                'es_actual' => $id === $activoId,
+            ];
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Pasa líneas ya preparadas a otro picking abierto. No toca el stock.
+     *
+     * @param  list<int>  $pedidoCombinacionIds
+     * @return array{ok?: bool, error?: string, picking_id?: int, picking_codigo?: int, cantidad?: int, aviso?: string}
+     */
+    public static function cambiarPickingLineas(array $pedidoCombinacionIds, int $pickingDestinoId): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $pedidoCombinacionIds), fn ($id) => $id > 0)));
+        if ($ids === []) {
+            return ['error' => 'Seleccione al menos una línea'];
+        }
+        if ($pickingDestinoId <= 0) {
+            return ['error' => 'Elija el picking destino'];
+        }
+
+        $destino = Pedido_Picking::query()->find($pickingDestinoId);
+        if (! $destino) {
+            return ['error' => 'El picking destino no existe'];
+        }
+
+        $abiertos = collect(self::pickingsAbiertosParaAsignar())->keyBy('id');
+        if (! $abiertos->has((int) $destino->id)) {
+            return ['error' => 'El picking #'.$destino->codigo.' ya fue facturado o no está abierto'];
+        }
+
+        $lineas = Pedido_Combinacion::query()->whereIn('id', $ids)->get();
+        if ($lineas->count() !== count($ids)) {
+            return ['error' => 'Hay líneas inexistentes'];
+        }
+
+        foreach ($lineas as $linea) {
+            if (($linea->estado ?? 'N') === 'A') {
+                return ['error' => 'La línea '.$linea->id.' está anulada'];
+            }
+            if (($linea->picking ?? self::NO_MARCADO) !== self::MARCADO) {
+                return ['error' => 'La línea '.$linea->id.' no está preparada'];
+            }
+            if (($linea->picking_facturado ?? self::NO_MARCADO) === self::FACTURADO) {
+                return ['error' => 'La línea '.$linea->id.' ya fue facturada'];
+            }
+            if ((int) $linea->picking_id === (int) $destino->id) {
+                return ['error' => 'La línea ya está en el picking #'.$destino->codigo];
+            }
+        }
+
+        DB::transaction(function () use ($lineas, $destino) {
+            foreach ($lineas as $linea) {
+                $linea->picking_id = $destino->id;
+                $linea->save();
+            }
+            self::setPickingActivoId((int) $destino->id);
+        });
+
+        $cantidad = $lineas->count();
+
+        return [
+            'ok' => true,
+            'picking_id' => (int) $destino->id,
+            'picking_codigo' => (int) $destino->codigo,
+            'cantidad' => $cantidad,
+            'aviso' => $cantidad.' línea(s) pasaron al picking #'.$destino->codigo.'. El stock no se movió.',
+        ];
+    }
+
+    /**
      * @return self::ESTADO_PENDIENTES|self::ESTADO_FACTURADOS|self::ESTADO_TODOS
      */
     public static function normalizarEstadoConsulta(?string $estado): string
@@ -281,6 +473,10 @@ final class PedidoPickingFerliSupport
 
         $depositoId = $depositoId && $depositoId > 0 ? $depositoId : null;
         $ordentrabajoId = $ordentrabajoId && $ordentrabajoId > 0 ? $ordentrabajoId : null;
+        $exclusiva = self::errorSiOtAsignadaAOtroPedido($linea, $loteCodigo, $ordentrabajoId);
+        if ($exclusiva !== null) {
+            return ['error' => $exclusiva];
+        }
         $validacionStock = self::validarSaldoLoteDepositoParaMarcar(
             $linea,
             $loteCodigo,
@@ -289,6 +485,10 @@ final class PedidoPickingFerliSupport
         );
         if (! empty($validacionStock['error'])) {
             return $validacionStock;
+        }
+        $depositoId = (int) ($validacionStock['deposito_id'] ?? 0);
+        if ($depositoId <= 0) {
+            return ['error' => 'No se pudo determinar el depósito del stock para ese lote/OT'];
         }
 
         if (($linea->picking ?? self::NO_MARCADO) === self::MARCADO) {
@@ -299,6 +499,11 @@ final class PedidoPickingFerliSupport
 
         try {
             DB::transaction(function () use ($linea, $picking, $loteCodigo, $depositoId, $ordentrabajoId) {
+                $exclusiva = self::errorSiOtAsignadaAOtroPedido($linea, $loteCodigo, $ordentrabajoId, true);
+                if ($exclusiva !== null) {
+                    throw new RuntimeException($exclusiva);
+                }
+
                 $linea->picking = self::MARCADO;
                 $linea->picking_id = $picking->id;
                 $linea->picking_lote_codigo = $loteCodigo;
@@ -319,7 +524,12 @@ final class PedidoPickingFerliSupport
                 );
             });
         } catch (\Throwable $e) {
-            return ['error' => 'No se pudo preparar: '.$e->getMessage()];
+            $msg = $e->getMessage();
+            if (str_starts_with($msg, 'La OT ')) {
+                return ['error' => $msg];
+            }
+
+            return ['error' => 'No se pudo preparar: '.$msg];
         }
 
         $linea->refresh();
@@ -335,6 +545,259 @@ final class PedidoPickingFerliSupport
             'picking_ordentrabajo_id' => $linea->picking_ordentrabajo_id,
             'aviso' => 'Línea preparada y stock descontado del lote/OT (queda reservado hasta facturar o quitar picking).',
         ];
+    }
+
+    /**
+     * Una OT de producción (la tarea) sale hacia un solo pedido cliente.
+     * El pedido STOCK que la fabricó no cuenta. Un lote de importación (sin OT) sí se puede partir.
+     */
+    public static function mensajeOtAsignadaAOtroPedido(string $otCodigo, string $pedidoCodigo, string $clienteNombre): string
+    {
+        $clienteNombre = trim($clienteNombre);
+        $quien = $clienteNombre !== '' ? ' ('.$clienteNombre.')' : '';
+
+        return 'La OT '.$otCodigo.' ya está asignada al pedido '.$pedidoCodigo.$quien.'. No se puede usar en otro pedido.';
+    }
+
+    /**
+     * @return string|null mensaje de error si la OT ya salió hacia otro pedido
+     */
+    public static function errorSiOtAsignadaAOtroPedido(
+        Pedido_Combinacion $linea,
+        string $loteCodigo,
+        ?int $ordentrabajoId = null,
+        bool $bloquear = false
+    ): ?string {
+        $ot = self::resolverOtProduccion($loteCodigo, $ordentrabajoId);
+        if ($ot === null) {
+            return null;
+        }
+
+        if ($bloquear) {
+            Ordentrabajo::query()->whereKey($ot->id)->lockForUpdate()->first(['id']);
+        }
+
+        $conflicto = self::primerPedidoClientePorOt(collect([$ot]), (int) $linea->pedido_id)[(int) $ot->id] ?? null;
+        if ($conflicto === null) {
+            return null;
+        }
+
+        return self::mensajeOtAsignadaAOtroPedido(
+            trim((string) $ot->codigo),
+            (string) $conflicto['pedido_codigo'],
+            (string) $conflicto['cliente_nombre']
+        );
+    }
+
+    /**
+     * Marca filas del modal F1 que ya salieron hacia otro pedido (no se pueden elegir).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    public static function marcarOtAsignadasAOtroPedido(array $filas, int $exceptoPedidoId): array
+    {
+        if ($filas === []) {
+            return $filas;
+        }
+
+        $codigos = [];
+        $ids = [];
+        foreach ($filas as $fila) {
+            $lote = trim((string) ($fila['lote'] ?? ''));
+            if ($lote !== '' && $lote !== '0') {
+                $codigos[$lote] = true;
+            }
+            $otId = (int) ($fila['ordentrabajo_id'] ?? 0);
+            if ($otId > 0) {
+                $ids[$otId] = true;
+            }
+        }
+
+        if ($codigos === [] && $ids === []) {
+            return $filas;
+        }
+
+        $ots = Ordentrabajo::query()
+            ->where(function ($q) use ($codigos, $ids) {
+                $aplico = false;
+                if ($codigos !== []) {
+                    $q->whereIn('codigo', array_keys($codigos));
+                    $aplico = true;
+                }
+                if ($ids !== []) {
+                    $aplico ? $q->orWhereIn('id', array_keys($ids)) : $q->whereIn('id', array_keys($ids));
+                }
+            })
+            ->get(['id', 'codigo']);
+
+        if ($ots->isEmpty()) {
+            return $filas;
+        }
+
+        $porOt = self::primerPedidoClientePorOt($ots, $exceptoPedidoId);
+        $porCodigo = [];
+        foreach ($ots as $ot) {
+            if (isset($porOt[(int) $ot->id])) {
+                $porCodigo[trim((string) $ot->codigo)] = $porOt[(int) $ot->id];
+            }
+        }
+
+        foreach ($filas as &$fila) {
+            $lote = trim((string) ($fila['lote'] ?? ''));
+            $otId = (int) ($fila['ordentrabajo_id'] ?? 0);
+            $conflicto = $porCodigo[$lote] ?? ($porOt[$otId] ?? null);
+            if ($conflicto === null) {
+                continue;
+            }
+            $fila['bloqueada'] = true;
+            $fila['bloqueada_motivo'] = 'Pedido '.$conflicto['pedido_codigo']
+                .($conflicto['cliente_nombre'] !== '' ? ' · '.$conflicto['cliente_nombre'] : '');
+        }
+        unset($fila);
+
+        return $filas;
+    }
+
+    private static function resolverOtProduccion(string $loteCodigo, ?int $ordentrabajoId): ?Ordentrabajo
+    {
+        $otId = (int) ($ordentrabajoId ?? 0);
+        $codigo = trim($loteCodigo);
+        $ot = null;
+        if ($otId > 0) {
+            $ot = Ordentrabajo::query()->find($otId, ['id', 'codigo']);
+        }
+        if ($ot === null && $codigo !== '' && $codigo !== '0') {
+            $ot = Ordentrabajo::query()->where('codigo', $codigo)->first(['id', 'codigo']);
+        }
+
+        return $ot;
+    }
+
+    /**
+     * Primer pedido cliente (no STOCK) que ya tiene la OT: picking marcado o consumo neto sin devolver.
+     *
+     * @param  Collection<int, Ordentrabajo>  $ots
+     * @return array<int, array{pedido_codigo: string, cliente_nombre: string}>
+     */
+    private static function primerPedidoClientePorOt(Collection $ots, int $exceptoPedidoId): array
+    {
+        if ($ots->isEmpty()) {
+            return [];
+        }
+
+        $stockClienteId = (int) config('consprod.CLIENTE_STOCK');
+        $porId = [];
+        $porCodigo = [];
+        foreach ($ots as $ot) {
+            $porId[(int) $ot->id] = $ot;
+            $porCodigo[trim((string) $ot->codigo)] = (int) $ot->id;
+        }
+        $codigos = array_keys($porCodigo);
+        $ids = array_keys($porId);
+
+        $out = [];
+
+        $pickingRows = DB::table('pedido_combinacion as pc')
+            ->join('pedido as p', 'p.id', '=', 'pc.pedido_id')
+            ->leftJoin('cliente as c', 'c.id', '=', 'p.cliente_id')
+            ->where('pc.pedido_id', '<>', $exceptoPedidoId)
+            ->where(function ($q) {
+                $q->whereNull('pc.estado')->orWhere('pc.estado', '<>', 'A');
+            })
+            ->when($stockClienteId > 0, fn ($q) => $q->where('p.cliente_id', '<>', $stockClienteId))
+            ->where(function ($q) {
+                $q->where('pc.picking', self::MARCADO)
+                    ->orWhere('pc.picking_facturado', self::FACTURADO);
+            })
+            ->where(function ($q) use ($codigos, $ids) {
+                $q->whereIn('pc.picking_lote_codigo', $codigos);
+                if ($ids !== []) {
+                    $q->orWhereIn('pc.picking_ordentrabajo_id', $ids);
+                }
+            })
+            ->orderBy('p.codigo')
+            ->get(['pc.picking_lote_codigo', 'pc.picking_ordentrabajo_id', 'p.codigo as pedido_codigo', 'c.nombre as cliente_nombre']);
+
+        foreach ($pickingRows as $row) {
+            $otId = $porCodigo[trim((string) $row->picking_lote_codigo)] ?? (int) $row->picking_ordentrabajo_id;
+            if ($otId <= 0 || isset($out[$otId]) || ! isset($porId[$otId])) {
+                continue;
+            }
+            $out[$otId] = [
+                'pedido_codigo' => (string) $row->pedido_codigo,
+                'cliente_nombre' => trim((string) ($row->cliente_nombre ?? '')),
+            ];
+        }
+
+        $movs = DB::table('articulo_movimiento as am')
+            ->join('pedido_combinacion as pc', 'pc.id', '=', 'am.pedido_combinacion_id')
+            ->join('pedido as p', 'p.id', '=', 'pc.pedido_id')
+            ->leftJoin('cliente as c', 'c.id', '=', 'p.cliente_id')
+            ->where('pc.pedido_id', '<>', $exceptoPedidoId)
+            ->where(function ($q) {
+                $q->whereNull('pc.estado')->orWhere('pc.estado', '<>', 'A');
+            })
+            ->when($stockClienteId > 0, fn ($q) => $q->where('p.cliente_id', '<>', $stockClienteId))
+            ->where(function ($q) use ($codigos, $ids) {
+                $q->whereIn('am.lote', $codigos);
+                if ($ids !== []) {
+                    $q->orWhereIn('am.ordentrabajo_id', $ids);
+                }
+            })
+            ->where(function ($q) {
+                $q->where('am.concepto', self::CONCEPTO_CONSUMO_OT)
+                    ->orWhere('am.concepto', 'like', self::CONCEPTO_DEVOLUCION_PICKING_PREFIJO.'%')
+                    ->orWhere('am.concepto', 'like', self::CONCEPTO_DEVOLUCION_NC_PICKING_PREFIJO.'%')
+                    ->orWhere('am.concepto', 'like', 'Devolución NC picking #%');
+            })
+            ->groupBy('p.id', 'p.codigo', 'c.nombre', 'am.lote', 'am.ordentrabajo_id')
+            ->select([
+                'p.id as pedido_id',
+                'p.codigo as pedido_codigo',
+                'c.nombre as cliente_nombre',
+                'am.lote',
+                'am.ordentrabajo_id',
+                DB::raw('SUM(am.cantidad) as neto'),
+            ])
+            ->get();
+
+        $netoPorOtPedido = [];
+        foreach ($movs as $mov) {
+            $otId = $porCodigo[trim((string) $mov->lote)] ?? 0;
+            if ($otId <= 0 && isset($porId[(int) $mov->ordentrabajo_id])) {
+                $otId = (int) $mov->ordentrabajo_id;
+            }
+            if ($otId <= 0 || isset($out[$otId])) {
+                continue;
+            }
+            $pedidoId = (int) $mov->pedido_id;
+            if (! isset($netoPorOtPedido[$otId][$pedidoId])) {
+                $netoPorOtPedido[$otId][$pedidoId] = [
+                    'neto' => 0.0,
+                    'pedido_codigo' => (string) $mov->pedido_codigo,
+                    'cliente_nombre' => trim((string) ($mov->cliente_nombre ?? '')),
+                ];
+            }
+            $netoPorOtPedido[$otId][$pedidoId]['neto'] += (float) $mov->neto;
+        }
+
+        foreach ($netoPorOtPedido as $otId => $pedidos) {
+            if (isset($out[$otId])) {
+                continue;
+            }
+            foreach ($pedidos as $info) {
+                if ($info['neto'] < -0.0001) {
+                    $out[$otId] = [
+                        'pedido_codigo' => $info['pedido_codigo'],
+                        'cliente_nombre' => $info['cliente_nombre'],
+                    ];
+                    break;
+                }
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -355,7 +818,24 @@ final class PedidoPickingFerliSupport
         }
 
         if (! $depositoId || $depositoId <= 0) {
-            return ['error' => 'Seleccione el depósito de salida (use F1 / lupa y Elegir el lote con su depósito)'];
+            $saldos = self::saldosNetosLotePorDeposito($articuloId, $combinacionId, $loteCodigo);
+            $conSaldo = [];
+            foreach ($saldos as $depId => $info) {
+                if ((float) ($info['saldo'] ?? 0) > 0.0001) {
+                    $conSaldo[(int) $depId] = $info;
+                }
+            }
+            if (count($conSaldo) === 1) {
+                $depositoId = (int) array_key_first($conSaldo);
+            } else {
+                $sugerencias = self::formatearSugerenciasDepositosConSaldo($saldos);
+                $msg = "Elegí el lote/OT {$loteCodigo} con F1: el depósito sale del stock.";
+                if ($sugerencias !== '') {
+                    $msg .= ' Hay saldo en más de un depósito: '.$sugerencias.'.';
+                }
+
+                return ['error' => $msg, 'saldo' => 0.0, 'deposito_id' => 0];
+            }
         }
 
         $bucket = self::resolverBucketConsumoAsignado(
@@ -1015,6 +1495,41 @@ final class PedidoPickingFerliSupport
             ]);
     }
 
+    /**
+     * NC parcial: la línea vuelve a pendiente en el mismo picking.
+     *
+     * @param  list<int>  $pedidoCombinacionIds
+     */
+    public static function reabrirFacturadoDeLineas(array $pedidoCombinacionIds): int
+    {
+        $ids = array_values(array_filter(array_map('intval', $pedidoCombinacionIds), static fn (int $id) => $id > 0));
+        if ($ids === [] || ! self::habilitado()) {
+            return 0;
+        }
+
+        $lineas = Pedido_Combinacion::query()
+            ->whereIn('id', $ids)
+            ->where('picking_facturado', self::FACTURADO)
+            ->get();
+
+        $pedidos = [];
+        foreach ($lineas as $linea) {
+            $linea->picking_facturado = self::NO_MARCADO;
+            $linea->picking_venta_id = null;
+            $linea->save();
+            $pedidoId = (int) ($linea->pedido_id ?? 0);
+            if ($pedidoId > 0) {
+                $pedidos[$pedidoId] = $pedidoId;
+            }
+        }
+
+        foreach ($pedidos as $pedidoId) {
+            PedidoEstadoCabeceraSupport::refrescar($pedidoId);
+        }
+
+        return $lineas->count();
+    }
+
     public static function conceptoDevolucionNcPicking(int $movimientoOrigenId): string
     {
         return self::CONCEPTO_DEVOLUCION_NC_PICKING_PREFIJO.$movimientoOrigenId;
@@ -1506,7 +2021,7 @@ final class PedidoPickingFerliSupport
                 'medidas' => $medidas,
                 'total' => $total,
                 'cantidadmodulo' => (float) ($linea->modulos->cantidad ?? 0),
-                'precio' => (float) $linea->precio,
+                'precio' => self::precioUnitarioLinea($linea),
                 'situacion' => 'ENTREGA INMEDIATA',
                 'numero_ot' => $loteTxt,
                 'deposito' => $depositoTxt,
@@ -1639,7 +2154,8 @@ final class PedidoPickingFerliSupport
         int $articuloId,
         int $combinacionId,
         ?int $moduloId = null,
-        ?string $texto = null
+        ?string $texto = null,
+        int $exceptoPedidoId = 0
     ): array {
         if ($articuloId <= 0 || $combinacionId <= 0) {
             return ['error' => 'Seleccione artículo y combinación de la línea', 'filas' => []];
@@ -1668,6 +2184,8 @@ final class PedidoPickingFerliSupport
             }
         }
 
+        $filas = self::marcarOtAsignadasAOtroPedido($filas, $exceptoPedidoId);
+
         return [
             'filas' => $filas,
             'articulo_id' => $articuloId,
@@ -1682,10 +2200,111 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * Precio que se muestra en el picking y el que se factura.
+     * Si todos los talles con cantidad comparten un precio, ese manda.
+     * La cabecera de la línea puede quedar desactualizada (se copia el precio
+     * de la línea anterior si la pantalla no espera la lista).
+     */
+    public static function precioUnitarioLinea(object $linea): float
+    {
+        $precios = [];
+        foreach ($linea->pedido_combinacion_talles ?? [] as $talle) {
+            if ((float) ($talle->cantidad ?? 0) == 0.0) {
+                continue;
+            }
+            $precios[] = $talle->precio ?? 0;
+        }
+
+        $unico = self::precioUnicoPositivo($precios);
+        if ($unico !== null) {
+            return $unico;
+        }
+
+        return (float) ($linea->precio ?? 0);
+    }
+
+    /**
+     * @param  list<float|int|string|null>  $precios
+     */
+    public static function precioUnicoPositivo(array $precios): ?float
+    {
+        $unicos = [];
+        foreach ($precios as $precio) {
+            $numero = round((float) $precio, 4);
+            if ($numero <= 0) {
+                continue;
+            }
+            $unicos[number_format($numero, 4, '.', '')] = $numero;
+        }
+
+        if (count($unicos) !== 1) {
+            return null;
+        }
+
+        return (float) array_values($unicos)[0];
+    }
+
+    /**
+     * Descuentos del modal de factura picking.
+     * El pie sale del cliente (igual que la prefactura Ferli). Si el cliente está en cero,
+     * usa el descuento del pedido cuando todas las líneas coinciden.
+     * La línea sale de la combinación cuando todas coinciden y no es cero.
+     *
+     * @param  list<float|int|string|null>  $descuentosPedido
+     * @param  list<float|int|string|null>  $descuentosLinea
+     * @return array{descuentopie: float, descuentolinea: float|null}
+     */
+    public static function descuentosModalFactura(mixed $descuentoCliente, array $descuentosPedido, array $descuentosLinea): array
+    {
+        $pie = self::descuentoNumero($descuentoCliente);
+        if ($pie == 0.0) {
+            $unicosPedido = self::descuentosUnicos($descuentosPedido);
+            if (count($unicosPedido) === 1) {
+                $pie = $unicosPedido[0];
+            }
+        }
+
+        $unicosLinea = self::descuentosUnicos($descuentosLinea);
+        $linea = null;
+        if (count($unicosLinea) === 1 && $unicosLinea[0] != 0.0) {
+            $linea = $unicosLinea[0];
+        }
+
+        return [
+            'descuentopie' => $pie,
+            'descuentolinea' => $linea,
+        ];
+    }
+
+    /**
+     * @param  list<float|int|string|null>  $valores
+     * @return list<float>
+     */
+    private static function descuentosUnicos(array $valores): array
+    {
+        $unicos = [];
+        foreach ($valores as $valor) {
+            $numero = self::descuentoNumero($valor);
+            $unicos[number_format($numero, 4, '.', '')] = $numero;
+        }
+
+        return array_values($unicos);
+    }
+
+    private static function descuentoNumero(mixed $valor): float
+    {
+        if ($valor === null || $valor === '') {
+            return 0.0;
+        }
+
+        return round((float) $valor, 4);
+    }
+
+    /**
      * Payload para el modal de facturación OT (mismos campos que creaferli.js).
      *
      * @param  list<int>  $ids
-     * @return array{pedido_combinacion_ids: list<int>, ordentrabajo_ids: list<int>, filas: list<array<string,mixed>>, error?: string}
+     * @return array{pedido_combinacion_ids: list<int>, ordentrabajo_ids: list<int>, filas: list<array<string,mixed>>, descuentopie?: float, descuentolinea?: float|null, error?: string}
      */
     public static function payloadModalFactura(array $ids): array
     {
@@ -1753,13 +2372,22 @@ final class PedidoPickingFerliSupport
             $totalPares += (float) ($fila['cantidad'] ?? 0);
         }
 
+        $cliente = $lineas->first()->pedidos->clientes ?? null;
+        $descuentos = self::descuentosModalFactura(
+            $cliente?->descuento ?? 0,
+            $lineas->map(fn ($linea) => $linea->pedidos->descuento ?? 0)->all(),
+            $lineas->map(fn ($linea) => $linea->descuento ?? 0)->all(),
+        );
+
         return [
             'pedido_combinacion_ids' => $pedidoCombinacionIds,
             'ordentrabajo_ids' => $ordentrabajoIds,
             'filas' => $filas,
             'total_pares' => $totalPares,
-            'nombrecliente' => $lineas->first()->pedidos->clientes->nombre ?? '',
+            'nombrecliente' => $cliente?->nombre ?? '',
             'cliente_id' => (int) ($lineas->first()->pedidos->cliente_id ?? 0),
+            'descuentopie' => $descuentos['descuentopie'],
+            'descuentolinea' => $descuentos['descuentolinea'],
         ];
     }
 }

@@ -354,6 +354,18 @@ final class ArcaWsfeEmisionResiliencia
         return self::clasificarError($mensaje) === self::CLASE_TRANSPORTE;
     }
 
+    /**
+     * Texto para el operador cuando ARCA no respondió. null si el error es de datos o de sistema.
+     */
+    public static function mensajeOperadorSiTransporte(?string $mensaje): ?string
+    {
+        if (! self::esErrorTransporte($mensaje)) {
+            return null;
+        }
+
+        return 'ARCA no responde el servicio de factura electrónica. No se emitió la factura. Puede reintentar en unos minutos.';
+    }
+
     public static function esErrorDatos(?string $mensaje): bool
     {
         return self::clasificarError($mensaje) === self::CLASE_DATOS;

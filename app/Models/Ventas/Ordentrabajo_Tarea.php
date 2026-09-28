@@ -8,9 +8,12 @@ use App\Models\Produccion\Empleado;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Venta;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Ordentrabajo_Tarea extends Model
+class Ordentrabajo_Tarea extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $fillable = ['ordentrabajo_id', 'tarea_id', 'empleado_id', 'pedido_combinacion_id', 'desdefecha', 'hastafecha', 'costo',
 						'estado', 'usuario_id', 'venta_id'];
     protected $table = 'ordentrabajo_tarea';

@@ -50,7 +50,6 @@
         table.data th { font-size: 7.5px; font-weight: bold; color: #17202A; }
         .text-right { text-align: right; white-space: nowrap; }
         .col-nowrap { white-space: nowrap; }
-        .col-texto { white-space: nowrap; overflow: hidden; }
         .listado-header {
             width: 100%;
             margin: 0 0 4px 0;

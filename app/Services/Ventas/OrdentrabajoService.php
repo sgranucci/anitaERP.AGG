@@ -21,8 +21,11 @@ use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\CupsRemotoImpresionSupport;
 use App\Support\Ventas\QrCodePngSupport;
+use App\Models\Ventas\Pedido_Combinacion;
 use App\Support\Ventas\ClientePoliticaComercialSupport;
+use App\Support\Ventas\PedidoPickingFerliSupport;
 use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
+use App\Support\Ventas\Ferli\OrdentrabajoMezclaArticuloSupport;
 use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
 use App\Support\Ventas\OrdentrabajoEmisionPreimpresoLayout;
 use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
@@ -206,6 +209,17 @@ class OrdentrabajoService
 	
 		try 
 		{
+			if ($funcion === 'update') {
+				// No borrar las tallas de otro artículo ni colgar un renglón distinto.
+				OrdentrabajoMezclaArticuloSupport::assertActualizacionNoIncorporaOtroArticulo(
+					(int) $id,
+					array_map('intval', $ids)
+				);
+				foreach ($ids as $pcIdGuard) {
+					$this->ordentrabajo_combinacion_talleRepository->deletePorPedidoCombinacionId((int) $pcIdGuard);
+				}
+			}
+
 			for ($i = 0; $i < count($ids); $i++)
 			{
 				// Lee el articulo para sacar todos los datos para Anita
@@ -354,12 +368,6 @@ class OrdentrabajoService
 
 						$ordentrabajo_id = ($funcion == 'update' ? $id : $id_ot);
 						$cliente_id = $ordentrabajo->cliente_id;
-			
-						// Borra los registros de movimientos antes de grabar nuevamente
-						if ($funcion == 'update')
-						{
-							$this->ordentrabajo_combinacion_talleRepository->deleteporordentrabajo($ordentrabajo_id);
-						}
 
 						foreach($pedido_combinacion_talle as $item)
 						{
@@ -384,18 +392,15 @@ class OrdentrabajoService
 							}
 						}
 						// Actualiza el nro. de ot en el pedido
-						if ($funcion == 'create')
-						{
-							if ($lote_id > 0)
-								$this->pedido_combinacionRepository->find($ids[$i])->update([
-													'ot_id'=>$ordentrabajo_id,
-													'lote_id'=>$lote_id
-												]);
-							else
-								$this->pedido_combinacionRepository->find($ids[$i])->update([
-													'ot_id'=>$ordentrabajo_id,
-												]);
-						}
+						if ($funcion == 'create' && $lote_id > 0)
+							$this->pedido_combinacionRepository->find($ids[$i])->update([
+												'ot_id'=>$ordentrabajo_id,
+												'lote_id'=>$lote_id
+											]);
+						else
+							$this->pedido_combinacionRepository->find($ids[$i])->update([
+												'ot_id'=>$ordentrabajo_id,
+											]);
 
 						// Graba stock si el cliente es el correspondiente
 						if ($cliente->id == config("consprod.CLIENTE_STOCK") || $ordentrabajo_stock_codigo > 0)
@@ -407,6 +412,19 @@ class OrdentrabajoService
 							if ($ordentrabajo_stock_codigo > 0 && $checkOtStock == 'on' &&
 								$cliente->id != config("consprod.CLIENTE_STOCK"))
 							{
+								$lineaDestino = Pedido_Combinacion::query()->find($ids[$i]);
+								if ($lineaDestino) {
+									$yaAsignada = PedidoPickingFerliSupport::errorSiOtAsignadaAOtroPedido(
+										$lineaDestino,
+										(string) $ordentrabajo_stock_codigo,
+										null,
+										true
+									);
+									if ($yaAsignada !== null) {
+										throw new Exception($yaAsignada);
+									}
+								}
+
 								$stock = Self::controlaOtStock($ordentrabajo_stock_codigo, $articulo->id, $combinacion->id);
 
 								$deposito_id = $stock['deposito_id'];

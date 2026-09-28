@@ -226,10 +226,20 @@ class ProveedorController extends Controller
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ProveedorListadoColumnas::RECURSO, $usuarioId);
         }
 
-        $filtrosRequest = $this->resolverFiltrosListado($request);
+        $filtrosRequest = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request),
+            $request
+        );
         $filtros = $filtrosRequest;
         if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
             $filtros = ProveedorListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
+        }
+        unset($filtros['_qbe_explicito']);
+        $guardoQbeVista = ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
+        if ($request->boolean('quitar_qbe') && $vistaActiva && $guardoQbeVista) {
+            return redirect()
+                ->route('proveedor', ['vista_id' => $vistaActiva->id])
+                ->with('mensaje', 'Se quitaron los filtros de la vista «'.$vistaActiva->nombre.'». Las columnas siguen igual.');
         }
         if ($vistaActiva && ($request->exists('group') || $request->exists('sort'))) {
             if ($request->exists('group')) {

@@ -401,6 +401,15 @@ class PedidoImportarUnoRenumeradoDesdeL8Service
                     ->first();
 
                 if ($existenteTarea) {
+                    $pcActual = (int) ($existenteTarea->pedido_combinacion_id ?? 0);
+                    if ($pcL12 !== null && $pcActual > 0 && $pcActual !== (int) $pcL12) {
+                        Log::warning('ferli.l8.importar_uno.tarea_otro_articulo', [
+                            'ordentrabajo_tarea_id' => $existenteTarea->id,
+                            'pedido_combinacion_id' => $pcActual,
+                            'pedido_combinacion_id_l8' => $pcL12,
+                        ]);
+                        continue;
+                    }
                     $upd = ['updated_at' => now()];
                     if ($pcL12 !== null) {
                         $upd['pedido_combinacion_id'] = $pcL12;

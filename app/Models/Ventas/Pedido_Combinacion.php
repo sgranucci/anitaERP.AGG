@@ -19,10 +19,12 @@ use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Transporte;
 use App\Models\Seguridad\Usuario;
 use App\Traits\Ventas\Pedido_CombinacionTrait;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pedido_Combinacion extends Model
+class Pedido_Combinacion extends Model implements Auditable
 {
 	use Pedido_CombinacionTrait;
+    use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['pedido_id', 'combinacion_id', 'articulo_id', 'numeroitem', 'modulo_id', 'cantidad', 
 		'precio', 'incluyeimpuesto', 'listaprecio_id', 'moneda_id', 'descuento', 'descuentointegrado', 

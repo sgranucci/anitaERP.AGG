@@ -95,6 +95,29 @@ return [
         App\Models\Presupuesto\Capex_Partida_Monto::class => 36,
         App\Models\Presupuesto\Partidagasto::class => 36,
 
+        // Ferli: pedido por combinación y OT. El rastro de un cambio de artículo
+        // en una OT se consulta meses después (caso 30340 / 31178).
+        App\Models\Ventas\Pedido_Combinacion::class => 36,
+        App\Models\Ventas\Pedido_Combinacion_Talle::class => 36,
+        App\Models\Ventas\Pedido_Combinacion_Estado::class => 36,
+        App\Models\Ventas\Ordentrabajo_Combinacion_Talle::class => 36,
+        App\Models\Ventas\Ordentrabajo_Tarea::class => 36,
+        App\Models\Ventas\Pedido_Picking::class => 36,
+        App\Models\Ventas\Copiaot::class => 36,
+        App\Models\Produccion\Tarea::class => 36,
+        App\Models\Produccion\Empleado::class => 36,
+        App\Models\Produccion\Operacion::class => 36,
+        App\Models\Stock\Combinacion::class => 36,
+        App\Models\Stock\Fondo::class => 36,
+        App\Models\Stock\Forro::class => 36,
+        App\Models\Stock\Horma::class => 36,
+        App\Models\Stock\Talle::class => 36,
+        App\Models\Stock\Color::class => 36,
+        App\Models\Stock\Material::class => 36,
+        App\Models\Stock\Materialcapellada::class => 36,
+        App\Models\Stock\Tipocorte::class => 36,
+        App\Models\Stock\Linea::class => 36,
+
         /*
          * 3 meses — alta rotación. Todos estos ya pasaron a auditar solo
          * updated/deleted, así que lo que queda para purgar es el backlog de audits

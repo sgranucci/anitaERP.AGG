@@ -228,10 +228,15 @@ class ArticuloController extends Controller
             $vistaActiva = ListadoVistaSupport::defaultDelUsuario(ArticuloListadoColumnas::RECURSO, $usuarioId);
         }
 
-        $filtros = $this->resolverFiltrosListado($request);
+        $filtros = ListadoVistaSupport::prepararQbeContraVista(
+            $this->resolverFiltrosListado($request),
+            $request
+        );
         if ($vistaActiva && is_array($vistaActiva->filtros_json)) {
             $filtros = ArticuloListadoFiltros::fusionarDesdeVista($filtros, $vistaActiva->filtros_json);
         }
+        unset($filtros['_qbe_explicito']);
+        ListadoVistaSupport::recordarQbeSiEnvio($vistaActiva, $request, $filtros);
 
         $empresa_query = ArticuloListadoFiltros::filtroEmpresaActivo()
             ? $this->empresaRepository->allFiltrado()

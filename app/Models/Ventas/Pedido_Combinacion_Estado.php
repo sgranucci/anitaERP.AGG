@@ -5,9 +5,12 @@ namespace App\Models\Ventas;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Ventas\Motivocierrepedido;
 use App\Models\Ventas\Cliente;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Pedido_Combinacion_Estado extends Model
+class Pedido_Combinacion_Estado extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $fillable = ['pedido_combinacion_id', 'motivocierrepedido_id', 'cliente_id', 'estado', 
                             'observacion'];
     protected $table = 'pedido_combinacion_estado';

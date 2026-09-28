@@ -1000,7 +1000,10 @@ class ChequeListadoFiltros
             'estado' => $base['estado'] ?? '',
         ];
 
-        if (self::tieneCriteriosTexto($base) || ($base['sort'] ?? []) !== [] || ($base['agrupar'] ?? []) !== []) {
+        $qbeExplicito = ! empty($base['_qbe_explicito']);
+        unset($base['_qbe_explicito']);
+
+        if ($qbeExplicito || self::tieneCriteriosTexto($base) || ($base['sort'] ?? []) !== [] || ($base['agrupar'] ?? []) !== []) {
             if (($base['sort'] ?? []) === [] && ! empty($desdeVista['sort']) && is_array($desdeVista['sort'])) {
                 $base['sort'] = $desdeVista['sort'];
             }

@@ -13,6 +13,7 @@
 	<td>{{$data['sku']}}</td>
 	<td>{{$data['nombrecombinacion']}}</td>
 	<td>{{$data['numeropedido']}}</td>
+	<td>{{ $data['nombrecliente'] ?? '' }}</td>
 	<td align='right'>{{number_format($data['cantidad'], 0,'.','')}}</td>
 	<td align='right'>{{number_format($data['costoporpar'], 2,'.','')}}</td>
 	<td align='right'>{{number_format($data['cantidad']*$data['costoporpar'], 2,'.','')}}</td>

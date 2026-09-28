@@ -10,9 +10,12 @@ use App\Models\Stock\Modulo;
 use App\Models\Stock\Tiponumeracion;
 use App\Models\Stock\Numeracion;
 use App\Models\Stock\Listaprecio;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Linea extends Model
+class Linea extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
+
     protected $fillable = ['nombre', 'codigo', 'tiponumeracion_id', 'maxhorma', 'numeracion_id', 'listaprecio_id'];
     protected $table = 'linea';
     protected $tableAnita = 'linmae';

@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\Ordentrabajo_Combinacion_Talle;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Queries\Ventas\OrdentrabajoQueryInterface;
 use App\Queries\Ventas\PedidoQueryInterface;
 use App\Queries\Ventas\Pedido_CombinacionQueryInterface;
@@ -94,7 +95,9 @@ class Ordentrabajo_Combinacion_TalleRepository implements Ordentrabajo_Combinaci
 
     public function deleteporordentrabajo($ordentrabajo_id)
     {
-    	$ordentrabajo_combinacion_talle = $this->model->where('ordentrabajo_id', $ordentrabajo_id)->delete();
+    	$ordentrabajo_combinacion_talle = EloquentAuditDeleteSupport::each(
+			$this->model->where('ordentrabajo_id', $ordentrabajo_id)
+		);
 
         $ordentrabajo = $this->ordentrabajoQuery->leeOrdenTrabajo($ordentrabajo_id);
 
@@ -123,7 +126,9 @@ class Ordentrabajo_Combinacion_TalleRepository implements Ordentrabajo_Combinaci
 			return 0;
 		}
 
-		return $this->model->whereIn('pedido_combinacion_talle_id', $talleIds)->delete();
+		return EloquentAuditDeleteSupport::each(
+			$this->model->whereIn('pedido_combinacion_talle_id', $talleIds)
+		);
 	}
 
     public function find($id)

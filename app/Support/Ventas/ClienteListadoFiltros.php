@@ -334,7 +334,10 @@ class ClienteListadoFiltros
             self::camposOrdenables()
         );
 
-        if (self::tieneCriteriosAplicados($base)) {
+        $qbeExplicito = ! empty($base['_qbe_explicito']);
+        unset($base['_qbe_explicito']);
+
+        if (self::tieneCriteriosAplicados($base) || $qbeExplicito) {
             if ($ordenBase === [] && $ordenVista !== []) {
                 $base['orden'] = $ordenVista;
             }

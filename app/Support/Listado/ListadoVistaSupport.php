@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Listado;
 
 use App\Models\Listado\ListadoVista;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
@@ -80,6 +81,86 @@ final class ListadoVistaSupport
         $json['agrupar'] = $agrupar;
         $vista->filtros_json = $json;
         $vista->save();
+    }
+
+    /**
+     * El usuario apretó Buscar en el QBE o Quitar filtros. No cuenta la paginación ni un link de orden.
+     */
+    public static function envioQbeDeVista(Request $request): bool
+    {
+        if ($request->boolean('filtro_busqueda_rapida')) {
+            return false;
+        }
+
+        return $request->boolean('quitar_qbe') || $request->boolean('aplicar_qbe');
+    }
+
+    /**
+     * Lo que vino en el formulario manda sobre el QBE guardado en la vista, también si quedó vacío.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function prepararQbeContraVista(array $filtros, Request $request): array
+    {
+        if (! self::envioQbeDeVista($request)) {
+            return $filtros;
+        }
+
+        $filtros['_qbe_explicito'] = true;
+        if ($request->boolean('quitar_qbe') || ! ListadoQbeSupport::tieneCriterios((array) ($filtros['qbe'] ?? []))) {
+            $filtros['qbe'] = ListadoQbeSupport::vacio();
+            $filtros['modo'] = 'todos';
+            $filtros['valor'] = '';
+            $filtros['valor_hasta'] = '';
+            $filtros['busqueda'] = '';
+        }
+
+        return $filtros;
+    }
+
+    /**
+     * Graba el QBE en la vista del usuario. No toca una vista compartida de otro.
+     *
+     * @param  array<string, mixed>  $qbe
+     */
+    public static function recordarQbe(ListadoVista $vista, array $qbe): bool
+    {
+        if ((int) $vista->usuario_id !== (int) auth()->id()) {
+            return false;
+        }
+
+        $tiene = ListadoQbeSupport::tieneCriterios($qbe);
+        $modoGuardar = $tiene ? 'qbe' : 'todos';
+        $qbeGuardar = $tiene ? $qbe : ListadoQbeSupport::vacio();
+        $json = is_array($vista->filtros_json) ? $vista->filtros_json : [];
+        if (($json['qbe'] ?? null) == $qbeGuardar && ($json['modo'] ?? 'todos') === $modoGuardar) {
+            return true;
+        }
+
+        $json['qbe'] = $qbeGuardar;
+        $json['modo'] = $modoGuardar;
+        if ($modoGuardar !== 'qbe') {
+            $json['valor'] = '';
+            $json['busqueda'] = '';
+            $json['valor_hasta'] = '';
+        }
+        $vista->filtros_json = $json;
+        $vista->save();
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function recordarQbeSiEnvio(?ListadoVista $vista, Request $request, array $filtros): bool
+    {
+        if ($vista === null || ! self::envioQbeDeVista($request)) {
+            return false;
+        }
+
+        return self::recordarQbe($vista, (array) ($filtros['qbe'] ?? []));
     }
 
     /**

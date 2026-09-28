@@ -338,7 +338,7 @@ class EmpleadoSueldosListadoFiltros
         $agruparBase = ListadoAgrupacionSupport::normalizar($base['agrupar'] ?? [], $campos);
 
         if (! empty($base['_limpiar'])) {
-            unset($base['_limpiar']);
+            unset($base['_limpiar'], $base['_qbe_explicito']);
 
             return array_merge($base, $externos, [
                 'modo' => self::MODO_TODOS,
@@ -351,7 +351,10 @@ class EmpleadoSueldosListadoFiltros
             ]);
         }
 
-        if (self::tieneCriteriosTexto($base) || $ordenBase !== [] || $agruparBase !== []) {
+        $qbeExplicito = ! empty($base['_qbe_explicito']);
+        unset($base['_qbe_explicito']);
+
+        if ($qbeExplicito || self::tieneCriteriosTexto($base) || $ordenBase !== [] || $agruparBase !== []) {
             if ($ordenBase === [] && $ordenVista !== []) {
                 $base['sort'] = $ordenVista;
             }

@@ -19,6 +19,7 @@
      data-ops-fecha='@json($opsFecha)'
      data-ops-decimal='@json(\App\Support\Listado\ListadoQbeSupport::OPERADORES_DECIMAL)'
      data-campos='@json($camposQbeJson)'>
+    <input type="hidden" name="aplicar_qbe" id="lw-aplicar-qbe" value="">
     <div class="lw-qbe-title">
         <div>
             <h4><i class="fa fa-filter text-info"></i> Consulta avanzada</h4>

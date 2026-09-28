@@ -36,7 +36,6 @@ Proveedores
     $columnasVisibles = $columnasVisibles ?? ProveedorListadoColumnas::defaultsVisibles();
     $catalogoColumnas = $catalogoColumnas ?? ProveedorListadoColumnas::catalogoActivo();
     $etiquetasColumnas = $etiquetasColumnas ?? [];
-    $qbe = (array) ($filtros['qbe'] ?? []);
     $tieneQbe = ProveedorListadoFiltros::tieneCriteriosAplicados($filtros ?? []);
     $vistasListado = $vistasListado ?? collect();
     $vistaActiva = $vistaActiva ?? null;
@@ -119,7 +118,12 @@ Proveedores
                         <button type="button" id="btn-lw-buscar-rapida" class="btn btn-sm btn-primary">
                             <i class="fa fa-search"></i>
                         </button>
-                        @if ($tieneQbe || (($filtros['valor'] ?? '') !== ''))
+                        @if ($vistaActiva && $tieneQbe && ($filtros['modo'] ?? '') === 'qbe')
+                            <button type="submit" name="quitar_qbe" value="1" class="btn btn-sm btn-outline-warning"
+                                    title="Saca los filtros guardados en esta vista. Las columnas no cambian.">
+                                <i class="fa fa-eraser"></i> Quitar filtros
+                            </button>
+                        @elseif ($tieneQbe || (($filtros['valor'] ?? '') !== ''))
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
@@ -132,24 +136,73 @@ Proveedores
                 @if ($tieneQbe)
                     <div class="lw-chips">
                         @if (($filtros['modo'] ?? '') === 'qbe')
-                            @foreach ($qbe as $c)
-                                @if (is_array($c))
-                                    <span class="lw-chip">
-                                        <strong>{{ $etiquetasColumnas[$c['campo'] ?? ''] ?? ($c['campo'] ?? '') }}</strong>
-                                        {{ $c['op'] ?? 'contiene' }}
-                                        @if (($c['op'] ?? '') !== 'vacio')
-                                            «{{ $c['valor'] ?? '' }}»
-                                        @endif
-                                    </span>
-                                @elseif (is_string($c) || is_numeric($c))
-                                    <span class="lw-chip"><strong>{{ $loop->key }}</strong> {{ $c }}</span>
+                            @php
+                                $qbeChip = \App\Support\Listado\ListadoQbeSupport::paraUi($filtros['qbe'] ?? []);
+                                $opsChip = array_merge(
+                                    ProveedorListadoFiltros::OPERADORES_TEXTO,
+                                    ProveedorListadoFiltros::OPERADORES_ENTERO,
+                                    ProveedorListadoFiltros::OPERADORES_BOOLEANO,
+                                    ProveedorListadoFiltros::OPERADORES_FECHA,
+                                    \App\Support\Listado\ListadoQbeSupport::OPERADORES_DECIMAL
+                                );
+                            @endphp
+                            @foreach ($qbeChip['grupos'] as $gi => $grupo)
+                                @if ($gi > 0)
+                                    <span class="lw-chip lw-chip-logic">{{ ($qbeChip['entre_grupos'] ?? 'and') === 'or' ? 'O' : 'Y' }}</span>
                                 @endif
+                                @if (! empty($grupo['not']))
+                                    <span class="lw-chip lw-chip-logic">NOT</span>
+                                @endif
+                                @if (count($qbeChip['grupos']) > 1 || ! empty($grupo['not']) || ($grupo['logic'] ?? 'and') === 'or')
+                                    <span class="lw-chip lw-chip-logic">{{ ($grupo['logic'] ?? 'and') === 'or' ? 'Alguno' : 'Todos' }}</span>
+                                @endif
+                                @foreach (($grupo['criterios'] ?? []) as $c)
+                                    @if (($c['op'] ?? '') === 'vacio' || ($c['op'] ?? '') === 'entre' || trim((string) ($c['valor'] ?? '')) !== '')
+                                        <span class="lw-chip">
+                                            <strong>{{ $etiquetasColumnas[$c['campo'] ?? ''] ?? ($c['campo'] ?? '') }}</strong>
+                                            {{ $opsChip[$c['op'] ?? 'contiene'] ?? ($c['op'] ?? 'contiene') }}
+                                            @if (($c['op'] ?? '') === 'entre')
+                                                «{{ $c['valor'] ?? '' }}»…«{{ $c['valor_hasta'] ?? '' }}»
+                                            @elseif (($c['op'] ?? '') !== 'vacio')
+                                                «{{ $c['valor'] ?? '' }}»
+                                            @endif
+                                        </span>
+                                    @endif
+                                @endforeach
                             @endforeach
+                            @if ($vistaActiva)
+                                <span class="small text-muted align-self-center">Guardados en la vista «{{ $vistaActiva->nombre }}».</span>
+                            @endif
                         @elseif (($filtros['valor'] ?? '') !== '')
                             <span class="lw-chip">
                                 <strong>Texto</strong> {{ $filtros['valor'] }}
                             </span>
                         @endif
+                        @php
+                            $ordenChips = \App\Support\Listado\ListadoOrdenamientoSupport::normalizar(
+                                $filtros['orden'] ?? [],
+                                ProveedorListadoFiltros::camposOrdenables()
+                            );
+                        @endphp
+                        @foreach ($ordenChips as $oc)
+                            <span class="lw-chip">
+                                <i class="fa fa-sort"></i>
+                                <strong>{{ $etiquetasColumnas[$oc['campo']] ?? $oc['campo'] }}</strong>
+                                {{ $oc['dir'] === 'desc' ? '↓' : '↑' }}
+                            </span>
+                        @endforeach
+                        @php
+                            $agruparChips = \App\Support\Listado\ListadoAgrupacionSupport::normalizar(
+                                $filtros['agrupar'] ?? [],
+                                ProveedorListadoFiltros::camposOrdenables()
+                            );
+                        @endphp
+                        @foreach ($agruparChips as $ac)
+                            <span class="lw-chip">
+                                <i class="fa fa-object-group"></i>
+                                <strong>{{ $etiquetasColumnas[$ac] ?? $ac }}</strong>
+                            </span>
+                        @endforeach
                     </div>
                 @endif
 

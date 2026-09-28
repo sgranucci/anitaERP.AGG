@@ -25,6 +25,7 @@
 		<th>SKU</th>
        	<th>Combinaci&oacute;n</th>
 		<th>Pedido</th>
+		<th>Cliente</th>
 		<th>Pares</th>
 		<th>Costo por par</th>
 		<th align="right">Total</th>

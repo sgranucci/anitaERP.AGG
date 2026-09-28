@@ -110,6 +110,7 @@
         $('#btn-lw-aplicar-qbe').on('click', function () {
             $('#filtro_modo').val('qbe');
             $('#filtro_busqueda_rapida').val('');
+            $('#lw-aplicar-qbe').val('1');
             syncColumnasHidden();
         });
 
@@ -118,6 +119,7 @@
                 e.preventDefault();
                 $('#filtro_modo').val('qbe');
                 $('#filtro_busqueda_rapida').val('');
+                $('#lw-aplicar-qbe').val('1');
                 syncColumnasHidden();
                 $('#form-filtros-cheque').trigger('submit');
             }
