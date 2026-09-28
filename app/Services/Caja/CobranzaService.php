@@ -203,6 +203,8 @@ class CobranzaService
 						}
 					}
 
+					$this->completarDetalleCobranza($data);
+
 					if ($origen) {
 						$this->procesarDescuentosAntesDeGrabar($data);
 
@@ -405,9 +407,74 @@ class CobranzaService
 		if ($numero === '' || $detalle === '') {
 			return;
 		}
-		if ($detalle === $desde.' Nro. '.$numero) {
-			$data['detalle'] = $hacia.' Nro. '.$numero;
+		$desdeMarca = $desde.' Nro. '.$numero;
+		$haciaMarca = $hacia.' Nro. '.$numero;
+		$reemplazado = preg_replace(
+			'/'.preg_quote($desdeMarca, '/').'(?!\d)/',
+			$haciaMarca,
+			$detalle,
+			1
+		);
+		if (is_string($reemplazado) && $reemplazado !== $detalle) {
+			$data['detalle'] = $reemplazado;
 		}
+	}
+
+	/**
+	 * El detalle automático («Cobranza Nro.» / «COA Nro.») lleva el cliente adelante
+	 * para que caja, asiento y Anita graben el mismo texto.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function completarDetalleCobranza(array &$data): void
+	{
+		$detalle = trim((string) ($data['detalle'] ?? ''));
+		if ($detalle === '') {
+			$numero = trim((string) ($data['numerotransaccion'] ?? ''));
+			if ($numero !== '') {
+				$abrev = IngresoEgresoAnitaNumeracionSupport::abreviaturaTipo((int) ($data['tipotransaccion_caja_id'] ?? 0));
+				$prefijo = $abrev === 'COA' ? 'COA' : 'Cobranza';
+				$detalle = $prefijo.' Nro. '.$numero;
+			}
+		}
+
+		$nombre = $this->nombreClienteCobranza($data);
+		if ($nombre !== '' && ! $this->detalleIncluyeCliente($detalle, $nombre)) {
+			$detalle = $detalle === '' ? $nombre : ($nombre.' - '.$detalle);
+		}
+
+		if ($detalle !== '') {
+			$data['detalle'] = mb_substr($detalle, 0, 255);
+		}
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 */
+	private function nombreClienteCobranza(array $data): string
+	{
+		$nombre = trim((string) ($data['nombrecliente'] ?? ''));
+		if ($nombre !== '') {
+			return $nombre;
+		}
+
+		$clienteId = (int) ($data['cliente_id'] ?? 0);
+		if ($clienteId <= 0) {
+			return '';
+		}
+
+		$cliente = $this->clienteRepository->find($clienteId);
+
+		return trim((string) ($cliente->nombre ?? ''));
+	}
+
+	private function detalleIncluyeCliente(string $detalle, string $nombre): bool
+	{
+		if ($nombre === '' || $detalle === '') {
+			return false;
+		}
+
+		return mb_stripos($detalle, $nombre) !== false;
 	}
 
 	private function tipoCajaIdPorAbreviatura(string $abreviatura): int
@@ -484,6 +551,7 @@ class CobranzaService
 
 	private function actualiza($data, $id, $request)
 	{
+		$this->completarDetalleCobranza($data);
 		$this->procesarDescuentosAntesDeGrabar($data);
 
 		// Graba cobranza 

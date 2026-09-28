@@ -158,6 +158,34 @@ class PedidoPickingFerliSupportTest extends TestCase
         self::assertNull($desc['descuentolinea']);
     }
 
+    public function test_numeracion_igual_a_la_del_lote_deja_preparar(): void
+    {
+        $curva = ['35' => 1, '36' => 2, '37' => 3, '38' => 3, '39' => 2, '40' => 1];
+
+        self::assertNull(S::mensajeSiNumeracionNoSaleIgual($curva, $curva));
+    }
+
+    public function test_numeracion_parcial_no_sale_igual_al_lote(): void
+    {
+        $msg = S::mensajeSiNumeracionNoSaleIgual(
+            ['35' => 1, '36' => 2],
+            ['35' => 10, '36' => 9, '37' => 2]
+        );
+
+        self::assertNotNull($msg);
+        self::assertStringContainsString('tiene que salir igual', $msg);
+        self::assertStringContainsString('35: pide 1, hay 10', $msg);
+        self::assertStringContainsString('37: pide 0, hay 2', $msg);
+    }
+
+    public function test_numeracion_ignora_talles_en_cero(): void
+    {
+        self::assertNull(S::mensajeSiNumeracionNoSaleIgual(
+            ['35' => 2, '36' => 0],
+            ['35' => 2, '41' => 0]
+        ));
+    }
+
     public function test_elige_bucket_ot_lote_cero_cuando_hay_saldo_visible(): void
     {
         // Caso real OT 21205 dep 14: saldo en OT (lote=0); consumo viejo en L:codigo no debe ganar.

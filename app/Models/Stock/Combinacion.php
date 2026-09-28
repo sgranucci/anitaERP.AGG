@@ -19,7 +19,7 @@ class Combinacion extends Model implements Auditable
 
     protected $fillable = [ 'articulo_id', 'codigo', 'nombre', 'observacion', 'forro_id', 'colorforro_id', 'plvista_id', 'plarmado_id',
             'fondo_id', 'colorfondo_id', 'horma_id', 'serigrafia_id', 'estado', 'estado_fabrica', 'estado_local',
-            'plvista_16_26', 'plvista_27_33', 'plvista_34_40', 'plvista_41_47',
+            'plvista_16_26', 'plvista_27_33', 'plvista_34_40', 'plvista_41_45',
             'usuarioultcambio_id', 'foto' ];
     protected $table = 'combinacion';
     protected $tableAnita = ['combinacion', 'stkfich'];

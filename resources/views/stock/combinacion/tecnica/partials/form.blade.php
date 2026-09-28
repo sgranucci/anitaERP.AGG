@@ -122,9 +122,9 @@
     				</div>
 				</div>
 				<div class="form-group row">
-    				<label for="consumoplantilla" class="col-lg-4 col-form-label">Consumo Plantilla 41/47</label>
+    				<label for="plvista_41_45" class="col-lg-4 col-form-label">Consumo Plantilla 41/45</label>
     				<div class="col-lg-4">
-        				<input type="number" name="plvista_41_47" id="plvista_41_47" value="{{$combinacion->plvista_41_47}}">
+        				<input type="number" name="plvista_41_45" id="plvista_41_45" value="{{$combinacion->plvista_41_45}}">
     				</div>
 				</div>
             </div>

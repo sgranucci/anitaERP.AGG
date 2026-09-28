@@ -877,13 +877,14 @@ final class PedidoPickingFerliSupport
             ];
         }
 
-        $faltaTalle = self::mensajeSiStockNoCubreNumeracionPedido(
-            $linea,
+        $linea->loadMissing('pedido_combinacion_talles.talles');
+        $numeracionDistinta = self::mensajeSiNumeracionNoSaleIgual(
+            self::curvaDesdeTallesPedido($linea),
             $bucket['talles'] ?? []
         );
-        if ($faltaTalle !== null) {
+        if ($numeracionDistinta !== null) {
             return [
-                'error' => $faltaTalle,
+                'error' => $numeracionDistinta,
                 'saldo' => $saldoElegido,
                 'deposito_id' => $depositoId,
             ];
@@ -1182,33 +1183,86 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * @param  array<string, float>  $tallesStock
+     * Curva del pedido: talle => pares. Ignora cantidades en cero.
+     *
+     * @return array<string, float>
      */
-    private static function mensajeSiStockNoCubreNumeracionPedido(Pedido_Combinacion $linea, array $tallesStock): ?string
+    private static function curvaDesdeTallesPedido(Pedido_Combinacion $linea): array
     {
-        $linea->loadMissing('pedido_combinacion_talles.talles');
-        $faltantes = [];
+        $curva = [];
         foreach ($linea->pedido_combinacion_talles as $pct) {
             $need = (float) ($pct->cantidad ?? 0);
-            if ($need <= 0) {
+            if ($need <= 0.0001) {
                 continue;
             }
             $nombre = trim((string) ($pct->talles->nombre ?? ''));
             if ($nombre === '') {
                 continue;
             }
-            $hay = (float) ($tallesStock[$nombre] ?? 0);
-            if (($hay + 0.0001) < $need) {
-                $faltantes[] = $nombre.': pide '.number_format($need, 0, ',', '.')
-                    .', hay '.number_format($hay, 0, ',', '.');
-            }
+            $curva[$nombre] = (float) (($curva[$nombre] ?? 0) + $need);
         }
 
-        if ($faltantes === []) {
+        return $curva;
+    }
+
+    /**
+     * El picking solo descuenta si la numeración sale igual a la del lote
+     * (mismos talles y las mismas cantidades). No se permite un parcial.
+     *
+     * @param  array<string, float|int>  $tallesPedido
+     * @param  array<string, float|int>  $tallesStock
+     */
+    public static function mensajeSiNumeracionNoSaleIgual(array $tallesPedido, array $tallesStock): ?string
+    {
+        $pedido = self::normalizarCurvaNumeracion($tallesPedido);
+        $stock = self::normalizarCurvaNumeracion($tallesStock);
+        $nombres = array_values(array_unique(array_merge(array_keys($pedido), array_keys($stock))));
+        usort($nombres, static function (string $a, string $b): int {
+            $na = is_numeric($a) ? (float) $a : null;
+            $nb = is_numeric($b) ? (float) $b : null;
+            if ($na !== null && $nb !== null && abs($na - $nb) > 0.0001) {
+                return $na <=> $nb;
+            }
+
+            return strcmp($a, $b);
+        });
+
+        $diferencias = [];
+        foreach ($nombres as $nombre) {
+            $pide = (float) ($pedido[$nombre] ?? 0);
+            $hay = (float) ($stock[$nombre] ?? 0);
+            if (abs($pide - $hay) <= 0.0001) {
+                continue;
+            }
+            $diferencias[] = $nombre.': pide '.number_format($pide, 0, ',', '.')
+                .', hay '.number_format($hay, 0, ',', '.');
+        }
+
+        if ($diferencias === []) {
             return null;
         }
 
-        return 'El depósito no cubre la numeración del pedido ('.implode('; ', $faltantes).').';
+        return 'La numeración del pedido tiene que salir igual a la del lote ('
+            .implode('; ', $diferencias).').';
+    }
+
+    /**
+     * @param  array<string, float|int>  $curva
+     * @return array<string, float>
+     */
+    private static function normalizarCurvaNumeracion(array $curva): array
+    {
+        $out = [];
+        foreach ($curva as $nombre => $cantidad) {
+            $nombre = trim((string) $nombre);
+            $cantidad = (float) $cantidad;
+            if ($nombre === '' || abs($cantidad) <= 0.0001) {
+                continue;
+            }
+            $out[$nombre] = (float) (($out[$nombre] ?? 0) + $cantidad);
+        }
+
+        return $out;
     }
 
     public static function desmarcar(int $pedidoCombinacionId): array

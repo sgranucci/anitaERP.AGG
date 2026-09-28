@@ -195,7 +195,7 @@ class CombinacionController extends Controller
 			$data['plvista_16_26'] = 0;
 			$data['plvista_27_33'] = 0;
 			$data['plvista_34_40'] = 0;
-			$data['plvista_41_47'] = 0;
+			$data['plvista_41_45'] = 0;
 		}
 		$data = CombinacionEstadoCanalSupport::normalizarDataFormulario($data);
 		$alta = [
@@ -211,7 +211,7 @@ class CombinacionController extends Controller
 			'plvista_16_26' => $data['plvista_16_26'],
 			'plvista_27_33' => $data['plvista_27_33'],
 			'plvista_34_40' => $data['plvista_34_40'],
-			'plvista_41_47' => $data['plvista_41_47'],
+			'plvista_41_45' => $data['plvista_41_45'],
         ];
 		if (CombinacionEstadoCanalSupport::columnasEstadoDisponibles()) {
 			$alta['estado_fabrica'] = $data['estado_fabrica'];
@@ -373,7 +373,7 @@ class CombinacionController extends Controller
 				'plvista_16_26' => $request->plvista_16_26,
 				'plvista_27_33' => $request->plvista_27_33,
 				'plvista_34_40' => $request->plvista_34_40,
-				'plvista_41_47' => $request->plvista_41_47,
+				'plvista_41_45' => $request->plvista_41_45,
 				'foto' => ($nombre_foto != NULL ? $nombre_foto.'.jpg' : NULL),
             ]);
 
