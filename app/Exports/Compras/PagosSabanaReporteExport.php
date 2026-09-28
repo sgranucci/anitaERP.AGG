@@ -4,6 +4,7 @@ namespace App\Exports\Compras;
 
 use App\Support\Compras\PagosSabanaColumnasSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -24,8 +25,6 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 class PagosSabanaReporteExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     use Exportable;
-
-    private const FORMAT_IMPORTE = NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED2;
 
     private const CLAVES_TEXTO = [
         'proveedor_codigo', 'tip', 'numero_op', 'tipo_medio', 'comprobantes',
@@ -91,7 +90,9 @@ class PagosSabanaReporteExport implements FromView, WithColumnFormatting, WithCo
 
             $formatos[$letra] = match (true) {
                 in_array($clave, self::CLAVES_TEXTO, true) => NumberFormat::FORMAT_TEXT,
-                $columna['tipo'] === PagosSabanaColumnasSupport::TIPO_IMPORTE => self::FORMAT_IMPORTE,
+                $columna['tipo'] === PagosSabanaColumnasSupport::TIPO_IMPORTE => ExcelFormatoNumero::codigoColumna(
+                    ExcelFormatoNumero::preferenciaGlobal()
+                ),
                 $columna['tipo'] === PagosSabanaColumnasSupport::TIPO_ENTERO => NumberFormat::FORMAT_NUMBER,
                 default => NumberFormat::FORMAT_TEXT,
             };
@@ -116,12 +117,10 @@ class PagosSabanaReporteExport implements FromView, WithColumnFormatting, WithCo
         foreach ($this->columnas as $indice => $columna) {
             $letra = Coordinate::stringFromColumnIndex($indice + 1);
             $clave = (string) $columna['clave'];
-            $anchos[$letra] = match ($clave) {
-                'proveedor_nombre', 'detalle', 'comprobantes', 'centros_costo' => 28,
-                'banco', 'ordenes_compra' => 18,
-                'total_pago', 'transferencia', 'efectivo', 'ch_propios' => 14,
-                default => 12,
-            };
+            $anchos[$letra] = PagosSabanaColumnasSupport::anchoExcel(
+                $clave,
+                (string) ($columna['tipo'] ?? ''),
+            );
         }
 
         return $anchos;
@@ -181,6 +180,30 @@ class PagosSabanaReporteExport implements FromView, WithColumnFormatting, WithCo
                     'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '85C1E9']],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
                 ]);
+
+                $ultimaFila = max($this->filaPrimeraDatosExcel, (int) $sheet->getHighestRow());
+                foreach ($this->columnas as $indice => $columna) {
+                    $alineacion = PagosSabanaColumnasSupport::alineacion(
+                        (string) ($columna['tipo'] ?? ''),
+                        (string) ($columna['clave'] ?? ''),
+                    );
+                    $horizontal = match ($alineacion) {
+                        'right' => Alignment::HORIZONTAL_RIGHT,
+                        'center' => Alignment::HORIZONTAL_CENTER,
+                        default => Alignment::HORIZONTAL_LEFT,
+                    };
+                    $letra = Coordinate::stringFromColumnIndex($indice + 1);
+                    $sheet->getStyle($letra.$this->filaCabecerasExcel.':'.$letra.$ultimaFila)
+                        ->getAlignment()
+                        ->setHorizontal($horizontal)
+                        ->setVertical(Alignment::VERTICAL_CENTER);
+                    $sheet->getColumnDimension($letra)->setWidth(
+                        PagosSabanaColumnasSupport::anchoExcel(
+                            (string) ($columna['clave'] ?? ''),
+                            (string) ($columna['tipo'] ?? ''),
+                        )
+                    );
+                }
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },

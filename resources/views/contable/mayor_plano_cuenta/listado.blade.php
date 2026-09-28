@@ -42,6 +42,7 @@
         tr.mpc-fila-total td { background-color: #fdebd0; font-weight: bold; color: #6e2c00; border-top: 1.5px solid #e67e22; }
         tr.mpc-fila-total-cc td { background-color: #e8f8f5; color: #0e6655; border-top-color: #16a085; }
         tr.mpc-fila-total .mpc-importe-total { font-weight: bold; }
+        tr.mpc-fila-total-general td { background-color: #1a5276; font-weight: bold; color: #ffffff; border-top: 2px solid #1a5276; }
         .mpc-etiqueta { text-transform: uppercase; font-size: 6px; margin-right: 4px; }
         .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 6px; }
         .listado-header td { vertical-align: middle; border: none; }
@@ -114,6 +115,24 @@
                     </tr>
                 @endforeach
             </tbody>
+            @php
+                $totalDebePdf = (float) ($tot['total_debe'] ?? 0);
+                $totalHaberPdf = (float) ($tot['total_haber'] ?? 0);
+                $diferenciaPdf = round($totalDebePdf - $totalHaberPdf, 2);
+            @endphp
+            @if ((int) ($tot['cantidad_filas'] ?? 0) > 0)
+                <tfoot>
+                    <tr class="mpc-fila-total-general">
+                        <td colspan="{{ $mostrarCcPdf ? 3 : 2 }}">Total general · Diferencia (D−H) {{ number_format($diferenciaPdf, 2, ',', '.') }}</td>
+                        <td></td>
+                        <td class="text-right">{{ number_format($totalDebePdf, 2, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($totalHaberPdf, 2, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format($totalHaberPdf - $totalDebePdf, 2, ',', '.') }}</td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            @endif
         </table>
         @if (! empty($cuadrePdf))
             <p class="meta" style="margin-top: 10px; font-weight: bold;">Cuadre total comprobantes (listado IVA ventas / subdiario)</p>
@@ -149,15 +168,41 @@
             'puede_ver_ordencompra' => false,
             'multiempresa' => $multiempresa,
         ])
+        @php
+            $mostrarCcDetallePdf = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
+            $colSpanAntesImportesPdf = $mostrarCcDetallePdf ? 13 : 12;
+            $totalDebePdf = (float) ($tot['total_debe'] ?? 0);
+            $totalHaberPdf = (float) ($tot['total_haber'] ?? 0);
+            $diferenciaPdf = round($totalDebePdf - $totalHaberPdf, 2);
+        @endphp
+        @if ((int) ($tot['cantidad_filas'] ?? 0) > 0)
+            <tfoot>
+                <tr class="mpc-fila-total-general">
+                    <td colspan="{{ $colSpanAntesImportesPdf }}">Total general · Diferencia (D−H) {{ number_format($diferenciaPdf, 2, ',', '.') }}</td>
+                    <td class="text-right">{{ number_format($totalDebePdf, 2, ',', '.') }}</td>
+                    <td class="text-right">{{ number_format($totalHaberPdf, 2, ',', '.') }}</td>
+                    <td></td>
+                    <td></td>
+                    @if ($multiempresa)
+                        <td></td>
+                    @endif
+                </tr>
+            </tfoot>
+        @endif
     </table>
     @endif
 
     @if (! empty($tot))
+        @php
+            $totalDebeCierre = (float) ($tot['total_debe'] ?? 0);
+            $totalHaberCierre = (float) ($tot['total_haber'] ?? 0);
+        @endphp
         <p class="meta" style="margin-top: 8px;">
             Totales: {{ (int) ($tot['cantidad_cuentas'] ?? 0) }} cuentas,
             {{ (int) ($tot['cantidad_filas'] ?? 0) }} líneas,
-            Debe {{ number_format((float) ($tot['total_debe'] ?? 0), 2, ',', '.') }},
-            Haber {{ number_format((float) ($tot['total_haber'] ?? 0), 2, ',', '.') }}
+            Debe {{ number_format($totalDebeCierre, 2, ',', '.') }},
+            Haber {{ number_format($totalHaberCierre, 2, ',', '.') }},
+            Diferencia (D−H) {{ number_format(round($totalDebeCierre - $totalHaberCierre, 2), 2, ',', '.') }}
         </p>
     @endif
 </body>

@@ -54,7 +54,8 @@ return [
             'titulo' => '3. Cómo funciona el bloqueo',
             'captura_id' => 'circuito_bloqueo',
             'parrafos' => [
-                'Cuando intenta grabar una cobranza, un movimiento de stock, un asiento o una factura en una fecha ya cerrada para ese módulo, el sistema lo impide e indica hasta qué fecha está cerrado el período.',
+                'Cuando intenta grabar una cobranza, un movimiento de stock o una factura en una fecha ya cerrada para ese módulo, el sistema lo impide e indica hasta qué fecha está cerrado el período.',
+                'Corregir o borrar un asiento ya generado depende del cierre de Contable, no del módulo que lo originó. Si Contable sigue abierto, se puede modificar el asiento aunque Compras, Ventas, Stock u otro subsistema ya esté cerrado.',
                 'Excepciones: (1) apertura programada activa para su usuario y ese alcance; (2) permiso especial de operar en período cerrado; (3) facturación electrónica WSFE/CAE (la fecha la valida AFIP/ARCA). Facturación manual o CAEA sí aplica el cierre.',
                 'Si hay un cierre general y otro por módulo, prevalece el más restrictivo (la fecha hasta más reciente entre ambos).',
                 'La fecha que se valida es la que define el período de cada proceso: en facturas de proveedor es la fecha de IVA (la factura puede tener fecha anterior), en facturación es la fecha de jornada y en el resto es la fecha del comprobante o del movimiento.',
@@ -170,6 +171,7 @@ return [
             'titulo' => '9. Preguntas frecuentes',
             'parrafos' => [
                 '¿Por qué no puedo grabar una factura de julio el 2 de agosto? Porque el módulo Facturación está cerrado hasta 31/07 y la fecha de jornada cae en julio.',
+                '¿Puedo corregir un asiento de compras si Compras ya está cerrado? Sí, mientras Contable siga abierto. El asiento se bloquea con el cierre de Contable (o el general), no con el del subsistema que lo generó.',
                 '¿Puedo cambiar la fecha de cierre de 31/07 a 30/07? Sí, al programar o reprogramar (si aún no está ejecutado).',
                 '¿Qué pasa si programo ejecución el 5/08 a las 24:00? El job aplica el cierre al fin de ese día (hora efectiva CONTABLE_CIERRE_HORA_FIN_DIA, default 23:50). Antes puede usar Aplicar ahora si la fecha ya es ≤ hoy.',
                 '¿Cerrar todos ahora cierra cada fila de la agenda? Registra un cierre general que bloquea todos los módulos; las filas de agenda por módulo son independientes.',

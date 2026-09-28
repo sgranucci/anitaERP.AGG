@@ -31,6 +31,11 @@ final class MayorPlanoCuentaXlsxExportSupport
             $writer->escribirFila(MayorPlanoCuentaCsvExportSupport::filaExcelPlanoACsv($fila, $filtros));
         }
 
+        $writer->escribirFila(
+            MayorPlanoCuentaCsvExportSupport::filaTotalGeneralExcelPlano($resultado, $filtros),
+            'total',
+        );
+
         return $writer->cerrar();
     }
 

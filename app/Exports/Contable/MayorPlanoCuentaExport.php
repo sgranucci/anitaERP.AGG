@@ -561,6 +561,15 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCuenta);
             } elseif (str_starts_with($valor, 'Centro de costo:')) {
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCc);
+            } elseif (str_starts_with($valor, 'Total general')) {
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray([
+                    'font' => ['bold' => true, 'name' => 'Arial', 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
+                    'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '1A5276']],
+                    'borders' => [
+                        'top' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '1A5276']],
+                        'bottom' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '1A5276']],
+                    ],
+                ]);
             } elseif (str_starts_with($valor, 'Total centro de costo')) {
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloTotalCc);
             } elseif (str_starts_with($valor, 'Total cuenta')) {

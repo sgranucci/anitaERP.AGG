@@ -133,11 +133,12 @@
 
     $(document).on('submit', '.form-revertir-ie', function (event) {
         event.preventDefault();
+        var $form = $(this);
         postForm(
-            $(this),
-            '¿Revertir esta OP? Se genera compensatorio con asiento y Anita invertidos; la SP vuelve a AUTORIZADA. La OP original no se borra.',
-            'Revirtiendo OP…',
-            'OP revertida.'
+            $form,
+            $form.attr('data-confirm') || '¿Revertir esta OP? Se genera compensatorio con asiento y Anita invertidos; la SP vuelve a AUTORIZADA. La OP original no se borra.',
+            $form.attr('data-titulo') || 'Revirtiendo OP…',
+            $form.attr('data-ok') || 'OP revertida.'
         );
     });
 

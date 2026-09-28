@@ -177,6 +177,9 @@ final class MayorPlanoCuentaClasificadoExportSupport
             }
         }
 
+        fputcsv($out, self::filaTotalGeneral($resultado, $filtros), ';');
+        $n++;
+
         fclose($out);
         @chmod($rutaAbsoluta, 0664);
 
@@ -209,7 +212,33 @@ final class MayorPlanoCuentaClasificadoExportSupport
             );
         }
 
+        $writer->escribirFila(self::filaTotalGeneral($resultado, $filtros), 'total');
+
         return $writer->cerrar();
+    }
+
+    /**
+     * Fila de cierre: debe, haber y diferencia (debe − haber) del resultado completo.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     * @return list<string|float>
+     */
+    public static function filaTotalGeneral(array $resultado, array $filtros): array
+    {
+        $mostrarCc = MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros);
+        $idxDebe = $mostrarCc ? 13 : 12;
+        $idxHaber = $idxDebe + 1;
+        $debe = round((float) ($resultado['totales']['debe'] ?? 0), 2);
+        $haber = round((float) ($resultado['totales']['haber'] ?? 0), 2);
+        $diferencia = round($debe - $haber, 2);
+
+        $fila = array_fill(0, count(self::cabeceras($filtros)), '');
+        $fila[0] = 'Total general · Diferencia (D-H) '.number_format($diferencia, 2, ',', '.');
+        $fila[$idxDebe] = $debe;
+        $fila[$idxHaber] = $haber;
+
+        return $fila;
     }
 
     /**

@@ -7,13 +7,45 @@ use App\Models\Stock\MovimientoStock;
 /**
  * Alcance de cierre contable que corresponde a un asiento.
  *
- * El alcance lo define el **documento que origina** el asiento (cobranza, movimiento de caja,
- * venta, recepción, factura de proveedor, movimiento de stock). Un asiento cargado desde el
- * ABM de asientos es siempre "Asientos contables manuales", cualquiera sea su tipo de asiento:
- * el tipo (VTA, TES, COM, STK…) es una clasificación contable, no el circuito que lo generó.
+ * El alta lo define el documento que origina el asiento (cobranza, caja, venta, recepción,
+ * factura de proveedor, stock). Un asiento cargado desde el ABM es "Asientos contables
+ * manuales": el tipo (VTA, TES, COM, STK…) clasifica, no es el circuito que lo generó.
+ *
+ * Corregir o borrar un asiento ya existente depende solo del cierre de Contable.
+ * Si Contable sigue abierto, se puede modificar el asiento aunque Compras, Ventas
+ * u otro subsistema ya esté cerrado.
  */
 class AsientoAlcanceCierreSupport
 {
+    /**
+     * Alcance que debe validar la grabación del asiento.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function alcanceParaValidar(array $data, bool $esModificacion): string
+    {
+        if ($esModificacion) {
+            return PeriodoContableCierreSupport::ALCANCE_CONTABLE;
+        }
+
+        $explicito = trim((string) ($data['alcance_cierre_contable'] ?? ''));
+        if ($explicito !== '' && PeriodoContableCierreSupport::alcanceEsValido($explicito)) {
+            return $explicito;
+        }
+
+        return self::inferir($data);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function tieneAlcanceExplicito(array $data): bool
+    {
+        $explicito = trim((string) ($data['alcance_cierre_contable'] ?? ''));
+
+        return $explicito !== '' && PeriodoContableCierreSupport::alcanceEsValido($explicito);
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */

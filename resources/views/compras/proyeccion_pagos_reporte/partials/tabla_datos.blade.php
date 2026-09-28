@@ -37,7 +37,7 @@
         }
 
         try {
-            return \Carbon\Carbon::parse($valor)->format('d/m/y');
+            return \Carbon\Carbon::parse($valor)->format('d/m/Y');
         } catch (\Throwable) {
             return '';
         }

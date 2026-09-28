@@ -29,6 +29,7 @@ final class PagoproveedorListadoFila
         public readonly string $detalle,
         public readonly ?int $solicitudpagoId = null,
         public readonly string $cuentasCaja = '',
+        public readonly bool $revertible = false,
     ) {
         $this->nombreempresa = $this->nombreEmpresa;
     }
@@ -53,6 +54,7 @@ final class PagoproveedorListadoFila
             detalle: $this->detalle,
             solicitudpagoId: $this->solicitudpagoId,
             cuentasCaja: trim($cuentasCaja),
+            revertible: $this->revertible,
         );
     }
 
@@ -176,6 +178,7 @@ final class PagoproveedorListadoFila
                 ? (int) $row->solicitudpago_id
                 : null,
             cuentasCaja: trim((string) ($row->cuentas_caja ?? '')),
+            revertible: (int) ($row->revertible ?? 0) === 1,
         );
     }
 }

@@ -4,16 +4,23 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Services\Stock\RecepcionProveedorImportarDesdeAnitaService;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
 use App\Support\Stock\RecepcionProveedorPrecioPendienteSupport;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Listado de recepciones / devoluciones vinculadas a una OC (solapa Recepciones en edición OC).
  */
 class OrdencompraRecepcionesListadoService
 {
+    public function __construct(
+        private RecepcionProveedorImportarDesdeAnitaService $importarDesdeAnitaService,
+    ) {}
+
     /**
      * @return array{
      *     recepciones: list<array<string, mixed>>,
@@ -22,6 +29,8 @@ class OrdencompraRecepcionesListadoService
      */
     public function listar(int $ordencompraId): array
     {
+        $this->traerComFaltantesDesdeAnita($ordencompraId);
+
         $oc = Ordencompra::query()
             ->with(['ordencompra_articulos.articulos'])
             ->findOrFail($ordencompraId);
@@ -64,10 +73,16 @@ class OrdencompraRecepcionesListadoService
                 $precioPendienteAprobacion++;
             }
 
+            $documento = $this->documentoRecepcion($rec);
+            $anitaRef = $this->anitaRefRecepcion($rec);
+            if ($anitaRef !== null && str_contains($documento, $anitaRef)) {
+                $anitaRef = null;
+            }
+
             $items[] = [
                 'id' => (int) $rec->id,
                 'tipo' => (string) $rec->tipo,
-                'documento' => $this->documentoRecepcion($rec),
+                'documento' => $documento,
                 'fecha' => $rec->fecha?->format('Y-m-d'),
                 'estado' => (string) $rec->estado,
                 'numerorecepcion' => $rec->numerorecepcion,
@@ -86,7 +101,7 @@ class OrdencompraRecepcionesListadoService
                 'moneda' => $rec->monedas?->abreviatura ?? $rec->monedas?->nombre,
                 'usuario' => $rec->creousuarios?->nombre,
                 'observacion' => $rec->observacion,
-                'anita_ref' => $this->anitaRefRecepcion($rec),
+                'anita_ref' => $anitaRef,
                 'lineas' => $lineas,
                 'pendiente_aplicar_precio_oc' => $pendienteAplicar,
                 'precio_pendiente_aprobacion' => $esPrecioPendiente,
@@ -111,6 +126,34 @@ class OrdencompraRecepcionesListadoService
                 'precio_pendiente_aprobacion' => $precioPendienteAprobacion,
             ],
         ];
+    }
+
+    /**
+     * Las COM históricas viven en Anita (recepmae/aplicped). Si no están en ERP,
+     * la solapa queda vacía aunque la OC tenga recepciones.
+     */
+    private function traerComFaltantesDesdeAnita(int $ordencompraId): void
+    {
+        if ($ordencompraId <= 0) {
+            return;
+        }
+
+        $cacheKey = 'oc_recepciones_anita_sync:'.$ordencompraId;
+        if (Cache::has($cacheKey)) {
+            return;
+        }
+
+        try {
+            $stats = $this->importarDesdeAnitaService->asegurarPorOrdencompraId($ordencompraId, false);
+            if (($stats['errores'] ?? []) === []) {
+                Cache::put($cacheKey, 1, now()->addMinutes(5));
+            }
+        } catch (\Throwable $e) {
+            Log::warning('OC recepciones: no se pudieron traer COM desde Anita', [
+                'ordencompra_id' => $ordencompraId,
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -169,13 +212,17 @@ class OrdencompraRecepcionesListadoService
         $nro = $rec->numerorecepcion ?: $rec->id;
 
         if ($rec->anita_tipo && $rec->anita_sucursal && $rec->anita_nro) {
+            $tipo = trim((string) $rec->anita_tipo);
+            $letra = trim((string) ($rec->anita_letra ?? ''));
+            $etiqueta = strcasecmp($tipo, $prefijo) === 0 ? $prefijo : trim($prefijo.' '.$tipo);
+            $letraTxt = $letra !== '' ? ' '.$letra : '';
+
             return sprintf(
-                '%s %s %c %d-%d',
-                $prefijo,
-                $rec->anita_tipo,
-                $rec->anita_letra ?? ' ',
-                $rec->anita_sucursal,
-                $rec->anita_nro
+                '%s%s %d-%d',
+                $etiqueta,
+                $letraTxt,
+                (int) $rec->anita_sucursal,
+                (int) $rec->anita_nro
             );
         }
 
@@ -188,13 +235,15 @@ class OrdencompraRecepcionesListadoService
             return null;
         }
 
-        return sprintf(
-            '%s %c %d-%d',
-            $rec->anita_tipo,
-            $rec->anita_letra ?? ' ',
-            $rec->anita_sucursal ?? 0,
-            $rec->anita_nro ?? 0
-        );
+        $letra = trim((string) ($rec->anita_letra ?? ''));
+
+        return trim(sprintf(
+            '%s%s %d-%d',
+            trim((string) $rec->anita_tipo),
+            $letra !== '' ? ' '.$letra : '',
+            (int) ($rec->anita_sucursal ?? 0),
+            (int) ($rec->anita_nro ?? 0)
+        ));
     }
 
     private function totalRecepcion(Recepcion_Proveedor $rec): ?float

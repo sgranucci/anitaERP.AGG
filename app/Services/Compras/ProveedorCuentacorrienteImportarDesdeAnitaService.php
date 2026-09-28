@@ -632,6 +632,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
         $totalFirmado = round($monto * $signo, 4);
         $pendienteFirmado = round($pendienteAbs * $signo, 4);
         $fecha = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($promov['prov_fecha'] ?? $compra['com_fecha'] ?? '');
+        $fechaComprobante = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha'] ?? '') ?: $fecha;
         $fechaIva = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($compra['com_fecha_iva'] ?? '') ?: $fecha;
         $fechaVto = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($promov['prov_fecha_vto'] ?? '') ?: $fecha;
         if ($fecha === '') {
@@ -793,6 +794,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
             'accion_apl' => $accionApl,
             'accion_saldo' => $accionSaldo,
             'fecha' => $fecha,
+            'fecha_comprobante' => $fechaComprobante,
             'fechaiva' => $fechaIva,
             'fechavencimiento' => $fechaVto,
             'letra' => $letra,
@@ -985,7 +987,7 @@ class ProveedorCuentacorrienteImportarDesdeAnitaService
                     'letra' => $item['letra'],
                     'sucursal' => $item['sucursal'],
                     'numerocomprobante' => $item['numero'],
-                    'fechacomprobante' => $item['fecha'],
+                    'fechacomprobante' => $item['fecha_comprobante'] ?? $item['fecha'],
                     'fechaiva' => $item['fechaiva'],
                     'fechavencimiento' => $item['fechavencimiento'],
                     'subtotal' => $item['monto_abs'],

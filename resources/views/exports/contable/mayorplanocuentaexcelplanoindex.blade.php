@@ -8,6 +8,19 @@
     );
     $fmt = \App\Support\Export\ExcelFormatoNumero::formateadorMonto($formatoExcel, 2);
     $fmtCotiz = \App\Support\Export\ExcelFormatoNumero::formateadorMonto($formatoExcel, 4);
+    $fmtTotal = static function ($valor) use ($fmt, $formatoExcel): string {
+        $texto = $fmt($valor);
+        if ($texto !== '') {
+            return $texto;
+        }
+
+        return \App\Support\Export\ExcelFormatoNumero::esAuto($formatoExcel)
+            ? number_format(0, 2, '.', '')
+            : \App\Support\Export\ExcelFormatoNumero::formatearTexto(0.0, $formatoExcel, 2);
+    };
+    $totalDebeFinal = (float) ($totales['total_debe'] ?? 0);
+    $totalHaberFinal = (float) ($totales['total_haber'] ?? 0);
+    $diferenciaFinal = round($totalDebeFinal - $totalHaberFinal, 2);
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
@@ -30,8 +43,9 @@
         <tr>
             <td colspan="{{ $colSpan }}">
                 {{ $cantidadLineas }} movimiento(s)
-                · Debe {{ number_format((float) ($totales['total_debe'] ?? 0), 2, ',', '.') }}
-                · Haber {{ number_format((float) ($totales['total_haber'] ?? 0), 2, ',', '.') }}
+                · Debe {{ number_format($totalDebeFinal, 2, ',', '.') }}
+                · Haber {{ number_format($totalHaberFinal, 2, ',', '.') }}
+                · Diferencia (D−H) {{ number_format($diferenciaFinal, 2, ',', '.') }}
             </td>
         </tr>
     @endif
@@ -85,4 +99,14 @@
             <td>{{ $fila['numeros_facturas'] ?? '' }}</td>
         </tr>
     @endforeach
+    @if ($cantidadLineas > 0)
+        <tr>
+            <td colspan="{{ $mostrarCentrocosto ? 8 : 7 }}">Total general · Diferencia (D−H) {{ number_format($diferenciaFinal, 2, ',', '.') }}</td>
+            <td>{{ $fmtTotal($totalDebeFinal) }}</td>
+            <td>{{ $fmtTotal($totalHaberFinal) }}</td>
+            @for ($i = 0; $i < 9; $i++)
+                <td></td>
+            @endfor
+        </tr>
+    @endif
 </table>

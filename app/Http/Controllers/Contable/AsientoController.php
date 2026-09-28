@@ -20,6 +20,7 @@ use App\Models\Contable\Configuracion_AsientoContable;
 use App\Services\Contable\AsientoAprobacionService;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Contable\AsientoBalanceSupport;
+use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
 use App\Support\Contable\AsientoListadoFiltros;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
@@ -258,6 +259,7 @@ class AsientoController extends Controller
 
         try {
             AsientoBalanceSupport::assertValidoParaCrudAsiento($data);
+            AsientoCentrocostoObligatorioSupport::assertDesdePayload($data);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['errores' => $e->getMessage()]);
         }
@@ -387,6 +389,7 @@ class AsientoController extends Controller
         $dataRequest = $request->all();
         try {
             AsientoBalanceSupport::assertValidoParaCrudAsiento($dataRequest);
+            AsientoCentrocostoObligatorioSupport::assertDesdePayload($dataRequest);
         } catch (\InvalidArgumentException $e) {
             return ['errores' => $e->getMessage()];
         }
@@ -555,6 +558,7 @@ class AsientoController extends Controller
         $payloadBalance = array_merge($data, $datas);
         try {
             AsientoBalanceSupport::assertValidoParaCrudAsiento($payloadBalance);
+            AsientoCentrocostoObligatorioSupport::assertDesdePayload($payloadBalance);
         } catch (\InvalidArgumentException $e) {
             return ['errores' => $e->getMessage()];
         }

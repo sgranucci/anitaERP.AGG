@@ -128,4 +128,59 @@ final class PagosSabanaColumnasSupport
 
         return array_merge($visibles, self::extras());
     }
+
+    /**
+     * Alineación de la columna: los importes y fechas van a la derecha.
+     */
+    public static function alineacion(string $tipo, string $clave = ''): string
+    {
+        if (in_array($clave, ['tip', 'tipo_medio', 'empresa'], true)) {
+            return 'center';
+        }
+
+        return match ($tipo) {
+            self::TIPO_IMPORTE, self::TIPO_ENTERO, self::TIPO_FECHA => 'right',
+            default => 'left',
+        };
+    }
+
+    /**
+     * Peso relativo de ancho. Sirve para porcentajes del PDF y para el ancho de Excel.
+     */
+    public static function pesoAncho(string $clave, string $tipo): int
+    {
+        return match ($clave) {
+            'proveedor_codigo' => 8,
+            'proveedor_nombre' => 24,
+            'tip' => 5,
+            'numero_op' => 11,
+            'fecha' => 10,
+            'tipo_medio' => 6,
+            'total_pago' => 12,
+            'comprobantes' => 26,
+            'detalle' => 22,
+            'centros_costo' => 16,
+            'ordenes_compra' => 14,
+            'banco' => 16,
+            'empresa' => 7,
+            'ch_prop_emi', 'ch_terc_ent', 'doc_prop_emit', 'doc_terc_entr' => 14,
+            default => $tipo === self::TIPO_IMPORTE ? 12 : 11,
+        };
+    }
+
+    /**
+     * Ancho de columna en Excel (unidades de carácter).
+     */
+    public static function anchoExcel(string $clave, string $tipo): float
+    {
+        return (float) max(8, (int) round(self::pesoAncho($clave, $tipo) * 1.15));
+    }
+
+    /**
+     * Ancho mínimo en pantalla, en píxeles.
+     */
+    public static function anchoHtmlPx(string $clave, string $tipo): int
+    {
+        return self::pesoAncho($clave, $tipo) * 9;
+    }
 }

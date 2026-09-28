@@ -8,6 +8,7 @@
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/pagoproveedor/filtro.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.pagoproveedor.partials.documentos_relacionados_script')
 @if (session('imprimir_pagoproveedor_url'))
 <script>
@@ -152,6 +153,20 @@
                                                 <i class="fa fa-print"></i>
                                             </a>
                                         @endif
+                                        @if (
+                                            can('revertir-ingresos-egresos-caja', false)
+                                            && $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                                            && $fila->revertible
+                                        )
+                                            <form action="{{ route('revertir_ingresoegreso_id', ['id' => $fila->id]) }}"
+                                                  class="d-inline form-revertir-ie" method="POST">
+                                                @csrf
+                                                <input type="hidden" name="id" value="{{ $fila->id }}">
+                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir (compensatorio + asiento + Anita)">
+                                                    <i class="fa fa-undo text-warning"></i>
+                                                </button>
+                                            </form>
+                                        @endif
                                     @else
                                         @if (can('editar-pagoproveedor', false))
                                             <a href="{{ route('editar_pagoproveedor', ['id' => $fila->id] + $retornoListadoQuery) }}"
@@ -179,6 +194,20 @@
                                                 data-pagoproveedor-id="{{ $fila->id }}">
                                                 <i class="fa fa-envelope"></i>
                                             </button>
+                                        @endif
+                                        @if (
+                                            can('revertir-pagoproveedor', false)
+                                            && $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                                            && $fila->revertible
+                                        )
+                                            <form action="{{ route('revertir_pagoproveedor', $fila->id) }}"
+                                                  class="d-inline form-revertir-ie" method="POST"
+                                                  data-confirm="¿Revertir esta OP? Se genera compensatorio con asiento y Anita invertidos. La OP original no se borra.">
+                                                @csrf
+                                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir (compensatorio + asiento + Anita)">
+                                                    <i class="fa fa-undo text-warning"></i>
+                                                </button>
+                                            </form>
                                         @endif
                                     @endif
                                 </td>

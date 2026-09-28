@@ -133,6 +133,23 @@ class MayorPlanoCuentaClasificadoExportSupportTest extends TestCase
         $this->assertCount(17, $row);
     }
 
+    public function test_fila_total_general_pone_debe_haber_y_diferencia(): void
+    {
+        $filtros = [
+            'mostrar_columna_centrocosto' => false,
+            'empresa_ids' => [1],
+            'consolidar_empresas' => true,
+        ];
+        $row = MayorPlanoCuentaClasificadoExportSupport::filaTotalGeneral([
+            'totales' => ['debe' => 1500.5, 'haber' => 400],
+        ], $filtros);
+
+        $this->assertSame('Total general · Diferencia (D-H) 1.100,50', $row[0]);
+        $this->assertSame(1500.5, $row[12]);
+        $this->assertSame(400.0, $row[13]);
+        $this->assertCount(16, $row);
+    }
+
     public function test_estilo_fila_excel_por_tipo(): void
     {
         $this->assertSame('cuenta', MayorPlanoCuentaClasificadoExportSupport::estiloFilaExcel(['tipo_fila' => 'header_cuenta']));

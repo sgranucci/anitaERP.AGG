@@ -182,7 +182,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 		$asientoExistente = $this->model->find($id);
 		if ($asientoExistente) {
 			$dataParaValidar = array_merge($asientoExistente->toArray(), $data);
-			$this->assertPeriodoContablePermitido($dataParaValidar);
+			// Corregir un asiento ya grabado depende del cierre de Contable,
+			// no del subsistema que lo originó (compras, ventas, stock, etc.).
+			$this->assertPeriodoContablePermitido($dataParaValidar, true);
 		}
 
 		$asiento = $this->model->findOrFail($id)->update($data);
@@ -210,7 +212,13 @@ class AsientoRepository implements AsientoRepositoryInterface
 
         $this->asignarPathSistema($data);
 
-        $this->assertPeriodoContablePermitido($data);
+        // El alta de un circuito (factura, cobranza, etc.) trae alcance explícito y sigue
+        // el cierre de ese subsistema. Reescribir un asiento ya existente, sin ese alcance,
+        // solo mira el cierre de Contable.
+        $this->assertPeriodoContablePermitido(
+            $data,
+            ! AsientoAlcanceCierreSupport::tieneAlcanceExplicito($data)
+        );
         AsientoBalanceSupport::assertBalanceadoDesdePayload($data, 'asiento (Anita ctamov)');
         AsientoCtamovRollbackSupport::registrarSiHayTransaccion(
             (int) ($data['empresa_id'] ?? 0),
@@ -274,7 +282,7 @@ class AsientoRepository implements AsientoRepositoryInterface
     	$asiento = Asiento::find($id);
 
 		if ($asiento) {
-			$this->assertPeriodoContablePermitido($asiento->toArray());
+			$this->assertPeriodoContablePermitido($asiento->toArray(), true);
 		}
 
 		// Elimina anita
@@ -1521,13 +1529,13 @@ class AsientoRepository implements AsientoRepositoryInterface
 		);
 	}
 
-	private function assertPeriodoContablePermitido(array $data): void
+	private function assertPeriodoContablePermitido(array $data, bool $esModificacion = false): void
 	{
 		if (empty($data['empresa_id']) || empty($data['fecha'])) {
 			return;
 		}
 
-		$alcance = (string) ($data['alcance_cierre_contable'] ?? $this->inferirAlcanceCierre($data));
+		$alcance = AsientoAlcanceCierreSupport::alcanceParaValidar($data, $esModificacion);
 		$opciones = [];
 
 		if ($alcance === PeriodoContableCierreSupport::ALCANCE_FACTURACION) {
@@ -1555,10 +1563,5 @@ class AsientoRepository implements AsientoRepositoryInterface
 			(int) (Auth::id() ?? 0) ?: null,
 			$opciones
 		);
-	}
-
-	private function inferirAlcanceCierre(array $data): string
-	{
-		return AsientoAlcanceCierreSupport::inferir($data);
 	}
 }

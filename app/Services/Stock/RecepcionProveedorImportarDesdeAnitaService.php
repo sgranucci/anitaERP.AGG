@@ -56,6 +56,7 @@ class RecepcionProveedorImportarDesdeAnitaService
         bool $conImpacto = true,
         bool $dryRun = false,
         ?int $usuarioId = null,
+        ?string $estadoSinImpacto = null,
     ): array {
         $resultado = [
             'estado' => 'error',
@@ -148,9 +149,12 @@ class RecepcionProveedorImportarDesdeAnitaService
         try {
             $recepcionId = DB::transaction(function () use (
                 $cab, $empresaId, $nro, $sucursal, $ordencompraId, $ocCentrocostoId, $proveedorId,
-                $usuarioId, $monedaDefault, $monedaCabecera, $lineasAnita, $conImpacto
+                $usuarioId, $monedaDefault, $monedaCabecera, $lineasAnita, $conImpacto, $estadoSinImpacto
             ) {
                 $fecha = RecepcionProveedorAnitaImportSupport::fechaDesdeAnita((int) ($cab->recm_fecha ?? 0));
+                $estado = $conImpacto
+                    ? RecepcionProveedorEstados::BORRADOR
+                    : self::estadoHistoricoSinImpacto($estadoSinImpacto);
 
                 $recepcion = Recepcion_Proveedor::create([
                     'ordencompra_id' => $ordencompraId,
@@ -162,9 +166,7 @@ class RecepcionProveedorImportarDesdeAnitaService
                     'numerofactura' => '',
                     'moneda_id' => $monedaCabecera['moneda_id'],
                     'cotizacion' => $monedaCabecera['cotizacion'],
-                    'estado' => $conImpacto
-                        ? RecepcionProveedorEstados::BORRADOR
-                        : RecepcionProveedorEstados::CONFIRMADA,
+                    'estado' => $estado,
                     'observacion' => trim((string) ($cab->recm_observacion ?? '')) ?: null,
                     'anita_tipo' => 'COM',
                     'anita_letra' => 'X',
@@ -203,6 +205,15 @@ class RecepcionProveedorImportarDesdeAnitaService
         }
 
         return $resultado;
+    }
+
+    private static function estadoHistoricoSinImpacto(?string $estado): string
+    {
+        return in_array($estado, [
+            RecepcionProveedorEstados::BORRADOR,
+            RecepcionProveedorEstados::CONFIRMADA,
+            RecepcionProveedorEstados::ANULADA,
+        ], true) ? $estado : RecepcionProveedorEstados::CONFIRMADA;
     }
 
     /**

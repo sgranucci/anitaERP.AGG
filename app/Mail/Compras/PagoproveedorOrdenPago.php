@@ -15,6 +15,8 @@ class PagoproveedorOrdenPago extends Mailable
 
     public ?string $mensajeAdicional;
 
+    public bool $incluyeComprobanteTransferencia = false;
+
     public function __construct(Pagoproveedor $pagoproveedor, ?string $mensajeAdicional = null)
     {
         $this->pagoproveedor = $pagoproveedor;

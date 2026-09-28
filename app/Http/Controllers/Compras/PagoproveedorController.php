@@ -262,8 +262,19 @@ class PagoproveedorController extends Controller
                 $mensaje .= ' '.$resultado['aviso'];
             }
 
+            if ($request->ajax()) {
+                return response()->json([
+                    'mensaje' => 'ok',
+                    'resultado' => $resultado,
+                ]);
+            }
+
             return redirect()->route('pagoproveedor')->with('mensaje', $mensaje);
         } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+
             return redirect()->back()->with('mensaje', $e->getMessage());
         }
     }

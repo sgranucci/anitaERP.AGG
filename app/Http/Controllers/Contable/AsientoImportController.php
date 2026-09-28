@@ -8,6 +8,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\AsientoImportPreviewService;
 use App\Services\Contable\AsientoImportService;
+use App\Services\Contable\AsientoPegadoTextoService;
 use Illuminate\Http\Request;
 use Throwable;
 
@@ -152,5 +153,66 @@ class AsientoImportController extends Controller
             ->route('crear_importacion_asiento')
             ->with('asiento_import_resultado', $resumen)
             ->with('mensaje', $mensaje);
+    }
+
+    public function pegar(Request $request, AsientoPegadoTextoService $pegadoService)
+    {
+        if (! can('crear-asiento', false) && ! can('editar-asiento', false)) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'No tiene permiso para cargar asientos.',
+            ], 403);
+        }
+
+        $request->validate([
+            'texto' => 'nullable|string|max:200000',
+            'archivo' => 'nullable|file|max:15360',
+            'empresa_id' => 'nullable|integer',
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId > 0 && ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'Empresa no válida o no asignada al usuario.',
+            ], 422);
+        }
+
+        if ($request->hasFile('archivo')) {
+            $archivo = $request->file('archivo');
+            $extension = strtolower((string) $archivo->getClientOriginalExtension());
+            if (! in_array($extension, ['pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'], true)) {
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => 'El archivo tiene que ser un PDF o una imagen (jpg, png).',
+                ], 422);
+            }
+
+            $ruta = $archivo->getRealPath();
+            if ($ruta === false || $ruta === '') {
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => 'No se pudo leer el archivo subido.',
+                ], 422);
+            }
+
+            try {
+                return response()->json($pegadoService->decodificarArchivo($ruta, $archivo->getMimeType(), $empresaId));
+            } catch (Throwable $e) {
+                return response()->json([
+                    'ok' => false,
+                    'mensaje' => $e->getMessage(),
+                ], 422);
+            }
+        }
+
+        if (! $request->filled('texto')) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'Suba el PDF o la imagen, o pegue el texto del asiento.',
+            ], 422);
+        }
+
+        return response()->json($pegadoService->decodificar((string) $request->input('texto'), $empresaId));
     }
 }

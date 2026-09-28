@@ -16,6 +16,19 @@
     );
     $fmt = \App\Support\Export\ExcelFormatoNumero::formateadorMonto($formatoExcel, 2);
     $fmtCotiz = \App\Support\Export\ExcelFormatoNumero::formateadorMonto($formatoExcel, 4);
+    $fmtTotal = static function ($valor) use ($fmt, $formatoExcel): string {
+        $texto = $fmt($valor);
+        if ($texto !== '') {
+            return $texto;
+        }
+
+        return \App\Support\Export\ExcelFormatoNumero::esAuto($formatoExcel)
+            ? number_format(0, 2, '.', '')
+            : \App\Support\Export\ExcelFormatoNumero::formatearTexto(0.0, $formatoExcel, 2);
+    };
+    $totalDebeFinal = (float) ($totales['total_debe'] ?? 0);
+    $totalHaberFinal = (float) ($totales['total_haber'] ?? 0);
+    $diferenciaFinal = round($totalDebeFinal - $totalHaberFinal, 2);
     $cuadre = $cuadre_cobro_ventas ?? null;
 @endphp
 <table>
@@ -39,8 +52,9 @@
         <tr>
             <td colspan="{{ $colSpan }}">
                 {{ $cantidadLineas }} movimiento(s)
-                · Debe {{ number_format((float) ($totales['total_debe'] ?? 0), 2, ',', '.') }}
-                · Haber {{ number_format((float) ($totales['total_haber'] ?? 0), 2, ',', '.') }}
+                · Debe {{ number_format($totalDebeFinal, 2, ',', '.') }}
+                · Haber {{ number_format($totalHaberFinal, 2, ',', '.') }}
+                · Diferencia (D−H) {{ number_format($diferenciaFinal, 2, ',', '.') }}
                 · {{ (int) ($totales['cantidad_cuentas'] ?? 0) }} cuenta(s)
             </td>
         </tr>
@@ -85,6 +99,17 @@
             <td>{{ (int) ($row['cantidad_lineas'] ?? 0) }}</td>
         </tr>
     @endforeach
+    @if ($cantidadLineas > 0)
+        <tr>
+            <td colspan="{{ $mostrarCcResumen ? 3 : 2 }}">Total general · Diferencia (D−H) {{ number_format($diferenciaFinal, 2, ',', '.') }}</td>
+            <td></td>
+            <td>{{ $fmtTotal($totalDebeFinal) }}</td>
+            <td>{{ $fmtTotal($totalHaberFinal) }}</td>
+            <td>{{ $fmtTotal($totalHaberFinal - $totalDebeFinal) }}</td>
+            <td></td>
+            <td></td>
+        </tr>
+    @endif
     @if (! empty($cuadre))
         <tr>
             <td colspan="{{ $colSpan }}"></td>
@@ -230,5 +255,17 @@
             </tr>
         @endif
     @endforeach
+    @if ($cantidadLineas > 0)
+        <tr>
+            <td colspan="{{ $colSpanAntesImportes }}">Total general · Diferencia (D−H) {{ number_format($diferenciaFinal, 2, ',', '.') }}</td>
+            <td>{{ $fmtTotal($totalDebeFinal) }}</td>
+            <td>{{ $fmtTotal($totalHaberFinal) }}</td>
+            <td></td>
+            <td></td>
+            @if ($multiempresa)
+                <td></td>
+            @endif
+        </tr>
+    @endif
     @endif
 </table>

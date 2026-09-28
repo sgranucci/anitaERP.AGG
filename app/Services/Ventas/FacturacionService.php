@@ -2542,6 +2542,31 @@ class FacturacionService
 		return $data;
 	}
 
+	/**
+	 * El formulario de nota de crédito arma el combo de punto de venta en el navegador.
+	 * Si el de la factura original no entra en el circuito, el campo no se envía.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array{error: string}|null
+	 */
+	private function errorSiFaltaPuntoventa(array $data): ?array
+	{
+		if ($this->esEmisionPos($data)) {
+			return null;
+		}
+		if ((int) ($data['puntoventa_id'] ?? 0) > 0) {
+			return null;
+		}
+
+		$ventaId = (int) ($data['venta_id'] ?? 0);
+		$tipoId = (int) ($data['tipotransaccion_id'] ?? 0);
+		if ($ventaId > 0 && VentaNotaCreditoPrecioLiteralSupport::esNotaCreditoTipotransaccionId($tipoId)) {
+			return ['error' => 'No bajó el punto de venta de la factura original. Elegí un punto de venta antes de generar la nota de crédito.'];
+		}
+
+		return null;
+	}
+
 	// Calcula factura general
 
 	public function calculaFacturaGeneral($data)
@@ -2555,6 +2580,9 @@ class FacturacionService
 
 		// Recibe datos para facturar
 		$cliente_id = $data['cliente_id'];
+		if ($errorPv = $this->errorSiFaltaPuntoventa($data)) {
+			return $errorPv;
+		}
 		$puntoventa_id = $data['puntoventa_id'];
 		$moneda_id = $data['moneda_id'];
 		$this->descuentoPie = $data['descuentopie'];
@@ -2634,6 +2662,10 @@ class FacturacionService
 		}
 		$conceptoVentaCabeceraId = (int) ($data['concepto_venta_id'] ?? 0);
 		$esPosMostrador = $this->esEmisionPos($data);
+		$esNcMostrador = ! $esPosMostrador
+			&& (int) ($data['venta_id'] ?? 0) > 0
+			&& $tipotransaccionCalculo
+			&& $tipotransaccionCalculo->esNotaCredito();
 
 		// Lee los items a facturar
 		$dataFactura = [];
@@ -2682,6 +2714,12 @@ class FacturacionService
 
 		for ($offItem = 0; $offItem < count($cantidades); $offItem++)
 		{
+			if ($esNcMostrador && (
+				! is_array($precios) || ! array_key_exists($offItem, $precios)
+				|| ! is_array($descripciones) || ! array_key_exists($offItem, $descripciones)
+			)) {
+				continue;
+			}
 			$articuloIdLinea = (int) ($articulos[$offItem] ?? 0);
 			$conceptoIdInputLinea = (int) ($conceptoVentaIdsInput[$offItem] ?? 0);
 			if ($articuloIdLinea <= 0 && $conceptoIdInputLinea <= 0) {
@@ -9267,6 +9305,9 @@ class FacturacionService
 		$tipotransacciondefault_id = $prefsFacturacion['tipotransaccion_id'];
         $puntoventadefault_id = $prefsFacturacion['puntoventa_id'];
         $puntoventaremitodefault_id = $prefsFacturacion['puntoventaremito_id'];
+		if (isset($flGeneraNotaDeCredito) && (int) ($data->puntoventa_id ?? 0) > 0) {
+			$puntoventadefault_id = (int) $data->puntoventa_id;
+		}
 
         $urlOrigen = request()->headers->get('referer');
         $consultaFacturasDia = request()->query('origen') === 'gastronomia_facturas_dia';

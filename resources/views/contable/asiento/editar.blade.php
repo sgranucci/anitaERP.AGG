@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="{{ asset('assets/pages/scripts/contable/asiento/referencias.css') }}">
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 @include('includes.contable.asiento_montos_formato_js')
-<script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuentacontable/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/asiento/referencias.js")}}" type="text/javascript"></script>
 <script>
     // Ruta relativa con carpetaBase (APP_URL no incluye /anitaERP/public).
@@ -15,6 +15,7 @@
         + '/contable/cierre-periodo/validar-fecha';
 </script>
 <script src="{{ asset('assets/pages/scripts/contable/asiento/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/asiento/pegar_excel.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/pegar_excel.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/asiento/copiar_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/copiar_revertir.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/asiento/validar_fecha_cierre.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/validar_fecha_cierre.js')) ?: time() }}" type="text/javascript"></script>
 <script>
@@ -64,12 +65,22 @@
             ? AsientoMontosFormato.parseDecimal.bind(AsientoMontosFormato)
             : function (v) {
                 if (v == null || v === '') return 0;
-                var t = String(v).trim().replace(/\s/g, '');
-                if (t.indexOf(',') >= 0) {
-                    t = t.replace(/\./g, '').replace(',', '.');
+                var t = String(v).trim().replace(/\s/g, '').replace(/[^\d,.\-]/g, '');
+                if (t === '' || t === '-') return 0;
+                var negativo = t.charAt(0) === '-';
+                if (negativo) t = t.substring(1);
+                var tieneComa = t.indexOf(',') >= 0;
+                var tienePunto = t.indexOf('.') >= 0;
+                if (tieneComa && tienePunto) {
+                    t = t.lastIndexOf(',') > t.lastIndexOf('.')
+                        ? t.replace(/\./g, '').replace(',', '.')
+                        : t.replace(/,/g, '');
+                } else if (tieneComa) {
+                    t = /^\d{1,3}(,\d{3})+$/.test(t) ? t.replace(/,/g, '') : t.replace(/,/g, '.');
                 } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
                     t = t.replace(/\./g, '');
                 }
+                if (negativo) t = '-' + t;
                 var n = parseFloat(t);
                 return isNaN(n) ? 0 : Math.round(n * 100) / 100;
             };

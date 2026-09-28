@@ -11,9 +11,10 @@ var PROY_PRESETS = {
     ],
     analisis: [
         'proveedor_codigo', 'proveedor_nombre', 'tipo', 'comprobante', 'fecha_comprobante',
-        'fecha_vencimiento', 'nro_referencia', 'requisicion', 'usuario_requisicion',
-        'autorizante_requisicion',
-        'detalle_item', 'concepto', 'detalle_concepto', 'aprobacion', 'total_adeudado',
+        'fecha_iva', 'fecha_vencimiento', 'fecha_diferida', 'nro_referencia', 'medio_pago',
+        'detalle_pago', 'condicion_pago_dias', 'condicion_pago', 'dias_entrega_cheque',
+        'aprobacion', 'usuario_requisicion', 'autorizante_requisicion', 'aprobacion_requisicion',
+        'detalle_item', 'empresa', 'concepto', 'detalle_concepto', 'leyenda', 'total_adeudado',
     ],
     cashflow: [
         'concepto', 'detalle_concepto', 'cuenta_concepto', 'proveedor_codigo', 'proveedor_nombre',

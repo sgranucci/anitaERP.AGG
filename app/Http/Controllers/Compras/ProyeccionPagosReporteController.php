@@ -145,7 +145,7 @@ class ProyeccionPagosReporteController extends Controller
                     ->download('proyeccion_pagos.xlsx');
 
             case 'CSV':
-                return (new ProyeccionPagosReporteExport($filas, $columnas, $titulo, $subtitulo, $totales))
+                return (new ProyeccionPagosReporteExport($filas, $columnas, $titulo, $subtitulo, $totales, fechasNativasExcel: false))
                     ->download('proyeccion_pagos.csv', Excel::CSV);
         }
 

@@ -81,9 +81,10 @@ class PagoproveedorEnvioProveedorService
     }
 
     /**
+     * @param  list<array{ruta: string, nombre: string}>  $adjuntosExtra
      * @return array{mensaje: string, errores?: string}
      */
-    public function enviar(int $pagoproveedorId, ?string $emailOverride = null, ?string $mensajeAdicional = null): array
+    public function enviar(int $pagoproveedorId, ?string $emailOverride = null, ?string $mensajeAdicional = null, array $adjuntosExtra = []): array
     {
         $pagoExiste = Pagoproveedor::query()->whereKey($pagoproveedorId)->exists();
         if (! $pagoExiste) {
@@ -126,10 +127,21 @@ class PagoproveedorEnvioProveedorService
         try {
             $pdf = $this->pagoproveedorComprobantePdfService->generarArchivo($pagoproveedorId);
             $mailable = new PagoproveedorOrdenPago($pago, $mensajeAdicional);
-            Mail::to($emails)->send($mailable->attach($pdf['ruta'], [
+            $mailable->incluyeComprobanteTransferencia = $adjuntosExtra !== [];
+            $mailable->attach($pdf['ruta'], [
                 'as' => $pdf['nombre'],
                 'mime' => 'application/pdf',
-            ]));
+            ]);
+            foreach ($adjuntosExtra as $adjunto) {
+                if (! is_file($adjunto['ruta'])) {
+                    continue;
+                }
+                $mailable->attach($adjunto['ruta'], [
+                    'as' => $adjunto['nombre'],
+                    'mime' => 'application/pdf',
+                ]);
+            }
+            Mail::to($emails)->send($mailable);
         } catch (\Throwable $e) {
             report($e);
 
@@ -147,7 +159,8 @@ class PagoproveedorEnvioProveedorService
                 'fecha' => now(),
                 'estado' => (string) ($pago->estado ?? ''),
                 'usuario_id' => $uid,
-                'observacion' => 'OP enviada por correo ('.implode(', ', $emails).')',
+                'observacion' => 'OP enviada por correo ('.implode(', ', $emails).')'
+                    .($adjuntosExtra !== [] ? ' + comprobante de transferencia' : ''),
             ]);
         }
 

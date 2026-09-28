@@ -1,9 +1,12 @@
 @php
     use App\Support\Compras\PagosSabanaColumnasSupport as Col;
+    use App\Support\Export\ExcelFormatoNumero;
 
     $columnasLocal = $columnas ?? [];
     $filasLocal = $filas ?? [];
-    $paraExport = ! empty($para_export) || ! empty($para_excel);
+    $paraExcel = ! empty($para_excel);
+    $paraExport = ! empty($para_export) || $paraExcel;
+    $paraPdf = $paraExport && ! $paraExcel;
     $soloFilas = ! empty($solo_filas);
     $cabeceraEnFilas = ! empty($cabecera_en_filas);
     $puedeVerProveedor = ! empty($puede_ver_proveedor);
@@ -13,17 +16,57 @@
     $puedeVerOc = ! empty($puede_ver_ordencompra);
     $puedeVerSp = ! empty($puede_ver_solicitudpago);
     $importesTotales = $totales['importes'] ?? [];
+    $fmtImporteExcel = $paraExcel
+        ? ExcelFormatoNumero::formateadorMonto(ExcelFormatoNumero::preferenciaGlobal())
+        : null;
+    $pesoTotal = 0;
+    foreach ($columnasLocal as $colPeso) {
+        $pesoTotal += Col::pesoAncho((string) ($colPeso['clave'] ?? ''), (string) ($colPeso['tipo'] ?? ''));
+    }
+    $pesoTotal = max(1, $pesoTotal);
+    $estiloCelda = static function (array $col, bool $pdf, bool $encabezado = false) use ($pesoTotal): string {
+        $clave = (string) ($col['clave'] ?? '');
+        $tipo = (string) ($col['tipo'] ?? '');
+        $align = Col::alineacion($tipo, $clave);
+        $nowrap = ! ($pdf && $encabezado) && (
+            in_array($tipo, [Col::TIPO_IMPORTE, Col::TIPO_ENTERO, Col::TIPO_FECHA], true)
+            || in_array($clave, ['tip', 'tipo_medio', 'empresa', 'proveedor_codigo', 'numero_op'], true)
+            || $encabezado
+        );
+        if ($pdf) {
+            $pct = round(Col::pesoAncho($clave, $tipo) / $pesoTotal * 100, 2);
+
+            return 'text-align:'.$align.';vertical-align:middle;width:'.$pct.'%;'
+                .($nowrap ? 'white-space:nowrap;' : 'word-wrap:break-word;');
+        }
+
+        $px = Col::anchoHtmlPx($clave, $tipo);
+
+        return 'text-align:'.$align.';vertical-align:middle;min-width:'.$px.'px;width:'.$px.'px;'
+            .($nowrap ? 'white-space:nowrap;' : '');
+    };
 @endphp
 
 @if (! $soloFilas)
-<table class="table table-sm table-bordered table-hover mb-0" id="{{ $paraExport ? 'tabla-export' : 'tabla-paginada' }}" style="font-size: 12px;">
+<table class="{{ $paraPdf ? 'data' : 'table table-sm table-bordered table-hover mb-0' }}" id="{{ $paraExport ? 'tabla-export' : 'tabla-paginada' }}" style="{{ $paraPdf ? 'width:100%;table-layout:fixed;border-collapse:collapse;font-size:7px;' : 'font-size:12px;width:max-content;min-width:100%;border-collapse:collapse;' }}">
+    <colgroup>
+        @foreach ($columnasLocal as $col)
+            @php
+                $claveCol = (string) ($col['clave'] ?? '');
+                $tipoCol = (string) ($col['tipo'] ?? '');
+            @endphp
+            <col style="{{ $paraPdf
+                ? 'width:'.round(Col::pesoAncho($claveCol, $tipoCol) / $pesoTotal * 100, 2).'%;'
+                : 'width:'.Col::anchoHtmlPx($claveCol, $tipoCol).'px;' }}">
+        @endforeach
+    </colgroup>
 @endif
 
 @if (! $soloFilas || $cabeceraEnFilas)
     <thead style="background:#85C1E9;color:#17202A;">
         <tr>
             @foreach ($columnasLocal as $col)
-                <th class="{{ ($col['tipo'] ?? '') === Col::TIPO_IMPORTE ? 'text-right' : '' }}">
+                <th style="background:#85C1E9;color:#17202A;font-weight:bold;{{ $estiloCelda($col, $paraPdf, true) }}">
                     {{ $col['etiqueta'] }}
                 </th>
             @endforeach
@@ -49,7 +92,7 @@
                         $esImporte = ($col['tipo'] ?? '') === Col::TIPO_IMPORTE;
                         $esFecha = ($col['tipo'] ?? '') === Col::TIPO_FECHA;
                     @endphp
-                    <td class="{{ $esImporte ? 'text-right text-nowrap' : '' }}">
+                    <td style="{{ $estiloCelda($col, $paraPdf) }}">
                         @if ($clave === 'proveedor_codigo' && $puedeVerProveedor && ! empty($fila['proveedor_id']))
                             <a class="text-primary" target="_blank" rel="noopener"
                                href="{{ route('editar_proveedor', $fila['proveedor_id']) }}?origen=modal_consulta&vista=consulta">
@@ -104,7 +147,11 @@
                             </a>
                         @elseif ($esImporte)
                             @if (abs((float) $valor) >= 0.005)
-                                {{ number_format((float) $valor, 2, ',', '.') }}
+                                @if ($fmtImporteExcel)
+                                    {{ $fmtImporteExcel($valor) }}
+                                @else
+                                    {{ number_format((float) $valor, 2, ',', '.') }}
+                                @endif
                             @endif
                         @elseif ($esFecha && $valor)
                             {{ \Carbon\Carbon::parse($valor)->format('d/m/Y') }}
@@ -129,11 +176,16 @@
         <tfoot>
             <tr style="background:#D6EAF8;font-weight:600;">
                 @foreach ($columnasLocal as $idx => $col)
-                    <td class="{{ ($col['tipo'] ?? '') === Col::TIPO_IMPORTE ? 'text-right text-nowrap' : '' }}">
+                    <td style="background:#D6EAF8;font-weight:600;{{ $estiloCelda($col, $paraPdf) }}">
                         @if ($idx === 0)
                             Totales ({{ (int) ($totales['cantidad'] ?? 0) }})
                         @elseif (($col['tipo'] ?? '') === Col::TIPO_IMPORTE)
-                            {{ number_format((float) ($importesTotales[$col['clave']] ?? 0), 2, ',', '.') }}
+                            @php $totalCol = (float) ($importesTotales[$col['clave']] ?? 0); @endphp
+                            @if ($fmtImporteExcel)
+                                {{ $fmtImporteExcel($totalCol) }}
+                            @else
+                                {{ number_format($totalCol, 2, ',', '.') }}
+                            @endif
                         @endif
                     </td>
                 @endforeach

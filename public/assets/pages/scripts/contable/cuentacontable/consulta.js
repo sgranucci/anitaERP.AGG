@@ -171,6 +171,7 @@ function refrescarCentroCostoTrasCuenta($ctx, data) {
 
     if (data && data.manejaccosto !== undefined) {
         var manejaCc = data.manejaccosto === 'S' || data.manejaccosto === '1' || data.manejaccosto === 1;
+        $tr.attr('data-manejaccosto', manejaCc ? 'S' : 'N');
         if (!manejaCc) {
             if (tieneCcAsiento) {
                 $ccAsiento.empty().append('<option value="0" selected>Sin CC</option>').attr('readonly', true);

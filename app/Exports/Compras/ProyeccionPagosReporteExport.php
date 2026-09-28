@@ -15,6 +15,7 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Shared\Date;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
@@ -59,6 +60,7 @@ class ProyeccionPagosReporteExport implements FromView, WithColumnFormatting, Wi
         private string $titulo,
         private string $subtitulo = '',
         private array $totales = [],
+        private bool $fechasNativasExcel = true,
     ) {}
 
     public function view(): View
@@ -97,6 +99,7 @@ class ProyeccionPagosReporteExport implements FromView, WithColumnFormatting, Wi
                 $columna['tipo'] === ProyeccionPagosColumnasSupport::TIPO_IMPORTE => self::FORMAT_IMPORTE,
                 $columna['tipo'] === ProyeccionPagosColumnasSupport::TIPO_ENTERO => NumberFormat::FORMAT_NUMBER,
                 $columna['tipo'] === ProyeccionPagosColumnasSupport::TIPO_RATIO => '#,##0.0000',
+                $columna['tipo'] === ProyeccionPagosColumnasSupport::TIPO_FECHA && $this->fechasNativasExcel => 'dd/mm/yyyy',
                 default => NumberFormat::FORMAT_TEXT,
             };
         }
@@ -212,6 +215,10 @@ class ProyeccionPagosReporteExport implements FromView, WithColumnFormatting, Wi
                     }
                 }
 
+                if ($this->fechasNativasExcel) {
+                    $this->convertirFechasAExcel($sheet, $filaMax);
+                }
+
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];
@@ -220,6 +227,36 @@ class ProyeccionPagosReporteExport implements FromView, WithColumnFormatting, Wi
     public function title(): string
     {
         return 'Proyección de pagos';
+    }
+
+    private function convertirFechasAExcel(\PhpOffice\PhpSpreadsheet\Worksheet\Worksheet $sheet, int $filaMax): void
+    {
+        foreach ($this->columnas as $indice => $columna) {
+            if ($columna['tipo'] !== ProyeccionPagosColumnasSupport::TIPO_FECHA) {
+                continue;
+            }
+
+            $letra = Coordinate::stringFromColumnIndex($indice + 1);
+            $sheet->getStyle($letra.$this->filaPrimeraDatosExcel.':'.$letra.$filaMax)
+                ->getNumberFormat()
+                ->setFormatCode('dd/mm/yyyy');
+
+            for ($fila = $this->filaPrimeraDatosExcel; $fila <= $filaMax; $fila++) {
+                $celda = $letra.$fila;
+                $crudo = $sheet->getCell($celda)->getValue();
+                if ($crudo === null || $crudo === '' || is_numeric($crudo)) {
+                    continue;
+                }
+
+                $valor = trim((string) $crudo);
+                $fecha = \DateTime::createFromFormat('!d/m/Y', $valor);
+                if ($fecha === false || $fecha->format('d/m/Y') !== $valor) {
+                    continue;
+                }
+
+                $sheet->setCellValue($celda, Date::PHPToExcel($fecha));
+            }
+        }
     }
 
     private function columnaUltima(): string

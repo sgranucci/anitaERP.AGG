@@ -8,6 +8,7 @@ use App\Support\Caja\ConceptoCashflowResolverSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\PropuestaPagoLineaPresentacionSupport;
 use App\Support\Compras\ProyeccionPagosColumnasSupport;
+use App\Support\Compras\ProyeccionPagosFechaSupport;
 use App\Support\Compras\ProyeccionPagosReporteFiltros;
 use App\Support\Compras\ProyeccionPagosTramosSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
@@ -525,6 +526,7 @@ class ProyeccionPagosReporteService
                 'cc.proveedor_id as proveedor_id',
                 'p.codigo as proveedor_codigo',
                 'p.nombre as proveedor_nombre',
+                'p.dias_atraso as dias_atraso',
                 'p.conceptogasto_id as proveedor_conceptogasto_id',
                 'e.nombre as nombreempresa',
                 'mon.abreviatura as moneda_abreviatura',
@@ -635,9 +637,10 @@ class ProyeccionPagosReporteService
             'fecha_carga' => $row->fecha_carga ?? null,
             'fecha_vencimiento' => $row->fechavencimiento ?? null,
             'dias_vencimiento' => $fechaVto ? (int) $fechaBase->diffInDays($fechaVto, false) : null,
-            'fecha_diferida' => $fechaVto && $diasEntrega > 0
-                ? $fechaVto->copy()->addDays($diasEntrega)->format('Y-m-d')
-                : ($fechaVto?->format('Y-m-d')),
+            'fecha_diferida' => ProyeccionPagosFechaSupport::fechaDiferida(
+                $row->fecha ?? $row->fechaiva ?? null,
+                (int) ($row->dias_atraso ?? 0),
+            ),
             'tramo_vencimiento' => ProyeccionPagosTramosSupport::etiquetaTramo($tramos, $claveTramo),
             'moneda' => (string) ($row->moneda_abreviatura ?? ''),
             'cotizacion' => round($coeficiente, 6),
@@ -720,7 +723,10 @@ class ProyeccionPagosReporteService
             'fecha_carga' => null,
             'fecha_vencimiento' => $row->fechavencimiento ?? null,
             'dias_vencimiento' => null,
-            'fecha_diferida' => null,
+            'fecha_diferida' => ProyeccionPagosFechaSupport::fechaDiferida(
+                $row->fecha ?? null,
+                (int) ($row->dias_atraso ?? 0),
+            ),
             'tramo_vencimiento' => 'Adelanto',
             'moneda' => (string) ($row->moneda_abreviatura ?? ''),
             'cotizacion' => round($coeficiente, 6),
@@ -849,6 +855,7 @@ class ProyeccionPagosReporteService
         $soloTotales = (string) ($filtros['salida'] ?? ProyeccionPagosReporteFiltros::SALIDA_DETALLE)
             === ProyeccionPagosReporteFiltros::SALIDA_RESUMEN;
         $sinAgrupar = $agrupacion === ProyeccionPagosReporteFiltros::AGRUPACION_SIN;
+        $sinCabeceraGrupo = $sinAgrupar || $agrupacion === ProyeccionPagosReporteFiltros::AGRUPACION_PROVEEDOR;
         $clavesImporte = ProyeccionPagosColumnasSupport::clavesImporte($columnas);
 
         $filas = [];
@@ -889,7 +896,7 @@ class ProyeccionPagosReporteService
                 $etiquetaGrupo = (string) $movimiento['grupo_etiqueta'];
                 $grupoSecuencia++;
 
-                if (! $soloTotales && ! $sinAgrupar) {
+                if (! $soloTotales && ! $sinCabeceraGrupo) {
                     $filas[] = [
                         'tipo_fila' => 'cabecera_grupo',
                         'grupo_id' => $grupoSecuencia,

@@ -39,6 +39,43 @@ class ProyeccionPagosColumnasSupportTest extends TestCase
         );
     }
 
+    public function test_detalle_por_defecto_sigue_el_orden_de_l_proy(): void
+    {
+        $visibles = ProyeccionPagosColumnasSupport::resolverVisibles(
+            ProyeccionPagosColumnasSupport::catalogo(),
+            '',
+            ProyeccionPagosReporteFiltros::SALIDA_DETALLE,
+        );
+        $claves = array_column($visibles, 'clave');
+        $anita = [
+            'proveedor_codigo', 'proveedor_nombre', 'tipo', 'comprobante',
+            'fecha_comprobante', 'fecha_iva', 'fecha_vencimiento', 'fecha_diferida',
+            'nro_referencia', 'medio_pago', 'detalle_pago',
+            'a_compensar', 'adelantos', 'pend_aprobacion', 'total_aprobado', 'total_adeudado',
+            'condicion_pago_dias', 'condicion_pago', 'dias_entrega_cheque',
+            'aprobacion', 'usuario_requisicion', 'autorizante_requisicion',
+            'aprobacion_requisicion', 'detalle_item', 'empresa',
+            'concepto', 'detalle_concepto', 'leyenda',
+        ];
+
+        $this->assertSame($anita, array_values(array_intersect($claves, $anita)));
+    }
+
+    public function test_layout_anterior_se_reemplaza_por_el_de_l_proy(): void
+    {
+        $visibles = ProyeccionPagosColumnasSupport::resolverVisibles(
+            ProyeccionPagosColumnasSupport::catalogo(),
+            'proveedor_codigo,proveedor_nombre,empresa,tipo,comprobante,fecha_comprobante,fecha_vencimiento,dias_vencimiento,moneda,tramo_0,posterior,a_compensar,adelantos,pend_aprobacion,total_aprobado,total_adeudado,condicion_pago,medio_pago,aprobacion',
+            ProyeccionPagosReporteFiltros::SALIDA_DETALLE,
+        );
+        $claves = array_column($visibles, 'clave');
+
+        $this->assertContains('fecha_iva', $claves);
+        $this->assertContains('nro_referencia', $claves);
+        $this->assertContains('detalle_pago', $claves);
+        $this->assertContains('leyenda', $claves);
+    }
+
     public function test_sin_columnas_de_requisicion_no_fuerza_autorizante(): void
     {
         $visibles = ProyeccionPagosColumnasSupport::resolverVisibles(

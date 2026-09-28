@@ -16,6 +16,7 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
@@ -355,6 +356,19 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
                             'vertical' => Alignment::VERTICAL_CENTER,
                         ],
                     ]);
+                    for ($row = $desde; $row <= $highestRow; $row++) {
+                        $etiqueta = trim((string) ($sheet->getCell('A'.$row)->getValue() ?? ''));
+                        if (str_starts_with($etiqueta, 'Total general')) {
+                            $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray([
+                                'font' => ['bold' => true, 'name' => 'Arial', 'size' => 11, 'color' => ['rgb' => 'FFFFFF']],
+                                'fill' => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => '1A5276']],
+                                'borders' => [
+                                    'top' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '1A5276']],
+                                    'bottom' => ['borderStyle' => Border::BORDER_MEDIUM, 'color' => ['rgb' => '1A5276']],
+                                ],
+                            ]);
+                        }
+                    }
                     $sheet->getStyle($colObs.$desde.':'.$colFact.$highestRow)->applyFromArray([
                         'alignment' => ['wrapText' => true, 'vertical' => Alignment::VERTICAL_CENTER],
                     ]);

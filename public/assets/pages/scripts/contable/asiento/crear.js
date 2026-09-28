@@ -388,12 +388,14 @@
 		$.get(url_cta, function(data){
 			if (data === "No maneja centro de costo" || data === "Cuenta inexistente")
 			{
+				$tr.attr('data-manejaccosto', 'N');
 				$sel.empty();
 				$sel.append('<option value="0" selected>Sin CC</option>');
 				$sel.attr("readonly", true);
 			}
 			else
 			{
+				$tr.attr('data-manejaccosto', 'S');
 				var cta = $.map(data, function(value, index){
 					return [value];
 				});
@@ -447,9 +449,11 @@
 			$tr.find('.nombrecuentacontable, .nombre').val(data.nombre);
 
 			if (data.manejaccosto === 'S' || data.manejaccosto === '1' || data.manejaccosto === 1) {
+				$tr.attr('data-manejaccosto', 'S');
 				$tr.find('.centrocosto').attr('readonly', false);
 				completarCentroCosto($codigo, data.id, 0);
 			} else {
+				$tr.attr('data-manejaccosto', 'N');
 				$tr.find('.centrocosto').empty();
 				$tr.find('.centrocosto').append('<option value="0" selected>Sin CC</option>');
 				$tr.find('.centrocosto').attr('readonly', true);
@@ -480,11 +484,34 @@
 		if (valor == null || valor === '') {
 			return 0;
 		}
-		var t = String(valor).trim().replace(/\s/g, '');
-		if (t.indexOf(',') >= 0) {
-			t = t.replace(/\./g, '').replace(',', '.');
+		var t = String(valor).trim().replace(/\s/g, '').replace(/[^\d,.\-]/g, '');
+		if (t === '' || t === '-') {
+			return 0;
+		}
+		var negativo = false;
+		if (t.charAt(0) === '-') {
+			negativo = true;
+			t = t.substring(1);
+		}
+		var tieneComa = t.indexOf(',') >= 0;
+		var tienePunto = t.indexOf('.') >= 0;
+		if (tieneComa && tienePunto) {
+			if (t.lastIndexOf(',') > t.lastIndexOf('.')) {
+				t = t.replace(/\./g, '').replace(',', '.');
+			} else {
+				t = t.replace(/,/g, '');
+			}
+		} else if (tieneComa) {
+			if (/^\d{1,3}(,\d{3})+$/.test(t)) {
+				t = t.replace(/,/g, '');
+			} else {
+				t = t.replace(/,/g, '.');
+			}
 		} else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
 			t = t.replace(/\./g, '');
+		}
+		if (negativo) {
+			t = '-' + t;
 		}
 		var n = parseFloat(t);
 		return isNaN(n) ? 0 : Math.round(n * 100) / 100;
@@ -590,6 +617,11 @@
 							$tr.find('.nombrecuentacontable').first().val(data.nombre);
 							$tr.find('.codigocuentacontable').first().val(data.codigo);
 						}
+						if (data.manejaccosto === 'S' || data.manejaccosto === '1' || data.manejaccosto === 1) {
+							$tr.attr('data-manejaccosto', 'S');
+						} else if (data.manejaccosto !== undefined) {
+							$tr.attr('data-manejaccosto', 'N');
+						}
 					} else {
 						error = 'No existe la cuenta ' + codigo;
 					}
@@ -606,10 +638,47 @@
 		return { ok: true };
 	}
 
+	function validarCentrosCostoObligatorios() {
+		var mensaje = null;
+		$('#tbody-cuenta-table tr.item-cuenta').each(function () {
+			if (mensaje) {
+				return false;
+			}
+			var $tr = $(this);
+			var debe = parseMonto($tr.find('.debe').first().val());
+			var haber = parseMonto($tr.find('.haber').first().val());
+			if (debe <= 0.000001 && haber <= 0.000001) {
+				return;
+			}
+			var cuentaId = parseInt($tr.find('.cuentacontable_id').first().val(), 10) || 0;
+			if (cuentaId <= 0) {
+				return;
+			}
+			var flag = String($tr.attr('data-manejaccosto') || '');
+			if (flag !== 'S' && flag !== '1') {
+				return;
+			}
+			var cc = parseInt($tr.find('.centrocosto').val() || $tr.find('.centrocosto_id_previo').val() || '0', 10) || 0;
+			if (cc > 0) {
+				return;
+			}
+			var codigo = $.trim($tr.find('.codigocuentacontable').first().val() || '');
+			mensaje = 'Indique el centro de costo de la cuenta ' + (codigo || cuentaId) + '.';
+			$tr.find('.centrocosto').trigger('focus');
+		});
+		return mensaje;
+	}
+
 	function enviarFormularioAsiento(confirmarPendiente) {
 		var resolucionCuentas = asegurarCuentasContablesResueltasAntesDeEnviar();
 		if (!resolucionCuentas.ok) {
 			alert(resolucionCuentas.mensaje);
+			return;
+		}
+
+		var centroCostoFaltante = validarCentrosCostoObligatorios();
+		if (centroCostoFaltante) {
+			alert(centroCostoFaltante);
 			return;
 		}
 

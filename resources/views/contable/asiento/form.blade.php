@@ -232,13 +232,13 @@
                             @php
                                 $debeValor = old('debes.'.$loop->index, ($cuenta->monto ?? 0) > 0 ? number_format($cuenta->monto, 2, ',', '.') : '');
                             @endphp
-                            <input type="text" inputmode="decimal" name="debes[]" class="form-control text-right debe" value="{{ $debeValor }}">
+                            <input type="text" inputmode="decimal" name="debes[]" class="form-control text-right debe" value="{{ $debeValor }}" title="Puede pegar 1.025.504,12 o 1,025,504.12">
                         </td>
                         <td class="asiento-monto-celda">
                             @php
                                 $haberValor = old('haberes.'.$loop->index, ($cuenta->monto ?? 0) < 0 ? number_format(abs($cuenta->monto), 2, ',', '.') : '');
                             @endphp
-                            <input type="text" inputmode="decimal" name="haberes[]" class="form-control text-right haber" value="{{ $haberValor }}">
+                            <input type="text" inputmode="decimal" name="haberes[]" class="form-control text-right haber" value="{{ $haberValor }}" title="Puede pegar 1.025.504,12 o 1,025,504.12">
                         </td>
                         <td>
                             @php
@@ -290,6 +290,9 @@
                 <button id="agrega_renglon_cuenta" type="button" class="btn btn-outline-primary btn-sm">
                     <i class="fa fa-plus"></i> Agrega rengl&oacute;n
                 </button>
+                <button id="pegar_excel_asiento" type="button" class="btn btn-outline-secondary btn-sm ml-1" title="Copie la imagen y péguela con Ctrl+V en esta pantalla">
+                    <i class="fa fa-file-image-o"></i> Cargar desde PDF o imagen
+                </button>
                 <span class="text-muted small ml-2">El detalle de la 1.&ordf; l&iacute;nea se copia a los renglones nuevos (y a los vac&iacute;os al guardarlo). En este ABM la moneda la fija el 1.&ordf; movimiento (no se pueden mezclar monedas).</span>
             </div>
         </div>
@@ -311,6 +314,38 @@
             <div class="modal-footer py-2">
                 <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
                 <button type="button" class="btn btn-primary btn-sm" id="asiento_detalle_linea_guardar">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalAsientoPegarExcel" tabindex="-1" role="dialog" aria-labelledby="modalAsientoPegarExcelLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title" id="modalAsientoPegarExcelLabel">Cargar asiento desde PDF o imagen</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2">
+                    Copie la imagen en Windows y péguela en esta pantalla con Ctrl+V.
+                    La foto no se escribe en un cuadro: se muestra abajo y se leen las líneas.
+                    También puede elegir el PDF o la imagen, o pegar el texto si el PDF deja copiarlo.
+                    Tiene que verse la fila de títulos
+                    (<code>Nro.Cta.</code>, <code>C.Cos.</code>, <code>Debe</code>, <code>Haber</code>).
+                </p>
+                <img id="asiento_pegar_vista" alt="Imagen pegada del asiento" class="d-none img-fluid border mb-2" style="max-height: 220px;">
+                <div class="form-group">
+                    <label for="asiento_pegar_archivo">PDF o imagen</label>
+                    <input type="file" id="asiento_pegar_archivo" class="form-control"
+                           accept=".pdf,image/png,image/jpeg,image/webp,image/tiff,image/bmp">
+                </div>
+                <textarea id="asiento_pegar_excel_texto" class="form-control" rows="6" placeholder="O pegue acá el texto copiado del PDF"></textarea>
+                <div id="asiento_pegar_excel_aviso" class="small mt-2"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="asiento_pegar_excel_aplicar">Cargar l&iacute;neas</button>
             </div>
         </div>
     </div>

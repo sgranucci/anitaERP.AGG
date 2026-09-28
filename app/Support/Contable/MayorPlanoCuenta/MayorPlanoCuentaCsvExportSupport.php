@@ -61,6 +61,34 @@ final class MayorPlanoCuentaCsvExportSupport
     }
 
     /**
+     * Fila de cierre del Excel plano: debe, haber y diferencia (debe − haber).
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     * @return list<string|float>
+     */
+    public static function filaTotalGeneralExcelPlano(array $resultado, array $filtros): array
+    {
+        $cols = self::cabecerasExcelPlano($filtros);
+        $fila = array_fill(0, count($cols), '');
+        $debe = round((float) ($resultado['totales']['debe'] ?? 0), 2);
+        $haber = round((float) ($resultado['totales']['haber'] ?? 0), 2);
+        $diferencia = round($debe - $haber, 2);
+        $fila[0] = 'Total general · Diferencia (D-H) '.number_format($diferencia, 2, ',', '.');
+
+        $idxDebe = array_search('Debe', $cols, true);
+        $idxHaber = array_search('Haber', $cols, true);
+        if ($idxDebe !== false) {
+            $fila[$idxDebe] = $debe;
+        }
+        if ($idxHaber !== false) {
+            $fila[$idxHaber] = $haber;
+        }
+
+        return $fila;
+    }
+
+    /**
      * Escribe CSV Excel plano enriquecido (para cola/mail o disco).
      *
      * @param  array<string, mixed>  $resultado
@@ -104,6 +132,9 @@ final class MayorPlanoCuentaCsvExportSupport
                 fflush($out);
             }
         }
+
+        fputcsv($out, self::filaTotalGeneralExcelPlano($resultado, $filtros), ';');
+        $n++;
 
         fclose($out);
         @chmod($rutaAbsoluta, 0664);

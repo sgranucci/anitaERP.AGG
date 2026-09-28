@@ -7,11 +7,34 @@
         if (str == null || str === '') {
             return 0;
         }
-        var t = String(str).trim().replace(/\s/g, '');
-        if (t.indexOf(',') >= 0) {
-            t = t.replace(/\./g, '').replace(',', '.');
+        var t = String(str).trim().replace(/\s/g, '').replace(/[^\d,.\-]/g, '');
+        if (t === '' || t === '-') {
+            return 0;
+        }
+        var negativo = false;
+        if (t.charAt(0) === '-') {
+            negativo = true;
+            t = t.substring(1);
+        }
+        var tieneComa = t.indexOf(',') >= 0;
+        var tienePunto = t.indexOf('.') >= 0;
+        if (tieneComa && tienePunto) {
+            if (t.lastIndexOf(',') > t.lastIndexOf('.')) {
+                t = t.replace(/\./g, '').replace(',', '.');
+            } else {
+                t = t.replace(/,/g, '');
+            }
+        } else if (tieneComa) {
+            if (/^\d{1,3}(,\d{3})+$/.test(t)) {
+                t = t.replace(/,/g, '');
+            } else {
+                t = t.replace(/,/g, '.');
+            }
         } else if (/^\d{1,3}(\.\d{3})+$/.test(t)) {
             t = t.replace(/\./g, '');
+        }
+        if (negativo) {
+            t = '-' + t;
         }
         var n = parseFloat(t);
         return isNaN(n) ? 0 : Math.round(n * 100) / 100;
@@ -98,6 +121,32 @@
 
         $(document).on('blur', SELECTORES_MONTO, function () {
             formatearInput(this);
+            $(document).trigger('asiento:monto-actualizado');
+        });
+
+        $(document).on('paste', SELECTORES_MONTO, function (e) {
+            var clipboard = e.originalEvent && e.originalEvent.clipboardData
+                ? e.originalEvent.clipboardData
+                : window.clipboardData;
+            if (!clipboard) {
+                return;
+            }
+            var texto = String(clipboard.getData('text') || '').replace(/\u00a0/g, ' ').trim();
+            if (!texto) {
+                return;
+            }
+            var lineas = texto.split(/\r?\n/).map(function (linea) {
+                return linea.trim();
+            }).filter(function (linea) {
+                return linea !== '';
+            });
+            if (lineas.length !== 1 || lineas[0].indexOf('\t') >= 0) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            var n = parseDecimal(lineas[0]);
+            this.value = n === 0 ? '' : fmt(n);
             $(document).trigger('asiento:monto-actualizado');
         });
 

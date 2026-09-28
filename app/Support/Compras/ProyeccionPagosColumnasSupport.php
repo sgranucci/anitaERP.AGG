@@ -45,42 +45,42 @@ final class ProyeccionPagosColumnasSupport
         return [
             self::col('proveedor_codigo', 'N.Pro.', self::GRUPO_PROVEEDOR, self::TIPO_TEXTO, fija: true, anchoExcel: 10, anchoPdf: 2.6, ayuda: 'Código de proveedor con enlace al ABM.'),
             self::col('proveedor_nombre', 'Nombre', self::GRUPO_PROVEEDOR, self::TIPO_TEXTO, fija: true, anchoExcel: 34, anchoPdf: 8.5),
-            self::col('empresa', 'Empresa', self::GRUPO_PROVEEDOR, self::TIPO_TEXTO, anchoExcel: 20, anchoPdf: 5),
             self::col('tipo', 'Tip', self::GRUPO_COMPROBANTE, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 6, anchoPdf: 1.8),
             self::col('comprobante', 'Comprobante', self::GRUPO_COMPROBANTE, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 18, anchoPdf: 4.6, ayuda: 'Letra-sucursal-número con enlace al comprobante.'),
             self::col('cuota', 'Cuota', self::GRUPO_COMPROBANTE, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 7, anchoPdf: 1.8),
             self::col('estado_comprobante', 'Estado', self::GRUPO_COMPROBANTE, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 18, anchoPdf: 4),
-            self::col('fecha_comprobante', 'F.Comp.', self::GRUPO_COMPROBANTE, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 11, anchoPdf: 2.8),
-            self::col('fecha_iva', 'F.IVA', self::GRUPO_COMPROBANTE, self::TIPO_FECHA, visible: false, soloDetalle: true, anchoExcel: 11, anchoPdf: 2.8),
+            self::col('fecha_comprobante', 'F.Comp.', self::GRUPO_COMPROBANTE, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 12, anchoPdf: 3.2),
+            self::col('fecha_iva', 'F.Iva', self::GRUPO_COMPROBANTE, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 12, anchoPdf: 3.2),
             self::col('fecha_carga', 'F.Carga', self::GRUPO_COMPROBANTE, self::TIPO_FECHA, visible: false, soloDetalle: true, anchoExcel: 13, anchoPdf: 3),
-            self::col('fecha_vencimiento', 'F.Vto.', self::GRUPO_VENCIMIENTOS, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 11, anchoPdf: 2.8),
-            self::col('dias_vencimiento', 'Días', self::GRUPO_VENCIMIENTOS, self::TIPO_ENTERO, soloDetalle: true, anchoExcel: 8, anchoPdf: 2, ayuda: 'Días entre la fecha base y el vencimiento (negativo = vencido).'),
-            self::col('fecha_diferida', 'F.Difer.', self::GRUPO_VENCIMIENTOS, self::TIPO_FECHA, visible: false, soloDetalle: true, anchoExcel: 11, anchoPdf: 2.8, ayuda: 'Vencimiento + días de entrega de cheque del proveedor.'),
+            self::col('fecha_vencimiento', 'F.Vto.', self::GRUPO_VENCIMIENTOS, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 12, anchoPdf: 3.2),
+            self::col('fecha_diferida', 'F.Difer.', self::GRUPO_VENCIMIENTOS, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 12, anchoPdf: 3.2, ayuda: 'Fecha del movimiento en cuenta corriente más los días de atraso del proveedor.'),
+            self::col('dias_vencimiento', 'Días vto.', self::GRUPO_VENCIMIENTOS, self::TIPO_ENTERO, soloDetalle: true, anchoExcel: 8, anchoPdf: 2, ayuda: 'Días entre la fecha base y el vencimiento (negativo = vencido).'),
             self::col('tramo_vencimiento', 'Tramo', self::GRUPO_VENCIMIENTOS, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 16, anchoPdf: 3.6),
+            self::col('nro_referencia', 'N.Refer.', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4, ayuda: 'Orden de compra origen con enlace al ABM.'),
+            self::col('medio_pago', 'M.Pago', self::GRUPO_PAGO, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4),
+            self::col('detalle_pago', 'Detalle pago', self::GRUPO_PAGO, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 28, anchoPdf: 6),
             self::col('moneda', 'Mon.', self::GRUPO_IMPORTES, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 7, anchoPdf: 1.8),
             self::col('cotizacion', 'Cotiz.', self::GRUPO_IMPORTES, self::TIPO_RATIO, visible: false, soloDetalle: true, anchoExcel: 11, anchoPdf: 2.4),
             self::col('importe_origen', 'Saldo origen', self::GRUPO_IMPORTES, self::TIPO_IMPORTE, visible: false, soloDetalle: true, anchoExcel: 14, anchoPdf: 3.4, ayuda: 'Saldo impago en la moneda del comprobante.'),
             self::col('a_compensar', 'A compensar', self::GRUPO_IMPORTES, self::TIPO_IMPORTE, anchoExcel: 14, anchoPdf: 3.4, ayuda: 'Comprobantes con condición de pago marcada como compensación.'),
             self::col('adelantos', 'Adelantos', self::GRUPO_IMPORTES, self::TIPO_IMPORTE, anchoExcel: 14, anchoPdf: 3.4, ayuda: 'Pagos a cuenta sin aplicar.'),
-            self::col('pend_aprobacion', 'Pend.aprob.', self::GRUPO_IMPORTES, self::TIPO_IMPORTE, anchoExcel: 14, anchoPdf: 3.4),
+            self::col('pend_aprobacion', 'Pend.de aprob.', self::GRUPO_IMPORTES, self::TIPO_IMPORTE, anchoExcel: 14, anchoPdf: 3.4),
             self::col('total_aprobado', 'Total aprob.', self::GRUPO_IMPORTES, self::TIPO_IMPORTE, anchoExcel: 14, anchoPdf: 3.4, ayuda: 'Deuda aprobada neta de adelantos.'),
             self::col('total_adeudado', 'Total adeudado', self::GRUPO_IMPORTES, self::TIPO_IMPORTE, fija: true, anchoExcel: 15, anchoPdf: 3.6),
-            self::col('condicion_pago_dias', 'Días cond.', self::GRUPO_PAGO, self::TIPO_ENTERO, visible: false, anchoExcel: 9, anchoPdf: 2.2),
+            self::col('condicion_pago_dias', 'Días', self::GRUPO_PAGO, self::TIPO_ENTERO, anchoExcel: 9, anchoPdf: 2.2, ayuda: 'Días de la primera cuota de la condición de pago.'),
             self::col('condicion_pago', 'Condición de pago', self::GRUPO_PAGO, self::TIPO_TEXTO, anchoExcel: 26, anchoPdf: 6),
-            self::col('medio_pago', 'M.Pago', self::GRUPO_PAGO, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4),
-            self::col('detalle_pago', 'Detalle pago', self::GRUPO_PAGO, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 28, anchoPdf: 6),
-            self::col('dias_entrega_cheque', 'Días entr.chq', self::GRUPO_PAGO, self::TIPO_ENTERO, visible: false, anchoExcel: 11, anchoPdf: 2.4),
-            self::col('aprobacion', 'Ap.', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 6, anchoPdf: 1.6, ayuda: 'A = aprobado / contabilizado, P = pendiente.'),
-            self::col('nro_referencia', 'Nro.OC', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4, ayuda: 'Orden de compra origen con enlace al ABM.'),
+            self::col('dias_entrega_cheque', 'Días entrega Chq', self::GRUPO_PAGO, self::TIPO_ENTERO, anchoExcel: 14, anchoPdf: 2.8),
+            self::col('aprobacion', 'Ap', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 6, anchoPdf: 1.6, ayuda: 'A = aprobado / contabilizado, P = pendiente.'),
             self::col('requisicion', 'Requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4),
-            self::col('usuario_requisicion', 'Confecciona requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 24, anchoPdf: 5),
+            self::col('usuario_requisicion', 'Confecciona requisición', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 24, anchoPdf: 5),
             self::col('autorizante_requisicion', 'Autorizante requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 24, anchoPdf: 5, ayuda: 'Último usuario que aprobó la requisición origen (historia APROBADA o último firmante del árbol).'),
-            self::col('aprobacion_requisicion', 'Aprob. requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 28, anchoPdf: 5.4, ayuda: 'Autorizante y fecha de aprobación de la requisición origen.'),
-            self::col('detalle_item', 'Detalle ítem comprado', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 30, anchoPdf: 6),
-            self::col('concepto', 'N.Con.', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 9, anchoPdf: 2.2, ayuda: 'Código del concepto de cash flow (Anita concoper) con enlace al ABM.'),
-            self::col('detalle_concepto', 'Detalle del concepto', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 26, anchoPdf: 5.4, ayuda: 'Concepto de cash flow: del pago, de la cuenta contable imputada o el asignado al proveedor.'),
+            self::col('aprobacion_requisicion', 'Aprobación de requisición', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 28, anchoPdf: 5.4, ayuda: 'Autorizante y fecha de aprobación de la requisición origen.'),
+            self::col('detalle_item', 'Detalle ítem comprado', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 30, anchoPdf: 6),
+            self::col('empresa', 'Empr.', self::GRUPO_PROVEEDOR, self::TIPO_TEXTO, anchoExcel: 20, anchoPdf: 5),
+            self::col('concepto', 'N.Con.', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 9, anchoPdf: 2.2, ayuda: 'Código del concepto de cash flow (Anita concoper) con enlace al ABM.'),
+            self::col('detalle_concepto', 'Detalle del concepto', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 26, anchoPdf: 5.4, ayuda: 'Concepto de cash flow: del pago, de la cuenta contable imputada o el asignado al proveedor.'),
+            self::col('leyenda', 'Leyenda', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 28, anchoPdf: 5.6),
             self::col('cuenta_concepto', 'Cuenta cash flow', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 30, anchoPdf: 6, ayuda: 'Cuenta contable que aporta el concepto de cash flow.'),
-            self::col('leyenda', 'Leyenda', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 28, anchoPdf: 5.6),
         ];
     }
 
@@ -155,6 +155,10 @@ final class ProyeccionPagosColumnasSupport
      */
     public static function resolverVisibles(array $catalogo, string $configuracion, string $salida): array
     {
+        if (self::esLayoutAnterior($configuracion)) {
+            $configuracion = '';
+        }
+
         $detalle = $salida === ProyeccionPagosReporteFiltros::SALIDA_DETALLE;
         $disponibles = [];
         foreach ($catalogo as $columna) {
@@ -256,6 +260,27 @@ final class ProyeccionPagosColumnasSupport
             ->pluck('clave')
             ->values()
             ->all();
+    }
+
+    /**
+     * Layout que se guardaba antes de alinear el detalle con l-proy.c.
+     * Si el operador no personalizó ese conjunto, se reemplaza por el nuevo default.
+     */
+    private static function esLayoutAnterior(string $configuracion): bool
+    {
+        $legacy = [
+            'proveedor_codigo', 'proveedor_nombre', 'empresa', 'tipo', 'comprobante',
+            'fecha_comprobante', 'fecha_vencimiento', 'dias_vencimiento', 'moneda',
+            'a_compensar', 'adelantos', 'pend_aprobacion', 'total_aprobado',
+            'total_adeudado', 'condicion_pago', 'medio_pago', 'aprobacion',
+        ];
+        $claves = array_values(array_filter(
+            self::interpretar($configuracion),
+            static fn (string $clave): bool => preg_match('/^tramo_\d+$/', $clave) !== 1
+                && ! in_array($clave, [ProyeccionPagosTramosSupport::CLAVE_SALDO_ANTERIOR, ProyeccionPagosTramosSupport::CLAVE_POSTERIOR], true),
+        ));
+
+        return $claves === $legacy;
     }
 
     /**

@@ -248,7 +248,76 @@ final class AsientoImportColumnasSupport
 
     public static function normalizarImporte(mixed $valor): ?float
     {
-        return PrecioImportColumnasSupport::normalizarValorPrecio($valor);
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+
+        if (is_int($valor) || is_float($valor)) {
+            return round((float) $valor, 2);
+        }
+
+        $texto = trim((string) $valor);
+        if ($texto === '') {
+            return null;
+        }
+
+        return self::parsearImporteTexto($texto);
+    }
+
+    /**
+     * Acepta importe argentino (1.025.504,12) y el de Excel en inglés (1,025,504.12).
+     */
+    public static function parsearImporteTexto(string $texto): ?float
+    {
+        $texto = trim($texto);
+        if ($texto === '' || $texto === '-' || $texto === '—') {
+            return null;
+        }
+
+        $negativo = false;
+        if (preg_match('/^\((.*)\)$/', $texto, $paren)) {
+            $negativo = true;
+            $texto = $paren[1];
+        }
+
+        $texto = str_replace(['$', ' '], '', $texto);
+        $texto = preg_replace('/[^\d,.\-]/', '', $texto) ?? '';
+        if ($texto === '' || $texto === '-') {
+            return null;
+        }
+
+        if (str_starts_with($texto, '-')) {
+            $negativo = true;
+            $texto = substr($texto, 1);
+        }
+
+        $tieneComa = str_contains($texto, ',');
+        $tienePunto = str_contains($texto, '.');
+
+        if ($tieneComa && $tienePunto) {
+            if (strrpos($texto, ',') > strrpos($texto, '.')) {
+                $texto = str_replace('.', '', $texto);
+                $texto = str_replace(',', '.', $texto);
+            } else {
+                $texto = str_replace(',', '', $texto);
+            }
+        } elseif ($tieneComa) {
+            if (preg_match('/^\d{1,3}(,\d{3})+$/', $texto)) {
+                $texto = str_replace(',', '', $texto);
+            } else {
+                $texto = str_replace(',', '.', $texto);
+            }
+        } elseif (preg_match('/^\d{1,3}(\.\d{3})+$/', $texto)) {
+            $texto = str_replace('.', '', $texto);
+        }
+
+        if (! is_numeric($texto)) {
+            return null;
+        }
+
+        $importe = round((float) $texto, 2);
+
+        return $negativo ? -$importe : $importe;
     }
 
     public static function formatearImporte(?float $importe): string

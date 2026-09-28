@@ -1168,6 +1168,7 @@ Route::get('contable/asiento/crear', 'Contable\AsientoController@crear')->name('
 Route::get('contable/asiento/crearimportacion', 'Contable\AsientoImportController@crear')->name('crear_importacion_asiento');
 Route::post('contable/asiento/importar/preview', 'Contable\AsientoImportController@preview')->name('asiento_import_preview');
 Route::post('contable/asiento/importar', 'Contable\AsientoImportController@importar')->name('importar_asiento');
+Route::post('contable/asiento/pegar-excel', 'Contable\AsientoImportController@pegar')->name('asiento_pegar_excel');
 Route::post('contable/asiento', 'Contable\AsientoController@guardar')->name('guardar_asiento');
 Route::get('contable/asiento/{id}/editar', 'Contable\AsientoController@editar')->name('editar_asiento')->middleware('modo.consulta');
 Route::put('contable/actualizarasiento/{id}', 'Contable\AsientoController@actualizar')->name('actualizar_asiento')->middleware('modo.consulta');
@@ -3779,6 +3780,8 @@ Route::post('compras/pagoproveedor/api/genera-asiento', 'Compras\PagoproveedorCo
 Route::get('compras/pagoproveedor/{id}/imprimir', 'Compras\PagoproveedorController@imprimir')->name('imprimir_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/documentos-relacionados', 'Compras\PagoproveedorController@documentosRelacionados')->name('pagoproveedor_documentos_relacionados');
 Route::get('compras/pagoproveedor/{id}/retencion/{retencionId}/imprimir', 'Compras\PagoproveedorController@imprimirRetencion')->name('imprimir_retencion_pagoproveedor');
+Route::get('compras/pagoproveedor/envio-masivo', 'Compras\PagoproveedorEnvioMasivoController@index')->name('pagoproveedor_envio_masivo');
+Route::post('compras/pagoproveedor/envio-masivo', 'Compras\PagoproveedorEnvioMasivoController@enviar')->name('pagoproveedor_envio_masivo_enviar');
 Route::get('compras/pagoproveedor/{id}/datos-envio-proveedor', 'Compras\PagoproveedorController@datosEnvioProveedor')->name('pagoproveedor_datos_envio_proveedor');
 Route::post('compras/pagoproveedor/{id}/enviar-proveedor', 'Compras\PagoproveedorController@enviarProveedor')->name('pagoproveedor_enviar_proveedor');
 

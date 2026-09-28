@@ -104,6 +104,7 @@ final class PagoproveedorListadoUnificadoSupport
                 'pp.detalle',
                 DB::raw('NULL as solicitudpago_id'),
                 DB::raw("'' as cuentas_caja"),
+                DB::raw("CASE WHEN pp.estado IN ('CONFIRMADA', 'PAGADA', 'CONCILIADA') AND COALESCE(pp.pagoproveedor_origen_id, 0) = 0 AND COALESCE(pp.pagoproveedor_revertido_por_id, 0) = 0 THEN 1 ELSE 0 END as revertible"),
             ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pp.empresa_id');
@@ -172,6 +173,7 @@ final class PagoproveedorListadoUnificadoSupport
                 'cm.detalle',
                 'cm.solicitudpago_id',
                 DB::raw("'' as cuentas_caja"),
+                DB::raw('CASE WHEN COALESCE(cm.caja_movimiento_origen_id, 0) = 0 AND COALESCE(cm.caja_movimiento_revertido_por_id, 0) = 0 THEN 1 ELSE 0 END as revertible'),
             ]);
 
         if ($tipoIds !== []) {

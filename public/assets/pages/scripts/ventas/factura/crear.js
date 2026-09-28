@@ -399,9 +399,31 @@
 		});
 	}
 
+	function mensajeFaltaPuntoVentaFactura() {
+		if (esProcesoNotaDeCreditoFactura()) {
+			return 'No bajó el punto de venta de la factura original. Elegí un punto de venta antes de generar la nota de crédito.';
+		}
+		return 'Debe elegir un punto de venta.';
+	}
+
 	function enviarComprobanteFacturaMostradorAjax() {
 		var form = document.getElementById('formgeneral');
 		if (!form) {
+			return;
+		}
+
+		var puntoventaId = $('#puntoventa_id').val();
+		if (!puntoventaId) {
+			var msgPv = mensajeFaltaPuntoVentaFactura();
+			mostrarResultadoFacturaMostrador({
+				exito: false,
+				tipo: 'error',
+				titulo: esProcesoNotaDeCreditoFactura() ? 'Error al generar la nota de crédito' : 'Error al generar el comprobante',
+				subtitulo: msgPv,
+				facturas: [],
+				errores: [msgPv],
+				redirect: '',
+			});
 			return;
 		}
 
@@ -540,7 +562,7 @@
 
 		if (puntoventa_id == '' || puntoventa_id == null)
 		{
-			alert('Debe elegir un punto de venta');
+			alert(mensajeFaltaPuntoVentaFactura());
 			return;
 		}
 
@@ -1076,7 +1098,31 @@
 			window.FacturacionCircuitoAfip.aplicar($('#tipotransaccion_id'), selectPuntoVenta, ctxCircuitoFac);
 		}
 
-		if (puntoVentaDefault) {
+		var esNcFactura = $('#formgeneral').attr('data-factura-proceso') === 'nc';
+		if (esNcFactura && puntoVentaDefault && !selectPuntoVenta.find('option[value="' + puntoVentaDefault + '"]').length) {
+			$.each(sel_puntoventa, function (_, item) {
+				if (String(item.id) !== String(puntoVentaDefault)) {
+					return;
+				}
+				var attrsOrigen = window.FacturacionCircuitoAfip
+					? window.FacturacionCircuitoAfip.attrsPvOption(item)
+					: '';
+				selectPuntoVenta.append(
+					'<option value="' + item.id + '"' + attrsOrigen + ' selected="selected">' +
+					item.codigo + '-' + item.nombre + '</option>'
+				);
+			});
+		}
+
+		if (esNcFactura && puntoVentaDefault && selectPuntoVenta.find('option[value="' + puntoVentaDefault + '"]').length) {
+			selectPuntoVenta.val(String(puntoVentaDefault)).trigger('change.select2');
+			leePuntoVenta(puntoVentaDefault);
+			$.get(carpetaBase + '/ventas/leeunpuntoventa/' + puntoVentaDefault, function (data) {
+				$('#actividad_arca_id').val(data.actividad_arca_id);
+				$('#actividad_arca_id').attr('readonly', data.actividad_arca_id > 0);
+				sincronizarEmpresaDesdePuntoVenta(data, true);
+			});
+		} else if (!esNcFactura && puntoVentaDefault) {
 			selectPuntoVenta.val(puntoVentaDefault);
 			leePuntoVenta(puntoVentaDefault);
 			$.get(carpetaBase + '/ventas/leeunpuntoventa/' + puntoVentaDefault, function (data) {
