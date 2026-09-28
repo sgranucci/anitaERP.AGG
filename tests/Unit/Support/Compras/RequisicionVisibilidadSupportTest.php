@@ -13,6 +13,9 @@ class RequisicionVisibilidadSupportTest extends TestCase
     {
         Session::forget('usuario_empresas');
         Session::forget('rol_nombre');
+        Session::forget('centrocosto_id');
+        Session::forget('roles');
+        Session::forget('rol_id');
         parent::tearDown();
     }
 
@@ -61,5 +64,24 @@ class RequisicionVisibilidadSupportTest extends TestCase
         $this->assertStringContainsString('centrocosto_id', $sql);
         $this->assertStringContainsString('centrocostodestino_arbol_id', $sql);
         $this->assertSame([9, 9], $query->getBindings());
+    }
+
+    public function test_alcance_suma_centro_del_usuario_y_del_rol(): void
+    {
+        Session::put('centrocosto_id', 19);
+        Session::put('roles', [
+            ['id' => 19, 'nombre' => 'Enc-Laboratorio', 'centrocosto_id' => 9],
+            ['id' => 8, 'nombre' => 'Otro', 'centrocosto_id' => 19],
+        ]);
+
+        $this->assertSame([19, 9], RequisicionVisibilidadSupport::centrocostosAlcance());
+    }
+
+    public function test_tablero_resto_acepta_centro_de_usuario_y_de_rol(): void
+    {
+        $query = DB::table('requisicion');
+        RequisicionVisibilidadSupport::aplicarFiltroCentrocostosOrigenODestinoArbol($query, [19, 9]);
+
+        $this->assertSame([19, 9, 19, 9], $query->getBindings());
     }
 }

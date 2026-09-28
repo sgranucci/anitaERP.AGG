@@ -36,7 +36,7 @@ Seguimiento aprobación de requisiciones
                 Muestra el responsable actual, los días desde la creación y alerta cuando el nivel
                 actual supera {{ $umbralHoras }} horas.
                 @if (can('usuario-requisicion-resto', false) && ! can('listar-todas-requisicion', false) && ! can('usuario-requisicion-compras', false))
-                    Solo las de tu centro de costo (origen o destino del árbol).
+                    Solo las de tu centro de costo y el de tu rol (origen o destino del árbol).
                 @endif
             </p>
 
