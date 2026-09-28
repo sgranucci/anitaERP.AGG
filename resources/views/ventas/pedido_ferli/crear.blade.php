@@ -12,6 +12,8 @@
 @endphp
 @include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'pedido', 'politicaCliente' => $politicaCliente])
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/crearferli.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crearferli.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/ordentrabajo/factura_cliente.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/ordentrabajo/factura_cliente.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/picking_pedido/consulta_lotes.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/picking_pedido/consulta_lotes.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
@@ -87,4 +89,5 @@
         </div>
     </div>
 </div>
+@include('includes.ventas.modalconsultacliente')
 @endsection

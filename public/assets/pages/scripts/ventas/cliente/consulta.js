@@ -499,6 +499,12 @@ function activa_eventos_consultacliente()
                 return;
             }
 
+            // El pedido Ferli elige el cliente del documento en un select.
+            // La factura de la sesión usa otro campo; no resolver acá.
+            if ($(this).is('select')) {
+                return;
+            }
+
             let cliente_id = $("#cliente_id").val();
 
             if ($.isNumeric(cliente_id)) {

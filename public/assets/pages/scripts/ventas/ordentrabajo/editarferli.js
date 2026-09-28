@@ -256,6 +256,9 @@ $(document).on('shown.bs.modal', '#facturarOrdenTrabajoModal', function() {
 
     modal.find('#fechafactura').val(hoy.toISOString().substring(0,10));
     modal.find('#nombrecliente').val(nombrecliente);
+    if (typeof window.prefijarClienteFacturaOt === 'function') {
+        window.prefijarClienteFacturaOt(cliente_id);
+    }
     modal.find('#descuentopie').val(descuentoPie);
     modal.find('.modal-title').text('Factura OT '+ot+' '+descripcion_articulo+' Combinacion '+nombre_combinacion);
     modal.find('#facturarMedidasModal').empty();
@@ -410,6 +413,10 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
     pedido_combinacion_ids.push(pedido_combinacion_id);
     ordentrabajo_ids.push(ordentrabajo_id);
 
+    if (typeof window.validarClienteFacturaOt === 'function' && !window.validarClienteFacturaOt()) {
+        return false;
+    }
+
     $.post(carpetaBase+"/ventas/facturarItemOt",
             {
                 pedido_combinacion_id: pedido_combinacion_ids,
@@ -429,6 +436,7 @@ $('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
                 mercaderia: mercaderia,
                 leyendaexportacion: leyendaexportacion,
                 con_envios: $('#con_envios').is(':checked') ? 1 : 0,
+                cliente_id: window.clienteIdFacturaOt(),
                 _token: token
             },
             function(data, status){

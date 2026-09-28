@@ -17,6 +17,8 @@
 </script>
 @include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'boleta'])
 <script src="{{asset("assets/pages/scripts/ventas/ordentrabajo/editarferli.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/ordentrabajo/factura_cliente.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/ordentrabajo/factura_cliente.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -51,4 +53,5 @@
         </div>
     </div>
 </div>
+@include('includes.ventas.modalconsultacliente')
 @endsection

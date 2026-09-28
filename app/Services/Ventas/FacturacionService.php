@@ -3631,9 +3631,10 @@ class FacturacionService
 				$this->formaPagoExportacion = $formapago->nombre;
 		}
 
-		// Lee los items a facturar
+		// Lee los items a facturar. Un solo cliente para toda la sesión.
 		$dataFactura = [];
 		$totPares = 0;
+		$cliente = null;
 		for ($offOt = 0; $offOt < count($ordenestrabajo_id); $offOt++)
 		{
 			$ordentrabajo_id = $ordenestrabajo_id[$offOt];
@@ -3686,19 +3687,13 @@ class FacturacionService
 						if ($categoria)
 							$codigoCategoria = $categoria->codigo;
 
-						// Trae el cliente
-						$cliente = $this->clienteQuery->traeClienteporId($item->cliente_id);
-
-						if (!$cliente)
-							return ['error' => 'Cliente inexistente'];
-
-						if ($errorPolitica = $this->errorPoliticaComercialFactura($cliente, $data)) {
-							return $errorPolitica;
+						if ($cliente === null) {
+							$cliente = $this->resolverClienteFacturaSesion($data, $item->cliente_id);
+							if (is_array($cliente)) {
+								return $cliente;
+							}
 						}
 
-						if ($cliente->numerodocumento == null)
-							return ['error' => 'No tiene CUIT'];
-							
 						$this->cuentacontable_id = $cliente->cuentacontable_id;
 						$this->codigoCuentaContable = $cliente->cuentascontables?->codigo ?? '';
 
@@ -8288,6 +8283,35 @@ class FacturacionService
 		}
 
 		return ClienteDespachoSupport::errorNoFacturable((int) $clienteId);
+	}
+
+	/**
+	 * Cliente de esta sesión de factura (OT o picking Ferli).
+	 * Si el preview envió cliente_id, la factura sale a esa razón social.
+	 * El pedido conserva su cliente.
+	 *
+	 * @param  mixed  $clienteIdDocumento
+	 * @return \App\Models\Ventas\Cliente|array{error: string}
+	 */
+	protected function resolverClienteFacturaSesion(array $data, $clienteIdDocumento)
+	{
+		$elegido = (int) ($data['cliente_id'] ?? 0);
+		$id = $elegido > 0 ? $elegido : (int) $clienteIdDocumento;
+		$cliente = $id > 0 ? $this->clienteQuery->traeClienteporId($id) : null;
+		if (! $cliente) {
+			return ['error' => 'Cliente inexistente'];
+		}
+		if ($errorPolitica = $this->errorPoliticaComercialFactura($cliente, $data)) {
+			return $errorPolitica;
+		}
+		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente->id)) {
+			return $errorDespacho;
+		}
+		if ($cliente->numerodocumento == null || $cliente->numerodocumento === '') {
+			return ['error' => 'No tiene CUIT'];
+		}
+
+		return $cliente;
 	}
 
 	/**

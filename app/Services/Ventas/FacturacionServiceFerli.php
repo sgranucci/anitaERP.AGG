@@ -51,19 +51,20 @@ class FacturacionServiceFerli extends FacturacionService
 
     protected function aplicarLugarEntregaFacturaOt($cliente, $pedido)
     {
-        if ($cliente->id != $pedido->cliente_id) {
+        $mismoCliente = (int) $cliente->id === (int) $pedido->cliente_id;
+        if (! $mismoCliente) {
             $cliente_entrega = $this->cliente_entregaRepository->leeClienteEntrega($cliente->id);
 
             if ($cliente_entrega) {
                 $pedido->lugarentrega = $cliente_entrega[0]->nombre;
-                $pedido->cliente_entrega_id = $cliente_entrega[0]->id ?? $pedido->cliente_entrega_id;
+                $pedido->cliente_entrega_id = $cliente_entrega[0]->id ?? null;
+            } else {
+                $pedido->cliente_entrega_id = null;
             }
-
-            $this->descuentoPie = $cliente->descuento;
         }
 
-        // Siempre resolver desde cliente_entrega del documento/cliente (no dejar "NULL" de Anita).
-        return $this->resolverLugarEntregaPedido($cliente, $pedido, [], true);
+        // Si la factura va a otra razón social, el lugar queda solo en el comprobante.
+        return $this->resolverLugarEntregaPedido($cliente, $pedido, [], $mismoCliente);
     }
 
     protected function sincronizarLugarEntregaFacturaOt($pedido): void
@@ -160,6 +161,7 @@ class FacturacionServiceFerli extends FacturacionService
 
         $dataFactura = [];
         $cliente = null;
+        $clienteResuelto = false;
         $pedido = null;
         $moneda_id = null;
         $lineasValidas = [];
@@ -210,15 +212,12 @@ class FacturacionServiceFerli extends FacturacionService
             }
             $pedido = $pedido_query[0];
 
-            $cliente = $this->clienteQuery->traeClienteporId($pedido->cliente_id);
-            if (! $cliente) {
-                return ['error' => 'Cliente inexistente'];
-            }
-            if ($errorPolitica = $this->errorPoliticaComercialFactura($cliente, $data)) {
-                return $errorPolitica;
-            }
-            if ($cliente->numerodocumento == null) {
-                return ['error' => 'No tiene CUIT'];
+            if (! $clienteResuelto) {
+                $cliente = $this->resolverClienteFacturaSesion($data, $pedido->cliente_id);
+                if (is_array($cliente)) {
+                    return $cliente;
+                }
+                $clienteResuelto = true;
             }
 
             $this->cuentacontable_id = $cliente->cuentacontable_id;

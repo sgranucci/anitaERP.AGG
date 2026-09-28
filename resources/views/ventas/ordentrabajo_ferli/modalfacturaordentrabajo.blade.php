@@ -27,9 +27,24 @@
                             <select name="puntoventa_id" id="puntoventa_id" data-placeholder="Punto de venta" class="col-lg-5 form-control required" data-fouc>
                             </select>
                         </div>
-                        <div class="form-group row">
-                            <label for="recipient-name" class="col-lg-4 col-form-label">Cliente</label>
-                            <input type="text" id="nombrecliente" name="nombrecliente" class="col-lg-5 form-control" value=""></input>
+                        <div class="form-group row" id="factura-ot-cliente-campo">
+                            <label for="factura_ot_codigocliente" class="col-lg-4 col-form-label text-right pr-2 requerido">Cliente</label>
+                            <div class="col-lg-8">
+                                <input type="hidden" id="factura_ot_cliente_id" value="">
+                                <input type="hidden" id="nombrecliente" value="">
+                                <div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+                                    <button type="button" id="factura-ot-consultacliente" title="Consulta clientes (F1)" class="btn-accion-tabla flex-shrink-0">
+                                        <i class="fa fa-search text-primary"></i>
+                                    </button>
+                                    <input type="text" id="factura_ot_codigocliente" class="form-control"
+                                        value="" placeholder="C&oacute;d." autocomplete="off"
+                                        title="C&oacute;digo de cliente. F1 = consulta, Enter = resolver"
+                                        style="width: 5.5rem; flex-shrink: 0;">
+                                    <input type="text" id="factura_ot_nombrecliente" class="form-control" value="" readonly
+                                        placeholder="Raz&oacute;n social" style="min-width: 0; flex: 1 1 auto;">
+                                </div>
+                                <small class="form-text text-muted">Confirme el cliente del pedido o elija otra raz&oacute;n social. Esta sesi&oacute;n se factura a ese cliente.</small>
+                            </div>
                         </div>
                     </div>
                     <div class="col-sm-6">

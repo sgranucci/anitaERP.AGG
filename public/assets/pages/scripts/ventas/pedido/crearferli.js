@@ -1515,6 +1515,9 @@
 
 		modal.find('#fechafactura').val(hoy.toISOString().substring(0,10));
 		modal.find('#nombrecliente').val(nombrecliente);
+		if (typeof window.prefijarClienteFacturaOt === 'function') {
+			window.prefijarClienteFacturaOt(cliente_id);
+		}
 		modal.find('.modal-title').text('Factura PEDIDO '+numeroPedido);
 		modal.find('#facturarMedidasModal').empty();
 		modal.find('#descuentopie').val(descuentoCliente);
@@ -1641,6 +1644,10 @@
 			return false;
 		}
 
+		if (typeof window.validarClienteFacturaOt === 'function' && !window.validarClienteFacturaOt()) {
+			return false;
+		}
+
 		// Overlay antes de cerrar el modal (evita quedar tapado / JS cacheado viejo)
 		mostrarOverlayFacturarPedidoFerli('Generando factura…');
 		$('#facturarOrdenTrabajoModal').modal('hide');
@@ -1663,6 +1670,7 @@
 					mercaderia: mercaderia,
 					leyendaexportacion: leyendaexportacion,
 					con_envios: $('#con_envios').is(':checked') ? 1 : 0,
+					cliente_id: window.clienteIdFacturaOt(),
 					_token: token
 				})
 				.done(function(data, status){
