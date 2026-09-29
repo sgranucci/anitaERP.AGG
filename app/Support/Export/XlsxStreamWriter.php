@@ -54,6 +54,9 @@ final class XlsxStreamWriter
             .' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
             .'<sheetViews><sheetView workbookViewId="0" tabSelected="1">'
             .'<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>'
+            // Sin este selection, Excel abre la hoja como varias selecciones
+            // (panel congelado + filtro) y no deja copiarla a un libro vacío.
+            .'<selection pane="bottomLeft" activeCell="A2" sqref="A2"/>'
             .'</sheetView></sheetViews>');
     }
 
@@ -408,6 +411,7 @@ final class XlsxStreamWriter
             '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"'
             .' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            .'<workbookViews><workbookView activeTab="0"/></workbookViews>'
             .'<sheets><sheet name="'.$hoja.'" sheetId="1" r:id="rId1"/></sheets>'
             .'</workbook>'
         );

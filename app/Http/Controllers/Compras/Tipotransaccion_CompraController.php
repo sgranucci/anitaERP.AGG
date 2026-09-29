@@ -304,6 +304,10 @@ class Tipotransaccion_CompraController extends Controller
             || can('listar-comprobante-proveedor', false)
             || can('crear-precarga-proveedores', false)
             || can('editar-precarga-proveedores', false)
-            || can('listar-precarga-proveedores', false);
+            || can('listar-precarga-proveedores', false)
+            || can('crear-ingresos-egresos-caja', false)
+            || can('editar-ingresos-egresos-caja', false)
+            || can('actualizar-ingresos-egresos-caja', false)
+            || can('listar-ingresos-egresos-caja', false);
     }
 }

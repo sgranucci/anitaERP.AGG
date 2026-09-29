@@ -11,9 +11,9 @@
                 </button>
             </div>
         </div>
-        <p class="text-muted small">
-            Registra facturas de fondo fijo, gastos bancarios u otros comprobantes de IVA compras.
-            Se graban en el mismo maestro que comprobantes de proveedor; el haber contable sale de las cuentas de caja del movimiento.
+        <p class="text-muted small mb-3">
+            Facturas de fondo fijo, gastos bancarios u otros comprobantes de IVA compras.
+            Al elegir el tipo de comprobante se cargan sus conceptos. El haber contable sale de las cuentas de caja del movimiento.
         </p>
         <input type="hidden" name="comprobantes_ivacompra_json" id="comprobantes_ivacompra_json" value="">
         <div class="table-responsive">

@@ -32,6 +32,11 @@ class XlsxStreamWriterTest extends TestCase
             $this->assertStringContainsString('1500.5', $sheet);
             $this->assertStringContainsString('Compra &amp; &quot;OC&quot;', $sheet);
             $this->assertStringContainsString('autoFilter', $sheet);
+            $this->assertStringContainsString(
+                '<selection pane="bottomLeft" activeCell="A2" sqref="A2"/>',
+                $sheet
+            );
+            $this->assertStringContainsString('<workbookView activeTab="0"/>', $workbook);
             $this->assertStringContainsString('<cols>', $sheet);
             // Empresa / Nro.Asi. no llevan máscara de plata (evita 2.00 y #####).
             $this->assertMatchesRegularExpression('/<c r="A2" t="n"><v>2<\\/v><\\/c>/', $sheet);

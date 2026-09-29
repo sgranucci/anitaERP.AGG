@@ -30,6 +30,7 @@ use App\Observers\Ventas\Venta_EmisionObserver;
 use App\Observers\Ventas\VentaObserver;
 use App\Support\AyudaManuales;
 use App\Support\Console\ProteccionComandosDestructivosProduccion;
+use App\Support\Export\ExcelSeleccionHojaSupport;
 use App\Support\Seguridad\BarraTareasSupport;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
@@ -48,6 +49,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot()
     {
         ProteccionComandosDestructivosProduccion::registrar();
+        ExcelSeleccionHojaSupport::registrar();
 
         Paginator::useBootstrap();
 

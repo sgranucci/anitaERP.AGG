@@ -11,6 +11,7 @@
     var ptrFilaCuentaConcepto = null;
     window.ptrIeCpFilaCuentaConcepto = null;
     var previewTimer = null;
+    var precargaTipoSeq = 0;
     var iaDecisionId = null;
     var iaSugerenciaHash = null;
     // true solo mientras la sugerencia IA está en el modal y aún no se aceptó a la grilla
@@ -144,7 +145,11 @@
                 $tpl.find('.codigo_concepto_ivacompra').data('codigo-resuelto', codigo);
             }
             $tpl.find('.nombre_concepto_ivacompra').val(nombre);
-            $tpl.find('.ie-cp-monto').val(data.monto || 0);
+            if (data.monto === '' || data.monto === null) {
+                $tpl.find('.ie-cp-monto').val('');
+            } else {
+                $tpl.find('.ie-cp-monto').val(data.monto || 0);
+            }
             if (data.cuentacontabledebe_id) {
                 var detData = detalleCuentaMeta(meta, data.cuentacontabledebe_id);
                 setCuentaFila(
@@ -214,7 +219,168 @@
         $('#ie-cp-preview-total-debe, #ie-cp-preview-total-haber').text('0.00');
         $('#ie-cp-preview-error, #ie-cp-asiento-avisos').addClass('d-none').empty();
         $('#ie-cp-conceptos-coherencia-error, #ie-cp-conceptos-coherencia-aviso').addClass('d-none').empty();
+        $('#ie-cp-conceptos-tipo-aviso').addClass('d-none').empty();
+        $('#ie-cp-tipo-abreviatura').addClass('d-none').text('');
+        $('#ie-cp-fecha-iva').data('seguir-comprobante', '1');
         $('#ie-cp-pdf-temp-id').val('');
+        actualizarSumaConceptos();
+    }
+
+    function mostrarAvisoTipoConceptos(html, clase) {
+        var $aviso = $('#ie-cp-conceptos-tipo-aviso');
+        if (!$aviso.length) {
+            return;
+        }
+        $aviso.removeClass('d-none alert-info alert-warning alert-success alert-danger')
+            .addClass(clase || 'alert-info')
+            .html(html);
+    }
+
+    function actualizarBadgeTipo() {
+        var abrev = String($('#ie-cp-tipotransaccion-compra-id option:selected').data('abreviatura') || '').trim();
+        var $badge = $('#ie-cp-tipo-abreviatura');
+        if (!abrev) {
+            $badge.addClass('d-none').text('');
+            return;
+        }
+        $badge.removeClass('d-none').text(abrev);
+    }
+
+    function conceptosTienenMontos() {
+        var hay = false;
+        $('#ie-cp-tbody-conceptos .ie-cp-monto').each(function () {
+            if (Math.abs(parseFloat($(this).val() || '0') || 0) >= 0.0001) {
+                hay = true;
+                return false;
+            }
+        });
+        return hay;
+    }
+
+    function incorporarMetaConceptoTipo(c) {
+        var id = parseInt(c && c.id ? c.id : '0', 10) || 0;
+        if (id <= 0) {
+            return;
+        }
+        var prev = conceptosMeta[String(id)] || {};
+        conceptosMeta[String(id)] = $.extend({}, prev, {
+            tipoconcepto: String(c.tipoconcepto || prev.tipoconcepto || ''),
+            nombre: String(c.nombre || prev.nombre || ''),
+            codigo: String(c.codigo || prev.codigo || ''),
+            impuesto_tasa: parseFloat(c.impuesto_tasa || prev.impuesto_tasa || 0) || 0,
+            formula: String(c.formula || prev.formula || ''),
+            formula_codigo_base: String(c.formula_codigo_base || prev.formula_codigo_base || ''),
+            formula_coeficiente: parseFloat(c.formula_coeficiente || prev.formula_coeficiente || 0) || 0,
+            cuenta_debe_id: parseInt(c.cuenta_debe_id || prev.cuenta_debe_id || '0', 10) || 0,
+            cuentas_por_empresa: c.cuentas_por_empresa || prev.cuentas_por_empresa || {},
+        });
+    }
+
+    function urlConceptosPorTipo(tipoId) {
+        var base = (typeof window.carpetaBase === 'string') ? window.carpetaBase.replace(/\/$/, '') : '';
+        return base + '/compras/tipotransaccion_compra/' + tipoId + '/conceptos-iva';
+    }
+
+    function precargarConceptosPorTipo(tipoId) {
+        var id = parseInt(tipoId || '0', 10) || 0;
+        actualizarBadgeTipo();
+        var seq = ++precargaTipoSeq;
+        if (id <= 0) {
+            if (!conceptosTienenMontos()) {
+                $('#ie-cp-tbody-conceptos').empty();
+                agregarFilaConcepto(null);
+                $('#ie-cp-conceptos-tipo-aviso').addClass('d-none').empty();
+            }
+            return;
+        }
+        if (conceptosTienenMontos()) {
+            mostrarAvisoTipoConceptos(
+                '<i class="fa fa-info-circle"></i> Se conservaron los conceptos y montos. El asiento se recalcula con el tipo nuevo.',
+                'alert-info'
+            );
+            programarPreview();
+            return;
+        }
+
+        mostrarAvisoTipoConceptos('<i class="fa fa-spinner fa-spin"></i> Cargando conceptos del tipo…', 'alert-info');
+        $.getJSON(urlConceptosPorTipo(id))
+            .done(function (res) {
+                if (seq !== precargaTipoSeq) {
+                    return;
+                }
+                var lista = (res && res.conceptos) || [];
+                $('#ie-cp-tbody-conceptos').empty();
+                if (!lista.length) {
+                    agregarFilaConcepto(null);
+                    mostrarAvisoTipoConceptos(
+                        '<i class="fa fa-info-circle"></i> Este tipo no tiene conceptos IVA configurados. Agreguelos a mano.',
+                        'alert-warning'
+                    );
+                    programarPreview();
+                    return;
+                }
+                var vistos = {};
+                var agregados = 0;
+                lista.forEach(function (c) {
+                    var cid = parseInt(c && c.id ? c.id : '0', 10) || 0;
+                    var codigo = String((c && c.codigo) || '').trim();
+                    var clave = cid > 0 ? ('id:' + cid) : (codigo ? ('cod:' + codigo) : '');
+                    if (clave && vistos[clave]) {
+                        return;
+                    }
+                    if (clave) {
+                        vistos[clave] = true;
+                    }
+                    incorporarMetaConceptoTipo(c);
+                    agregarFilaConcepto({
+                        concepto_ivacompra_id: cid,
+                        concepto_codigo: codigo,
+                        concepto_nombre: String((c && c.nombre) || ''),
+                        monto: '',
+                    });
+                    agregados++;
+                });
+                mostrarAvisoTipoConceptos(
+                    '<i class="fa fa-check-circle"></i> Conceptos del tipo de comprobante. Complete los importes.'
+                    + (agregados ? ' (' + agregados + ')' : ''),
+                    'alert-success'
+                );
+                programarPreview();
+            })
+            .fail(function (xhr) {
+                if (seq !== precargaTipoSeq) {
+                    return;
+                }
+                var msg = 'No se pudieron cargar los conceptos del tipo.';
+                if (xhr && xhr.status === 403) {
+                    msg = 'No tiene permiso para leer los conceptos de este tipo de comprobante.';
+                }
+                mostrarAvisoTipoConceptos('<i class="fa fa-exclamation-triangle"></i> ' + msg, 'alert-danger');
+            });
+    }
+
+    function actualizarSumaConceptos() {
+        var suma = 0;
+        $('#ie-cp-tbody-conceptos .ie-cp-monto').each(function () {
+            suma += parseFloat($(this).val() || '0') || 0;
+        });
+        $('#ie-cp-suma-conceptos').text(formatoNumero(suma));
+        var total = parseFloat($('#ie-cp-total').val() || '0') || 0;
+        var $dif = $('#ie-cp-dif-conceptos');
+        if (!$dif.length) {
+            return;
+        }
+        if (Math.abs(total) < 0.001 && Math.abs(suma) < 0.001) {
+            $dif.addClass('d-none').text('');
+            return;
+        }
+        var dif = Math.round((total - suma) * 100) / 100;
+        if (Math.abs(dif) < 0.02) {
+            $dif.removeClass('d-none text-danger').addClass('text-success').text('Coincide con el total');
+            return;
+        }
+        $dif.removeClass('d-none text-success').addClass('text-danger')
+            .text('Diferencia con el total: ' + formatoNumero(dif));
     }
 
     function abrirModal(idx) {
@@ -251,6 +417,10 @@
             if ((c.conceptos || []).length === 0) {
                 agregarFilaConcepto(null);
             }
+            actualizarBadgeTipo();
+            var fechaComp = ($('#ie-cp-fecha-comprobante').val() || '').slice(0, 10);
+            var fechaIva = ($('#ie-cp-fecha-iva').val() || '').slice(0, 10);
+            $('#ie-cp-fecha-iva').data('seguir-comprobante', fechaComp && fechaComp === fechaIva ? '1' : '0');
         } else {
             $('#modal-ie-comprobante-iva-titulo').text('Nuevo comprobante IVA');
         }
@@ -354,6 +524,7 @@
     }
 
     function programarPreview() {
+        actualizarSumaConceptos();
         renderCoherenciaConceptosModal(validarCoherenciaConceptosModal());
         clearTimeout(previewTimer);
         previewTimer = setTimeout(recargarPreviewAsiento, 400);
@@ -520,6 +691,10 @@
             $('#ie-cp-numero').val(cab.numerocomprobante || '');
             $('#ie-cp-fecha-comprobante').val((cab.fechacomprobante || '').slice(0, 10));
             $('#ie-cp-fecha-iva').val((cab.fechaiva || '').slice(0, 10));
+            $('#ie-cp-fecha-iva').data(
+                'seguir-comprobante',
+                ($('#ie-cp-fecha-comprobante').val() || '') === ($('#ie-cp-fecha-iva').val() || '') ? '1' : '0'
+            );
             $('#ie-cp-total').val(cab.total || 0);
             $('#ie-cp-cae').val(cab.numerocae || '');
             $('#ie-cp-tipo-autorizacion').val(cab.tipo_autorizacion || (cab.numerocae ? 'CAE' : ''));
@@ -559,6 +734,22 @@
         $('#ie-cp-pdf-procesar').on('click', procesarPdf);
         $('#ie-cp-agregar-concepto').on('click', function () {
             agregarFilaConcepto(null);
+        });
+
+        $('#ie-cp-tipotransaccion-compra-id').on('change', function () {
+            precargarConceptosPorTipo($(this).val());
+        });
+
+        $('#ie-cp-fecha-comprobante').on('change', function () {
+            var $iva = $('#ie-cp-fecha-iva');
+            if (String($iva.data('seguir-comprobante') || '1') !== '0') {
+                $iva.val($(this).val());
+            }
+        });
+
+        $('#ie-cp-fecha-iva').on('input change', function () {
+            var comp = $('#ie-cp-fecha-comprobante').val() || '';
+            $(this).data('seguir-comprobante', ($(this).val() || '') === comp ? '1' : '0');
         });
 
         $(document).on('click', '.ie-del-comprobante', function () {
