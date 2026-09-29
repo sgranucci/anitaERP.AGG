@@ -9,6 +9,7 @@ use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Caja\ChequePropioImputacionSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
+use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
@@ -24,7 +25,8 @@ use RuntimeException;
  * Moneda de la operación = moneda del pago. Todas las líneas del asiento van en esa moneda
  * (importes convertidos). Cotización única del pago en todas las líneas (también MN, para
  * poder expresar el movimiento en ME). La diferencia vs cotización de factura va a
- * diferencia de cambio (P&L), no a otra TC por línea.
+ * diferencia de cambio (P&L), no a otra TC por línea. Si esa cuenta maneja centro
+ * de costo, cada tramo toma el de la orden de compra del comprobante aplicado.
  *
  * Cruzada (ej. factura DOL / pago PES): proveedor al valor libro en PES (monto × cot_factura);
  * DC = valor_libro − valor_liquidación asienta la pérdida/ganancia sin “anticipo” parche.
@@ -261,7 +263,8 @@ final class PagoproveedorAsientoArmadoSupport
         }
 
         $totalesPorCuenta = [];
-        $dcTotal = 0.0;
+        /** @var array<int, float> $dcPorCentro centrocosto_id => diferencia firmada */
+        $dcPorCentro = [];
         $cuentaApRef = 0;
         $dcSoloPnL = false; // cruzada a MN: proveedor a valor libro; DC sin contraasiento en AP
         foreach ($datosComprobantes as $comp) {
@@ -345,7 +348,16 @@ final class PagoproveedorAsientoArmadoSupport
                 ];
             }
             $totalesPorCuenta[$key]['monto'] += $signo * $montoEnMonedaPago;
-            $dcTotal += $signo * $dcLinea;
+            $dcFirmada = $signo * $dcLinea;
+            if (abs($dcFirmada) >= 0.0001) {
+                $ccDc = 0;
+                if ($cc?->comprobante_proveedores) {
+                    $ccDc = ComprobanteProveedorCentrocostoSupport::resolverDesdeComprobante(
+                        $cc->comprobante_proveedores
+                    );
+                }
+                $dcPorCentro[$ccDc] = ($dcPorCentro[$ccDc] ?? 0.0) + $dcFirmada;
+            }
             if ($signo > 0) {
                 $cuentaApRef = $cuentaId;
             }
@@ -370,7 +382,7 @@ final class PagoproveedorAsientoArmadoSupport
 
         self::agregarDcSiCorresponde(
             $asiento,
-            $dcTotal,
+            $dcPorCentro,
             $cuentaApRef,
             $proveedor,
             $cuentacontableRepository,
@@ -612,33 +624,45 @@ final class PagoproveedorAsientoArmadoSupport
         float $monto,
         CuentacontableRepositoryInterface $cuentacontableRepository,
         string $observacion = '',
+        int $centrocostoId = 0,
     ): void {
         $debe = $d_h === 'D' ? $monto : '';
         $haber = $d_h === 'H' ? $monto : '';
 
+        $cuenta = $cuentacontableRepository->find($cuentacontableId);
+        if ($cuenta === null) {
+            return;
+        }
+
+        $ccGrabar = 0;
+        if ($centrocostoId > 0 && AsientoCentrocostoObligatorioSupport::maneja($cuenta->manejaccosto ?? null)) {
+            $ccGrabar = $centrocostoId;
+        }
+
         $idx = null;
         foreach ($asiento as $i => $linea) {
+            $mismoLado = $d_h === 'H'
+                ? ($linea['haber'] !== '' && $linea['haber'] !== null)
+                : ($linea['debe'] !== '' && $linea['debe'] !== null);
             if ((int) $linea['cuentacontable_id'] === $cuentacontableId
                 && (int) $linea['moneda_id'] === $monedaId
                 && (float) $linea['cotizacion'] === (float) $cotizacion
-                && (string) ($linea['observacion'] ?? '') === $observacion) {
+                && (int) ($linea['centrocosto_id'] ?? 0) === $ccGrabar
+                && (string) ($linea['observacion'] ?? '') === $observacion
+                && $mismoLado) {
                 $idx = $i;
                 break;
             }
         }
 
         if ($idx === null) {
-            $cuenta = $cuentacontableRepository->find($cuentacontableId);
-            if ($cuenta === null) {
-                return;
-            }
             $asiento[] = [
                 'cuentacontable_id' => $cuentacontableId,
                 'codigo' => $cuenta->codigo,
                 'nombre' => $cuenta->nombre,
                 'moneda_id' => $monedaId,
                 'cotizacion' => $cotizacion,
-                'centrocosto_id' => 0,
+                'centrocosto_id' => $ccGrabar,
                 'debe' => $debe,
                 'haber' => $haber,
                 'observacion' => $observacion,
@@ -657,11 +681,12 @@ final class PagoproveedorAsientoArmadoSupport
     }
 
     /**
+     * @param  array<int, float>  $dcPorCentro  centrocosto_id de la OC (0 si no hay) => diferencia firmada
      * @param  list<array<string, mixed>>  $asiento
      */
     private static function agregarDcSiCorresponde(
         array &$asiento,
-        float $dcTotal,
+        array $dcPorCentro,
         int $cuentaApId,
         ?Proveedor $proveedor,
         CuentacontableRepositoryInterface $cuentacontableRepository,
@@ -670,7 +695,7 @@ final class PagoproveedorAsientoArmadoSupport
         bool $soloPnL = false,
         int $empresaId = 0,
     ): void {
-        $dcTotal = round($dcTotal, 4);
+        $dcTotal = round(array_sum($dcPorCentro), 4);
         if (abs($dcTotal) < 0.01) {
             return;
         }
@@ -683,35 +708,59 @@ final class PagoproveedorAsientoArmadoSupport
             );
         }
 
+        $cuentaDc = $cuentacontableRepository->find($cuentaDcId);
+        $partePorCentro = $cuentaDc !== null
+            && AsientoCentrocostoObligatorioSupport::maneja($cuentaDc->manejaccosto ?? null);
+
+        /** @var array<int, float> $tramos */
+        $tramos = [];
+        if ($partePorCentro) {
+            foreach ($dcPorCentro as $ccId => $importe) {
+                $importe = round((float) $importe, 4);
+                if (abs($importe) < 0.01) {
+                    continue;
+                }
+                $tramos[(int) $ccId] = $importe;
+            }
+        }
+        if ($tramos === []) {
+            $tramos[0] = $dcTotal;
+        }
+
         $monedaLocal = self::monedaLocalId();
         $cot = self::cotizacionParaLinea($monedaLocal, $cotizacionPago);
-        $importe = abs($dcTotal);
-        // dc = valor_libro − valor_liquidación. dc < 0 → pérdida (Debe DC).
-        $perdida = $dcTotal < 0;
 
-        self::agregaCuenta(
-            $asiento,
-            $cuentaDcId,
-            $monedaLocal,
-            $cot,
-            $perdida ? 'D' : 'H',
-            $importe,
-            $cuentacontableRepository,
-            $concepto
-        );
+        foreach ($tramos as $ccId => $dcTramo) {
+            $importe = abs($dcTramo);
+            // dc = valor_libro − valor_liquidación. dc < 0 → pérdida (Debe DC).
+            $perdida = $dcTramo < 0;
 
-        // Misma moneda ME: contraasiento en AP en MN. Cruzada a MN a valor libro: solo P&L.
-        if (! $soloPnL && $cuentaApId > 0) {
             self::agregaCuenta(
                 $asiento,
-                $cuentaApId,
+                $cuentaDcId,
                 $monedaLocal,
                 $cot,
-                $perdida ? 'H' : 'D',
+                $perdida ? 'D' : 'H',
                 $importe,
                 $cuentacontableRepository,
-                $concepto
+                $concepto,
+                (int) $ccId
             );
+
+            // Misma moneda ME: contraasiento en AP en MN. Cruzada a MN a valor libro: solo P&L.
+            if (! $soloPnL && $cuentaApId > 0) {
+                self::agregaCuenta(
+                    $asiento,
+                    $cuentaApId,
+                    $monedaLocal,
+                    $cot,
+                    $perdida ? 'H' : 'D',
+                    $importe,
+                    $cuentacontableRepository,
+                    $concepto,
+                    (int) $ccId
+                );
+            }
         }
     }
 
