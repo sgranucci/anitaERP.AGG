@@ -40,6 +40,27 @@ class OrdentrabajoEmisionTextoSupportTest extends TestCase
         self::assertSame('', $lineas[2]);
     }
 
+    public function test_el_forro_de_la_ot_no_parte_entretela(): void
+    {
+        $texto = ' CACHAREL NEGRO -5.50- D/ VACUNO NEGRO -2.64- D/ PECARI NEGRO -0.66- D/ ENTRETELA  -1.54- D';
+        $lineas = OrdentrabajoEmisionTextoSupport::partirForro($texto);
+
+        self::assertSame(
+            'CACHAREL NEGRO -5.50- D/ VACUNO NEGRO -2.64- D/ PECARI NEGRO -0.66- D',
+            $lineas[0]
+        );
+        self::assertSame('ENTRETELA  -1.54- D', $lineas[1]);
+        self::assertStringNotContainsString('ENTRETEL', $lineas[0]);
+        self::assertLessThanOrEqual(
+            OrdentrabajoEmisionTextoSupport::ANCHO_FORRO_LINEA1_MM,
+            OrdentrabajoEmisionTextoSupport::anchoMm(OrdentrabajoEmisionTextoSupport::PREFIJO_FORRO.$lineas[0])
+        );
+        self::assertLessThanOrEqual(
+            OrdentrabajoEmisionTextoSupport::ANCHO_FORRO_LINEA2_MM,
+            OrdentrabajoEmisionTextoSupport::anchoMm($lineas[1])
+        );
+    }
+
     public function test_sin_barra_de_material_corta_en_el_espacio(): void
     {
         $texto = str_repeat('PALABRA ', 40);

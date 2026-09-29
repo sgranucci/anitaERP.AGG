@@ -4,6 +4,7 @@ namespace App\Services\Ventas\Ferli;
 
 use App\Support\Ventas\Ferli\FerliL8ReaderSupport;
 use App\Support\Ventas\Ferli\MovimientoOrdentrabajoL8ImportSupport;
+use App\Support\Ventas\Ferli\OrdentrabajoMezclaArticuloSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -1068,6 +1069,18 @@ class PedidoImportarTareasDesdeL8Service
                         continue;
                     }
                 }
+            }
+
+            // El id de talle del L8 puede existir acá y ser otro artículo.
+            // Si la OT ya tiene su combinación, no colgar ese talle.
+            if ($table === 'ordentrabajo_combinacion_talle'
+                && OrdentrabajoMezclaArticuloSupport::talleMezclaOtroArticulo($otId, $pctId)) {
+                Log::warning('ferli.l8.tareas.oct_otro_articulo', [
+                    'ordentrabajo_id' => $otId,
+                    'pedido_combinacion_talle_id' => $pctId,
+                    'id_l8' => $id,
+                ]);
+                continue;
             }
 
             DB::table($table)->insert($clean);

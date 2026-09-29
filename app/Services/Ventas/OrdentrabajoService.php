@@ -1658,6 +1658,7 @@ class OrdentrabajoService
 		$lineasMaterial = OrdentrabajoEmisionTextoSupport::partirMaterial($mat);
 		$aplique = (string) ($doc['aplique'] ?? '');
 		$forradoFondo = (string) ($doc['forrado_fondo_consumo'] ?? '');
+		$lineasForro = OrdentrabajoEmisionTextoSupport::partirForro($forradoFondo);
 		$forradoBase = (string) ($doc['forrado_base_consumo'] ?? '');
 		$codArtRed = (string) ($doc['codigo_articulo_reducido'] ?? '');
 		$pedidos = trim((string) ($doc['pedidos'] ?? ''));
@@ -1686,8 +1687,8 @@ class OrdentrabajoService
 			'empaque' => substr((string) ($doc['empaque'] ?? ''), 0, 60),
 			'empaque_fmt' => $this->prefijoCampoOt('AVIOS DE EMPAQUE: ', substr((string) ($doc['empaque'] ?? ''), 0, 60)),
 			'forrado_base_fmt' => $this->prefijoCampoOt('FORRADO BASE: ', substr($forradoBase, 0, 60)),
-			'forrado_fondo1' => $this->prefijoCampoOt('FORRO: ', substr($forradoFondo, 0, 80)),
-			'forrado_fondo2' => substr($forradoFondo, 80, 80),
+			'forrado_fondo1' => $this->prefijoCampoOt(OrdentrabajoEmisionTextoSupport::PREFIJO_FORRO, $lineasForro[0]),
+			'forrado_fondo2' => $lineasForro[1],
 			'material2' => $lineasMaterial[0],
 			'material3' => $lineasMaterial[1],
 			'material4' => $lineasMaterial[2],
@@ -1776,6 +1777,8 @@ class OrdentrabajoService
 			$k === 'codigo', $k === 'tot_pares' => 25.0,
 			str_starts_with($k, 'titulo_') => 55.0,
 			str_starts_with($k, 'cliente'), str_starts_with($k, 'material'), str_starts_with($k, 'aplique') => 160.0,
+			$k === 'forrado_fondo1' => OrdentrabajoEmisionTextoSupport::ANCHO_FORRO_LINEA1_MM,
+			$k === 'forrado_fondo2' => OrdentrabajoEmisionTextoSupport::ANCHO_FORRO_LINEA2_MM,
 			default => 120.0,
 		};
 	}
@@ -2408,11 +2411,12 @@ class OrdentrabajoService
 				$d_material[4] = "tag @material4---------------------------------------------------------------------------------@ ";
 				$reporte .= $d_material[4].'{'.$lineasMaterial[2].'}'."\n";
 
+				$lineasForro = OrdentrabajoEmisionTextoSupport::partirForro($forradoFondoConConsumo);
 				$d_forradofondo[0] = "tag @forrado_fondo1------------------------------------------------------------------@ ";
-				$reporte .= $d_forradofondo[0].'{'.substr($forradoFondoConConsumo,0,80).'}'."\n";
+				$reporte .= $d_forradofondo[0].'{'.$lineasForro[0].'}'."\n";
 
 				$d_forradofondo[1] = "tag @forrado_fondo2------------------------------------------------------------------@ ";
-				$reporte .= $d_forradofondo[1].'{'.substr($forradoFondoConConsumo,80,80).'}'."\n";
+				$reporte .= $d_forradofondo[1].'{'.$lineasForro[1].'}'."\n";
 
 				if ($data['tipoemision'] != 'COMPLETA')
 					$d_forradobase = "tag @forrado_base".$nroPosicionOt."-----------------------------------------------@ ";

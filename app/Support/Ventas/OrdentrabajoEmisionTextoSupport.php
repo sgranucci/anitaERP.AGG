@@ -18,6 +18,16 @@ final class OrdentrabajoEmisionTextoSupport
 
     public const LINEAS_MATERIAL = 3;
 
+    /**
+     * El forro arranca más a la izquierda (incluye "FORRO: ") y la continuación
+     * está corrida. El tope es el mismo borde derecho que el material (~193 mm).
+     */
+    public const ANCHO_FORRO_LINEA1_MM = 178.0;
+
+    public const ANCHO_FORRO_LINEA2_MM = 150.0;
+
+    public const PREFIJO_FORRO = 'FORRO: ';
+
     private const TAMANO_PT = 9.0;
 
     /**
@@ -43,13 +53,34 @@ final class OrdentrabajoEmisionTextoSupport
     }
 
     /**
+     * Dos renglones. El primero reserva el ancho de "FORRO: ".
+     *
+     * @return list<string>
+     */
+    public static function partirForro(string $texto): array
+    {
+        $anchoCuerpo = self::ANCHO_FORRO_LINEA1_MM - self::anchoMm(self::PREFIJO_FORRO);
+
+        return self::partirConAnchos($texto, [$anchoCuerpo, self::ANCHO_FORRO_LINEA2_MM]);
+    }
+
+    /**
      * @return list<string>
      */
     public static function partir(string $texto, int $lineas, float $anchoMm): array
     {
+        return self::partirConAnchos($texto, array_fill(0, $lineas, $anchoMm));
+    }
+
+    /**
+     * @param  list<float>  $anchosMm
+     * @return list<string>
+     */
+    public static function partirConAnchos(string $texto, array $anchosMm): array
+    {
         $texto = trim($texto);
         $salida = [];
-        while (count($salida) < $lineas) {
+        foreach ($anchosMm as $anchoMm) {
             if ($texto === '') {
                 $salida[] = '';
                 continue;

@@ -21,6 +21,36 @@ final class FerliRinNumeracionSupport
 
     public const ABREVIATURA = 'RIN';
 
+    /**
+     * Sucursal fija del número RIN (Ferli). Tiene que quedar por encima de 2000.
+     */
+    public static function codigoPuntoVenta(): string
+    {
+        $codigo = (int) config('facturacion.RIN_PUNTOVENTA_CODIGO', 2001);
+
+        return (string) ($codigo > 2000 ? $codigo : 2001);
+    }
+
+    /**
+     * En RIN el comprobante sale con la sucursal fija; el resto usa el PV real.
+     */
+    public static function sucursalParaCodigo(?object $tipotransaccion, string $codigoPuntoventa): string
+    {
+        if (self::aplica($tipotransaccion)) {
+            return self::codigoPuntoVenta();
+        }
+
+        return $codigoPuntoventa;
+    }
+
+    public static function numeroImpreso(int $numero): string
+    {
+        return VentaNumeracionEmpresaSupport::formatearPuntoVentaNumero(
+            self::codigoPuntoVenta(),
+            $numero
+        );
+    }
+
     public static function aplica(?object $tipotransaccion): bool
     {
         if (! EntornoEmpresaSupport::esFerli()) {

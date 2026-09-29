@@ -1367,7 +1367,7 @@ class FacturacionService
 						'lugarentrega' => $pedido->lugarentrega,
 						'cliente_entrega_id' => $pedido->cliente_entrega_id,
 						'codigo' => $tipoAnita.' '.$letra.'-'.
-										str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
+										str_pad(FerliRinNumeracionSupport::sucursalParaCodigo($tipotransaccion, (string) ($puntoventa->codigo ?? '')), config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
 										str_pad($numero, config('facturacion.DIGITOS_COMPROBANTE'), "0", STR_PAD_LEFT),
 						'codigo_afip' => (int) preg_replace('/\D+/', '', (string) $codigoTipoTransaccion) ?: null,
 						'nombre' => $cliente->nombre,
@@ -1424,7 +1424,7 @@ class FacturacionService
 
 							$venta['numerocomprobante'] = $numero;
 							$venta['codigo'] = $tipoAnita.' '.$letra.'-'
-								.str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), '0', STR_PAD_LEFT).'-'
+								.str_pad(FerliRinNumeracionSupport::sucursalParaCodigo($tipotransaccion, (string) ($puntoventa->codigo ?? '')), config('facturacion.DIGITOS_SUCURSAL'), '0', STR_PAD_LEFT).'-'
 								.str_pad((string) $numero, config('facturacion.DIGITOS_COMPROBANTE'), '0', STR_PAD_LEFT);
 
 							if (isset($dataCAE) && is_array($dataCAE)) {
@@ -2316,7 +2316,7 @@ class FacturacionService
 						'lugarentrega' => $cliente->lugarentrega,
 						'cliente_entrega_id' => null,
 						'codigo' => $tipoAnita.' '.$letra.'-'.
-										str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
+										str_pad(FerliRinNumeracionSupport::sucursalParaCodigo($tipotransaccion, (string) ($puntoventa->codigo ?? '')), config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
 										str_pad($numero, config('facturacion.DIGITOS_COMPROBANTE'), "0", STR_PAD_LEFT),
 						'nombre' => $cliente->nombre,
 						'domicilio' => $cliente->domicilio,
@@ -4152,7 +4152,7 @@ class FacturacionService
 						'lugarentrega' => $pedido->lugarentrega,
 						'cliente_entrega_id' => $pedido->cliente_entrega_id,
 						'codigo' => $tipoAnita.' '.$letra.'-'.
-										str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
+										str_pad(FerliRinNumeracionSupport::sucursalParaCodigo($tipotransaccion, (string) ($puntoventa->codigo ?? '')), config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
 										str_pad($numero, config('facturacion.DIGITOS_COMPROBANTE'), "0", STR_PAD_LEFT),
 						'nombre' => $cliente->nombre,
 						'domicilio' => $cliente->domicilio,
@@ -4685,7 +4685,7 @@ class FacturacionService
 				'lugarentrega' => $cliente->lugarentrega,
 				'cliente_entrega_id' => null,
 				'codigo' => $tipoAnita.' '.$letra.'-'.
-								str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
+								str_pad(FerliRinNumeracionSupport::sucursalParaCodigo($tipotransaccion, (string) ($puntoventa->codigo ?? '')), config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
 								str_pad($numero, config('facturacion.DIGITOS_COMPROBANTE'), "0", STR_PAD_LEFT),
 				'nombre' => $cliente->nombre,
 				'domicilio' => $cliente->domicilio,
@@ -4737,7 +4737,7 @@ class FacturacionService
 
 					$venta['numerocomprobante'] = $numero;
 					$venta['codigo'] = $tipoAnita.' '.$letra.'-'
-						.str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), '0', STR_PAD_LEFT).'-'
+						.str_pad(FerliRinNumeracionSupport::sucursalParaCodigo($tipotransaccion, (string) ($puntoventa->codigo ?? '')), config('facturacion.DIGITOS_SUCURSAL'), '0', STR_PAD_LEFT).'-'
 						.str_pad((string) $numero, config('facturacion.DIGITOS_COMPROBANTE'), '0', STR_PAD_LEFT);
 
 					if (is_array($dataCAE)) {

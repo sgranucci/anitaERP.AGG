@@ -197,6 +197,8 @@ switch(strtoupper(config('app.empresa')))
             "PDF_CHEQUES_A_LA_ORDEN" => env('FACTURACION_PDF_CHEQUES_A_LA_ORDEN', 'CALZADOS FERLI S.A.'),
             // Etiqueta ENVÍO (T.E. en rótulo). Fallback si ningún PV trae teléfono usable.
             "PDF_TELEFONO_ENVIO" => env('FACTURACION_PDF_TELEFONO_ENVIO', '4442-1587'),
+            // Remito interno: sucursal fija del número (mayor a 2000, no es un PV fiscal).
+            "RIN_PUNTOVENTA_CODIGO" => (int) env('FERLI_RIN_PUNTOVENTA_CODIGO', 2001),
             'contrato_venta_aviso' => [
                 'habilitado' => filter_var(env('FACTURACION_CONTRATO_VENTA_AVISO_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
                 'dias_antes' => max(1, (int) env('FACTURACION_CONTRATO_VENTA_AVISO_DIAS', 15)),

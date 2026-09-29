@@ -95,7 +95,7 @@
     );
     $mostrarHojaFactura = ! ($facturaPdfSoloHojaRemito ?? false);
     // FAE Interforming: solo hoja factura (sin remito), layout Anita.
-    $mostrarHojaRemito = $facturaPdfEsInterformingExport
+    $mostrarHojaRemito = $facturaPdfEsInterformingExport || $esRinFerli
         ? false
         : FacturaPdfHojaRemitoSupport::mostrarParaVenta(
             $venta,
@@ -127,7 +127,9 @@
     }
 @endphp
 <div id="area-pdf">
-    @if ($mostrarHojaFactura)
+    @if ($esRinFerli)
+        @include('exports.ventas.partials.formulariofactura_rin')
+    @elseif ($mostrarHojaFactura)
         @foreach ($paginasFactura as $pagIdx => $itemsPagina)
             @php
                 $esPrimera = $pagIdx === 0;
