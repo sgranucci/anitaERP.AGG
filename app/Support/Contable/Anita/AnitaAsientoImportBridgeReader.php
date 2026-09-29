@@ -176,6 +176,7 @@ final class AnitaAsientoImportBridgeReader
             'campos' => $campos,
             'whereArmado' => $whereArmado,
             'orderBy' => $orderBy,
+            'curl_timeout' => 300,
         ];
 
         // El bridge a veces responde "[]" con filas reales (UNLOAD concurrente).

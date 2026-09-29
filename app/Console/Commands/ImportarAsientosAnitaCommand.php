@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\ApiAnita;
 use App\Services\Contable\AnitaAsientoImportService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
 class ImportarAsientosAnitaCommand extends Command
@@ -20,12 +21,16 @@ class ImportarAsientosAnitaCommand extends Command
                             {--dry-run : Solo analiza (default si no hay --ejecutar)}
                             {--ejecutar : Persiste en ERP (no escribe Anita)}
                             {--reemplazar-diferentes : En --ejecutar, reemplaza duplicados con diferencias}
+                            {--solo-documentos : En --ejecutar solo completa factura y OC por renglón. No crea ni reescribe asientos}
                             {--importar-resumen-sin-detalle : Importa el resumen V/C/T cuando no hay detalle del sistema en el mes (verificar antes: el detalle puede estar en otro mes)}';
 
     protected $description = 'Importa asientos Anita (ctamov + subdiario/subhist) a ERP. Excluye ctamov resumen V/C/T (no P/PER).';
 
     public function handle(AnitaAsientoImportService $service): int
     {
+        ini_set('memory_limit', '1024M');
+        ini_set('max_execution_time', '0');
+
         $desde = trim((string) $this->option('desde'));
         $hasta = trim((string) $this->option('hasta'));
         $mesesBloque = max(1, (int) $this->option('meses-bloque'));
@@ -33,6 +38,7 @@ class ImportarAsientosAnitaCommand extends Command
         $ejecutar = (bool) $this->option('ejecutar');
         $dryRun = ! $ejecutar || (bool) $this->option('dry-run');
         $reemplazar = (bool) $this->option('reemplazar-diferentes');
+        $soloDocumentos = (bool) $this->option('solo-documentos');
         $resumenSinDetalle = (bool) $this->option('importar-resumen-sin-detalle');
 
         if ($ejecutar && (bool) $this->option('dry-run')) {
@@ -48,12 +54,13 @@ class ImportarAsientosAnitaCommand extends Command
 
         $this->line('Bridge: '.ApiAnita::urlBridge());
         $this->line(sprintf(
-            'Rango %s → %s | empresas %s | bloque %d mes(es) | %s%s',
+            'Rango %s → %s | empresas %s | bloque %d mes(es) | %s%s%s',
             $desde,
             $hasta,
             implode(',', $empresas),
             $mesesBloque,
             $dryRun ? 'DRY-RUN' : 'EJECUTAR',
+            $soloDocumentos ? ' +solo-documentos' : '',
             $reemplazar ? ' +reemplazar-diferentes' : '',
         ));
         $this->line('Exclusión ctamov: sistemas '.implode(',', AnitaAsientoImportService::SISTEMAS_CIERRE_SUBDIARIO)
@@ -77,6 +84,7 @@ class ImportarAsientosAnitaCommand extends Command
                 $usuarioId,
                 fn (string $m) => $this->line($m),
                 $resumenSinDetalle,
+                $soloDocumentos,
             );
         } catch (\Throwable $e) {
             $this->error($e->getMessage());
@@ -99,6 +107,9 @@ class ImportarAsientosAnitaCommand extends Command
                 ['A crear (líneas mov.)', (string) $r['lineas_a_crear']],
                 ['Creados', (string) $r['creados']],
                 ['Duplicados coincidentes: metadatos Anita completados', (string) ($r['metadatos_anita_actualizados'] ?? 0)],
+                ['Asientos con factura/OC de renglón a completar', (string) ($r['asientos_documento_a_actualizar'] ?? 0)],
+                ['Renglones factura/OC a completar', (string) ($r['documentos_linea_a_actualizar'] ?? 0)],
+                ['Renglones factura/OC completados', (string) ($r['documentos_linea_actualizados'] ?? 0)],
                 ['Duplicados total', (string) $r['duplicados']],
                 ['Duplicados → dejar', (string) $r['duplicados_dejar']],
                 ['Duplicados → reemplazar', (string) $r['duplicados_reemplazar']],
@@ -131,6 +142,20 @@ class ImportarAsientosAnitaCommand extends Command
                 ];
             }
             $this->table(['Nro', 'Emp', 'Fecha', 'Sist', 'Líneas', 'Acción'], $filas);
+        }
+
+        $docs = $r['documentos_linea_detalle'] ?? [];
+        if ($docs !== []) {
+            $this->line('Factura y OC por renglón a completar (muestra):');
+            $filas = [];
+            foreach (array_slice($docs, 0, 30) as $d) {
+                $filas[] = [
+                    (string) ($d['numeroasiento'] ?? ''),
+                    (string) ($d['erp_id'] ?? ''),
+                    (string) ($d['lineas'] ?? ''),
+                ];
+            }
+            $this->table(['Nro asiento', 'Id ERP', 'Renglones'], $filas);
         }
 
         if (($r['cuentas_faltantes'] ?? []) !== []) {
@@ -166,6 +191,9 @@ class ImportarAsientosAnitaCommand extends Command
             $this->table(['Nro', 'Emp', 'Origen', 'Motivo', 'Líneas ERP→Anita'], $filas);
         }
 
+        $this->imprimirPendientes('A crear — no se grabaron', $r['pendientes_crear'] ?? []);
+        $this->imprimirPendientes('Distintos — no se reescribieron', $r['pendientes_reemplazar'] ?? []);
+
         foreach (array_slice($r['errores'] ?? [], 0, 20) as $err) {
             $this->error((string) $err);
         }
@@ -184,5 +212,77 @@ class ImportarAsientosAnitaCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $fichas
+     */
+    private function imprimirPendientes(string $titulo, array $fichas): void
+    {
+        if ($fichas === []) {
+            return;
+        }
+
+        $ids = [];
+        foreach ($fichas as $ficha) {
+            foreach (['anita', 'erp'] as $lado) {
+                foreach ($ficha[$lado] ?? [] as $linea) {
+                    $id = (int) ($linea['cuenta_id'] ?? 0);
+                    if ($id > 0) {
+                        $ids[$id] = $id;
+                    }
+                }
+            }
+        }
+        $codigos = $ids === []
+            ? []
+            : DB::table('cuentacontable')->whereIn('id', array_values($ids))->pluck('codigo', 'id')->all();
+
+        $this->newLine();
+        $this->warn($titulo.' ('.count($fichas).')');
+        foreach ($fichas as $ficha) {
+            $this->line(sprintf(
+                '  asiento %s  empresa %s  %s  fecha Anita %s  ERP id %s  %s',
+                $ficha['numeroasiento'] ?? '',
+                $ficha['empresa_id'] ?? '',
+                $ficha['origen'] ?? '',
+                $ficha['fecha_anita'] ?? '',
+                (int) ($ficha['erp_id'] ?? 0) > 0 ? (string) $ficha['erp_id'] : '—',
+                $ficha['motivo'] ?? '',
+            ));
+            if (trim((string) ($ficha['observacion'] ?? '')) !== '') {
+                $this->line('    '.trim((string) $ficha['observacion']));
+            }
+            $this->line('    Anita:');
+            $this->imprimirLineasRevision($ficha['anita'] ?? [], $codigos);
+            if (($ficha['erp'] ?? []) !== []) {
+                $this->line('    ERP:');
+                $this->imprimirLineasRevision($ficha['erp'] ?? [], $codigos);
+            }
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     * @param  array<int|string, mixed>  $codigos
+     */
+    private function imprimirLineasRevision(array $lineas, array $codigos): void
+    {
+        foreach ($lineas as $linea) {
+            $cuentaId = (int) ($linea['cuenta_id'] ?? 0);
+            $nro = (int) ($linea['nro'] ?? 0);
+            $comp = $nro > 0
+                ? trim(($linea['tipo'] ?? '').' '.($linea['letra'] ?? '').' '.($linea['sucursal'] ?? '').'-'.$nro)
+                : '';
+            $oc = (int) ($linea['oc'] ?? 0);
+            $this->line(sprintf(
+                '      %s  %s  %s%s%s',
+                $codigos[$cuentaId] ?? (string) $cuentaId,
+                number_format((float) ($linea['monto'] ?? 0), 2, ',', '.'),
+                (string) ($linea['obs'] ?? ''),
+                $comp !== '' ? '  ['.$comp.']' : '',
+                $oc > 0 ? '  OC '.$oc : '',
+            ));
+        }
     }
 }

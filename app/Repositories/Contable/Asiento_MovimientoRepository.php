@@ -5,6 +5,7 @@ namespace App\Repositories\Contable;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 use Auth;
 
@@ -73,6 +74,35 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
         return $asiento_movimiento;
     }
 
+	/**
+	 * Conserva factura y OC originales del renglón al grabar el formulario.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<string, mixed>
+	 */
+	private function documentoLineaDesdeRequest(array $data, int $i): array
+	{
+		if (! Schema::hasColumn('asiento_movimiento', 'anita_nro')) {
+			return [];
+		}
+		if (! array_key_exists('mov_anita_nro', $data) && ! array_key_exists('mov_nro_ordencompra', $data)) {
+			return [];
+		}
+
+		$nro = (int) ($data['mov_anita_nro'][$i] ?? 0);
+		$oc = (int) ($data['mov_nro_ordencompra'][$i] ?? 0);
+		$tipo = strtoupper(trim((string) ($data['mov_anita_tipo'][$i] ?? '')));
+		$letra = trim((string) ($data['mov_anita_letra'][$i] ?? ''));
+
+		return [
+			'anita_tipo' => $nro > 0 && $tipo !== '' ? substr($tipo, 0, 10) : null,
+			'anita_letra' => $nro > 0 && $letra !== '' ? substr($letra, 0, 3) : null,
+			'anita_sucursal' => $nro > 0 ? (int) ($data['mov_anita_sucursal'][$i] ?? 0) : null,
+			'anita_nro' => $nro > 0 ? $nro : null,
+			'nro_ordencompra' => $oc > 0 ? $oc : null,
+		];
+	}
+
 	private function normalizarCentrocostoId($centrocostoId)
 	{
 		if ($centrocostoId === null || $centrocostoId === '' || $centrocostoId === 0 || $centrocostoId === '0') {
@@ -134,7 +164,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 
 						$ccId = $centrocosto_ids[$i] ?? $centrocosto_ids_previo[$i] ?? 0;
 
-						$asiento_movimiento = $this->model->findOrFail($_id[$i])->update([
+						$asiento_movimiento = $this->model->findOrFail($_id[$i])->update(array_merge([
 									"asiento_id" => $id,
 									"cuentacontable_id" => $cuentacontable_ids[$i],
 									"centrocosto_id" => $this->normalizarCentrocostoId($ccId),
@@ -142,7 +172,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 									"monto" => $monto,
 									"cotizacion" => NumeroDecimalLocalSupport::aFloat($cotizaciones[$i] ?? 0),
 									"observacion" => $observaciones[$i] ?? ''
-									]);
+									], $this->documentoLineaDesdeRequest($data, $i)));
 					}
 				}
 				if ($q_asiento_movimiento > count($cuentacontable_ids))
@@ -171,7 +201,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 
 					$ccId = $centrocosto_ids[$i_movimiento] ?? $centrocosto_ids_previo[$i_movimiento] ?? 0;
 
-					$asiento_movimiento = $this->model->create([
+					$asiento_movimiento = $this->model->create(array_merge([
 									"asiento_id" => $id,
 									"cuentacontable_id" => $cuentacontable_ids[$i_movimiento],
 									"centrocosto_id" => $this->normalizarCentrocostoId($ccId),
@@ -179,7 +209,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 									"monto" => $monto,
 									"cotizacion" => NumeroDecimalLocalSupport::aFloat($cotizaciones[$i_movimiento] ?? 0),
 									"observacion" => $observaciones[$i_movimiento] ?? ''
-									]);
+									], $this->documentoLineaDesdeRequest($data, $i_movimiento)));
 				}
 			}
 		}

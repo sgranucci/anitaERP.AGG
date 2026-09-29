@@ -5,10 +5,9 @@ return [
     |--------------------------------------------------------------------------
     | Escritura Anita (create/update/delete)
     |--------------------------------------------------------------------------
-    | Temporal: mientras el pago no se haga desde Ingreso/Egreso en ERP.
-    | Poner false para dejar de replicar CUD a che_ban.
+    | Anita está apagado para solicitudes de pago. No replicar CUD a che_ban.
     */
-    'anita_escritura' => filter_var(env('SOLICITUDPAGO_ANITA_ESCRITURA', true), FILTER_VALIDATE_BOOLEAN),
+    'anita_escritura' => filter_var(env('SOLICITUDPAGO_ANITA_ESCRITURA', false), FILTER_VALIDATE_BOOLEAN),
 
     'anita_sistema' => env('SOLICITUDPAGO_ANITA_SISTEMA', 'che_ban'),
 
@@ -30,11 +29,10 @@ return [
     ],
 
     /*
-    | Sync diario Anita→ERP (faltantes + estados). Temporal mientras se paguen SP en Anita.
-    | Apagar (habilitado=false) cuando el circuito de pago quede 100% en ERP.
+    | Sync Anita→ERP. Anita está apagado para este módulo: no traer cabeceras, estados ni cuentas.
     */
     'sync_anita' => [
-        'habilitado' => filter_var(env('SOLICITUDPAGO_SYNC_ANITA_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'habilitado' => filter_var(env('SOLICITUDPAGO_SYNC_ANITA_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
         'hora' => env('SOLICITUDPAGO_SYNC_ANITA_HORA', '06:45'),
     ],
 

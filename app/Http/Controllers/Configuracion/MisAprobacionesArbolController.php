@@ -259,6 +259,55 @@ class MisAprobacionesArbolController extends Controller
         return response()->json(['ok' => true, 'detalle' => $detalle]);
     }
 
+    public function aprobarRequisicionSala(Request $request, $id)
+    {
+        can('aprobar-mis-aprobaciones-arbol');
+
+        try {
+            $resultado = $this->misAprobacionesService->aprobarRequisicionSalaVisible(
+                (int) $id,
+                (int) (auth()->id() ?? 0),
+                $request->input('observacion')
+            );
+        } catch (\Throwable $e) {
+            return redirect()
+                ->to($this->urlRedirect($request))
+                ->with('error', $e->getMessage());
+        }
+
+        $tipo = (string) ($resultado['tipo'] ?? 'RS');
+        $numero = (string) ($resultado['numero'] ?? $id);
+        $ok = ! empty($resultado['aprobado_ok']);
+        $mensaje = $ok
+            ? "Aprobación registrada: {$tipo} {$numero}. El circuito del árbol avanzó."
+            : "No se pudo confirmar la aprobación de {$tipo} {$numero} (el pendiente ya no estaba disponible).";
+
+        $this->userTaskBandejaService->invalidarContador();
+
+        return redirect()
+            ->to($this->urlRedirect($request))
+            ->with($ok ? 'mensaje' : 'error', $mensaje);
+    }
+
+    public function rechazarRequisicionSala(Request $request, $id)
+    {
+        can('aprobar-mis-aprobaciones-arbol');
+
+        try {
+            $this->misAprobacionesService->rechazarRequisicionSalaVisible(
+                (int) $id,
+                (int) (auth()->id() ?? 0),
+                $request->input('observacion')
+            );
+        } catch (\Throwable $e) {
+            return redirect()
+                ->to($this->urlRedirect($request))
+                ->with('error', $e->getMessage());
+        }
+
+        return $this->redirectTrasAccion($request, 'Rechazo registrado.');
+    }
+
     public function aprobar(Request $request, $id)
     {
         can('aprobar-mis-aprobaciones-arbol');

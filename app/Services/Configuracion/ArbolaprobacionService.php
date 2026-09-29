@@ -196,6 +196,7 @@ class ArbolaprobacionService
                     $operacion,
                     fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
                     fn (...$args) => $this->buscaProximoNivel(...$args),
+                    (bool) ($opciones['enviar_correo'] ?? true),
                 );
             case 'PE':
                 return app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)->procesaArbol(

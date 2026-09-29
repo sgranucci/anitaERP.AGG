@@ -140,7 +140,8 @@ final class MayorPlanoCuentaErpAsientoReader
                 'cc.codigo as cuenta_codigo',
                 'cco.codigo as ccosto_codigo',
                 'm.codigo as moneda_codigo',
-            ], array_map(fn (string $columna) => 'a.'.$columna, array_merge($columnasFk, $columnasAnita))));
+            ], array_map(fn (string $columna) => 'a.'.$columna, array_merge($columnasFk, $columnasAnita)),
+                $this->columnasDocumentoMovimiento()));
 
         if ($soloMovimientosVentas) {
             MayorPlanoCuentaVentasFiltroSupport::aplicarFiltroErpQuery($query, $columnasAnita);
@@ -198,6 +199,11 @@ final class MayorPlanoCuentaErpAsientoReader
                     (int) ($row->moneda_id ?? 0),
                     (int) ($row->centrocosto_id ?? 0),
                     $monto >= 0 ? 'D' : 'H',
+                    strtoupper(trim((string) ($row->mov_anita_tipo ?? ''))),
+                    trim((string) ($row->mov_anita_letra ?? '')),
+                    (int) ($row->mov_anita_sucursal ?? 0),
+                    (int) ($row->mov_anita_nro ?? 0),
+                    (int) ($row->mov_nro_ordencompra ?? 0),
                 ])
                 : 'mov|'.(int) $row->mov_id;
             if (! isset($gruposAsiento[$claveGrupo])) {
@@ -308,6 +314,8 @@ final class MayorPlanoCuentaErpAsientoReader
                 $requiereEmisoresBridge = true;
             }
             $linea++;
+            $nroMov = (int) ($row->mov_anita_nro ?? 0);
+            $usaDocumentoLinea = $nroMov > 0;
 
             $filaCtamov = (object) [
                 'ctav_empresa' => (int) $row->empresa_id,
@@ -316,23 +324,31 @@ final class MayorPlanoCuentaErpAsientoReader
                 'ctav_d_h' => $monto >= 0 ? 'D' : 'H',
                 'ctav_cuenta' => (int) $grupo['cuenta'],
                 'ctav_fecha' => (int) str_replace('-', '', substr((string) $row->fecha, 0, 10)),
-                'ctav_tipo' => trim((string) ($row->anita_tipo ?? '')) ?: $comprobante['tipo'],
-                'ctav_letra' => ($row->anita_letra ?? null) !== null
-                    ? (string) $row->anita_letra
-                    : $comprobante['letra'],
-                'ctav_sucursal' => ($row->anita_sucursal ?? null) !== null
-                    ? (int) $row->anita_sucursal
-                    : $comprobante['sucursal'],
-                'ctav_nro' => ($row->anita_nro ?? null) !== null
-                    ? (int) $row->anita_nro
-                    : $comprobante['nro'],
+                'ctav_tipo' => $usaDocumentoLinea
+                    ? (trim((string) ($row->mov_anita_tipo ?? '')) ?: $comprobante['tipo'])
+                    : (trim((string) ($row->anita_tipo ?? '')) ?: $comprobante['tipo']),
+                'ctav_letra' => $usaDocumentoLinea
+                    ? (string) ($row->mov_anita_letra ?? ' ')
+                    : (($row->anita_letra ?? null) !== null
+                        ? (string) $row->anita_letra
+                        : $comprobante['letra']),
+                'ctav_sucursal' => $usaDocumentoLinea
+                    ? (int) ($row->mov_anita_sucursal ?? 0)
+                    : (($row->anita_sucursal ?? null) !== null
+                        ? (int) $row->anita_sucursal
+                        : $comprobante['sucursal']),
+                'ctav_nro' => $usaDocumentoLinea
+                    ? $nroMov
+                    : (($row->anita_nro ?? null) !== null
+                        ? (int) $row->anita_nro
+                        : $comprobante['nro']),
                 'ctav_importe' => abs($monto),
                 'ctav_desc_mov' => $grupo['observacion'] !== '' ? $grupo['observacion'] : $obsAsiento,
                 'ctav_cod_mon' => (string) ($row->moneda_codigo ?? '1'),
                 'ctav_cotizacion' => (float) ($row->cotizacion ?? 1),
                 'ctav_tipo_asiento' => strtoupper(trim((string) ($row->tipo_asiento ?? ''))),
                 'ctav_balancea' => 'S',
-                'ctav_o_compra' => 0,
+                'ctav_o_compra' => (int) ($row->mov_nro_ordencompra ?? 0),
                 'ctav_ccosto' => (int) ($row->ccosto_codigo ?? 0),
                 'ctav_sistema' => trim((string) ($row->anita_sistema ?? '')) ?: $comprobante['sistema'],
                 'ctav_asi_mon_ref' => AnitaAsientoImportService::ASI_MON_REF_ORIGEN_ERP,
@@ -535,6 +551,29 @@ final class MayorPlanoCuentaErpAsientoReader
         ] as $columna) {
             if (Schema::hasColumn('asiento', $columna)) {
                 $columnas[] = $columna;
+            }
+        }
+
+        return $columnas;
+    }
+
+    /**
+     * Factura y OC guardadas en el renglón. Alias para no pisar los de la cabecera.
+     *
+     * @return list<string>
+     */
+    private function columnasDocumentoMovimiento(): array
+    {
+        $columnas = [];
+        foreach ([
+            'anita_tipo' => 'mov_anita_tipo',
+            'anita_letra' => 'mov_anita_letra',
+            'anita_sucursal' => 'mov_anita_sucursal',
+            'anita_nro' => 'mov_anita_nro',
+            'nro_ordencompra' => 'mov_nro_ordencompra',
+        ] as $columna => $alias) {
+            if (Schema::hasColumn('asiento_movimiento', $columna)) {
+                $columnas[] = 'am.'.$columna.' as '.$alias;
             }
         }
 

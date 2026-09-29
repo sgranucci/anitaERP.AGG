@@ -17,7 +17,7 @@ class SolicitudpagoSincronizarAnitaCommand extends Command
 
     public function handle(SolicitudpagoAnitaSyncService $syncService): int
     {
-        if (! config('solicitudpago.sync_anita.habilitado', true)) {
+        if (! config('solicitudpago.sync_anita.habilitado', false)) {
             $this->warn('Sync Anita SP deshabilitado (solicitudpago.sync_anita.habilitado).');
 
             return self::SUCCESS;

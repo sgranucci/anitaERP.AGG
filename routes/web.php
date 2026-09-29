@@ -1060,6 +1060,8 @@ Route::middleware('auth')->group(function () {
     Route::get('notificaciones/contador', 'Configuracion\AnitaNotificacionController@contador')->name('notificaciones_contador');
     Route::post('notificaciones/leer-todas', 'Configuracion\AnitaNotificacionController@leerTodas')->name('notificaciones_leer_todas');
     Route::post('notificaciones/{id}/leer', 'Configuracion\AnitaNotificacionController@leer')->name('notificaciones_leer');
+    Route::post('mis-aprobaciones/requisicion-sala/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarRequisicionSala')->name('aprobar_requisicion_sala_bandeja');
+    Route::post('mis-aprobaciones/requisicion-sala/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarRequisicionSala')->name('rechazar_requisicion_sala_bandeja');
     Route::post('mis-aprobaciones/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobar')->name('aprobar_mis_aprobacion_arbol');
     Route::post('mis-aprobaciones/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazar')->name('rechazar_mis_aprobacion_arbol');
     Route::post('mis-aprobaciones/{id}/descartar-huerfano', 'Configuracion\MisAprobacionesArbolController@descartarHuerfano')->name('descartar_huerfano_mis_aprobacion_arbol');

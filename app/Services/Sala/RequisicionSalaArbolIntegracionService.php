@@ -4,10 +4,12 @@ namespace App\Services\Sala;
 
 use App\Mail\Configuracion\MailArbolAprobacion;
 use App\Mail\Sala\MailRequisicionSalaRechazoArbol;
+use App\Models\Admin\Rol;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Sala\RequisicionSala;
 use App\Models\Sala\RequisicionSalaEstado;
+use App\Models\Seguridad\Usuario;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface;
@@ -71,6 +73,7 @@ class RequisicionSalaArbolIntegracionService
         string $operacion,
         callable $leeAprobacionComprobante,
         callable $buscaProximoNivel,
+        bool $enviarCorreo = true,
     ): int {
         $req = $this->requisicionSalaRepository->find($comprobanteId);
         if (! $req) {
@@ -87,8 +90,14 @@ class RequisicionSalaArbolIntegracionService
 
         $arbol = $arbolaprobacion->first();
         $arrayReplace = ArbolAprobacionEnlaceSupport::CARACTERES_REEMPLAZO;
-        $centrocostoArbol = (int) $req->centrocosto_id;
         $tipoarbol = $this->nombreTipoArbol();
+        $centrocostoArbol = $this->resolverCentrocostoArbol(
+            $req,
+            $arbol,
+            $tipoarbol,
+            $leeAprobacionComprobante,
+            $buscaProximoNivel
+        );
 
         while (true) {
             $req = $this->requisicionSalaRepository->find($comprobanteId);
@@ -169,7 +178,9 @@ class RequisicionSalaArbolIntegracionService
                 $linkAprobacion = ArbolAprobacionEnlaceSupport::enlaceAprobar($ip, 'RS', $comprobanteId, $hashAprobacion);
                 $linkRechazo = ArbolAprobacionEnlaceSupport::enlaceRechazo($ip, 'RS', $comprobanteId, $hashRechazo);
 
-                $this->enviaCorreo($uid, $req, $linkAprobacion, $linkRechazo, $linkVisualizar, $mailExtras);
+                if ($enviarCorreo) {
+                    $this->enviaCorreo($uid, $req, $linkAprobacion, $linkRechazo, $linkVisualizar, $mailExtras);
+                }
 
                 $this->arbolaprobacionMovimientoRepository->create([
                     'arbolaprobacion_id' => $arbol->id,
@@ -388,5 +399,105 @@ class RequisicionSalaArbolIntegracionService
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * El nivel se busca primero con el CC de la cabecera (el del usuario).
+     * Si ese CC no tiene nivel, se usa el CC de los roles asignados al solicitante.
+     */
+    private function resolverCentrocostoArbol(
+        RequisicionSala $req,
+        Arbolaprobacion $arbol,
+        string $tipoarbol,
+        callable $leeAprobacionComprobante,
+        callable $buscaProximoNivel,
+    ): int {
+        $candidatos = $this->centrosCostoParaArbol($req);
+        $fallback = (int) ($req->centrocosto_id ?? 0);
+        if ($candidatos === []) {
+            return $fallback;
+        }
+
+        $totales = RequisicionSalaTotalesCabecera::desdeModelo($req);
+        $nivelActual = (int) ($leeAprobacionComprobante($tipoarbol, (int) $req->id)['nivelactual'] ?? 0);
+
+        foreach ($candidatos as $cc) {
+            $prox = $buscaProximoNivel(
+                $arbol,
+                $cc,
+                $nivelActual,
+                $req->fecha,
+                $totales['monto'],
+                $totales['moneda_id']
+            );
+            if ((int) ($prox['proximonivel'] ?? 0) !== 0) {
+                return (int) $cc;
+            }
+        }
+
+        return $fallback > 0 ? $fallback : (int) $candidatos[0];
+    }
+
+    /**
+     * CC de la cabecera, el de la ficha del solicitante y el de sus roles.
+     *
+     * @return list<int>
+     */
+    public function centrosCostoParaArbol(RequisicionSala $req): array
+    {
+        $ids = [];
+        $doc = (int) ($req->centrocosto_id ?? 0);
+        if ($doc > 0) {
+            $ids[] = $doc;
+        }
+
+        $usuarioId = (int) ($req->usuario_id ?: $req->creousuario_id);
+        foreach ($this->centrosCostoDeUsuario($usuarioId) as $cc) {
+            $ids[] = $cc;
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * Centro de costo de la ficha y el de cada rol asignado.
+     *
+     * @return list<int>
+     */
+    public function centrosCostoDeUsuario(int $usuarioId): array
+    {
+        if ($usuarioId <= 0) {
+            return [];
+        }
+
+        $usuario = Usuario::query()->find($usuarioId);
+        if (! $usuario) {
+            return [];
+        }
+
+        $ids = [];
+        $ccUsuario = (int) ($usuario->centrocosto_id ?? 0);
+        if ($ccUsuario > 0) {
+            $ids[] = $ccUsuario;
+        }
+
+        if (Auth::check() && (int) Auth::id() === $usuarioId) {
+            $rolActivoId = (int) (session('rol_id') ?? 0);
+            if ($rolActivoId > 0) {
+                $ccRol = (int) (Rol::query()->whereKey($rolActivoId)->value('centrocosto_id') ?? 0);
+                if ($ccRol > 0) {
+                    $ids[] = $ccRol;
+                }
+            }
+        }
+
+        foreach ($usuario->roles()->orderBy('rol.id')->pluck('rol.centrocosto_id') as $cc) {
+            $cc = (int) $cc;
+            if ($cc > 0) {
+                $ids[] = $cc;
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 }

@@ -803,6 +803,23 @@ class AsientoRepository implements AsientoRepositoryInterface
 					|| AsientoAnitaFerliSupport::usaEsquemaCtamovReducido()
 					|| AsientoAnitaInterformingSupport::usaEsquemaCtamovReducido();
 
+				$nroLineaAnita = (int) ($request['mov_anita_nro'][$i_movimiento] ?? 0);
+				$ocLineaAnita = (int) ($request['mov_nro_ordencompra'][$i_movimiento] ?? 0);
+				if ($nroLineaAnita > 0) {
+					$tipoLinea = strtoupper(trim((string) ($request['mov_anita_tipo'][$i_movimiento] ?? '')));
+					$tipoIns = $tipoLinea !== '' ? substr(preg_replace('/[^A-Za-z0-9]/', '', $tipoLinea), 0, 10) : $tipo;
+					$letraIns = trim((string) ($request['mov_anita_letra'][$i_movimiento] ?? ''));
+					$letraIns = $letraIns !== '' ? substr(preg_replace('/[^A-Za-z0-9]/', '', $letraIns), 0, 3) : $letra;
+					$sucursalIns = (int) ($request['mov_anita_sucursal'][$i_movimiento] ?? 0);
+					$nroIns = $nroLineaAnita;
+				} else {
+					$tipoIns = $tipo;
+					$letraIns = $letra;
+					$sucursalIns = $sucursal;
+					$nroIns = $nro;
+				}
+				$ocIns = $ocLineaAnita > 0 ? $ocLineaAnita : $numeroOrdenCompra;
+
 				$data = array( 'tabla' => $this->tableAnita[0], 
 						'acc' => 'insert',
 						'sistema' => 'contab',
@@ -838,10 +855,10 @@ class AsientoRepository implements AsientoRepositoryInterface
 						'".$d_h."',
 						'".$cuentacontable."',
 						'".$fecha."',
-						'".$tipo."',
-						'".$letra."',
-						'".$sucursal."',
-						'".$nro."',
+						'".$tipoIns."',
+						'".$letraIns."',
+						'".$sucursalIns."',
+						'".$nroIns."',
 						'".abs($monto)."',
 						'".$observacion."',
 						'".($cotizaciones[$i_movimiento] ?? 0)."',
@@ -855,7 +872,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 						'".' '."',
 						'".'0'."',
 						'".' '."',
-						".$numeroOrdenCompra." ")
+						".$ocIns." ")
       			);
 				if (isset($this->path_sistema))
 					$data['path_sistema'] = $this->path_sistema;

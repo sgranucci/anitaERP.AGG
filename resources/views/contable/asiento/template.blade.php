@@ -61,6 +61,11 @@
                 <span class="asiento-detalle-preview is-empty" title="">—</span>
             </div>
         </td>
+        @include('contable.asiento.partials.documento_linea', [
+            'mov' => null,
+            'indice' => null,
+            'ocPorNumero' => [],
+        ])
         <td>
             <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cuenta tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>

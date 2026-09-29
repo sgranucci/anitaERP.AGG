@@ -44,6 +44,21 @@ class SolicitudpagoAnitaSyncService
 
     public function sincronizar(): array
     {
+        if (! config('solicitudpago.sync_anita.habilitado', false)) {
+            Log::info('solicitudpago.anita_sync.omitido', [
+                'motivo' => 'Anita apagado para solicitudes de pago',
+            ]);
+
+            return [
+                'cabeceras' => 0,
+                'creados' => 0,
+                'actualizados' => 0,
+                'madres_desde_cuotas' => 0,
+                'arbol_pendientes_cerrados' => 0,
+                'omitido' => true,
+            ];
+        }
+
         ini_set('max_execution_time', '900');
         ini_set('memory_limit', '1024M');
 
@@ -319,6 +334,15 @@ class SolicitudpagoAnitaSyncService
             return;
         }
         $filtro = array_flip($soloSpIds);
+        // solpc_empresa = 0: la línea es de la empresa de la cabecera (Anita no cargó empresa en esa pierna).
+        $empresaCodigoPorSpId = Solicitudpago::query()
+            ->whereIn('id', $soloSpIds)
+            ->with('empresas:id,codigo')
+            ->get(['id', 'empresa_id'])
+            ->mapWithKeys(fn (Solicitudpago $sp) => [
+                (int) $sp->id => (int) (optional($sp->empresas)->codigo ?? 0),
+            ])
+            ->all();
 
         $filas = $this->listar($api, $sistema, 'solpagocta',
             'solpc_id, solpc_empresa, solpc_cuenta, solpc_ccosto, solpc_d_h, solpc_monto'
@@ -335,7 +359,10 @@ class SolicitudpagoAnitaSyncService
             $idsTocados[$spId] = true;
 
             $empresaCodigo = (int) ($row->solpc_empresa ?? 0);
-            $empresaId = $mapas['empresas'][$empresaCodigo] ?? null;
+            if ($empresaCodigo <= 0) {
+                $empresaCodigo = (int) ($empresaCodigoPorSpId[$spId] ?? 0);
+            }
+            $empresaId = $mapas['empresas'][$empresaCodigo] ?? $mapas['empresas'][(string) $empresaCodigo] ?? null;
             if (! $empresaId) {
                 continue;
             }

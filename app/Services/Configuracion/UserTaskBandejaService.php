@@ -653,13 +653,17 @@ class UserTaskBandejaService
         $fecha = $row['fecha_envio'] ?? null;
         $sortTs = $fecha ? Carbon::parse($fecha)->getTimestamp() : (int) ($row['movimiento_id'] ?? 0);
 
+        $movimientoId = (int) ($row['movimiento_id'] ?? 0);
+
         return array_merge($row, [
             'fuente' => self::FUENTE_ARBOL,
             'fuente_label' => self::FUENTES[self::FUENTE_ARBOL],
-            'task_key' => 'arbol:'.(int) ($row['movimiento_id'] ?? 0),
+            'task_key' => $movimientoId > 0
+                ? 'arbol:'.$movimientoId
+                : 'arbol:rs:'.(int) ($row['comprobante_id'] ?? 0),
             'sort_ts' => $sortTs,
             'acciones_inline' => true,
-            'muestra_reenviar' => ! empty($row['puede_aprobar']),
+            'muestra_reenviar' => ! empty($row['puede_aprobar']) && empty($row['sin_movimiento']),
             'muestra_descartar' => empty($row['documento_existe']),
             'url_detalle' => url('mis-aprobaciones/detalle/arbol/'.(int) ($row['movimiento_id'] ?? 0)),
             'es_reemplazo' => ! empty($row['reemplazo_de']),

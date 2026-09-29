@@ -168,6 +168,8 @@
                     <th style="width: 12%;" class="text-right">Haber</th>
                     <th style="width: 9%;" class="text-right">Cotizaci&oacute;n</th>
                     <th style="width: 12%;">Detalle</th>
+                    <th style="width: 11%;">Comprobante</th>
+                    <th style="width: 8%;">O.Compra</th>
                     <th style="width: 4%;"></th>
                 </tr>
             </thead>
@@ -262,6 +264,11 @@
                                       title="{{ $detalleTrim }}">{{ $detalleTrim !== '' ? $detalleTrim : '—' }}</span>
                             </div>
                         </td>
+                        @include('contable.asiento.partials.documento_linea', [
+                            'mov' => is_object($cuenta) ? $cuenta : null,
+                            'indice' => $loop->index,
+                            'ocPorNumero' => $ocPorNumero ?? [],
+                        ])
                         <td>
                             <button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_cuenta tooltipsC">
                                 <i class="fa fa-times-circle text-danger"></i>
@@ -280,7 +287,7 @@
                     <td>
                         <input type="text" id="totalhaber" name="totalhaber" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ old('totalhaber', $totalHaberAsientoFormTxt) }}" />
                     </td>
-                    <td colspan="3"></td>
+                    <td colspan="5"></td>
                 </tr>
             </tfoot>
         </table>

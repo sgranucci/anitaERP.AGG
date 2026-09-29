@@ -17,6 +17,7 @@ use App\Support\Contable\AsientoAnitaMetadatosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Importa asientos Anita (ctamov + detalle subdiario/subhist) hacia ERP.
@@ -87,6 +88,7 @@ final class AnitaAsientoImportService
         int $usuarioId = 1,
         ?callable $logger = null,
         bool $importarResumenSinDetalle = false,
+        bool $soloDocumentos = false,
     ): array {
         $desde = Carbon::createFromFormat('Y-m-d', $desdeYmd)->startOfDay();
         $hasta = Carbon::createFromFormat('Y-m-d', $hastaYmd)->endOfDay();
@@ -157,6 +159,7 @@ final class AnitaAsientoImportService
                     $usuarioId,
                     $logger,
                     $importarResumenSinDetalle,
+                    $soloDocumentos,
                 );
 
                 $this->mergeResumen($resumen, $bloque);
@@ -184,6 +187,7 @@ final class AnitaAsientoImportService
         int $usuarioId,
         ?callable $logger,
         bool $importarResumenSinDetalle = false,
+        bool $soloDocumentos = false,
     ): array {
         $out = $this->resumenVacio();
         $data = $this->bridgeReader->cargarBloque($empresaAnita, $fechaDesdeYmd, $fechaHastaYmd);
@@ -228,6 +232,7 @@ final class AnitaAsientoImportService
                 $reemplazarDiferentes,
                 $out,
                 $item['origen'],
+                $soloDocumentos,
             );
         }
 
@@ -924,6 +929,7 @@ final class AnitaAsientoImportService
         bool $reemplazarDiferentes,
         array &$out,
         string $origen,
+        bool $soloDocumentos = false,
     ): void {
         $nro = (int) $asientoPlan['numeroasiento'];
         $existente = $existentes[$nro] ?? null;
@@ -932,7 +938,8 @@ final class AnitaAsientoImportService
             $out['a_crear']++;
             $out['a_crear_por_origen'][$origen] = ($out['a_crear_por_origen'][$origen] ?? 0) + 1;
             $out['lineas_a_crear'] += count($asientoPlan['movimientos']);
-            if (! $dryRun) {
+            $out['pendientes_crear'][] = $this->fichaPendiente($asientoPlan, $origen, null);
+            if (! $dryRun && ! $soloDocumentos) {
                 $this->persistirNuevo($asientoPlan);
                 $out['creados']++;
             }
@@ -978,7 +985,7 @@ final class AnitaAsientoImportService
             $completarNroAsiento = (int) ($asientoPlan['anita_nro_asiento'] ?? 0) > 0
                 && (int) ($existente['anita_nro_asiento'] ?? 0) <= 0
                 && ($completarMetadatos || AsientoAnitaMetadatosSupport::esDetalle($origenExistente));
-            if (! $dryRun && ($completarMetadatos || $completarNroAsiento)) {
+            if (! $dryRun && ! $soloDocumentos && ($completarMetadatos || $completarNroAsiento)) {
                 $cambios = $completarMetadatos
                     ? $this->metadatosAnitaDesdePlan($asientoPlan)
                     : ['anita_nro_asiento' => (int) $asientoPlan['anita_nro_asiento']];
@@ -994,12 +1001,15 @@ final class AnitaAsientoImportService
                 }
             }
 
+            $this->completarDocumentosLinea($existente, $asientoPlan, $dryRun, $out);
+
             return;
         }
 
         // decision = reemplazar
         $out['duplicados_reemplazar']++;
-        $aplicar = $anitaVerdad || $reemplazarDiferentes;
+        $out['pendientes_reemplazar'][] = $this->fichaPendiente($asientoPlan, $origen, $existente, $analisis['motivo']);
+        $aplicar = ! $soloDocumentos && ($anitaVerdad || $reemplazarDiferentes);
         if (! $dryRun && $aplicar) {
             $this->reemplazarExistente(
                 (int) $existente['id'],
@@ -1087,6 +1097,53 @@ final class AnitaAsientoImportService
     }
 
     /**
+     * Ficha para revisar antes de crear o reescribir. No persiste.
+     *
+     * @param  array<string, mixed>  $plan
+     * @param  array<string, mixed>|null  $existente
+     * @return array<string, mixed>
+     */
+    private function fichaPendiente(array $plan, string $origen, ?array $existente, string $motivo = ''): array
+    {
+        return [
+            'numeroasiento' => (int) ($plan['numeroasiento'] ?? 0),
+            'empresa_id' => (int) ($plan['empresa_id'] ?? 0),
+            'origen' => $origen,
+            'fecha_anita' => (string) ($plan['fecha'] ?? ''),
+            'observacion' => (string) ($plan['observacion'] ?? ''),
+            'erp_id' => (int) ($existente['id'] ?? 0),
+            'fecha_erp' => (string) ($existente['fecha'] ?? ''),
+            'motivo' => $motivo,
+            'anita' => $this->lineasRevision($plan['movimientos'] ?? []),
+            'erp' => $this->lineasRevision($existente['movimientos_documento'] ?? []),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $movimientos
+     * @return list<array<string, mixed>>
+     */
+    private function lineasRevision(array $movimientos): array
+    {
+        $out = [];
+        foreach ($movimientos as $mov) {
+            $nro = (int) ($mov['anita_nro'] ?? 0);
+            $out[] = [
+                'cuenta_id' => (int) ($mov['cuentacontable_id'] ?? 0),
+                'monto' => round((float) ($mov['monto'] ?? 0), 2),
+                'obs' => trim((string) ($mov['observacion'] ?? '')),
+                'tipo' => $nro > 0 ? (string) ($mov['anita_tipo'] ?? '') : '',
+                'letra' => $nro > 0 ? (string) ($mov['anita_letra'] ?? '') : '',
+                'sucursal' => $nro > 0 ? (int) ($mov['anita_sucursal'] ?? 0) : 0,
+                'nro' => $nro,
+                'oc' => (int) ($mov['nro_ordencompra'] ?? 0),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $movimientos
      */
     private function firmaMovimientos(array $movimientos): string
@@ -1122,15 +1179,7 @@ final class AnitaAsientoImportService
             ], $this->metadatosAnitaDesdePlan($plan)));
 
             foreach ($plan['movimientos'] as $mov) {
-                Asiento_Movimiento::query()->create([
-                    'asiento_id' => $asiento->id,
-                    'cuentacontable_id' => $mov['cuentacontable_id'],
-                    'centrocosto_id' => $mov['centrocosto_id'],
-                    'monto' => $mov['monto'],
-                    'moneda_id' => $mov['moneda_id'],
-                    'cotizacion' => $mov['cotizacion'],
-                    'observacion' => $mov['observacion'],
-                ]);
+                Asiento_Movimiento::query()->create($this->atributosMovimiento((int) $asiento->id, $mov));
             }
         });
     }
@@ -1153,29 +1202,177 @@ final class AnitaAsientoImportService
                 return;
             }
             $cabecera = [
-                'tipoasiento_id' => $plan['tipoasiento_id'],
-                'fecha' => $plan['fecha'],
-                'observacion' => $plan['observacion'],
-                'usuario_id' => $plan['usuario_id'],
                 'estado_aprobacion' => Asiento::ESTADO_APROBACION_CONFIRMADO,
             ];
             if ($persistirMetadatosAnita) {
-                $cabecera = array_merge($cabecera, $this->metadatosAnitaDesdePlan($plan));
+                $cabecera = array_merge($cabecera, [
+                    'tipoasiento_id' => $plan['tipoasiento_id'],
+                    'fecha' => $plan['fecha'],
+                    'observacion' => $plan['observacion'],
+                    'usuario_id' => $plan['usuario_id'],
+                ], $this->metadatosAnitaDesdePlan($plan));
             }
             $asiento->update($cabecera);
 
             foreach ($plan['movimientos'] as $mov) {
-                Asiento_Movimiento::query()->create([
-                    'asiento_id' => $asientoId,
-                    'cuentacontable_id' => $mov['cuentacontable_id'],
-                    'centrocosto_id' => $mov['centrocosto_id'],
-                    'monto' => $mov['monto'],
-                    'moneda_id' => $mov['moneda_id'],
-                    'cotizacion' => $mov['cotizacion'],
-                    'observacion' => $mov['observacion'],
-                ]);
+                Asiento_Movimiento::query()->create($this->atributosMovimiento($asientoId, $mov));
             }
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $mov
+     * @return array<string, mixed>
+     */
+    private function atributosMovimiento(int $asientoId, array $mov): array
+    {
+        $attrs = [
+            'asiento_id' => $asientoId,
+            'cuentacontable_id' => $mov['cuentacontable_id'],
+            'centrocosto_id' => $mov['centrocosto_id'],
+            'monto' => $mov['monto'],
+            'moneda_id' => $mov['moneda_id'],
+            'cotizacion' => $mov['cotizacion'],
+            'observacion' => $mov['observacion'],
+        ];
+
+        foreach (['anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'nro_ordencompra'] as $columna) {
+            if (Schema::hasColumn('asiento_movimiento', $columna)) {
+                $attrs[$columna] = $mov[$columna] ?? null;
+            }
+        }
+
+        return $attrs;
+    }
+
+    /**
+     * Factura y OC del renglón Anita. La cabecera del asiento se queda con la primera línea.
+     *
+     * @return array{anita_tipo: ?string, anita_letra: ?string, anita_sucursal: ?int, anita_nro: ?int, nro_ordencompra: ?int}
+     */
+    private function documentoMovimientoDesdeLinea(object $linea, bool $esCtamov): array
+    {
+        if ($esCtamov) {
+            $tipo = strtoupper(trim((string) ($linea->ctav_tipo ?? '')));
+            $letra = trim((string) ($linea->ctav_letra ?? ''));
+            $sucursal = (int) ($linea->ctav_sucursal ?? 0);
+            $nro = (int) ($linea->ctav_nro ?? 0);
+            $oc = (int) ($linea->ctav_o_compra ?? 0);
+        } else {
+            $tipo = strtoupper(trim((string) ($linea->subd_tipo ?? '')));
+            $letra = trim((string) ($linea->subd_letra ?? ''));
+            $sucursal = (int) ($linea->subd_sucursal ?? 0);
+            $nro = (int) ($linea->subd_nro ?? 0);
+            $oc = (int) ($linea->subd_o_compra ?? 0);
+        }
+
+        return [
+            'anita_tipo' => $nro > 0 && $tipo !== '' ? $tipo : null,
+            'anita_letra' => $nro > 0 && $letra !== '' ? $letra : null,
+            'anita_sucursal' => $nro > 0 ? $sucursal : null,
+            'anita_nro' => $nro > 0 ? $nro : null,
+            'nro_ordencompra' => $oc > 0 ? $oc : null,
+        ];
+    }
+
+    /**
+     * Si el asiento ya coincide en fecha y montos, completa factura y OC por renglón
+     * sin reescribir importes (no toca saldos).
+     *
+     * @param  array<string, mixed>  $existente
+     * @param  array<string, mixed>  $plan
+     * @param  array<string, mixed>  $out
+     */
+    private function completarDocumentosLinea(array $existente, array $plan, bool $dryRun, array &$out): void
+    {
+        if (! Schema::hasColumn('asiento_movimiento', 'anita_nro')) {
+            return;
+        }
+
+        $erpMovs = $existente['movimientos_documento'] ?? [];
+        $planMovs = $plan['movimientos'] ?? [];
+        if ($erpMovs === [] || $planMovs === []) {
+            return;
+        }
+
+        $usados = [];
+        $updates = [];
+        foreach ($planMovs as $planMov) {
+            $idx = $this->indiceMovimientoEmparejado($erpMovs, $usados, $planMov);
+            if ($idx === null) {
+                return;
+            }
+            $usados[$idx] = true;
+            $erp = $erpMovs[$idx];
+            $cols = [];
+            foreach (['anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'nro_ordencompra'] as $columna) {
+                $nuevo = $planMov[$columna] ?? null;
+                if ($nuevo === null || $nuevo === '' || $nuevo === 0) {
+                    continue;
+                }
+                if ((string) ($erp[$columna] ?? '') !== (string) $nuevo) {
+                    $cols[$columna] = $nuevo;
+                }
+            }
+            $movId = (int) ($erp['id'] ?? 0);
+            if ($cols !== [] && $movId > 0) {
+                $updates[$movId] = $cols;
+            }
+        }
+
+        if ($updates === []) {
+            return;
+        }
+
+        $out['asientos_documento_a_actualizar'] = (int) ($out['asientos_documento_a_actualizar'] ?? 0) + 1;
+        $out['documentos_linea_a_actualizar'] = (int) ($out['documentos_linea_a_actualizar'] ?? 0) + count($updates);
+        if (count($out['documentos_linea_detalle'] ?? []) < 40) {
+            $out['documentos_linea_detalle'][] = [
+                'numeroasiento' => (int) ($plan['numeroasiento'] ?? $existente['numeroasiento'] ?? 0),
+                'erp_id' => (int) ($existente['id'] ?? 0),
+                'lineas' => count($updates),
+            ];
+        }
+
+        if ($dryRun) {
+            return;
+        }
+
+        foreach ($updates as $movId => $cols) {
+            DB::table('asiento_movimiento')->where('id', $movId)->update($cols);
+        }
+        $out['documentos_linea_actualizados'] = (int) ($out['documentos_linea_actualizados'] ?? 0) + count($updates);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $erpMovs
+     * @param  array<int, true>  $usados
+     * @param  array<string, mixed>  $plan
+     */
+    private function indiceMovimientoEmparejado(array $erpMovs, array $usados, array $plan): ?int
+    {
+        $obsPlan = trim((string) ($plan['observacion'] ?? ''));
+        $candidato = null;
+        foreach ($erpMovs as $i => $erp) {
+            if (isset($usados[$i])) {
+                continue;
+            }
+            if ((int) ($erp['cuentacontable_id'] ?? 0) !== (int) ($plan['cuentacontable_id'] ?? 0)) {
+                continue;
+            }
+            if (abs(round((float) ($erp['monto'] ?? 0), 4) - round((float) ($plan['monto'] ?? 0), 4)) > 0.0001) {
+                continue;
+            }
+            $obsErp = trim((string) ($erp['observacion'] ?? ''));
+            if ($obsPlan !== '' && $obsErp === $obsPlan) {
+                return $i;
+            }
+            if ($candidato === null) {
+                $candidato = $i;
+            }
+        }
+
+        return $candidato;
     }
 
     /**
@@ -1246,14 +1443,14 @@ final class AnitaAsientoImportService
                 continue;
             }
 
-            $movimientos[] = [
-                'cuentacontable_id' => $cuentaId,
-                'centrocosto_id' => $this->resolverCentrocosto((int) ($linea->ctav_ccosto ?? 0)),
-                'monto' => $imp['dh'] === 'D' ? (float) $imp['importe'] : -1 * (float) $imp['importe'],
-                'moneda_id' => $this->resolverMoneda((string) ($linea->ctav_cod_mon ?? '1'), $monedaDefaultId),
-                'cotizacion' => (float) ($linea->ctav_cotizacion ?? 1),
-                'observacion' => trim((string) ($linea->ctav_desc_mov ?? '')),
-            ];
+                $movimientos[] = array_merge([
+                    'cuentacontable_id' => $cuentaId,
+                    'centrocosto_id' => $this->resolverCentrocosto((int) ($linea->ctav_ccosto ?? 0)),
+                    'monto' => $imp['dh'] === 'D' ? (float) $imp['importe'] : -1 * (float) $imp['importe'],
+                    'moneda_id' => $this->resolverMoneda((string) ($linea->ctav_cod_mon ?? '1'), $monedaDefaultId),
+                    'cotizacion' => (float) ($linea->ctav_cotizacion ?? 1),
+                    'observacion' => trim((string) ($linea->ctav_desc_mov ?? '')),
+                ], $this->documentoMovimientoDesdeLinea($linea, true));
         }
 
         if ($movimientos === []) {
@@ -1340,14 +1537,14 @@ final class AnitaAsientoImportService
                     ? (int) ($linea->subd_ccosto_cta ?? 0)
                     : (int) ($linea->subd_ccosto_con ?? 0);
 
-                $movimientos[] = [
+                $movimientos[] = array_merge([
                     'cuentacontable_id' => $cuentaId,
                     'centrocosto_id' => $this->resolverCentrocosto($ccCodigo),
                     'monto' => $imp['dh'] === 'D' ? (float) $imp['importe'] : -1 * (float) $imp['importe'],
                     'moneda_id' => $this->resolverMoneda((string) ($linea->subd_cod_mon ?? '1'), $monedaDefaultId),
                     'cotizacion' => (float) ($linea->subd_cotizacion ?? 1),
                     'observacion' => trim((string) ($linea->subd_desc_mov ?? '')),
-                ];
+                ], $this->documentoMovimientoDesdeLinea($linea, false));
             }
         }
 
@@ -1529,7 +1726,15 @@ final class AnitaAsientoImportService
             $asientos = Asiento::query()
                 ->where('empresa_id', $empresaErpId)
                 ->whereIn('numeroasiento', $chunk)
-                ->with('asiento_movimientos:id,asiento_id,cuentacontable_id,monto,moneda_id')
+                ->with(['asiento_movimientos' => function ($q) {
+                    $cols = ['id', 'asiento_id', 'cuentacontable_id', 'monto', 'moneda_id', 'observacion'];
+                    foreach (['anita_tipo', 'anita_letra', 'anita_sucursal', 'anita_nro', 'nro_ordencompra'] as $columna) {
+                        if (Schema::hasColumn('asiento_movimiento', $columna)) {
+                            $cols[] = $columna;
+                        }
+                    }
+                    $q->select($cols)->orderBy('id');
+                }])
                 ->get([
                     'id', 'numeroasiento', 'fecha',
                     'venta_id', 'movimientostock_id', 'cobranza_id', 'compra_id',
@@ -1559,12 +1764,24 @@ final class AnitaAsientoImportService
 
                 $suma = 0.0;
                 $movs = [];
+                $movsDocumento = [];
                 foreach ($asiento->asiento_movimientos as $mov) {
                     $suma += (float) $mov->monto;
                     $movs[] = [
                         'cuentacontable_id' => (int) $mov->cuentacontable_id,
                         'moneda_id' => (int) ($mov->moneda_id ?? 0),
                         'monto' => (float) $mov->monto,
+                    ];
+                    $movsDocumento[] = [
+                        'id' => (int) $mov->id,
+                        'cuentacontable_id' => (int) $mov->cuentacontable_id,
+                        'monto' => (float) $mov->monto,
+                        'observacion' => (string) ($mov->observacion ?? ''),
+                        'anita_tipo' => $mov->anita_tipo ?? null,
+                        'anita_letra' => $mov->anita_letra ?? null,
+                        'anita_sucursal' => $mov->anita_sucursal ?? null,
+                        'anita_nro' => $mov->anita_nro ?? null,
+                        'nro_ordencompra' => $mov->nro_ordencompra ?? null,
                     ];
                 }
 
@@ -1578,6 +1795,7 @@ final class AnitaAsientoImportService
                     'lineas' => count($movs),
                     'suma_monto' => round($suma, 4),
                     'firma_movimientos' => $this->firmaMovimientos($movs),
+                    'movimientos_documento' => $movsDocumento,
                 ];
             }
         }
@@ -1722,6 +1940,12 @@ final class AnitaAsientoImportService
             'creados' => 0,
             'reemplazados' => 0,
             'metadatos_anita_actualizados' => 0,
+            'asientos_documento_a_actualizar' => 0,
+            'documentos_linea_a_actualizar' => 0,
+            'documentos_linea_actualizados' => 0,
+            'documentos_linea_detalle' => [],
+            'pendientes_crear' => [],
+            'pendientes_reemplazar' => [],
             'duplicados' => 0,
             'duplicados_dejar' => 0,
             'duplicados_reemplazar' => 0,
@@ -1747,6 +1971,7 @@ final class AnitaAsientoImportService
             'ctamov_filas_leidas', 'subdiario_filas_leidas', 'subhist_filas_leidas',
             'ctamov_excluidos_cierre', 'ctamov_excluidos_lineas', 'ctamov_resumen_sin_detalle',
             'a_crear', 'lineas_a_crear', 'creados', 'reemplazados', 'metadatos_anita_actualizados',
+            'asientos_documento_a_actualizar', 'documentos_linea_a_actualizar', 'documentos_linea_actualizados',
             'duplicados', 'duplicados_dejar', 'duplicados_reemplazar',
             'omitidos_sin_numero', 'omitidos_sin_tipo', 'omitidos_sin_movimientos',
             'lineas_sin_importe',
@@ -1764,6 +1989,18 @@ final class AnitaAsientoImportService
             $total['tipos_faltantes'][$abr] = ($total['tipos_faltantes'][$abr] ?? 0) + (int) $cant;
         }
 
+        $total['documentos_linea_detalle'] = array_merge(
+            $total['documentos_linea_detalle'] ?? [],
+            $bloque['documentos_linea_detalle'] ?? [],
+        );
+        $total['pendientes_crear'] = array_merge(
+            $total['pendientes_crear'] ?? [],
+            $bloque['pendientes_crear'] ?? [],
+        );
+        $total['pendientes_reemplazar'] = array_merge(
+            $total['pendientes_reemplazar'] ?? [],
+            $bloque['pendientes_reemplazar'] ?? [],
+        );
         $total['duplicados_detalle'] = array_merge(
             $total['duplicados_detalle'] ?? [],
             $bloque['duplicados_detalle'] ?? [],

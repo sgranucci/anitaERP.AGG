@@ -26,6 +26,7 @@ use App\Support\Contable\AsientoListadoFiltros;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
 use App\Support\Contable\AsientoReferenciaAnitaSupport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use Exception;
@@ -357,6 +358,7 @@ class AsientoController extends Controller
 
 		$data = $this->asientoRepository->find($id);
         $asiento_referencias = AsientoReferenciaAnitaSupport::etiquetasDesdeAsiento($data);
+        $ocPorNumero = $this->ocPorNumeroDesdeMovimientos($data->asiento_movimientos ?? []);
 
         $tipoasiento_query = $this->tipoasientoRepository->all();
         $moneda_query = $this->monedaRepository->all();
@@ -367,6 +369,7 @@ class AsientoController extends Controller
 
         return view('contable.asiento.editar', compact('data',
                                                     'asiento_referencias',
+                                                    'ocPorNumero',
                                                     'tipoasiento_query', 'moneda_query',
                                                     'empresa_query', 'cuentacontable_query',
                                                     'centrocosto_query', 'filtrosQuery'));
@@ -649,5 +652,34 @@ class AsientoController extends Controller
             $busquedaRuta,
             $empresaDefault ? (int) $empresaDefault : null
         );
+    }
+
+    /**
+     * numeroordencompra => id, para enlazar la OC original de cada renglón.
+     *
+     * @param  iterable<mixed>  $movimientos
+     * @return array<int|string, int>
+     */
+    private function ocPorNumeroDesdeMovimientos(iterable $movimientos): array
+    {
+        if (! Schema::hasTable('ordencompra') || ! Schema::hasColumn('asiento_movimiento', 'nro_ordencompra')) {
+            return [];
+        }
+
+        $numeros = [];
+        foreach ($movimientos as $mov) {
+            $nro = (int) (is_object($mov) ? ($mov->nro_ordencompra ?? 0) : 0);
+            if ($nro > 0) {
+                $numeros[$nro] = $nro;
+            }
+        }
+        if ($numeros === []) {
+            return [];
+        }
+
+        return DB::table('ordencompra')
+            ->whereIn('numeroordencompra', array_values($numeros))
+            ->pluck('id', 'numeroordencompra')
+            ->all();
     }
 }

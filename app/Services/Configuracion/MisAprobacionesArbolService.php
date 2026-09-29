@@ -4,10 +4,15 @@ namespace App\Services\Configuracion;
 
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
+use App\Models\Configuracion\Arbolaprobacion_Nivel;
+use App\Models\Sala\RequisicionSala;
+use App\Models\Sala\RequisicionSalaEstado;
 use App\Models\Solicitudpago\Solicitudpago;
+use App\Services\Sala\RequisicionSalaArbolIntegracionService;
 use App\Support\Configuracion\ArbolAprobacionContextoSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Navegacion\ModoConsultaUrlSupport;
+use App\Support\Sala\RequisicionSalaTotalesCabecera;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -72,7 +77,29 @@ class MisAprobacionesArbolService
             }
         }
 
+        if ($tipoFiltro === '' || $tipoFiltro === 'RS') {
+            foreach ($this->requisicionesSalaVisiblesPorCentros($usuarioId) as $row) {
+                $items->push($row);
+            }
+        }
+
         return $items->sortByDesc(fn (array $row) => (int) ($row['movimiento_id'] ?? 0))->values();
+    }
+
+    /**
+     * @return array{mensaje: string}
+     */
+    public function aprobarRequisicionSalaVisible(int $requisicionSalaId, int $usuarioId, ?string $observacion = null): array
+    {
+        $movId = $this->asegurarMovimientoSalaVisible($requisicionSalaId, $usuarioId);
+
+        return $this->aprobar($movId, $usuarioId, $observacion);
+    }
+
+    public function rechazarRequisicionSalaVisible(int $requisicionSalaId, int $usuarioId, ?string $observacion = null): void
+    {
+        $movId = $this->asegurarMovimientoSalaVisible($requisicionSalaId, $usuarioId);
+        $this->rechazar($movId, $usuarioId, $observacion);
     }
 
     /**
@@ -380,6 +407,219 @@ class MisAprobacionesArbolService
         }
 
         return ['tipo' => '', 'comprobante_id' => 0, 'ruta_visualizar' => '', 'ruta_editar' => null];
+    }
+
+    /**
+     * Requisiciones de sala en PENDIENTE cuyo CC es el del usuario o el de su rol,
+     * y el firmante del nivel que calza es este usuario. No crea movimientos.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function requisicionesSalaVisiblesPorCentros(int $usuarioId): array
+    {
+        $integracion = app(RequisicionSalaArbolIntegracionService::class);
+        $centros = $integracion->centrosCostoDeUsuario($usuarioId);
+        if ($centros === []) {
+            return [];
+        }
+
+        $nombreTipo = $integracion->nombreTipoArbol();
+        $niveles = Arbolaprobacion_Nivel::query()
+            ->with('arbolaprobaciones:id,empresa_id,tipoarbol,estado')
+            ->where('usuario_id', $usuarioId)
+            ->where(function ($q) use ($centros) {
+                $q->whereNull('centrocosto_id')->orWhereIn('centrocosto_id', $centros);
+            })
+            ->whereHas('arbolaprobaciones', function ($q) use ($nombreTipo) {
+                $q->where('tipoarbol', $nombreTipo)->where('estado', 'Activo');
+            })
+            ->get();
+        if ($niveles->isEmpty()) {
+            return [];
+        }
+
+        $empresas = $niveles
+            ->map(fn (Arbolaprobacion_Nivel $nivel) => (int) ($nivel->arbolaprobaciones->empresa_id ?? 0))
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($empresas === []) {
+            return [];
+        }
+
+        $nombrePendienteDoc = RequisicionSalaEstado::$enumEstado[
+            array_search('0', array_column(RequisicionSalaEstado::$enumEstado, 'valor'))
+        ]['nombre'];
+        $nombrePendienteMov = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
+        $yaEnBandeja = Arbolaprobacion_Movimiento::query()
+            ->where('destinatariousuario_id', $usuarioId)
+            ->where('estado', $nombrePendienteMov)
+            ->whereNotNull('requisicion_sala_id')
+            ->pluck('requisicion_sala_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $requisiciones = RequisicionSala::query()
+            ->with(['centrocostos:id,nombre'])
+            ->where('estado', $nombrePendienteDoc)
+            ->whereIn('empresa_id', $empresas)
+            ->whereIn('centrocosto_id', $centros)
+            ->when($yaEnBandeja !== [], fn ($q) => $q->whereNotIn('id', $yaEnBandeja))
+            ->orderByDesc('id')
+            ->get();
+
+        $filas = [];
+        foreach ($requisiciones as $req) {
+            if (! $this->usuarioEsFirmanteSala($usuarioId, $req, $integracion)) {
+                continue;
+            }
+            $filas[] = $this->filaSalaVisiblePorCentros($req);
+        }
+
+        return $filas;
+    }
+
+    private function usuarioEsFirmanteSala(
+        int $usuarioId,
+        RequisicionSala $req,
+        RequisicionSalaArbolIntegracionService $integracion,
+    ): bool {
+        $arboles = Arbolaprobacion::query()
+            ->where('tipoarbol', $integracion->nombreTipoArbol())
+            ->where('empresa_id', (int) $req->empresa_id)
+            ->where('estado', 'Activo')
+            ->get();
+        if ($arboles->count() !== 1) {
+            return false;
+        }
+
+        $totales = RequisicionSalaTotalesCabecera::desdeModelo($req);
+        foreach ($integracion->centrosCostoParaArbol($req) as $cc) {
+            $prox = $this->arbolaprobacionService->buscaProximoNivel(
+                $arboles->first(),
+                $cc,
+                0,
+                $req->fecha,
+                $totales['monto'],
+                $totales['moneda_id']
+            );
+            $uids = array_map('intval', $prox['proximousuarios'] ?? []);
+            if (in_array($usuarioId, $uids, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filaSalaVisiblePorCentros(RequisicionSala $req): array
+    {
+        $totales = RequisicionSalaTotalesCabecera::desdeModelo($req);
+        $fecha = $req->created_at ? Carbon::parse($req->created_at) : ($req->fecha ? Carbon::parse($req->fecha) : null);
+        $diasPendiente = $fecha ? max(0, $fecha->copy()->startOfDay()->diffInDays(Carbon::now()->startOfDay())) : 0;
+        $urgencia = 'normal';
+        if ($diasPendiente >= 5) {
+            $urgencia = 'urgente';
+        } elseif ($diasPendiente >= 2) {
+            $urgencia = 'atencion';
+        }
+
+        $ccNombre = trim((string) (optional($req->centrocostos)->nombre ?? ''));
+        $urlVer = Route::has('editar_requisicion_sala')
+            ? ModoConsultaUrlSupport::route('editar_requisicion_sala', ['id' => $req->id])
+            : null;
+
+        return [
+            'movimiento_id' => 0,
+            'sin_movimiento' => true,
+            'tipo' => 'RS',
+            'etiqueta_tipo' => ArbolAprobacionContextoSupport::etiquetaTipo('RS'),
+            'comprobante_id' => (int) $req->id,
+            'numero' => (string) ($req->numerorequisicion ?? $req->id),
+            'monto' => (float) ($totales['monto'] ?? 0),
+            'moneda_abrev' => '',
+            'nivel' => 1,
+            'fecha_envio' => $fecha,
+            'dias_pendiente' => $diasPendiente,
+            'urgencia' => $urgencia,
+            'documento_existe' => true,
+            'es_aviso_pago' => false,
+            'puede_aprobar' => true,
+            'url_ver' => $urlVer,
+            'url_editar' => $urlVer,
+            'url_aprobar' => url('mis-aprobaciones/requisicion-sala/'.$req->id.'/aprobar'),
+            'url_rechazar' => url('mis-aprobaciones/requisicion-sala/'.$req->id.'/rechazar'),
+            'url_descartar' => null,
+            'url_reenviar' => null,
+            'reemplazo_de' => null,
+            'es_reemplazo' => false,
+            'sla_label' => null,
+            'sla_estado' => $urgencia,
+            'sla_fecha_limite' => null,
+            'dias_para_vencer' => null,
+            'observacion' => null,
+            'proveedor' => null,
+            'concepto' => null,
+            'detalle' => null,
+            'subtitulo' => $ccNombre !== '' ? 'Centro de costo '.$ccNombre : null,
+        ];
+    }
+
+    private function asegurarMovimientoSalaVisible(int $requisicionSalaId, int $usuarioId): int
+    {
+        if (! $this->requisicionSalaVisiblePara($usuarioId, $requisicionSalaId)) {
+            throw new RuntimeException(
+                'El pendiente ya no está disponible (puede haber sido resuelto por otro firmante o reasignado).'
+            );
+        }
+
+        $movId = $this->idMovimientoPendienteSala($requisicionSalaId, $usuarioId);
+        if ($movId > 0) {
+            return $movId;
+        }
+
+        $this->arbolaprobacionService->procesaArbolaprobacion('RS', $requisicionSalaId, 'insert', [
+            'enviar_correo' => false,
+        ]);
+
+        $movId = $this->idMovimientoPendienteSala($requisicionSalaId, $usuarioId);
+        if ($movId <= 0) {
+            throw new RuntimeException('No hay un nivel de aprobación para esta requisición de sala.');
+        }
+
+        return $movId;
+    }
+
+    private function requisicionSalaVisiblePara(int $usuarioId, int $requisicionSalaId): bool
+    {
+        foreach ($this->requisicionesSalaVisiblesPorCentros($usuarioId) as $row) {
+            if ((int) ($row['comprobante_id'] ?? 0) === $requisicionSalaId) {
+                return true;
+            }
+        }
+
+        return $this->idMovimientoPendienteSala($requisicionSalaId, $usuarioId) > 0;
+    }
+
+    private function idMovimientoPendienteSala(int $requisicionSalaId, int $usuarioId): int
+    {
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
+        return (int) (Arbolaprobacion_Movimiento::query()
+            ->where('requisicion_sala_id', $requisicionSalaId)
+            ->where('destinatariousuario_id', $usuarioId)
+            ->where('estado', $nombrePendiente)
+            ->orderByDesc('id')
+            ->value('id') ?? 0);
     }
 
     private function queryPendientes(int $usuarioId)

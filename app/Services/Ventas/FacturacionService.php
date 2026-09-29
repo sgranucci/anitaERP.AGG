@@ -3448,15 +3448,13 @@ class FacturacionService
 					$asientoFactura = $factura->asientos;
 					$asientoContable = [];
 					if ($asientoFactura) {
+						// Cada pierna trae su centro de costo. No usar el de la última
+						// línea: suele ser la cuenta del cliente, que no maneja CC.
 						$asientoContable = $this->asientoInvertidoDesdeFactura(
 							$asientoFactura,
 							(float) $totalComprobante,
 							(int) $empresa->id
 						);
-						$ultimoMov = $asientoFactura->asiento_movimientos->last();
-						if ($ultimoMov) {
-							$centrocosto_id = $ultimoMov->centrocosto_id;
-						}
 					}
 					if ($asientoContable === []) {
 						$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
@@ -7997,7 +7995,7 @@ class FacturacionService
 	 * Si las piernas tienen el mismo absoluto (caso típico 2 cuentas), usa el total
 	 * del comprobante al centavo: round(suma cruda) puede dar .39 y el total .38.
 	 *
-	 * @return list<array{empresa_id:int, cuentacontable_id:mixed, monto:float}>
+	 * @return list<array{empresa_id:int, cuentacontable_id:mixed, monto:float, centrocosto_id:?int}>
 	 */
 	private function asientoInvertidoDesdeFactura($asientoFactura, float $totalComprobante, int $empresaId): array
 	{
@@ -8029,9 +8027,11 @@ class FacturacionService
 				? (-1 * $signoFac * $totalAbs)
 				: VentaImporteDosDecimalesSupport::redondear($montoFac * -1);
 
+			$ccLinea = (int) ($movimiento->centrocosto_id ?? 0);
 			$asientoContable[] = [
 				'empresa_id' => $empresaAsiento,
 				'cuentacontable_id' => $movimiento->cuentacontable_id,
+				'centrocosto_id' => $ccLinea > 0 ? $ccLinea : null,
 				'monto' => $montoNc,
 			];
 		}

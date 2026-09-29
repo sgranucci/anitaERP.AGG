@@ -8,6 +8,7 @@ use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
+use App\Support\Contable\AsientoCentrocostoObligatorioSupport;
 use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
 use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
@@ -238,7 +239,7 @@ class IngresoEgresoSolicitudpagoSupport
                 'nombre' => $cuenta->nombre,
                 'moneda_id' => $monedaId > 0 ? $monedaId : (int) ($sp->moneda_id ?? 0),
                 'cotizacion' => self::cotizacionParaMoneda($monedaId > 0 ? $monedaId : (int) ($sp->moneda_id ?? 0), $cotizacion),
-                'centrocosto_id' => (int) ($cta->centrocosto_id ?? 0),
+                'centrocosto_id' => self::centrocostoSiLaCuentaLoRequiere($sp, $cta, $cuenta),
                 'debe' => $dh === 'D' ? $monto : '',
                 'haber' => $dh === 'H' ? $monto : '',
                 'observacion' => '',
@@ -318,11 +319,11 @@ class IngresoEgresoSolicitudpagoSupport
             $signo,
             $cc
         );
-        if ($lineasCaja === []) {
-            return;
+        if ($lineasCaja !== []) {
+            self::escribirLineasAsientoEnData($data, self::reemplazarPiernaFinanciera($lineas, $lineasCaja));
         }
 
-        self::escribirLineasAsientoEnData($data, self::reemplazarPiernaFinanciera($lineas, $lineasCaja));
+        self::aplicarCentrocostoRequeridoEnDataAsiento($data);
     }
 
     /**
@@ -383,7 +384,7 @@ class IngresoEgresoSolicitudpagoSupport
             );
         }
 
-        $cuenta = Cuentacontable::query()->find($cuentaId, ['id', 'codigo', 'nombre']);
+        $cuenta = Cuentacontable::query()->find($cuentaId, ['id', 'codigo', 'nombre', 'manejaccosto']);
         if ($cuenta === null) {
             throw new InvalidArgumentException(
                 'No se encontró la cuenta contable de anticipos a proveedores configurada para la empresa.'
@@ -412,7 +413,7 @@ class IngresoEgresoSolicitudpagoSupport
             'nombre' => $cuenta->nombre,
             'moneda_id' => $monedaLinea,
             'cotizacion' => $cotizLinea,
-            'centrocosto_id' => self::centrocostoPiernaFinanciera($lineasSolicitud),
+            'centrocosto_id' => self::centrocostoAnticipo($sp, $cuenta, $lineasSolicitud),
             'debe' => $monto,
             'haber' => '',
             'observacion' => 'Anticipo a proveedores',
@@ -736,6 +737,96 @@ class IngresoEgresoSolicitudpagoSupport
             $data['carga_cuentacontable_manuales'][] = $linea['carga_cuentacontable_manual'] ?? 'N';
             $data['cuenta'][] = 1;
         }
+    }
+
+    /**
+     * Si la cuenta maneja centro de costo, usa el de la línea de la SP
+     * y, si la línea no trae, el de la cabecera. Si no maneja, deja el de la línea.
+     */
+    private static function centrocostoSiLaCuentaLoRequiere(Solicitudpago $sp, object $cta, object $cuenta): int
+    {
+        $ccLinea = (int) ($cta->centrocosto_id ?? 0);
+        if (! AsientoCentrocostoObligatorioSupport::maneja($cuenta->manejaccosto ?? null)) {
+            return $ccLinea;
+        }
+        if ($ccLinea > 0) {
+            return $ccLinea;
+        }
+
+        return (int) ($sp->centrocosto_id ?? 0);
+    }
+
+    /**
+     * Anticipo: si la cuenta de anticipos maneja CC, manda el de la cabecera de la SP.
+     *
+     * @param  list<array<string, mixed>>  $lineasSolicitud
+     */
+    private static function centrocostoAnticipo(Solicitudpago $sp, object $cuenta, array $lineasSolicitud): int
+    {
+        if (AsientoCentrocostoObligatorioSupport::maneja($cuenta->manejaccosto ?? null)) {
+            $ccCabecera = (int) ($sp->centrocosto_id ?? 0);
+            if ($ccCabecera > 0) {
+                return $ccCabecera;
+            }
+        }
+
+        return self::centrocostoPiernaFinanciera($lineasSolicitud);
+    }
+
+    /**
+     * Al grabar el pago, si la cuenta maneja CC y la línea del asiento viene
+     * sin centro, completa con el de la SP (línea, o cabecera). Si ya trae uno, no lo pisa.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function aplicarCentrocostoRequeridoEnDataAsiento(array &$data): void
+    {
+        $spId = self::solicitudpagoIdDesdeData($data);
+        if ($spId <= 0) {
+            return;
+        }
+
+        $sp = Solicitudpago::query()->with(['cuentas.cuentacontables'])->find($spId);
+        if ($sp === null) {
+            return;
+        }
+
+        $ccPorCuenta = [];
+        foreach ($sp->cuentas as $cta) {
+            $cuentaId = (int) ($cta->cuentacontable_id ?? 0);
+            $cuenta = $cta->cuentacontables;
+            if ($cuentaId <= 0 || $cuenta === null || isset($ccPorCuenta[$cuentaId])) {
+                continue;
+            }
+            if (! AsientoCentrocostoObligatorioSupport::maneja($cuenta->manejaccosto ?? null)) {
+                continue;
+            }
+            $cc = self::centrocostoSiLaCuentaLoRequiere($sp, $cta, $cuenta);
+            if ($cc > 0) {
+                $ccPorCuenta[$cuentaId] = $cc;
+            }
+        }
+        if ($ccPorCuenta === []) {
+            return;
+        }
+
+        $ids = array_values((array) ($data['cuentacontable_ids'] ?? []));
+        $ccs = array_values((array) ($data['centrocostoasiento_ids'] ?? []));
+        $prev = array_values((array) ($data['centrocostoasiento_id_previo'] ?? []));
+        foreach ($ids as $i => $cuentaId) {
+            $cuentaId = (int) $cuentaId;
+            if (! isset($ccPorCuenta[$cuentaId])) {
+                continue;
+            }
+            $yaTiene = (int) ($ccs[$i] ?? 0) > 0 || (int) ($prev[$i] ?? 0) > 0;
+            if ($yaTiene) {
+                continue;
+            }
+            $ccs[$i] = $ccPorCuenta[$cuentaId];
+            $prev[$i] = $ccPorCuenta[$cuentaId];
+        }
+        $data['centrocostoasiento_ids'] = $ccs;
+        $data['centrocostoasiento_id_previo'] = $prev;
     }
 
     /**
