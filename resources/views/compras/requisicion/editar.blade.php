@@ -43,7 +43,7 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/presupuestos.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/compras/requisicion/enviar-arbol.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/enviar-arbol.js') }}?v={{ filemtime(public_path('assets/pages/scripts/compras/requisicion/enviar-arbol.js')) }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/volver-compras.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/marcar-cumplida.js') }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_enviando_arbol_styles')

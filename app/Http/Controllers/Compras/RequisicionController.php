@@ -717,7 +717,9 @@ class RequisicionController extends Controller
             $observacionEnvio !== '' ? $observacionEnvio : null
         );
 
-        if ($ret['mensaje'] === 'ok') {
+        if ($ret['mensaje'] === 'ok' && ! empty($ret['aprobada'])) {
+            $mensaje = 'La requisición quedó APROBADA: el último nivel que aplica a este monto ya estaba aprobado y no hay un firmante posterior.';
+        } elseif ($ret['mensaje'] === 'ok') {
             $mensaje = 'Requisición enviada al árbol de aprobación; el circuito continúa con el siguiente nivel.';
         } elseif ($ret['mensaje'] === 'seleccionar_firmante') {
             $mensaje = 'Debe seleccionar un firmante para continuar el árbol de aprobación.';

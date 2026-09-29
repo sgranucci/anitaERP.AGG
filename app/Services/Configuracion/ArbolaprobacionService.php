@@ -330,6 +330,9 @@ class ArbolaprobacionService
             $reTriggerId = null;
         }
         $esRetome = ! empty($opciones['es_retome']);
+        if ($esRetome) {
+            $this->anulaFirmasHumanasPreviasAlReinicioRequisicion((int) $comprobante_id);
+        }
         $nivelRetome = (int) ($opciones['nivel_retome'] ?? 0);
         $destinatarioRetome = (int) ($opciones['destinatario_usuario_id'] ?? 0);
 
@@ -695,6 +698,7 @@ class ArbolaprobacionService
         $nivelActual = 0;
         $estadoActual = '';
         $usuarioActual_id = null;
+        $corteReinicioRequisicion = null;
 
         switch ($tipoarbol) {
             case 'Ordenes de venta':
@@ -704,6 +708,7 @@ class ArbolaprobacionService
             case 'Requisiciones':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorRequisicion($comprobante_id);
                 $arbolaprobacion_movimiento = $this->filtrarMovimientosRequisicionPorCircuito($arbolaprobacion_movimiento, $circuitoRe);
+                $corteReinicioRequisicion = $this->fechaReinicioArbolRequisicion((int) $comprobante_id);
                 break;
             case 'Requisiciones de sala':
                 $arbolaprobacion_movimiento = app(\App\Services\Sala\RequisicionSalaArbolIntegracionService::class)
@@ -744,6 +749,11 @@ class ArbolaprobacionService
         if ($arbolaprobacion_movimiento) {
             $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
             foreach ($arbolaprobacion_movimiento as $aprobacion) {
+                if ($corteReinicioRequisicion
+                    && $aprobacion->estado === $nombreAprobado
+                    && $this->firmaHumanaAnteriorAlReinicio($aprobacion, $corteReinicioRequisicion)) {
+                    continue;
+                }
                 $estadoActual = $aprobacion->estado;
                 if ($aprobacion->estado === $nombreAprobado && $aprobacion->nivel >= $nivelActual) {
                     $nivelActual = $aprobacion->nivel;
@@ -1589,6 +1599,80 @@ class ArbolaprobacionService
     }
 
     /**
+     * Última vuelta a compras. Las firmas humanas anteriores a esa fecha no cuentan: el circuito rearranca.
+     */
+    private function fechaReinicioArbolRequisicion(int $requisicionId): ?Carbon
+    {
+        if ($requisicionId <= 0) {
+            return null;
+        }
+        $fecha = Requisicion_Estado::query()
+            ->where('requisicion_id', $requisicionId)
+            ->where('observacion', 'like', 'Devuelta a compras%')
+            ->orderByDesc('id')
+            ->value('fecha');
+        if (! $fecha) {
+            return null;
+        }
+
+        return Carbon::parse($fecha);
+    }
+
+    private function firmaHumanaAnteriorAlReinicio($movimiento, Carbon $corte): bool
+    {
+        $uid = (int) ($movimiento->destinatariousuario_id ?? 0);
+        if ($uid <= 0 || empty($movimiento->fechaproceso)) {
+            return false;
+        }
+
+        return Carbon::parse($movimiento->fechaproceso)->lt($corte);
+    }
+
+    /**
+     * Deja sin efecto las firmas de personas del circuito anterior a la última vuelta a compras.
+     * El nivel automático (sin usuario) que dejó el documento en EN COMPRAS se conserva.
+     */
+    public function anulaFirmasHumanasPreviasAlReinicioRequisicion(int $requisicionId): void
+    {
+        $corte = $this->fechaReinicioArbolRequisicion($requisicionId);
+        if ($corte === null) {
+            return;
+        }
+        $this->anulaFirmasHumanasArbolRequisicion(
+            $requisicionId,
+            'Sin efecto (devuelta a compras: el circuito se reinicia)',
+            $corte
+        );
+    }
+
+    /**
+     * Deja sin efecto las firmas de personas. Sin corte, anula todas las del circuito vigente.
+     */
+    public function anulaFirmasHumanasArbolRequisicion(int $requisicionId, string $observacion, ?Carbon $anterioresA = null): void
+    {
+        if ($requisicionId <= 0) {
+            return;
+        }
+        $nombreAprobado = Arbolaprobacion_Movimiento::$enumEstado[array_search('A', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $obs = Str::limit(trim($observacion) !== '' ? trim($observacion) : 'Sin efecto', 255, '');
+        $query = Arbolaprobacion_Movimiento::query()
+            ->where('requisicion_id', $requisicionId)
+            ->where('estado', $nombreAprobado)
+            ->whereNotNull('destinatariousuario_id')
+            ->where('destinatariousuario_id', '>', 0);
+        if ($anterioresA !== null) {
+            $query->where('fechaproceso', '<', $anterioresA);
+        }
+        foreach ($query->get() as $movimiento) {
+            $movimiento->update([
+                'estado' => $nombreSinEfecto,
+                'observacion' => $obs,
+            ]);
+        }
+    }
+
+    /**
      * Marca como sin efecto los movimientos de árbol aún pendientes (cabecera ya avanzó fuera del circuito).
      */
     public function anulaMovimientosArbolPendientesAbiertosRequisicion(int $requisicionId, string $observacion): void
@@ -2161,9 +2245,11 @@ class ArbolaprobacionService
      * @return array{
      *     nivel?: int,
      *     requiere_seleccion?: bool,
+     *     circuito_completo?: bool,
      *     firmantes?: list<array{id: int, nombre: string, usuario: string, email: string}>,
      *     requiere_seleccion_centrocosto?: bool,
-     *     centros_costo?: list<array{id: int, codigo: string, nombre: string, etiqueta: string}>
+     *     centros_costo?: list<array{id: int, codigo: string, nombre: string, etiqueta: string}>,
+     *     centrocosto_arbol_id?: int
      * }
      */
     public function firmantesRetomeArbolRequisicion(Requisicion $requisicion, ?int $centrocostoArbolSeleccionado = null): array
@@ -2206,6 +2292,17 @@ class ArbolaprobacionService
             $circuitoRe
         );
         $proximoNivel = $this->filtrarProximoNivelUsuariosPorEmpresa($proximoNivel, (int) $requisicion->empresa_id);
+
+        // -1: el último nivel que aplica a este monto ya está aprobado. El retome cierra el circuito.
+        if ((int) $proximoNivel['proximonivel'] === -1) {
+            return [
+                'circuito_completo' => true,
+                'nivel' => (int) $estadoAprobacionActual['nivelactual'],
+                'requiere_seleccion' => false,
+                'firmantes' => [],
+                'centrocosto_arbol_id' => $centrocostoArbol,
+            ];
+        }
 
         if ($proximoNivel['proximonivel'] <= 0) {
             throw new \RuntimeException('El árbol de aprobación no tiene un nivel aplicable para continuar el circuito.');

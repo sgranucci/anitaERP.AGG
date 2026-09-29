@@ -471,6 +471,13 @@ class RequisicionService
             ];
         }
 
+        if (! empty($preview['circuito_completo'])) {
+            return $this->cerrarCircuitoArbolYaCompletoDesdeEnCompras(
+                $id,
+                (int) ($preview['centrocosto_arbol_id'] ?? 0)
+            );
+        }
+
         if ($preview['requiere_seleccion']) {
             if ($destinatarioUsuarioId === null || $destinatarioUsuarioId <= 0) {
                 return [
@@ -537,7 +544,37 @@ class RequisicionService
     }
 
     /**
-     * Devuelve una requisición enviada al árbol por error a EN COMPRAS y anula autorizaciones pendientes.
+     * El último nivel aplicable ya fue aprobado (el árbol se reconfiguró y no queda un nivel posterior).
+     * Confirmar el envío cierra el circuito en APROBADA, sin generar otro pendiente.
+     *
+     * @return array{mensaje: string, errores?: string, aprobada?: bool}
+     */
+    private function cerrarCircuitoArbolYaCompletoDesdeEnCompras(int $id, int $centrocostoParaPersistir): array
+    {
+        DB::beginTransaction();
+        try {
+            if ($centrocostoParaPersistir > 0) {
+                $this->requisicionRepository->update(['centrocostodestino_arbol_id' => $centrocostoParaPersistir], $id);
+            }
+
+            $nivel = $this->arbolaprobacionService->procesaArbolaprobacion('RE', $id, 'resume', []);
+            if ((int) $nivel !== -1) {
+                throw new \RuntimeException('El circuito de aprobación no pudo cerrarse.');
+            }
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return ['mensaje' => 'ok', 'aprobada' => true];
+    }
+
+    /**
+     * Devuelve una requisición al estado EN COMPRAS y reinicia el circuito:
+     * anula pendientes y las firmas de personas ya otorgadas. El nivel automático se conserva.
      *
      * @return array{mensaje: string, errores?: string}
      */
@@ -569,7 +606,11 @@ class RequisicionService
         try {
             $this->arbolaprobacionService->anulaMovimientosArbolPendientesAbiertosRequisicion(
                 $id,
-                'Sin efecto (requisición devuelta a compras antes de completar autorización)'
+                'Sin efecto (devuelta a compras: el circuito se reinicia)'
+            );
+            $this->arbolaprobacionService->anulaFirmasHumanasArbolRequisicion(
+                $id,
+                'Sin efecto (devuelta a compras: el circuito se reinicia)'
             );
 
             $this->requisicion_estadoRepository->creaEstado(
@@ -577,7 +618,7 @@ class RequisicionService
                 Carbon::now()->toDateTimeString(),
                 $nombreEnCompras,
                 Auth::user()->id,
-                'Devuelta a compras (anulado envío al árbol de aprobación)'
+                'Devuelta a compras (el circuito de aprobación se reinicia)'
             );
             $this->requisicionRepository->update(['estado' => $nombreEnCompras], $id);
 

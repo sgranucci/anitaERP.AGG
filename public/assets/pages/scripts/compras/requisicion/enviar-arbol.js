@@ -12,6 +12,7 @@ $(function () {
 	var $obsFirmante = $('#requisicionFirmanteRetomeArbolObservacion');
 	var envioPendiente = null;
 	var enviandoAlArbol = false;
+	var htmlBtnConfirmarArbol = $('#requisicionFirmanteRetomeArbolConfirmar').html();
 
 	function limpiarErrorModal($error) {
 		$error.addClass('d-none').text('');
@@ -84,8 +85,33 @@ $(function () {
 		$('body').append(html);
 	}
 
-	function mostrarBannerEnviandoArbol(firmante, nivel, centrocosto) {
+	function grupoObservacionFirmante() {
+		return $obsFirmante.closest('.form-group');
+	}
+
+	function setModoCircuitoCompleto(activo) {
+		var $btn = $('#requisicionFirmanteRetomeArbolConfirmar');
+		if (activo) {
+			grupoObservacionFirmante().addClass('d-none');
+			$btn.html('<i class="fa fa-check"></i> Aprobar requisici\u00f3n');
+			return;
+		}
+		grupoObservacionFirmante().removeClass('d-none');
+		if (htmlBtnConfirmarArbol) {
+			$btn.html(htmlBtnConfirmarArbol);
+		}
+	}
+
+	function mostrarBannerEnviandoArbol(firmante, nivel, centrocosto, circuitoCompleto) {
 		asegurarBannerEnviandoArbol();
+		if (circuitoCompleto) {
+			$('#requisicion-banner-enviando-arbol-titulo').text('Cerrando el circuito de aprobaci\u00f3n\u2026');
+			$('#requisicion-banner-enviando-arbol-destinatario').html('No hay otro firmante: la requisici\u00f3n quedar\u00e1 <strong>APROBADA</strong>.');
+			$('#requisicion-banner-enviando-arbol-nivel').text('');
+			$('#requisicion-banner-enviando-arbol').addClass('is-visible');
+			return;
+		}
+		$('#requisicion-banner-enviando-arbol-titulo').text('Enviando al \u00e1rbol de aprobaci\u00f3n\u2026');
 		var nombre = nombreFirmante(firmante);
 		var detalle = detalleFirmante(firmante);
 		var destHtml = '<strong>Destinatario:</strong> ' + $('<div>').text(nombre).html();
@@ -148,7 +174,7 @@ $(function () {
 		return $.get(previewUrl, params);
 	}
 
-	function enviarAlArbol(requisicionId, postUrl, destinatarioId, redirectUrl, firmantes, nivel, centrocostoId, centrosCosto, observacionEnvio) {
+	function enviarAlArbol(requisicionId, postUrl, destinatarioId, redirectUrl, firmantes, nivel, centrocostoId, centrosCosto, observacionEnvio, circuitoCompleto) {
 		if (enviandoAlArbol) {
 			return;
 		}
@@ -163,7 +189,7 @@ $(function () {
 		if ($modalCentrocosto.length && $modalCentrocosto.hasClass('show')) {
 			$modalCentrocosto.modal('hide');
 		}
-		mostrarBannerEnviandoArbol(firmante, nivel, centrocosto);
+		mostrarBannerEnviandoArbol(firmante, nivel, centrocosto, circuitoCompleto);
 
 		var payload = {
 			_token: $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').first().val(),
@@ -257,6 +283,24 @@ $(function () {
 	}
 
 	function continuarFlujoFirmantes(data, context) {
+		if (data.circuito_completo) {
+			context.centrocostoId = data.centrocosto_arbol_id || context.centrocostoId || null;
+			context.firmantes = [];
+			context.nivel = data.nivel || null;
+			context.requiereSeleccion = false;
+			context.circuitoCompleto = true;
+			envioPendiente = context;
+			setModoCircuitoCompleto(true);
+			$textoFirmante.text('El \u00faltimo nivel que aplica a este monto ya fue aprobado. No hay un firmante posterior. Al confirmar, la requisici\u00f3n quedar\u00e1 APROBADA.');
+			$listaFirmante.empty();
+			$obsFirmante.val('');
+			limpiarErrorModal($errorFirmante);
+			$modalFirmante.modal('show');
+			return;
+		}
+
+		setModoCircuitoCompleto(false);
+		context.circuitoCompleto = false;
 		var firmantes = data.firmantes || [];
 		var nivel = data.nivel || null;
 		var centrocostoId = data.centrocosto_arbol_id || context.centrocostoId || null;
@@ -334,6 +378,7 @@ $(function () {
 			firmantes: [],
 			nivel: null,
 			requiereSeleccion: false,
+			circuitoCompleto: false,
 			$btn: $btn
 		};
 
@@ -385,7 +430,8 @@ $(function () {
 			envioPendiente.nivel,
 			envioPendiente.centrocostoId,
 			envioPendiente.centrosCosto,
-			leerObservacionEnvio()
+			envioPendiente.circuitoCompleto ? '' : leerObservacionEnvio(),
+			!!envioPendiente.circuitoCompleto
 		);
 	});
 
@@ -395,6 +441,7 @@ $(function () {
 		}
 		$listaFirmante.empty();
 		$obsFirmante.val('');
+		setModoCircuitoCompleto(false);
 		limpiarErrorModal($errorFirmante);
 		$('#requisicionFirmanteRetomeArbolConfirmar').prop('disabled', false);
 	});
