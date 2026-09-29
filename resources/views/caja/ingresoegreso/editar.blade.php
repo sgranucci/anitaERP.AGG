@@ -17,6 +17,7 @@
 <script src="{{ asset('assets/pages/scripts/caja/chequera/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/chequera/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/cheque/consulta_cartera.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cheque/consulta_cartera.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/cheques.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/cheques.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/tipotransaccion_compra/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/tipotransaccion_compra/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/concepto_ivacompra/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/concepto_ivacompra/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/conceptos_ivacompra_coherencia.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/comprobantes_ivacompra.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/comprobantes_ivacompra.js')) ?: time() }}" type="text/javascript"></script>

@@ -274,6 +274,22 @@ class Tipotransaccion_CompraController extends Controller
                     $tipo = 'I';
                 }
 
+                $cuentaDebe = $c->cuentacontablesdebe;
+                $cuentasDetalleEmpresa = [];
+                foreach ($c->concepto_ivacompra_empresas as $lineaEmpresa) {
+                    $empresaLinea = (int) ($lineaEmpresa->empresa_id ?? 0);
+                    $cuentaLineaId = (int) ($lineaEmpresa->cuentacontabledebe_id ?? 0);
+                    if ($empresaLinea <= 0 || $cuentaLineaId <= 0) {
+                        continue;
+                    }
+                    $cuentaLinea = $lineaEmpresa->cuentacontabledebe;
+                    $cuentasDetalleEmpresa[$empresaLinea] = [
+                        'id' => $cuentaLineaId,
+                        'codigo' => (string) ($cuentaLinea?->codigo ?? ''),
+                        'nombre' => (string) ($cuentaLinea?->nombre ?? ''),
+                    ];
+                }
+
                 return [
                     'id' => (int) $c->id,
                     'codigo' => (string) ($c->codigo ?? ''),
@@ -287,9 +303,12 @@ class Tipotransaccion_CompraController extends Controller
                         ? ConceptoIvacompraFormulaSupport::tasaPorcentajeDesdeFormula($formula)
                         : round((float) ($c->impuestos->valor ?? 0), 3),
                     'cuenta_debe_id' => (int) ($c->cuentacontabledebe_id ?? 0),
+                    'cuenta_debe_codigo' => (string) ($cuentaDebe?->codigo ?? ''),
+                    'cuenta_debe_nombre' => (string) ($cuentaDebe?->nombre ?? ''),
                     'cuentas_por_empresa' => method_exists($c, 'mapaCuentaDebePorEmpresa')
                         ? $c->mapaCuentaDebePorEmpresa()
                         : [],
+                    'cuentas_detalle_por_empresa' => $cuentasDetalleEmpresa,
                 ];
             })->values()->all(),
         ]);

@@ -13,6 +13,10 @@ $(function () {
         decodificarPegadoAsiento(texto, true);
     });
 
+    $('#asiento_pegar_quitar_imagen').on('click', function () {
+        quitarImagenPegadaAsiento();
+    });
+
     $(document).on('paste', '#cuenta-table, #asiento_pegar_excel_texto', function (e) {
         if (archivoImagenPortapapeles(e)) {
             return;
@@ -108,7 +112,8 @@ function mostrarImagenPegada(archivo) {
     }
     var url = URL.createObjectURL(archivo);
     asientoArchivoPegado = archivo;
-    $img.attr('src', url).data('url', url).removeClass('d-none');
+    $img.attr('src', url).data('url', url);
+    $('#asiento_pegar_vista_wrap').removeClass('d-none');
     $('#asiento_pegar_excel_aviso')
         .removeClass('text-danger text-success')
         .addClass('text-muted')
@@ -134,6 +139,22 @@ function grillaAsientoTieneDatos() {
 }
 
 var asientoArchivoPegado = null;
+
+function quitarImagenPegadaAsiento() {
+    var $img = $('#asiento_pegar_vista');
+    var anterior = $img.data('url');
+    if (anterior) {
+        URL.revokeObjectURL(anterior);
+    }
+    $img.attr('src', '').removeData('url');
+    $('#asiento_pegar_vista_wrap').addClass('d-none');
+    asientoArchivoPegado = null;
+    var inputArchivo = document.getElementById('asiento_pegar_archivo');
+    if (inputArchivo) {
+        inputArchivo.value = '';
+    }
+    $('#asiento_pegar_excel_aviso').empty();
+}
 
 function decodificarPegadoAsiento(texto, desdeModal, archivoDirecto) {
     var inputArchivo = document.getElementById('asiento_pegar_archivo');
@@ -199,9 +220,7 @@ function decodificarPegadoAsiento(texto, desdeModal, archivoDirecto) {
             resumen += '\n\n' + avisos.join('\n');
         }
         if (desdeModal) {
-            if (inputArchivo) {
-                inputArchivo.value = '';
-            }
+            quitarImagenPegadaAsiento();
             $('#modalAsientoPegarExcel').modal('hide');
         }
         alert(resumen);

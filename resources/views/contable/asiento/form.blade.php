@@ -341,7 +341,12 @@
                     Tiene que verse la fila de títulos
                     (<code>Nro.Cta.</code>, <code>C.Cos.</code>, <code>Debe</code>, <code>Haber</code>).
                 </p>
-                <img id="asiento_pegar_vista" alt="Imagen pegada del asiento" class="d-none img-fluid border mb-2" style="max-height: 220px;">
+                <div id="asiento_pegar_vista_wrap" class="d-none mb-2">
+                    <img id="asiento_pegar_vista" alt="Imagen pegada del asiento" class="img-fluid border d-block" style="max-height: 220px;">
+                    <button type="button" class="btn btn-outline-danger btn-sm mt-1" id="asiento_pegar_quitar_imagen">
+                        <i class="fa fa-times"></i> Quitar imagen
+                    </button>
+                </div>
                 <div class="form-group">
                     <label for="asiento_pegar_archivo">PDF o imagen</label>
                     <input type="file" id="asiento_pegar_archivo" class="form-control"

@@ -542,6 +542,12 @@ final class AsientoPegadoTextoSupport
     public static function normalizarCodigoCuentaOcr(string $codigo): string
     {
         $codigo = trim($codigo);
+        $codigo = str_replace(
+            ["\u{2010}", "\u{2011}", "\u{2012}", "\u{2013}", "\u{2014}", "\u{2212}", '¡', '¦'],
+            ['-', '-', '-', '-', '-', '-', '1', '1'],
+            $codigo
+        );
+        $codigo = rtrim($codigo, '.,:;');
         if ($codigo === '' || self::esCodigoCuenta($codigo)) {
             return $codigo;
         }
@@ -585,12 +591,22 @@ final class AsientoPegadoTextoSupport
             }
         }
 
+        $corte = self::corteDebeHaber(self::cajasDeImportes($lineasHocr));
         $filas = [];
         foreach (preg_split('/\r\n|\r|\n/', $textoPlano) ?: [] as $linea) {
-            $fila = self::filaDesdeTextoOcr((string) $linea, $lineasHocr, $cols);
-            if ($fila !== null) {
+            $fila = self::filaDesdeTextoOcr((string) $linea, $lineasHocr, $cols, $corte);
+            if ($fila !== null && ! self::tieneCuentaEnLado($filas, $fila)) {
                 $filas[] = $fila;
             }
+        }
+
+        foreach ($lineasHocr as $palabras) {
+            $linea = trim(implode(' ', array_map(static fn (array $palabra): string => (string) ($palabra['t'] ?? ''), $palabras)));
+            $fila = self::filaDesdeTextoOcr($linea, $lineasHocr, $cols, $corte);
+            if ($fila === null || self::tieneCuenta($filas, $fila['codigo_cuenta'])) {
+                continue;
+            }
+            $filas[] = $fila;
         }
 
         if ($filas !== []) {
@@ -601,11 +617,134 @@ final class AsientoPegadoTextoSupport
     }
 
     /**
+     * @param  array{filas: list<array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}>, con_encabezado: bool}  $parseado
+     */
+    public static function lecturaIncompleta(string $textoPlano, array $parseado): bool
+    {
+        $filas = $parseado['filas'];
+        if ($filas === []) {
+            return true;
+        }
+
+        if (self::lineasQueParecenCuenta($textoPlano) > count($filas)) {
+            return true;
+        }
+
+        return abs(self::sumaLado($filas, 'debe') - self::sumaLado($filas, 'haber')) > 0.009;
+    }
+
+    /**
+     * @param  array{filas: list<array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}>, con_encabezado: bool}  $a
+     * @param  array{filas: list<array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}>, con_encabezado: bool}  $b
+     * @return array{filas: list<array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}>, con_encabezado: bool}
+     */
+    public static function elegirLectura(array $a, array $b): array
+    {
+        $union = self::fusionarLecturas($a, $b);
+        $difUnion = abs(self::sumaLado($union['filas'], 'debe') - self::sumaLado($union['filas'], 'haber'));
+        if ($difUnion <= 0.009 && count($union['filas']) >= max(count($a['filas']), count($b['filas']))) {
+            return $union;
+        }
+
+        $difA = abs(self::sumaLado($a['filas'], 'debe') - self::sumaLado($a['filas'], 'haber'));
+        $difB = abs(self::sumaLado($b['filas'], 'debe') - self::sumaLado($b['filas'], 'haber'));
+        if (count($b['filas']) > count($a['filas']) && $difB <= $difA + 0.009) {
+            return $b;
+        }
+        if ($difB + 0.009 < $difA && count($b['filas']) >= count($a['filas'])) {
+            return $b;
+        }
+
+        return $a;
+    }
+
+    /**
+     * @param  array{filas: list<array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}>, con_encabezado: bool}  $a
+     * @param  array{filas: list<array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}>, con_encabezado: bool}  $b
+     * @return array{filas: list<array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}>, con_encabezado: bool}
+     */
+    private static function fusionarLecturas(array $a, array $b): array
+    {
+        $filas = $a['filas'];
+        foreach ($b['filas'] as $fila) {
+            if (! self::tieneCuentaEnLado($filas, $fila)) {
+                $filas[] = $fila;
+            }
+        }
+
+        return [
+            'filas' => $filas,
+            'con_encabezado' => $a['con_encabezado'] || $b['con_encabezado'],
+        ];
+    }
+
+    /**
+     * @param  list<array{codigo_cuenta: string, debe: float, haber: float}>  $filas
+     */
+    private static function tieneCuenta(array $filas, string $cuenta): bool
+    {
+        foreach ($filas as $existente) {
+            if ($existente['codigo_cuenta'] === $cuenta) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<array{codigo_cuenta: string, debe: float, haber: float}>  $filas
+     */
+    private static function tieneCuentaEnLado(array $filas, array $fila): bool
+    {
+        $lado = ((float) $fila['debe']) > 0 ? 'D' : 'H';
+        foreach ($filas as $existente) {
+            $ladoExistente = ((float) $existente['debe']) > 0 ? 'D' : 'H';
+            if ($existente['codigo_cuenta'] === $fila['codigo_cuenta'] && $ladoExistente === $lado) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<array{debe: float, haber: float}>  $filas
+     */
+    private static function sumaLado(array $filas, string $lado): float
+    {
+        $total = 0.0;
+        foreach ($filas as $fila) {
+            $total += (float) ($fila[$lado] ?? 0);
+        }
+
+        return round($total, 2);
+    }
+
+    private static function lineasQueParecenCuenta(string $textoPlano): int
+    {
+        $cantidad = 0;
+        foreach (preg_split('/\r\n|\r|\n/', $textoPlano) ?: [] as $linea) {
+            $linea = trim((string) $linea);
+            if ($linea === '' || preg_match('/^total\b/i', $linea)) {
+                continue;
+            }
+            $tokens = preg_split('/\s+/', $linea) ?: [];
+            [$cuenta] = self::extraerCodigoCuenta($tokens);
+            if ($cuenta !== '') {
+                $cantidad++;
+            }
+        }
+
+        return $cantidad;
+    }
+
+    /**
      * @param  list<list<array{t: string, x1: int, x2: int}>>  $lineasHocr
      * @param  array<string, array{x1: int, x2: int, cx: float}>|null  $cols
      * @return array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}|null
      */
-    private static function filaDesdeTextoOcr(string $linea, array $lineasHocr, ?array $cols): ?array
+    private static function filaDesdeTextoOcr(string $linea, array $lineasHocr, ?array $cols, ?float $corte): ?array
     {
         $linea = trim($linea);
         if ($linea === '' || preg_match('/^total\b/i', $linea)) {
@@ -617,14 +756,14 @@ final class AsientoPegadoTextoSupport
             return null;
         }
 
-        $cuenta = self::normalizarCodigoCuentaOcr($tokens[0]);
-        if (! self::esCodigoCuenta($cuenta)) {
+        [$cuenta, $desde] = self::extraerCodigoCuenta($tokens);
+        if ($cuenta === '') {
             return null;
         }
 
         $importes = [];
         foreach ($tokens as $indice => $token) {
-            if (! preg_match('/\d[,.]\d/', $token)) {
+            if ($indice < $desde || ! preg_match('/\d[,.]\d/', $token)) {
                 continue;
             }
             $importe = AsientoImportColumnasSupport::parsearImporteTexto($token);
@@ -639,8 +778,8 @@ final class AsientoPegadoTextoSupport
 
         $cc = '';
         $primero = $importes[0]['indice'];
-        for ($i = 1; $i < $primero; $i++) {
-            $candidato = strtr($tokens[$i], ['?' => '7', 'O' => '0', 'o' => '0', 'I' => '1', 'l' => '1']);
+        for ($i = $desde; $i < $primero; $i++) {
+            $candidato = strtr($tokens[$i], ['?' => '7', 'O' => '0', 'o' => '0', 'I' => '1', 'l' => '1', '¡' => '1']);
             if (preg_match('/^\d{1,4}$/', $candidato)) {
                 $cc = $candidato;
             }
@@ -649,7 +788,7 @@ final class AsientoPegadoTextoSupport
         $debe = 0.0;
         $haber = 0.0;
         foreach ($importes as $importe) {
-            if (self::importeCaeEnDebe($importe['token'], $lineasHocr, $cols)) {
+            if (self::importeCaeEnDebe($importe['token'], $linea, $lineasHocr, $cols, $corte)) {
                 $debe = (float) $importe['importe'];
             } else {
                 $haber = (float) $importe['importe'];
@@ -658,6 +797,16 @@ final class AsientoPegadoTextoSupport
 
         $ultimo = $importes[count($importes) - 1]['indice'];
         $detalle = trim(implode(' ', array_slice($tokens, $ultimo + 1)));
+        if ($detalle === '') {
+            $medio = [];
+            for ($i = $desde; $i < $primero; $i++) {
+                if ($cc !== '' && $tokens[$i] === $cc) {
+                    continue;
+                }
+                $medio[] = $tokens[$i];
+            }
+            $detalle = trim(implode(' ', $medio));
+        }
 
         return [
             'codigo_cuenta' => $cuenta,
@@ -669,14 +818,38 @@ final class AsientoPegadoTextoSupport
     }
 
     /**
+     * El OCR a veces parte el código (52 + ¡090-004) o cambia el guión.
+     *
+     * @param  list<string>  $tokens
+     * @return array{0: string, 1: int}
+     */
+    private static function extraerCodigoCuenta(array $tokens): array
+    {
+        $n = count($tokens);
+        $acumulado = '';
+        for ($i = 0; $i < $n && $i < 4; $i++) {
+            $pieza = (string) $tokens[$i];
+            if ($acumulado !== '' && preg_match('/\p{L}{2,}/u', $pieza)) {
+                break;
+            }
+            $acumulado .= $pieza;
+            $norm = self::normalizarCodigoCuentaOcr($acumulado);
+            if (self::esCodigoCuenta($norm)) {
+                return [$norm, $i + 1];
+            }
+        }
+
+        return ['', 0];
+    }
+
+    /**
      * @param  list<list<array{t: string, x1: int, x2: int}>>  $lineasHocr
      * @param  array<string, array{x1: int, x2: int, cx: float}>|null  $cols
      */
-    private static function importeCaeEnDebe(string $token, array $lineasHocr, ?array $cols): bool
+    private static function importeCaeEnDebe(string $token, string $linea, array $lineasHocr, ?array $cols, ?float $corte): bool
     {
         $cajas = self::cajasDeImportes($lineasHocr);
-        $corte = self::corteDebeHaber($cajas);
-        $x2 = self::x2DelImporte($token, $cajas);
+        $x2 = self::x2DelImporteParaLinea($token, $linea, $lineasHocr) ?? self::x2DelImporte($token, $cajas);
 
         // En la impresión el número se alinea a la derecha: el grupo de la
         // izquierda es el Debe y el de la derecha es el Haber.
@@ -741,6 +914,118 @@ final class AsientoPegadoTextoSupport
         }
 
         return $mejorGap >= 25 ? $corte : null;
+    }
+
+    /**
+     * El mismo importe puede estar en el Debe y en el Haber (asiento de amortización).
+     * Hay que usar la caja de la línea de esa cuenta, no la mediana de todas.
+     *
+     * @param  list<list<array{t: string, x1: int, x2: int}>>  $lineasHocr
+     */
+    private static function x2DelImporteParaLinea(string $token, string $linea, array $lineasHocr): ?int
+    {
+        $digitos = preg_replace('/\D/', '', $token) ?? '';
+        if ($digitos === '') {
+            return null;
+        }
+
+        $palabrasCuenta = self::palabrasDeLaCuenta($linea, $lineasHocr);
+        if ($palabrasCuenta !== null) {
+            $x2Linea = null;
+            foreach ($palabrasCuenta as $palabra) {
+                if (preg_match('/\d[,.]\d/', (string) ($palabra['t'] ?? ''))) {
+                    $x2Linea = (int) $palabra['x2'];
+                }
+            }
+            if ($x2Linea !== null) {
+                return $x2Linea;
+            }
+        }
+
+        $candidatos = [];
+        foreach ($lineasHocr as $indice => $palabras) {
+            foreach ($palabras as $palabra) {
+                $digitosPalabra = preg_replace('/\D/', '', (string) ($palabra['t'] ?? '')) ?? '';
+                if ($digitosPalabra !== $digitos) {
+                    continue;
+                }
+                $candidatos[] = [
+                    'i' => $indice,
+                    'x2' => (int) $palabra['x2'],
+                    'palabras' => $palabras,
+                ];
+            }
+        }
+        if ($candidatos === []) {
+            return null;
+        }
+        if (count($candidatos) === 1) {
+            return $candidatos[0]['x2'];
+        }
+
+        $mejorX2 = null;
+        $mejorPuntos = -1;
+        foreach ($candidatos as $candidato) {
+            $puntos = 0;
+            foreach ($candidato['palabras'] as $palabra) {
+                $texto = (string) ($palabra['t'] ?? '');
+                if ($texto !== '' && str_contains($linea, $texto)) {
+                    $puntos++;
+                }
+            }
+            if ($puntos > $mejorPuntos) {
+                $mejorPuntos = $puntos;
+                $mejorX2 = $candidato['x2'];
+            }
+        }
+
+        return $mejorX2;
+    }
+
+    /**
+     * @param  list<list<array{t: string, x1: int, x2: int}>>  $lineasHocr
+     * @return list<array{t: string, x1: int, x2: int}>|null
+     */
+    private static function palabrasDeLaCuenta(string $linea, array $lineasHocr): ?array
+    {
+        $tokens = preg_split('/\s+/', trim($linea)) ?: [];
+        [$cuenta] = self::extraerCodigoCuenta($tokens);
+        if ($cuenta === '') {
+            return null;
+        }
+
+        $exacta = null;
+        $mejor = null;
+        $mejorDist = 3;
+        foreach ($lineasHocr as $palabras) {
+            if ($palabras === []) {
+                continue;
+            }
+            $crudos = [
+                (string) $palabras[0]['t'],
+                (string) $palabras[0]['t'].(string) ($palabras[1]['t'] ?? ''),
+            ];
+            foreach ($crudos as $crudo) {
+                $norm = self::normalizarCodigoCuentaOcr($crudo);
+                if ($norm === $cuenta) {
+                    $exacta = $palabras;
+                    break 2;
+                }
+                if (self::esCodigoCuenta($norm) && $norm !== $cuenta && ! preg_match('/\p{L}/u', $crudo)) {
+                    continue;
+                }
+                if ($crudo === '' || abs(strlen($crudo) - strlen($cuenta)) > 3) {
+                    continue;
+                }
+                $dist = levenshtein($crudo, $cuenta);
+                if ($dist <= 2 && $dist < $mejorDist) {
+                    $mejorDist = $dist;
+                    $mejor = $palabras;
+                }
+            }
+        }
+
+        return $exacta ?? $mejor;
     }
 
     /**

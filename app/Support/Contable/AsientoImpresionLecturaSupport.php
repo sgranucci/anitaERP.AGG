@@ -112,9 +112,8 @@ final class AsientoImpresionLecturaSupport
     private static function leerImagenes(array $imagenes): array
     {
         self::assertBinario('tesseract');
-        $lineas = [];
-        $textos = [];
         $temporales = [];
+        $preparadas = [];
 
         try {
             foreach ($imagenes as $imagen) {
@@ -122,11 +121,21 @@ final class AsientoImpresionLecturaSupport
                 if ($ampliada !== $imagen) {
                     $temporales[] = $ampliada;
                 }
-                $textos[] = self::textoTesseract($ampliada);
-                foreach (self::palabrasHocr(self::hocr($ampliada)) as $linea) {
-                    $lineas[] = $linea;
+                $legible = self::aclararParaOcr($ampliada);
+                if ($legible !== $ampliada) {
+                    $temporales[] = $legible;
                 }
+                $preparadas[] = $legible;
             }
+
+            $primero = self::ocrPreparadas($preparadas, '6');
+            if (! AsientoPegadoTextoSupport::lecturaIncompleta($primero['texto'], $primero['parseado'])) {
+                return $primero['parseado'];
+            }
+
+            $segundo = self::ocrPreparadas($preparadas, '4');
+
+            return AsientoPegadoTextoSupport::elegirLectura($primero['parseado'], $segundo['parseado']);
         } finally {
             foreach ($temporales as $temporal) {
                 if (is_file($temporal)) {
@@ -138,8 +147,29 @@ final class AsientoImpresionLecturaSupport
                 self::borrarDirectorio($dir);
             }
         }
+    }
 
-        return AsientoPegadoTextoSupport::decodificarOcr(implode("\n", $textos), $lineas);
+    /**
+     * @param  list<string>  $imagenes
+     * @return array{texto: string, parseado: array{filas: list<array{codigo_cuenta: string, codigo_centrocosto: string, debe: float, haber: float, detalle: string}>, con_encabezado: bool}}
+     */
+    private static function ocrPreparadas(array $imagenes, string $psm): array
+    {
+        $lineas = [];
+        $textos = [];
+        foreach ($imagenes as $imagen) {
+            $textos[] = self::textoTesseract($imagen, $psm);
+            foreach (self::palabrasHocr(self::hocr($imagen, $psm)) as $linea) {
+                $lineas[] = $linea;
+            }
+        }
+
+        $texto = implode("\n", $textos);
+
+        return [
+            'texto' => $texto,
+            'parseado' => AsientoPegadoTextoSupport::decodificarOcr($texto, $lineas),
+        ];
     }
 
     private static function ampliarParaOcr(string $ruta): string
@@ -175,6 +205,32 @@ final class AsientoImpresionLecturaSupport
         return is_readable($tmp) ? $tmp : $ruta;
     }
 
+    /**
+     * La impresión de Anita trae una grilla gris clara. En escala de grises con más
+     * contraste Tesseract separa los importes de esas líneas.
+     */
+    private static function aclararParaOcr(string $ruta): string
+    {
+        $info = @getimagesize($ruta);
+        if ($info === false) {
+            return $ruta;
+        }
+
+        $origen = self::abrirImagen($ruta, (int) ($info[2] ?? 0));
+        if ($origen === null) {
+            return $ruta;
+        }
+
+        imagefilter($origen, IMG_FILTER_GRAYSCALE);
+        imagefilter($origen, IMG_FILTER_CONTRAST, -35);
+
+        $tmp = RecepcionProveedorOcrTempSupport::archivo('asiento_contraste_', 'png');
+        imagepng($origen, $tmp);
+        imagedestroy($origen);
+
+        return is_readable($tmp) ? $tmp : $ruta;
+    }
+
     /** @return \GdImage|resource|null */
     private static function abrirImagen(string $ruta, int $tipo)
     {
@@ -188,10 +244,10 @@ final class AsientoImpresionLecturaSupport
         };
     }
 
-    private static function textoTesseract(string $imagen): string
+    private static function textoTesseract(string $imagen, string $psm = '6'): string
     {
         $base = RecepcionProveedorOcrTempSupport::base('asiento_txt_');
-        $process = new Process(['tesseract', $imagen, $base, '-l', 'spa', '-psm', '6']);
+        $process = new Process(['tesseract', $imagen, $base, '-l', 'spa', '-psm', $psm]);
         $process->setTimeout(90);
         $process->run();
 
@@ -206,10 +262,10 @@ final class AsientoImpresionLecturaSupport
         return $texto;
     }
 
-    private static function hocr(string $imagen): string
+    private static function hocr(string $imagen, string $psm = '6'): string
     {
         $base = RecepcionProveedorOcrTempSupport::base('asiento_hocr_');
-        $process = new Process(['tesseract', $imagen, $base, '-l', 'spa', '-psm', '6', 'hocr']);
+        $process = new Process(['tesseract', $imagen, $base, '-l', 'spa', '-psm', $psm, 'hocr']);
         $process->setTimeout(90);
         $process->run();
 
@@ -237,7 +293,7 @@ final class AsientoImpresionLecturaSupport
         }
 
         preg_match_all(
-            "/<span class='ocrx_word'[^>]*title='bbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)[^']*'[^>]*>([^<]*)</",
+            "/<span class=['\"]ocrx_word['\"][^>]*title=['\"]bbox\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)[^'\"]*['\"][^>]*>(.*?)<\\/span>/s",
             $hocr,
             $coincidencias,
             PREG_SET_ORDER
@@ -245,7 +301,7 @@ final class AsientoImpresionLecturaSupport
 
         $palabras = [];
         foreach ($coincidencias as $coincidencia) {
-            $texto = trim(html_entity_decode((string) $coincidencia[5], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $texto = trim(strip_tags(html_entity_decode((string) $coincidencia[5], ENT_QUOTES | ENT_HTML5, 'UTF-8')));
             if ($texto === '') {
                 continue;
             }

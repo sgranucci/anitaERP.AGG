@@ -189,7 +189,9 @@ function avisarProveedorNoCargado(mensaje) {
     } finally {
         avisoProveedorMostrandose = false;
     }
-    var $codigo = $('#codigoproveedor');
+    var $codigo = (ptrcodigoproveedor && ptrcodigoproveedor.length && ptrcodigoproveedor.is(':visible'))
+        ? ptrcodigoproveedor
+        : $('#codigoproveedor');
     if ($codigo.length && !$codigo.prop('readonly') && !$codigo.prop('disabled')) {
         $codigo.data('cp-skip-blur-once', 1);
         setTimeout(function () {
@@ -253,10 +255,43 @@ function abrirModalConsultaProveedorDesdeInput($input) {
     $('#consultaproveedorModal').modal('show');
 }
 
+function proveedorConsultaEsModalIva() {
+    return ptrproveedor_id && ptrproveedor_id.length
+        && ptrproveedor_id.closest('#modal-ie-comprobante-iva').length > 0;
+}
+
+function idProveedorContextoActual() {
+    if (proveedorConsultaEsModalIva()) {
+        return parseInt(String(ptrproveedor_id.val() || '0'), 10) || 0;
+    }
+    return parseInt(String($('#proveedor_id').val() || '0'), 10) || 0;
+}
+
+function apuntarProveedorDesdeInput($input) {
+    if (!$input || !$input.length) {
+        return;
+    }
+    var ctx = resolverPtrProveedorDesdeBoton($input);
+    if (ctx.$id && ctx.$id.length) {
+        ptrproveedor_id = ctx.$id;
+        ptrnombreproveedor = ctx.$nombre;
+        ptrcodigoproveedor = ctx.$codigo;
+        proveedorxcodigo = ctx.$codigo;
+    }
+}
+
 function aceptarCodigoProveedorDesdeInput($input) {
+    apuntarProveedorDesdeInput($input);
     var codigo = String($input.val() || '').trim();
     if (codigo === '') {
-        limpiarProveedorEnPantalla();
+        if ($input.closest('#modal-ie-comprobante-iva').length) {
+            $input.closest('.tm-proveedor-campo').find('.proveedor_id, .nombreproveedor').val('');
+            if (typeof window.ieComprobanteIvaAplicarProveedor === 'function') {
+                window.ieComprobanteIvaAplicarProveedor('', '', '');
+            }
+        } else {
+            limpiarProveedorEnPantalla();
+        }
         $input.removeData('cp-avanzar-tras-ok');
         return;
     }
@@ -264,7 +299,7 @@ function aceptarCodigoProveedorDesdeInput($input) {
     if (
         ultimoCodigoProveedorFallo &&
         ultimoCodigoProveedorIntentado === codigo &&
-        !(parseInt(String($('#proveedor_id').val() || '0'), 10) > 0)
+        idProveedorContextoActual() <= 0
     ) {
         $input.removeData('cp-avanzar-tras-ok');
         return;
@@ -292,7 +327,18 @@ function aplicarProveedorEnPantalla(data, ctx) {
 
     marcarProveedorConsultaOk(data.codigo || '');
 
-    var dest = ctx || resolverPtrProveedorDesdeBoton($('#div-proveedor'));
+    var dest = ctx;
+    if (!dest && ptrproveedor_id && ptrproveedor_id.length) {
+        dest = {
+            $id: ptrproveedor_id,
+            $nombre: ptrnombreproveedor,
+            $codigo: ptrcodigoproveedor,
+        };
+    }
+    if (!dest || !dest.$id || !dest.$id.length) {
+        dest = resolverPtrProveedorDesdeBoton($('#div-proveedor'));
+    }
+    var enModalIva = dest.$id && dest.$id.closest('#modal-ie-comprobante-iva').length > 0;
     if (dest.$id && dest.$id.length) {
         dest.$id.val(data.id);
     }
@@ -303,10 +349,12 @@ function aplicarProveedorEnPantalla(data, ctx) {
         dest.$codigo.val(data.codigo || '');
     }
 
-    $('#proveedor_id').val(data.id);
-    $('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val(data.nombre || '');
-    $('#codigoproveedor').val(data.codigo || '');
-    $('#proveedor').val(data.nombre || '');
+    if (!enModalIva) {
+        $('#proveedor_id').val(data.id);
+        $('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val(data.nombre || '');
+        $('#codigoproveedor').val(data.codigo || '');
+        $('#proveedor').val(data.nombre || '');
+    }
 
     actualizarCondicionPagoProveedorDesdeJson(data);
     actualizarLinkEditarProveedor(data.id);
@@ -318,14 +366,16 @@ function aplicarProveedorEnPantalla(data, ctx) {
         window.cpValidarProveedorArcaApoc(data.id);
     }
 
-    $('#proveedor_id').trigger('change.cpProveedorCargado', [data]);
+    if (!enModalIva) {
+        $('#proveedor_id').trigger('change.cpProveedorCargado', [data]);
+    }
 
     if (typeof window.afterProveedorConsultaOk === 'function') {
         window.afterProveedorConsultaOk(data, dest.$codigo && dest.$codigo.length ? dest.$codigo : $('#codigoproveedor'));
     }
 
-    if (typeof window.ieComprobanteIvaAplicarProveedor === 'function' && $('#modal-ie-comprobante-iva').hasClass('show')) {
-        window.ieComprobanteIvaAplicarProveedor(data.id, data.nombre || '');
+    if (enModalIva && typeof window.ieComprobanteIvaAplicarProveedor === 'function') {
+        window.ieComprobanteIvaAplicarProveedor(data.id, data.nombre || '', data.codigo || '');
     }
 }
 
@@ -353,19 +403,39 @@ function leeUnProveedor(proveedorId, codigoproveedor) {
             aplicarProveedorEnPantalla(data);
             return;
         }
-        marcarProveedorConsultaFallo(codigoPedido || String($('#codigoproveedor').val() || '').trim());
-        limpiarProveedorEnPantallaManteniendoCodigo();
-        $('#codigoproveedor').removeData('cp-avanzar-tras-ok');
-        if (typeof window.afterProveedorConsultaFail === 'function') {
-            window.afterProveedorConsultaFail($('#codigoproveedor'));
+        marcarProveedorConsultaFallo(codigoPedido || String((ptrcodigoproveedor && ptrcodigoproveedor.length ? ptrcodigoproveedor.val() : $('#codigoproveedor').val()) || '').trim());
+        if (proveedorConsultaEsModalIva()) {
+            ptrproveedor_id.val('');
+            if (ptrnombreproveedor && ptrnombreproveedor.length) {
+                ptrnombreproveedor.val('');
+            }
+            if (ptrcodigoproveedor && ptrcodigoproveedor.length) {
+                ptrcodigoproveedor.removeData('cp-avanzar-tras-ok');
+            }
+        } else {
+            limpiarProveedorEnPantallaManteniendoCodigo();
+            $('#codigoproveedor').removeData('cp-avanzar-tras-ok');
+            if (typeof window.afterProveedorConsultaFail === 'function') {
+                window.afterProveedorConsultaFail($('#codigoproveedor'));
+            }
         }
         avisarProveedorNoCargado('No se encontró el proveedor indicado.');
     }).fail(function () {
-        marcarProveedorConsultaFallo(codigoPedido || String($('#codigoproveedor').val() || '').trim());
-        limpiarProveedorEnPantallaManteniendoCodigo();
-        $('#codigoproveedor').removeData('cp-avanzar-tras-ok');
-        if (typeof window.afterProveedorConsultaFail === 'function') {
-            window.afterProveedorConsultaFail($('#codigoproveedor'));
+        marcarProveedorConsultaFallo(codigoPedido || String((ptrcodigoproveedor && ptrcodigoproveedor.length ? ptrcodigoproveedor.val() : $('#codigoproveedor').val()) || '').trim());
+        if (proveedorConsultaEsModalIva()) {
+            ptrproveedor_id.val('');
+            if (ptrnombreproveedor && ptrnombreproveedor.length) {
+                ptrnombreproveedor.val('');
+            }
+            if (ptrcodigoproveedor && ptrcodigoproveedor.length) {
+                ptrcodigoproveedor.removeData('cp-avanzar-tras-ok');
+            }
+        } else {
+            limpiarProveedorEnPantallaManteniendoCodigo();
+            $('#codigoproveedor').removeData('cp-avanzar-tras-ok');
+            if (typeof window.afterProveedorConsultaFail === 'function') {
+                window.afterProveedorConsultaFail($('#codigoproveedor'));
+            }
         }
         avisarProveedorNoCargado('No se pudo cargar el proveedor.');
     });
@@ -591,6 +661,9 @@ function activa_eventos_consultaproveedor() {
         .off('change.consultaProveedor')
         .on('change.consultaProveedor', function (event) {
             event.preventDefault();
+            ptrproveedor_id = $('#proveedor_id');
+            ptrnombreproveedor = $('#nombreproveedor, #descripcionproveedor').first();
+            ptrcodigoproveedor = $('#codigoproveedor');
             var proveedorId = parseInt(String($(this).val() || '0'), 10);
             if (proveedorId > 0) {
                 leeUnProveedor(proveedorId, 0);
@@ -617,10 +690,15 @@ function activa_eventos_consultaproveedor() {
                 if (!data) {
                     return;
                 }
-                $(ptrrenglon).closest('tr').find('.proveedor_id').val(data.id);
-                $(ptrrenglon).closest('tr').find('.codigoproveedor').val(data.codigo);
-                $(ptrrenglon).closest('tr').find('.nombreproveedor').val(data.nombre);
-                aplicarProveedorEnPantalla(data);
+                var $tr = $(ptrrenglon).closest('tr');
+                $tr.find('.proveedor_id').val(data.id);
+                $tr.find('.codigoproveedor').val(data.codigo);
+                $tr.find('.nombreproveedor').val(data.nombre);
+                aplicarProveedorEnPantalla(data, {
+                    $id: $tr.find('.proveedor_id').first(),
+                    $nombre: $tr.find('.nombreproveedor').first(),
+                    $codigo: $tr.find('.codigoproveedor').first(),
+                });
             });
         });
 }

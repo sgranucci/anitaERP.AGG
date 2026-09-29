@@ -34,7 +34,11 @@ final class ConceptoIvacompraConsultaSupport
         }
 
         $query = Concepto_Ivacompra::query()
-            ->with(['impuestos', 'concepto_ivacompra_empresas'])
+            ->with([
+                'impuestos',
+                'cuentacontablesdebe:id,codigo,nombre',
+                'concepto_ivacompra_empresas.cuentacontabledebe:id,codigo,nombre',
+            ])
             ->whereIn('id', $conceptoIds);
 
         $texto = trim((string) $consulta);

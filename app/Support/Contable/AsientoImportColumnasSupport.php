@@ -294,7 +294,12 @@ final class AsientoImportColumnasSupport
         $tieneComa = str_contains($texto, ',');
         $tienePunto = str_contains($texto, '.');
 
-        if ($tieneComa && $tienePunto) {
+        if (preg_match('/^\d{1,3}([.,]\d{3})+[.,]\d{1,2}$/', $texto)) {
+            // 8.912.936.58, 1.025.504,12 o el mixto del OCR 2.494,744.04
+            $ultimo = max((int) strrpos($texto, '.'), (int) strrpos($texto, ','));
+            $entero = preg_replace('/[.,]/', '', substr($texto, 0, $ultimo)) ?? '';
+            $texto = $entero.'.'.substr($texto, $ultimo + 1);
+        } elseif ($tieneComa && $tienePunto) {
             if (strrpos($texto, ',') > strrpos($texto, '.')) {
                 $texto = str_replace('.', '', $texto);
                 $texto = str_replace(',', '.', $texto);

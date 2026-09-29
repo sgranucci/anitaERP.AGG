@@ -5,6 +5,7 @@ namespace App\Services\Caja;
 use App\Models\Ai\AiDecision;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Concepto;
+use App\Models\Compras\Comprobante_Proveedor_Debe_Gasto;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface;
@@ -15,7 +16,6 @@ use App\Support\Caja\IngresoEgresoComprobanteIvaAiHashSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
-use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -50,6 +50,7 @@ class IngresoEgresoComprobanteIvaService
                 'proveedores',
                 'tipotransaccion_compras',
                 'comprobante_proveedor_conceptos.concepto_ivacompras',
+                'comprobante_proveedor_debe_gastos.cuentacontables',
                 'comprobante_proveedor_archivos',
             ])
             ->orderBy('id')
@@ -117,6 +118,9 @@ class IngresoEgresoComprobanteIvaService
                 'asiento_id' => null,
             ]);
             EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Debe_Gasto::query()->whereIn('comprobante_proveedor_id', $aEliminar)
+            );
+            EloquentAuditDeleteSupport::each(
                 Comprobante_Proveedor::query()->whereIn('id', $aEliminar)
             );
         }
@@ -161,50 +165,67 @@ class IngresoEgresoComprobanteIvaService
             $conceptos = [];
         }
 
-        $avisos = IngresoEgresoComprobanteIvaAsientoSupport::avisosCuentasFaltantes($conceptos);
+        $debitos = $payload['debitos_gasto'] ?? [];
+        if (! is_array($debitos)) {
+            $debitos = [];
+        }
         $totalComprobante = round(abs((float) ($payload['total'] ?? 0)), 2);
 
         try {
-            $conceptos = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($conceptos);
-            $lineasDebe = IngresoEgresoComprobanteIvaAsientoSupport::lineasDebeDesdeConceptos($conceptos);
-            $totalDebe = round(array_sum(array_column($lineasDebe, 'importe')), 2);
+            $armado = IngresoEgresoComprobanteIvaAsientoSupport::armar(
+                $conceptos,
+                $debitos,
+                1,
+                $empresaId > 0 ? $empresaId : null,
+                false,
+            );
+            $totalDebe = round(array_sum(array_column($armado['lineas'], 'importe')), 2);
 
             $lineas = [];
-            foreach ($lineasDebe as $linea) {
-                $cuenta = $this->cuentacontableRepository->find($linea['cuentacontable_id']);
+            foreach ($armado['lineas'] as $linea) {
+                $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
+                $cuenta = $cuentaId > 0 ? $this->cuentacontableRepository->find($cuentaId) : null;
                 $lineas[] = [
-                    'cuentacontable_id' => $linea['cuentacontable_id'],
-                    'codigo' => $cuenta->codigo ?? '',
-                    'nombre' => $cuenta->nombre ?? '',
+                    'cuentacontable_id' => $cuentaId,
+                    'codigo' => $cuenta?->codigo ?? '',
+                    'nombre' => $cuenta?->nombre ?? '',
                     'debe' => $linea['importe'],
                     'haber' => 0,
                     'observacion' => $linea['observacion'],
+                    'origen' => $linea['origen'],
+                    'editable_cuenta' => (bool) $linea['editable_cuenta'],
+                    'editable_importe' => (bool) $linea['editable_importe'],
+                    'concepto_ivacompra_id' => $linea['concepto_ivacompra_id'],
                     'automatico' => false,
                 ];
             }
 
-            $error = null;
-            if ($totalComprobante > 0 && abs($totalDebe - $totalComprobante) > 0.05) {
-                $error = 'Los conceptos ('.number_format($totalDebe, 2).') no coinciden con el total ('.number_format($totalComprobante, 2).').';
+            $error = $armado['error'];
+            if ($error === null && $totalComprobante > 0 && abs($totalDebe - $totalComprobante) > 0.05) {
+                $error = 'Los conceptos ('.number_format($totalDebe, 2, ',', '.').') no coinciden con el total ('.number_format($totalComprobante, 2, ',', '.').').';
             }
 
             return [
                 'activo' => true,
                 'es_preview' => true,
                 'error' => $error,
-                'avisos' => $avisos,
+                'avisos' => $armado['avisos'],
+                'permite_reparto_gasto' => $armado['permite_reparto_gasto'],
+                'neto_imputable_gasto' => $armado['neto_imputable'],
                 'total_comprobante' => $totalComprobante,
                 'total_debe' => $totalDebe,
                 'total_haber' => $totalComprobante,
                 'lineas' => $lineas,
-                'nota' => 'El haber (disponibilidades) se imputa automáticamente desde las cuentas de caja del movimiento.',
+                'nota' => 'El haber (disponibilidades) se imputa automáticamente desde las cuentas de caja del movimiento. El neto sin COM es gasto abierto: puede repartirlo en varias cuentas.',
             ];
         } catch (RuntimeException $e) {
             return [
                 'activo' => true,
                 'es_preview' => true,
                 'error' => $e->getMessage(),
-                'avisos' => $avisos,
+                'avisos' => [],
+                'permite_reparto_gasto' => false,
+                'neto_imputable_gasto' => 0,
                 'total_comprobante' => $totalComprobante,
                 'lineas' => [],
             ];
@@ -224,6 +245,7 @@ class IngresoEgresoComprobanteIvaService
 
         $comprobante = $this->comprobanteRepository->create($cabecera);
         $this->sincronizarConceptos($comprobante, $payload);
+        $this->sincronizarDebitosGasto($comprobante, $payload);
         $this->registrarEstado($comprobante, 'Alta desde ingresos y egresos');
 
         return $comprobante;
@@ -240,7 +262,12 @@ class IngresoEgresoComprobanteIvaService
 
         $this->comprobanteRepository->update($cabecera, (int) $comprobante->id);
         $this->conceptoRepository->deletePorComprobanteProveedor((int) $comprobante->id);
-        $this->sincronizarConceptos($comprobante->fresh(), $payload);
+        $fresco = $comprobante->fresh();
+        if (! $fresco) {
+            throw new RuntimeException('No se pudo releer el comprobante de proveedor.');
+        }
+        $this->sincronizarConceptos($fresco, $payload);
+        $this->sincronizarDebitosGasto($fresco, $payload);
     }
 
     /**
@@ -267,6 +294,11 @@ class IngresoEgresoComprobanteIvaService
             throw new RuntimeException('El proveedor eventual debe tener un CUIT válido (11 dígitos).');
         }
 
+        $sucursal = (int) ($payload['sucursal'] ?? 0);
+        if ($sucursal <= 0) {
+            throw new RuntimeException('El punto de venta debe ser distinto de 0. ARCA rechaza la sucursal 0.');
+        }
+
         $cuitNormalizado = ComprobanteProveedorUnicidadSupport::resolverCuitDigitos(
             $proveedorId > 0 ? $proveedorId : null,
             $documentoEventual,
@@ -281,7 +313,7 @@ class IngresoEgresoComprobanteIvaService
             'proveedor_condicioniva_id_eventual' => $proveedorId > 0 ? null : ((int) ($payload['proveedor_condicioniva_id_eventual'] ?? 0) ?: null),
             'tipotransaccion_compra_id' => (int) ($payload['tipotransaccion_compra_id'] ?? 0),
             'letra' => strtoupper(substr((string) ($payload['letra'] ?? 'B'), 0, 1)),
-            'sucursal' => (int) ($payload['sucursal'] ?? 0),
+            'sucursal' => $sucursal,
             'numerocomprobante' => (int) ($payload['numerocomprobante'] ?? 0),
             'fechacomprobante' => $payload['fechacomprobante'] ?? now()->format('Y-m-d'),
             'fechaiva' => $payload['fechaiva'] ?? ($payload['fechacomprobante'] ?? now()->format('Y-m-d')),
@@ -319,10 +351,8 @@ class IngresoEgresoComprobanteIvaService
             return;
         }
 
-        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($conceptos);
-
         $orden = 1;
-        foreach ($lineas as $concepto) {
+        foreach ($conceptos as $concepto) {
             $conceptoId = (int) ($concepto['concepto_ivacompra_id'] ?? 0);
             $monto = (float) ($concepto['monto'] ?? 0);
             if ($conceptoId <= 0 || abs($monto) < 0.0001) {
@@ -341,6 +371,43 @@ class IngresoEgresoComprobanteIvaService
                 'orden' => $orden++,
                 'monto' => $monto,
                 'cuentacontabledebe_id' => $cuentaOverride,
+            ]);
+        }
+    }
+
+    /**
+     * Reparto del neto (gasto abierto) en una o más cuentas de débito.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function sincronizarDebitosGasto(Comprobante_Proveedor $comprobante, array $payload): void
+    {
+        EloquentAuditDeleteSupport::each(
+            Comprobante_Proveedor_Debe_Gasto::query()->where('comprobante_proveedor_id', $comprobante->id)
+        );
+
+        $debitos = $payload['debitos_gasto'] ?? [];
+        if (! is_array($debitos)) {
+            return;
+        }
+
+        $orden = 1;
+        foreach ($debitos as $linea) {
+            if (! is_array($linea)) {
+                continue;
+            }
+            $cuentaId = (int) ($linea['cuentacontable_id'] ?? 0);
+            $importe = round(abs((float) ($linea['importe'] ?? 0)), 2);
+            if ($cuentaId <= 0 || $importe < 0.0001) {
+                continue;
+            }
+
+            Comprobante_Proveedor_Debe_Gasto::query()->create([
+                'comprobante_proveedor_id' => $comprobante->id,
+                'orden' => $orden++,
+                'cuentacontable_id' => $cuentaId,
+                'importe' => $importe,
+                'centrocosto_id' => ((int) ($linea['centrocosto_id'] ?? 0)) ?: null,
             ]);
         }
     }
@@ -431,6 +498,7 @@ class IngresoEgresoComprobanteIvaService
         return [
             'id' => (int) $cp->id,
             'proveedor_id' => (int) ($cp->proveedor_id ?? 0),
+            'proveedor_codigo' => $cp->proveedores?->codigo ?? '',
             'proveedor_nombre' => $cp->proveedores?->nombre ?? $cp->proveedor_nombre_eventual,
             'proveedor_nombre_eventual' => $cp->proveedor_nombre_eventual,
             'proveedor_documento_eventual' => $cp->proveedor_documento_eventual,
@@ -449,6 +517,14 @@ class IngresoEgresoComprobanteIvaService
             'tipo_autorizacion' => $cp->tipo_autorizacion,
             'fechavencimientocae' => $cp->fechavencimientocae?->format('Y-m-d'),
             'leyenda' => $cp->leyenda,
+            'debitos_gasto' => $cp->comprobante_proveedor_debe_gastos->map(function ($fila) {
+                return [
+                    'cuentacontable_id' => (int) $fila->cuentacontable_id,
+                    'importe' => (float) $fila->importe,
+                    'codigo' => $fila->cuentacontables?->codigo ?? '',
+                    'nombre' => $fila->cuentacontables?->nombre ?? '',
+                ];
+            })->values()->all(),
             'tiene_pdf' => $cp->comprobante_proveedor_archivos
                 ->whereIn('tipo', [ComprobanteProveedorArchivoTipos::ORIGEN_IA, ComprobanteProveedorArchivoTipos::ADJUNTO])
                 ->isNotEmpty(),
