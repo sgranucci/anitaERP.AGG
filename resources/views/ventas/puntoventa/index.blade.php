@@ -20,6 +20,7 @@
 
 @php
     use App\Support\Ventas\PuntoventaListadoFiltros;
+    $muestraIvaVentas = \Illuminate\Support\Facades\Schema::hasColumn('puntoventa', 'iva_ventas');
 @endphp
 
 @section('contenido')
@@ -91,6 +92,9 @@
                             <th>Localidad</th>
                             <th>Provincia</th>
                             <th>Modo Facturación</th>
+                            @if ($muestraIvaVentas)
+                            <th>IVA ventas</th>
+                            @endif
                             <th>Estado</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -106,6 +110,9 @@
                             <td>{{ $data->localidades->nombre ?? '' }}</td>
                             <td>{{ $data->provincias->nombre ?? '' }}</td>
                             <td>{{ $modofacturacionEnum[$data->modofacturacion] ?? $data->modofacturacion }}</td>
+                            @if ($muestraIvaVentas)
+                            <td>{{ ! empty($data->iva_ventas) ? 'Sí' : 'No' }}</td>
+                            @endif
                             <td>{{ $estadoEnum[$data->estado] ?? $data->estado }}</td>
                             <td class="text-nowrap">
                                 @if (can('editar-puntos-de-venta', false))

@@ -24,6 +24,7 @@ use App\Support\Ventas\TipotransaccionIvaVentasSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
+use Illuminate\Support\Facades\Schema;
 
 final class IvaVentasReporteService
 {
@@ -267,8 +268,15 @@ final class IvaVentasReporteService
             ? 'fecha'
             : 'fechajornada';
 
+        $filtraIvaVentas = Schema::hasColumn('puntoventa', 'iva_ventas');
+
         return Venta::query()
-            ->whereHas('puntoventas', fn (Builder $q) => $q->where('empresa_id', $empresaId))
+            ->whereHas('puntoventas', function (Builder $q) use ($empresaId, $filtraIvaVentas) {
+                $q->where('empresa_id', $empresaId);
+                if ($filtraIvaVentas) {
+                    $q->where('iva_ventas', true);
+                }
+            })
             ->whereDate($campoFecha, '>=', $filtros['fecha_desde'])
             ->whereDate($campoFecha, '<=', $filtros['fecha_hasta'])
             ->with([
@@ -484,6 +492,7 @@ final class IvaVentasReporteService
             === IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA;
         $pvDefault = CierreRendicionMaquinaConfigSupport::puntoventaFsl($empresaId);
         $pvPorSucursal = $this->mapaPuntoventaPorSucursal($empresaId);
+        $filtraIvaVentas = Schema::hasColumn('puntoventa', 'iva_ventas');
         $tipoFslId = (int) (Tipotransaccion::query()
             ->where('abreviatura', MaquinaFslTipoSupport::ABREVIATURA)
             ->whereNull('deleted_at')
@@ -497,12 +506,16 @@ final class IvaVentasReporteService
             }
 
             $sucursal = LibroIvaDigitalVentasFslAnitaArmadoSupport::puntoVentaDesdeFila($filaAnita, $pvDefault);
+            if ($filtraIvaVentas && isset($pvPorSucursal[$sucursal]) && empty($pvPorSucursal[$sucursal]['iva_ventas'])) {
+                continue;
+            }
             $pv = $pvPorSucursal[$sucursal] ?? [
                 'puntoventa_id' => 0,
                 'puntoventa_codigo' => (string) $sucursal,
                 'puntoventa_nombre' => 'PV '.$sucursal,
                 'sucursal' => $sucursal,
                 'nombreempresa' => '',
+                'iva_ventas' => true,
             ];
             $pv['tipotransaccion_id'] = $tipoFslId;
             $pv['sucursal'] = $sucursal;
@@ -538,7 +551,7 @@ final class IvaVentasReporteService
     }
 
     /**
-     * @return array<int, array{puntoventa_id: int, puntoventa_codigo: string, puntoventa_nombre: string, sucursal: int, nombreempresa: string}>
+     * @return array<int, array{puntoventa_id: int, puntoventa_codigo: string, puntoventa_nombre: string, sucursal: int, nombreempresa: string, iva_ventas: bool}>
      */
     private function mapaPuntoventaPorSucursal(int $empresaId): array
     {
@@ -558,6 +571,7 @@ final class IvaVentasReporteService
                 'puntoventa_nombre' => trim((string) ($pv->nombre ?? $pv->codigo)),
                 'sucursal' => $sucursal,
                 'nombreempresa' => (string) ($pv->empresas->nombre ?? ''),
+                'iva_ventas' => (bool) $pv->iva_ventas,
             ];
         }
 

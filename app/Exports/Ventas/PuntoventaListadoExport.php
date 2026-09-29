@@ -25,7 +25,7 @@ class PuntoventaListadoExport implements FromView, ShouldAutoSize, WithColumnFor
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA = 'J';
 
     private PuntoventaRepositoryInterface $repository;
 
@@ -93,6 +93,7 @@ class PuntoventaListadoExport implements FromView, ShouldAutoSize, WithColumnFor
                 'G' => NumberFormat::FORMAT_TEXT,
                 'H' => NumberFormat::FORMAT_TEXT,
                 'I' => NumberFormat::FORMAT_TEXT,
+                'J' => NumberFormat::FORMAT_TEXT,
             ];
         }
 
@@ -133,7 +134,8 @@ class PuntoventaListadoExport implements FromView, ShouldAutoSize, WithColumnFor
                 'F' => 16,
                 'G' => 14,
                 'H' => 14,
-                'I' => 10,
+                'I' => 12,
+                'J' => 10,
             ];
         }
 

@@ -192,6 +192,8 @@ class PuntoventaAnitaSyncService
                 return 'actualizado';
             }
 
+            $webservice = trim((string) ($datos['webservice'] ?? ''));
+            $datos['iva_ventas'] = $webservice !== '';
             $this->puntoventaRepository->create($datos, false);
             DB::commit();
 

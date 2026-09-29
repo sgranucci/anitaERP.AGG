@@ -8,7 +8,10 @@ use App\ApiAnita;
 use App\Models\Contable\Sicore_Config;
 use App\Repositories\Compras\RetenciongananciaRepositoryInterface;
 use App\Repositories\Compras\RetencionivaRepositoryInterface;
+use App\Support\Compras\Retencion\AnitaRetencionEsquemaSupport;
+use App\Support\Contable\Anita\AsientoAnitaFerliSupport;
 use App\Support\Contable\Sicore\SicoreCompraConcmovAnitaSupport;
+use App\Support\Contable\Sicore\SicoreCuentaRgpSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreErpComplementoSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
@@ -464,10 +467,12 @@ final class SicoreComprasDatosService
             'acc' => 'list',
             'sistema' => 'contab',
             'tabla' => 'subdiario',
-            'campos' => 'subd_empresa,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,'
+            'campos' => $this->camposSubdiario(
+                'subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,'
                 .'subd_cuenta,subd_contrapartida,subd_importe,subd_tipo_mov',
-            'whereArmado' => ' WHERE subd_empresa='.$empresaAnita
-                .' AND subd_fecha BETWEEN '.$desdeAnita.' AND '.$hastaAnita
+            ),
+            'whereArmado' => ' WHERE '.$this->filtroEmpresaSubdiario($empresaAnita)
+                .'subd_fecha BETWEEN '.$desdeAnita.' AND '.$hastaAnita
                 .' AND subd_tipo="CHP"'
                 .' AND ('.implode(' OR ', $cuentasOr).')',
             'orderBy' => 'subd_fecha, subd_nro',
@@ -490,7 +495,7 @@ final class SicoreComprasDatosService
             }
 
             $nro = (int) ($fila['subd_nro'] ?? 0);
-            $empresa = (int) ($fila['subd_empresa'] ?? $empresaAnita);
+            $empresa = $this->empresaClaveSubdiario($fila, $empresaAnita);
             if ($nro <= 0) {
                 continue;
             }
@@ -570,13 +575,13 @@ final class SicoreComprasDatosService
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'retmov',
-            'campos' => implode(', ', [
+            'campos' => $this->camposRetmov(implode(', ', [
                 'retv_proveedor', 'retv_tipo', 'retv_letra', 'retv_sucursal', 'retv_nro',
                 'retv_fecha', 'retv_codigo_ret', 'retv_pago_actual', 'retv_retencion',
-                'retv_nro_retencion', 'retv_porc_excl', 'retv_empresa',
-            ]),
-            'whereArmado' => ' WHERE retv_empresa='.$empresaAnita
-                .' AND retv_fecha <= '.$hastaAnita
+                'retv_nro_retencion', 'retv_porc_excl',
+            ])),
+            'whereArmado' => ' WHERE '.$this->filtroEmpresaRetmov($empresaAnita)
+                .'retv_fecha <= '.$hastaAnita
                 .' AND retv_retencion <> 0'
                 .' AND (retv_tipo="OPP" OR retv_tipo LIKE "OPP%")'
                 .' AND (retv_proveedor="'.$emisorEsc.'" OR retv_proveedor="'.$emisorAlt.'")'
@@ -596,6 +601,13 @@ final class SicoreComprasDatosService
      */
     private function codigosCuentaConfig(Sicore_Config $config, int $empresaId): array
     {
+        if ($config->criterio === 'compras_ganancias') {
+            $rgp = SicoreCuentaRgpSupport::ganancias($empresaId);
+            if ($rgp !== null) {
+                return [$rgp['codigo_anita']];
+            }
+        }
+
         if (! $config->relationLoaded('cuentas')) {
             $config->load('cuentas.cuentacontable');
         }
@@ -644,10 +656,12 @@ final class SicoreComprasDatosService
             'acc' => 'list',
             'sistema' => 'contab',
             'tabla' => 'subdiario',
-            'campos' => 'subd_empresa,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,'
+            'campos' => $this->camposSubdiario(
+                'subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,subd_emisor,'
                 .'subd_cuenta,subd_contrapartida',
-            'whereArmado' => ' WHERE subd_empresa='.$empresaAnita
-                .' AND subd_fecha BETWEEN '.$desdeAnita.' AND '.$hastaAnita
+            ),
+            'whereArmado' => ' WHERE '.$this->filtroEmpresaSubdiario($empresaAnita)
+                .'subd_fecha BETWEEN '.$desdeAnita.' AND '.$hastaAnita
                 .' AND subd_tipo IN ('.$tiposSql.')'
                 .' AND ('.implode(' OR ', $cuentasOr).')',
             'orderBy' => 'subd_fecha, subd_tipo, subd_nro',
@@ -664,7 +678,7 @@ final class SicoreComprasDatosService
             $letra = trim((string) ($fila['subd_letra'] ?? ''));
             $sucursal = (int) ($fila['subd_sucursal'] ?? 0);
             $nro = (int) ($fila['subd_nro'] ?? 0);
-            $empresa = (int) ($fila['subd_empresa'] ?? $empresaAnita);
+            $empresa = $this->empresaClaveSubdiario($fila, $empresaAnita);
             if ($nro <= 0) {
                 continue;
             }
@@ -706,12 +720,11 @@ final class SicoreComprasDatosService
         }
 
         $api = new ApiAnita();
-        $campos = implode(', ', [
+        $campos = $this->camposRetmov(implode(', ', [
             'retv_proveedor', 'retv_tipo', 'retv_letra', 'retv_sucursal', 'retv_nro',
             'retv_fecha', 'retv_codigo_ret', 'retv_pago_actual', 'retv_retencion',
             'retv_nro_retencion', 'retv_nombre_prov', 'retv_cuit_prov', 'retv_porc_excl',
-            'retv_empresa',
-        ]);
+        ]));
 
         $out = [];
         foreach (array_chunk($claves, 40) as $lote) {
@@ -725,11 +738,14 @@ final class SicoreComprasDatosService
                 if ($tipo === '' || $nro <= 0) {
                     continue;
                 }
-                $ors[] = '(retv_tipo="'.$tipo.'"'
+                $clausula = '(retv_tipo="'.$tipo.'"'
                     .' AND retv_letra="'.$letra.'"'
                     .' AND retv_sucursal='.$suc
-                    .' AND retv_nro='.$nro
-                    .' AND retv_empresa='.$emp.')';
+                    .' AND retv_nro='.$nro;
+                if ($this->retencionIncluyeEmpresa()) {
+                    $clausula .= ' AND retv_empresa='.$emp;
+                }
+                $ors[] = $clausula.')';
             }
             if ($ors === []) {
                 continue;
@@ -765,7 +781,7 @@ final class SicoreComprasDatosService
                 trim((string) ($fila['retv_letra'] ?? '')),
                 (int) ($fila['retv_sucursal'] ?? 0),
                 (int) ($fila['retv_nro'] ?? 0),
-                (int) ($fila['retv_empresa'] ?? 0),
+                $this->retencionIncluyeEmpresa() ? (int) ($fila['retv_empresa'] ?? 0) : 0,
             );
             $out[$clave][] = $fila;
         }
@@ -797,16 +813,16 @@ final class SicoreComprasDatosService
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'retimov',
-            'campos' => implode(', ', [
+            'campos' => $this->camposRetimov(implode(', ', [
                 'retiv_proveedor', 'retiv_fecha', 'retiv_codigo_ret', 'retiv_retencion',
                 'retiv_nro_ret', 'retiv_tipo_comp', 'retiv_letra_comp', 'retiv_suc_comp',
                 'retiv_nro_comp', 'retiv_fecha_comp', 'retiv_nro_interno',
                 'retiv_nombre_prov', 'retiv_cuit_prov',
-                'retiv_porc_excl', 'retiv_empresa',
-            ]),
+                'retiv_porc_excl',
+            ])),
             'whereArmado' => ' WHERE retiv_fecha >= '.$desdeAnita
                 .' AND retiv_fecha <= '.$hastaAnita
-                .' AND retiv_empresa = '.$empresaAnita
+                .($this->retencionIncluyeEmpresa() ? ' AND retiv_empresa = '.$empresaAnita : '')
                 .' AND retiv_retencion <> 0',
             'orderBy' => 'retiv_fecha, retiv_proveedor, retiv_nro_ret',
         ]));
@@ -853,5 +869,55 @@ final class SicoreComprasDatosService
         $s = str_pad((string) $fechaAnita, 8, '0', STR_PAD_LEFT);
 
         return substr($s, 0, 4).'-'.substr($s, 4, 2).'-'.substr($s, 6, 2);
+    }
+
+    /**
+     * Ferli: subdiario no tiene subd_empresa. La clave del comprobante usa 0 en ambos lados.
+     */
+    private function subdiarioIncluyeEmpresa(): bool
+    {
+        return ! AsientoAnitaFerliSupport::aplica();
+    }
+
+    private function retencionIncluyeEmpresa(): bool
+    {
+        return AnitaRetencionEsquemaSupport::movimientosTienenColumnaEmpresa();
+    }
+
+    private function camposSubdiario(string $campos): string
+    {
+        return $this->subdiarioIncluyeEmpresa() ? 'subd_empresa,'.$campos : $campos;
+    }
+
+    private function filtroEmpresaSubdiario(int $empresaAnita): string
+    {
+        return $this->subdiarioIncluyeEmpresa() ? 'subd_empresa='.$empresaAnita.' AND ' : '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function empresaClaveSubdiario(array $fila, int $empresaAnita): int
+    {
+        if (! $this->subdiarioIncluyeEmpresa()) {
+            return 0;
+        }
+
+        return (int) ($fila['subd_empresa'] ?? $empresaAnita);
+    }
+
+    private function camposRetmov(string $campos): string
+    {
+        return $this->retencionIncluyeEmpresa() ? $campos.', retv_empresa' : $campos;
+    }
+
+    private function camposRetimov(string $campos): string
+    {
+        return $this->retencionIncluyeEmpresa() ? $campos.', retiv_empresa' : $campos;
+    }
+
+    private function filtroEmpresaRetmov(int $empresaAnita): string
+    {
+        return $this->retencionIncluyeEmpresa() ? 'retv_empresa='.$empresaAnita.' AND ' : '';
     }
 }

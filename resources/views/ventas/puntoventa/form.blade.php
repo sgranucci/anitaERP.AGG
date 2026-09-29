@@ -12,12 +12,18 @@
     $webserviceActual = old('webservice', $data->webservice ?? '');
     $modofacturacionActual = old('modofacturacion', $data->modofacturacion ?? '');
     $paisActual = (int) old('pais_id', $data->pais_id ?? config('puntoventa_anita.default_pais_id', 1));
+    $ivaVentasMarcado = old('iva_ventas');
+    if ($ivaVentasMarcado === null) {
+        $ivaVentasMarcado = isset($data)
+            ? (bool) ($data->iva_ventas ?? false)
+            : ($webserviceActual !== '');
+    }
 @endphp
-
 <div id="puntoventa-form-root"
      data-url-puntos="{{ route('puntoventa_arca_puntos_venta') }}"
      data-url-domicilio="{{ route('puntoventa_arca_domicilio_fiscal') }}"
-     data-empresa-arca-id="{{ $empresaArcaId }}">
+     data-empresa-arca-id="{{ $empresaArcaId }}"
+     data-es-alta="{{ isset($data) ? '0' : '1' }}">
 
     <div class="form-group row">
         <label for="nombre" class="col-lg-3 control-label text-right pr-2 requerido">Nombre</label>
@@ -119,7 +125,7 @@
                     </select>
                 </div>
             </div>
-            <div class="form-group row mb-0">
+            <div class="form-group row">
                 <label for="webservice" class="col-lg-3 control-label text-right pr-2">Web service</label>
                 <div class="col-lg-4">
                     <select name="webservice" id="webservice" class="form-control" data-fouc>
@@ -133,6 +139,23 @@
                     </select>
                 </div>
             </div>
+            @if (\Illuminate\Support\Facades\Schema::hasColumn('puntoventa', 'iva_ventas'))
+            <div class="form-group row mb-0">
+                <div class="col-lg-3"></div>
+                <div class="col-lg-8">
+                    <div class="form-check">
+                        <input type="hidden" name="iva_ventas" value="0">
+                        <input type="checkbox" class="form-check-input" name="iva_ventas" id="iva_ventas" value="1"
+                            @checked($ivaVentasMarcado)>
+                        <label class="form-check-label" for="iva_ventas">Va al IVA ventas</label>
+                    </div>
+                    <small class="form-text text-muted">
+                        Si está tildado, los comprobantes de este punto de venta entran al listado IVA ventas.
+                        En el alta se propone tildado cuando hay web service.
+                    </small>
+                </div>
+            </div>
+            @endif
             <div id="puntoventa-arca-estado" class="alert alert-info py-2 px-3 mt-3 mb-0 d-none" role="status" aria-live="polite"></div>
         </div>
     </div>

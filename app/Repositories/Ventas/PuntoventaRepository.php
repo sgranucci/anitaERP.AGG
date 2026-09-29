@@ -9,6 +9,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Ventas\PuntoventaListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Schema;
 
 class PuntoventaRepository implements PuntoventaRepositoryInterface
 {
@@ -87,6 +88,7 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
 
     public function create(array $data, ?bool $syncAnita = null)
     {
+        $data = $this->sinIvaVentasSiFaltaColumna($data);
         $puntoventa = $this->model->create($data);
 
         if ($syncAnita ?? config('app.anita_sync_puntoventa_write')) {
@@ -100,6 +102,7 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
     {
         $puntoventa = $this->model->findOrFail($id);
         $codigoAnterior = (string) $puntoventa->codigo;
+        $data = $this->sinIvaVentasSiFaltaColumna($data);
 
         $puntoventa->update($data);
 
@@ -273,5 +276,18 @@ class PuntoventaRepository implements PuntoventaRepositoryInterface
                 $condicioniva = '5';
                 break;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function sinIvaVentasSiFaltaColumna(array $data): array
+    {
+        if (! Schema::hasColumn('puntoventa', 'iva_ventas')) {
+            unset($data['iva_ventas']);
+        }
+
+        return $data;
     }
 }

@@ -7,6 +7,7 @@ namespace App\Services\Contable\Sicore;
 use App\Models\Contable\Sicore_Config;
 use App\Repositories\Contable\Sicore_ConfigRepositoryInterface;
 use App\Support\Contable\Sicore\SicoreCriteriosSupport;
+use App\Support\Contable\Sicore\SicoreCuentaRgpSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
 use App\Support\Contable\Sicore\SicoreListadoFiltros;
 use Illuminate\Support\Collection;
@@ -102,6 +103,7 @@ final class SicoreReporteService
         $criteriosConfig = SicoreCriteriosSupport::criteriosConfigParaProceso($proceso);
         /** @var Collection<int, Sicore_Config> $configs */
         $configs = $this->configRepository->activosPorCriterios($criteriosConfig);
+        $configs = $this->completarGananciasPagoSiFalta($proceso, $empresaId, $configs);
 
         $registros = [];
         foreach ($configs as $config) {
@@ -139,6 +141,48 @@ final class SicoreReporteService
             'archivo_v8' => SicoreFormatoV8Support::generarArchivo($registros),
             'desde_cache' => false,
         ];
+    }
+
+    /**
+     * Sin fila de compras_ganancias el reporte no consulta Anita.
+     * La cuenta sale de RGP; impuesto y quincenas son los del régimen de pagos.
+     *
+     * @param  Collection<int, Sicore_Config>  $configs
+     * @return Collection<int, Sicore_Config>
+     */
+    private function completarGananciasPagoSiFalta(string $proceso, int $empresaId, Collection $configs): Collection
+    {
+        if ($proceso !== SicoreCriteriosSupport::COMPRAS || $empresaId <= 0) {
+            return $configs;
+        }
+        if ($configs->contains(static fn (Sicore_Config $c) => $c->criterio === 'compras_ganancias')) {
+            return $configs;
+        }
+        if (SicoreCuentaRgpSupport::ganancias($empresaId) === null) {
+            return $configs;
+        }
+
+        $config = new Sicore_Config([
+            'codigo_impuesto' => 217,
+            'codigo_regimen' => null,
+            'nombre' => 'Ret. impto. gcias. a 3ros (compras)',
+            'descripcion' => 'Retenciones de ganancias en pagos a proveedores (retmov). Cuenta: RGP.',
+            'criterio' => 'compras_ganancias',
+            'codigo_operacion' => 1,
+            'concilia_con' => 'sicore',
+            'frecuencia' => 'quincenal',
+            'quincena_1_desde' => 1,
+            'quincena_1_hasta' => 15,
+            'quincena_2_desde' => 16,
+            'quincena_2_hasta' => 31,
+            'activo' => true,
+        ]);
+        $config->id = 0;
+        $config->exists = false;
+        $config->setRelation('cuentas', collect());
+        $configs->push($config);
+
+        return $configs;
     }
 
     /**

@@ -91,8 +91,8 @@ final class SicoreListadoFiltros
     public static function firma(array $filtros): string
     {
         return md5(json_encode([
-            // v5: vuelve a mostrar saldo arrastrado (no tapar diferencias de col. P)
-            'v' => 5,
+            // v6: ganancias de pagos sin fila en sicore_config usa la cuenta RGP
+            'v' => 6,
             'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
             'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),

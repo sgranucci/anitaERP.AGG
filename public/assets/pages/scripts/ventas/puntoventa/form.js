@@ -34,6 +34,18 @@
 		return sel ? String(sel.value || '') : '';
 	}
 
+	function proponerIvaVentasDesdeWebservice() {
+		var form = root();
+		var cb = document.getElementById('iva_ventas');
+		if (!form || !cb || form.getAttribute('data-es-alta') !== '1') {
+			return;
+		}
+		if (cb.getAttribute('data-tocado') === '1') {
+			return;
+		}
+		cb.checked = webserviceSeleccionado() !== '';
+	}
+
 	function modofacturacionSeleccionado() {
 		var sel = document.getElementById('modofacturacion');
 		return sel ? String(sel.value || '') : '';
@@ -555,6 +567,14 @@
 		if (wsSel) {
 			wsSel.addEventListener('change', function () {
 				cargarPuntos(false, false);
+				proponerIvaVentasDesdeWebservice();
+			});
+		}
+
+		var ivaVentas = byId('iva_ventas');
+		if (ivaVentas) {
+			ivaVentas.addEventListener('change', function () {
+				ivaVentas.setAttribute('data-tocado', '1');
 			});
 		}
 

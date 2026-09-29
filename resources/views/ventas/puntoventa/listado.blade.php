@@ -68,11 +68,12 @@
 				<th style="width: 14%;">Nombre</th>
 				<th style="width: 8%;">Código</th>
 				<th style="width: 12%;">Empresa</th>
-				<th style="width: 18%;">Domicilio</th>
+				<th style="width: 15%;">Domicilio</th>
 				<th style="width: 12%;">Localidad</th>
 				<th style="width: 10%;">Provincia</th>
-				<th style="width: 11%;">Modo</th>
-				<th style="width: 10%;">Estado</th>
+				<th style="width: 10%;">Modo</th>
+				<th style="width: 6%;">IVA ventas</th>
+				<th style="width: 8%;">Estado</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -86,6 +87,7 @@
 					<td>{{ $data->localidades->nombre ?? '' }}</td>
 					<td>{{ $data->provincias->nombre ?? '' }}</td>
 					<td>{{ $modofacturacionEnum[$data->modofacturacion] ?? $data->modofacturacion }}</td>
+					<td>{{ ! empty($data->iva_ventas) ? 'Sí' : 'No' }}</td>
 					<td>{{ $estadoEnum[$data->estado] ?? $data->estado }}</td>
 				</tr>
 			@endforeach

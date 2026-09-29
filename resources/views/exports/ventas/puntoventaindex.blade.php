@@ -2,13 +2,13 @@
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="9" style="height: 52px;">&#160;</td>
+				<td colspan="10" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="9"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Puntos de venta</h2></td>
+			<td colspan="10"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Puntos de venta</h2></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -21,6 +21,7 @@
 			<th>Localidad</th>
 			<th>Provincia</th>
 			<th>Modo facturación</th>
+			<th>IVA ventas</th>
 			<th>Estado</th>
 		</tr>
 	</thead>
@@ -35,6 +36,7 @@
 				<td>{{ $data->localidades->nombre ?? '' }}</td>
 				<td>{{ $data->provincias->nombre ?? '' }}</td>
 				<td>{{ \App\Models\Ventas\Puntoventa::$enumModoFacturacion[$data->modofacturacion] ?? $data->modofacturacion }}</td>
+				<td>{{ ! empty($data->iva_ventas) ? 'Sí' : 'No' }}</td>
 				<td>{{ \App\Models\Ventas\Puntoventa::$enumEstado[$data->estado] ?? $data->estado }}</td>
 			</tr>
 		@endforeach

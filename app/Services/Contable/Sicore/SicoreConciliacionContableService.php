@@ -8,6 +8,7 @@ use App\Models\Contable\Sicore_Config;
 use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
+use App\Support\Contable\Sicore\SicoreCuentaRgpSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
 use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 use Illuminate\Support\Collection;
@@ -41,8 +42,8 @@ final class SicoreConciliacionContableService
         // Precarga saldos de ejercicio (col. P) de todas las cuentas del proceso en un solo mayor plano.
         $codigosSaldo = [];
         foreach ($configs as $configPrecarga) {
-            foreach ($configPrecarga->cuentas->where('empresa_id', $empresaId) as $c) {
-                $codigo = (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? ''));
+            foreach ($this->cuentasDetalle($configPrecarga, $empresaId) as $c) {
+                $codigo = (int) preg_replace('/\D/', '', (string) ($c['codigo'] ?? ''));
                 if ($codigo > 0) {
                     $codigosSaldo[$codigo] = $codigo;
                 }
@@ -69,16 +70,7 @@ final class SicoreConciliacionContableService
                 $registrosConfig,
             )), 2);
 
-            $cuentasDetalle = $config->cuentas
-                ->where('empresa_id', $empresaId)
-                ->map(static fn ($c) => [
-                    'id' => (int) $c->cuentacontable_id,
-                    'codigo' => $c->cuentacontable?->codigo ?? '',
-                    'nombre' => $c->cuentacontable?->nombre ?? '',
-                    'tipocuenta' => $c->cuentacontable?->tipocuenta ?? null,
-                ])
-                ->values()
-                ->all();
+            $cuentasDetalle = $this->cuentasDetalle($config, $empresaId);
 
             $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
 
@@ -118,6 +110,44 @@ final class SicoreConciliacionContableService
             'saldo_ejercicio_desde' => self::ymdAIso(MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD),
             'saldo_ejercicio_hasta' => $hasta,
         ];
+    }
+
+    /**
+     * Ganancias de pagos: la cuenta es la de RGP (pago.retencion_ganancias).
+     * El resto sigue la cuenta cargada en la configuración SICORE.
+     *
+     * @return list<array{id: int, codigo: string, nombre: string, tipocuenta: ?string}>
+     */
+    private function cuentasDetalle(Sicore_Config $config, int $empresaId): array
+    {
+        if ($config->criterio === 'compras_ganancias') {
+            $rgp = SicoreCuentaRgpSupport::ganancias($empresaId);
+            if ($rgp !== null) {
+                return [[
+                    'id' => $rgp['id'],
+                    'codigo' => $rgp['codigo'],
+                    'nombre' => $rgp['nombre'],
+                    'tipocuenta' => $rgp['tipocuenta'],
+                ]];
+            }
+        }
+
+        if (! $config->relationLoaded('cuentas')) {
+            $config->load('cuentas.cuentacontable');
+        }
+
+        return $config->cuentas
+            ->where('empresa_id', $empresaId)
+            ->map(static fn ($c) => [
+                'id' => (int) $c->cuentacontable_id,
+                'codigo' => (string) ($c->cuentacontable?->codigo ?? ''),
+                'nombre' => (string) ($c->cuentacontable?->nombre ?? ''),
+                'tipocuenta' => $c->cuentacontable?->tipocuenta !== null
+                    ? (string) $c->cuentacontable->tipocuenta
+                    : null,
+            ])
+            ->values()
+            ->all();
     }
 
     private static function ymdAIso(int $ymd): string
