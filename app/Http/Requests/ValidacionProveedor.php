@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Compras\Tiposervicio_Proveedor;
+use App\Models\Configuracion\Pais;
 use App\Rules\Compras\RuleProveedor;
 use App\Rules\EmailsMultiples;
 use App\Support\Configuracion\LocalidadProvinciaSupport;
@@ -52,7 +53,7 @@ class ValidacionProveedor extends FormRequest
     public function rules()
     {
         $nroInscripcionRules = ['required', new RuleProveedor('nroinscripcion')];
-        if ($this->tipoServicioProveedorControlaUnicidadCuit()) {
+        if ($this->tipoServicioProveedorControlaUnicidadCuit() && ! $this->proveedorEsDelExterior()) {
             $nroInscripcionRules[] = Rule::unique('proveedor', 'nroinscripcion')
                 ->ignore($this->route('id'))
                 ->whereNull('deleted_at');
@@ -262,5 +263,35 @@ class ValidacionProveedor extends FormRequest
         }
 
         return $tipo->controla_unicidad_cuit !== Tiposervicio_Proveedor::UNICIDAD_CUIT_NO_CONTROLA;
+    }
+
+    /**
+     * País distinto de Argentina: el CUIT puede repetirse (CUIT país compartido o CUIT ARCA).
+     */
+    private function proveedorEsDelExterior(): bool
+    {
+        $paisId = (int) $this->input('pais_id');
+        if ($paisId <= 0) {
+            return false;
+        }
+
+        $pais = Pais::query()->find($paisId, ['id', 'nombre', 'codigo']);
+        if ($pais === null) {
+            return false;
+        }
+
+        return ! self::paisEsArgentina($pais->codigo, $pais->nombre);
+    }
+
+    private static function paisEsArgentina(?string $codigo, ?string $nombre): bool
+    {
+        if (trim((string) $codigo) === '200') {
+            return true;
+        }
+
+        $nombreNorm = mb_strtoupper(trim((string) $nombre));
+        $nombreNorm = preg_replace('/^\d+\s*-\s*/', '', $nombreNorm) ?? $nombreNorm;
+
+        return $nombreNorm === 'ARGENTINA';
     }
 }
