@@ -621,6 +621,9 @@
                 comprobantesIva.push(payload);
             }
             renderGrilla();
+            if (typeof flModificaAsiento !== 'undefined') {
+                flModificaAsiento = true;
+            }
             $('#modal-ie-comprobante-iva').modal('hide');
         }
 
@@ -757,6 +760,9 @@
             if (confirm('¿Quitar este comprobante de la grilla?')) {
                 comprobantesIva.splice(idx, 1);
                 renderGrilla();
+                if (typeof flModificaAsiento !== 'undefined') {
+                    flModificaAsiento = true;
+                }
             }
         });
 

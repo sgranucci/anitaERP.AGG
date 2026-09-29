@@ -816,6 +816,8 @@ class IngresoEgresoService
 			}
 
 			$importe = round((float) $linea['importe'], 2);
+			// Contrapartida de la caja: egreso (signo < 0) deja el gasto/compra
+			// al DEBE y la caja al HABER. El signo del tipo no se copia a estas líneas.
 			$asiento[] = [
 				'cuentacontable_id' => $linea['cuentacontable_id'],
 				'codigo' => $cuentacontable->codigo,
@@ -823,8 +825,8 @@ class IngresoEgresoService
 				'moneda_id' => $monedaAsientoId,
 				'cotizacion' => $cotizacion,
 				'centrocosto_id' => $linea['centrocosto_id'] ?? 0,
-				'debe' => $signo >= 0 ? $importe : '',
-				'haber' => $signo < 0 ? $importe : '',
+				'debe' => $signo < 0 ? $importe : '',
+				'haber' => $signo >= 0 ? $importe : '',
 				'observacion' => $linea['observacion'] ?? '',
 				'carga_cuentacontable_manual' => 'N',
 			];
