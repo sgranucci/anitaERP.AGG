@@ -59,6 +59,7 @@ class MayorPlanoCuentaComprobanteEnricher
 
         $remesaIds = [];
         $solicitudpagoIds = [];
+        $cpIds = [];
         foreach ($filas as $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
                 continue;
@@ -72,6 +73,10 @@ class MayorPlanoCuentaComprobanteEnricher
             $spid = (int) ($fks['solicitudpago_id'] ?? 0);
             if ($spid > 0) {
                 $solicitudpagoIds[$spid] = $spid;
+            }
+            $cpId = (int) ($fks['comprobante_proveedor_id'] ?? 0);
+            if ($cpId > 0) {
+                $cpIds[$cpId] = $cpId;
             }
         }
 
@@ -90,6 +95,8 @@ class MayorPlanoCuentaComprobanteEnricher
                 ->pluck('codigo', 'id')
                 ->all();
         }
+
+        $facturas = $this->cargarFacturasProveedor(array_values($cpIds));
 
         foreach ($filas as $idx => $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
@@ -123,6 +130,10 @@ class MayorPlanoCuentaComprobanteEnricher
                 $filas[$idx]['ordencompra_id'] = $ocAsiento;
             }
 
+            $cpIdFila = (int) ($filas[$idx]['comprobante_proveedor_id'] ?? 0);
+            $factura = $facturas[$cpIdFila] ?? null;
+            $this->aplicarFacturaProveedor($filas[$idx], $factura);
+
             if (trim((string) ($filas[$idx]['comprobante'] ?? '')) === '') {
                 $filas[$idx]['comprobante'] = $this->etiquetaComprobante($filas[$idx]);
             }
@@ -151,6 +162,74 @@ class MayorPlanoCuentaComprobanteEnricher
         $row = $asientoId > 0 ? $mapa->get($asientoId) : null;
 
         return $row !== null ? array_map('intval', (array) $row) : [];
+    }
+
+    /**
+     * Número fiscal del comprobante de proveedor (tipo FNB y comprobante A0007-00000890).
+     * Cubre el asiento manual con referencia y el asiento generado por la factura,
+     * cuando la cabecera no trae anita_tipo / anita_nro.
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}|null  $factura
+     */
+    private function aplicarFacturaProveedor(array &$fila, ?array $factura): void
+    {
+        if ($factura === null || (int) ($factura['nro'] ?? 0) <= 0) {
+            return;
+        }
+
+        $comprobante = trim((string) ($fila['comprobante'] ?? ''));
+        $esPlaceholder = $comprobante === '' || preg_match('/^CP #\d+$/', $comprobante) === 1;
+        if ($esPlaceholder) {
+            $formateado = MayorPlanoCuentaSupport::formatearComprobante(
+                (string) ($factura['tipo'] ?? ''),
+                (string) ($factura['letra'] ?? ' '),
+                (int) ($factura['sucursal'] ?? 0),
+                (int) ($factura['nro'] ?? 0),
+            );
+            if ($formateado !== '') {
+                $fila['comprobante'] = $formateado;
+            }
+        }
+
+        $tipo = strtoupper(trim((string) ($factura['tipo'] ?? '')));
+        if ($tipo !== '' && trim((string) ($fila['tipo_comp'] ?? '')) === '') {
+            $fila['tipo_comp'] = $tipo;
+        }
+    }
+
+    /**
+     * @param  list<int>  $cpIds
+     * @return array<int, array{tipo: string, letra: string, sucursal: int, nro: int}>
+     */
+    private function cargarFacturasProveedor(array $cpIds): array
+    {
+        if ($cpIds === [] || ! Schema::hasTable('comprobante_proveedor')) {
+            return [];
+        }
+
+        $query = DB::table('comprobante_proveedor as cp')
+            ->whereIn('cp.id', $cpIds)
+            ->select(['cp.id', 'cp.letra', 'cp.sucursal', 'cp.numerocomprobante']);
+
+        if (Schema::hasTable('tipotransaccion_compra')
+            && Schema::hasColumn('comprobante_proveedor', 'tipotransaccion_compra_id')
+            && Schema::hasColumn('tipotransaccion_compra', 'abreviatura')) {
+            $query->leftJoin('tipotransaccion_compra as tt', 'tt.id', '=', 'cp.tipotransaccion_compra_id')
+                ->addSelect('tt.abreviatura');
+        }
+
+        $out = [];
+        foreach ($query->get() as $row) {
+            $out[(int) $row->id] = [
+                'tipo' => strtoupper(substr(trim((string) ($row->abreviatura ?? '')), 0, 10)),
+                'letra' => (string) ($row->letra ?? ' '),
+                'sucursal' => (int) ($row->sucursal ?? 0),
+                'nro' => (int) ($row->numerocomprobante ?? 0),
+            ];
+        }
+
+        return $out;
     }
 
     /**

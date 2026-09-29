@@ -109,7 +109,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 		if (! isset($data['estado_aprobacion'])) {
 			$data['estado_aprobacion'] = Asiento::ESTADO_APROBACION_CONFIRMADO;
 		}
-		
+
+		$data = $this->proyectarMetadatosDocumentoAnita($data);
+
 		$asiento = $this->model->create($data);
 
 		// omitir_anita: el caller sincroniza ctamov después (ej. recepción COM) para evitar doble escritura.
@@ -175,6 +177,39 @@ class AsientoRepository implements AsientoRepositoryInterface
         ]);
     }
 
+    /**
+     * La clave fiscal (tipo, letra, sucursal, nro) viaja al sync de Anita pero no se
+     * guardaba en asiento.anita_*. Sin eso el mayor muestra «CP #id» en vez de la factura.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function proyectarMetadatosDocumentoAnita(array $data): array
+    {
+        if ((int) ($data['anita_nro'] ?? 0) > 0) {
+            return $data;
+        }
+
+        $nro = (int) ($data['nro'] ?? 0);
+        if ($nro <= 0) {
+            return $data;
+        }
+
+        $tipo = strtoupper(substr(trim((string) ($data['tipo'] ?? '')), 0, 10));
+        $letra = substr(trim((string) ($data['letra'] ?? '')), 0, 3);
+        $data['anita_tipo'] = $tipo !== '' ? $tipo : null;
+        $data['anita_letra'] = $letra !== '' ? $letra : null;
+        $data['anita_sucursal'] = (int) ($data['sucursal'] ?? 0);
+        $data['anita_nro'] = $nro;
+
+        $sistema = substr(trim((string) ($data['sistema_ctav'] ?? '')), 0, 5);
+        if ($sistema !== '' && trim((string) ($data['anita_sistema'] ?? '')) === '') {
+            $data['anita_sistema'] = $sistema;
+        }
+
+        return $data;
+    }
+
     public function update(array $data, $id)
     {
 		$data['usuario_id'] = Auth::user()->id;
@@ -186,6 +221,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 			// no del subsistema que lo originó (compras, ventas, stock, etc.).
 			$this->assertPeriodoContablePermitido($dataParaValidar, true);
 		}
+
+		$data = $this->proyectarMetadatosDocumentoAnita($data);
 
 		$asiento = $this->model->findOrFail($id)->update($data);
 
