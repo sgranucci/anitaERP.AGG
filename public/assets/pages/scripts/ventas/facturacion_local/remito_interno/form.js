@@ -63,6 +63,23 @@
             var selV = row.querySelector('.ri-variante-select');
             var selT = row.querySelector('.ri-talle-select');
             if (!selV || !selT) return;
+            row.dataset.modoVariante = modo;
+
+            if (modo === 'sin_variante') {
+                selV.innerHTML = '<option value="">No aplica</option>';
+                selT.innerHTML = '<option value="">No aplica</option>';
+                selV.disabled = true;
+                selT.disabled = true;
+                var comb0 = row.querySelector('.ri-combinacion-id');
+                var color0 = row.querySelector('.ri-color-id');
+                var talle0 = row.querySelector('.ri-talle-id');
+                if (comb0) comb0.value = '';
+                if (color0) color0.value = '';
+                if (talle0) talle0.value = '';
+                return;
+            }
+            selV.disabled = false;
+            selT.disabled = false;
 
             selV.innerHTML = '<option value="">Seleccione…</option>';
             if (modo === 'color_talle') {

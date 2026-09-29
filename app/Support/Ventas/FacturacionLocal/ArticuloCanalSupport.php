@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Programas de Facturación Local / stock local: scopeArticulosCanalLocal()
  * (canal LOCAL + estado_local ACTIVO + estado ACTIVO).
- * POS búsqueda: scopeArticulosPosLocal() (+ combinación activa o color/talle).
+ * POS búsqueda: scopeArticulosPosLocal() (canal Local activo; la variante la decide el modal).
  */
 final class ArticuloCanalSupport
 {
@@ -146,8 +146,8 @@ final class ArticuloCanalSupport
     }
 
     /**
-     * POS / búsqueda operativa: canal Local + artículo activo + variante vendible
-     * (combinación activa o color/talle).
+     * POS / búsqueda operativa: canal Local + artículo activo.
+     * Sin combinación activa y sin tilde de color/talle igual se puede vender (solo cantidad).
      *
      * @param  \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder  $query
      * @return \Illuminate\Database\Eloquent\Builder|\Illuminate\Database\Query\Builder
@@ -155,7 +155,6 @@ final class ArticuloCanalSupport
     public static function scopeArticulosPosLocal($query)
     {
         self::scopeArticulosCanalLocal($query);
-        FacturacionLocalVarianteArticuloSupport::scopeArticulosConVarianteVendible($query);
 
         return $query;
     }

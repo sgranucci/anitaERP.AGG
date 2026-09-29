@@ -162,7 +162,15 @@ class LocalidadRepository implements LocalidadRepositoryInterface
             $columnsOut = ['id', 'nombre', 'codigopostal', 'codigo', 'provincia_id', 'nombreprovincia'];            
         }
 
-		$consulta = strtoupper($consulta);
+		$consulta = strtoupper(trim((string) $consulta));
+		$limiteConsulta = 80;
+		$output = ['data' => ''];
+
+		if (mb_strlen($consulta) < 2) {
+			$output['data'] = '<tr><td colspan="9">Escrib&iacute; al menos 2 caracteres (nombre, c&oacute;digo o c&oacute;digo postal).</td></tr>';
+
+			return json_encode($output, JSON_UNESCAPED_UNICODE);
+		}
 
 		$count = count($columns);
         if (config('app.empresa') == "EL BIERZO")
@@ -186,8 +194,10 @@ class LocalidadRepository implements LocalidadRepositoryInterface
                                         if ($columns[$i] != 'provincia.nombre')
                             			    $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
                                     }
-                })	
-				->get();								
+                })
+				->orderBy('localidad.nombre')
+				->limit($limiteConsulta + 1)
+				->get();
         }
         else
         {
@@ -209,11 +219,17 @@ class LocalidadRepository implements LocalidadRepositoryInterface
                                         if ($columns[$i] != 'provincia.nombre')
                             			    $query->orWhere($columns[$i], "LIKE", '%'. $consulta . '%');
                                     }
-                })	
-				->get();	
+                })
+				->orderBy('localidad.nombre')
+				->limit($limiteConsulta + 1)
+				->get();
+        }
+        $hayMas = $data->count() > $limiteConsulta;
+        if ($hayMas) {
+            $data = $data->take($limiteConsulta);
         }
         $output = [];
-		$output['data'] = '';	
+		$output['data'] = '';
         $flSinDatos = true;
         $count = count($columns);
 		if (count($data) > 0)
@@ -238,6 +254,10 @@ class LocalidadRepository implements LocalidadRepositoryInterface
 			$output['data'] .= '<td>Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
+        elseif ($hayMas)
+        {
+            $output['data'] .= '<tr><td colspan="9">Hay m&aacute;s resultados. Afin&aacute; la b&uacute;squeda.</td></tr>';
+        }
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));
     }
 

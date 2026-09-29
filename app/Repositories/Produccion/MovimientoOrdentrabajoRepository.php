@@ -55,6 +55,7 @@ class MovimientoOrdentrabajoRepository implements MovimientoOrdentrabajoReposito
                             ->join('tarea', 'tarea.id', 'movimientoordentrabajo.tarea_id')
                             ->join('operacion', 'operacion.id', 'movimientoordentrabajo.operacion_id')
                             ->join('empleado', 'empleado.id', 'movimientoordentrabajo.empleado_id')
+                            ->deLaTareaDeSuOt()
                             ->whereNotExists(function($query)
                             {
                                 $query->select(DB::raw(1))
@@ -90,7 +91,8 @@ class MovimientoOrdentrabajoRepository implements MovimientoOrdentrabajoReposito
                             ->join('ordentrabajo', 'ordentrabajo.id', 'movimientoordentrabajo.ordentrabajo_id')
                             ->join('tarea', 'tarea.id', 'movimientoordentrabajo.tarea_id')
                             ->join('operacion', 'operacion.id', 'movimientoordentrabajo.operacion_id')
-                            ->join('empleado', 'empleado.id', 'movimientoordentrabajo.empleado_id');
+                            ->join('empleado', 'empleado.id', 'movimientoordentrabajo.empleado_id')
+                            ->deLaTareaDeSuOt();
 
         if ($id)
             $all = $all->where('movimientoordentrabajo.ordentrabajo_id', $id);

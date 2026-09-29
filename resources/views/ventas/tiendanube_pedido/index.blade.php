@@ -4,9 +4,71 @@
     Pedidos Tiendanube
 @endsection
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/listado-workbench.css') }}?v={{ filemtime(public_path('assets/css/listado-workbench.css')) }}">
+<style>
+    #form-tn-filtros .lw-hint { font-size: .75rem; color: #5D6D7E; }
+    #form-tn-filtros .lw-orden { border-top: 0; margin-top: .25rem; padding-top: 0; }
+    #form-tn-filtros .tn-filtros-bandas { display: flex; flex-direction: column; gap: .35rem; }
+    #form-tn-filtros .tn-filtros-banda {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: .5rem 1.25rem;
+    }
+    #form-tn-filtros .tn-filtro-grupo {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 4px;
+    }
+    #form-tn-filtros .tn-filtro-grupo-der { margin-left: auto; justify-content: flex-end; }
+    #form-tn-filtros .tn-filtro-etiq {
+        padding: .12rem .45rem;
+        font-size: .75rem;
+        line-height: 1.3;
+        white-space: nowrap;
+    }
+</style>
+@endsection
+
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/tiendanube_pedido/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/listado/workbench-orden.js') }}?v={{ filemtime(public_path('assets/pages/scripts/listado/workbench-orden.js')) }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/tiendanube_pedido/index.js') }}?v={{ filemtime(public_path('assets/pages/scripts/ventas/tiendanube_pedido/index.js')) }}" type="text/javascript"></script>
+<script>
+    $(function () {
+        if (typeof window.initListadoOrden === 'function') {
+            window.initListadoOrden();
+        }
+        var form = document.getElementById('form-tn-filtros');
+        var panel = document.getElementById('lw-orden-panel');
+        if (!form || !panel) {
+            return;
+        }
+        function aplicarOrden() {
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit();
+            } else {
+                form.submit();
+            }
+        }
+        panel.addEventListener('change', function (e) {
+            if (e.target && e.target.classList && e.target.classList.contains('lw-orden-campo')) {
+                aplicarOrden();
+            }
+        });
+        panel.addEventListener('click', function (e) {
+            var nodo = e.target && e.target.closest
+                ? e.target.closest('.lw-orden-dir-btn, .lw-orden-remove, .lw-orden-move-up, .lw-orden-move-down')
+                : null;
+            if (!nodo || !panel.contains(nodo)) {
+                return;
+            }
+            window.setTimeout(aplicarOrden, 0);
+        });
+    });
+</script>
 @endsection
 
 @section('contenido')
@@ -113,50 +175,72 @@
                         </button>
                     </div>
 
-                    <div class="mb-2 d-flex flex-wrap align-items-center" style="gap:6px;">
-                        <span class="text-muted small mr-1">Estado ERP</span>
-                        <button type="button" class="btn btn-sm tn-filtro-etiq {{ $estadoErpActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                data-campo="estado_erp" data-valor="" title="Todos los estados ERP">Todos</button>
-                        @foreach ($estados as $cod => $eti)
-                            <button type="button"
-                                    class="btn btn-sm tn-filtro-etiq {{ $estadoErpActivo === $cod ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                    data-campo="estado_erp" data-valor="{{ $cod }}">{{ $eti }}</button>
-                        @endforeach
-                    </div>
-
-                    <div class="mb-2 d-flex flex-wrap align-items-center" style="gap:6px;">
-                        <span class="text-muted small mr-1">Estado TN</span>
-                        <button type="button" class="btn btn-sm tn-filtro-etiq {{ $statusTnActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                data-campo="status_tn" data-valor="" title="Todos los estados Tiendanube">Todos</button>
-                        @foreach (($estadosExternos ?? []) as $cod => $eti)
-                            <button type="button"
-                                    class="btn btn-sm tn-filtro-etiq {{ $statusTnActivo === $cod ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                    data-campo="status_tn" data-valor="{{ $cod }}">{{ $eti }}</button>
-                        @endforeach
-                    </div>
-
-                    <div class="mb-2 d-flex flex-wrap align-items-center" style="gap:6px;">
-                        <span class="text-muted small mr-1">Pago</span>
-                        <button type="button" class="btn btn-sm tn-filtro-etiq {{ $pagoActivo === 'paid' ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                data-campo="payment_status" data-valor="paid">Pagado</button>
-                        <button type="button" class="btn btn-sm tn-filtro-etiq {{ $pagoActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                data-campo="payment_status" data-valor="">Todos</button>
-                    </div>
-
                     @php $storeActivo = (string) ($filtros['store_id'] ?? ''); @endphp
-                    @if (count($tiendas ?? []) > 1)
-                        <div class="mb-2 d-flex flex-wrap align-items-center" style="gap:6px;">
-                            <span class="text-muted small mr-1">Tienda</span>
-                            <button type="button" class="btn btn-sm tn-filtro-etiq {{ $storeActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                    data-campo="store_id" data-valor="">Todas</button>
-                            @foreach ($tiendas as $tienda)
-                                <button type="button"
-                                        class="btn btn-sm tn-filtro-etiq {{ $storeActivo === $tienda['store_id'] ? 'btn-primary' : 'btn-outline-secondary' }}"
-                                        data-campo="store_id" data-valor="{{ $tienda['store_id'] }}">{{ $tienda['nombre'] }}</button>
-                            @endforeach
+                    <div class="tn-filtros-bandas mb-2">
+                        <div class="tn-filtros-banda">
+                            <div class="tn-filtro-grupo">
+                                <span class="text-muted small mr-1">Estado ERP</span>
+                                <button type="button" class="btn btn-sm tn-filtro-etiq {{ $estadoErpActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                        data-campo="estado_erp" data-valor="" title="Todos los estados ERP">Todos</button>
+                                @foreach ($estados as $cod => $eti)
+                                    <button type="button"
+                                            class="btn btn-sm tn-filtro-etiq {{ $estadoErpActivo === $cod ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                            data-campo="estado_erp" data-valor="{{ $cod }}">{{ $eti }}</button>
+                                @endforeach
+                            </div>
+                            <div class="tn-filtro-grupo tn-filtro-grupo-der">
+                                <span class="text-muted small mr-1">Estado TN</span>
+                                <button type="button" class="btn btn-sm tn-filtro-etiq {{ $statusTnActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                        data-campo="status_tn" data-valor="" title="Todos los estados Tiendanube">Todos</button>
+                                @foreach (($estadosExternos ?? []) as $cod => $eti)
+                                    <button type="button"
+                                            class="btn btn-sm tn-filtro-etiq {{ $statusTnActivo === $cod ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                            data-campo="status_tn" data-valor="{{ $cod }}">{{ $eti }}</button>
+                                @endforeach
+                            </div>
                         </div>
-                    @endif
+                        <div class="tn-filtros-banda">
+                            <div class="tn-filtro-grupo">
+                                <span class="text-muted small mr-1">Pago</span>
+                                <button type="button" class="btn btn-sm tn-filtro-etiq {{ $pagoActivo === 'paid' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                        data-campo="payment_status" data-valor="paid">Pagado</button>
+                                <button type="button" class="btn btn-sm tn-filtro-etiq {{ $pagoActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                        data-campo="payment_status" data-valor="">Todos</button>
+                            </div>
+                            @if (count($tiendas ?? []) > 1)
+                                <div class="tn-filtro-grupo tn-filtro-grupo-der">
+                                    <span class="text-muted small mr-1">Tienda</span>
+                                    <button type="button" class="btn btn-sm tn-filtro-etiq {{ $storeActivo === '' ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                            data-campo="store_id" data-valor="">Todas</button>
+                                    @foreach ($tiendas as $tienda)
+                                        <button type="button"
+                                                class="btn btn-sm tn-filtro-etiq {{ $storeActivo === $tienda['store_id'] ? 'btn-primary' : 'btn-outline-secondary' }}"
+                                                data-campo="store_id" data-valor="{{ $tienda['store_id'] }}">{{ $tienda['nombre'] }}</button>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+
+                    <input type="hidden" name="sort_definido" value="1">
+                    <div class="lw-workbench">
+                        @include('includes.listado.workbench_orden', [
+                            'camposOrdenables' => \App\Support\Ventas\Tiendanube\TiendanubePedidoListadoFiltros::camposOrdenables(),
+                            'orden' => $filtros['orden'] ?? [],
+                            'etiquetasColumnas' => [],
+                            'ordenVacioCompacto' => true,
+                            'ordenHint' => 'Sin orden personalizado. Por defecto: fecha de pago, la más reciente primero.',
+                        ])
+                    </div>
                 </form>
+                @php
+                    $textoOrden = \App\Support\Ventas\Tiendanube\TiendanubePedidoListadoFiltros::textoOrden($filtros['orden'] ?? []);
+                @endphp
+                @if ($textoOrden !== '')
+                    <p class="small mb-2">
+                        <span class="text-muted">Orden:</span> {{ $textoOrden }}
+                    </p>
+                @endif
                 <p class="text-muted small mb-3">
                     <strong>Consultar</strong> filtra pedidos ya guardados en anitaERP.
                     <strong>Sincronizar</strong> baja/actualiza pedidos pagados desde Tiendanube.
@@ -173,6 +257,10 @@
                         <input type="hidden" name="payment_status" value="{{ $filtros['payment_status'] ?? 'paid' }}">
                         <input type="hidden" name="store_id" value="{{ $filtros['store_id'] ?? '' }}">
                         <input type="hidden" name="buscar" value="{{ $filtros['buscar'] ?? '' }}">
+                        @foreach (($filtros['orden'] ?? []) as $iOrden => $criterioOrden)
+                            <input type="hidden" name="sort[{{ $iOrden }}][campo]" value="{{ $criterioOrden['campo'] }}">
+                            <input type="hidden" name="sort[{{ $iOrden }}][dir]" value="{{ $criterioOrden['dir'] }}">
+                        @endforeach
                         <div class="mb-2">
                             <button type="submit" class="btn btn-warning btn-sm" id="btn-tn-masivo"
                                     @if ($cantListosPagina === 0) disabled @endif>

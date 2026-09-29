@@ -7,11 +7,28 @@
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 
 <script>
-
     $(function () {
   		$("#ordenestrabajo").focus();
-    });
 
+        @php
+            $textosExitoOt = \Illuminate\Support\Arr::wrap(session('mensaje'));
+            $textoExitoOt = trim(implode(' ', array_map(function ($texto) {
+                return is_array($texto) ? implode(' ', array_map('strval', $texto)) : (string) $texto;
+            }, $textosExitoOt)));
+        @endphp
+        @if ($textoExitoOt !== '')
+        if (window.toastr) {
+            toastr.success(@json($textoExitoOt), '', {
+                positionClass: 'toast-bottom-right',
+                timeOut: 1600,
+                extendedTimeOut: 400,
+                closeButton: false,
+                progressBar: false,
+                preventDuplicates: true
+            });
+        }
+        @endif
+    });
 </script>
 @endsection
 
@@ -19,7 +36,7 @@
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
-        @include('includes.mensaje')
+        @include('includes.mensaje', ['ocultarMensajeExito' => true])
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title">Crear Movimiento de OT</h3>

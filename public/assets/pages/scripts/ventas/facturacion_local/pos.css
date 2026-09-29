@@ -482,6 +482,10 @@
 #fl-medios-rapidos .fl-medio-tema-tarjeta .fl-medio-icon { background: #d6eaf8; color: #1a5276; }
 #fl-medios-rapidos .fl-medio-tema-transfer { border-color: #d5d8dc; background: #f8f9f9; }
 #fl-medios-rapidos .fl-medio-tema-transfer .fl-medio-icon { background: #eaecee; color: #566573; }
+#fl-medios-rapidos .fl-medio-tema-nube { border-color: #aed6f1; background: #f4f9fd; }
+#fl-medios-rapidos .fl-medio-tema-nube .fl-medio-icon { background: #d6eaf8; color: #1a5276; }
+#fl-medios-rapidos .fl-medio-tema-ncd { border-color: #f5cba7; background: #fef9f3; }
+#fl-medios-rapidos .fl-medio-tema-ncd .fl-medio-icon { background: #fdebd0; color: #b9770e; }
 
 .fl-receptor-manual {
     padding: 0.55rem 0.6rem;

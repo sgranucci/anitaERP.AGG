@@ -49,11 +49,6 @@
 		return (v || '').toString().replace(/\D+/g, '');
 	}
 
-	function cssEscape(v) {
-		if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(String(v));
-		return String(v).replace(/["\\]/g, '\\$&');
-	}
-
 	function escapeHtml(str) {
 		const d = document.createElement('div');
 		d.textContent = str == null ? '' : String(str);
@@ -340,17 +335,6 @@
 		if (overlay) overlay.style.display = 'flex';
 	}
 
-	function ensureSelectHasOption(selectId, value, label) {
-		const sel = byId(selectId);
-		if (!sel || value == null || value === '') return;
-		const exists = sel.querySelector('option[value="' + cssEscape(value) + '"]');
-		if (exists) return;
-		const opt = document.createElement('option');
-		opt.value = String(value);
-		opt.textContent = label || String(value);
-		sel.appendChild(opt);
-	}
-
 	async function aplicarDatosArcaEnFormulario({ cuit, data }) {
 		const df = data.domicilioFiscal || {};
 
@@ -368,38 +352,23 @@
 			setVal('desc_provincia', df.provincia);
 		}
 
-		if (df.localidad) {
-			setVal('desc_localidad', df.localidad);
-		}
-
-		function sleep(ms) {
-			return new Promise(function (resolve) {
-				setTimeout(resolve, ms);
-			});
-		}
-
-		async function esperarOptionLocalidad(timeoutMs, desiredValue) {
-			const start = Date.now();
-			const desired = desiredValue == null ? '' : String(desiredValue);
-			while (Date.now() - start < timeoutMs) {
-				const loc = byId('localidad_id');
-				if (loc) {
-					const opt = loc.querySelector('option[value="' + cssEscape(desired) + '"]');
-					if (opt) return true;
-				}
-				await sleep(100);
-			}
-			return false;
-		}
-
 		if (df.localidad_id) {
-			await esperarOptionLocalidad(7000, df.localidad_id);
-			ensureSelectHasOption('localidad_id', df.localidad_id, df.localidad || df.localidad_id);
 			setVal('localidad_id', df.localidad_id);
-			triggerChange('localidad_id');
-			if (!getVal('desc_localidad') && df.localidad) {
-				setVal('desc_localidad', df.localidad);
+			setVal('localidad_id_previa', df.localidad_id);
+			setVal('nombrelocalidad', df.localidad || '');
+			setVal('desc_localidad', df.localidad || '');
+			if (df.localidad_codigo) {
+				setVal('codigolocalidad', df.localidad_codigo);
 			}
+		} else if (df.localidad) {
+			setVal('desc_localidad', df.localidad);
+			setVal('nombrelocalidad', df.localidad);
+		} else {
+			setVal('localidad_id', '');
+			setVal('localidad_id_previa', '');
+			setVal('codigolocalidad', '');
+			setVal('nombrelocalidad', '');
+			setVal('desc_localidad', '');
 		}
 	}
 

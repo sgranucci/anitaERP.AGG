@@ -18,6 +18,7 @@
         previaName           hidden localidad_id_previa (default localidad_id_previa)
         descName             hidden desc_localidad (default desc_localidad)
         provinciaSource      selector CSS del hidden de provincia para filtrar el modal
+        con_ids              en layout inline, emite id y name (un solo campo por pantalla)
 --}}
 @php
     $clInputName = $inputName ?? 'localidad_id';
@@ -36,10 +37,16 @@
     $clPreviaName = $previaName ?? 'localidad_id_previa';
     $clDescName = $descName ?? 'desc_localidad';
     $clProvinciaSource = $provinciaSource ?? '';
+    $clConIds = (bool) ($con_ids ?? false);
     $clLocalidadId = old($clInputName, $localidadId ?? '');
     $clCodigo = old($clCodigoName, $codigo ?? '');
     $clNombre = old($clNombreName, $nombre ?? '');
-    $clUsaIds = $clLayout !== 'inline';
+    $clUsaIds = $clLayout !== 'inline' || $clConIds;
+    $clAttrInputId = $clUsaIds ? ' id="'.e($clInputId).'"' : '';
+    $clAttrPreviaId = $clUsaIds ? ' id="localidad_id_previa"' : '';
+    $clAttrDescId = $clUsaIds ? ' id="desc_localidad"' : '';
+    $clAttrCodigo = $clUsaIds ? ' name="'.e($clCodigoName).'" id="'.e($clCodigoId).'"' : '';
+    $clAttrNombre = $clUsaIds ? ' name="'.e($clNombreName).'" id="'.e($clNombreId).'"' : '';
 @endphp
 @if ($clLayout === 'inline')
     <div class="tm-localidad-campo {{ $clExtraClass }}"
@@ -47,9 +54,9 @@
             data-provincia-source="{{ $clProvinciaSource }}"
         @endif
     >
-        <input type="hidden" name="{{ $clInputName }}" class="localidad_id" value="{{ $clLocalidadId }}">
-        <input type="hidden" class="localidad_id_previa" name="{{ $clPreviaName }}" value="{{ $clLocalidadId }}">
-        <input type="hidden" class="desc_localidad" name="{{ $clDescName }}" value="{{ $clNombre }}">
+        <input type="hidden" name="{{ $clInputName }}" class="localidad_id" value="{{ $clLocalidadId }}"{!! $clAttrInputId !!}>
+        <input type="hidden" class="localidad_id_previa" name="{{ $clPreviaName }}" value="{{ $clLocalidadId }}"{!! $clAttrPreviaId !!}>
+        <input type="hidden" class="desc_localidad" name="{{ $clDescName }}" value="{{ $clNombre }}"{!! $clAttrDescId !!}>
         <div class="d-flex flex-nowrap align-items-center" style="gap: 2px;">
             @if (! $clSoloLectura)
                 <button type="button" title="Consulta localidades (F1)"
@@ -59,11 +66,13 @@
             @endif
             <input type="text" class="form-control form-control-sm codigolocalidad flex-shrink-0"
                 value="{{ $clCodigo }}" placeholder="C&oacute;d." autocomplete="off"
-                style="width: 4rem;" title="C&oacute;digo de localidad. F1 = consulta, Enter = resolver"
+                style="width: 4.5rem;" title="C&oacute;digo de localidad. F1 = consulta, Enter = resolver"
+                {!! $clAttrCodigo !!}
                 @if ($clSoloLectura) readonly @endif>
             <input type="text" class="form-control form-control-sm nombrelocalidad text-truncate"
                 value="{{ $clNombre }}" placeholder="Localidad" readonly
-                style="min-width: 0; flex: 1 1 auto;">
+                style="min-width: 0; flex: 1 1 auto;"
+                {!! $clAttrNombre !!}>
         </div>
     </div>
 @else

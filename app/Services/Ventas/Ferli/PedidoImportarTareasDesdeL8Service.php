@@ -3,6 +3,7 @@
 namespace App\Services\Ventas\Ferli;
 
 use App\Support\Ventas\Ferli\FerliL8ReaderSupport;
+use App\Support\Ventas\Ferli\MovimientoOrdentrabajoL8ImportSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -975,8 +976,8 @@ class PedidoImportarTareasDesdeL8Service
                 continue;
             }
             if ($table === 'movimientoordentrabajo') {
-                $ottId = (int) ($clean['ordentrabajo_tarea_id'] ?? 0);
-                if ($ottId > 0 && ! DB::table('ordentrabajo_tarea')->where('id', $ottId)->exists()) {
+                $clean = MovimientoOrdentrabajoL8ImportSupport::filaInsertable($clean);
+                if ($clean === null) {
                     continue;
                 }
             }

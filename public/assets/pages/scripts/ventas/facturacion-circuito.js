@@ -149,23 +149,107 @@
 		$select.trigger('change.select2');
 	}
 
+	function catalogoTiposPagina() {
+		var node = document.querySelector('#datosfactura');
+		if (!node || !node.dataset || node.dataset.tipotransaccion === undefined || node.dataset.tipotransaccion === '') {
+			return [];
+		}
+		try {
+			var raw = JSON.parse(node.dataset.tipotransaccion || '[]');
+			return Array.isArray(raw) ? raw : Object.keys(raw || {}).map(function (k) { return raw[k]; });
+		} catch (e) {
+			return [];
+		}
+	}
+
+	function tipoPermitidoEnCircuito(item, circuito) {
+		return circuito === 'exportacion'
+			? esTipoPermitidoExportItem(item)
+			: !esTipoExportExclusivoItem(item);
+	}
+
+	function idsPermitidosPagina() {
+		var ctx = {
+			letraCliente: ($('#letra_cliente_factura').val() || window.facturacionLetraCliente || ''),
+			codigoDocumento: (window.facturacionCodigoDocumento || '')
+		};
+		var circuito = resolverCircuito(ctx);
+		return catalogoTiposPagina().filter(function (item) {
+			return item && tipoPermitidoEnCircuito(item, circuito);
+		}).map(function (item) {
+			return parseInt(item.id, 10) || 0;
+		});
+	}
+
+	function aplicarTipoEnCampoConsulta($campo, circuito, ctx) {
+		if (!$campo || !$campo.length || typeof window.aplicarTipotransaccionVentaPorItem !== 'function') {
+			return;
+		}
+		var lista = catalogoTiposPagina().filter(function (item) {
+			return item && tipoPermitidoEnCircuito(item, circuito);
+		});
+		if (!lista.length) {
+			return;
+		}
+		var actual = String($campo.val() || '');
+		var elegido = null;
+		if (circuito === 'exportacion') {
+			if (ctx.preferTipoId) {
+				elegido = lista.find(function (item) {
+					return String(item.id) === String(ctx.preferTipoId);
+				}) || null;
+			}
+			var preferAbrev = ['FAF', 'FAE', 'NCE', 'NDE', 'NCD'];
+			for (var i = 0; i < preferAbrev.length && !elegido; i++) {
+				var ab = preferAbrev[i];
+				elegido = lista.find(function (item) {
+					return norm(item.abreviatura) === ab;
+				}) || null;
+			}
+			if (!elegido) {
+				elegido = lista[0];
+			}
+		} else {
+			elegido = lista.find(function (item) {
+				return String(item.id) === actual;
+			}) || null;
+			if (!elegido) {
+				elegido = lista[0];
+			}
+		}
+		if (!elegido || String(elegido.id) === actual) {
+			return;
+		}
+		var $ctx = $campo.closest('.tm-tipotransaccion-venta-campo');
+		window.aplicarTipotransaccionVentaPorItem(
+			$ctx.length ? $ctx : $campo.parent(),
+			elegido,
+			!!window.facturaCircuitoListo
+		);
+	}
+
 	/**
 	 * @param {object} ctx { letraCliente, codigoDocumento, preferPvId, preferTipoId }
 	 */
 	function aplicar($tipoSelect, $pvSelect, ctx) {
 		ctx = ctx || {};
 		var circuito = resolverCircuito(ctx);
-		filtrarSelect($tipoSelect, circuito, function ($o) {
-			return circuito === 'exportacion'
-				? esTipoPermitidoExportFromData($o)
-				: !esTipoExportExclusivoFromData($o);
-		});
+		var esSelect = $tipoSelect && $tipoSelect.length && $tipoSelect.is('select');
+		if (esSelect) {
+			filtrarSelect($tipoSelect, circuito, function ($o) {
+				return circuito === 'exportacion'
+					? esTipoPermitidoExportFromData($o)
+					: !esTipoExportExclusivoFromData($o);
+			});
+		} else if ($tipoSelect && $tipoSelect.length) {
+			aplicarTipoEnCampoConsulta($tipoSelect, circuito, ctx);
+		}
 		filtrarSelect($pvSelect, circuito, function ($o) {
 			var exp = esPvExportFromData($o);
 			return circuito === 'exportacion' ? exp : !exp;
 		});
 
-		if (circuito === 'exportacion') {
+		if (circuito === 'exportacion' && esSelect) {
 			var tipoOk = ctx.preferTipoId
 				&& $tipoSelect.find('option[value="' + ctx.preferTipoId + '"]:not(:disabled)').length;
 			if (tipoOk) {
@@ -188,10 +272,13 @@
 					$tipoSelect.val(elegido);
 				}
 			}
+			$tipoSelect.trigger('change');
+		}
+
+		if (circuito === 'exportacion') {
 			if (ctx.preferPvId && $pvSelect.find('option[value="' + ctx.preferPvId + '"]:not(:disabled)').length) {
 				$pvSelect.val(String(ctx.preferPvId));
 			}
-			$tipoSelect.trigger('change');
 			$pvSelect.trigger('change');
 		}
 
@@ -232,6 +319,7 @@
 		esTipoExportItem: esTipoExportExclusivoItem,
 		esTipoPermitidoExportItem: esTipoPermitidoExportItem,
 		esPvExportItem: esPvExportItem,
-		documentoEsExport: documentoEsExport
+		documentoEsExport: documentoEsExport,
+		idsPermitidosPagina: idsPermitidosPagina
 	};
 })(window, window.jQuery);

@@ -473,10 +473,6 @@ final class PedidoPickingFerliSupport
 
         $depositoId = $depositoId && $depositoId > 0 ? $depositoId : null;
         $ordentrabajoId = $ordentrabajoId && $ordentrabajoId > 0 ? $ordentrabajoId : null;
-        $exclusiva = self::errorSiOtAsignadaAOtroPedido($linea, $loteCodigo, $ordentrabajoId);
-        if ($exclusiva !== null) {
-            return ['error' => $exclusiva];
-        }
         $validacionStock = self::validarSaldoLoteDepositoParaMarcar(
             $linea,
             $loteCodigo,
@@ -499,9 +495,16 @@ final class PedidoPickingFerliSupport
 
         try {
             DB::transaction(function () use ($linea, $picking, $loteCodigo, $depositoId, $ordentrabajoId) {
-                $exclusiva = self::errorSiOtAsignadaAOtroPedido($linea, $loteCodigo, $ordentrabajoId, true);
-                if ($exclusiva !== null) {
-                    throw new RuntimeException($exclusiva);
+                // Serializa dos preparaciones del mismo lote/OT. El saldo se vuelve a leer adentro.
+                self::errorSiOtAsignadaAOtroPedido($linea, $loteCodigo, $ordentrabajoId, true);
+                $revalida = self::validarSaldoLoteDepositoParaMarcar(
+                    $linea,
+                    $loteCodigo,
+                    $depositoId,
+                    $ordentrabajoId
+                );
+                if (! empty($revalida['error'])) {
+                    throw new RuntimeException((string) $revalida['error']);
                 }
 
                 $linea->picking = self::MARCADO;
@@ -523,13 +526,10 @@ final class PedidoPickingFerliSupport
                     $ordentrabajoId
                 );
             });
+        } catch (RuntimeException $e) {
+            return ['error' => $e->getMessage()];
         } catch (\Throwable $e) {
-            $msg = $e->getMessage();
-            if (str_starts_with($msg, 'La OT ')) {
-                return ['error' => $msg];
-            }
-
-            return ['error' => 'No se pudo preparar: '.$msg];
+            return ['error' => 'No se pudo preparar: '.$e->getMessage()];
         }
 
         $linea->refresh();
@@ -548,8 +548,8 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * Una OT de producción (la tarea) sale hacia un solo pedido cliente.
-     * El pedido STOCK que la fabricó no cuenta. Un lote de importación (sin OT) sí se puede partir.
+     * Texto histórico. El picking ya no frena por este motivo: otro cliente puede
+     * llevar los pares que quedan si la curva coincide y el saldo alcanza.
      */
     public static function mensajeOtAsignadaAOtroPedido(string $otCodigo, string $pedidoCodigo, string $clienteNombre): string
     {
@@ -560,7 +560,10 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * @return string|null mensaje de error si la OT ya salió hacia otro pedido
+     * No rechaza porque la OT ya salió hacia otro cliente.
+     * Con $bloquear, toma lock de la OT para que dos preparaciones no descuenten el mismo saldo.
+     *
+     * @return null
      */
     public static function errorSiOtAsignadaAOtroPedido(
         Pedido_Combinacion $linea,
@@ -568,93 +571,28 @@ final class PedidoPickingFerliSupport
         ?int $ordentrabajoId = null,
         bool $bloquear = false
     ): ?string {
-        $ot = self::resolverOtProduccion($loteCodigo, $ordentrabajoId);
-        if ($ot === null) {
+        unset($linea);
+        if (! $bloquear) {
             return null;
         }
 
-        if ($bloquear) {
+        $ot = self::resolverOtProduccion($loteCodigo, $ordentrabajoId);
+        if ($ot !== null) {
             Ordentrabajo::query()->whereKey($ot->id)->lockForUpdate()->first(['id']);
         }
 
-        $conflicto = self::primerPedidoClientePorOt(collect([$ot]), (int) $linea->pedido_id)[(int) $ot->id] ?? null;
-        if ($conflicto === null) {
-            return null;
-        }
-
-        return self::mensajeOtAsignadaAOtroPedido(
-            trim((string) $ot->codigo),
-            (string) $conflicto['pedido_codigo'],
-            (string) $conflicto['cliente_nombre']
-        );
+        return null;
     }
 
     /**
-     * Marca filas del modal F1 que ya salieron hacia otro pedido (no se pueden elegir).
+     * El modal muestra el saldo que queda. No se oculta una OT porque otro cliente ya se llevó una parte.
      *
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
      */
     public static function marcarOtAsignadasAOtroPedido(array $filas, int $exceptoPedidoId): array
     {
-        if ($filas === []) {
-            return $filas;
-        }
-
-        $codigos = [];
-        $ids = [];
-        foreach ($filas as $fila) {
-            $lote = trim((string) ($fila['lote'] ?? ''));
-            if ($lote !== '' && $lote !== '0') {
-                $codigos[$lote] = true;
-            }
-            $otId = (int) ($fila['ordentrabajo_id'] ?? 0);
-            if ($otId > 0) {
-                $ids[$otId] = true;
-            }
-        }
-
-        if ($codigos === [] && $ids === []) {
-            return $filas;
-        }
-
-        $ots = Ordentrabajo::query()
-            ->where(function ($q) use ($codigos, $ids) {
-                $aplico = false;
-                if ($codigos !== []) {
-                    $q->whereIn('codigo', array_keys($codigos));
-                    $aplico = true;
-                }
-                if ($ids !== []) {
-                    $aplico ? $q->orWhereIn('id', array_keys($ids)) : $q->whereIn('id', array_keys($ids));
-                }
-            })
-            ->get(['id', 'codigo']);
-
-        if ($ots->isEmpty()) {
-            return $filas;
-        }
-
-        $porOt = self::primerPedidoClientePorOt($ots, $exceptoPedidoId);
-        $porCodigo = [];
-        foreach ($ots as $ot) {
-            if (isset($porOt[(int) $ot->id])) {
-                $porCodigo[trim((string) $ot->codigo)] = $porOt[(int) $ot->id];
-            }
-        }
-
-        foreach ($filas as &$fila) {
-            $lote = trim((string) ($fila['lote'] ?? ''));
-            $otId = (int) ($fila['ordentrabajo_id'] ?? 0);
-            $conflicto = $porCodigo[$lote] ?? ($porOt[$otId] ?? null);
-            if ($conflicto === null) {
-                continue;
-            }
-            $fila['bloqueada'] = true;
-            $fila['bloqueada_motivo'] = 'Pedido '.$conflicto['pedido_codigo']
-                .($conflicto['cliente_nombre'] !== '' ? ' · '.$conflicto['cliente_nombre'] : '');
-        }
-        unset($fila);
+        unset($exceptoPedidoId);
 
         return $filas;
     }
@@ -672,132 +610,6 @@ final class PedidoPickingFerliSupport
         }
 
         return $ot;
-    }
-
-    /**
-     * Primer pedido cliente (no STOCK) que ya tiene la OT: picking marcado o consumo neto sin devolver.
-     *
-     * @param  Collection<int, Ordentrabajo>  $ots
-     * @return array<int, array{pedido_codigo: string, cliente_nombre: string}>
-     */
-    private static function primerPedidoClientePorOt(Collection $ots, int $exceptoPedidoId): array
-    {
-        if ($ots->isEmpty()) {
-            return [];
-        }
-
-        $stockClienteId = (int) config('consprod.CLIENTE_STOCK');
-        $porId = [];
-        $porCodigo = [];
-        foreach ($ots as $ot) {
-            $porId[(int) $ot->id] = $ot;
-            $porCodigo[trim((string) $ot->codigo)] = (int) $ot->id;
-        }
-        $codigos = array_keys($porCodigo);
-        $ids = array_keys($porId);
-
-        $out = [];
-
-        $pickingRows = DB::table('pedido_combinacion as pc')
-            ->join('pedido as p', 'p.id', '=', 'pc.pedido_id')
-            ->leftJoin('cliente as c', 'c.id', '=', 'p.cliente_id')
-            ->where('pc.pedido_id', '<>', $exceptoPedidoId)
-            ->where(function ($q) {
-                $q->whereNull('pc.estado')->orWhere('pc.estado', '<>', 'A');
-            })
-            ->when($stockClienteId > 0, fn ($q) => $q->where('p.cliente_id', '<>', $stockClienteId))
-            ->where(function ($q) {
-                $q->where('pc.picking', self::MARCADO)
-                    ->orWhere('pc.picking_facturado', self::FACTURADO);
-            })
-            ->where(function ($q) use ($codigos, $ids) {
-                $q->whereIn('pc.picking_lote_codigo', $codigos);
-                if ($ids !== []) {
-                    $q->orWhereIn('pc.picking_ordentrabajo_id', $ids);
-                }
-            })
-            ->orderBy('p.codigo')
-            ->get(['pc.picking_lote_codigo', 'pc.picking_ordentrabajo_id', 'p.codigo as pedido_codigo', 'c.nombre as cliente_nombre']);
-
-        foreach ($pickingRows as $row) {
-            $otId = $porCodigo[trim((string) $row->picking_lote_codigo)] ?? (int) $row->picking_ordentrabajo_id;
-            if ($otId <= 0 || isset($out[$otId]) || ! isset($porId[$otId])) {
-                continue;
-            }
-            $out[$otId] = [
-                'pedido_codigo' => (string) $row->pedido_codigo,
-                'cliente_nombre' => trim((string) ($row->cliente_nombre ?? '')),
-            ];
-        }
-
-        $movs = DB::table('articulo_movimiento as am')
-            ->join('pedido_combinacion as pc', 'pc.id', '=', 'am.pedido_combinacion_id')
-            ->join('pedido as p', 'p.id', '=', 'pc.pedido_id')
-            ->leftJoin('cliente as c', 'c.id', '=', 'p.cliente_id')
-            ->where('pc.pedido_id', '<>', $exceptoPedidoId)
-            ->where(function ($q) {
-                $q->whereNull('pc.estado')->orWhere('pc.estado', '<>', 'A');
-            })
-            ->when($stockClienteId > 0, fn ($q) => $q->where('p.cliente_id', '<>', $stockClienteId))
-            ->where(function ($q) use ($codigos, $ids) {
-                $q->whereIn('am.lote', $codigos);
-                if ($ids !== []) {
-                    $q->orWhereIn('am.ordentrabajo_id', $ids);
-                }
-            })
-            ->where(function ($q) {
-                $q->where('am.concepto', self::CONCEPTO_CONSUMO_OT)
-                    ->orWhere('am.concepto', 'like', self::CONCEPTO_DEVOLUCION_PICKING_PREFIJO.'%')
-                    ->orWhere('am.concepto', 'like', self::CONCEPTO_DEVOLUCION_NC_PICKING_PREFIJO.'%')
-                    ->orWhere('am.concepto', 'like', 'Devolución NC picking #%');
-            })
-            ->groupBy('p.id', 'p.codigo', 'c.nombre', 'am.lote', 'am.ordentrabajo_id')
-            ->select([
-                'p.id as pedido_id',
-                'p.codigo as pedido_codigo',
-                'c.nombre as cliente_nombre',
-                'am.lote',
-                'am.ordentrabajo_id',
-                DB::raw('SUM(am.cantidad) as neto'),
-            ])
-            ->get();
-
-        $netoPorOtPedido = [];
-        foreach ($movs as $mov) {
-            $otId = $porCodigo[trim((string) $mov->lote)] ?? 0;
-            if ($otId <= 0 && isset($porId[(int) $mov->ordentrabajo_id])) {
-                $otId = (int) $mov->ordentrabajo_id;
-            }
-            if ($otId <= 0 || isset($out[$otId])) {
-                continue;
-            }
-            $pedidoId = (int) $mov->pedido_id;
-            if (! isset($netoPorOtPedido[$otId][$pedidoId])) {
-                $netoPorOtPedido[$otId][$pedidoId] = [
-                    'neto' => 0.0,
-                    'pedido_codigo' => (string) $mov->pedido_codigo,
-                    'cliente_nombre' => trim((string) ($mov->cliente_nombre ?? '')),
-                ];
-            }
-            $netoPorOtPedido[$otId][$pedidoId]['neto'] += (float) $mov->neto;
-        }
-
-        foreach ($netoPorOtPedido as $otId => $pedidos) {
-            if (isset($out[$otId])) {
-                continue;
-            }
-            foreach ($pedidos as $info) {
-                if ($info['neto'] < -0.0001) {
-                    $out[$otId] = [
-                        'pedido_codigo' => $info['pedido_codigo'],
-                        'cliente_nombre' => $info['cliente_nombre'],
-                    ];
-                    break;
-                }
-            }
-        }
-
-        return $out;
     }
 
     /**
@@ -878,13 +690,13 @@ final class PedidoPickingFerliSupport
         }
 
         $linea->loadMissing('pedido_combinacion_talles.talles');
-        $numeracionDistinta = self::mensajeSiNumeracionNoSaleIgual(
+        $numeracionSupera = self::mensajeSiNumeracionSuperaElLote(
             self::curvaDesdeTallesPedido($linea),
             $bucket['talles'] ?? []
         );
-        if ($numeracionDistinta !== null) {
+        if ($numeracionSupera !== null) {
             return [
-                'error' => $numeracionDistinta,
+                'error' => $numeracionSupera,
                 'saldo' => $saldoElegido,
                 'deposito_id' => $depositoId,
             ];
@@ -1206,17 +1018,132 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * El picking solo descuenta si la numeración sale igual a la del lote
-     * (mismos talles y las mismas cantidades). No se permite un parcial.
+     * La curva del pedido tiene que ser la del lote: mismos talles y la misma proporción.
+     * Se pueden sacar menos módulos (2 de un lote de 3) si esa curva coincide.
+     * Una curva distinta se rechaza aunque cada talle alcance. Si la curva coincide
+     * y algún talle pide de más, el saldo de ese talle no puede quedar negativo.
      *
      * @param  array<string, float|int>  $tallesPedido
      * @param  array<string, float|int>  $tallesStock
      */
-    public static function mensajeSiNumeracionNoSaleIgual(array $tallesPedido, array $tallesStock): ?string
+    public static function mensajeSiNumeracionSuperaElLote(array $tallesPedido, array $tallesStock): ?string
     {
         $pedido = self::normalizarCurvaNumeracion($tallesPedido);
         $stock = self::normalizarCurvaNumeracion($tallesStock);
-        $nombres = array_values(array_unique(array_merge(array_keys($pedido), array_keys($stock))));
+        if ($pedido === []) {
+            return null;
+        }
+
+        $nombres = self::ordenarNombresTalle(array_keys($pedido + $stock));
+        if (! self::curvasMismaForma($pedido, $stock)) {
+            return 'La numeración del pedido no coincide con la curva del lote (pedido '
+                .self::textoCurva(self::curvaReducida($pedido))
+                .'; lote '
+                .self::textoCurva(self::curvaReducida($stock))
+                .').';
+        }
+
+        $faltantes = [];
+        foreach ($nombres as $nombre) {
+            $pide = (float) ($pedido[$nombre] ?? 0);
+            $hay = (float) ($stock[$nombre] ?? 0);
+            if ($pide <= $hay + 0.0001) {
+                continue;
+            }
+            $faltantes[] = $nombre.': pide '.number_format($pide, 0, ',', '.')
+                .', hay '.number_format($hay, 0, ',', '.');
+        }
+
+        if ($faltantes === []) {
+            return null;
+        }
+
+        return 'El lote no alcanza la numeración del pedido ('
+            .implode('; ', $faltantes).').';
+    }
+
+    /**
+     * Misma forma: al dividir cada curva por su máximo común divisor queda el mismo módulo.
+     *
+     * @param  array<string, float>  $pedido
+     * @param  array<string, float>  $stock
+     */
+    private static function curvasMismaForma(array $pedido, array $stock): bool
+    {
+        $a = self::curvaReducida($pedido);
+        $b = self::curvaReducida($stock);
+        if ($a === [] || $b === [] || count($a) !== count($b)) {
+            return false;
+        }
+
+        $claves = self::ordenarNombresTalle(array_keys($a));
+        foreach ($claves as $nombre) {
+            if (! isset($b[$nombre]) || (int) $a[$nombre] !== (int) $b[$nombre]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, float|int>  $curva
+     * @return array<string, int>
+     */
+    private static function curvaReducida(array $curva): array
+    {
+        $enteros = [];
+        foreach ($curva as $nombre => $cantidad) {
+            $n = (int) round((float) $cantidad);
+            if ($n <= 0) {
+                continue;
+            }
+            $enteros[(string) $nombre] = ($enteros[(string) $nombre] ?? 0) + $n;
+        }
+        if ($enteros === []) {
+            return [];
+        }
+
+        $mcd = 0;
+        foreach ($enteros as $n) {
+            $mcd = $mcd === 0 ? $n : self::mcd($mcd, $n);
+        }
+        if ($mcd <= 1) {
+            return $enteros;
+        }
+
+        $out = [];
+        foreach ($enteros as $nombre => $n) {
+            $out[$nombre] = intdiv($n, $mcd);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, int>  $curva
+     */
+    private static function textoCurva(array $curva): string
+    {
+        if ($curva === []) {
+            return '(sin pares)';
+        }
+
+        $partes = [];
+        foreach (self::ordenarNombresTalle(array_keys($curva)) as $nombre) {
+            $partes[] = $nombre.':'.$curva[$nombre];
+        }
+
+        return implode(', ', $partes);
+    }
+
+    /**
+     * @param  list<string>  $nombres
+     * @return list<string>
+     */
+    private static function ordenarNombresTalle(array $nombres): array
+    {
+        $nombres = array_values(array_unique($nombres));
         usort($nombres, static function (string $a, string $b): int {
             $na = is_numeric($a) ? (float) $a : null;
             $nb = is_numeric($b) ? (float) $b : null;
@@ -1227,23 +1154,20 @@ final class PedidoPickingFerliSupport
             return strcmp($a, $b);
         });
 
-        $diferencias = [];
-        foreach ($nombres as $nombre) {
-            $pide = (float) ($pedido[$nombre] ?? 0);
-            $hay = (float) ($stock[$nombre] ?? 0);
-            if (abs($pide - $hay) <= 0.0001) {
-                continue;
-            }
-            $diferencias[] = $nombre.': pide '.number_format($pide, 0, ',', '.')
-                .', hay '.number_format($hay, 0, ',', '.');
+        return $nombres;
+    }
+
+    private static function mcd(int $a, int $b): int
+    {
+        $a = abs($a);
+        $b = abs($b);
+        while ($b !== 0) {
+            $resto = $a % $b;
+            $a = $b;
+            $b = $resto;
         }
 
-        if ($diferencias === []) {
-            return null;
-        }
-
-        return 'La numeración del pedido tiene que salir igual a la del lote ('
-            .implode('; ', $diferencias).').';
+        return $a;
     }
 
     /**

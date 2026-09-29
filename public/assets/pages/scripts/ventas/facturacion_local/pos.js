@@ -107,9 +107,11 @@
         tb.innerHTML = '';
         cart.forEach(function (line, idx) {
             var tr = document.createElement('tr');
-            var varLabel = line.modo === 'color_talle'
-                ? ((line.color_nombre || ('C' + (line.color_id || ''))) + ' / ' + (line.talle_nombre || line.talle_id))
-                : ((line.combinacion_nombre || ('Comb ' + line.combinacion_id)) + ' / ' + (line.talle_nombre || line.talle_id));
+            var varLabel = line.modo === 'sin_variante'
+                ? '—'
+                : (line.modo === 'color_talle'
+                    ? ((line.color_nombre || ('C' + (line.color_id || ''))) + ' / ' + (line.talle_nombre || line.talle_id))
+                    : ((line.combinacion_nombre || ('Comb ' + line.combinacion_id)) + ' / ' + (line.talle_nombre || line.talle_id)));
             tr.innerHTML =
                 '<td><strong>' + escapeHtml(line.sku) + '</strong><br><span style="color:#5d6d7e;font-size:12px;">' + escapeHtml(line.descripcion) + '</span></td>' +
                 '<td style="font-size:12px;">' + escapeHtml(varLabel) + '</td>' +
@@ -509,12 +511,22 @@
                 aviso.classList.add('d-none');
                 aviso.textContent = '';
             }
-            if (v.modo === 'color_talle') {
+            var ayuda = document.querySelector('#fl-modal-var .fl-var-ayuda');
+            if (v.modo === 'sin_variante') {
+                $('fl-var-talle-wrap').style.display = 'none';
+                $('fl-var-color-wrap').style.display = 'none';
+                $('fl-var-comb-wrap').style.display = 'none';
+                if (ayuda) ayuda.textContent = 'Enter en cantidad agrega al carrito';
+            } else if (v.modo === 'color_talle') {
+                $('fl-var-talle-wrap').style.display = '';
                 $('fl-var-color-wrap').style.display = '';
                 $('fl-var-comb-wrap').style.display = 'none';
+                if (ayuda) ayuda.innerHTML = 'Foco en talle · <kbd>Enter</kbd> avanza al siguiente campo · <kbd>Enter</kbd> en cantidad agrega · <kbd>F1</kbd> consulta';
             } else {
+                $('fl-var-talle-wrap').style.display = '';
                 $('fl-var-color-wrap').style.display = 'none';
                 $('fl-var-comb-wrap').style.display = '';
+                if (ayuda) ayuda.innerHTML = 'Foco en talle · <kbd>Enter</kbd> avanza al siguiente campo · <kbd>Enter</kbd> en cantidad agrega · <kbd>F1</kbd> consulta';
                 var combs = v.combinaciones || [];
                 if (!combs.length && aviso) {
                     aviso.textContent = 'El artículo no tiene combinaciones activas. No se puede vender hasta activar una en el maestro.';
@@ -679,7 +691,13 @@
             $jq('#fl-modal-var')
                 .off('shown.bs.modal.flVarFoco')
                 .on('shown.bs.modal.flVarFoco', function () {
-                    setTimeout(focoTalleVariante, 30);
+                    setTimeout(function () {
+                        if (pendingArticulo && pendingArticulo.modo === 'sin_variante') {
+                            focoCantidadVariante();
+                            return;
+                        }
+                        focoTalleVariante();
+                    }, 30);
                 });
 
             // Al elegir desde modal F1, avanzar al siguiente
@@ -790,10 +808,11 @@
 
     function confirmarVariante() {
         if (!pendingArticulo) return;
-        var talleId = +(($('fl-var-talle-id') && $('fl-var-talle-id').value) || 0);
-        var talleNombre = ($('fl-var-talle-nombre') && $('fl-var-talle-nombre').value) || '';
-        var talleCodigo = ($('fl-var-talle-codigo') && $('fl-var-talle-codigo').value) || '';
-        if (!talleId) {
+        var sinVariante = pendingArticulo.modo === 'sin_variante';
+        var talleId = sinVariante ? 0 : +(($('fl-var-talle-id') && $('fl-var-talle-id').value) || 0);
+        var talleNombre = sinVariante ? '' : (($('fl-var-talle-nombre') && $('fl-var-talle-nombre').value) || '');
+        var talleCodigo = sinVariante ? '' : (($('fl-var-talle-codigo') && $('fl-var-talle-codigo').value) || '');
+        if (!sinVariante && !talleId) {
             msg('Elegí el talle (F1 / código + Enter)', false);
             if ($('fl-var-talle-codigo')) $('fl-var-talle-codigo').focus();
             return;
@@ -802,7 +821,9 @@
         var colorNombre = '';
         var combinacionId = null;
         var combinacionNombre = '';
-        if (pendingArticulo.modo === 'color_talle') {
+        if (sinVariante) {
+            // cantidad sola
+        } else if (pendingArticulo.modo === 'color_talle') {
             colorId = +(($('fl-var-color-id') && $('fl-var-color-id').value) || 0) || null;
             colorNombre = ($('fl-var-color-nombre') && $('fl-var-color-nombre').value) || '';
             if (!colorId) {
@@ -1424,7 +1445,9 @@
                 + '</div>'
                 + '<div><strong>Saldo total</strong>: ' + fmtNumPos(b.saldo_total || 0, 0) + '</div>'
                 + '<div><strong>Variante</strong>: '
-                + escapeHtml(b.modo_variante === 'color_talle' ? 'color + talle' : 'combinación + talle')
+                + escapeHtml(b.modo_variante === 'sin_variante'
+                    ? 'sin talle'
+                    : (b.modo_variante === 'color_talle' ? 'color + talle' : 'combinación + talle'))
                 + '</div>';
         }
         var listaCombos = b.combinaciones || [];

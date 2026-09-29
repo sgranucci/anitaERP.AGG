@@ -98,9 +98,7 @@ final class TiendanubeConfiguracionSupport
                 )?->id
                 : null,
             'listaprecio_id' => $listaId,
-            'articulo_envio_sku' => $esFerli
-                ? ((string) config('tiendanube.articulo_envio_sku', 'FL') ?: null)
-                : null,
+            'articulo_envio_sku' => ((string) config('tiendanube.articulo_envio_sku', 'FL') ?: null),
             'articulo_descuento_sku' => $esFerli
                 ? ((string) config('tiendanube.articulo_descuento_sku', '') ?: null)
                 : null,

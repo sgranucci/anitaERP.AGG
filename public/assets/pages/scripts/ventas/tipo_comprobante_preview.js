@@ -9,7 +9,7 @@
 		if (abr) {
 			return abr === 'FAC' || abr === 'FCE';
 		}
-		var txt = String($opt.text() || '').toUpperCase();
+		var txt = String($opt.is('option') ? $opt.text() : ($opt.closest('.tm-tipotransaccion-venta-campo').find('.nombretipotransaccionventa').val() || '')).toUpperCase();
 		if (/N[CD][EB]|NOTA DE|D[EÉ]BITO/.test(txt) && txt.indexOf('FACTURA') === -1) {
 			return false;
 		}
@@ -36,13 +36,20 @@
 			return;
 		}
 
-		if (!esFacOFceOption($sel.find('option:selected'))) {
+		var $meta = (window.metaTipotransaccionVenta)
+			? window.metaTipotransaccionVenta($sel)
+			: $sel.find('option:selected');
+		if (!esFacOFceOption($meta.length ? $meta : $sel)) {
 			return;
 		}
 
 		var idSugerido = data.tipotransaccion_sugerido_id;
-		if (idSugerido && $sel.find('option[value="' + idSugerido + '"]').length) {
-			$sel.val(String(idSugerido));
+		if ($sel.is('select')) {
+			if (idSugerido && $sel.find('option[value="' + idSugerido + '"]').length) {
+				$sel.val(String(idSugerido));
+			}
+		} else if (idSugerido && typeof window.aplicarTipotransaccionVentaPorId === 'function') {
+			window.aplicarTipotransaccionVentaPorId(idSugerido, $sel.closest('.tm-tipotransaccion-venta-campo'));
 		}
 
 		if (data.es_fce && data.aviso_fce && $aviso.length) {

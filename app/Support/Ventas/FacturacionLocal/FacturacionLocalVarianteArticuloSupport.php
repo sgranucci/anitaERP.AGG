@@ -9,14 +9,21 @@ use App\Support\Stock\CombinacionEstadoCanalSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Decide color suelto vs combinación Ferli; talle siempre.
- * Combinaciones vendibles en POS Local: estado_local = A (canal Local).
+ * Variante de venta en POS Local.
+ *
+ * - Combinación activa en local → combinación + talle (calzado).
+ * - Sin combinación y con tilde de color/talle → color + talle.
+ * - Sin combinación y sin ese tilde → solo cantidad (flete, servicios).
+ *
+ * Combinaciones vendibles: estado_local = A.
  */
 final class FacturacionLocalVarianteArticuloSupport
 {
     public const MODO_COLOR_TALLE = 'color_talle';
 
     public const MODO_COMBINACION = 'combinacion';
+
+    public const MODO_SIN_VARIANTE = 'sin_variante';
 
     public const COMBINACION_ACTIVA = 'A';
 
@@ -84,13 +91,15 @@ final class FacturacionLocalVarianteArticuloSupport
             return self::MODO_COMBINACION;
         }
 
-        $tieneCombinaciones = self::tieneCombinacionesActivas((int) $model->id);
+        if (self::tieneCombinacionesActivas((int) $model->id)) {
+            return self::MODO_COMBINACION;
+        }
 
-        if (! $tieneCombinaciones && ArticuloStockColorTalleSupport::articuloManejaColorTalle($model)) {
+        if (ArticuloStockColorTalleSupport::articuloManejaColorTalle($model)) {
             return self::MODO_COLOR_TALLE;
         }
 
-        return self::MODO_COMBINACION;
+        return self::MODO_SIN_VARIANTE;
     }
 
     /**
@@ -137,6 +146,17 @@ final class FacturacionLocalVarianteArticuloSupport
             : Articulo::query()->find((int) $articulo);
         $articuloId = (int) ($model?->id ?? 0);
         $modo = self::modo($model ?? $articulo);
+
+        if ($modo === self::MODO_SIN_VARIANTE) {
+            return [
+                'ok' => true,
+                'modo' => $modo,
+                'color_id' => null,
+                'talle_id' => null,
+                'combinacion_id' => null,
+            ];
+        }
+
         $talleOk = $talleId !== null && $talleId > 0;
 
         if (! $talleOk) {

@@ -383,7 +383,11 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                                                                 ->where('cliente_cuentacorriente.empresa_id', $empresa_id);
                                                         });
                                                 });
-        
+
+        // Mismo alcance que la deuda de cuenta corriente: facturas, NC, ND y COA.
+        // Un COB (cobro ya imputado) no es saldo a favor y no se ofrece para aplicar.
+        ClienteCuentacorrienteDeudaAlcanceSupport::aplicar($cuentacorriente);
+
         $cuentacorriente = $cuentacorriente->orderBy('fecha', 'asc')->get();
 
         // Saldo = pendiente real (total + aplicaciones firmadas). Los pagos a cuenta

@@ -28,6 +28,7 @@ final class TiendanubePedidoListoSupport
     public static function evaluar(TiendanubePedido $pedido): array
     {
         $pedido->loadMissing('lineas');
+        TiendanubePedidoMaestrosSupport::completarArticuloEnvio($pedido);
         $motivos = [];
 
         if ($pedido->estaFacturado()) {

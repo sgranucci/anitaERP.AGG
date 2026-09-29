@@ -2,11 +2,38 @@
 
 namespace App\Support\Ventas\Tiendanube;
 
+use App\Support\Listado\ListadoOrdenamientoSupport;
+use Illuminate\Support\Facades\Cache;
+
 /**
  * Filtros del listado de pedidos Tiendanube.
  */
 final class TiendanubePedidoListadoFiltros
 {
+    private const CACHE_ORDEN = 'tiendanube-pedidos-orden';
+
+    /**
+     * Columnas ordenables de la grilla (whitelist SQL).
+     *
+     * @return array<string, array{column: string, label: string, type: string}>
+     */
+    public static function camposOrdenables(): array
+    {
+        return [
+            'order_number' => ['column' => 'tiendanube_pedido.order_number', 'label' => 'Nº TN', 'type' => 'texto'],
+            'store_id' => ['column' => 'tiendanube_pedido.store_id', 'label' => 'Tienda', 'type' => 'texto'],
+            'tiendanube_order_id' => ['column' => 'tiendanube_pedido.tiendanube_order_id', 'label' => 'ID interno', 'type' => 'entero'],
+            'paid_at' => ['column' => 'tiendanube_pedido.paid_at', 'label' => 'Pagado', 'type' => 'fecha'],
+            'customer_name' => ['column' => 'tiendanube_pedido.customer_name', 'label' => 'Cliente', 'type' => 'texto'],
+            'customer_doc' => ['column' => 'tiendanube_pedido.customer_doc', 'label' => 'Doc', 'type' => 'texto'],
+            'gateway_name' => ['column' => 'tiendanube_pedido.gateway_name', 'label' => 'Gateway', 'type' => 'texto'],
+            'total' => ['column' => 'tiendanube_pedido.total', 'label' => 'Total', 'type' => 'decimal'],
+            'status' => ['column' => 'tiendanube_pedido.status', 'label' => 'Estado TN', 'type' => 'texto'],
+            'estado_erp' => ['column' => 'tiendanube_pedido.estado_erp', 'label' => 'Estado ERP', 'type' => 'texto'],
+            'venta_id' => ['column' => 'tiendanube_pedido.venta_id', 'label' => 'Venta', 'type' => 'entero'],
+        ];
+    }
+
     /**
      * @return array{
      *   desde:?string,
@@ -16,7 +43,8 @@ final class TiendanubePedidoListadoFiltros
      *   payment_status:?string,
      *   buscar:?string,
      *   store_id:?string,
-     *   consultar:bool
+     *   consultar:bool,
+     *   orden:list<array{campo:string, dir:string}>
      * }
      */
     public static function resolverDesdeRequest(\Illuminate\Http\Request $request): array
@@ -43,6 +71,14 @@ final class TiendanubePedidoListadoFiltros
             $storeId = '';
         }
 
+        $camposOrden = self::camposOrdenables();
+        if ($request->exists('sort') || $request->exists('sort_definido')) {
+            $orden = ListadoOrdenamientoSupport::normalizar($request->input('sort'), $camposOrden);
+            self::recordarOrden($orden);
+        } else {
+            $orden = self::leerOrdenRecordado();
+        }
+
         return [
             'desde' => $desde !== '' ? $desde : null,
             'hasta' => $hasta !== '' ? $hasta : null,
@@ -52,12 +88,61 @@ final class TiendanubePedidoListadoFiltros
             'buscar' => $buscar !== '' ? $buscar : null,
             'store_id' => $storeId !== '' ? $storeId : null,
             'consultar' => $consultar,
+            'orden' => $orden,
         ];
     }
 
     /**
+     * @param  list<array{campo: string, dir: string}>  $orden
+     */
+    public static function recordarOrden(array $orden): void
+    {
+        $usuarioId = auth()->id();
+        if ($usuarioId === null || (int) $usuarioId <= 0) {
+            return;
+        }
+
+        Cache::forever(generaKey(self::CACHE_ORDEN), array_values($orden));
+    }
+
+    /**
+     * @return list<array{campo: string, dir: string}>
+     */
+    public static function leerOrdenRecordado(): array
+    {
+        $usuarioId = auth()->id();
+        if ($usuarioId === null || (int) $usuarioId <= 0) {
+            return [];
+        }
+
+        return ListadoOrdenamientoSupport::normalizar(
+            Cache::get(generaKey(self::CACHE_ORDEN)),
+            self::camposOrdenables()
+        );
+    }
+
+    /**
+     * @param  list<array{campo: string, dir: string}>  $orden
+     */
+    public static function textoOrden(array $orden): string
+    {
+        $campos = self::camposOrdenables();
+        $partes = [];
+        foreach ($orden as $criterio) {
+            $campo = (string) ($criterio['campo'] ?? '');
+            if ($campo === '' || ! isset($campos[$campo])) {
+                continue;
+            }
+            $dir = ($criterio['dir'] ?? 'asc') === 'desc' ? 'descendente' : 'ascendente';
+            $partes[] = $campos[$campo]['label'].' '.$dir;
+        }
+
+        return implode(' · ', $partes);
+    }
+
+    /**
      * @param  array<string,mixed>  $filtros
-     * @return array<string,string>
+     * @return array<string, mixed>
      */
     public static function paraQueryString(array $filtros): array
     {
@@ -71,7 +156,28 @@ final class TiendanubePedidoListadoFiltros
             $out['consultar'] = '1';
         }
 
-        return $out;
+        $orden = is_array($filtros['orden'] ?? null) ? $filtros['orden'] : [];
+
+        return array_merge($out, ListadoOrdenamientoSupport::paraQueryString($orden));
+    }
+
+    /**
+     * Sin criterios: fecha de pago descendente y luego id.
+     * Con criterios: el orden pedido y id como desempate.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Ventas\TiendanubePedido>  $query
+     * @param  list<array{campo: string, dir: string}>  $orden
+     */
+    public static function aplicarOrden($query, array $orden): void
+    {
+        if ($orden === []) {
+            $query->orderByDesc('tiendanube_pedido.paid_at')->orderByDesc('tiendanube_pedido.id');
+
+            return;
+        }
+
+        ListadoOrdenamientoSupport::aplicar($query, $orden, self::camposOrdenables());
+        $query->orderByDesc('tiendanube_pedido.id');
     }
 
     /**

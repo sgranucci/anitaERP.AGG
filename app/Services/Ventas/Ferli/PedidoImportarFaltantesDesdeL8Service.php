@@ -3,6 +3,7 @@
 namespace App\Services\Ventas\Ferli;
 
 use App\Support\Ventas\Ferli\FerliL8ReaderSupport;
+use App\Support\Ventas\Ferli\MovimientoOrdentrabajoL8ImportSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -220,6 +221,12 @@ class PedidoImportarFaltantesDesdeL8Service
             }
             if (DB::table($table)->where('id', $id)->exists()) {
                 continue;
+            }
+            if ($table === 'movimientoordentrabajo') {
+                $clean = MovimientoOrdentrabajoL8ImportSupport::filaInsertable($clean);
+                if ($clean === null) {
+                    continue;
+                }
             }
             try {
                 DB::table($table)->insert($clean);

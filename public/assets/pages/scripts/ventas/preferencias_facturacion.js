@@ -10,7 +10,7 @@ window.PreferenciasFacturacionUsuario = {
 	},
 	esTipoFceSeleccionado: function ($sel) {
 		$sel = $sel && $sel.length ? $sel : $('#tipotransaccion_id');
-		var $opt = $sel.find('option:selected');
+		var $opt = ($sel.is('select')) ? $sel.find('option:selected') : $sel;
 		if (!$opt.length || !$opt.val()) {
 			return false;
 		}
@@ -18,7 +18,10 @@ window.PreferenciasFacturacionUsuario = {
 		if (abr === 'FCE' || abr === 'NCE' || abr === 'DCE') {
 			return true;
 		}
-		var txt = String($opt.text() || '').toUpperCase();
+		var txt = $sel.is('select')
+			? String($opt.text() || '')
+			: String($sel.closest('.tm-tipotransaccion-venta-campo').find('.nombretipotransaccionventa').val() || '');
+		txt = txt.toUpperCase();
 		return /(^|[\s\-])FCE([\s\-]|$)/.test(txt)
 			|| txt.indexOf('FACTURA DE CRÉDITO') !== -1
 			|| txt.indexOf('FACTURA DE CREDITO') !== -1;

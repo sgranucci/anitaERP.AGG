@@ -1,6 +1,12 @@
 @php
 	$layoutItemsPedido = $layoutItemsPedido ?? facturaUsaLayoutItemsPedido();
 	$tipotransaccionSeleccionada = old('tipotransaccion_id', $data->tipotransaccion_id ?? ($tipotransacciondefault_id ?? ''));
+	if (! empty($flGeneraNotaDeCredito) && ! old('tipotransaccion_id')) {
+		$primeroNcTipo = collect($tipotransaccion_query ?? [])->first();
+		if ($primeroNcTipo) {
+			$tipotransaccionSeleccionada = $primeroNcTipo->id;
+		}
+	}
 	$unidadmedida_query = $unidadmedida_query ?? [];
 	$impuesto_query = $impuesto_query ?? collect();
 	$descuentoventa_query = $descuentoventa_query ?? collect();
@@ -14,6 +20,7 @@
 	$puedeAbrirAbmCliente = can('editar-clientes', false) || can('listar-clientes', false);
 	$puedeAbrirAbmVendedor = can('editar-vendedores', false) || can('listar-vendedores', false);
 	$tipotransaccionSel = collect($tipotransaccion_query ?? [])->firstWhere('id', (int) $tipotransaccionSeleccionada);
+	$conceptoTipoFactura = $tipotransaccionSel?->conceptoVenta;
 	$conceptoAsignadoTipo = (int) ($tipotransaccionSel->concepto_venta_id ?? 0);
 	$mostrarConceptoCabecera = $conceptoAsignadoTipo > 0;
 	$conceptoCabeceraId = old('concepto_venta_id', $mostrarConceptoCabecera ? $conceptoAsignadoTipo : '');
@@ -229,40 +236,26 @@
 <div class="row">
 	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query ?? ''}}" data-formapago="{{$formapago_query ?? ''}}" data-layout-items-pedido="{{ $layoutItemsPedido ? '1' : '0' }}">
 		<input type="hidden" id="codigofactura" class="form-control" value="{{old('codigofactura', $data->codigo ?? '')}}" />
-		<div class="form-group row" id="tipotransaccion">
-			<label for="tipotransaccion_id" class="col-lg-3 control-label text-right pr-2 requerido">Tipo de transacci&oacute;n</label>
-			<select name="tipotransaccion_id" id="tipotransaccion_id" data-placeholder="Tipo de transacci&oacute;n" class="col-lg-8 form-control" data-fouc required>
-				<option value="">-- Seleccionar transacción  --</option>
-				@php $flPrimero = true; @endphp
-				@foreach($tipotransaccion_query as $key => $value)
-					@php
-						$conceptoTipo = $value->conceptoVenta ?? null;
-						$attrsConcepto = 'data-abreviatura="'.e((string) ($value->abreviatura ?? '')).'"'
-							.' data-codigo="'.e((string) ($value->codigo ?? '')).'"'
-							.' data-operacion="'.e((string) ($value->operacion ?? '')).'"'
-							.' data-usa-concepto="'.(($value->usaConceptoVentaEnFacturador() ?? false) ? '1' : '0').'"'
-							.' data-concepto-venta-id="'.e((string) ($value->concepto_venta_id ?? '')).'"'
-							.' data-concepto-codigo="'.e((string) ($conceptoTipo->codigo ?? '')).'"'
-							.' data-concepto-nombre="'.e((string) ($conceptoTipo->nombre ?? '')).'"'
-							.' data-concepto-descripcion="'.e((string) ($conceptoTipo->descripcion ?? '')).'"'
-							.' data-concepto-impuesto-id="'.e((string) ($conceptoTipo->impuesto_id ?? '')).'"';
-					@endphp
-					@if (isset($flGeneraNotaDeCredito) && $flPrimero)
-						<option value="{{ $value->id }}" {!! $attrsConcepto !!} selected="select">{{ $value->nombre }}</option>
-						@php $flPrimero = false; @endphp
-					@else
-						@if( (int) $value->id == (int) $tipotransaccionSeleccionada)
-							<option value="{{ $value->id }}" {!! $attrsConcepto !!} selected="select">{{ $value->nombre }}</option>
-						@else
-							<option value="{{ $value->id }}" {!! $attrsConcepto !!}>{{ $value->nombre }}</option>
-						@endif
-					@endif
-				@endforeach	
-			</select>
-			<div class="col-lg-8 offset-lg-3">
-				<small id="aviso-tipo-fce" class="form-text text-info d-none"></small>
-			</div>
-		</div>
+		@include('ventas.partials.campo_consulta_tipotransaccion', [
+			'prefix' => 'factura',
+			'label' => 'Tipo de transacci&oacute;n',
+			'tipoId' => (int) $tipotransaccionSeleccionada,
+			'abreviatura' => (string) ($tipotransaccionSel?->abreviatura ?? ''),
+			'nombre' => (string) ($tipotransaccionSel?->nombre ?? ''),
+			'codigo' => (string) ($tipotransaccionSel?->codigo ?? ''),
+			'operacion' => (string) ($tipotransaccionSel?->operacion ?? ''),
+			'concepto_venta_id' => (string) ($tipotransaccionSel?->concepto_venta_id ?? ''),
+			'concepto_codigo' => (string) ($conceptoTipoFactura?->codigo ?? ''),
+			'concepto_nombre' => (string) ($conceptoTipoFactura?->nombre ?? ''),
+			'concepto_descripcion' => (string) ($conceptoTipoFactura?->descripcion ?? ''),
+			'concepto_impuesto_id' => (string) ($conceptoTipoFactura?->impuesto_id ?? ''),
+			'inputName' => 'tipotransaccion_id',
+			'inputId' => 'tipotransaccion_id',
+			'required' => true,
+			'col_label' => 'col-lg-3 control-label text-right pr-2',
+			'col_input' => 'col-lg-8',
+			'aviso_id' => 'aviso-tipo-fce',
+		])
 		<div class="form-group row tm-cliente-campo">
    			<label for="codigocliente" class="col-lg-3 control-label text-right pr-2 requerido">Cliente</label>
 			<div class="col-lg-8">

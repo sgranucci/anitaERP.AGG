@@ -1,41 +1,32 @@
-// Carga de domicilio provincia/localidad/codigo postal (ABM proveedor)
+// Domicilio del ABM proveedor: localidad por consulta (F1 / lupa), no por combo.
+// Capital Federal tiene miles de calles en el maestro; el select nativo no se puede usar.
 
-    function completarLocalidades(provincia_id, localidadIdSeleccionar) {
-        var restaurar = localidadIdSeleccionar !== undefined
-            ? localidadIdSeleccionar
-            : $("#localidad_id_previa").val();
-        LocalidadCascada.completar(
-            $("#localidad_id"),
-            provincia_id,
-            restaurar,
-            $("#desc_localidad").val(),
-            'localidad_id'
-        );
+function limpiarCampoLocalidadProveedor() {
+    if (window.__sincronizandoProvinciaDesdeLocalidad) {
+        return;
+    }
+    var $campo = $('#localidad_id').closest('.tm-localidad-campo');
+    if (typeof aplicarLocalidadEnCampo === 'function' && $campo.length) {
+        aplicarLocalidadEnCampo($campo, null);
+        return;
+    }
+    $('#localidad_id').val('');
+    $('#localidad_id_previa').val('');
+    $('#desc_localidad').val('');
+    $('#codigolocalidad').val('');
+    $('#nombrelocalidad').val('');
+}
+
+$(function () {
+    if (!$('#provincia_id').length) {
+        return;
     }
 
-    function completarCP(localidad_id) {
-        LocalidadCascada.completarCP(localidad_id, $("#codigopostal"));
-    }
-
-    $(function () {
-        if (!$("#localidad_id").length) {
-            return;
+    $('#provincia_id').on('change', function () {
+        var texto = $(this).children('option:selected').text();
+        if ($(this).val()) {
+            $('#desc_provincia').val(texto);
         }
-
-        completarLocalidades($("#provincia_id").val(), $("#localidad_id_previa").val());
-
-        $("#provincia_id").on('change', function () {
-            $('#desc_provincia').val($(this).children("option:selected").text());
-            completarLocalidades($(this).val(), '');
-        });
-
-        $("#localidad_id").on('change', function () {
-            var $sel = $(this);
-            var localidad_id = $sel.val();
-            $("#localidad_id_previa").val(localidad_id || '');
-            $("#desc_localidad").val($sel.children("option:selected").text());
-            if (!$sel.data('aplicandoLocalidadCascada')) {
-                completarCP(localidad_id);
-            }
-        });
+        limpiarCampoLocalidadProveedor();
     });
+});

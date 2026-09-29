@@ -769,9 +769,6 @@ $(function () {
     function sincronizarTotalesDesdeConceptos() {
         var total = 0;
         var subtotal = 0;
-        var sumaSinExento = 0;
-        var exento = 0;
-        var netoSinExento = 0;
         var hayLineas = false;
         $('#tbody-concepto-table tr.item-concepto').each(function () {
             var $row = $(this);
@@ -783,17 +780,8 @@ $(function () {
             hayLineas = true;
             total += monto;
             var tip = String((conceptosMeta[conceptoId] || {}).tipoconcepto || '').toUpperCase();
-            var codigo = String((conceptosMeta[conceptoId] || {}).codigo || '');
-            if (esExento(tip, codigo)) {
-                exento += monto;
-            } else {
-                sumaSinExento += monto;
-            }
             if (TIPOS_NETO.indexOf(tip) >= 0) {
                 subtotal += monto;
-                if (!esExento(tip, codigo)) {
-                    netoSinExento += monto;
-                }
             }
         });
         if (!hayLineas) {
@@ -826,15 +814,11 @@ $(function () {
         };
         total = Math.round(total * 100) / 100;
         subtotal = Math.round(subtotal * 100) / 100;
-        sumaSinExento = Math.round(sumaSinExento * 100) / 100;
-        exento = Math.round(exento * 100) / 100;
-        netoSinExento = Math.round(netoSinExento * 100) / 100;
-        var totalDoc = parseMonto($('#total').val() || '0');
-        if (Math.abs(exento) > 0.005 && !exentoIntegraTotal(totalDoc, sumaSinExento, exento)) {
-            total = (totalDoc > 0 && Math.abs(totalDoc - sumaSinExento) <= 1) ? totalDoc : sumaSinExento;
-            if (Math.abs(netoSinExento) > 0.0001) {
-                subtotal = netoSinExento;
-            }
+        var sumaConceptos = total;
+        var precargaTotal = parseFloat($formPrecarga().attr('data-precarga-total') || '0') || 0;
+        var precargaId = parseInt($formPrecarga().attr('data-precarga-id') || '0', 10) || 0;
+        if (precargaId > 0 && precargaTotal > 0.05) {
+            total = Math.round(precargaTotal * 100) / 100;
         }
         if ($('#total').length) {
             $('#total').val(fmt(total));
@@ -843,7 +827,15 @@ $(function () {
             $('#subtotal').val(fmt(subtotal));
         }
         sincronizarCuotasDesdeTotal(total);
-        avisarDesvioVsPrecarga(total);
+        avisarDesvioVsPrecarga(sumaConceptos);
+    }
+
+    function $formPrecarga() {
+        var $form = $('#form-comprobante-proveedor');
+        if ($form.length) {
+            return $form;
+        }
+        return $('form[data-precarga-id]').first();
     }
 
     /**

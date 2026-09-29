@@ -267,20 +267,19 @@
         				<input type="hidden" id="desc_provincia" name="desc_provincia" value="{{old('desc_provincia', $data->desc_provincia ?? '')}}" >
         			</div>
         		</div>
-        		<div class="col-md-3" id='loc'>
+        		<div class="col-md-3" id="loc">
         			<div class="form-group">
         				<label>Localidad</label>
-        				<select name="localidad_id" id='localidad_id' data-placeholder="Localidad" class="form-control" data-fouc>
-        					@if($data->localidad_id ?? '')
-								@if($data->localidad_id == "")
-        							<option selected></option>
-        						@else
-        							<option value="{{old('localidad_id', $data['localidad_id'])}}" selected>{{$data['desc_localidad']}}</option>
-								@endif
-        					@endif
-        				</select>
-        				<input type="hidden" id="localidad_id_previa" name="localidad_id_previa" value="{{old('localidad_id', $data->localidad_id ?? '')}}" >
-        				<input type="hidden" id="desc_localidad" name="desc_localidad" value="{{old('desc_localidad', $data->desc_localidad ?? '')}}" >
+        				@include('configuracion.partials.campo_consulta_localidad', [
+        				    'layout' => 'inline',
+        				    'con_ids' => true,
+        				    'localidadId' => optional($data ?? null)->localidad_id ?? '',
+        				    'codigo' => optional(optional($data ?? null)->localidades)->codigo ?? '',
+        				    'nombre' => optional(optional($data ?? null)->localidades)->nombre
+        				        ?: (optional($data ?? null)->desc_localidad ?? ''),
+        				    'provinciaSource' => '#provincia_id',
+        				    'extra_class' => 'w-100',
+        				])
         			</div>
         		</div>
         		<div class="col-md-3">

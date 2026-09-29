@@ -30,6 +30,7 @@
 @include('includes.ventas.cliente_politica_contexto', ['contextoPoliticaCliente' => 'factura', 'politicaCliente' => $politicaCliente])
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('includes.ventas.facturacion_circuito_scripts')
+<script src="{{ asset('assets/pages/scripts/ventas/tipotransaccion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tipotransaccion/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @include('ventas.partials.aviso_deposito_facturacion')
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/factura/consulta_referencia.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/consulta_referencia.js')) ?: time() }}" type="text/javascript"></script>
@@ -175,5 +176,6 @@
     </div>
 </div>
 @include('includes.compras.arca_apoc_validacion_modal')
+@include('includes.ventas.modalconsultatipotransaccion')
 @include('includes.proceso-overlay-factura')
 @endsection

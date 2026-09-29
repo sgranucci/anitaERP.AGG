@@ -138,7 +138,7 @@ Configuraci&oacute;n Tiendanube
                                 'col_label' => 'col-lg-3 control-label text-right pr-2',
                                 'col_input' => 'col-lg-8',
                                 'next_focus' => '#tn_descuento_articulo_id_codigo',
-                                'help' => 'F1 o lupa consulta el art&iacute;culo. Enter resuelve el SKU. Vac&iacute;o = sin &iacute;tem de env&iacute;o.',
+                                'help' => 'F1 o lupa consulta el art&iacute;culo. Enter resuelve el SKU. Vac&iacute;o = el flete por defecto (FL).',
                             ])
                             @include('produccion.partials.campo_consulta_articulo', [
                                 'prefix' => 'tn_descuento',
@@ -153,7 +153,7 @@ Configuraci&oacute;n Tiendanube
                                 'col_label' => 'col-lg-3 control-label text-right pr-2',
                                 'col_input' => 'col-lg-8',
                                 'next_focus' => '#usocuentacaja_nombre',
-                                'help' => 'F1 o lupa consulta el art&iacute;culo. Enter resuelve el SKU. Vac&iacute;o = descuento al pie.',
+                                'help' => 'F1 o lupa consulta el art&iacute;culo. Enter resuelve el SKU. Vac&iacute;o = el cup&oacute;n se descuenta del precio de los art&iacute;culos.',
                             ])
                             <div class="form-group row mb-0">
                                 <label for="usocuentacaja_nombre" class="col-lg-3 control-label text-right pr-2">Uso cuentas de caja</label>

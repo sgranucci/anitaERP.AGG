@@ -244,6 +244,14 @@ class RemitoInternoController extends Controller
 
         $articulo = Articulo::query()->findOrFail($articuloId);
         $modo = FacturacionLocalVarianteArticuloSupport::modo($articulo);
+        if ($modo === FacturacionLocalVarianteArticuloSupport::MODO_SIN_VARIANTE) {
+            return response()->json([
+                'modo' => $modo,
+                'talles' => [],
+                'colores' => [],
+                'combinaciones' => [],
+            ]);
+        }
         $talles = Talle::query()->orderBy('nombre')->get(['id', 'nombre', 'codigo']);
         $payload = [
             'modo' => $modo,

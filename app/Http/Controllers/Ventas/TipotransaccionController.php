@@ -354,6 +354,7 @@ class TipotransaccionController extends Controller
         }
 
         $tipo = Tipotransaccion::query()
+            ->with('conceptoVenta:id,codigo,nombre,descripcion,impuesto_id')
             ->whereIn('operacion', ['V', 'U', 'C'])
             ->where(function ($q) use ($abrev) {
                 $q->where('abreviatura', $abrev)
@@ -362,18 +363,29 @@ class TipotransaccionController extends Controller
             ->first();
 
         if (! $tipo && ctype_digit($abrev)) {
-            $tipo = Tipotransaccion::query()->whereKey((int) $abrev)->first();
+            $tipo = Tipotransaccion::query()
+                ->with('conceptoVenta:id,codigo,nombre,descripcion,impuesto_id')
+                ->whereKey((int) $abrev)
+                ->first();
         }
 
         if (! $tipo) {
             return response()->json(['error' => 'Tipo de transacción no encontrado'], 404);
         }
 
+        $concepto = $tipo->conceptoVenta;
+
         return response()->json([
             'id' => $tipo->id,
             'abreviatura' => $tipo->abreviatura,
             'nombre' => $tipo->nombre,
             'operacion' => $tipo->operacion,
+            'codigo' => $tipo->codigo,
+            'concepto_venta_id' => $tipo->concepto_venta_id,
+            'concepto_codigo' => $concepto?->codigo ?? '',
+            'concepto_nombre' => $concepto?->nombre ?? '',
+            'concepto_descripcion' => $concepto?->descripcion ?? '',
+            'concepto_impuesto_id' => $concepto?->impuesto_id ?? '',
         ]);
     }
 
@@ -398,6 +410,12 @@ class TipotransaccionController extends Controller
             || can('crear-local-venta', false)
             || can('editar-local-venta', false)
             || can('actualizar-local-venta', false)
-            || can('usar-facturacion-local', false);
+            || can('usar-facturacion-local', false)
+            || can('crear-factura', false)
+            || can('editar-factura', false)
+            || can('actualizar-factura', false)
+            || can('listar-factura', false)
+            || can('facturar', false)
+            || can('generar-nota-de-credito', false);
     }
 }

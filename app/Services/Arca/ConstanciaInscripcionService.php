@@ -130,6 +130,7 @@ class ConstanciaInscripcionService
                     'texto' => null,
                     'provincia_id' => null,
                     'localidad_id' => null,
+                    'localidad_codigo' => null,
                 ],
                 'metadata' => [
                     'fechaHora' => isset($personaReturn->metadata->fechaHora) ? (string) $personaReturn->metadata->fechaHora : null,
@@ -155,6 +156,9 @@ class ConstanciaInscripcionService
         $provincia_id = $provinciaDesc ? $this->resolverProvinciaId($provinciaDesc) : null;
         $localidad_id = ($provincia_id && $localidadDesc)
             ? $this->resolverLocalidadId($provincia_id, $localidadDesc)
+            : null;
+        $localidadCodigo = $localidad_id
+            ? Localidad::query()->whereKey($localidad_id)->value('codigo')
             : null;
 
         $domicilioTexto = trim(implode(' - ', array_filter([
@@ -196,6 +200,7 @@ class ConstanciaInscripcionService
                 'texto' => $domicilioTexto !== '' ? $domicilioTexto : null,
                 'provincia_id' => $provincia_id,
                 'localidad_id' => $localidad_id,
+                'localidad_codigo' => $localidadCodigo ? (string) $localidadCodigo : null,
             ],
             'metadata' => [
                 'fechaHora' => isset($personaReturn->metadata->fechaHora) ? (string) $personaReturn->metadata->fechaHora : null,
@@ -369,6 +374,21 @@ class ConstanciaInscripcionService
         foreach ($localidades as $l) {
             if ($this->normalizarKey((string) $l->nombre) === $key) {
                 return (int) $l->id;
+            }
+        }
+
+        // ARCA manda la ciudad, no la calle. En Capital Federal el maestro
+        // está cargado con calles del CPA; la localidad usable es esta.
+        if (in_array($key, [
+            'CABA',
+            'CAPITAL FEDERAL',
+            'CIUDAD AUTONOMA DE BUENOS AIRES',
+            'CIUDAD DE BUENOS AIRES',
+        ], true)) {
+            foreach ($localidades as $l) {
+                if ($this->normalizarKey((string) $l->nombre) === 'CIUDAD DE BUENOS AIRES') {
+                    return (int) $l->id;
+                }
             }
         }
 

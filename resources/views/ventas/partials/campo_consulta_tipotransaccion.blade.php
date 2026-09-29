@@ -19,6 +19,14 @@
     $editUrl = ($tipoId > 0 && $puedeAbrirAbm)
         ? route('editar_tipotransaccion', ['id' => $tipoId, 'origen' => 'modal_consulta', 'vista' => 'consulta'])
         : '#';
+    $codigoAfip = (string) ($codigo ?? '');
+    $operacionTipo = (string) ($operacion ?? '');
+    $conceptoVentaId = (string) ($concepto_venta_id ?? '');
+    $conceptoCodigo = (string) ($concepto_codigo ?? '');
+    $conceptoNombre = (string) ($concepto_nombre ?? '');
+    $conceptoDescripcion = (string) ($concepto_descripcion ?? '');
+    $conceptoImpuestoId = (string) ($concepto_impuesto_id ?? '');
+    $avisoId = $aviso_id ?? '';
 @endphp
 
 @if ($layout === 'form_row')
@@ -28,6 +36,15 @@
         <div class="d-flex flex-nowrap align-items-center tm-tipotransaccion-venta-campo-inputs w-100" style="gap: 4px;">
             <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="tipotransaccion_venta_id"
                 value="{{ $tipoId > 0 ? $tipoId : '' }}"
+                data-abreviatura="{{ $abreviatura }}"
+                data-codigo="{{ $codigoAfip }}"
+                data-operacion="{{ $operacionTipo }}"
+                data-usa-concepto="{{ (int) $conceptoVentaId > 0 ? '1' : '0' }}"
+                data-concepto-venta-id="{{ $conceptoVentaId }}"
+                data-concepto-codigo="{{ $conceptoCodigo }}"
+                data-concepto-nombre="{{ $conceptoNombre }}"
+                data-concepto-descripcion="{{ $conceptoDescripcion }}"
+                data-concepto-impuesto-id="{{ $conceptoImpuestoId }}"
                 @if ($required && ! $soloLectura) required @endif>
             @if ($soloLectura)
                 <input type="text" class="form-control abreviaturatipotransaccionventa"
@@ -57,6 +74,9 @@
         </div>
         @if (! empty($ayuda))
             <small class="form-text text-muted">{{ $ayuda }}</small>
+        @endif
+        @if ($avisoId !== '')
+            <small id="{{ $avisoId }}" class="form-text text-info d-none"></small>
         @endif
     </div>
 </div>

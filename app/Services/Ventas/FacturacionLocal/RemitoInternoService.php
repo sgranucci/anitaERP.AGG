@@ -9,6 +9,7 @@ use App\Models\Ventas\RemitoInterno;
 use App\Models\Ventas\RemitoInternoLinea;
 use App\Services\Stock\MovimientoStockService;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\RemitoInternoEstadosSupport;
 use App\Support\Ventas\FacturacionLocal\RemitoInternoListadoFiltros;
 use App\Support\Ventas\FacturacionLocal\RemitoInternoNumeracionSupport;
@@ -259,12 +260,21 @@ class RemitoInternoService
             }
 
             $orden++;
+            $variante = FacturacionLocalVarianteArticuloSupport::validarLinea(
+                $articuloId,
+                (($t = (int) ($raw['talle_id'] ?? 0)) > 0) ? $t : null,
+                (($col = (int) ($raw['color_id'] ?? 0)) > 0) ? $col : null,
+                (($c = (int) ($raw['combinacion_id'] ?? 0)) > 0) ? $c : null,
+            );
+            if (! ($variante['ok'] ?? false)) {
+                throw new InvalidArgumentException('Línea '.$orden.': '.($variante['error'] ?? 'variante inválida'));
+            }
             $payload = [
                 'orden' => $orden,
                 'articulo_id' => $articuloId,
-                'combinacion_id' => (($c = (int) ($raw['combinacion_id'] ?? 0)) > 0) ? $c : null,
-                'talle_id' => (($t = (int) ($raw['talle_id'] ?? 0)) > 0) ? $t : null,
-                'color_id' => (($col = (int) ($raw['color_id'] ?? 0)) > 0) ? $col : null,
+                'combinacion_id' => $variante['combinacion_id'],
+                'talle_id' => $variante['talle_id'],
+                'color_id' => $variante['color_id'],
                 'modulo_id' => (($m = (int) ($raw['modulo_id'] ?? 0)) > 0) ? $m : null,
                 'cantidad' => $cantidad,
                 'descripcion' => $this->resolverDescripcionLinea($raw, $articuloId),

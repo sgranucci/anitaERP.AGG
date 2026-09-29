@@ -37,7 +37,8 @@
             var hay = $rows.filter(function () {
                 return !!($(this).find('.lw-orden-campo').val() || '');
             }).length > 0;
-            $('#lw-orden-empty').toggleClass('d-none', hay);
+            var vacioLinea = $panel.attr('data-vacio-linea') === '1';
+            $('#lw-orden-empty').toggleClass('d-none', vacioLinea ? $rows.length > 0 : hay);
             $('#btn-lw-add-orden').prop('disabled', $rows.length >= ordenMax);
         }
 
@@ -89,6 +90,11 @@
         $panel.on('click', '.lw-orden-remove', function () {
             var $rows = $('#lw-orden-criterios .lw-orden-chip');
             if ($rows.length <= 1) {
+                if ($panel.attr('data-vacio-linea') === '1') {
+                    $rows.remove();
+                    reindexOrden();
+                    return;
+                }
                 $rows.find('.lw-orden-campo').val('');
                 setDir($rows.first(), 'asc');
                 reindexOrden();

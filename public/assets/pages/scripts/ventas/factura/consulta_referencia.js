@@ -34,7 +34,10 @@ function preferirSoloFceReferencia() {
     if ($wrap.length && String($wrap.attr('data-nc-origen-fce') || '0') === '1') {
         return true;
     }
-    var abr = String($('#tipotransaccion_id option:selected').attr('data-abreviatura') || '').toUpperCase();
+    var $meta = (window.metaTipotransaccionVenta)
+        ? window.metaTipotransaccionVenta($('#tipotransaccion_id'))
+        : $('#tipotransaccion_id option:selected');
+    var abr = String($meta.attr('data-abreviatura') || '').toUpperCase();
     return abr.indexOf('FCE') >= 0 || abr.indexOf('NCE') >= 0;
 }
 

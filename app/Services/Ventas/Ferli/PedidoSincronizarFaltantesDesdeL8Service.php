@@ -3,6 +3,7 @@
 namespace App\Services\Ventas\Ferli;
 
 use App\Support\Ventas\Ferli\FerliL8ReaderSupport;
+use App\Support\Ventas\Ferli\MovimientoOrdentrabajoL8ImportSupport;
 use App\Support\Ventas\Ferli\OrdentrabajoMezclaArticuloSupport;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
@@ -317,11 +318,11 @@ class PedidoSincronizarFaltantesDesdeL8Service
         }
 
         $tarea12PorClave = [];
-        $tarea12Ids = [];
+        $tarea12OtPorId = [];
         foreach (DB::table('ordentrabajo_tarea')->get(['id', 'ordentrabajo_id', 'tarea_id', 'pedido_combinacion_id']) as $r) {
             $pc = max(0, (int) ($r->pedido_combinacion_id ?? 0));
             $tarea12PorClave[(int) $r->ordentrabajo_id.'|'.(int) $r->tarea_id.'|'.$pc] = (int) $r->id;
-            $tarea12Ids[(int) $r->id] = true;
+            $tarea12OtPorId[(int) $r->id] = (int) $r->ordentrabajo_id;
         }
         foreach ($l8->table('ordentrabajo_tarea')->cursor() as $r) {
             $otId = (int) $r->ordentrabajo_id;
@@ -358,7 +359,12 @@ class PedidoSincronizarFaltantesDesdeL8Service
                 continue;
             }
             $ottId = (int) ($r->ordentrabajo_tarea_id ?? 0);
-            if ($ottId > 0 && ! isset($tarea12Ids[$ottId]) && ! isset($tareasNuevasIds[$ottId])) {
+            $tareaOt = $tarea12OtPorId[$ottId] ?? null;
+            // Id de L8 ya usado por la tarea de otra OT: no copiar el movimiento.
+            if ($tareaOt !== null && $tareaOt !== $otId) {
+                continue;
+            }
+            if ($ottId > 0 && $tareaOt === null && ! isset($tareasNuevasIds[$ottId])) {
                 continue;
             }
             $plan['acciones']['movimientos'][] = (array) $r;
@@ -634,8 +640,8 @@ class PedidoSincronizarFaltantesDesdeL8Service
             if ($id <= 0 || DB::table('movimientoordentrabajo')->where('id', $id)->exists()) {
                 continue;
             }
-            $ottId = (int) ($clean['ordentrabajo_tarea_id'] ?? 0);
-            if ($ottId > 0 && ! DB::table('ordentrabajo_tarea')->where('id', $ottId)->exists()) {
+            $clean = MovimientoOrdentrabajoL8ImportSupport::filaInsertable($clean);
+            if ($clean === null) {
                 continue;
             }
             DB::table('movimientoordentrabajo')->insert($clean);

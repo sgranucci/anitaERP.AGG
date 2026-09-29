@@ -257,7 +257,7 @@ final class TiendanubePedidoSyncService
             'synced_at' => now(),
         ];
 
-        return DB::transaction(function () use ($existente, $attrs, $order, $doc) {
+        return DB::transaction(function () use ($existente, $attrs, $order, $doc, $storeId) {
             if ($existente && $existente->preservaStagingFacturado()) {
                 // No pisar estado facturado; solo refresh de metadatos seguros
                 $existente->fill(array_diff_key($attrs, array_flip([
@@ -279,7 +279,7 @@ final class TiendanubePedidoSyncService
             $pedido->error_mensaje = null;
             $pedido->save();
 
-            $this->reemplazarLineas($pedido, $order);
+            $this->reemplazarLineas($pedido, $order, $storeId);
 
             return $existente ? 'updated' : 'created';
         });
@@ -288,7 +288,7 @@ final class TiendanubePedidoSyncService
     /**
      * @param  array<string,mixed>  $order
      */
-    private function reemplazarLineas(TiendanubePedido $pedido, array $order): void
+    private function reemplazarLineas(TiendanubePedido $pedido, array $order, ?string $storeId = null): void
     {
         EloquentAuditDeleteSupport::each(
             TiendanubePedidoLinea::query()->where('tiendanube_pedido_id', $pedido->id)

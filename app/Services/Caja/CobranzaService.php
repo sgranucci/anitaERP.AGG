@@ -1450,26 +1450,47 @@ class CobranzaService
 		$cliente = $this->clienteRepository->find($cobranza->cliente_id);
 
 		$tblComprobante = [];
+		$fechaCobro = $cobranza->fecha ? Carbon::parse($cobranza->fecha)->copy()->startOfDay() : null;
+		$pesoDias = 0.0;
+		$pesoTotal = 0.0;
 		foreach($cobranza->cobranza_comprobantes as $comprobante)
 		{
+			$cc = $comprobante->cliente_cuentacorrientes;
 			$totalAplicado = 0;
-			foreach ($comprobante->cliente_cuentacorrientes->cliente_cuentacorriente_aplicaciones as $aplicacion)
+			foreach ($cc->cliente_cuentacorriente_aplicaciones as $aplicacion)
 			{
-				$coeficiente = calculaCoeficienteMoneda($comprobante->cliente_cuentacorrientes->moneda_id, $aplicacion->moneda_id, $aplicacion->cotizacion);
+				$coeficiente = calculaCoeficienteMoneda($cc->moneda_id, $aplicacion->moneda_id, $aplicacion->cotizacion);
 				$totalAplicado += ($aplicacion->total * $coeficiente);
 			}
 
+			$montoEsta = abs((float) ($comprobante->montoaplicado ?? 0));
+			$diasPago = null;
+			if ($fechaCobro && $cc->fecha && $montoEsta >= 0.01) {
+				$diasPago = (int) round(
+					($fechaCobro->getTimestamp() - Carbon::parse($cc->fecha)->copy()->startOfDay()->getTimestamp()) / 86400
+				);
+				$cotiz = (float) ($comprobante->cotizacion ?: ($cc->cotizacion ?: 1));
+				if ($cotiz <= 0) {
+					$cotiz = 1.0;
+				}
+				$peso = $montoEsta * $cotiz;
+				$pesoDias += $diasPago * $peso;
+				$pesoTotal += $peso;
+			}
+
 			$tblComprobante[] = [
-					"comprobante" => $comprobante->cliente_cuentacorrientes->ventas->codigo,
-					"fecha" => $comprobante->cliente_cuentacorrientes->fecha,
-					"fechavencimiento" => $comprobante->cliente_cuentacorrientes->fechavencimiento,
-					"moneda" => $comprobante->cliente_cuentacorrientes->monedas->abreviatura,
-					"cotizacion" => $comprobante->cliente_cuentacorrientes->cotizacion,
-					"monto" => $comprobante->cliente_cuentacorrientes->total,
+					"comprobante" => $cc->ventas?->codigo ?? '',
+					"fecha" => $cc->fecha,
+					"fechavencimiento" => $cc->fechavencimiento,
+					"moneda" => $cc->monedas?->abreviatura ?? '',
+					"cotizacion" => $cc->cotizacion,
+					"monto" => $cc->total,
 					"aplicado" => $totalAplicado,
-					"saldo" => $comprobante->cliente_cuentacorrientes->total + $totalAplicado,
+					"saldo" => $cc->total + $totalAplicado,
+					"dias" => $diasPago,
 					];
 		}
+		$promedioPagoDias = $pesoTotal >= 0.01 ? (int) round($pesoDias / $pesoTotal) : null;
 
 		// Arma datos del cliente
 		$datosCliente = [ "nombre" => $cobranza->clientes->nombre,
@@ -1552,7 +1573,7 @@ class CobranzaService
 		$view =  \View::make('exports.caja.formulariocobranza', compact('cobranza', 'tblComprobante', 
 																		'datosCliente', 'datosEmpresa', 'letra',
 																		'tblCuenta', 'tblCheques', 'tblRetenciones',
-																		'totalCobranza'
+																		'totalCobranza', 'promedioPagoDias'
 																		))
 			    ->render();
 		$path = storage_path('pdf/caja');

@@ -183,6 +183,66 @@ class ComprobanteProveedorImporteComparacionComSupportTest extends TestCase
         );
     }
 
+    public function test_exento_real_entra_al_total_aunque_la_cabecera_haya_cerrado_sin_el(): void
+    {
+        $conceptos = [
+            $this->linea('N', 8237.33, '1'),
+            $this->linea('G', 82372.39, '2'),
+            $this->linea('I', 17298.23, '101'),
+            $this->linea('P', 2471.17, '103'),
+        ];
+
+        $comprobante = new \App\Models\Compras\Comprobante_Proveedor;
+        $comprobante->total = 102141.76;
+        $comprobante->setRelation('comprobante_proveedor_conceptos', collect($conceptos));
+
+        app(ComprobanteProveedorAsientoPreviewSupport::class)->sincronizarTotalesDesdeConceptos($comprobante);
+
+        $this->assertEqualsWithDelta(110379.12, (float) $comprobante->total, 0.001);
+    }
+
+    public function test_precarga_con_total_no_se_reemplaza_por_la_suma_de_conceptos(): void
+    {
+        $conceptos = [
+            $this->linea('N', 8237.33, '1'),
+            $this->linea('G', 82372.39, '2'),
+            $this->linea('I', 17298.23, '101'),
+        ];
+        $precarga = new \App\Models\Compras\Precarga_Comprobante_Proveedor([
+            'total' => 102141.76,
+            'subtotal' => 82372.39,
+        ]);
+        $comprobante = new \App\Models\Compras\Comprobante_Proveedor;
+        $comprobante->precarga_comprobante_proveedor_id = 50;
+        $comprobante->total = 102141.76;
+        $comprobante->setRelation('precarga_comprobante_proveedores', $precarga);
+        $comprobante->setRelation('comprobante_proveedor_conceptos', collect($conceptos));
+
+        app(ComprobanteProveedorAsientoPreviewSupport::class)->sincronizarTotalesDesdeConceptos($comprobante);
+
+        $this->assertEqualsWithDelta(102141.76, (float) $comprobante->total, 0.001);
+    }
+
+    public function test_el_total_es_la_suma_de_todos_los_conceptos(): void
+    {
+        $conceptos = [
+            $this->linea('E', 70266.09, '1'),
+            $this->linea('I', 67305.80, '503'),
+            $this->linea('I', 2960.29, '504'),
+            $this->linea('B', 20921.82, '140'),
+            $this->linea('G', 320503.81, '50'),
+            $this->linea('G', 28193.24, '6'),
+        ];
+
+        $comprobante = new \App\Models\Compras\Comprobante_Proveedor;
+        $comprobante->total = 439885.02;
+        $comprobante->setRelation('comprobante_proveedor_conceptos', collect($conceptos));
+
+        app(ComprobanteProveedorAsientoPreviewSupport::class)->sincronizarTotalesDesdeConceptos($comprobante);
+
+        $this->assertEqualsWithDelta(510151.05, (float) $comprobante->total, 0.001);
+    }
+
     public function test_exento_duplicado_de_iva_sigue_descartado_si_el_resto_cierra_el_total(): void
     {
         $this->assertFalse(

@@ -3,7 +3,8 @@
     use App\Support\Listado\ListadoOrdenamientoSupport;
     $camposOrden = $camposOrdenables ?? [];
     $ordenVals = ListadoOrdenamientoSupport::normalizar($orden ?? [], $camposOrden);
-    if ($ordenVals === []) {
+    $ordenVacioCompacto = ! empty($ordenVacioCompacto);
+    if ($ordenVals === [] && ! $ordenVacioCompacto) {
         $ordenVals[] = ['campo' => '', 'dir' => ListadoOrdenamientoSupport::DIR_ASC];
     }
     $maxOrden = ListadoOrdenamientoSupport::MAX_CRITERIOS;
@@ -19,6 +20,7 @@
 @endphp
 <div class="lw-orden" id="lw-orden-panel"
      data-max="{{ $maxOrden }}"
+     data-vacio-linea="{{ $ordenVacioCompacto ? '1' : '0' }}"
      data-campos='@json($camposOrdenJson)'>
     <div class="lw-orden-head">
         <div class="lw-orden-head-text">
@@ -33,13 +35,20 @@
         </button>
     </div>
 
-    <div class="lw-orden-empty {{ $hayOrdenActivo ? 'd-none' : '' }}" id="lw-orden-empty">
-        <div class="lw-orden-empty-ico"><i class="fa fa-exchange"></i></div>
-        <div class="lw-orden-empty-title">Sin orden personalizado</div>
-        <div class="lw-orden-empty-hint">Por defecto: ID descendente. Elegí un campo o usá el clic en el encabezado de la grilla.</div>
-    </div>
+    @if (! $ordenVacioCompacto)
+        <div class="lw-orden-empty {{ $hayOrdenActivo ? 'd-none' : '' }}" id="lw-orden-empty">
+            <div class="lw-orden-empty-ico"><i class="fa fa-exchange"></i></div>
+            <div class="lw-orden-empty-title">Sin orden personalizado</div>
+            <div class="lw-orden-empty-hint">{{ $ordenHint ?? 'Por defecto: ID descendente. Elegí un campo o usá el clic en el encabezado de la grilla.' }}</div>
+        </div>
+    @endif
 
     <div class="lw-orden-stack" id="lw-orden-criterios">
+        @if ($ordenVacioCompacto)
+            <div class="lw-orden-vacio-linea {{ $hayOrdenActivo ? 'd-none' : '' }}" id="lw-orden-empty">
+                {{ $ordenHint ?? 'Sin orden personalizado.' }}
+            </div>
+        @endif
         @foreach ($ordenVals as $i => $c)
             @php
                 $campoAct = (string) ($c['campo'] ?? '');

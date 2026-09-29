@@ -73,7 +73,9 @@ return [
     // Artículo para flete / envío (SKU ERP Ferli = FL).
     'articulo_envio_sku' => env('TIENDANUBE_ARTICULO_ENVIO_SKU', 'FL'),
 
-    // Artículo para descuentos / cupones (importe negativo). Vacío = descuento pie.
+    // Artículo para descuentos / cupones (importe negativo).
+    // Vacío = el cupón se descuenta del precio de los artículos (IVA incluido).
+    // No usar descuento de pie: AFIP WSFE 10048 (ImpTotal ≠ ImpNeto + ImpIVA).
     'articulo_descuento_sku' => env('TIENDANUBE_ARTICULO_DESCUENTO_SKU', ''),
 
     // Uso de cuentas de caja del canal (maestro usocuentacaja).

@@ -196,6 +196,13 @@
     </table>
 @endif
 
+@if (($promedioPagoDias ?? null) !== null)
+    <p style="margin: 10px 0 0;">
+        <strong>Promedio de pago:</strong> {{ $promedioPagoDias }} d&iacute;as
+        <span class="muted">desde la fecha de cada factura hasta este recibo, ponderado por el importe cobrado.</span>
+    </p>
+@endif
+
 @if (count($tblCuenta) > 0)
     <h3>Cuentas de caja</h3>
     <table>

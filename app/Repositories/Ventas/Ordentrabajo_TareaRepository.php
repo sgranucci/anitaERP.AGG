@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Ventas;
 
+use App\Models\Produccion\MovimientoOrdentrabajo;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
@@ -51,16 +52,34 @@ class Ordentrabajo_TareaRepository implements Ordentrabajo_TareaRepositoryInterf
 
     public function delete($id, $nro_orden = null)
     {
-    	$ordentrabajo_tarea = $this->model->destroy($id);
+        // La FK no alcanza: hay borrados con foreign_key_checks=0 y copias
+        // cuyo ordentrabajo_id no es el de la tarea. Se llevan igual.
+        $this->borrarMovimientosDeLaTarea((int) $id);
 
-		return $ordentrabajo_tarea;
+    	return $this->model->destroy($id);
     }
 
     public function deleteporordentrabajo($ordentrabajo_id, $nro_orden)
     {
+        $ids = $this->model->where('ordentrabajo_id', $ordentrabajo_id)->pluck('id');
+        foreach ($ids as $id) {
+            $this->borrarMovimientosDeLaTarea((int) $id);
+        }
+
     	return EloquentAuditDeleteSupport::each(
 			$this->model->where('ordentrabajo_id', $ordentrabajo_id)
 		);
+    }
+
+    private function borrarMovimientosDeLaTarea(int $ordentrabajoTareaId): void
+    {
+        if ($ordentrabajoTareaId <= 0) {
+            return;
+        }
+
+        EloquentAuditDeleteSupport::each(
+            MovimientoOrdentrabajo::query()->where('ordentrabajo_tarea_id', $ordentrabajoTareaId)
+        );
     }
 
     public function find($id)

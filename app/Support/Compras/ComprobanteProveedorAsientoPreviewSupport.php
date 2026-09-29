@@ -3,6 +3,7 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Comprobante_Proveedor_Debe_Gasto;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
@@ -129,8 +130,9 @@ final class ComprobanteProveedorAsientoPreviewSupport
     }
 
     /**
-     * El Haber del asiento usa total: alinear con la suma de líneas cuando el campo quedó desfasado
-     * (preview on-the-fly, borrador con total erróneo, Perc. IIBB, solo EXENTO, etc.).
+     * Sin precarga: total = suma de todos los conceptos. El asiento y la cuenta corriente usan ese importe.
+     * Con precarga de legajo: el total del PDF manda y no se reemplaza.
+     * Subtotal = suma de los netos (gravado y exento).
      */
     public function sincronizarTotalesDesdeConceptos(Comprobante_Proveedor $comprobante): void
     {
@@ -139,12 +141,13 @@ final class ComprobanteProveedorAsientoPreviewSupport
             return;
         }
 
-        $totalPrevio = round(abs((float) ($comprobante->total ?? 0)), 2);
+        if ($this->precargaFijaElTotal($comprobante)) {
+            return;
+        }
+
+        $this->inferirTiposConceptoEnMemoria($conceptos);
         $total = 0.0;
         $subtotal = 0.0;
-        $sumaSinExento = 0.0;
-        $exento = 0.0;
-        $netoSinExento = 0.0;
         foreach ($conceptos as $linea) {
             $monto = (float) ($linea->monto ?? 0);
             if (abs($monto) < 0.0001) {
@@ -153,15 +156,6 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $total += $monto;
             $tipo = (string) ($linea->concepto_ivacompras?->tipoconcepto ?? '');
             $codigo = (string) ($linea->concepto_ivacompras?->codigo ?? '');
-            if (ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
-                $exento += $monto;
-            } else {
-                $sumaSinExento += $monto;
-            }
-            if (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)
-                && ! ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
-                $netoSinExento += $monto;
-            }
             if (ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)) {
                 $subtotal += $monto;
             }
@@ -172,26 +166,48 @@ final class ComprobanteProveedorAsientoPreviewSupport
             return;
         }
 
-        $exentoIntegra = ComprobanteProveedorImporteComparacionComSupport::exentoIntegraComprobante(
-            $totalPrevio,
-            $sumaSinExento,
-            $exento,
-        );
-        if (! $exentoIntegra && abs($exento) > 0.005) {
-            if ($totalPrevio <= 0 || abs($totalPrevio - $sumaSinExento) > 1.0) {
-                $comprobante->total = round($sumaSinExento, 2);
-            }
-            if (abs($netoSinExento) > 0.0001) {
-                $comprobante->subtotal = round($netoSinExento, 2);
-            }
-
-            return;
-        }
-
         $comprobante->total = $total;
         if (abs($subtotal) > 0.0001) {
             $comprobante->subtotal = round($subtotal, 2);
         }
+    }
+
+    /**
+     * Anita deja gravado e IVA en tipoconcepto N. Sin inferir, el IVA entra al subtotal.
+     *
+     * @param  Collection<int, mixed>  $conceptos
+     */
+    private function inferirTiposConceptoEnMemoria(Collection $conceptos): void
+    {
+        $maestros = $conceptos
+            ->map(static fn ($linea) => $linea->concepto_ivacompras ?? null)
+            ->filter(static fn ($concepto) => $concepto instanceof Concepto_Ivacompra)
+            ->keyBy(static fn (Concepto_Ivacompra $concepto) => (int) $concepto->id);
+        if ($maestros->isEmpty()) {
+            return;
+        }
+
+        ConceptoIvacompraFormulaSupport::inferirTiposYTasasEnColeccion($maestros);
+    }
+
+    /**
+     * Legajo / precarga con total del PDF: no recalcular la cabecera desde los conceptos.
+     */
+    private function precargaFijaElTotal(Comprobante_Proveedor $comprobante): bool
+    {
+        $precargaId = (int) ($comprobante->precarga_comprobante_proveedor_id ?? 0);
+        if ($precargaId <= 0) {
+            return false;
+        }
+
+        $precarga = $comprobante->relationLoaded('precarga_comprobante_proveedores')
+            ? $comprobante->precarga_comprobante_proveedores
+            : Precarga_Comprobante_Proveedor::query()
+                ->whereKey($precargaId)
+                ->first(['id', 'total', 'subtotal', 'origen_entrada']);
+
+        return $precarga instanceof Precarga_Comprobante_Proveedor
+            && ComprobanteProveedorPrecargaTotalSupport::precargaTieneTotalUsable($precarga);
     }
 
     /**

@@ -73,6 +73,10 @@ class Cobranza_ComprobanteRepository implements Cobranza_ComprobanteRepositoryIn
 
 	private function guardarCobranza_Comprobante($data, $funcion, $id = null)
 	{
+		// Anticipo: la grilla manda los comprobantes con aplicado vacío.
+		// Sin esta inicialización, return dispara "Undefined variable $cobranza_comprobante".
+		$cobranza_comprobante = null;
+
 		if ($funcion == 'update')
 		{
 			// Trae todos los id
@@ -222,7 +226,10 @@ class Cobranza_ComprobanteRepository implements Cobranza_ComprobanteRepositoryIn
 				$i = 0;
 			for ($i_movimiento = $i; $i_movimiento < count($cliente_cuentacorriente_ids); $i_movimiento++)
 			{
-				if ($cliente_cuentacorriente_ids[$i_movimiento] != '' && $montos[$i_movimiento] != null) 
+				$montoFila = $montos[$i_movimiento] ?? null;
+				if (($cliente_cuentacorriente_ids[$i_movimiento] ?? '') !== ''
+					&& $montoFila !== null
+					&& abs((float) $montoFila) >= 0.01)
 				{
 					$monto = 0;
 					if ($montos[$i_movimiento] != null && $montos[$i_movimiento] != 0)

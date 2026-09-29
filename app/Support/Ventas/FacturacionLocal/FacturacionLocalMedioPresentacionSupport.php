@@ -113,6 +113,20 @@ final class FacturacionLocalMedioPresentacionSupport
                 'etiqueta' => 'Go Cuotas',
             ],
             [
+                'keywords' => ['aplicacion de credito', 'nota de credito', 'ncd'],
+                'icono' => 'fas fa-file-invoice',
+                'icono_color' => '',
+                'tema' => 'ncd',
+                'etiqueta' => 'NCD',
+            ],
+            [
+                'keywords' => ['pago nube', 'nube boa', 'nube'],
+                'icono' => 'fas fa-cloud',
+                'icono_color' => '',
+                'tema' => 'nube',
+                'etiqueta' => 'NUBE',
+            ],
+            [
                 'keywords' => ['fiserv', 'posnet', 'getnet', 'payway', 'first data'],
                 'icono' => 'fa fa-credit-card',
                 'icono_color' => '',

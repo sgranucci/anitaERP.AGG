@@ -6,6 +6,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\TiendanubePedido;
 use App\Support\Stock\ArticuloSkuMatchSupport;
 use Illuminate\Support\Collection;
 
@@ -190,6 +191,32 @@ final class TiendanubePedidoMaestrosSupport
         return self::resolverArticuloPorSku(self::skuConfigurado('articulo_envio_sku', 'articulo_envio_sku', $storeId));
     }
 
+    /**
+     * Líneas de envío stageadas sin artículo (Boaonda dejó el SKU vacío).
+     * Completa en memoria el artículo de flete de la tienda, o el default FL.
+     * No graba: el próximo sync persiste el id.
+     */
+    public static function completarArticuloEnvio(TiendanubePedido $pedido): void
+    {
+        $pedido->loadMissing('lineas');
+        $articulo = self::articuloEnvio($pedido->store_id);
+        if ($articulo === null) {
+            return;
+        }
+        foreach ($pedido->lineas as $linea) {
+            if ($linea->tipo !== 'envio' || $linea->articulo_id) {
+                continue;
+            }
+            if ((float) $linea->price <= 0.0001) {
+                continue;
+            }
+            $linea->articulo_id = (int) $articulo->id;
+            if (trim((string) $linea->sku) === '') {
+                $linea->sku = $articulo->sku;
+            }
+        }
+    }
+
     public static function articuloDescuento(?string $storeId = null): ?Articulo
     {
         return self::resolverArticuloPorSku(self::skuConfigurado('articulo_descuento_sku', 'articulo_descuento_sku', $storeId));
@@ -202,12 +229,10 @@ final class TiendanubePedidoMaestrosSupport
         if ($sku !== '') {
             return $sku;
         }
-        if (TiendanubeConfiguracionSupport::storeIdEfectivo($storeId) !== TiendanubeConfiguracionSupport::storeIdFerli()
-            && TiendanubeConfiguracionSupport::cabeceraPropia($storeId)) {
-            return '';
-        }
 
-        return (string) config('tiendanube.'.$configKey);
+        // SKU vacío en la tienda: el default del .env (FL). Una tienda con
+        // cabecera propia y el campo en blanco no debe quedar sin flete.
+        return trim((string) config('tiendanube.'.$configKey));
     }
 
     /**

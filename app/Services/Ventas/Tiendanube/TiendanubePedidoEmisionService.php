@@ -12,6 +12,7 @@ use App\Services\Ventas\FacturaMailEnvioService;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Ventas\Tiendanube\TiendanubeConfiguracionSupport;
+use App\Support\Ventas\Tiendanube\TiendanubePedidoDescuentoPrecioSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
@@ -60,6 +61,7 @@ final class TiendanubePedidoEmisionService
         }
 
         $pedido->loadMissing('lineas');
+        TiendanubePedidoMaestrosSupport::completarArticuloEnvio($pedido);
         $seleccion = $this->resolverSeleccion($pedido, $input);
         if ($seleccion['error'] !== null) {
             return ['ok' => false, 'error' => $seleccion['error']];
@@ -332,6 +334,7 @@ final class TiendanubePedidoEmisionService
         $combinacionIds = [];
         $talleIds = [];
         $colorIds = [];
+        $tipos = [];
         $descuentoPieImporte = (float) ($input['descuentoimportepie'] ?? 0);
 
         foreach ($lineas as $item) {
@@ -356,10 +359,23 @@ final class TiendanubePedidoEmisionService
             $combinacionIds[] = (int) ($linea->combinacion_id ?? 0);
             $talleIds[] = (int) ($linea->talle_id ?? 0);
             $colorIds[] = (int) ($linea->color_id ?? 0);
+            $tipos[] = (string) $linea->tipo;
         }
 
         if ($articuloIds === []) {
             throw new InvalidArgumentException('No hay líneas facturables con artículo ERP.');
+        }
+
+        // Sin SKU de descuento el cupón no puede ir como descuento de pie:
+        // ese importe baja el total y no el neto ni el IVA (AFIP 10048).
+        if ($descuentoPieImporte > 0.004) {
+            $precios = TiendanubePedidoDescuentoPrecioSupport::aplicar(
+                $precios,
+                $cantidades,
+                $tipos,
+                $descuentoPieImporte,
+            );
+            $descuentoPieImporte = 0.;
         }
 
         $letra = strtoupper(trim((string) ($input['letra'] ?? TiendanubePedidoReceptorSupport::LETRA_B)));

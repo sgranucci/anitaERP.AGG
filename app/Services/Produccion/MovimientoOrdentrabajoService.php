@@ -1,6 +1,8 @@
 <?php
 namespace App\Services\Produccion;
 
+use App\Models\Produccion\MovimientoOrdentrabajo;
+use App\Models\Ventas\Ordentrabajo_Tarea;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
 use App\Repositories\Ventas\OrdentrabajoRepositoryInterface;
 use App\Repositories\Ventas\Ordentrabajo_Combinacion_TalleRepositoryInterface;
@@ -293,11 +295,22 @@ class MovimientoOrdentrabajoService
 							}
 							else // Actualiza la tarea
 							{
-								if (OrdentrabajoTareaFechaSupport::tieneValor($ordentrabajo_tarea_filtrada[0]->hastafecha))
+								$esInicio = ($tipooperacionEnum[$operacion->tipooperacion] ?? '') === 'Inicio';
+								if ($esInicio)
 								{
+									// Inicio sobre una tarea sin fecha de inicio (0000-00-00).
+									// Si no hay movimiento de Fin, el hastafecha es huérfano
+									// (el alta anterior copió el mismo día) y no debe quedar cerrada.
 									$dataTarea['desdefecha'] = $dataTarea['fecha'];
-									$dataTarea['hastafecha'] = $ordentrabajo_tarea_filtrada[0]->hastafecha;
-								}								
+									$tieneFin = $this->tieneMovimientoFin(
+										(int) $ordentrabajo->id,
+										(int) $data['tarea_id']
+									);
+									if ($tieneFin && OrdentrabajoTareaFechaSupport::tieneValor($ordentrabajo_tarea_filtrada[0]->hastafecha))
+										$dataTarea['hastafecha'] = $ordentrabajo_tarea_filtrada[0]->hastafecha;
+									else
+										$dataTarea['hastafecha'] = null;
+								}
 								else
 								{
 									$dataTarea['desdefecha'] = $ordentrabajo_tarea_filtrada[0]->desdefecha;
@@ -310,9 +323,14 @@ class MovimientoOrdentrabajoService
 
 								foreach($ordentrabajo_tarea_filtrada as $otTarea)
 								{
-									$item_tarea = $this->ordentrabajo_tareaRepository->update(['desdefecha' => $dataTarea['desdefecha'],
-																								'hastafecha' => $dataTarea['hastafecha']], 
-																								$otTarea->id);
+									$camposTarea = [
+										'desdefecha' => $dataTarea['desdefecha'],
+										'hastafecha' => $dataTarea['hastafecha'],
+									];
+									if ($esInicio)
+										$camposTarea['empleado_id'] = $dataTarea['empleado_id'];
+
+									$item_tarea = $this->ordentrabajo_tareaRepository->update($camposTarea, $otTarea->id);
 								}
 
 								if ($item_tarea)
@@ -384,10 +402,13 @@ class MovimientoOrdentrabajoService
 
 			if ($movimientoordentrabajo)
 			{
-				// Lee la tarea
-				$ordentrabajo_tarea = $this->ordentrabajo_tareaRepository->find($movimientoordentrabajo->ordentrabajo_tarea_id);
+				// Lee la tarea. Si no existe o es de otra OT (copia cruzada de L8),
+				// se borra solo este movimiento: no hay que tocar la tarea ajena.
+				$ordentrabajo_tarea = Ordentrabajo_Tarea::query()->find($movimientoordentrabajo->ordentrabajo_tarea_id);
+				$tareaDeEstaOt = $ordentrabajo_tarea
+					&& (int) $ordentrabajo_tarea->ordentrabajo_id === (int) $movimientoordentrabajo->ordentrabajo_id;
 
-				if ($ordentrabajo_tarea)
+				if ($tareaDeEstaOt)
 				{
 					// Filtra tarea_id
 					$ordentrabajo_tarea_filtrada = $this->ordentrabajo_tareaRepository
@@ -397,26 +418,32 @@ class MovimientoOrdentrabajoService
 					{
 						// Si el movimiento es de finalizacion borra la fecha en la tarea si no borra la tarea
 						if ($movimientoordentrabajo->operaciones->tipooperacion == 'F')
-							$ordentrabajo_tarea = $this->ordentrabajo_tareaRepository
-														->update(['hastafecha' => null], $otTarea->id);
+							$this->ordentrabajo_tareaRepository
+								->update(['hastafecha' => null], $otTarea->id);
 						else
 						{
-							// Si no tiene fin borra la tarea, si tiene fecha de fin actualiza desde fecha
-							if (! OrdentrabajoTareaFechaSupport::tieneValor($ordentrabajo_tarea->hastafecha)
-								|| $ordentrabajo_tarea->tarea_id == config('consprod.TAREA_CORTADO_DE_FORRO'))
-								$ordentrabajo_tarea = $this->ordentrabajo_tareaRepository->delete($otTarea->id);
+							// Hastafecha sin movimiento de Fin es un cierre huérfano (inicio y fin
+							// el mismo día). Borrar el Inicio tiene que llevarse la tarea, como
+							// cuando nunca tuvo fin. Si hay Fin, solo se limpia el inicio.
+							$tieneFin = $this->tieneMovimientoFin(
+								(int) $otTarea->ordentrabajo_id,
+								(int) $otTarea->tarea_id,
+								(int) $movimientoordentrabajo->id
+							);
+							if (! $tieneFin
+								|| (int) $otTarea->tarea_id === (int) config('consprod.TAREA_CORTADO_DE_FORRO'))
+								$this->ordentrabajo_tareaRepository->delete($otTarea->id);
 							else
-								$ordentrabajo_tarea = $this->ordentrabajo_tareaRepository
-														->update(['desdefecha' => null], $otTarea->id);
+								$this->ordentrabajo_tareaRepository
+									->update(['desdefecha' => null], $otTarea->id);
 						}
 
-						// Lee la tarea, si no tienen fechas la borra
-						$ordentrabajo_tarea = $this->ordentrabajo_tareaRepository->find($otTarea->id);
+						$restante = Ordentrabajo_Tarea::query()->find($otTarea->id);
 
-						if ($ordentrabajo_tarea
-							&& ! OrdentrabajoTareaFechaSupport::tieneValor($ordentrabajo_tarea->desdefecha)
-							&& ! OrdentrabajoTareaFechaSupport::tieneValor($ordentrabajo_tarea->hastafecha))
-							$ordentrabajo_tarea = $this->ordentrabajo_tareaRepository->delete($otTarea->id);
+						if ($restante
+							&& ! OrdentrabajoTareaFechaSupport::tieneValor($restante->desdefecha)
+							&& ! OrdentrabajoTareaFechaSupport::tieneValor($restante->hastafecha))
+							$this->ordentrabajo_tareaRepository->delete($otTarea->id);
 					}
 				}
 
@@ -676,6 +703,23 @@ class MovimientoOrdentrabajoService
 		}
 	}
 
+	/**
+	 * Hay un movimiento de Fin de esta tarea en la OT.
+	 * Un hastafecha sin este movimiento es un cierre huérfano del alta de Inicio.
+	 */
+	private function tieneMovimientoFin(int $ordentrabajoId, int $tareaId, ?int $exceptoMovimientoId = null): bool
+	{
+		$query = MovimientoOrdentrabajo::query()
+			->where('ordentrabajo_id', $ordentrabajoId)
+			->where('tarea_id', $tareaId)
+			->where('operacion_id', (int) config('consprod.OPERACION_FIN'));
+
+		if ($exceptoMovimientoId)
+			$query->where('id', '!=', $exceptoMovimientoId);
+
+		return $query->exists();
+	}
+
 	// Control de secuencia de fabricacion
 
 	public function controlSecuencia($ordenestrabajo, $operacion_id, $tarea_id, $pedido_combinacion_id, $movimiento_id = null)
@@ -726,8 +770,11 @@ class MovimientoOrdentrabajoService
 					if ($tarea_id == $tarea->tarea_id && 
 						($pedido_combinacion_id != 0 ? $tarea->pedido_combinacion_id == $pedido_combinacion_id : true))
 					{
-						// 0000-00-00 = abierta (legacy / import L8), no "ya finalizada"
-						if (OrdentrabajoTareaFechaSupport::tieneValor($tarea->hastafecha))
+						// Ya cargada = inicio y fin reales. Un hastafecha huérfano
+						// (desdefecha 0000-00-00 tras borrar el Inicio) no bloquea volver a cargarlo.
+						$inicio = OrdentrabajoTareaFechaSupport::tieneValor($tarea->desdefecha);
+						$fin = OrdentrabajoTareaFechaSupport::tieneValor($tarea->hastafecha);
+						if ($inicio && $fin)
 							$flTareaYaCargada = true;
 					}
 				}

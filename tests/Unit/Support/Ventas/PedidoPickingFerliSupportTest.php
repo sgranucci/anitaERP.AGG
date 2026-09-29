@@ -162,28 +162,63 @@ class PedidoPickingFerliSupportTest extends TestCase
     {
         $curva = ['35' => 1, '36' => 2, '37' => 3, '38' => 3, '39' => 2, '40' => 1];
 
-        self::assertNull(S::mensajeSiNumeracionNoSaleIgual($curva, $curva));
+        self::assertNull(S::mensajeSiNumeracionSuperaElLote($curva, $curva));
     }
 
-    public function test_numeracion_parcial_no_sale_igual_al_lote(): void
+    public function test_sacar_menos_modulos_de_los_que_hay_deja_preparar(): void
     {
-        $msg = S::mensajeSiNumeracionNoSaleIgual(
+        // Lote con 3 módulos (36 pares) y pedido de 2 (24). El resto queda en el lote.
+        self::assertNull(S::mensajeSiNumeracionSuperaElLote(
+            ['36' => 2, '37' => 4, '38' => 6, '39' => 6, '40' => 4, '41' => 2],
+            ['36' => 3, '37' => 6, '38' => 9, '39' => 9, '40' => 6, '41' => 3]
+        ));
+    }
+
+    public function test_sacar_mas_modulos_de_los_que_hay_rechaza(): void
+    {
+        $msg = S::mensajeSiNumeracionSuperaElLote(
+            ['36' => 4, '37' => 8, '38' => 12, '39' => 12, '40' => 8, '41' => 4],
+            ['36' => 3, '37' => 6, '38' => 9, '39' => 9, '40' => 6, '41' => 3]
+        );
+
+        self::assertNotNull($msg);
+        self::assertStringContainsString('no alcanza', $msg);
+        self::assertStringContainsString('36: pide 4, hay 3', $msg);
+        self::assertStringContainsString('41: pide 4, hay 3', $msg);
+    }
+
+    public function test_numeracion_ignora_talles_en_cero(): void
+    {
+        self::assertNull(S::mensajeSiNumeracionSuperaElLote(
+            ['35' => 2, '36' => 0],
+            ['35' => 2, '41' => 0]
+        ));
+    }
+
+    public function test_curva_distinta_rechaza_aunque_cada_talle_alcance(): void
+    {
+        // Pedido 1-2-3-3-2-1 contra lote 1-1-2-3-3-2 (15 módulos). Hay pares, la forma no es la misma.
+        $msg = S::mensajeSiNumeracionSuperaElLote(
+            ['35' => 1, '36' => 2, '37' => 3, '38' => 3, '39' => 2, '40' => 1],
+            ['35' => 15, '36' => 15, '37' => 30, '38' => 45, '39' => 45, '40' => 30]
+        );
+
+        self::assertNotNull($msg);
+        self::assertStringContainsString('no coincide con la curva', $msg);
+        self::assertStringContainsString('36:2', $msg);
+        self::assertStringContainsString('36:1', $msg);
+    }
+
+    public function test_talle_extra_en_el_lote_no_es_la_misma_curva(): void
+    {
+        $msg = S::mensajeSiNumeracionSuperaElLote(
             ['35' => 1, '36' => 2],
             ['35' => 10, '36' => 9, '37' => 2]
         );
 
         self::assertNotNull($msg);
-        self::assertStringContainsString('tiene que salir igual', $msg);
-        self::assertStringContainsString('35: pide 1, hay 10', $msg);
-        self::assertStringContainsString('37: pide 0, hay 2', $msg);
-    }
-
-    public function test_numeracion_ignora_talles_en_cero(): void
-    {
-        self::assertNull(S::mensajeSiNumeracionNoSaleIgual(
-            ['35' => 2, '36' => 0],
-            ['35' => 2, '41' => 0]
-        ));
+        self::assertStringContainsString('no coincide con la curva', $msg);
+        self::assertStringContainsString('37:2', $msg);
     }
 
     public function test_elige_bucket_ot_lote_cero_cuando_hay_saldo_visible(): void

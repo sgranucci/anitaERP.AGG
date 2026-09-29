@@ -11,6 +11,7 @@ use App\Services\Ventas\Tiendanube\TiendanubeApiClient;
 use App\Services\Ventas\Tiendanube\TiendanubePedidoEmisionService;
 use App\Services\Ventas\Tiendanube\TiendanubePedidoSyncService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Ventas\Tiendanube\TiendanubeApiHealthSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
@@ -48,9 +49,14 @@ class TiendanubePedidoController extends Controller
         }
 
         $filtrosQuery = TiendanubePedidoListadoFiltros::paraQueryString($filtros);
+        if (! $request->exists('sort') && ($filtros['orden'] ?? []) !== []) {
+            return redirect()->route('tiendanube_pedidos', $filtrosQuery);
+        }
+
         $query = TiendanubePedido::query()->with(['venta:id,codigo,cae', 'lineas']);
         TiendanubePedidoListadoFiltros::aplicar($query, $filtros);
-        $coleccion = $query->orderByDesc('paid_at')->orderByDesc('id')->paginate(20);
+        TiendanubePedidoListadoFiltros::aplicarOrden($query, $filtros['orden'] ?? []);
+        $coleccion = $query->paginate(20);
 
         $apiOk = TiendanubeTiendasSupport::configuradas() !== [];
         $tiendas = TiendanubeTiendasSupport::paraVista();
@@ -414,6 +420,12 @@ class TiendanubePedidoController extends Controller
             'buscar' => $request->input('buscar'),
             'consultar' => 1,
         ], fn ($v) => $v !== null && $v !== '');
+        $query = array_merge($query, ListadoOrdenamientoSupport::paraQueryString(
+            ListadoOrdenamientoSupport::normalizar(
+                $request->input('sort', []),
+                TiendanubePedidoListadoFiltros::camposOrdenables()
+            )
+        ));
 
         return redirect()
             ->route('tiendanube_pedidos', $query)

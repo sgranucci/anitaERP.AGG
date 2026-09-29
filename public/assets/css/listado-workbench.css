@@ -409,6 +409,23 @@
   margin: 0.2rem auto 0;
 }
 
+.lw-orden-vacio-linea {
+  display: flex;
+  align-items: center;
+  min-height: 2.15rem;
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  border: 1px dashed var(--lw-border, #D5E1EA);
+  border-radius: 0.75rem;
+  background: #f8fbfe;
+  color: var(--lw-muted, #5D6D7E);
+  font-size: 0.8125rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .lw-orden-stack {
   display: flex;
   flex-direction: column;

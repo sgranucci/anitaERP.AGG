@@ -57,4 +57,19 @@ class MovimientoOrdentrabajo extends Model implements Auditable
         return $this->hasOne(Empleado::class, 'id', 'empleado_id');
     }
 
+    /**
+     * La tarea del movimiento tiene que ser la de esta OT.
+     * Un id de tarea de otra orden (copia de L8) no se lista.
+     */
+    public function scopeDeLaTareaDeSuOt($query)
+    {
+        return $query->whereExists(function ($q) {
+            $q->selectRaw('1')
+                ->from('ordentrabajo_tarea')
+                ->whereColumn('ordentrabajo_tarea.id', 'movimientoordentrabajo.ordentrabajo_tarea_id')
+                ->whereColumn('ordentrabajo_tarea.ordentrabajo_id', 'movimientoordentrabajo.ordentrabajo_id')
+                ->whereColumn('ordentrabajo_tarea.tarea_id', 'movimientoordentrabajo.tarea_id');
+        });
+    }
+
 }

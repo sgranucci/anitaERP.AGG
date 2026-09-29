@@ -118,14 +118,25 @@ function facturaConceptoObligatorioSinArticulo() {
     return ws === 'wsmtxca' || ws === 'mtxca' || ws === 'mtxsca';
 }
 
+function metaTipoFacturaSeleccionada() {
+    var $el = $('#tipotransaccion_id');
+    if (window.metaTipotransaccionVenta) {
+        return window.metaTipotransaccionVenta($el);
+    }
+    if ($el.is('select')) {
+        return $el.find('option:selected');
+    }
+    return $el;
+}
+
 function tipoSeleccionadoTieneConceptoAsignado() {
-    var $opt = $('#tipotransaccion_id option:selected');
+    var $opt = metaTipoFacturaSeleccionada();
     return $opt.length && parseInt($opt.attr('data-concepto-venta-id') || '0', 10) > 0;
 }
 
 function tipoSeleccionadoEsNcNd() {
-    var $opt = $('#tipotransaccion_id option:selected');
-    if (!$opt.length) {
+    var $opt = metaTipoFacturaSeleccionada();
+    if (!$opt.length || !$opt.val()) {
         return false;
     }
     var abr = String($opt.attr('data-abreviatura') || '').toUpperCase();
@@ -138,7 +149,7 @@ function tipoSeleccionadoUsaConceptoVenta() {
 }
 
 function dataConceptoDesdeTipoSeleccionado() {
-    var $opt = $('#tipotransaccion_id option:selected');
+    var $opt = metaTipoFacturaSeleccionada();
     if (!$opt.length || !$opt.val()) {
         return null;
     }

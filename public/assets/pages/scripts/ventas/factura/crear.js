@@ -1185,6 +1185,7 @@
 		} else if (typeof window.actualizarAvisoConceptoVentaFactura === 'function') {
 			window.actualizarAvisoConceptoVentaFactura();
 		}
+		window.facturaCircuitoListo = true;
 
 		$("#botonform1").click(function(e){
 			if (e && typeof e.preventDefault === 'function') {
@@ -2495,13 +2496,24 @@
 		$("#tbody-tabla-total-factura").append(renglon);
     }
 
+	function metaTipoFacturaMostrador() {
+		var $el = $('#tipotransaccion_id');
+		if (window.metaTipotransaccionVenta) {
+			return window.metaTipotransaccionVenta($el);
+		}
+		if ($el.is('select')) {
+			return $el.find('option:selected');
+		}
+		return $el;
+	}
+
 	function facturaTipoEsNotaCreditoMostrador() {
-		var op = ($('#tipotransaccion_id option:selected').data('operacion') || '').toString().toUpperCase();
+		var op = (metaTipoFacturaMostrador().attr('data-operacion') || '').toString().toUpperCase();
 		return op === 'C';
 	}
 
 	function facturaTipoCodigoAfipMostrador() {
-		var raw = ($('#tipotransaccion_id option:selected').data('codigo') || '').toString();
+		var raw = (metaTipoFacturaMostrador().attr('data-codigo') || '').toString();
 		var digits = raw.replace(/\D+/g, '');
 		return digits ? parseInt(digits, 10) : 0;
 	}

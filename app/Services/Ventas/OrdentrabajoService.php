@@ -28,6 +28,7 @@ use App\Support\Ventas\Ferli\FerliL8AltasBloqueadasSupport;
 use App\Support\Ventas\Ferli\OrdentrabajoMezclaArticuloSupport;
 use App\Support\Ventas\OrdentrabajoEmisionCopiaSupport;
 use App\Support\Ventas\OrdentrabajoEmisionPreimpresoLayout;
+use App\Support\Ventas\OrdentrabajoEmisionTextoSupport;
 use App\Support\Produccion\OrdentrabajoTareaFechaSupport;
 use App\Models\Configuracion\Salida;
 use App\Models\Stock\Articulo;
@@ -1654,6 +1655,7 @@ class OrdentrabajoService
 
 		$leyenda = (string) ($doc['leyenda'] ?? '');
 		$mat = (string) ($doc['material_capellada_consumo'] ?? '');
+		$lineasMaterial = OrdentrabajoEmisionTextoSupport::partirMaterial($mat);
 		$aplique = (string) ($doc['aplique'] ?? '');
 		$forradoFondo = (string) ($doc['forrado_fondo_consumo'] ?? '');
 		$forradoBase = (string) ($doc['forrado_base_consumo'] ?? '');
@@ -1686,9 +1688,9 @@ class OrdentrabajoService
 			'forrado_base_fmt' => $this->prefijoCampoOt('FORRADO BASE: ', substr($forradoBase, 0, 60)),
 			'forrado_fondo1' => $this->prefijoCampoOt('FORRO: ', substr($forradoFondo, 0, 80)),
 			'forrado_fondo2' => substr($forradoFondo, 80, 80),
-			'material2' => substr($mat, 0, 90),
-			'material3' => substr($mat, 90, 90),
-			'material4' => substr($mat, 180, 90),
+			'material2' => $lineasMaterial[0],
+			'material3' => $lineasMaterial[1],
+			'material4' => $lineasMaterial[2],
 			'aplique0' => $this->prefijoCampoOt('APLIQUES: ', substr($aplique, 0, 55)),
 			'aplique1' => substr($aplique, 55, 55),
 			'aplique2' => substr($aplique, 110, 55),
@@ -2396,14 +2398,15 @@ class OrdentrabajoService
 				$d_material[1] = "tag @material1---------------------------------------------------@ ";
 				$reporte .= $d_material[1].'{'.substr($materialCapellada,60,60).'}'."\n";
 
+				$lineasMaterial = OrdentrabajoEmisionTextoSupport::partirMaterial($materialCapelladaConConsumo);
 				$d_material[2] = "tag @material2---------------------------------------------------------------------------------@ ";
-				$reporte .= $d_material[2].'{'.substr($materialCapelladaConConsumo,0,90).'}'."\n";
+				$reporte .= $d_material[2].'{'.$lineasMaterial[0].'}'."\n";
 
 				$d_material[3] = "tag @material3---------------------------------------------------------------------------------@ ";
-				$reporte .= $d_material[3].'{'.substr($materialCapelladaConConsumo,90,90).'}'."\n";
+				$reporte .= $d_material[3].'{'.$lineasMaterial[1].'}'."\n";
 
 				$d_material[4] = "tag @material4---------------------------------------------------------------------------------@ ";
-				$reporte .= $d_material[4].'{'.substr($materialCapelladaConConsumo,180,90).'}'."\n";
+				$reporte .= $d_material[4].'{'.$lineasMaterial[2].'}'."\n";
 
 				$d_forradofondo[0] = "tag @forrado_fondo1------------------------------------------------------------------@ ";
 				$reporte .= $d_forradofondo[0].'{'.substr($forradoFondoConConsumo,0,80).'}'."\n";
