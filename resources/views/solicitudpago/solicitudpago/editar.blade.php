@@ -10,7 +10,7 @@
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/solicitudpago/concepto_solicitudpago/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/arbolaprobacion/panel_ia.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/solicitudpago/solicitudpago/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/solicitudpago/solicitudpago/crear.js') }}?v={{ filemtime(public_path('assets/pages/scripts/solicitudpago/solicitudpago/crear.js')) }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')

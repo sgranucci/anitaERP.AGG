@@ -49,6 +49,11 @@ class ValidacionSolicitudpago extends FormRequest
             );
         }
 
+        $concepto = $this->input('concepto_solicitudpago_id');
+        if ($concepto === null || $concepto === '' || (int) $concepto === 0) {
+            $merge['concepto_solicitudpago_id'] = null;
+        }
+
         if ($merge !== []) {
             $this->merge($merge);
         }
@@ -97,7 +102,7 @@ class ValidacionSolicitudpago extends FormRequest
             'fecha' => 'required|date',
             'tratamiento' => ['required', Rule::in(array_column(SolicitudpagoTratamientos::opciones(), 'valor'))],
             'proveedor_id' => 'nullable|exists:proveedor,id',
-            'concepto_solicitudpago_id' => 'nullable|exists:concepto_solicitudpago,id',
+            'concepto_solicitudpago_id' => 'required|exists:concepto_solicitudpago,id',
             'formapagosol_id' => 'required|exists:formapagosol,id',
             'moneda_id' => 'required|exists:moneda,id',
             'beneficiario' => 'nullable|string|max:80',
@@ -283,6 +288,14 @@ class ValidacionSolicitudpago extends FormRequest
             ->value('forma_pago');
 
         return $forma !== null ? (string) $forma : null;
+    }
+
+    public function messages()
+    {
+        return [
+            'concepto_solicitudpago_id.required' => 'Debe cargar el concepto.',
+            'concepto_solicitudpago_id.exists' => 'El concepto no existe.',
+        ];
     }
 
     public function attributes()

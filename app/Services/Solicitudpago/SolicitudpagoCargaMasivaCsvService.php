@@ -272,8 +272,10 @@ class SolicitudpagoCargaMasivaCsvService
 
         $conceptoCod = (int) $raw['concepto_codigo'];
         /** @var Concepto_Solicitudpago|null $concepto */
-        $concepto = $mapas['conceptos'][$conceptoCod] ?? null;
-        if ($concepto === null) {
+        $concepto = $conceptoCod > 0 ? ($mapas['conceptos'][$conceptoCod] ?? null) : null;
+        if ($conceptoCod <= 0) {
+            $errores[] = 'Concepto obligatorio';
+        } elseif ($concepto === null) {
             $errores[] = "Concepto {$conceptoCod} inexistente";
         }
 

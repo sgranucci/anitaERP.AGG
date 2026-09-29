@@ -22,7 +22,7 @@
         : '#';
 @endphp
 <div class="form-group row sp-concepto-campo mb-2" id="sp_concepto_campo">
-    <label for="{{ $inputId }}_codigo" class="{{ $colLabel }} col-form-label">{{ $label }}</label>
+    <label for="{{ $inputId }}_codigo" class="{{ $colLabel }} col-form-label requerido">{{ $label }}</label>
     <div class="{{ $colInput }}">
         <div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
             <input type="hidden" name="{{ $inputName }}" id="{{ $inputId }}" class="concepto_solicitudpago_id"
@@ -39,7 +39,7 @@
                     <i class="fa fa-edit"></i>
                 </a>
             @endif
-            <input type="text" class="form-control codigoconcepto_solicitudpago"
+            <input type="text" class="form-control codigoconcepto_solicitudpago required"
                    id="{{ $inputId }}_codigo" value="{{ $codigo }}"
                    placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem; flex-shrink: 0;">
             <input type="text" class="form-control nombreconcepto_solicitudpago text-truncate"
@@ -47,6 +47,6 @@
                    placeholder="Descripci&oacute;n" readonly
                    style="min-width: 0; flex: 1 1 auto;">
         </div>
-        <small class="form-text text-muted">Ingrese c&oacute;digo y Enter para validar, o F1 / lupa para consultar. Si hay sector, filtr&aacute; primero por sector.</small>
+        <small class="form-text text-muted">Obligatorio. Ingrese c&oacute;digo y Enter para validar, o F1 / lupa para consultar. Si hay sector, filtr&aacute; primero por sector.</small>
     </div>
 </div>

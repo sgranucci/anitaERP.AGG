@@ -63,6 +63,23 @@ $(function () {
     })();
 
     $('#form-general').on('submit', function (e) {
+        var conceptoId = parseInt($('#concepto_solicitudpago_id').val() || '0', 10);
+        if (!(conceptoId > 0)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            var $tabDatos = $('#tab-datos-link');
+            if ($tabDatos.length && typeof $tabDatos.tab === 'function') {
+                $tabDatos.tab('show');
+            } else if ($tabDatos.length) {
+                $tabDatos.trigger('click');
+            }
+            var $codigoConcepto = $('#concepto_solicitudpago_id_codigo');
+            if ($codigoConcepto.length) {
+                $codigoConcepto.trigger('focus');
+            }
+            alert('Debe cargar el concepto.');
+            return false;
+        }
         // Antes de validar HTML5 / funciones.js: deshabilitar cuotas si no aplican.
         actualizarVisibilidadCuotas();
         spNormalizarMontosAntesDeEnviar();
