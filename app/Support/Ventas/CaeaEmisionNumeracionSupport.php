@@ -4,7 +4,6 @@ namespace App\Support\Ventas;
 
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
-use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\VentaNumeradorFiscalSupport;
@@ -14,7 +13,9 @@ use InvalidArgumentException;
  * Numeración CAEA (PV mod A).
  *
  * AGG / gastronomía: reserva en ERP (max venta.numerocomprobante).
- * El Bierzo: max(ERP, Anita bridge) mientras Informix sigue vivo; al grabar se avanza compemis.
+ * El Bierzo: solo venta_serie_numerador. No lee el último de Anita: un máximo
+ * de otra sucursal corría la serie (FAC A PV 8, 109 → 134414, 29/sep/2026).
+ * Al grabar se sigue enviando la venta, el remito y el asiento a Anita.
  */
 final class CaeaEmisionNumeracionSupport
 {
@@ -83,27 +84,9 @@ final class CaeaEmisionNumeracionSupport
         }
 
         if (EntornoEmpresaSupport::esElBierzo()) {
-            $puntoventa = Puntoventa::query()->find($puntoventaId);
-            $sucursal = trim((string) ($puntoventa->codigo ?? ''));
-            $tipoAnita = self::tipoAnitaDesdeTipotransaccion(
-                $tipotransaccion,
-                $modoFacturacionCliente,
-                $totalComprobante,
-                $letraComprobante,
-            );
-            $path = PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision($puntoventaId)
-                ? PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA
-                : null;
-            $ultimoAnita = app(VentaRepositoryInterface::class)->maxNumeroComprobanteAnitaBridge(
-                $tipoAnita,
-                $letraComprobante,
-                $sucursal,
-                $path,
-            );
-            $ultimoErp = max($ultimoErp, $ultimoAnita);
-
-            // Reserva atómica en venta_serie_numerador (no max()+1 suelto).
-            // Solo El Bierzo: AGG POS/gastronomía sigue con max ERP + Redis lock.
+            // Reserva atómica en venta_serie_numerador. El piso es el máximo
+            // ya grabado en el ERP (y el piso de config del PV), nunca Anita.
+            // Al arrancar cada punto de venta se carga ultimo_numero a mano.
             $piso = self::aplicarPisoCaea($puntoventaId, $ultimoErp, $codigoAfip);
 
             return VentaNumeradorFiscalSupport::reservarSiguiente(

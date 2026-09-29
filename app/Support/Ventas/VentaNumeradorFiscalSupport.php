@@ -18,7 +18,7 @@ use RuntimeException;
  *
  * Emisión El Bierzo (CAEA): CaeaEmisionNumeracionSupport llama reservarSiguiente()
  * aunque NUMERADOR_FISCAL_EN_USO esté en false (ese flag solo afecta preview POS).
- * AGG POS/gastronomía no usa esta tabla.
+ * No consulta Anita para elegir el número. AGG POS/gastronomía no usa esta tabla.
  */
 final class VentaNumeradorFiscalSupport
 {
@@ -47,8 +47,8 @@ final class VentaNumeradorFiscalSupport
     /**
      * Reserva el siguiente número de la serie (lockForUpdate atómico).
      *
-     * $pisoExterno: máximo ya conocido (ERP / Anita / CAEA) para no quedar atrás
-     * si la fila aún no está sembrada. El avance queda persistido aunque falle
+     * $pisoExterno: máximo ya grabado en el ERP (o piso de config) para no quedar
+     * atrás si la fila aún no está sembrada. El avance queda persistido aunque falle
      * el INSERT posterior: evita colisiones entre emisiones concurrentes.
      *
      * El Bierzo lo usa desde CaeaEmisionNumeracionSupport sin depender del flag
