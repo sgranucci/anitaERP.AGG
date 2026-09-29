@@ -362,6 +362,10 @@ class PagosSabanaReporteService
             if (empty($fila['proveedor_id']) && ! empty($erpFila['proveedor_id'])) {
                 $fila['proveedor_id'] = $erpFila['proveedor_id'];
             }
+            $fechaErp = trim((string) ($erpFila['fecha_cheque'] ?? ''));
+            if ($fechaErp !== '') {
+                $fila['fecha_cheque'] = $fechaErp;
+            }
         }
         unset($fila);
 
@@ -1023,7 +1027,7 @@ class PagosSabanaReporteService
             ->where(function ($q) {
                 $q->whereNull('c.estado')->orWhere('c.estado', '<>', 'A');
             })
-            ->select(['c.pagoproveedor_id', 'c.origen', 'c.numerocheque', 'c.monto', 'c.cotizacion', 'c.moneda_id', 'b.nombre as banco_nombre'])
+            ->select(['c.pagoproveedor_id', 'c.origen', 'c.numerocheque', 'c.monto', 'c.cotizacion', 'c.moneda_id', 'c.fechapago', 'b.nombre as banco_nombre'])
             ->get();
 
         $out = [];
@@ -1051,7 +1055,7 @@ class PagosSabanaReporteService
             ->where(function ($q) {
                 $q->whereNull('c.estado')->orWhere('c.estado', '<>', 'A');
             })
-            ->select(['c.caja_movimiento_id', 'c.origen', 'c.numerocheque', 'c.monto', 'c.cotizacion', 'c.moneda_id', 'b.nombre as banco_nombre'])
+            ->select(['c.caja_movimiento_id', 'c.origen', 'c.numerocheque', 'c.monto', 'c.cotizacion', 'c.moneda_id', 'c.fechapago', 'b.nombre as banco_nombre'])
             ->get();
 
         $out = [];
@@ -1354,6 +1358,7 @@ class PagosSabanaReporteService
             'comprobantes' => $this->unirEtiquetas(array_column($comps, 'etiqueta')),
             'comprobantes_links' => $comps,
             'ch_prop_emi' => $desglose['ch_prop_emi'],
+            'fecha_cheque' => $desglose['fecha_cheque'],
             'banco' => $desglose['banco'],
             'ch_terc_ent' => $desglose['ch_terc_ent'],
             'doc_prop_emit' => '',
@@ -1403,6 +1408,7 @@ class PagosSabanaReporteService
             'varios' => 0.0,
             'intercompany' => 0.0,
             'ch_prop_emi' => '',
+            'fecha_cheque' => '',
             'ch_terc_ent' => '',
             'banco' => '',
         ];
@@ -1410,6 +1416,7 @@ class PagosSabanaReporteService
         $bancos = [];
         $chPropEmi = [];
         $chTercEnt = [];
+        $fechasCheque = [];
 
         foreach ($lineasCaja as $linea) {
             $importe = $this->importeMn($linea->monto ?? 0, $linea->moneda_id ?? 1, $linea->cotizacion ?? 1);
@@ -1449,6 +1456,11 @@ class PagosSabanaReporteService
             $bancoCh = trim((string) ($cheque->banco_nombre ?? ''));
             $texto = $nro !== '' ? ($nro.($bancoCh !== '' ? '/'.mb_substr($bancoCh, 0, 4).'.' : '')) : '';
 
+            $fechaTxt = $this->fechaChequeDmy($cheque->fechapago ?? '');
+            if ($fechaTxt !== '') {
+                $fechasCheque[$texto !== '' ? $texto : $origen.':'.$nro] = $fechaTxt;
+            }
+
             if ($origen === 'E') {
                 $out['ch_propios'] += $importe;
                 if ($texto !== '') {
@@ -1469,10 +1481,24 @@ class PagosSabanaReporteService
             $out[$k] = round($out[$k], 2);
         }
         $out['ch_prop_emi'] = implode(' ', array_values($chPropEmi));
+        $out['fecha_cheque'] = implode(' | ', array_values($fechasCheque));
         $out['ch_terc_ent'] = implode(' ', array_values($chTercEnt));
         $out['banco'] = implode(' | ', array_values($bancos));
 
         return $out;
+    }
+
+    private function fechaChequeDmy(mixed $fecha): string
+    {
+        $raw = trim((string) $fecha);
+        if ($raw === '' || str_starts_with($raw, '0000')) {
+            return '';
+        }
+        try {
+            return \Carbon\Carbon::parse($raw)->format('d/m/Y');
+        } catch (\Throwable) {
+            return '';
+        }
     }
 
     private function importeMn($monto, $monedaId, $cotizacion): float

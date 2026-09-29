@@ -28,7 +28,7 @@ class PagosSabanaReporteExport implements FromView, WithColumnFormatting, WithCo
 
     private const CLAVES_TEXTO = [
         'proveedor_codigo', 'tip', 'numero_op', 'tipo_medio', 'comprobantes',
-        'ch_prop_emi', 'banco', 'ch_terc_ent', 'doc_prop_emit', 'doc_terc_entr',
+        'ch_prop_emi', 'fecha_cheque', 'banco', 'ch_terc_ent', 'doc_prop_emit', 'doc_terc_entr',
         'centros_costo', 'ordenes_compra', 'detalle', 'empresa',
     ];
 

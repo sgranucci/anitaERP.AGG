@@ -19,7 +19,7 @@ final class PagosSabanaAnitaBridgeReader
     /** Descripción al final: si el CSV de Informix se corre, no desplaza montos. */
     private const AUXPAG_CAMPOS = 'axp_empresa,axp_fecha,axp_tipo,axp_rec,axp_pro,axp_nro,axp_tipo_ap,'
         .'axp_monto_ap,axp_cod_mon_co,axp_banco,axp_letra_comp,axp_sucursal,axp_sucursal_cob,'
-        .'axp_nro_interno,axp_concepto';
+        .'axp_nro_interno,axp_concepto,axp_fecha_co';
 
     private const TESMAE_CAMPOS = 'tesm_cuenta,tesm_desc,tesm_tipo_cuenta';
 

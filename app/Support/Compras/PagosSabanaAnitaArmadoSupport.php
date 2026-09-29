@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Compras;
 
 use App\Support\Caja\InterbankingArchivoPagoAnitaReader;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 
 /**
  * Arma filas sábana desde pago + auxpag Anita (l-movim.c lee_auxpag), en memoria.
@@ -111,6 +112,7 @@ final class PagosSabanaAnitaArmadoSupport
                 'comprobantes_links' => [],
                 'comprobantes_refs' => $desglose['comprobantes_refs'],
                 'ch_prop_emi' => implode(' ', $desglose['ch_prop_emi']),
+                'fecha_cheque' => (string) ($desglose['fecha_cheque'] ?? ''),
                 'banco' => implode(' | ', array_values($desglose['bancos'])),
                 'ch_terc_ent' => implode(' ', $desglose['ch_terc_ent']),
                 'doc_prop_emit' => implode(' ', $desglose['doc_prop_emit']),
@@ -134,6 +136,26 @@ final class PagosSabanaAnitaArmadoSupport
         });
 
         return $filas;
+    }
+
+    /**
+     * Fallback Anita: fecha de pago del cheque (axp_fecha_co). No usa la fecha de la OP.
+     *
+     * @param  array<string, mixed>  $out
+     */
+    private static function sumarFechaCheque(array &$out, object $axp, string $clave): void
+    {
+        $iso = ComprobanteProveedorAnitaImportClaveSupport::fechaIsoDesdeAnita($axp->axp_fecha_co ?? '');
+        if ($iso === '') {
+            return;
+        }
+        $partes = explode('-', $iso);
+        $out['fechas_cheque'][$clave] = sprintf(
+            '%02d/%02d/%04d',
+            (int) ($partes[2] ?? 0),
+            (int) ($partes[1] ?? 0),
+            (int) ($partes[0] ?? 0),
+        );
     }
 
     public static function clavePago(int $empresa, string $tipo, int $rec): string
@@ -166,6 +188,7 @@ final class PagosSabanaAnitaArmadoSupport
             'comprobantes' => [],
             'comprobantes_refs' => [],
             'ch_prop_emi' => [],
+            'fechas_cheque' => [],
             'ch_terc_ent' => [],
             'doc_prop_emit' => [],
             'doc_terc_entr' => [],
@@ -185,10 +208,12 @@ final class PagosSabanaAnitaArmadoSupport
 
             if (in_array($tipoAp, ['CHP', 'CPC', 'CPA'], true)) {
                 $out['ch_propios'] += $monto;
+                $txt = '';
                 if ($nro !== '' && $nro !== '0') {
                     $txt = $nro.($bancoNom !== '' ? '/'.mb_substr($bancoNom, 0, 4).'.' : '');
                     $out['ch_prop_emi'][$txt] = $txt;
                 }
+                self::sumarFechaCheque($out, $axp, $txt !== '' ? $txt : 'P:'.$nro);
                 if ($bancoNom !== '') {
                     $out['bancos'][$bancoNom] = $bancoNom;
                 }
@@ -200,6 +225,7 @@ final class PagosSabanaAnitaArmadoSupport
                 if ($nro !== '' && $nro !== '0') {
                     $out['ch_terc_ent'][$nro] = $nro;
                 }
+                self::sumarFechaCheque($out, $axp, 'T:'.$nro);
                 continue;
             }
 
@@ -303,6 +329,8 @@ final class PagosSabanaAnitaArmadoSupport
         }
         $out['comprobantes'] = array_values($out['comprobantes']);
         $out['comprobantes_refs'] = array_values($out['comprobantes_refs']);
+        $out['fecha_cheque'] = implode(' | ', array_values($out['fechas_cheque']));
+        unset($out['fechas_cheque']);
         $out['ch_prop_emi'] = array_values($out['ch_prop_emi']);
         $out['ch_terc_ent'] = array_values($out['ch_terc_ent']);
         $out['doc_prop_emit'] = array_values($out['doc_prop_emit']);

@@ -66,6 +66,7 @@ final class PagosSabanaColumnasSupport
         return [
             ['clave' => 'comprobantes', 'etiqueta' => 'Comprobantes', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
             ['clave' => 'ch_prop_emi', 'etiqueta' => 'Ch.Prop.Emi.', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
+            ['clave' => 'fecha_cheque', 'etiqueta' => 'Fecha cheque', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
             ['clave' => 'banco', 'etiqueta' => 'Banco', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
             ['clave' => 'ch_terc_ent', 'etiqueta' => 'Ch.Terc.Ent.', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
             ['clave' => 'doc_prop_emit', 'etiqueta' => 'D.Prop.Emit.', 'tipo' => self::TIPO_TEXTO, 'fijo' => false],
@@ -155,6 +156,7 @@ final class PagosSabanaColumnasSupport
             'tip' => 5,
             'numero_op' => 11,
             'fecha' => 10,
+            'fecha_cheque' => 12,
             'tipo_medio' => 6,
             'total_pago' => 12,
             'comprobantes' => 26,

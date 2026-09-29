@@ -30,7 +30,7 @@
         $align = Col::alineacion($tipo, $clave);
         $nowrap = ! ($pdf && $encabezado) && (
             in_array($tipo, [Col::TIPO_IMPORTE, Col::TIPO_ENTERO, Col::TIPO_FECHA], true)
-            || in_array($clave, ['tip', 'tipo_medio', 'empresa', 'proveedor_codigo', 'numero_op'], true)
+            || in_array($clave, ['tip', 'tipo_medio', 'empresa', 'proveedor_codigo', 'numero_op', 'fecha_cheque'], true)
             || $encabezado
         );
         if ($pdf) {
