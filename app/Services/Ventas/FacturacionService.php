@@ -841,7 +841,10 @@ class FacturacionService
 			else
 				$this->coeficienteExtraCliente = $cliente->coeficienteextra;
 
-			if (isset($cliente->coeficientes))
+			// Reparto 101 no usa el coeficiente del cliente: el 100% va a Villafranca
+			// y en El Bierzo queda solo el remito. Sin coeficiente, el pedido caía
+			// en una FAC normal del punto de prueba (A 8).
+			if (isset($cliente->coeficientes) || $tipoExpreso === '4')
 			{
 				$this->flDivide = true;
 				$this->flGrabaComprobanteDividido = false;
@@ -851,7 +854,7 @@ class FacturacionService
 					$this->coeficienteCliente = 100.;
 				else
 					$this->coeficienteCliente = $cliente->coeficientes->porcentajedivision;
-				$this->tasaImpuesto = $cliente->coeficientes->tasa;
+				$this->tasaImpuesto = isset($cliente->coeficientes) ? $cliente->coeficientes->tasa : 0;
 
 				// Si no es toda dividida genera factura por el resto en el Bierzo
 				if ($this->coeficienteCliente < 100)
