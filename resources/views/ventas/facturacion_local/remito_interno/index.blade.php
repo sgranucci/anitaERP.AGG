@@ -41,6 +41,44 @@
                     'limpiarUrl' => $limpiarUrl,
                 ])
             </form>
+            @php
+                $qSinEstado = $filtrosQuery ?? [];
+                unset($qSinEstado['filtro_estado']);
+                $qSinLocal = $filtrosQuery ?? [];
+                unset($qSinLocal['filtro_local_venta_id']);
+                $estadoActivo = (string) ($filtros['estado'] ?? '');
+                $localActivo = (int) ($filtros['local_venta_id'] ?? 0);
+            @endphp
+            <div class="px-3 py-2 border-bottom bg-light">
+                <div class="d-flex flex-wrap align-items-center mb-2">
+                    <span class="small text-muted mr-2">Estado</span>
+                    <a href="{{ route('facturacion_local_remitos_internos', $qSinEstado) }}"
+                       class="btn btn-sm mr-1 {{ $estadoActivo === '' ? 'btn-primary' : 'btn-outline-primary' }}">Todos</a>
+                    @foreach ($estados as $estKey => $estLabel)
+                        @php
+                            $claseEstado = match ($estKey) {
+                                RemitoInternoEstadosSupport::BORRADOR => $estadoActivo === $estKey ? 'btn-warning' : 'btn-outline-warning',
+                                RemitoInternoEstadosSupport::CONFIRMADO => $estadoActivo === $estKey ? 'btn-success' : 'btn-outline-success',
+                                RemitoInternoEstadosSupport::ANULADO => $estadoActivo === $estKey ? 'btn-danger' : 'btn-outline-danger',
+                                default => $estadoActivo === $estKey ? 'btn-secondary' : 'btn-outline-secondary',
+                            };
+                        @endphp
+                        <a href="{{ route('facturacion_local_remitos_internos', array_merge($qSinEstado, ['filtro_estado' => $estKey])) }}"
+                           class="btn btn-sm mr-1 {{ $claseEstado }}">{{ $estLabel }}</a>
+                    @endforeach
+                </div>
+                <div class="d-flex flex-wrap align-items-center">
+                    <span class="small text-muted mr-2">Local</span>
+                    <a href="{{ route('facturacion_local_remitos_internos', $qSinLocal) }}"
+                       class="btn btn-sm mr-1 mb-1 {{ $localActivo === 0 ? 'btn-info' : 'btn-outline-info' }}">Todos</a>
+                    @foreach ($locales as $loc)
+                        <a href="{{ route('facturacion_local_remitos_internos', array_merge($qSinLocal, ['filtro_local_venta_id' => $loc->id])) }}"
+                           class="btn btn-sm mr-1 mb-1 {{ $localActivo === (int) $loc->id ? 'btn-info' : 'btn-outline-info' }}">
+                            {{ $loc->codigo }} — {{ $loc->nombre }}
+                        </a>
+                    @endforeach
+                </div>
+            </div>
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_remito_interno',

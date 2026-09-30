@@ -39,9 +39,11 @@ window.RI_CFG = {
                     ])
                 </div>
                 <div class="card-footer">
-                    <button type="submit" class="btn btn-primary botonsubmit">
-                        <i class="fa fa-save"></i> Guardar borrador
-                    </button>
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary botonsubmit">
+                            <i class="fa fa-save"></i> Guardar borrador
+                        </button>
+                    </div>
                 </div>
             </form>
         </div>

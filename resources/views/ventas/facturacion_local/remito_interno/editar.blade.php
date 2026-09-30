@@ -32,13 +32,13 @@ window.RI_CFG = {
                     Remito interno Nº {{ $data->numero }}
                     <small class="ml-2 text-white-50">{{ RemitoInternoEstadosSupport::etiqueta($data->estado) }}</small>
                 </h3>
-                <div>
+                <div class="card-tools ml-auto d-flex flex-wrap align-items-center justify-content-end">
                     @if ($data->estado !== RemitoInternoEstadosSupport::BORRADOR && can('pdf-remito-interno-facturacion-local', false))
-                        <a href="{{ route('pdf_remito_interno', $data->id) }}" class="btn btn-outline-light btn-sm" target="_blank" rel="noopener">
+                        <a href="{{ route('pdf_remito_interno', $data->id) }}" class="btn btn-outline-light btn-sm mr-1" target="_blank" rel="noopener">
                             <i class="fa fa-file-pdf-o"></i> PDF
                         </a>
                     @endif
-                    <a href="{{ route('facturacion_local_remitos_internos') }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('facturacion_local_remitos_internos') }}" class="btn btn-outline-light btn-sm">
                         <i class="fa fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
@@ -66,12 +66,23 @@ window.RI_CFG = {
             </div>
             @endif
 
-            <div class="card-footer d-flex flex-wrap align-items-center">
-                @if ($editable)
-                    <button type="submit" class="btn btn-primary mr-2" form="form-remito-interno">
-                        <i class="fa fa-save"></i> Actualizar
-                    </button>
-                    @if (can('confirmar-remito-interno-facturacion-local', false))
+            @php
+                $puedeAnular = in_array($data->estado, [RemitoInternoEstadosSupport::BORRADOR, RemitoInternoEstadosSupport::CONFIRMADO], true)
+                    && can('anular-remito-interno-facturacion-local', false);
+            @endphp
+            @if ($editable || $puedeAnular)
+            <div class="card-footer">
+                <div class="d-flex flex-wrap justify-content-end align-items-center">
+                    @if ($puedeAnular)
+                        <form action="{{ route('anular_remito_interno', $data->id) }}" method="POST" class="d-inline mr-2"
+                              onsubmit="return confirm('{{ $data->estado === RemitoInternoEstadosSupport::CONFIRMADO ? '¿Anular remito y revertir el stock?' : '¿Anular este borrador? No tiene movimiento de stock.' }}');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-danger">
+                                <i class="fa fa-times"></i> Anular
+                            </button>
+                        </form>
+                    @endif
+                    @if ($editable && can('confirmar-remito-interno-facturacion-local', false))
                         <form action="{{ route('confirmar_remito_interno', $data->id) }}" method="POST" class="d-inline mr-2"
                               onsubmit="return confirm('¿Confirmar remito y generar movimiento de stock?');">
                             @csrf
@@ -80,17 +91,14 @@ window.RI_CFG = {
                             </button>
                         </form>
                     @endif
-                @endif
-                @if (in_array($data->estado, [RemitoInternoEstadosSupport::BORRADOR, RemitoInternoEstadosSupport::CONFIRMADO], true) && can('anular-remito-interno-facturacion-local', false))
-                    <form action="{{ route('anular_remito_interno', $data->id) }}" method="POST" class="d-inline"
-                          onsubmit="return confirm('{{ $data->estado === RemitoInternoEstadosSupport::CONFIRMADO ? '¿Anular remito y revertir el stock?' : '¿Anular este borrador? No tiene movimiento de stock.' }}');">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-danger">
-                            <i class="fa fa-times"></i> Anular
+                    @if ($editable)
+                        <button type="submit" class="btn btn-primary" form="form-remito-interno">
+                            <i class="fa fa-save"></i> Actualizar
                         </button>
-                    </form>
-                @endif
+                    @endif
+                </div>
             </div>
+            @endif
         </div>
     </div>
 </div>

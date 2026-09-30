@@ -48,31 +48,13 @@
                     @endforeach
                 </select>
             </div>
-            <div class="form-group col-md-2 col-sm-6 mb-2">
+            <div class="form-group col-md-3 col-sm-6 mb-2">
                 <label class="small mb-1" for="filtro_valor_panel">Valor</label>
                 <input type="text" id="filtro_valor_panel" class="form-control form-control-sm"
                        value="{{ $f['valor'] ?? '' }}" autocomplete="off">
             </div>
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="filtro_estado">Estado</label>
-                <select name="filtro_estado" id="filtro_estado" class="form-control form-control-sm">
-                    <option value="">Todos</option>
-                    @foreach ($estados ?? [] as $estKey => $estLabel)
-                        <option value="{{ $estKey }}" {{ ($f['estado'] ?? '') === $estKey ? 'selected' : '' }}>{{ $estLabel }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="filtro_local_venta_id">Local</label>
-                <select name="filtro_local_venta_id" id="filtro_local_venta_id" class="form-control form-control-sm">
-                    <option value="">Todos</option>
-                    @foreach ($locales ?? [] as $loc)
-                        <option value="{{ $loc->id }}" {{ (int) ($f['local_venta_id'] ?? 0) === (int) $loc->id ? 'selected' : '' }}>
-                            {{ $loc->codigo }} — {{ $loc->nombre }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
+            <input type="hidden" name="filtro_estado" value="{{ $f['estado'] ?? '' }}">
+            <input type="hidden" name="filtro_local_venta_id" value="{{ (int) ($f['local_venta_id'] ?? 0) ?: '' }}">
             <div class="form-group col-md-auto mb-2">
                 <button type="submit" class="btn btn-sm btn-primary">Aplicar filtros</button>
             </div>
