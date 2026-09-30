@@ -724,6 +724,71 @@ class CertificadoSanitarioService
     }
 
     /**
+     * Certificados cuya fecha cae en el rango inclusive.
+     *
+     * @return Builder<CertificadoSanitario>
+     */
+    public function queryPorRangoFecha(string $desde, string $hasta): Builder
+    {
+        return CertificadoSanitario::query()
+            ->where('fecha', '>=', $desde)
+            ->where('fecha', '<=', $hasta);
+    }
+
+    /**
+     * @return array{cantidad: int, muestra: list<array{id: int, etiqueta: string, fecha: string}>}
+     */
+    public function resumenBorradoPorRango(string $desde, string $hasta): array
+    {
+        $base = $this->queryPorRangoFecha($desde, $hasta);
+        $cantidad = (int) (clone $base)->count();
+        $muestra = (clone $base)
+            ->orderBy('fecha')
+            ->orderBy('numero')
+            ->limit(12)
+            ->get(['id', 'numero', 'serie', 'fecha']);
+
+        return [
+            'cantidad' => $cantidad,
+            'muestra' => $muestra->map(static function (CertificadoSanitario $cert): array {
+                return [
+                    'id' => (int) $cert->id,
+                    'etiqueta' => $cert->etiqueta,
+                    'fecha' => $cert->fecha?->format('d/m/Y') ?? '',
+                ];
+            })->values()->all(),
+        ];
+    }
+
+    public function borrarPorRango(string $desde, string $hasta): int
+    {
+        $borrados = 0;
+        $this->queryPorRangoFecha($desde, $hasta)
+            ->chunkById(100, function ($certs) use (&$borrados): void {
+                foreach ($certs as $cert) {
+                    if (! $cert instanceof CertificadoSanitario) {
+                        continue;
+                    }
+                    $this->borrarRegistro($cert);
+                    $borrados++;
+                }
+            });
+
+        return $borrados;
+    }
+
+    public function borrarRegistro(CertificadoSanitario $cert): void
+    {
+        $paths = [$cert->xml_frio, $cert->xml_sin_frio];
+        $cert->delete();
+        foreach ($paths as $path) {
+            if (is_string($path) && $path !== '' && Storage::disk('local')->exists($path)) {
+                Storage::disk('local')->delete($path);
+            }
+        }
+    }
+
+    /**
      * ZIP con el XML adentro: SENASA no acepta el XML suelto.
      */
     public function descargarXmlZip(string $pathRelativo): BinaryFileResponse

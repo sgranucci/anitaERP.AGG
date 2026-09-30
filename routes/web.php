@@ -5537,6 +5537,10 @@ Route::get('ventas/certificado-sanitario', 'Ventas\CertificadoSanitarioControlle
 Route::get('ventas/lista-certificado-sanitario/{formato?}/{busqueda?}', 'Ventas\CertificadoSanitarioController@listar')->name('lista_certificado_sanitario');
 Route::get('ventas/certificado-sanitario/crear', 'Ventas\CertificadoSanitarioController@crear')->name('crear_certificado_sanitario');
 Route::post('ventas/certificado-sanitario', 'Ventas\CertificadoSanitarioController@guardar')->name('guardar_certificado_sanitario');
+Route::get('ventas/certificado-sanitario/borrar-historial', 'Ventas\CertificadoSanitarioController@previewBorrarHistorial')
+    ->name('preview_borrar_historial_certificado_sanitario');
+Route::post('ventas/certificado-sanitario/borrar-historial', 'Ventas\CertificadoSanitarioController@borrarHistorial')
+    ->name('borrar_historial_certificado_sanitario');
 Route::get('ventas/certificado-sanitario/{id}/xml/{tipo}', 'Ventas\CertificadoSanitarioController@descargarXml')
     ->whereNumber('id')
     ->where('tipo', '[SsNn]')

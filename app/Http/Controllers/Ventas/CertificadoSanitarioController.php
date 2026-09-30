@@ -15,6 +15,8 @@ use App\Services\Ventas\CertificadoSanitarioService;
 use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Ventas\CertificadoSanitarioListadoFiltros;
 use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioPreviewAplanado;
+use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
@@ -244,14 +246,77 @@ class CertificadoSanitarioController extends Controller
         }
 
         $data = CertificadoSanitario::query()->findOrFail($id);
-        foreach ([$data->xml_frio, $data->xml_sin_frio] as $path) {
-            if ($path && Storage::disk('local')->exists($path)) {
-                Storage::disk('local')->delete($path);
-            }
-        }
-        $data->delete();
+        $this->service->borrarRegistro($data);
 
         return response()->json(['mensaje' => 'ok']);
+    }
+
+    public function previewBorrarHistorial(Request $request): JsonResponse
+    {
+        can('borrar-certificado-sanitario');
+
+        [$desde, $hasta, $error] = $this->rangoFechasHistorial($request);
+        if ($error !== null) {
+            return response()->json(['ok' => false, 'mensaje' => $error], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'desde' => Carbon::parse($desde)->format('d/m/Y'),
+            'hasta' => Carbon::parse($hasta)->format('d/m/Y'),
+            'resumen' => $this->service->resumenBorradoPorRango($desde, $hasta),
+        ]);
+    }
+
+    public function borrarHistorial(Request $request): JsonResponse
+    {
+        can('borrar-certificado-sanitario');
+
+        if (! $request->boolean('confirmar')) {
+            return response()->json(['ok' => false, 'mensaje' => 'Falta la confirmación del borrado.'], 422);
+        }
+
+        [$desde, $hasta, $error] = $this->rangoFechasHistorial($request);
+        if ($error !== null) {
+            return response()->json(['ok' => false, 'mensaje' => $error], 422);
+        }
+
+        $borrados = $this->service->borrarPorRango($desde, $hasta);
+        $mensaje = $borrados === 1
+            ? 'Se borró 1 certificado sanitario.'
+            : 'Se borraron '.$borrados.' certificados sanitarios.';
+        session()->flash('mensaje', $mensaje);
+
+        return response()->json([
+            'ok' => true,
+            'borrados' => $borrados,
+            'mensaje' => $mensaje,
+        ]);
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: ?string}
+     */
+    private function rangoFechasHistorial(Request $request): array
+    {
+        $desde = trim((string) $request->input('fecha_desde', ''));
+        $hasta = trim((string) $request->input('fecha_hasta', ''));
+        try {
+            $fechaDesde = Carbon::createFromFormat('!Y-m-d', $desde);
+            $fechaHasta = Carbon::createFromFormat('!Y-m-d', $hasta);
+        } catch (\Throwable) {
+            return ['', '', 'Indique fecha desde y fecha hasta válidas.'];
+        }
+        $desdeInvalida = ! $fechaDesde || $fechaDesde->format('Y-m-d') !== $desde;
+        $hastaInvalida = ! $fechaHasta || $fechaHasta->format('Y-m-d') !== $hasta;
+        if ($desdeInvalida || $hastaInvalida) {
+            return ['', '', 'Indique fecha desde y fecha hasta válidas.'];
+        }
+        if ($fechaDesde->gt($fechaHasta)) {
+            return ['', '', 'La fecha desde no puede ser posterior a la fecha hasta.'];
+        }
+
+        return [$desde, $hasta, null];
     }
 
     private function resolverCamionDesdeRequest(Request $request): ?Camion

@@ -7,6 +7,9 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/certificado_sanitario/filtro.js")}}" type="text/javascript"></script>
+@if (can('borrar-certificado-sanitario', false))
+<script src="{{ asset('assets/pages/scripts/ventas/certificado_sanitario/borrar_historial.js') }}" type="text/javascript"></script>
+@endif
 @endsection
 
 @section('contenido')
@@ -35,6 +38,15 @@
                         'nuevoRegistroCan' => 'crear-certificado-sanitario',
                         'nuevoRegistroLabel' => 'Generar certificado WEB',
                     ])
+                    @if (can('borrar-certificado-sanitario', false))
+                        <button type="button"
+                                class="btn btn-light btn-sm ml-1"
+                                data-toggle="modal"
+                                data-target="#modal-borrar-historial-certsan"
+                                title="Borrar certificados por rango de fechas">
+                            <i class="fa fa-trash"></i> Borrar historial
+                        </button>
+                    @endif
                 </div>
             </div>
             <form method="get" action="{{ route('consultar_certificado_sanitario') }}" id="form-filtros-certificado-sanitario" class="mb-0">
@@ -152,4 +164,7 @@
         </div>
     </div>
 </div>
+@if (can('borrar-certificado-sanitario', false))
+    @include('ventas.certificado_sanitario.partials.modal_borrar_historial')
+@endif
 @endsection
