@@ -673,9 +673,15 @@ class IngresoEgresoController extends Controller
         }
 
         $monedaRef = (int) ($monedaIds[0] ?? 1);
+        $conceptoGastoId = (int) $request->input('conceptogasto_id', 0);
 
         try {
-            $this->comprobanteIvaService->validarTotalesContraCaja($comprobantes, $lineasCaja, $monedaRef);
+            $this->comprobanteIvaService->validarTotalesContraCaja(
+                $comprobantes,
+                $lineasCaja,
+                $monedaRef,
+                $conceptoGastoId,
+            );
 
             return response()->json([
                 'mensaje' => 'ok',

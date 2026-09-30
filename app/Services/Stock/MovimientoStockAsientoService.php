@@ -69,7 +69,7 @@ class MovimientoStockAsientoService
         MovimientoStockCuadreContableSupport::assertPreview($preview);
     }
 
-    public function generarAsiento(MovimientoStock $movimiento): ?int
+    public function generarAsiento(MovimientoStock $movimiento, bool $sincronizarAnita = true): ?int
     {
         if (! $this->debeGenerarAsiento($movimiento->tipotransaccion_stock)) {
             return null;
@@ -97,12 +97,14 @@ class MovimientoStockAsientoService
 
         $movimiento->asiento_id = $asientoId;
         $movimiento->setRelation('asientos', $asiento);
-        $this->sincronizarCtamovAnitaMovimiento($movimiento, $preview);
+        if ($sincronizarAnita) {
+            $this->sincronizarCtamovAnitaMovimiento($movimiento, $preview);
+        }
 
         return $asientoId;
     }
 
-    public function recuadrarAsientoExistente(MovimientoStock $movimiento): void
+    public function recuadrarAsientoExistente(MovimientoStock $movimiento, bool $sincronizarAnita = true): void
     {
         $asientoId = (int) ($movimiento->asiento_id ?? 0);
         if ($asientoId <= 0) {
@@ -127,7 +129,9 @@ class MovimientoStockAsientoService
             $this->asientoMovimientoRepository
         );
 
-        $this->sincronizarCtamovAnitaMovimiento($movimiento->fresh(['asientos']), $preview);
+        if ($sincronizarAnita) {
+            $this->sincronizarCtamovAnitaMovimiento($movimiento->fresh(['asientos']), $preview);
+        }
     }
 
     /**

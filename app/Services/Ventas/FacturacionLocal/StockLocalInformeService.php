@@ -16,8 +16,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 
 /**
- * Informe de stock del local (puerto de l-stocklocal.c).
- * Origen default: ERP (articulo_movimiento). Opcional: Anita Local (stkdep/stkvmed).
+ * Informe de stock del local. Siempre anitaERP (articulo_movimiento).
+ * El bridge del local no se consulta.
  */
 final class StockLocalInformeService
 {
@@ -51,8 +51,9 @@ final class StockLocalInformeService
      */
     public function consultar(array $filtros, bool $paginar = true, int $porPagina = 40): array
     {
+        $filtros['origen'] = StockLocalInformeListadoFiltros::ORIGEN_ERP;
         $local = $this->resolverLocal($filtros);
-        $origen = (string) ($filtros['origen'] ?? StockLocalInformeListadoFiltros::ORIGEN_ERP);
+        $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP;
         $depositoAnita = 0;
         $depositoErpId = 0;
 

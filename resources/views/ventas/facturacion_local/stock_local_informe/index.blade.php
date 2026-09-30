@@ -30,9 +30,8 @@
                 <input type="hidden" name="consultar" value="1">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Equivalente Anita <code>l-stocklocal.c</code>: stock por medida del depósito del local.
-                        Por defecto lee el <strong>ERP</strong> (<code>articulo_movimiento</code> del depósito del local).
-                        Active el tilde solo si necesita comparar contra Anita Local (Informix).
+                        Equivalente Anita <code>l-stocklocal.c</code>: stock por medida del dep&oacute;sito del local.
+                        Lee el <strong>ERP</strong> (<code>articulo_movimiento</code> del dep&oacute;sito del local).
                     </p>
 
                     @if (! empty($error))
@@ -42,7 +41,6 @@
                     @php
                         $colLabel = 'col-lg-2 control-label text-right pr-2';
                         $colInput = 'col-lg-4';
-                        $origenAnita = ($filtros['origen'] ?? 'erp') === 'anita';
                     @endphp
 
                     <div class="form-group row">
@@ -52,7 +50,6 @@
                                 <option value="">— Todos —</option>
                                 @foreach ($locales as $loc)
                                     <option value="{{ $loc->id }}"
-                                        data-deposito="{{ (int) ($loc->anita_deposito ?? 0) }}"
                                         data-deposito-erp="{{ (int) ($loc->deposito_id ?? 0) }}"
                                         @selected((int) ($filtros['local_venta_id'] ?? 0) === (int) $loc->id)>
                                         {{ $loc->codigo }} — {{ $loc->nombre }}
@@ -67,22 +64,6 @@
                             @endif
                             <small class="form-text text-muted">«Todos» requiere elegir depósito ERP abajo.</small>
                         </div>
-                        <label class="{{ $colLabel }}">Origen de datos</label>
-                        <div class="{{ $colInput }} pt-2">
-                            <div class="custom-control custom-checkbox">
-                                <input type="hidden" name="origen_anita" value="0">
-                                <input type="checkbox" class="custom-control-input" id="origen_anita"
-                                    name="origen_anita" value="1"
-                                    @checked($origenAnita)>
-                                <label class="custom-control-label" for="origen_anita">
-                                    Traer datos de Anita (Informix)
-                                </label>
-                            </div>
-                            <small class="form-text text-muted">Sin tilde = ERP. Con tilde = bridge Anita Local.</small>
-                        </div>
-                    </div>
-
-                    <div class="form-group row" id="fila-deposito-erp" style="{{ $origenAnita ? 'display:none;' : '' }}">
                         <label for="deposito_erp_id" class="{{ $colLabel }}">Depósito ERP</label>
                         <div class="{{ $colInput }}">
                             <select name="deposito_erp_id" id="deposito_erp_id" class="form-control">
@@ -97,17 +78,6 @@
                             <small class="form-text text-muted">
                                 El que va con el local es el depósito asignado en Locales. Acá también están los que tienen movimientos (fábrica). Los códigos 610, 620, 630… repiten la misma sucursal y no se listan.
                             </small>
-                        </div>
-                    </div>
-
-                    <div class="form-group row" id="fila-deposito-anita" style="{{ $origenAnita ? '' : 'display:none;' }}">
-                        <label for="deposito_anita" class="{{ $colLabel }}">Depósito Anita</label>
-                        <div class="{{ $colInput }}">
-                            <input type="number" name="deposito_anita" id="deposito_anita" class="form-control"
-                                min="1" step="1"
-                                value="{{ $filtros['deposito_anita'] ?? $depositoAnita ?? '' }}"
-                                placeholder="Vacío = depósito Anita del local">
-                            <small class="form-text text-muted">Override opcional del depósito Informix.</small>
                         </div>
                     </div>
 
@@ -269,7 +239,7 @@
     'tituloId' => 'sli-overlay-titulo',
     'subtituloId' => 'sli-overlay-subtitulo',
     'titulo' => 'Consultando stock del local…',
-    'subtitulo' => 'Lee el ERP (o Anita si activó el tilde). Puede demorar según el rango. Pulse Esc para ocultar el aviso.',
+    'subtitulo' => 'Lee el ERP. Puede demorar según el rango. Pulse Esc para ocultar el aviso.',
 ])
 @include('includes.stock.modalconsultaarticulo')
 @endsection
@@ -281,11 +251,7 @@
     var form = document.getElementById('form-stock-local-informe');
     var overlay = document.getElementById('sli-overlay');
     var selectLocal = document.getElementById('local_venta_id');
-    var inputDepAnita = document.getElementById('deposito_anita');
     var selectDepErp = document.getElementById('deposito_erp_id');
-    var checkAnita = document.getElementById('origen_anita');
-    var filaAnita = document.getElementById('fila-deposito-anita');
-    var filaErp = document.getElementById('fila-deposito-erp');
 
     if (typeof jQuery !== 'undefined') {
         jQuery('#consultaarticuloModal').data('articuloCanal', 'LOCAL');
@@ -330,16 +296,6 @@
         });
     }
 
-    function toggleOrigen() {
-        var on = checkAnita && checkAnita.checked;
-        if (filaAnita) {
-            filaAnita.style.display = on ? '' : 'none';
-        }
-        if (filaErp) {
-            filaErp.style.display = on ? 'none' : '';
-        }
-    }
-
     function mostrarOverlay(titulo) {
         if (!overlay) return;
         if (titulo) {
@@ -357,19 +313,10 @@
         overlay.setAttribute('aria-hidden', 'true');
     }
 
-    if (checkAnita) {
-        checkAnita.addEventListener('change', toggleOrigen);
-        toggleOrigen();
-    }
-
     if (selectLocal) {
         selectLocal.addEventListener('change', function () {
             var opt = selectLocal.options[selectLocal.selectedIndex];
-            var depAnita = opt ? parseInt(opt.getAttribute('data-deposito') || '0', 10) : 0;
             var depErp = opt ? parseInt(opt.getAttribute('data-deposito-erp') || '0', 10) : 0;
-            if (inputDepAnita && !inputDepAnita.value && depAnita > 0) {
-                inputDepAnita.value = depAnita;
-            }
             if (selectDepErp && depErp > 0) {
                 selectDepErp.value = String(depErp);
             }
@@ -383,15 +330,12 @@
             }
             var localVal = selectLocal ? (selectLocal.value || '') : '';
             var depErpVal = selectDepErp ? (selectDepErp.value || '') : '';
-            if ((!checkAnita || !checkAnita.checked) && !localVal && !depErpVal) {
+            if (!localVal && !depErpVal) {
                 ev.preventDefault();
                 alert('Elija un local o un depósito ERP.');
                 return;
             }
-            var msg = (checkAnita && checkAnita.checked)
-                ? 'Consultando Anita Local…'
-                : 'Consultando stock ERP…';
-            mostrarOverlay(msg);
+            mostrarOverlay('Consultando stock ERP…');
         });
     }
 

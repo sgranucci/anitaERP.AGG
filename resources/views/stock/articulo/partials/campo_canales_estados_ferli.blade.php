@@ -20,6 +20,7 @@
                            class="custom-control-input"
                            id="canal_id_{{ $canal['id'] }}"
                            name="canal_ids[]"
+                           data-canal-codigo="{{ $canal['codigo'] }}"
                            value="{{ $canal['id'] }}"
                            @if (in_array((int) $canal['id'], $canalIdsSel, true)) checked @endif>
                     <label class="custom-control-label" for="canal_id_{{ $canal['id'] }}">

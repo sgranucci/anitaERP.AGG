@@ -92,7 +92,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
 
         $comprobante->setRelation(
             'comprobante_proveedor_debe_gastos',
-            $this->construirDebeGastosDesdeRequest($request, $base)
+            $this->construirDebeGastosDesdeRequest($request, $base, $comprobante)
         );
 
         return $comprobante;
@@ -101,8 +101,16 @@ final class ComprobanteProveedorAsientoPreviewSupport
     /**
      * @return Collection<int, Comprobante_Proveedor_Debe_Gasto>
      */
-    private function construirDebeGastosDesdeRequest(Request $request, ?Comprobante_Proveedor $base): Collection
-    {
+    private function construirDebeGastosDesdeRequest(
+        Request $request,
+        ?Comprobante_Proveedor $base,
+        Comprobante_Proveedor $comprobante,
+    ): Collection {
+        // COM, artículos de OC, anticipo y contrato: el Debe no sale del reparto manual.
+        if (! ComprobanteProveedorDebeGastoSupport::permiteParaComprobante($comprobante)) {
+            return collect();
+        }
+
         // Si el form manda el bloque (aunque vacío), manda el form; si no, usa lo persistido.
         if (! $request->exists('debe_gasto_cuenta_ids') && ! $request->exists('debe_gasto_importes')) {
             if ($base !== null) {

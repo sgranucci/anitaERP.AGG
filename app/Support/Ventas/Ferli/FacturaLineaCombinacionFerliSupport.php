@@ -12,8 +12,11 @@ use App\Models\Ventas\Venta_Emision;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
- * Ferli: la NC/mostrador no manda combinación ni despacho en el POST.
- * Anita (compaux/stkmov) sí los usa: se reponen desde venta_emision de la FAC origen.
+ * Ferli: la NC de mostrador y la nota de crédito total no mandan combinación ni talle.
+ * Anita (compaux/stkmov) los usa: se copian desde venta_emision de la FAC origen.
+ *
+ * El canje del POS (+1/−1) es otro caso: el renglón que entra ya trae artículo,
+ * color, talle y precio. No se pisan con la factura del par que sale.
  */
 final class FacturaLineaCombinacionFerliSupport
 {
@@ -25,6 +28,17 @@ final class FacturaLineaCombinacionFerliSupport
     public static function enriquecerDesdeEmisionOrigen(array $dataFactura, array $requestData): array
     {
         if (! EntornoEmpresaSupport::esFerli() || $dataFactura === []) {
+            return $dataFactura;
+        }
+
+        if (self::esCanjePos($requestData)) {
+            foreach ($dataFactura as $i => $item) {
+                if (! is_array($item) || empty($item['articulo_id'])) {
+                    continue;
+                }
+                $dataFactura[$i] = self::completarVariantePropia($item);
+            }
+
             return $dataFactura;
         }
 
@@ -94,6 +108,48 @@ final class FacturaLineaCombinacionFerliSupport
     }
 
     /**
+     * @param  array<string, mixed>  $requestData
+     */
+    private static function esCanjePos(array $requestData): bool
+    {
+        $opciones = is_array($requestData['opciones_emision'] ?? null)
+            ? $requestData['opciones_emision']
+            : [];
+
+        return ! empty($opciones['canje_pos']);
+    }
+
+    /**
+     * Canje: código de color y medida salen del renglón que entra, no de la FAC.
+     *
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>
+     */
+    private static function completarVariantePropia(array $item): array
+    {
+        $combinacionId = (int) ($item['combinacion_id'] ?? 0);
+        if ($combinacionId > 0) {
+            $item['codigocombinacion'] = trim((string) (Combinacion::query()->whereKey($combinacionId)->value('codigo') ?? ''));
+        } else {
+            $item['codigocombinacion'] = $item['codigocombinacion'] ?? '';
+        }
+
+        $talleId = (int) ($item['talle_id'] ?? 0);
+        if ($talleId > 0) {
+            $talle = Talle::query()->find($talleId);
+            if ($talle) {
+                $medida = trim((string) ($talle->nombre ?? ''));
+                if ($medida === '') {
+                    $medida = trim((string) ($talle->codigo ?? ''));
+                }
+                $item['medida'] = $medida;
+            }
+        }
+
+        return $item;
+    }
+
+    /**
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
@@ -126,6 +182,7 @@ final class FacturaLineaCombinacionFerliSupport
                 $item['medida'] = $medida;
             }
         }
+
 
         if (! empty($emision->pedido_combinacion_id)) {
             $item['pedido_combinacion_id'] = (int) $emision->pedido_combinacion_id;

@@ -93,6 +93,15 @@ final class TiendanubeApiClient
     }
 
     /**
+     * @param  array<int|string, mixed>  $body
+     * @return array{ok:bool,status:int,data?:mixed,error?:string}
+     */
+    public function patch(string $path, array $body = []): array
+    {
+        return $this->request('PATCH', $path, [], $body);
+    }
+
+    /**
      * @return array{ok:bool,status:int,data?:mixed,error?:string}
      */
     public function delete(string $path): array
@@ -285,6 +294,7 @@ final class TiendanubeApiClient
             $response = match (strtoupper($method)) {
                 'POST' => $pending->post($url, $body ?? []),
                 'PUT' => $pending->put($url, $body ?? []),
+                'PATCH' => $pending->patch($url, $body ?? []),
                 'DELETE' => $pending->delete($url),
                 default => $pending->get($url, $query),
             };

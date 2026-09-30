@@ -169,12 +169,11 @@ class FacturacionLocalProcesoController extends Controller
             return response()->json(['ok' => false, 'error' => 'Ingrese un artículo (SKU o ID).'], 422);
         }
 
-        $origen = strtolower(trim((string) $request->input('origen', StockLocalInformeListadoFiltros::ORIGEN_ANITA)));
-        if ($origen !== StockLocalInformeListadoFiltros::ORIGEN_ERP) {
-            $origen = StockLocalInformeListadoFiltros::ORIGEN_ANITA;
-        }
-
-        $resultado = $this->stockConsultaService->consultarPreciosYStock($local, $busqueda, $origen);
+        $resultado = $this->stockConsultaService->consultarPreciosYStock(
+            $local,
+            $busqueda,
+            StockLocalInformeListadoFiltros::ORIGEN_ERP
+        );
         $status = ($resultado['ok'] ?? false) ? 200 : 422;
 
         return response()->json($resultado, $status);

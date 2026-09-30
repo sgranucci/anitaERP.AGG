@@ -7,7 +7,7 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/pagoproveedor/filtro.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/enviar-proveedor.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.pagoproveedor.partials.documentos_relacionados_script')
 @if (session('imprimir_pagoproveedor_url'))
@@ -86,6 +86,9 @@
                             <th>Cuentas de caja</th>
                             <th class="text-right">Monto</th>
                             <th>Estado</th>
+                            <th class="text-center" style="width:36px" title="Correo enviado al proveedor">
+                                <i class="fa fa-envelope" style="opacity:.45"></i>
+                            </th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -134,6 +137,15 @@
                                 </td>
                                 <td class="text-right text-nowrap">{{ number_format((float)$fila->monto, 2, ',', '.') }} {{ $fila->monedas->abreviatura ?? '' }}</td>
                                 <td>{{ $fila->estado }}</td>
+                                <td class="text-center align-middle js-op-mail-celda" data-pagoproveedor-id="{{ $esIeOpp ? '' : $fila->id }}">
+                                    @if (! $esIeOpp)
+                                        @if ($fila->mailEnviado)
+                                            <i class="fa fa-envelope js-op-mail-icono" title="Enviado por correo" style="color:#1e8449;font-size:12px;opacity:.8"></i>
+                                        @else
+                                            <i class="fa fa-envelope-o js-op-mail-icono" title="Sin enviar" style="color:#bfc9ca;font-size:12px"></i>
+                                        @endif
+                                    @endif
+                                </td>
                                 <td class="text-nowrap">
                                     @php
                                         $opSoloLectura = strtoupper(trim((string) ($fila->estado ?? ''))) === 'REVERTIDA';
@@ -213,7 +225,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="9" class="text-center text-muted">Sin órdenes de pago</td></tr>
+                            <tr><td colspan="10" class="text-center text-muted">Sin órdenes de pago</td></tr>
                         @endforelse
                     </tbody>
                 </table>

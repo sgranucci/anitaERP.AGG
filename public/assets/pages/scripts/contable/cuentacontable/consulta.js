@@ -18,8 +18,32 @@ function modalCuentaContableAbierto() {
 }
 
 /**
+ * El asiento se pinta dos veces (solapa Conceptos y solapa Asiento) con el mismo
+ * data-concepto / data-debe-gasto-idx. Si el nodo original ya no está, hay que
+ * volver al mismo panel: .first() cae en Conceptos y deja vacía la fila que
+ * el operador estaba cargando.
+ */
+function editorCuentaContableVivoEnPanel($ctx, selector) {
+    var $panel = ($ctx && $ctx.length) ? $ctx.closest('.cp-asiento-preview-target') : $();
+    var panelId = $panel.attr('id') || '';
+    var $candidatos = $(selector).filter(function () {
+        return document.contains(this);
+    });
+    if (panelId) {
+        var $enPanel = $candidatos.filter(function () {
+            return $(this).closest('.cp-asiento-preview-target').attr('id') === panelId;
+        });
+        if ($enPanel.length) {
+            return $enPanel.first();
+        }
+    }
+    return $candidatos.first();
+}
+
+/**
  * Si el preview del asiento reemplazó el DOM mientras el modal estaba abierto,
- * el ptr queda en un nodo muerto: reubicar por data-concepto-ivacompra-id.
+ * el ptr queda en un nodo muerto: reubicar por data-concepto-ivacompra-id
+ * o data-debe-gasto-idx, en el mismo panel.
  */
 function contextoCuentaContableVivo($ctx) {
     if ($ctx && $ctx.length && document.contains($ctx.get(0))) {
@@ -33,9 +57,10 @@ function contextoCuentaContableVivo($ctx) {
         }
     }
     if (conceptoId > 0) {
-        var $vivo = $('.cp-asiento-cuenta-editable[data-concepto-ivacompra-id="' + conceptoId + '"]').filter(function () {
-            return document.contains(this);
-        }).first();
+        var $vivo = editorCuentaContableVivoEnPanel(
+            $ctx,
+            '.cp-asiento-cuenta-editable[data-concepto-ivacompra-id="' + conceptoId + '"]'
+        );
         if ($vivo.length) {
             return $vivo;
         }
@@ -48,9 +73,10 @@ function contextoCuentaContableVivo($ctx) {
         }
     }
     if (debeIdx > 0) {
-        var $vivoGasto = $('.cp-asiento-cuenta-editable[data-debe-gasto-idx="' + debeIdx + '"]').filter(function () {
-            return document.contains(this);
-        }).first();
+        var $vivoGasto = editorCuentaContableVivoEnPanel(
+            $ctx,
+            '.cp-asiento-cuenta-editable[data-debe-gasto-idx="' + debeIdx + '"]'
+        );
         if ($vivoGasto.length) {
             return $vivoGasto;
         }

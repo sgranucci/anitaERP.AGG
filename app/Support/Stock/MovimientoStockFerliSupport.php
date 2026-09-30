@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Schema;
  * - Depósito ligado a local_venta → catálogo LOCAL (tiendas).
  * - Resto (Fábrica, Junín, Tal-*, etc.) → catálogo FÁBRICA (importaciones, insumos).
  * - TRA fábrica→local / local→fábrica: manda el depósito de origen (de dónde se saca).
- * - Calzado: combinaciones activas del canal. Insumos: sin combinaciones, igual seleccionables.
+ * - Calzado: combinaciones activas del canal, o activas en el otro canal (estado legacy).
+ * - Insumos: sin combinaciones, igual seleccionables.
  * - Si el depósito tiene saldo distinto de cero, el artículo entra igual (ajuste de colores inactivos).
  */
 final class MovimientoStockFerliSupport
@@ -87,8 +88,9 @@ final class MovimientoStockFerliSupport
 
     /**
      * Query de artículos elegibles en el canal del depósito:
-     * activos en canal + (combinación activa en canal OR sin ninguna combinación = insumo
-     * OR saldo distinto de cero en ese depósito).
+     * activos en el estado del canal (en fábrica, sin exigir el pivote de canal)
+     * + (combinación activa en canal OR color activo en el otro canal
+     * OR sin ninguna combinación = insumo OR saldo distinto de cero en ese depósito).
      * Fuera de Ferli: solo activos operativos (sin filtro de canal/combinación).
      *
      * @param  Builder<Articulo>  $query
@@ -101,11 +103,20 @@ final class MovimientoStockFerliSupport
         }
 
         $ambito = self::ambitoCatalogo($depositoId);
+        $codigoCanal = self::codigoCanal($depositoId);
 
-        ArticuloEstadoCanalSupport::aplicarSoloActivosEnCanal(
-            $query,
-            self::codigoCanal($depositoId)
-        );
+        // En movimientos no exigimos el pivote articulo_canal. Hay calzado de local
+        // (GOBBY 11) con estado_fabrica ACTIVO y colores activos, pero el canal
+        // cargado es solo LOCAL: el alta en Tal-E2 / Fábrica tiene que poder tomarlo.
+        // Pedidos, POS y facturas siguen usando aplicarSoloActivosEnCanal.
+        if ($codigoCanal === Canal::CODIGO_LOCAL) {
+            ArticuloEstadoCanalSupport::aplicarSoloActivosEnCanal($query, $codigoCanal);
+        } else {
+            $query->where('articulo.estado', ArticuloSeleccionOperativaSupport::ESTADO_ACTIVO);
+            if (ArticuloEstadoCanalSupport::columnasEstadoDisponibles()) {
+                $query->where('articulo.estado_fabrica', ArticuloEstadoCanalSupport::ESTADO_ACTIVO);
+            }
+        }
 
         $depositoSaldo = ($depositoId !== null && $depositoId > 0) ? $depositoId : 0;
 
@@ -132,6 +143,14 @@ final class MovimientoStockFerliSupport
                         ->havingRaw('SUM(articulo_movimiento.cantidad) <> 0');
                 });
             }
+            // Alta en planta/talles (Tal-E2, etc.): el artículo sigue en el canal,
+            // pero el color solo está activo en el otro (estado legacy A).
+            $q->orWhereExists(function ($sub) {
+                $sub->selectRaw('1')
+                    ->from('combinacion')
+                    ->whereColumn('combinacion.articulo_id', 'articulo.id')
+                    ->where('combinacion.estado', CombinacionEstadoCanalSupport::ESTADO_ACTIVO);
+            });
         });
     }
 

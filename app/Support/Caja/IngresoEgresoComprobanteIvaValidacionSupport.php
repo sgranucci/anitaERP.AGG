@@ -6,10 +6,13 @@ use App\Support\Numerico\NumeroDecimalLocalSupport;
 
 /**
  * Cuadre entre comprobantes IVA del IE y el monto del pago en cuentas de caja.
+ *
+ * Una factura puede ser menor que el pago: la diferencia se imputa al concepto
+ * de gasto del movimiento. Los comprobantes no pueden superar el pago.
  */
 final class IngresoEgresoComprobanteIvaValidacionSupport
 {
-    private const TOLERANCIA = 0.05;
+    public const TOLERANCIA = 0.05;
 
     /**
      * @param  list<array<string, mixed>>  $comprobantes
@@ -32,12 +35,41 @@ final class IngresoEgresoComprobanteIvaValidacionSupport
             throw new \RuntimeException('El movimiento de caja debe tener montos para cuadrar con los comprobantes IVA.');
         }
 
-        if (abs($totalComprobantes - $totalPago) > self::TOLERANCIA) {
+        if ($totalComprobantes - $totalPago > self::TOLERANCIA) {
             throw new \RuntimeException(
-                'La suma de comprobantes IVA ('.number_format($totalComprobantes, 2)
-                .') no coincide con el total del pago ('.number_format($totalPago, 2).').'
+                'La suma de comprobantes IVA ('.self::formato($totalComprobantes)
+                .') supera el total del pago ('.self::formato($totalPago).').'
             );
         }
+    }
+
+    /**
+     * Si las facturas no cubren el pago, el resto va al concepto de gasto.
+     */
+    public static function validarDiferenciaConConceptoGasto(
+        float $totalComprobantes,
+        float $totalPago,
+        int $conceptoGastoId,
+    ): void {
+        $diferencia = round($totalPago - $totalComprobantes, 2);
+        if ($diferencia <= self::TOLERANCIA) {
+            return;
+        }
+
+        if ($conceptoGastoId > 0) {
+            return;
+        }
+
+        throw new \RuntimeException(
+            'Los comprobantes IVA ('.self::formato($totalComprobantes)
+            .') no cubren el pago ('.self::formato($totalPago)
+            .'). Indique el concepto de gasto para la diferencia ('.self::formato($diferencia).').'
+        );
+    }
+
+    private static function formato(float $importe): string
+    {
+        return number_format($importe, 2, ',', '.');
     }
 
     /**

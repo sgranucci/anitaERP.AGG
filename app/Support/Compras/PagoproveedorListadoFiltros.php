@@ -106,6 +106,7 @@ class PagoproveedorListadoFiltros
             'empresa_scope' => $empresaScope,
             'fecha_desde' => trim((string) $request->input('fecha_desde', '')),
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
+            'mail' => self::normalizarMail((string) $request->input('mail', '')),
         ];
     }
 
@@ -153,6 +154,7 @@ class PagoproveedorListadoFiltros
             'empresa_scope' => 'una',
             'fecha_desde' => '',
             'fecha_hasta' => '',
+            'mail' => '',
         ];
     }
 
@@ -183,6 +185,10 @@ class PagoproveedorListadoFiltros
         }
         if (! empty($filtros['fecha_hasta'])) {
             $params['fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        $mail = self::normalizarMail((string) ($filtros['mail'] ?? ''));
+        if ($mail !== '') {
+            $params['mail'] = $mail;
         }
 
         return $params;
@@ -456,6 +462,13 @@ class PagoproveedorListadoFiltros
     private static function escapeLike(string $value): string
     {
         return addcslashes($value, '%_\\');
+    }
+
+    public static function normalizarMail(string $mail): string
+    {
+        $mail = strtolower(trim($mail));
+
+        return in_array($mail, ['enviado', 'no'], true) ? $mail : '';
     }
 
     private static function normalizarOperador(string $operador, string $campoKey): string

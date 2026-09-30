@@ -262,11 +262,7 @@ class Tipotransaccion_CompraController extends Controller
         $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
         $esProrrateo = \App\Support\Compras\PrecargaProveedor\PrecargaProveedorProrrateoMultiCcSupport::esTipoProrrateado($abrev);
 
-        return response()->json([
-            'ok' => true,
-            'prorrateo_multi_cc' => $esProrrateo && $numeroOc !== null,
-            'numero_oc' => $numeroOc,
-            'conceptos' => $lista->map(function ($c) {
+        $conceptos = $lista->map(function ($c) {
                 $formula = (string) ($c->formula ?? '');
                 $parsed = ConceptoIvacompraFormulaSupport::parse($formula);
                 $tipo = (string) ($c->tipoconcepto ?? '');
@@ -310,7 +306,15 @@ class Tipotransaccion_CompraController extends Controller
                         : [],
                     'cuentas_detalle_por_empresa' => $cuentasDetalleEmpresa,
                 ];
-            })->values()->all(),
+            })->keyBy('id')->all();
+
+        $conceptos = array_values(ConceptoIvacompraFormulaSupport::enriquecerMetaCliente($conceptos));
+
+        return response()->json([
+            'ok' => true,
+            'prorrateo_multi_cc' => $esProrrateo && $numeroOc !== null,
+            'numero_oc' => $numeroOc,
+            'conceptos' => $conceptos,
         ]);
     }
 

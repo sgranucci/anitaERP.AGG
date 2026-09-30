@@ -30,6 +30,7 @@ final class PagoproveedorListadoFila
         public readonly ?int $solicitudpagoId = null,
         public readonly string $cuentasCaja = '',
         public readonly bool $revertible = false,
+        public readonly bool $mailEnviado = false,
     ) {
         $this->nombreempresa = $this->nombreEmpresa;
     }
@@ -55,6 +56,7 @@ final class PagoproveedorListadoFila
             solicitudpagoId: $this->solicitudpagoId,
             cuentasCaja: trim($cuentasCaja),
             revertible: $this->revertible,
+            mailEnviado: $this->mailEnviado,
         );
     }
 

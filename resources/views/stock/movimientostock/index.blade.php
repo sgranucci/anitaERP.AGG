@@ -65,6 +65,8 @@ $rutaLista = $ruta_lista_movimientostock ?? ($modoSurmar ? 'lista_movimiento_sur
 $nuevoCan = can('crear-movimientos-de-stock', false)
     ? 'crear-movimientos-de-stock'
     : (can('crear-movimiento-surmar', false) ? 'crear-movimiento-surmar' : 'crear-movimientos-de-stock');
+$puedeCrearMovimiento = can('crear-movimientos-de-stock', false) || can('crear-movimiento-surmar', false);
+$puedeNuevaTransferencia = ! $modoSurmar && can('crear-transferencia-mercaderia', false) && ! $puedeCrearMovimiento;
 ?>
 
 @section('contenido')
@@ -87,6 +89,11 @@ $nuevoCan = can('crear-movimientos-de-stock', false)
                         </a>
                     @endif
                     @include('includes.stock.boton-manual-recepcion-movstock')
+                    @if ($puedeNuevaTransferencia)
+                        <a href="{{ route('transferencia_mercaderia') }}" class="btn btn-light btn-sm mr-1">
+                            <i class="fa fa-fw fa-plus-circle"></i> Nueva transferencia
+                        </a>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-movimientostock',
                         'filtroValor' => $filtros['valor'] ?? '',

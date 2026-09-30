@@ -2,16 +2,12 @@
 
 namespace App\Services\Ventas\FacturacionLocal;
 
-use App\Models\Stock\Articulo;
-use App\Models\Stock\Combinacion;
-use App\Models\Stock\Talle;
 use App\Models\Ventas\FacturacionLocalEmision;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturacionService;
-use App\Services\Ventas\FacturacionServiceFerli;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
@@ -172,7 +168,6 @@ final class FacturacionLocalNotaCreditoService
                 $emision,
                 $turno,
                 $motivoDevolucion,
-                $omitirReingresoStock,
                 $registrarHistorial,
             ) {
                 $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
@@ -186,9 +181,6 @@ final class FacturacionLocalNotaCreditoService
                 $ventaNc = $this->resolverVentaEmitida($ventaOrigen, $resultado);
 
                 $lineasStock = $this->lineasStockDesdeEmisiones($ventaOrigen);
-                if (! $omitirReingresoStock) {
-                    $this->grabarStockLocalSiCorresponde($local, $ventaNc, $lineasStock, true);
-                }
                 if ($registrarHistorial) {
                     app(DevolucionHistorialService::class)->registrarNotaCredito(
                         $local,
@@ -442,104 +434,6 @@ final class FacturacionLocalNotaCreditoService
         }
 
         return $lineas;
-    }
-
-    /**
-     * @param  list<array<string,mixed>>  $lineas
-     */
-    private function grabarStockLocalSiCorresponde(
-        LocalVenta $local,
-        Venta $venta,
-        array $lineas,
-        bool $esEntrada,
-    ): void {
-        try {
-            if (! class_exists(FacturacionServiceFerli::class)) {
-                return;
-            }
-            /** @var FacturacionServiceFerli $ferli */
-            $ferli = app(FacturacionServiceFerli::class);
-            if (! method_exists($ferli, 'grabaStockLocal')) {
-                return;
-            }
-            $datatalle = [];
-            foreach ($lineas as $linea) {
-                $articulo = Articulo::query()->with(['categorias'])->find((int) $linea['articulo_id']);
-                if (! $articulo) {
-                    continue;
-                }
-                $cant = (float) $linea['cantidad'];
-                unset($esEntrada);
-                $talleId = (int) ($linea['talle_id'] ?? 0);
-                $talleNombre = '0';
-                if ($talleId > 0) {
-                    $talleNombre = (string) (Talle::query()->whereKey($talleId)->value('nombre') ?? $talleId);
-                }
-                $combId = (int) ($linea['combinacion_id'] ?? 0);
-                $codigoComb = '';
-                if ($combId > 0) {
-                    $codigoComb = (string) (Combinacion::query()->whereKey($combId)->value('codigo') ?? '');
-                }
-                $categoriaCodigo = (string) ($articulo->categorias?->codigo ?? '');
-                $datatalle[] = [
-                    'sku' => (string) $articulo->sku,
-                    'descripcion' => (string) $articulo->descripcion,
-                    'categoria' => $categoriaCodigo,
-                    'impuesto_id' => (int) ($articulo->impuesto_id ?: 3),
-                    'incluyeimpuesto' => '1',
-                    'codigocombinacion' => $codigoComb,
-                    'medidas' => [[
-                        'medida' => is_numeric($talleNombre) ? (int) $talleNombre : 0,
-                        'cantidad' => $cant,
-                        'precio' => (float) ($linea['precio'] ?? 0),
-                        'pedido' => '0',
-                    ]],
-                ];
-            }
-            if ($datatalle === []) {
-                return;
-            }
-            $depositoAnita = $local->depositoAnitaCodigo();
-            if ($depositoAnita > 0) {
-                foreach ($datatalle as &$itemStock) {
-                    $itemStock['deposito'] = $depositoAnita;
-                }
-                unset($itemStock);
-            }
-            $pvCodigo = (int) ltrim((string) ($local->puntoventa?->codigo ?? $local->puntoventa_id), '0');
-            if ($pvCodigo <= 0) {
-                $pvCodigo = (int) ($local->puntoventa_id ?: 0);
-            }
-            $letra = $this->resolverLetraComprobante($venta);
-            $fecha = $venta->fecha;
-            $fechaStr = $fecha instanceof \DateTimeInterface
-                ? $fecha->format('Y-m-d')
-                : (string) ($fecha ?: now()->format('Y-m-d'));
-            $ventaArr = [
-                'fecha' => $fechaStr,
-                'codigo' => (string) ($venta->codigo ?? 'NC'),
-                'numerocomprobante' => (int) ($venta->numerocomprobante ?? 0),
-                'moneda_id' => (int) ($venta->moneda_id ?: 1),
-            ];
-            $ferli->grabaStockLocal(
-                $pvCodigo,
-                $letra,
-                $ventaArr,
-                $datatalle,
-                '',
-                1,
-                0,
-                902,
-                0,
-                $local->anitaServidor(),
-                $local->anitaIfxServer()
-            );
-        } catch (Throwable $e) {
-            Log::warning('facturacion_local.nota_credito.stock_local', [
-                'msg' => $e->getMessage(),
-                'venta_id' => $venta->id,
-            ]);
-        }
     }
 
     /**

@@ -30,6 +30,10 @@ final class FacturacionLocalNcPrecioSupport
         if ($ventaFacId <= 0 || $tipoId <= 0) {
             return;
         }
+        $opciones = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
+        if (! empty($opciones['canje_pos'])) {
+            return;
+        }
 
         $tipo = Tipotransaccion::query()->find($tipoId);
         if (! $tipo || ! $tipo->esNotaCredito()) {

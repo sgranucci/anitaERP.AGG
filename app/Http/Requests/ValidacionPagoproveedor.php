@@ -24,6 +24,11 @@ class ValidacionPagoproveedor extends FormRequest
             'estado' => 'nullable|in:PRE CARGA,CONFIRMADA',
             'caja_id' => 'nullable|integer|exists:caja,id',
             'detalle' => 'nullable|string|max:255',
+            'nombrearchivos' => 'nullable|array|max:10',
+            'nombrearchivos.*' => 'nullable|file|max:10240',
+            'nombresanteriores' => 'nullable|array',
+            'nombresanteriores.*' => 'nullable|string|max:255',
+            'sincronizar_archivos_op' => 'nullable|in:1',
         ];
     }
 }

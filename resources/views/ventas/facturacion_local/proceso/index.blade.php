@@ -396,10 +396,6 @@ window.FACTURACION_LOCAL = {
                         <label class="small mb-1 d-block" for="fl-stock-q">SKU o descripción</label>
                         <input type="text" id="fl-stock-q" class="form-control form-control-sm" placeholder="Ej. MELISA o 41079206" autocomplete="off">
                     </div>
-                    <div class="form-check mb-1">
-                        <input type="checkbox" class="form-check-input" id="fl-stock-origen-erp" value="1">
-                        <label class="form-check-label small" for="fl-stock-origen-erp">Stock ERP</label>
-                    </div>
                     <button type="button" class="btn btn-sm btn-primary" id="fl-stock-buscar">Consultar</button>
                 </div>
                 <div id="fl-stock-matches" class="fl-stock-matches d-none mt-2"></div>

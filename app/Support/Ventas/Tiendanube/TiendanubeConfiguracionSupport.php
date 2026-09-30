@@ -5,6 +5,7 @@ namespace App\Support\Ventas\Tiendanube;
 use App\Models\Ventas\TiendanubeConfiguracion;
 use App\Models\Ventas\TiendanubeGatewayCuentacaja;
 use App\Models\Ventas\TiendanubePuntoventaDeposito;
+use App\Models\Ventas\TiendanubeStockDeposito;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -287,6 +288,12 @@ final class TiendanubeConfiguracionSupport
      *   articulo_envio_sku?:string|null,
      *   articulo_descuento_sku?:string|null,
      *   usocuentacaja_nombre?:string|null,
+     *   sube_stock?:bool,
+     *   marketplace_codigo?:int|null,
+     *   hora_subida?:string|null,
+     *   listaprecio_precio_id?:int|null,
+     *   listaprecio_oferta_id?:int|null,
+     *   stock_deposito_ids?:list<int>,
      * }  $cabecera
      * @param  list<array{gateway_key:string,cuentacaja_id:int}>  $gateways
      * @param  list<array{puntoventa_id:int,deposito_id:int,es_default:bool}>  $pares
@@ -305,8 +312,16 @@ final class TiendanubeConfiguracionSupport
             'articulo_descuento_sku' => self::strOrNull($cabecera['articulo_descuento_sku'] ?? null),
             'usocuentacaja_nombre' => self::strOrNull($cabecera['usocuentacaja_nombre'] ?? null)
                 ?? 'TIENDA NUBE',
+            'sube_stock' => (bool) ($cabecera['sube_stock'] ?? false),
+            'marketplace_codigo' => max(0, (int) ($cabecera['marketplace_codigo'] ?? 2)),
+            'hora_subida' => self::strOrNull($cabecera['hora_subida'] ?? null) ?? '14:00',
+            'listaprecio_precio_id' => self::intOrNull($cabecera['listaprecio_precio_id'] ?? null),
+            'listaprecio_oferta_id' => self::intOrNull($cabecera['listaprecio_oferta_id'] ?? null),
         ]);
         $cfg->save();
+        if (array_key_exists('stock_deposito_ids', $cabecera)) {
+            self::sincronizarDepositosStock($storeId, $cabecera['stock_deposito_ids'] ?? []);
+        }
 
         $gatewayIdsKeep = [];
         $orden = 0;
@@ -396,6 +411,57 @@ final class TiendanubeConfiguracionSupport
         }
 
         return $cfg->fresh();
+    }
+
+    /**
+     * @param  list<int>  $depositoIds
+     */
+    public static function sincronizarDepositosStock(string $storeId, array $depositoIds): void
+    {
+        if (! Schema::hasTable('tiendanube_stock_deposito')) {
+            return;
+        }
+
+        $storeId = self::storeIdEfectivo($storeId);
+        $idsKeep = [];
+        $orden = 0;
+        $vistos = [];
+        foreach ($depositoIds as $depId) {
+            $depId = (int) $depId;
+            if ($depId <= 0 || isset($vistos[$depId])) {
+                continue;
+            }
+            $vistos[$depId] = true;
+            $fila = TiendanubeStockDeposito::query()->updateOrCreate(
+                ['store_id' => $storeId, 'deposito_id' => $depId],
+                ['orden' => $orden]
+            );
+            $idsKeep[] = (int) $fila->id;
+            $orden++;
+        }
+
+        EloquentAuditDeleteSupport::exceptIds(
+            TiendanubeStockDeposito::query()->where('store_id', $storeId),
+            $idsKeep
+        );
+    }
+
+    /**
+     * @return list<int>
+     */
+    public static function depositoIdsStock(?string $storeId = null): array
+    {
+        if (! Schema::hasTable('tiendanube_stock_deposito')) {
+            return [];
+        }
+
+        return TiendanubeStockDeposito::query()
+            ->where('store_id', self::storeIdEfectivo($storeId))
+            ->orderBy('orden')
+            ->orderBy('id')
+            ->pluck('deposito_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     private static function intOrNull(mixed $v): ?int

@@ -4,10 +4,13 @@ namespace App\Services\Compras;
 
 use App\Mail\Compras\PagoproveedorOrdenPago;
 use App\Models\Compras\Pagoproveedor;
+use App\Models\Compras\Pagoproveedor_Archivo;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Proveedor;
+use App\Support\Compras\PagoproveedorArchivoSupport;
 use App\Support\Mail\EmailsMultiplesSupport;
 use Auth;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 
 class PagoproveedorEnvioProveedorService
@@ -25,7 +28,8 @@ class PagoproveedorEnvioProveedorService
      *     etiqueta_op: string,
      *     estado: string,
      *     advertencia_estado: string|null,
-     *     mensaje: string|null
+     *     mensaje: string|null,
+     *     archivos_asociados: int
      * }
      */
     public function datosEnvio(int $pagoproveedorId): array
@@ -45,6 +49,7 @@ class PagoproveedorEnvioProveedorService
                 'estado' => '',
                 'advertencia_estado' => null,
                 'mensaje' => 'La orden de pago no existe.',
+                'archivos_asociados' => 0,
             ];
         }
 
@@ -60,6 +65,7 @@ class PagoproveedorEnvioProveedorService
                 'estado' => (string) ($pago->estado ?? ''),
                 'advertencia_estado' => null,
                 'mensaje' => 'La orden de pago no tiene proveedor asignado.',
+                'archivos_asociados' => 0,
             ];
         }
 
@@ -77,14 +83,18 @@ class PagoproveedorEnvioProveedorService
             'mensaje' => $sinEmailProveedor
                 ? 'El proveedor no tiene email configurado. Ingrese uno o más destinatarios.'
                 : null,
+            'archivos_asociados' => (int) Pagoproveedor_Archivo::query()
+                ->where('pagoproveedor_id', $pago->id)
+                ->count(),
         ];
     }
 
     /**
      * @param  list<array{ruta: string, nombre: string}>  $adjuntosExtra
+     * @param  list<UploadedFile|null>  $archivosNuevos
      * @return array{mensaje: string, errores?: string}
      */
-    public function enviar(int $pagoproveedorId, ?string $emailOverride = null, ?string $mensajeAdicional = null, array $adjuntosExtra = []): array
+    public function enviar(int $pagoproveedorId, ?string $emailOverride = null, ?string $mensajeAdicional = null, array $adjuntosExtra = [], array $archivosNuevos = []): array
     {
         $pagoExiste = Pagoproveedor::query()->whereKey($pagoproveedorId)->exists();
         if (! $pagoExiste) {
@@ -124,10 +134,15 @@ class PagoproveedorEnvioProveedorService
         }
 
         $pdf = null;
+        $asociados = [];
         try {
             $pdf = $this->pagoproveedorComprobantePdfService->generarArchivo($pagoproveedorId);
+            if ($archivosNuevos !== []) {
+                $asociados = PagoproveedorArchivoSupport::guardarSubidos($pagoproveedorId, $archivosNuevos);
+            }
             $mailable = new PagoproveedorOrdenPago($pago, $mensajeAdicional);
             $mailable->incluyeComprobanteTransferencia = $adjuntosExtra !== [];
+            $mailable->incluyeArchivosAdicionales = $asociados !== [];
             $mailable->attach($pdf['ruta'], [
                 'as' => $pdf['nombre'],
                 'mime' => 'application/pdf',
@@ -141,8 +156,20 @@ class PagoproveedorEnvioProveedorService
                     'mime' => 'application/pdf',
                 ]);
             }
+            foreach ($asociados as $adjunto) {
+                if (! is_file($adjunto['ruta'])) {
+                    continue;
+                }
+                $mailable->attach($adjunto['ruta'], [
+                    'as' => $adjunto['nombre'],
+                    'mime' => $adjunto['mime'] !== '' ? $adjunto['mime'] : 'application/octet-stream',
+                ]);
+            }
             Mail::to($emails)->send($mailable);
         } catch (\Throwable $e) {
+            if ($asociados !== []) {
+                PagoproveedorArchivoSupport::eliminar($pagoproveedorId, $asociados);
+            }
             report($e);
 
             return ['mensaje' => 'error', 'errores' => 'No se pudo enviar el correo: '.$e->getMessage()];
@@ -154,13 +181,22 @@ class PagoproveedorEnvioProveedorService
 
         $uid = Auth::id();
         if ($uid) {
+            $observacion = Pagoproveedor::PREFIJO_OBSERVACION_ENVIO_CORREO.' ('.implode(', ', $emails).')';
+            if ($adjuntosExtra !== []) {
+                $observacion .= ' + comprobante de transferencia';
+            }
+            $nAdj = count($asociados);
+            if ($nAdj === 1) {
+                $observacion .= ' + 1 archivo adjunto';
+            } elseif ($nAdj > 1) {
+                $observacion .= ' + '.$nAdj.' archivos adjuntos';
+            }
             Pagoproveedor_Estado::query()->create([
                 'pagoproveedor_id' => $pago->id,
                 'fecha' => now(),
                 'estado' => (string) ($pago->estado ?? ''),
                 'usuario_id' => $uid,
-                'observacion' => 'OP enviada por correo ('.implode(', ', $emails).')'
-                    .($adjuntosExtra !== [] ? ' + comprobante de transferencia' : ''),
+                'observacion' => mb_substr($observacion, 0, 500),
             ]);
         }
 

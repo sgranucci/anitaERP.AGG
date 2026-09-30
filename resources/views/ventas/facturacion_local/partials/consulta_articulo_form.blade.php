@@ -42,7 +42,6 @@
                 <button type="button"
                         title="Consulta art&iacute;culos (F1)"
                         class="btn btn-outline-primary consultaarticulo tooltipsC flex-shrink-0 fl-consulta-lupa"
-                        data-solo-facturable="1"
                         id="{{ $formId }}-lupa">
                     <i class="fa fa-search"></i>
                 </button>
@@ -83,19 +82,6 @@
                 <kbd>F1</kbd> o lupa abre el modal &middot; <kbd>Enter</kbd> resuelve el SKU y consulta &middot; precio seg&uacute;n lista del local
             </p>
         </div>
-    </div>
-    <div class="fl-consulta-origen-row">
-        <div class="custom-control custom-checkbox">
-            <input type="hidden" name="origen_anita" value="0" id="{{ $formId }}-origen-hidden">
-            <input type="checkbox" class="custom-control-input" id="{{ $formId }}-origen-anita"
-                name="origen_anita" value="1" checked>
-            <label class="custom-control-label" for="{{ $formId }}-origen-anita">
-                Traer datos de Anita (Informix)
-            </label>
-        </div>
-        <small class="text-muted ml-md-3">
-            Con tilde = bridge Anita Local (prueba actual). Sin tilde = solo ERP (<code>articulo_movimiento</code> del dep&oacute;sito del local).
-        </small>
     </div>
 </form>
 <script>

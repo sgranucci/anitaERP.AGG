@@ -25,6 +25,9 @@ class Pagoproveedor extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     use PagoproveedorEstadoTrait;
 
+    /** Prefijo de pagoproveedor_estado.observacion cuando la OP se envió por correo. */
+    public const PREFIJO_OBSERVACION_ENVIO_CORREO = 'OP enviada por correo';
+
     protected $table = 'pagoproveedor';
 
     protected $fillable = [

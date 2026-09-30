@@ -172,6 +172,19 @@
         line-height: 1.25;
         text-align: center;
     }
+    table.factura-remito-transporte {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 6px;
+        border: 1px solid #000;
+        font-size: 12px;
+        line-height: 1.25;
+    }
+    table.factura-remito-transporte td {
+        vertical-align: top;
+        padding: 4px 8px;
+        border: none;
+    }
     table.factura-remito-pie-grid {
         width: 100%;
         border-collapse: collapse;

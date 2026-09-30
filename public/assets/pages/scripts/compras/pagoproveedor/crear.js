@@ -11,7 +11,7 @@ var flModificaAsiento = false;
     'use strict';
 
     function ocultarForms() {
-        $('.form1, .form2, .form3, .form4, .form5, .formasientoexterno').hide();
+        $('.form1, .form2, .form3, .form4, .form5, .form7, .formasientoexterno').hide();
     }
 
     function armaSelectMoneda(ptrrenglon) {
@@ -815,6 +815,37 @@ var flModificaAsiento = false;
         });
         $('#botonform6').on('click', function () {
             muestraVentanaAsiento();
+        });
+        $('#botonform7').on('click', function () {
+            ocultarForms();
+            $('.form7').show();
+        });
+
+        $('#op-agrega-renglon-archivo').on('click', function (e) {
+            e.preventDefault();
+            var tpl = document.getElementById('op-template-renglon-archivo');
+            var tbody = document.getElementById('op-tbody-tabla-archivo');
+            if (!tpl || !tbody || !tpl.content) {
+                return;
+            }
+            if (tbody.querySelectorAll('tr.item-archivo-op').length >= 10) {
+                return;
+            }
+            tbody.appendChild(document.importNode(tpl.content, true));
+        });
+        $(document).on('click', '.op-eliminararchivo', function (e) {
+            e.preventDefault();
+            $(this).closest('tr.item-archivo-op').remove();
+        });
+        $('#form-pagoproveedor').on('submit', function () {
+            $('#op-tbody-tabla-archivo .op-nombrearchivos').each(function () {
+                if (!this.files || !this.files.length) {
+                    $(this).closest('tr.item-archivo-op').remove();
+                }
+            });
+        });
+        $(document).on('click', '.op-quitar-archivo', function () {
+            $(this).closest('.op-archivo-item').remove();
         });
 
         $(document).on('click', '.eligeconsultacuentacaja', function () {

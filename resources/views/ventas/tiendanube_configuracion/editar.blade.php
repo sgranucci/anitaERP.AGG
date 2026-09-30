@@ -47,6 +47,7 @@ Configuraci&oacute;n Tiendanube
 <script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/marketplace.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/marketplace.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/tiendanube_configuracion/editar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tiendanube_configuracion/editar.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
@@ -69,6 +70,8 @@ Configuraci&oacute;n Tiendanube
                 @csrf
                 @method('PUT')
                 <input type="hidden" name="store_id" value="{{ $storeId }}">
+                <input type="hidden" id="articulo-marketplace-consulta-url" value="{{ route('consulta_marketplace') }}">
+                <input type="hidden" id="articulo-marketplace-resolver-url" value="{{ route('resolver_marketplace') }}">
                 <div class="card-body">
                     <div class="alert alert-light border mb-3 py-2">
                         <div class="d-flex flex-wrap align-items-center" style="gap:.5rem 1rem;">
@@ -258,6 +261,93 @@ Configuraci&oacute;n Tiendanube
                             </button>
                         </div>
                     </div>
+
+                    <div class="card card-outline card-info mb-3">
+                        <div class="card-header py-2">
+                            <strong><i class="fa fa-cloud-upload"></i> Subida diaria de stock y precios</strong>
+                            <span class="tn-cfg-hint ml-2">Una vez por d&iacute;a, a la hora indicada, para esta tienda.</span>
+                        </div>
+                        <div class="card-body pb-2">
+                            <div class="form-group row">
+                                <label class="col-lg-3 control-label text-right pr-2" for="sube_stock">Subir esta tienda</label>
+                                <div class="col-lg-8 pt-1">
+                                    <input type="checkbox" name="sube_stock" id="sube_stock" value="1" @checked(old('sube_stock', $config->sube_stock))>
+                                    <a href="{{ route('tiendanube_stock_subidas') }}" class="ml-3">Ver historial de subidas</a>
+                                </div>
+                            </div>
+                            <div class="form-group row">
+                                <label class="col-lg-3 control-label text-right pr-2" for="hora_subida">Hora</label>
+                                <div class="col-lg-3">
+                                    <input type="time" name="hora_subida" id="hora_subida" class="form-control"
+                                        value="{{ old('hora_subida', $config->hora_subida ?: '14:00') }}">
+                                </div>
+                            </div>
+                            <div class="form-group row tm-marketplace-campo">
+                                <label class="col-lg-3 control-label text-right pr-2" for="stock_marketplace_codigo">Marketplace</label>
+                                <div class="col-lg-8">
+                                    <div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+                                        <input type="hidden" class="marketplace_id" name="stock_marketplace_id" value="{{ $marketplaceStock->id ?? '' }}">
+                                        <button type="button" class="btn-accion-tabla consultamarketplace flex-shrink-0" title="Consulta marketplaces (F1)">
+                                            <i class="fa fa-search text-primary"></i>
+                                        </button>
+                                        <input type="text" name="stock_marketplace_codigo" id="stock_marketplace_codigo"
+                                            class="codigomarketplace form-control flex-shrink-0" style="width: 5.5rem;"
+                                            value="{{ old('stock_marketplace_codigo', $config->marketplace_codigo ?: 2) }}"
+                                            autocomplete="off" inputmode="numeric" title="C&oacute;digo. F1 abre el modal. Enter resuelve.">
+                                        <input type="text" class="descripcionmarketplace form-control" readonly tabindex="-1"
+                                            value="{{ $marketplaceStock->nombre ?? '' }}" placeholder="Nombre">
+                                    </div>
+                                    <small class="form-text text-muted">Se suben los art&iacute;culos marcados con este marketplace. El SKU de la variante es art&iacute;culo-combinaci&oacute;n-talle.</small>
+                                </div>
+                            </div>
+                            @include('stock.partials.campo_consulta_listaprecio', [
+                                'prefix' => 'tn_lista_precio',
+                                'label' => 'Lista de precio',
+                                'inputName' => 'listaprecio_precio_id',
+                                'inputId' => 'listaprecio_precio_id',
+                                'listaprecioId' => old('listaprecio_precio_id', $config->listaprecio_precio_id),
+                                'codigo' => old('listaprecio_precio_codigo', $listaPrecioWeb->codigo ?? ''),
+                                'nombre' => old('listaprecio_precio_nombre', $listaPrecioWeb->nombre ?? ''),
+                                'col_label' => 'col-lg-3 control-label text-right pr-2',
+                                'col_input' => 'col-lg-8',
+                            ])
+                            @include('stock.partials.campo_consulta_listaprecio', [
+                                'prefix' => 'tn_lista_oferta',
+                                'label' => 'Lista de oferta',
+                                'inputName' => 'listaprecio_oferta_id',
+                                'inputId' => 'listaprecio_oferta_id',
+                                'listaprecioId' => old('listaprecio_oferta_id', $config->listaprecio_oferta_id),
+                                'codigo' => old('listaprecio_oferta_codigo', $listaPrecioOferta->codigo ?? ''),
+                                'nombre' => old('listaprecio_oferta_nombre', $listaPrecioOferta->nombre ?? ''),
+                                'col_label' => 'col-lg-3 control-label text-right pr-2',
+                                'col_input' => 'col-lg-8',
+                            ])
+                            <p class="tn-cfg-hint">Si las dos listas coinciden, el precio promocional se env&iacute;a en cero. El stock es la suma de estos dep&oacute;sitos, por combinaci&oacute;n y talle.</p>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered mb-2">
+                                    <thead style="background:#85C1E9;color:#17202A;">
+                                        <tr>
+                                            <th>Dep&oacute;sito de stock</th>
+                                            <th class="width80 text-center">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbody-tn-stock-dep">
+                                        @foreach ($stockDepositos as $idx => $filaDep)
+                                            @include('ventas.tiendanube_configuracion.partials.fila_stock_deposito', [
+                                                'idx' => $idx,
+                                                'depositoId' => $filaDep['id'],
+                                                'codigo' => $filaDep['codigo'],
+                                                'nombre' => $filaDep['nombre'],
+                                            ])
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="tn-stock-dep-agregar">
+                                <i class="fa fa-plus"></i> Agregar dep&oacute;sito
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer">
                     <button type="submit" class="btn btn-primary">
@@ -275,6 +365,7 @@ Configuraci&oacute;n Tiendanube
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.stock.modalconsultalistaprecio')
 @include('includes.stock.modalconsultaarticulo')
+@include('includes.ventas.modalconsultamarketplace')
 
 <template id="tn-template-fila-pv-dep">
     @include('ventas.tiendanube_configuracion.partials.fila_pv_deposito', [
@@ -286,6 +377,14 @@ Configuraci&oacute;n Tiendanube
     @include('ventas.tiendanube_configuracion.partials.fila_gateway', [
         'idx' => '__IDX__',
         'gw' => (object) ['gateway_key' => '', 'cuentacaja_id' => '', 'cuentacaja' => null],
+    ])
+</template>
+<template id="tn-template-fila-stock-dep">
+    @include('ventas.tiendanube_configuracion.partials.fila_stock_deposito', [
+        'idx' => '__IDX__',
+        'depositoId' => '',
+        'codigo' => '',
+        'nombre' => '',
     ])
 </template>
 @endsection

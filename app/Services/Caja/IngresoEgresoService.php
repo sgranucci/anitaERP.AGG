@@ -706,12 +706,14 @@ class IngresoEgresoService
 			);
 		}
 
-		// Agrega contrapartida de gastos (concepto de caja) o comprobantes IVA compra
+		// Comprobantes IVA (pueden ser menores que el pago) y el resto al concepto de gasto.
 		$comprobantesIva = $this->decodificarComprobantesIvaJson($data['comprobantes_ivacompra_json'] ?? null);
 
 		if ($comprobantesIva !== []) {
 			$this->agregarLineasDebeComprobantesIva($asiento, $comprobantesIva, $signo);
-		} elseif ($conceptogasto_id > 0 && count($datosContables) == 0)
+		}
+
+		if ($conceptogasto_id > 0 && count($datosContables) == 0 && $asiento !== [])
 		{
 			$conceptogasto = $this->conceptogastoRepository->find($conceptogasto_id);
 
@@ -721,7 +723,6 @@ class IngresoEgresoService
 				$monedaAsiento_id = $asiento[0]['moneda_id'];
 				$cotizacion = $asiento[0]['cotizacion'];
 
-				// Suma monto del asiento
 				$totalDebe = $totalHaber = 0.;
 				foreach($asiento as $movimiento)
 				{
@@ -733,35 +734,41 @@ class IngresoEgresoService
 					if ($movimiento['haber'])
 						$totalHaber += $movimiento['haber'] * $coef;
 				}
-				foreach($conceptogasto->conceptogasto_cuentacontables as $cuenta)
-				{
-					if ($cuenta->empresa_id == $empresa_id)
-					{
-						$cuentacontable = $this->cuentacontableRepository->find($cuenta->cuentacontable_id);
 
-						if ($cuentacontable)
+				$diferencia = round($totalHaber - $totalDebe, 2);
+				if (abs($diferencia) > 0.05)
+				{
+					if ($diferencia > 0)
+					{
+						$debe = $diferencia;
+						$haber = '';
+					}
+					else
+					{
+						$debe = '';
+						$haber = abs($diferencia);
+					}
+
+					foreach($conceptogasto->conceptogasto_cuentacontables as $cuenta)
+					{
+						if ($cuenta->empresa_id == $empresa_id)
 						{
-							if ($totalHaber != 0)
+							$cuentacontable = $this->cuentacontableRepository->find($cuenta->cuentacontable_id);
+
+							if ($cuentacontable)
 							{
-								$debe = abs($totalHaber);
-								$haber = '';
+								$asiento[] = [ 'cuentacontable_id' => $cuentacontable->id,
+												'codigo' => $cuentacontable->codigo,
+												'nombre' => $cuentacontable->nombre,
+												'moneda_id' => $monedaAsiento_id,
+												'cotizacion' => $cotizacion,
+												'centrocosto_id' => 0,
+												'debe' => $debe,
+												'haber' => $haber,
+												'observacion' => '',
+												'carga_cuentacontable_manual' => 'N'
+										];
 							}
-							else
-							{
-								$debe = '';
-								$haber = $totalDebe;
-							}
-							$asiento[] = [ 'cuentacontable_id' => $cuentacontable->id,
-											'codigo' => $cuentacontable->codigo,
-											'nombre' => $cuentacontable->nombre,
-											'moneda_id' => $monedaAsiento_id,
-											'cotizacion' => $cotizacion,
-											'centrocosto_id' => 0,
-											'debe' => $debe,
-											'haber' => $haber,
-											'observacion' => '',
-											'carga_cuentacontable_manual' => 'N'
-									];
 						}
 					}
 				}
@@ -883,7 +890,12 @@ class IngresoEgresoService
 		}
 
 		$monedaRef = (int) ($monedaIds[0] ?? 1);
-		$this->comprobanteIvaService->validarTotalesContraCaja($comprobantes, $lineasCaja, $monedaRef);
+		$this->comprobanteIvaService->validarTotalesContraCaja(
+			$comprobantes,
+			$lineasCaja,
+			$monedaRef,
+			(int) $request->input('conceptogasto_id', 0),
+		);
 	}
 
 	/**

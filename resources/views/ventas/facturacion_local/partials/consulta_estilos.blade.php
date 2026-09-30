@@ -59,31 +59,16 @@
         gap: 0.35rem;
     }
 
-    .fl-consulta-origen-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 0.35rem 0.75rem;
-        margin: 0 0 1rem;
-        padding: 0.55rem 1.15rem 0.65rem;
-        background: #f8fbfc;
-        border: 1px solid #d5e4ef;
-        border-top: 0;
-        border-radius: 0 0 12px 12px;
-        box-shadow: var(--fl-shadow);
-        position: relative;
-        z-index: 0;
-    }
     .fl-consulta-bar {
         display: grid;
         grid-template-columns: minmax(220px, 320px) 1fr;
         gap: 1rem 1.25rem;
         background: var(--fl-card);
         border: 1px solid #d5e4ef;
-        border-radius: 12px 12px 0 0;
+        border-radius: 12px;
         padding: 1rem 1.15rem 0.85rem;
-        box-shadow: none;
-        margin-bottom: 0;
+        box-shadow: var(--fl-shadow);
+        margin-bottom: 1rem;
     }
     .fl-consulta-label {
         display: block;

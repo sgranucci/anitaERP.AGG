@@ -25,6 +25,10 @@
 @if((string)($producto->numeroparte ?? '0') === '1')
 <script src="{{ asset('assets/pages/scripts/stock/articulo/partes_unicas.js') }}?v=20260608" type="text/javascript"></script>
 @endif
+@if (\App\Support\Stock\ArticuloMarketplaceGrillaSupport::uiActiva())
+<script src="{{ asset('assets/pages/scripts/stock/combinacion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/combinacion/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/marketplace.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/marketplace.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.kardex_deposito_scripts')
 <script src="{{ asset('assets/pages/scripts/stock/recuento/movimientos_articulo.js') }}" type="text/javascript"></script>
@@ -164,6 +168,7 @@ window.abrirRecalcularTraFormula = @json(session('abrir_recalcular_tra_formula')
                 @if((string)($producto->numeroparte ?? '0') === '1')
                     @include('stock.articulo.form9_partes_unicas')
                 @endif
+                @include('stock.articulo.form10_marketplace')
                 </div>
                 </div>
                 <div class="card-footer">
@@ -221,5 +226,15 @@ window.abrirRecalcularTraFormula = @json(session('abrir_recalcular_tra_formula')
 @include('stock.articulo.partials.modal_recalcular_transferencias_formula')
 <input type="hidden" id="articulo-preview-recalcular-tra-formula-url" value="{{ route('articulo_preview_recalcular_transferencias_formula', ['id' => $producto->id ?? 0]) }}">
 <input type="hidden" id="articulo-aplicar-recalcular-tra-formula-url" value="{{ route('articulo_aplicar_recalcular_transferencias_formula', ['id' => $producto->id ?? 0]) }}">
+@endif
+@if (\App\Support\Stock\ArticuloMarketplaceGrillaSupport::uiActiva())
+@include('includes.ventas.modalconsultamarketplace')
+@include('includes.stock.modalconsultacombinacion')
+<input type="hidden" id="articulo-marketplace-consulta-url" value="{{ route('consulta_marketplace') }}">
+<input type="hidden" id="articulo-marketplace-resolver-url" value="{{ route('resolver_marketplace') }}">
+<script>
+window.otCombinacionesLista = @json($articuloCombinacionesLista ?? []);
+</script>
+<style>#seleccionartodascombinacionModal{display:none;}</style>
 @endif
 @endsection

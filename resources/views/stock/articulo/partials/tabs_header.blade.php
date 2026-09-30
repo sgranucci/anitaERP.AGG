@@ -62,6 +62,13 @@
                 <i class="fa fa-history"></i> Historia
             </a>
         </li>
+        @if (\App\Support\Stock\ArticuloMarketplaceGrillaSupport::uiActiva())
+        <li class="nav-item" id="li-botonform10" style="display:none;">
+            <a class="nav-link {{ $tabsArticuloActiva === 'marketplaces' ? 'active' : '' }}" href="#" id="botonform10" role="tab">
+                <i class="fa fa-shopping-bag"></i> Marketplaces
+            </a>
+        </li>
+        @endif
         @if ($mostrarPartesUnicas)
         <li class="nav-item">
             <a class="nav-link {{ $tabsArticuloActiva === 'partes' ? 'active' : '' }}" href="#" id="botonform9" role="tab">

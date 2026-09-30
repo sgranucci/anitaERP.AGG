@@ -20,6 +20,12 @@ $(function () {
     var previewXhr = null;
     /** @type {Object.<string, {id:number, codigo:string, nombre:string}>} */
     var cuentasAsientoManualPorConcepto = {};
+    /**
+     * Cuentas de reparto elegidas en cualquiera de los dos previews (Conceptos o Asiento).
+     * El refresh AJAX puede devolver el renglón sin cuenta si el POST leyó el otro panel.
+     * @type {Object.<string, {id:number, codigo:string, nombre:string}>}
+     */
+    var cuentasDebeGastoManualPorIdx = {};
     var conceptosMeta = {};
     /** Reparto multi-cuenta Debe gasto (solapa Asiento). */
     var debeGastoActivo = false;
@@ -1272,25 +1278,185 @@ $(function () {
         return $.param(params);
     }
 
+    function filaDebeGastoEsImporteEditado($row) {
+        if (!$ultimoDebeGastoImporteEditado || !$ultimoDebeGastoImporteEditado.length || !$row || !$row.length) {
+            return false;
+        }
+        var $editada = $ultimoDebeGastoImporteEditado.closest('tr.cp-debe-gasto-row');
+        return $editada.length > 0 && $row.get(0) === $editada.get(0);
+    }
+
+    function leerFilaDebeGasto($row) {
+        var $campo = $row.find('.cp-asiento-cuenta-editable').first();
+        var cuentaId = parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0;
+        var $imp = $row.find('.cp-debe-gasto-importe');
+        var importe = $imp.length
+            ? parseMonto($imp.val() || '0')
+            : parseMonto($row.find('td').eq(2).text() || '0');
+        return {
+            cuenta_id: cuentaId,
+            codigo: String($campo.find('.codigocuentacontable').val() || ''),
+            nombre: String($campo.find('.nombrecuentacontable').val() || ''),
+            importe: Math.round(Math.abs(importe) * 100) / 100,
+            centrocosto_id: 0,
+            enConceptos: $row.closest('#cp-asiento-preview-conceptos').length > 0,
+            importeEditado: filaDebeGastoEsImporteEditado($row)
+        };
+    }
+
+    /**
+     * Los dos previews tienen las mismas filas. Leer solo la solapa Asiento
+     * perdía la cuenta cargada a la derecha, en Conceptos (error «renglón de gasto #2»).
+     * Se fusiona por data-debe-gasto-idx y se queda la cuenta que esté cargada.
+     */
     function leerDebeGastoDesdeTabla() {
-        var lineas = [];
-        $filasDebeGasto().each(function () {
+        var porIdx = {};
+        var orden = [];
+        targetsPreviewAsiento().find('tr.cp-debe-gasto-row').each(function () {
             var $row = $(this);
-            var $campo = $row.find('.cp-asiento-cuenta-editable').first();
-            var cuentaId = parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0;
-            var $imp = $row.find('.cp-debe-gasto-importe');
-            var importe = $imp.length
-                ? parseMonto($imp.val() || '0')
-                : parseMonto($row.find('td').eq(2).text() || '0');
-            lineas.push({
+            var idx = parseInt($row.attr('data-debe-gasto-idx') || '0', 10) || 0;
+            var key = idx > 0 ? ('i' + idx) : ('d' + orden.length);
+            var parsed = leerFilaDebeGasto($row);
+            if (!porIdx[key]) {
+                orden.push(key);
+                porIdx[key] = parsed;
+                return;
+            }
+            var prev = porIdx[key];
+            if ((prev.cuenta_id || 0) <= 0 && parsed.cuenta_id > 0) {
+                prev.cuenta_id = parsed.cuenta_id;
+                prev.codigo = parsed.codigo;
+                prev.nombre = parsed.nombre;
+            }
+            if (parsed.importeEditado) {
+                prev.importe = parsed.importe;
+                prev.importeEditado = true;
+            } else if (!prev.importeEditado) {
+                if (parsed.enConceptos && Math.abs(parsed.importe - prev.importe) >= 0.01) {
+                    prev.importe = parsed.importe;
+                } else if (prev.importe <= 0 && parsed.importe > 0) {
+                    prev.importe = parsed.importe;
+                }
+            }
+            if (parsed.enConceptos) {
+                prev.enConceptos = true;
+            }
+        });
+        return orden.map(function (key) {
+            var l = porIdx[key];
+            var idxNum = key.charAt(0) === 'i' ? (parseInt(key.slice(1), 10) || 0) : 0;
+            var mem = idxNum > 0 ? cuentasDebeGastoManualPorIdx[String(idxNum)] : null;
+            var cuentaId = l.cuenta_id || 0;
+            var codigo = l.codigo;
+            var nombre = l.nombre;
+            if (mem && cuentaId <= 0 && (parseInt(mem.id, 10) || 0) > 0) {
+                cuentaId = parseInt(mem.id, 10) || 0;
+                codigo = String(mem.codigo || '');
+                nombre = String(mem.nombre || '');
+            }
+            return {
                 cuenta_id: cuentaId,
-                codigo: String($campo.find('.codigocuentacontable').val() || ''),
-                nombre: String($campo.find('.nombrecuentacontable').val() || ''),
-                importe: Math.round(Math.abs(importe) * 100) / 100,
-                centrocosto_id: 0
+                codigo: codigo,
+                nombre: nombre,
+                importe: l.importe,
+                centrocosto_id: l.centrocosto_id || 0
+            };
+        });
+    }
+
+    /**
+     * «Agregar cuenta» deja filas en memoria antes de que el preview las pinte.
+     * Si el DOM ya tiene todas las filas, manda el DOM (ahí está la cuenta del panel Conceptos).
+     */
+    function lineasDebeGastoParaEnviar() {
+        var vivas = leerDebeGastoDesdeTabla();
+        if (debeGastoPendiente && debeGastoPendiente.length > vivas.length) {
+            for (var i = 0; i < debeGastoPendiente.length; i++) {
+                var v = vivas[i];
+                if (!v) {
+                    continue;
+                }
+                if ((parseInt(debeGastoPendiente[i].cuenta_id, 10) || 0) <= 0 && v.cuenta_id > 0) {
+                    debeGastoPendiente[i].cuenta_id = v.cuenta_id;
+                    debeGastoPendiente[i].codigo = v.codigo;
+                    debeGastoPendiente[i].nombre = v.nombre;
+                }
+            }
+            return debeGastoPendiente;
+        }
+        if (vivas.length) {
+            return vivas;
+        }
+        return debeGastoPendiente || [];
+    }
+
+    function recordarCuentaDebeGasto(idx, datos) {
+        idx = parseInt(idx, 10) || 0;
+        if (idx <= 0) {
+            return;
+        }
+        var id = parseInt((datos && datos.id) || '0', 10) || 0;
+        if (id <= 0) {
+            delete cuentasDebeGastoManualPorIdx[String(idx)];
+            return;
+        }
+        cuentasDebeGastoManualPorIdx[String(idx)] = {
+            id: id,
+            codigo: String((datos && datos.codigo) || ''),
+            nombre: String((datos && datos.nombre) || '')
+        };
+    }
+
+    function recordarCuentasDebeGastoDesdeLineas(lineas) {
+        cuentasDebeGastoManualPorIdx = {};
+        (lineas || []).forEach(function (l, i) {
+            var id = parseInt(l.cuenta_id, 10) || 0;
+            if (id <= 0) {
+                return;
+            }
+            cuentasDebeGastoManualPorIdx[String(i + 1)] = {
+                id: id,
+                codigo: String(l.codigo || ''),
+                nombre: String(l.nombre || '')
+            };
+        });
+    }
+
+    /** Copia la cuenta al mismo renglón del otro preview, sin disparar change. */
+    function espejarCuentaDebeGasto(idx, datos, $origen) {
+        idx = parseInt(idx, 10) || 0;
+        if (idx <= 0) {
+            return;
+        }
+        var id = parseInt((datos && datos.id) || '0', 10) || 0;
+        $('.cp-asiento-cuenta-editable[data-debe-gasto-idx="' + idx + '"]').each(function () {
+            if ($origen && $origen.length && this === $origen.get(0)) {
+                return;
+            }
+            var $campo = $(this);
+            $campo.find('.cuentacontable_id').val(id > 0 ? String(id) : '');
+            $campo.find('.codigocuentacontable').val(id > 0 ? String((datos && datos.codigo) || '') : '');
+            $campo.find('.nombrecuentacontable').val(id > 0 ? String((datos && datos.nombre) || '') : '');
+            if (typeof actualizarLinkEditarCuentaContable === 'function') {
+                actualizarLinkEditarCuentaContable($campo, id);
+            }
+        });
+    }
+
+    function aplicarCuentasDebeGastoManualesEnEditores() {
+        $.each(cuentasDebeGastoManualPorIdx, function (idx, datos) {
+            var id = parseInt((datos && datos.id) || '0', 10) || 0;
+            if (id <= 0) {
+                return;
+            }
+            $('.cp-asiento-cuenta-editable[data-debe-gasto-idx="' + idx + '"]').each(function () {
+                var $campo = $(this);
+                if ((parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0) > 0) {
+                    return;
+                }
+                escribirCuentaEnEditorNeto($campo, datos);
             });
         });
-        return lineas;
     }
 
     /** Semilla para «Agregar cuenta»: debe_gasto o neto_manual; si no hay filas, una vacía con el neto. */
@@ -1301,21 +1467,31 @@ $(function () {
         }
         var $wrap = $wrapAsientoTabla();
         var neto = parseFloat($wrap.attr('data-neto-imputable-gasto') || $wrap.data('neto-imputable-gasto') || '0') || 0;
-        var $row = $rootPreviewAsiento().find('tr.cp-asiento-linea-editable').first();
-        if ($row.length) {
+        var mejor = null;
+        targetsPreviewAsiento().find('tr.cp-asiento-linea-editable').each(function () {
+            var $row = $(this);
+            if ($row.hasClass('cp-debe-gasto-row')) {
+                return;
+            }
             var $campo = $row.find('.cp-asiento-cuenta-editable').first();
             var cuentaId = parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0;
             var importe = parseMonto($row.find('td').eq(2).text() || '0');
             if (Math.abs(importe) < 0.0001 && neto > 0) {
                 importe = neto;
             }
-            return [{
+            var candidato = {
                 cuenta_id: cuentaId,
                 codigo: String($campo.find('.codigocuentacontable').val() || ''),
                 nombre: String($campo.find('.nombrecuentacontable').val() || ''),
                 importe: Math.round(Math.abs(importe) * 100) / 100,
                 centrocosto_id: 0
-            }];
+            };
+            if (!mejor || (mejor.cuenta_id <= 0 && cuentaId > 0)) {
+                mejor = candidato;
+            }
+        });
+        if (mejor) {
+            return [mejor];
         }
         if (neto > 0) {
             return [{ cuenta_id: 0, codigo: '', nombre: '', importe: Math.round(neto * 100) / 100, centrocosto_id: 0 }];
@@ -1323,11 +1499,43 @@ $(function () {
         return [];
     }
 
+    /**
+     * COM, OC de artículos, anticipo y contrato manual arman el Debe solos.
+     * El atributo lo pone el preview: si no es 1, el reparto manual no existe.
+     * @return {'si'|'no'|'ausente'}
+     */
+    function estadoRepartoGastoPantalla() {
+        var $wraps = targetsPreviewAsiento().find('#cp-asiento-tabla-wrap');
+        if (!$wraps.length) {
+            return 'ausente';
+        }
+        var permitido = false;
+        $wraps.each(function () {
+            if (String($(this).attr('data-permite-reparto-gasto') || '') === '1') {
+                permitido = true;
+            }
+        });
+        return permitido ? 'si' : 'no';
+    }
+
+    function descartarRepartoGastoManual(olvidarCuentas) {
+        debeGastoActivo = false;
+        debeGastoPendiente = null;
+        if (olvidarCuentas) {
+            cuentasDebeGastoManualPorIdx = {};
+        }
+        $('#cp-debe-gasto-hidden').empty();
+    }
+
     function appendDebeGastoParams(params) {
+        // Factura con COM u OC: no mandar debe_gasto (no debe pisar la provisión ni las cuentas de artículos).
+        if (estadoRepartoGastoPantalla() !== 'si') {
+            return;
+        }
         if (!debeGastoActivo && !debeGastoPendiente) {
             return;
         }
-        var lineas = debeGastoPendiente || leerDebeGastoDesdeTabla();
+        var lineas = lineasDebeGastoParaEnviar();
         if (!lineas.length) {
             // Marca presencia vacía para que el backend limpie el reparto.
             params.push({ name: 'debe_gasto_cuenta_ids[]', value: '' });
@@ -1367,23 +1575,24 @@ $(function () {
     }
 
     function sincronizarDebeGastoHiddenDesdeTabla() {
-        var $wrap = $wrapAsientoTabla();
-        if (!$wrap.length || String($wrap.data('permite-reparto-gasto')) !== '1') {
-            // Preview en error / sin reparto: no arrastrar debe_gasto de un intento anterior.
-            debeGastoActivo = false;
-            if (!debeGastoPendiente) {
-                $('#cp-debe-gasto-hidden').empty();
-            }
+        var estado = estadoRepartoGastoPantalla();
+        if (estado !== 'si') {
+            // COM / OC / anticipo / contrato: olvidar el reparto manual.
+            // Error de preview (sin tabla): no postear, pero conservar la cuenta elegida
+            // para reponerla cuando el asiento vuelva a pintarse en modo gasto.
+            descartarRepartoGastoManual(estado === 'no');
             return;
         }
-        var tieneRepartoPersistido = String($wrap.data('tiene-reparto-gasto')) === '1';
+        var $wrap = $wrapAsientoTabla();
+        var tieneRepartoPersistido = String($wrap.attr('data-tiene-reparto-gasto') || $wrap.data('tiene-reparto-gasto') || '') === '1';
+        var vivas = leerDebeGastoDesdeTabla();
         // Solo activar si el usuario partió cuentas (pendiente) o el backend ya devolvió
         // origen debe_gasto. Un neto_manual solo NO debe mandar debe_gasto.
-        if (debeGastoPendiente || tieneRepartoPersistido) {
+        // Siempre reescribir el hidden desde los dos paneles: el pendiente de «Agregar»
+        // no debe tapar la cuenta cargada después en el preview de Conceptos.
+        if (debeGastoPendiente || tieneRepartoPersistido || vivas.length) {
             debeGastoActivo = true;
-            if (!debeGastoPendiente) {
-                escribirDebeGastoHidden(leerDebeGastoDesdeTabla());
-            }
+            escribirDebeGastoHidden(lineasDebeGastoParaEnviar());
             actualizarAvisoSumaDebeGasto();
             return;
         }
@@ -1599,7 +1808,7 @@ $(function () {
 
     function agregarCuentaDebeGasto() {
         var $wrap = $wrapAsientoTabla();
-        if (!$wrap.length || String($wrap.data('permite-reparto-gasto')) !== '1') {
+        if (estadoRepartoGastoPantalla() !== 'si') {
             return;
         }
         var neto = parseFloat($wrap.attr('data-neto-imputable-gasto') || $wrap.data('neto-imputable-gasto') || '0') || 0;
@@ -1617,6 +1826,7 @@ $(function () {
             centrocosto_id: 0
         });
         lineas = redistribuirImportesDebeGasto(lineas, neto);
+        recordarCuentasDebeGastoDesdeLineas(lineas);
         debeGastoActivo = true;
         debeGastoPendiente = lineas;
         escribirDebeGastoHidden(lineas);
@@ -1624,32 +1834,24 @@ $(function () {
     }
 
     function quitarCuentaDebeGasto($row) {
+        if (estadoRepartoGastoPantalla() !== 'si') {
+            return;
+        }
         var $wrap = $wrapAsientoTabla();
         var neto = parseFloat($wrap.attr('data-neto-imputable-gasto') || $wrap.data('neto-imputable-gasto') || '0') || 0;
+        var idxQuitar = parseInt($row.attr('data-debe-gasto-idx') || '0', 10) || 0;
         var lineas = [];
-        $filasDebeGasto().each(function () {
-            if ($row.length && this === $row[0]) {
+        leerDebeGastoDesdeTabla().forEach(function (l, i) {
+            if (idxQuitar > 0 && (i + 1) === idxQuitar) {
                 return;
             }
-            // Solo filas del mismo panel (evitar el clon de la otra solapa).
-            if ($rootPreviewAsiento().has(this).length === 0) {
-                return;
-            }
-            var $r = $(this);
-            var $campo = $r.find('.cp-asiento-cuenta-editable').first();
-            var $imp = $r.find('.cp-debe-gasto-importe');
-            lineas.push({
-                cuenta_id: parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0,
-                codigo: String($campo.find('.codigocuentacontable').val() || ''),
-                nombre: String($campo.find('.nombrecuentacontable').val() || ''),
-                importe: $imp.length ? parseMonto($imp.val() || '0') : 0,
-                centrocosto_id: 0
-            });
+            lineas.push(l);
         });
         if (!lineas.length) {
             return;
         }
         lineas = redistribuirImportesDebeGasto(lineas, neto);
+        recordarCuentasDebeGastoDesdeLineas(lineas);
         debeGastoActivo = true;
         debeGastoPendiente = lineas;
         escribirDebeGastoHidden(lineas);
@@ -1685,6 +1887,7 @@ $(function () {
     }
 
     function trasRenderPreviewAsiento() {
+        aplicarCuentasDebeGastoManualesEnEditores();
         debeGastoPendiente = null;
         sincronizarDebeGastoHiddenDesdeTabla();
         formatearInputMontoEn($('#cp-asiento-preview-body'));
@@ -2300,6 +2503,10 @@ $(function () {
     $(document).on('change', '.cp-asiento-cuenta-editable .cuentacontable_id', function () {
         var $campo = $(this).closest('.cp-asiento-cuenta-editable');
         if ($campo.data('debe-gasto') || $campo.closest('tr.cp-debe-gasto-row').length) {
+            var idxGasto = parseInt($campo.attr('data-debe-gasto-idx') || $campo.closest('tr').attr('data-debe-gasto-idx') || '0', 10) || 0;
+            var datosGasto = datosCuentaDesdeEditor($campo);
+            recordarCuentaDebeGasto(idxGasto, datosGasto);
+            espejarCuentaDebeGasto(idxGasto, datosGasto, $campo);
             sincronizarDebeGastoHiddenDesdeTabla();
             window.refrescarPreviewAsiento(true);
             return;
@@ -2438,11 +2645,9 @@ $(function () {
             && String($(submitter).val() || '') === 'contabilizar';
         if (accionContabilizar && !tieneOrdenCompra() && modo !== 'ASIGNA_RECEPCION') {
             var hayDebeGastoConCuenta = false;
-            $filasDebeGasto().each(function () {
-                var cid = parseInt($(this).find('.cp-asiento-cuenta-editable .cuentacontable_id').val() || '0', 10) || 0;
-                if (cid > 0) {
+            leerDebeGastoDesdeTabla().forEach(function (l) {
+                if ((parseInt(l.cuenta_id, 10) || 0) > 0) {
                     hayDebeGastoConCuenta = true;
-                    return false;
                 }
             });
             if (!hayDebeGastoConCuenta) {

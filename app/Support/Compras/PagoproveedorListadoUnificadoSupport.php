@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Models\Compras\Pagoproveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -50,7 +51,7 @@ final class PagoproveedorListadoUnificadoSupport
                 ->values();
 
             return new PaginatorImpl(
-                $this->hidratarCuentasCaja($filas),
+                $this->hidratarMailEnviado($this->hidratarCuentasCaja($filas)),
                 $total,
                 self::PER_PAGE,
                 $page,
@@ -62,7 +63,7 @@ final class PagoproveedorListadoUnificadoSupport
             ->map(fn ($row) => PagoproveedorListadoFila::desdeUnionRow($row))
             ->values();
 
-        return $this->hidratarCuentasCaja($filas);
+        return $this->hidratarMailEnviado($this->hidratarCuentasCaja($filas));
     }
 
     /**
@@ -118,6 +119,7 @@ final class PagoproveedorListadoUnificadoSupport
             'detalle' => 'pp.detalle',
             'empresa_id' => 'pp.empresa_id',
         ]);
+        $this->aplicarFiltroMail($query, $filtros, 'pp.id');
 
         return $query;
     }
@@ -194,8 +196,94 @@ final class PagoproveedorListadoUnificadoSupport
             'detalle' => 'cm.detalle',
             'empresa_id' => 'cm.empresa_id',
         ], true);
+        if (PagoproveedorListadoFiltros::normalizarMail((string) ($filtros['mail'] ?? '')) !== '') {
+            $query->whereRaw('0 = 1');
+        }
 
         return $query;
+    }
+
+    /**
+     * Marca las OP que tienen un envío por correo en la historia, sin subquery por fila del union.
+     *
+     * @param  Collection<int, PagoproveedorListadoFila>  $filas
+     * @return Collection<int, PagoproveedorListadoFila>
+     */
+    private function hidratarMailEnviado(Collection $filas): Collection
+    {
+        $ids = $filas
+            ->filter(static fn (PagoproveedorListadoFila $f) => ! $f->esIeOpp())
+            ->map(static fn (PagoproveedorListadoFila $f) => $f->id)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids === []) {
+            return $filas;
+        }
+
+        $enviados = [];
+        $prefijo = Pagoproveedor::PREFIJO_OBSERVACION_ENVIO_CORREO.'%';
+        foreach (array_chunk($ids, 1000) as $lote) {
+            $encontrados = DB::table('pagoproveedor_estado')
+                ->whereIn('pagoproveedor_id', $lote)
+                ->where('observacion', 'like', $prefijo)
+                ->distinct()
+                ->pluck('pagoproveedor_id');
+            foreach ($encontrados as $id) {
+                $enviados[(int) $id] = true;
+            }
+        }
+
+        return $filas->map(function (PagoproveedorListadoFila $fila) use ($enviados) {
+            if ($fila->esIeOpp() || ! isset($enviados[$fila->id])) {
+                return $fila;
+            }
+
+            return new PagoproveedorListadoFila(
+                origen: $fila->origen,
+                id: $fila->id,
+                fecha: $fila->fecha,
+                etiqueta: $fila->etiqueta,
+                nombreEmpresa: $fila->nombreEmpresa,
+                nombreProveedor: $fila->nombreProveedor,
+                monto: $fila->monto,
+                monedaAbreviatura: $fila->monedaAbreviatura,
+                estado: $fila->estado,
+                detalle: $fila->detalle,
+                solicitudpagoId: $fila->solicitudpagoId,
+                cuentasCaja: $fila->cuentasCaja,
+                revertible: $fila->revertible,
+                mailEnviado: true,
+            );
+        })->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function aplicarFiltroMail(QueryBuilder $query, array $filtros, string $idColumna): void
+    {
+        $mail = PagoproveedorListadoFiltros::normalizarMail((string) ($filtros['mail'] ?? ''));
+        if ($mail === '') {
+            return;
+        }
+
+        $prefijo = Pagoproveedor::PREFIJO_OBSERVACION_ENVIO_CORREO.'%';
+        $existe = function ($q) use ($idColumna, $prefijo) {
+            $q->select(DB::raw('1'))
+                ->from('pagoproveedor_estado as pe_mail')
+                ->whereColumn('pe_mail.pagoproveedor_id', $idColumna)
+                ->where('pe_mail.observacion', 'like', $prefijo);
+        };
+
+        if ($mail === 'enviado') {
+            $query->whereExists($existe);
+
+            return;
+        }
+
+        $query->whereNotExists($existe);
     }
 
     /**

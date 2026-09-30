@@ -18,7 +18,7 @@
                 <p>
                     Equivalente Anita <strong>c-stocklocal</strong>: stock por dep&oacute;sito / color / medida
                     y precio de venta seg&uacute;n la lista del local.
-                    Por ahora el tilde deja Anita para probar; sin tilde lee solo el ERP.
+                    Lee el ERP (<code>articulo_movimiento</code> del dep&oacute;sito del local).
                 </p>
             </div>
             <div class="fl-consulta-hero-actions">
@@ -56,7 +56,7 @@
                         <div class="fl-kpi">
                             <div class="fl-kpi-label">Saldo total</div>
                             <div class="fl-kpi-value" id="fl-stock-saldo">—</div>
-                            <div class="fl-kpi-sub" id="fl-stock-saldo-hint">Unidades en Anita Local</div>
+                            <div class="fl-kpi-sub" id="fl-stock-saldo-hint">Unidades en ERP (dep&oacute;sito del local)</div>
                         </div>
                     </div>
 
@@ -92,7 +92,7 @@
     'tituloId' => 'fl-stock-overlay-titulo',
     'subtituloId' => 'fl-stock-overlay-subtitulo',
     'titulo' => 'Consultando stock…',
-    'subtitulo' => 'Lee Anita Local. Puede demorar unos segundos.',
+    'subtitulo' => 'Lee el ERP. Puede demorar unos segundos.',
 ])
 @endsection
 

@@ -16,6 +16,9 @@
     @if (!empty($incluyeComprobanteTransferencia))
         <p>También adjuntamos el comprobante de la transferencia electrónica.</p>
     @endif
+    @if (!empty($incluyeArchivosAdicionales))
+        <p>También adjuntamos archivos adicionales de la orden de pago.</p>
+    @endif
     @if (!empty($mensajeAdicional))
         <p>{!! nl2br(e($mensajeAdicional)) !!}</p>
     @endif

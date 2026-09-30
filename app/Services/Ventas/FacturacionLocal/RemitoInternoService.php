@@ -66,7 +66,7 @@ class RemitoInternoService
             }
 
             $remito = RemitoInterno::query()->create([
-                'numero' => RemitoInternoNumeracionSupport::reservarSiguiente($local, true),
+                'numero' => RemitoInternoNumeracionSupport::reservarSiguiente($local),
                 'fecha' => $data['fecha'],
                 'local_venta_id' => (int) $local->id,
                 'empresa_id' => (int) ($local->empresa_id ?: 0) ?: null,

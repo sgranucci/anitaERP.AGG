@@ -25,6 +25,7 @@ use App\Services\Compras\ProveedorCuentacorrienteImportarDesdeAnitaService;
 use App\Services\Compras\RetencionesPagoCalculator;
 use App\Services\Compras\RetencionesPagoContextoBuilder;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
+use App\Support\Compras\PagoproveedorArchivoSupport;
 use App\Support\Compras\PagoproveedorDocumentosRelacionadosSupport;
 use App\Support\Compras\PagoproveedorListadoFiltros;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
@@ -199,6 +200,18 @@ class PagoproveedorController extends Controller
         $mensaje = 'Orden de pago actualizada.';
         if (! empty($resultado['aviso'])) {
             $mensaje .= ' '.$resultado['aviso'];
+        }
+        if ((string) $request->input('sincronizar_archivos_op') === '1') {
+            try {
+                PagoproveedorArchivoSupport::sincronizar(
+                    $id,
+                    (array) $request->input('nombresanteriores', []),
+                    array_values(array_filter((array) $request->file('nombrearchivos', [])))
+                );
+            } catch (\Throwable $e) {
+                report($e);
+                $mensaje .= ' No se pudieron guardar los archivos adjuntos: '.$e->getMessage();
+            }
         }
 
         return redirect()
@@ -745,12 +758,21 @@ class PagoproveedorController extends Controller
         $request->validate([
             'email' => 'required|string|max:500',
             'mensaje' => 'nullable|string|max:4000',
+            'nombrearchivos' => 'nullable|array|max:10',
+            'nombrearchivos.*' => 'file|max:10240',
         ]);
+
+        $archivos = array_values(array_filter(
+            (array) $request->file('nombrearchivos', []),
+            static fn ($archivo) => $archivo instanceof \Illuminate\Http\UploadedFile && $archivo->isValid()
+        ));
 
         $ret = $this->pagoproveedorEnvioProveedorService->enviar(
             $id,
             $request->input('email'),
-            $request->input('mensaje')
+            $request->input('mensaje'),
+            [],
+            $archivos
         );
 
         $status = ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422;

@@ -2,14 +2,12 @@
 
 namespace App\Services\Ventas\FacturacionLocal;
 
-use App\Models\Stock\Articulo;
 use App\Models\Ventas\FacturacionLocalEmision;
 use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TurnoOperativoLocal;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturacionService;
-use App\Services\Ventas\FacturacionServiceFerli;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalAsientoMedioSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
@@ -26,7 +24,7 @@ use Throwable;
 
 /**
  * Orquesta emisión FAC (+ NC) del POS Local.
- * Reutiliza FacturacionService; sin CAEA; stock Local vía FacturacionServiceFerli cuando aplica.
+ * Reutiliza FacturacionService; sin CAEA. El stock queda en anitaERP (no se graba en el bridge del local).
  */
 final class FacturacionLocalEmisionService
 {
@@ -140,7 +138,7 @@ final class FacturacionLocalEmisionService
         }
 
         try {
-            return DB::transaction(function () use (
+            $resultado = DB::transaction(function () use (
                 $local,
                 $turno,
                 $input,
@@ -178,7 +176,6 @@ final class FacturacionLocalEmisionService
                     if (is_array($resultadoFac['cae_pendiente'] ?? null)) {
                         $caePendientes[] = $resultadoFac['cae_pendiente'];
                     }
-                    $this->grabarStockLocalSiCorresponde($local, $ventaFac, $split['fac'], false);
                 }
 
                 if ($split['tiene_nc']) {
@@ -191,10 +188,13 @@ final class FacturacionLocalEmisionService
                         $payloadNc['opciones_emision']['omitir_movimiento_stock'] = true;
                     }
                     if ($ventaFac) {
-                        // venta_id = FAC origen → asiento invertido + CbteAsoc ARCA.
+                        // venta_id = FAC del mismo cobro → asiento invertido + CbteAsoc ARCA.
+                        // canje_pos: el −1 entra con artículo, color, talle y precio propios.
+                        // No copiar la FAC (eso queda para la nota de crédito total).
                         $payloadNc['venta_id'] = $ventaFac->id;
                         $payloadNc['comprobanteasociado_id'] = $ventaFac->id;
                         $payloadNc['venta_id_asociada'] = $ventaFac->id;
+                        $payloadNc['opciones_emision']['canje_pos'] = true;
                     }
                     $resultadoNc = $this->facturacionService->generaComprobanteGeneral($payloadNc);
                     if (! is_array($resultadoNc) || ! empty($resultadoNc['error'])) {
@@ -204,13 +204,6 @@ final class FacturacionLocalEmisionService
                     }
                     $ventaNc = Venta::query()->find((int) ($resultadoNc['venta_id'] ?? 0));
                     if ($ventaNc) {
-                        $lineasReingreso = array_values(array_filter(
-                            $split['nc'],
-                            static fn (array $linea): bool => empty($linea['omitir_stock'])
-                        ));
-                        if ($lineasReingreso !== []) {
-                            $this->grabarStockLocalSiCorresponde($local, $ventaNc, $lineasReingreso, true);
-                        }
                         app(DevolucionHistorialService::class)->registrarPos($local, $ventaNc, $ventaFac, $split['nc']);
                     }
                     if (is_array($resultadoNc['cae_pendiente'] ?? null)) {
@@ -300,6 +293,8 @@ final class FacturacionLocalEmisionService
                     'letra' => (string) ($receptorResuelto['letra'] ?? ''),
                 ];
             });
+
+            return $resultado;
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage(), 'errores' => [$e->getMessage()]];
         } catch (Throwable $e) {
@@ -540,107 +535,4 @@ final class FacturacionLocalEmisionService
         ];
     }
 
-    /**
-     * @param  list<array<string,mixed>>  $lineas
-     */
-    private function grabarStockLocalSiCorresponde(
-        LocalVenta $local,
-        Venta $venta,
-        array $lineas,
-        bool $esEntrada,
-    ): void {
-        try {
-            if (! class_exists(FacturacionServiceFerli::class)) {
-                return;
-            }
-            /** @var FacturacionServiceFerli $ferli */
-            $ferli = app(FacturacionServiceFerli::class);
-            if (! method_exists($ferli, 'grabaStockLocal')) {
-                return;
-            }
-            $datatalle = [];
-            foreach ($lineas as $linea) {
-                $articulo = Articulo::query()->with(['categorias'])->find((int) $linea['articulo_id']);
-                if (! $articulo) {
-                    continue;
-                }
-                $cant = (float) $linea['cantidad'];
-                if ($esEntrada) {
-                    // NC: entrada (cantidad positiva hacia Anita Local)
-                }
-                $talleId = (int) ($linea['talle_id'] ?? 0);
-                $talleNombre = '0';
-                if ($talleId > 0) {
-                    $talleNombre = (string) (\App\Models\Stock\Talle::query()->whereKey($talleId)->value('nombre') ?? $talleId);
-                }
-                $combId = (int) ($linea['combinacion_id'] ?? 0);
-                $codigoComb = '';
-                if ($combId > 0) {
-                    $codigoComb = (string) (\App\Models\Stock\Combinacion::query()->whereKey($combId)->value('codigo') ?? '');
-                }
-                $categoriaCodigo = (string) ($articulo->categorias?->codigo ?? '');
-                $datatalle[] = [
-                    'sku' => (string) $articulo->sku,
-                    'descripcion' => (string) $articulo->descripcion,
-                    'categoria' => $categoriaCodigo,
-                    'impuesto_id' => (int) ($articulo->impuesto_id ?: 3),
-                    'incluyeimpuesto' => '1',
-                    'codigocombinacion' => $codigoComb,
-                    'medidas' => [[
-                        'medida' => is_numeric($talleNombre) ? (int) $talleNombre : 0,
-                        'cantidad' => $cant,
-                        'precio' => (float) ($linea['precio'] ?? 0),
-                        'pedido' => '0',
-                    ]],
-                ];
-            }
-            if ($datatalle === []) {
-                return;
-            }
-            $depositoAnita = $local->depositoAnitaCodigo();
-            if ($depositoAnita > 0) {
-                foreach ($datatalle as &$itemStock) {
-                    $itemStock['deposito'] = $depositoAnita;
-                }
-                unset($itemStock);
-            }
-            $pvCodigo = (int) ltrim((string) ($local->puntoventa?->codigo ?? $local->puntoventa_id), '0');
-            if ($pvCodigo <= 0) {
-                $pvCodigo = (int) ($local->puntoventa_id ?: 0);
-            }
-            $letra = strtoupper(substr(trim((string) ($venta->codigo ?? 'B')), -1) ?: 'B');
-            if (! in_array($letra, ['A', 'B', 'C', 'E', 'M'], true)) {
-                $letra = 'B';
-            }
-            $fecha = $venta->fecha;
-            $fechaStr = $fecha instanceof \DateTimeInterface
-                ? $fecha->format('Y-m-d')
-                : (string) ($fecha ?: now()->format('Y-m-d'));
-            $ventaArr = [
-                'fecha' => $fechaStr,
-                'codigo' => (string) ($venta->codigo ?? 'FAC'),
-                'numerocomprobante' => (int) ($venta->numerocomprobante ?? 0),
-                'moneda_id' => (int) ($venta->moneda_id ?: 1),
-            ];
-            $ferli->grabaStockLocal(
-                $pvCodigo,
-                $letra,
-                $ventaArr,
-                $datatalle,
-                '',
-                1,
-                0,
-                902,
-                0,
-                $local->anitaServidor(),
-                $local->anitaIfxServer()
-            );
-        } catch (Throwable $e) {
-            Log::warning('facturacion_local.stock_local', [
-                'msg' => $e->getMessage(),
-                'venta_id' => $venta->id,
-                'file' => $e->getFile().':'.$e->getLine(),
-            ]);
-        }
-    }
 }

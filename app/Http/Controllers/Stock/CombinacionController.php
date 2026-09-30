@@ -148,6 +148,8 @@ class CombinacionController extends Controller
             if ($depositoId <= 0) {
                 return;
             }
+            // Movimiento de stock: el color puede estar activo solo en el otro canal.
+            $w->orWhere('estado', CombinacionEstadoCanalSupport::ESTADO_ACTIVO);
             $w->orWhereIn('id', function ($sub) use ($id, $depositoId) {
                 $sub->from('articulo_movimiento')
                     ->select('combinacion_id')

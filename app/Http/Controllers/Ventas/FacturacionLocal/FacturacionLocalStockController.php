@@ -70,7 +70,7 @@ class FacturacionLocalStockController extends Controller
         $resultado = $this->consultaService->consultarStockLocal(
             $local,
             $busqueda,
-            $this->resolverOrigen($request)
+            StockLocalInformeListadoFiltros::ORIGEN_ERP
         );
         $status = ($resultado['ok'] ?? false) ? 200 : 422;
 
@@ -95,7 +95,7 @@ class FacturacionLocalStockController extends Controller
         $resultado = $this->consultaService->consultarPreciosYStock(
             $local,
             $busqueda,
-            $this->resolverOrigen($request)
+            StockLocalInformeListadoFiltros::ORIGEN_ERP
         );
         $status = ($resultado['ok'] ?? false) ? 200 : 422;
 
@@ -141,30 +141,6 @@ class FacturacionLocalStockController extends Controller
             ->where('activo', true)
             ->orderBy('codigo')
             ->get();
-    }
-
-    /**
-     * Mismo criterio que el informe: tilde origen_anita=1 → Anita; sin tilde → ERP.
-     * Default Anita mientras se prueba el bridge (antes de importar stock al ERP).
-     */
-    private function resolverOrigen(Request $request): string
-    {
-        if ($request->input('origen') === StockLocalInformeListadoFiltros::ORIGEN_ERP) {
-            return StockLocalInformeListadoFiltros::ORIGEN_ERP;
-        }
-        if ($request->input('origen') === StockLocalInformeListadoFiltros::ORIGEN_ANITA) {
-            return StockLocalInformeListadoFiltros::ORIGEN_ANITA;
-        }
-
-        // Checkbox: ausente o 1 = Anita (default prueba); 0 = ERP
-        $flag = $request->input('origen_anita', '1');
-        if (is_array($flag)) {
-            $flag = end($flag);
-        }
-
-        return (string) $flag === '0'
-            ? StockLocalInformeListadoFiltros::ORIGEN_ERP
-            : StockLocalInformeListadoFiltros::ORIGEN_ANITA;
     }
 
     private function resolverBusquedaArticulo(Request $request): string

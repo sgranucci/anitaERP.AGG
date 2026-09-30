@@ -470,6 +470,22 @@ class MovimientoStockService
 
 			DB::commit();
 
+			if ((int) $movimientostock_id > 0 && ! $this->omitirAsientoContable($data)) {
+				try {
+					$movAnita = MovimientoStock::query()
+						->with(['asientos', 'tipotransaccion_stock'])
+						->find($movimientostock_id);
+					if ($movAnita && (int) ($movAnita->asiento_id ?? 0) > 0) {
+						$this->asientoService->sincronizarCtamovAnitaMovimiento($movAnita);
+					}
+				} catch (\Throwable $eAnita) {
+					Log::warning('MovimientoStock: ctamov Anita después del commit', [
+						'movimientostock_id' => $movimientostock_id,
+						'mensaje' => $eAnita->getMessage(),
+					]);
+				}
+			}
+
 			$asientoIdNuevo = null;
 			$ctamovNuevo = null;
 			$ctamovSincronizadoEnEdicion = false;
@@ -637,13 +653,13 @@ class MovimientoStockService
 				'asientos',
 				'tipotransaccion_stock',
 				'articulos_movimiento.articulos.articulo_cuentacontables',
-			]));
+			]), false);
 			$resultado['ctamov_sincronizado_edicion'] = true;
 
 			return $resultado;
 		}
 
-		$nuevoAsientoId = $this->asientoService->generarAsiento($movimiento);
+		$nuevoAsientoId = $this->asientoService->generarAsiento($movimiento, false);
 		if ($nuevoAsientoId > 0) {
 			$movimiento->update(['asiento_id' => $nuevoAsientoId]);
 			$movimiento->loadMissing('asientos');

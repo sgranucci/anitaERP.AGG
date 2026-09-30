@@ -1628,7 +1628,6 @@
             return;
         }
         if (msgEl) msgEl.textContent = 'Consultando…';
-        var origenErp = $('fl-stock-origen-erp') && $('fl-stock-origen-erp').checked;
         // ID interno ERP (~hasta 6 dígitos) vs SKU Ferli (8+).
         var param = /^\d{1,6}$/.test(String(clave))
             ? 'articulo_id=' + encodeURIComponent(clave)
@@ -1636,7 +1635,7 @@
         var url = CFG.urls.consultaStockPrecios
             + '?local_id=' + CFG.localId
             + '&' + param
-            + '&origen=' + (origenErp ? 'erp' : 'anita');
+            + '&origen=erp';
         get(url).then(function (res) {
             var b = res.body || {};
             if (res.status >= 400 || !b.ok) {

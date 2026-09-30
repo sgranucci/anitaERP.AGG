@@ -17,8 +17,7 @@
                 <h2><i class="fa fa-tags mr-2"></i> Precios y stock del art&iacute;culo</h2>
                 <p>
                     Equivalente Anita <strong>c-articulo</strong>: precio de la lista del local,
-                    resto de listas ERP y stock (Anita o ERP seg&uacute;n el tilde).
-                    Por ahora el tilde deja Anita para probar.
+                    resto de listas y stock del ERP.
                 </p>
             </div>
             <div class="fl-consulta-hero-actions">
@@ -56,7 +55,7 @@
                         <div class="fl-kpi">
                             <div class="fl-kpi-label">Saldo total</div>
                             <div class="fl-kpi-value" id="fl-precios-saldo">—</div>
-                            <div class="fl-kpi-sub" id="fl-precios-saldo-hint">Unidades en Anita Local</div>
+                            <div class="fl-kpi-sub" id="fl-precios-saldo-hint">Unidades en ERP (dep&oacute;sito del local)</div>
                         </div>
                     </div>
 
@@ -125,7 +124,7 @@
     'tituloId' => 'fl-precios-overlay-titulo',
     'subtituloId' => 'fl-precios-overlay-subtitulo',
     'titulo' => 'Consultando precios…',
-    'subtitulo' => 'Lee Anita Local y listas ERP. Puede demorar unos segundos.',
+    'subtitulo' => 'Lee stock y listas del ERP. Puede demorar unos segundos.',
 ])
 @endsection
 

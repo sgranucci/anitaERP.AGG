@@ -13,6 +13,8 @@
         $('#op-envio-proveedor-email-error').addClass('d-none').text('');
         $('#op_envio_proveedor_email').val('').removeClass('is-invalid');
         $('#op_envio_proveedor_mensaje').val('');
+        $('#op-envio-archivos-actuales').addClass('d-none').text('');
+        resetFilasArchivo();
         $('#op_envio_proveedor_confirmar').addClass('d-none').prop('disabled', false);
         $('#modalOpEnviarProveedor .modal-title').text('Enviar orden de pago por email');
     }
@@ -89,6 +91,38 @@
         }
     }
 
+    function marcarMailEnviadoEnGrilla(pagoproveedorId) {
+        if (!pagoproveedorId) {
+            return;
+        }
+        var $celda = $('.js-op-mail-celda[data-pagoproveedor-id="' + pagoproveedorId + '"]');
+        if (!$celda.length) {
+            return;
+        }
+        $celda.html('<i class="fa fa-envelope js-op-mail-icono" title="Enviado por correo" style="color:#1e8449;font-size:12px;opacity:.8"></i>');
+    }
+
+    function resetFilasArchivo() {
+        var $tbody = $('#op-envio-tbody-archivos');
+        $tbody.find('tr.op-envio-archivo-fila').not(':first').remove();
+        $tbody.find('input[type=file]').val('');
+        $('#op-envio-agrega-archivo').prop('disabled', false);
+    }
+
+    function cantidadFilasArchivo() {
+        return $('#op-envio-tbody-archivos tr.op-envio-archivo-fila').length;
+    }
+
+    function archivosSeleccionados() {
+        var files = [];
+        $('#op-envio-tbody-archivos .op-envio-archivo').each(function () {
+            if (this.files && this.files.length && this.files[0]) {
+                files.push(this.files[0]);
+            }
+        });
+        return files;
+    }
+
     function abrirModalEnvioProveedor(pagoproveedorId) {
         if (!pagoproveedorId) {
             return;
@@ -114,6 +148,13 @@
             }
             if (data.advertencia_estado) {
                 $('#op-envio-proveedor-advertencia').removeClass('d-none').text(data.advertencia_estado);
+            }
+            var yaAsociados = parseInt(data.archivos_asociados, 10) || 0;
+            if (yaAsociados > 0) {
+                var textoAsoc = yaAsociados === 1
+                    ? 'Esta OP ya tiene 1 archivo asociado. Los que adjunte ahora se suman y también se envían en este correo.'
+                    : 'Esta OP ya tiene ' + yaAsociados + ' archivos asociados. Los que adjunte ahora se suman y también se envían en este correo.';
+                $('#op-envio-archivos-actuales').removeClass('d-none').text(textoAsoc);
             }
             var titulo = 'Enviar ' + (data.etiqueta_op || ('OP #' + pagoproveedorId));
             if (data.proveedor_nombre) {
@@ -160,7 +201,11 @@
         mostrarErrorEmail('');
 
         var email = validacion.emails.join(', ');
-        if (!window.confirm('¿Confirma el envío de la orden de pago por correo?\n\nDestino: ' + email)) {
+        var adjuntos = archivosSeleccionados();
+        var avisoAdj = adjuntos.length
+            ? '\nArchivos adjuntos: ' + adjuntos.length
+            : '';
+        if (!window.confirm('¿Confirma el envío de la orden de pago por correo?\n\nDestino: ' + email + avisoAdj)) {
             return;
         }
 
@@ -170,17 +215,23 @@
             '/compras/pagoproveedor/' + opIdActual + '/enviar-proveedor';
         var token = $('meta[name="csrf-token"]').attr('content') ||
             $('input[name="_token"]').first().val();
+        var fd = new FormData();
+        fd.append('_token', token);
+        fd.append('email', email);
+        fd.append('mensaje', $('#op_envio_proveedor_mensaje').val() || '');
+        adjuntos.forEach(function (file) {
+            fd.append('nombrearchivos[]', file);
+        });
 
         $.ajax({
             url: url,
             method: 'POST',
-            data: {
-                _token: token,
-                email: email,
-                mensaje: $('#op_envio_proveedor_mensaje').val()
-            }
+            data: fd,
+            processData: false,
+            contentType: false
         }).done(function (data) {
             if (data && data.mensaje === 'ok') {
+                marcarMailEnviadoEnGrilla(opIdActual);
                 $('#modalOpEnviarProveedor').modal('hide');
                 if (typeof toastr !== 'undefined') {
                     toastr.success('La orden de pago fue enviada por correo.');
@@ -197,12 +248,48 @@
                 msg = xhr.responseJSON.errores;
             } else if (xhr.responseJSON && xhr.responseJSON.message) {
                 msg = xhr.responseJSON.message;
-            } else if (xhr.responseJSON && xhr.responseJSON.errors && xhr.responseJSON.errors.email) {
-                msg = xhr.responseJSON.errors.email.join(' ');
+            } else if (xhr.responseJSON && xhr.responseJSON.errors) {
+                var msgs = [];
+                Object.keys(xhr.responseJSON.errors).forEach(function (k) {
+                    (xhr.responseJSON.errors[k] || []).forEach(function (m) {
+                        msgs.push(m);
+                    });
+                });
+                if (msgs.length) {
+                    msg = msgs.join(' ');
+                }
             }
             alert(msg);
             $btn.prop('disabled', false);
         });
+    });
+
+    $('#op-envio-agrega-archivo').on('click', function (e) {
+        e.preventDefault();
+        if (cantidadFilasArchivo() >= 10) {
+            return;
+        }
+        var tpl = document.getElementById('op-envio-template-archivo');
+        var tbody = document.getElementById('op-envio-tbody-archivos');
+        if (!tpl || !tbody || !tpl.content) {
+            return;
+        }
+        tbody.appendChild(document.importNode(tpl.content, true));
+        if (cantidadFilasArchivo() >= 10) {
+            $('#op-envio-agrega-archivo').prop('disabled', true);
+        }
+    });
+
+    $(document).on('click', '.op-envio-quitar-archivo', function (e) {
+        e.preventDefault();
+        var $tbody = $('#op-envio-tbody-archivos');
+        var $fila = $(this).closest('tr.op-envio-archivo-fila');
+        if ($tbody.find('tr.op-envio-archivo-fila').length <= 1) {
+            $fila.find('input[type=file]').val('');
+            return;
+        }
+        $fila.remove();
+        $('#op-envio-agrega-archivo').prop('disabled', false);
     });
 
     $('#modalOpEnviarProveedor').on('hidden.bs.modal', function () {

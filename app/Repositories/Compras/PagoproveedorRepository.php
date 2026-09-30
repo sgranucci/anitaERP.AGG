@@ -48,6 +48,7 @@ class PagoproveedorRepository implements PagoproveedorRepositoryInterface
             'pagoproveedor_comprobantes.proveedor_cuentacorrientes.comprobante_proveedores.ordencompras.ordencompra_articulos',
             'pagoproveedor_retenciones',
             'pagoproveedor_estados.usuarios',
+            'pagoproveedor_archivos' => static fn ($q) => $q->orderBy('id'),
             'cheques',
             'caja_movimientos.caja_movimiento_cuentacajas.cuentacajas',
             'asientos.asiento_movimientos.cuentacontables',

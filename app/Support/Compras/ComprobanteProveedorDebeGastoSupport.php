@@ -52,6 +52,40 @@ final class ComprobanteProveedorDebeGastoSupport
     }
 
     /**
+     * El reparto manual de cuentas de gasto no aplica cuando el Debe lo arma
+     * la provisión COM, los artículos de la OC, el anticipo o el contrato.
+     */
+    public static function permiteParaComprobante(Comprobante_Proveedor $comprobante): bool
+    {
+        $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+        $usaProvisionCom = $modoAsignaRecepcion
+            && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
+        $fechaYmd = null;
+        if ($comprobante->fechacomprobante instanceof \DateTimeInterface) {
+            $fechaYmd = $comprobante->fechacomprobante->format('Y-m-d');
+        } elseif (filled($comprobante->fechacomprobante ?? null)) {
+            $fechaYmd = substr((string) $comprobante->fechacomprobante, 0, 10);
+        }
+        $contratoImputacionManual = OrdencompraContratoRutaFacturaSupport::imputacionManual(
+            $comprobante->ordencompras,
+            $fechaYmd
+        ) && ! $modoAsignaRecepcion;
+        $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
+        $netoDesdeArticulosOc = ! $usaProvisionCom
+            && ! $facturaAnticipada
+            && ! $contratoImputacionManual
+            && (int) ($comprobante->ordencompra_id ?? 0) > 0
+            && $comprobante->ordencompras !== null;
+
+        return self::modoPermiteReparto(
+            $usaProvisionCom,
+            $netoDesdeArticulosOc,
+            $facturaAnticipada,
+            $contratoImputacionManual,
+        );
+    }
+
+    /**
      * Neto de mercadería / exento que integra el total (mismo criterio que el asiento).
      */
     public static function totalNetoImputable(Comprobante_Proveedor $comprobante): float

@@ -5,6 +5,7 @@ namespace App\Console;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Interbanking\InterbankingCalendarioSync;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
+use App\Support\Ventas\Tiendanube\TiendanubeStockCatalogoSupport;
 use Carbon\Carbon;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
@@ -645,6 +646,13 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/tiendanube-sync.log'))
             ->when(fn () => EntornoEmpresaSupport::esFerli()
                 && (bool) config('tiendanube.sync_cron_habilitado', true));
+
+        $schedule->command('tiendanube:subir-stock')
+            ->everyMinute()
+            ->runInBackground()
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/tiendanube-stock-subida.log'))
+            ->when(fn () => TiendanubeStockCatalogoSupport::debeDispararCron());
     }
 
     /**

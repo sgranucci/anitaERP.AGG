@@ -31,7 +31,7 @@ final class FacturacionLocalMedioPresentacionSupport
     {
         foreach (self::reglas() as $regla) {
             foreach ($regla['keywords'] as $keyword) {
-                if (str_contains($texto, self::normalizar($keyword))) {
+                if (self::coincideKeyword($texto, $keyword)) {
                     return [
                         'icono' => $regla['icono'],
                         'icono_color' => $regla['icono_color'],
@@ -155,6 +155,40 @@ final class FacturacionLocalMedioPresentacionSupport
                 'etiqueta' => 'Tarjeta',
             ],
         ];
+    }
+
+    /**
+     * Palabra o frase completa. «cabal» no debe agarrar «caballito»
+     * (L-FONDO FIJO CABALLITO quedaba como tarjeta Cabal y no salía el efectivo).
+     * Acepta el plural en S (Transferencias ← transferencia).
+     */
+    private static function coincideKeyword(string $texto, string $keyword): bool
+    {
+        $keyword = trim(self::normalizar($keyword));
+        if ($keyword === '') {
+            return false;
+        }
+
+        $offset = 0;
+        $largo = strlen($keyword);
+        while (($pos = strpos($texto, $keyword, $offset)) !== false) {
+            $antes = $pos > 0 ? $texto[$pos - 1] : ' ';
+            $despuesPos = $pos + $largo;
+            $despues = $despuesPos < strlen($texto) ? $texto[$despuesPos] : ' ';
+            $izquierdaOk = ! ctype_alnum($antes);
+            if ($izquierdaOk && ! ctype_alnum($despues)) {
+                return true;
+            }
+            if ($izquierdaOk && $despues === 'S') {
+                $trasPlural = ($despuesPos + 1) < strlen($texto) ? $texto[$despuesPos + 1] : ' ';
+                if (! ctype_alnum($trasPlural)) {
+                    return true;
+                }
+            }
+            $offset = $pos + 1;
+        }
+
+        return false;
     }
 
     private static function normalizar(string $texto): string

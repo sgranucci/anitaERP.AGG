@@ -56,16 +56,11 @@ final class StockLocalInformeListadoFiltros
             $orden = self::ORDEN_ARTICULO;
         }
 
-        // Checkbox "Traer datos de Anita": 1 = anita, ausente/0 = erp
-        $origen = $request->input('origen_anita', '0') === '1' || $request->input('origen') === self::ORIGEN_ANITA
-            ? self::ORIGEN_ANITA
-            : self::ORIGEN_ERP;
-
         $filtros = [
             'local_venta_id' => self::enteroOpcional($request->input('local_venta_id')),
             'deposito_anita' => self::enteroOpcional($request->input('deposito_anita')),
             'deposito_erp_id' => self::enteroOpcional($request->input('deposito_erp_id')),
-            'origen' => $origen,
+            'origen' => self::ORIGEN_ERP,
             'modo' => $modo,
             'orden' => $orden,
             'fecha_desde' => self::fechaOpcional($request->input('fecha_desde')),
@@ -88,13 +83,9 @@ final class StockLocalInformeListadoFiltros
     /** @return array<string, mixed> */
     public static function paraQueryString(array $filtros): array
     {
-        $origenAnita = ($filtros['origen'] ?? self::ORIGEN_ERP) === self::ORIGEN_ANITA;
-
         return array_filter([
             'local_venta_id' => $filtros['local_venta_id'] ?? null,
-            'deposito_anita' => $filtros['deposito_anita'] ?? null,
             'deposito_erp_id' => $filtros['deposito_erp_id'] ?? null,
-            'origen_anita' => $origenAnita ? '1' : '0',
             'modo' => $filtros['modo'] ?? self::MODO_SALDO,
             'orden' => $filtros['orden'] ?? self::ORDEN_ARTICULO,
             'fecha_desde' => $filtros['fecha_desde'] ?? null,

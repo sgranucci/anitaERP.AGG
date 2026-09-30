@@ -19,6 +19,10 @@
 @if (config('app.empresa') == 'EL BIERZO')
 <script src="{{ asset('assets/pages/scripts/stock/codigosenasa/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/codigosenasa/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @endif
+@if (\App\Support\Stock\ArticuloMarketplaceGrillaSupport::uiActiva())
+<script src="{{ asset('assets/pages/scripts/stock/combinacion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/combinacion/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/marketplace.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/marketplace.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
 <script>
 window.consultaFormulaArticuloConfig = {
@@ -71,6 +75,7 @@ window.consultaFormulaArticuloConfig = {
                     @if (can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false))
                         @include('stock.articulo.form8')
                     @endif
+                    @include('stock.articulo.form10_marketplace')
                 </div>
                 <div class="card-footer">
                 	<div class="row">
@@ -94,5 +99,15 @@ window.consultaFormulaArticuloConfig = {
 @endif
 @if (config('app.empresa') == 'EL BIERZO')
 @include('includes.stock.modalconsultacodigosenasa')
+@endif
+@if (\App\Support\Stock\ArticuloMarketplaceGrillaSupport::uiActiva())
+@include('includes.ventas.modalconsultamarketplace')
+@include('includes.stock.modalconsultacombinacion')
+<input type="hidden" id="articulo-marketplace-consulta-url" value="{{ route('consulta_marketplace') }}">
+<input type="hidden" id="articulo-marketplace-resolver-url" value="{{ route('resolver_marketplace') }}">
+<script>
+window.otCombinacionesLista = @json($articuloCombinacionesLista ?? []);
+</script>
+<style>#seleccionartodascombinacionModal{display:none;}</style>
 @endif
 @endsection

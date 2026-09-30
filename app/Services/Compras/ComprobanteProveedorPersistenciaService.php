@@ -19,7 +19,6 @@ use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
-use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
@@ -30,7 +29,6 @@ use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\ComprobanteProveedorVencimientoCondicionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorEscrituraLock;
-use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\OrdencompraLegajoDocumentoTipoSupport;
@@ -847,32 +845,7 @@ class ComprobanteProveedorPersistenciaService
 
     private function modoPermiteRepartoGasto(Comprobante_Proveedor $comprobante): bool
     {
-        $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
-        $usaProvisionCom = $modoAsignaRecepcion
-            && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
-        $fechaYmd = null;
-        if ($comprobante->fechacomprobante instanceof \DateTimeInterface) {
-            $fechaYmd = $comprobante->fechacomprobante->format('Y-m-d');
-        } elseif (filled($comprobante->fechacomprobante ?? null)) {
-            $fechaYmd = substr((string) $comprobante->fechacomprobante, 0, 10);
-        }
-        $contratoImputacionManual = OrdencompraContratoRutaFacturaSupport::imputacionManual(
-            $comprobante->ordencompras,
-            $fechaYmd
-        ) && ! $modoAsignaRecepcion;
-        $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
-        $netoDesdeArticulosOc = ! $usaProvisionCom
-            && ! $facturaAnticipada
-            && ! $contratoImputacionManual
-            && (int) ($comprobante->ordencompra_id ?? 0) > 0
-            && $comprobante->ordencompras !== null;
-
-        return ComprobanteProveedorDebeGastoSupport::modoPermiteReparto(
-            $usaProvisionCom,
-            $netoDesdeArticulosOc,
-            $facturaAnticipada,
-            $contratoImputacionManual,
-        );
+        return ComprobanteProveedorDebeGastoSupport::permiteParaComprobante($comprobante);
     }
 
     private function sincronizarArticulos(Request $request, Comprobante_Proveedor $comprobante): void

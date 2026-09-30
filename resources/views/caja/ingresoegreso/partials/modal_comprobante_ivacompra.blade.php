@@ -292,7 +292,7 @@
                         <div class="ie-cp-bloque mb-2" style="margin:0;">
                             <div class="ie-cp-bloque-head ie-cp-head-asiento">Vista previa del asiento</div>
                             <div class="px-3 pt-2">
-                                <p class="text-muted small mb-2">Impuestos a la cuenta del concepto. El neto sin COM es gasto abierto: la cuenta se indica ac&aacute; y se puede repartir en m&aacute;s d&eacute;bitos. El haber sale de las cuentas de caja del movimiento.</p>
+                                <p class="text-muted small mb-2">Impuestos a la cuenta del concepto. El neto sin COM es gasto abierto: la cuenta se indica ac&aacute; y se puede repartir en m&aacute;s d&eacute;bitos. Si la factura es menor que el pago, la diferencia se imputa al concepto de gasto.</p>
                             </div>
                             <div class="table-responsive" id="ie-cp-preview-scroll">
                                 <table class="table table-sm table-bordered mb-0">

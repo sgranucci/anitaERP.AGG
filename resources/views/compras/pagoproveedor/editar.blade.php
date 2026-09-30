@@ -60,6 +60,7 @@
     $puedeConciliada = can('marcar-conciliada-pagoproveedor', false)
         && ! $opSoloLectura
         && in_array($estado, ['CONFIRMADA', 'PAGADA'], true);
+    $cantArchivosOp = $data->pagoproveedor_archivos?->count() ?? 0;
 @endphp
 <div class="row" id="editar">
     <div class="col-lg-12">
@@ -90,7 +91,7 @@
                     <a href="{{ route('pagoproveedor') }}" class="btn btn-outline-info btn-sm"><i class="fa fa-reply-all"></i> Volver</a>
                 </div>
             </div>
-            <form action="{{ route('actualizar_pagoproveedor', $data->id) }}" method="POST" id="form-pagoproveedor" class="form-horizontal form--label-right" autocomplete="off">
+            <form action="{{ route('actualizar_pagoproveedor', $data->id) }}" method="POST" id="form-pagoproveedor" class="form-horizontal form--label-right" autocomplete="off" enctype="multipart/form-data">
                 @csrf
                 @method('PUT')
                 <div align="center" style="margin: 5px;">
@@ -100,6 +101,12 @@
                     <button type="button" id="botonform4" class="btn btn-info btn-sm"><span class="fa fa-copy"></span> Retenciones</button>
                     <button type="button" id="botonform5" class="btn btn-info btn-sm"><span class="fa fa-copy"></span> Historia</button>
                     <button type="button" id="botonform6" class="btn btn-info btn-sm"><span class="fa fa-copy"></span> Asiento Contable</button>
+                    <button type="button" id="botonform7" class="btn btn-info btn-sm">
+                        <i class="fa fa-paperclip"></i> Archivos
+                        @if ($cantArchivosOp > 0)
+                            <span class="badge badge-light">{{ $cantArchivosOp }}</span>
+                        @endif
+                    </button>
                 </div>
                 @include('compras.pagoproveedor.partials.resumen_desembolso')
                 <div class="card-body">
@@ -108,6 +115,7 @@
                     @include('compras.pagoproveedor.form3')
                     @include('compras.pagoproveedor.form4')
                     @include('compras.pagoproveedor.form5')
+                    @include('compras.pagoproveedor.partials.solapa_archivos')
                     @include('includes.contable.formasientoexterno')
                 </div>
             </form>

@@ -38,6 +38,11 @@ final class VentaNotaCreditoPrecioLiteralSupport
         if ($ventaId <= 0 || ! self::esNotaCreditoTipotransaccionId($tipoId)) {
             return;
         }
+        // Canje POS (+1/−1): el renglón que entra ya trae su precio. La NC total sigue copiando la FAC.
+        $opciones = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
+        if (! empty($opciones['canje_pos'])) {
+            return;
+        }
         if (! isset($data['precios']) || ! is_array($data['precios']) || $data['precios'] === []) {
             return;
         }
@@ -72,6 +77,10 @@ final class VentaNotaCreditoPrecioLiteralSupport
         $ventaId = (int) ($data['venta_id'] ?? 0);
         $tipoId = (int) ($data['tipotransaccion_id'] ?? 0);
         if ($ventaId <= 0 || ! self::esNotaCreditoTipotransaccionId($tipoId)) {
+            return;
+        }
+        $opciones = is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : [];
+        if (! empty($opciones['canje_pos'])) {
             return;
         }
 

@@ -3,7 +3,7 @@
 
     var ptrCuentacajaTn = null;
     var tnArticuloCampoActivo = null;
-    var CODIGOS_CONSULTA = '.codigopuntoventa, .codigodeposito, .codigocuentacaja, .codigolistaprecio, .codigoarticulo, .tn-gateway-key';
+    var CODIGOS_CONSULTA = '.codigopuntoventa, .codigodeposito, .codigocuentacaja, .codigolistaprecio, .codigoarticulo, .codigomarketplace, .tn-gateway-key';
 
     function carpeta() {
         return typeof carpetaBase !== 'undefined' ? carpetaBase : '';
@@ -30,7 +30,7 @@
     }
 
     function moverModalesAlBody() {
-        ['#consultadepositoModal', '#consultapuntoventaModal', '#consultacuentacajaModal', '#consultalistaprecioModal', '#consultaarticuloModal']
+        ['#consultadepositoModal', '#consultapuntoventaModal', '#consultacuentacajaModal', '#consultalistaprecioModal', '#consultaarticuloModal', '#consultamarketplaceModal']
             .forEach(function (sel) {
                 var $m = $(sel);
                 if ($m.length && $m.parent()[0] !== document.body) {
@@ -244,7 +244,7 @@
         var $row = $(html);
         $(tbodySelector).append($row);
         reindexRadios();
-        var $focus = $row.find('.codigopuntoventa, .tn-gateway-key').first();
+        var $focus = $row.find('.codigopuntoventa, .tn-gateway-key, .codigodeposito').first();
         if ($focus.length) {
             $focus.trigger('focus');
         }
@@ -320,6 +320,10 @@
             agregarDesdeTemplate('tn-template-fila-gateway', '#tbody-tn-gateway');
         });
 
+        $('#tn-stock-dep-agregar').on('click', function () {
+            agregarDesdeTemplate('tn-template-fila-stock-dep', '#tbody-tn-stock-dep');
+        });
+
         $(document).on('click', '.tn-pv-dep-quitar', function () {
             var $tbody = $('#tbody-tn-pv-dep');
             if ($tbody.find('.tn-pv-dep-row').length <= 1) {
@@ -341,6 +345,16 @@
                 return;
             }
             $(this).closest('.tn-gateway-row').remove();
+        });
+
+        $(document).on('click', '.tn-stock-dep-quitar', function () {
+            var $tbody = $('#tbody-tn-stock-dep');
+            if ($tbody.find('.tn-stock-dep-row').length <= 1) {
+                var $row = $(this).closest('.tn-stock-dep-row');
+                $row.find('input').val('');
+                return;
+            }
+            $(this).closest('.tn-stock-dep-row').remove();
         });
 
         $(document).on('change', '.tn-pv-dep-default', syncDefaultsHidden);

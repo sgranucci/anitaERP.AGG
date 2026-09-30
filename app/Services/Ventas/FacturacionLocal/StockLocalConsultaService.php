@@ -10,6 +10,7 @@ use App\Models\Stock\Numeracion;
 use App\Models\Stock\Precio;
 use App\Models\Ventas\LocalVenta;
 use App\Services\Stock\PrecioServiceFerli;
+use App\Support\Stock\ArticuloNofacturaSupport;
 use App\Support\Ventas\FacturacionLocal\ArticuloCanalSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\PrecioListaLocalMapeoSupport;
@@ -21,9 +22,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * Consulta stock/precios de locales (puerto de c-stocklocal.c / c-articulo.c).
  *
- * Origen (igual que el informe stock locales):
- * - anita (default mientras se prueba el bridge): stkdep / stkvmed vía Anita Local
- * - erp: articulo_movimiento del depósito ERP del local (sin Anita)
+ * Stock y precios salen de anitaERP (articulo_movimiento y listas).
+ * El bridge del local no se consulta.
  */
 final class StockLocalConsultaService
 {
@@ -50,15 +50,12 @@ final class StockLocalConsultaService
      *   origen?:string
      * }
      */
-    public function consultarStockLocal(LocalVenta $local, string $busqueda, string $origen = StockLocalInformeListadoFiltros::ORIGEN_ANITA): array
+    public function consultarStockLocal(LocalVenta $local, string $busqueda, string $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP): array
     {
-        $origen = $this->normalizarOrigen($origen);
+        $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP;
         $articulo = $this->resolverArticulo($busqueda);
         if ($articulo === null) {
             return ['ok' => false, 'error' => 'Artículo inexistente o sin canal LOCAL.'];
-        }
-        if ((bool) ($articulo->nofactura ?? false)) {
-            return ['ok' => false, 'error' => 'Artículo inactivo (no factura).'];
         }
 
         $skuAnita = $this->codigoAnitaDesdeSku((string) $articulo->sku);
@@ -137,15 +134,12 @@ final class StockLocalConsultaService
      *   origen?:string
      * }
      */
-    public function consultarPreciosYStock(LocalVenta $local, string $busqueda, string $origen = StockLocalInformeListadoFiltros::ORIGEN_ANITA): array
+    public function consultarPreciosYStock(LocalVenta $local, string $busqueda, string $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP): array
     {
-        $origen = $this->normalizarOrigen($origen);
+        $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP;
         $articulo = $this->resolverArticulo($busqueda);
         if ($articulo === null) {
             return ['ok' => false, 'error' => 'Artículo inexistente o sin canal LOCAL.'];
-        }
-        if ((bool) ($articulo->nofactura ?? false)) {
-            return ['ok' => false, 'error' => 'Artículo inactivo (no factura).'];
         }
 
         $skuAnita = $this->codigoAnitaDesdeSku((string) $articulo->sku);
@@ -252,15 +246,6 @@ final class StockLocalConsultaService
             'modo_variante' => $modo,
             'combinaciones' => $combinaciones,
         ];
-    }
-
-    private function normalizarOrigen(string $origen): string
-    {
-        $origen = strtolower(trim($origen));
-
-        return $origen === StockLocalInformeListadoFiltros::ORIGEN_ERP
-            ? StockLocalInformeListadoFiltros::ORIGEN_ERP
-            : StockLocalInformeListadoFiltros::ORIGEN_ANITA;
     }
 
     /**
@@ -468,11 +453,6 @@ final class StockLocalConsultaService
                 'lista' => $lista ? trim((string) ($lista->nombre ?? $lista->codigo ?? '')) : null,
                 'origen' => 'erp',
             ];
-        }
-
-        $anita = $this->precioDesdeAnita($local, $this->codigoAnitaDesdeSku((string) $articulo->sku));
-        if ($anita !== null) {
-            return $anita;
         }
 
         return [
@@ -1037,6 +1017,7 @@ final class StockLocalConsultaService
             'sku' => (string) $articulo->sku,
             'descripcion' => (string) $articulo->descripcion,
             'sku_anita' => $skuAnita,
+            'nofacturable' => ! ArticuloNofacturaSupport::esFacturable($articulo->nofactura ?? null),
         ];
     }
 

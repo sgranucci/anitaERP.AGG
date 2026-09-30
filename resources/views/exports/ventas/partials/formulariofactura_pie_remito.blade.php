@@ -79,6 +79,45 @@
             </td>
         </tr>
     </table>
+    @if ($facturaPdfEsFerli && isset($venta->transportes))
+        @php
+            $transporteRemito = $venta->transportes;
+            $nombreTransporte = trim((string) ($transporteRemito->nombre ?? ''));
+            $domTransporte = trim((string) ($transporteRemito->domicilio ?? ''));
+            $locTransporte = trim((string) ($transporteRemito->localidades->nombre ?? ''));
+            $telTransporte = trim((string) ($transporteRemito->telefono ?? ''));
+            $ivaTransporte = trim((string) ($transporteRemito->condicionivas->nombre ?? ''));
+            $cuitTransporte = trim((string) ($transporteRemito->nroinscripcion ?? ''));
+        @endphp
+        @if ($nombreTransporte !== '' || $domTransporte !== '' || $locTransporte !== '' || $telTransporte !== '')
+            <table class="factura-remito-transporte">
+                <tr>
+                    <td>
+                        @if ($nombreTransporte !== '')
+                            <strong>Expreso:</strong> {{ $nombreTransporte }}<br>
+                        @endif
+                        @if ($domTransporte !== '')
+                            {{ $domTransporte }}<br>
+                        @endif
+                        @if ($locTransporte !== '')
+                            {{ $locTransporte }}<br>
+                        @endif
+                        @if ($telTransporte !== '')
+                            TE: {{ $telTransporte }}
+                        @endif
+                    </td>
+                    <td class="text-right">
+                        @if ($ivaTransporte !== '')
+                            IVA: {{ $ivaTransporte }}<br>
+                        @endif
+                        @if ($cuitTransporte !== '')
+                            CUIT: {{ $cuitTransporte }}
+                        @endif
+                    </td>
+                </tr>
+            </table>
+        @endif
+    @endif
     @if ($caiRemito && $caiRemito->numero_cai)
         <p class="factura-pie-cai">
             CAI: {{ $caiRemito->numero_cai }}<br>

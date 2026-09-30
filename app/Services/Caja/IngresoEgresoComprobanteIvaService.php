@@ -63,12 +63,22 @@ class IngresoEgresoComprobanteIvaService
      * @param  list<array<string, mixed>>  $comprobantesJson
      * @param  list<object|array<string, mixed>>  $lineasCaja
      */
-    public function validarTotalesContraCaja(array $comprobantesJson, array $lineasCaja, int $monedaReferenciaId = 1): void
-    {
+    public function validarTotalesContraCaja(
+        array $comprobantesJson,
+        array $lineasCaja,
+        int $monedaReferenciaId = 1,
+        int $conceptoGastoId = 0,
+    ): void {
         IngresoEgresoComprobanteIvaValidacionSupport::validarTotales(
             $comprobantesJson,
             $lineasCaja,
             $monedaReferenciaId,
+        );
+
+        IngresoEgresoComprobanteIvaValidacionSupport::validarDiferenciaConConceptoGasto(
+            IngresoEgresoComprobanteIvaValidacionSupport::totalComprobantes($comprobantesJson, $monedaReferenciaId),
+            IngresoEgresoComprobanteIvaValidacionSupport::totalPagoCaja($lineasCaja, $monedaReferenciaId),
+            $conceptoGastoId,
         );
     }
 
@@ -201,22 +211,39 @@ class IngresoEgresoComprobanteIvaService
             }
 
             $error = $armado['error'];
-            if ($error === null && $totalComprobante > 0 && abs($totalDebe - $totalComprobante) > 0.05) {
-                $error = 'Los conceptos ('.number_format($totalDebe, 2, ',', '.').') no coinciden con el total ('.number_format($totalComprobante, 2, ',', '.').').';
+            $totalHaberPreview = $totalComprobante;
+            $avisos = $armado['avisos'];
+            if ($error === null && $totalComprobante > 0 && $totalDebe > 0) {
+                $diferencia = round($totalComprobante - $totalDebe, 2);
+                if ($diferencia < -0.05) {
+                    $error = 'Los conceptos ('.number_format($totalDebe, 2, ',', '.')
+                        .') superan el total de la factura ('.number_format($totalComprobante, 2, ',', '.').').';
+                } elseif ($diferencia > 0.05) {
+                    $totalHaberPreview = $totalDebe;
+                    $avisos[] = [
+                        'tipo' => 'factura_menor_que_monto',
+                        'mensaje' => 'La factura ('.number_format($totalDebe, 2, ',', '.')
+                            .') es menor que el monto indicado ('.number_format($totalComprobante, 2, ',', '.')
+                            .'). Al aceptar, el comprobante queda en '
+                            .number_format($totalDebe, 2, ',', '.')
+                            .' y la diferencia ('.number_format($diferencia, 2, ',', '.')
+                            .') se imputa al concepto de gasto del pago.',
+                    ];
+                }
             }
 
             return [
                 'activo' => true,
                 'es_preview' => true,
                 'error' => $error,
-                'avisos' => $armado['avisos'],
+                'avisos' => $avisos,
                 'permite_reparto_gasto' => $armado['permite_reparto_gasto'],
                 'neto_imputable_gasto' => $armado['neto_imputable'],
-                'total_comprobante' => $totalComprobante,
+                'total_comprobante' => $totalHaberPreview,
                 'total_debe' => $totalDebe,
-                'total_haber' => $totalComprobante,
+                'total_haber' => $totalHaberPreview,
                 'lineas' => $lineas,
-                'nota' => 'El haber (disponibilidades) se imputa automáticamente desde las cuentas de caja del movimiento. El neto sin COM es gasto abierto: puede repartirlo en varias cuentas.',
+                'nota' => 'Esta vista previa cierra la factura. Si es menor que el pago, la diferencia se imputa al concepto de gasto del movimiento. El neto sin COM es gasto abierto: puede repartirlo en varias cuentas.',
             ];
         } catch (RuntimeException $e) {
             return [

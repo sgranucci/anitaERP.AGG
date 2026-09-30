@@ -367,6 +367,51 @@
         return hay;
     }
 
+    /**
+     * Anita deja gravado e IVA como tipo N. La fórmula con(2)*0.21 marca el IVA;
+     * el neto base (COMPRAS 21%) hay que marcarlo como gravado de esa alícuota.
+     */
+    function enriquecerMetaGravadosDesdeFormulas() {
+        var porCodigo = {};
+        Object.keys(conceptosMeta || {}).forEach(function (id) {
+            var meta = conceptosMeta[id] || {};
+            var cod = String(meta.codigo || '').trim();
+            if (cod) {
+                porCodigo[cod] = id;
+            }
+        });
+        Object.keys(conceptosMeta || {}).forEach(function (id) {
+            var meta = conceptosMeta[id] || {};
+            var base = String(meta.formula_codigo_base || '').trim();
+            var coef = parseFloat(meta.formula_coeficiente || 0) || 0;
+            if (!base || !(coef > 0)) {
+                return;
+            }
+            var tipoI = String(meta.tipoconcepto || '').toUpperCase();
+            if (tipoI !== 'I' && tipoI !== 'G' && tipoI !== 'E' && tipoI !== 'T' && tipoI !== 'P' && tipoI !== 'B' && tipoI !== 'M' && tipoI !== 'S' && tipoI !== 'A') {
+                meta.tipoconcepto = 'I';
+            }
+            if (!(parseFloat(meta.impuesto_tasa || 0) > 0)) {
+                meta.impuesto_tasa = Math.round(coef * 100000) / 1000;
+            }
+            conceptosMeta[id] = meta;
+
+            var gravadoId = porCodigo[base];
+            if (!gravadoId || !conceptosMeta[gravadoId]) {
+                return;
+            }
+            var gMeta = conceptosMeta[gravadoId];
+            var tipoG = String(gMeta.tipoconcepto || '').toUpperCase();
+            if (tipoG !== 'G' && tipoG !== 'E') {
+                gMeta.tipoconcepto = 'G';
+            }
+            if (!(parseFloat(gMeta.impuesto_tasa || 0) > 0)) {
+                gMeta.impuesto_tasa = Math.round(coef * 100000) / 1000;
+            }
+            conceptosMeta[gravadoId] = gMeta;
+        });
+    }
+
     function incorporarMetaConceptoTipo(c) {
         var id = parseInt(c && c.id ? c.id : '0', 10) || 0;
         if (id <= 0) {
@@ -478,6 +523,7 @@
                     });
                     agregados++;
                 });
+                enriquecerMetaGravadosDesdeFormulas();
                 mostrarAvisoTipoConceptos(
                     '<i class="fa fa-check-circle"></i> Conceptos del tipo de comprobante. Complete los importes.'
                     + (agregados ? ' (' + agregados + ')' : ''),
@@ -514,11 +560,32 @@
         }
         var dif = Math.round((total - suma) * 100) / 100;
         if (Math.abs(dif) < 0.02) {
-            $dif.removeClass('d-none text-danger').addClass('text-success').text('Coincide con el total');
+            $dif.removeClass('d-none text-danger text-info').addClass('text-success').text('Coincide con el total');
             return;
         }
-        $dif.removeClass('d-none text-success').addClass('text-danger')
-            .text('Diferencia con el total: ' + formatoNumero(dif));
+        if (dif > 0 && Math.abs(suma) > 0.001) {
+            $dif.removeClass('d-none text-danger text-success').addClass('text-info')
+                .text('Factura menor que el monto: la diferencia (' + formatoNumero(dif) + ') va al concepto de gasto');
+            return;
+        }
+        $dif.removeClass('d-none text-success text-info').addClass('text-danger')
+            .text('Los conceptos superan el total: ' + formatoNumero(Math.abs(dif)));
+    }
+
+    function sumaImportesConceptosModal() {
+        var suma = 0;
+        $('#ie-cp-tbody-conceptos .ie-cp-monto').each(function () {
+            var monto = parseFloat($(this).val() || '0');
+            if (!monto) {
+                return;
+            }
+            var conceptoId = parseInt($(this).closest('.ie-cp-fila-concepto').find('.concepto_ivacompra_id').val() || '0', 10);
+            if (conceptoId <= 0) {
+                return;
+            }
+            suma += monto;
+        });
+        return Math.round(suma * 100) / 100;
     }
 
     function abrirModal(idx) {
@@ -598,6 +665,7 @@
         if (typeof window.ConceptosIvacompraCoherencia === 'undefined') {
             return { valido: true, errores: [], advertencias: [] };
         }
+        enriquecerMetaGravadosDesdeFormulas();
         return window.ConceptosIvacompraCoherencia.validar(lineasConceptosDesdeModal(), conceptosMeta);
     }
 
@@ -842,6 +910,7 @@
     }
 
     function aplicarIvaDesdeGravados() {
+        enriquecerMetaGravadosDesdeFormulas();
         var gravados = [];
         var ivas = [];
         var codigosEnGrilla = {};
@@ -1157,9 +1226,17 @@
             return;
         }
         marcarSucursalInvalida(false);
+        var sumaConceptos = sumaImportesConceptosModal();
+        if (sumaConceptos > 0.001 && payload.total - sumaConceptos > 0.05) {
+            payload.total = sumaConceptos;
+        }
         if (!(parseFloat(payload.total) > 0)) {
             alert('Indique el total de la factura.');
             focoCampoIe('ie-cp-total');
+            return;
+        }
+        if (sumaConceptos - payload.total > 0.05) {
+            alert('Los conceptos (' + formatoNumero(sumaConceptos) + ') superan el total de la factura (' + formatoNumero(payload.total) + ').');
             return;
         }
         if ((payload.conceptos || []).length === 0) {
@@ -1701,6 +1778,7 @@
                 montos: montos,
                 moneda_ids: monedaIds,
                 cotizaciones: cotizaciones,
+                conceptogasto_id: $('#conceptogasto_id').val() || '',
             }).done(function (data) {
                 if (data.mensaje !== 'ok' || !data.valido) {
                     alert(data.error || 'La suma de comprobantes IVA no coincide con el total del pago.');

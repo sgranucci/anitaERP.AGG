@@ -758,8 +758,14 @@ Route::get('stock/precio/consulta-por-articulo', 'Stock\PrecioController@consult
  */
 
 if ((string) config('app.empresa') === 'Calzados Ferli') {
-    Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeControllerFerli@crearImportacion')->name('crear_importacion_tiendanube');
-    Route::post('stock/importartiendanube', 'Stock\TiendaNubeControllerFerli@importar')->name('importar_tiendanube');
+    Route::get('stock/crearimportaciontiendanube', function () {
+        return redirect()->route('tiendanube_stock_subidas');
+    })->name('crear_importacion_tiendanube');
+    Route::post('stock/importartiendanube', function () {
+        return redirect()
+            ->route('tiendanube_stock_subidas')
+            ->with('mensaje', 'La importación por archivo fue reemplazada por la subida de stock y precios.');
+    })->name('importar_tiendanube');
     Route::get('ventas/crearimportacionfacturastiendanube', 'Ventas\FacturanteControllerFerli@crearImportacion')->name('crear_importacion_facturas_tiendanube');
     Route::post('ventas/listarfacturastiendanube', 'Ventas\FacturanteControllerFerli@listarComprobanteFull')->name('listar_facturas_tiendanube');
     Route::post('ventas/generarfacturastiendanube', 'Ventas\FacturanteControllerFerli@generarFacturasTiendaNube')->name('generar_facturas_tiendanube');
@@ -829,6 +835,16 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::put('ventas/facturacion-local/motivos-devolucion/{id}', 'Ventas\FacturacionLocal\MotivoDevolucionController@actualizar')->name('actualizar_motivo_devolucion');
     Route::delete('ventas/facturacion-local/motivos-devolucion/{id}', 'Ventas\FacturacionLocal\MotivoDevolucionController@eliminar')->name('eliminar_motivo_devolucion');
 
+    Route::get('ventas/facturacion-local/marketplaces', 'Ventas\FacturacionLocal\MarketplaceController@index')->name('facturacion_local_marketplaces');
+    Route::get('ventas/facturacion-local/marketplaces/lista/{formato?}', 'Ventas\FacturacionLocal\MarketplaceController@listar')->name('lista_marketplace');
+    Route::post('ventas/facturacion-local/marketplaces/consulta', 'Ventas\FacturacionLocal\MarketplaceController@consulta')->name('consulta_marketplace');
+    Route::get('ventas/facturacion-local/marketplaces/resolver', 'Ventas\FacturacionLocal\MarketplaceController@resolver')->name('resolver_marketplace');
+    Route::get('ventas/facturacion-local/marketplaces/crear', 'Ventas\FacturacionLocal\MarketplaceController@crear')->name('crear_marketplace');
+    Route::post('ventas/facturacion-local/marketplaces', 'Ventas\FacturacionLocal\MarketplaceController@guardar')->name('guardar_marketplace');
+    Route::get('ventas/facturacion-local/marketplaces/{id}/editar', 'Ventas\FacturacionLocal\MarketplaceController@editar')->name('editar_marketplace')->middleware('modo.consulta');
+    Route::put('ventas/facturacion-local/marketplaces/{id}', 'Ventas\FacturacionLocal\MarketplaceController@actualizar')->name('actualizar_marketplace')->middleware('modo.consulta');
+    Route::delete('ventas/facturacion-local/marketplaces/{id}', 'Ventas\FacturacionLocal\MarketplaceController@eliminar')->name('eliminar_marketplace');
+
     Route::get('ventas/facturacion-local/historial-devoluciones', 'Ventas\FacturacionLocal\HistorialDevolucionController@index')->name('facturacion_local_historial_devoluciones');
     Route::get('ventas/facturacion-local/listar-historial-devoluciones/{formato}', 'Ventas\FacturacionLocal\HistorialDevolucionController@exportar')->name('listar_historial_devolucion');
 
@@ -895,6 +911,15 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
 
     Route::get('ventas/configuracion-tiendanube', 'Ventas\Tiendanube\TiendanubeConfiguracionController@editar')->name('editar_configuracion_tiendanube');
     Route::put('ventas/configuracion-tiendanube', 'Ventas\Tiendanube\TiendanubeConfiguracionController@actualizar')->name('actualizar_configuracion_tiendanube');
+
+    Route::get('ventas/tiendanube-stock', 'Ventas\Tiendanube\TiendanubeStockSubidaController@index')->name('tiendanube_stock_subidas');
+    Route::post('ventas/tiendanube-stock/subir', 'Ventas\Tiendanube\TiendanubeStockSubidaController@subir')->name('subir_tiendanube_stock');
+    Route::post('ventas/tiendanube-stock/previsualizar', 'Ventas\Tiendanube\TiendanubeStockSubidaController@previsualizar')->name('previsualizar_tiendanube_stock');
+    Route::get('ventas/tiendanube-stock/{id}/listar/{formato}', 'Ventas\Tiendanube\TiendanubeStockSubidaController@exportar')
+        ->name('listar_tiendanube_stock_subida')
+        ->where(['id' => '[0-9]+', 'formato' => 'PDF|EXCEL|CSV']);
+    Route::get('ventas/tiendanube-stock/{id}', 'Ventas\Tiendanube\TiendanubeStockSubidaController@ver')->name('ver_tiendanube_stock_subida')->where('id', '[0-9]+');
+    Route::delete('ventas/tiendanube-stock/{id}', 'Ventas\Tiendanube\TiendanubeStockSubidaController@eliminar')->name('eliminar_tiendanube_stock_subida')->where('id', '[0-9]+');
 } else {
     Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeController@crearImportacion')->name('crear_importacion_tiendanube');
     Route::post('stock/importartiendanube', 'Stock\TiendaNubeController@importar')->name('importar_tiendanube');

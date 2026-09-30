@@ -11,8 +11,8 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Numeración remito interno Ferli: serie Anita LOCAL tipo RIN / letra B / sucursal del PV del local.
- * Si existe sistema_numerador ERP, lo alinea al último de Anita y reserva el siguiente.
+ * Numeración remito interno de facturación local: serie ERP por sucursal (ventas.rin.{sucursal}).
+ * No consulta ni actualiza el Anita del local.
  */
 final class RemitoInternoNumeracionSupport
 {
@@ -23,11 +23,15 @@ final class RemitoInternoNumeracionSupport
     public const CODIGO_NUMERADOR_PREFIX = 'ventas.rin.';
 
     /**
-     * Reserva el siguiente número para el local (ERP + Anita LOCAL).
+     * Reserva el siguiente número en sistema_numerador (anitaERP).
      * Debe llamarse dentro de una transacción DB.
+     *
+     * @param  bool  $actualizarAnita  Ignorado. El Anita del local ya no numera.
      */
-    public static function reservarSiguiente(LocalVenta $local, bool $actualizarAnita = true): int
+    public static function reservarSiguiente(LocalVenta $local, bool $actualizarAnita = false): int
     {
+        unset($actualizarAnita);
+
         $sucursal = self::sucursalDesdeLocal($local);
         if ($sucursal === '') {
             throw new InvalidArgumentException(
@@ -40,11 +44,7 @@ final class RemitoInternoNumeracionSupport
             throw new InvalidArgumentException('El local no tiene empresa asignada.');
         }
 
-        $servidor = $local->anitaServidor();
-        $ifx = $local->anitaIfxServer();
-
-        $anita = self::leerUltimoAnitaLocal($sucursal, $servidor, $ifx);
-        $row = self::asegurarFilaNumerador($sucursal, $empresaId, $anita['clave'], $anita['ultimo']);
+        $row = self::asegurarFilaNumerador($sucursal, $empresaId, '', 0);
 
         /** @var SistemaNumerador $locked */
         $locked = SistemaNumerador::query()
@@ -52,39 +52,20 @@ final class RemitoInternoNumeracionSupport
             ->lockForUpdate()
             ->firstOrFail();
 
-        // Cargar en ERP el último correcto si Anita (u otra fuente) está más adelante.
-        $pisoAnita = max(0, (int) $anita['ultimo']);
-        if ($pisoAnita > (int) $locked->ultimo_numero) {
-            $locked->ultimo_numero = $pisoAnita;
-            if ($anita['clave'] !== '' && (string) $locked->anita_clave !== $anita['clave']) {
-                $locked->anita_clave = $anita['clave'];
-                $locked->anita_sistema = 'ventas';
-                $locked->anita_fuente = 'numerador';
-            }
-            $locked->save();
-        }
-
         $pisoErpTabla = (int) RemitoInterno::query()
             ->where('local_venta_id', (int) $local->id)
             ->lockForUpdate()
             ->max('numero');
 
-        $siguiente = max((int) $locked->ultimo_numero, $pisoErpTabla, $pisoAnita) + 1;
+        $siguiente = max((int) $locked->ultimo_numero, $pisoErpTabla) + 1;
         $locked->ultimo_numero = $siguiente;
         $locked->save();
-
-        if ($actualizarAnita && $anita['clave'] !== '') {
-            self::actualizarAnitaLocal($anita['clave'], $siguiente, $servidor, $ifx);
-        }
 
         Log::info('remito_interno.numeracion.reservado', [
             'local_venta_id' => (int) $local->id,
             'sucursal' => $sucursal,
-            'clave_anita' => $anita['clave'],
-            'piso_anita' => $pisoAnita,
             'piso_erp_tabla' => $pisoErpTabla,
             'asignado' => $siguiente,
-            'servidor' => $servidor,
         ]);
 
         return $siguiente;
@@ -273,7 +254,7 @@ final class RemitoInternoNumeracionSupport
             'anita_fuente' => $claveAnita !== '' ? 'numerador' : null,
             'anita_clave' => $claveAnita !== '' ? $claveAnita : null,
             'activo' => true,
-            'observacion' => 'Serie RIN/B del bridge Local (Facturación Local).',
+            'observacion' => 'Serie RIN de facturación local. Numera en anitaERP.',
         ]);
     }
 

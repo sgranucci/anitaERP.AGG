@@ -248,12 +248,7 @@ class ComprobanteProveedorAsientoService
             )
             : 0;
 
-        $permiteRepartoGasto = ComprobanteProveedorDebeGastoSupport::modoPermiteReparto(
-            $usaProvisionCom,
-            $netoDesdeArticulosOc,
-            $facturaAnticipada,
-            $contratoImputacionManual,
-        );
+        $permiteRepartoGasto = ComprobanteProveedorDebeGastoSupport::permiteParaComprobante($comprobante);
         $lineasRepartoGasto = $permiteRepartoGasto
             ? ComprobanteProveedorDebeGastoSupport::lineasDesdeComprobante($comprobante)
             : [];

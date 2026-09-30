@@ -54,7 +54,7 @@ class TransferenciaMercaderiaAsientoService
     /**
      * Genera el asiento único de la transferencia confirmada, o null si no aplica.
      */
-    public function generarSiCorresponde(Transferencia_Mercaderia $transferencia): ?int
+    public function generarSiCorresponde(Transferencia_Mercaderia $transferencia, bool $sincronizarAnita = true): ?int
     {
         $transferencia->loadMissing([
             'articulos.articuloOrigen.articulo_cuentacontables',
@@ -76,13 +76,14 @@ class TransferenciaMercaderiaAsientoService
             );
         }
 
-        return $this->generarDesdeTransferencia($transferencia);
+        return $this->generarDesdeTransferencia($transferencia, null, false, $sincronizarAnita);
     }
 
     public function generarDesdeTransferencia(
         Transferencia_Mercaderia $transferencia,
         ?string $fechaAsiento = null,
         bool $omitirValidacionDeposito = false,
+        bool $sincronizarAnita = true,
     ): int
     {
         $transferencia->loadMissing([
@@ -143,7 +144,9 @@ class TransferenciaMercaderiaAsientoService
 
         $transferencia->asiento_id = $asientoId;
         $transferencia->setRelation('asientos', $asiento);
-        $this->sincronizarCtamovAnitaTransferencia($transferencia, $preview);
+        if ($sincronizarAnita) {
+            $this->sincronizarCtamovAnitaTransferencia($transferencia, $preview);
+        }
 
         Log::info('TransferenciaMercaderiaAsiento: asiento generado', [
             'transferencia_id' => $transferencia->id,

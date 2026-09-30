@@ -65,6 +65,7 @@ use App\Support\Listado\ListadoOrdenamientoSupport;
 use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Reportes\DompdfListadoSupport;
+use App\Support\Stock\ArticuloMarketplaceGrillaSupport;
 use App\Support\Stock\ArticuloListadoColumnas;
 use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Stock\ArticuloListadoPreferenciasUsuario;
@@ -1105,6 +1106,9 @@ class ArticuloController extends Controller
 
         $producto = ArticuloUltimoCreatePrefill::cargarProductoPrefill();
         $articulo_proveedor_lineas = ArticuloProveedorLineasSupport::lineasParaFormulario($producto);
+        $datosMarketplace = ArticuloMarketplaceGrillaSupport::datosParaFormulario($producto instanceof Articulo ? $producto : null);
+        $articuloMarketplaceLineas = $datosMarketplace['lineas'];
+        $articuloCombinacionesLista = $datosMarketplace['combinaciones'];
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloListadoFiltros::class);
 
         return view('stock.articulo.crear', compact('producto', 'categoria', 'subcategoria', 'linea', 'marca', 'tipoimputacion_enum',
@@ -1112,7 +1116,8 @@ class ArticuloController extends Controller
             'periodicidadcompra_query', 'condicionentrega_query', 'empresa_query', 'estado_enum',
             'tiposArticulos', 'deposito_query', 'numeroparte_enum', 'nofactura_enum',
             'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
-            'divide_enum', 'enviaalarma_enum', 'articulo_proveedor_lineas', 'filtrosQuery'));
+            'divide_enum', 'enviaalarma_enum', 'articulo_proveedor_lineas', 'filtrosQuery',
+            'articuloMarketplaceLineas', 'articuloCombinacionesLista'));
     }
 
     public function guardar(ValidacionArticulo $request)
@@ -1151,6 +1156,7 @@ class ArticuloController extends Controller
                         (int) $articulo->id,
                         $request->input('canal_ids', [])
                     );
+                    ArticuloMarketplaceGrillaSupport::sincronizarDesdeRequest($request, (int) $articulo->id);
                 }
 
                 // Crea estado
@@ -1289,6 +1295,9 @@ class ArticuloController extends Controller
         ];
 
         $articulo_proveedor_lineas = ArticuloProveedorLineasSupport::lineasParaFormulario($producto);
+        $datosMarketplace = ArticuloMarketplaceGrillaSupport::datosParaFormulario($producto);
+        $articuloMarketplaceLineas = $datosMarketplace['lineas'];
+        $articuloCombinacionesLista = $datosMarketplace['combinaciones'];
         $partesUnicasTotal = (string) ($producto->numeroparte ?? '0') === '1'
             ? app(ArticuloParteUnicaService::class)->contarPorArticulo((int) $producto->id)
             : 0;
@@ -1301,7 +1310,8 @@ class ArticuloController extends Controller
             'divide_enum', 'enviaalarma_enum',
             'tipoproducto_query', 'capacidad_query', 'color_query', 'tipoliquido_query',
             'puedeActualizarArticulo', 'ocultarVolver', 'soloConsulta',
-            'articulo_proveedor_lineas', 'partesUnicasTotal', 'filtrosQuery'));
+            'articulo_proveedor_lineas', 'partesUnicasTotal', 'filtrosQuery',
+            'articuloMarketplaceLineas', 'articuloCombinacionesLista'));
     }
 
     public function actualizar(ValidacionArticulo $request, $id)
@@ -1353,6 +1363,7 @@ class ArticuloController extends Controller
                     (int) $id,
                     $request->input('canal_ids', [])
                 );
+                ArticuloMarketplaceGrillaSupport::sincronizarDesdeRequest($request, (int) $id);
             }
 
             $articulo_estado = $this->articulo_estadoRepository->update($data, $id);

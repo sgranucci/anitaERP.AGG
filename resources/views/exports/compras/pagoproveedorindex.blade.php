@@ -16,10 +16,10 @@
 @endphp
 <table>
 @if (!empty($reservarFilaLogoExcel))
-    <tr><td colspan="8" style="height:52px;"></td></tr>
+    <tr><td colspan="9" style="height:52px;"></td></tr>
 @endif
     <tr>
-        <td colspan="8"><strong style="font-size:16pt;">Órdenes de pago a proveedores</strong></td>
+        <td colspan="9"><strong style="font-size:16pt;">Órdenes de pago a proveedores</strong></td>
     </tr>
     <thead>
         <tr>
@@ -31,6 +31,7 @@
             <th>Monto</th>
             <th>Estado</th>
             <th>Detalle</th>
+            <th>Mail</th>
         </tr>
     </thead>
     <tbody>
@@ -55,6 +56,11 @@
                 <td>{{ $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
                     ? $fila->detalleIndicativo()
                     : $fila->detalle }}</td>
+                <td>
+                    @if ($fila instanceof \App\Support\Compras\PagoproveedorListadoFila && ! $fila->esIeOpp())
+                        {{ $fila->mailEnviado ? 'Enviado' : 'Sin enviar' }}
+                    @endif
+                </td>
             </tr>
         @endforeach
     </tbody>

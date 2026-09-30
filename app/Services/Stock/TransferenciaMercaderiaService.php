@@ -602,7 +602,7 @@ class TransferenciaMercaderiaService
             $maxIntentosCodigo = 5;
             while (true) {
                 try {
-                    return DB::transaction(function () use (
+                    $resultadoGrabacion = DB::transaction(function () use (
                         $cabecera,
                         $lineasResueltas,
                         $tipoTransferencia,
@@ -684,12 +684,10 @@ class TransferenciaMercaderiaService
                             $transferencia->movimientostock_entrada_id = (int) $entrada['id'];
                             $transferencia->save();
 
-                            $this->actualizarStkmaePrecioDestino($transferencia);
-
                             $this->confirmarAsientoContable($transferencia->fresh([
                                 'articulos.articuloOrigen.articulo_cuentacontables',
                                 'tipotransaccion_stock',
-                            ]));
+                            ]), false);
 
                             $this->generarTokenConsultaPublica($transferencia->fresh());
                             $this->encolarAvisoTransferencia('transferencia_confirmada', (int) $transferencia->id);
@@ -710,6 +708,11 @@ class TransferenciaMercaderiaService
                             'requiere_aprobacion' => $requiereAprobacion,
                         ];
                     });
+                    if (is_array($resultadoGrabacion) && ($resultadoGrabacion['ok'] ?? false) && empty($resultadoGrabacion['requiere_aprobacion'])) {
+                        $this->publicarAnitaDespuesDeCommit((int) $resultadoGrabacion['transferencia_id']);
+                    }
+
+                    return $resultadoGrabacion;
                 } catch (\Throwable $e) {
                     if (! TransferenciaMercaderiaCodigoSupport::esCodigoDuplicado($e)
                         || ++$intentoCodigo >= $maxIntentosCodigo) {
@@ -764,7 +767,7 @@ class TransferenciaMercaderiaService
             $usuarioAprobadorId
         );
 
-        return DB::transaction(function () use ($transferencia, $usuarioAprobadorId, $observaciones, $esDestinoBien, $esOrigenBien) {
+        $confirmada = DB::transaction(function () use ($transferencia, $usuarioAprobadorId, $observaciones, $esDestinoBien, $esOrigenBien) {
             $this->transferenciaAsientoService->assertCuadreAntesDeConfirmar($transferencia);
 
             $lineas = $transferencia->articulos->all();
@@ -798,18 +801,20 @@ class TransferenciaMercaderiaService
 
             $this->invalidarTokens($transferencia);
 
-            $this->actualizarStkmaePrecioDestino($transferencia);
-
             $this->confirmarAsientoContable($transferencia->fresh([
                 'articulos.articuloOrigen.articulo_cuentacontables',
                 'tipotransaccion_stock',
-            ]));
+            ]), false);
 
             $this->generarTokenConsultaPublica($transferencia->fresh());
             $this->encolarAvisoTransferencia('transferencia_confirmada', (int) $transferencia->id);
 
             return $transferencia->fresh();
         });
+
+        $this->publicarAnitaDespuesDeCommit((int) $confirmada->id);
+
+        return $confirmada;
     }
 
     public function rechazarRecepcion(int $id, ?int $usuarioId = null, ?string $motivo = null): Transferencia_Mercaderia
@@ -1545,6 +1550,48 @@ class TransferenciaMercaderiaService
         }
     }
 
+    /**
+     * Anita (precio stkmae y ctamov) va después del commit: si corre adentro,
+     * el bridge deja tomados los saldos y el POS de los locales espera.
+     */
+    private function publicarAnitaDespuesDeCommit(int $transferenciaId): void
+    {
+        $transferencia = Transferencia_Mercaderia::query()
+            ->with([
+                'articulos.articuloDestino',
+                'asientos',
+                'tipotransaccion_stock',
+            ])
+            ->find($transferenciaId);
+        if ($transferencia === null) {
+            return;
+        }
+
+        try {
+            $this->actualizarStkmaePrecioDestino($transferencia);
+        } catch (\Throwable $e) {
+            Log::warning('TransferenciaMercaderia: precio Anita después del commit', [
+                'transferencia_id' => $transferenciaId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        if ((int) ($transferencia->asiento_id ?? 0) <= 0) {
+            return;
+        }
+
+        try {
+            $this->transferenciaAsientoService->sincronizarCtamovAnitaTransferencia(
+                $transferencia->fresh(['asientos', 'tipotransaccion_stock'])
+            );
+        } catch (\Throwable $e) {
+            Log::warning('TransferenciaMercaderia: ctamov Anita después del commit', [
+                'transferencia_id' => $transferenciaId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     private function actualizarStkmaePrecioDestino(Transferencia_Mercaderia $transferencia): void
     {
         try {
@@ -1673,9 +1720,9 @@ class TransferenciaMercaderiaService
             ->first(static fn ($tipo): bool => strtoupper(trim((string) ($tipo->abreviatura ?? ''))) === 'TRA');
     }
 
-    private function confirmarAsientoContable(Transferencia_Mercaderia $transferencia): void
+    private function confirmarAsientoContable(Transferencia_Mercaderia $transferencia, bool $sincronizarAnita = true): void
     {
-        $asientoId = $this->transferenciaAsientoService->generarSiCorresponde($transferencia);
+        $asientoId = $this->transferenciaAsientoService->generarSiCorresponde($transferencia, $sincronizarAnita);
         if ($asientoId !== null && $asientoId > 0) {
             $transferencia->asiento_id = $asientoId;
             $transferencia->save();

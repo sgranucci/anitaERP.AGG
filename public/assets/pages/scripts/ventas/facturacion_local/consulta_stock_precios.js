@@ -18,7 +18,6 @@
     var btn = document.getElementById(cfg.formId + '-btn');
     var lupa = document.getElementById(cfg.formId + '-lupa');
     var listaChip = document.getElementById(cfg.formId + '-lista-chip');
-    var checkAnita = document.getElementById(cfg.formId + '-origen-anita');
     var resultado = document.getElementById(cfg.resultadoId);
     var vacio = document.getElementById(cfg.vacioId);
     var vacioTxt = document.getElementById(cfg.vacioTxtId);
@@ -110,12 +109,8 @@
         };
     }
 
-    function usaAnita() {
-        return !!(checkAnita && checkAnita.checked);
-    }
-
     function etiquetaOrigen(json) {
-        var origen = (json && json.origen) ? String(json.origen) : (usaAnita() ? 'anita' : 'erp');
+        var origen = (json && json.origen) ? String(json.origen) : 'erp';
         var detalle = (json && json.origen_stock) ? String(json.origen_stock) : '';
         if (origen === 'erp') {
             return 'Origen: ERP' + (detalle ? ' (' + detalle + ')' : ' · articulo_movimiento');
@@ -124,7 +119,7 @@
     }
 
     function textoSaldoHint(json) {
-        var origen = (json && json.origen) ? String(json.origen) : (usaAnita() ? 'anita' : 'erp');
+        var origen = (json && json.origen) ? String(json.origen) : 'erp';
         return origen === 'erp' ? 'Unidades en ERP (depósito del local)' : 'Unidades en Anita Local';
     }
 
@@ -204,22 +199,17 @@
             return;
         }
 
-        var key = String(selectLocal.value) + '|' + (art.articulo_id || art.q) + '|' + (usaAnita() ? 'anita' : 'erp');
+        var key = String(selectLocal.value) + '|' + (art.articulo_id || art.q) + '|erp';
         if (consultando && key === ultimaConsultaKey && !opts.force) {
             return;
         }
         consultando = true;
         ultimaConsultaKey = key;
         ocultarVacio();
-        mostrarOverlay(
-            usaAnita()
-                ? (cfg.modo === 'precios' ? 'Consultando Anita…' : 'Consultando stock Anita…')
-                : (cfg.modo === 'precios' ? 'Consultando ERP…' : 'Consultando stock ERP…')
-        );
+        mostrarOverlay(cfg.modo === 'precios' ? 'Consultando ERP…' : 'Consultando stock ERP…');
 
         var params = new URLSearchParams();
         params.set('local_id', selectLocal.value);
-        params.set('origen_anita', usaAnita() ? '1' : '0');
         if (art.articulo_id) {
             params.set('articulo_id', art.articulo_id);
         }
@@ -275,7 +265,8 @@
         var saldo = Number(json.saldo_total || 0);
 
         document.getElementById('fl-stock-sku').textContent = art.sku || '—';
-        document.getElementById('fl-stock-desc').textContent = art.descripcion || '';
+        document.getElementById('fl-stock-desc').textContent = (art.descripcion || '')
+            + (art.nofacturable ? ' · No facturable' : '');
         document.getElementById('fl-stock-precio').textContent = '$ ' + fmtNum(precio.valor, 2);
         document.getElementById('fl-stock-lista').textContent = precio.lista
             ? ('Lista del local: ' + precio.lista + (precio.origen ? ' · ' + precio.origen : ''))
@@ -332,7 +323,8 @@
         var listaLocalId = Number(precio.listaprecio_id || 0) || listaDelLocal().id;
 
         document.getElementById('fl-precios-sku').textContent = art.sku || '—';
-        document.getElementById('fl-precios-desc').textContent = art.descripcion || '';
+        document.getElementById('fl-precios-desc').textContent = (art.descripcion || '')
+            + (art.nofacturable ? ' · No facturable' : '');
         document.getElementById('fl-precios-precio').textContent = '$ ' + fmtNum(precio.valor, 2);
         document.getElementById('fl-precios-lista').textContent = precio.lista
             ? ('Lista del local: ' + precio.lista)
