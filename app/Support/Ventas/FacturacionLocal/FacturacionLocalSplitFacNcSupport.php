@@ -25,18 +25,27 @@ final class FacturacionLocalSplitFacNcSupport
             }
             $precio = (float) ($linea['precio'] ?? 0);
             $dto = (float) ($linea['descuento'] ?? $linea['descuentolinea'] ?? 0);
-            $importe = round($cantidad * $precio * (1 - $dto / 100), 2);
+            $dtoImporte = abs((float) ($linea['descuento_importe'] ?? 0));
+            $bruto = round(abs($cantidad) * $precio * (1 - $dto / 100), 2);
+            $neto = $dtoImporte > 0.00001
+                ? max(0., round($bruto - $dtoImporte, 2))
+                : $bruto;
+            $copia = $linea;
+            if ($dtoImporte > 0.00001) {
+                $copia['precio'] = self::precioUnitarioParaNeto(abs($cantidad), $neto);
+                $copia['descuento'] = 0;
+                $copia['descuentolinea'] = 0;
+                $copia['descuento_importe'] = 0;
+            }
 
             if ($cantidad > 0) {
-                $copia = $linea;
                 $copia['cantidad'] = $cantidad;
                 $fac[] = $copia;
-                $netoFac += $importe;
+                $netoFac += $neto;
             } else {
-                $copia = $linea;
                 $copia['cantidad'] = abs($cantidad);
                 $nc[] = $copia;
-                $netoNc += abs($importe);
+                $netoNc += $neto;
             }
         }
 
@@ -48,5 +57,30 @@ final class FacturacionLocalSplitFacNcSupport
             'neto_nc' => round($netoNc, 2),
             'neto' => round($netoFac - $netoNc, 2),
         ];
+    }
+
+    /**
+     * Precio unitario tal que round(cantidad * precio, 2) coincide con el neto en pesos.
+     * Evita convertir un importe a un porcentaje periódico (16,666…).
+     */
+    public static function precioUnitarioParaNeto(float $cantidad, float $neto): float
+    {
+        $cant = abs($cantidad);
+        $objetivo = round(abs($neto), 2);
+        if ($cant < 0.000001) {
+            return 0.;
+        }
+
+        $precio = $objetivo / $cant;
+        for ($i = 0; $i < 6; $i++) {
+            $calculado = round($cant * $precio, 2);
+            $dif = round($objetivo - $calculado, 2);
+            if (abs($dif) < 0.001) {
+                break;
+            }
+            $precio += $dif / $cant;
+        }
+
+        return $precio;
     }
 }

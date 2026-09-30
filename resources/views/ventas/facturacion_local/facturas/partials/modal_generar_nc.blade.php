@@ -12,8 +12,22 @@
                 <ul class="small mb-3 pl-3">
                     <li>La factura original no se borra: queda compensada fiscalmente por la NC.</li>
                     <li>Requiere turno abierto en el local de la emisión.</li>
-                    <li>Se registra devolución de cobranza y reingreso de stock Local cuando aplica.</li>
+                    <li>El motivo define si el par ingresa al stock vendible. El movimiento queda en el historial.</li>
                 </ul>
+                @php
+                    $motivosNc = \App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport::paraPos();
+                @endphp
+                <div class="form-group">
+                    <label for="fd-nc-motivo" class="small mb-1">Motivo de la devolución</label>
+                    <select id="fd-nc-motivo" class="form-control form-control-sm" required>
+                        <option value="">Elegí el motivo…</option>
+                        @foreach ($motivosNc as $motivoNc)
+                            <option value="{{ $motivoNc['id'] }}" data-vuelve="{{ $motivoNc['vuelve_stock'] ? '1' : '0' }}">
+                                {{ $motivoNc['nombre'] }} — {{ $motivoNc['vuelve_stock'] ? 'vuelve al stock' : 'no entra al stock' }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
                 <div class="form-group mb-0">
                     <label for="fd-nc-leyenda" class="small mb-1">Leyenda (motivo de la reversión)</label>
                     <textarea id="fd-nc-leyenda" class="form-control form-control-sm" rows="3"

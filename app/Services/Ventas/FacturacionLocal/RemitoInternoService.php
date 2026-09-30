@@ -154,8 +154,22 @@ class RemitoInternoService
 
     public function anular(RemitoInterno $remito): RemitoInterno
     {
+        if ($remito->estado === RemitoInternoEstadosSupport::ANULADO) {
+            throw new InvalidArgumentException('El remito ya está anulado.');
+        }
+
+        if ($remito->estado === RemitoInternoEstadosSupport::BORRADOR) {
+            return DB::transaction(function () use ($remito) {
+                $remito->update([
+                    'estado' => RemitoInternoEstadosSupport::ANULADO,
+                ]);
+
+                return $remito->fresh(['lineas.articulo', 'lineas.combinacion', 'lineas.talle', 'localVenta', 'deposito']);
+            });
+        }
+
         if ($remito->estado !== RemitoInternoEstadosSupport::CONFIRMADO) {
-            throw new InvalidArgumentException('Solo se puede anular un remito confirmado.');
+            throw new InvalidArgumentException('Solo se puede anular un remito en borrador o confirmado.');
         }
 
         $remito->load(['lineas', 'localVenta']);

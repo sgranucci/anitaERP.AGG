@@ -14,6 +14,7 @@ use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSuppor
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceListadoFiltros;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePuenteSupport;
+use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\View;
 use InvalidArgumentException;
@@ -125,6 +126,7 @@ class CambioDevolucionMarketplaceController extends Controller
                 'ventaReemplazo',
                 'ventaNc',
                 'tiendanubePedido',
+                'motivoDevolucion',
             ])
             ->findOrFail($id);
 
@@ -344,7 +346,7 @@ class CambioDevolucionMarketplaceController extends Controller
             'data' => $data,
             'locales' => $locales,
             'canales' => CambioDevolucionMarketplaceCatalogoSupport::CANALES,
-            'motivos' => CambioDevolucionMarketplaceCatalogoSupport::MOTIVOS,
+            'motivos' => MotivoDevolucionSupport::paraPos(),
             'disposiciones' => CambioDevolucionMarketplaceCatalogoSupport::DISPOSICIONES,
             'tiposLinea' => CambioDevolucionMarketplaceCatalogoSupport::TIPOS_LINEA,
             'estadosEtiquetas' => CambioDevolucionMarketplaceEstadosSupport::ETIQUETAS,

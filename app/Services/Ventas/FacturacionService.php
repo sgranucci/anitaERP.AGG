@@ -2714,6 +2714,7 @@ class FacturacionService
 		// gastronomía $0: aparecen en compaux como detalle visual, pero el stock real
 		// se descuenta vía formula expansion en el depósito de insumos).
 		$omitirStkmovAnitaPorItem = $data['omitir_stkmov_anita_por_item'] ?? [];
+		$omitirStockPorItem = $data['omitir_stock_por_item'] ?? [];
 
 		for ($offItem = 0; $offItem < count($cantidades); $offItem++)
 		{
@@ -2989,6 +2990,8 @@ class FacturacionService
 
 			$omitirStkmovAnita = is_array($omitirStkmovAnitaPorItem)
 				&& ! empty($omitirStkmovAnitaPorItem[$offItem]);
+			$omitirStockLinea = is_array($omitirStockPorItem)
+				&& ! empty($omitirStockPorItem[$offItem]);
 
 			$piezaLinea = (float) str_replace(',', '', (string) ($piezasInput[$offItem] ?? 0));
 			$cajaLinea = (float) str_replace(',', '', (string) ($cajasInput[$offItem] ?? 0));
@@ -3038,6 +3041,7 @@ class FacturacionService
 				'cuentacontable_id' => $cuentaContable_id,
 				'impuesto_interno_coeficiente' => $impuestoInternoCoeficiente,
 				'omitir_stkmov_anita' => $omitirStkmovAnita,
+				'omitir_stock_linea' => $omitirStockLinea,
 				'concepto_venta_id' => $conceptoVentaIdLinea,
 				'contrato_venta_id' => $contratoVentaIdLinea,
 				'tag_valores' => $tagValoresLinea,
@@ -4863,7 +4867,8 @@ class FacturacionService
 			$dataArticuloMovimiento = [];
 			foreach($dataFactura as $itemEmision)
 			{
-				if (! $omitirMovimientoStock && isset($itemEmision['articulo_id']))
+				$omitirStockLinea = ! empty($itemEmision['omitir_stock_linea']);
+				if (! $omitirMovimientoStock && ! $omitirStockLinea && isset($itemEmision['articulo_id']))
 				{
 					$dataArticuloMovimiento = [
 						'fecha' => $fechaFactura,
@@ -4941,7 +4946,7 @@ class FacturacionService
 				$venta_emision = $this->venta_emisionRepository->create($dataEmision);
 				ContratoVentaEmisionSupport::persistirTrasCrearEmision($venta_emision, $itemEmision, (int) $vta->id);
 
-				if (! $omitirMovimientoStock && isset($itemEmision['articulo_id']) && $dataArticuloMovimiento !== [])
+				if (! $omitirMovimientoStock && empty($itemEmision['omitir_stock_linea']) && isset($itemEmision['articulo_id']) && $dataArticuloMovimiento !== [])
 				{
 					$dataTalle = [];
 					$dataFirmado = \App\Support\Ventas\TipotransaccionOperacionStockSupport::firmarPayloadMovimiento(

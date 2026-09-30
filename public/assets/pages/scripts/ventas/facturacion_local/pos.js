@@ -100,6 +100,20 @@
         return tema !== '' ? tema : 'default';
     }
 
+    function htmlMotivoDevolucion(line, idx) {
+        if (!(Number(line.cantidad) < 0)) {
+            return '';
+        }
+        var opts = '<option value="">Motivo…</option>';
+        (CFG.motivos || []).forEach(function (m) {
+            var sel = String(line.motivo_devolucion_id || '') === String(m.id) ? ' selected' : '';
+            var stock = m.vuelve_stock ? 'vuelve al stock' : 'no entra al stock';
+            opts += '<option value="' + m.id + '" data-vuelve="' + (m.vuelve_stock ? '1' : '0') + '"' + sel + '>'
+                + escapeHtml(m.nombre) + ' (' + stock + ')</option>';
+        });
+        return '<select data-i="' + idx + '" class="fl-motivo" style="max-width:180px;">' + opts + '</select>';
+    }
+
     /* ——— Carrito ——— */
     function renderCart() {
         var tb = $('fl-cart-body');
@@ -117,13 +131,22 @@
                 '<td style="font-size:12px;">' + escapeHtml(varLabel) + '</td>' +
                 '<td><input type="number" step="1" data-i="' + idx + '" class="fl-cant" value="' + line.cantidad + '"></td>' +
                 '<td><input type="number" step="0.01" data-i="' + idx + '" class="fl-precio" value="' + line.precio + '"></td>' +
-                '<td><input type="number" step="0.01" data-i="' + idx + '" class="fl-dto" value="' + (line.descuento || 0) + '"></td>' +
+                '<td><input type="number" step="0.01" min="0" data-i="' + idx + '" class="fl-dto" value="' + (line.descuento || 0) + '" title="Porcentaje"></td>' +
+                '<td><input type="number" step="0.01" min="0" data-i="' + idx + '" class="fl-dto-imp" value="' + (line.descuento_importe || 0) + '" title="Importe en pesos"></td>' +
+                '<td>' + htmlMotivoDevolucion(line, idx) + '</td>' +
                 '<td><button type="button" class="fl-btn fl-btn-ghost fl-del" data-i="' + idx + '">×</button></td>';
             tb.appendChild(tr);
         });
         tb.querySelectorAll('.fl-cant').forEach(function (inp) {
             inp.addEventListener('change', function () {
-                cart[+inp.dataset.i].cantidad = parseFloat(inp.value) || 0;
+                var i = +inp.dataset.i;
+                var antes = Number(cart[i].cantidad) || 0;
+                cart[i].cantidad = parseFloat(inp.value) || 0;
+                var ahora = Number(cart[i].cantidad) || 0;
+                if ((antes < 0) !== (ahora < 0)) {
+                    renderCart();
+                    return;
+                }
                 preview();
             });
         });
@@ -137,6 +160,20 @@
             inp.addEventListener('change', function () {
                 cart[+inp.dataset.i].descuento = parseFloat(inp.value) || 0;
                 preview();
+            });
+        });
+        tb.querySelectorAll('.fl-dto-imp').forEach(function (inp) {
+            inp.addEventListener('change', function () {
+                cart[+inp.dataset.i].descuento_importe = Math.abs(parseFloat(inp.value) || 0);
+                preview();
+            });
+        });
+        tb.querySelectorAll('.fl-motivo').forEach(function (sel) {
+            sel.addEventListener('change', function () {
+                var i = +sel.dataset.i;
+                cart[i].motivo_devolucion_id = parseInt(sel.value, 10) || 0;
+                var opt = sel.options[sel.selectedIndex];
+                cart[i].vuelve_stock = opt && opt.getAttribute('data-vuelve') === '1';
             });
         });
         tb.querySelectorAll('.fl-del').forEach(function (btn) {
@@ -866,7 +903,8 @@
                 combinacion_nombre: combinacionNombre,
                 cantidad: cant,
                 precio: +(p.precio || 0),
-                descuento: 0
+                descuento: 0,
+                descuento_importe: 0
             });
             pendingArticulo = null;
             pendingVariantes = null;
@@ -1134,6 +1172,12 @@
         if (!cart.length) {
             msg('Carrito vacío', false);
             return;
+        }
+        for (var li = 0; li < cart.length; li++) {
+            if (Number(cart[li].cantidad) < 0 && !(parseInt(cart[li].motivo_devolucion_id, 10) > 0)) {
+                msg('Elegí el motivo de la devolución en cada par que vuelve', false);
+                return;
+            }
         }
         if (netoActual < -0.009) {
             msg('Saldo negativo no permitido. Emita una nota de crédito completa desde Facturas Local y luego facture de nuevo.', false);

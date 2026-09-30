@@ -81,22 +81,14 @@ window.RI_CFG = {
                         </form>
                     @endif
                 @endif
-                @if ($data->estado === RemitoInternoEstadosSupport::CONFIRMADO && can('anular-remito-interno-facturacion-local', false))
+                @if (in_array($data->estado, [RemitoInternoEstadosSupport::BORRADOR, RemitoInternoEstadosSupport::CONFIRMADO], true) && can('anular-remito-interno-facturacion-local', false))
                     <form action="{{ route('anular_remito_interno', $data->id) }}" method="POST" class="d-inline"
-                          onsubmit="return confirm('¿Anular remito y revertir el stock?');">
+                          onsubmit="return confirm('{{ $data->estado === RemitoInternoEstadosSupport::CONFIRMADO ? '¿Anular remito y revertir el stock?' : '¿Anular este borrador? No tiene movimiento de stock.' }}');">
                         @csrf
                         <button type="submit" class="btn btn-outline-danger">
                             <i class="fa fa-times"></i> Anular
                         </button>
                     </form>
-                @endif
-                @if ($data->movimientostock_id)
-                    <span class="ml-auto text-muted small">
-                        Mov. stock #{{ $data->movimientostock_id }}
-                        @if ($data->movimientoStock)
-                            ({{ $data->movimientoStock->codigo }})
-                        @endif
-                    </span>
                 @endif
             </div>
         </div>

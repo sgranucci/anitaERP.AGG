@@ -83,7 +83,7 @@ window.cdmBuscarVentaUrl = @json(route('api_buscar_venta_cambio_devolucion_marke
 
                 @if ($estado === CambioDevolucionMarketplaceEstadosSupport::RECIBIDO && can('emitir-nc-cambio-devolucion-marketplace-facturacion-local', false))
                     <form method="POST" action="{{ route('emitir_nc_cambio_devolucion_marketplace', $data->id) }}" class="d-inline mr-2 mb-1"
-                          onsubmit="return confirm('¿Emitir NC completa de la factura original con medio puente NCD?');">
+                          onsubmit="return confirm('¿Emitir NC de la factura original? El motivo del legajo define si el par ingresa al stock.');">
                         @csrf
                         <button type="submit" class="btn btn-danger">Emitir NC original (NCD)</button>
                     </form>

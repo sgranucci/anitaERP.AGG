@@ -30,6 +30,7 @@ class CambioDevolucionMarketplace extends Model implements Auditable
         'receptor_documento',
         'estado',
         'motivo_codigo',
+        'motivo_devolucion_id',
         'motivo',
         'disposicion',
         'diferencia_importe',
@@ -49,6 +50,7 @@ class CambioDevolucionMarketplace extends Model implements Auditable
         'venta_reemplazo_id' => 'integer',
         'venta_nc_id' => 'integer',
         'cliente_id' => 'integer',
+        'motivo_devolucion_id' => 'integer',
         'diferencia_importe' => 'float',
         'compensacion_registrada_at' => 'datetime',
     ];
@@ -86,6 +88,11 @@ class CambioDevolucionMarketplace extends Model implements Auditable
     public function cliente()
     {
         return $this->belongsTo(Cliente::class, 'cliente_id');
+    }
+
+    public function motivoDevolucion()
+    {
+        return $this->belongsTo(MotivoDevolucion::class, 'motivo_devolucion_id');
     }
 
     public function lineas()

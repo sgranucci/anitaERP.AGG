@@ -20,6 +20,7 @@ use App\Support\Ventas\FacturacionLocal\FacturacionLocalMedioPresentacionSupport
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
+use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalUsoCuentacajaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalVarianteArticuloSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
@@ -113,6 +114,8 @@ class FacturacionLocalProcesoController extends Controller
             ];
         })->values()->all();
 
+        $motivosDevolucion = MotivoDevolucionSupport::paraPos();
+
         return view('ventas.facturacion_local.proceso.index', compact(
             'locales',
             'local',
@@ -122,7 +125,8 @@ class FacturacionLocalProcesoController extends Controller
             'turnoSugeridoId',
             'usocuentacajaLocalId',
             'empresaIdPos',
-            'contextoPos'
+            'contextoPos',
+            'motivosDevolucion'
         ));
     }
 

@@ -138,8 +138,17 @@ class RemitoInternoController extends Controller
 
         $remito = RemitoInterno::query()->findOrFail($id);
 
+        $lineas = $request->lineasNormalizadas();
+
         try {
-            $this->service->actualizar($remito, $request->validated(), $request->lineasNormalizadas());
+            if ($lineas === []) {
+                $this->service->anular($remito);
+
+                return redirect()
+                    ->route('editar_remito_interno', $remito->id)
+                    ->with('mensaje', 'El remito quedó sin artículos y se anuló. Un borrador no mueve stock.');
+            }
+            $this->service->actualizar($remito, $request->validated(), $lineas);
         } catch (InvalidArgumentException $e) {
             return back()->withInput()->with('error', $e->getMessage());
         }
@@ -177,6 +186,7 @@ class RemitoInternoController extends Controller
         can('anular-remito-interno-facturacion-local');
 
         $remito = RemitoInterno::query()->findOrFail($id);
+        $teniaStock = (int) ($remito->movimientostock_id ?: 0) > 0;
 
         try {
             $this->service->anular($remito);
@@ -188,9 +198,13 @@ class RemitoInternoController extends Controller
             return back()->with('error', 'Error al anular: '.$e->getMessage());
         }
 
+        $mensaje = $teniaStock
+            ? 'Remito anulado. Se revirtió el movimiento de stock.'
+            : 'Borrador anulado. No tenía movimiento de stock.';
+
         return redirect()
             ->route('editar_remito_interno', $id)
-            ->with('mensaje', 'Remito anulado. Se revirtió el stock.');
+            ->with('mensaje', $mensaje);
     }
 
     public function pdf($id)
@@ -275,6 +289,7 @@ class RemitoInternoController extends Controller
     private function formData(RemitoInterno $data, bool $editable): array
     {
         $locales = LocalVenta::query()
+            ->with('deposito:id,codigo,nombre')
             ->where('activo', true)
             ->orderBy('codigo')
             ->get(['id', 'codigo', 'nombre', 'deposito_id', 'empresa_id']);

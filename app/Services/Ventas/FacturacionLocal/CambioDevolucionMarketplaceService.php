@@ -10,6 +10,7 @@ use App\Models\Ventas\LocalVenta;
 use App\Models\Ventas\Venta;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSupport;
+use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceEstadosSupport;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceLiquidacionSupport;
 use Illuminate\Http\UploadedFile;
@@ -39,6 +40,7 @@ final class CambioDevolucionMarketplaceService
             $ventaOriginal = Venta::query()->findOrFail((int) $data['venta_original_id']);
 
             $empresaId = (int) ($data['empresa_id'] ?? $local->empresa_id ?? 0);
+            $camposMotivo = $this->camposMotivo($data);
             $cambio = CambioDevolucionMarketplace::query()->create([
                 'numero' => $this->siguienteNumero(),
                 'canal' => (string) ($data['canal'] ?? CambioDevolucionMarketplaceCatalogoSupport::CANAL_TIENDANUBE),
@@ -51,7 +53,8 @@ final class CambioDevolucionMarketplaceService
                 'receptor_nombre' => $data['receptor_nombre'] ?? null,
                 'receptor_documento' => $data['receptor_documento'] ?? null,
                 'estado' => CambioDevolucionMarketplaceEstadosSupport::BORRADOR,
-                'motivo_codigo' => $data['motivo_codigo'] ?? null,
+                'motivo_devolucion_id' => $camposMotivo['motivo_devolucion_id'],
+                'motivo_codigo' => $camposMotivo['motivo_codigo'],
                 'motivo' => $data['motivo'] ?? null,
                 'observacion' => $data['observacion'] ?? null,
             ]);
@@ -85,7 +88,9 @@ final class CambioDevolucionMarketplaceService
             $cambio->cliente_id = ((int) ($data['cliente_id'] ?? 0)) ?: null;
             $cambio->receptor_nombre = $data['receptor_nombre'] ?? $cambio->receptor_nombre;
             $cambio->receptor_documento = $data['receptor_documento'] ?? $cambio->receptor_documento;
-            $cambio->motivo_codigo = $data['motivo_codigo'] ?? $cambio->motivo_codigo;
+            $camposMotivo = $this->camposMotivo($data);
+            $cambio->motivo_devolucion_id = $camposMotivo['motivo_devolucion_id'];
+            $cambio->motivo_codigo = $camposMotivo['motivo_codigo'];
             $cambio->motivo = $data['motivo'] ?? $cambio->motivo;
             $cambio->observacion = $data['observacion'] ?? $cambio->observacion;
             $cambio->save();
@@ -105,6 +110,9 @@ final class CambioDevolucionMarketplaceService
         }
         if ((int) $cambio->venta_original_id <= 0) {
             throw new InvalidArgumentException('Debe indicar la factura original.');
+        }
+        if (! MotivoDevolucionSupport::resolverDeCambio($cambio)) {
+            throw new InvalidArgumentException('Elegí un motivo de devolución activo.');
         }
 
         $cambio->estado = CambioDevolucionMarketplaceEstadosSupport::ABIERTO;
@@ -185,6 +193,10 @@ final class CambioDevolucionMarketplaceService
         }
 
         $cambio->venta_nc_id = (int) $resultado['venta_id'];
+        $ventaNc = Venta::query()->find((int) $resultado['venta_id']);
+        if ($ventaNc) {
+            app(DevolucionHistorialService::class)->registrarTiendanube($cambio, $ventaNc);
+        }
         $cambio->estado = CambioDevolucionMarketplaceEstadosSupport::NC_ORIGINAL;
         $cambio->save();
         $this->registrarEstado(
@@ -343,6 +355,20 @@ final class CambioDevolucionMarketplaceService
             'usuario_id' => Auth::id(),
             'observacion' => $observacion,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{motivo_devolucion_id:?int,motivo_codigo:?string}
+     */
+    private function camposMotivo(array $data): array
+    {
+        $motivo = MotivoDevolucionSupport::exigir((int) ($data['motivo_devolucion_id'] ?? 0));
+
+        return [
+            'motivo_devolucion_id' => (int) $motivo->id,
+            'motivo_codigo' => (string) $motivo->codigo,
+        ];
     }
 
     private function assertTransicion(CambioDevolucionMarketplace $cambio, string $hacia): void

@@ -125,6 +125,18 @@
         $totalPiezasRemito = (float) ($totalesRemito['cantidad'] ?? 0);
         $totalKilosRemito = $totalPiezasRemito;
     }
+    $facturaPdfLocalConDescuento = false;
+    if ($facturaPdfEsLocal) {
+        foreach ($itemsFactura as $itDtoLocal) {
+            if ((float) ($itDtoLocal['descuento'] ?? 0) > 0.00001) {
+                $facturaPdfLocalConDescuento = true;
+                break;
+            }
+        }
+    }
+    $formaPagoLocal = $facturaPdfEsLocal
+        ? \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfImpresionSupport::textoFormaPago((int) ($venta->id ?? 0))
+        : '';
 @endphp
 <div id="area-pdf">
     @if ($esRinFerli)
@@ -152,6 +164,7 @@
                         'mostrarTotalesFila' => $esUltima,
                         'totalesDocumento' => $totalesDocumento,
                         'facturaPdfEsLocal' => $facturaPdfEsLocal,
+                        'facturaPdfLocalConDescuento' => $facturaPdfLocalConDescuento,
                     ])
                     @if ($esUltima)
                         @include('exports.ventas.partials.formulariofactura_pie')

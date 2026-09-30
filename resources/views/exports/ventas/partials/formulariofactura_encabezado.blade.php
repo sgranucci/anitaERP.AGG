@@ -300,3 +300,10 @@
     <tr class="factura-linea-cliente-admin-fila"><td colspan="3">&nbsp;</td></tr>
 </table>
 @endif
+@if (! $esRemitoHoja && $facturaPdfEsLocal && trim((string) ($formaPagoLocal ?? '')) !== '')
+<table class="table borderless factura-forma-pago">
+    <tr>
+        <td><strong>Forma de pago:</strong> {{ $formaPagoLocal }}</td>
+    </tr>
+</table>
+@endif

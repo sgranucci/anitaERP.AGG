@@ -14,6 +14,7 @@ use App\Services\Ventas\FacturacionService;
 use App\Services\Ventas\FacturacionServiceFerli;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
+use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -113,6 +114,17 @@ final class FacturacionLocalNotaCreditoService
             return ['ok' => false, 'error' => 'El comprobante origen no es una factura de venta.'];
         }
 
+        try {
+            $motivoDevolucion = MotivoDevolucionSupport::exigir((int) ($opciones['motivo_devolucion_id'] ?? 0));
+        } catch (InvalidArgumentException $e) {
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+        $omitirReingresoStock = array_key_exists('omitir_reingreso_stock', $opciones)
+            ? (bool) $opciones['omitir_reingreso_stock']
+            : ! $motivoDevolucion->vuelve_stock;
+        $registrarHistorial = ! array_key_exists('registrar_historial', $opciones)
+            || (bool) $opciones['registrar_historial'];
+
         /** @var LocalVenta|null $local */
         $local = $emision->localVenta;
         if (! $local) {
@@ -138,6 +150,11 @@ final class FacturacionLocalNotaCreditoService
         } catch (InvalidArgumentException $e) {
             return ['ok' => false, 'error' => $e->getMessage()];
         }
+        if ($omitirReingresoStock) {
+            $payload['opciones_emision']['omitir_movimiento_stock'] = true;
+            $nItems = count($payload['articulo_ids'] ?? []);
+            $payload['omitir_stock_por_item'] = $nItems > 0 ? array_fill(0, $nItems, true) : [];
+        }
 
         $mediosForzados = $opciones['medios_forzados'] ?? null;
         $mediosPago = is_array($mediosForzados) && $mediosForzados !== []
@@ -153,6 +170,9 @@ final class FacturacionLocalNotaCreditoService
                 $mediosPago,
                 $emision,
                 $turno,
+                $motivoDevolucion,
+                $omitirReingresoStock,
+                $registrarHistorial,
             ) {
                 $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
 
@@ -165,7 +185,18 @@ final class FacturacionLocalNotaCreditoService
                 $ventaNc = $this->resolverVentaEmitida($ventaOrigen, $resultado);
 
                 $lineasStock = $this->lineasStockDesdeEmisiones($ventaOrigen);
-                $this->grabarStockLocalSiCorresponde($local, $ventaNc, $lineasStock, true);
+                if (! $omitirReingresoStock) {
+                    $this->grabarStockLocalSiCorresponde($local, $ventaNc, $lineasStock, true);
+                }
+                if ($registrarHistorial) {
+                    app(DevolucionHistorialService::class)->registrarNotaCredito(
+                        $local,
+                        $ventaNc,
+                        $ventaOrigen,
+                        $motivoDevolucion,
+                        $lineasStock,
+                    );
+                }
 
                 if ($mediosPago !== []) {
                     $this->cobranzaService->registrar($ventaNc->fresh(), $local, $mediosPago, true);

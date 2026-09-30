@@ -222,7 +222,9 @@ class FacturacionLocalFacturasController extends Controller
             $leyenda = mb_substr($leyenda, 0, 255);
         }
 
-        $resultado = $this->notaCreditoService->generarDesdeFactura($ventaId, $request, $leyenda);
+        $resultado = $this->notaCreditoService->generarDesdeFactura($ventaId, $request, $leyenda, [
+            'motivo_devolucion_id' => (int) $request->input('motivo_devolucion_id', 0),
+        ]);
 
         if ($request->expectsJson() || $request->ajax()) {
             if (! empty($resultado['ok'])) {

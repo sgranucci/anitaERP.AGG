@@ -821,6 +821,17 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/facturacion-local/parametros', 'Ventas\FacturacionLocal\FacturacionLocalParametroController@index')->name('facturacion_local_parametros');
     Route::put('ventas/facturacion-local/parametros', 'Ventas\FacturacionLocal\FacturacionLocalParametroController@actualizar')->name('actualizar_facturacion_local_parametros');
 
+    Route::get('ventas/facturacion-local/motivos-devolucion', 'Ventas\FacturacionLocal\MotivoDevolucionController@index')->name('facturacion_local_motivos_devolucion');
+    Route::get('ventas/facturacion-local/motivos-devolucion/lista/{formato?}', 'Ventas\FacturacionLocal\MotivoDevolucionController@listar')->name('lista_motivo_devolucion');
+    Route::get('ventas/facturacion-local/motivos-devolucion/crear', 'Ventas\FacturacionLocal\MotivoDevolucionController@crear')->name('crear_motivo_devolucion');
+    Route::post('ventas/facturacion-local/motivos-devolucion', 'Ventas\FacturacionLocal\MotivoDevolucionController@guardar')->name('guardar_motivo_devolucion');
+    Route::get('ventas/facturacion-local/motivos-devolucion/{id}/editar', 'Ventas\FacturacionLocal\MotivoDevolucionController@editar')->name('editar_motivo_devolucion');
+    Route::put('ventas/facturacion-local/motivos-devolucion/{id}', 'Ventas\FacturacionLocal\MotivoDevolucionController@actualizar')->name('actualizar_motivo_devolucion');
+    Route::delete('ventas/facturacion-local/motivos-devolucion/{id}', 'Ventas\FacturacionLocal\MotivoDevolucionController@eliminar')->name('eliminar_motivo_devolucion');
+
+    Route::get('ventas/facturacion-local/historial-devoluciones', 'Ventas\FacturacionLocal\HistorialDevolucionController@index')->name('facturacion_local_historial_devoluciones');
+    Route::get('ventas/facturacion-local/listar-historial-devoluciones/{formato}', 'Ventas\FacturacionLocal\HistorialDevolucionController@exportar')->name('listar_historial_devolucion');
+
     // Facturas Local (admin post-emisión)
     Route::get('ventas/facturacion-local/facturas', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@index')->name('facturacion_local_facturas')->middleware('modo.consulta');
     Route::get('ventas/facturacion-local/listar-facturas/{formato}', 'Ventas\FacturacionLocal\FacturacionLocalFacturasController@exportar')->name('listar_facturacion_local_facturas');

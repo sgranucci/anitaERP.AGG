@@ -80,7 +80,12 @@
         <td class="text-center">{{ $esRemitoHojaItems ? 'PARES' : 'CANTIDAD' }}</td>
         @if ($mostrarPrecios)
             <td class="text-right">PRECIO UNITARIO</td>
-            <td class="text-right">IMPORTE BRUTO</td>
+            @if ($facturaPdfEsLocal && ($facturaPdfLocalConDescuento ?? false))
+                <td class="text-right">DESCUENTO</td>
+                <td class="text-right">IMPORTE</td>
+            @else
+                <td class="text-right">IMPORTE BRUTO</td>
+            @endif
         @endif
     </tr>
     @foreach ($itemsPagina as $item)
@@ -97,9 +102,21 @@
                 if ($talleFerli !== '' && ! str_contains(mb_strtoupper($detalleFerli), mb_strtoupper('TALLE '.$talleFerli))) {
                     $detalleFerli = trim($detalleFerli.' Talle '.$talleFerli);
                 }
+                // El precio grabado ya tiene el dto de línea. No usar item['precio']: ese vuelve a descontar.
+                $importesLocal = \App\Support\Ventas\FacturacionLocal\FacturacionLocalPdfImpresionSupport::importesLinea(
+                    (float) ($item['preciosindescuento'] ?? 0),
+                    (float) ($item['descuento'] ?? 0),
+                    (float) ($item['cantidad'] ?? 0),
+                );
+                $precioUnitarioFerli = $importesLocal['unitario'];
+                $importeBruto = $importesLocal['importe'];
+                $montoDescuentoFerli = $importesLocal['descuento'];
+            } else {
+                $precioUnitarioFerli = (float) ($item['precio'] ?? 0);
+                $importeBruto = round((float) ($item['preciosindescuento'] ?? $item['precio'] ?? 0), 2)
+                    * round((float) ($item['cantidad'] ?? 0), 2);
+                $montoDescuentoFerli = 0.0;
             }
-            $importeBruto = round((float) ($item['preciosindescuento'] ?? $item['precio'] ?? 0), 2)
-                * round((float) ($item['cantidad'] ?? 0), 2);
         @endphp
         <tr>
             <td>{{ $item['sku'] ?? '' }}</td>
@@ -111,7 +128,14 @@
             </td>
             <td class="text-center">{{ number_format((float) ($item['cantidad'] ?? 0), $decCant) }}</td>
             @if ($mostrarPrecios)
-                <td class="text-right">{{ number_format((float) ($item['precio'] ?? 0), 2) }}</td>
+                <td class="text-right">{{ number_format($precioUnitarioFerli, 2) }}</td>
+                @if ($facturaPdfEsLocal && ($facturaPdfLocalConDescuento ?? false))
+                    <td class="text-right">
+                        @if ($montoDescuentoFerli > 0.00001)
+                            {{ number_format($montoDescuentoFerli, 2) }}
+                        @endif
+                    </td>
+                @endif
                 <td class="text-right">{{ number_format($importeBruto, 2) }}</td>
             @endif
         </tr>
@@ -128,6 +152,9 @@
             </td>
             @if ($mostrarPrecios)
                 <td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
+                @if ($facturaPdfEsLocal && ($facturaPdfLocalConDescuento ?? false))
+                    <td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
+                @endif
                 <td style="{{ $facturaPdfCeldaTotales }}">&nbsp;</td>
             @endif
         </tr>

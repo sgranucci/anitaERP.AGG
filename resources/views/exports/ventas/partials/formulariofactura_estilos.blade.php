@@ -41,6 +41,7 @@
         font-weight: bold;
     }
     .factura-pie-leyendas { font-size: 9px; }
+    table.factura-forma-pago { margin: 0; font-size: 12px; }
     .factura-leyenda { font-size: 11px; margin: 4px 0 0 0; }
     table.tabla-items-factura {
         border-collapse: collapse;

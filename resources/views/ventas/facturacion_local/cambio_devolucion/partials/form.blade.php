@@ -157,21 +157,33 @@
             </div>
         </div>
 
+        @php
+            $motivoSel = (int) old('motivo_devolucion_id', $data->motivo_devolucion_id ?? 0);
+        @endphp
         <div class="form-group row">
             <label class="col-lg-4 control-label text-right pr-2">Motivo</label>
-            <div class="col-lg-3">
-                <select name="motivo_codigo" class="form-control" {{ $ro ? 'disabled' : '' }}>
-                    <option value="">—</option>
-                    @foreach ($motivos as $mKey => $mLabel)
-                        <option value="{{ $mKey }}" {{ old('motivo_codigo', $data->motivo_codigo) === $mKey ? 'selected' : '' }}>{{ $mLabel }}</option>
+            <div class="col-lg-4">
+                <select name="motivo_devolucion_id" id="cdm-motivo" class="form-control" {{ $ro ? 'disabled' : '' }} required>
+                    <option value="">Elegí el motivo…</option>
+                    @foreach ($motivos as $motivo)
+                        @php
+                            $selMotivo = $motivoSel === (int) $motivo['id']
+                                || ($motivoSel === 0 && (string) ($data->motivo_codigo ?? '') === (string) $motivo['codigo']);
+                        @endphp
+                        <option value="{{ $motivo['id'] }}" data-vuelve="{{ $motivo['vuelve_stock'] ? '1' : '0' }}" {{ $selMotivo ? 'selected' : '' }}>
+                            {{ $motivo['nombre'] }} — {{ $motivo['vuelve_stock'] ? 'vuelve al stock' : 'no entra al stock' }}
+                        </option>
                     @endforeach
                 </select>
                 @if ($ro)
-                    <input type="hidden" name="motivo_codigo" value="{{ $data->motivo_codigo }}">
+                    <input type="hidden" name="motivo_devolucion_id" value="{{ $motivoSel ?: ($data->motivo_devolucion_id ?? '') }}">
                 @endif
+                <small class="text-muted d-block mt-1" id="cdm-motivo-ayuda">
+                    El motivo define si el par ingresa al stock vendible al emitir la nota de crédito. Queda registrado en el historial.
+                </small>
             </div>
-            <div class="col-lg-4">
-                <input type="text" name="motivo" class="form-control" placeholder="Detalle motivo"
+            <div class="col-lg-3">
+                <input type="text" name="motivo" class="form-control" placeholder="Detalle"
                        value="{{ old('motivo', $data->motivo) }}" {{ $ro ? 'readonly' : '' }}>
             </div>
         </div>

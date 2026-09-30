@@ -15,6 +15,7 @@ use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalReceptorSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
+use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,9 @@ final class FacturacionLocalEmisionService
 
         $lineas = $input['lineas'] ?? [];
         $split = FacturacionLocalSplitFacNcSupport::partir($lineas);
+        if ($split['tiene_nc'] && empty($input['es_ticket_regalo'])) {
+            $split['nc'] = MotivoDevolucionSupport::anotarLineas($split['nc']);
+        }
         $medios = $input['medios_pago'] ?? [];
         $esRegalo = ! empty($input['es_ticket_regalo']);
 
@@ -159,6 +163,13 @@ final class FacturacionLocalEmisionService
 
                 if ($split['tiene_nc']) {
                     $payloadNc = $this->armarPayload($local, $split['nc'], $input, true, false, $receptorResuelto);
+                    $lineasSinStock = array_values(array_filter(
+                        $split['nc'],
+                        static fn (array $linea): bool => ! empty($linea['omitir_stock'])
+                    ));
+                    if ($lineasSinStock !== [] && count($lineasSinStock) === count($split['nc'])) {
+                        $payloadNc['opciones_emision']['omitir_movimiento_stock'] = true;
+                    }
                     if ($ventaFac) {
                         // venta_id = FAC origen → asiento invertido + CbteAsoc ARCA.
                         $payloadNc['venta_id'] = $ventaFac->id;
@@ -173,7 +184,14 @@ final class FacturacionLocalEmisionService
                     }
                     $ventaNc = Venta::query()->find((int) ($resultadoNc['venta_id'] ?? 0));
                     if ($ventaNc) {
-                        $this->grabarStockLocalSiCorresponde($local, $ventaNc, $split['nc'], true);
+                        $lineasReingreso = array_values(array_filter(
+                            $split['nc'],
+                            static fn (array $linea): bool => empty($linea['omitir_stock'])
+                        ));
+                        if ($lineasReingreso !== []) {
+                            $this->grabarStockLocalSiCorresponde($local, $ventaNc, $lineasReingreso, true);
+                        }
+                        app(DevolucionHistorialService::class)->registrarPos($local, $ventaNc, $ventaFac, $split['nc']);
                     }
                     if (is_array($resultadoNc['cae_pendiente'] ?? null)) {
                         $caePendientes[] = $resultadoNc['cae_pendiente'];
@@ -330,6 +348,7 @@ final class FacturacionLocalEmisionService
         $combinacionIds = [];
         $talleIds = [];
         $colorIds = [];
+        $omitirStockPorItem = [];
 
         foreach ($lineas as $linea) {
             $articuloIds[] = (int) $linea['articulo_id'];
@@ -345,6 +364,7 @@ final class FacturacionLocalEmisionService
             $combinacionIds[] = (int) ($linea['combinacion_id'] ?? 0);
             $talleIds[] = (int) ($linea['talle_id'] ?? 0);
             $colorIds[] = (int) ($linea['color_id'] ?? 0);
+            $omitirStockPorItem[] = ! empty($linea['omitir_stock']);
         }
 
         $clienteId = (int) ($receptorResuelto['cliente_id'] ?? 0);
@@ -403,6 +423,7 @@ final class FacturacionLocalEmisionService
             'arca_receptor' => $receptorResuelto['arca_receptor'],
             'venta_receptor' => $receptorResuelto['venta_receptor'],
             '_descuentos_linea_item' => $descuentos,
+            'omitir_stock_por_item' => $omitirStockPorItem,
         ];
 
         if (! empty($receptorResuelto['omitir_percepciones'])) {

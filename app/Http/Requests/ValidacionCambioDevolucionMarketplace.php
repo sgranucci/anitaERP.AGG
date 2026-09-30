@@ -27,7 +27,7 @@ class ValidacionCambioDevolucionMarketplace extends FormRequest
             'cliente_id' => 'nullable|integer|exists:cliente,id',
             'receptor_nombre' => 'nullable|string|max:120',
             'receptor_documento' => 'nullable|string|max:30',
-            'motivo_codigo' => ['nullable', Rule::in(array_keys(CambioDevolucionMarketplaceCatalogoSupport::MOTIVOS))],
+            'motivo_devolucion_id' => 'required|integer|exists:motivo_devolucion,id',
             'motivo' => 'nullable|string|max:255',
             'observacion' => 'nullable|string',
             'lineas' => 'nullable|array',

@@ -53,6 +53,7 @@
     var btnConfirmarText = document.getElementById('fd-nc-confirmar-text');
     var btnConfirmarIcono = document.getElementById('fd-nc-confirmar-icono');
     var inputLeyenda = document.getElementById('fd-nc-leyenda');
+    var selectMotivo = document.getElementById('fd-nc-motivo');
     var textoCompro = document.getElementById('fd-nc-compro');
     var overlay = document.getElementById('fd-nc-procesando-overlay');
     var overlayDetalle = document.getElementById('fd-nc-procesando-detalle');
@@ -117,6 +118,7 @@
         if (btnCancelar) btnCancelar.disabled = activo;
         if (btnCerrarX) btnCerrarX.style.visibility = activo ? 'hidden' : '';
         if (inputLeyenda) inputLeyenda.disabled = activo;
+        if (selectMotivo) selectMotivo.disabled = activo;
         if (btnConfirmarText) btnConfirmarText.textContent = activo ? 'Procesando…' : 'Generar nota de crédito';
         if (btnConfirmarIcono) {
             btnConfirmarIcono.classList.toggle('fa-undo', !activo);
@@ -144,6 +146,7 @@
             estado.btnDisparador = btn;
             if (textoCompro) textoCompro.textContent = codigo || ('#' + ventaId);
             if (inputLeyenda) inputLeyenda.value = '';
+            if (selectMotivo) selectMotivo.value = '';
             setProcesando(false);
             if (typeof $ !== 'undefined' && modalEl) {
                 $('#modal-fd-generar-nc').one('shown.bs.modal', function () {
@@ -160,9 +163,16 @@
         var ventaId = estado.ventaId;
         var btn = estado.btnDisparador;
         if (!ventaId) return;
+        var motivoId = selectMotivo ? String(selectMotivo.value || '') : '';
+        if (!motivoId) {
+            if (typeof toastr !== 'undefined') toastr.warning('Elegí el motivo de la devolución.');
+            else alert('Elegí el motivo de la devolución.');
+            if (selectMotivo) selectMotivo.focus();
+            return;
+        }
         if (btn) btn.disabled = true;
         setProcesando(true);
-        var payload = { leyenda: leyenda || '' };
+        var payload = { leyenda: leyenda || '', motivo_devolucion_id: motivoId };
         postNotaCreditoBody(ventaId, token, payload)
             .then(function (res) {
                 if (res.status === 419) {

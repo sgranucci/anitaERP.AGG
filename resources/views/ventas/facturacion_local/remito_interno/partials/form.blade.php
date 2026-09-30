@@ -34,6 +34,15 @@
         ];
     }
     $ro = ! ($editable ?? true);
+    $depositoTxt = trim((($data->deposito->codigo ?? '').' — '.($data->deposito->nombre ?? '')), ' —');
+    if ($depositoTxt === '' && ($data->local_venta_id ?? null)) {
+        foreach ($locales as $locDep) {
+            if ((int) $locDep->id === (int) $data->local_venta_id && $locDep->deposito) {
+                $depositoTxt = trim(($locDep->deposito->codigo ?? '').' — '.($locDep->deposito->nombre ?? ''), ' —');
+                break;
+            }
+        }
+    }
 @endphp
 
 @include('includes.tabs-activas-estilos')
@@ -84,6 +93,7 @@
                         <option value="{{ $loc->id }}"
                             data-empresa="{{ $loc->empresa_id }}"
                             data-deposito="{{ $loc->deposito_id }}"
+                            data-deposito-label="{{ trim(($loc->deposito->codigo ?? '').' — '.($loc->deposito->nombre ?? ''), ' —') }}"
                             {{ (int) old('local_venta_id', $data->local_venta_id) === (int) $loc->id ? 'selected' : '' }}>
                             {{ $loc->codigo }} — {{ $loc->nombre }}
                         </option>
@@ -92,9 +102,28 @@
                 @if ($ro)
                     <input type="hidden" name="local_venta_id" value="{{ $data->local_venta_id }}">
                 @endif
-                <small class="form-text text-muted">El depósito de salida es el del local.</small>
             </div>
         </div>
+
+        <div class="form-group row">
+            <label class="col-lg-4 control-label text-right pr-2" for="ri-deposito">Depósito</label>
+            <div class="col-lg-6">
+                <input type="text" id="ri-deposito" class="form-control" readonly
+                       value="{{ $depositoTxt }}"
+                       placeholder="Se toma del local">
+                <small class="form-text text-muted">Salida de stock de este depósito. Se graba al confirmar el remito.</small>
+            </div>
+        </div>
+
+        @if ($data->movimientostock_id)
+            <div class="form-group row">
+                <label class="col-lg-4 control-label text-right pr-2">Mov. stock</label>
+                <div class="col-lg-6">
+                    <input type="text" class="form-control" readonly
+                           value="#{{ $data->movimientostock_id }}{{ $data->movimientoStock ? ' — '.$data->movimientoStock->codigo : '' }}">
+                </div>
+            </div>
+        @endif
 
         <div class="form-group row">
             <label class="col-lg-4 control-label text-right pr-2" for="destinatario">Destinatario</label>

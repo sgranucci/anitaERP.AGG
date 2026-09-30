@@ -237,7 +237,25 @@
         }
     }
 
+    function refrescarDeposito() {
+        var sel = document.getElementById('local_venta_id');
+        var out = document.getElementById('ri-deposito');
+        if (!sel || !out || sel.disabled) {
+            return;
+        }
+        var opt = sel.options[sel.selectedIndex];
+        out.value = opt ? (opt.getAttribute('data-deposito-label') || '') : '';
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        var selLocal = document.getElementById('local_venta_id');
+        if (selLocal && !selLocal.disabled) {
+            selLocal.addEventListener('change', refrescarDeposito);
+            if (!document.getElementById('ri-deposito').value) {
+                refrescarDeposito();
+            }
+        }
+
         var tbody = document.getElementById('ri-lineas-tbody');
         var btnAdd = document.getElementById('ri-agregar-linea');
         var tpl = document.getElementById('ri-template-linea');
@@ -247,20 +265,8 @@
             tbody.addEventListener('click', function (ev) {
                 var btn = ev.target.closest('.ri-quitar-linea');
                 if (!btn) return;
-                var rows = tbody.querySelectorAll('.ri-linea-row');
                 var row = btn.closest('tr');
                 if (!row) return;
-                if (rows.length <= 1) {
-                    row.querySelectorAll('input').forEach(function (inp) {
-                        if (inp.classList.contains('ri-cantidad')) {
-                            inp.value = '1';
-                        } else if (!inp.type || inp.type === 'text' || inp.type === 'hidden' || inp.type === 'number') {
-                            if (!inp.classList.contains('ri-cantidad')) inp.value = '';
-                        }
-                    });
-                    limpiarVariantes(row);
-                    return;
-                }
                 row.remove();
                 reindexLineas();
             });

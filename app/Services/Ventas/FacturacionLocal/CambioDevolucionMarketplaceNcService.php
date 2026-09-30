@@ -5,6 +5,7 @@ namespace App\Services\Ventas\FacturacionLocal;
 use App\Models\Ventas\CambioDevolucionMarketplace;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplacePuenteSupport;
+use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -35,6 +36,11 @@ final class CambioDevolucionMarketplaceNcService
             return ['ok' => false, 'error' => 'Factura original inexistente.'];
         }
 
+        $motivo = MotivoDevolucionSupport::resolverDeCambio($cambio);
+        if (! $motivo) {
+            return ['ok' => false, 'error' => 'Elegí un motivo de devolución activo antes de emitir la nota de crédito.'];
+        }
+
         $total = abs((float) $venta->total);
         try {
             $medios = CambioDevolucionMarketplacePuenteSupport::medioPagoUnico($total);
@@ -49,6 +55,9 @@ final class CambioDevolucionMarketplaceNcService
             [
                 'medios_forzados' => $medios,
                 'local_venta_id' => (int) $cambio->local_venta_id,
+                'motivo_devolucion_id' => (int) $motivo->id,
+                'omitir_reingreso_stock' => ! $motivo->vuelve_stock,
+                'registrar_historial' => false,
             ]
         );
 

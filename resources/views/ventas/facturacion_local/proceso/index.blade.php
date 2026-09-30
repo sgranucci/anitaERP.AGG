@@ -18,6 +18,7 @@ window.FL_POS = {
     efectivoId: {{ (int) ($local->cuentacaja_efectivo_id ?? 0) }},
     empresaId: {{ (int) ($empresaIdPos ?? 0) }},
     contexto: @json($contextoPos ?? []),
+    motivos: @json($motivosDevolucion ?? []),
     urls: {
         pos: @json(route('facturacion_local_pos')),
         buscar: @json(url('ventas/facturacion-local/api/buscar-articulo')),
@@ -174,6 +175,8 @@ window.FACTURACION_LOCAL = {
                             <th>Cant.</th>
                             <th>Precio</th>
                             <th>Dto%</th>
+                            <th>Dto $</th>
+                            <th>Motivo devolución</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -185,7 +188,7 @@ window.FACTURACION_LOCAL = {
                 <small id="fl-totales-detalle">FAC 0 · NC 0</small>
             </div>
             <p class="fl-keys">
-                Cantidad negativa = devolución (NC). Neto 0 → $0,01 ARCA. Neto negativo → NC completa afuera.
+                Cantidad negativa = devolución (NC): elegí el motivo. Si el motivo no repone, el par no entra al stock. Dto $ resta pesos exactos (redondeo); no lo conviertas a un % periódico. Neto 0 → $0,01 ARCA. Neto negativo → NC completa afuera.
                 <kbd>F1</kbd> consulta art. · <kbd>F2</kbd> cobrar · <kbd>F3</kbd> stock/precios · <kbd>F8</kbd> ticket regalo · <kbd>Esc</kbd> limpia
             </p>
         </div>

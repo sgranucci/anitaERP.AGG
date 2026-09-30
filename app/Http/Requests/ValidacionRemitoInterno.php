@@ -11,6 +11,21 @@ class ValidacionRemitoInterno extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $lineas = [];
+        foreach ($this->input('lineas', []) as $linea) {
+            if (! is_array($linea)) {
+                continue;
+            }
+            if ((int) ($linea['articulo_id'] ?? 0) <= 0) {
+                continue;
+            }
+            $lineas[] = $linea;
+        }
+        $this->merge(['lineas' => $lineas]);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -22,7 +37,7 @@ class ValidacionRemitoInterno extends FormRequest
             'destinatario' => 'nullable|string|max:160',
             'leyenda' => 'nullable|string|max:255',
             'observacion' => 'nullable|string|max:2000',
-            'lineas' => 'required|array|min:1',
+            'lineas' => $this->isMethod('post') ? 'required|array|min:1' : 'nullable|array',
             'lineas.*.id' => 'nullable|integer',
             'lineas.*.articulo_id' => 'required|integer|exists:articulo,id',
             'lineas.*.articulo_codigo' => 'nullable|string|max:40',
