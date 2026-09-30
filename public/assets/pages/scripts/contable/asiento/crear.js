@@ -67,10 +67,7 @@
 		});
 
 		$(document).on('click', '.asiento-abrir-detalle', function () {
-			ptrAsientoDetalleLineaRow = $(this).closest('tr.item-cuenta');
-			var v = ptrAsientoDetalleLineaRow.find('.asiento-ta-detalle').val() || '';
-			$('#asiento_detalle_linea_editor').val(v);
-			$('#modalAsientoDetalleLinea').modal('show');
+			abrirDetalleLineaAsiento($(this).closest('tr.item-cuenta'));
 		});
 
 		$('#modalAsientoDetalleLinea').on('shown.bs.modal', function () {
@@ -78,21 +75,61 @@
 		});
 
 		$(document).on('click', '#asiento_detalle_linea_guardar', function () {
-			if (!ptrAsientoDetalleLineaRow || !ptrAsientoDetalleLineaRow.length) {
-				return;
-			}
-			var texto = $('#asiento_detalle_linea_editor').val() || '';
-			var esPrimera = ptrAsientoDetalleLineaRow.is($('#tbody-cuenta-table tr.item-cuenta').first());
-			ptrAsientoDetalleLineaRow.find('.asiento-ta-detalle').val(texto);
-			asientoRefreshDetallePreview(ptrAsientoDetalleLineaRow);
-			if (esPrimera) {
-				asientoPropagarDetallePrimeraLinea(texto);
-			}
-			$('#modalAsientoDetalleLinea').modal('hide');
+			guardarDetalleLineaAsiento(false);
 		});
+
+		predefinirMonedaPrimeraLinea();
+		activarTecladoAsientoForm();
+		enfocarInicioAsientoForm();
     });
 
 	var ptrAsientoDetalleLineaRow = null;
+	var asientoDetalleIgnorarEnterHasta = 0;
+
+	function abrirDetalleLineaAsiento($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		ptrAsientoDetalleLineaRow = $tr;
+		asientoDetalleIgnorarEnterHasta = Date.now() + 400;
+		$('#asiento_detalle_linea_editor').val($tr.find('.asiento-ta-detalle').val() || '');
+		$('#modalAsientoDetalleLinea').modal('show');
+	}
+
+	function seguirLineaTrasOrdenCompraAsiento($tr) {
+		var $siguiente = $tr.next('tr.item-cuenta');
+		if ($siguiente.length) {
+			enfocarCampoAsientoForm($siguiente.find('.codigocuentacontable').get(0));
+			return;
+		}
+		agregaRenglonCuenta({ preventDefault: function () {} });
+	}
+
+	function guardarDetalleLineaAsiento(continuar) {
+		if (!ptrAsientoDetalleLineaRow || !ptrAsientoDetalleLineaRow.length) {
+			return;
+		}
+		var $tr = ptrAsientoDetalleLineaRow;
+		var texto = $('#asiento_detalle_linea_editor').val() || '';
+		var esPrimera = $tr.is($('#tbody-cuenta-table tr.item-cuenta').first());
+		$tr.find('.asiento-ta-detalle').val(texto);
+		asientoRefreshDetallePreview($tr);
+		if (esPrimera) {
+			asientoPropagarDetallePrimeraLinea(texto);
+		}
+		$('#modalAsientoDetalleLinea').one('hidden.bs.modal.asientoDetalle', function () {
+			if (!continuar) {
+				return;
+			}
+			var comp = $tr.find('.comprobante-linea').get(0);
+			if (comp) {
+				enfocarCampoAsientoForm(comp);
+				return;
+			}
+			seguirLineaTrasOrdenCompraAsiento($tr);
+		});
+		$('#modalAsientoDetalleLinea').modal('hide');
+	}
 
 	function asientoRefreshDetallePreview($row) {
 		var t = (($row.find('.asiento-ta-detalle').val() || '') + '').trim();
@@ -234,8 +271,10 @@
 		return ok;
 	}
 
-    function agregaRenglonCuenta(){
-    	event.preventDefault();
+    function agregaRenglonCuenta(ev){
+    	if (ev && ev.preventDefault) {
+    		ev.preventDefault();
+    	}
     	let renglon = $('#template-renglon-cuenta').html();
 		let $primera = $("#tbody-cuenta-table tr.item-cuenta").first();
 		let monedaDefault = $primera.find('.moneda').val();
@@ -248,6 +287,9 @@
 
 		// Asigna default de moneda y detalle (leyenda 1ª línea)
 		$nuevo.find('.moneda').val(monedaDefault);
+		if ($nuevo.is($('#tbody-cuenta-table tr.item-cuenta').first())) {
+			predefinirMonedaPrimeraLinea();
+		}
 		if ((detalleDefault || '').trim().length) {
 			$nuevo.find('.asiento-ta-detalle').val(detalleDefault);
 		}
@@ -262,6 +304,8 @@
 		if (window.AsientoMontosFormato) {
 			AsientoMontosFormato.initEnContenedor($nuevo);
 		}
+
+		enfocarCampoAsientoForm($nuevo.find('.codigocuentacontable').get(0));
     }
 
     function borraRenglonCuenta(event) {
@@ -376,7 +420,7 @@
 		asegurarOpcionCentroCosto($sel, valorPrev);
 
 		if (!cuentacontable_id) {
-			return;
+			return $.Deferred().resolve().promise();
 		}
 
 		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
@@ -385,7 +429,7 @@
 			url_cta += '?incluir=' + ccIncluir;
 		}
 
-		$.get(url_cta, function(data){
+		return $.get(url_cta, function(data){
 			if (data === "No maneja centro de costo" || data === "Cuenta inexistente")
 			{
 				$tr.attr('data-manejaccosto', 'N');
@@ -560,6 +604,395 @@
 
 		$("#totaldebe").val(formateaMontoTotal(totDebe));
 		$("#totalhaber").val(formateaMontoTotal(totHaber));
+	}
+
+	function esTeclaEnterAsientoForm(e) {
+		return e && (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13);
+	}
+
+	function enfocarCampoAsientoForm(el) {
+		if (!el) {
+			return;
+		}
+		setTimeout(function () {
+			var $el = $(el);
+			if ($el.hasClass('select2-hidden-accessible')) {
+				var $sel = $el.next('.select2-container').find('.select2-selection').first();
+				if ($sel.length) {
+					$sel.trigger('focus');
+					return;
+				}
+			}
+			el.focus();
+			if (typeof el.select === 'function' && el.tagName === 'INPUT' && el.type !== 'hidden') {
+				el.select();
+			}
+		}, 0);
+	}
+
+	function modalAsientoFormAbierto() {
+		return $('.modal.show, .modal.in').filter(':visible').length > 0;
+	}
+
+	function centrocostoAsientoFormRequiereEleccion($tr) {
+		if (String($tr.attr('data-manejaccosto') || '') === 'N') {
+			return false;
+		}
+		var $cc = $tr.find('.centrocosto');
+		if (!$cc.length || $cc.prop('disabled') || $cc.prop('readonly')) {
+			return false;
+		}
+		return $cc.find('option').filter(function () {
+			var v = String(this.value || '').trim();
+			return v !== '' && v !== '0';
+		}).length > 0;
+	}
+
+	function camposNavAsientoForm($tr) {
+		var out = [];
+		['.codigocuentacontable', '.centrocosto', '.moneda', '.cotizacion', '.debe', '.haber'].forEach(function (sel) {
+			var el = $tr.find(sel).get(0);
+			if (!el || el.disabled) {
+				return;
+			}
+			if (el.readOnly && !$(el).hasClass('codigocuentacontable')) {
+				return;
+			}
+			if ($(el).hasClass('centrocosto') && !centrocostoAsientoFormRequiereEleccion($tr)) {
+				return;
+			}
+			out.push(el);
+		});
+		return out;
+	}
+
+	function predefinirMonedaPrimeraLinea() {
+		var $primera = $('#tbody-cuenta-table tr.item-cuenta').first();
+		var $moneda = $primera.find('.moneda');
+		if (!$moneda.length || String($moneda.val() || '').trim() !== '') {
+			return;
+		}
+		if (!$moneda.find('option[value="1"]').length) {
+			return;
+		}
+		$moneda.val('1');
+		if ($moneda.hasClass('select2-hidden-accessible')) {
+			$moneda.trigger('change.select2');
+		}
+		leeCotizacion($moneda);
+	}
+
+	function enfocarSiguienteTrasCuentaAsientoForm($tr) {
+		if (centrocostoAsientoFormRequiereEleccion($tr)) {
+			enfocarCampoAsientoForm($tr.find('.centrocosto').get(0));
+			return;
+		}
+		var $moneda = $tr.find('.moneda');
+		var moneda = $moneda.get(0);
+		if (moneda && !moneda.disabled) {
+			if ($tr.is($('#tbody-cuenta-table tr.item-cuenta').first())) {
+				predefinirMonedaPrimeraLinea();
+			}
+			enfocarCampoAsientoForm(moneda);
+			return;
+		}
+		enfocarCampoAsientoForm($tr.find('.debe').get(0));
+	}
+
+	window.asientoEnfocarSiguienteTrasCuenta = function ($tr) {
+		if ($tr && $tr.length && $tr.closest('#cuenta-table').length) {
+			enfocarSiguienteTrasCuentaAsientoForm($tr);
+		}
+	};
+
+	function avanzarCampoAsientoForm(actual) {
+		var $tr = $(actual).closest('tr.item-cuenta');
+		if (!$tr.length) {
+			return;
+		}
+		if ($(actual).hasClass('debe')) {
+			var debe = parseMonto(actual.value);
+			var haber = parseMonto($tr.find('.haber').val());
+			if (debe > 0.009 || haber > 0.009) {
+				abrirDetalleLineaAsiento($tr);
+				return;
+			}
+		}
+		var campos = camposNavAsientoForm($tr);
+		var idx = campos.indexOf(actual);
+		if (idx >= 0 && idx < campos.length - 1) {
+			enfocarCampoAsientoForm(campos[idx + 1]);
+			return;
+		}
+		var $siguiente = $tr.next('tr.item-cuenta');
+		if ($siguiente.length) {
+			enfocarCampoAsientoForm($siguiente.find('.codigocuentacontable').get(0));
+			return;
+		}
+		agregaRenglonCuenta({ preventDefault: function () {} });
+	}
+
+	function limpiarLineaAsientoForm($tr) {
+		$tr.find('.cuentacontable_id, .cuentacontable_id_previa, .codigocuentacontable, .codigo_previo, .nombrecuentacontable, .debe, .haber').val('');
+		$tr.find('.asiento-ta-detalle').val('');
+		asientoRefreshDetallePreview($tr);
+		if (typeof actualizarLinkEditarCuentaContable === 'function') {
+			actualizarLinkEditarCuentaContable($tr, 0);
+		}
+		sumaMonto();
+	}
+
+	function borrarLineaAsientoForm($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var $filas = $('#tbody-cuenta-table tr.item-cuenta');
+		if ($filas.length <= 1) {
+			limpiarLineaAsientoForm($tr);
+			enfocarCampoAsientoForm($tr.find('.codigocuentacontable').get(0));
+			return;
+		}
+		var $prev = $tr.prev('tr.item-cuenta');
+		var $sig = $tr.next('tr.item-cuenta');
+		$tr.remove();
+		actualizaRenglonesCuenta();
+		sumaMonto();
+		var $foco = $prev.length ? $prev : $sig;
+		if ($foco.length) {
+			enfocarCampoAsientoForm($foco.find('.codigocuentacontable').get(0));
+		}
+	}
+
+	window.asientoBorrarUltimaLineaSiCuentaVacia = function () {
+		var $ultima = $('#tbody-cuenta-table tr.item-cuenta').last();
+		if (!$ultima.length) {
+			return false;
+		}
+		var codigo = $.trim($ultima.find('.codigocuentacontable').val() || '');
+		var cuentaId = parseInt($ultima.find('.cuentacontable_id').val() || '0', 10) || 0;
+		if (codigo !== '' || cuentaId > 0) {
+			return false;
+		}
+		borrarLineaAsientoForm($ultima);
+		return true;
+	};
+
+	function lineaAsientoFormTieneImporte($tr) {
+		return parseMonto($tr.find('.debe').val()) > 0.009 || parseMonto($tr.find('.haber').val()) > 0.009;
+	}
+
+	function manejarEnterCampoAsientoForm(target) {
+		var $t = $(target);
+		var $tr = $t.closest('tr.item-cuenta');
+
+		if ($t.hasClass('codigocuentacontable')) {
+			var codigo = $.trim($t.val() || '');
+			if (codigo === '') {
+				borrarLineaAsientoForm($tr);
+				return;
+			}
+			$t.data('cta-enter-procesado', 1);
+			if (typeof resolverPorCodigoCuentaContable !== 'function') {
+				enfocarSiguienteTrasCuentaAsientoForm($tr);
+				return;
+			}
+			resolverPorCodigoCuentaContable(codigo, $tr, function (ok) {
+				if (ok) {
+					enfocarSiguienteTrasCuentaAsientoForm($tr);
+					return;
+				}
+				$t.removeData('cta-enter-procesado');
+				enfocarCampoAsientoForm($t.get(0));
+			});
+			return;
+		}
+
+		if ($t.hasClass('centrocosto')) {
+			var cc = String($t.val() || '').trim();
+			if (centrocostoAsientoFormRequiereEleccion($tr) && (cc === '' || cc === '0')) {
+				alert('Seleccione el centro de costo');
+				enfocarCampoAsientoForm(target);
+				return;
+			}
+			avanzarCampoAsientoForm(target);
+			return;
+		}
+
+		if ($t.hasClass('moneda')) {
+			if (!String($t.val() || '').trim()) {
+				alert('Seleccione la moneda');
+				enfocarCampoAsientoForm(target);
+				return;
+			}
+			avanzarCampoAsientoForm(target);
+			return;
+		}
+
+		if ($t.hasClass('debe') || $t.hasClass('haber')) {
+			if (parseMonto($t.val()) < -0.000001) {
+				alert('El importe no puede ser negativo');
+				enfocarCampoAsientoForm(target);
+				return;
+			}
+			sumaMonto();
+		}
+
+		if ($t.hasClass('haber')) {
+			if (!lineaAsientoFormTieneImporte($tr)) {
+				alert('Ingrese un importe en el Debe o en el Haber');
+				enfocarCampoAsientoForm($tr.find('.debe').get(0) || target);
+				return;
+			}
+			abrirDetalleLineaAsiento($tr);
+			return;
+		}
+
+		if ($t.hasClass('comprobante-linea')) {
+			var textoComp = $.trim($t.val() || '');
+			if (textoComp !== '' && !/\d/.test(textoComp)) {
+				alert('El comprobante tiene que incluir el número. Ejemplo: FC A0001-123');
+				enfocarCampoAsientoForm(target);
+				return;
+			}
+			var oc = $tr.find('.ordencompra-linea').get(0);
+			if (oc) {
+				enfocarCampoAsientoForm(oc);
+				return;
+			}
+			seguirLineaTrasOrdenCompraAsiento($tr);
+			return;
+		}
+
+		if ($t.hasClass('ordencompra-linea')) {
+			seguirLineaTrasOrdenCompraAsiento($tr);
+			return;
+		}
+
+		avanzarCampoAsientoForm(target);
+	}
+
+	function campoLogicoAsientoForm(target) {
+		if (!target || !target.closest) {
+			return null;
+		}
+		var $t = $(target);
+		var $container = $t.closest('.select2-container');
+		if ($container.length) {
+			if ($container.hasClass('select2-container--open')) {
+				return null;
+			}
+			var sel = $container.prev('select').get(0);
+			if (!sel) {
+				return null;
+			}
+			if (sel.id === 'empresa_id' || sel.id === 'tipoasiento_id' || $(sel).closest('#cuenta-table').length) {
+				return sel;
+			}
+			return null;
+		}
+		if ($t.is('#empresa_id, #tipoasiento_id, #fecha, #observacion')) {
+			return target;
+		}
+		if ($t.closest('#cuenta-table').length && $t.is('.codigocuentacontable, .centrocosto, .moneda, .debe, .haber, .cotizacion, .comprobante-linea, .ordencompra-linea')) {
+			return target;
+		}
+		return null;
+	}
+
+	function empresaAsientoPermiteElegir() {
+		var el = document.getElementById('empresa_id');
+		return !!(el && el.tagName === 'SELECT' && !el.disabled);
+	}
+
+	function enfocarInicioAsientoForm() {
+		var destino = empresaAsientoPermiteElegir()
+			? document.getElementById('empresa_id')
+			: document.getElementById('tipoasiento_id');
+		setTimeout(function () {
+			enfocarCampoAsientoForm(destino);
+		}, 50);
+	}
+
+	function avanzarCabeceraAsientoForm(el) {
+		var orden = ['empresa_id', 'tipoasiento_id', 'fecha', 'observacion'];
+		var idx = orden.indexOf(el.id);
+		if (idx < 0) {
+			return;
+		}
+		var i;
+		for (i = idx + 1; i < orden.length; i++) {
+			var sig = document.getElementById(orden[i]);
+			if (sig && !sig.disabled) {
+				enfocarCampoAsientoForm(sig);
+				return;
+			}
+		}
+		enfocarCampoAsientoForm($('#tbody-cuenta-table tr.item-cuenta').first().find('.codigocuentacontable').get(0));
+	}
+
+	function activarTecladoAsientoForm() {
+		if (window.__asientoFormTecladoActivo) {
+			return;
+		}
+		window.__asientoFormTecladoActivo = true;
+
+		document.addEventListener('keydown', function (e) {
+			if (!esTeclaEnterAsientoForm(e)) {
+				return;
+			}
+			if (e.target && e.target.id === 'asiento_detalle_linea_editor') {
+				if (Date.now() < asientoDetalleIgnorarEnterHasta) {
+					e.preventDefault();
+					return;
+				}
+				e.preventDefault();
+				e.stopPropagation();
+				if (typeof e.stopImmediatePropagation === 'function') {
+					e.stopImmediatePropagation();
+				}
+				guardarDetalleLineaAsiento(true);
+				return;
+			}
+			if (modalAsientoFormAbierto()) {
+				return;
+			}
+			if (!$('#cuenta-table').length) {
+				return;
+			}
+			var campo = campoLogicoAsientoForm(e.target);
+			if (!campo || campo.disabled) {
+				return;
+			}
+			if (campo.readOnly && !$(campo).hasClass('codigocuentacontable')) {
+				return;
+			}
+			if (campo.tagName === 'TEXTAREA' || campo.tagName === 'BUTTON') {
+				return;
+			}
+
+			e.preventDefault();
+			e.stopPropagation();
+			if (typeof e.stopImmediatePropagation === 'function') {
+				e.stopImmediatePropagation();
+			}
+
+			if (campo.id === 'observacion') {
+				agregaRenglonCuenta({ preventDefault: function () {} });
+				return;
+			}
+
+			if (campo.id === 'empresa_id' || campo.id === 'tipoasiento_id' || campo.id === 'fecha') {
+				if ((campo.id === 'empresa_id' || campo.id === 'tipoasiento_id') && !String($(campo).val() || '').trim()) {
+					alert(campo.id === 'empresa_id' ? 'Debe ingresar empresa' : 'Seleccione el tipo de asiento');
+					enfocarCampoAsientoForm(campo);
+					return;
+				}
+				avanzarCabeceraAsientoForm(campo);
+				return;
+			}
+
+			manejarEnterCampoAsientoForm(campo);
+		}, true);
 	}
 
 	$("#form-general").submit(function (e) {

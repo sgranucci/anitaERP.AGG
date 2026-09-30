@@ -153,6 +153,15 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         // El modal "Enviar a Gastronomía" usa paquete_ok; si se mezclaran, habría un catch-22.
         $gate['paquete_ok'] = $gate['ok'];
         $gate['paquete_errores'] = $gate['errores'];
+        $cargadas = self::clavesComprobantesCargados($oc);
+        if (self::debeBloquearEnvioPorFacturasYaEnErp(
+            ((int) ($gate['pendientes_carga'] ?? 0)) > 0,
+            ($gate['documentos_pendiente_entrega'] ?? []) !== [],
+            $cargadas !== [],
+            self::hayPrecargaMarcadaAnitaSinComprobanteErp($oc, $cargadas),
+        )) {
+            $gate['errores'][] = self::mensajeTodasFacturasYaCargadasEnErp();
+        }
         $erroresGastro = OrdencompraLegajoGastronomiaSupport::erroresEnvioCuentasAPagar($oc);
         foreach ($erroresGastro as $errorGastro) {
             $gate['errores'][] = $errorGastro;
@@ -594,13 +603,23 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
 
         $retenidos = self::documentosPendienteEntrega($oc);
         $pendientesCarga = self::documentosPendientesCarga($oc);
-        if ($pendientesCarga === [] && $retenidos !== [] && self::clavesComprobantesCargados($oc) === []) {
+        $cargadas = self::clavesComprobantesCargados($oc);
+        if ($pendientesCarga === [] && $retenidos !== [] && $cargadas === []) {
             $errores[] = 'Todas las facturas del legajo están pendientes de entrega. '
                 .'Liberá al menos una (o asigná COM) para enviar algo a Cuentas a pagar.';
         }
 
         $paqueteErrores = $errores;
         $paqueteOk = $paqueteErrores === [];
+
+        if (self::debeBloquearEnvioPorFacturasYaEnErp(
+            $pendientesCarga !== [],
+            $retenidos !== [],
+            $cargadas !== [],
+            self::hayPrecargaMarcadaAnitaSinComprobanteErp($oc, $cargadas),
+        )) {
+            $errores[] = self::mensajeTodasFacturasYaCargadasEnErp();
+        }
 
         $erroresGastro = OrdencompraLegajoGastronomiaSupport::erroresEnvioCuentasAPagar($oc);
         foreach ($erroresGastro as $errorGastro) {
@@ -672,6 +691,66 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         }
 
         return $cargadas;
+    }
+
+    public static function mensajeTodasFacturasYaCargadasEnErp(): string
+    {
+        return 'Todas las facturas del legajo ya están cargadas en el ERP. No se puede enviar a Cuentas a pagar.';
+    }
+
+    /**
+     * Nada queda por cargar en CxP: cada factura del legajo ya es un comprobante del ERP.
+     * No cuenta facturas retenidas por entrega ni precargas marcadas solo en Anita.
+     */
+    public static function todasLasFacturasYaCargadasEnErp(Ordencompra $oc): bool
+    {
+        $cargadas = self::clavesComprobantesCargados($oc);
+
+        return self::debeBloquearEnvioPorFacturasYaEnErp(
+            self::documentosPendientesCarga($oc) !== [],
+            self::documentosPendienteEntrega($oc) !== [],
+            $cargadas !== [],
+            self::hayPrecargaMarcadaAnitaSinComprobanteErp($oc, $cargadas),
+        );
+    }
+
+    public static function debeBloquearEnvioPorFacturasYaEnErp(
+        bool $hayPendientesCarga,
+        bool $hayPendienteEntrega,
+        bool $hayComprobanteEnErp,
+        bool $hayFacturaFueraDeErp,
+    ): bool {
+        return ! $hayPendientesCarga
+            && ! $hayPendienteEntrega
+            && $hayComprobanteEnErp
+            && ! $hayFacturaFueraDeErp;
+    }
+
+    /**
+     * Precarga marcada como ya cargada en Anita cuyo número no está en un comprobante ERP.
+     *
+     * @param  array<string, true>  $cargadas
+     */
+    private static function hayPrecargaMarcadaAnitaSinComprobanteErp(Ordencompra $oc, array $cargadas): bool
+    {
+        foreach (self::queryPrecargaDelLegajo($oc)
+            ->whereNotNull('rutaalmacenamiento')
+            ->where('rutaalmacenamiento', '!=', '')
+            ->get(['estado', 'letra', 'sucursal', 'numerocomprobante']) as $pre) {
+            if (! PrecargaComprobanteEstados::esCargadaAnita($pre->estado ?? null)) {
+                continue;
+            }
+            $clave = self::claveNumeroFactura(
+                (string) ($pre->letra ?? ''),
+                (int) ($pre->sucursal ?? 0),
+                (int) ($pre->numerocomprobante ?? 0)
+            );
+            if ($clave === '' || ! isset($cargadas[$clave])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -43,14 +43,14 @@
                 @endforeach
             </select>
         </td>
+        <td>
+            <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="">
+        </td>
         <td class="asiento-monto-celda">
             <input type="text" inputmode="decimal" name="debes[]" class="form-control text-right debe" value="" title="Puede pegar 1.025.504,12 o 1,025,504.12">
         </td>
         <td class="asiento-monto-celda">
             <input type="text" inputmode="decimal" name="haberes[]" class="form-control text-right haber" value="" title="Puede pegar 1.025.504,12 o 1,025,504.12">
-        </td>
-        <td>
-            <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="">
         </td>
         <td class="asiento-detalle-celda">
             <textarea name="observaciones[]" class="d-none asiento-ta-detalle observacion" aria-hidden="true"></textarea>

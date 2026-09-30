@@ -64,6 +64,15 @@
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed{{ $modoConsulta ? ' modo-consulta sidebar-collapse' : '' }}{{ $modoEmbed ? ' modo-embed' : '' }}">
+    <script>
+        try {
+            if (!document.body.classList.contains('modo-embed')
+                && !document.body.classList.contains('modo-consulta')
+                && localStorage.getItem('anita_sidebar_collapse') === '1') {
+                document.body.classList.add('sidebar-collapse');
+            }
+        } catch (e) {}
+    </script>
     <!-- Site wrapper -->
     <div class="wrapper">
         @if ($modoEmbed)

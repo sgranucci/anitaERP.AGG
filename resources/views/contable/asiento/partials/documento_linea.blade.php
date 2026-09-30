@@ -26,24 +26,22 @@
         );
         $etiquetaComp = trim(strtoupper(trim($tipoLinea)).' '.$compFmt);
     }
-    $ocIdLinea = (int) (($ocPorNumero ?? [])[$nroOcLinea] ?? ($ocPorNumero ?? [])[(string) $nroOcLinea] ?? 0);
-    $puedeVerOcLinea = $nroOcLinea > 0 && $ocIdLinea > 0 && (can('listar-ordencompra', false) || can('editar-ordencompra', false));
+    $textoComp = $idxLinea !== null ? old('comprobante_linea.'.$idxLinea) : null;
+    if ($textoComp === null) {
+        $textoComp = $etiquetaComp;
+    }
+    $textoOc = $idxLinea !== null ? old('ordencompra_linea.'.$idxLinea) : null;
+    if ($textoOc === null) {
+        $textoOc = $nroOcLinea > 0 ? (string) $nroOcLinea : '';
+    }
 @endphp
-<td class="text-nowrap small">
-    <input type="hidden" name="mov_anita_tipo[]" value="{{ $tipoLinea }}">
-    <input type="hidden" name="mov_anita_letra[]" value="{{ $letraLinea }}">
-    <input type="hidden" name="mov_anita_sucursal[]" value="{{ $sucLinea }}">
-    <input type="hidden" name="mov_anita_nro[]" value="{{ $nroLinea }}">
-    {{ $etiquetaComp !== '' ? $etiquetaComp : '—' }}
+<td class="text-nowrap">
+    <input type="text" name="comprobante_linea[]" class="form-control form-control-sm comprobante-linea"
+           value="{{ $textoComp }}" placeholder="FC A0001-123" autocomplete="off"
+           title="Tipo, letra y número. Ejemplo: FC A0001-123">
 </td>
-<td class="text-nowrap small">
-    <input type="hidden" name="mov_nro_ordencompra[]" value="{{ $nroOcLinea }}">
-    @if ($puedeVerOcLinea)
-        <a href="{{ route('editar_ordencompra', ['id' => $ocIdLinea, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-           target="_blank" rel="noopener" class="text-primary">{{ $nroOcLinea }}</a>
-    @elseif ($nroOcLinea > 0)
-        {{ $nroOcLinea }}
-    @else
-        —
-    @endif
+<td class="text-nowrap">
+    <input type="text" name="ordencompra_linea[]" class="form-control form-control-sm ordencompra-linea"
+           value="{{ $textoOc }}" placeholder="Nº" autocomplete="off"
+           title="Número de orden de compra">
 </td>

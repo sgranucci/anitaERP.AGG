@@ -15,7 +15,7 @@ final class MayorPlanoCuentaCacheSupport
 {
     private const TTL_SEGUNDOS = 14400; // 4 h
 
-    private const VERSION = 'v6';
+    private const VERSION = 'v7';
 
     /**
      * @param  array<string, mixed>  $filtros

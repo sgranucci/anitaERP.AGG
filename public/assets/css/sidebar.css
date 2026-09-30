@@ -65,6 +65,21 @@ body.layout-fixed:not(.modo-consulta):not(.modo-embed) .main-sidebar.anita-sideb
     overflow-y: auto;
 }
 
+/*
+ * Colapsado: el aside (z-index 1038) se ensancha al hover y tapa el botón del header.
+ * El header queda por encima para que colapsar siga respondiendo mientras se elige una opción.
+ */
+body.sidebar-mini.sidebar-collapse .main-header {
+    position: relative;
+    z-index: 1040;
+}
+
+/* Un submenú abierto (display inline de treeview) no debe dejar el mini-menú “abierto”. */
+body.sidebar-mini.sidebar-collapse .main-sidebar.sidebar-no-expand .nav-treeview,
+body.sidebar-mini.sidebar-collapse .main-sidebar:not(:hover):not(.sidebar-focused) .nav-treeview {
+    display: none !important;
+}
+
 /* --- Enlaces base --- */
 .main-sidebar.anita-sidebar .nav-sidebar > .nav-item > .nav-link,
 .main-sidebar.anita-sidebar .nav-treeview > .nav-item > .nav-link {

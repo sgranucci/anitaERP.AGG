@@ -164,9 +164,9 @@
                     <th style="width: 18%;">Descripci&oacute;n</th>
                     <th style="width: 13%;">Centro de costo</th>
                     <th style="width: 6%;">Moneda</th>
+                    <th style="width: 9%;" class="text-right">Cotizaci&oacute;n</th>
                     <th style="width: 12%;" class="text-right">Debe</th>
                     <th style="width: 12%;" class="text-right">Haber</th>
-                    <th style="width: 9%;" class="text-right">Cotizaci&oacute;n</th>
                     <th style="width: 12%;">Detalle</th>
                     <th style="width: 11%;">Comprobante</th>
                     <th style="width: 8%;">O.Compra</th>
@@ -230,6 +230,12 @@
                                 @endforeach
                             </select>
                         </td>
+                        <td>
+                            @php
+                                $cotizValor = old('cotizaciones.'.$loop->index, isset($cuenta->cotizacion) ? number_format((float) $cuenta->cotizacion, 2, ',', '.') : '0,00');
+                            @endphp
+                            <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="{{ $cotizValor }}">
+                        </td>
                         <td class="asiento-monto-celda">
                             @php
                                 $debeValor = old('debes.'.$loop->index, ($cuenta->monto ?? 0) > 0 ? number_format($cuenta->monto, 2, ',', '.') : '');
@@ -241,12 +247,6 @@
                                 $haberValor = old('haberes.'.$loop->index, ($cuenta->monto ?? 0) < 0 ? number_format(abs($cuenta->monto), 2, ',', '.') : '');
                             @endphp
                             <input type="text" inputmode="decimal" name="haberes[]" class="form-control text-right haber" value="{{ $haberValor }}" title="Puede pegar 1.025.504,12 o 1,025,504.12">
-                        </td>
-                        <td>
-                            @php
-                                $cotizValor = old('cotizaciones.'.$loop->index, isset($cuenta->cotizacion) ? number_format((float) $cuenta->cotizacion, 2, ',', '.') : '0,00');
-                            @endphp
-                            <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="{{ $cotizValor }}">
                         </td>
                         <td class="asiento-detalle-celda">
                             @php
@@ -280,14 +280,14 @@
             </tbody>
             <tfoot class="asiento-totales-pie">
                 <tr class="asiento-totales-fila">
-                    <td colspan="4" class="text-right font-weight-bold text-secondary">Totales</td>
+                    <td colspan="5" class="text-right font-weight-bold text-secondary">Totales</td>
                     <td>
                         <input type="text" id="totaldebe" name="totaldebe" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ old('totaldebe', $totalDebeAsientoFormTxt) }}" />
                     </td>
                     <td>
                         <input type="text" id="totalhaber" name="totalhaber" class="form-control form-control-sm text-right asiento-total-celda" readonly value="{{ old('totalhaber', $totalHaberAsientoFormTxt) }}" />
                     </td>
-                    <td colspan="5"></td>
+                    <td colspan="4"></td>
                 </tr>
             </tfoot>
         </table>
@@ -315,7 +315,7 @@
                 <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
             </div>
             <div class="modal-body">
-                <p class="small text-muted mb-2">Leyenda / detalle del movimiento contable. Si es la primera l&iacute;nea, al guardar se copia a los renglones sin detalle.</p>
+                <p class="small text-muted mb-2">Leyenda / detalle del movimiento contable. Enter guarda y sigue con el campo siguiente. Si es la primera l&iacute;nea, al guardar se copia a los renglones sin detalle.</p>
                 <textarea id="asiento_detalle_linea_editor" class="form-control" rows="6" maxlength="255" placeholder="Detalle de la l&iacute;nea…"></textarea>
             </div>
             <div class="modal-footer py-2">

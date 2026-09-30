@@ -367,9 +367,13 @@ final class OrdencompraLegajoGastronomiaSupport
 
     /**
      * @param  bool|null  $tienePendientesCarga  Si viene informado, no consulta pendientes (bandeja hidratada).
+     * @param  bool|null  $todasFacturasCargadasEnErp  Si viene informado, no reconsulta el ERP (bandeja hidratada).
      */
-    public static function puedeMostrarEnviarCuentasAPagar(?Ordencompra $oc, ?bool $tienePendientesCarga = null): bool
-    {
+    public static function puedeMostrarEnviarCuentasAPagar(
+        ?Ordencompra $oc,
+        ?bool $tienePendientesCarga = null,
+        ?bool $todasFacturasCargadasEnErp = null,
+    ): bool {
         if (! $oc || ! $oc->id) {
             return false;
         }
@@ -387,6 +391,16 @@ final class OrdencompraLegajoGastronomiaSupport
                 $tienePendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc) !== [];
             }
             if (! $tienePendientes) {
+                return false;
+            }
+        }
+
+        if ($tienePendientesCarga !== true) {
+            $todasEnErp = $todasFacturasCargadasEnErp;
+            if ($todasEnErp === null) {
+                $todasEnErp = OrdencompraEnvioCuentasAPagarGateSupport::todasLasFacturasYaCargadasEnErp($oc);
+            }
+            if ($todasEnErp) {
                 return false;
             }
         }

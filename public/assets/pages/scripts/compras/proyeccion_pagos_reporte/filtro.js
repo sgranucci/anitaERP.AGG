@@ -6,7 +6,7 @@ var PROY_PRESETS = {
         'adelantos', 'total_adeudado',
     ],
     tesoreria: [
-        'proveedor_codigo', 'proveedor_nombre', 'tipo', 'comprobante', 'fecha_vencimiento',
+        'proveedor_codigo', 'proveedor_nombre', 'tipo', 'comprobante', 'nro_referencia', 'fecha_vencimiento',
         'dias_vencimiento', 'moneda', 'medio_pago', 'condicion_pago', 'total_adeudado',
     ],
     analisis: [

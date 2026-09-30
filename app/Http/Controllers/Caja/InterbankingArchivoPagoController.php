@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Caja;
 
+use App\Exports\Caja\ArchivoPagoInformeExport;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\Cuentacaja;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -111,6 +112,94 @@ class InterbankingArchivoPagoController extends Controller
             'Content-Type' => 'text/plain; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="'.$nombre.'"',
         ]);
+    }
+
+    public function exportar(Request $request, string $formato)
+    {
+        can(self::PERMISO);
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $filtros = InterbankingArchivoPagoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarPreferencias($request, $filtros, $empresaQuery);
+        $cuentaOrigen = $this->hidratarCuentaOrigen($request, $filtros);
+        $filtros['cuentacaja_id'] = $cuentaOrigen ? (int) $cuentaOrigen->id : (int) ($filtros['cuentacaja_id'] ?? 0);
+        $filtros['cbu_origen'] = $cuentaOrigen
+            ? CbuSupport::normalizar((string) $cuentaOrigen->cbu)
+            : '';
+
+        $volver = array_merge(
+            InterbankingArchivoPagoFiltros::paraQueryString($filtros),
+            ['consultar' => 1]
+        );
+        if (! InterbankingArchivoPagoFiltros::tieneCriteriosAplicados($filtros)) {
+            return redirect()->route('interbanking_archivo_pago')
+                ->with('mensaje_error', 'Indique empresa y fechas para generar el informe.');
+        }
+
+        ini_set('memory_limit', '512M');
+        ini_set('max_execution_time', '180');
+        $resultado = $this->service->generar($filtros);
+        if (empty($resultado['ok']) || ($resultado['cantidad'] ?? 0) <= 0) {
+            return redirect()->route('interbanking_archivo_pago', $volver)
+                ->with('mensaje_error', $resultado['mensaje'] ?? 'Sin transferencias para exportar.');
+        }
+
+        $empresa = $empresaQuery->firstWhere('id', (int) $filtros['empresa_id']);
+        $nombreEmpresa = trim((string) ($empresa->nombre ?? ''));
+        $filas = [];
+        foreach ($resultado['filas'] as $fila) {
+            $fecha = (string) ($fila['fecha'] ?? '');
+            $filas[] = [
+                'origen' => (string) ($fila['origen'] ?? ''),
+                'proveedor_codigo' => (string) ($fila['proveedor_codigo'] ?? ''),
+                'proveedor_nombre' => (string) ($fila['proveedor_nombre'] ?? ''),
+                'tipo' => (string) ($fila['tipo'] ?? ''),
+                'orden_pago' => sprintf(
+                    '%04d-%08d',
+                    (int) ($fila['sucursal'] ?? 0),
+                    (int) ($fila['numero'] ?? 0)
+                ),
+                'fecha' => $fecha !== '' ? date('d/m/Y', strtotime($fecha)) : '',
+                'cbu' => (string) ($fila['cbu'] ?? ''),
+                'importe' => (float) ($fila['importe'] ?? 0),
+                'nombreempresa' => $nombreEmpresa,
+            ];
+        }
+
+        $columnas = [
+            ['clave' => 'origen', 'titulo' => 'Origen', 'ancho' => 12],
+            ['clave' => 'proveedor_codigo', 'titulo' => 'N.Pro.', 'ancho' => 10],
+            ['clave' => 'proveedor_nombre', 'titulo' => 'Proveedor', 'ancho' => 32],
+            ['clave' => 'tipo', 'titulo' => 'Tip', 'ancho' => 8],
+            ['clave' => 'orden_pago', 'titulo' => 'Nº OP', 'ancho' => 16],
+            ['clave' => 'fecha', 'titulo' => 'Fecha', 'ancho' => 12],
+            ['clave' => 'cbu', 'titulo' => 'CBU', 'ancho' => 26, 'mono' => true],
+            ['clave' => 'importe', 'titulo' => 'Monto', 'tipo' => 'importe', 'ancho' => 16],
+        ];
+        $cuentaTxt = trim(((string) ($cuentaOrigen->codigo ?? '')).' '.((string) ($cuentaOrigen->nombre ?? '')));
+        $subtitulo = implode(' · ', array_filter([
+            $nombreEmpresa,
+            $cuentaTxt !== '' ? 'Cuenta '.$cuentaTxt : '',
+            'Del '.date('d/m/Y', strtotime((string) $filtros['fecha_desde']))
+                .' al '.date('d/m/Y', strtotime((string) $filtros['fecha_hasta'])),
+            'OP '.(int) $filtros['op_desde'].' a '.(int) $filtros['op_hasta'],
+            'Tipo '.((string) ($filtros['tipo_op'] ?? 'OPP')),
+        ]));
+        $titulo = 'Transferencias Interbanking';
+        $total = (float) ($resultado['total_importe'] ?? 0);
+        $nombre = 'interbanking_transferencias_'.date('Ymd_His');
+        $respuesta = ArchivoPagoInformeExport::responder(
+            $formato,
+            $filas,
+            $columnas,
+            $titulo,
+            $subtitulo,
+            $total,
+            $nombre,
+            'Transferencias'
+        );
+
+        return $respuesta ?? redirect()->route('interbanking_archivo_pago', $volver);
     }
 
     /**

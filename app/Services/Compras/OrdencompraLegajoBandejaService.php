@@ -309,6 +309,13 @@ class OrdencompraLegajoBandejaService
             $comAsignadaOk = ! $exigeCom || $faltanComDocs === [];
             $tieneAlgunaFcCargada = $primeraCp !== null;
             $todasCargadas = $tieneAlgunaFcCargada && $pendientes === [];
+            $todasFacturasEnErp = $facturasLegajo !== [];
+            foreach ($facturasLegajo as $facEstado) {
+                if (($facEstado['estado'] ?? '') !== 'cargada') {
+                    $todasFacturasEnErp = false;
+                    break;
+                }
+            }
             $tienePendienteEntrega = false;
             foreach ($facs as $facCheck) {
                 if (PrecargaComprobanteEstados::esPendienteEntrega($facCheck['estado_precarga'] ?? null)) {
@@ -358,7 +365,8 @@ class OrdencompraLegajoBandejaService
                 'puede_enviar' => $esGastro && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviar($oc),
                 'puede_enviar_cxp' => ! $esGastro && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarCuentasAPagar(
                     $oc,
-                    count($pendientes) > 0
+                    count($pendientes) > 0,
+                    $todasFacturasEnErp
                 ),
                 'puede_enviar_pagos' => OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarPagos(
                     $oc,

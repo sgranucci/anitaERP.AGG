@@ -6,9 +6,9 @@ use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\ConceptoCashflowResolverSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
-use App\Support\Compras\PropuestaPagoLineaPresentacionSupport;
 use App\Support\Compras\ProyeccionPagosColumnasSupport;
 use App\Support\Compras\ProyeccionPagosFechaSupport;
+use App\Support\Compras\ProyeccionPagosMedioPagoSupport;
 use App\Support\Compras\ProyeccionPagosReporteFiltros;
 use App\Support\Compras\ProyeccionPagosTramosSupport;
 use App\Support\Configuracion\CotizacionVigenteSupport;
@@ -377,6 +377,18 @@ class ProyeccionPagosReporteService
             ->leftJoin('ordencompra as oc', function ($join) {
                 $join->on('oc.id', '=', DB::raw(SqlDialectSupport::coalesce('ocp.ordencompra_id', 'comp.ordencompra_id')));
             })
+            ->leftJoinSub(
+                DB::table('ordencompra_comprobante as ocp_med')
+                    ->join('ordencompra_comprobante_cuota as occ_med', 'occ_med.ordencompra_comprobante_id', '=', 'ocp_med.id')
+                    ->selectRaw('ocp_med.ordencompra_id, MIN(occ_med.id) AS occ_id')
+                    ->groupBy('ocp_med.ordencompra_id'),
+                'ocmed',
+                'ocmed.ordencompra_id',
+                '=',
+                'oc.id',
+            )
+            ->leftJoin('ordencompra_comprobante_cuota as occdoc', 'occdoc.id', '=', 'ocmed.occ_id')
+            ->leftJoin('formapago as fpdoc', 'fpdoc.id', '=', 'occdoc.formapago_id')
             ->leftJoin('condicionpago as cp', function ($join) {
                 $join->on('cp.id', '=', DB::raw(SqlDialectSupport::coalesce('comp.condicionpago_id', 'p.condicionpago_id')));
             })
@@ -443,12 +455,16 @@ class ProyeccionPagosReporteService
                 'comp.ordencompra_id as comprobante_ordencompra_id',
                 'tt.abreviatura as tipo_abreviatura',
                 'tt.nombre as tipo_nombre',
+                'tt.signo as tipo_signo',
+                'comp.origen_entrada as origen_entrada',
                 'cuo.numero_cuota as numero_cuota',
                 'cuo.detalle as detalle_cuota',
                 'fp.abreviatura as formapago_abreviatura',
                 'fp.nombre as formapago_nombre',
                 'fpoc.abreviatura as formapago_oc_abreviatura',
                 'fpoc.nombre as formapago_oc_nombre',
+                'fpdoc.abreviatura as formapago_oc_doc_abreviatura',
+                'fpdoc.nombre as formapago_oc_doc_nombre',
                 'occ.detalle as detalle_cuota_oc',
                 'oc.id as ordencompra_id',
                 'oc.numeroordencompra as numeroordencompra',
@@ -616,12 +632,15 @@ class ProyeccionPagosReporteService
             : null;
         $diasEntrega = (int) ($row->dias_entrega_cheque ?? 0);
 
-        $medio = PropuestaPagoLineaPresentacionSupport::abreviaturaAnita(
-            (string) ($row->formapago_abreviatura
-                ?? $row->formapago_nombre
-                ?? $row->formapago_oc_abreviatura
-                ?? $row->formapago_oc_nombre
-                ?? ''),
+        $medio = ProyeccionPagosMedioPagoSupport::resolver(
+            $row->formapago_abreviatura ?? null,
+            $row->formapago_nombre ?? null,
+            $row->formapago_oc_abreviatura ?? null,
+            $row->formapago_oc_nombre ?? null,
+            $row->formapago_oc_doc_abreviatura ?? null,
+            $row->formapago_oc_doc_nombre ?? null,
+            (int) ($row->tipo_signo ?? 0),
+            isset($row->origen_entrada) ? (string) $row->origen_entrada : null,
         );
 
         $valores = [
@@ -636,7 +655,7 @@ class ProyeccionPagosReporteService
             'fecha_iva' => $row->fechaiva ?? null,
             'fecha_carga' => $row->fecha_carga ?? null,
             'fecha_vencimiento' => $row->fechavencimiento ?? null,
-            'dias_vencimiento' => $fechaVto ? (int) $fechaBase->diffInDays($fechaVto, false) : null,
+            'dias_vencimiento' => ProyeccionPagosFechaSupport::diasVencimiento($fechaBase, $fechaVto),
             'fecha_diferida' => ProyeccionPagosFechaSupport::fechaDiferida(
                 $row->fecha ?? $row->fechaiva ?? null,
                 (int) ($row->dias_atraso ?? 0),
@@ -818,7 +837,9 @@ class ProyeccionPagosReporteService
 
         $ordenDetalle = match ($orden) {
             ProyeccionPagosReporteFiltros::ORDEN_VENCIMIENTO => fn (array $m) => (string) ($m['fechavencimiento'] ?? '9999-12-31'),
-            ProyeccionPagosReporteFiltros::ORDEN_DIAS => fn (array $m) => (int) ($m['valores']['dias_vencimiento'] ?? 99999),
+            ProyeccionPagosReporteFiltros::ORDEN_DIAS => fn (array $m) => ($m['valores']['dias_vencimiento'] ?? null) === null
+                ? 99999
+                : -1 * (int) $m['valores']['dias_vencimiento'],
             ProyeccionPagosReporteFiltros::ORDEN_TOTAL_DESC => fn (array $m) => -1 * (float) $m['importe'],
             ProyeccionPagosReporteFiltros::ORDEN_TOTAL_ASC => fn (array $m) => (float) $m['importe'],
             default => fn (array $m) => (string) ($m['fechavencimiento'] ?? '9999-12-31'),

@@ -240,7 +240,7 @@ class SumasSaldosController extends Controller
     {
         $userId = (int) (auth()->id() ?? 0);
 
-        return 'sumas_saldos_v2_'.$userId.'_'.SumasSaldosListadoFiltros::firma($filtros);
+        return 'sumas_saldos_v3_'.$userId.'_'.SumasSaldosListadoFiltros::firma($filtros);
     }
 
     /**

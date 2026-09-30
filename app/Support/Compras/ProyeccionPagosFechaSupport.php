@@ -28,6 +28,21 @@ final class ProyeccionPagosFechaSupport
         return $fecha->format('Y-m-d');
     }
 
+    /**
+     * Días de atraso respecto del vencimiento.
+     * Positivo = ya venció. Negativo = faltan esos días para el vencimiento.
+     */
+    public static function diasVencimiento(mixed $fechaBase, mixed $fechaVencimiento): ?int
+    {
+        $base = self::normalizar($fechaBase);
+        $vto = self::normalizar($fechaVencimiento);
+        if ($base === null || $vto === null) {
+            return null;
+        }
+
+        return (int) Carbon::parse($vto)->startOfDay()->diffInDays(Carbon::parse($base)->startOfDay(), false);
+    }
+
     private static function normalizar(mixed $fecha): ?string
     {
         if ($fecha instanceof \DateTimeInterface) {

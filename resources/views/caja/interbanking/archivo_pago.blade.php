@@ -193,6 +193,14 @@
                         @endif
                     </h3>
                 </div>
+                @if (($resultado['cantidad'] ?? 0) > 0)
+                    <div class="px-2 pt-2">
+                        @include('includes.exportar-tabla-queryparams', [
+                            'ruta' => 'lista_interbanking_archivo_pago',
+                            'queryparams' => $filtrosQuery ?? [],
+                        ])
+                    </div>
+                @endif
                 <div class="card-body p-0 table-responsive">
                     <table class="table table-sm table-bordered table-striped mb-0" id="tabla-paginada">
                         <thead style="background:#85C1E9;color:#17202A;">
@@ -246,7 +254,7 @@
             @if (count($omitidas) > 0)
                 <div class="card card-outline card-warning mt-3">
                     <div class="card-header">
-                        <h3 class="card-title">Omitidas por CBU / monto ({{ count($omitidas) }})</h3>
+                        <h3 class="card-title">Omitidas ({{ count($omitidas) }})</h3>
                     </div>
                     <div class="card-body p-0 table-responsive">
                         <table class="table table-sm table-bordered mb-0">

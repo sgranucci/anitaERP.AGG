@@ -84,6 +84,8 @@ class ReporteDefinibleSaldoReader
                 'am.monto',
                 'am.moneda_id',
                 'am.cotizacion',
+                'am.observacion as mov_obs',
+                'a.observacion as asiento_obs',
                 'ta.abreviatura as tipo_abrev',
             ]);
 
@@ -94,7 +96,11 @@ class ReporteDefinibleSaldoReader
         $out = [];
         foreach ($query->cursor() as $row) {
             $tipo = (string) ($row->tipo_abrev ?? '');
-            if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoAsientos)) {
+            $descripcion = trim((string) ($row->mov_obs ?? ''));
+            if ($descripcion === '') {
+                $descripcion = trim((string) ($row->asiento_obs ?? ''));
+            }
+            if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoAsientos, $descripcion)) {
                 continue;
             }
 

@@ -25,6 +25,47 @@ $(document).ready(function () {
     menuParents.children('a').addClass('menu-parent-open');
     $('ul.nav-sidebar li.menu-open > .nav-treeview').css('display', 'block');
 
+    // El mini-sidebar, al pasar el mouse, se dibuja encima del botón de colapsar.
+    // Si en ese momento se elige una opción, el clic no llega al botón (o AdminLTE
+    // lo interpreta como "abrir" un menú que ya se ve abierto) y parece que no hace nada.
+    (function arreglarColapsoAside() {
+        function guardarColapso(colapsado) {
+            try {
+                localStorage.setItem('anita_sidebar_collapse', colapsado ? '1' : '0');
+            } catch (e) {}
+        }
+
+        document.addEventListener('click', function (ev) {
+            var btn = ev.target && ev.target.closest ? ev.target.closest('[data-widget="pushmenu"]') : null;
+            if (!btn || !document.body.classList.contains('sidebar-mini')) {
+                return;
+            }
+            var sidebar = document.querySelector('.main-sidebar');
+            if (!document.body.classList.contains('sidebar-collapse') || !sidebar || !sidebar.matches(':hover')) {
+                return;
+            }
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            sidebar.classList.add('sidebar-no-expand');
+            var soltar = function () {
+                sidebar.classList.remove('sidebar-no-expand');
+                sidebar.removeEventListener('mouseleave', soltar);
+            };
+            sidebar.addEventListener('mouseleave', soltar);
+            guardarColapso(true);
+        }, true);
+
+        document.addEventListener('click', function (ev) {
+            var btn = ev.target && ev.target.closest ? ev.target.closest('[data-widget="pushmenu"]') : null;
+            if (!btn) {
+                return;
+            }
+            setTimeout(function () {
+                guardarColapso(document.body.classList.contains('sidebar-collapse'));
+            }, 0);
+        });
+    })();
+
     // Mantener scroll del aside / ítem activo visible tras navegación (MPA).
     (function persistirScrollAside() {
         var $body = $('body');

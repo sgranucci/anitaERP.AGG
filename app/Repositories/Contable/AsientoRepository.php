@@ -840,14 +840,13 @@ class AsientoRepository implements AsientoRepositoryInterface
 					|| AsientoAnitaFerliSupport::usaEsquemaCtamovReducido()
 					|| AsientoAnitaInterformingSupport::usaEsquemaCtamovReducido();
 
-				$nroLineaAnita = (int) ($request['mov_anita_nro'][$i_movimiento] ?? 0);
-				$ocLineaAnita = (int) ($request['mov_nro_ordencompra'][$i_movimiento] ?? 0);
+				$docLinea = \App\Support\Contable\AsientoLineaDocumentoTextoSupport::desdeRequest($request, $i_movimiento);
+				$nroLineaAnita = (int) ($docLinea['anita_nro'] ?? 0);
+				$ocLineaAnita = (int) ($docLinea['nro_ordencompra'] ?? 0);
 				if ($nroLineaAnita > 0) {
-					$tipoLinea = strtoupper(trim((string) ($request['mov_anita_tipo'][$i_movimiento] ?? '')));
-					$tipoIns = $tipoLinea !== '' ? substr(preg_replace('/[^A-Za-z0-9]/', '', $tipoLinea), 0, 10) : $tipo;
-					$letraIns = trim((string) ($request['mov_anita_letra'][$i_movimiento] ?? ''));
-					$letraIns = $letraIns !== '' ? substr(preg_replace('/[^A-Za-z0-9]/', '', $letraIns), 0, 3) : $letra;
-					$sucursalIns = (int) ($request['mov_anita_sucursal'][$i_movimiento] ?? 0);
+					$tipoIns = $docLinea['anita_tipo'] ?: $tipo;
+					$letraIns = $docLinea['anita_letra'] ?: $letra;
+					$sucursalIns = (int) ($docLinea['anita_sucursal'] ?? 0);
 					$nroIns = $nroLineaAnita;
 				} else {
 					$tipoIns = $tipo;

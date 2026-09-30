@@ -768,6 +768,7 @@ class MayorPlanoCuentaProcesador
         if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento(
             (string) ($mov['tipo_asiento'] ?? ''),
             $modoInclusionAsientos,
+            (string) ($mov['descripcion'] ?? ''),
         )) {
             return false;
         }

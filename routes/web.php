@@ -3476,10 +3476,16 @@ Route::get('caja/interbanking/saldos-historicos/{formato}', 'Caja\InterbankingSa
 Route::get('caja/interbanking/saldos-historicos', 'Caja\InterbankingSaldoHistoricoController@index')->name('interbanking_saldos_historicos');
 Route::get('caja/interbanking/archivo-pago', 'Caja\InterbankingArchivoPagoController@index')->name('interbanking_archivo_pago');
 Route::get('caja/interbanking/archivo-pago/descargar', 'Caja\InterbankingArchivoPagoController@descargar')->name('descargar_interbanking_archivo_pago');
+Route::get('caja/interbanking/archivo-pago/{formato}', 'Caja\InterbankingArchivoPagoController@exportar')
+    ->name('lista_interbanking_archivo_pago')
+    ->where('formato', 'PDF|EXCEL|CSV');
 
 // Banco Macro — exportación pagos por archivo (diskette); WS premium vía config macro.canal
 Route::get('caja/macro/archivo-pago', 'Caja\MacroArchivoPagoController@index')->name('macro_archivo_pago');
 Route::get('caja/macro/archivo-pago/descargar', 'Caja\MacroArchivoPagoController@descargar')->name('descargar_macro_archivo_pago');
+Route::get('caja/macro/archivo-pago/{formato}', 'Caja\MacroArchivoPagoController@exportar')
+    ->name('lista_macro_archivo_pago')
+    ->where('formato', 'PDF|EXCEL|CSV');
 
 // Modulo de compras
 

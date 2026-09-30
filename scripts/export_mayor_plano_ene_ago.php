@@ -68,7 +68,7 @@ $writeStatus('START firma='.MayorPlanoCuentaListadoFiltros::firma($filtros));
 $svc = app(MayorPlanoCuentaReporteService::class);
 
 // Preferir cache ya generado (user 2 / misma firma de negocio sin user en filtros).
-$cacheDirs = glob(storage_path('framework/cache/data/mayor_plano/mayor_plano_cuenta_v6_*')) ?: [];
+$cacheDirs = glob(storage_path('framework/cache/data/mayor_plano/mayor_plano_cuenta_v7_*')) ?: [];
 $resultado = null;
 foreach ($cacheDirs as $dir) {
     $metaPath = $dir.'/meta.gz';

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Caja;
 
 use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\Cheque;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Compras\Pagoproveedor;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
@@ -67,6 +68,7 @@ class InterbankingArchivoPagoService
         $filas = [];
         $omitidas = [];
         $errores = [];
+        $chequesAparte = 0;
 
         // ERP primero: netoAPagar es la fuente confiable del importe.
         // Anita completa OPs que no están en ERP (o sin CBU en formapago).
@@ -74,7 +76,7 @@ class InterbankingArchivoPagoService
         $opsConErp = [];
 
         if ($incluirErp) {
-            [$filasErp, $omitErp] = $this->recolectarErp(
+            [$filasErp, $omitErp, $clavesCheque] = $this->recolectarErp(
                 $empresaId,
                 $fechaDesde,
                 $fechaHasta,
@@ -87,6 +89,11 @@ class InterbankingArchivoPagoService
                 $filas[$clave] = $f;
                 $opsConErp[$this->claveOp((string) $f['tipo'], (int) $f['numero'], '')] = true;
             }
+            // Anita no debe reponer una OP que el ERP ya pagó con cheque.
+            foreach ($clavesCheque as $claveCheque) {
+                $opsConErp[$claveCheque] = true;
+            }
+            $chequesAparte = count($clavesCheque);
             $omitidas = array_merge($omitidas, $omitErp);
         }
 
@@ -156,12 +163,16 @@ class InterbankingArchivoPagoService
         );
 
         $total = round(array_sum(array_column($filas, 'importe')), 2);
+        $mensaje = count($filas) > 0
+            ? 'Listo: '.count($filas).' transferencia(s) por $'.number_format($total, 2, ',', '.')
+            : 'Sin transferencias en el rango (revise CBU proveedor / tipo aplicación Anita).';
+        if ($chequesAparte > 0) {
+            $mensaje .= ' Quedaron afuera '.$chequesAparte.' orden(es) pagada(s) con cheque.';
+        }
 
         return [
             'ok' => true,
-            'mensaje' => count($filas) > 0
-                ? 'Listo: '.count($filas).' transferencia(s) por $'.number_format($total, 2, ',', '.')
-                : 'Sin transferencias en el rango (revise CBU proveedor / tipo aplicación Anita).',
+            'mensaje' => $mensaje,
             'filas' => $filas,
             'omitidas' => $omitidas,
             'errores' => $errores,
@@ -265,7 +276,7 @@ class InterbankingArchivoPagoService
     }
 
     /**
-     * @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>}
+     * @return array{0:list<array<string,mixed>>,1:list<array<string,mixed>>,2:list<string>}
      */
     private function recolectarErp(
         int $empresaId,
@@ -277,6 +288,7 @@ class InterbankingArchivoPagoService
     ): array {
         $filas = [];
         $omitidas = [];
+        $clavesCheque = [];
 
         $ops = Pagoproveedor::query()
             ->with(['proveedores', 'pagoproveedor_retenciones'])
@@ -297,7 +309,15 @@ class InterbankingArchivoPagoService
             ->orderBy('numerotransaccion')
             ->get();
 
+        $idsCheque = array_flip($this->idsOpPagadasConCheque($ops->pluck('id')->all()));
+
         foreach ($ops as $op) {
+            if (isset($idsCheque[(int) $op->id])) {
+                $tipo = strtoupper(substr(trim((string) $op->tipocomprobante), 0, 3));
+                $clavesCheque[] = $this->claveOp($tipo, (int) $op->numerotransaccion, '');
+
+                continue;
+            }
             $fila = $this->filaDesdePagoproveedor($op);
             if ($fila === null) {
                 $omitidas[] = [
@@ -351,7 +371,50 @@ class InterbankingArchivoPagoService
             $filas[] = $fila;
         }
 
-        return [$filas, $omitidas];
+        return [$filas, $omitidas, $clavesCheque];
+    }
+
+    /**
+     * OP cuyo pago salió por cheque propio y no por débito de cuenta bancaria.
+     * Esas no van al archivo de transferencias aunque el proveedor tenga CBU.
+     *
+     * @param  list<int>  $pagoproveedorIds
+     * @return list<int>
+     */
+    private function idsOpPagadasConCheque(array $pagoproveedorIds): array
+    {
+        $pagoproveedorIds = array_values(array_unique(array_filter(
+            array_map('intval', $pagoproveedorIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($pagoproveedorIds === []) {
+            return [];
+        }
+
+        $conCheque = Cheque::query()
+            ->whereIn('pagoproveedor_id', $pagoproveedorIds)
+            ->distinct()
+            ->pluck('pagoproveedor_id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        if ($conCheque === []) {
+            return [];
+        }
+
+        $conBanco = DB::table('caja_movimiento as m')
+            ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'm.id')
+            ->whereIn('m.pagoproveedor_id', $conCheque)
+            ->groupBy('m.pagoproveedor_id')
+            ->havingRaw('SUM(ABS(cmc.monto)) >= 0.005')
+            ->pluck('m.pagoproveedor_id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+        $conBanco = array_flip($conBanco);
+
+        return array_values(array_filter(
+            $conCheque,
+            static fn (int $id): bool => ! isset($conBanco[$id])
+        ));
     }
 
     private function filaDesdePagoproveedor(Pagoproveedor $op): ?array

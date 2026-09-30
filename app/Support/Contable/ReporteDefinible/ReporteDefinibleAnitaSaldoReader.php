@@ -131,7 +131,8 @@ class ReporteDefinibleAnitaSaldoReader
         }
         if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento(
             (string) ($linea->ctav_tipo_asiento ?? ''),
-            $modoAsientos
+            $modoAsientos,
+            (string) ($linea->ctav_desc_mov ?? ''),
         )) {
             return null;
         }

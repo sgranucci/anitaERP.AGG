@@ -128,6 +128,14 @@ var totalHaberAsiento = 0;
 			return;
 		}
 		setTimeout(function () {
+			var $el = $(el);
+			if ($el.hasClass('select2-hidden-accessible')) {
+				var $sel = $el.next('.select2-container').find('.select2-selection').first();
+				if ($sel.length) {
+					$sel.trigger('focus');
+					return;
+				}
+			}
 			el.focus();
 			if (typeof el.select === 'function' && el.tagName === 'INPUT' && el.type !== 'hidden') {
 				el.select();
@@ -148,7 +156,12 @@ var totalHaberAsiento = 0;
 
 	function enfocarSiguienteTrasCuentaAsiento($tr) {
 		if (centrocostoAsientoRequiereEleccion($tr)) {
-			$tr.find('.centrocostoasiento').trigger('focus');
+			enfocarCampoAsiento($tr.find('.centrocostoasiento').get(0));
+			return;
+		}
+		var moneda = $tr.find('.monedaasiento').get(0);
+		if (moneda && !moneda.disabled) {
+			enfocarCampoAsiento(moneda);
 			return;
 		}
 		var debe = $tr.find('.debeasiento')[0];
@@ -309,18 +322,36 @@ var totalHaberAsiento = 0;
 			if (modalConsultaCuentaAsientoAbierto() || (target.closest && target.closest('.modal'))) {
 				return;
 			}
-			if (target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON') {
+
+			var campo = target;
+			var $containerSel = $(target).closest('.select2-container');
+			if ($containerSel.length) {
+				if ($containerSel.hasClass('select2-container--open')) {
+					return;
+				}
+				var sel = $containerSel.prev('select').get(0);
+				if (!sel) {
+					return;
+				}
+				campo = sel;
+				$tr = $(campo).closest('tr.item-cuenta-asiento');
+				if (!$tr.length) {
+					return;
+				}
+			}
+
+			if (campo.tagName === 'TEXTAREA' || campo.tagName === 'BUTTON') {
 				return;
 			}
 
-			var $input = $(target);
-			var navegaAsientoIe = esPantallaIngresoEgresoAsiento() && $input.is(
+			var $input = $(campo);
+			var navegaAsiento = $input.is(
 				'.codigoasiento, .centrocostoasiento, .monedaasiento, .debeasiento, .haberasiento, .cotizacionasiento, .observacionasiento'
 			);
-			if (!navegaAsientoIe && !$input.hasClass('codigoasiento')) {
+			if (!navegaAsiento) {
 				return;
 			}
-			if ((target.readOnly && !$input.hasClass('codigoasiento')) || target.disabled) {
+			if ((campo.readOnly && !$input.hasClass('codigoasiento')) || campo.disabled) {
 				return;
 			}
 
@@ -330,18 +361,7 @@ var totalHaberAsiento = 0;
 				e.stopImmediatePropagation();
 			}
 
-			if (navegaAsientoIe) {
-				manejarEnterCampoAsientoIe(target);
-				return;
-			}
-
-			$input.data('asiento-enter-procesado', 1);
-			var codigo = String($input.val() || '').trim();
-			if (codigo === '') {
-				abrirConsultaCuentaAsientoFila($tr);
-				return;
-			}
-			resolverCodigoAsiento($input, { alertar: true, avanzar: true });
+			manejarEnterCampoAsientoIe(campo);
 		}, true);
 	}
 
@@ -781,10 +801,17 @@ var totalHaberAsiento = 0;
 		}
 
 		precargarSaldoContrapartidaAsiento($nuevo);
-		if (esPantallaIngresoEgresoAsiento()) {
-			enfocarCampoAsiento($nuevo.find('.codigoasiento').get(0));
-		}
+		enfocarCampoAsiento($nuevo.find('.codigoasiento').get(0));
     }
+
+	window.asientoExternoBorrarUltimaLineaSiCuentaVacia = function () {
+		var $ultima = $('#tbody-cuenta-asiento-table tr.item-cuenta-asiento').last();
+		if (!$ultima.length || filaAsientoTieneCuenta($ultima)) {
+			return false;
+		}
+		eliminarRenglonAsientoVacio($ultima);
+		return true;
+	};
 
     function borraRenglonCuentaAsiento(event) {
     	event.preventDefault();

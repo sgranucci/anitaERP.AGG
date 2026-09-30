@@ -27,6 +27,14 @@ class ProyeccionPagosFechaSupportTest extends TestCase
         );
     }
 
+    public function test_dias_vencimiento_positivo_si_ya_vencio(): void
+    {
+        $this->assertSame(29, ProyeccionPagosFechaSupport::diasVencimiento('2026-09-30', '2026-09-01'));
+        $this->assertSame(-15, ProyeccionPagosFechaSupport::diasVencimiento('2026-09-30', '2026-10-15'));
+        $this->assertSame(0, ProyeccionPagosFechaSupport::diasVencimiento('2026-09-30', '2026-09-30'));
+        $this->assertNull(ProyeccionPagosFechaSupport::diasVencimiento('2026-09-30', null));
+    }
+
     public function test_fecha_vacia_no_arma_diferida(): void
     {
         $this->assertNull(ProyeccionPagosFechaSupport::fechaDiferida(null, 30));

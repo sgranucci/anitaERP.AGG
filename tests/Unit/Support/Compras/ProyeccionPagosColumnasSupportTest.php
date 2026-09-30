@@ -76,6 +76,21 @@ class ProyeccionPagosColumnasSupportTest extends TestCase
         $this->assertContains('leyenda', $claves);
     }
 
+    public function test_si_muestra_comprobante_agrega_orden_de_compra_al_lado(): void
+    {
+        $visibles = ProyeccionPagosColumnasSupport::resolverVisibles(
+            ProyeccionPagosColumnasSupport::catalogo(),
+            'proveedor_codigo,proveedor_nombre,comprobante,total_adeudado',
+            ProyeccionPagosReporteFiltros::SALIDA_DETALLE,
+        );
+        $claves = array_column($visibles, 'clave');
+
+        $this->assertSame(
+            ['comprobante', 'nro_referencia'],
+            array_values(array_intersect($claves, ['comprobante', 'nro_referencia']))
+        );
+    }
+
     public function test_sin_columnas_de_requisicion_no_fuerza_autorizante(): void
     {
         $visibles = ProyeccionPagosColumnasSupport::resolverVisibles(

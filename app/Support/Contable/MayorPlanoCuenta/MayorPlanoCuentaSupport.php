@@ -14,10 +14,12 @@ class MayorPlanoCuentaSupport
 
     /**
      * Ajuste por inflación. Biyemas ABM usa AJ; INF/AJI/AJU/INFL por compatibilidad.
+     * CIJ es el cierre de ese ajuste: también se excluye al pedir “sin inflación”
+     * (sigue siendo cierre, así que “sin cierre” lo saca igual).
      *
      * @var list<string>
      */
-    private const TIPOS_ASIENTO_INFLACION = ['AJ', 'INF', 'AJI', 'AJU', 'INFL'];
+    private const TIPOS_ASIENTO_INFLACION = ['AJ', 'INF', 'AJI', 'AJU', 'INFL', 'CIJ'];
 
     /** Asiento de apertura de ejercicio (lee_saldo_inicial lo incluye siempre). */
     public const TIPO_ASIENTO_APERTURA = 'APE';
@@ -66,19 +68,24 @@ class MayorPlanoCuentaSupport
 
     /**
      * Equivalente a FILA_valida_tipo_asiento() según fl_incluye_asi (help_10) en l-mayor.c:
-     * 1 todos | 2 sin cierre (CIR/CIP/CIJ + legacy) | 3 sin inflación (AJ + legacy) | 4 sin ambos.
+     * 1 todos | 2 sin cierre (CIR/CIP/CIJ + legacy) | 3 sin inflación (AJ, CIJ + legacy) | 4 sin ambos.
      * APE y demás tipos no se excluyen en ningún modo.
+     * APJ es “ajuste personal” y también la reapertura del ajuste (“Asiento de apertura aj.inflaci”):
+     * esa reapertura se excluye solo si la descripción menciona inflación.
      */
-    public static function movimientoVisiblePorTipoAsiento(string $tipoAsiento, string $modoInclusion): bool
-    {
+    public static function movimientoVisiblePorTipoAsiento(
+        string $tipoAsiento,
+        string $modoInclusion,
+        string $descripcion = '',
+    ): bool {
         $tipo = strtoupper(trim($tipoAsiento));
 
         return match ($modoInclusion) {
             'todos' => true,
             'sin_cierre' => ! self::esAsientoCierre($tipo),
-            'sin_inflacion' => ! self::esAsientoInflacion($tipo),
-            'sin_cierre_ni_inflacion' => ! self::esAsientoCierre($tipo) && ! self::esAsientoInflacion($tipo),
-            default => ! self::esAsientoCierre($tipo) && ! self::esAsientoInflacion($tipo),
+            'sin_inflacion' => ! self::esAsientoInflacion($tipo, $descripcion),
+            'sin_cierre_ni_inflacion' => ! self::esAsientoCierre($tipo) && ! self::esAsientoInflacion($tipo, $descripcion),
+            default => ! self::esAsientoCierre($tipo) && ! self::esAsientoInflacion($tipo, $descripcion),
         };
     }
 
@@ -89,11 +96,26 @@ class MayorPlanoCuentaSupport
         return in_array($tipo, self::TIPOS_ASIENTO_CIERRE, true);
     }
 
-    public static function esAsientoInflacion(string $tipoAsiento): bool
+    public static function esAsientoInflacion(string $tipoAsiento, string $descripcion = ''): bool
     {
         $tipo = strtoupper(trim($tipoAsiento));
+        if (in_array($tipo, self::TIPOS_ASIENTO_INFLACION, true)) {
+            return true;
+        }
 
-        return in_array($tipo, self::TIPOS_ASIENTO_INFLACION, true);
+        // APJ también identifica la reapertura del ajuste. El ajuste de personal
+        // usa el mismo tipo y no debe caerse del mayor ni del sumas y saldos.
+        return $tipo === 'APJ' && self::descripcionMencionaAjusteInflacion($descripcion);
+    }
+
+    public static function descripcionMencionaAjusteInflacion(string $descripcion): bool
+    {
+        $texto = mb_strtolower(trim($descripcion));
+        if ($texto === '') {
+            return false;
+        }
+
+        return str_contains($texto, 'inflac');
     }
 
     /**

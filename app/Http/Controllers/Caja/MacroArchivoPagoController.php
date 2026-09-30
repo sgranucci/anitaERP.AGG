@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Caja;
 
+use App\Exports\Caja\ArchivoPagoInformeExport;
 use App\Http\Controllers\Controller;
 use App\Models\Caja\Cuentacaja;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -164,6 +165,119 @@ class MacroArchivoPagoController extends Controller
             'Content-Type' => $mime,
             'Content-Disposition' => 'attachment; filename="'.$nombre.'"',
         ]);
+    }
+
+    public function exportar(Request $request, string $formato)
+    {
+        can(self::PERMISO);
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $filtros = MacroArchivoPagoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->aplicarPreferencias($request, $filtros, $empresaQuery);
+        $cuentaOrigen = $this->hidratarCuentaOrigen($request, $filtros);
+        $filtros['cuentacaja_id'] = $cuentaOrigen ? (int) $cuentaOrigen->id : (int) ($filtros['cuentacaja_id'] ?? 0);
+        $filtros['cuenta_anita'] = $cuentaOrigen
+            ? MacroArchivoPagoFiltros::padCuentaAnita((string) $cuentaOrigen->codigo)
+            : (string) ($filtros['cuenta_anita'] ?? '');
+
+        $empAnita = (int) ($filtros['empresa_id'] ?? 0) > 0
+            ? SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) $filtros['empresa_id'])
+            : 0;
+        $sucBanco = (int) ($filtros['sucursal_banco'] ?? 0);
+        if ($sucBanco <= 0) {
+            $sucBanco = (int) config('macro.sucursal_default', 651);
+            $filtros['sucursal_banco'] = $sucBanco;
+        }
+        $cuentaDebito = '';
+        if ($cuentaOrigen !== null) {
+            $cuentaDebito = MacroArchivoPagoFormatoSupport::cuentaDebitoDesdeCbu(
+                (string) $cuentaOrigen->cbu,
+                $sucBanco
+            );
+        }
+        if ($cuentaDebito === '' && $empAnita > 0) {
+            $cuentaDebito = MacroArchivoPagoFormatoSupport::cuentaDebitoEmpresa($empAnita);
+        }
+        $filtros['cuenta_debito'] = $cuentaDebito;
+        if (($filtros['usuario_retencion'] ?? '') === '' && $empAnita > 0) {
+            $filtros['usuario_retencion'] = MacroArchivoPagoFormatoSupport::usuarioRetencionEmpresa($empAnita);
+        }
+
+        $volver = array_merge(
+            MacroArchivoPagoFiltros::paraQueryString($filtros),
+            ['consultar' => 1]
+        );
+        if (! MacroArchivoPagoFiltros::tieneCriteriosAplicados($filtros)) {
+            return redirect()->route('macro_archivo_pago')
+                ->with('mensaje_error', 'Indique empresa y fechas para generar el informe.');
+        }
+
+        ini_set('memory_limit', '512M');
+        ini_set('max_execution_time', '180');
+        $resultado = $this->service->generar($filtros);
+        if (empty($resultado['ok']) || ($resultado['cantidad'] ?? 0) <= 0) {
+            return redirect()->route('macro_archivo_pago', $volver)
+                ->with('mensaje_error', $resultado['mensaje'] ?? 'Sin pagos Macro para exportar.');
+        }
+
+        $empresa = $empresaQuery->firstWhere('id', (int) $filtros['empresa_id']);
+        $nombreEmpresa = trim((string) ($empresa->nombre ?? ''));
+        $filas = [];
+        foreach ($resultado['filas'] as $fila) {
+            $fecha = (string) ($fila['fecha'] ?? '');
+            $filas[] = [
+                'origen' => (string) ($fila['origen'] ?? ''),
+                'medio' => (string) ($fila['medio'] ?? ''),
+                'proveedor_codigo' => (string) ($fila['proveedor_codigo'] ?? ''),
+                'proveedor_nombre' => (string) ($fila['proveedor_nombre'] ?? ''),
+                'tipo' => (string) ($fila['tipo'] ?? ''),
+                'orden_pago' => (string) ($fila['orden_pago'] ?? ''),
+                'fecha' => $fecha !== '' ? date('d/m/Y', strtotime($fecha)) : '',
+                'referencia' => (string) ($fila['referencia_cbu_o_cheque'] ?? ($fila['cbu'] ?? '')),
+                'importe' => (float) ($fila['importe'] ?? 0),
+                'nombreempresa' => $nombreEmpresa,
+            ];
+        }
+
+        $columnas = [
+            ['clave' => 'origen', 'titulo' => 'Origen', 'ancho' => 12],
+            ['clave' => 'medio', 'titulo' => 'Medio', 'ancho' => 14],
+            ['clave' => 'proveedor_codigo', 'titulo' => 'N.Pro.', 'ancho' => 10],
+            ['clave' => 'proveedor_nombre', 'titulo' => 'Proveedor', 'ancho' => 28],
+            ['clave' => 'tipo', 'titulo' => 'Tip', 'ancho' => 8],
+            ['clave' => 'orden_pago', 'titulo' => 'Nº OP', 'ancho' => 16],
+            ['clave' => 'fecha', 'titulo' => 'Fecha', 'ancho' => 12],
+            ['clave' => 'referencia', 'titulo' => 'CBU / Cheque', 'ancho' => 26, 'mono' => true],
+            ['clave' => 'importe', 'titulo' => 'Monto', 'tipo' => 'importe', 'ancho' => 16],
+        ];
+        $cuentaTxt = trim(((string) ($cuentaOrigen->codigo ?? '')).' '.((string) ($cuentaOrigen->nombre ?? '')));
+        $medios = [];
+        if (! empty($filtros['incluir_transferencias'])) {
+            $medios[] = 'transferencias';
+        }
+        if (! empty($filtros['incluir_cheques'])) {
+            $medios[] = 'cheques';
+        }
+        $subtitulo = implode(' · ', array_filter([
+            $nombreEmpresa,
+            $cuentaTxt !== '' ? 'Cuenta '.$cuentaTxt : '',
+            'Del '.date('d/m/Y', strtotime((string) $filtros['fecha_desde']))
+                .' al '.date('d/m/Y', strtotime((string) $filtros['fecha_hasta'])),
+            'OP '.(int) $filtros['op_desde'].' a '.(int) $filtros['op_hasta'],
+            $medios !== [] ? ucfirst(implode(' y ', $medios)) : '',
+        ]));
+        $respuesta = ArchivoPagoInformeExport::responder(
+            $formato,
+            $filas,
+            $columnas,
+            'Pagos Banco Macro',
+            $subtitulo,
+            (float) ($resultado['total_importe'] ?? 0),
+            'macro_pagos_'.date('Ymd_His'),
+            'Pagos Macro'
+        );
+
+        return $respuesta ?? redirect()->route('macro_archivo_pago', $volver);
     }
 
     /**

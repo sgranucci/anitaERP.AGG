@@ -85,21 +85,21 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 		if (! Schema::hasColumn('asiento_movimiento', 'anita_nro')) {
 			return [];
 		}
-		if (! array_key_exists('mov_anita_nro', $data) && ! array_key_exists('mov_nro_ordencompra', $data)) {
+		if (! array_key_exists('mov_anita_nro', $data)
+			&& ! array_key_exists('mov_nro_ordencompra', $data)
+			&& ! array_key_exists('comprobante_linea', $data)
+			&& ! array_key_exists('ordencompra_linea', $data)) {
 			return [];
 		}
 
-		$nro = (int) ($data['mov_anita_nro'][$i] ?? 0);
-		$oc = (int) ($data['mov_nro_ordencompra'][$i] ?? 0);
-		$tipo = strtoupper(trim((string) ($data['mov_anita_tipo'][$i] ?? '')));
-		$letra = trim((string) ($data['mov_anita_letra'][$i] ?? ''));
+		$doc = \App\Support\Contable\AsientoLineaDocumentoTextoSupport::desdeRequest($data, $i);
 
 		return [
-			'anita_tipo' => $nro > 0 && $tipo !== '' ? substr($tipo, 0, 10) : null,
-			'anita_letra' => $nro > 0 && $letra !== '' ? substr($letra, 0, 3) : null,
-			'anita_sucursal' => $nro > 0 ? (int) ($data['mov_anita_sucursal'][$i] ?? 0) : null,
-			'anita_nro' => $nro > 0 ? $nro : null,
-			'nro_ordencompra' => $oc > 0 ? $oc : null,
+			'anita_tipo' => $doc['anita_tipo'],
+			'anita_letra' => $doc['anita_letra'],
+			'anita_sucursal' => $doc['anita_sucursal'],
+			'anita_nro' => $doc['anita_nro'],
+			'nro_ordencompra' => $doc['nro_ordencompra'],
 		];
 	}
 

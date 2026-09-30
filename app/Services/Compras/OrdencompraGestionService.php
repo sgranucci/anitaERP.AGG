@@ -910,6 +910,12 @@ class OrdencompraGestionService
         }
         if (! OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarCuentasAPagar($oc)) {
             $enPagos = OrdencompraLegajoGastronomiaSupport::esSectorPagos((int) ($oc->sector_legajocompra_id ?? 0));
+            if (! $enPagos && OrdencompraEnvioCuentasAPagarGateSupport::todasLasFacturasYaCargadasEnErp($oc)) {
+                return [
+                    'mensaje' => 'error',
+                    'errores' => OrdencompraEnvioCuentasAPagarGateSupport::mensajeTodasFacturasYaCargadasEnErp(),
+                ];
+            }
 
             return [
                 'mensaje' => 'error',

@@ -54,9 +54,9 @@ final class ProyeccionPagosColumnasSupport
             self::col('fecha_carga', 'F.Carga', self::GRUPO_COMPROBANTE, self::TIPO_FECHA, visible: false, soloDetalle: true, anchoExcel: 13, anchoPdf: 3),
             self::col('fecha_vencimiento', 'F.Vto.', self::GRUPO_VENCIMIENTOS, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 12, anchoPdf: 3.2),
             self::col('fecha_diferida', 'F.Difer.', self::GRUPO_VENCIMIENTOS, self::TIPO_FECHA, soloDetalle: true, anchoExcel: 12, anchoPdf: 3.2, ayuda: 'Fecha del movimiento en cuenta corriente más los días de atraso del proveedor.'),
-            self::col('dias_vencimiento', 'Días vto.', self::GRUPO_VENCIMIENTOS, self::TIPO_ENTERO, soloDetalle: true, anchoExcel: 8, anchoPdf: 2, ayuda: 'Días entre la fecha base y el vencimiento (negativo = vencido).'),
+            self::col('dias_vencimiento', 'Días vto.', self::GRUPO_VENCIMIENTOS, self::TIPO_ENTERO, soloDetalle: true, anchoExcel: 8, anchoPdf: 2, ayuda: 'Días de atraso al vencimiento. Positivo = ya venció. Negativo = faltan esos días.'),
             self::col('tramo_vencimiento', 'Tramo', self::GRUPO_VENCIMIENTOS, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 16, anchoPdf: 3.6),
-            self::col('nro_referencia', 'N.Refer.', self::GRUPO_APROBACION, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4, ayuda: 'Orden de compra origen con enlace al ABM.'),
+            self::col('nro_referencia', 'O.Compra', self::GRUPO_COMPROBANTE, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4, ayuda: 'Orden de compra de la factura, con enlace de consulta.'),
             self::col('medio_pago', 'M.Pago', self::GRUPO_PAGO, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4),
             self::col('detalle_pago', 'Detalle pago', self::GRUPO_PAGO, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 28, anchoPdf: 6),
             self::col('moneda', 'Mon.', self::GRUPO_IMPORTES, self::TIPO_TEXTO, soloDetalle: true, anchoExcel: 7, anchoPdf: 1.8),
@@ -186,6 +186,7 @@ final class ProyeccionPagosColumnasSupport
             }
         }
 
+        $visibles = self::insertarOrdencompraSiCorresponde($visibles, $disponibles);
         $visibles = self::insertarAutorizanteSiCorresponde($visibles, $disponibles);
 
         return array_values($visibles);
@@ -281,6 +282,30 @@ final class ProyeccionPagosColumnasSupport
         ));
 
         return $claves === $legacy;
+    }
+
+    /**
+     * La orden de compra va al lado del comprobante para que pagos pueda abrirla.
+     *
+     * @param  array<string, array<string, mixed>>  $visibles
+     * @param  array<string, array<string, mixed>>  $disponibles
+     * @return array<string, array<string, mixed>>
+     */
+    private static function insertarOrdencompraSiCorresponde(array $visibles, array $disponibles): array
+    {
+        if (! isset($disponibles['nro_referencia'], $visibles['comprobante']) || isset($visibles['nro_referencia'])) {
+            return $visibles;
+        }
+
+        $salida = [];
+        foreach ($visibles as $clave => $columna) {
+            $salida[$clave] = $columna;
+            if ($clave === 'comprobante') {
+                $salida['nro_referencia'] = $disponibles['nro_referencia'];
+            }
+        }
+
+        return $salida;
     }
 
     /**

@@ -236,13 +236,16 @@ class PagoproveedorAnularRevertirService
                 ->where('pagoproveedor_id', (int) $pago->id)
                 ->get();
 
-            $asientoOrig = Asiento::query()
+            // Una OP importada de Anita puede partir el asiento en subdiario
+            // (retención y cheque). Se revierten todos los que cuelgan de la OP.
+            $asientosOrig = Asiento::query()
                 ->with('asiento_movimientos')
                 ->where('pagoproveedor_id', (int) $pago->id)
                 ->orderBy('id')
-                ->first();
+                ->get();
 
-            if ($asientoOrig) {
+            $asientoIdReverso = null;
+            foreach ($asientosOrig as $asientoOrig) {
                 $resAsiento = $this->asientoReversoSupport->generarDesdeAsiento(
                     $asientoOrig,
                     $fechaOp,
@@ -250,14 +253,18 @@ class PagoproveedorAnularRevertirService
                     $leyenda,
                     alcanceCierre: PeriodoContableCierreSupport::ALCANCE_CAJA
                 );
-                if (! empty($resAsiento['asiento_id'])) {
-                    Asiento::query()->where('id', (int) $resAsiento['asiento_id'])->update([
-                        'pagoproveedor_id' => (int) $reverso->id,
-                    ]);
-                    $this->pagoproveedorRepository->update([
-                        'asiento_id' => (int) $resAsiento['asiento_id'],
-                    ], (int) $reverso->id);
+                if (empty($resAsiento['asiento_id'])) {
+                    continue;
                 }
+                $asientoIdReverso = (int) $resAsiento['asiento_id'];
+                Asiento::query()->where('id', $asientoIdReverso)->update([
+                    'pagoproveedor_id' => (int) $reverso->id,
+                ]);
+            }
+            if ($asientoIdReverso !== null) {
+                $this->pagoproveedorRepository->update([
+                    'asiento_id' => $asientoIdReverso,
+                ], (int) $reverso->id);
             }
 
             // Misma idea que el detalle del AOP ("ANULA OPP…"): la OPP original

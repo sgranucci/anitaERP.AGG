@@ -190,16 +190,15 @@ function refrescarCentroCostoTrasCuenta($ctx, data) {
 
     if (tieneCcAsiento && typeof completarCentroCostoAsiento === 'function') {
         var ccPrevioAsiento = parseInt($tr.find('.centrocostoasiento_id_previo').val() || '0', 10) || 0;
-        completarCentroCostoAsiento($codigo.get(0), cuentaId, ccPrevioAsiento);
+        var esperaAsiento = completarCentroCostoAsiento($codigo.get(0), cuentaId, ccPrevioAsiento);
         if (typeof marcaAsientoLineaManual === 'function') {
             marcaAsientoLineaManual($tr);
         }
-        return;
+        return esperaAsiento;
     }
 
     if (typeof completarCentroCosto === 'function') {
-        completarCentroCosto($codigo.get(0), cuentaId, 0);
-        return;
+        return completarCentroCosto($codigo.get(0), cuentaId, 0);
     }
 
     if (typeof leeCentroCosto === 'function') {
@@ -256,9 +255,12 @@ function programarBusquedaCuentaContable(consulta) {
     }, CONSULTA_CUENTACONTABLE_DEBOUNCE_MS);
 }
 
-function resolverPorCodigoCuentaContable(codigo, $ctx) {
+function resolverPorCodigoCuentaContable(codigo, $ctx, onDone) {
     // Abrir el modal dispara blur del código: no resolver ni limpiar mientras abre/está abierto.
     if (modalCuentaContableAbierto()) {
+        if (typeof onDone === 'function') {
+            onDone(false, $ctx);
+        }
         return;
     }
 
@@ -269,11 +271,17 @@ function resolverPorCodigoCuentaContable(codigo, $ctx) {
 
     if (!codigoNuevo) {
         limpiarCuentaContableEnContexto($ctx);
+        if (typeof onDone === 'function') {
+            onDone(false, $ctx);
+        }
         return;
     }
 
     if (!empresaId) {
         alert('Debe ingresar empresa');
+        if (typeof onDone === 'function') {
+            onDone(false, $ctx);
+        }
         return;
     }
 
@@ -283,20 +291,32 @@ function resolverPorCodigoCuentaContable(codigo, $ctx) {
         if (data && data.id > 0) {
             aplicarCuentaContableEnContexto($ctx, data);
 
-            if (codigoNuevo !== codigoAnt) {
-                refrescarCentroCostoTrasCuenta($ctx, data);
-            }
+            var esperaCc = (codigoNuevo !== codigoAnt)
+                ? refrescarCentroCostoTrasCuenta($ctx, data)
+                : null;
+            $.when(esperaCc).always(function () {
+                if (typeof onDone === 'function') {
+                    onDone(true, $ctx);
+                }
+            });
         } else {
             alert('No existe la cuenta');
 
-            if ($ctx && $ctx.length && $ctx.is('tr') && $ctx.find('.cuentacontable_id_previa').length) {
+            if ($ctx && $ctx.length && $ctx.is('tr') && $ctx.find('.cuentacontable_id_previa').length
+                && !($ctx.closest('#cuenta-table').length)) {
                 $ctx.remove();
             }
 
             limpiarCuentaContableEnContexto($ctx);
+            if (typeof onDone === 'function') {
+                onDone(false, $ctx);
+            }
         }
     }).fail(function() {
         limpiarCuentaContableEnContexto($ctx);
+        if (typeof onDone === 'function') {
+            onDone(false, $ctx);
+        }
     });
 }
 
@@ -364,6 +384,10 @@ document.addEventListener('keydown', function (e) {
     if (!target.classList.contains('codigocuentacontable') && target.id !== 'codigocuentacontable') {
         return;
     }
+    // La grilla del asiento contable mueve el foco y borra el renglón vacío.
+    if (target.closest && target.closest('#cuenta-table')) {
+        return;
+    }
     e.preventDefault();
     e.stopPropagation();
     var $input = $(target);
@@ -375,6 +399,9 @@ $(document)
     .off('keydown.ctaCodigoCuentaEnter', '.codigocuentacontable, #codigocuentacontable')
     .on('keydown.ctaCodigoCuentaEnter', '.codigocuentacontable, #codigocuentacontable', function (e) {
         if (e.which !== 13 && e.key !== 'Enter') {
+            return;
+        }
+        if ($(this).closest('#cuenta-table').length) {
             return;
         }
         if ($(this).data('cta-enter-procesado')) {
@@ -451,9 +478,40 @@ function manejarEnterBuscadorCuentaContable(e) {
     if (typeof e.stopImmediatePropagation === 'function') {
         e.stopImmediatePropagation();
     }
-    if (!elegirUnicaCuentaContableDelModal()) {
-        programarBusquedaCuentaContable(String(target.value || ''));
+    var textoBuscador = String(target.value || '').trim();
+    if (textoBuscador === '' && borrarUltimaLineaAsientoSiCuentaVaciaDesdeModal()) {
+        return;
     }
+    if (!elegirUnicaCuentaContableDelModal()) {
+        programarBusquedaCuentaContable(textoBuscador);
+    }
+}
+
+/** Enter en el buscador vacío: cierra el modal y borra la última línea sin cuenta. */
+function borrarUltimaLineaAsientoSiCuentaVaciaDesdeModal() {
+    var $ctx = (typeof ptrCuentacontableContext !== 'undefined' && ptrCuentacontableContext)
+        ? $(ptrCuentacontableContext)
+        : $();
+    var desdeAsientoAbm = $ctx.length && $ctx.closest('#cuenta-table').length > 0;
+    var desdeAsientoExterno = window.__asientoConsultaCuentaOrigen === true;
+
+    if (!desdeAsientoAbm && !desdeAsientoExterno) {
+        return false;
+    }
+
+    var borro = false;
+    if (desdeAsientoAbm && typeof window.asientoBorrarUltimaLineaSiCuentaVacia === 'function') {
+        borro = window.asientoBorrarUltimaLineaSiCuentaVacia() === true;
+    } else if (desdeAsientoExterno && typeof window.asientoExternoBorrarUltimaLineaSiCuentaVacia === 'function') {
+        borro = window.asientoExternoBorrarUltimaLineaSiCuentaVacia() === true;
+    }
+
+    if (!borro) {
+        return false;
+    }
+
+    $('#consultacuentaModal').modal('hide');
+    return true;
 }
 
 document.addEventListener('keydown', manejarEnterBuscadorCuentaContable, true);
@@ -573,7 +631,12 @@ function activa_eventos_consulta_cuentacontable()
         // Un solo apply sobre el nodo vivo (evita escribir en DOM reemplazado por el preview).
         if ($ctx && $ctx.length) {
             aplicarCuentaContableEnContexto($ctx, data);
-            refrescarCentroCostoTrasCuenta($ctx, data);
+            var esperaCcModal = refrescarCentroCostoTrasCuenta($ctx, data);
+            if ($ctx.closest('#cuenta-table').length && typeof window.asientoEnfocarSiguienteTrasCuenta === 'function') {
+                $.when(esperaCcModal).always(function () {
+                    window.asientoEnfocarSiguienteTrasCuenta($ctx);
+                });
+            }
             ptrCuentacontableContext = $ctx;
             cuentacontablexcodigo = $ctx.find('.cuentacontable_id').first();
             nombrexcodigo = $ctx.find('.nombrecuentacontable').first();

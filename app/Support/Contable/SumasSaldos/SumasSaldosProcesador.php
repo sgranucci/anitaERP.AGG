@@ -449,6 +449,7 @@ class SumasSaldosProcesador
                 'c.nombre',
                 'a.fecha',
                 'a.observacion as asiento_obs',
+                'am.observacion as mov_obs',
                 'am.monto',
                 'am.moneda_id',
                 'am.cotizacion',
@@ -464,7 +465,11 @@ class SumasSaldosProcesador
 
         foreach ($query->cursor() as $row) {
             $tipo = (string) ($row->tipo_abrev ?? '');
-            $restarPorTipo = ! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion);
+            $descripcion = trim((string) ($row->mov_obs ?? ''));
+            if ($descripcion === '') {
+                $descripcion = trim((string) ($row->asiento_obs ?? ''));
+            }
+            $restarPorTipo = ! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion, $descripcion);
             $restarPorSubdiario = $excluirSubdiario && $this->esOrigenSubdiarioObservacion((string) ($row->asiento_obs ?? ''));
             // Solo restar lo que el filtro de inclusión / subdiario NO muestra.
             if (! $restarPorTipo && ! $restarPorSubdiario) {
@@ -596,6 +601,8 @@ class SumasSaldosProcesador
                 'c.codigo',
                 'c.nombre',
                 'a.fecha',
+                'a.observacion as asiento_obs',
+                'am.observacion as mov_obs',
                 'am.monto',
                 'am.moneda_id',
                 'am.cotizacion',
@@ -613,7 +620,11 @@ class SumasSaldosProcesador
 
         foreach ($query->cursor() as $row) {
             $tipo = (string) ($row->tipo_abrev ?? '');
-            if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion)) {
+            $descripcion = trim((string) ($row->mov_obs ?? ''));
+            if ($descripcion === '') {
+                $descripcion = trim((string) ($row->asiento_obs ?? ''));
+            }
+            if (! MayorPlanoCuentaSupport::movimientoVisiblePorTipoAsiento($tipo, $modoInclusion, $descripcion)) {
                 continue;
             }
 
