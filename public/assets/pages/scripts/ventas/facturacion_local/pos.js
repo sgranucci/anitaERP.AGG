@@ -9,6 +9,7 @@
     var cuentacajaxcodigo = null;
     var clientePos = null;
     var netoActual = 0;
+    var previewSeq = 0;
     var receptorManualModo = 'b';
 
     function $(id) { return document.getElementById(id); }
@@ -186,10 +187,39 @@
         preview();
     }
 
+    function aCobrarActual() {
+        if (Math.abs(netoActual) < 0.009 && cart.length) {
+            return 0.01;
+        }
+        return Math.max(0, netoActual);
+    }
+
+    function sincronizarMontosAutomaticos() {
+        var filas = document.querySelectorAll('#tbody-fl-cuenta-table tr');
+        var autos = [];
+        var otros = 0;
+        filas.forEach(function (row) {
+            var monto = row.querySelector('.monto');
+            var id = +((row.querySelector('.cuentacaja_id') || {}).value || 0);
+            if (!monto) return;
+            if (monto.dataset.auto === '1' && id > 0) {
+                autos.push(monto);
+                return;
+            }
+            otros += parseFloat(monto.value) || 0;
+        });
+        if (autos.length !== 1) return;
+        var resto = Math.max(0, aCobrarActual() - otros);
+        autos[0].value = resto.toFixed(2);
+    }
+
     function preview() {
+        var seq = ++previewSeq;
         post(CFG.urls.preview, { lineas: cart }).then(function (res) {
+            if (seq !== previewSeq) return;
             var b = res.body || {};
             netoActual = Number(b.neto || 0);
+            sincronizarMontosAutomaticos();
             var el = $('fl-totales');
             if (el) {
                 var mostrar = netoActual;
@@ -245,11 +275,12 @@
         if (nom) nom.value = cuenta.nombre || '';
         var monto = tr.querySelector('.monto');
         if (monto && (!monto.value || Number(monto.value) === 0)) {
-            var aCobrar = (Math.abs(netoActual) < 0.009 && cart.length) ? 0.01 : netoActual;
+            var aCobrar = aCobrarActual();
             if (aCobrar > 0) {
                 var ya = totalCobrado();
                 var resto = Math.max(0, aCobrar - (ya - (parseFloat(monto.value) || 0)));
                 monto.value = resto.toFixed(2);
+                monto.dataset.auto = '1';
             }
         }
         actualizarCampoCupon(tr, cuenta);
@@ -375,6 +406,13 @@
                 agregarRenglonCobranza(0, true);
             });
         }
+
+        document.addEventListener('input', function (e) {
+            var t = e.target;
+            if (!t || !t.classList || !t.classList.contains('monto')) return;
+            if (!t.closest('#tbody-fl-cuenta-table')) return;
+            delete t.dataset.auto;
+        });
 
         document.addEventListener('click', function (e) {
             var rm = e.target.closest('.fl-eliminar-cuenta');
@@ -1193,6 +1231,21 @@
         if (!validarReceptorManualUi()) {
             return;
         }
+        if (!esRegalo) {
+            var aCobrar = aCobrarActual();
+            var sumaCobro = totalCobrado();
+            var excedenteSel = ($('fl-excedente') && $('fl-excedente').value) || '';
+            if (aCobrar > 0.009 && Math.abs(sumaCobro - aCobrar) > 0.05) {
+                if (sumaCobro + 0.05 < aCobrar) {
+                    msg('La cobranza es insuficiente respecto del total a pagar.', false);
+                    return;
+                }
+                if (excedenteSel !== 'vale' && excedenteSel !== 'reintegro') {
+                    msg('El cobro (' + money(sumaCobro) + ') no coincide con el total a pagar (' + money(aCobrar) + '). Ajustá el medio, o elegí vale / reintegro si el excedente es real.', false);
+                    return;
+                }
+            }
+        }
         var cuponPendiente = esRegalo ? null : filaCuponPendiente();
         if (cuponPendiente) {
             msg('Ingresá el número de cupón de la tarjeta', false);
@@ -1223,6 +1276,7 @@
             var letra = (res.body.letra || (clientePos && clientePos.letra) || '');
             msg('OK ' + (res.body.codigo || '') + (letra ? ' (' + letra + ')' : '') + (res.body.cae ? ' CAE ' + res.body.cae : ''), true);
             cart = [];
+            netoActual = 0;
             renderCart();
             var tbody = $('tbody-fl-cuenta-table');
             if (tbody) tbody.innerHTML = '';

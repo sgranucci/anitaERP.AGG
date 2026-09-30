@@ -12,6 +12,7 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\FacturacionLocal\StockLocalInformeListadoFiltros;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Informe de stock de locales (l-stocklocal.c).
@@ -37,9 +38,25 @@ class StockLocalInformeController extends Controller
             ->orderBy('codigo')
             ->get();
 
-        // Todos los depósitos autorizados (incluye fábrica sin local de facturación).
+        // Depósito del local, o cualquiera que ya tenga movimientos.
+        // Quedan afuera las copias Anita 610/620/630… (mismo local, otro código, sin stock)
+        // y maestros vacíos (Palermo 20, La Dulce 50, etc.).
+        $idsDepositoLocal = $locales
+            ->pluck('deposito_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0);
+        $idsConMovimiento = DB::table('articulo_movimiento')
+            ->distinct()
+            ->pluck('deposito_id')
+            ->map(static fn ($id) => (int) $id);
+        $idsDepositoVisibles = $idsDepositoLocal->merge($idsConMovimiento)->unique()->values();
+
         $depositosErp = Depmae::query()
             ->paraUsuarioAutorizado()
+            ->when($idsDepositoVisibles->isNotEmpty(), static function ($query) use ($idsDepositoVisibles) {
+                $query->whereIn('id', $idsDepositoVisibles->all());
+            })
+            ->where('nombre', 'not like', '%(local %')
             ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
             ->get(['id', 'codigo', 'nombre'])
             ->map(static function ($dep) {

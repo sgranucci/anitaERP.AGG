@@ -385,8 +385,8 @@ class FacturacionServiceFerli extends FacturacionService
                 $precio = $medida['precio'];
             }
 
-            $deposito = isset($medida['deposito']) ? $medida['deposito'] : 1;
-            if ($ifx_server == 'IFX_SERVER_LOCAL') {
+            $deposito = isset($medida['deposito']) ? (int) $medida['deposito'] : 1;
+            if ($ifx_server == 'IFX_SERVER_LOCAL' && $deposito <= 1) {
                 $deposito = ($puntoventa == 27) ? 27 : 10;
             }
 
@@ -550,6 +550,7 @@ class FacturacionServiceFerli extends FacturacionService
                         'codigocombinacion' => $item['codigocombinacion'] ?? '',
                         'despacho' => $item['despacho'] ?? '',
                         'medida' => $medida['medida'],
+                        'deposito' => (int) ($item['deposito'] ?? 0),
                     ];
                 }
             }

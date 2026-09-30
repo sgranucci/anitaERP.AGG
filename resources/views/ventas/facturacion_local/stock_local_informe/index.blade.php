@@ -95,7 +95,7 @@
                                 @endforeach
                             </select>
                             <small class="form-text text-muted">
-                                Incluye depósitos de fábrica sin local (no facturan). Varias sucursales pueden compartir depósito.
+                                El que va con el local es el depósito asignado en Locales. Acá también están los que tienen movimientos (fábrica). Los códigos 610, 620, 630… repiten la misma sucursal y no se listan.
                             </small>
                         </div>
                     </div>
@@ -235,7 +235,7 @@
                         <span class="badge badge-info">Filas: {{ (int) ($totales['total_filas'] ?? 0) }}</span>
                         <span class="badge badge-secondary">Grupos art./color: {{ (int) ($totales['total_grupos'] ?? 0) }}</span>
                         <span class="badge badge-success">
-                            Stock total: {{ number_format((float) ($totales['total_stock'] ?? 0), 0, ',', '.') }}
+                            Stock total: {{ \App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport::cantidadVisible((float) ($totales['total_stock'] ?? 0), '0') }}
                         </span>
                         @if (! empty($totales['origen']))
                             <span class="badge badge-light">Origen: {{ $totales['origen'] }}</span>

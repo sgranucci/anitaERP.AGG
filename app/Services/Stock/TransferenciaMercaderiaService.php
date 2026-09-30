@@ -27,6 +27,7 @@ use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaCodigoSupport;
+use App\Support\Stock\TransferenciaMercaderiaCostoSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
@@ -691,7 +692,7 @@ class TransferenciaMercaderiaService
                             ]));
 
                             $this->generarTokenConsultaPublica($transferencia->fresh());
-                            $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
+                            $this->encolarAvisoTransferencia('transferencia_confirmada', (int) $transferencia->id);
                         } else {
                             $this->generarTokensYNotificarAprobacion($transferencia->fresh(['articulos', 'depositoOrigen', 'depositoDestino']));
                         }
@@ -805,7 +806,7 @@ class TransferenciaMercaderiaService
             ]));
 
             $this->generarTokenConsultaPublica($transferencia->fresh());
-            $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
+            $this->encolarAvisoTransferencia('transferencia_confirmada', (int) $transferencia->id);
 
             return $transferencia->fresh();
         });
@@ -844,7 +845,7 @@ class TransferenciaMercaderiaService
             $transferencia->save();
 
             $this->invalidarTokens($transferencia);
-            $this->moduloAvisoService->enviar('stock', 'transferencia_rechazada', (int) $transferencia->id, [
+            $this->encolarAvisoTransferencia('transferencia_rechazada', (int) $transferencia->id, [
                 'motivo' => $motivo,
             ]);
 
@@ -890,6 +891,22 @@ class TransferenciaMercaderiaService
         $resueltas = [];
         $item = 0;
         $faltantesInsumo = [];
+        $idsCosto = [];
+        foreach ($lineas as $linea) {
+            $articuloId = (int) ($linea['articulo_id'] ?? 0);
+            $cantidad = (float) ($linea['cantidad'] ?? 0);
+            $sumaMedidas = TransferenciaMercaderiaDetalleFerliSupport::sumaCantidadDesdeMedidas($linea['medidas'] ?? '');
+            if ($sumaMedidas > 0.000001) {
+                $cantidad = $sumaMedidas;
+            }
+            if ($articuloId > 0 && $cantidad > 0) {
+                $idsCosto[$articuloId] = $articuloId;
+            }
+        }
+        $articulosPorId = $idsCosto === []
+            ? collect()
+            : Articulo::query()->whereIn('id', array_values($idsCosto))->get()->keyBy('id');
+        $costos = TransferenciaMercaderiaCostoSupport::resolverCostosUltimaCompra($articulosPorId);
 
         foreach ($lineas as $linea) {
             $articuloId = (int) ($linea['articulo_id'] ?? 0);
@@ -904,16 +921,18 @@ class TransferenciaMercaderiaService
                 continue;
             }
 
-            $articulo = Articulo::query()->findOrFail($articuloId);
+            $articulo = $articulosPorId->get($articuloId) ?? Articulo::query()->findOrFail($articuloId);
+            $precioOrigen = $costos[(int) $articulo->id] ?? null;
             if ($destinoBienUso) {
-                $conv = TransferenciaMercaderiaLineaSupport::resolverLineaParaBienUso($articulo, $cantidad);
+                $conv = TransferenciaMercaderiaLineaSupport::resolverLineaParaBienUso($articulo, $cantidad, $precioOrigen);
             } else {
                 try {
                     $conv = TransferenciaMercaderiaLineaSupport::resolverLinea(
                         $articulo,
                         $depositoEntrada,
                         $cantidad,
-                        $empresaId > 0 ? $empresaId : null
+                        $empresaId > 0 ? $empresaId : null,
+                        $precioOrigen
                     );
                 } catch (\RuntimeException $e) {
                     if (RecepcionProveedorDepositoSupport::esDepositoFormula($depositoEntrada)
@@ -1408,7 +1427,20 @@ class TransferenciaMercaderiaService
             }
         }
 
-        $this->moduloAvisoService->enviar('stock', 'transferencia_pendiente_aprobacion', (int) $transferencia->id);
+        $this->encolarAvisoTransferencia('transferencia_pendiente_aprobacion', (int) $transferencia->id);
+    }
+
+    /**
+     * El aviso sale recién cuando la transacción confirma. El mail va a la cola:
+     * el SMTP no queda adentro del commit ni alarga la respuesta al navegador.
+     *
+     * @param  array<string, mixed>  $opciones
+     */
+    private function encolarAvisoTransferencia(string $codigo, int $transferenciaId, array $opciones = []): void
+    {
+        DB::afterCommit(function () use ($codigo, $transferenciaId, $opciones) {
+            $this->moduloAvisoService->enviar('stock', $codigo, $transferenciaId, $opciones);
+        });
     }
 
     /**

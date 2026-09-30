@@ -9,6 +9,12 @@
         return $codigoNumericoSeleccionado > 0
             && (int) ($pv['numero'] ?? $pv['codigo'] ?? 0) === $codigoNumericoSeleccionado;
     });
+    $marcaCodigoInterno = old('codigo_interno');
+    if ($marcaCodigoInterno === null) {
+        $marcaCodigoInterno = $codigoFueraDeArca;
+    } else {
+        $marcaCodigoInterno = (string) $marcaCodigoInterno === '1';
+    }
     $webserviceActual = old('webservice', $data->webservice ?? '');
     $modofacturacionActual = old('modofacturacion', $data->modofacturacion ?? '');
     $paisActual = (int) old('pais_id', $data->pais_id ?? config('puntoventa_anita.default_pais_id', 1));
@@ -66,10 +72,11 @@
         </div>
         <div class="card-body pb-2">
             <div class="form-group row">
-                <label for="codigo" class="col-lg-3 control-label text-right pr-2 requerido">Código ARCA</label>
+                <label for="codigo" class="col-lg-3 control-label text-right pr-2 requerido">Código</label>
                 <div class="col-lg-6">
                     <select name="codigo" id="codigo" class="form-control" required data-fouc
-                            @if($empresasArca->isEmpty() && $codigoSeleccionado === '') disabled @endif>
+                            @if($marcaCodigoInterno) disabled @endif
+                            @if($empresasArca->isEmpty() && $codigoSeleccionado === '' && ! $marcaCodigoInterno) disabled @endif>
                         <option value="">-- Elija punto de venta (ARCA) --</option>
                         @foreach($puntosArca as $pv)
                             @php
@@ -87,12 +94,22 @@
                             </option>
                         @endif
                     </select>
-                    <small class="form-text text-muted">
-                        Puntos habilitados según el webservice de la empresa
+                    <input type="text" id="codigo_manual" class="form-control mt-2 @if(! $marcaCodigoInterno) d-none @endif"
+                           inputmode="numeric" maxlength="5" placeholder="Ej. 2001" autocomplete="off"
+                           value="{{ $codigoNumericoSeleccionado > 0 ? $codigoNumericoSeleccionado : '' }}"
+                           @if($marcaCodigoInterno) name="codigo" required @else disabled @endif>
+                    <div class="form-check mt-2">
+                        <input type="hidden" name="codigo_interno" value="0">
+                        <input type="checkbox" class="form-check-input" name="codigo_interno" id="codigo_interno" value="1"
+                            @checked($marcaCodigoInterno)>
+                        <label class="form-check-label" for="codigo_interno">Código interno (sin ARCA)</label>
+                    </div>
+                    <small class="form-text text-muted" id="codigo-ayuda">
+                        Puntos habilitados en ARCA
                         @if($webserviceArcaEtiqueta !== '')
                             (<strong>{{ $webserviceArcaEtiqueta }}</strong>)
                         @endif
-                        y el modo de facturación.
+                        . Si el punto es interno (remito, sin código ARCA), tildá «Código interno», dejá el web service vacío y destildá IVA ventas.
                     </small>
                     <small id="puntoventa-webservice-arca" class="form-text text-muted d-none"></small>
                 </div>

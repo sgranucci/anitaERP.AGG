@@ -2,6 +2,8 @@
 
 namespace App\Support\Caja;
 
+use App\Support\Numerico\NumeroDecimalLocalSupport;
+
 /**
  * Cuadre entre comprobantes IVA del IE y el monto del pago en cuentas de caja.
  */
@@ -50,13 +52,13 @@ final class IngresoEgresoComprobanteIvaValidacionSupport
                 continue;
             }
 
-            $monto = round(abs((float) ($comprobante['total'] ?? 0)), 2);
+            $monto = round(abs(NumeroDecimalLocalSupport::aFloat($comprobante['total'] ?? 0)), 2);
             if ($monto <= 0) {
                 continue;
             }
 
             $monedaId = (int) ($comprobante['moneda_id'] ?? $monedaReferenciaId);
-            $cotizacion = (float) ($comprobante['cotizacion'] ?? 1);
+            $cotizacion = NumeroDecimalLocalSupport::aFloat($comprobante['cotizacion'] ?? 1, 1.0);
             $coef = function_exists('calculaCoeficienteMoneda')
                 ? calculaCoeficienteMoneda($monedaReferenciaId, $monedaId, $cotizacion)
                 : 1.0;
@@ -75,13 +77,15 @@ final class IngresoEgresoComprobanteIvaValidacionSupport
         $total = 0.0;
 
         foreach ($lineasCaja as $linea) {
-            $monto = round(abs((float) (is_array($linea) ? ($linea['montos'] ?? $linea['monto'] ?? 0) : ($linea->montos ?? $linea->monto ?? 0))), 2);
+            $montoRaw = is_array($linea) ? ($linea['montos'] ?? $linea['monto'] ?? 0) : ($linea->montos ?? $linea->monto ?? 0);
+            $monto = round(abs(NumeroDecimalLocalSupport::aFloat($montoRaw)), 2);
             if ($monto <= 0) {
                 continue;
             }
 
             $monedaId = (int) (is_array($linea) ? ($linea['moneda_ids'] ?? $linea['moneda_id'] ?? $monedaReferenciaId) : ($linea->moneda_ids ?? $linea->moneda_id ?? $monedaReferenciaId));
-            $cotizacion = (float) (is_array($linea) ? ($linea['cotizaciones'] ?? $linea['cotizacion'] ?? 1) : ($linea->cotizaciones ?? $linea->cotizacion ?? 1));
+            $cotRaw = is_array($linea) ? ($linea['cotizaciones'] ?? $linea['cotizacion'] ?? 1) : ($linea->cotizaciones ?? $linea->cotizacion ?? 1);
+            $cotizacion = NumeroDecimalLocalSupport::aFloat($cotRaw, 1.0);
             $coef = function_exists('calculaCoeficienteMoneda')
                 ? calculaCoeficienteMoneda($monedaReferenciaId, $monedaId, $cotizacion)
                 : 1.0;

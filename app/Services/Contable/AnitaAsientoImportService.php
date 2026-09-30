@@ -89,6 +89,7 @@ final class AnitaAsientoImportService
         ?callable $logger = null,
         bool $importarResumenSinDetalle = false,
         bool $soloDocumentos = false,
+        bool $completarDocumentosLinea = true,
     ): array {
         $desde = Carbon::createFromFormat('Y-m-d', $desdeYmd)->startOfDay();
         $hasta = Carbon::createFromFormat('Y-m-d', $hastaYmd)->endOfDay();
@@ -160,6 +161,7 @@ final class AnitaAsientoImportService
                     $logger,
                     $importarResumenSinDetalle,
                     $soloDocumentos,
+                    $completarDocumentosLinea,
                 );
 
                 $this->mergeResumen($resumen, $bloque);
@@ -188,6 +190,7 @@ final class AnitaAsientoImportService
         ?callable $logger,
         bool $importarResumenSinDetalle = false,
         bool $soloDocumentos = false,
+        bool $completarDocumentosLinea = true,
     ): array {
         $out = $this->resumenVacio();
         $data = $this->bridgeReader->cargarBloque($empresaAnita, $fechaDesdeYmd, $fechaHastaYmd);
@@ -233,6 +236,7 @@ final class AnitaAsientoImportService
                 $out,
                 $item['origen'],
                 $soloDocumentos,
+                $completarDocumentosLinea,
             );
         }
 
@@ -930,6 +934,7 @@ final class AnitaAsientoImportService
         array &$out,
         string $origen,
         bool $soloDocumentos = false,
+        bool $completarDocumentosLinea = true,
     ): void {
         $nro = (int) $asientoPlan['numeroasiento'];
         $existente = $existentes[$nro] ?? null;
@@ -1001,7 +1006,9 @@ final class AnitaAsientoImportService
                 }
             }
 
-            $this->completarDocumentosLinea($existente, $asientoPlan, $dryRun, $out);
+            if ($completarDocumentosLinea) {
+                $this->completarDocumentosLinea($existente, $asientoPlan, $dryRun, $out);
+            }
 
             return;
         }

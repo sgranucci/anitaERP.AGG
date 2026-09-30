@@ -15,21 +15,67 @@ final class TransferenciaMercaderiaCostoSupport
 {
     public static function resolverCostoUltimaCompra(Articulo $articulo): float
     {
-        if (ArticuloPrecioTransferenciaContableSupport::usaPrecioPromedio($articulo)) {
-            $promedio = ArticuloPrecioPromedioCompraSupport::resolverPrecioUnitario($articulo);
-            if ($promedio !== null && (float) $promedio > 0) {
-                return round((float) $promedio, 6);
+        $id = (int) $articulo->id;
+
+        return self::resolverCostosUltimaCompra([$articulo])[$id] ?? self::fallbackCostoArticulo($articulo);
+    }
+
+    /**
+     * Misma regla que {@see resolverCostoUltimaCompra}, en una sola lectura ERP/Anita
+     * para todas las líneas de la transferencia.
+     *
+     * @param  iterable<Articulo>  $articulos
+     * @return array<int, float>
+     */
+    public static function resolverCostosUltimaCompra(iterable $articulos): array
+    {
+        /** @var array<int, Articulo> $porId */
+        $porId = [];
+        /** @var array<int, Articulo> $promedio */
+        $promedio = [];
+        /** @var array<int, Articulo> $ultimaCompra */
+        $ultimaCompra = [];
+
+        foreach ($articulos as $articulo) {
+            if (! $articulo instanceof Articulo) {
+                continue;
+            }
+            $id = (int) $articulo->id;
+            if ($id <= 0 || isset($porId[$id])) {
+                continue;
+            }
+            $porId[$id] = $articulo;
+            if (ArticuloPrecioTransferenciaContableSupport::usaPrecioPromedio($articulo)) {
+                $promedio[$id] = $articulo;
+            } else {
+                $ultimaCompra[$id] = $articulo;
             }
         }
 
-        $dato = ArticuloPrecioUltimaCompraSupport::resolverPorArticulo($articulo);
-        $precio = $dato['precio'] ?? null;
-
-        if ($precio !== null && (float) $precio > 0) {
-            return round((float) $precio, 6);
+        $out = [];
+        if ($promedio !== []) {
+            $resueltos = ArticuloPrecioPromedioCompraSupport::resolverPorArticulos($promedio);
+            foreach ($promedio as $id => $articulo) {
+                $precio = $resueltos[$id]['precio'] ?? null;
+                if ($precio !== null && (float) $precio > 0) {
+                    $out[$id] = round((float) $precio, 6);
+                } else {
+                    $ultimaCompra[$id] = $articulo;
+                }
+            }
         }
 
-        return self::fallbackCostoArticulo($articulo);
+        if ($ultimaCompra !== []) {
+            $resueltos = ArticuloPrecioUltimaCompraSupport::resolverPorArticulos($ultimaCompra);
+            foreach ($ultimaCompra as $id => $articulo) {
+                $precio = $resueltos[$id]['precio'] ?? null;
+                $out[$id] = $precio !== null && (float) $precio > 0
+                    ? round((float) $precio, 6)
+                    : self::fallbackCostoArticulo($articulo);
+            }
+        }
+
+        return $out;
     }
 
     /**

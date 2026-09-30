@@ -486,8 +486,8 @@ final class StockLocalInformeService
                 'categoria_codigo' => $meta['categoria_codigo'],
                 'color' => $colorCodigo,
                 'color_desc' => $grupo['color_desc'],
-                'orden_cat' => $meta['categoria_codigo'].'|'.$meta['sku'].'|'.$colorCodigo,
-                'orden_art' => $meta['sku'].'|'.$colorCodigo,
+                'orden_cat' => $meta['categoria_codigo'].'|'.$meta['sku'].'|'.StockLocalErpMovimientosSupport::claveOrdenColor($colorCodigo),
+                'orden_art' => $meta['sku'].'|'.StockLocalErpMovimientosSupport::claveOrdenColor($colorCodigo),
             ];
 
             if ($modo === StockLocalInformeListadoFiltros::MODO_APERTURA) {
@@ -681,8 +681,8 @@ final class StockLocalInformeService
                 'concepto' => trim($mov['tipo'].' '.$mov['numero']),
                 'cantidades' => $mov['cantidades'],
                 'total' => $total,
-                'orden_cat' => $meta['categoria_codigo'].'|'.$mov['fecha'].'|'.$meta['sku'].'|'.$colorCodigo.'|'.$mov['am_id'],
-                'orden_art' => $mov['fecha'].'|'.$meta['sku'].'|'.$colorCodigo.'|'.$mov['am_id'],
+                'orden_cat' => $meta['categoria_codigo'].'|'.$mov['fecha'].'|'.$meta['sku'].'|'.StockLocalErpMovimientosSupport::claveOrdenColor($colorCodigo).'|'.$mov['am_id'],
+                'orden_art' => $mov['fecha'].'|'.$meta['sku'].'|'.StockLocalErpMovimientosSupport::claveOrdenColor($colorCodigo).'|'.$mov['am_id'],
             ];
         }
 
@@ -938,8 +938,8 @@ final class StockLocalInformeService
                 'categoria_codigo' => $meta['categoria_codigo'],
                 'color' => $color,
                 'color_desc' => $colorDesc,
-                'orden_cat' => $meta['categoria_codigo'].'|'.$meta['sku'].'|'.sprintf('%06d', $color),
-                'orden_art' => $meta['sku'].'|'.sprintf('%06d', $color),
+                'orden_cat' => $meta['categoria_codigo'].'|'.$meta['sku'].'|'.StockLocalErpMovimientosSupport::claveOrdenColor((string) $color),
+                'orden_art' => $meta['sku'].'|'.StockLocalErpMovimientosSupport::claveOrdenColor((string) $color),
             ];
 
             if ($modo === StockLocalInformeListadoFiltros::MODO_APERTURA) {

@@ -15,6 +15,7 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
@@ -25,6 +26,8 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
     use Exportable;
 
     private const COL_ULTIMA = 'M';
+
+    private const COL_IMPORTE = 'K';
 
     private ChequeRepositoryInterface $chequeRepository;
 
@@ -101,7 +104,9 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
         if ($this->flDesdeIndex) {
             $cols = [];
             foreach (range('A', self::COL_ULTIMA) as $c) {
-                $cols[$c] = NumberFormat::FORMAT_TEXT;
+                $cols[$c] = $c === self::COL_IMPORTE
+                    ? '#,##0.00'
+                    : NumberFormat::FORMAT_TEXT;
             }
 
             return $cols;
@@ -211,6 +216,24 @@ class ChequeListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
                             'color' => ['rgb' => '17202A'],
                         ],
                     ]);
+                }
+
+                $ultimaFila = max($this->filaPrimeraDatosExcel, (int) $sheet->getHighestRow());
+                if ($ultimaFila >= $this->filaPrimeraDatosExcel) {
+                    $rangoImporte = self::COL_IMPORTE.$this->filaPrimeraDatosExcel.':'.self::COL_IMPORTE.$ultimaFila;
+                    $sheet->getStyle($rangoImporte)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle($rangoImporte)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+                    for ($r = $this->filaPrimeraDatosExcel; $r <= $ultimaFila; $r++) {
+                        $cell = $sheet->getCell(self::COL_IMPORTE.$r);
+                        $raw = $cell->getValue();
+                        if ($raw === null || $raw === '') {
+                            continue;
+                        }
+                        if (is_numeric($raw)) {
+                            $cell->setValueExplicit((float) $raw, DataType::TYPE_NUMERIC);
+                        }
+                    }
                 }
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);

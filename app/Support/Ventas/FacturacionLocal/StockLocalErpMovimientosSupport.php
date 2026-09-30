@@ -167,6 +167,79 @@ final class StockLocalErpMovimientosSupport
     }
 
     /**
+     * Clave de orden del color: numérica (1, 2, 13), no lexicográfica (1, 13, 2).
+     */
+    public static function claveOrdenColor(string $colorCodigo): string
+    {
+        $color = trim($colorCodigo);
+        if ($color !== '' && ctype_digit($color)) {
+            return sprintf('%06d', (int) $color);
+        }
+
+        return $color;
+    }
+
+    /**
+     * Talle de columna: entero sin decimales (23, no 23.00). 48 = UN.
+     */
+    public static function etiquetaMedida(mixed $med): string
+    {
+        if ((string) $med === '48') {
+            return 'UN';
+        }
+        if (is_int($med) || (is_string($med) && ctype_digit(trim($med)))) {
+            $n = (int) $med;
+
+            return $n === 0 ? '—' : (string) $n;
+        }
+        if (is_numeric($med)) {
+            $n = (float) $med;
+            if (abs($n) < 0.000001) {
+                return '—';
+            }
+            if (abs($n - round($n)) < 0.000001) {
+                return (string) (int) round($n);
+            }
+
+            return rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.');
+        }
+        $texto = trim((string) $med);
+
+        return $texto !== '' ? $texto : '—';
+    }
+
+    /**
+     * Cantidad en pantalla/PDF: pares enteros sin decimales; si hay fracción, máximo 2.
+     * Cero queda vacío (un 0.00 de más confunde al contar).
+     */
+    public static function cantidadVisible(float $val, string $cero = ''): string
+    {
+        if (abs($val) < 0.000001) {
+            return $cero;
+        }
+        if (abs($val - round($val)) < 0.000001) {
+            return number_format($val, 0, ',', '.');
+        }
+
+        return number_format($val, 2, ',', '.');
+    }
+
+    /**
+     * Cantidad para Excel: número con punto decimal, sin miles (Excel aplica el formato).
+     */
+    public static function cantidadExcel(float $val): string
+    {
+        if (abs($val) < 0.000001) {
+            return '';
+        }
+        if (abs($val - round($val)) < 0.000001) {
+            return (string) (int) round($val);
+        }
+
+        return number_format($val, 2, '.', '');
+    }
+
+    /**
      * @param  object{combinacion_codigo?:mixed,combinacion_nombre?:mixed,color_codigo_m?:mixed,color_nombre?:mixed}  $row
      * @return array{0:string,1:string}
      */

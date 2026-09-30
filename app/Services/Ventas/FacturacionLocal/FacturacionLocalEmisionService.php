@@ -16,6 +16,7 @@ use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalReceptorSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalSplitFacNcSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
+use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -117,6 +118,25 @@ final class FacturacionLocalEmisionService
         );
         if ($errores !== []) {
             return ['ok' => false, 'errores' => $errores, 'error' => $errores[0]];
+        }
+
+        // Un medio que quedó del ticket anterior (ej. $85.500 sobre un cambio de $0,01)
+        // no puede entrar a caja. Vale: se cobra el total y el exceso queda a cuenta.
+        // Reintegro: el vuelto ya salió del cajón, la cobranza queda en el neto.
+        $excedenteAccion = (string) ($input['excedente_accion'] ?? '');
+        if (! $esRegalo && $totalPagar > 0.009) {
+            $sumaMedios = $this->sumaMediosEnPesos($medios);
+            if ($sumaMedios - $totalPagar > 0.05) {
+                if ($excedenteAccion === 'reintegro') {
+                    $medios = $this->escalarMediosAlTotal($medios, $totalPagar);
+                } elseif ($excedenteAccion !== 'vale') {
+                    $msg = 'El cobro ('.number_format($sumaMedios, 2, ',', '.')
+                        .') supera el total a pagar ('.number_format($totalPagar, 2, ',', '.')
+                        .'). Ajustá el medio, o indicá vale o reintegro si el excedente es real.';
+
+                    return ['ok' => false, 'error' => $msg, 'errores' => [$msg]];
+                }
+            }
         }
 
         try {
@@ -295,6 +315,62 @@ final class FacturacionLocalEmisionService
     }
 
     /**
+     * @param  list<array<string, mixed>>  $medios
+     */
+    private function sumaMediosEnPesos(array $medios): float
+    {
+        $suma = 0.;
+        foreach ($medios as $medio) {
+            $cot = (float) ($medio['cotizacion'] ?? 1.);
+            if ($cot <= 0.) {
+                $cot = 1.;
+            }
+            $suma += (float) ($medio['monto'] ?? 0) * $cot;
+        }
+
+        return round($suma, 2);
+    }
+
+    /**
+     * Baja los medios al neto del ticket (reintegro: el vuelto ya salió del cajón).
+     *
+     * @param  list<array<string, mixed>>  $medios
+     * @return list<array<string, mixed>>
+     */
+    private function escalarMediosAlTotal(array $medios, float $total): array
+    {
+        $suma = $this->sumaMediosEnPesos($medios);
+        if ($suma <= 0.009 || $total <= 0.009 || $medios === []) {
+            return $medios;
+        }
+
+        $factor = $total / $suma;
+        $lineas = [];
+        $acum = 0.;
+        $ultimo = count($medios) - 1;
+        foreach ($medios as $i => $medio) {
+            $cot = (float) ($medio['cotizacion'] ?? 1.);
+            if ($cot <= 0.) {
+                $cot = 1.;
+            }
+            if ($i === $ultimo) {
+                $monto = round(($total - $acum) / $cot, 2);
+            } else {
+                $monto = round((float) ($medio['monto'] ?? 0) * $factor, 2);
+                $acum += round($monto * $cot, 2);
+            }
+            if ($monto <= 0.009) {
+                continue;
+            }
+            $medio['monto'] = $monto;
+            $medio['cotizacion'] = $cot;
+            $lineas[] = $medio;
+        }
+
+        return $lineas !== [] ? $lineas : $medios;
+    }
+
+    /**
      * Cuando FAC ≈ NC (neto 0), sube el precio de la primera línea FAC para dejar $0,01 a cobrar (ARCA).
      *
      * @param  array{fac:list<array<string,mixed>>,nc:list<array<string,mixed>>,tiene_nc:bool,neto_fac:float,neto_nc:float,neto:float}  $split
@@ -390,6 +466,10 @@ final class FacturacionLocalEmisionService
         $puntoventaId = (int) ($local->puntoventaDefaultId() ?? $local->puntoventa_id ?? 0);
 
         $opciones = $this->opcionesEmision();
+        // El FAC de locales está en «sin operación». El POS igual descuenta el depósito del local.
+        $opciones['forzar_operacion_stock'] = $esNc
+            ? TipotransaccionOperacionStockSupport::ENTRADA
+            : TipotransaccionOperacionStockSupport::SALIDA;
         // FAC contado: asiento VTA imputa medios de pago (no deudores).
         // NC asociada usa venta_id → asiento invertido (incluye las piernas de medios).
         if (! $esNc && ! $esRegalo && $medios !== []) {
@@ -516,6 +596,13 @@ final class FacturacionLocalEmisionService
             }
             if ($datatalle === []) {
                 return;
+            }
+            $depositoAnita = $local->depositoAnitaCodigo();
+            if ($depositoAnita > 0) {
+                foreach ($datatalle as &$itemStock) {
+                    $itemStock['deposito'] = $depositoAnita;
+                }
+                unset($itemStock);
             }
             $pvCodigo = (int) ltrim((string) ($local->puntoventa?->codigo ?? $local->puntoventa_id), '0');
             if ($pvCodigo <= 0) {

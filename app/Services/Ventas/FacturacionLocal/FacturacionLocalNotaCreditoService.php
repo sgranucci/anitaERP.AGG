@@ -16,6 +16,7 @@ use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPosContextoSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
 use App\Support\Ventas\FacturacionLocal\FacturacionLocalPrecioIvaSupport;
+use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -373,6 +374,7 @@ final class FacturacionLocalNotaCreditoService
             'venta_id_asociada' => (int) $ventaOrigen->id,
             'opciones_emision' => [
                 'omitir_movimiento_stock' => false,
+                'forzar_operacion_stock' => TipotransaccionOperacionStockSupport::ENTRADA,
                 'permitir_caea' => false,
                 'origen_facturacion_local' => true,
                 'omitir_cuenta_corriente' => true,
@@ -496,6 +498,13 @@ final class FacturacionLocalNotaCreditoService
             }
             if ($datatalle === []) {
                 return;
+            }
+            $depositoAnita = $local->depositoAnitaCodigo();
+            if ($depositoAnita > 0) {
+                foreach ($datatalle as &$itemStock) {
+                    $itemStock['deposito'] = $depositoAnita;
+                }
+                unset($itemStock);
             }
             $pvCodigo = (int) ltrim((string) ($local->puntoventa?->codigo ?? $local->puntoventa_id), '0');
             if ($pvCodigo <= 0) {

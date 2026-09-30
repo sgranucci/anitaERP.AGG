@@ -3599,12 +3599,18 @@ class FacturacionService
 					$opcionesEmision['fce_anulacion'] = $fceAnulacionSn;
 				}
 				// POS gastronomía / estacionamiento / canje: no resolver depósito ni reparto.
+				// Facturación local sí trae el depósito del local en el payload: hay que conservarlo.
 				if (! $this->esEmisionPos($data, $opcionesEmision)) {
 					if (empty($opcionesEmision['deposito_id'])) {
 						$opcionesEmision['deposito_id'] = $this->depositoIdDesdePayload($data, $clienteGraba);
 					}
 					if (empty($opcionesEmision['transporte_id'])) {
 						$opcionesEmision['transporte_id'] = TransporteDepositoSupport::transporteIdDesdeFactura($data, $clienteGraba);
+					}
+				} elseif (! empty($opcionesEmision['origen_facturacion_local']) && empty($opcionesEmision['deposito_id'])) {
+					$depositoLocal = (int) ($data['deposito_id'] ?? 0);
+					if ($depositoLocal > 0) {
+						$opcionesEmision['deposito_id'] = $depositoLocal;
 					}
 				}
 				$graba = Self::grabaFacturaERP($empresa, $codigoTipoTransaccion, $tipotransaccion, $fechaFactura,  
@@ -4623,9 +4629,22 @@ class FacturacionService
 			$transporteIdEmision = (int) ($cliente->transporte_id ?? 0);
 		}
 
+		$forzarOperacionStock = null;
+		if (is_array($opcionesEmision)) {
+			$forzar = strtoupper(trim((string) ($opcionesEmision['forzar_operacion_stock'] ?? '')));
+			if (in_array($forzar, [
+				\App\Support\Ventas\TipotransaccionOperacionStockSupport::SALIDA,
+				\App\Support\Ventas\TipotransaccionOperacionStockSupport::ENTRADA,
+			], true)) {
+				$forzarOperacionStock = $forzar;
+			}
+		}
 		$omitirMovimientoStock = (is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']))
-			|| ! \App\Support\Ventas\TipotransaccionOperacionStockSupport::afectaStock(
-				$tipotransaccion->operacionstock ?? \App\Support\Ventas\TipotransaccionOperacionStockSupport::SIN_OPERACION
+			|| (
+				$forzarOperacionStock === null
+				&& ! \App\Support\Ventas\TipotransaccionOperacionStockSupport::afectaStock(
+					$tipotransaccion->operacionstock ?? \App\Support\Ventas\TipotransaccionOperacionStockSupport::SIN_OPERACION
+				)
 			);
 		$omitirContabilidad = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_contabilidad']);
 		$omitirCuentaCorriente = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_cuenta_corriente']);
@@ -4951,7 +4970,7 @@ class FacturacionService
 					$dataTalle = [];
 					$dataFirmado = \App\Support\Ventas\TipotransaccionOperacionStockSupport::firmarPayloadMovimiento(
 						$dataArticuloMovimiento,
-						$tipotransaccion->operacionstock
+						$forzarOperacionStock ?? $tipotransaccion->operacionstock
 					);
 					$articulo_movimiento = $this->articulo_movimientoService->
 								guardaArticuloMovimiento('create',
@@ -4960,8 +4979,8 @@ class FacturacionService
 			}
 			// Graba contabilidad
 			if (! $omitirContabilidad) {
-			$omitirAnitaAsientoMostrador = ! $transaccionExterna
-				&& PedidoFacturaAnitaDeferSupport::debeDiferir();
+			$omitirAnitaAsientoMostrador = $omitirSincronizacionAnita
+				|| (! $transaccionExterna && PedidoFacturaAnitaDeferSupport::debeDiferir());
 			Self::grabaAsientoContable($asientoContable, $puntoventa->empresa_id, $fechaFactura, $vta->id, 
 									$detalleContable, $centrocosto_id,
 									$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,

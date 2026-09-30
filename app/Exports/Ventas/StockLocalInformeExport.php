@@ -3,6 +3,7 @@
 namespace App\Exports\Ventas;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -13,6 +14,7 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
@@ -35,7 +37,12 @@ class StockLocalInformeExport implements FromView, ShouldAutoSize, WithColumnFor
 
     private int $totalColumnas = 6;
 
+    private int $columnasFijas = 5;
+
     private string $colUltima = 'F';
+
+    /** Entero sin decimales; si hay fracción, hasta 2. El separador de miles lo pone Excel. */
+    private const FORMATO_CANTIDAD = '#,##0.##';
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
@@ -86,9 +93,9 @@ class StockLocalInformeExport implements FromView, ShouldAutoSize, WithColumnFor
     public function columnFormats(): array
     {
         $formats = [];
-        // Columnas de medidas + total (desde col 6)
-        for ($i = 6; $i <= $this->totalColumnas; $i++) {
-            $formats[$this->indiceAColumna($i)] = NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1;
+        // Medidas + total. No desde la columna 6 fija: en detalle Tipo/Número van antes.
+        for ($i = $this->columnasFijas + 1; $i <= $this->totalColumnas; $i++) {
+            $formats[$this->indiceAColumna($i)] = self::FORMATO_CANTIDAD;
         }
         $formats['A'] = NumberFormat::FORMAT_TEXT;
         $formats['C'] = NumberFormat::FORMAT_TEXT;
@@ -155,6 +162,19 @@ class StockLocalInformeExport implements FromView, ShouldAutoSize, WithColumnFor
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
                 ]);
 
+                // El formato de la columna no debe convertir el talle 23 en 23.00.
+                $ultimaMedida = $this->totalColumnas - 1;
+                for ($i = $this->columnasFijas + 1; $i <= $ultimaMedida; $i++) {
+                    $cell = $this->indiceAColumna($i).$this->filaCabecerasExcel;
+                    $valor = $sheet->getCell($cell)->getValue();
+                    $sheet->setCellValueExplicit(
+                        $cell,
+                        StockLocalErpMovimientosSupport::etiquetaMedida($valor),
+                        DataType::TYPE_STRING
+                    );
+                    $sheet->getStyle($cell)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
+                }
+
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },
         ];
@@ -171,8 +191,8 @@ class StockLocalInformeExport implements FromView, ShouldAutoSize, WithColumnFor
         }
         // Detalle: Fecha + SKU + Desc + Color + Color desc + Tipo + Número + medidas + Total
         // Otros: SKU + Desc + Color + Color desc + Concepto + medidas + Total
-        $fijas = $modoDetalle ? 7 : 5;
-        $this->totalColumnas = $fijas + count($this->medidas) + 1;
+        $this->columnasFijas = $modoDetalle ? 7 : 5;
+        $this->totalColumnas = $this->columnasFijas + count($this->medidas) + 1;
         $this->colUltima = $this->indiceAColumna($this->totalColumnas);
     }
 

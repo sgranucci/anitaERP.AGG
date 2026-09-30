@@ -51,7 +51,7 @@
 					@endif
 				</td>
 				<td>{{ $data->empresas->nombre ?? '' }}</td>
-				<td>{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
+				<td>{{ number_format((float) $data->monto, 2, '.', '') }}</td>
 				<td>{{ $data->monedas->abreviatura ?? ($data->monedas->nombre ?? '') }}</td>
 				<td>{{ $data->entregado ?? $data->anombrede }}</td>
 			</tr>
@@ -59,7 +59,7 @@
 		@foreach ($totales ?? [] as $tot)
 			<tr>
 				<td colspan="10" style="text-align:right;font-weight:bold;">Total ({{ (int) ($tot['cantidad'] ?? 0) }})</td>
-				<td style="font-weight:bold;">{{ number_format((float) ($tot['monto'] ?? 0), 2, ',', '.') }}</td>
+				<td style="font-weight:bold;">{{ number_format((float) ($tot['monto'] ?? 0), 2, '.', '') }}</td>
 				<td style="font-weight:bold;">{{ $tot['moneda'] ?? '' }}</td>
 				<td></td>
 			</tr>

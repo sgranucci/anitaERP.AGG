@@ -118,13 +118,11 @@ class FacturanteControllerFerli extends Controller
                 default:
                     $tipoComprobante = substr($datas[$i]->TipoComprobante, 0, 3);
             }
-            $venta = $this->facturanteService->leeComprobante(
+            if ($this->facturanteService->tieneVentaErp(
                 $tipoComprobante,
-                $letra,
-                $datas[$i]->Prefijo,
+                (int) $datas[$i]->Prefijo,
                 $datas[$i]->Numero
-            );
-            if (isset($venta[0]->ven_nro) && $venta[0]->ven_nro == $datas[$i]->Numero) {
+            )) {
                 $yaImportados++;
                 continue;
             }
@@ -145,8 +143,8 @@ class FacturanteControllerFerli extends Controller
         }
 
         return redirect()->route('crear_importacion_facturas_tiendanube')
-            ->with('mensaje', 'Los '.$yaImportados.' comprobante(s) del periodo ya estan importados en administracion.'
-                .' Use Verificar importacion del periodo para revisar admin y stock Lugano.');
+            ->with('mensaje', 'Los '.$yaImportados.' comprobante(s) del periodo ya estan en anitaERP.'
+                .' Use Verificar importacion del periodo para revisar venta, stock y asiento.');
     }
 
     public function generarFacturasTiendaNube(Request $request)

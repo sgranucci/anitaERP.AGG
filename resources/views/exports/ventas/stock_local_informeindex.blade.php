@@ -1,4 +1,6 @@
 @php
+    use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
+
     $medidas = $medidas ?? [];
     $filasLista = $filas ?? [];
     if ($filasLista instanceof \Illuminate\Support\Collection) {
@@ -44,7 +46,7 @@
             <td colspan="{{ $cols }}">
                 Filas: {{ (int) ($totales['total_filas'] ?? 0) }}
                 · Grupos: {{ (int) ($totales['total_grupos'] ?? 0) }}
-                · Stock total: {{ (float) ($totales['total_stock'] ?? 0) }}
+                · Stock total: {{ StockLocalErpMovimientosSupport::cantidadVisible((float) ($totales['total_stock'] ?? 0), '0') }}
                 @if (! empty($totales['origen']))
                     · Origen: {{ $totales['origen'] }}
                 @endif
@@ -67,7 +69,7 @@
                 <th>Concepto</th>
             @endif
             @foreach ($medidas as $med)
-                <th>{{ (string) $med === '48' ? 'UN' : $med }}</th>
+                <th>{{ StockLocalErpMovimientosSupport::etiquetaMedida($med) }}</th>
             @endforeach
             <th>Total</th>
         </tr>
@@ -92,9 +94,9 @@
                     <td>{{ $fila['concepto'] ?? 'Stock' }}</td>
                 @endif
                 @foreach ($medidas as $med)
-                    <td>{{ (float) ($cants[(string) $med] ?? 0) }}</td>
+                    <td>{{ StockLocalErpMovimientosSupport::cantidadExcel((float) ($cants[(string) $med] ?? 0)) }}</td>
                 @endforeach
-                <td>{{ (float) ($fila['total'] ?? 0) }}</td>
+                <td>{{ StockLocalErpMovimientosSupport::cantidadExcel((float) ($fila['total'] ?? 0)) }}</td>
             </tr>
         @endforeach
     </tbody>

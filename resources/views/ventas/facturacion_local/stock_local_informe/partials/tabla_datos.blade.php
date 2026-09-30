@@ -1,5 +1,6 @@
 @php
     use App\Support\Stock\KardexMovimientoComprobanteSupport;
+    use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
 
     $medidas = $medidas ?? [];
     $filasLista = $filas ?? [];
@@ -40,15 +41,7 @@
                 <th>Concepto</th>
             @endif
             @foreach ($medidas as $med)
-                <th class="text-right">
-                    @if ((string) $med === '48')
-                        UN
-                    @elseif ((int) $med === 0)
-                        —
-                    @else
-                        {{ $med }}
-                    @endif
-                </th>
+                <th class="text-right">{{ StockLocalErpMovimientosSupport::etiquetaMedida($med) }}</th>
             @endforeach
             <th class="text-right">Total</th>
         </tr>
@@ -108,15 +101,11 @@
                         $val = (float) ($cants[(string) $med] ?? 0);
                     @endphp
                     <td class="text-right {{ abs($val) < 0.000001 ? 'text-muted' : ($val < 0 ? 'text-danger' : '') }}">
-                        @if (abs($val) >= 0.000001)
-                            {{ number_format($val, 0, ',', '.') }}
-                        @endif
+                        {{ StockLocalErpMovimientosSupport::cantidadVisible($val) }}
                     </td>
                 @endforeach
                 <td class="text-right {{ $total < 0 ? 'text-danger' : '' }}">
-                    @if (abs($total) >= 0.000001)
-                        {{ number_format($total, 0, ',', '.') }}
-                    @endif
+                    {{ StockLocalErpMovimientosSupport::cantidadVisible($total) }}
                 </td>
             </tr>
         @empty

@@ -689,10 +689,13 @@ final class PedidoPickingFerliSupport
             ];
         }
 
-        $linea->loadMissing('pedido_combinacion_talles.talles');
+        $linea->loadMissing(['pedido_combinacion_talles.talles', 'modulos']);
+        // Módulo Abierto: la numeración es a medida. Alcanza con que cada talle tenga saldo.
+        // Un módulo cerrado solo puede salir si la curva del lote es la misma (menos módulos).
         $numeracionSupera = self::mensajeSiNumeracionSuperaElLote(
             self::curvaDesdeTallesPedido($linea),
-            $bucket['talles'] ?? []
+            $bucket['talles'] ?? [],
+            ! self::lineaEsModuloAbierto($linea)
         );
         if ($numeracionSupera !== null) {
             return [
@@ -995,6 +998,28 @@ final class PedidoPickingFerliSupport
     }
 
     /**
+     * Módulo Abierto (id 30 / código 99): la numeración del pedido no tiene que copiar la curva del lote.
+     */
+    private static function lineaEsModuloAbierto(Pedido_Combinacion $linea): bool
+    {
+        $moduloId = (int) ($linea->modulo_id ?? 0);
+        if ($moduloId === 30) {
+            return true;
+        }
+        if ($moduloId <= 0) {
+            return false;
+        }
+
+        $modulo = $linea->modulos;
+        if ($modulo === null) {
+            return false;
+        }
+
+        return stripos((string) ($modulo->nombre ?? ''), 'abierto') !== false
+            || trim((string) ($modulo->codigo ?? '')) === '99';
+    }
+
+    /**
      * Curva del pedido: talle => pares. Ignora cantidades en cero.
      *
      * @return array<string, float>
@@ -1018,16 +1043,19 @@ final class PedidoPickingFerliSupport
     }
 
     /**
-     * La curva del pedido tiene que ser la del lote: mismos talles y la misma proporción.
-     * Se pueden sacar menos módulos (2 de un lote de 3) si esa curva coincide.
-     * Una curva distinta se rechaza aunque cada talle alcance. Si la curva coincide
-     * y algún talle pide de más, el saldo de ese talle no puede quedar negativo.
+     * En un módulo cerrado, la curva del pedido tiene que ser la del lote: mismos talles
+     * y la misma proporción. Se pueden sacar menos módulos (2 de un lote de 3) si esa
+     * curva coincide. Una curva distinta se rechaza aunque cada talle alcance.
+     * En módulo Abierto no se exige la misma forma: solo que ningún talle pida de más.
      *
      * @param  array<string, float|int>  $tallesPedido
      * @param  array<string, float|int>  $tallesStock
      */
-    public static function mensajeSiNumeracionSuperaElLote(array $tallesPedido, array $tallesStock): ?string
-    {
+    public static function mensajeSiNumeracionSuperaElLote(
+        array $tallesPedido,
+        array $tallesStock,
+        bool $exigeMismaCurva = true
+    ): ?string {
         $pedido = self::normalizarCurvaNumeracion($tallesPedido);
         $stock = self::normalizarCurvaNumeracion($tallesStock);
         if ($pedido === []) {
@@ -1035,7 +1063,7 @@ final class PedidoPickingFerliSupport
         }
 
         $nombres = self::ordenarNombresTalle(array_keys($pedido + $stock));
-        if (! self::curvasMismaForma($pedido, $stock)) {
+        if ($exigeMismaCurva && ! self::curvasMismaForma($pedido, $stock)) {
             return 'La numeración del pedido no coincide con la curva del lote (pedido '
                 .self::textoCurva(self::curvaReducida($pedido))
                 .'; lote '

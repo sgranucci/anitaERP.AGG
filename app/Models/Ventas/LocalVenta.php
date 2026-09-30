@@ -76,6 +76,22 @@ class LocalVenta extends Model implements Auditable
         return $this->belongsTo(Depmae::class, 'deposito_id');
     }
 
+    /**
+     * Código de depósito Anita del local. Si no hay override, el código del depósito ERP (30 Caballito, 10 Lugano).
+     */
+    public function depositoAnitaCodigo(): int
+    {
+        $anita = (int) ($this->anita_deposito ?: 0);
+        if ($anita > 0) {
+            return $anita;
+        }
+        $codigo = $this->relationLoaded('deposito')
+            ? ($this->deposito->codigo ?? null)
+            : Depmae::query()->whereKey((int) $this->deposito_id)->value('codigo');
+
+        return is_numeric($codigo) ? (int) $codigo : 0;
+    }
+
     public function listaprecio(): BelongsTo
     {
         return $this->belongsTo(Listaprecio::class, 'listaprecio_id');

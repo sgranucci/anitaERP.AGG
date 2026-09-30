@@ -291,6 +291,63 @@
 		if (window.jQuery && jQuery.fn.select2) {
 			jQuery(sel).trigger('change.select2');
 		}
+		aplicarModoCodigoInterno();
+	}
+
+	function codigoInternoActivo() {
+		var cb = byId('codigo_interno');
+		return !!(cb && cb.checked);
+	}
+
+	function contenedorSelectCodigo(sel) {
+		if (window.jQuery) {
+			var cont = jQuery(sel).next('.select2-container');
+			if (cont.length) {
+				return cont[0];
+			}
+		}
+		return sel;
+	}
+
+	function aplicarModoCodigoInterno() {
+		var sel = byId('codigo');
+		var manual = byId('codigo_manual');
+		if (!sel || !manual) {
+			return;
+		}
+		var interno = codigoInternoActivo();
+		var caja = contenedorSelectCodigo(sel);
+		if (interno) {
+			if (!manual.value && sel.value) {
+				var n = codigoNumerico(sel.value);
+				if (n > 0) {
+					manual.value = String(n);
+				}
+			}
+			sel.disabled = true;
+			sel.required = false;
+			sel.removeAttribute('name');
+			sel.classList.add('d-none');
+			if (caja && caja !== sel) {
+				caja.classList.add('d-none');
+			}
+			manual.disabled = false;
+			manual.required = true;
+			manual.setAttribute('name', 'codigo');
+			manual.classList.remove('d-none');
+			return;
+		}
+		manual.disabled = true;
+		manual.required = false;
+		manual.removeAttribute('name');
+		manual.classList.add('d-none');
+		sel.required = true;
+		sel.setAttribute('name', 'codigo');
+		sel.classList.remove('d-none');
+		sel.disabled = sel.options.length <= 1 && !sel.value;
+		if (caja && caja !== sel) {
+			caja.classList.remove('d-none');
+		}
 	}
 
 	function mostrarError(msg) {
@@ -578,6 +635,32 @@
 			});
 		}
 
+		var codigoInterno = byId('codigo_interno');
+		if (codigoInterno) {
+			codigoInterno.addEventListener('change', function () {
+				if (codigoInterno.checked) {
+					if (ivaVentas) {
+						ivaVentas.checked = false;
+						ivaVentas.setAttribute('data-tocado', '1');
+					}
+					if (wsSel && wsSel.value !== '') {
+						wsSel.value = '';
+						if (window.jQuery && jQuery(wsSel).data('select2')) {
+							jQuery(wsSel).val('').trigger('change.select2');
+						}
+					}
+					if (modoSel && modoSel.value === '') {
+						modoSel.value = 'L';
+						if (window.jQuery && jQuery(modoSel).data('select2')) {
+							jQuery(modoSel).val('L').trigger('change.select2');
+						}
+					}
+				}
+				aplicarModoCodigoInterno();
+			});
+			aplicarModoCodigoInterno();
+		}
+
 		var sel = byId('codigo');
 		if (sel && empresaId() > 0 && sel.options.length <= 2) {
 			cargarPuntos(false, true);
@@ -591,4 +674,5 @@
 	} else {
 		init();
 	}
+	window.addEventListener('load', aplicarModoCodigoInterno);
 })();

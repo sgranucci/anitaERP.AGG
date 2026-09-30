@@ -48,7 +48,7 @@
             · {{ $subtitulo }}
         @endif
         · Filas: {{ (int) ($totales['total_filas'] ?? count($filasIterable)) }}
-        · Stock: {{ number_format((float) ($totales['total_stock'] ?? 0), 0, ',', '.') }}
+        · Stock: {{ \App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport::cantidadVisible((float) ($totales['total_stock'] ?? 0), '0') }}
     </div>
     @include('ventas.facturacion_local.stock_local_informe.partials.tabla_datos', [
         'medidas' => $medidas ?? [],

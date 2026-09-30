@@ -27,10 +27,12 @@ final class TransferenciaMercaderiaLineaSupport
         Articulo $articuloOrigen,
         Depmae $depositoDestino,
         float $cantidadOrigen,
-        ?int $empresaId = null
+        ?int $empresaId = null,
+        ?float $precioOrigenResuelto = null,
     ): array {
         $cantidadOrigen = max(0.0, $cantidadOrigen);
-        $precioOrigen = TransferenciaMercaderiaCostoSupport::resolverCostoUltimaCompra($articuloOrigen);
+        $precioOrigen = $precioOrigenResuelto
+            ?? TransferenciaMercaderiaCostoSupport::resolverCostoUltimaCompra($articuloOrigen);
 
         $conversion = RecepcionProveedorDepositoSupport::calcularConversionStock(
             $articuloOrigen,
@@ -67,10 +69,14 @@ final class TransferenciaMercaderiaLineaSupport
      *
      * @return array<string, mixed>
      */
-    public static function resolverLineaParaBienUso(Articulo $articuloOrigen, float $cantidadOrigen): array
-    {
+    public static function resolverLineaParaBienUso(
+        Articulo $articuloOrigen,
+        float $cantidadOrigen,
+        ?float $precioOrigenResuelto = null,
+    ): array {
         $cantidadOrigen = max(0.0, $cantidadOrigen);
-        $precioOrigen = TransferenciaMercaderiaCostoSupport::resolverCostoUltimaCompra($articuloOrigen);
+        $precioOrigen = $precioOrigenResuelto
+            ?? TransferenciaMercaderiaCostoSupport::resolverCostoUltimaCompra($articuloOrigen);
 
         return [
             'articulo_origen_id' => (int) $articuloOrigen->id,

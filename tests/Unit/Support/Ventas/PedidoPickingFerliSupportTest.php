@@ -209,6 +209,31 @@ class PedidoPickingFerliSupportTest extends TestCase
         self::assertStringContainsString('36:1', $msg);
     }
 
+    public function test_modulo_abierto_acepta_curva_distinta_si_cada_talle_alcanza(): void
+    {
+        // Pedido 5107 NELLIE Abierto 3-3-6-9-9-6 contra lote 503388 en 64-A.
+        $msg = S::mensajeSiNumeracionSuperaElLote(
+            ['35' => 3, '36' => 3, '37' => 6, '38' => 9, '39' => 9, '40' => 6],
+            ['35' => 10, '36' => 9, '37' => 19, '38' => 30, '39' => 31, '40' => 21],
+            false
+        );
+
+        self::assertNull($msg);
+    }
+
+    public function test_modulo_abierto_rechaza_si_un_talle_pide_de_mas(): void
+    {
+        $msg = S::mensajeSiNumeracionSuperaElLote(
+            ['35' => 3, '36' => 12],
+            ['35' => 10, '36' => 9],
+            false
+        );
+
+        self::assertNotNull($msg);
+        self::assertStringContainsString('no alcanza', $msg);
+        self::assertStringContainsString('36: pide 12, hay 9', $msg);
+    }
+
     public function test_talle_extra_en_el_lote_no_es_la_misma_curva(): void
     {
         $msg = S::mensajeSiNumeracionSuperaElLote(

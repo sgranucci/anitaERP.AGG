@@ -1664,6 +1664,14 @@
                 alCerrarModalHijoSobreComprobanteIva(this);
             });
 
+        function parseMontoCajaIe(val) {
+            if (window.AsientoMontosFormato && typeof AsientoMontosFormato.parseDecimal === 'function') {
+                return AsientoMontosFormato.parseDecimal(val);
+            }
+            var n = parseFloat(String(val || '').replace(/\./g, '').replace(',', '.'));
+            return isNaN(n) ? 0 : n;
+        }
+
         window.obtenerComprobantesIvaIngresoEgreso = function () {
             return comprobantesIva;
         };
@@ -1680,10 +1688,11 @@
             var montos = [];
             var monedaIds = [];
             var cotizaciones = [];
-            $('#cuenta-caja-table .item-cuenta-caja').each(function () {
-                montos.push($(this).find('.monto').val() || 0);
+            $('#tbody-cuenta-table .item-cuenta').each(function () {
+                montos.push(parseMontoCajaIe($(this).find('.monto').val()));
                 monedaIds.push($(this).find('.moneda').val() || 1);
-                cotizaciones.push($(this).find('.cotizacion').val() || 1);
+                var cotTxt = $.trim($(this).find('.cotizacion').val() || '');
+                cotizaciones.push(cotTxt === '' ? 1 : parseMontoCajaIe(cotTxt));
             });
 
             $.post(url, {

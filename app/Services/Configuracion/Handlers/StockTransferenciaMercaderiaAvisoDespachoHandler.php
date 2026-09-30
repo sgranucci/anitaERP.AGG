@@ -148,7 +148,7 @@ class StockTransferenciaMercaderiaAvisoDespachoHandler implements ModuloAvisoDes
                 if (! empty($tipo->mail_remitente)) {
                     $mailable->from($tipo->mail_remitente);
                 }
-                Mail::to($email)->send($mailable);
+                Mail::to($email)->queue($mailable);
             } catch (\Throwable $e) {
                 Log::warning('TransferenciaMercaderia aviso: error envío', [
                     'email' => $email,

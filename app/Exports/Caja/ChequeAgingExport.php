@@ -14,6 +14,8 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
@@ -22,7 +24,9 @@ class ChequeAgingExport implements FromView, ShouldAutoSize, WithColumnFormattin
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'J';
+    private const COL_ULTIMA = 'K';
+
+    private const COL_IMPORTE = 'G';
 
     /** @var array<string, mixed> */
     private array $filtros = [];
@@ -87,7 +91,9 @@ class ChequeAgingExport implements FromView, ShouldAutoSize, WithColumnFormattin
         }
         $cols = [];
         foreach (range('A', self::COL_ULTIMA) as $c) {
-            $cols[$c] = NumberFormat::FORMAT_TEXT;
+            $cols[$c] = $c === self::COL_IMPORTE
+                ? '#,##0.00'
+                : NumberFormat::FORMAT_TEXT;
         }
 
         return $cols;
@@ -128,10 +134,11 @@ class ChequeAgingExport implements FromView, ShouldAutoSize, WithColumnFormattin
             'D' => 12,
             'E' => 8,
             'F' => 12,
-            'G' => 14,
-            'H' => 22,
-            'I' => 28,
-            'J' => 22,
+            'G' => 16,
+            'H' => 10,
+            'I' => 22,
+            'J' => 28,
+            'K' => 22,
         ];
     }
 
@@ -177,6 +184,24 @@ class ChequeAgingExport implements FromView, ShouldAutoSize, WithColumnFormattin
                         'color' => ['rgb' => '17202A'],
                     ],
                 ]);
+
+                $ultimaFila = max($this->filaPrimeraDatosExcel, (int) $sheet->getHighestRow());
+                if ($ultimaFila >= $this->filaPrimeraDatosExcel) {
+                    $rangoImporte = self::COL_IMPORTE.$this->filaPrimeraDatosExcel.':'.self::COL_IMPORTE.$ultimaFila;
+                    $sheet->getStyle($rangoImporte)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle($rangoImporte)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+                    for ($r = $this->filaPrimeraDatosExcel; $r <= $ultimaFila; $r++) {
+                        $cell = $sheet->getCell(self::COL_IMPORTE.$r);
+                        $raw = $cell->getValue();
+                        if ($raw === null || $raw === '') {
+                            continue;
+                        }
+                        if (is_numeric($raw)) {
+                            $cell->setValueExplicit((float) $raw, DataType::TYPE_NUMERIC);
+                        }
+                    }
+                }
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
             },

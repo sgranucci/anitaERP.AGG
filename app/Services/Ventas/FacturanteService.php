@@ -7,15 +7,27 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use App\Services\Stock\Articulo_MovimientoService;
 use App\Queries\Stock\ArticuloQueryInterface;
 use App\Repositories\Ventas\VentaRepositoryInterface;
+use App\Models\Configuracion\Empresa;
+use App\Models\Configuracion\Impuesto;
+use App\Models\Contable\Cuentacontable;
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
+use App\Models\Stock\Depmae;
 use App\Models\Stock\Talle;
+use App\Models\Ventas\Cliente;
+use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Tipotransaccion;
+use App\Models\Ventas\Venta;
 use App\ApiAnita;
+use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Exception;
 use SoapClient;
 use Log;
+use Illuminate\Support\Facades\DB;
 
 class FacturanteService 
 {
@@ -24,6 +36,8 @@ class FacturanteService
 	protected $ventaRepository;
 	protected $articuloQuery;
 	private $arrayPago = [];
+	private $stkmovLocalCache = [];
+	private $stkmovLocalListo = [];
 	
     public function __construct(FacturacionService $facturacionservice,
 								VentaRepositoryInterface $ventarepository,
@@ -220,16 +234,18 @@ class FacturanteService
 			$conceptosTotales[] = [
 				'concepto' => "Total Iva",
 				'tasa' => 21,
-				'importe' => floatval($iva2)
-			];			
+				'importe' => floatval($iva2),
+				'impuesto_id' => 3,
+			];
 		}
 		if (floatval($iva1) != 0)
 		{
 			$conceptosTotales[] = [
 				'concepto' => "IVA",
 				'tasa' => 10.5,
-				'importe' => floatval($iva1)
-			];			
+				'importe' => floatval($iva1),
+				'impuesto_id' => 2,
+			];
 		}
 		$dataFactura = [];
 
@@ -274,128 +290,29 @@ class FacturanteService
 		}
 
 		try {
-			if (config('app.empresa') === 'Calzados Ferli') {
-				$dataCAE['codigoempresa'] = $dataCAE['codigoempresa'] ?? 1;
-				$anita = $this->facturacionService->grabaAnita(
-								$puntoVenta, $letra, 0, 0,
-								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
-								'V', 0, true, 0, 0, '',
-								'LOCAL_IP', 'IFX_SERVER_LOCAL');
-
-				if (is_array($anita) && isset($anita['error']) && $anita['error'] !== '' && $anita['error'] !== 'Success') {
-					if (($anita['error'] ?? '') == 'Errvend')
-						throw new Exception('No tiene vendedor asignado.');
-					throw new Exception($anita['mensaje'] ?? $anita['error']);
-				}
-
-				if ($anita === 'Error' || (is_string($anita) && strpos($anita, 'Error') !== false))
-					throw new Exception(is_string($anita) ? $anita : 'Error en grabacion anita.');
-
-				if ($anita === 'Errvend')
-					throw new Exception('No tiene vendedor asignado.');
-			} else {
-				$anita = $this->facturacionService->grabaAnita($puntoVenta, $letra, 0, 0,
-								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
-								$cuentaVenta, $contrapartida, true,
-								'LOCAL_IP', 'IFX_SERVER_LOCAL');
-
-				if ($anita == 'Error')
-					throw new Exception('Error en grabacion anita.');
-
-				if ($anita == 'Errvend')
-					throw new Exception('No tiene vendedor asignado.');
-			}
-			
-			$fecha = Carbon::now();
-			$tipo = 'COC';
-			Self::grabaTesmov($cuentaFinanciera, $fechahora, $tipo, $letra, $puntoVenta, $numero, $total*$signo);
-
-			// Graba cobranza de la factura
-			// Graba subdiario
-			// Arma detalle
-			$detalle = $tipo." ".$letra." ".$puntoVenta."-".$numero;
-			
-			// Lee numerador de operacion contable
-			$numeroOperacion = $this->facturacionService->leeNumeroOperacionSubdiario();
-
-			// Busca cuenta financiera
-			if ($cuentaFinanciera != '')
-			{
-				$tesmae = Self::leeCuentaFinanciera($cuentaFinanciera);
-
-				if ($tesmae)
-					$cuentaContable = $tesmae[0]->tesm_cta_contable;
-			}			
-			$cuenta = $cuentaContable;
-			$contrapartida = 114110007;
-
-			// Graba subdiario
-			$apiAnita = new ApiAnita();
-
-			if ($signo == -1)
-				$d_h = 'H';
-			else
-				$d_h = 'D';
-
-			$data = array( 	'tabla' => 'subdiario', 
-					'acc' => 'insert',
-					'campos' => ' 
-								subd_sistema, subd_fecha, subd_tipo, subd_letra, subd_sucursal, subd_nro,
-								subd_emisor, subd_tipo_mov, subd_cuenta, subd_contrapartida,
-								subd_nro_operacion, subd_ref_tipo, subd_ref_letra, subd_ref_sucursal,
-								subd_ref_nro, subd_ref_sistema, subd_importe, subd_cod_mon,
-								subd_cotizacion, subd_desc_mov, subd_nro_asiento,
-								subd_procesado, subd_ccosto_cta, subd_ccosto_con,
-								subd_nro_interno
-							',
-					'valores' => "
-					'".'T'."',
-					'".date('Ymd', strtotime($fechahora))."',
-					'".$tipoComprobante."',
-					'".$letra."',
-					'".$puntoVenta."',
-					'".$numero."',
-					'"."000000"."',
-					'".$d_h."',
-					'".$cuenta."',
-					'".$contrapartida."',
-					'".$numeroOperacion."',
-					'"."COC"."',
-					'".$letra."',
-					'".$puntoVenta."',
-					'".$numero."',
-					'".'V'."',
-					'".$total."',
-					'".$moneda_id."',
-					'".'1'."',
-					'".$detalle."',
-					'".'0'."',
-					'".' '."',
-					'".'0'."',
-					'".'0'."',
-					'".'0'."'
-					"
+			$this->persistirEnErp(
+				$tipoComprobante,
+				$letra,
+				$puntoVenta,
+				(int) $numero,
+				$venta,
+				$dataCAE,
+				$conceptosTotales,
+				$dataFactura,
+				$signo,
+				(string) $numeroCae,
+				(string) $fechavencimientocae,
+				$nombreCliente,
+				(string) ($arrayCliente->NroDocumento ?? ''),
+				$direccionCliente
 			);
-			$subdiario = $apiAnita->apiCallEscritura($data);
-
-
-			$vencae = $this->facturacionService->grabaVenCae(substr($venta['codigo'], 0, 3), $letra, 
-				$puntoVenta, $venta['numerocomprobante'], $cae['cae'], 
-				date('Ymd', strtotime($cae['fechavencimientocae'])));
 
 			return ['error' => 'Success', 'estado' => 'grabada', 'comprobante' => $comprobante];
 		}
 		catch (\Exception $e) {
-			Log::info('Error al generar factura TiendaNube '. $e->getMessage());
+			Log::info('Error al generar factura Facturante '.$e->getMessage());
 
-			if (config('app.empresa') === 'Calzados Ferli') {
-				if ($tipoComprobante ?? '')
-					$this->facturacionService->borraAnita($tipoComprobante, $letra, $puntoVenta, $numero, 1);
-
-				return ['error' => $e->getMessage()];
-			}
-
-			throw $e;
+			return ['error' => $e->getMessage()];
 		}
 	}
 
@@ -548,100 +465,9 @@ class FacturanteService
 
 	public function grabaPre($fecha)
 	{
-		// Barre por cada impuesto para grabar asiento contable
-		foreach ($this->arrayPago as $pago)
-		{
-			// Graba solo los importes distintos a 0
-			if ($pago['total'] != 0)
-			{
-				$total = $pago['total'];
-				$cuentaFinanciera = '';
-				$cuentaContable = 0;
-				$cuentaTarjeta = 113100007;
-				$moneda_id = $pago['moneda_id'];
-
-				// Busca cuenta
-				$cuentaFinanciera = Self::generaCuenta($pago['tarjeta']);
-
-				// Busca cuenta financiera
-				if ($cuentaFinanciera != '')
-				{
-					$tesmae = Self::leeCuentaFinanciera($cuentaFinanciera);
-
-					if ($tesmae)
-						$cuentaContable = $tesmae[0]->tesm_cta_contable;
-				}
-
-				// Numera la PRE
-				$letra = 'A';
-				$puntoVenta = 1;
-				$numeroPre = $this->ventaRepository->traeUltimoNumeroRemito('PRE', $letra, $puntoVenta);
-
-				// Graba climov
-				$fecha = Carbon::now();
-				$climov = Self::grabaClimov(substr($cuentaFinanciera,-6), $fecha, "PRE", 
-											$letra, $puntoVenta, $numeroPre, $total, $moneda_id);
-
-				// Graba venta
-
-				// Graba subdiario
-				// Arma detalle
-				//$detalle = "PRE"." ".$letra." ".$puntoVenta."-".$numeroPre;
-				
-				// Lee numerador de operacion contable
-				//$numeroOperacion = $this->facturacionService->leeNumeroOperacionSubdiario();
-
-				// Graba subdiario
-				//$apiAnita = new ApiAnita();
-
-				//$data = array( 	'tabla' => 'subdiario', 
-				//		'acc' => 'insert',
-				//		'campos' => ' 
-				//					subd_sistema, subd_fecha, subd_tipo, subd_letra, subd_sucursal, subd_nro,
-				//					subd_emisor, subd_tipo_mov, subd_cuenta, subd_contrapartida,
-				//					subd_nro_operacion, subd_ref_tipo, subd_ref_letra, subd_ref_sucursal,
-				//					subd_ref_nro, subd_ref_sistema, subd_importe, subd_cod_mon,
-				//					subd_cotizacion, subd_desc_mov, subd_nro_asiento,
-				//					subd_procesado, subd_ccosto_cta, subd_ccosto_con,
-				//					subd_nro_interno
-				//				',
-				//		'valores' => "
-				//		'".'V'."',
-				//		'".date('Ymd', strtotime($fecha))."',
-				//		'"."PRE"."',
-				//		'".$letra."',
-				//		'".$puntoVenta."',
-				//		'".$numeroPre."',
-				//		'".substr($cuentaFinanciera,-6)."',
-				//		'".'H'."',
-				//		'".$cuentaTarjeta."',
-				//		'".$cuentaContable."',
-				//		'".$numeroOperacion."',
-				//		'"."PRE"."',
-				//		'".$letra."',
-				//		'".$puntoVenta."',
-				//		'".$numeroPre."',
-				//		'".'V'."',
-				//		'".$total."',
-				//		'".$moneda_id."',
-				//		'".'1'."',
-				//		'".$detalle."',
-				//		'".'0'."',
-				//		'".' '."',
-				//		'".'0'."',
-				//		'".'0'."',
-				//		'".'0'."'
-				//		"
-				//);
-				//$subdiario = $apiAnita->apiCallEscritura($data);
-
-
-				// Numera el remito
-				if ($this->ventaRepository->numeraAnita('PRE', $letra, $puntoVenta) == 'Error')
-					return 'Error';
-			}
-		}
-		
+		// La cobranza de Facturante queda en el asiento de la venta en anitaERP.
+		// No numera PRE ni escribe climov/subdiario en Anita ni en el bridge local.
+		return null;
 	}
 
 	public function leeComprobante($tipocomprobante, $letra, $sucursal, $numero)
@@ -812,6 +638,20 @@ class FacturanteService
 	public function validarVentaExistente($tipoComprobante, $letra, $puntoVenta, $numero,
 		$venta, $dataCAE, $percepcionIibb, $condicionVentaId)
 	{
+		$enErp = $this->buscarVentaErp($tipoComprobante, (int) $puntoVenta, $numero);
+		if ($enErp !== null) {
+			$montoErp = abs((float) $enErp->total);
+			$montoNuevo = abs((float) ($venta['total'] ?? 0));
+			if (abs($montoErp - $montoNuevo) < 0.02) {
+				return ['estado' => 'identica'];
+			}
+
+			return [
+				'estado' => 'distinta',
+				'diferencias' => ['total (existente: '.$montoErp.', nuevo: '.$montoNuevo.')'],
+			];
+		}
+
 		$existente = $this->leeVentaAnita($tipoComprobante, $letra, $puntoVenta, $numero);
 		if ($existente === null)
 			return null;
@@ -957,13 +797,13 @@ class FacturanteService
 			{
 				$estado = 'sin_admin';
 				$resumen['sin_admin']++;
-				$estadoTexto = 'Falta en administracion';
+				$estadoTexto = 'Falta en anitaERP';
 			}
 			elseif (!$enStock)
 			{
 				$estado = 'sin_stock';
 				$resumen['sin_stock']++;
-				$estadoTexto = 'Falta stock en Lugano';
+				$estadoTexto = 'Falta stock en anitaERP';
 			}
 			else
 			{
@@ -1094,13 +934,16 @@ class FacturanteService
 				continue;
 			}
 
-			$stock = app(FacturacionServiceFerli::class)->grabaStockLocal(
-				$puntoVenta, $letra, $venta, $dataFactura
-			);
+			$ventaErp = $this->buscarVentaErp($tipoComprobante, $puntoVenta, $numero);
+			try {
+				$creados = $this->crearStockDesdeVentaErp($ventaErp);
+			} catch (\Exception $e) {
+				$resultado['errores'][] = $detalle.': '.$e->getMessage();
+				continue;
+			}
 
-			if ($stock != 'Success')
-			{
-				$resultado['errores'][] = $detalle.': '.$stock;
+			if ($creados === 0) {
+				$resultado['errores'][] = $detalle.': la venta no tiene renglones con articulo';
 				continue;
 			}
 
@@ -1109,7 +952,7 @@ class FacturanteService
 		}
 
 		$resultado['mensaje'] = ($dryRun ? 'Simulacion: ' : 'Recuperados: ').$resultado['procesados']
-			.', sin venta en admin: '.$resultado['omitidos_sin_admin']
+			.', sin venta en anitaERP: '.$resultado['omitidos_sin_admin']
 			.', ya con stock: '.$resultado['omitidos_con_stock']
 			.', medio pago no transfiere: '.$resultado['omitidos_mediopago']
 			.', errores: '.count($resultado['errores']);
@@ -1138,27 +981,17 @@ class FacturanteService
 
 	public function tieneStockLocal($tipoComprobante, $letra, $puntoVenta, $numero)
 	{
-		$apiAnita = new ApiAnita();
-		$data = array(
-			'acc' => 'list',
-			'tabla' => 'stkmov',
-			'sistema' => 'ventas',
-			'campos' => 'stkv_nro',
-			'whereArmado' => " WHERE stkv_tipo='".$tipoComprobante."' AND stkv_letra='".$letra
-				."' AND stkv_sucursal=".$puntoVenta." AND stkv_nro=".$numero,
-			'servidor' => 'LOCAL_IP',
-			'ifx_server' => 'IFX_SERVER_LOCAL'
-		);
-		$stkmov = json_decode($apiAnita->apiCall($data));
+		$venta = $this->buscarVentaErp($tipoComprobante, (int) $puntoVenta, $numero);
+		if ($venta === null) {
+			return false;
+		}
 
-		return is_array($stkmov) && count($stkmov) > 0;
+		return DB::table('articulo_movimiento')->where('venta_id', $venta->id)->exists();
 	}
 
 	private function existeEnAdministracion($tipoComprobante, $letra, $puntoVenta, $numero)
 	{
-		$venta = $this->leeComprobante($tipoComprobante, $letra, $puntoVenta, $numero);
-
-		return isset($venta[0]->ven_nro) && $venta[0]->ven_nro == $numero;
+		return $this->buscarVentaErp($tipoComprobante, (int) $puntoVenta, $numero) !== null;
 	}
 
 	private function resolverMedioPago($prefijo)
@@ -1197,6 +1030,542 @@ class FacturanteService
 	private function mapearTipoComprobanteFacturante($tipoComprobante)
 	{
 		return $this->mapearTipoComprobanteAnita($tipoComprobante);
+	}
+
+	public function tieneVentaErp(string $tipoComprobante, int $puntoVenta, $numero): bool
+	{
+		return $this->buscarVentaErp($tipoComprobante, $puntoVenta, $numero) !== null;
+	}
+
+	public function importarFaltantesDesdeBridges(string $desde, string $hasta, bool $dryRun = true): array
+	{
+		$desdeYmd = Carbon::parse($desde)->format('Ymd');
+		$hastaYmd = Carbon::parse($hasta)->format('Ymd');
+		$apiAnita = new ApiAnita();
+		$raw = $apiAnita->apiCall([
+			'acc' => 'list',
+			'tabla' => 'venta',
+			'sistema' => 'ventas',
+			'campos' => 'ven_tipo, ven_letra, ven_sucursal, ven_nro, ven_fecha, ven_monto, ven_gravado, ven_impuesto1, ven_exento, ven_perc_ing_bruto, ven_nombre_cliente, ven_cuit_cli, ven_direccion_cli',
+			'whereArmado' => " WHERE ven_fecha >= '".$desdeYmd."' AND ven_fecha <= '".$hastaYmd
+				."' AND ven_sucursal IN (21,23,26,27) AND ven_tipo IN ('FAC','NCD','NDB') ",
+		]);
+		$filas = json_decode($raw);
+		if (! is_array($filas)) {
+			return ['error' => 'No se pudo leer el bridge Anita: '.substr((string) $raw, 0, 240)];
+		}
+
+		$resultado = [
+			'bridge' => count($filas),
+			'a_crear' => [],
+			'ya_en_erp' => 0,
+			'sin_stock' => [],
+			'creadas' => 0,
+			'stock_completado' => 0,
+			'errores' => [],
+		];
+
+		foreach ($filas as $fila) {
+			$tipo = trim((string) $fila->ven_tipo);
+			$letra = trim((string) $fila->ven_letra);
+			$puntoVenta = (int) $fila->ven_sucursal;
+			$numero = (int) $fila->ven_nro;
+			$etiqueta = $tipo.' '.$letra.' '.$puntoVenta.'-'.$numero;
+			$venta = $this->buscarVentaErp($tipo, $puntoVenta, $numero);
+			if ($venta === null) {
+				$resultado['a_crear'][] = $etiqueta;
+				if ($dryRun) {
+					continue;
+				}
+				try {
+					$this->grabarVentaDesdeBridge($fila);
+					$resultado['creadas']++;
+				} catch (\Exception $e) {
+					$resultado['errores'][] = $etiqueta.': '.$e->getMessage();
+				}
+				continue;
+			}
+
+			$resultado['ya_en_erp']++;
+			if (DB::table('articulo_movimiento')->where('venta_id', $venta->id)->exists()) {
+				continue;
+			}
+			$resultado['sin_stock'][] = $etiqueta;
+			if ($dryRun) {
+				continue;
+			}
+			try {
+				$this->crearStockDesdeVentaErp($venta);
+				$resultado['stock_completado']++;
+			} catch (\Exception $e) {
+				$resultado['errores'][] = $etiqueta.' stock: '.$e->getMessage();
+			}
+		}
+
+		return $resultado;
+	}
+
+	private function persistirEnErp(
+		string $tipoComprobante,
+		string $letra,
+		int $puntoVenta,
+		int $numero,
+		array $venta,
+		array $dataCAE,
+		array $conceptosTotales,
+		array $dataFactura,
+		float $signo,
+		string $cae,
+		string $fechaVencimientoCae,
+		string $nombreCliente,
+		string $documentoCliente,
+		string $direccionCliente
+	): int {
+		$puntoventa = Puntoventa::query()
+			->where('codigo', str_pad((string) $puntoVenta, 5, '0', STR_PAD_LEFT))
+			->first();
+		if (! $puntoventa) {
+			throw new Exception('No existe el punto de venta '.$puntoVenta.' en anitaERP.');
+		}
+
+		$tipotransaccion = Tipotransaccion::query()
+			->where('abreviatura', $tipoComprobante)
+			->where('estado', 'A')
+			->first();
+		if (! $tipotransaccion) {
+			throw new Exception('No existe el tipo '.$tipoComprobante.' en anitaERP.');
+		}
+
+		$empresa = Empresa::query()->find($puntoventa->empresa_id);
+		if (! $empresa) {
+			throw new Exception('La empresa del punto de venta no existe.');
+		}
+
+		$cliente = Cliente::query()->where('codigo', '0')->orderBy('id')->first();
+		if (! $cliente) {
+			throw new Exception('No existe el cliente consumidor final (codigo 0).');
+		}
+		$clienteGraba = clone $cliente;
+		if ($nombreCliente !== '') {
+			$clienteGraba->nombre = $nombreCliente;
+		}
+		if ($direccionCliente !== '') {
+			$clienteGraba->domicilio = $direccionCliente;
+		}
+		if ($documentoCliente !== '') {
+			$clienteGraba->numerodocumento = $documentoCliente;
+		}
+
+		$codigoDeposito = $puntoVenta === 27 ? '27' : '10';
+		$deposito = Depmae::query()
+			->where('empresa_id', $empresa->id)
+			->where('codigo', $codigoDeposito)
+			->first();
+		if (! $deposito) {
+			throw new Exception('No existe el deposito '.$codigoDeposito.' en anitaERP.');
+		}
+
+		$cuentaVentaId = (int) (Cuentacontable::query()
+			->where('empresa_id', $empresa->id)
+			->where('codigo', '411000003')
+			->value('id') ?? 0);
+
+		$dataFactura = $this->normalizarRenglonesErp($dataFactura, $cuentaVentaId);
+		$fecha = Carbon::parse($venta['fecha'])->format('Y-m-d');
+		$asiento = $this->facturacionService->armaContabilidad(
+			$this->renglonesNetosParaAsiento($dataFactura),
+			$conceptosTotales,
+			(int) $empresa->id,
+			abs((float) ($venta['total'] ?? 0))
+		);
+		$dataCAE['codigoempresa'] = $dataCAE['codigoempresa'] ?? ($empresa->codigo ?? 1);
+
+		$ret = $this->facturacionService->grabaFacturaERP(
+			$empresa,
+			$tipotransaccion->codigo,
+			$tipotransaccion,
+			$fecha,
+			$clienteGraba,
+			abs((float) ($venta['total'] ?? 0)),
+			1,
+			1,
+			'Facturante',
+			$letra,
+			$puntoventa,
+			$numero,
+			null,
+			$conceptosTotales,
+			[],
+			$dataFactura,
+			$asiento,
+			trim($tipoComprobante.' '.$letra.' '.$puntoventa->codigo.' '.$numero),
+			$signo,
+			0,
+			0,
+			$dataCAE,
+			0,
+			null,
+			null,
+			[
+				'deposito_id' => (int) $deposito->id,
+				'omitir_sincronizacion_anita' => true,
+				'omitir_stkmov_anita' => true,
+				'omitir_solicitud_arca_cae' => true,
+				'omitir_numera_anita_fin' => true,
+				'omitir_cuenta_corriente' => true,
+				'forzar_operacion_stock' => $signo < 0
+					? TipotransaccionOperacionStockSupport::ENTRADA
+					: TipotransaccionOperacionStockSupport::SALIDA,
+			]
+		);
+
+		if (! is_array($ret) || trim((string) ($ret['error'] ?? '')) !== '') {
+			$detalle = trim((string) ($ret['mensaje'] ?? $ret['error'] ?? 'No se pudo grabar la venta en anitaERP.'));
+			throw new Exception($detalle !== '' ? $detalle : 'No se pudo grabar la venta en anitaERP.');
+		}
+
+		$ventaId = (int) ($ret['venta_id'] ?? 0);
+		if ($ventaId <= 0) {
+			throw new Exception('La venta no quedo grabada en anitaERP.');
+		}
+
+		if (trim($cae) !== '') {
+			$this->ventaRepository->update([
+				'cae' => $cae,
+				'fechavencimientocae' => Carbon::parse($fechaVencimientoCae)->format('Y-m-d'),
+			], $ventaId);
+		}
+
+		return $ventaId;
+	}
+
+	private function grabarVentaDesdeBridge(object $fila): int
+	{
+		$tipo = trim((string) $fila->ven_tipo);
+		$letra = trim((string) $fila->ven_letra);
+		$puntoVenta = (int) $fila->ven_sucursal;
+		$numero = (int) $fila->ven_nro;
+		$fecha = $this->fechaAnitaAYmd((string) $fila->ven_fecha);
+		$signo = $tipo === 'NCD' ? -1.0 : 1.0;
+
+		$compaux = $this->listarBridge('compaux', 'ventas',
+			'compa_orden, compa_articulo, compa_cantidad, compa_precio, compa_desc, compa_tipo_iva, compa_incl_imp, compa_dto',
+			" WHERE compa_tipo='".$tipo."' AND compa_letra='".$letra."' AND compa_sucursal=".$puntoVenta." AND compa_nro_fact=".$numero
+		);
+		if ($compaux === []) {
+			throw new Exception('Sin renglones en compaux del bridge Anita.');
+		}
+
+		$stkmov = $this->movimientosStockLocal($fecha, $tipo, $letra, $puntoVenta, $numero);
+		$tallePorSku = [];
+		foreach ($stkmov as $mov) {
+			$tallePorSku[$this->skuNormalizado((string) $mov->stkv_articulo)] = $mov;
+		}
+
+		$dataFactura = [];
+		foreach ($compaux as $linea) {
+			if (trim((string) $linea->compa_articulo) === '' || trim((string) $linea->compa_articulo) === 'texto') {
+				continue;
+			}
+			$sku = $this->skuNormalizado((string) $linea->compa_articulo);
+			$articulo = $this->articuloQuery->traeArticuloPorSku($sku);
+			if (! $articulo) {
+				$articulo = $this->articuloQuery->traeArticuloPorSku(str_pad($sku, 13, '0', STR_PAD_LEFT));
+			}
+			$impuestoId = (int) ($linea->compa_tipo_iva ?: 3);
+			$tasa = (float) (Impuesto::query()->whereKey($impuestoId)->value('valor') ?? 21);
+			$precio = (float) $linea->compa_precio;
+			if (strtoupper(trim((string) ($linea->compa_incl_imp ?? 'S'))) === 'S' && $tasa > 0) {
+				$precio = round($precio * (1 + ($tasa / 100)), 2);
+			}
+			$mov = $tallePorSku[$sku] ?? null;
+			$talleId = 0;
+			$combinacionId = 0;
+			$codigoCombinacion = '';
+			if ($mov) {
+				$talle = Talle::query()->where('nombre', trim((string) $mov->stkv_partida))->first();
+				$talleId = $talle ? (int) $talle->id : 0;
+				$codigoCombinacion = trim((string) ($mov->stkv_color ?? ''));
+				if ($articulo && $codigoCombinacion !== '') {
+					$combinacion = Combinacion::query()
+						->where('articulo_id', $articulo->id)
+						->where('codigo', $codigoCombinacion)
+						->first();
+					$combinacionId = $combinacion ? (int) $combinacion->id : 0;
+				}
+			}
+			$dataFactura[] = [
+				'cantidad' => (float) $linea->compa_cantidad,
+				'precio' => $precio,
+				'descuento' => (float) ($linea->compa_dto ?? 0),
+				'descuentointegrado' => '',
+				'incluyeimpuesto' => '1',
+				'impuesto_id' => $impuestoId,
+				'articulo_id' => $articulo ? (int) $articulo->id : 0,
+				'sku' => $sku,
+				'descripcion' => (string) ($linea->compa_desc ?? $sku),
+				'combinacion_id' => $combinacionId,
+				'codigocombinacion' => $codigoCombinacion,
+				'moneda_id' => 1,
+				'listaprecio_id' => 1,
+				'medidas' => [[
+					'talle' => $talleId,
+					'cantidad' => (float) $linea->compa_cantidad,
+				]],
+			];
+		}
+		if ($dataFactura === []) {
+			throw new Exception('compaux no tiene articulos.');
+		}
+
+		$vencae = $this->listarBridge('vencae', 'ventas',
+			'venc_nro_cae, venc_fecha_vto',
+			" WHERE venc_tipo='".$tipo."' AND venc_letra='".$letra."' AND venc_sucursal=".$puntoVenta." AND venc_nro=".$numero
+		);
+		$cae = isset($vencae[0]) ? trim((string) $vencae[0]->venc_nro_cae) : '';
+		$fechaCae = isset($vencae[0]) ? $this->fechaAnitaAYmd((string) $vencae[0]->venc_fecha_vto) : $fecha;
+
+		$gravado = (float) ($fila->ven_gravado ?? 0);
+		$iva = (float) ($fila->ven_impuesto1 ?? 0);
+		$exento = (float) ($fila->ven_exento ?? 0);
+		$percepcion = (float) ($fila->ven_perc_ing_bruto ?? 0);
+		$conceptos = [];
+		if ($percepcion != 0.0) {
+			$conceptos[] = [
+				'concepto' => 'Percepcion IIBB',
+				'jurisdiccion' => '902',
+				'provincia_id' => 2,
+				'tasa' => $gravado != 0.0 ? $percepcion / $gravado : 0,
+				'importe' => $percepcion,
+			];
+		}
+		if ($iva != 0.0) {
+			$conceptos[] = [
+				'concepto' => 'Total Iva',
+				'tasa' => 21,
+				'importe' => $iva,
+				'impuesto_id' => 3,
+			];
+		}
+
+		return $this->persistirEnErp(
+			$tipo,
+			$letra,
+			$puntoVenta,
+			$numero,
+			[
+				'codigo' => $tipo,
+				'numerocomprobante' => $numero,
+				'fecha' => $fecha,
+				'total' => abs((float) $fila->ven_monto),
+				'moneda_id' => 1,
+			],
+			[
+				'gravado' => $gravado,
+				'iva' => $iva,
+				'total' => abs((float) $fila->ven_monto),
+				'nogravado' => 0,
+				'exento' => $exento,
+			],
+			$conceptos,
+			$dataFactura,
+			$signo,
+			$cae,
+			$fechaCae,
+			trim((string) ($fila->ven_nombre_cliente ?? '')),
+			trim((string) ($fila->ven_cuit_cli ?? '')),
+			trim((string) ($fila->ven_direccion_cli ?? ''))
+		);
+	}
+
+	private function crearStockDesdeVentaErp(?Venta $venta): int
+	{
+		if (! $venta) {
+			throw new Exception('La venta no existe en anitaERP.');
+		}
+		if (DB::table('articulo_movimiento')->where('venta_id', $venta->id)->exists()) {
+			return 0;
+		}
+
+		$tipo = Tipotransaccion::query()->find($venta->tipotransaccion_id);
+		$operacion = ($tipo && $tipo->esNotaCredito())
+			? TipotransaccionOperacionStockSupport::ENTRADA
+			: TipotransaccionOperacionStockSupport::SALIDA;
+		$lineas = DB::table('venta_emision')->where('venta_id', $venta->id)->orderBy('numeroitem')->get();
+		$creados = 0;
+		$servicio = app(Articulo_MovimientoService::class);
+		foreach ($lineas as $linea) {
+			if ((int) ($linea->articulo_id ?? 0) <= 0) {
+				continue;
+			}
+			$payload = TipotransaccionOperacionStockSupport::firmarPayloadMovimiento([
+				'fecha' => Carbon::parse($venta->fecha)->format('Y-m-d'),
+				'fechajornada' => Carbon::parse($venta->fechajornada ?: $venta->fecha)->format('Y-m-d'),
+				'tipotransaccion_id' => (int) $venta->tipotransaccion_id,
+				'venta_id' => (int) $venta->id,
+				'articulo_id' => (int) $linea->articulo_id,
+				'combinacion_id' => (int) ($linea->combinacion_id ?? 0),
+				'talle_id' => (int) ($linea->talle_id ?? 0),
+				'concepto' => $tipo->nombre ?? 'Facturante',
+				'cantidad' => abs((float) $linea->cantidad),
+				'precio' => (float) $linea->precio,
+				'costo' => 0,
+				'descuento' => $linea->descuento,
+				'descuentointegrado' => $linea->descuentointegrado,
+				'moneda_id' => (int) ($linea->moneda_id ?: 1),
+				'incluyeimpuesto' => $linea->incluyeimpuesto,
+				'listaprecio_id' => null,
+				'deposito_id' => (int) ($linea->deposito_id ?: 0),
+			], $operacion);
+			$servicio->guardaArticuloMovimiento('create', $payload, []);
+			$creados++;
+		}
+
+		return $creados;
+	}
+
+	private function buscarVentaErp(string $tipoComprobante, int $puntoVenta, $numero): ?Venta
+	{
+		$puntoventaId = Puntoventa::query()
+			->where('codigo', str_pad((string) $puntoVenta, 5, '0', STR_PAD_LEFT))
+			->value('id');
+		$tipoId = Tipotransaccion::query()
+			->where('abreviatura', $tipoComprobante)
+			->where('estado', 'A')
+			->value('id');
+		if (! $puntoventaId || ! $tipoId) {
+			return null;
+		}
+
+		return Venta::query()
+			->where('puntoventa_id', $puntoventaId)
+			->where('tipotransaccion_id', $tipoId)
+			->where('numerocomprobante', (int) $numero)
+			->first();
+	}
+
+	private function normalizarRenglonesErp(array $dataFactura, int $cuentaVentaId): array
+	{
+		foreach ($dataFactura as &$item) {
+			$talleId = (int) ($item['medidas'][0]['talle'] ?? $item['talle_id'] ?? 0);
+			if ($talleId > 0 && Talle::query()->whereKey($talleId)->exists()) {
+				$item['talle_id'] = $talleId;
+			}
+			$articuloId = (int) ($item['articulo_id'] ?? 0);
+			if ($articuloId <= 0) {
+				unset($item['articulo_id']);
+			} else {
+				$item['articulo_id'] = $articuloId;
+				$cuentaArticulo = (int) (Articulo::query()->whereKey($articuloId)->value('cuentacontableventa_id') ?? 0);
+				$item['cuentacontable_id'] = $cuentaArticulo > 0 ? $cuentaArticulo : $cuentaVentaId;
+			}
+			if (empty($item['detalle'])) {
+				$item['detalle'] = (string) ($item['descripcion'] ?? '');
+			}
+			if ((int) ($item['combinacion_id'] ?? 0) <= 0) {
+				unset($item['combinacion_id']);
+			}
+		}
+		unset($item);
+
+		return $dataFactura;
+	}
+
+	private function renglonesNetosParaAsiento(array $dataFactura): array
+	{
+		$netos = [];
+		foreach ($dataFactura as $item) {
+			$copia = $item;
+			$tasa = (float) (Impuesto::query()->whereKey((int) ($item['impuesto_id'] ?? 0))->value('valor') ?? 0);
+			if (($item['incluyeimpuesto'] ?? '') === '1' && $tasa > 0) {
+				$copia['precio'] = ((float) $item['precio']) / (1 + ($tasa / 100));
+			}
+			$bonificacion = (float) ($item['descuento'] ?? 0);
+			if ($bonificacion > 0 && $bonificacion <= 100) {
+				$copia['precio'] = ((float) $copia['precio']) * (1 - ($bonificacion / 100));
+			}
+			$netos[] = $copia;
+		}
+
+		return $netos;
+	}
+
+	private function movimientosStockLocal(string $fecha, string $tipo, string $letra, int $sucursal, int $numero): array
+	{
+		$fechaYmd = Carbon::parse($fecha)->format('Ymd');
+		$lote = $fechaYmd.'|'.$sucursal;
+		if (! isset($this->stkmovLocalListo[$lote])) {
+			$filas = $this->listarBridge(
+				'stkmov',
+				'ventas',
+				'stkv_tipo, stkv_letra, stkv_nro, stkv_articulo, stkv_partida, stkv_color, stkv_cantidad',
+				" WHERE stkv_fecha='".$fechaYmd."' AND stkv_sucursal=".$sucursal
+					." AND stkv_tipo IN ('FAC','NCD','NDB') ",
+				'LOCAL_IP',
+				'IFX_SERVER_LOCAL'
+			);
+			$mapa = [];
+			foreach ($filas as $mov) {
+				$clave = trim((string) $mov->stkv_tipo).'|'.trim((string) $mov->stkv_letra).'|'
+					.(int) $mov->stkv_nro.'|'.$this->skuNormalizado((string) $mov->stkv_articulo);
+				$mapa[$clave] = $mov;
+			}
+			$this->stkmovLocalCache[$lote] = $mapa;
+			$this->stkmovLocalListo[$lote] = true;
+		}
+
+		$prefijo = $tipo.'|'.$letra.'|'.$numero.'|';
+		$salida = [];
+		foreach ($this->stkmovLocalCache[$lote] as $clave => $mov) {
+			if (strpos($clave, $prefijo) === 0) {
+				$salida[] = $mov;
+			}
+		}
+
+		return $salida;
+	}
+
+	private function listarBridge(
+		string $tabla,
+		string $sistema,
+		string $campos,
+		string $where,
+		?string $servidor = null,
+		?string $ifxServer = null
+	): array {
+		$apiAnita = new ApiAnita();
+		$data = [
+			'acc' => 'list',
+			'tabla' => $tabla,
+			'sistema' => $sistema,
+			'campos' => $campos,
+			'whereArmado' => $where,
+		];
+		if ($servidor !== null) {
+			$data['servidor'] = $servidor;
+			$data['ifx_server'] = $ifxServer;
+		}
+		$filas = json_decode($apiAnita->apiCall($data));
+
+		return is_array($filas) ? $filas : [];
+	}
+
+	private function skuNormalizado(string $sku): string
+	{
+		$sku = trim($sku);
+		$sinCeros = ltrim($sku, '0');
+
+		return $sinCeros !== '' ? $sinCeros : '0';
+	}
+
+	private function fechaAnitaAYmd(string $fecha): string
+	{
+		$fecha = trim($fecha);
+		if (preg_match('/^\d{8}$/', $fecha)) {
+			return Carbon::createFromFormat('Ymd', $fecha)->format('Y-m-d');
+		}
+
+		return Carbon::parse($fecha)->format('Y-m-d');
 	}
 
 }
