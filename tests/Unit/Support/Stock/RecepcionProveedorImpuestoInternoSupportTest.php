@@ -113,12 +113,26 @@ class RecepcionProveedorImpuestoInternoSupportTest extends TestCase
 
     public function test_assert_impuesto_interno_cero_falla_en_devolucion(): void
     {
+        $origen = $this->recepcionConLineas([[10.0, self::TIPO_CIG_ID]], 400.0);
         $devolucion = $this->recepcionConLineas([[10.0, self::TIPO_CIG_ID]], 0.0);
         $devolucion->tipo = Recepcion_Proveedor::TIPO_DEVOLUCION;
         $devolucion->impuesto_interno = 0;
+        $devolucion->setRelation('recepcion_referencia', $origen);
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('impuesto interno');
+        RecepcionProveedorImpuestoInternoSupport::assertImpuestoInternoCumplido($devolucion);
+    }
+
+    public function test_assert_devolucion_sin_impuesto_interno_en_origen_se_puede_confirmar(): void
+    {
+        $origen = $this->recepcionConLineas([[10.0, self::TIPO_CIG_ID]], 0.0);
+        $devolucion = $this->recepcionConLineas([[10.0, self::TIPO_CIG_ID]], 0.0);
+        $devolucion->tipo = Recepcion_Proveedor::TIPO_DEVOLUCION;
+        $devolucion->impuesto_interno = 0;
+        $devolucion->setRelation('recepcion_referencia', $origen);
+
+        $this->expectNotToPerformAssertions();
         RecepcionProveedorImpuestoInternoSupport::assertImpuestoInternoCumplido($devolucion);
     }
 

@@ -2,10 +2,10 @@
 
 namespace App\Services\Compras;
 
-use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraReporteCriteriosSupport;
+use App\Support\Compras\OrdencompraReporteEntregaSql;
 use App\Support\Compras\OrdencompraReporteFiltros;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\RequisicionReporteCriteriosSupport;
@@ -200,33 +200,8 @@ class OrdencompraReporteService
                 WHERE estado = \'APROBADA\'
                 GROUP BY requisicion_id
             ) AS reap'), 'reap.requisicion_id', '=', 'oc.requisicion_id')
-            ->leftJoin(DB::raw('(
-                SELECT
-                    rpa.ordencompra_articulo_id,
-                    SUM(CASE rp.tipo
-                        WHEN \''.Recepcion_Proveedor::TIPO_RECEPCION.'\' THEN rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0)
-                        WHEN \''.Recepcion_Proveedor::TIPO_DEVOLUCION.'\' THEN -(rpa.cantidad + COALESCE(rpa.cantidad_rechazada, 0))
-                        ELSE 0 END) AS cantidad_entregada
-                FROM recepcion_proveedor_articulo rpa
-                INNER JOIN recepcion_proveedor rp ON rp.id = rpa.recepcion_proveedor_id
-                WHERE rp.estado = \''.Recepcion_Proveedor::ESTADO_CONFIRMADA.'\'
-                  AND rp.tipo IN (\''.Recepcion_Proveedor::TIPO_RECEPCION.'\',\''.Recepcion_Proveedor::TIPO_DEVOLUCION.'\')
-                  AND rpa.ordencompra_articulo_id IS NOT NULL
-                GROUP BY rpa.ordencompra_articulo_id
-            ) AS ent'), 'ent.ordencompra_articulo_id', '=', 'oa.id')
-            ->leftJoin(DB::raw('(
-                SELECT
-                    rpa.ordencompra_articulo_id,
-                    MIN(rp.id) AS recepcion_id,
-                    MIN(rp.numerorecepcion) AS numero_recepcion,
-                    MIN(rp.fecha) AS fecha_recepcion
-                FROM recepcion_proveedor_articulo rpa
-                INNER JOIN recepcion_proveedor rp ON rp.id = rpa.recepcion_proveedor_id
-                WHERE rp.estado = \''.Recepcion_Proveedor::ESTADO_CONFIRMADA.'\'
-                  AND rp.tipo = \''.Recepcion_Proveedor::TIPO_RECEPCION.'\'
-                  AND rpa.ordencompra_articulo_id IS NOT NULL
-                GROUP BY rpa.ordencompra_articulo_id
-            ) AS rec1'), 'rec1.ordencompra_articulo_id', '=', 'oa.id')
+            ->leftJoin(DB::raw(OrdencompraReporteEntregaSql::subqueryCantidadEntregada().' AS ent'), 'ent.ordencompra_articulo_id', '=', 'oa.id')
+            ->leftJoin(DB::raw(OrdencompraReporteEntregaSql::subqueryPrimeraRecepcion().' AS rec1'), 'rec1.ordencompra_articulo_id', '=', 'oa.id')
             ->leftJoin(DB::raw('(
                 SELECT
                     cp.ordencompra_id,

@@ -416,13 +416,36 @@ final class RecepcionProveedorImpuestoInternoSupport
         }
 
         $importe = $recepcion->impuesto_interno;
-        if ($importe === null || (float) $importe <= 0.000001) {
-            $msg = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
-                ? 'La devolución con cigarrillos debe tener impuesto interno (se prorratea desde la recepción origen) antes de confirmar.'
-                : 'Indique el impuesto interno de la factura (líneas con cigarrillos) y guarde la recepción antes de confirmar.';
-
-            throw new \RuntimeException($msg);
+        if ($importe !== null && (float) $importe > 0.000001) {
+            return;
         }
+
+        // La devolución revierte el II de la recepción origen. Si esa recepción
+        // no lo cargó, no hay nada que prorratear y se puede confirmar igual.
+        if ($recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
+            && ! self::origenExigeImpuestoInternoEnDevolucion($recepcion)) {
+            return;
+        }
+
+        $msg = $recepcion->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION
+            ? 'La devolución con cigarrillos debe tener impuesto interno (se prorratea desde la recepción origen) antes de confirmar.'
+            : 'Indique el impuesto interno de la factura (líneas con cigarrillos) y guarde la recepción antes de confirmar.';
+
+        throw new \RuntimeException($msg);
+    }
+
+    /**
+     * Solo si la recepción origen provisionó impuesto interno hay que revertirlo en la devolución.
+     */
+    private static function origenExigeImpuestoInternoEnDevolucion(Recepcion_Proveedor $devolucion): bool
+    {
+        $devolucion->loadMissing('recepcion_referencia');
+        $origen = $devolucion->recepcion_referencia;
+        if (! $origen instanceof Recepcion_Proveedor) {
+            return false;
+        }
+
+        return (float) ($origen->impuesto_interno ?? 0) > 0.000001;
     }
 
     /**
