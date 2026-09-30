@@ -33,6 +33,7 @@ Proveedores
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route('proveedor');
     $filtroEmpresaActivo = ProveedorListadoFiltros::filtroEmpresaActivo();
+    $filtroCodigo = trim((string) ($filtros['codigo'] ?? ''));
     $columnasVisibles = $columnasVisibles ?? ProveedorListadoColumnas::defaultsVisibles();
     $catalogoColumnas = $catalogoColumnas ?? ProveedorListadoColumnas::catalogoActivo();
     $etiquetasColumnas = $etiquetasColumnas ?? [];
@@ -111,6 +112,13 @@ Proveedores
                         </button>
                     </div>
                     <div class="lw-toolbar-right">
+                        <input type="text" name="filtro_codigo" id="filtro_codigo"
+                               class="form-control form-control-sm"
+                               style="width:110px;"
+                               value="{{ $filtroCodigo }}"
+                               placeholder="Código"
+                               autocomplete="off"
+                               title="Filtrar por código de proveedor">
                         <input type="search" id="lw-search-rapida" class="form-control form-control-sm lw-search-rapida"
                                value="{{ ($filtros['modo'] ?? '') !== 'qbe' ? ($filtros['valor'] ?? '') : '' }}"
                                placeholder="Búsqueda rápida (Enter)…"
@@ -123,7 +131,7 @@ Proveedores
                                     title="Saca los filtros guardados en esta vista. Las columnas no cambian.">
                                 <i class="fa fa-eraser"></i> Quitar filtros
                             </button>
-                        @elseif ($tieneQbe || (($filtros['valor'] ?? '') !== ''))
+                        @elseif ($tieneQbe || (($filtros['valor'] ?? '') !== '') || $filtroCodigo !== '')
                             <a href="{{ $limpiarUrl }}" class="btn btn-sm btn-outline-warning">
                                 <i class="fa fa-eraser"></i> Limpiar
                             </a>
@@ -135,6 +143,9 @@ Proveedores
 
                 @if ($tieneQbe)
                     <div class="lw-chips">
+                        @if ($filtroCodigo !== '')
+                            <span class="lw-chip"><strong>Código</strong> {{ $filtroCodigo }}</span>
+                        @endif
                         @if (($filtros['modo'] ?? '') === 'qbe')
                             @php
                                 $qbeChip = \App\Support\Listado\ListadoQbeSupport::paraUi($filtros['qbe'] ?? []);

@@ -88,6 +88,15 @@
             return;
         }
 
+        $('#filtro_codigo').on('keydown', function (e) {
+            if (e.key !== 'Enter') {
+                return;
+            }
+            e.preventDefault();
+            syncColumnasHidden();
+            $('#form-filtros-proveedor').trigger('submit');
+        });
+
         $('#lw-search-rapida').on('keydown', function (e) {
             if (e.key === 'Enter') {
                 e.preventDefault();

@@ -164,6 +164,7 @@ class ProveedorListadoFiltros
             'operador' => $operador,
             'valor' => $valor,
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
+            'codigo' => trim((string) $request->input('filtro_codigo', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
             'qbe' => $qbe,
@@ -258,11 +259,15 @@ class ProveedorListadoFiltros
 
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
+        if (trim((string) ($filtros['codigo'] ?? '')) !== '') {
+            return true;
+        }
+
         return self::tieneCriteriosTexto($filtros);
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, qbe: array{entre_grupos: string, grupos: list}, orden: list<array{campo: string, dir: string}>, agrupar: list, empresa_id: ?int, empresa_scope: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, codigo: string, busqueda: string, qbe: array{entre_grupos: string, grupos: list}, orden: list<array{campo: string, dir: string}>, agrupar: list, empresa_id: ?int, empresa_scope: string}
      */
     public static function filtrosVacios(): array
     {
@@ -272,6 +277,7 @@ class ProveedorListadoFiltros
             'operador' => 'contiene',
             'valor' => '',
             'valor_hasta' => '',
+            'codigo' => '',
             'busqueda' => '',
             'qbe' => ListadoQbeSupport::vacio(),
             'orden' => [],
@@ -306,6 +312,10 @@ class ProveedorListadoFiltros
     {
         $params = self::paraQueryStringEmpresa($filtros);
         $modo = $filtros['modo'] ?? self::MODO_TODOS;
+
+        if (trim((string) ($filtros['codigo'] ?? '')) !== '') {
+            $params['filtro_codigo'] = trim((string) $filtros['codigo']);
+        }
 
         if ($modo === self::MODO_QBE) {
             $params['filtro_modo'] = self::MODO_QBE;
@@ -403,6 +413,7 @@ class ProveedorListadoFiltros
             'valor' => (string) ($desdeVista['valor'] ?? ''),
             'valor_hasta' => (string) ($desdeVista['valor_hasta'] ?? ''),
             'busqueda' => (string) ($desdeVista['valor'] ?? $desdeVista['busqueda'] ?? ''),
+            'codigo' => (string) ($desdeVista['codigo'] ?? $base['codigo'] ?? ''),
             'qbe' => $qbe,
             'orden' => $ordenBase !== [] ? $ordenBase : $ordenVista,
             'agrupar' => $agruparBase !== [] ? $agruparBase : $agruparVista,
@@ -443,6 +454,8 @@ class ProveedorListadoFiltros
             });
         }
 
+        self::aplicarFiltroCodigo($query, $filtros);
+
         if (! self::tieneCriteriosTexto($filtros)) {
             return;
         }
@@ -465,6 +478,48 @@ class ProveedorListadoFiltros
         }
 
         self::aplicarBusquedaGlobal($query, $operador, $valor);
+    }
+
+    /**
+     * Filtro dedicado de código (input separado de la búsqueda rápida):
+     * acepta el código con o sin ceros a la izquierda.
+     *
+     * @param  Builder<\App\Models\Compras\Proveedor>  $query
+     */
+    private static function aplicarFiltroCodigo(Builder $query, array $filtros): void
+    {
+        $codigo = trim((string) ($filtros['codigo'] ?? ''));
+        if ($codigo === '') {
+            return;
+        }
+
+        $variantes = self::variantesCodigo($codigo);
+        if ($variantes === []) {
+            return;
+        }
+
+        $query->whereIn('proveedor.codigo', $variantes);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function variantesCodigo(string $codigo): array
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return [];
+        }
+        if (! ctype_digit($codigo)) {
+            return [$codigo];
+        }
+
+        $norm = ltrim($codigo, '0');
+        if ($norm === '') {
+            $norm = '0';
+        }
+
+        return array_values(array_unique([$codigo, $norm, str_pad($norm, 6, '0', STR_PAD_LEFT)]));
     }
 
     /**

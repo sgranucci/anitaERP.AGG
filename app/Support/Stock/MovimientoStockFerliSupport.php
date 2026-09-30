@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Schema;
  * - Resto (Fábrica, Junín, Tal-*, etc.) → catálogo FÁBRICA (importaciones, insumos).
  * - TRA fábrica→local / local→fábrica: manda el depósito de origen (de dónde se saca).
  * - Calzado: combinaciones activas del canal. Insumos: sin combinaciones, igual seleccionables.
+ * - Si el depósito tiene saldo distinto de cero, el artículo entra igual (ajuste de colores inactivos).
  */
 final class MovimientoStockFerliSupport
 {
@@ -86,7 +87,8 @@ final class MovimientoStockFerliSupport
 
     /**
      * Query de artículos elegibles en el canal del depósito:
-     * activos en canal + (combinación activa en canal OR sin ninguna combinación = insumo).
+     * activos en canal + (combinación activa en canal OR sin ninguna combinación = insumo
+     * OR saldo distinto de cero en ese depósito).
      * Fuera de Ferli: solo activos operativos (sin filtro de canal/combinación).
      *
      * @param  Builder<Articulo>  $query
@@ -105,7 +107,9 @@ final class MovimientoStockFerliSupport
             self::codigoCanal($depositoId)
         );
 
-        return $query->where(function ($q) use ($ambito) {
+        $depositoSaldo = ($depositoId !== null && $depositoId > 0) ? $depositoId : 0;
+
+        return $query->where(function ($q) use ($ambito, $depositoSaldo) {
             $q->whereExists(function ($sub) use ($ambito) {
                 $sub->selectRaw('1')
                     ->from('combinacion')
@@ -118,6 +122,16 @@ final class MovimientoStockFerliSupport
                     ->from('combinacion')
                     ->whereRaw('combinacion.articulo_id = articulo.id');
             });
+            if ($depositoSaldo > 0) {
+                $q->orWhereExists(function ($sub) use ($depositoSaldo) {
+                    $sub->from('articulo_movimiento')
+                        ->select('articulo_movimiento.articulo_id')
+                        ->whereColumn('articulo_movimiento.articulo_id', 'articulo.id')
+                        ->where('articulo_movimiento.deposito_id', $depositoSaldo)
+                        ->groupBy('articulo_movimiento.articulo_id')
+                        ->havingRaw('SUM(articulo_movimiento.cantidad) <> 0');
+                });
+            }
         });
     }
 

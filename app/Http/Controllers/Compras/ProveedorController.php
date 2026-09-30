@@ -220,6 +220,7 @@ class ProveedorController extends Controller
             ! $forzarEstandar
             && ! $request->has('filtro_valor')
             && ! $request->has('qbe')
+            && ! $request->has('filtro_codigo')
             && ! $request->boolean('limpiar_filtros')
         ) {
             // Solo auto-aplicar vista default al entrar sin criterios (no al elegir "Vista estándar").

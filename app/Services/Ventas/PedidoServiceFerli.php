@@ -246,30 +246,7 @@ class PedidoServiceFerli
 						$medidasPorTalle = [];
 
 						$numeropedido = $pedido['pedido_id'];
-						if ($pedido['estado'] == 'A')
-							$estadopedido = 'ANULADO';
-						else
-							$estadopedido = $pedido['codigoot'] != '' ? 'EN PRODUCCION' : 'PENDIENTE';
-
-						// Busca tareas para definir el estado real
-						if ($pedido['codigoot'] != '' && $estadopedido != 'ANULADO')
-						{
-							$this->ordentrabajoService->traeEstadoOt($pedido['ordentrabajo_id'], $pedido['pedido_combinacion_id'], 
-																	$nombretarea);
-
-							if ($nombretarea != '')
-								$estadopedido = $nombretarea;
-						}
-
-						// Circuito picking stock (sin OT): picking_facturado = ya facturado
-						// Misma regla que conteoEstadoLineaCombinacion / cabecera estadopedido.
-						if ($estadopedido != 'ANULADO'
-							&& ($pedido['picking_facturado'] ?? PedidoPickingFerliSupport::NO_MARCADO)
-								=== PedidoPickingFerliSupport::FACTURADO) {
-							$estadopedido = 'FACTURADA';
-						}
-
-						$numeroot = $pedido['codigoot'];
+						[$estadopedido, $numeroot] = $this->estadoOtReporteGeneral($pedido);
 						$fecha = $pedido['fecha'];
 						$nombrevendedor = $pedido['nombrevendedor'];
 						$nombrecliente = $pedido['nombrecliente'];
@@ -288,6 +265,14 @@ class PedidoServiceFerli
 						$sku = $pedido['sku'];
 						$colorfondo_id = $pedido['colorfondo_id'];
 						$nombrecolorfondo = $pedido['nombrecolorfondo'];
+					}
+					elseif ($this->reporteSinOt($numeroot)
+						&& ! $this->reporteSinOt($pedido['codigoot'] ?? null)
+						&& $estadopedido !== 'ANULADO'
+						&& $estadopedido !== 'FACTURADA')
+					{
+						// El primer talle puede no tener vínculo de OT y otro sí.
+						[$estadopedido, $numeroot] = $this->estadoOtReporteGeneral($pedido);
 					}
 
 					// Una sola cantidad por talle: hay pedidos con filas duplicadas en
@@ -336,8 +321,8 @@ class PedidoServiceFerli
 			switch($estado)
 			{
 				case 'PENDIENTES':
-					// Solo líneas realmente pendientes (sin OT y no facturadas por picking).
-					if ($item['estadopedido'] == 'PENDIENTE')
+					// Sin OT en la línea ni en sus talles, y sin facturar por picking.
+					if ($item['estadopedido'] == 'PENDIENTE' && $this->reporteSinOt($item['numeroot']))
 						$cc = true;
 					break;
 				case 'EN PRODUCCION':
@@ -364,6 +349,55 @@ class PedidoServiceFerli
 				$dataFiltrado[] = $item;
 		}
 		return(['data' => $dataFiltrado]);
+	}
+
+	/**
+	 * Estado de una línea del reporte general.
+	 * Hay OT si está en el talle (ordentrabajo_combinacion_talle) o en la línea (pedido_combinacion.ot_id).
+	 *
+	 * @return array{0: string, 1: mixed}
+	 */
+	private function estadoOtReporteGeneral($pedido): array
+	{
+		if (($pedido['estado'] ?? '') == 'A') {
+			$estadopedido = 'ANULADO';
+		} else {
+			$estadopedido = $this->reporteSinOt($pedido['codigoot'] ?? null) ? 'PENDIENTE' : 'EN PRODUCCION';
+		}
+
+		if (! $this->reporteSinOt($pedido['codigoot'] ?? null) && $estadopedido != 'ANULADO') {
+			$nombretarea = '';
+			$this->ordentrabajoService->traeEstadoOt(
+				$pedido['ordentrabajo_id'],
+				$pedido['pedido_combinacion_id'],
+				$nombretarea
+			);
+
+			if ($nombretarea != '') {
+				$estadopedido = $nombretarea;
+			}
+		}
+
+		// Circuito picking stock (sin OT): picking_facturado = ya facturado.
+		// Misma regla que conteoEstadoLineaCombinacion / cabecera estadopedido.
+		if ($estadopedido != 'ANULADO'
+			&& ($pedido['picking_facturado'] ?? PedidoPickingFerliSupport::NO_MARCADO)
+				=== PedidoPickingFerliSupport::FACTURADO) {
+			$estadopedido = 'FACTURADA';
+		}
+
+		return [$estadopedido, $pedido['codigoot'] ?? null];
+	}
+
+	private function reporteSinOt($codigo): bool
+	{
+		if ($codigo === null) {
+			return true;
+		}
+
+		$codigo = trim((string) $codigo);
+
+		return $codigo === '' || $codigo === '0' || $codigo === '-1';
 	}
 
 	public function generaDatosRepPedido($desdeFecha, $hastaFecha, $desdeVendedor_id, $hastaVendedor_id)

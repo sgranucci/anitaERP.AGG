@@ -140,8 +140,24 @@ class CombinacionController extends Controller
             $ambito = CombinacionEstadoCanalSupport::AMBITO_FABRICA;
         }
 
+        $depositoId = (int) request()->query('deposito_id', 0);
+
         $q = Combinacion::select('id', 'codigo', 'nombre')->where('articulo_id', $id);
-        CombinacionEstadoCanalSupport::scopeActivasEnAmbito($q, $ambito);
+        $q->where(function ($w) use ($ambito, $id, $depositoId) {
+            CombinacionEstadoCanalSupport::scopeActivasEnAmbito($w, $ambito);
+            if ($depositoId <= 0) {
+                return;
+            }
+            $w->orWhereIn('id', function ($sub) use ($id, $depositoId) {
+                $sub->from('articulo_movimiento')
+                    ->select('combinacion_id')
+                    ->where('articulo_id', $id)
+                    ->where('deposito_id', $depositoId)
+                    ->whereNotNull('combinacion_id')
+                    ->groupBy('combinacion_id')
+                    ->havingRaw('SUM(cantidad) <> 0');
+            });
+        });
 
         return $q->orderBy('nombre', 'asc')->orderBy('codigo', 'asc')->get()->toArray();
     }

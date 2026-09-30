@@ -5,28 +5,33 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Remito interno {{ $remito->numero ?? '' }}</title>
     <style type="text/css">
-        @page { margin: 12mm; }
-        html, body { height: auto; margin: 0; padding: 0; }
+        @include('includes.reportes.estilos_pdf_pagina', [
+            'pdf_size' => 'a4 portrait',
+            'pdf_lateral' => '12mm',
+            'pdf_vertical' => '10mm',
+        ])
         body {
             font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
-            font-size: 12px;
+            font-size: 11px;
             color: #1a1a1a;
         }
         table.ri-header {
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 10px;
+            table-layout: fixed;
         }
-        table.ri-header td { border: none; vertical-align: top; padding: 0 4px 0 0; }
-        .ri-logo { width: 48%; }
+        table.ri-header td { border: none; vertical-align: top; padding: 0 4px 0 0; word-wrap: break-word; }
+        .ri-logo { width: 42%; }
         .ri-meta {
-            width: 52%;
-            font-size: 13px;
+            width: 58%;
+            font-size: 11px;
             text-align: right;
-            line-height: 1.45;
+            line-height: 1.4;
+            word-wrap: break-word;
         }
         .ri-titulo {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             margin: 0 0 4px 0;
             color: #17202A;
@@ -39,7 +44,7 @@
         table.ri-items {
             border-collapse: collapse;
             width: 100%;
-            font-size: 11px;
+            font-size: 10px;
             margin-top: 12px;
             table-layout: fixed;
         }
@@ -76,6 +81,9 @@
     </style>
 </head>
 <body>
+<table class="marco-pdf"><tr>
+    <td class="marco-lat"></td>
+    <td class="marco-centro">
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
 
@@ -131,10 +139,10 @@
 <table class="ri-items">
     <thead>
         <tr>
-            <th style="width:14%;">ARTÍCULO</th>
-            <th style="width:30%;">DESCRIPCIÓN / COLOR</th>
-            <th style="width:42%;">MEDIDAS</th>
-            <th style="width:14%;" class="text-center">TOTAL PARES</th>
+            <th style="width:16%;">ARTÍCULO</th>
+            <th style="width:28%;">DESCRIPCIÓN / COLOR</th>
+            <th style="width:40%;">MEDIDAS</th>
+            <th style="width:16%;">TOTAL PARES</th>
         </tr>
     </thead>
     <tbody>
@@ -194,5 +202,8 @@
 <div class="ri-footer">
     Generado {{ date('d/m/Y H:i') }} — Documento interno (no fiscal).
 </div>
+    </td>
+    <td class="marco-lat"></td>
+</tr></table>
 </body>
 </html>

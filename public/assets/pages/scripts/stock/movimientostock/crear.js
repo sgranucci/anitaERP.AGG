@@ -169,6 +169,12 @@
 			if (window.movimientoStockModoFerli) {
 				var ambitoComb = (window.movimientoStockAmbitoCatalogo || 'FABRICA').toString().toUpperCase();
 				url_comb += '?ambito=' + encodeURIComponent(ambitoComb);
+				var depComb = typeof window.msDepositoOperativoId === 'function'
+					? (parseInt(window.msDepositoOperativoId(), 10) || 0)
+					: 0;
+				if (depComb > 0) {
+					url_comb += '&deposito_id=' + encodeURIComponent(String(depComb));
+				}
 			}
 		}
 

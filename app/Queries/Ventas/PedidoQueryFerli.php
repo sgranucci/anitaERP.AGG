@@ -159,8 +159,8 @@ class PedidoQueryFerli
                                 'cliente.nombre as nombrecliente',
                                 'cliente.codigo as codigocliente',
                                 'tiposuspensioncliente.nombre as estadocliente',
-                                'ordentrabajo.id as ordentrabajo_id',
-                                'ordentrabajo.codigo as codigoot',
+                                DB::raw('COALESCE(ordentrabajo.id, ot_linea.id) as ordentrabajo_id'),
+                                DB::raw('COALESCE(ordentrabajo.codigo, ot_linea.codigo) as codigoot'),
                                 'vendedor.id as vendedor_id',
                                 'vendedor.nombre as nombrevendedor',
                                 'color.nombre as nombrecolorfondo')
@@ -170,6 +170,10 @@ class PedidoQueryFerli
                         ->leftjoin('pedido_combinacion_talle', 'pedido_combinacion_talle.pedido_combinacion_id', '=', 'pedido_combinacion.id')
                         ->leftjoin('ordentrabajo_combinacion_talle', 'ordentrabajo_combinacion_talle.pedido_combinacion_talle_id', '=', 'pedido_combinacion_talle.id')
                         ->leftjoin('ordentrabajo', 'ordentrabajo.id', '=', 'ordentrabajo_combinacion_talle.ordentrabajo_id')
+                        ->leftJoin('ordentrabajo as ot_linea', function ($join) {
+                            $join->on('ot_linea.id', '=', 'pedido_combinacion.ot_id')
+                                ->where('pedido_combinacion.ot_id', '>', 0);
+                        })
                         ->join('articulo', 'articulo.id', '=', 'pedido_combinacion.articulo_id')
                         ->join('combinacion', 'combinacion.id', '=', 'pedido_combinacion.combinacion_id')
                         ->join('linea', 'linea.id', '=', 'articulo.linea_id')

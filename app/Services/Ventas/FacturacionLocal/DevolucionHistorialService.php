@@ -12,6 +12,7 @@ use App\Support\Ventas\FacturacionLocal\CambioDevolucionMarketplaceCatalogoSuppo
 use App\Support\Ventas\FacturacionLocal\DevolucionHistorialListadoFiltros;
 use App\Support\Ventas\FacturacionLocal\DevolucionHistorialOrigenSupport;
 use App\Support\Ventas\FacturacionLocal\MotivoDevolucionSupport;
+use DateTimeInterface;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -67,7 +68,7 @@ class DevolucionHistorialService
                 'empresa_id' => (int) ($local->empresa_id ?: 0) ?: null,
                 'venta_id' => (int) $ventaNc->id,
                 'venta_origen_id' => $ventaFac ? (int) $ventaFac->id : null,
-                'fecha' => $ventaNc->fecha?->format('Y-m-d') ?: now()->toDateString(),
+                'fecha' => $this->fechaYmd($ventaNc->fecha),
             ]));
         }
     }
@@ -96,7 +97,7 @@ class DevolucionHistorialService
                 'empresa_id' => (int) ($local->empresa_id ?: $ventaNc->empresa_id ?: 0) ?: null,
                 'venta_id' => (int) $ventaNc->id,
                 'venta_origen_id' => (int) $ventaOrigen->id,
-                'fecha' => $ventaNc->fecha?->format('Y-m-d') ?: now()->toDateString(),
+                'fecha' => $this->fechaYmd($ventaNc->fecha),
             ]));
         }
     }
@@ -137,9 +138,26 @@ class DevolucionHistorialService
                 'venta_id' => (int) $ventaNc->id,
                 'venta_origen_id' => (int) $cambio->venta_original_id,
                 'cambio_devolucion_id' => (int) $cambio->id,
-                'fecha' => $ventaNc->fecha?->format('Y-m-d') ?: now()->toDateString(),
+                'fecha' => $this->fechaYmd($ventaNc->fecha),
             ]));
         }
+    }
+
+    /**
+     * venta.fecha no está casteada a fecha: en runtime llega como string.
+     */
+    private function fechaYmd(mixed $fecha): string
+    {
+        if ($fecha instanceof DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+
+        $texto = trim((string) $fecha);
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $texto, $m) === 1) {
+            return $m[1];
+        }
+
+        return now()->toDateString();
     }
 
     public function queryListado(): Builder
