@@ -5,6 +5,7 @@ namespace App\Services\Direccion;
 use App\Models\Caja\Cheque;
 use App\Support\Caja\ChequeListadoFiltros;
 use App\Support\Configuracion\CotizacionVigenteSupport;
+use App\Support\Database\SqlDialectSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder;
@@ -94,7 +95,7 @@ class TableroDireccionService
                 'menos_es_mejor',
                 $emitidos,
                 $emitidosAnt,
-                'Emitidos sin debitar ni anular, al cierre del período.',
+                'Solo cheques propios posdatados, con vencimiento de hoy en adelante.',
                 $vencen['cantidad'].' vencen en 7 días'
             ),
             $this->kpi('deuda_clientes', 'Deuda de clientes', 'stock', 'menos_es_mejor', $deudaCli, $deudaCliAnt, 'Saldo pendiente de cuenta corriente al cierre.'),
@@ -669,12 +670,13 @@ class TableroDireccionService
         }
         $filas = $this->emitidosQuery($empresaIds, $hasta)
             ->orderBy('cheque.fechapago')
+            ->orderBy('cheque.id')
             ->limit(self::DETALLE)
             ->get(['cheque.id', 'cheque.numerocheque', 'cheque.fechapago', 'cheque.monto', 'cheque.moneda_id', 'cheque.cotizacion', 'cheque.fechaemision', 'cheque.anombrede']);
 
         return [
             'titulo' => 'Cheques propios emitidos',
-            'nota' => 'Sin anular y sin debitar, emitidos hasta el cierre del período.',
+            'nota' => 'Posdatados o diferidos, con vencimiento de hoy en adelante. Los ya vencidos no entran.',
             'secciones' => [[
                 'titulo' => '',
                 'columnas' => ['Pago', 'Número', 'A nombre de', 'Importe'],
@@ -981,18 +983,25 @@ class TableroDireccionService
     }
 
     /**
+     * Cheques propios todavía en circulación: posdatados (fecha de pago posterior
+     * a la emisión) con vencimiento desde hoy, o desde el cierre si el período ya pasó.
+     *
      * @param  list<int>  $empresaIds
      */
     private function emitidosQuery(array $empresaIds, string $hasta): EloquentBuilder
     {
+        $desde = $this->referencia($hasta);
+
         return Cheque::query()
             ->whereIn('cheque.empresa_id', $empresaIds)
             ->where('cheque.origen', 'E')
             ->where(function ($q) {
                 $q->whereNull('cheque.estado')
-                    ->orWhereNotIn('cheque.estado', ['A', '*']);
+                    ->orWhereNotIn('cheque.estado', ['A', 'R', 'C']);
             })
             ->whereDate('cheque.fechaemision', '<=', $hasta)
+            ->whereColumn('cheque.fechapago', '>', 'cheque.fechaemision')
+            ->whereDate('cheque.fechapago', '>=', $desde)
             ->where(function ($q) use ($hasta) {
                 $q->whereNull('cheque.fecha_acreditacion')
                     ->orWhereDate('cheque.fecha_acreditacion', '>', $hasta);
@@ -1024,7 +1033,15 @@ class TableroDireccionService
         return DB::table('proveedor_cuentacorriente as cc')
             ->leftJoinSub($aplicado, 'ap', 'ap.proveedor_cuentacorriente_id', '=', 'cc.id')
             ->whereIn('cc.empresa_id', $empresaIds)
-            ->whereDate('cc.fecha', '<=', $hasta);
+            ->whereDate('cc.fecha', '<=', $hasta)
+            ->whereRaw(SqlDialectSupport::sqlAlcanceDeudaAbiertaProveedorCc('cc'))
+            ->whereRaw('ABS('.SqlDialectSupport::coalesce('ap.aplicado', '0').') < ABS(cc.total)')
+            ->whereExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('proveedor as p')
+                    ->whereColumn('p.id', 'cc.proveedor_id')
+                    ->whereNull('p.deleted_at');
+            });
     }
 
     private function exprSaldoCc(string $lado): string

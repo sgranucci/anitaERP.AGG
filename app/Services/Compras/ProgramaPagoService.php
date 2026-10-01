@@ -93,7 +93,7 @@ class ProgramaPagoService
         $creadas = 0;
 
         foreach ($saldos as $fila) {
-            if ($fila->saldo <= 0.009) {
+            if (abs($fila->saldo) <= 0.009) {
                 continue;
             }
             $proveedorId = (int) $fila->proveedor_id;
