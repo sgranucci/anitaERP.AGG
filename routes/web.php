@@ -741,6 +741,8 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('stock/precio/datatable', 'Stock\PrecioController@datatableFerli')->name('precio.datatable');
 }
 Route::get('stock/listar_precio/{formato?}', 'Stock\PrecioController@listar')->name('listar_precio');
+Route::get('stock/precio/lista-ferli', 'Stock\PrecioListaFerliController@index')->name('precio_lista_ferli');
+Route::get('stock/listar-precio-lista-ferli/{formato}', 'Stock\PrecioListaFerliController@exportar')->name('listar_precio_lista_ferli');
 Route::get('stock/precio/crear', 'Stock\PrecioController@crear')->name('crear_precio');
 Route::post('stock/precio', 'Stock\PrecioController@guardar')->name('guardar_precio');
 Route::get('stock/precio/{id}/editar', 'Stock\PrecioController@editar')->name('editar_precio');

@@ -63,8 +63,11 @@ function limpiaFiltros(){
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
-                    <button type="button" class="btn btn-outline-light btn-sm" id="btn-emitir-lista-vigente" title="Emitir la lista vigente en Excel, PDF o CSV">
-                        <i class="fa fa-file-export"></i> Emitir lista
+                    <a href="{{ route('precio_lista_ferli') }}" class="btn btn-outline-light btn-sm" title="Lista de precios: un artículo por fila y las listas pedidas en columnas">
+                        <i class="fa fa-tags"></i> Lista de precios
+                    </a>
+                    <button type="button" class="btn btn-outline-light btn-sm" id="btn-emitir-lista-vigente" title="Listado plano anterior: una fila por artículo y lista">
+                        <i class="fa fa-file-export"></i> Listado plano
                     </button>
                 </div>
             </div>

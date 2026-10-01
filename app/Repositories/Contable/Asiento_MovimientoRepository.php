@@ -30,7 +30,11 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 
 	public function createUnique(array $data)
 	{
-		$asiento_movimiento = $this->model->create($data);
+		if (array_key_exists('centrocosto_id', $data)) {
+			$data['centrocosto_id'] = $this->normalizarCentrocostoId($data['centrocosto_id']);
+		}
+
+		return $this->model->create($data);
 	}
 
     public function update(array $data, $id)

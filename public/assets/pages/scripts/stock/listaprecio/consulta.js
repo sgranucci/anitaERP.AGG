@@ -87,6 +87,9 @@ function aplicarListaprecioEnContexto($ctx, data, opciones) {
         if (typeof opts.onDone === 'function') {
             opts.onDone(data);
         }
+        if ($ctx.attr('id') === 'tm_listaprecio_listaferli' && id && typeof window.listaFerliAgregarLista === 'function') {
+            window.listaFerliAgregarLista();
+        }
         return;
     }
 
