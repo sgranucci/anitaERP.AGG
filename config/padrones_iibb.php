@@ -42,9 +42,30 @@ return [
     'directorios' => env(
         'PADRON_IIBB_DIRS',
         '/home/sergio/padroncaba,/home/sergio/padronarba,/home/sergio/padronsantafe,'
-        .         '/home/sergio/padronmisiones,/home/sergio/padroncordoba,'
-        . '/home/sergio/padronerios,/home/sergio/padrontucuman'
+        . '/home/sergio/padronmisiones,/home/sergio/padroncordoba,'
+        . '/home/sergio/padronerios,/home/sergio/padrontucuman,'
+        . '/var/www/padrones'
     ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bandeja externa (Samba): CABA y provincias, no ARBA
+    |--------------------------------------------------------------------------
+    |
+    | El operador pega el archivo en la subcarpeta de la jurisdicción. El
+    | scheduler (padron-iibb:vigilar-bandeja) espera a que la copia termine y
+    | encola el mismo job que la pantalla. ARBA sigue por DFE.
+    |
+    */
+
+    'bandeja' => [
+        'habilitada' => filter_var(env('PADRON_IIBB_BANDEJA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'directorio' => env('PADRON_IIBB_BANDEJA_DIR', '/var/www/padrones'),
+        'estable_segundos' => (int) env('PADRON_IIBB_BANDEJA_ESTABLE_SEGUNDOS', 90),
+    ],
+
+    /** Binario para abrir el RAR de AGIP (CABA). Vacío: busca unrar, unrar-free o bsdtar. */
+    'unrar' => env('PADRON_IIBB_UNRAR', ''),
 
     /** Destinatarios del mail al terminar (o fallar) la carga. Separados por coma. */
     'notificar_email' => env('PADRON_IIBB_NOTIFICAR_EMAIL', env('QUEUE_VERIFICACION_PICO_EMAIL', '')),

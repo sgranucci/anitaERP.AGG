@@ -6,6 +6,7 @@ namespace App\Jobs\Configuracion;
 
 use App\Services\Configuracion\PadronIibbTasaCargaService;
 use App\Services\Configuracion\PadronIibbTucumanCoeficienteCargaService;
+use App\Support\Configuracion\PadronIibbBandejaSupport;
 use App\Support\Configuracion\PadronIibbCargaNotificacionSupport;
 use App\Support\Configuracion\PadronIibbCargaRegistroSupport;
 use App\Support\Configuracion\PadronIibb\PadronIibbParserFactory;
@@ -58,10 +59,12 @@ class ImportarPadronIibbProvinciaJob implements ShouldQueue
             'tipopadron' => $this->tipoPadron,
         ]);
 
+        $ok = false;
         try {
             $stats = $this->ejecutar($tasaService, $coeficienteService);
 
             PadronIibbCargaRegistroSupport::finalizar($this->cargaId, $stats);
+            $ok = true;
             Log::info('ImportarPadronIibbProvinciaJob:ok', $stats);
 
             PadronIibbCargaNotificacionSupport::notificar(
@@ -73,6 +76,7 @@ class ImportarPadronIibbProvinciaJob implements ShouldQueue
             );
         } finally {
             $this->limpiarArchivoSiCorresponde();
+            PadronIibbBandejaSupport::archivar($this->archivo, $ok);
         }
     }
 

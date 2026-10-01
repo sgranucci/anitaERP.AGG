@@ -82,8 +82,10 @@
                 </tbody>
             </table>
             <small class="form-text text-muted">
-                Solo ARBA se baja sola (último día del mes, padrón del mes siguiente). El resto de los
-                organismos exige clave fiscal, así que hay que bajar el archivo y cargarlo desde esta pantalla.
+                Solo ARBA se baja sola (último día del mes, padrón del mes siguiente). El resto se baja
+                con clave fiscal y se pega en la bandeja
+                <code>{{ config('padrones_iibb.bandeja.directorio', '/var/www/padrones') }}</code>
+                (una subcarpeta por provincia). Esta pantalla sigue sirviendo para cargar a mano.
             </small>
         </div>
 
@@ -108,6 +110,8 @@
                                 {{ $carga->etiqueta }}
                                 @if ($carga->origen === 'consola')
                                     <span class="badge badge-secondary">consola</span>
+                                @elseif ($carga->origen === 'bandeja')
+                                    <span class="badge badge-info">bandeja</span>
                                 @endif
                             </td>
                             <td class="text-center">

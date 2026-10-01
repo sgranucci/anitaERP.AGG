@@ -222,7 +222,7 @@ class Padron_IibbController extends Controller
         $tipoPadron = '';
         $rules = [
             'provincia_id' => 'required',
-            'file' => 'nullable|file|mimes:csv,txt,zip',
+            'file' => 'nullable|file|mimes:csv,txt,zip,rar',
             'ruta_servidor' => 'nullable|string|max:500',
         ];
         if ($request->filled('tipopadron')) {
@@ -249,7 +249,7 @@ class Padron_IibbController extends Controller
             {
             case 901: // CABA → padron_iibb_caba (cola padrones)
                 try {
-                    [$archivo, $borrarAlTerminar] = $this->resolverArchivoPadronMasivo($request, ['txt', 'csv']);
+                    [$archivo, $borrarAlTerminar] = $this->resolverArchivoPadronMasivo($request, ['txt', 'csv', 'rar']);
                 } catch (InvalidArgumentException | Throwable $e) {
                     return back()->withErrors(['file' => $e->getMessage()]);
                 }

@@ -43,7 +43,7 @@
         <small class="form-text text-muted">
             <strong>Santa Fe:</strong> ZIP <code>PARP_YYYYMM.csv.zip</code> o CSV <code>PARP_YYYYMM.csv</code>.
             <br>
-            <strong>CABA (AGIP):</strong> TXT <code>ARDJU&hellip;.TXT</code>.
+            <strong>CABA (AGIP):</strong> TXT <code>ARDJU&hellip;.TXT</code> o el RAR que publica AGIP.
             <br>
             <strong>ARBA:</strong> ZIP <code>PadronRGS&hellip;.zip</code> o TXT Per/Ret.
             <br>
@@ -73,6 +73,12 @@
             <br>
             Deje el archivo en <code>{{ storage_path('app/padrones') }}</code>: los directorios personales
             (<code>/home/&hellip;</code>) no son legibles por el proceso que importa en background.
+            <br>
+            Para no subirlo desde acá, péguelo en
+            <code>{{ config('padrones_iibb.bandeja.directorio', '/var/www/padrones') }}</code>
+            dentro de la carpeta de la provincia (<code>caba</code>, <code>cordoba</code>, <code>entrerios</code>,
+            <code>misiones</code>, <code>santafe</code>, <code>tucuman/tasas</code>, <code>tucuman/coeficientes</code>).
+            ARBA no usa esa bandeja.
         </small>
     </div>
 </div>

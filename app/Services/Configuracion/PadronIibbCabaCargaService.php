@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Configuracion;
 
+use App\Support\Configuracion\PadronIibb\PadronIibbArchivoSupport;
 use DateTime;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -33,6 +34,24 @@ class PadronIibbCabaCargaService
         $batchSize = max(100, $batchSize);
         $pauseMs = max(0, $pauseMs);
 
+        $archivo = PadronIibbArchivoSupport::resolver($archivo, ['txt', 'csv']);
+
+        try {
+            return $this->cargarTexto($archivo, $batchSize, $pauseMs, $keepPeriod);
+        } finally {
+            PadronIibbArchivoSupport::limpiarTemporal($archivo);
+        }
+    }
+
+    /**
+     * @return array{leidas:int,insertadas:int,omitidas:int,errores:int,lotes:int,borrados:int,desdefecha:?string,hastafecha:?string}
+     */
+    private function cargarTexto(
+        string $archivo,
+        int $batchSize,
+        int $pauseMs,
+        bool $keepPeriod
+    ): array {
         if (! is_file($archivo) || ! is_readable($archivo)) {
             throw new RuntimeException("No se puede leer: {$archivo}");
         }

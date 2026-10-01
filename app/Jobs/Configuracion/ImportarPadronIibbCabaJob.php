@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs\Configuracion;
 
 use App\Services\Configuracion\PadronIibbCabaCargaService;
+use App\Support\Configuracion\PadronIibbBandejaSupport;
 use App\Support\Configuracion\PadronIibbCargaNotificacionSupport;
 use App\Support\Configuracion\PadronIibbCargaRegistroSupport;
 use Illuminate\Bus\Queueable;
@@ -42,6 +43,7 @@ class ImportarPadronIibbCabaJob implements ShouldQueue
     {
         Log::info('ImportarPadronIibbCabaJob:inicio', ['archivo' => $this->archivo]);
 
+        $ok = false;
         try {
             $stats = $service->cargar(
                 $this->archivo,
@@ -51,6 +53,7 @@ class ImportarPadronIibbCabaJob implements ShouldQueue
             );
             Log::info('ImportarPadronIibbCabaJob:ok', $stats);
             PadronIibbCargaRegistroSupport::finalizar($this->cargaId, $stats);
+            $ok = true;
 
             PadronIibbCargaNotificacionSupport::notificar(
                 true,
@@ -72,6 +75,7 @@ class ImportarPadronIibbCabaJob implements ShouldQueue
             );
         } finally {
             $this->limpiarArchivoSiCorresponde();
+            PadronIibbBandejaSupport::archivar($this->archivo, $ok);
         }
     }
 

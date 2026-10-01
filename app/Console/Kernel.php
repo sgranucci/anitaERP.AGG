@@ -141,6 +141,14 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/padron-iibb-alertar-vencidos.log'))
             ->when(fn () => (bool) config('padrones_iibb.alertar_vencidos', true));
 
+        // CABA y provincias: archivos pegados en la bandeja Samba. ARBA no entra acá.
+        $schedule->command('padron-iibb:vigilar-bandeja')
+            ->everyTwoMinutes()
+            ->runInBackground()
+            ->withoutOverlapping(10)
+            ->appendOutputTo(storage_path('logs/padron-iibb-bandeja.log'))
+            ->when(fn () => (bool) config('padrones_iibb.bandeja.habilitada', true));
+
         $schedule->command('bitacora-acceso:purge')
             ->dailyAt('03:20')
             ->withoutOverlapping(60)

@@ -22,6 +22,8 @@ final class PadronIibbCargaRegistroSupport
 
     public const ORIGEN_CONSOLA = 'consola';
 
+    public const ORIGEN_BANDEJA = 'bandeja';
+
     /**
      * @param  array<string,mixed>  $datos
      * @return int|null id de la carga, o null si no se pudo registrar

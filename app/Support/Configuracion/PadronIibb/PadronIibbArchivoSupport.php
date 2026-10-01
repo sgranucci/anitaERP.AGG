@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support\Configuracion\PadronIibb;
 
+use FilesystemIterator;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
 use RuntimeException;
 use ZipArchive;
 
@@ -32,11 +35,72 @@ final class PadronIibbArchivoSupport
             throw new RuntimeException("No se puede leer el archivo: {$entrada}");
         }
 
+        if (self::pareceRar($entrada)) {
+            return self::extraerDelRar($entrada, $extensiones);
+        }
+
         if (! self::pareceZip($entrada)) {
             return $entrada;
         }
 
         return self::extraerDelZip($entrada, $extensiones, $selector);
+    }
+
+    /**
+     * RAR por extensión o por firma "Rar!". CABA (AGIP) publica el padrón así.
+     */
+    public static function pareceRar(string $entrada): bool
+    {
+        $ext = strtolower((string) pathinfo($entrada, PATHINFO_EXTENSION));
+        if ($ext === 'rar') {
+            return true;
+        }
+
+        return self::tieneFirmaRar($entrada);
+    }
+
+    public static function tieneFirmaRar(string $entrada): bool
+    {
+        if (! is_file($entrada) || ! is_readable($entrada)) {
+            return false;
+        }
+
+        $fh = fopen($entrada, 'rb');
+        if ($fh === false) {
+            return false;
+        }
+
+        $magic = fread($fh, 7);
+        fclose($fh);
+
+        return is_string($magic) && str_starts_with($magic, "Rar!\x1a\x07");
+    }
+
+    /**
+     * unrar, unrar-free o bsdtar. Vacío si el servidor no puede abrir un RAR.
+     */
+    public static function binarioUnrar(): ?string
+    {
+        $candidatos = [];
+        $configurado = trim((string) config('padrones_iibb.unrar', ''));
+        if ($configurado !== '') {
+            $candidatos[] = $configurado;
+        }
+        $candidatos = array_merge($candidatos, [
+            '/var/www/bin/unrar',
+            '/var/www/bin/unrar-free',
+            '/usr/bin/unrar',
+            '/usr/bin/unrar-free',
+            '/usr/bin/bsdtar',
+        ]);
+
+        foreach ($candidatos as $bin) {
+            if (is_string($bin) && $bin !== '' && is_executable($bin)) {
+                return $bin;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -130,6 +194,162 @@ final class PadronIibbArchivoSupport
             'No se pudo crear un directorio temporal para descomprimir el padrón. Probé: '
             . implode(', ', $intentos)
         );
+    }
+
+    /**
+     * @param  list<string>  $extensiones
+     */
+    private static function extraerDelRar(string $entrada, array $extensiones): string
+    {
+        $bin = self::binarioUnrar();
+        if ($bin === null) {
+            throw new RuntimeException(
+                'El padrón viene en RAR y no hay unrar ni bsdtar en el servidor.'
+            );
+        }
+
+        $destino = self::crearDirectorioTemporal();
+
+        try {
+            self::ejecutarExtraccionRar($bin, $entrada, $destino);
+            $elegido = self::buscarDatosExtraidos($destino, $extensiones);
+            if ($elegido === null) {
+                throw new RuntimeException('El RAR no contiene ningún TXT o CSV del padrón.');
+            }
+
+            return self::dejarEnRaizTemporal($destino, $elegido);
+        } catch (RuntimeException $e) {
+            self::borrarDirectorioTemporal($destino);
+            throw $e;
+        }
+    }
+
+    private static function ejecutarExtraccionRar(string $bin, string $entrada, string $destino): void
+    {
+        $base = strtolower(basename($bin));
+        $binQ = escapeshellarg($bin);
+        $entradaQ = escapeshellarg($entrada);
+        $destinoQ = escapeshellarg($destino);
+
+        if (str_contains($base, 'bsdtar')) {
+            $cmd = $binQ . ' -xf ' . $entradaQ . ' -C ' . $destinoQ;
+        } elseif (str_contains($base, 'unrar-free')) {
+            $cmd = 'cd ' . $destinoQ . ' && ' . $binQ . ' -x ' . $entradaQ;
+        } else {
+            $cmd = $binQ . ' x -o+ -p- -inul ' . $entradaQ . ' ' . $destinoQ . '/';
+        }
+
+        $salida = [];
+        $codigo = 1;
+        exec($cmd . ' 2>&1', $salida, $codigo);
+        if ($codigo !== 0) {
+            $detalle = trim(implode("\n", array_slice($salida, -8)));
+            throw new RuntimeException(
+                'No se pudo descomprimir el RAR'
+                . ($detalle !== '' ? ': ' . $detalle : ' (código ' . $codigo . ').')
+            );
+        }
+    }
+
+    /**
+     * @param  list<string>  $extensiones
+     */
+    private static function buscarDatosExtraidos(string $directorio, array $extensiones): ?string
+    {
+        $realBase = realpath($directorio);
+        if ($realBase === false) {
+            return null;
+        }
+
+        $mejor = null;
+        $tamanio = -1;
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($realBase, FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($it as $item) {
+            if (! $item->isFile()) {
+                continue;
+            }
+            $ruta = $item->getPathname();
+            $real = realpath($ruta);
+            if ($real === false || ! str_starts_with($real, $realBase . DIRECTORY_SEPARATOR)) {
+                continue;
+            }
+            $ext = strtolower((string) pathinfo($real, PATHINFO_EXTENSION));
+            if ($extensiones !== [] && ! in_array($ext, $extensiones, true)) {
+                continue;
+            }
+            $peso = (int) $item->getSize();
+            if ($peso > $tamanio) {
+                $tamanio = $peso;
+                $mejor = $real;
+            }
+        }
+
+        return $mejor;
+    }
+
+    private static function dejarEnRaizTemporal(string $destino, string $elegido): string
+    {
+        $ext = strtolower((string) pathinfo($elegido, PATHINFO_EXTENSION));
+        $final = rtrim($destino, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . self::nombreLocalSeguro(basename($elegido), $ext);
+        if ($elegido !== $final && ! @rename($elegido, $final)) {
+            throw new RuntimeException('No se pudo dejar el TXT extraído del RAR en el temporal.');
+        }
+
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($destino, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($it as $item) {
+            $ruta = $item->getPathname();
+            if ($ruta === $final) {
+                continue;
+            }
+            if ($item->isDir()) {
+                @rmdir($ruta);
+            } else {
+                @unlink($ruta);
+            }
+        }
+
+        return $final;
+    }
+
+    private static function borrarDirectorioTemporal(string $directorio): void
+    {
+        $real = realpath($directorio);
+        if ($real === false || ! self::estaEnTemporal($real)) {
+            return;
+        }
+
+        $it = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($real, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($it as $item) {
+            if ($item->isDir()) {
+                @rmdir($item->getPathname());
+            } else {
+                @unlink($item->getPathname());
+            }
+        }
+        @rmdir($real);
+    }
+
+    private static function estaEnTemporal(string $real): bool
+    {
+        foreach (self::basesTemporales() as $base) {
+            $baseReal = realpath($base);
+            if ($baseReal === false) {
+                continue;
+            }
+            if (str_starts_with($real, rtrim($baseReal, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
