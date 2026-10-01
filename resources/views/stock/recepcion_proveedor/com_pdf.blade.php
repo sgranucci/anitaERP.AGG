@@ -12,12 +12,14 @@
     if ($cotizacionFmt === '' || $cotizacionFmt === '-') {
         $cotizacionFmt = '1';
     }
+    $esDevolucionPdf = $recepcion->tipo === \App\Models\Stock\Recepcion_Proveedor::TIPO_DEVOLUCION;
+    $tituloPdf = $esDevolucionPdf ? 'DEVOLUCION' : 'Comprobante de recepción (COM)';
 @endphp
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>COM {{ $recepcion->numerorecepcion }}</title>
+    <title>{{ $tituloPdf }} {{ $recepcion->numerorecepcion }}</title>
     <style>
         body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #1a1a1a; }
         .header { width: 100%; border-bottom: 2px solid #333; margin-bottom: 12px; padding-bottom: 8px; }
@@ -44,7 +46,7 @@
             @endforeach
         </td>
         <td style="width:40%; text-align:center">
-            <h1>Comprobante de recepción (COM)</h1>
+            <h1>{{ $tituloPdf }}</h1>
             <div class="meta">{{ $clave['tipo'] }} {{ $clave['letra'] }} {{ $clave['sucursal'] }}-{{ $clave['nro'] }}</div>
             <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
         </td>
