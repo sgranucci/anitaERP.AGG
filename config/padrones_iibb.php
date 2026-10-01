@@ -62,6 +62,7 @@ return [
         'habilitada' => filter_var(env('PADRON_IIBB_BANDEJA_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
         'directorio' => env('PADRON_IIBB_BANDEJA_DIR', '/var/www/padrones'),
         'estable_segundos' => (int) env('PADRON_IIBB_BANDEJA_ESTABLE_SEGUNDOS', 90),
+        'cada_minutos' => (int) env('PADRON_IIBB_BANDEJA_CADA_MINUTOS', 15),
     ],
 
     /** Binario para abrir el RAR de AGIP (CABA). Vacío: busca unrar, unrar-free o bsdtar. */

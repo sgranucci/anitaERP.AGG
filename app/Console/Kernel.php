@@ -142,8 +142,9 @@ class Kernel extends ConsoleKernel
             ->when(fn () => (bool) config('padrones_iibb.alertar_vencidos', true));
 
         // CABA y provincias: archivos pegados en la bandeja Samba. ARBA no entra acá.
+        $cadaBandeja = max(5, min(60, (int) config('padrones_iibb.bandeja.cada_minutos', 15)));
         $schedule->command('padron-iibb:vigilar-bandeja')
-            ->everyTwoMinutes()
+            ->cron('*/' . $cadaBandeja . ' * * * *')
             ->runInBackground()
             ->withoutOverlapping(10)
             ->appendOutputTo(storage_path('logs/padron-iibb-bandeja.log'))
