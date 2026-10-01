@@ -125,8 +125,14 @@
 	}
 	#itemspedido-table th.factura-col-acciones,
 	#itemspedido-table td.factura-col-acciones {
-		width: 4.4rem;
+		width: 6.5rem;
 		text-align: center;
+		white-space: nowrap;
+	}
+	#itemspedido-table td.factura-col-acciones .btn-accion-tabla {
+		min-width: 1.25rem;
+		padding-left: 2px;
+		padding-right: 2px;
 	}
 	#itemspedido-table.factura-grilla-concepto th.factura-col-descuento,
 	#itemspedido-table.factura-grilla-concepto td.factura-col-descuento {
@@ -683,6 +689,16 @@
 									.' · pend. '.number_format($cantidadPendienteNc, 2, ',', '.');
 							}
 							$extraNcTexto = implode(' · ', $extraNcPartes);
+							$precioItemNum = (float) str_replace([',', ' '], '', (string) $valorOldIndice('precios', $idxItem, optional($item)->precio ?? 0));
+							$sinCargoOld = (string) $valorOldIndice('sincargos', $idxItem, '');
+							$sinCargoItem = 'N';
+							if ($layoutItemsPedido && empty($flGeneraNotaDeCredito) && ! $esLineaConcepto) {
+								if ($sinCargoOld === 'S' || $sinCargoOld === 'N') {
+									$sinCargoItem = $sinCargoOld;
+								} elseif (! empty($item->articulo_id) && abs($precioItemNum) < 0.00001) {
+									$sinCargoItem = 'S';
+								}
+							}
 							$trNcClass = (! empty($flGeneraNotaDeCredito) ? ' nc-linea-origen' : '')
 								.((! empty($flGeneraNotaDeCredito) && ! $marcarDevolverNc) ? ' nc-linea-excluida' : '');
 						@endphp
@@ -809,6 +825,14 @@
 								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
                             		<i class="fa fa-times-circle text-danger"></i>
 								</button>
+								@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito) && ! $esLineaConcepto)
+									<button type="button" title="Art&iacute;culo sin cargo" style="padding:0;" class="btn-accion-tabla botonsincargo tooltipsC">
+										<i class="fa fa-gift {{ $sinCargoItem === 'S' ? 'text-success' : 'text-primary' }}"></i>
+									</button>
+								@endif
+								@if ($layoutItemsPedido)
+									<input type="hidden" name="sincargos[]" class="form-control sincargo" value="{{ $sinCargoItem }}" />
+								@endif
                 			</td>
                 		</tr>
            			@endforeach
@@ -831,6 +855,9 @@
 			</button>
 			<small class="form-text text-muted d-inline-block ml-2">
 				Mercadería: lupa o código. Comentario de la l&iacute;nea: &iacute;cono de p&aacute;rrafo (como en OC). Sin art&iacute;culo: &iacute;cono de documento o F1 (concepto, IVA, detalle y precio).
+				@if ($layoutItemsPedido && can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito))
+					Regalo: &iacute;cono de regalo (art&iacute;culo sin cargo, mismo tope que pedidos).
+				@endif
 			</small>
 		</div>
 		<div class="row">
