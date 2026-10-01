@@ -7,7 +7,10 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/mventa/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/categoria/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/precio/filtro.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/precio/emitir-lista.js') }}" type="text/javascript"></script>
 <style>
     .precio-index-toolbar {
         flex-wrap: nowrap;
@@ -168,6 +171,9 @@
                                 <i class="fa fa-upload"></i>
                             </a>
                         @endif
+                        <button type="button" class="btn btn-outline-light btn-sm" id="btn-emitir-lista-vigente" title="Emitir la lista vigente en Excel, PDF o CSV">
+                            <i class="fa fa-file-export"></i> Emitir
+                        </button>
                     </div>
                 </div>
             </div>
@@ -188,6 +194,7 @@
                     @endif
                     Lista: escriba el <strong>código</strong> (ej. 162) y pulse <kbd>Enter</kbd> o <kbd>F1</kbd> / lupa para el modal.
                     Use <strong>Filtros</strong> para criterios avanzados por campo (opcional).
+                    <strong>Emitir</strong> abre la lista vigente (marca, categor&iacute;a, lista) y la baja en Excel, PDF o CSV.
                 </div>
             </div>
             <div class="card-body table-responsive p-0 border-top-0 pt-0">
@@ -255,4 +262,14 @@
     </div>
 </div>
 @include('includes.stock.modalconsultalistaprecio')
+@include('includes.stock.modalconsultamventa')
+@include('includes.stock.modalconsultacategoria')
+@include('stock.precio.partials.modal_emitir_lista')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'emitir-lista-overlay',
+    'tituloId' => 'emitir-lista-overlay-titulo',
+    'subtituloId' => 'emitir-lista-overlay-subtitulo',
+    'titulo' => 'Generando lista…',
+    'subtitulo' => 'Puede demorar según la cantidad de artículos.',
+])
 @endsection

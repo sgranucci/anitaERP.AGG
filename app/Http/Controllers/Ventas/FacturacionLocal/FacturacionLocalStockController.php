@@ -70,7 +70,8 @@ class FacturacionLocalStockController extends Controller
         $resultado = $this->consultaService->consultarStockLocal(
             $local,
             $busqueda,
-            StockLocalInformeListadoFiltros::ORIGEN_ERP
+            StockLocalInformeListadoFiltros::ORIGEN_ERP,
+            $this->depositoIdOpcional($request)
         );
         $status = ($resultado['ok'] ?? false) ? 200 : 422;
 
@@ -95,7 +96,8 @@ class FacturacionLocalStockController extends Controller
         $resultado = $this->consultaService->consultarPreciosYStock(
             $local,
             $busqueda,
-            StockLocalInformeListadoFiltros::ORIGEN_ERP
+            StockLocalInformeListadoFiltros::ORIGEN_ERP,
+            $this->depositoIdOpcional($request)
         );
         $status = ($resultado['ok'] ?? false) ? 200 : 422;
 
@@ -141,6 +143,13 @@ class FacturacionLocalStockController extends Controller
             ->where('activo', true)
             ->orderBy('codigo')
             ->get();
+    }
+
+    private function depositoIdOpcional(Request $request): ?int
+    {
+        $id = (int) $request->input('deposito_id', 0);
+
+        return $id > 0 ? $id : null;
     }
 
     private function resolverBusquedaArticulo(Request $request): string

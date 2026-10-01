@@ -128,4 +128,108 @@ class CategoriaController extends Controller
             abort(404);
         }
     }
+
+    public function consultaCategoria(Request $request)
+    {
+        if (! $this->puedeConsultarCategoria()) {
+            abort(403);
+        }
+
+        $consulta = trim((string) ($request->get('consulta') ?? ''));
+        $query = Categoria::query()->select('id', 'nombre', 'codigo');
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('codigo', 'LIKE', '%'.$consulta.'%');
+                if (ctype_digit($consulta)) {
+                    $q->orWhere('id', (int) $consulta);
+                }
+            });
+        }
+
+        $data = $query->orderBy('nombre')->orderBy('codigo')->limit(200)->get();
+        $puedeAbrirAbm = can('editar-categorias', false) || can('listar-categorias', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="4">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultacategoria">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_categoria', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return response()->json($output);
+    }
+
+    public function leeUnaCategoriaPorCodigo(string $codigo)
+    {
+        if (! $this->puedeConsultarCategoria()) {
+            abort(403);
+        }
+
+        $fila = $this->findCategoriaPorCodigo($codigo);
+        if ($fila === null) {
+            return response()->json(null);
+        }
+
+        return response()->json([
+            'id' => (int) $fila->id,
+            'codigo' => (string) $fila->codigo,
+            'nombre' => (string) $fila->nombre,
+        ]);
+    }
+
+    private function puedeConsultarCategoria(): bool
+    {
+        return can('listar-categorias', false)
+            || can('editar-categorias', false)
+            || can('listar-precios', false)
+            || can('crear-precios', false)
+            || can('editar-precios', false)
+            || can('actualizar-precios', false)
+            || can('listar-articulos', false);
+    }
+
+    private function findCategoriaPorCodigo(string $codigo): ?Categoria
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $base = Categoria::query()->select('id', 'nombre', 'codigo');
+        $fila = (clone $base)->where('codigo', $codigo)->first();
+        if ($fila) {
+            return $fila;
+        }
+
+        $alt = ltrim($codigo, '0');
+        if ($alt !== '' && $alt !== $codigo) {
+            $fila = (clone $base)->where('codigo', $alt)->first();
+            if ($fila) {
+                return $fila;
+            }
+        }
+
+        if (ctype_digit($codigo)) {
+            return (clone $base)->whereKey((int) $codigo)->first();
+        }
+
+        return null;
+    }
 }

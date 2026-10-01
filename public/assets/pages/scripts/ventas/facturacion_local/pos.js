@@ -1469,6 +1469,24 @@
         });
     }
 
+    function depositoStockPosId() {
+        var el = $('fl-pos-deposito_id');
+        var id = el ? parseInt(el.value || '0', 10) : 0;
+        return id > 0 ? String(id) : '';
+    }
+
+    function textoAlcanceDepositos(b) {
+        if (b && b.alcance_depositos === 'uno' && b.deposito) {
+            var cod = b.deposito.codigo || '';
+            var nom = b.deposito.nombre || '';
+            return cod + (nom ? ' — ' + nom : '');
+        }
+        if (b && b.depositos_alcance) {
+            return String(b.depositos_alcance);
+        }
+        return 'depósitos del local';
+    }
+
     function etiquetaMedidaPos(m) {
         if (String(m) === '48' || Number(m) === 48) {
             return 'UN';
@@ -1497,6 +1515,7 @@
             if (!grupos[key]) {
                 grupos[key] = {
                     deposito: f.deposito,
+                    deposito_nombre: f.deposito_nombre || '',
                     color: f.color,
                     color_desc: f.color_desc || '',
                     cantidades: {},
@@ -1542,6 +1561,7 @@
                 + (precio.lista ? ' <span class="text-muted">(' + escapeHtml(precio.lista) + ')</span>' : '')
                 + '</div>'
                 + '<div><strong>Saldo total</strong>: ' + fmtNumPos(b.saldo_total || 0, 0) + '</div>'
+                + '<div><strong>Depósitos</strong>: ' + escapeHtml(textoAlcanceDepositos(b)) + '</div>'
                 + '<div><strong>Variante</strong>: '
                 + escapeHtml(b.modo_variante === 'sin_variante'
                     ? 'sin talle'
@@ -1591,7 +1611,9 @@
 
         if (!filas.length) {
             if (body) {
-                body.innerHTML = '<tr><td colspan="' + colCount + '" class="text-muted text-center">Sin stock en el depósito del local.</td></tr>';
+                body.innerHTML = '<tr><td colspan="' + colCount + '" class="text-muted text-center">'
+                    + escapeHtml(b.alcance_depositos === 'uno' ? 'Sin stock en ese depósito.' : 'Sin stock en ningún depósito.')
+                    + '</td></tr>';
             }
             return;
         }
@@ -1605,8 +1627,12 @@
                 if (f.color_desc) {
                     combTxt = (combTxt ? combTxt + ' — ' : '') + f.color_desc;
                 }
+                var depTxt = String(f.deposito != null ? f.deposito : '');
+                if (f.deposito_nombre) {
+                    depTxt = depTxt ? (depTxt + ' — ' + f.deposito_nombre) : String(f.deposito_nombre);
+                }
                 var row = '<tr>'
-                    + '<td>' + escapeHtml(String(f.deposito != null ? f.deposito : '')) + '</td>'
+                    + '<td>' + escapeHtml(depTxt) + '</td>'
                     + '<td class="fl-stock-comb-cell">' + escapeHtml(combTxt) + '</td>';
                 medidas.forEach(function (m) {
                     var c = Number((f.cantidades && f.cantidades[String(m)]) || 0);
@@ -1632,10 +1658,12 @@
         var param = /^\d{1,6}$/.test(String(clave))
             ? 'articulo_id=' + encodeURIComponent(clave)
             : 'codigo=' + encodeURIComponent(clave);
+        var depId = depositoStockPosId();
         var url = CFG.urls.consultaStockPrecios
             + '?local_id=' + CFG.localId
             + '&' + param
-            + '&origen=erp';
+            + '&origen=erp'
+            + (depId ? ('&deposito_id=' + encodeURIComponent(depId)) : '');
         get(url).then(function (res) {
             var b = res.body || {};
             if (res.status >= 400 || !b.ok) {
@@ -1794,6 +1822,38 @@
         }
         if ($('fl-stock-buscar')) {
             $('fl-stock-buscar').addEventListener('click', consultarStockPrecios);
+        }
+        if (window.jQuery && typeof window.activa_eventos_consultadeposito === 'function') {
+            window.activa_eventos_consultadeposito();
+            var $depModal = window.jQuery('#consultadepositoModal');
+            if ($depModal.length && !$depModal.parent().is('body')) {
+                $depModal.appendTo('body');
+            }
+            window.payloadExtraConsultaDeposito = function ($ctx) {
+                var $campo = window.jQuery($ctx);
+                if ($campo && $campo.closest && $campo.closest('#fl-modal-stock').length) {
+                    return { omitir_filtro_usuario: 1 };
+                }
+                return {};
+            };
+            $depModal.on('show.bs.modal', function () {
+                var z = 2060;
+                window.jQuery(this).css('z-index', z);
+                setTimeout(function () {
+                    window.jQuery('.modal-backdrop').last().css('z-index', z - 10);
+                }, 0);
+            });
+            $depModal.on('hidden.bs.modal', function () {
+                if (window.jQuery('#fl-modal-stock').hasClass('show')) {
+                    window.jQuery('body').addClass('modal-open');
+                }
+            });
+            window.jQuery('#fl-modal-stock').on('change', '.deposito_id', function () {
+                var q = ($('fl-stock-q') && $('fl-stock-q').value || '').trim();
+                if (q) {
+                    consultarStockPrecios();
+                }
+            });
         }
         if ($('fl-stock-q')) {
             $('fl-stock-q').addEventListener('keydown', function (e) {

@@ -120,7 +120,36 @@
 
     function textoSaldoHint(json) {
         var origen = (json && json.origen) ? String(json.origen) : 'erp';
-        return origen === 'erp' ? 'Unidades en ERP (depósito del local)' : 'Unidades en Anita Local';
+        if (origen !== 'erp') {
+            return 'Unidades en Anita Local';
+        }
+        if (json && json.alcance_depositos === 'uno' && json.deposito) {
+            var cod = json.deposito.codigo || '';
+            var nom = json.deposito.nombre || '';
+            return 'Unidades en ERP (depósito ' + cod + (nom ? ' — ' + nom : '') + ')';
+        }
+        var etiqueta = (json && json.depositos_alcance) ? String(json.depositos_alcance) : (window.flDepositosAlcance || '');
+        return etiqueta
+            ? ('Unidades en depósitos del local (' + etiqueta + ')')
+            : 'Unidades en depósitos del local';
+    }
+
+    function escHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+        });
+    }
+
+    function textoDeposito(f) {
+        var cod = String((f && f.deposito) || '');
+        var nom = String((f && f.deposito_nombre) || '');
+        return nom ? (cod + ' — ' + nom) : cod;
+    }
+
+    function depositoSeleccionado() {
+        var el = document.getElementById(cfg.formId + '-deposito_id');
+        var id = el ? parseInt(el.value || '0', 10) : 0;
+        return id > 0 ? String(id) : '';
     }
 
     function actualizarChipLista() {
@@ -199,7 +228,8 @@
             return;
         }
 
-        var key = String(selectLocal.value) + '|' + (art.articulo_id || art.q) + '|erp';
+        var depId = depositoSeleccionado();
+        var key = String(selectLocal.value) + '|' + (art.articulo_id || art.q) + '|' + depId + '|erp';
         if (consultando && key === ultimaConsultaKey && !opts.force) {
             return;
         }
@@ -210,6 +240,9 @@
 
         var params = new URLSearchParams();
         params.set('local_id', selectLocal.value);
+        if (depId) {
+            params.set('deposito_id', depId);
+        }
         if (art.articulo_id) {
             params.set('articulo_id', art.articulo_id);
         }
@@ -305,7 +338,7 @@
         var body = '';
         filas.forEach(function (f) {
             var colorTxt = (f.color || '') + (f.color_desc ? ' ' + f.color_desc : '');
-            body += '<tr><td>' + (f.deposito || '') + '</td><td>' + colorTxt + '</td>';
+            body += '<tr><td>' + escHtml(textoDeposito(f)) + '</td><td>' + escHtml(colorTxt) + '</td>';
             medidas.forEach(function (m) {
                 var c = Number((f.cantidades && f.cantidades[String(m)]) || 0);
                 var cls = claseCantidad(c);
@@ -352,8 +385,8 @@
                 var colorTxt = (f.color || '') + (f.color_desc ? ' ' + f.color_desc : '');
                 var c = Number(f.cantidad || 0);
                 body += '<tr>'
-                    + '<td>' + (f.deposito || '') + '</td>'
-                    + '<td>' + colorTxt + '</td>'
+                    + '<td>' + escHtml(textoDeposito(f)) + '</td>'
+                    + '<td>' + escHtml(colorTxt) + '</td>'
                     + '<td>' + etiquetaMedida(f.medida) + '</td>'
                     + '<td class="text-right ' + claseCantidad(c) + '">' + fmtNum(c, 0) + '</td>'
                     + '</tr>';
@@ -401,6 +434,22 @@
             if (typeof window.activa_eventos_consultaarticulo === 'function') {
                 window.activa_eventos_consultaarticulo();
             }
+            if (typeof window.activa_eventos_consultadeposito === 'function') {
+                window.activa_eventos_consultadeposito();
+            }
+            window.payloadExtraConsultaDeposito = function ($ctx) {
+                var $campo = window.jQuery($ctx);
+                if ($campo && $campo.closest && $campo.closest('#' + cfg.formId).length) {
+                    return { omitir_filtro_usuario: 1 };
+                }
+                return {};
+            };
+            window.jQuery('#' + cfg.formId).on('change', '.deposito_id', function () {
+                var art = articuloQuery();
+                if (art.q || art.articulo_id) {
+                    consultar({ force: true });
+                }
+            });
 
             window.onArticuloSeleccionado = function (data) {
                 if (!data || !data.id) {
@@ -496,5 +545,10 @@
     });
 
     actualizarChipLista();
-    mostrarVacio('Elegí un local y un artículo (F1 / Enter) para consultar.', '');
+    mostrarVacio(
+        'Elegí un local y un artículo (F1 / Enter). Depósito vacío muestra los del local'
+            + (window.flDepositosAlcance ? ' (' + window.flDepositosAlcance + ')' : '')
+            + '.',
+        ''
+    );
 })();

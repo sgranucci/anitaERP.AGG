@@ -10,6 +10,10 @@ $(function () {
 
     var $form = $('#form-comprobante-proveedor');
     var comprobanteId = parseInt($form.attr('data-comprobante-id') || $form.data('comprobanteId') || '0', 10);
+    // Deuda CC importada: la cabecera trae total y la grilla de conceptos viene vacía.
+    // No pisar ese total hasta que el operador cargue un monto.
+    var totalCabeceraInicial = 0;
+    var conceptosConMontoTocados = false;
     var contabilizado = String($form.attr('data-contabilizado') || $form.data('contabilizado') || '0') === '1';
     // Preferir attr(): jQuery .data() a veces no lee data-preview-url en kebab-case.
     var previewUrl = String($form.attr('data-preview-url') || $form.data('previewUrl') || '').trim();
@@ -61,6 +65,11 @@ $(function () {
         var n = parseFloat(String(val || '').replace(/\./g, '').replace(',', '.'));
         return isNaN(n) ? 0 : n;
     }
+
+    totalCabeceraInicial = parseMonto($('#total').val() || '0');
+    $(document).on('input', '#tbody-concepto-table .monto', function () {
+        conceptosConMontoTocados = true;
+    });
 
     function formatearInputMontoEn($root) {
         if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.initEnContenedor === 'function') {
@@ -791,6 +800,9 @@ $(function () {
             }
         });
         if (!hayLineas) {
+            if (comprobanteId > 0 && !conceptosConMontoTocados && Math.abs(totalCabeceraInicial) >= 0.0001) {
+                return;
+            }
             var fmtVacio = function (n) {
                 if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.fmt === 'function') {
                     return window.AsientoMontosFormato.fmt(n);
@@ -3366,6 +3378,34 @@ $(function () {
         }
 
         window.focusSiguienteCampoCp = focusSiguienteCampoCp;
+
+        // Una sola cuota: el vencimiento de cabecera y el de la grilla son el mismo.
+        // Si no se copian, al guardar la cuota vieja pisa el vencimiento editado.
+        function cuotaVencimientoUnica() {
+            var $inputs = $('#tbody-cuotas-table input[name="cuota_fechavencimiento[]"]');
+            if ($inputs.length !== 1) {
+                return $();
+            }
+            return $inputs.eq(0);
+        }
+
+        $('#fechavencimiento').on('change.cpVencimientoUnico', function () {
+            var $cuota = cuotaVencimientoUnica();
+            if ($cuota.length) {
+                $cuota.val(this.value);
+            }
+        });
+
+        $(document).on('change.cpVencimientoUnico', '#tbody-cuotas-table input[name="cuota_fechavencimiento[]"]', function () {
+            var $cuota = cuotaVencimientoUnica();
+            if (!$cuota.length || $cuota[0] !== this) {
+                return;
+            }
+            var $cab = $('#fechavencimiento');
+            if ($cab.length && !$cab.prop('disabled')) {
+                $cab.val(this.value);
+            }
+        });
 
         function letraDesdeProveedorJson(data) {
             if (!data) {

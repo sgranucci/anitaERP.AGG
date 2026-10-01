@@ -64,7 +64,8 @@
                         'descripcion' => $descripcion_hasta_sku ?? '',
                         'col_label' => $colLabel,
                         'col_input' => $colInput,
-                        'help' => 'Vacío = hasta el último.',
+                        'next_focus' => '#desde_combinacion',
+                        'help' => 'Vacío = hasta el último. F1 o lupa consulta; Enter resuelve el SKU.',
                     ])
 
                     <div class="form-group row">

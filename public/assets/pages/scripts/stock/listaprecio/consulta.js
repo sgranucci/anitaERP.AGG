@@ -38,8 +38,33 @@ function notificarListaprecioSeleccionado(data) {
     }
 }
 
+function listaprecioActualizaIdsGlobales($ctx) {
+    if (!$ctx || !$ctx.length) {
+        return true;
+    }
+
+    return $ctx.find('#listaprecio_id').length > 0;
+}
+
+function enfocarSiguienteListaprecio($ctx) {
+    if (!$ctx || !$ctx.length) {
+        return;
+    }
+    var sig = $ctx.find('.codigolistaprecio').attr('data-siguiente');
+    if (!sig) {
+        return;
+    }
+    var $sig = $(sig);
+    if ($sig.length) {
+        $sig.trigger('focus');
+    }
+}
+
 function aplicarListaprecioEnContexto($ctx, data, opciones) {
     var opts = opciones || {};
+    if ($ctx && $ctx.closest('#modal-emitir-lista-vigente').length) {
+        opts.notificar = false;
+    }
     var id = data && data.id != null ? data.id : '';
     var codigo = data && data.codigo != null ? data.codigo : '';
     var nombre = data && data.nombre != null ? data.nombre : '';
@@ -48,10 +73,24 @@ function aplicarListaprecioEnContexto($ctx, data, opciones) {
         $ctx.find('.listaprecio_id').val(id);
         $ctx.find('.codigolistaprecio').val(codigo);
         $ctx.find('.nombrelistaprecio').val(nombre);
+        $ctx.find('.codigolistaprecio').removeAttr('data-listaprecio-invalido');
         actualizarLinkEditarListaprecio($ctx, id);
     }
 
-    // Compat: IDs globales del ABM / filtros
+    if (!listaprecioActualizaIdsGlobales($ctx)) {
+        if (opts.avanzar && id) {
+            enfocarSiguienteListaprecio($ctx);
+        }
+        if (opts.notificar !== false) {
+            notificarListaprecioSeleccionado(data);
+        }
+        if (typeof opts.onDone === 'function') {
+            opts.onDone(data);
+        }
+        return;
+    }
+
+    // Compat: IDs globales del ABM / filtros (solo el campo #listaprecio_id)
     if ($('#listaprecio_id').length) {
         $('#listaprecio_id').val(id);
     }
@@ -76,11 +115,24 @@ function aplicarListaprecioEnContexto($ctx, data, opciones) {
 
 function limpiarListaprecioEnContexto($ctx, opciones) {
     var opts = opciones || {};
+    if ($ctx && $ctx.closest('#modal-emitir-lista-vigente').length) {
+        opts.notificar = false;
+    }
     if ($ctx && $ctx.length) {
         $ctx.find('.listaprecio_id').val('');
         $ctx.find('.codigolistaprecio').val('');
         $ctx.find('.nombrelistaprecio').val('');
         actualizarLinkEditarListaprecio($ctx, 0);
+    }
+
+    if (!listaprecioActualizaIdsGlobales($ctx)) {
+        if (opts.notificar !== false) {
+            notificarListaprecioSeleccionado({ id: '', codigo: '', nombre: '' });
+        }
+        if (typeof opts.onDone === 'function') {
+            opts.onDone(null);
+        }
+        return;
     }
 
     if ($('#listaprecio_id').length) {
@@ -106,11 +158,15 @@ function limpiarListaprecioEnContexto($ctx, opciones) {
 }
 
 function limpiarListaprecioManteniendoCodigo($ctx, codigo) {
-    if ($ctx && $ctx.length) {
+        if ($ctx && $ctx.length) {
         $ctx.find('.listaprecio_id').val('');
         $ctx.find('.codigolistaprecio').val(codigo);
         $ctx.find('.nombrelistaprecio').val('');
         actualizarLinkEditarListaprecio($ctx, 0);
+    }
+
+    if (!listaprecioActualizaIdsGlobales($ctx)) {
+        return;
     }
 
     if ($('#listaprecio_id').length) {
@@ -167,10 +223,16 @@ function resolverPorCodigoListaprecio(codigo, $ctx, opciones) {
     var urlRes = carpetaBase + '/stock/leerlistaprecio/' + encodeURIComponent(cod);
     $.get(urlRes, function (data) {
         if (data && data.id) {
+            if ($ctx && $ctx.length) {
+                $ctx.find('.codigolistaprecio').removeAttr('data-listaprecio-invalido');
+            }
             aplicarListaprecioEnContexto($ctx, data, opts);
         } else {
+            var $codigo = $ctx && $ctx.length ? $ctx.find('.codigolistaprecio') : $();
+            var yaAvisado = $codigo.attr('data-listaprecio-invalido') === codOriginal;
             limpiarListaprecioManteniendoCodigo($ctx, codOriginal);
-            if (!opts.silencioso) {
+            $codigo.attr('data-listaprecio-invalido', codOriginal);
+            if (!opts.silencioso && !yaAvisado) {
                 alert('Lista de precios no encontrada');
             }
             if (typeof opts.onDone === 'function') {
@@ -209,8 +271,9 @@ function abrirModalConsultaListaprecioDesdeInput($input) {
 function aceptarCodigoListaprecioDesdeInput($input) {
     var $ctx = $input.closest('.tm-listaprecio-campo');
     resolverPorCodigoListaprecio($input.val(), $ctx.length ? $ctx : null, {
-        notificar: true,
+        notificar: debeNotificarAlResolverCodigo($input),
         silencioso: false,
+        avanzar: true,
     });
 }
 
@@ -237,6 +300,9 @@ function campoCodigoListaprecioPermitido(target) {
 }
 
 function debeNotificarAlResolverCodigo($input) {
+    if ($input.closest('#modal-emitir-lista-vigente').length) {
+        return false;
+    }
     // Index precios / consulta $ artículo: hay que refrescar al resolver
     if ($input.closest('#consultaprecioarticuloModal').length) {
         return true;
@@ -328,6 +394,10 @@ function activa_eventos_consultalistaprecio() {
     }
 
     // Delegado: funciona también dentro de modales anidados
+    $(document).off('mousedown.listaprecioLupa', '.consultalistaprecio').on('mousedown.listaprecioLupa', '.consultalistaprecio', function () {
+        $(this).closest('.tm-listaprecio-campo').find('.codigolistaprecio').data('consulta-abriendo', 1);
+    });
+
     $(document).off('click.listaprecioLupa', '.consultalistaprecio').on('click.listaprecioLupa', '.consultalistaprecio', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -401,10 +471,14 @@ function activa_eventos_consultalistaprecio() {
             var $input = $(this);
             var $ctx = $input.closest('.tm-listaprecio-campo');
             var notificar = debeNotificarAlResolverCodigo($input);
+            if ($input.data('consulta-abriendo') || modalConsultaListaprecioAbierto()) {
+                $input.removeData('consulta-abriendo');
+                return;
+            }
             resolverPorCodigoListaprecio($input.val(), $ctx.length ? $ctx : null, {
                 notificar: notificar,
-                // En consulta artículo no molestar con alert al salir del campo vacío/parcial
-                silencioso: $input.closest('#consultaprecioarticuloModal').length > 0,
+                silencioso: $input.closest('#consultaprecioarticuloModal').length > 0
+                    || $input.closest('#modal-emitir-lista-vigente').length > 0,
             });
         });
 }

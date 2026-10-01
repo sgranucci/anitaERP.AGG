@@ -5,7 +5,11 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/stock/precio/indexferli.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/mventa/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/categoria/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/precio/filtro.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/precio/emitir-lista.js') }}" type="text/javascript"></script>
 
 <script>
 function limpiaFiltros(){
@@ -59,6 +63,9 @@ function limpiaFiltros(){
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
+                    <button type="button" class="btn btn-outline-light btn-sm" id="btn-emitir-lista-vigente" title="Emitir la lista vigente en Excel, PDF o CSV">
+                        <i class="fa fa-file-export"></i> Emitir lista
+                    </button>
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
@@ -85,5 +92,16 @@ function limpiaFiltros(){
 </div>
 
 @include('includes.filtroprecio')
+@include('includes.stock.modalconsultalistaprecio')
+@include('includes.stock.modalconsultamventa')
+@include('includes.stock.modalconsultacategoria')
+@include('stock.precio.partials.modal_emitir_lista')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'emitir-lista-overlay',
+    'tituloId' => 'emitir-lista-overlay-titulo',
+    'subtituloId' => 'emitir-lista-overlay-subtitulo',
+    'titulo' => 'Generando lista…',
+    'subtitulo' => 'Puede demorar según la cantidad de artículos.',
+])
 
 @endsection

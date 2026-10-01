@@ -2343,6 +2343,9 @@
                 $('#numero_oc_buscar').val(data.numeroordencompra || numeroOc);
                 $('#proveedor_id').val(data.proveedor_id || '');
                 $('#proveedor_nombre').val(data.proveedor_nombre);
+                if (typeof window.recepcionProveedorRefrescarFiltroProveedorOc === 'function') {
+                    window.recepcionProveedorRefrescarFiltroProveedorOc();
+                }
                 centrocostoOcActivo = parseInt(data.centrocosto_id, 10) || null;
                 if (!centrocostoOcActivo && data.lineas && data.lineas.length) {
                     centrocostoOcActivo = parseInt(data.lineas[0].centrocosto_id, 10) || null;
@@ -3138,6 +3141,9 @@
             }
             if (res.proveedor_id) {
                 $('#proveedor_id').val(res.proveedor_id);
+                if (typeof window.recepcionProveedorRefrescarFiltroProveedorOc === 'function') {
+                    window.recepcionProveedorRefrescarFiltroProveedorOc();
+                }
             }
             if (res.empresa_id || res.empresa_nombre) {
                 sincronizarEmpresaDesdeOc(res);

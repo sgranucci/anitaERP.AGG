@@ -43,4 +43,61 @@ class ComprobanteProveedorVencimientoCondicionSupportTest extends TestCase
             ComprobanteProveedorVencimientoCondicionSupport::aplicarACuotas($cuotas, null, '2026-09-07')[0]['fechavencimiento']
         );
     }
+
+    public function test_cabecera_editada_pisa_la_cuota_que_no_se_toco(): void
+    {
+        $cuotas = [[
+            'numero_cuota' => 1,
+            'fechavencimiento' => '2026-10-30',
+            'monto' => 780000.0,
+        ]];
+
+        $out = ComprobanteProveedorVencimientoCondicionSupport::conservarVencimientoEditado(
+            $cuotas,
+            '2026-10-08',
+            '2026-10-30',
+            '2026-10-30',
+            '2026-10-30',
+        );
+
+        $this->assertSame('2026-10-08', $out[0]['fechavencimiento']);
+    }
+
+    public function test_cuota_editada_se_conserva(): void
+    {
+        $cuotas = [[
+            'numero_cuota' => 1,
+            'fechavencimiento' => '2026-11-15',
+            'monto' => 100.0,
+        ]];
+
+        $out = ComprobanteProveedorVencimientoCondicionSupport::conservarVencimientoEditado(
+            $cuotas,
+            '2026-10-30',
+            '2026-10-30',
+            '2026-11-15',
+            '2026-10-30',
+        );
+
+        $this->assertSame('2026-11-15', $out[0]['fechavencimiento']);
+    }
+
+    public function test_sin_edicion_deja_el_vencimiento_recalculado(): void
+    {
+        $cuotas = [[
+            'numero_cuota' => 1,
+            'fechavencimiento' => '2026-10-30',
+            'monto' => 100.0,
+        ]];
+
+        $out = ComprobanteProveedorVencimientoCondicionSupport::conservarVencimientoEditado(
+            $cuotas,
+            '2026-10-30',
+            '2026-10-30',
+            '2026-10-30',
+            '2026-10-30',
+        );
+
+        $this->assertSame('2026-10-30', $out[0]['fechavencimiento']);
+    }
 }

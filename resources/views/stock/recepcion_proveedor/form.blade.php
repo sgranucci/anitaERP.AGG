@@ -243,8 +243,20 @@
     </div>
     <label class="col-lg-2 col-form-label text-right">Proveedor</label>
     <div class="col-lg-4">
-        <input type="text" id="proveedor_nombre" name="proveedor_nombre" class="form-control" readonly
-            value="{{ old('proveedor_nombre', $proveedorNombreForm ?: optional(optional($recepcion)->proveedores)->nombre ?? '') }}">
+        <div class="input-group">
+            <input type="text" id="proveedor_nombre" name="proveedor_nombre" class="form-control" readonly
+                value="{{ old('proveedor_nombre', $proveedorNombreForm ?: optional(optional($recepcion)->proveedores)->nombre ?? '') }}">
+            @if(!$soloLectura)
+            <div class="input-group-append">
+                <button type="button"
+                    class="btn btn-outline-secondary {{ $proveedorIdForm ? '' : 'd-none' }}"
+                    id="btn-limpiar-proveedor-recepcion"
+                    title="Quita el proveedor para buscar órdenes de compra de cualquier proveedor. La OC cargada se reemplaza al elegir otra.">
+                    <i class="fa fa-eraser"></i> Limpiar
+                </button>
+            </div>
+            @endif
+        </div>
     </div>
 </div>
 

@@ -122,6 +122,15 @@
     font-weight: 600;
     font-size: 0.75rem;
 }
+#fl-modal-stock .tm-deposito-campo {
+    margin: 0;
+    padding: 0;
+    max-width: 100%;
+}
+#consultadepositoModal {
+    z-index: 2060;
+}
+
 .fl-stock-matriz-wrap {
     max-height: 55vh;
     overflow: auto;

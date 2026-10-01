@@ -61,7 +61,7 @@
 
     .fl-consulta-bar {
         display: grid;
-        grid-template-columns: minmax(220px, 320px) 1fr;
+        grid-template-columns: minmax(200px, 280px) minmax(240px, 360px) minmax(280px, 1fr);
         gap: 1rem 1.25rem;
         background: var(--fl-card);
         border: 1px solid #d5e4ef;
@@ -70,6 +70,17 @@
         box-shadow: var(--fl-shadow);
         margin-bottom: 1rem;
     }
+    .fl-consulta-bar-deposito .tm-deposito-campo {
+        margin: 0;
+        padding: 0;
+        max-width: 100%;
+        flex-direction: row;
+    }
+    .fl-consulta-bar-deposito .form-control {
+        height: calc(1.5em + 1rem + 2px);
+        font-size: 1.05rem;
+    }
+
     .fl-consulta-label {
         display: block;
         font-size: 0.72rem;

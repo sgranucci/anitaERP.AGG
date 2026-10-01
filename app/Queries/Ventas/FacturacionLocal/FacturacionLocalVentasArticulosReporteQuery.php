@@ -10,9 +10,12 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Ventas netas (FAC − NC) de Facturación Local por artículo / combinación-color / talle.
+ * Incluye el POS del local y los comprobantes grabados desde Facturante.
  */
 final class FacturacionLocalVentasArticulosReporteQuery
 {
+    /** Leyenda que deja FacturanteService al grabar la venta en el ERP. */
+    private const LEYENDA_FACTURANTE = 'Facturante';
     private static function cantidadExpr(): string
     {
         return GastronomiaVentaComprobanteSignoSupport::sqlCantidadLineaVenta();
@@ -139,12 +142,15 @@ final class FacturacionLocalVentasArticulosReporteQuery
             ->leftJoin('combinacion as c', 'c.id', '=', 've.combinacion_id')
             ->leftJoin('talle as t', 't.id', '=', 've.talle_id')
             ->whereNotNull('ve.articulo_id')
-            ->whereExists(function ($sub) {
-                $sub->select(DB::raw(1))
-                    ->from('facturacion_local_emision as fle')
-                    ->where(function ($w) {
-                        $w->whereColumn('fle.venta_id', 'v.id')
-                            ->orWhereColumn('fle.venta_nc_id', 'v.id');
+            ->where(function ($origen) {
+                $origen->where('v.leyenda', self::LEYENDA_FACTURANTE)
+                    ->orWhereExists(function ($sub) {
+                        $sub->select(DB::raw(1))
+                            ->from('facturacion_local_emision as fle')
+                            ->where(function ($w) {
+                                $w->whereColumn('fle.venta_id', 'v.id')
+                                    ->orWhereColumn('fle.venta_nc_id', 'v.id');
+                            });
                     });
             });
 

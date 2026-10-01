@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tiposervicio_Proveedor;
 use App\Models\Configuracion\Pais;
 use App\Rules\Compras\RuleProveedor;
@@ -54,9 +55,11 @@ class ValidacionProveedor extends FormRequest
     {
         $nroInscripcionRules = ['required', new RuleProveedor('nroinscripcion')];
         if ($this->tipoServicioProveedorControlaUnicidadCuit() && ! $this->proveedorEsDelExterior()) {
+            // Un CUIT repetido solo en un proveedor suspendido no bloquea el guardado.
             $nroInscripcionRules[] = Rule::unique('proveedor', 'nroinscripcion')
                 ->ignore($this->route('id'))
-                ->whereNull('deleted_at');
+                ->whereNull('deleted_at')
+                ->whereNot('estado', Proveedor::$enumEstado['1']);
         }
 
         $rules = [
@@ -97,6 +100,20 @@ class ValidacionProveedor extends FormRequest
         }
 
         return $rules;
+    }
+
+    public function messages(): array
+    {
+        return [
+            'nroinscripcion.unique' => $this->mensajeCuitYaUsado(),
+        ];
+    }
+
+    public function attributes(): array
+    {
+        return [
+            'nroinscripcion' => 'C.U.I.T.',
+        ];
     }
 
     public function withValidator(Validator $validator): void
@@ -293,5 +310,62 @@ class ValidacionProveedor extends FormRequest
         $nombreNorm = preg_replace('/^\d+\s*-\s*/', '', $nombreNorm) ?? $nombreNorm;
 
         return $nombreNorm === 'ARGENTINA';
+    }
+
+    /**
+     * El unique genérico solo dice «ya está en uso». Acá se nombra al proveedor que ya tiene el CUIT.
+     */
+    private function mensajeCuitYaUsado(): string
+    {
+        $cuit = trim((string) $this->input('nroinscripcion'));
+        $generico = 'El C.U.I.T. ya está cargado en otro proveedor.';
+        if ($cuit === '') {
+            return $generico;
+        }
+
+        $idActual = $this->route('id');
+        $otros = Proveedor::query()
+            ->where('nroinscripcion', $cuit)
+            ->where('estado', '!=', Proveedor::$enumEstado['1'])
+            ->when($idActual !== null && $idActual !== '', function ($query) use ($idActual) {
+                $query->where('id', '!=', $idActual);
+            })
+            ->orderBy('id')
+            ->limit(5)
+            ->get(['id', 'codigo', 'nombre', 'estado']);
+
+        if ($otros->isEmpty()) {
+            return $generico;
+        }
+
+        $partes = $otros->map(function (Proveedor $otro) {
+            $nombre = trim((string) $otro->nombre);
+            $texto = 'ID '.$otro->id;
+            if ($nombre !== '') {
+                $texto .= ' · '.$nombre;
+            }
+            $codigo = trim((string) $otro->codigo);
+            $estadoGuardado = trim((string) $otro->estado);
+            $estado = Proveedor::$enumEstado[$estadoGuardado] ?? $estadoGuardado;
+            $detalle = [];
+            if ($codigo !== '') {
+                $detalle[] = 'código Anita '.$codigo;
+            }
+            if ($estado !== '') {
+                $detalle[] = $estado;
+            }
+            if ($detalle !== []) {
+                $texto .= ' ('.implode(', ', $detalle).')';
+            }
+
+            return $texto;
+        })->all();
+
+        $lista = implode('; ', $partes);
+        if (count($partes) === 1) {
+            return 'El C.U.I.T. '.$cuit.' ya lo tiene el proveedor '.$lista.'.';
+        }
+
+        return 'El C.U.I.T. '.$cuit.' ya lo tienen estos proveedores: '.$lista.'.';
     }
 }

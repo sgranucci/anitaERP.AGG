@@ -2,6 +2,8 @@
 
 namespace App\Support\Stock;
 
+use App\Models\Stock\Categoria;
+use App\Models\Stock\Mventa;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Carbon\Carbon;
@@ -112,12 +114,9 @@ class PrecioListadoFiltros
             ? Carbon::parse($request->fecha_vigencia)->format('Y-m-d')
             : Carbon::today()->format('Y-m-d');
 
-        $listaprecioId = $request->input('listaprecio_id');
-        if ($listaprecioId !== null && $listaprecioId !== '') {
-            $listaprecioId = (int) $listaprecioId;
-        } else {
-            $listaprecioId = null;
-        }
+        $listaprecioId = self::idOpcional($request->input('listaprecio_id'));
+        $mventaId = self::idOpcional($request->input('mventa_id'));
+        $categoriaId = self::idOpcional($request->input('categoria_id'));
 
         $ocultarPrecioCero = $request->has('ocultar_precio_cero')
             ? (int) $request->input('ocultar_precio_cero') === 1
@@ -133,13 +132,26 @@ class PrecioListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'fecha_vigencia' => $fechaVigencia,
             'listaprecio_id' => $listaprecioId,
+            'mventa_id' => $mventaId,
+            'categoria_id' => $categoriaId,
             'ocultar_precio_cero' => $ocultarPrecioCero,
         ];
     }
 
+    private static function idOpcional(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $id = (int) $value;
+
+        return $id > 0 ? $id : null;
+    }
+
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        if (! empty($filtros['listaprecio_id'])) {
+        if (! empty($filtros['listaprecio_id']) || ! empty($filtros['mventa_id']) || ! empty($filtros['categoria_id'])) {
             return true;
         }
 
@@ -190,6 +202,8 @@ class PrecioListadoFiltros
             'busqueda' => '',
             'fecha_vigencia' => Carbon::today()->format('Y-m-d'),
             'listaprecio_id' => null,
+            'mventa_id' => null,
+            'categoria_id' => null,
             'ocultar_precio_cero' => true,
         ];
     }
@@ -219,6 +233,12 @@ class PrecioListadoFiltros
         $params['fecha_vigencia'] = $filtros['fecha_vigencia'] ?? Carbon::today()->format('Y-m-d');
         if (! empty($filtros['listaprecio_id'])) {
             $params['listaprecio_id'] = (int) $filtros['listaprecio_id'];
+        }
+        if (! empty($filtros['mventa_id'])) {
+            $params['mventa_id'] = (int) $filtros['mventa_id'];
+        }
+        if (! empty($filtros['categoria_id'])) {
+            $params['categoria_id'] = (int) $filtros['categoria_id'];
         }
         $params['ocultar_precio_cero'] = ($filtros['ocultar_precio_cero'] ?? true) ? 1 : 0;
 
@@ -652,7 +672,15 @@ class PrecioListadoFiltros
                     break;
                 }
             }
-            $partes[] = 'Lista toolbar: '.$etiqueta;
+            $partes[] = 'Lista: '.$etiqueta;
+        }
+
+        if (! empty($filtros['mventa_id'])) {
+            $partes[] = 'Marca: '.self::etiquetaMaestro(Mventa::class, (int) $filtros['mventa_id']);
+        }
+
+        if (! empty($filtros['categoria_id'])) {
+            $partes[] = 'Categoría: '.self::etiquetaMaestro(Categoria::class, (int) $filtros['categoria_id']);
         }
 
         if (self::tieneCriteriosInteligentesAplicados($filtros)) {
@@ -684,5 +712,22 @@ class PrecioListadoFiltros
         }
 
         return implode(' · ', $partes);
+    }
+
+    /**
+     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelo
+     */
+    private static function etiquetaMaestro(string $modelo, int $id): string
+    {
+        $fila = $modelo::query()->select('id', 'codigo', 'nombre')->find($id);
+        if ($fila === null) {
+            return 'ID '.$id;
+        }
+
+        $codigo = trim((string) ($fila->codigo ?? ''));
+        $nombre = trim((string) ($fila->nombre ?? ''));
+        $etiqueta = trim($codigo.' — '.$nombre, ' —');
+
+        return $etiqueta !== '' ? $etiqueta : 'ID '.$id;
     }
 }

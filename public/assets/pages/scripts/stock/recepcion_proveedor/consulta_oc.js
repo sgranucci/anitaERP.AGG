@@ -9,16 +9,21 @@
     }
 
     function actualizarAvisoFiltroProveedor() {
-        var $aviso = $('#consultaocrecepcion-filtro-proveedor');
-        if (!$aviso.length) {
-            return;
-        }
-        if (proveedorIdFormulario()) {
-            $aviso.removeClass('d-none');
-        } else {
-            $aviso.addClass('d-none');
+        var hayProveedor = !!proveedorIdFormulario();
+        $('#consultaocrecepcion-filtro-proveedor').toggleClass('d-none', !hayProveedor);
+        $('#btn-limpiar-proveedor-recepcion').toggleClass('d-none', !hayProveedor);
+    }
+
+    function limpiarProveedorRecepcion() {
+        $('#proveedor_id').val('');
+        $('#proveedor_nombre').val('');
+        actualizarAvisoFiltroProveedor();
+        if ($('#consultaocrecepcionModal').hasClass('show')) {
+            cargaTablaOcPendientes();
         }
     }
+
+    window.recepcionProveedorRefrescarFiltroProveedorOc = actualizarAvisoFiltroProveedor;
 
     function escHtml(texto) {
         return $('<div>').text(texto == null ? '' : texto).html();
@@ -62,6 +67,7 @@
         $('#numero_oc_buscar').val(r.numeroordencompra);
         $('#proveedor_id').val(r.proveedor_id || '');
         $('#proveedor_nombre').val(r.proveedor_nombre || '');
+        actualizarAvisoFiltroProveedor();
         if (r.empresa_id) {
             $('#empresa_id').val(r.empresa_id);
             window.recepcionProveedorEmpresaDesdeOc = true;
@@ -77,6 +83,13 @@
     }
 
     $(function () {
+        actualizarAvisoFiltroProveedor();
+
+        $(document).on('click', '#btn-limpiar-proveedor-recepcion, #btn-quitar-filtro-proveedor-oc', function (e) {
+            e.preventDefault();
+            limpiarProveedorRecepcion();
+        });
+
         $('#btn-consulta-oc-recepcion-modal').on('click', function () {
             actualizarAvisoFiltroProveedor();
             $('#consultaocrecepcionModal').modal('show');

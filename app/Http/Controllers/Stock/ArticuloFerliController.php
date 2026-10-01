@@ -48,6 +48,7 @@ use App\Support\Listado\ListadoVistaMenuSupport;
 use App\Support\Listado\ListadoVistaSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloEstadoCanalSupport;
+use App\Support\Stock\ArticuloMarketplaceGrillaSupport;
 use App\Support\Stock\ArticuloFerliListadoColumnas;
 use App\Support\Stock\ArticuloFerliListadoFiltros;
 use App\Support\Stock\ArticuloFerliListadoPreferenciasUsuario;
@@ -724,6 +725,15 @@ class ArticuloFerliController extends Controller
         }
         $combinacion = Combinacion::create($altaCombo);
 
+        try {
+            ArticuloMarketplaceGrillaSupport::sincronizarDesdeRequest($request, (int) $articulo->id);
+        } catch (\RuntimeException $e) {
+            return redirect()
+                ->route('product.edit', ['id' => $articulo->id])
+                ->withInput()
+                ->with('errores', [$e->getMessage()]);
+        }
+
         $producto = Articulo::with('categorias')
             ->with('subcategorias')
             ->with('lineas')
@@ -829,8 +839,11 @@ class ArticuloFerliController extends Controller
                 'compfondo', 'forro', 'usosArticulos', 'tipoCorte', 'punteras', 'ctamae', 'codimp',
                 'capellada', 'unidadmedida', 'tarea_query', 'nofactura_enum', 'filtrosQuery'));
         } else {
+            $datosMarketplace = ArticuloMarketplaceGrillaSupport::datosParaFormulario($producto);
+            $articuloMarketplaceLineas = $datosMarketplace['lineas'];
+            $articuloCombinacionesLista = $datosMarketplace['combinaciones'];
 
-            return view('stock.product.diseno.edit', compact('producto', 'id', 'categoria', 'subcategoria', 'marca', 'linea', 'compfondo', 'forro', 'usosArticulos', 'tipoCorte', 'punteras', 'capellada', 'unidadmedida', 'filtrosQuery'));
+            return view('stock.product.diseno.edit', compact('producto', 'id', 'categoria', 'subcategoria', 'marca', 'linea', 'compfondo', 'forro', 'usosArticulos', 'tipoCorte', 'punteras', 'capellada', 'unidadmedida', 'filtrosQuery', 'articuloMarketplaceLineas', 'articuloCombinacionesLista'));
         }
 
     }
@@ -846,6 +859,15 @@ class ArticuloFerliController extends Controller
                 (int) $id,
                 $request->input('canal_ids', [])
             );
+        }
+
+        try {
+            ArticuloMarketplaceGrillaSupport::sincronizarDesdeRequest($request, (int) $id);
+        } catch (\RuntimeException $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('errores', [$e->getMessage()]);
         }
 
         // Lee nuevo precio con relaciones para interface Anita

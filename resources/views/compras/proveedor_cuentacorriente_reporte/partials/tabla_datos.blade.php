@@ -55,9 +55,9 @@
             <th>Comprobante</th>
             <th>Moneda</th>
             @if ($modoDeuda)
-                <th class="text-right">Importe</th>
-                <th class="text-right">Aplicado</th>
-                <th class="text-right">Saldo pend.</th>
+                <th class="text-right" title="Monto total del comprobante">Importe</th>
+                <th class="text-right" title="Total ya aplicado o pagado">Aplicado</th>
+                <th class="text-right" title="Saldo de este comprobante">Saldo pend.</th>
                 <th class="text-right" title="Saldo acumulado del proveedor después de cada comprobante">Saldo</th>
             @else
                 <th class="text-right">Debe</th>

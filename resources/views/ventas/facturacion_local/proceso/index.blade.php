@@ -46,6 +46,7 @@ window.FACTURACION_LOCAL = {
 <script src="{{ asset('assets/pages/scripts/stock/color/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/color/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/localidad/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/localidad/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/facturacion_local/pos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/facturacion_local/pos.js')) ?: time() }}"></script>
 @endsection
 
@@ -391,6 +392,18 @@ window.FACTURACION_LOCAL = {
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
+                <div class="mb-2">
+                    <label class="small mb-1 d-block" for="fl-pos-deposito_id_codigo">Depósito <span class="text-muted">(vacío = todos, incluida fábrica)</span></label>
+                    @include('stock.partials.campo_consulta_deposito', [
+                        'prefix' => 'flposstock',
+                        'layout' => 'inline',
+                        'label' => '',
+                        'required' => false,
+                        'mostrar_editar' => false,
+                        'inputName' => 'deposito_id',
+                        'inputId' => 'fl-pos-deposito_id',
+                    ])
+                </div>
                 <div class="d-flex flex-wrap align-items-end" style="gap:8px;">
                     <div class="flex-grow-1" style="min-width:12rem;">
                         <label class="small mb-1 d-block" for="fl-stock-q">SKU o descripción</label>
@@ -424,6 +437,7 @@ window.FACTURACION_LOCAL = {
     </div>
 </div>
 
+@include('includes.stock.modalconsultadeposito')
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.ventas.modalconsultacliente')
 @include('includes.stock.modalconsultatalle')

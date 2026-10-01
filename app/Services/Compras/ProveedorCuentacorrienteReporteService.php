@@ -91,6 +91,9 @@ class ProveedorCuentacorrienteReporteService
         $enPesos = ($filtros['expresion'] ?? '') === ProveedorCuentacorrienteReporteFiltros::EXPRESION_PESOS;
         $soloTotales = ! empty($filtros['solo_totales']);
         $forzarDia = ($filtros['cotizacion_modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::COTIZACION_DIA;
+        $conteoCcPorComprobante = $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA
+            ? []
+            : $this->conteoMovimientosPorComprobante($movimientos);
 
         $porProveedor = $movimientos->groupBy(fn ($m) => (int) $m->proveedor_id);
         $filas = [];
@@ -122,7 +125,13 @@ class ProveedorCuentacorrienteReporteService
             $subDebe = 0.0;
             $subHaber = 0.0;
             $subPendiente = 0.0;
+            $subImporte = 0.0;
+            $subAplicado = 0.0;
             $saldoParcial = 0.0;
+
+            if ($modo !== ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
+                $movsProveedor = $this->ordenarPorFechaComprobante($movsProveedor);
+            }
 
             if ($modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
                 $saldoAnterior = $this->saldoAnteriorProveedor(
@@ -188,6 +197,16 @@ class ProveedorCuentacorrienteReporteService
                     $saldoCorrido += $totalOrigen;
                     $saldoCorridoPesos += $importeFirmadoPesos;
                 } else {
+                    [$importeMostrar, $aplicadoMostrar] = $this->columnasImporteAplicadoDeuda(
+                        $mov,
+                        $conteoCcPorComprobante,
+                        $totalOrigen,
+                        $pendienteOrigen,
+                        $importeMostrar,
+                        $aplicadoMostrar,
+                    );
+                    $subImporte += abs($importeMostrar);
+                    $subAplicado += abs($aplicadoMostrar);
                     $subPendiente += $pendienteMostrar;
                     $totalPendiente += $pendientePesos;
                     $saldoParcial = round($saldoParcial + $pendienteMostrar, 2);
@@ -274,7 +293,10 @@ class ProveedorCuentacorrienteReporteService
                 'comprobante' => 'Total proveedor',
                 'debe' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA ? $subDebe : null,
                 'haber' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA ? $subHaber : null,
-                'importe' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
+                'importe' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $subImporte : null,
+                'aplicado' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA && $subAplicado > 0.0001
+                    ? $subAplicado
+                    : null,
                 'saldo_pendiente' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
                 'saldo_parcial' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $saldoParcial : null,
                 'saldo' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA
@@ -326,6 +348,82 @@ class ProveedorCuentacorrienteReporteService
             $page,
             ['path' => PaginatorImpl::resolveCurrentPath()],
         );
+    }
+
+    /**
+     * Cuenta corriente de Anita a veces guarda solo el saldo (sin filas de aplicación).
+     * Con un único movimiento del documento, Importe es el total del comprobante y
+     * Aplicado es lo ya cancelado. El saldo pendiente no se toca.
+     *
+     * @param  array<int, int>  $conteoCcPorComprobante
+     * @return array{0: float, 1: float}
+     */
+    private function columnasImporteAplicadoDeuda(
+        Proveedor_Cuentacorriente $mov,
+        array $conteoCcPorComprobante,
+        float $totalOrigen,
+        float $pendienteOrigen,
+        float $importeMostrar,
+        float $aplicadoMostrar,
+    ): array {
+        $comprobante = $mov->comprobante_proveedores;
+        $comprobanteId = (int) ($mov->comprobante_proveedor_id ?? 0);
+        if ($comprobante === null || $comprobanteId <= 0 || (int) ($conteoCcPorComprobante[$comprobanteId] ?? 0) !== 1) {
+            return [$importeMostrar, $aplicadoMostrar];
+        }
+
+        $monedaComprobante = (int) ($comprobante->moneda_id ?? 0);
+        $monedaMovimiento = (int) ($mov->moneda_id ?? 0);
+        if ($monedaComprobante > 0 && $monedaMovimiento > 0 && $monedaComprobante !== $monedaMovimiento) {
+            return [$importeMostrar, $aplicadoMostrar];
+        }
+
+        $monto = abs((float) $comprobante->total);
+        $pendienteAbs = abs($pendienteOrigen);
+        if ($monto < 0.02 || $monto + 0.02 < $pendienteAbs) {
+            return [$importeMostrar, $aplicadoMostrar];
+        }
+
+        $coef = 1.0;
+        if (abs($totalOrigen) > 0.0001) {
+            $coef = abs($importeMostrar) / abs($totalOrigen);
+        }
+
+        $importe = round($monto * $coef, 2);
+        $aplicadoDocumento = round($monto - $pendienteAbs, 2);
+        $aplicado = $aplicadoDocumento > 0.02 ? round($aplicadoDocumento * $coef, 2) : 0.0;
+
+        return [$importe, $aplicado];
+    }
+
+    /**
+     * @param  Collection<int, Proveedor_Cuentacorriente>  $movimientos
+     * @return array<int, int>
+     */
+    private function conteoMovimientosPorComprobante(Collection $movimientos): array
+    {
+        $ids = $movimientos
+            ->pluck('comprobante_proveedor_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($ids === []) {
+            return [];
+        }
+
+        $out = [];
+        $rows = Proveedor_Cuentacorriente::query()
+            ->whereIn('comprobante_proveedor_id', $ids)
+            ->selectRaw('comprobante_proveedor_id, COUNT(*) as n')
+            ->groupBy('comprobante_proveedor_id')
+            ->get();
+        foreach ($rows as $row) {
+            $out[(int) $row->comprobante_proveedor_id] = (int) $row->n;
+        }
+
+        return $out;
     }
 
     /**
@@ -418,6 +516,39 @@ class ProveedorCuentacorrienteReporteService
         if ($proveedorIds !== []) {
             $query->whereIn('proveedor_cuentacorriente.proveedor_id', $proveedorIds);
         }
+    }
+
+    /**
+     * Dentro del proveedor, la deuda se lista por la fecha del comprobante
+     * (la misma que muestra la columna Fecha), no por la fecha de carga de la cuenta corriente.
+     *
+     * @param  Collection<int, Proveedor_Cuentacorriente>  $movimientos
+     * @return Collection<int, Proveedor_Cuentacorriente>
+     */
+    private function ordenarPorFechaComprobante(Collection $movimientos): Collection
+    {
+        return $movimientos->sortBy(function (Proveedor_Cuentacorriente $mov): string {
+            $fecha = $this->ymdOrden(ProveedorCuentacorrienteGrillaSupport::fechaComprobante($mov));
+            $vencimiento = $this->ymdOrden(ProveedorCuentacorrienteGrillaSupport::fechaVencimiento($mov));
+
+            return $fecha.'|'.$vencimiento.'|'.str_pad((string) (int) $mov->id, 12, '0', STR_PAD_LEFT);
+        })->values();
+    }
+
+    private function ymdOrden(mixed $fecha): string
+    {
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+
+        $texto = trim((string) $fecha);
+        if ($texto === '') {
+            return '9999-12-31';
+        }
+
+        $ts = strtotime($texto);
+
+        return $ts ? date('Y-m-d', $ts) : '9999-12-31';
     }
 
     /**

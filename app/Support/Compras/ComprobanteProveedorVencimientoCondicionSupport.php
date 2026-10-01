@@ -95,6 +95,68 @@ final class ComprobanteProveedorVencimientoCondicionSupport
     }
 
     /**
+     * Una sola cuota ya existente.
+     * Si el operador cambió el vencimiento de la cabecera y la grilla de cuotas
+     * siguió con la fecha anterior, la cabecera manda: si no, al guardar se pisa
+     * con esa cuota vieja. Si cambió la fecha de la cuota, esa fecha manda
+     * sobre el recálculo de la condición de pago.
+     *
+     * @param  list<array<string, mixed>>  $cuotas
+     * @return list<array<string, mixed>>
+     */
+    public static function conservarVencimientoEditado(
+        array $cuotas,
+        mixed $cabeceraNueva,
+        mixed $cabeceraAnterior,
+        mixed $cuotaFormulario,
+        mixed $cuotaAnterior,
+    ): array {
+        if (count($cuotas) !== 1) {
+            return $cuotas;
+        }
+
+        $cabeceraNueva = self::fechaYmd($cabeceraNueva);
+        $cabeceraAnterior = self::fechaYmd($cabeceraAnterior);
+        $cuotaFormulario = self::fechaYmd($cuotaFormulario);
+        $cuotaAnterior = self::fechaYmd($cuotaAnterior);
+
+        $cabeceraCambio = $cabeceraNueva !== null && $cabeceraNueva !== $cabeceraAnterior;
+        $cuotaCambio = $cuotaFormulario !== null && $cuotaFormulario !== $cuotaAnterior;
+
+        if ($cabeceraCambio && ! $cuotaCambio) {
+            $cuotas[0]['fechavencimiento'] = $cabeceraNueva;
+
+            return $cuotas;
+        }
+
+        if ($cuotaCambio) {
+            $cuotas[0]['fechavencimiento'] = $cuotaFormulario;
+
+            return $cuotas;
+        }
+
+        return $cuotas;
+    }
+
+    public static function fechaYmd(mixed $valor): ?string
+    {
+        if ($valor instanceof \DateTimeInterface) {
+            return $valor->format('Y-m-d');
+        }
+
+        $texto = trim((string) ($valor ?? ''));
+        if ($texto === '') {
+            return null;
+        }
+
+        if (preg_match('/^(\d{4}-\d{2}-\d{2})/', $texto, $coincide) === 1) {
+            return $coincide[1];
+        }
+
+        return null;
+    }
+
+    /**
      * Una cuota por fila de plantilla, montos por porcentaje (o partes iguales).
      *
      * @return list<array<string, mixed>>

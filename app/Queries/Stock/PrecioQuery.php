@@ -67,6 +67,14 @@ class PrecioQuery implements PrecioQueryInterface
             $q->where('precio.precio', '>', 0);
         }
 
+        if (! empty($filtros['mventa_id'])) {
+            $q->where('articulo.mventa_id', (int) $filtros['mventa_id']);
+        }
+
+        if (! empty($filtros['categoria_id'])) {
+            $q->where('articulo.categoria_id', (int) $filtros['categoria_id']);
+        }
+
         PrecioListadoFiltros::aplicar($q, $filtros);
 
         $q->orderByRaw(

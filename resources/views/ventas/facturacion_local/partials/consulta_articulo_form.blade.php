@@ -35,6 +35,20 @@
             </div>
         </div>
 
+        <div class="fl-consulta-bar-deposito">
+            <label class="fl-consulta-label" for="{{ $formId }}-deposito_id_codigo">Dep&oacute;sito</label>
+            @include('stock.partials.campo_consulta_deposito', [
+                'prefix' => $formId,
+                'layout' => 'inline',
+                'label' => '',
+                'required' => false,
+                'mostrar_editar' => false,
+                'inputName' => 'deposito_id',
+                'inputId' => $formId.'-deposito_id',
+            ])
+            <p class="fl-consulta-hint mb-0 mt-1">Vac&iacute;o = dep&oacute;sitos del local ({{ \App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport::etiquetaCodigosDepositoLocal() }}).</p>
+        </div>
+
         <div class="fl-consulta-bar-articulo tm-articulo-campo" id="{{ $formId }}-articulo-campo">
             <label class="fl-consulta-label">Art&iacute;culo</label>
             <div class="d-flex flex-nowrap align-items-center w-100" style="gap: 6px;">
@@ -79,11 +93,12 @@
                 </button>
             </div>
             <p class="fl-consulta-hint mb-0 mt-1">
-                <kbd>F1</kbd> o lupa abre el modal &middot; <kbd>Enter</kbd> resuelve el SKU y consulta &middot; precio seg&uacute;n lista del local
+                <kbd>F1</kbd> o lupa abre el modal &middot; <kbd>Enter</kbd> resuelve el SKU y consulta &middot; el local define la lista de precios
             </p>
         </div>
     </div>
 </form>
 <script>
 window.flLocalesMeta = @json($localesMeta);
+window.flDepositosAlcance = @json(\App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport::etiquetaCodigosDepositoLocal());
 </script>

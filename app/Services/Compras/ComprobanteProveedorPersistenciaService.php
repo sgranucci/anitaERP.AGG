@@ -60,6 +60,14 @@ class ComprobanteProveedorPersistenciaService
     /** @var list<string> */
     private array $ultimosAvisosControles = [];
 
+    /**
+     * Vencimiento de cabecera y de la única cuota, antes de este guardado.
+     * Null en el alta: ahí sigue mandando la condición de pago.
+     *
+     * @var array{cabecera:?string, cuota:?string, cantidad:int}|null
+     */
+    private ?array $vencimientoEdicionPrevio = null;
+
     public function __construct(
         private Comprobante_ProveedorRepositoryInterface $comprobanteRepository,
         private Comprobante_Proveedor_ConceptoRepositoryInterface $conceptoRepository,
@@ -101,6 +109,34 @@ class ComprobanteProveedorPersistenciaService
         );
     }
 
+    /**
+     * Un contabilizado se descontabiliza y se vuelve a asentar. Sin un concepto con monto
+     * esa segunda pasada falla, después de haber borrado asiento y Anita.
+     */
+    private function assertHayConceptoConMonto(Request $request): void
+    {
+        $conceptoIds = $request->input('concepto_ivacompra_ids', []);
+        $montos = $request->input('montos', []);
+        $cuentas = $request->input('cuentacontabledebe_ids', []);
+        $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
+            is_array($conceptoIds) ? $conceptoIds : [],
+            is_array($montos) ? $montos : [],
+            is_array($cuentas) ? $cuentas : [],
+        );
+        foreach ($lineas as $linea) {
+            if ((int) ($linea['concepto_ivacompra_id'] ?? 0) > 0
+                && abs((float) ($linea['monto'] ?? 0)) >= 0.0001) {
+                return;
+            }
+        }
+
+        throw new RuntimeException(
+            'No se guardó. Esta factura está contabilizada y no tiene conceptos de IVA con monto. '
+            .'Cargue los conceptos en la solapa Conceptos IVA y vuelva a actualizar. '
+            .'El asiento y Anita siguen como estaban.'
+        );
+    }
+
     private static function contarCuotasVencimientoRequest(Request $request): int
     {
         $vencimientos = $request->input('cuota_fechavencimiento', []);
@@ -120,6 +156,7 @@ class ComprobanteProveedorPersistenciaService
 
     public function crearDesdeRequest(Request $request): Comprobante_Proveedor
     {
+        $this->vencimientoEdicionPrevio = null;
         $payload = $this->armarPayloadCabecera($request);
         $payload['fechaiva'] = ComprobanteProveedorFechaContableSupport::inmodificableEnCarga(null);
         $payload['creousuario_id'] = Auth::id();
@@ -240,6 +277,7 @@ class ComprobanteProveedorPersistenciaService
     private function actualizarDesdeRequestConCandado(Request $request, int $id): Comprobante_Proveedor
     {
         $this->ultimosAvisosControles = [];
+        $this->vencimientoEdicionPrevio = null;
 
         $comprobante = $this->comprobanteRepository->find($id);
         if (! $comprobante) {
@@ -277,6 +315,9 @@ class ComprobanteProveedorPersistenciaService
 
         $estabaContabilizado = $comprobante->estado === ComprobanteProveedorEstados::CONTABILIZADO;
         if ($estabaContabilizado) {
+            // Sin conceptos con monto el formulario no se puede recontabilizar. Cortar acá:
+            // descontabilizar primero llama a Anita (varios minutos) y deja el comprobante en borrador.
+            $this->assertHayConceptoConMonto($request);
             $this->contabilizarService->descontabilizarSinPagos($id);
             $comprobante = $this->comprobanteRepository->find($id);
             if (! $comprobante) {
@@ -318,6 +359,8 @@ class ComprobanteProveedorPersistenciaService
                 : null,
             (float) ($payload['total'] ?? 0),
         );
+
+        $this->vencimientoEdicionPrevio = $this->snapshotVencimientoUnicaCuota($comprobante);
 
         DB::transaction(function () use ($request, $payload, $id) {
             try {
@@ -978,12 +1021,27 @@ class ComprobanteProveedorPersistenciaService
             (float) ($comprobante->total ?? 0),
         );
 
+        $cuotaFormulario = count($cuotasNormalizadas) === 1
+            ? ($cuotasNormalizadas[0]['fechavencimiento'] ?? null)
+            : null;
+
         // Vencimientos desde condición de pago (F.Comp. + plazo), no fechas absolutas de la OC.
         $cuotasNormalizadas = ComprobanteProveedorVencimientoCondicionSupport::aplicarACuotas(
             $cuotasNormalizadas,
             isset($comprobante->condicionpago_id) ? (int) $comprobante->condicionpago_id : null,
             $fechaFactura,
         );
+
+        $previo = $this->vencimientoEdicionPrevio;
+        if (is_array($previo) && (int) ($previo['cantidad'] ?? 0) === 1) {
+            $cuotasNormalizadas = ComprobanteProveedorVencimientoCondicionSupport::conservarVencimientoEditado(
+                $cuotasNormalizadas,
+                $comprobante->fechavencimiento,
+                $previo['cabecera'] ?? null,
+                $cuotaFormulario,
+                $previo['cuota'] ?? null,
+            );
+        }
 
         // Candado final: no persistir cuotas desalineadas del total (CC/promov ≠ asiento/compra).
         ComprobanteProveedorCuotasTotalSupport::assertCuadraConTotal(
@@ -1009,6 +1067,33 @@ class ComprobanteProveedorPersistenciaService
                 'ordencompra_comprobante_cuota_id' => $cuota['ordencompra_comprobante_cuota_id'] ?? null,
             ]);
         }
+    }
+
+    /**
+     * @return array{cabecera:?string, cuota:?string, cantidad:int}
+     */
+    private function snapshotVencimientoUnicaCuota(Comprobante_Proveedor $comprobante): array
+    {
+        $cuotas = Comprobante_Proveedor_Cuota::query()
+            ->where('comprobante_proveedor_id', $comprobante->id)
+            ->orderBy('numero_cuota')
+            ->orderBy('id')
+            ->get(['fechavencimiento']);
+
+        $cuota = null;
+        if ($cuotas->count() === 1) {
+            $cuota = ComprobanteProveedorVencimientoCondicionSupport::fechaYmd(
+                $cuotas->first()->fechavencimiento
+            );
+        }
+
+        return [
+            'cabecera' => ComprobanteProveedorVencimientoCondicionSupport::fechaYmd(
+                $comprobante->fechavencimiento
+            ),
+            'cuota' => $cuota,
+            'cantidad' => $cuotas->count(),
+        ];
     }
 
     private function registrarEstadoInicial(Comprobante_Proveedor $comprobante): void

@@ -1,5 +1,23 @@
 <div class="card">
     <div class="card-body">
+        @if (\App\Support\Stock\ArticuloMarketplaceGrillaSupport::uiActiva())
+            @include('includes.tabs-activas-estilos')
+            <div class="tabs-activas mb-3">
+                <ul class="nav nav-tabs" id="tabs-articulo" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" id="botonform1" role="tab">
+                            <i class="fa fa-pencil"></i> Datos diseño
+                        </a>
+                    </li>
+                    <li class="nav-item" id="li-botonform10" style="display:none;">
+                        <a class="nav-link" href="#" id="botonform10" role="tab">
+                            <i class="fa fa-shopping-bag"></i> Marketplaces
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        @endif
+        <div class="form-diseno">
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
@@ -140,6 +158,8 @@
             </div>
         </div>
         @include('stock.articulo.partials.campo_canales_estados_ferli')
+        </div>
+        @include('stock.articulo.form10_marketplace')
 		<div class="card-footer">
         	<div class="row">
             	@if ($edit)

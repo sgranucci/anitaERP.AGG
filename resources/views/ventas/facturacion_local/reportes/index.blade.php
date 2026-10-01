@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', function () {
             <form method="get" action="{{ route('facturacion_local_reportes') }}" id="form-fl-ventas-articulos" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Ventas netas del local (facturas menos notas de crédito) por artículo,
+                        Ventas netas del local y de Facturante (facturas menos notas de crédito) por artículo,
                         combinación/color y talle. Elija el punto de venta, el rango de fechas y si abre por talle
                         o cierra por artículo/combinación. El tilde de costo agrega P.Vta., P.Costo e importe al costo
                         ({{ \App\Support\Ventas\FacturacionLocal\FacturacionLocalCostoFabricaSupport::etiquetaFormula() }}).

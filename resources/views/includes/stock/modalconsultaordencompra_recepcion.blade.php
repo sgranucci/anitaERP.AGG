@@ -15,7 +15,10 @@
                     @else
                         OC aprobadas sin COM o con COM parcial confirmado.
                     @endif
-                    <span id="consultaocrecepcion-filtro-proveedor" class="d-none">Filtrado por proveedor del formulario.</span>
+                    <span id="consultaocrecepcion-filtro-proveedor" class="d-none">
+                        Filtrado por el proveedor del formulario.
+                        <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="btn-quitar-filtro-proveedor-oc">Quitar filtro</button>
+                    </span>
                 </p>
                 <div class="form-group row">
                     <label for="consultaocrecepcion" class="col-sm-2 col-form-label">Buscar</label>

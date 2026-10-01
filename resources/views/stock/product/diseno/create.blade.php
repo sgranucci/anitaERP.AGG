@@ -5,6 +5,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+@include('stock.product.diseno.partials.marketplace_scripts')
 @endsection
 
 @section('contenido')
@@ -32,4 +33,5 @@
         </div>
     </div>
 </div>
+@include('stock.product.diseno.partials.marketplace_modales')
 @endsection

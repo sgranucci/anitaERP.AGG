@@ -5,6 +5,7 @@ namespace App\Services\Ventas\FacturacionLocal;
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
+use App\Models\Stock\Depmae;
 use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Numeracion;
 use App\Models\Stock\Precio;
@@ -23,6 +24,8 @@ use Illuminate\Support\Facades\Log;
  * Consulta stock/precios de locales (puerto de c-stocklocal.c / c-articulo.c).
  *
  * Stock y precios salen de anitaERP (articulo_movimiento y listas).
+ * Sin depósito elegido, el stock queda en los códigos de local
+ * (StockLocalErpMovimientosSupport::CODIGOS_DEPOSITO_LOCAL).
  * El bridge del local no se consulta.
  */
 final class StockLocalConsultaService
@@ -50,7 +53,7 @@ final class StockLocalConsultaService
      *   origen?:string
      * }
      */
-    public function consultarStockLocal(LocalVenta $local, string $busqueda, string $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP): array
+    public function consultarStockLocal(LocalVenta $local, string $busqueda, string $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP, ?int $depositoId = null): array
     {
         $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP;
         $articulo = $this->resolverArticulo($busqueda);
@@ -58,12 +61,17 @@ final class StockLocalConsultaService
             return ['ok' => false, 'error' => 'Artículo inexistente o sin canal LOCAL.'];
         }
 
+        $alcance = $this->alcanceDeposito($depositoId);
+        if (isset($alcance['error'])) {
+            return ['ok' => false, 'error' => $alcance['error']];
+        }
+
         $skuAnita = $this->codigoAnitaDesdeSku((string) $articulo->sku);
         $precio = $this->resolverPrecio($local, $articulo);
         $medidas = $this->medidasDesdeArticulo($articulo);
 
         if ($origen === StockLocalInformeListadoFiltros::ORIGEN_ERP) {
-            $agg = $this->agregarDesdeErp($local, $articulo, $medidas, matriz: true);
+            $agg = $this->agregarDesdeErp($articulo, $medidas, matriz: true, depositoId: $depositoId);
             if (($agg['error'] ?? null) !== null) {
                 return [
                     'ok' => false,
@@ -85,6 +93,9 @@ final class StockLocalConsultaService
                 'saldo_total' => $agg['saldo_total'],
                 'origen_stock' => 'erp_articulo_movimiento',
                 'origen' => $origen,
+                'alcance_depositos' => $alcance['alcance_depositos'],
+                'deposito' => $alcance['deposito'],
+                'depositos_alcance' => $alcance['depositos_alcance'],
             ];
         }
 
@@ -134,12 +145,17 @@ final class StockLocalConsultaService
      *   origen?:string
      * }
      */
-    public function consultarPreciosYStock(LocalVenta $local, string $busqueda, string $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP): array
+    public function consultarPreciosYStock(LocalVenta $local, string $busqueda, string $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP, ?int $depositoId = null): array
     {
         $origen = StockLocalInformeListadoFiltros::ORIGEN_ERP;
         $articulo = $this->resolverArticulo($busqueda);
         if ($articulo === null) {
             return ['ok' => false, 'error' => 'Artículo inexistente o sin canal LOCAL.'];
+        }
+
+        $alcance = $this->alcanceDeposito($depositoId);
+        if (isset($alcance['error'])) {
+            return ['ok' => false, 'error' => $alcance['error']];
         }
 
         $skuAnita = $this->codigoAnitaDesdeSku((string) $articulo->sku);
@@ -158,7 +174,7 @@ final class StockLocalConsultaService
             ->all();
 
         if ($origen === StockLocalInformeListadoFiltros::ORIGEN_ERP) {
-            $agg = $this->agregarDesdeErp($local, $articulo, [], matriz: false);
+            $agg = $this->agregarDesdeErp($articulo, [], matriz: false, depositoId: $depositoId);
             if (($agg['error'] ?? null) !== null) {
                 return [
                     'ok' => false,
@@ -175,6 +191,7 @@ final class StockLocalConsultaService
             foreach ($agg['filas'] as $fila) {
                 $filas[] = [
                     'deposito' => $fila['deposito'] ?? '',
+                    'deposito_nombre' => $fila['deposito_nombre'] ?? '',
                     'color' => $fila['color'] ?? 0,
                     'color_desc' => (string) ($fila['color_desc'] ?? ''),
                     'medida' => $fila['medida'] ?? '',
@@ -191,6 +208,9 @@ final class StockLocalConsultaService
                 'saldo_total' => (float) ($agg['saldo_total'] ?? 0),
                 'origen_stock' => 'erp_articulo_movimiento',
                 'origen' => $origen,
+                'alcance_depositos' => $alcance['alcance_depositos'],
+                'deposito' => $alcance['deposito'],
+                'depositos_alcance' => $alcance['depositos_alcance'],
                 'modo_variante' => $modo,
                 'combinaciones' => $combinaciones,
             ];
@@ -249,38 +269,29 @@ final class StockLocalConsultaService
     }
 
     /**
-     * Stock ERP: articulo_movimiento firmado del depósito del local.
+     * Stock ERP. Sin $depositoId suma los depósitos de local; con id, solo ese.
      *
      * @param  list<int>  $medidasBase
      * @return array{
-     *   filas:list<array{deposito:int|string,color:int|string,color_desc?:string,cantidades?:array<string,float>,total?:float,medida?:int|string,cantidad?:float}>,
+     *   filas:list<array{deposito:int|string,deposito_nombre?:string,color:int|string,color_desc?:string,cantidades?:array<string,float>,total?:float,medida?:int|string,cantidad?:float}>,
      *   medidas:list<int|string>,
      *   saldo_total:float,
      *   error:?string
      * }
      */
-    private function agregarDesdeErp(LocalVenta $local, Articulo $articulo, array $medidasBase, bool $matriz): array
+    private function agregarDesdeErp(Articulo $articulo, array $medidasBase, bool $matriz, ?int $depositoId = null): array
     {
-        $depositoId = (int) ($local->deposito_id ?: 0);
-        if ($depositoId <= 0) {
-            return [
-                'filas' => [],
-                'medidas' => $medidasBase,
-                'saldo_total' => 0.0,
-                'error' => 'El local no tiene depósito ERP configurado (deposito_id).',
-            ];
-        }
-
-        $depCodigo = (string) ($local->deposito?->codigo ?? $depositoId);
-
-        $rows = StockLocalErpMovimientosSupport::filasPorDepositoYArticulos(
-            $depositoId,
+        $depositoPuntual = $depositoId !== null && $depositoId > 0;
+        $rows = StockLocalErpMovimientosSupport::filasPorArticulos(
             [(int) $articulo->id],
-            null
+            $depositoPuntual ? $depositoId : null,
+            null,
+            null,
+            $depositoPuntual ? null : StockLocalErpMovimientosSupport::CODIGOS_DEPOSITO_LOCAL,
         );
 
         if (! $matriz) {
-            /** @var array<string, array{deposito:string,color:string,color_desc:string,medida:int|string,cantidad:float}> $porClave */
+            /** @var array<string, array{deposito:string,deposito_nombre:string,color:string,color_desc:string,medida:int|string,cantidad:float}> $porClave */
             $porClave = [];
             $saldo = 0.0;
             foreach ($rows as $row) {
@@ -288,15 +299,17 @@ final class StockLocalConsultaService
                 if (abs($cant) < 0.000001) {
                     continue;
                 }
+                [$depCodigo, $depNombre] = $this->depositoDesdeFilaErp($row);
                 [$colorCodigo, $colorDesc] = StockLocalErpMovimientosSupport::colorDesdeFila($row);
                 $medida = StockLocalErpMovimientosSupport::normalizarMedida(
                     $row->medida ?? null,
                     $row->medida_nombre ?? null
                 );
-                $clave = $colorCodigo.'|'.$medida;
+                $clave = $depCodigo.'|'.$colorCodigo.'|'.$medida;
                 if (! isset($porClave[$clave])) {
                     $porClave[$clave] = [
                         'deposito' => $depCodigo,
+                        'deposito_nombre' => $depNombre,
                         'color' => $colorCodigo,
                         'color_desc' => $colorDesc,
                         'medida' => $medida,
@@ -310,12 +323,20 @@ final class StockLocalConsultaService
                 $porClave,
                 static fn (array $f) => abs($f['cantidad']) > 0.000001
             ));
-            usort($filas, static fn ($a, $b) => [$a['color'], $a['medida']] <=> [$b['color'], $b['medida']]);
+            usort($filas, static fn ($a, $b) => [
+                StockLocalErpMovimientosSupport::claveOrdenColor((string) $a['color']),
+                StockLocalErpMovimientosSupport::claveOrdenColor((string) $a['deposito']),
+                is_numeric($a['medida']) ? (int) $a['medida'] : (string) $a['medida'],
+            ] <=> [
+                StockLocalErpMovimientosSupport::claveOrdenColor((string) $b['color']),
+                StockLocalErpMovimientosSupport::claveOrdenColor((string) $b['deposito']),
+                is_numeric($b['medida']) ? (int) $b['medida'] : (string) $b['medida'],
+            ]);
 
             return ['filas' => $filas, 'medidas' => $medidasBase, 'saldo_total' => $saldo, 'error' => null];
         }
 
-        /** @var array<string, array{deposito:string,color:string,color_desc:string,cantidades:array<string,float>,total:float}> $porClave */
+        /** @var array<string, array{deposito:string,deposito_nombre:string,color:string,color_desc:string,cantidades:array<string,float>,total:float}> $porClave */
         $porClave = [];
         $medidasVistas = [];
         $saldoTotal = 0.0;
@@ -324,16 +345,18 @@ final class StockLocalConsultaService
             if (abs($cant) < 0.000001) {
                 continue;
             }
+            [$depCodigo, $depNombre] = $this->depositoDesdeFilaErp($row);
             [$colorCodigo, $colorDesc] = StockLocalErpMovimientosSupport::colorDesdeFila($row);
             $medida = StockLocalErpMovimientosSupport::normalizarMedida(
                 $row->medida ?? null,
                 $row->medida_nombre ?? null
             );
             $medidasVistas[is_int($medida) ? $medida : (string) $medida] = true;
-            $clave = $colorCodigo;
+            $clave = $depCodigo.'|'.$colorCodigo;
             if (! isset($porClave[$clave])) {
                 $porClave[$clave] = [
                     'deposito' => $depCodigo,
+                    'deposito_nombre' => $depNombre,
                     'color' => $colorCodigo,
                     'color_desc' => $colorDesc,
                     'cantidades' => [],
@@ -358,7 +381,13 @@ final class StockLocalConsultaService
             $porClave,
             static fn (array $f) => abs($f['total']) > 0.000001
         ));
-        usort($filas, static fn ($a, $b) => [(string) $a['color'], (string) $a['deposito']] <=> [(string) $b['color'], (string) $b['deposito']]);
+        usort($filas, static fn ($a, $b) => [
+            StockLocalErpMovimientosSupport::claveOrdenColor((string) $a['color']),
+            StockLocalErpMovimientosSupport::claveOrdenColor((string) $a['deposito']),
+        ] <=> [
+            StockLocalErpMovimientosSupport::claveOrdenColor((string) $b['color']),
+            StockLocalErpMovimientosSupport::claveOrdenColor((string) $b['deposito']),
+        ]);
 
         return [
             'filas' => $filas,
@@ -366,6 +395,54 @@ final class StockLocalConsultaService
             'saldo_total' => $saldoTotal,
             'error' => null,
         ];
+    }
+
+    /**
+     * @return array{alcance_depositos:string,deposito:?array{id:int,codigo:string,nombre:string},depositos_alcance:?string,error?:string}
+     */
+    private function alcanceDeposito(?int $depositoId): array
+    {
+        if ($depositoId === null || $depositoId <= 0) {
+            return [
+                'alcance_depositos' => 'locales',
+                'deposito' => null,
+                'depositos_alcance' => StockLocalErpMovimientosSupport::etiquetaCodigosDepositoLocal(),
+            ];
+        }
+
+        $dep = Depmae::query()->find($depositoId);
+        if (! $dep) {
+            return [
+                'alcance_depositos' => 'uno',
+                'deposito' => null,
+                'depositos_alcance' => null,
+                'error' => 'Depósito inexistente.',
+            ];
+        }
+
+        return [
+            'alcance_depositos' => 'uno',
+            'deposito' => [
+                'id' => (int) $dep->id,
+                'codigo' => (string) $dep->codigo,
+                'nombre' => (string) $dep->nombre,
+            ],
+            'depositos_alcance' => null,
+        ];
+    }
+
+    /**
+     * @return array{0:string,1:string}
+     */
+    private function depositoDesdeFilaErp(object $row): array
+    {
+        $codigo = trim((string) ($row->deposito_codigo ?? ''));
+        $nombre = trim((string) ($row->deposito_nombre ?? ''));
+        if ($codigo === '') {
+            $codigo = (string) ((int) ($row->deposito_id ?? 0));
+        }
+
+        return [$codigo, $nombre];
     }
 
     /**

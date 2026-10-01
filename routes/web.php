@@ -415,6 +415,8 @@ Route::delete('stock/subcategoria/{id}', 'Stock\SubcategoriaController@eliminar'
 Route::get('stock/mventa', 'Stock\MventaController@index')->name('mventa');
 Route::get('stock/mventa/crear', 'Stock\MventaController@crear')->name('crear_mventa');
 Route::post('stock/mventa', 'Stock\MventaController@guardar')->name('guardar_mventa');
+Route::post('stock/mventa/consultamventa', 'Stock\MventaController@consultaMventa')->name('consulta_mventa');
+Route::get('stock/leermventa/{codigo}', 'Stock\MventaController@leeUnaMventaPorCodigo')->name('leer_mventa');
 Route::get('stock/mventa/{id}/editar', 'Stock\MventaController@editar')->name('editar_mventa');
 Route::put('stock/mventa/{id}', 'Stock\MventaController@actualizar')->name('actualizar_mventa');
 Route::delete('stock/mventa/{id}', 'Stock\MventaController@eliminar')->name('eliminar_mventa');
@@ -689,6 +691,8 @@ Route::delete('stock/tipoarticulo/{id}', 'Stock\TipoarticuloController@eliminar'
 Route::get('stock/categoria', 'Stock\CategoriaController@index')->name('categoria');
 Route::get('stock/categoria/crear', 'Stock\CategoriaController@crear')->name('crear_categoria');
 Route::post('stock/categoria', 'Stock\CategoriaController@guardar')->name('guardar_categoria');
+Route::post('stock/categoria/consultacategoria', 'Stock\CategoriaController@consultaCategoria')->name('consulta_categoria');
+Route::get('stock/leercategoria/{codigo}', 'Stock\CategoriaController@leeUnaCategoriaPorCodigo')->name('leer_categoria');
 Route::get('stock/categoria/{id}/editar', 'Stock\CategoriaController@editar')->name('editar_categoria');
 Route::put('stock/categoria/{id}', 'Stock\CategoriaController@actualizar')->name('actualizar_categoria');
 Route::delete('stock/categoria/{id}', 'Stock\CategoriaController@eliminar')->name('eliminar_categoria');

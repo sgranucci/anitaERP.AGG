@@ -12,6 +12,24 @@ use Illuminate\Support\Facades\DB;
 final class StockLocalErpMovimientosSupport
 {
     /**
+     * Depósitos de locales (no fábrica). Vacío en la consulta = solo estos códigos.
+     *
+     * @var list<string>
+     */
+    public const CODIGOS_DEPOSITO_LOCAL = ['10', '11', '12', '13', '27', '30'];
+
+    public static function etiquetaCodigosDepositoLocal(): string
+    {
+        $codigos = self::CODIGOS_DEPOSITO_LOCAL;
+        if (count($codigos) <= 1) {
+            return implode('', $codigos);
+        }
+        $ultimo = array_pop($codigos);
+
+        return implode(', ', $codigos).' y '.$ultimo;
+    }
+
+    /**
      * Filas firmadas por artículo × color/combinación × medida.
      * Si el movimiento tiene talles hijos con cantidad != 0, usa esos;
      * si no, usa am.cantidad con medida de am.talle_id (o 0).
@@ -49,9 +67,31 @@ final class StockLocalErpMovimientosSupport
             return collect();
         }
 
+        return self::filasPorArticulos($articuloIds, $depositoId, $fechaHasta, $fechaDesde);
+    }
+
+    /**
+     * Igual que filasPorDepositoYArticulos, pero $depositoId null recorre todos los depósitos
+     * (o solo $depositoCodigos, si viene informado).
+     *
+     * @param  list<int>  $articuloIds
+     * @param  list<string>|null  $depositoCodigos
+     */
+    public static function filasPorArticulos(
+        array $articuloIds,
+        ?int $depositoId = null,
+        ?string $fechaHasta = null,
+        ?string $fechaDesde = null,
+        ?array $depositoCodigos = null,
+    ): Collection {
+        if ($articuloIds === []) {
+            return collect();
+        }
+
         $out = collect();
         foreach (array_chunk($articuloIds, 500) as $chunk) {
             $query = DB::table('articulo_movimiento as am')
+                ->leftJoin('depmae as dep', 'dep.id', '=', 'am.deposito_id')
                 ->leftJoin('combinacion as c', 'c.id', '=', 'am.combinacion_id')
                 ->leftJoin('color as col', 'col.id', '=', 'am.color_id')
                 ->leftJoin('articulo_movimiento_talle as amt', function ($join) {
@@ -64,9 +104,14 @@ final class StockLocalErpMovimientosSupport
                 ->leftJoin('tipotransaccion as tt', 'tt.id', '=', 'am.tipotransaccion_id')
                 ->leftJoin('venta as v', 'v.id', '=', 'am.venta_id')
                 ->leftJoin('movimientostock as ms', 'ms.id', '=', 'am.movimientostock_id')
-                ->where('am.deposito_id', $depositoId)
                 ->whereIn('am.articulo_id', $chunk)
                 ->whereNotNull('am.articulo_id');
+
+            if ($depositoId !== null && $depositoId > 0) {
+                $query->where('am.deposito_id', $depositoId);
+            } elseif ($depositoCodigos !== null && $depositoCodigos !== []) {
+                $query->whereIn('dep.codigo', array_values($depositoCodigos));
+            }
 
             if ($fechaDesde !== null && $fechaDesde !== '') {
                 $query->whereDate('am.fecha', '>=', $fechaDesde);
@@ -78,6 +123,9 @@ final class StockLocalErpMovimientosSupport
             $rows = $query->select([
                 'am.id as am_id',
                 'am.articulo_id',
+                'am.deposito_id',
+                'dep.codigo as deposito_codigo',
+                'dep.nombre as deposito_nombre',
                 'am.cantidad as am_cantidad',
                 'am.fecha',
                 'am.concepto',
@@ -117,6 +165,9 @@ final class StockLocalErpMovimientosSupport
                 $out->push((object) [
                     'am_id' => (int) $row->am_id,
                     'articulo_id' => (int) $row->articulo_id,
+                    'deposito_id' => (int) ($row->deposito_id ?? 0),
+                    'deposito_codigo' => trim((string) ($row->deposito_codigo ?? '')),
+                    'deposito_nombre' => trim((string) ($row->deposito_nombre ?? '')),
                     'cantidad' => $cant,
                     'fecha' => $row->fecha,
                     'combinacion_codigo' => $row->combinacion_codigo,

@@ -169,10 +169,12 @@ class FacturacionLocalProcesoController extends Controller
             return response()->json(['ok' => false, 'error' => 'Ingrese un artículo (SKU o ID).'], 422);
         }
 
+        $depositoId = (int) $request->input('deposito_id', 0);
         $resultado = $this->stockConsultaService->consultarPreciosYStock(
             $local,
             $busqueda,
-            StockLocalInformeListadoFiltros::ORIGEN_ERP
+            StockLocalInformeListadoFiltros::ORIGEN_ERP,
+            $depositoId > 0 ? $depositoId : null
         );
         $status = ($resultado['ok'] ?? false) ? 200 : 422;
 

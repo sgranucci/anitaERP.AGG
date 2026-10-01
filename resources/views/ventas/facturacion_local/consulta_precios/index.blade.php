@@ -16,8 +16,9 @@
             <div class="mb-2 mb-md-0" style="max-width: 46rem;">
                 <h2><i class="fa fa-tags mr-2"></i> Precios y stock del art&iacute;culo</h2>
                 <p>
-                    Equivalente Anita <strong>c-articulo</strong>: precio de la lista del local,
-                    resto de listas y stock del ERP.
+                    Precio de la lista del local, resto de listas y stock de los dep&oacute;sitos del local
+                    ({{ \App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport::etiquetaCodigosDepositoLocal() }}).
+                    Si eleg&iacute;s un dep&oacute;sito, muestra solo ese.
                 </p>
             </div>
             <div class="fl-consulta-hero-actions">
@@ -55,7 +56,7 @@
                         <div class="fl-kpi">
                             <div class="fl-kpi-label">Saldo total</div>
                             <div class="fl-kpi-value" id="fl-precios-saldo">—</div>
-                            <div class="fl-kpi-sub" id="fl-precios-saldo-hint">Unidades en ERP (dep&oacute;sito del local)</div>
+                            <div class="fl-kpi-sub" id="fl-precios-saldo-hint">Unidades en dep&oacute;sitos del local</div>
                         </div>
                     </div>
 
@@ -111,7 +112,7 @@
 
                 <div id="fl-precios-vacio" class="fl-empty-state" style="display:none;">
                     <i class="fa fa-tags"></i>
-                    <div id="fl-precios-vacio-txt">Eleg&iacute; un local y un art&iacute;culo para consultar.</div>
+                    <div id="fl-precios-vacio-txt">Eleg&iacute; un local y un art&iacute;culo. Dep&oacute;sito vac&iacute;o muestra los del local.</div>
                 </div>
             </div>
         </div>
@@ -119,6 +120,7 @@
 </div>
 
 @include('includes.stock.modalconsultaarticulo')
+@include('includes.stock.modalconsultadeposito')
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'fl-precios-overlay',
     'tituloId' => 'fl-precios-overlay-titulo',
@@ -141,5 +143,6 @@ window.flConsultaCfg = {
 };
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/facturacion_local/consulta_stock_precios.js') }}"></script>
 @endsection

@@ -8,6 +8,12 @@ DIR="${PADRON_IIBB_BANDEJA_DIR:-/var/www/padrones}"
 USUARIO="${PADRON_IIBB_BANDEJA_USUARIO:-sergio}"
 GRUPO="www-data"
 SHARE="padrones"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+EMPRESA_RAW="$(grep -E '^EMPRESA=' "$ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr '[:lower:]' '[:upper:]')"
+SOLO_CABA=0
+if [[ "$EMPRESA_RAW" == *FERLI* ]]; then
+    SOLO_CABA=1
+fi
 
 if [[ "$(id -u)" -ne 0 ]]; then
     echo "Hay que correrlo como root: sudo bash $0" >&2
@@ -19,24 +25,31 @@ if ! command -v smbd >/dev/null 2>&1; then
     apt-get install -y samba
 fi
 
+if [[ "$SOLO_CABA" -eq 1 ]]; then
+    SUBS=(caba procesando procesando/caba ok ok/caba error error/caba)
+    COMMENT="Padrones IIBB CABA (AGIP)"
+    AYUDA="Pegar el archivo en la carpeta caba (ARDJU….TXT o el RAR de AGIP)."
+else
+    SUBS=(caba cordoba entrerios misiones santafe tucuman/tasas tucuman/coeficientes \
+        procesando procesando/caba procesando/cordoba procesando/entrerios procesando/misiones \
+        procesando/santafe procesando/tucuman/tasas procesando/tucuman/coeficientes \
+        ok ok/caba ok/cordoba ok/entrerios ok/misiones ok/santafe ok/tucuman/tasas ok/tucuman/coeficientes \
+        error error/caba error/cordoba error/entrerios error/misiones error/santafe error/tucuman/tasas error/tucuman/coeficientes)
+    COMMENT="Padrones IIBB (CABA y provincias)"
+    AYUDA="Pegar cada archivo en la carpeta de la provincia (caba, cordoba, entrerios, misiones, santafe, tucuman/tasas, tucuman/coeficientes)."
+fi
+
 install -d -o "$USUARIO" -g "$GRUPO" -m 2770 "$DIR"
-for sub in caba cordoba entrerios misiones santafe tucuman/tasas tucuman/coeficientes \
-    procesando procesando/caba procesando/cordoba procesando/entrerios procesando/misiones \
-    procesando/santafe procesando/tucuman/tasas procesando/tucuman/coeficientes \
-    ok ok/caba ok/cordoba ok/entrerios ok/misiones ok/santafe ok/tucuman/tasas ok/tucuman/coeficientes \
-    error error/caba error/cordoba error/entrerios error/misiones error/santafe error/tucuman/tasas error/tucuman/coeficientes
-do
+for sub in "${SUBS[@]}"; do
     install -d -o "$USUARIO" -g "$GRUPO" -m 2770 "$DIR/$sub"
 done
-chmod 2770 "$DIR" "$DIR"/* "$DIR"/tucuman "$DIR"/tucuman/* "$DIR"/procesando "$DIR"/procesando/* \
-    "$DIR"/ok "$DIR"/ok/* "$DIR"/error "$DIR"/error/* 2>/dev/null || true
 find "$DIR" -type d -exec chmod 2770 {} \;
 
 if ! grep -q "^\[${SHARE}\]" /etc/samba/smb.conf; then
     cat >> /etc/samba/smb.conf <<EOF
 
 [${SHARE}]
-   comment = Padrones IIBB (CABA y provincias)
+   comment = ${COMMENT}
    path = ${DIR}
    browseable = yes
    read only = no
@@ -58,4 +71,4 @@ echo "Share listo: \\\\\\\\$(hostname)\\\\${SHARE}"
 echo "Si ${USUARIO} todavía no tiene clave de Samba:"
 echo "  sudo smbpasswd -a ${USUARIO}"
 echo "Desde Windows: Explorador → \\\\\\\\$(hostname)\\\\${SHARE}"
-echo "Pegar cada archivo en la carpeta de la provincia (caba, cordoba, entrerios, misiones, santafe, tucuman/tasas, tucuman/coeficientes)."
+echo "$AYUDA"
