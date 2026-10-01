@@ -155,6 +155,9 @@ final class IngresosBrutosPercepcionesDatosService
             IngresosBrutosProvinciaAnitaSupport::esBuenosAires($provincia) ? 'Buenos Aires' : null,
             IngresosBrutosProvinciaAnitaSupport::esBuenosAires($provincia) ? 'BAI' : null,
             IngresosBrutosProvinciaAnitaSupport::esBuenosAires($provincia) ? 'ARBA' : null,
+            IngresosBrutosProvinciaAnitaSupport::esCaba($provincia) ? 'CABA' : null,
+            IngresosBrutosProvinciaAnitaSupport::esCaba($provincia) ? 'Capital Federal' : null,
+            IngresosBrutosProvinciaAnitaSupport::esCaba($provincia) ? 'AGIP' : null,
         ]));
 
         $ventas = Venta::query()

@@ -5,7 +5,9 @@
         || (($filtros['modo'] ?? ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA)
             !== ProveedorCuentacorrienteReporteFiltros::MODO_FICHA);
     $stats = $resultado['stats'] ?? [];
-    $colspan = 12;
+    $soloTotalesDeuda = $modoDeuda && ! empty($filtros['solo_totales']);
+    $totalesReporte = $resultado['totales'] ?? [];
+    $colspan = $soloTotalesDeuda ? 2 : 12;
 @endphp
 <table>
     @if ($filaLogo)
@@ -35,6 +37,40 @@
             </td>
         </tr>
     @endif
+    @if ($soloTotalesDeuda)
+    <thead>
+        <tr>
+            <th>Proveedor</th>
+            <th>Saldo</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach ($filas as $fila)
+            @php $tipo = $fila['tipo'] ?? ''; @endphp
+            @if ($tipo === 'header_proveedor')
+                @continue
+            @endif
+            @if ($tipo === 'header_empresa')
+                <tr>
+                    <td>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</td>
+                    <td></td>
+                </tr>
+                @continue
+            @endif
+            @if ($tipo !== 'total_proveedor')
+                @continue
+            @endif
+            <tr>
+                <td>{{ $fila['proveedor_nombre'] ?? '' }}</td>
+                <td>{{ isset($fila['saldo_pendiente']) ? number_format((float) $fila['saldo_pendiente'], 2, '.', '') : '' }}</td>
+            </tr>
+        @endforeach
+        <tr>
+            <td>Total deuda pendiente</td>
+            <td>{{ number_format((float) ($totalesReporte['pendiente'] ?? 0), 2, '.', '') }}</td>
+        </tr>
+    </tbody>
+    @else
     <thead>
         <tr>
             <th>Código</th>
@@ -111,4 +147,5 @@
             </tr>
         @endforeach
     </tbody>
+    @endif
 </table>

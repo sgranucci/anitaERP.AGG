@@ -169,7 +169,7 @@ function buscar_datos_cheque_cartera() {
         data: {
             consulta: consulta,
             empresa_id: empresaId || '',
-            limite: ctx.limite || 80
+            limite: ctx.limite || 400
         }
     }).done(function (resp) {
         if (seq !== __chequeCarteraReqSeq) {

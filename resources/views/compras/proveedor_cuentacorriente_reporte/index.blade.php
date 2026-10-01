@@ -113,7 +113,7 @@
                                 <input type="checkbox" class="custom-control-input" name="solo_totales" id="solo_totales" value="1"
                                     @checked(! empty($filtros['solo_totales']))>
                                 <label class="custom-control-label" for="solo_totales">
-                                    Imprimir solo el total de cada proveedor (sin detalle de comprobantes)
+                                    Sin detalle de comprobantes. En deuda queda el nombre, el saldo y el total general al final
                                 </label>
                             </div>
                         </div>
@@ -240,6 +240,11 @@
                         }
                         #tabla-cc-proveedores-reporte .cc-rep-total td { font-size: 0.92rem; }
                         #tabla-cc-proveedores-reporte .cc-rep-total .text-right { font-size: 0.95rem; }
+                        #tabla-cc-proveedores-reporte .cc-rep-total-general {
+                            background: #aed6f1;
+                            font-weight: 700;
+                            color: #1b4f72;
+                        }
                         #tabla-cc-proveedores-reporte .cc-rep-apl { color: #555; font-style: italic; }
                         #tabla-cc-proveedores-reporte .cc-rep-saldo-ant { background: #f4f6f7; }
                         #tabla-cc-proveedores-reporte .text-right { text-align: right; }
@@ -250,6 +255,8 @@
                             @include('compras.proveedor_cuentacorriente_reporte.partials.tabla_datos', [
                                 'filas' => $filasVista ?? [],
                                 'filtros' => $filtros,
+                                'totales' => $resultado['totales'] ?? [],
+                                'mostrar_total_general' => true,
                                 'mostrarLinks' => true,
                                 'puede_ver_proveedor' => $puede_ver_proveedor ?? false,
                                 'puede_ver_comprobante' => $puede_ver_comprobante ?? false,

@@ -110,7 +110,7 @@
                                         <option value="{{ $tipo }}">{{ \App\Support\Compras\ComprobanteProveedorTipoTesoreria::etiqueta($tipo) }}</option>
                                     @endforeach
                                 </select>
-                                <small class="text-muted d-block mt-1">Clasifica fondo fijo o gasto bancario. No cambia las cuentas del asiento.</small>
+                                <small class="text-muted d-block mt-1">Clasifica fondo fijo, gasto bancario u otros / varios. No cambia las cuentas del asiento.</small>
                             </div>
                             <div class="form-group col-md-5 mb-2">
                                 <label class="ie-cp-label" for="ie-cp-tipo-abreviatura">Tipo de comprobante</label>

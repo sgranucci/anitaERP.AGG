@@ -44,4 +44,22 @@ final class IngresosBrutosProvinciaAnitaSupport
         return in_array((int) ($provincia->codigoexterno ?? 0), [2], true)
             || in_array((int) ($provincia->jurisdiccion ?? 0), [902], true);
     }
+
+    public static function esCaba(?Provincia $provincia): bool
+    {
+        if ($provincia === null) {
+            return false;
+        }
+        $nombre = mb_strtolower(trim((string) $provincia->nombre));
+        if (
+            str_contains($nombre, 'caba')
+            || str_contains($nombre, 'capital federal')
+            || str_contains($nombre, 'ciudad aut')
+        ) {
+            return true;
+        }
+
+        return in_array((int) ($provincia->jurisdiccion ?? 0), [901], true)
+            || in_array((int) ($provincia->codigo ?? 0), [901], true);
+    }
 }

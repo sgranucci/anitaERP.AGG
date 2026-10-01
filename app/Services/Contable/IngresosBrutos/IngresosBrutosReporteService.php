@@ -7,6 +7,7 @@ namespace App\Services\Contable\IngresosBrutos;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Provincia;
 use App\Repositories\Contable\Iibb_Presentacion_ConfigRepositoryInterface;
+use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoAgipSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosListadoFiltros;
 use Illuminate\Support\Facades\Cache;
@@ -81,6 +82,7 @@ final class IngresosBrutosReporteService
                 'totales' => $resultado['totales'] ?? [],
                 'conciliacion' => $resultado['conciliacion'] ?? [],
                 'nombre_archivo' => $resultado['nombre_archivo'] ?? '',
+                'nombre_archivo_nc' => $resultado['nombre_archivo_nc'] ?? '',
                 'mensaje_config' => $resultado['mensaje_config'] ?? null,
                 'advertencia_datos' => $resultado['advertencia_datos'] ?? null,
             ],
@@ -104,14 +106,17 @@ final class IngresosBrutosReporteService
         $fechaDesde = (string) ($filtros['fecha_desde'] ?? '');
         $fechaHasta = (string) ($filtros['fecha_hasta'] ?? '');
 
-        $config = $this->configRepository->findActivoPorProvinciaTipo($provinciaId, $tipo);
+        $tipoConfig = IngresosBrutosListadoFiltros::tipoConfig($tipo);
+        $config = $this->configRepository->findActivoPorProvinciaTipo($provinciaId, $tipoConfig);
         if ($config === null) {
             return [
                 'registros' => [],
                 'totales' => ['registros' => 0, 'importe' => 0.0, 'base_calculo' => 0.0],
                 'conciliacion' => ['habilitada' => false, 'items' => []],
                 'archivo_arba' => '',
+                'archivo_nc' => '',
                 'nombre_archivo' => 'iibb.txt',
+                'nombre_archivo_nc' => '',
                 'mensaje_config' => 'No hay configuración activa para la provincia y tipo seleccionados. Cargue Configuración IIBB.',
                 'advertencia_datos' => null,
                 'desde_cache' => false,
@@ -125,7 +130,9 @@ final class IngresosBrutosReporteService
                 'totales' => ['registros' => 0, 'importe' => 0.0, 'base_calculo' => 0.0],
                 'conciliacion' => ['habilitada' => false, 'items' => []],
                 'archivo_arba' => '',
+                'archivo_nc' => '',
                 'nombre_archivo' => 'iibb.txt',
+                'nombre_archivo_nc' => '',
                 'mensaje_config' => 'Provincia no encontrada.',
                 'advertencia_datos' => null,
                 'desde_cache' => false,
@@ -133,7 +140,7 @@ final class IngresosBrutosReporteService
         }
 
         $advertenciaDatos = null;
-        if ($tipo === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES) {
+        if ($tipoConfig === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES) {
             $registros = $this->percepcionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
         } else {
             $registros = $this->retencionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
@@ -157,7 +164,7 @@ final class IngresosBrutosReporteService
         if (
             $advertenciaDatos === null
             && $totales['registros'] === 0
-            && $tipo === IngresosBrutosListadoFiltros::TIPO_RETENCIONES
+            && $tipoConfig === IngresosBrutosListadoFiltros::TIPO_RETENCIONES
         ) {
             $totalMayor = 0.0;
             foreach ($conciliacion['items'] ?? [] as $item) {
@@ -169,26 +176,44 @@ final class IngresosBrutosReporteService
             }
         }
 
-        $archivo = IngresosBrutosFormatoArbaSupport::generarArchivo($registros, $tipo);
-
+        $esRetencion = IngresosBrutosListadoFiltros::esRetencion($tipo);
         $empresa = Empresa::query()->find($empresaId);
         $cuitAgente = IngresosBrutosFormatoArbaSupport::normalizarCuit((string) ($empresa?->nroinscripcion ?? ''));
-        $actividad = (int) ($config->codigo_actividad_arba
-            ?? ($tipo === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES
-                ? IngresosBrutosFormatoArbaSupport::ACTIVIDAD_PERCEPCIONES
-                : IngresosBrutosFormatoArbaSupport::ACTIVIDAD_RETENCIONES));
-        $quincena = IngresosBrutosListadoFiltros::quincenaLote((int) ($filtros['liquidacion'] ?? 0));
         $periodo = (string) ($filtros['periodo'] ?? date('Ym'));
-        $lote = $this->siguienteLote($empresaId, $periodo, $actividad, $quincena);
-        $nombre = IngresosBrutosFormatoArbaSupport::nombreLote($cuitAgente, $periodo, $quincena, $actividad, $lote);
+        $archivos = $this->armarArchivos($registros, $tipo, $esRetencion);
+        if ($archivos['cantidad_nc'] > 0) {
+            $avisoNc = 'Hay '.$archivos['cantidad_nc'].' nota'
+                .($archivos['cantidad_nc'] === 1 ? '' : 's').' de crédito. AGIP las importa en un archivo aparte.'
+                .' El comprobante de origen no viene en el puente de ventas: se informó el número de la propia nota.'
+                .' Si e-ARCIBA lo rechaza, hay que completar la factura aplicada.';
+            $advertenciaDatos = $advertenciaDatos === null
+                ? $avisoNc
+                : $advertenciaDatos.' '.$avisoNc;
+        }
+
+        if (IngresosBrutosListadoFiltros::esPresentacionAgip($tipo)) {
+            $nombre = IngresosBrutosFormatoAgipSupport::nombreArchivo($cuitAgente, $periodo, $esRetencion);
+            $nombreNc = IngresosBrutosFormatoAgipSupport::nombreArchivo($cuitAgente, $periodo, $esRetencion, true);
+        } else {
+            $actividad = (int) ($config->codigo_actividad_arba
+                ?? ($tipoConfig === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES
+                    ? IngresosBrutosFormatoArbaSupport::ACTIVIDAD_PERCEPCIONES
+                    : IngresosBrutosFormatoArbaSupport::ACTIVIDAD_RETENCIONES));
+            $quincena = IngresosBrutosListadoFiltros::quincenaLote((int) ($filtros['liquidacion'] ?? 0));
+            $lote = $this->siguienteLote($empresaId, $periodo, $actividad, $quincena);
+            $nombre = IngresosBrutosFormatoArbaSupport::nombreLote($cuitAgente, $periodo, $quincena, $actividad, $lote);
+            $nombreNc = '';
+        }
 
         return [
             'registros' => $registros,
             'totales' => $totales,
             'config' => $config,
             'conciliacion' => $conciliacion,
-            'archivo_arba' => $archivo,
+            'archivo_arba' => $archivos['principal'],
+            'archivo_nc' => $archivos['notas_credito'],
             'nombre_archivo' => $nombre,
+            'nombre_archivo_nc' => $nombreNc,
             'mensaje_config' => null,
             'advertencia_datos' => $advertenciaDatos,
             'desde_cache' => false,
@@ -204,17 +229,41 @@ final class IngresosBrutosReporteService
     {
         $registros = $pack['registros'] ?? [];
         $tipo = (string) ($filtros['tipo'] ?? IngresosBrutosListadoFiltros::TIPO_RETENCIONES);
+        $esRetencion = IngresosBrutosListadoFiltros::esRetencion($tipo);
+        $archivos = $this->armarArchivos($registros, $tipo, $esRetencion);
 
         return [
             'registros' => $registros,
             'totales' => $pack['totales'] ?? [],
             'config' => null,
             'conciliacion' => $pack['conciliacion'] ?? [],
-            'archivo_arba' => IngresosBrutosFormatoArbaSupport::generarArchivo($registros, $tipo),
+            'archivo_arba' => $archivos['principal'],
+            'archivo_nc' => $archivos['notas_credito'],
             'nombre_archivo' => (string) ($pack['nombre_archivo'] ?? 'iibb.txt'),
+            'nombre_archivo_nc' => (string) ($pack['nombre_archivo_nc'] ?? ''),
             'mensaje_config' => $pack['mensaje_config'] ?? null,
             'advertencia_datos' => $pack['advertencia_datos'] ?? null,
             'desde_cache' => true,
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $registros
+     * @return array{principal: string, notas_credito: string, cantidad_nc: int}
+     */
+    private function armarArchivos(array $registros, string $tipo, bool $esRetencion): array
+    {
+        if (IngresosBrutosListadoFiltros::esPresentacionAgip($tipo)) {
+            return IngresosBrutosFormatoAgipSupport::generar($registros, $esRetencion);
+        }
+
+        return [
+            'principal' => IngresosBrutosFormatoArbaSupport::generarArchivo(
+                $registros,
+                IngresosBrutosListadoFiltros::tipoConfig($tipo),
+            ),
+            'notas_credito' => '',
+            'cantidad_nc' => 0,
         ];
     }
 

@@ -16,7 +16,7 @@ return [
 	"EMPLEADO_FABRICA" => "48",
 	"OPERACION_INICIO" => "1",
 	"OPERACION_FIN" => "2",
-	"DESDE_MEDIDA" => "21",
+	"DESDE_MEDIDA" => "18",
 	"HASTA_MEDIDA" => "47",
 	"DESDE_INTERVALO1" => "16",
 	"HASTA_INTERVALO1" => "26",

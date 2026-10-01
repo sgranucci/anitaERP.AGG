@@ -65,7 +65,7 @@
                 7 — Percepciones
             </option>
         </select>
-        <small class="form-text text-muted">Actividad en el nombre de lote ER-… (Anita arma_lote_arba).</small>
+        <small class="form-text text-muted">Solo el lote de ARBA (ER-…). CABA (AGIP) no usa este código. Para CABA, la provincia de esta configuración tiene que ser Capital Federal y la empresa tiene que tener el tilde en Agentes IIBB.</small>
     </div>
 </div>
 <div class="form-group row">

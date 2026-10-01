@@ -90,6 +90,7 @@ class ProveedorCuentacorrienteReporteService
 
         $enPesos = ($filtros['expresion'] ?? '') === ProveedorCuentacorrienteReporteFiltros::EXPRESION_PESOS;
         $soloTotales = ! empty($filtros['solo_totales']);
+        $compactoDeuda = $soloTotales && $modo !== ProveedorCuentacorrienteReporteFiltros::MODO_FICHA;
         $forzarDia = ($filtros['cotizacion_modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::COTIZACION_DIA;
         $conteoCcPorComprobante = $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA
             ? []
@@ -111,14 +112,16 @@ class ProveedorCuentacorrienteReporteService
             $proveedorNombre = (string) ($primero->proveedores->nombre ?? '');
             $nombreEmpresa = $this->nombreEmpresaUnicaGrupo($movsProveedor);
 
-            $filas[] = [
-                'tipo' => 'header_proveedor',
-                'proveedor_id' => (int) $proveedorId,
-                'proveedor_codigo' => $proveedorCodigo,
-                'proveedor_nombre' => $proveedorNombre,
-                'nombreempresa' => $nombreEmpresa,
-                'empresa_id' => (int) ($primero->empresa_id ?? 0),
-            ];
+            if (! $compactoDeuda) {
+                $filas[] = [
+                    'tipo' => 'header_proveedor',
+                    'proveedor_id' => (int) $proveedorId,
+                    'proveedor_codigo' => $proveedorCodigo,
+                    'proveedor_nombre' => $proveedorNombre,
+                    'nombreempresa' => $nombreEmpresa,
+                    'empresa_id' => (int) ($primero->empresa_id ?? 0),
+                ];
+            }
 
             $saldoCorrido = 0.0;
             $saldoCorridoPesos = 0.0;

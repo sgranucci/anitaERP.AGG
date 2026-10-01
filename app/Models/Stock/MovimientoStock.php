@@ -26,7 +26,10 @@ class MovimientoStock extends Model implements Auditable
 
 	public function articulos_movimiento()
 	{
-		return $this->hasMany(Articulo_Movimiento::class, 'movimientostock_id')->with('articulo_movimiento_talles')->with('combinaciones');
+		return $this->hasMany(Articulo_Movimiento::class, 'movimientostock_id')
+			->orderBy('id')
+			->with('articulo_movimiento_talles')
+			->with('combinaciones');
 	}
 
 	public function tipotransaccion_stock()

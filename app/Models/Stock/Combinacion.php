@@ -5,7 +5,7 @@ namespace App\Models\Stock;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Hash;
-use Intervention\Image\Facades\Image;
+use Intervention\Image\Laravel\Facades\Image;
 use Illuminate\Support\Str;
 use App\ApiAnita;
 use App\Models\Seguridad\Usuario;
@@ -98,16 +98,17 @@ class Combinacion extends Model implements Auditable
             if ($actual) {
                 Storage::disk('public')->delete("imagenes/fotos_articulos/$actual");
             }
-            $imageName = $nombre_foto . '.jpg';
-            $imagen = Image::make($foto)->encode('jpg', 75);
-            $imagen->resize(300, 300, function ($constraint) {
-                $constraint->upsize();
-            });
-            Storage::disk('public')->put("imagenes/fotos_articulos/$imageName", $imagen->stream());
+            $imageName = $nombre_foto.'.jpg';
+            $imagen = Image::decode($foto)->resizeDown(300, 300);
+            Storage::disk('public')->put(
+                "imagenes/fotos_articulos/$imageName",
+                (string) $imagen->encodeUsingFileExtension('jpg', quality: 75)
+            );
+
             return $imageName;
-        } else {
-            return false;
         }
+
+        return false;
     }
 
     public function sincronizarConAnita(){

@@ -25,6 +25,7 @@ use App\Support\Stock\MovimientoStockLoteNumeracionSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
 use App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport;
+use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
 use Auth;
 use DB;
 use Illuminate\Support\Facades\Log;
@@ -126,6 +127,13 @@ class MovimientoStockService
 				$checkCanje = MovimientoStockCanjeSupport::validarLineas($data);
 				if (! $checkCanje['ok']) {
 					throw new \Exception((string) $checkCanje['mensaje']);
+				}
+			}
+
+			if ($funcion === 'update' && $id) {
+				$signoPata = TransferenciaMercaderiaSignoSupport::signoCantidadDeMovimientoVinculado((int) $id);
+				if ($signoPata !== null) {
+					$data['signo_cantidad'] = $signoPata;
 				}
 			}
 

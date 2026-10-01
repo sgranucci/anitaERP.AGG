@@ -383,7 +383,7 @@ class ChequeController extends Controller
         $filas = ChequeCarteraConsultaSupport::consultar([
             'consulta' => (string) $request->input('consulta', ''),
             'empresa_id' => $empresaId > 0 ? $empresaId : null,
-            'limite' => (int) $request->input('limite', 80),
+            'limite' => (int) $request->input('limite', 400),
         ]);
 
         $puedeAbm = can('editar-cheque', false) || can('listar-cheque', false);

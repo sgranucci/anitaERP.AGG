@@ -29,8 +29,8 @@ class Iibb_Presentacion_Config extends Model
 
     /** @var array<string, string> */
     public static array $enumTipo = [
-        'retenciones' => 'Retenciones ARBA',
-        'percepciones' => 'Percepciones ARBA',
+        'retenciones' => 'Retenciones',
+        'percepciones' => 'Percepciones',
     ];
 
     /** @var array<string, string> */

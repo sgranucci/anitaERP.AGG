@@ -147,6 +147,8 @@ class Articulo_MovimientoService
 						$this->guardaArticuloMovimientoTalle($dataMovimiento['pedido_combinacion_id'], $data);
 					}
 				}
+
+				return $articulo_movimiento;
 			}
 			else
 			{

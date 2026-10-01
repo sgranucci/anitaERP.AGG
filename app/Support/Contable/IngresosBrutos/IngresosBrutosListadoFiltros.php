@@ -12,10 +12,16 @@ final class IngresosBrutosListadoFiltros
 
     public const TIPO_PERCEPCIONES = 'percepciones';
 
+    public const TIPO_RETENCIONES_CABA = 'retenciones_caba';
+
+    public const TIPO_PERCEPCIONES_CABA = 'percepciones_caba';
+
     /** @var array<string, string> */
     public const TIPOS = [
         self::TIPO_RETENCIONES => 'Retenciones ARBA',
         self::TIPO_PERCEPCIONES => 'Percepciones ARBA',
+        self::TIPO_RETENCIONES_CABA => 'Retenciones CABA (AGIP)',
+        self::TIPO_PERCEPCIONES_CABA => 'Percepciones CABA (AGIP)',
     ];
 
     /** Liquidación: 0=rango libre, 1=1ra quincena, 2=2da quincena, 3=mes completo. */
@@ -106,6 +112,54 @@ final class IngresosBrutosListadoFiltros
             2 => 2,
             default => 0,
         };
+    }
+
+    public static function esPresentacionAgip(string $tipo): bool
+    {
+        return in_array($tipo, [self::TIPO_RETENCIONES_CABA, self::TIPO_PERCEPCIONES_CABA], true);
+    }
+
+    public static function esRetencion(string $tipo): bool
+    {
+        return in_array($tipo, [self::TIPO_RETENCIONES, self::TIPO_RETENCIONES_CABA], true);
+    }
+
+    /**
+     * Tipo guardado en iibb_presentacion_config (la provincia define el fisco).
+     */
+    public static function tipoConfig(string $tipo): string
+    {
+        return self::esRetencion($tipo) ? self::TIPO_RETENCIONES : self::TIPO_PERCEPCIONES;
+    }
+
+    /**
+     * CABA (AGIP) es una DDJJ mensual. Buenos Aires queda en la provincia 902.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function alinearProvincia(array $filtros): array
+    {
+        $tipo = (string) ($filtros['tipo'] ?? '');
+        if ($tipo === '') {
+            return $filtros;
+        }
+
+        $jurisdiccion = self::esPresentacionAgip($tipo) ? 901 : 902;
+        $provincia = IngresosBrutosAgenteOpcionesSupport::datosProvincia($jurisdiccion);
+        if ($provincia !== null) {
+            $filtros['provincia_id'] = $provincia['id'];
+        }
+
+        if (self::esPresentacionAgip($tipo)) {
+            $filtros['liquidacion'] = 3;
+            $periodo = (string) ($filtros['periodo'] ?? date('Ym'));
+            [$desde, $hasta] = self::rangoDesdeLiquidacion($periodo, 3);
+            $filtros['fecha_desde'] = $desde;
+            $filtros['fecha_hasta'] = $hasta;
+        }
+
+        return $filtros;
     }
 
     /**

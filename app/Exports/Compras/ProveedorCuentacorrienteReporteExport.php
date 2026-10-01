@@ -16,6 +16,7 @@ use Maatwebsite\Excel\Concerns\WithEvents;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
@@ -37,6 +38,12 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
 
     private int $filasMeta = 2;
 
+    private bool $listadoCompacto = false;
+
+    private string $colUltima = self::COL_ULTIMA;
+
+    private int $filaTotalGeneralExcel = 0;
+
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
@@ -52,6 +59,16 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
         private array $resultado = [],
         private array $filtros = [],
     ) {
+        $modoDeuda = ($this->filtros['modo'] ?? '') !== ProveedorCuentacorrienteReporteFiltros::MODO_FICHA;
+        $this->listadoCompacto = $modoDeuda && ! empty($this->filtros['solo_totales']);
+        if ($this->listadoCompacto) {
+            $this->filas = array_values(array_filter(
+                $this->filas,
+                static fn (array $fila): bool => ($fila['tipo'] ?? '') !== 'header_proveedor'
+            ));
+            $this->colUltima = 'B';
+        }
+
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(
             collect($this->filas)->map(fn ($f) => (object) ['nombreempresa' => $f['nombreempresa'] ?? ''])
         );
@@ -70,6 +87,9 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
         $this->filaTituloExcel = $offsetLogo + 1;
         $this->filaCabecerasExcel = $offsetLogo + $this->filasMeta + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
+        $this->filaTotalGeneralExcel = $this->listadoCompacto
+            ? $this->filaPrimeraDatosExcel + count($this->filas)
+            : 0;
     }
 
     public function view(): View
@@ -89,6 +109,13 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
 
     public function columnFormats(): array
     {
+        if ($this->listadoCompacto) {
+            return [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'B' => '#,##0.00',
+            ];
+        }
+
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
@@ -120,6 +147,13 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
 
     public function columnWidths(): array
     {
+        if ($this->listadoCompacto) {
+            return [
+                'A' => 42,
+                'B' => 18,
+            ];
+        }
+
         return [
             'A' => 10,
             'B' => 28,
@@ -146,7 +180,7 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                $colUltima = self::COL_ULTIMA;
+                $colUltima = $this->colUltima;
 
                 if ($this->hayFilaLogos) {
                     $sheet->getRowDimension(1)->setRowHeight(54);
@@ -205,12 +239,48 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
                         'color' => ['rgb' => 'F9E79F'],
                     ],
                 ];
-                foreach ($this->filas as $idx => $fila) {
-                    if (($fila['tipo'] ?? '') !== 'total_proveedor') {
-                        continue;
+                if ($this->listadoCompacto) {
+                    foreach ($this->filas as $idx => $fila) {
+                        if (($fila['tipo'] ?? '') !== 'total_proveedor') {
+                            continue;
+                        }
+                        $excelRow = $this->filaPrimeraDatosExcel + (int) $idx;
+                        $sheet->setCellValueExplicit(
+                            'B'.$excelRow,
+                            (float) ($fila['saldo_pendiente'] ?? 0),
+                            DataType::TYPE_NUMERIC
+                        );
+                        $sheet->getStyle('B'.$excelRow)->getNumberFormat()->setFormatCode('#,##0.00');
+                        $sheet->getStyle('B'.$excelRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                     }
-                    $excelRow = $this->filaPrimeraDatosExcel + (int) $idx;
-                    $sheet->getStyle('A'.$excelRow.':'.$colUltima.$excelRow)->applyFromArray($estiloTotalCorte);
+                    $totalRow = $this->filaTotalGeneralExcel;
+                    $sheet->setCellValueExplicit(
+                        'B'.$totalRow,
+                        (float) ($this->resultado['totales']['pendiente'] ?? 0),
+                        DataType::TYPE_NUMERIC
+                    );
+                    $sheet->getStyle('A'.$totalRow.':B'.$totalRow)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'color' => ['rgb' => '1B4F72'],
+                            'size' => 11,
+                            'name' => 'Arial',
+                        ],
+                        'fill' => [
+                            'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                            'color' => ['rgb' => 'AED6F1'],
+                        ],
+                    ]);
+                    $sheet->getStyle('B'.$totalRow)->getNumberFormat()->setFormatCode('#,##0.00');
+                    $sheet->getStyle('B'.$totalRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+                } else {
+                    foreach ($this->filas as $idx => $fila) {
+                        if (($fila['tipo'] ?? '') !== 'total_proveedor') {
+                            continue;
+                        }
+                        $excelRow = $this->filaPrimeraDatosExcel + (int) $idx;
+                        $sheet->getStyle('A'.$excelRow.':'.$colUltima.$excelRow)->applyFromArray($estiloTotalCorte);
+                    }
                 }
 
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);

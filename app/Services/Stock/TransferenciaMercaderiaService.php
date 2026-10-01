@@ -3,6 +3,8 @@
 namespace App\Services\Stock;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Articulo_Movimiento;
+use App\Models\Stock\Articulo_Movimiento_Talle;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Deposito_Administrador;
 use App\Models\Stock\MovimientoStock;
@@ -15,6 +17,7 @@ use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
 use App\Support\Configuracion\OperacionPublicaTokenSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\ArticuloSeleccionOperativaSupport;
@@ -1479,6 +1482,10 @@ class TransferenciaMercaderiaService
      * Tras editar el movimiento de stock vinculado a una TM, alinea cantidad_origen/destino
      * con el movimiento (y suma de talles Ferli si hay).
      */
+    /**
+     * La pantalla de edición regraba una sola pata. Esta rutina copia esa grilla
+     * a las líneas del comprobante y a la otra pata (alta, cambio y baja).
+     */
     public function sincronizarCantidadesDesdeMovimientoStock(int $movimientoId): void
     {
         if ($movimientoId <= 0) {
@@ -1504,49 +1511,314 @@ class TransferenciaMercaderiaService
             return;
         }
 
+        $otroId = $esSalida
+            ? (int) ($transferencia->movimientostock_entrada_id ?? 0)
+            : (int) ($transferencia->movimientostock_salida_id ?? 0);
+        $otro = $otroId > 0
+            ? MovimientoStock::query()
+                ->with(['articulos_movimiento.articulo_movimiento_talles'])
+                ->find($otroId)
+            : null;
+
         $ams = $mov->articulos_movimiento->values();
-        foreach ($transferencia->articulos as $idx => $linea) {
-            $articuloIdEsperado = $esSalida
-                ? (int) $linea->articulo_origen_id
-                : (int) $linea->articulo_destino_id;
-            $am = $ams[$idx] ?? null;
-            if ($am === null || (int) $am->articulo_id !== $articuloIdEsperado) {
-                $am = $ams->first(static fn ($row) => (int) $row->articulo_id === $articuloIdEsperado);
-            }
-            if ($am === null) {
-                continue;
-            }
+        $lineas = $transferencia->articulos->values();
+        $otros = $otro?->articulos_movimiento->values() ?? collect();
+        $plantillaOtro = $otros->first();
+        $idsOtroConservar = [];
+        $idsLineaConservar = [];
 
-            $cant = abs((float) $am->cantidad);
-            $sumaTalles = 0.0;
-            foreach ($am->articulo_movimiento_talles ?? [] as $talle) {
-                $sumaTalles += abs((float) ($talle->cantidad ?? 0));
-            }
-            if ($sumaTalles > 0.000001) {
-                $cant = $sumaTalles;
-            }
-            if ($cant <= 0.000001) {
-                continue;
-            }
+        DB::transaction(function () use (
+            $transferencia,
+            $esSalida,
+            $ams,
+            $lineas,
+            $otros,
+            $otro,
+            $plantillaOtro,
+            &$idsOtroConservar,
+            &$idsLineaConservar
+        ) {
+            foreach ($ams as $idx => $am) {
+                $cant = $this->cantidadAbsolutaMovimiento($am);
+                if ($cant <= 0.000001) {
+                    continue;
+                }
 
-            if ($esSalida) {
-                $linea->cantidad_origen = $cant;
-                if (! (bool) ($linea->fl_conversion_formula ?? false)) {
-                    $linea->cantidad_destino = $cant;
-                } else {
-                    $coef = (float) ($linea->coeficienteconversion ?? 1.0);
-                    if ($coef <= 0) {
-                        $coef = 1.0;
+                $linea = $lineas->get($idx);
+                $articuloEditado = (int) $am->articulo_id;
+                $mismoArticulo = $linea !== null && $articuloEditado === (
+                    $esSalida ? (int) $linea->articulo_origen_id : (int) $linea->articulo_destino_id
+                );
+
+                if ($linea === null || ! $mismoArticulo) {
+                    $resuelta = $this->resolverLineaDesdeMovimientoEditado($transferencia, $am, $esSalida, $cant);
+                    if ($linea === null) {
+                        $linea = new Transferencia_Mercaderia_Articulo([
+                            'transferencia_mercaderia_id' => $transferencia->id,
+                        ]);
+                        $lineas->push($linea);
                     }
-                    $linea->cantidad_destino = round($cant * $coef, 6);
+                    $linea->fill($resuelta);
+                } else {
+                    $this->aplicarCantidadEnLineaTransferencia($linea, $esSalida, $cant);
                 }
-            } else {
-                $linea->cantidad_destino = $cant;
-                if (! (bool) ($linea->fl_conversion_formula ?? false)) {
-                    $linea->cantidad_origen = $cant;
+
+                $linea->item = $idx + 1;
+                $np = trim((string) ($am->numeroparte ?? ''));
+                if ($np !== '') {
+                    $linea->numeroparte = $np;
+                }
+                $linea->transferencia_mercaderia_id = $transferencia->id;
+                $linea->save();
+                $idsLineaConservar[] = (int) $linea->id;
+
+                if ($otro === null) {
+                    continue;
+                }
+
+                $amOtro = $otros->get($idx);
+                $amOtro = $this->reflejarLineaEnPataContraparte(
+                    $transferencia,
+                    $otro,
+                    $am,
+                    $linea,
+                    $amOtro,
+                    $plantillaOtro,
+                    ! $esSalida
+                );
+                if ($amOtro !== null) {
+                    $idsOtroConservar[] = (int) $amOtro->id;
+                    $otros[$idx] = $amOtro;
                 }
             }
-            $linea->save();
+
+            $sobran = Transferencia_Mercaderia_Articulo::query()
+                ->where('transferencia_mercaderia_id', $transferencia->id);
+            if ($idsLineaConservar !== []) {
+                $sobran->whereNotIn('id', $idsLineaConservar);
+            }
+            foreach ($sobran->get() as $sobra) {
+                $sobra->delete();
+            }
+
+            if ($otro !== null) {
+                $qSobran = Articulo_Movimiento::query()->where('movimientostock_id', $otro->id);
+                if ($idsOtroConservar !== []) {
+                    $qSobran->whereNotIn('id', $idsOtroConservar);
+                }
+                EloquentAuditDeleteSupport::each($qSobran);
+            }
+        });
+    }
+
+    private function cantidadAbsolutaMovimiento(Articulo_Movimiento $am): float
+    {
+        $cant = abs((float) $am->cantidad);
+        $sumaTalles = 0.0;
+        foreach ($am->articulo_movimiento_talles ?? [] as $talle) {
+            $sumaTalles += abs((float) ($talle->cantidad ?? 0));
+        }
+        if ($sumaTalles > 0.000001) {
+            $cant = $sumaTalles;
+        }
+
+        return $cant;
+    }
+
+    private function aplicarCantidadEnLineaTransferencia(
+        Transferencia_Mercaderia_Articulo $linea,
+        bool $esSalida,
+        float $cant
+    ): void {
+        if ($esSalida) {
+            $linea->cantidad_origen = $cant;
+            if (! (bool) ($linea->fl_conversion_formula ?? false)) {
+                $linea->cantidad_destino = $cant;
+            } else {
+                $coef = (float) ($linea->coeficienteconversion ?? 1.0);
+                if ($coef <= 0) {
+                    $coef = 1.0;
+                }
+                $linea->cantidad_destino = round($cant * $coef, 6);
+            }
+
+            return;
+        }
+
+        $linea->cantidad_destino = $cant;
+        if (! (bool) ($linea->fl_conversion_formula ?? false)) {
+            $linea->cantidad_origen = $cant;
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverLineaDesdeMovimientoEditado(
+        Transferencia_Mercaderia $transferencia,
+        Articulo_Movimiento $am,
+        bool $esSalida,
+        float $cant
+    ): array {
+        $articulo = Articulo::query()->findOrFail((int) $am->articulo_id);
+        $precio = (float) ($am->costo ?? $am->precio ?? 0);
+        $precio = $precio > 0 ? $precio : null;
+
+        if ($esSalida && (int) ($transferencia->bien_uso_destino_id ?? 0) > 0) {
+            return TransferenciaMercaderiaLineaSupport::resolverLineaParaBienUso($articulo, $cant, $precio);
+        }
+
+        if ($esSalida && (int) ($transferencia->deposito_destino_id ?? 0) > 0) {
+            $depositoEntrada = Depmae::query()->findOrFail((int) $transferencia->deposito_destino_id);
+
+            return TransferenciaMercaderiaLineaSupport::resolverLinea(
+                $articulo,
+                $depositoEntrada,
+                $cant,
+                (int) ($transferencia->empresa_id ?? 0) ?: null,
+                $precio
+            );
+        }
+
+        $costo = $precio ?? TransferenciaMercaderiaCostoSupport::resolverCostoUltimaCompra($articulo);
+
+        return [
+            'articulo_origen_id' => (int) $articulo->id,
+            'articulo_destino_id' => (int) $articulo->id,
+            'cantidad_origen' => $cant,
+            'cantidad_destino' => $cant,
+            'precio_costo_origen' => round((float) $costo, 6),
+            'precio_costo_destino' => round((float) $costo, 6),
+            'coeficienteconversion' => 1.0,
+            'fl_conversion_formula' => false,
+        ];
+    }
+
+    private function reflejarLineaEnPataContraparte(
+        Transferencia_Mercaderia $transferencia,
+        MovimientoStock $otro,
+        Articulo_Movimiento $amOrigen,
+        Transferencia_Mercaderia_Articulo $linea,
+        ?Articulo_Movimiento $amOtro,
+        ?Articulo_Movimiento $plantillaOtro,
+        bool $contraparteEsSalida
+    ): ?Articulo_Movimiento {
+        $articuloId = $contraparteEsSalida
+            ? (int) $linea->articulo_origen_id
+            : (int) $linea->articulo_destino_id;
+        $cant = $contraparteEsSalida
+            ? abs((float) $linea->cantidad_origen)
+            : abs((float) $linea->cantidad_destino);
+        if ($articuloId <= 0 || $cant <= 0.000001) {
+            return $amOtro;
+        }
+
+        $signo = TransferenciaMercaderiaSignoSupport::signoCantidad($contraparteEsSalida);
+        $firmada = $cant * TransferenciaMercaderiaSignoSupport::multiplicadorCantidad($signo);
+        $precio = $contraparteEsSalida
+            ? (float) $linea->precio_costo_origen
+            : (float) $linea->precio_costo_destino;
+        if ($precio <= 0) {
+            $precio = abs((float) ($amOrigen->precio ?? $amOrigen->costo ?? 0));
+        }
+
+        $depositoId = $plantillaOtro?->deposito_id;
+        if ((int) $depositoId <= 0) {
+            $depositoId = $contraparteEsSalida
+                ? $transferencia->deposito_origen_id
+                : $transferencia->deposito_destino_id;
+        }
+        $bienUsoId = $plantillaOtro?->bien_uso_id;
+        if ((int) $bienUsoId <= 0) {
+            $bienUsoId = $contraparteEsSalida
+                ? $transferencia->bien_uso_origen_id
+                : $transferencia->bien_uso_destino_id;
+        }
+
+        if ($amOtro === null) {
+            $dataTalle = $this->tallesFirmadosDesde($amOrigen, $signo, $precio);
+            $creado = app(Articulo_MovimientoService::class)->guardaArticuloMovimiento('create', [
+                'fecha' => $plantillaOtro?->fecha ?? $amOrigen->fecha,
+                'fechajornada' => $plantillaOtro?->fechajornada ?? $amOrigen->fechajornada,
+                'signo_cantidad' => $signo,
+                'tipotransaccion_stock_id' => (int) ($otro->tipotransaccion_stock_id ?: $amOrigen->tipotransaccion_stock_id),
+                'movimientostock_id' => (int) $otro->id,
+                'deposito_id' => $depositoId,
+                'bien_uso_id' => (int) $bienUsoId > 0 ? (int) $bienUsoId : null,
+                'venta_id' => null,
+                'pedido_combinacion_id' => null,
+                'ordentrabajo_id' => null,
+                'lote' => $plantillaOtro?->lote ?? $amOrigen->lote,
+                'articulo_id' => $articuloId,
+                'combinacion_id' => $amOrigen->combinacion_id,
+                'modulo_id' => $amOrigen->modulo_id,
+                'numeroparte' => $amOrigen->numeroparte,
+                'concepto' => $plantillaOtro?->concepto ?? $amOrigen->concepto,
+                'cantidad' => $cant,
+                'precio' => $precio,
+                'costo' => $precio,
+                'descuento' => 0,
+                'moneda_id' => $plantillaOtro?->moneda_id ?? $amOrigen->moneda_id,
+                'incluyeimpuesto' => $plantillaOtro?->incluyeimpuesto ?? $amOrigen->incluyeimpuesto,
+                'listaprecio_id' => $plantillaOtro?->listaprecio_id ?? $amOrigen->listaprecio_id,
+                'loteimportacion_id' => null,
+            ], $dataTalle);
+
+            return $creado instanceof Articulo_Movimiento ? $creado : null;
+        }
+
+        $amOtro->articulo_id = $articuloId;
+        $amOtro->combinacion_id = $amOrigen->combinacion_id;
+        $amOtro->modulo_id = $amOrigen->modulo_id;
+        $amOtro->numeroparte = $amOrigen->numeroparte;
+        $amOtro->cantidad = $firmada;
+        if ($precio > 0) {
+            $amOtro->precio = $precio;
+            $amOtro->costo = $precio;
+        }
+        $amOtro->save();
+        $this->reemplazarTalles($amOtro, $amOrigen, $signo, $precio > 0 ? $precio : (float) $amOtro->precio);
+
+        return $amOtro;
+    }
+
+    /**
+     * @return list<array{id: null, talle_id: int, cantidad: float, precio: float}>
+     */
+    private function tallesFirmadosDesde(Articulo_Movimiento $am, string $signo, float $precio): array
+    {
+        $factor = TransferenciaMercaderiaSignoSupport::multiplicadorCantidad($signo);
+        $out = [];
+        foreach ($am->articulo_movimiento_talles ?? [] as $talle) {
+            $out[] = [
+                'id' => null,
+                'talle_id' => (int) $talle->talle_id,
+                'cantidad' => abs((float) $talle->cantidad) * $factor,
+                'precio' => $precio,
+            ];
+        }
+
+        return $out;
+    }
+
+    private function reemplazarTalles(
+        Articulo_Movimiento $destino,
+        Articulo_Movimiento $origen,
+        string $signo,
+        float $precio
+    ): void {
+        Articulo_Movimiento_Talle::query()
+            ->where('articulo_movimiento_id', $destino->id)
+            ->delete();
+
+        foreach ($this->tallesFirmadosDesde($origen, $signo, $precio) as $talle) {
+            Articulo_Movimiento_Talle::query()->create([
+                'articulo_movimiento_id' => $destino->id,
+                'pedido_combinacion_talle_id' => null,
+                'talle_id' => $talle['talle_id'],
+                'cantidad' => $talle['cantidad'],
+                'precio' => $talle['precio'],
+            ]);
         }
     }
 

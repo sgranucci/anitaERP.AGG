@@ -17,6 +17,9 @@
         return number_format($n, 2, ',', '.');
     };
     $colSpan = ($modoDeuda ? 11 : 10) + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
+    $soloTotalesDeuda = $modoDeuda && ! empty($filtros['solo_totales']);
+    $totalesReporte = $totales ?? [];
+    $mostrarTotalGeneral = $soloTotalesDeuda && ! empty($mostrar_total_general);
     $pdfCortar = static function ($texto, int $max) use ($paraPdf) {
         $texto = trim(preg_replace('/\s+/u', ' ', (string) $texto) ?? '');
         if (! $paraPdf || $texto === '' || mb_strlen($texto) <= $max) {
@@ -26,6 +29,70 @@
         return mb_substr($texto, 0, max(1, $max - 1)).'…';
     };
 @endphp
+@if ($soloTotalesDeuda)
+<thead>
+    <tr>
+        @if ($paraPdf)
+            <th style="width: 72%;">Proveedor</th>
+            <th class="text-right" style="width: 28%;">Saldo</th>
+        @else
+            <th>Proveedor</th>
+            <th class="text-right">Saldo</th>
+        @endif
+    </tr>
+</thead>
+<tbody>
+@forelse ($filas as $fila)
+    @php
+        $tipo = $fila['tipo'] ?? '';
+    @endphp
+    @if ($tipo === 'header_proveedor')
+        @continue
+    @endif
+    @if ($tipo === 'header_empresa')
+        <tr class="cc-rep-header-empresa">
+            <td colspan="2">
+                <strong>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</strong>
+            </td>
+        </tr>
+        @continue
+    @endif
+    @if ($tipo !== 'total_proveedor')
+        @continue
+    @endif
+    <tr>
+        <td>
+            @if ($mostrarLinks && ! empty($puede_ver_proveedor) && ! empty($fila['proveedor_id']))
+                <a class="text-primary" target="_blank" rel="noopener"
+                    href="{{ route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}">
+                    {{ $fila['proveedor_nombre'] ?? '' }}
+                </a>
+            @else
+                {{ $fila['proveedor_nombre'] ?? '' }}
+            @endif
+        </td>
+        <td class="text-right">{{ $fmt($fila['saldo_pendiente'] ?? null) }}</td>
+    </tr>
+@empty
+    <tr>
+        <td colspan="2" class="text-muted text-center">Sin datos.</td>
+    </tr>
+@endforelse
+</tbody>
+@if ($mostrarTotalGeneral)
+<tfoot>
+    <tr class="cc-rep-total-general">
+        <td><strong>Total deuda pendiente</strong></td>
+        <td class="text-right">
+            <strong>{{ $fmt($totalesReporte['pendiente'] ?? 0) }}</strong>
+            @if (! empty($totalesReporte['abreviatura']))
+                {{ $totalesReporte['abreviatura'] }}
+            @endif
+        </td>
+    </tr>
+</tfoot>
+@endif
+@else
 <thead>
     <tr>
         @if ($paraPdf)
@@ -213,3 +280,4 @@
     </tr>
 @endforelse
 </tbody>
+@endif

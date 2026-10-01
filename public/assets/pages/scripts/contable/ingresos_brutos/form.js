@@ -43,9 +43,64 @@
         $('#fecha_hasta').val(anio + '-' + pad2(mes) + '-' + pad2(hastaDia));
     }
 
+    function esCaba(tipo) {
+        return tipo === 'retenciones_caba' || tipo === 'percepciones_caba';
+    }
+
+    function aplicarFisco() {
+        var tipo = String($('#tipo').val() || '');
+        var caba = esCaba(tipo);
+        $('#liquidacion option').each(function () {
+            var valor = parseInt(this.value, 10);
+            this.disabled = caba && (valor === 1 || valor === 2);
+        });
+        if (caba && parseInt($('#liquidacion').val(), 10) !== 3) {
+            $('#liquidacion').val('3');
+        }
+
+        var fiscos = window.iibbProvinciasFisco || {};
+        var fisco = caba ? fiscos.caba : fiscos.arba;
+        if (fisco && fisco.id) {
+            $('#provincia_id').val(fisco.id);
+            $('#codigoprovincia').val(fisco.codigo || '');
+            $('#nombreprovincia').val(fisco.nombre || '');
+        }
+        actualizarFechasDesdeLiquidacion();
+    }
+
+    function refrescarTipos() {
+        var empresaId = String($('#empresa_id').val() || '');
+        var mapa = (window.iibbTiposPorEmpresa || {})[empresaId] || {};
+        var actual = String($('#tipo').val() || '');
+        var $tipo = $('#tipo');
+        if (!$tipo.length) {
+            return;
+        }
+        $tipo.empty();
+        var claves = Object.keys(mapa);
+        if (!claves.length) {
+            $tipo.append($('<option>', { value: '', text: 'Sin agente IIBB configurado' }));
+            return;
+        }
+        claves.forEach(function (clave) {
+            $tipo.append($('<option>', {
+                value: clave,
+                text: mapa[clave],
+                selected: clave === actual
+            }));
+        });
+        if (actual && mapa[actual]) {
+            $tipo.val(actual);
+        }
+        aplicarFisco();
+    }
+
     $(function () {
         actualizarFechasDesdeLiquidacion();
+        aplicarFisco();
         $('#periodo_mes_num, #periodo_anio, #liquidacion').on('change', actualizarFechasDesdeLiquidacion);
+        $('#tipo').on('change', aplicarFisco);
+        $('#empresa_id').on('change', refrescarTipos);
 
         var overlay = document.getElementById('ingresos-brutos-procesando-overlay');
 

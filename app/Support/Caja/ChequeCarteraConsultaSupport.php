@@ -24,7 +24,7 @@ final class ChequeCarteraConsultaSupport
     {
         $texto = trim((string) ($opts['consulta'] ?? ''));
         $empresaId = isset($opts['empresa_id']) ? (int) $opts['empresa_id'] : 0;
-        $limite = max(1, min(200, (int) ($opts['limite'] ?? 80)));
+        $limite = max(1, min(500, (int) ($opts['limite'] ?? 400)));
 
         $query = self::queryCartera();
         if ($empresaId > 0) {
@@ -40,7 +40,11 @@ final class ChequeCarteraConsultaSupport
                     ->orWhere('nro_interno_anita', 'like', $like)
                     ->orWhere('entregado', 'like', $like)
                     ->orWhere('anombrede', 'like', $like)
-                    ->orWhere('cuentalibradora', 'like', $like);
+                    ->orWhere('cuentalibradora', 'like', $like)
+                    ->orWhereHas('clientes', function (Builder $cliente) use ($like) {
+                        $cliente->where('nombre', 'like', $like)
+                            ->orWhere('codigo', 'like', $like);
+                    });
                 if (ctype_digit($texto)) {
                     $q->orWhere('nro_interno_anita', (int) $texto)
                         ->orWhere('id', (int) $texto)

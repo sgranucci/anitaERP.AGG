@@ -9,6 +9,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Configuracion\Provincia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\IngresosBrutos\IngresosBrutosReporteService;
+use App\Support\Contable\IngresosBrutos\IngresosBrutosAgenteOpcionesSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
@@ -30,8 +31,12 @@ class IngresosBrutosReporteController extends Controller
         can('listar-ingresos-brutos');
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
-        $filtros = IngresosBrutosListadoFiltros::resolverDesdeRequest($request);
-        $filtros = $this->aplicarPreferencias($request, $filtros, $empresaQuery);
+        $filtros = $this->filtrosEfectivos($request, $empresaQuery);
+        $tiposPorEmpresa = IngresosBrutosAgenteOpcionesSupport::mapaPorEmpresas(
+            $empresaQuery->pluck('id')->map(static fn ($id) => (int) $id)->all(),
+        );
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $tiposEnum = $tiposPorEmpresa[$empresaId] ?? IngresosBrutosAgenteOpcionesSupport::tiposParaEmpresa($empresaId);
 
         $consultado = false;
         $resultado = null;
@@ -70,7 +75,14 @@ class IngresosBrutosReporteController extends Controller
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'empresa_query' => $empresaQuery,
-            'tipos_enum' => IngresosBrutosListadoFiltros::TIPOS,
+            'tipos_enum' => $tiposEnum,
+            'tipos_por_empresa' => $tiposPorEmpresa,
+            'provincias_fisco' => [
+                'caba' => IngresosBrutosAgenteOpcionesSupport::datosProvincia(IngresosBrutosAgenteOpcionesSupport::JURISDICCION_CABA),
+                'arba' => IngresosBrutosAgenteOpcionesSupport::datosProvincia(IngresosBrutosAgenteOpcionesSupport::JURISDICCION_BUENOS_AIRES),
+            ],
+            'sin_agente' => $empresaId > 0 && $tiposEnum === [],
+            'es_agip' => IngresosBrutosListadoFiltros::esPresentacionAgip((string) ($filtros['tipo'] ?? '')),
             'liquidaciones_enum' => IngresosBrutosListadoFiltros::LIQUIDACIONES,
             'provincia' => $provincia,
             'consultado' => $consultado,
@@ -86,15 +98,26 @@ class IngresosBrutosReporteController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = IngresosBrutosListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->filtrosEfectivos($request);
         if (! IngresosBrutosListadoFiltros::tieneCriteriosAplicados($filtros)) {
             return redirect()->route('ingresos_brutos');
         }
 
         $resultado = $this->reporteService->generarOCache($filtros);
-        $nombre = (string) ($resultado['nombre_archivo'] ?? 'iibb_arba.txt');
+        $nombre = (string) ($resultado['nombre_archivo'] ?? 'iibb.txt');
+        $principal = (string) ($resultado['archivo_arba'] ?? '');
+        $notas = (string) ($resultado['archivo_nc'] ?? '');
+        $nombreNc = (string) ($resultado['nombre_archivo_nc'] ?? 'notas-credito.txt');
 
-        return Response::make($resultado['archivo_arba'] ?? '', 200, [
+        if ($notas !== '' && $principal !== '') {
+            return $this->descargarZipAgip($principal, $nombre, $notas, $nombreNc);
+        }
+        if ($notas !== '' && $principal === '') {
+            $nombre = $nombreNc;
+            $principal = $notas;
+        }
+
+        return Response::make($principal, 200, [
             'Content-Type' => 'text/plain; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="'.$nombre.'"',
         ]);
@@ -107,7 +130,7 @@ class IngresosBrutosReporteController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = IngresosBrutosListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->filtrosEfectivos($request);
         if (! IngresosBrutosListadoFiltros::tieneCriteriosAplicados($filtros)) {
             return redirect()->route('ingresos_brutos');
         }
@@ -222,5 +245,46 @@ class IngresosBrutosReporteController extends Controller
         }
 
         return $filtros;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, mixed>|null  $empresaQuery
+     * @return array<string, mixed>
+     */
+    private function filtrosEfectivos(Request $request, $empresaQuery = null): array
+    {
+        $filtros = IngresosBrutosListadoFiltros::resolverDesdeRequest($request);
+        if ($empresaQuery !== null) {
+            $filtros = $this->aplicarPreferencias($request, $filtros, $empresaQuery);
+        }
+
+        $permitidos = IngresosBrutosAgenteOpcionesSupport::tiposParaEmpresa((int) ($filtros['empresa_id'] ?? 0));
+        $tipo = (string) ($filtros['tipo'] ?? '');
+        if (! array_key_exists($tipo, $permitidos)) {
+            $filtros['tipo'] = (string) (array_key_first($permitidos) ?? '');
+        }
+
+        return IngresosBrutosListadoFiltros::alinearProvincia($filtros);
+    }
+
+    private function descargarZipAgip(string $principal, string $nombre, string $notas, string $nombreNc)
+    {
+        $zipPath = tempnam(sys_get_temp_dir(), 'agip');
+        if ($zipPath === false) {
+            return Response::make($principal, 200, [
+                'Content-Type' => 'text/plain; charset=UTF-8',
+                'Content-Disposition' => 'attachment; filename="'.$nombre.'"',
+            ]);
+        }
+
+        $zip = new \ZipArchive();
+        $zip->open($zipPath, \ZipArchive::OVERWRITE);
+        $zip->addFromString($nombre, $principal);
+        $zip->addFromString($nombreNc, $notas);
+        $zip->close();
+
+        $nombreZip = preg_replace('/-(retenciones|percepciones)\.txt$/', '.zip', $nombre) ?: 'AGIP.zip';
+
+        return response()->download($zipPath, $nombreZip)->deleteFileAfterSend(true);
     }
 }

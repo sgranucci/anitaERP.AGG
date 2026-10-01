@@ -46,6 +46,16 @@
             border-top: 2px solid #b7950b;
             font-size: 8px;
         }
+        table.data tfoot tr.cc-rep-total-general {
+            background-color: #aed6f1;
+            font-weight: bold;
+            color: #1b4f72;
+        }
+        table.data tfoot td {
+            border: 1px solid #cccccc;
+            padding: 2px 3px;
+            font-size: 8px;
+        }
         table.data thead tr { background-color: #85C1E9; }
         table.data th { font-size: 7.5px; font-weight: bold; color: #17202A; }
         .text-right { text-align: right; white-space: nowrap; }
@@ -86,6 +96,8 @@
         @include('compras.proveedor_cuentacorriente_reporte.partials.tabla_datos', [
             'filas' => $filas ?? [],
             'filtros' => $filtros ?? [],
+            'totales' => $resultado['totales'] ?? [],
+            'mostrar_total_general' => true,
             'mostrarLinks' => false,
             'para_pdf' => true,
             'puede_ver_proveedor' => false,

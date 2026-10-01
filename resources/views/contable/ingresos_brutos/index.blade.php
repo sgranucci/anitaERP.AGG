@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Ingresos Brutos — presentación ARBA
+    Ingresos Brutos — ARBA / AGIP
 @endsection
 
 @section('contenido')
@@ -9,7 +9,7 @@
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Ingresos Brutos (archivo ARBA)</h3>
+                <h3 class="card-title">Ingresos Brutos (ARBA / AGIP)</h3>
                 <div class="card-tools">
                     @if (can('listar-ingresos-brutos-config', false))
                         <a href="{{ route('ingresos_brutos_config') }}" class="btn btn-outline-secondary btn-sm" title="Configuración">
@@ -24,10 +24,18 @@
             <form method="get" action="{{ route('ingresos_brutos') }}" id="form-ingresos-brutos" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Generación del archivo de retenciones / percepciones IIBB para presentación en ARBA.
-                        Retenciones desde Anita (<code>retibrmov</code>) y ERP (<code>pagoproveedor_retencion</code>).
-                        Percepciones desde ventas / Anita según configuración.
+                        Retenciones y percepciones de IIBB para ARBA (Buenos Aires, jurisdicción 902) o AGIP (CABA, jurisdicción 901).
+                        CABA aparece solo si la empresa tiene tildado Percibe o Retiene en
+                        Configuración general → Agentes IIBB.
+                        AGIP es una declaración mensual (e-ARCIBA, diseño vigente desde 01/2022).
+                        Los datos salen de Anita (<code>retibrmov</code> / <code>venibr</code>) y, si no hay, del ERP.
                     </p>
+                    @if (! empty($sin_agente))
+                        <div class="alert alert-warning">
+                            Esta empresa no está nominada como agente de retención ni de percepción en Buenos Aires (902) ni en CABA (901).
+                            Los tildes se cargan en Configuración general → Agentes IIBB por empresa.
+                        </div>
+                    @endif
 
                     @php
                         $colLabel = 'col-lg-2 control-label text-right pr-2';
@@ -165,7 +173,10 @@
                     </button>
                     @if ($consultado && can('exportar-ingresos-brutos', false))
                         <a href="{{ route('exportar_ingresos_brutos', $filtrosQuery) }}" class="btn btn-success">
-                            <i class="fa fa-download"></i> Descargar archivo ARBA
+                            <i class="fa fa-download"></i> Descargar archivo {{ ! empty($es_agip) ? 'AGIP' : 'ARBA' }}
+                            @if (! empty($es_agip) && ! empty($resultado['archivo_nc']))
+                                (zip con notas de crédito)
+                            @endif
                         </a>
                     @endif
                 </div>
@@ -268,5 +279,9 @@
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/configuracion/provincia/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/provincia/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script>
+    window.iibbTiposPorEmpresa = @json($tipos_por_empresa ?? []);
+    window.iibbProvinciasFisco = @json($provincias_fisco ?? []);
+</script>
 <script src="{{ asset('assets/pages/scripts/contable/ingresos_brutos/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/ingresos_brutos/form.js')) ?: time() }}" type="text/javascript"></script>
 @endsection

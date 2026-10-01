@@ -182,6 +182,15 @@
         return (c.letra || '') + ' ' + (c.sucursal || '') + '-' + (c.numerocomprobante || '');
     }
 
+    function etiquetaTipoTesoreria(codigo) {
+        var cod = codigo || 'FONDO_FIJO';
+        var texto = $('#ie-cp-tipo-tesoreria option').filter(function () {
+            return $(this).val() === cod;
+        }).first().text();
+        texto = $.trim(texto || '');
+        return texto !== '' ? texto : cod;
+    }
+
     function renderGrilla() {
         var $tbody = $('#tbody-comprobantes-iva-ie');
         $tbody.empty();
@@ -189,7 +198,7 @@
 
         comprobantesIva.forEach(function (c, idx) {
             total += parseFloat(c.total) || 0;
-            var tipoLabel = c.tipo_tesoreria === 'GASTO_BANCO' ? 'Gasto banco' : 'Fondo fijo';
+            var tipoLabel = etiquetaTipoTesoreria(c.tipo_tesoreria);
             var prov = c.proveedor_nombre || c.proveedor_nombre_eventual || '—';
             var pdfBadge = (c.tiene_pdf || c.pdf_temp_id) ? ' <i class="fa fa-file-pdf text-danger" title="PDF adjunto"></i>' : '';
             $tbody.append(

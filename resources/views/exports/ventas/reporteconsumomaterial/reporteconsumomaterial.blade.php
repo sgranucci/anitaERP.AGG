@@ -32,10 +32,12 @@
 <table>
 	<thead>
 	<tr>
+		@php
+			$colsMedidaBloque = (int) config('consprod.HASTA_MEDIDA') - (int) config('consprod.DESDE_MEDIDA') + 2;
+		@endphp
 		<th colspan="12"></th>
-		
-		<th colspan="28">CONSUMOS</th>
-		<th colspan="28">PARES</th>
+		<th colspan="{{ $colsMedidaBloque }}">CONSUMOS</th>
+		<th colspan="{{ $colsMedidaBloque }}">PARES</th>
 	</tr>
     <tr>
        	<th>Pedido</th>

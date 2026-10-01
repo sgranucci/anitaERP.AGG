@@ -11,12 +11,16 @@ final class ComprobanteProveedorTipoTesoreria
     /** Gastos bancarios (comisiones, mantenimiento cuenta, etc.). */
     public const GASTO_BANCO = 'GASTO_BANCO';
 
+    /** Comprobantes que no son fondo fijo ni gasto bancario. */
+    public const OTROS_VARIOS = 'OTROS_VARIOS';
+
     /** @return list<string> */
     public static function todos(): array
     {
         return [
             self::FONDO_FIJO,
             self::GASTO_BANCO,
+            self::OTROS_VARIOS,
         ];
     }
 
@@ -25,6 +29,7 @@ final class ComprobanteProveedorTipoTesoreria
         return match ($tipo) {
             self::FONDO_FIJO => 'Fondo fijo / caja chica',
             self::GASTO_BANCO => 'Gasto bancario',
+            self::OTROS_VARIOS => 'Otros / Varios',
             default => $tipo ?? '',
         };
     }
