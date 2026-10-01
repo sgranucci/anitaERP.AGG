@@ -521,6 +521,8 @@ class ProveedorCuentacorrienteReporteService
     /**
      * Dentro del proveedor, la deuda se lista por la fecha del comprobante
      * (la misma que muestra la columna Fecha), no por la fecha de carga de la cuenta corriente.
+     * En el mismo día, por número de factura de más vieja a más reciente
+     * (letra, punto de venta y número). El vencimiento desempata cuotas del mismo comprobante.
      *
      * @param  Collection<int, Proveedor_Cuentacorriente>  $movimientos
      * @return Collection<int, Proveedor_Cuentacorriente>
@@ -531,8 +533,38 @@ class ProveedorCuentacorrienteReporteService
             $fecha = $this->ymdOrden(ProveedorCuentacorrienteGrillaSupport::fechaComprobante($mov));
             $vencimiento = $this->ymdOrden(ProveedorCuentacorrienteGrillaSupport::fechaVencimiento($mov));
 
-            return $fecha.'|'.$vencimiento.'|'.str_pad((string) (int) $mov->id, 12, '0', STR_PAD_LEFT);
+            return $fecha.'|'.$this->claveNumeroComprobante($mov).'|'.$vencimiento
+                .'|'.str_pad((string) (int) $mov->id, 12, '0', STR_PAD_LEFT);
         })->values();
+    }
+
+    /**
+     * Clave de orden del comprobante visible (A3-25181 antes que A3-25190).
+     * Sin factura, usa el número del pago. Sin ninguno, queda al final del día.
+     */
+    private function claveNumeroComprobante(Proveedor_Cuentacorriente $mov): string
+    {
+        $comp = $mov->comprobante_proveedores;
+        if ((int) ($mov->comprobante_proveedor_id ?? 0) > 0 && $comp !== null) {
+            return sprintf(
+                '%-4s|%08d|%012d',
+                strtoupper(trim((string) ($comp->letra ?? ''))),
+                (int) ($comp->sucursal ?? 0),
+                (int) ($comp->numerocomprobante ?? 0)
+            );
+        }
+
+        $pago = $mov->pagoproveedores;
+        if ((int) ($mov->pagoproveedor_id ?? 0) > 0 && $pago !== null) {
+            return sprintf(
+                '%-4s|%08d|%012d',
+                strtoupper(trim((string) ($pago->letra ?: ($pago->tipocomprobante ?? '')))),
+                (int) ($pago->sucursal ?? 0),
+                (int) ($pago->numerotransaccion ?? 0)
+            );
+        }
+
+        return sprintf('ZZZZ|99999999|%012d', (int) $mov->id);
     }
 
     private function ymdOrden(mixed $fecha): string
