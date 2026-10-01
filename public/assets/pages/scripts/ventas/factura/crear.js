@@ -768,6 +768,9 @@
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuentopie').val(descuento);
 				descuentoCliente = $('#descuentopie').val();
+				if (facturaTieneRenglonCalculable()) {
+					calculaFactura();
+				}
 				if (typeof window.actualizarAvisoDepositoFacturacion === 'function') {
 					window.actualizarAvisoDepositoFacturacion(transporte_id, { sincronizarCampo: true });
 				}
@@ -1300,8 +1303,53 @@
 		});
 	}
 
+	var calculaFacturaDescuentoTimer = null;
+
+	function facturaTieneRenglonCalculable()
+	{
+		var hay = false;
+		$('#tbody-tabla tr').each(function () {
+			var $tr = $(this);
+			var art = parseInt($tr.find('.articulo_id').val() || '0', 10) || 0;
+			var conc = parseInt($tr.find('.concepto_venta_id').val() || '0', 10) || 0;
+			var cod = $.trim($tr.find('.codigoarticulo').val() || '');
+			var cant = parseFloat(String($tr.find('.kilo').val() || $tr.find('.cantidad').val() || '0').replace(',', '.')) || 0;
+			if (art > 0 || conc > 0 || cod !== '' || cant !== 0) {
+				hay = true;
+				return false;
+			}
+		});
+		return hay;
+	}
+
+	function programarCalculaFacturaPorDescuento()
+	{
+		clearTimeout(calculaFacturaDescuentoTimer);
+		calculaFacturaDescuentoTimer = setTimeout(function () {
+			calculaFactura();
+		}, 350);
+	}
+
+	function activaEventosDescuentoCabeceraFactura()
+	{
+		$('#descuentopie, #descuentolinea, #descuentoimportepie')
+			.off('input.facturaDto change.facturaDto keydown.facturaDto')
+			.on('input.facturaDto change.facturaDto', function () {
+				programarCalculaFacturaPorDescuento();
+			})
+			.on('keydown.facturaDto', function (e) {
+				if (e.key === 'Enter' || e.which === 13) {
+					e.preventDefault();
+					clearTimeout(calculaFacturaDescuentoTimer);
+					calculaFactura();
+				}
+			});
+	}
+
 	function activa_eventos(flInicio)
 	{
+		activaEventosDescuentoCabeceraFactura();
+
 		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof activa_eventosFacturaBierzo === 'function') {
 			activa_eventosFacturaBierzo(flInicio);
 			return;

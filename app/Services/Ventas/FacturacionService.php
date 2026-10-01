@@ -2521,6 +2521,7 @@ class FacturacionService
 
 		$descuentoventaIds = $data['descuentoventa_ids'] ?? [];
 		$descuentosPct = $data['descuentos'] ?? [];
+		$dtoCabeceraLinea = (float) str_replace(',', '.', (string) ($data['descuentolinea'] ?? 0));
 		$cantidades = [];
 		$descuentosLinea = [];
 
@@ -2528,13 +2529,23 @@ class FacturacionService
 			$cantidades[] = $kilo;
 
 			$descPct = 0.;
+			$tieneDescuentoPropio = false;
 			if (! empty($descuentoventaIds[$i])) {
 				$descuentoventa = $this->descuentoventaRepository->find((int) $descuentoventaIds[$i]);
 				if ($descuentoventa) {
 					$descPct = (float) $descuentoventa->porcentajedescuento;
+					$tieneDescuentoPropio = true;
 				}
 			} elseif (isset($descuentosPct[$i]) && $descuentosPct[$i] !== '' && $descuentosPct[$i] !== null) {
-				$descPct = (float) str_replace(',', '', (string) $descuentosPct[$i]);
+				$parsed = (float) str_replace(',', '', (string) $descuentosPct[$i]);
+				// La grilla pedido manda descuentos[] = 0 oculto; eso no es un dto de línea.
+				if (abs($parsed) > 0.00001) {
+					$descPct = $parsed;
+					$tieneDescuentoPropio = true;
+				}
+			}
+			if (! $tieneDescuentoPropio) {
+				$descPct = $dtoCabeceraLinea;
 			}
 			$descuentosLinea[$i] = $descPct;
 		}
@@ -2588,9 +2599,9 @@ class FacturacionService
 		}
 		$puntoventa_id = $data['puntoventa_id'];
 		$moneda_id = $data['moneda_id'];
-		$this->descuentoPie = $data['descuentopie'];
+		$this->descuentoPie = (float) str_replace(',', '.', (string) ($data['descuentopie'] ?? 0));
 		$this->descuentoLinea = 0;
-		$this->descuentoImportePie = $data['descuentoimportepie'];
+		$this->descuentoImportePie = (float) str_replace(',', '.', (string) ($data['descuentoimportepie'] ?? 0));
 		$fechaFactura = $data['fechafactura'];
 		$this->activarGrabacionAnitaVillafrancaSiNotaCreditoDivision(
 			(int) $puntoventa_id,
@@ -2726,12 +2737,23 @@ class FacturacionService
 			}
 			$articuloIdLinea = (int) ($articulos[$offItem] ?? 0);
 			$conceptoIdInputLinea = (int) ($conceptoVentaIdsInput[$offItem] ?? 0);
-			if ($articuloIdLinea <= 0 && $conceptoIdInputLinea <= 0) {
-				$skuLinea = trim((string) ($codigosArticulo[$offItem] ?? ''));
-				if ($skuLinea !== '') {
-					$articuloPorSku = $this->articuloQuery->traeArticuloPorSku($skuLinea);
-					$articuloIdLinea = (int) ($articuloPorSku->id ?? 0);
-				}
+			$skuLinea = trim((string) ($codigosArticulo[$offItem] ?? ''));
+			if ($articuloIdLinea <= 0 && $conceptoIdInputLinea <= 0 && $skuLinea !== '') {
+				$articuloPorSku = $this->articuloQuery->traeArticuloPorSku($skuLinea);
+				$articuloIdLinea = (int) ($articuloPorSku->id ?? 0);
+			}
+
+			// El alta deja un renglón vacío para cargar. No es un ítem: no exige concepto.
+			$cantidadLineaPreview = (float) str_replace(',', '', (string) ($cantidades[$offItem] ?? 0));
+			$precioLineaPreview = (float) str_replace(',', '', (string) ($precios[$offItem] ?? 0));
+			$cajaLineaPreview = (float) str_replace(',', '', (string) ($cajasInput[$offItem] ?? 0));
+			$piezaLineaPreview = (float) str_replace(',', '', (string) ($piezasInput[$offItem] ?? 0));
+			$descripcionLineaPreview = trim((string) ($descripciones[$offItem] ?? ''));
+			if ($articuloIdLinea <= 0 && $conceptoIdInputLinea <= 0 && $skuLinea === ''
+				&& $cantidadLineaPreview == 0.0 && $precioLineaPreview == 0.0
+				&& $cajaLineaPreview == 0.0 && $piezaLineaPreview == 0.0
+				&& $descripcionLineaPreview === '') {
+				continue;
 			}
 
 			// Trae el articulo
@@ -2958,7 +2980,13 @@ class FacturacionService
 			if (is_array($descuentosLineaItem) && array_key_exists($offItem, $descuentosLineaItem)) {
 				$this->descuentoLinea = (float) $descuentosLineaItem[$offItem];
 			} else {
-				$this->descuentoLinea = (float) ($data['descuentolinea'] ?? 0);
+				$dtoCabeceraLinea = (float) str_replace(',', '.', (string) ($data['descuentolinea'] ?? 0));
+				$descuentosPct = $data['descuentos'] ?? [];
+				$rawDtoLinea = is_array($descuentosPct) ? ($descuentosPct[$offItem] ?? null) : null;
+				$dtoLinea = ($rawDtoLinea !== null && trim((string) $rawDtoLinea) !== '')
+					? (float) str_replace(',', '', (string) $rawDtoLinea)
+					: 0.;
+				$this->descuentoLinea = abs($dtoLinea) > 0.00001 ? $dtoLinea : $dtoCabeceraLinea;
 			}
 
 			$precioUnitario = $precios[$offItem];
@@ -3014,11 +3042,20 @@ class FacturacionService
 				$detalleLinea = $leyendaLinea;
 			}
 
+			// El Bierzo factura el neto con kilos ya descontados (igual que el pedido).
+			// Sin esta clave, ImpuestoService toma la cantidad plena y el % no mueve el total.
+			$kiloDescuento = $cantidadLinea;
+			if (strtoupper((string) config('app.empresa')) === 'EL BIERZO' && (float) $this->descuentoLinea != 0.0) {
+				$decimalesKilo = (int) config('facturacion.DECIMAL_KILO', 2);
+				$kiloDescuento = round($cantidadLinea * (1. - ($this->descuentoLinea / 100.)), $decimalesKilo);
+			}
+
 			$combinacionIdLinea = (int) ($combinacionIdsInput[$offItem] ?? 0);
 			$talleIdLinea = (int) ($talleIdsInput[$offItem] ?? 0);
 			$colorIdLinea = (int) ($colorIdsInput[$offItem] ?? 0);
 
 			$dataFactura[] = ["cantidad" => $cantidadLinea,
+				"kilodescuento" => $kiloDescuento,
 				"pieza" => $piezaLinea,
 				"caja" => $cajaLinea,
 				"preciosindescuento" => (float) str_replace(",","",$precioUnitario),
