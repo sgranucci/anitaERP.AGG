@@ -2431,6 +2431,10 @@
 
 	function calculaFactura()
 	{
+		if (typeof window.sumarCantidadesFacturaBierzo === 'function') {
+			window.sumarCantidadesFacturaBierzo();
+		}
+
 		var clienteId = parseInt($('#cliente_id').val() || '0', 10);
 		if (!(clienteId > 0)) {
 			return;

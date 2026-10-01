@@ -860,6 +860,22 @@
 				@endif
 			</small>
 		</div>
+		@if ($layoutItemsPedido)
+		<div class="d-flex flex-wrap align-items-center mb-3" id="factura-totales-cantidad" style="gap: 1.25rem;">
+			<div class="d-flex align-items-center">
+				<label for="totalcajasfactura" class="mb-0 mr-2 font-weight-bold">Total cajas</label>
+				<input type="text" id="totalcajasfactura" class="form-control form-control-sm text-right font-weight-bold" style="width: 7rem;" readonly value="0.00">
+			</div>
+			<div class="d-flex align-items-center">
+				<label for="totalunidadesfactura" class="mb-0 mr-2 font-weight-bold">Total unidades</label>
+				<input type="text" id="totalunidadesfactura" class="form-control form-control-sm text-right font-weight-bold" style="width: 7rem;" readonly value="0.00">
+			</div>
+			<div class="d-flex align-items-center">
+				<label for="totalkilosfactura" class="mb-0 mr-2 font-weight-bold">Total kilos</label>
+				<input type="text" id="totalkilosfactura" class="form-control form-control-sm text-right font-weight-bold" style="width: 7rem;" readonly value="0.00">
+			</div>
+		</div>
+		@endif
 		<div class="row">
 			<div class="col-sm-6">
                	<!-- textarea -->

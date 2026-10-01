@@ -23,6 +23,36 @@
 
 	window.sincronizarCantidadesItemsFactura = sincronizarCantidadesItemsFactura;
 
+	function sumaCampoCantidadFactura(selector) {
+		var total = 0;
+		$('#tbody-tabla tr').not('.nc-linea-excluida').find(selector).each(function () {
+			var n = parseFloat(String($(this).val() || '').replace(',', '.'));
+			if (!isNaN(n)) {
+				total += n;
+			}
+		});
+		return total;
+	}
+
+	function sumarCantidadesFacturaBierzo() {
+		if (!$('#factura-totales-cantidad').length) {
+			return;
+		}
+		$('#totalcajasfactura').val(sumaCampoCantidadFactura('.caja').toFixed(2));
+		$('#totalunidadesfactura').val(sumaCampoCantidadFactura('.pieza').toFixed(2));
+		$('#totalkilosfactura').val(sumaCampoCantidadFactura('.kilo').toFixed(2));
+	}
+
+	window.sumarCantidadesFacturaBierzo = sumarCantidadesFacturaBierzo;
+
+	$(document).on('input.facturaTotalesCantidad change.facturaTotalesCantidad', '#tbody-tabla .caja, #tbody-tabla .pieza, #tbody-tabla .kilo', function () {
+		sumarCantidadesFacturaBierzo();
+	});
+
+	$(function () {
+		sumarCantidadesFacturaBierzo();
+	});
+
 	window.asignaPrecio = function (ptr, Particulo_id, Ptalle_id) {
 		if ($('#formgeneral').attr('data-factura-proceso') === 'nc') {
 			return;
