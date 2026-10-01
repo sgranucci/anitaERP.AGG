@@ -61,6 +61,73 @@ final class IngresoEgresoImputacionDiariaSupport
         ];
     }
 
+    /**
+     * Elige el tesmov de una pierna TRA.
+     * La cuenta numérica (Macro 127 → 00000127) coincide con auxpag.
+     * Una cuenta alfanumérica (GMEP) queda en tesmov como 0000GMEP y en auxpag
+     * como 00000000, porque la imputación descarta las letras. Si no hay
+     * coincidencia exacta y auxpag no tiene dígitos, se toma esa pierna.
+     *
+     * @param  list<object|array<string, mixed>>  $filas
+     * @return list<object|array<string, mixed>>
+     */
+    public static function elegirFilasTesmovPierna(array $filas, string $cuentaAuxpag): array
+    {
+        $cuenta = self::normalizarCuentaTesmov($cuentaAuxpag);
+        if ($cuenta === '') {
+            return $filas;
+        }
+
+        $exactas = [];
+        foreach ($filas as $fila) {
+            if (self::cuentaDeFilaTesmov($fila) === $cuenta) {
+                $exactas[] = $fila;
+            }
+        }
+        if ($exactas !== []) {
+            return $exactas;
+        }
+        if (! self::cuentaSinImputacionNumerica($cuenta)) {
+            return [];
+        }
+
+        $alfanumericas = [];
+        foreach ($filas as $fila) {
+            $tes = self::cuentaDeFilaTesmov($fila);
+            if ($tes !== '' && $tes !== $cuenta && self::cuentaSinImputacionNumerica($tes)) {
+                $alfanumericas[] = $fila;
+            }
+        }
+
+        return $alfanumericas;
+    }
+
+    public static function normalizarCuentaTesmov(string $cuenta): string
+    {
+        $cuenta = strtoupper(trim($cuenta));
+        if ($cuenta === '') {
+            return '';
+        }
+
+        return str_pad($cuenta, 8, '0', STR_PAD_LEFT);
+    }
+
+    private static function cuentaSinImputacionNumerica(string $cuenta): bool
+    {
+        $digits = preg_replace('/\D+/', '', $cuenta) ?? '';
+
+        return ltrim($digits, '0') === '';
+    }
+
+    private static function cuentaDeFilaTesmov(object|array $fila): string
+    {
+        $raw = is_array($fila)
+            ? (string) ($fila['tesv_cuenta'] ?? '')
+            : (string) ($fila->tesv_cuenta ?? '');
+
+        return self::normalizarCuentaTesmov($raw);
+    }
+
     public static function aPesos(float $importe, int $monedaId, mixed $cotizacion): float
     {
         $importe = (float) $importe;

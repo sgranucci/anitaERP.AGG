@@ -13,12 +13,13 @@ final class PagoproveedorAnitaAuditoriaCompareSupport
     public const TOLERANCIA_IMPORTE = 0.05;
 
     /**
-     * OP generada en anitaERP: el circuito de pago crea asiento. Los importes
-     * desde Anita (acumulado RG 830, etc.) quedan sin asiento_id.
+     * OP generada en anitaERP: el circuito de pago crea el asiento y lo deja sin
+     * anita_origen. Un asiento copiado de Anita (subdiario, subhist, ctamov) no
+     * cuenta, aunque el backfill haya llenado asiento_id.
      */
-    public static function esGeneradaEnErp(int|string|null $asientoId): bool
+    public static function esGeneradaEnErp(int|string|null $asientoId, ?string $anitaOrigen = null): bool
     {
-        return (int) $asientoId > 0;
+        return (int) $asientoId > 0 && trim((string) $anitaOrigen) === '';
     }
 
     public static function normalizarChar1(string $valor): string

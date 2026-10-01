@@ -128,11 +128,22 @@ class Pagoproveedor extends Model implements Auditable
     }
 
     /**
-     * OP armada en anitaERP (tiene asiento). Excluye stubs importados de Anita (RG 830, etc.).
+     * OP armada en anitaERP. El circuito de pago deja asiento_id y el asiento sin
+     * anita_origen. El backfill de Anita también llena asiento_id (subdiario /
+     * ctamov); esas cabeceras importadas no entran.
      */
     public function scopeGeneradaEnErp(Builder $query): Builder
     {
-        return $query->where('asiento_id', '>', 0);
+        return $query->where('pagoproveedor.asiento_id', '>', 0)
+            ->whereExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('asiento')
+                    ->whereColumn('asiento.id', 'pagoproveedor.asiento_id')
+                    ->where(function ($q) {
+                        $q->whereNull('asiento.anita_origen')
+                            ->orWhere('asiento.anita_origen', '');
+                    });
+            });
     }
 
     /**

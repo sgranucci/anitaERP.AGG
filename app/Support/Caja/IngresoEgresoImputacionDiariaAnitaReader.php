@@ -265,13 +265,12 @@ final class IngresoEgresoImputacionDiariaAnitaReader
                         $tes = $this->listar(
                             IngresoEgresoAnitaTesmovSupport::sistema(),
                             'tesmov',
-                            'tesv_tipo,tesv_nro,tesv_importe',
+                            'tesv_tipo,tesv_nro,tesv_cuenta,tesv_importe',
                             ' WHERE tesv_tipo = '.$this->esc($tipoTes)
                                 .' AND tesv_nro = '.(int) $leg['nro']
-                                .($leg['cuenta'] !== '' ? ' AND tesv_cuenta = '.$this->esc($leg['cuenta']) : '')
                                 .CobranzaAnitaCheBanEsquemaSupport::andFiltroEmpresaTesmov($empresa)
                         );
-                        foreach ($tes as $fila) {
+                        foreach (IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna($tes, (string) $leg['cuenta']) as $fila) {
                             $out[$key]['ars'] = round($out[$key]['ars'] + abs((float) ($fila->tesv_importe ?? 0)), 2);
                             $out[$key]['lineas']++;
                             $out[$key]['encontrado'] = true;

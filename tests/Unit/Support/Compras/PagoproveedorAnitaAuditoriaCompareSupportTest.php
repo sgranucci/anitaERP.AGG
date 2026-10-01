@@ -13,6 +13,8 @@ class PagoproveedorAnitaAuditoriaCompareSupportTest extends TestCase
         $this->assertFalse(PagoproveedorAnitaAuditoriaCompareSupport::esGeneradaEnErp(null));
         $this->assertFalse(PagoproveedorAnitaAuditoriaCompareSupport::esGeneradaEnErp(0));
         $this->assertTrue(PagoproveedorAnitaAuditoriaCompareSupport::esGeneradaEnErp(164220));
+        $this->assertFalse(PagoproveedorAnitaAuditoriaCompareSupport::esGeneradaEnErp(168638, 'subdiario'));
+        $this->assertFalse(PagoproveedorAnitaAuditoriaCompareSupport::esGeneradaEnErp(168638, 'ctamov'));
     }
 
     public function test_estado_espacio_igual_vacio(): void

@@ -71,6 +71,28 @@ class IngresoEgresoImputacionDiariaSupportTest extends TestCase
         );
     }
 
+    public function test_tra_pierna_alfanumerica_cuando_auxpag_quedo_en_ceros(): void
+    {
+        $macro = (object) ['tesv_cuenta' => '00000127', 'tesv_importe' => 4800000];
+        $mp = (object) ['tesv_cuenta' => '0000GMEP', 'tesv_importe' => 4800000];
+
+        $piernaMacro = IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna(
+            [$macro, $mp],
+            '00000127'
+        );
+        $piernaMp = IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna(
+            [$mp],
+            '00000000'
+        );
+
+        $this->assertSame([$macro], $piernaMacro);
+        $this->assertSame([$mp], $piernaMp);
+        $this->assertSame(
+            [],
+            IngresoEgresoImputacionDiariaSupport::elegirFilasTesmovPierna([$mp], '00000127')
+        );
+    }
+
     public function test_tra_cuadra_con_maximo_de_piernas(): void
     {
         $eval = IngresoEgresoImputacionDiariaSupport::evaluar(
