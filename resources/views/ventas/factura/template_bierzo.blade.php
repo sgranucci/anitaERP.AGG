@@ -77,6 +77,12 @@
 			<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
         		<i class="fa fa-times-circle text-danger"></i>
 			</button>
+			@if (can('entregar-articulo-sin-cargo-pedido-venta', false) && empty($flGeneraNotaDeCredito))
+				<button type="button" title="Art&iacute;culo sin cargo" style="padding:0;" class="btn-accion-tabla botonsincargo tooltipsC">
+					<i class="fa fa-gift text-primary"></i>
+				</button>
+			@endif
+			<input type="hidden" name="sincargos[]" class="form-control sincargo" value="N" />
         </td>
 	</tr>
 </template>

@@ -36,6 +36,10 @@
 			return;
 		}
 
+		if ($(ptr).parents('tr').find('.sincargo').val() === 'S') {
+			return;
+		}
+
 		var claveCliente = codigoCliente || cliente_id;
 
 		$.get(carpetaBase + '/stock/asignapreciocliente/' + articulo_id + '/' + encodeURIComponent(claveCliente), function (data) {
@@ -51,8 +55,13 @@
 				moneda_id = value.moneda_id;
 			});
 
+			var $trPrecio = $(ptr).parents('tr');
+
+			if ($trPrecio.find('.sincargo').val() === 'S') {
+				return;
+			}
+
 			if (!window.listaprecioIdEsValidoLineaVentas(listaprecio_id)) {
-				var $trPrecio = $(ptr).parents('tr');
 				var skuPrecio = ($trPrecio.find('.codigoarticulo, .codigoarticulolocal').first().val() || '').trim();
 				window.limpiarLineaArticuloSinListaprecio($trPrecio, skuPrecio);
 
@@ -186,6 +195,68 @@
 		}
 	}
 
+	function liberarLineaSinCargoFactura($tr) {
+		$tr.find('.sincargo').val('N');
+		$tr.find('.codigoarticulo, .caja, .pieza, .kilo').prop('readonly', false);
+		$tr.find('.unidadmedida_id, .descuentoventa_id').prop('readonly', false);
+		$tr.find('.botonsincargo i').removeClass('text-success').addClass('text-primary');
+	}
+
+	function marcarLineaSinCargoFactura($tr, recalcular) {
+		$tr.find('.sincargo').val('S');
+		$tr.find('.precio').val(0);
+		$tr.find('.codigoarticulo, .caja, .pieza, .kilo').prop('readonly', true);
+		$tr.find('.unidadmedida_id, .descuentoventa_id').prop('readonly', true);
+		$tr.find('.botonsincargo i').removeClass('text-primary').addClass('text-success');
+		sincronizarCantidadRenglon($tr);
+
+		if (recalcular && typeof calculaFactura === 'function') {
+			calculaFactura();
+		}
+	}
+
+	function controlDescuentoFactura(ptr) {
+		var topedescuento = $('#topedescuento').val();
+		var articuloDescuento_id = $(ptr).parents('tr').find('.articulo_id').val();
+		var kiloActual = parseFloat(($(ptr).parents('tr').find('.kilo').val() || '0').toString().replace(',', '.'));
+		var totalKiloConCargo = 0;
+		var totalKiloSinCargo = kiloActual;
+		var itemActual = $(ptr).parents('tr').find('.item').val();
+
+		$('#tbody-tabla .articulo_id').each(function () {
+			var articulo_id = $(this).val();
+			var sinCargo = $(this).parents('tr').find('.sincargo').val();
+			var item = $(this).parents('tr').find('.item').val();
+
+			if (articulo_id == articuloDescuento_id && item != itemActual) {
+				var kilo = parseFloat(($(this).parents('tr').find('.kilo').val() || '0').toString().replace(',', '.'));
+
+				if (kilo >= 0 && kilo <= 99999999) {
+					if (sinCargo == 'N') {
+						totalKiloConCargo += kilo;
+					} else {
+						totalKiloSinCargo += kilo;
+					}
+				}
+			}
+		});
+
+		if (totalKiloConCargo > 0) {
+			var diferencia = totalKiloSinCargo / totalKiloConCargo * 100;
+
+			if (diferencia > parseFloat(topedescuento)) {
+				var dif = typeof redondearDecimales === 'function' ? redondearDecimales(diferencia, 2) : diferencia.toFixed(2);
+
+				alert('No puede tener artículos sin cargo por mas del ' + topedescuento + '%. Kilos ' + totalKiloConCargo + ' Sin Cargo ' +
+					totalKiloSinCargo + ' Diferencia ' + dif + '%');
+
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	window.activa_eventosFacturaBierzo = function (flInicio) {
 		$(document).off('change.ocPedidoCodigoLocal', '.codigoarticulolocal');
 		$('.unidadmedida_id').off('change.facturaBierzo');
@@ -208,11 +279,13 @@
 			var articulo_nuevo = $(this).parents('tr').find('.articulo_id').val();
 
 			if (articulo_nuevo != articulo_ant) {
-				$(this).parents('tr').find('.caja').val('');
-				$(this).parents('tr').find('.pieza').val('');
-				$(this).parents('tr').find('.kilo').val('');
-				$(this).parents('tr').find('.descuentoventa_id').val('');
-				$(this).parents('tr').find('.articulo_id_previa').val(articulo_nuevo);
+				var $trCodigo = $(this).parents('tr');
+				liberarLineaSinCargoFactura($trCodigo);
+				$trCodigo.find('.caja').val('');
+				$trCodigo.find('.pieza').val('');
+				$trCodigo.find('.kilo').val('');
+				$trCodigo.find('.descuentoventa_id').val('');
+				$trCodigo.find('.articulo_id_previa').val(articulo_nuevo);
 			}
 		});
 
@@ -287,6 +360,34 @@
 		$(document).on('change.facturaBierzo', '#itemspedido-table .precio', function () {
 			if (typeof calculaFactura === 'function') {
 				calculaFactura();
+			}
+		});
+
+		$(document).off('click.facturaBierzo', '#itemspedido-table .botonsincargo');
+		$(document).on('click.facturaBierzo', '#itemspedido-table .botonsincargo', function () {
+			var $tr = $(this).parents('tr');
+			var kilo = parseFloat(($tr.find('.kilo').val() || '0').toString().replace(',', '.'));
+			var articulo_id = $tr.find('.articulo_id').val();
+
+			if (!(kilo > 0) || !(articulo_id > 0)) {
+				return;
+			}
+			if (typeof window.filaEsConceptoVenta === 'function' && window.filaEsConceptoVenta($tr)) {
+				return;
+			}
+
+			$tr.find('.sincargo').val('S');
+
+			if (controlDescuentoFactura(this)) {
+				marcarLineaSinCargoFactura($tr, true);
+			} else {
+				$tr.find('.sincargo').val('N');
+			}
+		});
+
+		$('#tbody-tabla tr.item-pedido').each(function () {
+			if ($(this).find('.sincargo').val() === 'S') {
+				marcarLineaSinCargoFactura($(this), false);
 			}
 		});
 
