@@ -31,7 +31,7 @@
             <div class="anita-inbox-stats" role="group" aria-label="Resumen de pendientes">
                 <div class="anita-inbox-stat is-total">
                     <span class="anita-inbox-stat-value">{{ $totalPendientes }}</span>
-                    <span class="anita-inbox-stat-label">En cola</span>
+                    <span class="anita-inbox-stat-label">Pendientes</span>
                 </div>
                 <div class="anita-inbox-stat{{ ($countUrgentes ?? 0) > 0 ? ' is-urgent' : '' }}">
                     <span class="anita-inbox-stat-value">{{ $countUrgentes ?? 0 }}</span>
@@ -50,9 +50,9 @@
             $aging = $analytics['aging'] ?? ['fresco' => 0, 'medio' => 0, 'viejo' => 0];
             $agingTotal = max(1, (int) ($aging['fresco'] + $aging['medio'] + $aging['viejo']));
         @endphp
-        <section class="anita-inbox-analytics" aria-label="Resumen de tu cola">
+        <section class="anita-inbox-analytics" aria-label="Resumen de tus pendientes">
             <div class="anita-inbox-analytics-aging">
-                <p class="anita-inbox-analytics-label">Antigüedad de tu cola</p>
+                <p class="anita-inbox-analytics-label">Antigüedad de tus pendientes</p>
                 <div class="anita-inbox-aging-bar" role="img" aria-label="Distribución por antigüedad">
                     <span class="is-fresco" style="width: {{ round(100 * $aging['fresco'] / $agingTotal, 1) }}%"></span>
                     <span class="is-medio" style="width: {{ round(100 * $aging['medio'] / $agingTotal, 1) }}%"></span>
@@ -68,7 +68,7 @@
                 @if (($analytics['monto_total'] ?? 0) > 0)
                     <p class="anita-inbox-analytics-metric">
                         <strong>{{ number_format($analytics['monto_total'], 2, ',', '.') }}</strong>
-                        <span>Monto en cola</span>
+                        <span>Monto pendiente</span>
                     </p>
                 @endif
                 @if (!empty($analytics['por_fuente']) && count($analytics['por_fuente']) > 1)

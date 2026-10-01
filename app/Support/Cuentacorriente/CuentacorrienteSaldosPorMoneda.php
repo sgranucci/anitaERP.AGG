@@ -350,6 +350,68 @@ final class CuentacorrienteSaldosPorMoneda
         return 'Saldo pend. '.self::abreviaturaLocal().' (TC)';
     }
 
+    /**
+     * Columnas de saldo corrido de la ficha: moneda local primero y después
+     * cada moneda extranjera. No se mezclan en una sola columna.
+     *
+     * @param  list<array<string, mixed>>  $saldosPorMoneda
+     * @return list<array{moneda_id: int, abreviatura: string, es_local: bool}>
+     */
+    public static function columnasSaldoFicha(array $saldosPorMoneda, ?int $monedaFiltro = null): array
+    {
+        $localId = self::monedaLocalId();
+        $porId = [];
+
+        foreach ($saldosPorMoneda as $item) {
+            $id = (int) ($item['moneda_id'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            if ($monedaFiltro !== null && $id !== $monedaFiltro) {
+                continue;
+            }
+            $abreviatura = trim((string) ($item['abreviatura'] ?? ''));
+            $porId[$id] = [
+                'moneda_id' => $id,
+                'abreviatura' => $abreviatura !== ''
+                    ? $abreviatura
+                    : ($id === $localId ? self::abreviaturaLocal() : 'ME'),
+                'es_local' => $id === $localId,
+            ];
+        }
+
+        if ($porId === [] && ($monedaFiltro === null || $monedaFiltro === $localId)) {
+            $porId[$localId] = [
+                'moneda_id' => $localId,
+                'abreviatura' => self::abreviaturaLocal(),
+                'es_local' => true,
+            ];
+        }
+
+        uasort($porId, static function (array $a, array $b): int {
+            if ($a['es_local'] !== $b['es_local']) {
+                return $a['es_local'] ? -1 : 1;
+            }
+
+            return $a['moneda_id'] <=> $b['moneda_id'];
+        });
+
+        return array_values($porId);
+    }
+
+    /**
+     * @param  array{abreviatura?: string, es_local?: bool}  $columna
+     */
+    public static function etiquetaColumnaSaldoMoneda(array $columna): string
+    {
+        $abreviatura = trim((string) ($columna['abreviatura'] ?? ''));
+        if ($abreviatura !== '') {
+            return 'Saldo '.$abreviatura;
+        }
+
+        return ! empty($columna['es_local']) ? 'Saldo moneda local' : 'Saldo moneda extranjera';
+    }
+
     public static function formatearMonto(float $monto, string $abreviatura = ''): string
     {
         $abreviatura = trim($abreviatura);

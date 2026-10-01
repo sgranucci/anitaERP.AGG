@@ -167,7 +167,7 @@ class AnitaNotificacionService
             : "Tenés {$total} pendientes en tu bandeja";
         $cuerpo = $urgentes > 0
             ? ($urgentes === 1 ? '1 es urgente.' : "{$urgentes} son urgentes.")
-            : 'Revisá Mis aprobaciones para poner al día tu cola.';
+            : 'Revisá Mis aprobaciones para poner al día tu bandeja.';
 
         $this->crear($usuarioId, $titulo, $cuerpo, $linkBandeja, self::TIPO_DIGEST, [
             'total' => $total,

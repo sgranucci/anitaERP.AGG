@@ -67,6 +67,9 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
                 static fn (array $fila): bool => ($fila['tipo'] ?? '') !== 'header_proveedor'
             ));
             $this->colUltima = 'B';
+        } elseif (($this->filtros['modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
+            $cantSaldo = max(1, count($this->resultado['columnas_saldo'] ?? []));
+            $this->colUltima = self::letraColumna(9 + $cantSaldo);
         }
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion(
@@ -116,15 +119,19 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
             ];
         }
 
-        return [
+        $formatos = [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'G' => NumberFormat::FORMAT_TEXT,
-            'H' => '#,##0.00',
-            'I' => '#,##0.00',
-            'J' => '#,##0.00',
-            'K' => '#,##0.00',
         ];
+        $hasta = ($this->filtros['modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA
+            ? 9 + max(1, count($this->resultado['columnas_saldo'] ?? []))
+            : 11;
+        for ($indice = 8; $indice <= $hasta; $indice++) {
+            $formatos[self::letraColumna($indice)] = '#,##0.00';
+        }
+
+        return $formatos;
     }
 
     public function styles(Worksheet $sheet)
@@ -154,7 +161,7 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
             ];
         }
 
-        return [
+        $anchos = [
             'A' => 10,
             'B' => 28,
             'C' => 14,
@@ -166,8 +173,29 @@ class ProveedorCuentacorrienteReporteExport implements FromView, ShouldAutoSize,
             'I' => 16,
             'J' => 16,
             'K' => 16,
-            'L' => 4,
+            'L' => 16,
         ];
+        if (($this->filtros['modo'] ?? '') === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
+            $hasta = 9 + max(1, count($this->resultado['columnas_saldo'] ?? []));
+            for ($indice = 13; $indice <= $hasta; $indice++) {
+                $anchos[self::letraColumna($indice)] = 16;
+            }
+        }
+
+        return $anchos;
+    }
+
+    private static function letraColumna(int $indice): string
+    {
+        $letra = '';
+        $n = $indice;
+        while ($n > 0) {
+            $n--;
+            $letra = chr(65 + ($n % 26)).$letra;
+            $n = intdiv($n, 26);
+        }
+
+        return $letra;
     }
 
     public function title(): string

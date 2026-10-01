@@ -1,5 +1,6 @@
 @php
     use App\Support\Compras\ProveedorCuentacorrienteReporteFiltros;
+    use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
     $filaLogo = $reservarFilaLogoExcel ?? false;
     $modoDeuda = ! empty($modoDeuda)
         || (($filtros['modo'] ?? ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA)
@@ -7,7 +8,16 @@
     $stats = $resultado['stats'] ?? [];
     $soloTotalesDeuda = $modoDeuda && ! empty($filtros['solo_totales']);
     $totalesReporte = $resultado['totales'] ?? [];
-    $colspan = $soloTotalesDeuda ? 2 : 12;
+    $columnasSaldo = $resultado['columnas_saldo'] ?? [];
+    if (! $modoDeuda && $columnasSaldo === []) {
+        $columnasSaldo = [[
+            'moneda_id' => CuentacorrienteSaldosPorMoneda::monedaLocalId(),
+            'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
+            'es_local' => true,
+        ]];
+    }
+    $cantSaldoFicha = max(1, count($columnasSaldo));
+    $colspan = $soloTotalesDeuda ? 2 : ($modoDeuda ? 12 : (9 + $cantSaldoFicha));
 @endphp
 <table>
     @if ($filaLogo)
@@ -89,9 +99,9 @@
             @else
                 <th>Debe</th>
                 <th>Haber</th>
-                <th>Saldo</th>
-                <th></th>
-                <th></th>
+                @foreach ($columnasSaldo as $colSaldo)
+                    <th>{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoMoneda($colSaldo) }}</th>
+                @endforeach
             @endif
         </tr>
     </thead>
@@ -102,16 +112,9 @@
                 <tr>
                     <td></td>
                     <td>Empresa: {{ $fila['nombreempresa'] ?? $fila['empresa_nombre'] ?? '' }}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
+                    @for ($columnaVacia = 2; $columnaVacia < $colspan; $columnaVacia++)
+                        <td></td>
+                    @endfor
                 </tr>
                 @continue
             @endif
@@ -140,9 +143,14 @@
                 @else
                     <td>{{ isset($fila['debe']) ? number_format((float) $fila['debe'], 2, '.', '') : '' }}</td>
                     <td>{{ isset($fila['haber']) ? number_format((float) $fila['haber'], 2, '.', '') : '' }}</td>
-                    <td>{{ isset($fila['saldo']) ? number_format((float) $fila['saldo'], 2, '.', '') : '' }}</td>
-                    <td></td>
-                    <td></td>
+                    @php $mapaSaldos = $fila['saldos_por_moneda'] ?? null; @endphp
+                    @foreach ($columnasSaldo as $colSaldo)
+                        <td>
+                            @if (is_array($mapaSaldos))
+                                {{ number_format((float) ($mapaSaldos[$colSaldo['moneda_id']] ?? $mapaSaldos[(string) $colSaldo['moneda_id']] ?? 0), 2, '.', '') }}
+                            @endif
+                        </td>
+                    @endforeach
                 @endif
             </tr>
         @endforeach

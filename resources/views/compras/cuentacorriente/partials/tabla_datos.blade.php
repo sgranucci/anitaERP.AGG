@@ -7,6 +7,9 @@
         === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA;
     $expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion ?? null);
     $enPesos = CuentacorrienteSaldosPorMoneda::esExpresionPesos($expresion);
+    $columnasSaldo = $modoDeuda
+        ? []
+        : CuentacorrienteSaldosPorMoneda::columnasSaldoFicha($saldosPorMoneda ?? [], $monedaId ?? null);
     $paraExcel = ! empty($para_excel);
     $saldosCorridos = $saldosAnterioresPorMoneda ?? [];
     $saldoPesos = (float) ($saldoAnteriorPesos ?? 0);
@@ -46,7 +49,11 @@
         @else
             <th class="text-right" style="width: 10%; text-align: right;">Debe</th>
             <th class="text-right" style="width: 10%; text-align: right;">Haber</th>
-            <th class="text-right" style="width: 11%; text-align: right;">Saldo</th>
+            @foreach ($columnasSaldo as $colSaldo)
+                <th class="text-right" style="width: 11%; text-align: right;" title="{{ ! empty($colSaldo['es_local']) ? 'Saldo acumulado en moneda local' : 'Saldo acumulado en moneda extranjera' }}">
+                    {{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoMoneda($colSaldo) }}
+                </th>
+            @endforeach
             <th class="text-right" style="width: 11%; text-align: right;">{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoPesos() }}</th>
         @endif
     </tr>
@@ -68,7 +75,6 @@
             $saldoPendientePesos = $importes['saldo_pendiente_pesos'];
             $abreviaturaFila = $importes['abreviatura'];
             $monedaFilaId = $importes['moneda_id'];
-            $saldoFila = 0.0;
             $saldoFilaPesos = 0.0;
             if (! $modoDeuda) {
                 $saldosCorridos = CuentacorrienteSaldosPorMoneda::acumularSaldoCorrido(
@@ -76,7 +82,6 @@
                     $monedaFilaId,
                     (float) $data->total
                 );
-                $saldoFila = $saldosCorridos[$monedaFilaId] ?? 0.0;
                 $saldoPesos = CuentacorrienteSaldosPorMoneda::acumularSaldoCorridoPesos(
                     $saldoPesos,
                     $data,
@@ -119,7 +124,9 @@
                         {{ $formatearMonto($dh['haber'], $abreviaturaFila) }}
                     @endif
                 </td>
-                <td class="text-right" style="text-align: right;">{{ $formatearMonto($saldoFila, $data->monedas->abreviatura ?? $abreviaturaFila) }}</td>
+                @foreach ($columnasSaldo as $colSaldo)
+                    <td class="text-right" style="text-align: right;">{{ $formatearMonto((float) ($saldosCorridos[$colSaldo['moneda_id']] ?? 0), '') }}</td>
+                @endforeach
                 <td class="text-right" style="text-align: right;">{{ $formatearMonto($saldoFilaPesos, CuentacorrienteSaldosPorMoneda::abreviaturaLocal()) }}</td>
             @endif
         </tr>

@@ -75,6 +75,7 @@ class ProveedorCuentacorrienteReporteService
             return [
                 'filas' => [],
                 'totales' => $this->totalesVacios(),
+                'columnas_saldo' => [],
                 'advertencias' => array_merge($advertencias, ['Sin movimientos para los filtros indicados.']),
                 'stats' => ['proveedores' => 0, 'movimientos' => 0, 'aplicaciones' => 0],
                 'proveedores_resueltos' => $resProveedores['iniciales'],
@@ -101,9 +102,12 @@ class ProveedorCuentacorrienteReporteService
         $totalDebe = 0.0;
         $totalHaber = 0.0;
         $totalPendiente = 0.0;
+        $totalesSaldosPorMoneda = [];
+        $columnasSaldo = [];
         $movimientosCount = 0;
         $aplicacionesCount = 0;
         $cotizacionesDiaUsadas = 0;
+        $esFicha = $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA;
 
         foreach ($porProveedor as $proveedorId => $movsProveedor) {
             /** @var Collection<int, Proveedor_Cuentacorriente> $movsProveedor */
@@ -136,7 +140,8 @@ class ProveedorCuentacorrienteReporteService
                 $movsProveedor = $this->ordenarPorFechaComprobante($movsProveedor);
             }
 
-            if ($modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
+            $saldosMoneda = [];
+            if ($esFicha) {
                 $saldoAnterior = $this->saldoAnteriorProveedor(
                     (int) $proveedorId,
                     $filtros,
@@ -145,7 +150,17 @@ class ProveedorCuentacorrienteReporteService
                 );
                 $saldoCorrido = $saldoAnterior['origen'];
                 $saldoCorridoPesos = $saldoAnterior['pesos'];
-                if (! $soloTotales && (abs($saldoCorrido) > 0.0001 || abs($saldoCorridoPesos) > 0.0001)) {
+                $saldosMoneda = $saldoAnterior['por_moneda'];
+                foreach ($saldosMoneda as $monedaIdAnterior => $montoAnterior) {
+                    if (abs((float) $montoAnterior) > 0.0001) {
+                        $this->registrarColumnaSaldo(
+                            $columnasSaldo,
+                            (int) $monedaIdAnterior,
+                            (string) ($saldoAnterior['abreviaturas'][$monedaIdAnterior] ?? '')
+                        );
+                    }
+                }
+                if (! $soloTotales && $saldosMoneda !== [] && (abs($saldoCorrido) > 0.0001 || abs($saldoCorridoPesos) > 0.0001)) {
                     $filas[] = [
                         'tipo' => 'saldo_anterior',
                         'proveedor_id' => (int) $proveedorId,
@@ -156,6 +171,7 @@ class ProveedorCuentacorrienteReporteService
                         'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
                         'saldo_origen' => $saldoCorrido,
                         'saldo_pesos' => $saldoCorridoPesos,
+                        'saldos_por_moneda' => $saldosMoneda,
                         'abreviatura' => $enPesos
                             ? CuentacorrienteSaldosPorMoneda::abreviaturaLocal()
                             : '',
@@ -188,7 +204,7 @@ class ProveedorCuentacorrienteReporteService
                 $dhMov = ProveedorCuentacorrienteGrillaSupport::debeHaberDesdeTotal($totalOrigen, abs($importeMostrar));
                 $dhMovPesos = ProveedorCuentacorrienteGrillaSupport::debeHaberDesdeTotal($totalOrigen, abs($importeFirmadoPesos));
 
-                if ($modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA) {
+                if ($esFicha) {
                     if ($dhMov['debe'] !== null) {
                         $subDebe += $dhMov['debe'];
                         $totalDebe += (float) ($dhMovPesos['debe'] ?? 0);
@@ -199,6 +215,13 @@ class ProveedorCuentacorrienteReporteService
                     }
                     $saldoCorrido += $totalOrigen;
                     $saldoCorridoPesos += $importeFirmadoPesos;
+                    $monedaNativaId = (int) $conv['moneda_id'];
+                    $saldosMoneda[$monedaNativaId] = round(($saldosMoneda[$monedaNativaId] ?? 0) + $totalOrigen, 2);
+                    $this->registrarColumnaSaldo(
+                        $columnasSaldo,
+                        $monedaNativaId,
+                        CuentacorrienteSaldosPorMoneda::abreviaturaDe($mov)
+                    );
                 } else {
                     [$importeMostrar, $aplicadoMostrar] = $this->columnasImporteAplicadoDeuda(
                         $mov,
@@ -248,6 +271,7 @@ class ProveedorCuentacorrienteReporteService
                         : null,
                     'saldo' => $enPesos ? $saldoCorridoPesos : $saldoCorrido,
                     'saldo_pesos' => $saldoCorridoPesos,
+                    'saldos_por_moneda' => $esFicha ? $saldosMoneda : null,
                 ];
                 $filas[] = $filaMov;
 
@@ -302,13 +326,34 @@ class ProveedorCuentacorrienteReporteService
                     : null,
                 'saldo_pendiente' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $subPendiente : null,
                 'saldo_parcial' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA ? $saldoParcial : null,
-                'saldo' => $modo === ProveedorCuentacorrienteReporteFiltros::MODO_FICHA
+                'saldo' => $esFicha
                     ? ($enPesos ? $saldoCorridoPesos : $saldoCorrido)
                     : null,
                 'saldo_pesos' => $saldoCorridoPesos,
+                'saldos_por_moneda' => $esFicha ? $saldosMoneda : null,
                 'abreviatura' => $enPesos ? CuentacorrienteSaldosPorMoneda::abreviaturaLocal() : '',
             ];
+
+            if ($esFicha) {
+                foreach ($saldosMoneda as $monedaIdTotal => $montoTotal) {
+                    $totalesSaldosPorMoneda[$monedaIdTotal] = round(
+                        ($totalesSaldosPorMoneda[$monedaIdTotal] ?? 0) + (float) $montoTotal,
+                        2
+                    );
+                }
+            }
         }
+
+        if ($esFicha) {
+            $this->registrarColumnaSaldo(
+                $columnasSaldo,
+                CuentacorrienteSaldosPorMoneda::monedaLocalId(),
+                CuentacorrienteSaldosPorMoneda::abreviaturaLocal()
+            );
+        }
+        $columnasSaldoLista = $esFicha
+            ? CuentacorrienteSaldosPorMoneda::columnasSaldoFicha(array_values($columnasSaldo))
+            : [];
 
         if ($cotizacionesDiaUsadas > 0 && $enPesos) {
             $advertencias[] = 'Se usó cotización vigente del día en '.$cotizacionesDiaUsadas
@@ -321,9 +366,11 @@ class ProveedorCuentacorrienteReporteService
                 'debe' => $totalDebe,
                 'haber' => $totalHaber,
                 'pendiente' => $totalPendiente,
+                'saldos_por_moneda' => $totalesSaldosPorMoneda,
                 'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
                 'modo' => $modo,
             ],
+            'columnas_saldo' => $columnasSaldoLista,
             'advertencias' => $advertencias,
             'stats' => [
                 'proveedores' => $porProveedor->count(),
@@ -619,16 +666,18 @@ class ProveedorCuentacorrienteReporteService
 
     /**
      * @param  array<string, mixed>  $filtros
-     * @return array{origen: float, pesos: float}
+     * @return array{origen: float, pesos: float, por_moneda: array<int, float>, abreviaturas: array<int, string>}
      */
     private function saldoAnteriorProveedor(int $proveedorId, array $filtros, bool $enPesos, bool $forzarDia): array
     {
+        $vacio = ['origen' => 0.0, 'pesos' => 0.0, 'por_moneda' => [], 'abreviaturas' => []];
         $fechaDesde = trim((string) ($filtros['fecha_desde'] ?? ''));
         if ($fechaDesde === '') {
-            return ['origen' => 0.0, 'pesos' => 0.0];
+            return $vacio;
         }
 
         $query = Proveedor_Cuentacorriente::query()
+            ->with('monedas:id,abreviatura')
             ->where('proveedor_id', $proveedorId)
             ->whereDate('fecha', '<', $fechaDesde);
 
@@ -639,13 +688,55 @@ class ProveedorCuentacorrienteReporteService
 
         $origen = 0.0;
         $pesos = 0.0;
-        foreach ($query->get(['total', 'moneda_id', 'cotizacion', 'fecha']) as $mov) {
-            $origen += (float) $mov->total;
+        $porMoneda = [];
+        $abreviaturas = [];
+        foreach ($query->get(['id', 'total', 'moneda_id', 'cotizacion', 'fecha']) as $mov) {
+            $monedaId = CuentacorrienteSaldosPorMoneda::monedaIdDe($mov);
+            $total = (float) $mov->total;
+            $origen += $total;
+            $porMoneda[$monedaId] = round(($porMoneda[$monedaId] ?? 0) + $total, 2);
+            $abreviatura = CuentacorrienteSaldosPorMoneda::abreviaturaDe($mov);
+            if ($abreviatura !== '') {
+                $abreviaturas[$monedaId] = $abreviatura;
+            }
             $conv = $this->convertirMovimiento($mov, true, $forzarDia);
             $pesos += $conv['importe_firmado_pesos'];
         }
 
-        return ['origen' => $origen, 'pesos' => $pesos];
+        return [
+            'origen' => $origen,
+            'pesos' => $pesos,
+            'por_moneda' => $porMoneda,
+            'abreviaturas' => $abreviaturas,
+        ];
+    }
+
+    /**
+     * @param  array<int, array{moneda_id: int, abreviatura: string, es_local: bool}>  $columnas
+     */
+    private function registrarColumnaSaldo(array &$columnas, int $monedaId, string $abreviatura): void
+    {
+        if ($monedaId <= 0) {
+            return;
+        }
+
+        $abreviatura = trim($abreviatura);
+        $localId = CuentacorrienteSaldosPorMoneda::monedaLocalId();
+        if (! isset($columnas[$monedaId])) {
+            $columnas[$monedaId] = [
+                'moneda_id' => $monedaId,
+                'abreviatura' => $abreviatura !== ''
+                    ? $abreviatura
+                    : ($monedaId === $localId ? CuentacorrienteSaldosPorMoneda::abreviaturaLocal() : 'ME'),
+                'es_local' => $monedaId === $localId,
+            ];
+
+            return;
+        }
+
+        if ($columnas[$monedaId]['abreviatura'] === '' && $abreviatura !== '') {
+            $columnas[$monedaId]['abreviatura'] = $abreviatura;
+        }
     }
 
     /**
@@ -788,7 +879,7 @@ class ProveedorCuentacorrienteReporteService
     }
 
     /**
-     * @return array{debe: float, haber: float, pendiente: float, abreviatura: string, modo: string}
+     * @return array{debe: float, haber: float, pendiente: float, saldos_por_moneda: array<int, float>, abreviatura: string, modo: string}
      */
     private function totalesVacios(): array
     {
@@ -796,6 +887,7 @@ class ProveedorCuentacorrienteReporteService
             'debe' => 0.0,
             'haber' => 0.0,
             'pendiente' => 0.0,
+            'saldos_por_moneda' => [],
             'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
             'modo' => ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA,
         ];
@@ -814,6 +906,7 @@ class ProveedorCuentacorrienteReporteService
         $proveedoresResueltos = [];
         $stats = ['proveedores' => 0, 'movimientos' => 0, 'aplicaciones' => 0];
         $totales = $this->totalesVacios();
+        $columnasSaldo = [];
         $huboDatos = false;
 
         foreach ($empresaIds as $empresaId) {
@@ -855,6 +948,19 @@ class ProveedorCuentacorrienteReporteService
             $totales['debe'] += (float) ($res['totales']['debe'] ?? 0);
             $totales['haber'] += (float) ($res['totales']['haber'] ?? 0);
             $totales['pendiente'] += (float) ($res['totales']['pendiente'] ?? 0);
+            foreach ($res['totales']['saldos_por_moneda'] ?? [] as $monedaIdTotal => $montoTotal) {
+                $totales['saldos_por_moneda'][(int) $monedaIdTotal] = round(
+                    ($totales['saldos_por_moneda'][(int) $monedaIdTotal] ?? 0) + (float) $montoTotal,
+                    2
+                );
+            }
+            foreach ($res['columnas_saldo'] ?? [] as $columnaSaldo) {
+                $this->registrarColumnaSaldo(
+                    $columnasSaldo,
+                    (int) ($columnaSaldo['moneda_id'] ?? 0),
+                    (string) ($columnaSaldo['abreviatura'] ?? '')
+                );
+            }
             $totales['modo'] = (string) ($res['totales']['modo'] ?? $totales['modo']);
             $totales['abreviatura'] = (string) ($res['totales']['abreviatura'] ?? $totales['abreviatura']);
         }
@@ -864,6 +970,7 @@ class ProveedorCuentacorrienteReporteService
             return [
                 'filas' => [],
                 'totales' => $this->totalesVacios(),
+                'columnas_saldo' => [],
                 'advertencias' => $advertencias !== []
                     ? $advertencias
                     : ['Sin movimientos para los filtros indicados.'],
@@ -876,6 +983,7 @@ class ProveedorCuentacorrienteReporteService
         return [
             'filas' => $filas,
             'totales' => $totales,
+            'columnas_saldo' => CuentacorrienteSaldosPorMoneda::columnasSaldoFicha(array_values($columnasSaldo)),
             'advertencias' => $advertencias,
             'stats' => $stats,
             'proveedores_resueltos' => $proveedoresResueltos,

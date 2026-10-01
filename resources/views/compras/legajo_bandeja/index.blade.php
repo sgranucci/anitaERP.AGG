@@ -516,6 +516,26 @@ Bandeja de legajos
         border-radius: 8px;
         font-size: 0.75rem;
     }
+    .bandeja-pagos-rets {
+        margin-top: 0.55rem;
+        padding-top: 0.45rem;
+        border-top: 1px dashed var(--bp-line);
+    }
+    .bandeja-pagos-rets-titulo {
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--bp-muted);
+        margin-bottom: 0.25rem;
+    }
+    .bandeja-pagos-ret {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        font-size: 0.8rem;
+        padding: 0.12rem 0;
+    }
     .bandeja-pagos-estado {
         display: inline-block;
         border-radius: 6px;

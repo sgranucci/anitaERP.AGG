@@ -8,6 +8,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Historia;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Comprobante;
+use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Proveedor;
@@ -109,9 +110,9 @@ class OrdencompraLegajoBandejaPaqueteService
         $facturas = $this->fusionarComprobantesEnFacturas($facturas, $comprobantes);
         $facturas = $this->adjuntarScansAnitaAFacturas($oc, $facturas);
         [$facturas, $coms] = $this->adjuntarAsignacionesYSugerenciasCom($oc, $facturas, $coms, $asignadas);
-        $detallePagos = $this->resolverPagosDeComprobantes(
+        $detallePagos = $this->adjuntarRetencionesAPagos($this->resolverPagosDeComprobantes(
             array_map(static fn (array $c) => (int) $c['id'], $comprobantes)
-        );
+        ));
         $pagos = $detallePagos['lista'];
         $facturas = $this->adjuntarPagosAFacturas($facturas, $detallePagos['por_comprobante']);
         $pendientes = OrdencompraEnvioCuentasAPagarGateSupport::documentosPendientesCarga($oc);
@@ -1836,8 +1837,9 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         $ctRows = Proveedor_Cuentacorriente::query()
+            ->with('monedas:id,abreviatura')
             ->whereIn('comprobante_proveedor_id', $comprobanteIds)
-            ->get(['id', 'comprobante_proveedor_id']);
+            ->get(['id', 'comprobante_proveedor_id', 'moneda_id']);
         if ($ctRows->isEmpty()) {
             return $this->pagosFallbackPorCuentacorriente($comprobanteIds);
         }
@@ -1851,8 +1853,10 @@ class OrdencompraLegajoBandejaPaqueteService
         }
         $ctIds = $ctRows->pluck('id')->map(static fn ($id) => (int) $id)->all();
         $ctACp = [];
+        $monedaPorCt = [];
         foreach ($ctRows as $ct) {
             $ctACp[(int) $ct->id] = (int) $ct->comprobante_proveedor_id;
+            $monedaPorCt[(int) $ct->id] = (string) ($ct->monedas?->abreviatura ?? '');
         }
 
         $aplicaciones = Pagoproveedor_Comprobante::query()
@@ -1885,7 +1889,8 @@ class OrdencompraLegajoBandejaPaqueteService
                 continue;
             }
             $montoApl = (float) $apl->montoaplicado;
-            $filaPago = $this->filaPagoResumen($pago, $montoApl);
+            $monedaApl = (string) ($monedaPorCt[$ctId] ?? '');
+            $filaPago = $this->filaPagoResumen($pago, $montoApl, $monedaApl !== '' ? $monedaApl : null);
 
             if (! isset($ops[$pagoId])) {
                 $ops[$pagoId] = $filaPago;
@@ -1959,6 +1964,7 @@ class OrdencompraLegajoBandejaPaqueteService
             ->with([
                 'pagoproveedores:id,fecha,tipocomprobante,letra,sucursal,numerotransaccion,monto,moneda_id,estado',
                 'pagoproveedores.monedas:id,abreviatura',
+                'monedas:id,abreviatura',
             ])
             ->whereIn('comprobante_proveedor_id', $comprobanteIds)
             ->where('pagoproveedor_id', '>', 0)
@@ -1974,7 +1980,8 @@ class OrdencompraLegajoBandejaPaqueteService
             if ($pagoId <= 0 || $cpId <= 0 || $pago === null) {
                 continue;
             }
-            $fila = $this->filaPagoResumen($pago, null);
+            $monedaDeuda = (string) ($row->monedas?->abreviatura ?? '');
+            $fila = $this->filaPagoResumen($pago, null, $monedaDeuda !== '' ? $monedaDeuda : null);
             if (! isset($ops[$pagoId])) {
                 $ops[$pagoId] = $fila;
                 $ops[$pagoId]['monto_aplicado_legajo'] = $fila['monto'];
@@ -2028,16 +2035,19 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         $deudas = Proveedor_Cuentacorriente::query()
+            ->with('monedas:id,abreviatura')
             ->whereIn('comprobante_proveedor_id', $comprobanteIds)
             ->where('total', '>', 0)
-            ->get(['id', 'comprobante_proveedor_id']);
+            ->get(['id', 'comprobante_proveedor_id', 'moneda_id']);
         if ($deudas->isEmpty()) {
             return ['lista' => [], 'por_comprobante' => []];
         }
 
         $ctACp = [];
+        $monedaPorCt = [];
         foreach ($deudas as $deuda) {
             $ctACp[(int) $deuda->id] = (int) $deuda->comprobante_proveedor_id;
+            $monedaPorCt[(int) $deuda->id] = (string) ($deuda->monedas?->abreviatura ?? '');
         }
         $ctIds = array_keys($ctACp);
 
@@ -2106,7 +2116,8 @@ class OrdencompraLegajoBandejaPaqueteService
             if ($montoApl <= 0) {
                 continue;
             }
-            $filaPago = $this->filaPagoResumen($pago, $montoApl);
+            $monedaApl = (string) ($monedaPorCt[$ctId] ?? '');
+            $filaPago = $this->filaPagoResumen($pago, $montoApl, $monedaApl !== '' ? $monedaApl : null);
 
             if (! isset($ops[$pagoId])) {
                 $ops[$pagoId] = $filaPago;
@@ -2180,7 +2191,7 @@ class OrdencompraLegajoBandejaPaqueteService
      * @param  \App\Models\Compras\Pagoproveedor  $pago
      * @return array<string, mixed>
      */
-    private function filaPagoResumen($pago, ?float $montoAplicado): array
+    private function filaPagoResumen($pago, ?float $montoAplicado, ?string $monedaAplicado = null): array
     {
         $pagoId = (int) $pago->id;
         $fecha = $pago->fecha;
@@ -2195,8 +2206,82 @@ class OrdencompraLegajoBandejaPaqueteService
             'monto' => $pago->monto !== null ? (float) $pago->monto : null,
             'moneda' => (string) $moneda,
             'monto_aplicado' => $montoAplicado,
+            'moneda_aplicado' => $monedaAplicado !== null && $monedaAplicado !== '' ? $monedaAplicado : (string) $moneda,
+            'retenciones' => [],
             'url' => route('editar_pagoproveedor', ['id' => $pagoId]),
             'url_pdf' => route('imprimir_pagoproveedor', ['id' => $pagoId]),
+        ];
+    }
+
+    /**
+     * Certificados de la orden (ganancias, IVA, SUSS, IIBB), no el importe aplicado a la factura.
+     *
+     * @param  array{
+     *   lista: list<array<string, mixed>>,
+     *   por_comprobante: array<int, list<array<string, mixed>>>
+     * }  $detalle
+     * @return array{
+     *   lista: list<array<string, mixed>>,
+     *   por_comprobante: array<int, list<array<string, mixed>>>
+     * }
+     */
+    private function adjuntarRetencionesAPagos(array $detalle): array
+    {
+        $ids = [];
+        foreach ($detalle['lista'] as $op) {
+            $id = (int) ($op['id'] ?? 0);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+        if ($ids === []) {
+            return $detalle;
+        }
+
+        $porPago = [];
+        $filas = Pagoproveedor_Retencion::query()
+            ->with('monedas:id,abreviatura')
+            ->whereIn('pagoproveedor_id', array_values($ids))
+            ->orderBy('id')
+            ->get();
+        foreach ($filas as $ret) {
+            $porPago[(int) $ret->pagoproveedor_id][] = $this->resumenRetencion($ret);
+        }
+
+        foreach ($detalle['lista'] as &$op) {
+            $op['retenciones'] = $porPago[(int) ($op['id'] ?? 0)] ?? [];
+        }
+        unset($op);
+        foreach ($detalle['por_comprobante'] as &$lista) {
+            foreach ($lista as &$fila) {
+                $fila['retenciones'] = $porPago[(int) ($fila['id'] ?? 0)] ?? [];
+            }
+            unset($fila);
+        }
+        unset($lista);
+
+        return $detalle;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function resumenRetencion(Pagoproveedor_Retencion $ret): array
+    {
+        $pagoId = (int) $ret->pagoproveedor_id;
+        $retId = (int) $ret->id;
+
+        return [
+            'id' => $retId,
+            'tipo' => $ret->etiquetaTipo(),
+            'importe' => (float) $ret->importe,
+            'alicuota' => (float) $ret->alicuota,
+            'base' => (float) $ret->base_calculo,
+            'certificado' => (string) ($ret->nro_certificado ?? ''),
+            'moneda' => (string) ($ret->monedas?->abreviatura ?? ''),
+            'url_pdf' => ($pagoId > 0 && $retId > 0)
+                ? route('imprimir_retencion_pagoproveedor', ['id' => $pagoId, 'retencionId' => $retId])
+                : null,
         ];
     }
 
@@ -3033,8 +3118,13 @@ class OrdencompraLegajoBandejaPaqueteService
                     $facturas[$idx]['url_comprobante'] = $urlCp;
                 }
                 $facturas[$idx]['cargado_cxp'] = true;
-                if (! isset($facturas[$idx]['total']) || $facturas[$idx]['total'] === null) {
-                    $facturas[$idx]['total'] = $cp['total'] ?? null;
+                $totalCp = isset($cp['total']) && $cp['total'] !== null ? (float) $cp['total'] : null;
+                $totalFac = isset($facturas[$idx]['total']) && $facturas[$idx]['total'] !== null
+                    ? (float) $facturas[$idx]['total']
+                    : null;
+                // La precarga de un scan Anita nace en 0; el importe real está en el comprobante de CxP.
+                if ($totalCp !== null && ($totalFac === null || abs($totalFac) < 0.005) && abs($totalCp) >= 0.005) {
+                    $facturas[$idx]['total'] = $totalCp;
                 }
                 if (($facturas[$idx]['estado'] ?? '') === '' && ($cp['estado'] ?? '') !== '') {
                     $facturas[$idx]['estado'] = (string) $cp['estado'];

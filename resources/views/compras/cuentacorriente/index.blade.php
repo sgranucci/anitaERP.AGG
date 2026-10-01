@@ -40,6 +40,9 @@
     $expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion ?? null);
     $enPesos = CuentacorrienteSaldosPorMoneda::esExpresionPesos($expresion);
     $abrevLocal = CuentacorrienteSaldosPorMoneda::abreviaturaLocal();
+    $columnasSaldo = $modoCuentaCorriente
+        ? CuentacorrienteSaldosPorMoneda::columnasSaldoFicha($saldosPorMoneda ?? [], $monedaId)
+        : [];
 $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
     ['id' => $id],
     ProveedorCuentacorrienteListadoFiltros::paraQueryStringEmpresa($filtros ?? []),
@@ -145,7 +148,11 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                 @if ($modoCuentaCorriente)
                                     <th style="width: 11%; text-align: right;">Debe</th>
                                     <th style="width: 11%; text-align: right;">Haber</th>
-                                    <th style="width: 12%; text-align: right;">Saldo</th>
+                                    @foreach ($columnasSaldo as $colSaldo)
+                                        <th style="width: 12%; text-align: right;" title="{{ ! empty($colSaldo['es_local']) ? 'Saldo acumulado en moneda local' : 'Saldo acumulado en moneda extranjera' }}">
+                                            {{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoMoneda($colSaldo) }}
+                                        </th>
+                                    @endforeach
                                     <th style="width: 13%; text-align: right;">{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoPesos() }}</th>
                                 @else
                                     <th style="width: 11%; text-align: right;">Importe</th>
@@ -184,7 +191,6 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                             $monedaFilaId,
                                             (float) $data->total
                                         );
-                                        $saldoFila = $saldosCorridos[$monedaFilaId] ?? 0.0;
                                         $saldoPesos = CuentacorrienteSaldosPorMoneda::acumularSaldoCorridoPesos(
                                             $saldoPesos,
                                             $data,
@@ -226,9 +232,11 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                                 {{ CuentacorrienteSaldosPorMoneda::formatearMonto($dh['haber'], $abreviaturaFila) }}
                                             @endif
                                         </td>
-                                        <td style="text-align: right;">
-                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) $saldoFila, $data->monedas->abreviatura ?? $abreviaturaFila) }}
-                                        </td>
+                                        @foreach ($columnasSaldo as $colSaldo)
+                                            <td style="text-align: right;">
+                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) ($saldosCorridos[$colSaldo['moneda_id']] ?? 0), '') }}
+                                            </td>
+                                        @endforeach
                                         <td style="text-align: right;">
                                             {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) $saldoFilaPesos, $abrevLocal) }}
                                         </td>
@@ -259,9 +267,20 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                             <tfoot>
                                 <tr class="font-weight-bold bg-light">
                                     <td colspan="8" class="text-right">Saldos acumulados</td>
-                                    <td style="text-align: right;">
-                                        {{ CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda ?? [], 'saldo_cc') }}
-                                    </td>
+                                    @foreach ($columnasSaldo as $colSaldo)
+                                        @php
+                                            $saldoColumna = 0.0;
+                                            foreach ($saldosPorMoneda ?? [] as $saldoMoneda) {
+                                                if ((int) ($saldoMoneda['moneda_id'] ?? 0) === (int) $colSaldo['moneda_id']) {
+                                                    $saldoColumna = (float) ($saldoMoneda['saldo_cc'] ?? 0);
+                                                    break;
+                                                }
+                                            }
+                                        @endphp
+                                        <td style="text-align: right;">
+                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto($saldoColumna, '') }}
+                                        </td>
+                                    @endforeach
                                     <td style="text-align: right;">
                                         {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) ($equivalentePesos['saldo_cc'] ?? 0), $abrevLocal) }}
                                     </td>

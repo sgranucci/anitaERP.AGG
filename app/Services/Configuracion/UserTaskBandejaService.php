@@ -967,7 +967,7 @@ class UserTaskBandejaService
         $diasLimite = 5;
         if (! $fechaBase) {
             return [
-                'sla_label' => $diasPendiente > 0 ? $diasPendiente.' día(s) en cola' : 'Reciente',
+                'sla_label' => $diasPendiente > 0 ? $diasPendiente.' día(s) en espera' : 'Reciente',
                 'sla_estado' => $this->urgenciaPorDias($diasPendiente) === 'urgente' ? 'vencido' : 'ok',
                 'sla_fecha_limite' => null,
                 'dias_para_vencer' => null,

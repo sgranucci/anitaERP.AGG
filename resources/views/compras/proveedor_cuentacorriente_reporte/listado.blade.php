@@ -97,6 +97,7 @@
             'filas' => $filas ?? [],
             'filtros' => $filtros ?? [],
             'totales' => $resultado['totales'] ?? [],
+            'columnas_saldo' => $resultado['columnas_saldo'] ?? [],
             'mostrar_total_general' => true,
             'mostrarLinks' => false,
             'para_pdf' => true,

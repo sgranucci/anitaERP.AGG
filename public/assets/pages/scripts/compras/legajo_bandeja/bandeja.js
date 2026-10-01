@@ -170,6 +170,26 @@
         return moneda ? (s + ' ' + moneda) : s;
     }
 
+    function htmlRetencionesOp(op) {
+        var rets = (op && op.retenciones) || [];
+        if (!rets.length) {
+            return '';
+        }
+        var rows = rets.map(function (r) {
+            var cert = r.certificado ? ' <span class="text-muted">cert. ' + esc(r.certificado) + '</span>' : '';
+            var pdf = r.url_pdf
+                ? ' <a href="' + esc(r.url_pdf) + '" target="_blank" rel="noopener">PDF</a>'
+                : '';
+            return '<div class="bandeja-pagos-ret">' +
+                '<span>' + esc(r.tipo || 'Retención') + cert + pdf + '</span>' +
+                '<strong>' + fmtMonto(r.importe, r.moneda) + '</strong>' +
+                '</div>';
+        }).join('');
+        return '<div class="bandeja-pagos-rets">' +
+            '<div class="bandeja-pagos-rets-titulo">Retenciones de la orden</div>' +
+            rows + '</div>';
+    }
+
     function claseEstadoPago(estado) {
         var e = String(estado || '').toLowerCase().replace(/\s+/g, '-');
         if (!e) {
@@ -303,9 +323,11 @@
                 '<div class="bandeja-pagos-op-meta">' +
                 (op.fecha ? '<span><i class="fa fa-calendar-o"></i> ' + esc(op.fecha) + '</span>' : '') +
                 (op.monto_aplicado != null
-                    ? '<span><i class="fa fa-check-circle-o"></i> Aplicado ' + fmtMonto(op.monto_aplicado, op.moneda) + '</span>'
+                    ? '<span><i class="fa fa-check-circle-o"></i> Aplicado ' + fmtMonto(op.monto_aplicado, op.moneda_aplicado || op.moneda) + '</span>'
                     : (op.monto != null ? '<span><i class="fa fa-money"></i> OP ' + fmtMonto(op.monto, op.moneda) + '</span>' : '')) +
-                '</div></div>' +
+                '</div>' +
+                htmlRetencionesOp(op) +
+                '</div>' +
                 '<div class="bandeja-pagos-op-actions">' +
                 (op.url_pdf
                     ? '<a class="btn btn-sm btn-outline-danger" href="' + esc(op.url_pdf) + '" target="_blank" rel="noopener" title="PDF de la OP"><i class="fa fa-file-pdf-o"></i></a>'

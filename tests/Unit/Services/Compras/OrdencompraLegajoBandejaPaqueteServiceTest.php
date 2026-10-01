@@ -3,6 +3,7 @@
 namespace Tests\Unit\Services\Compras;
 
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Services\Compras\OrdencompraLegajoBandejaPaqueteService;
 use Tests\TestCase;
@@ -244,6 +245,61 @@ class OrdencompraLegajoBandejaPaqueteServiceTest extends TestCase
 
         $this->assertSame(27647, $out[0]['comprobante_proveedor_id']);
         $this->assertSame(1234.5, $out[0]['total']);
+    }
+
+    public function test_fusion_reemplaza_el_total_cero_de_la_precarga(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+        $out = $svc->fusionarComprobantesEnFacturas(
+            [
+                [
+                    'id' => 1190,
+                    'origen' => 'precarga',
+                    'etiqueta' => 'FIB A 0002-00081092',
+                    'total' => 0,
+                    'cargado_cxp' => true,
+                ],
+            ],
+            [
+                [
+                    'id' => 25117,
+                    'precarga_id' => 1190,
+                    'letra' => 'A',
+                    'sucursal' => 2,
+                    'numerocomprobante' => 81092,
+                    'etiqueta' => 'FIS A 0002-00081092',
+                    'tipo' => 'FC',
+                    'tipo_label' => 'FC',
+                    'fecha' => '12/06/2026',
+                    'total' => 371.21,
+                    'url' => '/cxp/25117',
+                ],
+            ]
+        );
+
+        $this->assertSame(371.21, $out[0]['total']);
+    }
+
+    public function test_resumen_retencion_de_la_orden(): void
+    {
+        $svc = app(OrdencompraLegajoBandejaPaqueteService::class);
+        $ret = new Pagoproveedor_Retencion([
+            'pagoproveedor_id' => 16729,
+            'tiporetencion' => Pagoproveedor_Retencion::TIPO_GANANCIAS,
+            'base_calculo' => 219700,
+            'alicuota' => 2,
+            'importe' => 4394,
+            'nro_certificado' => '8056',
+        ]);
+        $ret->id = 9;
+
+        $resumen = $svc->resumenRetencion($ret);
+
+        $this->assertSame('Ganancias', $resumen['tipo']);
+        $this->assertSame(4394.0, $resumen['importe']);
+        $this->assertSame('8056', $resumen['certificado']);
+        $this->assertStringContainsString('16729', (string) $resumen['url_pdf']);
+        $this->assertStringContainsString('9', (string) $resumen['url_pdf']);
     }
 
     public function test_incorpora_com_del_cp_anual_aunque_la_precarga_tenga_otra(): void

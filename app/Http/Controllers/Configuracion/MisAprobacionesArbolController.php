@@ -147,7 +147,7 @@ class MisAprobacionesArbolController extends Controller
         foreach ($ids as $id) {
             $item = $pendientes->get($id);
             if (! $item) {
-                $fallidos[] = "#{$id}: no está en tu cola";
+                $fallidos[] = "#{$id}: no está en tu bandeja";
 
                 continue;
             }

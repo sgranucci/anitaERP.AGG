@@ -26,10 +26,6 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 {
     use Exportable;
 
-    private const COL_ULTIMA_DEUDA = 'J';
-
-    private const COL_ULTIMA_CC = 'J';
-
     private Proveedor_CuentacorrienteRepositoryInterface $proveedorCuentacorrienteRepository;
 
     private string $busqueda = '';
@@ -125,16 +121,16 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 
     public function columnFormats(): array
     {
-        // Debe/Haber/Saldo (G–I) con máscara neutra: sumables y adaptables a la región.
+        // Debe/Haber/Saldos con máscara neutra: sumables y adaptables a la región.
         $codigo = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
-
-        return [
+        $formatos = [
             'A' => NumberFormat::FORMAT_TEXT,
-            'G' => $codigo,
-            'H' => $codigo,
-            'I' => $codigo,
-            'J' => $codigo,
         ];
+        for ($indice = 7; $indice <= $this->indiceUltimaColumna(); $indice++) {
+            $formatos[self::letraColumna($indice)] = $codigo;
+        }
+
+        return $formatos;
     }
 
     public function styles(Worksheet $sheet)
@@ -157,7 +153,7 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 
     public function columnWidths(): array
     {
-        return [
+        $anchos = [
             'A' => 8,
             'B' => 18,
             'C' => 12,
@@ -169,6 +165,11 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
             'I' => 14,
             'J' => 16,
         ];
+        for ($indice = 11; $indice <= $this->indiceUltimaColumna(); $indice++) {
+            $anchos[self::letraColumna($indice)] = 16;
+        }
+
+        return $anchos;
     }
 
     public function registerEvents(): array
@@ -249,9 +250,31 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 
     private function colUltima(): string
     {
-        return $this->modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA
-            ? self::COL_ULTIMA_DEUDA
-            : self::COL_ULTIMA_CC;
+        return self::letraColumna($this->indiceUltimaColumna());
+    }
+
+    private function indiceUltimaColumna(): int
+    {
+        if ($this->modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
+            return 10;
+        }
+
+        $columnas = CuentacorrienteSaldosPorMoneda::columnasSaldoFicha($this->saldosPorMoneda, $this->monedaId);
+
+        return 9 + max(1, count($columnas));
+    }
+
+    private static function letraColumna(int $indice): string
+    {
+        $letra = '';
+        $n = $indice;
+        while ($n > 0) {
+            $n--;
+            $letra = chr(65 + ($n % 26)).$letra;
+            $n = intdiv($n, 26);
+        }
+
+        return $letra;
     }
 
     public function title(): string

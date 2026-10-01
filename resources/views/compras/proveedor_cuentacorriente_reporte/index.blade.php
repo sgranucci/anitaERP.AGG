@@ -196,6 +196,12 @@
                             <span class="badge badge-secondary mr-1">
                                 Haber: {{ number_format((float) ($totales['haber'] ?? 0), 2, ',', '.') }}
                             </span>
+                            @foreach ($resultado['columnas_saldo'] ?? [] as $colSaldo)
+                                <span class="badge {{ ! empty($colSaldo['es_local']) ? 'badge-primary' : 'badge-warning' }} mr-1">
+                                    Saldo {{ $colSaldo['abreviatura'] ?? '' }}:
+                                    {{ number_format((float) (($totales['saldos_por_moneda'][$colSaldo['moneda_id']] ?? $totales['saldos_por_moneda'][(string) $colSaldo['moneda_id']] ?? 0)), 2, ',', '.') }}
+                                </span>
+                            @endforeach
                         @endif
                     </div>
 
@@ -256,6 +262,7 @@
                                 'filas' => $filasVista ?? [],
                                 'filtros' => $filtros,
                                 'totales' => $resultado['totales'] ?? [],
+                                'columnas_saldo' => $resultado['columnas_saldo'] ?? [],
                                 'mostrar_total_general' => true,
                                 'mostrarLinks' => true,
                                 'puede_ver_proveedor' => $puede_ver_proveedor ?? false,

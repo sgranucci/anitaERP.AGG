@@ -10,7 +10,10 @@
     $abrevLocal = CuentacorrienteSaldosPorMoneda::abreviaturaLocal();
     $modoDeuda = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
         === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA;
-    $colspan = 10;
+    $columnasSaldo = $modoDeuda
+        ? []
+        : CuentacorrienteSaldosPorMoneda::columnasSaldoFicha($saldosPorMoneda, $monedaId);
+    $colspan = $modoDeuda ? 10 : (9 + max(1, count($columnasSaldo)));
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))

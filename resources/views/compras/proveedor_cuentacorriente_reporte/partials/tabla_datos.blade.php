@@ -1,5 +1,6 @@
 @php
     use App\Support\Compras\ProveedorCuentacorrienteReporteFiltros;
+    use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
     $modoDeuda = ($filtros['modo'] ?? ProveedorCuentacorrienteReporteFiltros::MODO_DEUDA)
         !== ProveedorCuentacorrienteReporteFiltros::MODO_FICHA;
     $mostrarLinks = ! empty($mostrarLinks);
@@ -16,7 +17,16 @@
 
         return number_format($n, 2, ',', '.');
     };
-    $colSpan = ($modoDeuda ? 11 : 10) + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
+    $columnasSaldo = $columnas_saldo ?? [];
+    if (! $modoDeuda && $columnasSaldo === []) {
+        $columnasSaldo = [[
+            'moneda_id' => CuentacorrienteSaldosPorMoneda::monedaLocalId(),
+            'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
+            'es_local' => true,
+        ]];
+    }
+    $cantSaldoFicha = $modoDeuda ? 1 : max(1, count($columnasSaldo));
+    $colSpan = ($modoDeuda ? 11 : (9 + $cantSaldoFicha)) + (($mostrarLinks && ! $paraPdf && ! $paraExcel) ? 1 : 0);
     $soloTotalesDeuda = $modoDeuda && ! empty($filtros['solo_totales']);
     $totalesReporte = $totales ?? [];
     $mostrarTotalGeneral = $soloTotalesDeuda && ! empty($mostrar_total_general);
@@ -111,7 +121,11 @@
             @else
                 <th class="text-right" style="width: 8%;">Debe</th>
                 <th class="text-right" style="width: 8%;">Haber</th>
-                <th class="text-right" style="width: 8%;">Saldo</th>
+                @foreach ($columnasSaldo as $colSaldo)
+                    <th class="text-right" style="width: 8%;" title="{{ ! empty($colSaldo['es_local']) ? 'Saldo acumulado en moneda local' : 'Saldo acumulado en moneda extranjera' }}">
+                        {{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoMoneda($colSaldo) }}
+                    </th>
+                @endforeach
             @endif
         @else
             <th>Código</th>
@@ -129,7 +143,11 @@
             @else
                 <th class="text-right">Debe</th>
                 <th class="text-right">Haber</th>
-                <th class="text-right">Saldo</th>
+                @foreach ($columnasSaldo as $colSaldo)
+                    <th class="text-right" title="{{ ! empty($colSaldo['es_local']) ? 'Saldo acumulado en moneda local' : 'Saldo acumulado en moneda extranjera' }}">
+                        {{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoMoneda($colSaldo) }}
+                    </th>
+                @endforeach
             @endif
             @if ($mostrarLinks && ! $paraExcel)
                 <th></th>
@@ -240,13 +258,21 @@
                     {{ $fmt($fila['haber'] ?? null) }}
                 @endif
             </td>
-            <td class="text-right">
-                @if ($esTotal)
-                    <strong>{{ $fmt($fila['saldo'] ?? null) }}</strong>
-                @else
-                    {{ $fmt($fila['saldo'] ?? null) }}
-                @endif
-            </td>
+            @php
+                $mapaSaldos = $fila['saldos_por_moneda'] ?? null;
+            @endphp
+            @foreach ($columnasSaldo as $colSaldo)
+                <td class="text-right">
+                    @if (is_array($mapaSaldos))
+                        @php $montoSaldoMoneda = $mapaSaldos[$colSaldo['moneda_id']] ?? $mapaSaldos[(string) $colSaldo['moneda_id']] ?? 0; @endphp
+                        @if ($esTotal)
+                            <strong>{{ $fmt($montoSaldoMoneda) }}</strong>
+                        @else
+                            {{ $fmt($montoSaldoMoneda) }}
+                        @endif
+                    @endif
+                </td>
+            @endforeach
         @endif
         @if ($mostrarLinks && ! $paraPdf && ! $paraExcel)
             <td class="text-nowrap">

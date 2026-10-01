@@ -161,4 +161,29 @@ class CuentacorrienteExpresionPesosTest extends TestCase
             0.001
         );
     }
+
+    public function test_columnas_saldo_ficha_separan_local_y_extranjera(): void
+    {
+        $localId = CuentacorrienteSaldosPorMoneda::monedaLocalId();
+        $extranjeraId = $localId === 2 ? 3 : 2;
+        $columnas = CuentacorrienteSaldosPorMoneda::columnasSaldoFicha([
+            ['moneda_id' => $extranjeraId, 'abreviatura' => 'USD'],
+            ['moneda_id' => $localId, 'abreviatura' => CuentacorrienteSaldosPorMoneda::abreviaturaLocal()],
+        ]);
+
+        $this->assertCount(2, $columnas);
+        $this->assertSame($localId, $columnas[0]['moneda_id']);
+        $this->assertTrue($columnas[0]['es_local']);
+        $this->assertSame(
+            'Saldo '.CuentacorrienteSaldosPorMoneda::abreviaturaLocal(),
+            CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoMoneda($columnas[0])
+        );
+        $this->assertSame($extranjeraId, $columnas[1]['moneda_id']);
+        $this->assertFalse($columnas[1]['es_local']);
+        $this->assertSame('Saldo USD', CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoMoneda($columnas[1]));
+
+        $soloExtranjera = CuentacorrienteSaldosPorMoneda::columnasSaldoFicha($columnas, $extranjeraId);
+        $this->assertCount(1, $soloExtranjera);
+        $this->assertSame('USD', $soloExtranjera[0]['abreviatura']);
+    }
 }
