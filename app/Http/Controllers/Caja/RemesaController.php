@@ -130,7 +130,16 @@ class RemesaController extends Controller
 
     public function editar(Request $request, $id)
     {
-        can('editar-remesa');
+        $soloConsulta = QueryRetornoListado::esModalConsulta($request);
+        if ($soloConsulta) {
+            if (! can('listar-remesa', false)
+                && ! can('listar-remesa-reporte', false)
+                && ! can('editar-remesa', false)) {
+                can('listar-remesa');
+            }
+        } else {
+            can('editar-remesa');
+        }
 
         $remesa = $this->repository->findOrFail((int) $id);
         $this->assertAccesoEmpresa((int) $remesa->empresa_id);
@@ -140,6 +149,7 @@ class RemesaController extends Controller
 
         return view('caja.remesa.cargar', [
             'modo_edicion' => true,
+            'soloConsulta' => $soloConsulta,
             'remesa_id' => (int) $remesa->id,
             'remesa' => $remesa,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
@@ -147,7 +157,10 @@ class RemesaController extends Controller
             'fecha' => $remesa->fecha?->format('Y-m-d') ?? date('Y-m-d'),
             'tipo' => $tipo,
             'datos' => $datos,
-            'filtrosQuery' => QueryRetornoListado::desdeRequest($request, RemesaListadoFiltros::class),
+            'asientosContables' => $this->service->asientosContables($remesa),
+            'filtrosQuery' => $soloConsulta
+                ? []
+                : QueryRetornoListado::desdeRequest($request, RemesaListadoFiltros::class),
         ]);
     }
 

@@ -119,6 +119,11 @@
                                        class="btn-accion-tabla tooltipsC" title="Editar">
                                         <i class="fa fa-edit"></i>
                                     </a>
+                                @elseif (can('listar-remesa', false) || can('listar-remesa-reporte', false))
+                                    <a href="{{ route('editar_remesa', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                       class="btn-accion-tabla tooltipsC" title="Consultar remesa y contabilidad" target="_blank" rel="noopener">
+                                        <i class="fa fa-search text-primary"></i>
+                                    </a>
                                 @endif
                                 @if (can('revertir-remesa', false) && $data->estado === RemesaSupport::ESTADO_CONFIRMADA)
                                 <form action="{{ route('revertir_remesa', ['id' => $data->id]) }}" class="d-inline form-revertir" method="POST"

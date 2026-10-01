@@ -353,6 +353,16 @@ final class RemesaService
     }
 
     /**
+     * Contabilidad grabada de la remesa: todos los asientos (por moneda y reversiones) con sus cuentas.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, Asiento>
+     */
+    public function asientosContables(Remesa $remesa): \Illuminate\Database\Eloquent\Collection
+    {
+        return $this->asientoService->asientosDeRemesa($remesa);
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return list<array{lado: string, cuentacaja_id: int, monto: float, moneda_id: int}>
      */

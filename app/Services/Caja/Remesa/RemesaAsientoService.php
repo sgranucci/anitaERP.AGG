@@ -278,6 +278,31 @@ final class RemesaAsientoService
     }
 
     /**
+     * Asientos de la remesa (uno por moneda y, si hubo reversión, los contraasientos), con renglones.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, Asiento>
+     */
+    public function asientosDeRemesa(Remesa $remesa): \Illuminate\Database\Eloquent\Collection
+    {
+        $ids = $this->idsAsientosDeRemesa($remesa);
+        if ($ids === []) {
+            return new \Illuminate\Database\Eloquent\Collection();
+        }
+
+        return Asiento::query()
+            ->with([
+                'asiento_movimientos.cuentacontables',
+                'asiento_movimientos.monedas',
+                'tipoasientos',
+            ])
+            ->whereIn('id', $ids)
+            ->orderBy('fecha')
+            ->orderBy('numeroasiento')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
      * @return list<int>
      */
     public function idsAsientosDeRemesa(Remesa $remesa): array

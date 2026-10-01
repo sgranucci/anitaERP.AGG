@@ -1,6 +1,10 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    {{ ! empty($modo_edicion) ? 'Editar remesa' : 'Nueva remesa' }}
+    @if (! empty($soloConsulta))
+        Consultar remesa
+    @else
+        {{ ! empty($modo_edicion) ? 'Editar remesa' : 'Nueva remesa' }}
+    @endif
 @endsection
 
 @section("scripts")
@@ -50,7 +54,9 @@
         ? route('actualizar_remesa', ['id' => $remesa_id])
         : route('guardar_remesa');
     $formMethod = ! empty($modo_edicion) ? 'PUT' : 'POST';
-    $soloLectura = ! empty($remesa) && $remesa->estaInactiva();
+    $soloConsulta = ! empty($soloConsulta);
+    $soloLectura = $soloConsulta || (! empty($remesa) && $remesa->estaInactiva());
+    $asientosContables = $asientosContables ?? collect();
     $destinoLineas = $datos['destino'] ?? [];
     $origenLineas = $datos['origen'] ?? [];
     $totales = $datos['totales'] ?? ['destino' => 0, 'origen' => 0];
@@ -72,13 +78,21 @@
              data-tipo-externa="{{ RemesaSupport::TIPO_EXTERNA }}">
 
             <div class="card-header">
-                <h3 class="card-title">{{ ! empty($modo_edicion) ? 'Editar remesa' : 'Nueva remesa' }}</h3>
+                <h3 class="card-title">
+                    @if ($soloConsulta)
+                        Consultar remesa {{ $remesa->numero ?? '' }}
+                    @else
+                        {{ ! empty($modo_edicion) ? 'Editar remesa' : 'Nueva remesa' }}
+                    @endif
+                </h3>
                 <div class="card-tools">
-                    @if (! empty($remesa?->asiento_id) && (can('listar-asiento', false) || can('editar-asiento', false)))
-                        <a href="{{ route('editar_asiento', ['id' => $remesa->asiento_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                           class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener">
-                            <i class="fa fa-book"></i> Asiento
-                        </a>
+                    @if ((can('listar-asiento', false) || can('editar-asiento', false)) && $asientosContables->isNotEmpty())
+                        @foreach ($asientosContables as $asientoHeader)
+                            <a href="{{ route('editar_asiento', ['id' => $asientoHeader->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                               class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener">
+                                <i class="fa fa-book"></i> Asiento {{ $asientoHeader->numeroasiento ?: $asientoHeader->id }}
+                            </a>
+                        @endforeach
                     @endif
                     @if (! empty($remesa?->caja_movimiento_id) && (can('listar-ingresos-egresos-caja', false) || can('editar-ingresos-egresos-caja', false)))
                         <a href="{{ route('editar_ingresoegreso', ['id' => $remesa->caja_movimiento_id, 'origen' => 'modal_consulta']) }}"
@@ -86,13 +100,15 @@
                             <i class="fa fa-university"></i> Mov. caja
                         </a>
                     @endif
+                    @if (! $soloConsulta)
                     <a href="{{ route('remesa', $filtrosQuery ?? []) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-reply-all"></i> Volver al listado
                     </a>
+                    @endif
                 </div>
             </div>
 
-            <form id="form-remesa" method="POST" action="{{ $formAction }}" autocomplete="off">
+            <form id="form-remesa" method="POST" action="{{ $formAction }}" autocomplete="off" @if ($soloConsulta) onsubmit="return false;" @endif>
                 @csrf
                 @if ($formMethod === 'PUT')
                     @method('PUT')
@@ -111,7 +127,7 @@
                         <div class="col-lg-3">
                             <input type="date" name="fecha" id="fecha_remesa" class="form-control"
                                    value="{{ old('fecha', $fecha ?? date('Y-m-d')) }}"
-                                   max="{{ date('Y-m-d') }}" {{ $soloLectura ? 'readonly' : '' }} required>
+                                   max="{{ date('Y-m-d') }}" {{ $soloLectura ? 'readonly' : '' }} {{ $soloConsulta ? 'disabled' : '' }} required>
                         </div>
                         <label for="tipo_remesa" class="col-lg-2 control-label text-right pr-2 requerido">Tipo</label>
                         <div class="col-lg-3">
@@ -234,6 +250,11 @@
                         </div>
                     </div>
 
+                    @if ($soloConsulta || $asientosContables->isNotEmpty())
+                        @include('caja.remesa.partials.asientos_contables')
+                    @endif
+
+                    @if (! $soloConsulta)
                     <div class="card card-outline card-secondary mt-3" id="card-preview-asiento">
                         <div class="card-header py-2">
                             <strong>Vista previa asiento</strong>
@@ -243,9 +264,9 @@
                             <p class="text-muted mb-0">Complete montos para ver el preview.</p>
                         </div>
                     </div>
+                    @endif
                 </div>
 
-                @if (! $soloLectura)
                 <div class="remesa-acciones-fijas d-flex flex-wrap align-items-center">
                     <div class="totales-grid mr-3">
                         <div class="tot-item" id="tot-destino-wrap">
@@ -261,13 +282,14 @@
                             <span class="val" id="tot-diferencia">0,00</span>
                         </div>
                     </div>
+                    @if (! $soloLectura)
                     <div class="ml-auto">
                         <button type="submit" class="btn btn-success" id="btn-guardar-remesa">
                             <i class="fa fa-save"></i> Guardar
                         </button>
                     </div>
+                    @endif
                 </div>
-                @endif
             </form>
         </div>
     </div>
