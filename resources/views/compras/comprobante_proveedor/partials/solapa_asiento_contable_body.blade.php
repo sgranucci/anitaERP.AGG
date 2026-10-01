@@ -167,7 +167,22 @@
                     @endif
                     @endif
                 </td>
-                <td>{{ $linea['centrocosto_codigo'] ?: '—' }}</td>
+                <td>
+                    @if($editableCuenta && $cuentaLineaId > 0)
+                    <select class="form-control form-control-sm cp-asiento-centrocosto"
+                            data-cuenta-id="{{ $cuentaLineaId }}"
+                            data-cc-actual="{{ (int) ($linea['centrocosto_id'] ?? 0) }}"
+                            title="Centros de costo de la cuenta">
+                        @if((int) ($linea['centrocosto_id'] ?? 0) > 0)
+                        <option value="{{ (int) $linea['centrocosto_id'] }}" selected>{{ $linea['centrocosto_codigo'] ?: $linea['centrocosto_id'] }}</option>
+                        @else
+                        <option value="">—</option>
+                        @endif
+                    </select>
+                    @else
+                    {{ $linea['centrocosto_codigo'] ?: '—' }}
+                    @endif
+                </td>
                 <td class="text-right">
                     @if($editableImporte && $debeVal !== null)
                     <input type="text" inputmode="decimal"

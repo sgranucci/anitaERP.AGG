@@ -249,6 +249,7 @@ class ComprobanteProveedorPersistenciaService
                     : null
             );
             $this->archivoRepository->sincronizarDesdeRequest($request, (int) $comprobante->id);
+            app(ComprobanteProveedorScanManualService::class)->publicarPrimerAdjunto($comprobante, $request);
             $this->marcarOrdencompraComprobanteCargado($comprobante);
 
             return $comprobante;
@@ -390,6 +391,7 @@ class ComprobanteProveedorPersistenciaService
             $this->sincronizarRecepciones($request, $comprobante);
             ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
             $this->archivoRepository->sincronizarDesdeRequest($request, $id);
+            app(ComprobanteProveedorScanManualService::class)->publicarPrimerAdjunto($comprobante, $request);
             $this->marcarPrecargaGenerada(
                 isset($payload['precarga_comprobante_proveedor_id'])
                     ? (int) $payload['precarga_comprobante_proveedor_id']
@@ -743,6 +745,7 @@ class ComprobanteProveedorPersistenciaService
             $request->input('concepto_ivacompra_ids', []),
             $request->input('montos', []),
             $request->input('cuentacontabledebe_ids', []),
+            $request->input('concepto_centrocosto_ids', []),
         );
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
         $fechaYmd = null;
@@ -788,6 +791,9 @@ class ComprobanteProveedorPersistenciaService
                 'orden' => $i + 1,
                 'monto' => $linea['monto'] ?? 0,
                 'cuentacontabledebe_id' => $cuentaDebeId,
+                'centrocosto_id' => ! empty($linea['centrocosto_id'])
+                    ? (int) $linea['centrocosto_id']
+                    : null,
             ]);
         }
     }

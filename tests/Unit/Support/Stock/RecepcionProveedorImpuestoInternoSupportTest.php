@@ -48,6 +48,42 @@ class RecepcionProveedorImpuestoInternoSupportTest extends TestCase
         );
     }
 
+    public function test_precio_linea_ya_incluye_ii_en_precio_bruto(): void
+    {
+        $this->assertTrue(
+            RecepcionProveedorImpuestoInternoSupport::precioLineaYaIncluyeImpuestoInterno(5831.544, 4588.68)
+        );
+        $this->assertFalse(
+            RecepcionProveedorImpuestoInternoSupport::precioLineaYaIncluyeImpuestoInterno(1242.865, 4588.68)
+        );
+    }
+
+    public function test_asiento_no_suma_ii_si_el_precio_ya_lo_incluye(): void
+    {
+        $recepcion = $this->recepcionConLineas([[100.0, self::TIPO_CIG_ID]], 458868.0);
+        $recepcion->recepcion_proveedor_articulos->first()->precio = 5831.544;
+
+        $this->assertTrue(
+            RecepcionProveedorImpuestoInternoSupport::lineasCigarrilloYaIncluyenImpuestoInterno($recepcion)
+        );
+        $this->assertSame(0.0, RecepcionProveedorImpuestoInternoSupport::importeImpuestoInternoAAgregar($recepcion));
+        $this->assertSame(
+            0.0,
+            RecepcionProveedorImpuestoInternoSupport::importeImpuestoInternoContable($recepcion, 1)
+        );
+    }
+
+    public function test_asiento_suma_ii_si_el_precio_es_neto(): void
+    {
+        $recepcion = $this->recepcionConLineas([[100.0, self::TIPO_CIG_ID]], 458868.0);
+        $recepcion->recepcion_proveedor_articulos->first()->precio = 1242.865;
+
+        $this->assertFalse(
+            RecepcionProveedorImpuestoInternoSupport::lineasCigarrilloYaIncluyenImpuestoInterno($recepcion)
+        );
+        $this->assertSame(458868.0, RecepcionProveedorImpuestoInternoSupport::importeImpuestoInternoAAgregar($recepcion));
+    }
+
     public function test_precio_ultima_compra_sin_cigarrillo_no_suma_ii(): void
     {
         $this->assertSame(

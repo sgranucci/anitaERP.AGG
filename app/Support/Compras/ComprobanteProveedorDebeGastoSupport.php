@@ -3,6 +3,7 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Support\Contable\CuentaCentrocostoAsignadosSupport;
 use App\Support\Contable\MontoEsArSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -119,9 +120,9 @@ final class ComprobanteProveedorDebeGastoSupport
 
                 continue;
             }
-            // Mismo universo que el skip de armarPreview con hayReparto: N/G/E o EXENTO
-            // (código 1) que integra el total — aunque tipoconcepto venga vacío.
-            if (! ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipo, $codigo)
+            // Mismo universo que el skip de armarPreview con hayReparto: N/G/E, EXENTO
+            // (código 1) e impuesto interno (neto de costo, sin cuenta propia).
+            if (! ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto($tipo, $codigo)
                 && ! ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)) {
                 continue;
             }
@@ -280,11 +281,16 @@ final class ComprobanteProveedorDebeGastoSupport
     ): array {
         $out = [];
         foreach ($lineas as $linea) {
+            $cuentaId = (int) $linea['cuentacontable_id'];
             $cc = (int) ($linea['centrocosto_id'] ?? 0);
             $out[] = [
-                'cuentacontable_id' => (int) $linea['cuentacontable_id'],
+                'cuentacontable_id' => $cuentaId,
                 'importe' => round((float) $linea['importe'], 2),
-                'centrocosto_id' => $cc > 0 ? $cc : $centrocostoDefaultId,
+                'centrocosto_id' => CuentaCentrocostoAsignadosSupport::resolver(
+                    $cuentaId,
+                    $cc,
+                    $centrocostoDefaultId
+                ),
                 'observacion' => $observacion,
                 'origen' => 'debe_gasto',
                 'editable_cuenta' => true,

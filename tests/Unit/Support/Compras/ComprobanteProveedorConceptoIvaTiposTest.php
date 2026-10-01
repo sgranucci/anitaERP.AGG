@@ -34,4 +34,16 @@ class ComprobanteProveedorConceptoIvaTiposTest extends TestCase
         $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo('N', '2'));
         $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esDescuento('50'));
     }
+
+    public function test_impuesto_interno_es_neto_de_gasto_sin_ser_mercaderia(): void
+    {
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('T', '510'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno('N', '5'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia('T', '510'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia('N', '5'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto('T', '510'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto('N', '5'));
+        $this->assertTrue(ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto('G', '50'));
+        $this->assertFalse(ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto('I', '503'));
+    }
 }

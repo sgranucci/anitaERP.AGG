@@ -11,6 +11,7 @@ use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Stock\RecepcionProveedorConversionSupport;
+use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
@@ -244,7 +245,7 @@ class ComprobanteProveedorRecepcionesSupport
             );
         }
 
-        return round($total + (float) ($recepcion->impuesto_interno ?? 0), 2);
+        return round($total + RecepcionProveedorImpuestoInternoSupport::importeImpuestoInternoAAgregar($recepcion), 2);
     }
 
     /**

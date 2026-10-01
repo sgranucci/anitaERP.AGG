@@ -104,10 +104,22 @@ final class ComprobanteProveedorConceptoIvaTipos
 
     /**
      * Neto de mercadería (sin impuesto interno, aunque Anita lo haya dejado en tipo N).
+     * El comparable contra COM usa esto: el II no es gravado.
      */
     public static function esNetoMercaderia(?string $tipoconcepto, string|int|null $codigo = null): bool
     {
         return self::esNeto($tipoconcepto) && ! self::esImpuestoInterno($tipoconcepto, $codigo);
+    }
+
+    /**
+     * Costo que va a la cuenta de gasto de la factura (reparto, artículos, contrato
+     * o la cuenta del neto). El impuesto interno no tiene cuenta propia: si el
+     * maestro no la tiene cargada, igual se imputa con el gasto.
+     */
+    public static function esNetoDeGasto(?string $tipoconcepto, string|int|null $codigo = null): bool
+    {
+        return self::esNetoMercaderia($tipoconcepto, $codigo)
+            || self::esImpuestoInterno($tipoconcepto, $codigo);
     }
 
     /**

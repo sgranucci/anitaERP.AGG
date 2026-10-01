@@ -61,7 +61,10 @@ final class CorregirImporteAsientoTotemVsVentaSupport
 
         $datos = CierreJornadaFacturadoAnitaSupport::datosAsientoVentasJornadaSoloTotem($empresaId, $fechaJornada);
         $totalErp = round((float) ($datos['total'] ?? 0), 2);
-        if ($totalErp <= self::TOLERANCIA) {
+        $cantidadEmisiones = (int) ($datos['cantidad_emisiones'] ?? 0);
+        // Neto 0 con factura y nota de crédito: el asiento tiene que quedar en cero.
+        // Sin emisiones no hay base para recuadrar.
+        if ($totalErp <= self::TOLERANCIA && $cantidadEmisiones === 0) {
             throw new RuntimeException('No hay facturación TOTEM ERP para recalcular (empresa '.$empresaId.', '.$fechaJornada.').');
         }
 
@@ -142,7 +145,14 @@ final class CorregirImporteAsientoTotemVsVentaSupport
                     $resultado['asientos']++;
                     $resultado['lineas_erp'] += $cambios;
                     $this->validarCuadre((int) $asientoPlan['asiento_id'], (float) $plan['total_venta_erp']);
-                    $this->sincronizarCtamov((int) $asientoPlan['asiento_id']);
+                    if (abs((float) $plan['total_venta_erp']) <= self::TOLERANCIA) {
+                        $this->asientoRepository->eliminarCtamovAnitaPorNumero(
+                            (int) $asientoPlan['empresa_id'],
+                            (string) $asientoPlan['numeroasiento'],
+                        );
+                    } else {
+                        $this->sincronizarCtamov((int) $asientoPlan['asiento_id']);
+                    }
                     $resultado['ctamov']++;
                 }
                 $this->actualizarTotalesSnapshot((int) $plan['snapshot_id'], (float) $plan['total_venta_erp']);
@@ -210,6 +220,10 @@ final class CorregirImporteAsientoTotemVsVentaSupport
         float $totalErp,
         array $haberPorCuenta,
     ): float {
+        if (abs($totalErp) <= self::TOLERANCIA) {
+            return 0.0;
+        }
+
         if ($codigo === 'totem_puente') {
             return $montoActual >= 0 ? $totalErp : -1 * $totalErp;
         }

@@ -2,6 +2,7 @@
     $conceptosListaOld = old('concepto_ivacompra_ids');
     $montosOld = old('montos', []);
     $cuentasDebeOld = old('cuentacontabledebe_ids', []);
+    $centrosConceptoOld = old('concepto_centrocosto_ids', []);
     $mostrarPreviewAsiento = (bool) ($mostrarSolapaAsiento ?? false);
     $cpImputacionManual = (($com_politica['contrato_vigente'] ?? false)
         && ! ($com_politica['contrato_requiere_recepcion'] ?? true)
@@ -26,13 +27,12 @@
             se usan los renglones de la precarga (unión ya armada). El modal F1, en esos tipos,
             lista la unión de los finos de la OC (sin duplicar).
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
-            La columna <strong>Cuenta DEBE</strong> solo aparece para casos puntuales (p. ej. contrato manual
-            o impuestos sin cuenta en el maestro). El neto con OC toma por defecto las cuentas de los artículos;
-            en ND/NC (sin COM) puede cambiarla en la solapa <strong>Asiento contable</strong> si lo necesita.
+            La cuenta contable no se carga acá: el neto con OC toma las cuentas de los artículos;
+            en ND/NC (sin COM) se cambia en la solapa <strong>Asiento contable</strong>.
             Sin OC ni COM se indica también en esa solapa.
+            Los impuestos usan la cuenta del maestro de conceptos.
             @if ($cpImputacionManual)
-                El contrato exige <strong>cuenta DEBE</strong> del neto: se toma de la cuenta cargada en el contrato
-            (si falta, se pide en el renglón).
+                El contrato exige la <strong>cuenta DEBE</strong> del neto: se toma de la cuenta cargada en el contrato.
             @endif
         </p>
 
@@ -44,11 +44,9 @@
             <table class="table table-bordered table-sm mb-2" id="concepto-table">
                 <thead style="background-color:#85C1E9;color:#17202A;">
                     <tr>
-                        <th style="width:36%;">Concepto</th>
-                        <th style="width:16%;" class="text-right">Monto</th>
-                        <th style="width:30%;" class="cp-th-cuenta-debe">Cuenta DEBE</th>
-                        <th style="width:8%;" class="text-center" title="Estado de la cuenta contable DEBE">Cta.</th>
-                        <th style="width:8%;"></th>
+                        <th>Concepto</th>
+                        <th style="width:9rem;" class="text-right">Monto</th>
+                        <th style="width:2.5rem;"></th>
                     </tr>
                 </thead>
                 <tbody id="tbody-concepto-table">
@@ -80,6 +78,7 @@
                             <tr class="item-concepto">
                                 <td>
                                     <input type="hidden" name="concepto_ivacompra_ids[]" class="concepto_ivacompra_id" value="{{ $conceptoId ?: '' }}">
+                                    <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto" value="{{ (int) ($centrosConceptoOld[$idx] ?? 0) ?: '' }}">
                                     <div class="d-flex flex-wrap align-items-center">
                                         <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                                             value="{{ $codigo }}" style="width:5.5rem;" autocomplete="off"
@@ -91,20 +90,17 @@
                                             <i class="fa fa-search"></i>
                                         </button>
                                     </div>
+                                    <div class="d-none cp-celda-cuenta-debe">
+                                        @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
+                                            'cuentaIdCelda' => $cuentaDebeOldId,
+                                            'puedeAbrirAbmCuenta' => $puedeAbrirAbmCuenta,
+                                        ])
+                                    </div>
                                 </td>
                                 <td>
                                     <input type="text" inputmode="decimal" name="montos[]"
                                         class="form-control form-control-sm monto js-monto-ar text-right"
                                         value="{{ filled($montoVal) ? number_format((float) $montoVal, 2, ',', '.') : '' }}">
-                                </td>
-                                <td class="align-middle cp-celda-cuenta-debe">
-                                    @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
-                                        'cuentaIdCelda' => $cuentaDebeOldId,
-                                        'puedeAbrirAbmCuenta' => $puedeAbrirAbmCuenta,
-                                    ])
-                                </td>
-                                <td class="text-center align-middle cp-celda-aviso-concepto">
-                                    <span class="cp-aviso-concepto-cuenta text-muted" title=""></span>
                                 </td>
                                 <td class="text-center align-middle">
                                     <button type="button" class="btn-accion-tabla eliminar_concepto tooltipsC" title="Eliminar línea">
@@ -146,6 +142,7 @@
                                 <td>
                                     <input type="hidden" name="concepto_ivacompra_ids[]" class="concepto_ivacompra_id"
                                         value="{{ $renglon->concepto_ivacompra_id ?? '' }}">
+                                    <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto" value="{{ (int) ($renglon->centrocosto_id ?? 0) ?: '' }}">
                                     <div class="d-flex flex-wrap align-items-center">
                                         <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                                             value="{{ $concepto->codigo ?? '' }}" style="width:5.5rem;" autocomplete="off"
@@ -157,20 +154,17 @@
                                             <i class="fa fa-search"></i>
                                         </button>
                                     </div>
+                                    <div class="d-none cp-celda-cuenta-debe">
+                                        @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
+                                            'cuentaIdCelda' => $cuentaDebeId,
+                                            'puedeAbrirAbmCuenta' => $puedeAbrirAbmCuenta,
+                                        ])
+                                    </div>
                                 </td>
                                 <td>
                                     <input type="text" inputmode="decimal" name="montos[]"
                                         class="form-control form-control-sm monto js-monto-ar text-right"
                                         value="{{ number_format((float) ($renglon->monto ?? 0), 2, ',', '.') }}">
-                                </td>
-                                <td class="align-middle cp-celda-cuenta-debe">
-                                    @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
-                                        'cuentaIdCelda' => $cuentaDebeId,
-                                        'puedeAbrirAbmCuenta' => $puedeAbrirAbmCuenta,
-                                    ])
-                                </td>
-                                <td class="text-center align-middle cp-celda-aviso-concepto">
-                                    <span class="cp-aviso-concepto-cuenta text-muted" title=""></span>
                                 </td>
                                 <td class="text-center align-middle">
                                     <button type="button" class="btn-accion-tabla eliminar_concepto tooltipsC" title="Eliminar línea">

@@ -112,6 +112,8 @@ class ComprobanteProveedorContabilizarService
 
         $this->assertEstadoPermiteContabilizar($comprobante);
 
+        app(ComprobanteProveedorScanManualService::class)->exigeScanParaContabilizar($comprobante);
+
         app(ContratoValidacionAbonoService::class)->assertComprobanteContabilizable($comprobante);
 
         if ($comprobante->comprobante_proveedor_conceptos()->count() === 0) {

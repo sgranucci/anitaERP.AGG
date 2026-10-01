@@ -16,6 +16,7 @@
     var debitosGastoSemilla = null;
     var ultimoPreview = null;
     var cuentasGastoManual = {};
+    var ieCpCcAbrirCuentaId = 0;
     var precargaTipoSeq = 0;
     var iaDecisionId = null;
     var iaSugerenciaHash = null;
@@ -737,6 +738,18 @@
             '</div>';
     }
 
+    function htmlSelectCentroCosto(linea) {
+        var cuentaId = parseInt(linea.cuentacontable_id || '0', 10) || 0;
+        var cc = parseInt(linea.centrocosto_id || '0', 10) || 0;
+        if (cuentaId <= 0) {
+            return '—';
+        }
+        var opt = cc > 0
+            ? '<option value="' + cc + '" selected>' + escHtml(linea.centrocosto_codigo || String(cc)) + '</option>'
+            : '<option value="">—</option>';
+        return '<select class="form-control form-control-sm ie-cp-centrocosto" data-cuenta-id="' + cuentaId + '" data-cc-actual="' + cc + '">' + opt + '</select>';
+    }
+
     function filaGastoHtml(linea, quitar) {
         var origen = linea.origen || 'debe_gasto';
         var esReparto = origen === 'debe_gasto';
@@ -744,13 +757,14 @@
         var importe = parseFloat(linea.importe != null ? linea.importe : linea.debe) || 0;
         var conceptoId = parseInt(linea.concepto_ivacompra_id || '0', 10) || 0;
         var debeHtml = esReparto
-            ? '<input type="number" step="0.01" class="form-control form-control-sm text-right ie-cp-debito-importe" value="' + importe.toFixed(2) + '">'
+            ? '<input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm text-right ie-cp-debito-importe" value="' + importe.toFixed(2) + '">'
             : formatoNumero(importe);
         var quitarHtml = (esReparto && quitar)
             ? '<button type="button" class="btn-accion-tabla ie-cp-debito-quitar" title="Quitar cuenta de gasto"><i class="fa fa-times-circle text-danger"></i></button>'
             : '';
         return '<tr class="ie-cp-linea-gasto' + (esReparto ? ' ie-cp-debito-gasto' : ' ie-cp-neto-manual') + '" data-importe="' + importe + '" data-concepto-id="' + conceptoId + '">' +
             '<td>' + htmlCampoCuentaGasto(cuentaId, linea.codigo, linea.nombre) + '</td>' +
+            '<td class="ie-cp-cc">' + htmlSelectCentroCosto(linea) + '</td>' +
             '<td class="text-right">' + debeHtml + '</td>' +
             '<td class="text-right">0.00</td>' +
             '<td class="text-center">' + quitarHtml + '</td></tr>';
@@ -765,7 +779,7 @@
             (linea.observacion && texto.indexOf(linea.observacion) === -1
                 ? '<span class="d-block small text-muted">' + escHtml(linea.observacion) + '</span>'
                 : '') +
-            '</td><td class="text-right">' + formatoNumero(linea.debe) + '</td>' +
+            '</td><td class="text-muted">—</td><td class="text-right">' + formatoNumero(linea.debe) + '</td>' +
             '<td class="text-right">' + formatoNumero(linea.haber) + '</td><td></td></tr>';
     }
 
@@ -782,6 +796,7 @@
             lineas.push({
                 cuentacontable_id: parseInt($tr.find('.cuentacontable_id').val() || '0', 10) || 0,
                 importe: Math.round(Math.abs(importe) * 100) / 100,
+                centrocosto_id: parseInt($tr.find('.ie-cp-centrocosto').val() || '0', 10) || 0,
                 codigo: $tr.find('.codigocuentacontable').val() || '',
                 nombre: $tr.find('.nombrecuentacontable').val() || '',
             });
@@ -861,6 +876,7 @@
                     return {
                         origen: 'debe_gasto',
                         cuentacontable_id: linea.cuentacontable_id,
+                        centrocosto_id: linea.centrocosto_id || 0,
                         codigo: linea.codigo,
                         nombre: linea.nombre,
                         importe: linea.importe,
@@ -891,6 +907,31 @@
         $('#ie-cp-preview-total-debe').text(formatoNumero(data.total_debe));
         $('#ie-cp-preview-total-haber').text(formatoNumero(data.total_haber));
         actualizarAvisoSumaGasto();
+        aplicarCentrosCostoIeCp();
+    }
+
+    function aplicarCentrosCostoIeCp() {
+        if (typeof window.cargarCentrosCostoEnSelect !== 'function') {
+            return;
+        }
+        var abrirCuenta = ieCpCcAbrirCuentaId;
+        $('#ie-cp-preview-asiento .ie-cp-centrocosto').each(function () {
+            var $sel = $(this);
+            var cuentaId = parseInt($sel.attr('data-cuenta-id') || '0', 10) || 0;
+            var actual = parseInt($sel.attr('data-cc-actual') || $sel.val() || '0', 10) || 0;
+            window.cargarCentrosCostoEnSelect($sel, cuentaId, actual).done(function (res) {
+                if (!res || !res.maneja) {
+                    $sel.closest('td').text('—');
+                    return;
+                }
+                if (abrirCuenta > 0 && cuentaId === abrirCuenta && res.cantidad > 1 && res.id <= 0) {
+                    ieCpCcAbrirCuentaId = 0;
+                    if (typeof window.abrirListaCentroCosto === 'function') {
+                        window.abrirListaCentroCosto($sel.get(0));
+                    }
+                }
+            });
+        });
     }
 
     function copiarCuentaGastoAlConcepto($tr) {
@@ -1060,6 +1101,7 @@
             lineas.push({
                 origen: 'debe_gasto',
                 cuentacontable_id: parseInt($tr.find('.cuentacontable_id').val() || '0', 10) || 0,
+                centrocosto_id: parseInt($tr.find('.ie-cp-centrocosto').val() || '0', 10) || 0,
                 codigo: $tr.find('.codigocuentacontable').val() || '',
                 nombre: $tr.find('.nombrecuentacontable').val() || '',
                 importe: Math.round(importe * 100) / 100,
@@ -1133,10 +1175,13 @@
                 return;
             }
             var cuentaManual = cuentasGastoManual[String(conceptoId)];
+            var $filaAsiento = $('#ie-cp-preview-asiento tr.ie-cp-neto-manual[data-concepto-id="' + conceptoId + '"]');
+            var ccConcepto = parseInt($filaAsiento.find('.ie-cp-centrocosto').val() || '0', 10) || 0;
             conceptos.push({
                 concepto_ivacompra_id: conceptoId,
                 monto: monto,
                 cuentacontabledebe_id: cuentaManual && cuentaManual.id ? cuentaManual.id : null,
+                centrocosto_id: ccConcepto > 0 ? ccConcepto : null,
             });
         });
 
@@ -1608,6 +1653,7 @@
                 lineas.push({
                     origen: 'debe_gasto',
                     cuentacontable_id: parseInt($tr.find('.cuentacontable_id').val() || '0', 10) || 0,
+                    centrocosto_id: parseInt($tr.find('.ie-cp-centrocosto').val() || '0', 10) || 0,
                     codigo: $tr.find('.codigocuentacontable').val() || '',
                     nombre: $tr.find('.nombrecuentacontable').val() || '',
                     importe: parseFloat($tr.find('.ie-cp-debito-importe').val() || '0') || 0,
@@ -1628,6 +1674,14 @@
             completarResidualGasto($(this));
         });
 
+        $(document).on('change', '#ie-cp-preview-asiento .ie-cp-centrocosto', function () {
+            ieCpCcAbrirCuentaId = 0;
+            if ($(this).closest('tr').hasClass('ie-cp-debito-gasto')) {
+                debitosGastoTocados = true;
+            }
+            programarPreview();
+        });
+
         $(document).on('change', '#ie-cp-preview-asiento .ie-cp-debito-importe', function () {
             completarResidualGasto($(this));
             programarPreview();
@@ -1642,6 +1696,7 @@
 
         $(document).on('change', '#ie-cp-preview-asiento .cuentacontable_id', function () {
             var $tr = $(this).closest('tr');
+            ieCpCcAbrirCuentaId = parseInt($(this).val() || '0', 10) || 0;
             if ($tr.hasClass('ie-cp-neto-manual')) {
                 copiarCuentaGastoAlConcepto($tr);
                 programarPreview();

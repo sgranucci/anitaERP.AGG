@@ -98,7 +98,7 @@ function buscar_datos_proveedor(consulta) {
         payload.empresa_id = empresaId;
     }
     actualizarAvisoConsultaProveedor(empresaId);
-    $('#datosproveedor').html('<tr><td colspan="8" class="text-muted">Buscando…</td></tr>');
+    $('#datosproveedor').html('<tr><td colspan="9" class="text-muted">Buscando…</td></tr>');
     $.ajax({
         url: urlAppCompras('/compras/proveedor/consultaproveedor'),
         type: 'POST',
@@ -111,7 +111,7 @@ function buscar_datos_proveedor(consulta) {
         .done(function (respuesta) {
             var html = parsearHtmlConsultaProveedor(respuesta);
             if (!html) {
-                html = '<tr><td colspan="8" class="text-muted">Sin resultados</td></tr>';
+                html = '<tr><td colspan="9" class="text-muted">Sin resultados</td></tr>';
             }
             $('#datosproveedor').html(html);
         })
@@ -120,7 +120,7 @@ function buscar_datos_proveedor(consulta) {
             if (xhr && xhr.status) {
                 msg += ' (HTTP ' + xhr.status + ')';
             }
-            $('#datosproveedor').html('<tr><td colspan="8" class="text-danger">' + msg + '</td></tr>');
+            $('#datosproveedor').html('<tr><td colspan="9" class="text-danger">' + msg + '</td></tr>');
         });
 }
 

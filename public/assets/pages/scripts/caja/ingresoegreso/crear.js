@@ -602,13 +602,49 @@ var montoPendienteSp = 0;
 		agregaUnRenglon();
 	}
 
+	function minimoRenglonesCuentaCajaIe() {
+		return esTransferenciaIngresoEgreso() ? 2 : 1;
+	}
+
+	function eliminarRenglonCuentaCajaVacio($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+		var $filas = $('#tbody-cuenta-table tr.item-cuenta');
+		if ($filas.length <= minimoRenglonesCuentaCajaIe()) {
+			limpiarCuentaEnFilaIe($tr);
+			$tr.find('.monto, .observacion').val('');
+			$tr.find('.cotizacion').val('0');
+			sumaMonto();
+			flModificaAsiento = true;
+			enfocarCampoCuentaIe($tr.find('.codigo').get(0));
+			return;
+		}
+		var $prev = $tr.prev('tr.item-cuenta');
+		var $sig = $tr.next('tr.item-cuenta');
+		$tr.remove();
+		actualizaRenglonesCuenta();
+		sumaMonto();
+		flModificaAsiento = true;
+		var $foco = $prev.length ? $prev : $sig;
+		if ($foco.length) {
+			enfocarCampoCuentaIe($foco.find('.codigo').get(0));
+		}
+	}
+
 	function manejarEnterCampoCuentaIe(input) {
 		var $input = $(input);
 
 		if ($input.hasClass('codigo')) {
 			var codigo = String($input.val() || '').trim();
 			if (codigo === '') {
-				abrirConsultaCuentaCajaFila($input.closest('tr.item-cuenta'));
+				var $trVacia = $input.closest('tr.item-cuenta');
+				var ctaId = parseInt($trVacia.find('.cuentacaja_id').val() || '0', 10) || 0;
+				if (ctaId <= 0) {
+					eliminarRenglonCuentaCajaVacio($trVacia);
+					return;
+				}
+				abrirConsultaCuentaCajaFila($trVacia);
 				return;
 			}
 			validarCodigoCuentaCajaIe($input, function (ok) {

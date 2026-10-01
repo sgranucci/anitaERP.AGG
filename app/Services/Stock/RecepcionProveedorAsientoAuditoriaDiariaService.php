@@ -369,6 +369,17 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
                     number_format($debeEsperado, 2, ',', '.'),
                 );
             }
+
+            if (RecepcionProveedorImpuestoInternoSupport::lineasCigarrilloYaIncluyenImpuestoInterno($recepcion)
+                && abs($totalesErp['debe'] - $totalRecepcion) >= $tol
+            ) {
+                $base['problemas'][] = sprintf(
+                    'Impuesto interno duplicado: los precios de la COM ya lo incluyen (%s) y el asiento suma %s (total COM %s).',
+                    number_format((float) ($recepcion->impuesto_interno ?? 0), 2, ',', '.'),
+                    number_format($totalesErp['debe'], 2, ',', '.'),
+                    number_format($totalRecepcion, 2, ',', '.'),
+                );
+            }
         } catch (\Throwable $e) {
             $base['problemas'][] = 'No se pudo calcular preview contable: '.$e->getMessage();
         }

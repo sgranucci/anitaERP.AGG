@@ -13,7 +13,10 @@ class ComprobanteProveedorAnitaImportAplmovpSupportTest extends TestCase
         $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esTipoPago('AOP'));
         $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('NCA', []));
         $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('NCA', ['NCA' => 'R']));
+        $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('CGA', ['CGA' => -1]));
+        $this->assertTrue(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('CGA', ['CGA' => '-1']));
         $this->assertFalse(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('FAC', ['FAC' => 'S']));
+        $this->assertFalse(ComprobanteProveedorAnitaImportAplmovpSupport::esCredito('FGA', ['FGA' => 1]));
     }
 
     public function test_par_aplica_op_a_factura(): void
@@ -60,6 +63,29 @@ class ComprobanteProveedorAnitaImportAplmovpSupportTest extends TestCase
         $this->assertFalse($par['credito_es_pago']);
         $this->assertSame('003593|NCA|A|1|12', $par['credito']['clave']);
         $this->assertSame('003593|FAC|A|1|100', $par['deuda']['clave']);
+    }
+
+    public function test_op_que_aplica_nota_de_credito_deja_la_nc_como_credito(): void
+    {
+        $par = ComprobanteProveedorAnitaImportAplmovpSupport::parDesdeFila([
+            'aplvp_proveedor' => '4374',
+            'aplvp_tipo' => 'CGA',
+            'aplvp_letra' => 'A',
+            'aplvp_sucursal' => 1,
+            'aplvp_nro' => 60256,
+            'aplvp_fecha' => 20260728,
+            'aplvp_monto' => 24382.27,
+            'aplvp_tipo_cob' => 'OPP',
+            'aplvp_letra_cob' => 'A',
+            'aplvp_sucursal_cob' => 1,
+            'aplvp_nro_cob' => 124063,
+        ], ['CGA' => -1, 'FGA' => 1]);
+
+        $this->assertNotNull($par);
+        $this->assertFalse($par['credito_es_pago']);
+        $this->assertSame('004374|CGA|A|1|60256', $par['credito']['clave']);
+        $this->assertSame('004374|OPP| |1|124063', $par['deuda']['clave']);
+        $this->assertSame(24382.27, $par['monto']);
     }
 
     public function test_omite_monto_cero_y_deduplica(): void

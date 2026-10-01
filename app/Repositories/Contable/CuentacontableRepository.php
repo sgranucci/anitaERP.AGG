@@ -144,9 +144,27 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 
     public function findPorCodigo($empresa_id, $codigo)
     {
-        $cuentacontable = $this->model->where('empresa_id', $empresa_id)->where('codigo', $codigo)->first();
+        $variantes = CuentacontableArbolSupport::variantesCodigoBusqueda((string) $codigo);
+        if ($variantes === []) {
+            return null;
+        }
 
-        return $cuentacontable;
+        $cuentas = $this->model->where('empresa_id', $empresa_id)->whereIn('codigo', $variantes)->get();
+        if ($cuentas->isEmpty()) {
+            return null;
+        }
+
+        $porCodigo = [];
+        foreach ($cuentas as $cuenta) {
+            $porCodigo[(string) $cuenta->codigo] = $cuenta;
+        }
+        foreach ($variantes as $variante) {
+            if (isset($porCodigo[$variante])) {
+                return $porCodigo[$variante];
+            }
+        }
+
+        return null;
     }
 
     public function findOrFail($id)

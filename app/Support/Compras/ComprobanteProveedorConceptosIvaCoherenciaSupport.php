@@ -32,12 +32,13 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
      * @param  list<int|string|null>  $conceptoIds
      * @param  list<int|float|string|null>  $montos
      * @param  list<int|string|null>  $cuentaDebeIds
+     * @param  list<int|string|null>  $centrocostoIds
      * @return list<array<string, mixed>>
      */
-    public static function lineasDesdeArrays(array $conceptoIds, array $montos, array $cuentaDebeIds = []): array
+    public static function lineasDesdeArrays(array $conceptoIds, array $montos, array $cuentaDebeIds = [], array $centrocostoIds = []): array
     {
         $lineas = [];
-        $max = max(count($conceptoIds), count($montos), count($cuentaDebeIds));
+        $max = max(count($conceptoIds), count($montos), count($cuentaDebeIds), count($centrocostoIds));
 
         for ($i = 0; $i < $max; $i++) {
             $conceptoId = (int) ($conceptoIds[$i] ?? 0);
@@ -52,6 +53,10 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
             if ($cuentaDebeIds !== []) {
                 $cuentaId = (int) ($cuentaDebeIds[$i] ?? 0);
                 $linea['cuentacontabledebe_id'] = $cuentaId > 0 ? $cuentaId : null;
+            }
+            if ($centrocostoIds !== []) {
+                $centrocostoId = (int) ($centrocostoIds[$i] ?? 0);
+                $linea['centrocosto_id'] = $centrocostoId > 0 ? $centrocostoId : null;
             }
             $lineas[] = $linea;
         }
@@ -564,6 +569,9 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
                 ];
                 if (isset($lineas[0]) && array_key_exists('cuentacontabledebe_id', $lineas[0])) {
                     $nueva['cuentacontabledebe_id'] = $lineas[0]['cuentacontabledebe_id'] ?? null;
+                }
+                if (isset($lineas[0]) && array_key_exists('centrocosto_id', $lineas[0])) {
+                    $nueva['centrocosto_id'] = $lineas[0]['centrocosto_id'] ?? null;
                 }
                 $lineasFiltradas[] = $nueva;
             }

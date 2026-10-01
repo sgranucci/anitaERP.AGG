@@ -398,7 +398,7 @@ return [
                 'No puedo cargar la factura de un abono / honorario: el contrato vigente probablemente tiene "Recepción para facturar" en Obligatoria. Edite la OC, márquela en "No requiere recepción" y elija de dónde sale la cuenta (artículos de la OC o cuenta del contrato).',
                 'La factura pide COM aunque el contrato es un servicio: misma causa: recepción obligatoria en el contrato, o el contrato no está vigente a la fecha del comprobante (en ese caso rige el flujo de la empresa).',
                 'Al grabar pide la cuenta del contrato: el contrato está en sin recepción con cuenta indicada en el contrato, pero esa cuenta no está cargada. Edite la OC, elija "Cuenta indicada en este contrato" y complete Cuenta a imputar.',
-                'Al grabar pide la cuenta DEBE del neto: complete la columna Cuenta DEBE en los renglones de neto, o cargue la cuenta en el contrato para que se precargue sola.',
+                'Al grabar pide la cuenta DEBE del neto: cárguela en el contrato (cuenta a imputar) o, si el comprobante no tiene OC ni COM, indíquela en la solapa Asiento contable.',
                 'Al contabilizar falta la cuenta de un artículo de la OC: el contrato imputa el neto con las cuentas de los ítems. Abra el artículo y cargue la cuenta de compras o gastos de la empresa, o cambie la imputación del contrato a cuenta indicada en el contrato.',
             ],
         ],

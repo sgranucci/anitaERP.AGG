@@ -139,6 +139,7 @@
                 data-precarga-id="{{ (int) ($data->precarga_comprobante_proveedor_id ?? 0) }}"
                 data-precarga-total="{{ number_format((float) (optional($data->precarga_comprobante_proveedores)->total ?? 0), 2, '.', '') }}"
                 data-ordencompra-id="{{ (int) ($data->ordencompra_id ?? 0) }}"
+                data-tiene-scan="{{ ($esEdicion && (filled($ruta_factura_pdf ?? null) || ($data->comprobante_proveedor_archivos ?? collect())->contains(fn ($a) => in_array($a->tipo, [\App\Support\Compras\ComprobanteProveedorArchivoTipos::ORIGEN_IA, \App\Support\Compras\ComprobanteProveedorArchivoTipos::FACTURA], true)))) ? '1' : '0' }}"
                 data-numero-oc="{{ $data->ordencompras->numeroordencompra ?? (optional($data->precarga_comprobante_proveedores)->numeroordencompra ?? '') }}"
                 data-anita-nro="{{ (int) ($data->anita_nro_interno ?? 0) }}"
                 data-aviso-anita-url="{{ route('comprobante_proveedor_aviso_factura_anita') }}"

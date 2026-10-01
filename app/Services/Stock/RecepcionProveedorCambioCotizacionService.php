@@ -14,9 +14,9 @@ use Illuminate\Support\Facades\DB;
 /**
  * Cambia únicamente la cotización de una recepción de proveedor confirmada y propaga el cambio a:
  *  - Cabecera y líneas de la recepción (recepcion_proveedor / recepcion_proveedor_articulo).
- *  - Asiento contable del ERP (recuadre) y ctamov de Anita.
+ *  - Cotización de las líneas del asiento ERP que tenían la tasa anterior, y ctamov de Anita.
  *  - recepmov de Anita (recv_cotizacion).
- * No modifica cantidades, precios ni stock.
+ * No modifica cantidades, precios, cuentas del asiento ni stock.
  */
 class RecepcionProveedorCambioCotizacionService
 {
@@ -47,7 +47,7 @@ class RecepcionProveedorCambioCotizacionService
 
         $this->assertPeriodoContable($recepcion);
 
-        $recepcion = DB::transaction(function () use ($recepcion, $nuevaCotizacion) {
+        $recepcion = DB::transaction(function () use ($recepcion, $nuevaCotizacion, $cotizacionAnterior) {
             // 1) Solo la cotización, en cabecera y líneas.
             Recepcion_Proveedor_Articulo::query()
                 ->where('recepcion_proveedor_id', $recepcion->id)
@@ -64,9 +64,14 @@ class RecepcionProveedorCambioCotizacionService
                 'asientos',
             ]);
 
-            // 2) Asiento contable ERP + ctamov Anita (recuadre con la nueva cotización).
+            // 2) Cotización del asiento ya grabado. No recuadrar: eso vuelve a
+            // elegir anticipo vs provisión y borra la COM del mayor de anticipos.
             if ((int) ($recepcion->asiento_id ?? 0) > 0) {
-                $this->asientoService->recuadrarAsientoExistente($recepcion);
+                $this->asientoService->actualizarCotizacionAsientoExistente(
+                    $recepcion,
+                    $cotizacionAnterior,
+                    $nuevaCotizacion,
+                );
             }
 
             // 3) recepmov Anita (recv_cotizacion).

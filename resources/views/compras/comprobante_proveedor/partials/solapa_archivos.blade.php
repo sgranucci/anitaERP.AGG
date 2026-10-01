@@ -48,7 +48,7 @@
                         $urlFactura = route('comprobante_proveedor_factura_pdf', ['id' => $data->id, 'inline' => 1]);
                     @endphp
                     <tr>
-                        <td>{{ \App\Support\Compras\ComprobanteProveedorArchivoTipos::etiqueta($archivoFactura->tipo ?? \App\Support\Compras\ComprobanteProveedorArchivoTipos::ORIGEN_IA) }}</td>
+                        <td>{{ (($archivoFactura->tipo ?? '') === \App\Support\Compras\ComprobanteProveedorArchivoTipos::ORIGEN_IA && empty($archivoFactura->precarga_comprobante_proveedor_id) && empty($precargaId)) ? 'Factura (scan)' : \App\Support\Compras\ComprobanteProveedorArchivoTipos::etiqueta($archivoFactura->tipo ?? \App\Support\Compras\ComprobanteProveedorArchivoTipos::ORIGEN_IA) }}</td>
                         <td><small class="text-monospace">{{ $nombreFactura }}</small></td>
                         <td><small>{{ ($archivoFactura->tipo ?? '') === \App\Support\Compras\ComprobanteProveedorArchivoTipos::FACTURA ? 'ERP' : 'Facturas_scan' }}</small></td>
                         <td>
@@ -112,10 +112,18 @@
         <h5 class="card-title mb-0">Agregar archivos nuevos</h5>
     </div>
     <div class="card-body">
+        @if ((int) ($data->ordencompra_id ?? 0) <= 0)
+        <p class="text-muted small mb-2">
+            Sin orden de compra, el <strong>primer archivo</strong> es el PDF de la factura.
+            Se guarda como el scan y se abre desde la cuenta corriente y el resto de las consultas.
+            Los renglones siguientes son remitos u otros respaldos.
+        </p>
+        @else
         <p class="text-muted small mb-2">
             Adjunt&aacute; la <strong>factura PDF</strong> (tipo Factura), remitos u otros respaldos.
             Use <strong>+ Agrega rengl&oacute;n</strong> para varios. Se persisten al guardar el comprobante.
         </p>
+        @endif
         <table class="table table-sm table-bordered" id="cp-archivo-table">
             <thead style="background-color:#85C1E9;color:#17202A;">
                 <tr>

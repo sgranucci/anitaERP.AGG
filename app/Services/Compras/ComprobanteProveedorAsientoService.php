@@ -14,6 +14,7 @@ use App\Services\Stock\RecepcionProveedorAsientoService;
 use App\Support\Compras\ComprobanteProveedorAsientoCuadreSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoDescripcionSupport;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
+use App\Support\Contable\CuentaCentrocostoAsignadosSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorCuentaDebeNetoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
@@ -313,11 +314,13 @@ class ComprobanteProveedorAsientoService
             // Inferencia G/I ya aplicada sobre la colección al inicio de armarPreview.
 
             // Reparto multi-cuenta en Asiento: el neto no arma Debe 1:1 (lo reemplaza debe_gasto).
-            // Criterio: con reparto, solo los impuestos/percepciones (I/P/B/M/T/S/A) siguen 1:1.
-            // N/G/E, EXENTO codigo 1 y tipoconcepto vacío no deben postearse otra vez.
+            // Criterio: con reparto, solo los impuestos/percepciones (I/P/B/M/S/A) siguen 1:1.
+            // N/G/E, EXENTO codigo 1, impuesto interno y tipoconcepto vacío no se postean aparte:
+            // el II es neto y entra en la cuenta de gasto.
             // Solo corre con $hayRepartoDebeGasto (sin COM/FAR/OC artículos/anticipo/contrato).
             if ($hayRepartoDebeGasto
-                && ! ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipoConcepto)) {
+                && (ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto($tipoConcepto, $codigoConcepto)
+                    || ! ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipoConcepto))) {
                 continue;
             }
 
@@ -339,49 +342,51 @@ class ComprobanteProveedorAsientoService
                 continue;
             }
 
-            // II no provisionado en la COM (YAFEMA gastronomía): no cierra FAR.
-            // Cuenta del concepto si hay; si no, mismo destino que los artículos (MAT. PRIMA).
+            // II no provisionado en la COM: no cierra FAR y no exige cuenta del concepto.
+            // Va a las cuentas de gasto de los artículos; si no hay, a la cuenta de gasto de la factura.
             if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
-                $empresaIdIi = (int) ($comprobante->empresa_id ?? 0);
-                $cuentaIi = (int) ($linea->cuentacontabledebe_id ?? 0);
-                if ($cuentaIi <= 0) {
-                    $cuentaIi = (int) ($concepto?->cuentacontableDebeIdParaEmpresa($empresaIdIi) ?? 0);
-                }
-                if ($cuentaIi > 0) {
-                    $lineasDebe[] = [
+                $lineasIi = $this->lineasDebeDiferenciaArticulosProrrateada(
+                    $comprobante,
+                    $monto,
+                    $centrocostoId
+                );
+                if ($lineasIi === []) {
+                    $cuentaIi = ComprobanteProveedorCuentaDebeNetoSupport::cuentaGastoDeFactura(
+                        $comprobante,
+                        (int) ($linea->concepto_ivacompra_id ?? 0)
+                    );
+                    if ($cuentaIi <= 0) {
+                        $cuentaIi = (int) ($linea->cuentacontabledebe_id ?? 0);
+                    }
+                    if ($cuentaIi <= 0) {
+                        $cuentaIi = (int) ($concepto?->cuentacontableDebeIdParaEmpresa(
+                            (int) ($comprobante->empresa_id ?? 0) ?: null
+                        ) ?? 0);
+                    }
+                    if ($cuentaIi <= 0) {
+                        throw new RuntimeException(
+                            'El impuesto interno «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id)
+                            .'» es neto y va a la cuenta de gasto de la factura. '
+                            .'No hay renglones de COM/OC ni cuenta de gasto para imputarlo.'
+                        );
+                    }
+                    $lineasIi = [[
                         'cuentacontable_id' => $cuentaIi,
                         'importe' => $monto,
                         'centrocosto_id' => $centrocostoId,
-                        'observacion' => $descLineaErp,
-                        'origen' => 'impuesto',
-                        'editable_cuenta' => false,
-                        'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
-                    ];
-                } else {
-                    $lineasIi = $this->lineasDebeDiferenciaArticulosProrrateada(
-                        $comprobante,
-                        $monto,
-                        $centrocostoId
-                    );
-                    if ($lineasIi === []) {
-                        throw new RuntimeException(
-                            'Falta cuenta contable DEBE para impuesto interno «'
-                            .($concepto?->nombre ?? $linea->concepto_ivacompra_id)
-                            .'» y no hay renglones de COM/OC para imputarlo.'
-                        );
-                    }
-                    foreach ($lineasIi as &$lineaIi) {
-                        $lineaIi['observacion'] = $descLineaErp;
-                        $lineaIi['origen'] = 'impuesto_interno';
-                        $lineaIi['editable_cuenta'] = false;
-                        $lineaIi['concepto_ivacompra_id'] = (int) ($linea->concepto_ivacompra_id ?? 0);
-                    }
-                    unset($lineaIi);
-                    $lineasDebe = array_merge($lineasDebe, $lineasIi);
+                    ]];
                 }
+                foreach ($lineasIi as &$lineaIi) {
+                    $lineaIi['observacion'] = $descLineaErp;
+                    $lineaIi['origen'] = 'impuesto_interno';
+                    $lineaIi['editable_cuenta'] = false;
+                    $lineaIi['concepto_ivacompra_id'] = (int) ($linea->concepto_ivacompra_id ?? 0);
+                }
+                unset($lineaIi);
+                $lineasDebe = array_merge($lineasDebe, $lineasIi);
 
                 continue;
             }
@@ -395,7 +400,7 @@ class ComprobanteProveedorAsientoService
 
             // Con OC asociada (NC/ND/FAC sin COM valuada): neto → cuentas de artículos de la OC
             // (o override del renglón si el usuario cambió la cuenta en la solapa Asiento).
-            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
@@ -410,7 +415,7 @@ class ComprobanteProveedorAsientoService
             }
 
             // Contrato sin recepción: neto → cuenta del contrato (o override del renglón).
-            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
@@ -440,7 +445,7 @@ class ComprobanteProveedorAsientoService
             }
 
             // OC anticipada sin COM: neto → anticipo (Capex / sin Capex); impuestos siguen por concepto.
-            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
@@ -458,13 +463,25 @@ class ComprobanteProveedorAsientoService
             }
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
-            $esNetoSinReferencia = ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+            $esImpuestoInterno = ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno(
                 $tipoConcepto,
                 $codigoConcepto
             );
-            // Sin OC/COM: renglón, maestro, o la cuenta ya cargada en otro neto del mismo comprobante.
+            $esNetoSinReferencia = ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
+                $tipoConcepto,
+                $codigoConcepto
+            );
+            // Sin OC/COM: renglón, maestro, o la cuenta de gasto ya cargada en otro neto.
+            // El impuesto interno usa esa cuenta de gasto; no exige la del concepto.
             $cuentaId = ComprobanteProveedorCuentaDebeNetoSupport::resolverParaLinea($comprobante, $linea, $concepto);
             if ($cuentaId <= 0 && ! ($permitirCuentasPendientes && $esNetoSinReferencia)) {
+                if ($esImpuestoInterno) {
+                    throw new RuntimeException(
+                        'El impuesto interno «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id)
+                        .'» es neto y va a la cuenta de gasto de la factura. '
+                        .'Indíquela en la solapa Asiento contable.'
+                    );
+                }
                 throw new RuntimeException(
                     'Falta cuenta contable DEBE en concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'»'
                     .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
@@ -474,13 +491,21 @@ class ComprobanteProveedorAsientoService
                 );
             }
 
+            $ccLinea = $centrocostoId;
+            if ($esNetoSinReferencia && $cuentaId > 0) {
+                $ccLinea = CuentaCentrocostoAsignadosSupport::resolver(
+                    $cuentaId,
+                    (int) ($linea->centrocosto_id ?? 0),
+                    $centrocostoId
+                );
+            }
             $lineasDebe[] = [
                 'cuentacontable_id' => $cuentaId,
                 'importe' => $monto,
-                'centrocosto_id' => $centrocostoId,
+                'centrocosto_id' => $ccLinea,
                 'observacion' => $descLineaErp,
-                'origen' => $esNetoSinReferencia ? 'neto_manual' : 'impuesto',
-                'editable_cuenta' => $esNetoSinReferencia,
+                'origen' => $esImpuestoInterno ? 'impuesto_interno' : ($esNetoSinReferencia ? 'neto_manual' : 'impuesto'),
+                'editable_cuenta' => $esNetoSinReferencia && ! $esImpuestoInterno,
                 'editable_importe' => false,
                 'concepto_ivacompra_id' => (int) ($linea->concepto_ivacompra_id ?? 0),
             ];
@@ -1094,6 +1119,7 @@ class ComprobanteProveedorAsientoService
                 'cuentacontable_id' => $cuentaId,
                 'cuenta_codigo' => $cuentaCodigo,
                 'cuenta_nombre' => $cuentaNombre,
+                'centrocosto_id' => $ccId,
                 'centrocosto_codigo' => $ccCodigo,
                 'debe' => $debe > 0 ? $debe : null,
                 'haber' => $haber > 0 ? $haber : null,

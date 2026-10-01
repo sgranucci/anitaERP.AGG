@@ -9,6 +9,14 @@ use Tests\TestCase;
 
 class CuentacontableArbolSupportTest extends TestCase
 {
+    public function test_variantes_codigo_busqueda_aceptan_guion_sin_rellenar_incompleto(): void
+    {
+        $this->assertSame(['211010-001', '211010001'], CuentacontableArbolSupport::variantesCodigoBusqueda('211010-001'));
+        $this->assertSame(['211010001', '211010-001'], CuentacontableArbolSupport::variantesCodigoBusqueda('211010001'));
+        $this->assertSame(['211010'], CuentacontableArbolSupport::variantesCodigoBusqueda('211010'));
+        $this->assertSame(['211010-001', '211010001'], CuentacontableArbolSupport::variantesCodigoBusqueda(" 211010\u{2013}001\n"));
+    }
+
     public function test_candidatos_padre_van_de_especifico_a_amplio(): void
     {
         $cands = CuentacontableArbolSupport::candidatosPadre('111010001');

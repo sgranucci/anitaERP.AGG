@@ -315,7 +315,7 @@
                 <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
             </div>
             <div class="modal-body">
-                <p class="small text-muted mb-2">Leyenda / detalle del movimiento contable. Enter guarda y sigue con el campo siguiente. Si es la primera l&iacute;nea, al guardar se copia a los renglones sin detalle.</p>
+                <p class="small text-muted mb-2">Leyenda / detalle del movimiento contable. Enter guarda y sigue con el campo siguiente. Al agregar un rengl&oacute;n, la leyenda se copia de la l&iacute;nea anterior.</p>
                 <textarea id="asiento_detalle_linea_editor" class="form-control" rows="6" maxlength="255" placeholder="Detalle de la l&iacute;nea…"></textarea>
             </div>
             <div class="modal-footer py-2">

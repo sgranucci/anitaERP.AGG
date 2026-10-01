@@ -233,6 +233,130 @@ function refrescarCentroCostoTrasCuenta($ctx, data) {
     }
 }
 
+function sincronizarPrevioCentroCosto($sel, id) {
+    var valor = parseInt(id || '0', 10) > 0 ? String(parseInt(id, 10)) : '0';
+    $sel.closest('tr').find('.centrocostoasiento_id_previo, .centrocosto_id_previo').val(valor);
+}
+
+/**
+ * Llena el select con los centros cargados en la cuenta.
+ * Si hay uno solo y no había elección, lo deja seleccionado.
+ */
+function llenarSelectCentrosCostoCuenta($sel, data, centrocostoId) {
+    centrocostoId = parseInt(centrocostoId || '0', 10) || 0;
+    if (!$sel || !$sel.length) {
+        return { maneja: false, id: 0, cantidad: 0, auto: false };
+    }
+
+    if (data === 'No maneja centro de costo' || data === 'Cuenta inexistente' || !$.isArray(data)) {
+        $sel.empty().append('<option value="0" selected>Sin CC</option>').attr('readonly', true);
+        sincronizarPrevioCentroCosto($sel, 0);
+        return { maneja: false, id: 0, cantidad: 0, auto: false };
+    }
+
+    var reales = [];
+    $.each(data, function (_, value) {
+        var id = parseInt(value && value.id || '0', 10) || 0;
+        if (id > 0) {
+            reales.push(value);
+        }
+    });
+
+    var elegido = 0;
+    var auto = false;
+    if (centrocostoId > 0) {
+        $.each(reales, function (_, value) {
+            if ((parseInt(value.id, 10) || 0) === centrocostoId) {
+                elegido = centrocostoId;
+            }
+        });
+    }
+    if (elegido <= 0 && reales.length === 1) {
+        elegido = parseInt(reales[0].id, 10) || 0;
+        auto = elegido > 0;
+    }
+
+    $sel.empty().attr('readonly', false);
+    if (reales.length !== 1) {
+        $sel.append('<option value="">— Seleccione CC —</option>');
+    }
+    $.each(reales, function (_, value) {
+        var id = parseInt(value.id, 10) || 0;
+        var texto = $.trim((value.codigo || '') + (value.nombre ? '-' + value.nombre : ''));
+        var $opt = $('<option/>').val(String(id)).text(texto || String(id));
+        if (id === elegido) {
+            $opt.prop('selected', true);
+        }
+        $sel.append($opt);
+    });
+    if (elegido <= 0 && centrocostoId > 0) {
+        $sel.append($('<option/>').val(String(centrocostoId)).text(String(centrocostoId)).prop('selected', true));
+        elegido = centrocostoId;
+    }
+    if (elegido > 0) {
+        $sel.val(String(elegido));
+    }
+    sincronizarPrevioCentroCosto($sel, elegido);
+
+    return { maneja: true, id: elegido, cantidad: reales.length, auto: auto };
+}
+
+function cargarCentrosCostoEnSelect($sel, cuentaId, centrocostoId) {
+    var diferido = $.Deferred();
+    cuentaId = parseInt(cuentaId || '0', 10) || 0;
+    centrocostoId = parseInt(centrocostoId || '0', 10) || 0;
+    if (!$sel || !$sel.length || cuentaId <= 0) {
+        diferido.resolve({ maneja: false, id: 0, cantidad: 0, auto: false });
+        return diferido.promise();
+    }
+
+    var url = carpetaBase + '/contable/cuentacontable/leercuentacontablecentrocosto/' + cuentaId;
+    if (centrocostoId > 0) {
+        url += '?incluir=' + centrocostoId;
+    }
+
+    $.get(url).done(function (data) {
+        diferido.resolve(llenarSelectCentrosCostoCuenta($sel, data, centrocostoId));
+    }).fail(function () {
+        diferido.resolve({ maneja: false, id: centrocostoId, cantidad: 0, auto: false });
+    });
+
+    return diferido.promise();
+}
+
+function abrirListaCentroCosto(el) {
+    if (!el) {
+        return;
+    }
+    var $el = $(el);
+    setTimeout(function () {
+        if ($el.hasClass('select2-hidden-accessible')) {
+            try {
+                $el.select2('open');
+            } catch (errOpen) {
+                // ignore
+            }
+            return;
+        }
+        try {
+            el.focus();
+        } catch (errFocus) {
+            // ignore
+        }
+        if (typeof el.showPicker === 'function') {
+            try {
+                el.showPicker();
+            } catch (errPicker) {
+                // ignore
+            }
+        }
+    }, 40);
+}
+
+window.llenarSelectCentrosCostoCuenta = llenarSelectCentrosCostoCuenta;
+window.cargarCentrosCostoEnSelect = cargarCentrosCostoEnSelect;
+window.abrirListaCentroCosto = abrirListaCentroCosto;
+
 function buscar_datos(consulta) {
     if (consultaCuentaContableAjax && consultaCuentaContableAjax.readyState !== 4) {
         consultaCuentaContableAjax.abort();
@@ -568,28 +692,54 @@ function activa_eventos_consulta_cuentacontable()
                 return;
             }
 
+            var pegado = $input.data('cta-pegado-codigo') === 1;
+            if (pegado) {
+                $input.removeData('cta-pegado-codigo');
+            }
+
             var $ctx = contextoDesdeInputCodigoCuentaContable($input);
             var esCampoTm = $ctx && $ctx.length && $ctx.hasClass('tm-cuentacontable-campo');
-            var codigoActual = $.trim($input.val() || '');
-            var codigoPrevio = ($ctx && $ctx.length)
-                ? $.trim($ctx.find('.codigo_previo').first().val() || '')
-                : '';
+            var tipoEvento = event.type;
 
             // tm-cuentacontable-campo: solo blur (change se ignora para no duplicar).
-            // Grilla asiento (tr): blur y change resuelven si el código cambió — si no,
-            // el hidden cuentacontable_ids[] queda con el id viejo al grabar.
-            if (event.type === 'blur') {
-                if (!esCampoTm) {
-                    if (!$ctx || !$ctx.length || codigoActual === codigoPrevio) {
-                        return;
-                    }
-                }
-            } else if (esCampoTm) {
+            if (tipoEvento !== 'blur' && esCampoTm && !pegado) {
                 return;
             }
 
-            event.preventDefault();
-            resolverPorCodigoCuentaContable($input.val(), $ctx);
+            if ($input.data('cta-validar-pendiente')) {
+                return;
+            }
+            $input.data('cta-validar-pendiente', 1);
+            window.setTimeout(function () {
+                $input.removeData('cta-validar-pendiente');
+                if (!document.contains($input[0])) {
+                    return;
+                }
+                // Alt-tab: el foco vuelve al mismo campo. No validar el código a medio tipear.
+                if (!pegado && (!document.hasFocus() || document.activeElement === $input[0])) {
+                    return;
+                }
+                if (modalCuentaContableAbierto()) {
+                    return;
+                }
+
+                var codigoActual = $.trim($input.val() || '');
+                var codigoPrevio = ($ctx && $ctx.length)
+                    ? $.trim($ctx.find('.codigo_previo').first().val() || '')
+                    : '';
+
+                if (tipoEvento === 'blur') {
+                    if (!esCampoTm) {
+                        if (!$ctx || !$ctx.length || codigoActual === codigoPrevio) {
+                            return;
+                        }
+                    }
+                } else if (esCampoTm && !pegado) {
+                    return;
+                }
+
+                resolverPorCodigoCuentaContable($input.val(), $ctx);
+            }, 0);
         });
 
     $(document)
@@ -688,6 +838,49 @@ function activa_eventos_consulta_cuentacontable()
         $('#consultacuentaModal').modal('hide');
     });
 }
+
+/** Código copiado de un PDF u otro asiento: 211010-001, con guión tipográfico o salto de línea final. */
+function codigoCuentaDesdePegado(texto) {
+    var t = String(texto || '')
+        .replace(/[\u2010\u2011\u2012\u2013\u2014\u2212]/g, '-')
+        .replace(/\u00a0/g, ' ')
+        .trim();
+    if (t === '' || /[\r\n\t]/.test(t)) {
+        return null;
+    }
+    t = t.replace(/\s+/g, '');
+    if (!/^\d{3,}(?:-\d{1,6})?$/.test(t)) {
+        return null;
+    }
+    return t;
+}
+
+document.addEventListener('paste', function (e) {
+    var target = e.target;
+    if (!target || !target.classList) {
+        return;
+    }
+    var esCodigo = target.classList.contains('codigocuentacontable')
+        || target.classList.contains('codigoasiento')
+        || target.id === 'codigocuentacontable';
+    if (!esCodigo || target.readOnly || target.disabled) {
+        return;
+    }
+    var clipboard = e.clipboardData;
+    if (!clipboard) {
+        return;
+    }
+    var codigo = codigoCuentaDesdePegado(clipboard.getData('text') || '');
+    if (codigo === null) {
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    target.value = codigo;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    $(target).data('cta-pegado-codigo', 1);
+    $(target).trigger('change');
+}, true);
 
 $(function () {
     if (typeof activa_eventos_consulta_cuentacontable === 'function') {

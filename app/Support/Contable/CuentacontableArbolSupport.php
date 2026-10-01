@@ -68,6 +68,36 @@ class CuentacontableArbolSupport
     }
 
     /**
+     * Formas equivalentes de un código para buscarlo: con o sin guión (211010-001 y 211010001).
+     * No rellena con ceros un código incompleto.
+     *
+     * @return list<string>
+     */
+    public static function variantesCodigoBusqueda(string $codigo): array
+    {
+        $codigo = str_replace(
+            ["\u{2010}", "\u{2011}", "\u{2012}", "\u{2013}", "\u{2014}", "\u{2212}", "\u{00A0}"],
+            ['-', '-', '-', '-', '-', '-', ' '],
+            trim($codigo)
+        );
+        $codigo = preg_replace('/\s+/', '', $codigo) ?? '';
+        if ($codigo === '') {
+            return [];
+        }
+
+        $digits = preg_replace('/\D/', '', $codigo) ?? '';
+        $variantes = [$codigo];
+        if ($digits !== '' && $digits !== $codigo) {
+            $variantes[] = $digits;
+        }
+        if (strlen($digits) === 9) {
+            $variantes[] = substr($digits, 0, 6).'-'.substr($digits, 6, 3);
+        }
+
+        return array_values(array_unique($variantes));
+    }
+
+    /**
      * Candidatos de padre, del más específico al más amplio.
      *
      * @return list<string>

@@ -1017,14 +1017,16 @@ class ComprobanteProveedorImportarDesdeAnitaService
             return null;
         }
 
-        return Pagoproveedor::query()
+        $query = Pagoproveedor::query()
             ->where('proveedor_id', $proveedorId)
             ->where('tipocomprobante', $tipo)
-            ->where('letra', (string) ($credito['letra'] ?? 'A'))
             ->where('sucursal', (int) ($credito['sucursal'] ?? 0))
-            ->where('numerotransaccion', (string) $numero)
-            ->orderBy('id')
-            ->first();
+            ->where('numerotransaccion', (string) $numero);
+        if (! ComprobanteProveedorAnitaImportClaveSupport::esOrdenPago($tipo)) {
+            $query->where('letra', (string) ($credito['letra'] ?? 'A'));
+        }
+
+        return $query->orderBy('id')->first();
     }
 
     private function aplicacionYaExiste(int $deudaId, int $creditoId, float $monto): bool

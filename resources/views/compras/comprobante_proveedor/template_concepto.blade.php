@@ -2,6 +2,7 @@
     <tr class="item-concepto">
         <td>
             <input type="hidden" name="concepto_ivacompra_ids[]" class="concepto_ivacompra_id" value="">
+            <input type="hidden" name="concepto_centrocosto_ids[]" class="cp-concepto-centrocosto" value="">
             <div class="d-flex flex-wrap align-items-center">
                 <input type="text" class="form-control form-control-sm codigo_concepto_ivacompra mr-1"
                     value="" style="width:5.5rem;" autocomplete="off"
@@ -13,18 +14,15 @@
                     <i class="fa fa-search"></i>
                 </button>
             </div>
+            <div class="d-none cp-celda-cuenta-debe">
+                @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
+                    'cuentaIdCelda' => 0,
+                    'puedeAbrirAbmCuenta' => can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false),
+                ])
+            </div>
         </td>
         <td>
             <input type="text" inputmode="decimal" name="montos[]" class="form-control form-control-sm monto js-monto-ar text-right" value="" />
-        </td>
-        <td class="align-middle cp-celda-cuenta-debe d-none">
-            @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
-                'cuentaIdCelda' => 0,
-                'puedeAbrirAbmCuenta' => can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false),
-            ])
-        </td>
-        <td class="text-center align-middle cp-celda-aviso-concepto">
-            <span class="cp-aviso-concepto-cuenta text-muted" title=""></span>
         </td>
         <td class="text-center align-middle">
             <button type="button" title="Elimina esta línea" class="btn-accion-tabla eliminar_concepto tooltipsC">

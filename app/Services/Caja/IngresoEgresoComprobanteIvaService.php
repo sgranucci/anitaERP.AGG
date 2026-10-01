@@ -199,6 +199,7 @@ class IngresoEgresoComprobanteIvaService
                     'cuentacontable_id' => $cuentaId,
                     'codigo' => $cuenta?->codigo ?? '',
                     'nombre' => $cuenta?->nombre ?? '',
+                    'centrocosto_id' => (int) ($linea['centrocosto_id'] ?? 0),
                     'debe' => $linea['importe'],
                     'haber' => 0,
                     'observacion' => $linea['observacion'],
@@ -398,6 +399,7 @@ class IngresoEgresoComprobanteIvaService
                 'orden' => $orden++,
                 'monto' => $monto,
                 'cuentacontabledebe_id' => $cuentaOverride,
+                'centrocosto_id' => ((int) ($concepto['centrocosto_id'] ?? 0)) ?: null,
             ]);
         }
     }
@@ -548,6 +550,7 @@ class IngresoEgresoComprobanteIvaService
                 return [
                     'cuentacontable_id' => (int) $fila->cuentacontable_id,
                     'importe' => (float) $fila->importe,
+                    'centrocosto_id' => (int) ($fila->centrocosto_id ?? 0),
                     'codigo' => $fila->cuentacontables?->codigo ?? '',
                     'nombre' => $fila->cuentacontables?->nombre ?? '',
                 ];
@@ -569,6 +572,7 @@ class IngresoEgresoComprobanteIvaService
                     'monto' => (float) $linea->monto,
                     'cuentacontabledebe_id' => $linea->cuentacontabledebe_id,
                     'cuenta_debe_id' => (int) ($linea->cuentacontabledebe_id ?? $cuentaFallback),
+                    'centrocosto_id' => (int) ($linea->centrocosto_id ?? 0),
                 ];
             })->values()->all(),
         ];

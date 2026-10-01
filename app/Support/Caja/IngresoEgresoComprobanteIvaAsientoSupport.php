@@ -6,6 +6,7 @@ use App\Models\Compras\Concepto_Ivacompra;
 use App\Support\Compras\ComprobanteProveedorAsientoCuadreSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorDebeGastoSupport;
+use App\Support\Contable\CuentaCentrocostoAsignadosSupport;
 
 /**
  * Arma líneas DEBE de asiento desde conceptos IVA compra (ingreso/egreso).
@@ -109,10 +110,10 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
             $permiteNegativo = ComprobanteProveedorConceptoIvaTipos::permiteMontoNegativo($tipo, $codigo);
             $monto = $permiteNegativo ? $montoRaw : round(abs($montoRaw), 2);
             $empresaLinea = (int) ($concepto['empresa_id'] ?? $empresaId ?? 0);
+            $esImpuestoInterno = ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno($tipo, $codigo);
             $cuentaId = self::cuentaDebe($concepto, $modelo, $empresaLinea);
 
-            if (ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipo)
-                || ComprobanteProveedorConceptoIvaTipos::esImpuestoInterno($tipo, $codigo)) {
+            if (ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipo) && ! $esImpuestoInterno) {
                 if ($monto < 0) {
                     continue;
                 }
@@ -139,7 +140,7 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                 continue;
             }
 
-            $esGasto = ComprobanteProveedorConceptoIvaTipos::esNeto($tipo)
+            $esGasto = ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto($tipo, $codigo)
                 || ComprobanteProveedorConceptoIvaTipos::esExento($tipo, $codigo)
                 || $tipo === '';
             if (! $esGasto) {
@@ -163,7 +164,28 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                 'monto' => $monto,
                 'nombre' => (string) $modelo->nombre,
                 'concepto_id' => $conceptoId,
+                'centrocosto_id' => (int) ($concepto['centrocosto_id'] ?? 0),
+                'es_impuesto_interno' => $esImpuestoInterno,
             ];
+        }
+
+        $cuentaGasto = 0;
+        foreach ($netos as $netoLinea) {
+            if (! empty($netoLinea['es_impuesto_interno'])) {
+                continue;
+            }
+            if ((int) $netoLinea['cuenta_id'] > 0) {
+                $cuentaGasto = (int) $netoLinea['cuenta_id'];
+                break;
+            }
+        }
+        if ($cuentaGasto > 0) {
+            foreach ($netos as &$netoLinea) {
+                if (! empty($netoLinea['es_impuesto_interno']) && (int) $netoLinea['cuenta_id'] <= 0) {
+                    $netoLinea['cuenta_id'] = $cuentaGasto;
+                }
+            }
+            unset($netoLinea);
         }
 
         $debitos = self::normalizarDebitos($debitosGasto);
@@ -198,7 +220,11 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                 $lineas[] = self::linea(
                     $cuentaId,
                     (float) $debito['importe'],
-                    $centrocostoId,
+                    CuentaCentrocostoAsignadosSupport::resolver(
+                        $cuentaId,
+                        (int) ($debito['centrocosto_id'] ?? 0),
+                        $centrocostoId
+                    ),
                     'Gasto',
                     null,
                     'debe_gasto',
@@ -212,16 +238,22 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
                 if ($cuentaId <= 0) {
                     $avisos[] = self::avisoSinCuenta((int) $netoLinea['concepto_id'], (string) $netoLinea['nombre'], false);
                     if ($exigirCuentas) {
-                        throw new \RuntimeException(
-                            'Falta cuenta de gasto para «'.$netoLinea['nombre'].'». '
-                            .'Indíquela en la vista previa del asiento.'
-                        );
+                        $msgCuenta = ! empty($netoLinea['es_impuesto_interno'])
+                            ? 'El impuesto interno «'.$netoLinea['nombre'].'» es neto y va a la cuenta de gasto. '
+                                .'Indíquela en la vista previa del asiento.'
+                            : 'Falta cuenta de gasto para «'.$netoLinea['nombre'].'». '
+                                .'Indíquela en la vista previa del asiento.';
+                        throw new \RuntimeException($msgCuenta);
                     }
                 }
                 $lineas[] = self::linea(
                     $cuentaId,
                     (float) $netoLinea['monto'],
-                    $centrocostoId,
+                    CuentaCentrocostoAsignadosSupport::resolver(
+                        $cuentaId,
+                        (int) ($netoLinea['centrocosto_id'] ?? 0),
+                        $centrocostoId
+                    ),
                     (string) $netoLinea['nombre'],
                     (int) $netoLinea['concepto_id'],
                     'neto_manual',
@@ -305,6 +337,7 @@ final class IngresoEgresoComprobanteIvaAsientoSupport
             $out[] = [
                 'cuentacontable_id' => (int) ($debito['cuentacontable_id'] ?? 0),
                 'importe' => $importe,
+                'centrocosto_id' => (int) ($debito['centrocosto_id'] ?? 0),
             ];
         }
 

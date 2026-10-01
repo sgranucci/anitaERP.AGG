@@ -81,14 +81,14 @@ class PagoproveedorImportarDesdeAnitaService
 
                 continue;
             }
-            $letra = ComprobanteProveedorAnitaImportClaveSupport::letra((string) ($pago->pag_letra ?? 'A'));
             $sucursal = (int) ($pago->pag_sucursal ?? 0);
             $numero = (int) ($pago->pag_rec ?? 0);
             if ($numero <= 0) {
                 continue;
             }
 
-            $clave = $empresaId.'|'.$tipo.'|'.$letra.'|'.$sucursal.'|'.$numero;
+            // La letra de Anita no identifica la OP: el ERP no la usa.
+            $clave = self::claveOp($empresaId, $tipo, $sucursal, $numero);
             if (isset($existentes[$clave])) {
                 $stats['omitidos']++;
 
@@ -100,7 +100,7 @@ class PagoproveedorImportarDesdeAnitaService
             if (! $proveedorId) {
                 $stats['sin_proveedor']++;
                 if (count($stats['errores']) < 20) {
-                    $stats['errores'][] = "Proveedor {$provCodigo} no está en ERP ({$tipo} {$letra} {$sucursal}-{$numero})";
+                    $stats['errores'][] = "Proveedor {$provCodigo} no está en ERP ({$tipo} {$sucursal}-{$numero})";
                 }
 
                 continue;
@@ -119,7 +119,7 @@ class PagoproveedorImportarDesdeAnitaService
             }
 
             try {
-                DB::transaction(function () use ($pago, $tipo, $letra, $sucursal, $numero, $empresaId, $proveedorId, $fecha, $uid) {
+                DB::transaction(function () use ($pago, $tipo, $sucursal, $numero, $empresaId, $proveedorId, $fecha, $uid) {
                     $monedaAnita = (int) ($pago->pag_cod_mon_me ?? 0);
                     $monedaId = RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($monedaAnita > 0 ? $monedaAnita : 1);
                     $cotizacion = (float) ($pago->pag_cotizacion ?? 1);
@@ -136,7 +136,7 @@ class PagoproveedorImportarDesdeAnitaService
                         'empresa_id' => $empresaId,
                         'tipotransaccion_caja_id' => $this->resolverTipoCajaId($tipo),
                         'tipocomprobante' => $tipo,
-                        'letra' => $letra,
+                        'letra' => (string) config('pagoproveedor.letra_default', ' '),
                         'sucursal' => $sucursal,
                         'numerotransaccion' => (string) $numero,
                         'fecha' => $fecha,
@@ -190,15 +190,24 @@ class PagoproveedorImportarDesdeAnitaService
         foreach (Pagoproveedor::query()
             ->whereBetween('fecha', [$desdeIso, $hastaIso])
             ->whereIn('tipocomprobante', ['OPP', 'OPA'])
-            ->get(['empresa_id', 'tipocomprobante', 'letra', 'sucursal', 'numerotransaccion']) as $p) {
-            $out[(int) $p->empresa_id.'|'
-                .strtoupper(trim((string) $p->tipocomprobante)).'|'
-                .trim((string) $p->letra).'|'
-                .(int) $p->sucursal.'|'
-                .(int) $p->numerotransaccion] = true;
+            ->get(['empresa_id', 'tipocomprobante', 'sucursal', 'numerotransaccion']) as $p) {
+            $out[self::claveOp(
+                (int) $p->empresa_id,
+                (string) $p->tipocomprobante,
+                (int) $p->sucursal,
+                (int) $p->numerotransaccion,
+            )] = true;
         }
 
         return $out;
+    }
+
+    private static function claveOp(int $empresaId, string $tipo, int $sucursal, int $numero): string
+    {
+        return $empresaId.'|'
+            .ComprobanteProveedorAnitaImportClaveSupport::tipo($tipo).'|'
+            .$sucursal.'|'
+            .$numero;
     }
 
     private function resolverProveedorId(string $codigoAnita): ?int

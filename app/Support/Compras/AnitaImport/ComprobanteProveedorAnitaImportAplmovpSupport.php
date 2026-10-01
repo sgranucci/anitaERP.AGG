@@ -38,7 +38,7 @@ final class ComprobanteProveedorAnitaImportAplmovpSupport
     }
 
     /**
-     * @param  array<string, string>  $signoPorTipo  abreviatura Anita => S|R
+     * @param  array<string, string|int>  $signoPorTipo  abreviatura => R|S o 1|-1
      */
     public static function esCredito(string $tipo, array $signoPorTipo): bool
     {
@@ -47,8 +47,8 @@ final class ComprobanteProveedorAnitaImportAplmovpSupport
             return false;
         }
 
-        if (isset($signoPorTipo[$tipo])) {
-            return $signoPorTipo[$tipo] === 'R';
+        if (array_key_exists($tipo, $signoPorTipo)) {
+            return self::signoEsCredito($signoPorTipo[$tipo]);
         }
 
         if (self::esTipoPago($tipo) || str_starts_with($tipo, 'NC')) {
@@ -56,6 +56,18 @@ final class ComprobanteProveedorAnitaImportAplmovpSupport
         }
 
         return false;
+    }
+
+    /**
+     * tipotransaccion_compra.signo es -1/1. El mapa semilla histórico usa R/S.
+     */
+    private static function signoEsCredito(mixed $signo): bool
+    {
+        if (is_numeric($signo)) {
+            return (float) $signo < 0;
+        }
+
+        return strtoupper(trim((string) $signo)) === 'R';
     }
 
     /**
@@ -94,7 +106,14 @@ final class ComprobanteProveedorAnitaImportAplmovpSupport
         $bEsCredito = self::esCredito($creditoDoc['tipo'], $signoPorTipo);
 
         if ($aEsCredito === $bEsCredito) {
-            if (self::esTipoPago($creditoDoc['tipo']) || str_starts_with($creditoDoc['tipo'], 'NC')) {
+            $docEsNotaCredito = $aEsCredito && ! self::esTipoPago($deudaDoc['tipo']);
+            $cobEsPago = self::esTipoPago($creditoDoc['tipo']);
+            if ($docEsNotaCredito && $cobEsPago) {
+                // La OP aplica la nota de crédito: la NC queda en crédito (+)
+                // y la OP en el lado que resta. Si la NC se trata como deuda,
+                // la aplicación queda del mismo signo que el total y el saldo se duplica.
+                $bEsCredito = false;
+            } elseif ($cobEsPago || str_starts_with($creditoDoc['tipo'], 'NC')) {
                 $aEsCredito = false;
                 $bEsCredito = true;
             } else {

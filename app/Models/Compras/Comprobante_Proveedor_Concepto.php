@@ -14,7 +14,7 @@ class Comprobante_Proveedor_Concepto extends Model implements Auditable
     protected $table = 'comprobante_proveedor_concepto';
 
     protected $fillable = [
-        'comprobante_proveedor_id', 'concepto_ivacompra_id', 'orden', 'monto', 'cuentacontabledebe_id',
+        'comprobante_proveedor_id', 'concepto_ivacompra_id', 'orden', 'monto', 'cuentacontabledebe_id', 'centrocosto_id',
     ];
 
     public function comprobante_proveedores()

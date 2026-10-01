@@ -8,7 +8,7 @@
                 <button type="button" title="Consulta cuentas (F1)" style="padding:1;" class="btn-accion-tabla consultacuentacaja tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="" title="C&oacute;digo: Enter valida, F1 consulta" autocomplete="off">
+                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="" title="C&oacute;digo: Enter valida; vac&iacute;o borra la l&iacute;nea; F1 consulta" autocomplete="off">
                 <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="" >
             </div>
         </td>							

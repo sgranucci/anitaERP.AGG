@@ -191,7 +191,7 @@ function proyBuscarProveedoresModal(consulta) {
             $('#datosproveedor').html(html);
         })
         .fail(function () {
-            $('#datosproveedor').html('<tr><td colspan="8">Error al consultar proveedores</td></tr>');
+            $('#datosproveedor').html('<tr><td colspan="9">Error al consultar proveedores</td></tr>');
         });
 }
 

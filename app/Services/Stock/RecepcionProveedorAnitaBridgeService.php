@@ -1406,7 +1406,9 @@ class RecepcionProveedorAnitaBridgeService
             return;
         }
 
-        $importe = (float) ($recepcion->impuesto_interno ?? 0);
+        // Si el precio del cigarrillo ya trae el II, una línea IMPINTERNO lo duplica
+        // y deja recepmov por encima del asiento COM.
+        $importe = RecepcionProveedorImpuestoInternoSupport::importeImpuestoInternoAAgregar($recepcion);
         if ($importe <= 0.000001) {
             return;
         }

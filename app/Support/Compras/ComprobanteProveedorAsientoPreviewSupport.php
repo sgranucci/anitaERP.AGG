@@ -452,33 +452,44 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 $tipoConcepto,
                 $codigoConcepto
             )) {
-                $empresaIdIi = (int) ($comprobante->empresa_id ?? 0);
-                $cuentaIi = (int) ($linea->cuentacontabledebe_id ?? 0);
-                if ($cuentaIi <= 0) {
-                    $cuentaIi = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaIdIi) ?? 0);
-                }
-                if ($cuentaIi > 0 || $comprobante->ordencompras || $comprobante->comprobante_proveedor_recepciones->isNotEmpty()) {
+                $tieneRenglonesGasto = $comprobante->ordencompras !== null
+                    || $comprobante->comprobante_proveedor_recepciones->isNotEmpty();
+                $cuentaGastoIi = ComprobanteProveedorCuentaDebeNetoSupport::cuentaGastoDeFactura(
+                    $comprobante,
+                    (int) $concepto->id
+                );
+                if ($tieneRenglonesGasto || $cuentaGastoIi > 0) {
                     continue;
                 }
+                $avisos[] = [
+                    'tipo' => 'impuesto_interno_sin_gasto',
+                    'concepto_ivacompra_id' => (int) $concepto->id,
+                    'nombre' => (string) $concepto->nombre,
+                    'mensaje' => 'El impuesto interno «'.$concepto->nombre
+                        .'» es neto y va a la cuenta de gasto de la factura. '
+                        .'No hay renglones de COM/OC ni cuenta de gasto para imputarlo.',
+                ];
+
+                continue;
             }
 
             // Neto de factura anticipada: usa cuenta automática de anticipo, no la del concepto.
-            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+            if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
                 continue;
             }
 
-            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+            if ($netoDesdeArticulosOc && ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
                 continue;
             }
 
-            // Sin OC/COM: el neto va por reparto debe_gasto en Asiento → no exigir cuenta del concepto.
-            if ($hayRepartoDebeGasto && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+            // Sin OC/COM: el neto (y el impuesto interno) va por reparto debe_gasto.
+            if ($hayRepartoDebeGasto && ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
@@ -491,7 +502,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 continue;
             }
 
-            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia(
+            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto(
                 $tipoConcepto,
                 $codigoConcepto
             )) {
@@ -513,7 +524,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
             }
 
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
-            $esNeto = ComprobanteProveedorConceptoIvaTipos::esNetoMercaderia($tipoConcepto, $codigoConcepto);
+            $esNeto = ComprobanteProveedorConceptoIvaTipos::esNetoDeGasto($tipoConcepto, $codigoConcepto);
             $cuentaId = ComprobanteProveedorCuentaDebeNetoSupport::resolverParaLinea($comprobante, $linea, $concepto);
             if ($cuentaId <= 0) {
                     $avisos[] = [
@@ -613,6 +624,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $request->input('concepto_ivacompra_ids', []),
             $request->input('montos', []),
             $request->input('cuentacontabledebe_ids', []),
+            $request->input('concepto_centrocosto_ids', []),
         );
 
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
@@ -642,6 +654,9 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 'orden' => $i + 1,
                 'cuentacontabledebe_id' => ! empty($linea['cuentacontabledebe_id'])
                     ? (int) $linea['cuentacontabledebe_id']
+                    : null,
+                'centrocosto_id' => ! empty($linea['centrocosto_id'])
+                    ? (int) $linea['centrocosto_id']
                     : null,
             ]);
             $modelo->setRelation('concepto_ivacompras', $conceptosPorId->get($conceptoId));

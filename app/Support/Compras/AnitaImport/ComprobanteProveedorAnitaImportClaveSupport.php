@@ -29,6 +29,15 @@ final class ComprobanteProveedorAnitaImportClaveSupport
         return $letra !== '' ? $letra : ' ';
     }
 
+    /**
+     * Anita guardaba letra en OPP/OPA. En ERP la orden de pago no la usa:
+     * la identidad es empresa + tipo + sucursal + número.
+     */
+    public static function esOrdenPago(string $tipo): bool
+    {
+        return in_array(self::tipo($tipo), ['OPP', 'OPA', 'OPV', 'AOP'], true);
+    }
+
     public static function fechaIsoDesdeAnita(mixed $ymd): string
     {
         $digits = preg_replace('/\D/', '', (string) $ymd) ?? '';
@@ -68,7 +77,11 @@ final class ComprobanteProveedorAnitaImportClaveSupport
         int $sucursal,
         int $numero,
     ): string {
-        return self::proveedorCodigoAnita($proveedorCodigo).'|'.self::claveDocumento($tipo, $letra, $sucursal, $numero);
+        $tipoN = self::tipo($tipo);
+        $letraN = self::esOrdenPago($tipoN) ? ' ' : self::letra($letra);
+
+        return self::proveedorCodigoAnita($proveedorCodigo).'|'
+            .self::claveDocumento($tipoN, $letraN, $sucursal, $numero);
     }
 
     /**

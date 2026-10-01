@@ -22,6 +22,9 @@ $(function () {
     var previewTimer = null;
     var previewSeq = 0;
     var previewXhr = null;
+    /** Fila cuyo centro de costo hay que abrir tras cargar la cuenta. */
+    var cpCcAbrir = null;
+    var cpCcAutoHecho = {};
     /** @type {Object.<string, {id:number, codigo:string, nombre:string}>} */
     var cuentasAsientoManualPorConcepto = {};
     /**
@@ -280,8 +283,9 @@ $(function () {
     }
 
     /**
-     * La columna Cuenta DEBE solo se muestra si el renglón no está cubierto por COM
-     * ni por otra regla con cuenta ya resuelta (maestro, contrato, artículos OC).
+     * La cuenta no se edita en la grilla de conceptos.
+     * Neto: artículos de la OC, contrato, o solapa Asiento contable.
+     * Impuestos: maestro del concepto.
      */
     function esImpuestoInterno(tipoConcepto, codigo) {
         if (String(tipoConcepto || '').toUpperCase() === TIPO_IMPUESTO_INTERNO) {
@@ -352,31 +356,9 @@ $(function () {
         return null;
     }
 
-    function filaMuestraEditorCuentaDebe($row) {
-        var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10) || 0;
-        if (conceptoId <= 0) {
-            return false;
-        }
-        var meta = conceptosMeta[conceptoId] || {};
-        var tipo = String(meta.tipoconcepto || '');
-        var codigo = String(meta.codigo || '');
-        if (reglaCubreCuentaDebeSinEditor(tipo, codigo)) {
-            return false;
-        }
-        var esNeto = TIPOS_NETO.indexOf(tipo) >= 0 && !esImpuestoInterno(tipo, codigo);
-        // Neto sin OC/COM: la cuenta se elige en la solapa Asiento contable.
-        if (esNeto && !contratoImputacionManual()) {
-            return false;
-        }
-        var pre = cuentaPreasignadaPorRegla($row);
-        if (pre && pre.id > 0) {
-            return false;
-        }
-        if (pre && pre.id === -1) {
-            return false;
-        }
-        // Impuestos u otros sin cuenta preasignada: editor en conceptos.
-        return true;
+    function filaMuestraEditorCuentaDebe() {
+        // La cuenta no se edita al lado del concepto: va en Asiento contable o en el maestro.
+        return false;
     }
 
     function actualizarVisibilidadEditorCuentaDebe($row) {
@@ -469,24 +451,6 @@ $(function () {
         actualizarColumnaCuentaDebe();
     }
 
-    function conceptoRequiereCuentaDebe(tipoConcepto) {
-        var esNeto = TIPOS_NETO.indexOf(String(tipoConcepto || '')) >= 0;
-        if (esModoAsignaRecepcion() && esNeto) {
-            return false;
-        }
-        if (tieneOrdenCompra() && esNeto && !contratoImputacionManual()) {
-            return false;
-        }
-        if (contratoImputacionManual() && esNeto) {
-            return false;
-        }
-        // Neto sin referencia: se completa en solapa asiento, no exige cuenta en conceptos.
-        if (esNeto) {
-            return false;
-        }
-        return true;
-    }
-
     function actualizarBadgeAsiento(tieneProblema) {
         var $tab = $('#cp-boton-asiento-contable');
         if (!$tab.length) {
@@ -561,86 +525,7 @@ $(function () {
     }
 
     function marcarAvisosConceptosLocales() {
-        $('#tbody-concepto-table tr.item-concepto').each(function () {
-            var $row = $(this);
-            var $select = $row.find('.concepto_ivacompra_id');
-            var $monto = $row.find('.monto');
-            var $aviso = $row.find('.cp-aviso-concepto-cuenta');
-            var conceptoId = parseInt($select.val() || '0', 10);
-            var monto = parseMonto($monto.val() || '0');
-
-            $row.removeClass('table-warning');
-            $aviso.removeClass('text-danger text-success text-muted fa fa-exclamation-triangle fa-check')
-                .empty()
-                .attr('title', '');
-
-            if (conceptoId <= 0 || monto <= 0) {
-                return;
-            }
-
-            var meta = conceptosMeta[conceptoId] || {};
-            var esNeto = TIPOS_NETO.indexOf(String(meta.tipoconcepto || '')) >= 0;
-            if ((tieneOrdenCompra() || contratoImputacionArticulos()) && esNeto && !contratoImputacionManual()) {
-                $aviso.addClass('text-muted').text('OC').attr('title', 'Neto: cuenta de los artículos de la OC');
-                return;
-            }
-            if (contratoImputacionManual() && esNeto) {
-                var cuentaManual = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
-                if (cuentaManual <= 0) {
-                    cuentaManual = contratoCuentaManualDatos().id;
-                }
-                if (cuentaManual <= 0) {
-                    $row.addClass('table-warning');
-                    $aviso.addClass('text-danger fa fa-exclamation-triangle')
-                        .attr('title', 'Falta la cuenta DEBE del neto (indicarla en el contrato o en este renglón)');
-                } else {
-                    $aviso.addClass('text-success fa fa-check').attr('title', 'Cuenta DEBE del contrato / renglón');
-                }
-                return;
-            }
-            if (esNeto) {
-                var cuentaNeto = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
-                if (cuentaNeto > 0) {
-                    $aviso.addClass('text-success fa fa-check')
-                        .attr('title', 'Cuenta del neto cargada (se puede cambiar en Asiento contable)');
-                } else {
-                    $aviso.addClass('text-muted').text('Asiento')
-                        .attr('title', 'Neto sin OC/COM: indique la cuenta en la solapa Asiento contable');
-                }
-                return;
-            }
-            if (!conceptoRequiereCuentaDebe(meta.tipoconcepto)) {
-                $aviso.addClass('text-muted').text('—').attr('title', 'Neto: revierte provisión COM');
-                return;
-            }
-
-            var cuentaDebe = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
-            if (cuentaDebe <= 0) {
-                cuentaDebe = cuentaDebeDesdeMeta(conceptoId).id;
-            }
-
-            if (!cuentaDebe || cuentaDebe <= 0) {
-                $row.addClass('table-warning');
-                if (puedeEditarConceptoIva && urlEditarConceptoIvaTpl && conceptoId > 0) {
-                    var urlEditar = urlEditarConceptoIvaTpl.replace('__ID__', String(conceptoId));
-                    $aviso.html(
-                        '<a href="' + urlEditar + '" class="text-danger" target="_blank" rel="noopener noreferrer" ' +
-                        'title="Falta cuenta DEBE en el maestro del concepto «' + (meta.nombre || '') +
-                        '». Configúrela allí' + (filaMuestraEditorCuentaDebe($row) ? ' o en este renglón' : '') + '.">' +
-                        '<i class="fa fa-exclamation-triangle"></i></a>'
-                    );
-                } else {
-                    $aviso.addClass('text-danger fa fa-exclamation-triangle')
-                        .attr(
-                            'title',
-                            'Falta cuenta DEBE en el maestro del concepto «' + (meta.nombre || '') + '»'
-                            + (filaMuestraEditorCuentaDebe($row) ? ' (o indíquela en este renglón)' : '')
-                        );
-                }
-            } else {
-                $aviso.addClass('text-success fa fa-check').attr('title', 'Cuenta DEBE asignada');
-            }
-        });
+        $('#tbody-concepto-table tr.item-concepto').removeClass('table-warning');
         actualizarColumnaCuentaDebe();
     }
 
@@ -1310,7 +1195,7 @@ $(function () {
             codigo: String($campo.find('.codigocuentacontable').val() || ''),
             nombre: String($campo.find('.nombrecuentacontable').val() || ''),
             importe: Math.round(Math.abs(importe) * 100) / 100,
-            centrocosto_id: 0,
+            centrocosto_id: leerCentrocostoAsientoFila($row),
             enConceptos: $row.closest('#cp-asiento-preview-conceptos').length > 0,
             importeEditado: filaDebeGastoEsImporteEditado($row)
         };
@@ -1352,6 +1237,9 @@ $(function () {
             }
             if (parsed.enConceptos) {
                 prev.enConceptos = true;
+            }
+            if ((prev.centrocosto_id || 0) <= 0 && parsed.centrocosto_id > 0) {
+                prev.centrocosto_id = parsed.centrocosto_id;
             }
         });
         return orden.map(function (key) {
@@ -1557,7 +1445,7 @@ $(function () {
         lineas.forEach(function (l) {
             params.push({ name: 'debe_gasto_cuenta_ids[]', value: l.cuenta_id > 0 ? String(l.cuenta_id) : '' });
             params.push({ name: 'debe_gasto_importes[]', value: String(l.importe) });
-            params.push({ name: 'debe_gasto_centrocosto_ids[]', value: '' });
+            params.push({ name: 'debe_gasto_centrocosto_ids[]', value: l.centrocosto_id > 0 ? String(l.centrocosto_id) : '' });
         });
     }
 
@@ -1898,10 +1786,96 @@ $(function () {
         return true;
     }
 
+    function leerCentrocostoAsientoFila($row) {
+        var $sel = $row.find('.cp-asiento-centrocosto').first();
+        if (!$sel.length) {
+            return 0;
+        }
+        return parseInt($sel.val() || '0', 10) || 0;
+    }
+
+    function escribirCentrocostoConcepto(conceptoId, ccId) {
+        conceptoId = parseInt(conceptoId, 10) || 0;
+        if (conceptoId <= 0) {
+            return;
+        }
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var id = parseInt($(this).find('.concepto_ivacompra_id').val() || '0', 10) || 0;
+            if (id !== conceptoId) {
+                return;
+            }
+            $(this).find('.cp-concepto-centrocosto').val(ccId > 0 ? String(ccId) : '');
+        });
+    }
+
+    function filaPideAbrirCentroCosto($row, pedido) {
+        if (!pedido || !$row || !$row.length || !$row.is(':visible')) {
+            return false;
+        }
+        if (pedido.tipo === 'gasto') {
+            return (parseInt($row.attr('data-debe-gasto-idx') || '0', 10) || 0) === pedido.id;
+        }
+        return (parseInt($row.attr('data-concepto-ivacompra-id') || '0', 10) || 0) === pedido.id;
+    }
+
+    function aplicarCentrosCostoEnPreview() {
+        if (typeof window.cargarCentrosCostoEnSelect !== 'function') {
+            return;
+        }
+        var pedido = cpCcAbrir;
+        cpCcAbrir = null;
+        $('.cp-asiento-centrocosto').each(function () {
+            var $ya = $(this);
+            var ccYa = parseInt($ya.attr('data-cc-actual') || '0', 10) || 0;
+            var conceptoYa = parseInt($ya.closest('tr').attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+            if (conceptoYa > 0 && ccYa > 0) {
+                escribirCentrocostoConcepto(conceptoYa, ccYa);
+            }
+        });
+        $('.cp-asiento-centrocosto').each(function () {
+            var $sel = $(this);
+            var cuentaId = parseInt($sel.attr('data-cuenta-id') || '0', 10) || 0;
+            var actual = parseInt($sel.attr('data-cc-actual') || $sel.val() || '0', 10) || 0;
+            var $row = $sel.closest('tr');
+            window.cargarCentrosCostoEnSelect($sel, cuentaId, actual).done(function (res) {
+                if (!res || !res.maneja) {
+                    $sel.closest('td').text('—');
+                    return;
+                }
+                var conceptoId = parseInt($row.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+                if (conceptoId > 0 && res.id > 0) {
+                    escribirCentrocostoConcepto(conceptoId, res.id);
+                }
+                if (res.auto && res.id > 0 && res.id !== actual) {
+                    var claveAuto = String(cuentaId) + ':' + String(res.id);
+                    if (cpCcAutoHecho[claveAuto]) {
+                        return;
+                    }
+                    cpCcAutoHecho[claveAuto] = true;
+                    $sel.attr('data-cc-actual', String(res.id));
+                    if ($row.hasClass('cp-debe-gasto-row')) {
+                        sincronizarDebeGastoHiddenDesdeTabla();
+                    }
+                    if (conceptoId > 0) {
+                        escribirCentrocostoConcepto(conceptoId, res.id);
+                    }
+                    window.refrescarPreviewAsiento(true);
+                    return;
+                }
+                if (pedido && filaPideAbrirCentroCosto($row, pedido) && res.cantidad > 1 && (res.id <= 0)) {
+                    if (typeof window.abrirListaCentroCosto === 'function') {
+                        window.abrirListaCentroCosto($sel.get(0));
+                    }
+                }
+            });
+        });
+    }
+
     function trasRenderPreviewAsiento() {
         aplicarCuentasDebeGastoManualesEnEditores();
         debeGastoPendiente = null;
         sincronizarDebeGastoHiddenDesdeTabla();
+        aplicarCentrosCostoEnPreview();
         formatearInputMontoEn($('#cp-asiento-preview-body'));
         if (typeof window.activa_eventos_consultacuentacontable === 'function') {
             window.activa_eventos_consultacuentacontable();
@@ -2478,7 +2452,7 @@ $(function () {
         var $el = $(this);
         // La cuenta del asiento tiene handler propio; no disparar otro preview acá
         // (evita carrera que vuelve a pedir el HTML sin la cuenta recién elegida).
-        if ($el.closest('.cp-asiento-cuenta-editable').length) {
+        if ($el.closest('.cp-asiento-cuenta-editable').length || $el.hasClass('cp-asiento-centrocosto')) {
             return;
         }
         // Importes de reparto: aviso local; el preview solo al cuadrar (si no, tumba la tabla).
@@ -2514,7 +2488,12 @@ $(function () {
 
     $(document).on('change', '.cp-asiento-cuenta-editable .cuentacontable_id', function () {
         var $campo = $(this).closest('.cp-asiento-cuenta-editable');
+        var $filaCc = $campo.closest('tr');
         if ($campo.data('debe-gasto') || $campo.closest('tr.cp-debe-gasto-row').length) {
+            cpCcAbrir = {
+                tipo: 'gasto',
+                id: parseInt($filaCc.attr('data-debe-gasto-idx') || $campo.attr('data-debe-gasto-idx') || '0', 10) || 0
+            };
             var idxGasto = parseInt($campo.attr('data-debe-gasto-idx') || $campo.closest('tr').attr('data-debe-gasto-idx') || '0', 10) || 0;
             var datosGasto = datosCuentaDesdeEditor($campo);
             recordarCuentaDebeGasto(idxGasto, datosGasto);
@@ -2524,6 +2503,7 @@ $(function () {
             return;
         }
         var conceptoId = parseInt($campo.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+        cpCcAbrir = { tipo: 'concepto', id: conceptoId };
         recordarCuentaAsientoManual(conceptoId, {
             id: parseInt($(this).val() || '0', 10) || 0,
             codigo: String($campo.find('.codigocuentacontable').val() || ''),
@@ -2531,6 +2511,33 @@ $(function () {
         });
         sincronizarCuentasAsientoAConceptos();
         marcarAvisosConceptosLocales();
+        window.refrescarPreviewAsiento(true);
+    });
+
+    $(document).on('change', '.cp-asiento-centrocosto', function () {
+        var $sel = $(this);
+        var cc = parseInt($sel.val() || '0', 10) || 0;
+        var $row = $sel.closest('tr');
+        var conceptoId = parseInt($row.attr('data-concepto-ivacompra-id') || '0', 10) || 0;
+        var idx = parseInt($row.attr('data-debe-gasto-idx') || '0', 10) || 0;
+        cpCcAbrir = null;
+        if (conceptoId > 0) {
+            escribirCentrocostoConcepto(conceptoId, cc);
+        }
+        $('.cp-asiento-centrocosto').each(function () {
+            if (this === $sel.get(0)) {
+                return;
+            }
+            var $otra = $(this).closest('tr');
+            var mismoGasto = idx > 0 && (parseInt($otra.attr('data-debe-gasto-idx') || '0', 10) || 0) === idx;
+            var mismoConcepto = conceptoId > 0 && (parseInt($otra.attr('data-concepto-ivacompra-id') || '0', 10) || 0) === conceptoId;
+            if (mismoGasto || mismoConcepto) {
+                $(this).val(cc > 0 ? String(cc) : '');
+            }
+        });
+        if ($row.hasClass('cp-debe-gasto-row')) {
+            sincronizarDebeGastoHiddenDesdeTabla();
+        }
         window.refrescarPreviewAsiento(true);
     });
 
@@ -2655,6 +2662,36 @@ $(function () {
         var accionContabilizar = submitter
             && String($(submitter).attr('name') || '') === 'accion'
             && String($(submitter).val() || '') === 'contabilizar';
+        if (!tieneOrdenCompra()) {
+            var archivoScan = null;
+            $('#cp-tbody-tabla-archivo tr.item-archivo-cp').each(function () {
+                var input = $(this).find('.cp-nombrearchivos').get(0);
+                if (input && input.files && input.files[0]) {
+                    archivoScan = input.files[0];
+                    return false;
+                }
+            });
+            var scanOk = false;
+            if (archivoScan) {
+                var nombreScan = String(archivoScan.name || '').toLowerCase();
+                var mimeScan = String(archivoScan.type || '').toLowerCase();
+                scanOk = nombreScan.slice(-4) === '.pdf' || mimeScan.indexOf('pdf') >= 0;
+                if (!scanOk) {
+                    e.preventDefault();
+                    mostrarSolapa('#cp-solapa-archivos');
+                    marcarTabActivo('cp-boton-archivos');
+                    alert('Sin orden de compra, el primer archivo tiene que ser el PDF de la factura. Ese scan es el que se ve en la cuenta corriente.');
+                    return;
+                }
+            }
+            if (accionContabilizar && !scanOk && String($form.attr('data-tiene-scan') || '') !== '1') {
+                e.preventDefault();
+                mostrarSolapa('#cp-solapa-archivos');
+                marcarTabActivo('cp-boton-archivos');
+                alert('Sin orden de compra hay que adjuntar el PDF de la factura como primer archivo antes de contabilizar. Ese scan es el que se ve en la cuenta corriente.');
+                return;
+            }
+        }
         if (accionContabilizar && !tieneOrdenCompra() && modo !== 'ASIGNA_RECEPCION') {
             var hayDebeGastoConCuenta = false;
             leerDebeGastoDesdeTabla().forEach(function (l) {
@@ -2734,7 +2771,7 @@ $(function () {
                 e.preventDefault();
                 mostrarSolapa('#cp-solapa-conceptos');
                 marcarTabActivo('cp-boton-conceptos');
-                alert('El contrato exige una cuenta contable del neto. Cárguela en el contrato o en el renglón de neto.');
+                alert('El contrato exige una cuenta contable del neto. Cárguela en el contrato.');
             }
         }
     });
@@ -3129,11 +3166,34 @@ $(function () {
     });
 
     // Archivos adjuntos
+    function aplicarScanEnFilasArchivo() {
+        var filas = $('#cp-tbody-tabla-archivo tr.item-archivo-cp');
+        filas.each(function (i) {
+            var $fila = $(this);
+            var $sel = $fila.find('select.cp-archivo-tipo');
+            $fila.find('.cp-archivo-tipo-fijo').remove();
+            $sel.prop('disabled', false);
+            if (!$sel.attr('name')) {
+                $sel.attr('name', 'archivo_tipos[]');
+            }
+            var esScan = !tieneOrdenCompra() && i === 0;
+            if (esScan) {
+                $sel.val('FACTURA').prop('disabled', true).removeAttr('name');
+                $sel.after('<input type="hidden" name="archivo_tipos[]" value="FACTURA" class="cp-archivo-tipo-fijo">');
+            }
+        });
+    }
+
     $('#cp-agrega-renglon-archivo').on('click', function (e) {
         e.preventDefault();
         var tpl = document.getElementById('cp-template-renglon-archivo');
         if (tpl && tpl.content) {
             $('#cp-tbody-tabla-archivo').append(tpl.content.cloneNode(true));
+            var $filas = $('#cp-tbody-tabla-archivo tr.item-archivo-cp');
+            if (!tieneOrdenCompra() && $filas.length > 1) {
+                $filas.last().find('select.cp-archivo-tipo').val('ADJUNTO');
+            }
+            aplicarScanEnFilasArchivo();
         }
     });
 
@@ -3141,6 +3201,8 @@ $(function () {
     if ($('#cp-tbody-tabla-archivo').length && !$('#cp-tbody-tabla-archivo tr').length
         && String($form.attr('data-comprobante-id') || '') === '') {
         $('#cp-agrega-renglon-archivo').trigger('click');
+    } else {
+        aplicarScanEnFilasArchivo();
     }
 
     function actualizarPreviewLocalArchivoCp() {

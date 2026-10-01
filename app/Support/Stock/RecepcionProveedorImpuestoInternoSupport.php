@@ -228,13 +228,74 @@ final class RecepcionProveedorImpuestoInternoSupport
             return $precioLinea;
         }
 
-        $netoImplicito = $precioLinea - $impuestoInternoPorUnidad;
-        if ($netoImplicito > 0.000001
-            && ($netoImplicito / $precioLinea) <= self::FRACCION_MAX_NETO_SI_LINEA_INCLUYE_II) {
+        if (self::precioLineaYaIncluyeImpuestoInterno($precioLinea, $impuestoInternoPorUnidad)) {
             return $precioLinea;
         }
 
         return round($precioLinea + $impuestoInternoPorUnidad, 6);
+    }
+
+    /**
+     * True si el precio del renglón ya trae el II/u (neto implícito chico respecto del precio).
+     * Mismo criterio que la última compra: evita sumar el impuesto interno otra vez.
+     */
+    public static function precioLineaYaIncluyeImpuestoInterno(
+        float $precioLinea,
+        float $impuestoInternoPorUnidad,
+    ): bool {
+        $precioLinea = round($precioLinea, 6);
+        if ($precioLinea <= 0.0 || $impuestoInternoPorUnidad <= 0.000001) {
+            return false;
+        }
+
+        $netoImplicito = $precioLinea - $impuestoInternoPorUnidad;
+
+        return $netoImplicito > 0.000001
+            && ($netoImplicito / $precioLinea) <= self::FRACCION_MAX_NETO_SI_LINEA_INCLUYE_II;
+    }
+
+    /**
+     * True si todos los cigarrillos recibidos ya traen el II en el precio.
+     * En ese caso el asiento y recepmov no deben sumar de nuevo el importe de cabecera.
+     */
+    public static function lineasCigarrilloYaIncluyenImpuestoInterno(Recepcion_Proveedor $recepcion): bool
+    {
+        $iiPorUnidad = self::impuestoInternoPorUnidad($recepcion);
+        if ($iiPorUnidad <= 0.000001) {
+            return false;
+        }
+
+        $recepcion->loadMissing(['recepcion_proveedor_articulos.articulos']);
+        $hayCigarrillo = false;
+        foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
+            if (! self::lineaEsCigarrilloRecibida($linea)) {
+                continue;
+            }
+            $hayCigarrillo = true;
+            if (! self::precioLineaYaIncluyeImpuestoInterno((float) $linea->precio, $iiPorUnidad)) {
+                return false;
+            }
+        }
+
+        return $hayCigarrillo;
+    }
+
+    /**
+     * Importe de cabecera que todavía hay que discriminar en el asiento y en recepmov.
+     * Cero si el precio de los cigarrillos ya lo incluye.
+     */
+    public static function importeImpuestoInternoAAgregar(Recepcion_Proveedor $recepcion): float
+    {
+        $importe = round((float) ($recepcion->impuesto_interno ?? 0), 2);
+        if ($importe <= 0.000001) {
+            return 0.0;
+        }
+
+        if (self::lineasCigarrilloYaIncluyenImpuestoInterno($recepcion)) {
+            return 0.0;
+        }
+
+        return $importe;
     }
 
     /**
@@ -298,7 +359,7 @@ final class RecepcionProveedorImpuestoInternoSupport
 
     public static function importeImpuestoInternoContable(Recepcion_Proveedor $recepcion, float $cotizacionRecepcion): float
     {
-        $importe = (float) ($recepcion->impuesto_interno ?? 0);
+        $importe = self::importeImpuestoInternoAAgregar($recepcion);
         if ($importe <= 0.000001) {
             return 0.0;
         }

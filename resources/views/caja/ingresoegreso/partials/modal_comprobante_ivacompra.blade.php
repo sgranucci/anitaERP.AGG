@@ -152,7 +152,7 @@
                             </div>
                             <div class="form-group col-md-2 mb-2">
                                 <label class="ie-cp-label text-right" for="ie-cp-total">Total</label>
-                                <input type="number" step="0.01" class="form-control form-control-sm text-right font-weight-bold" id="ie-cp-total" title="Total de la factura. Enter lo valida y pasa al primer importe">
+                                <input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm text-right font-weight-bold" id="ie-cp-total" title="Total de la factura. Enter lo valida y pasa al primer importe">
                             </div>
                             <div class="form-group col-md-2 mb-2">
                                 <label class="ie-cp-label" for="ie-cp-moneda-id">Moneda</label>
@@ -277,7 +277,7 @@
                                         </div>
                                     </td>
                                     <td>
-                                        <input type="number" step="0.01" class="form-control form-control-sm text-right ie-cp-monto" value="">
+                                        <input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm text-right ie-cp-monto" value="">
                                     </td>
                                     <td class="text-center">
                                         <button type="button" class="btn btn-link text-danger p-0 ie-cp-quitar-concepto" title="Quitar">
@@ -299,6 +299,7 @@
                                     <thead style="background:#85C1E9;color:#17202A;">
                                         <tr>
                                             <th>Cuenta</th>
+                                            <th>Centro costo</th>
                                             <th class="text-right">Debe</th>
                                             <th class="text-right">Haber</th>
                                             <th style="width:2rem;"></th>
@@ -308,6 +309,7 @@
                                     <tfoot>
                                         <tr class="font-weight-bold">
                                             <td>Totales</td>
+                                            <td></td>
                                             <td class="text-right" id="ie-cp-preview-total-debe">0.00</td>
                                             <td class="text-right" id="ie-cp-preview-total-haber">0.00</td>
                                             <td></td>

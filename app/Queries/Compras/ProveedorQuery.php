@@ -118,8 +118,8 @@ class ProveedorQuery implements ProveedorQueryInterface
 
     public function consultaProveedor($consulta, ?int $empresaId = null): array
     {
-		$columns = ['proveedor.id', 'proveedor.codigo', 'proveedor.nombre', 'proveedor.domicilio', 'localidad.nombre', 'proveedor.telefono'];
-		$columnsOut = ['proveedor_id', 'codigoproveedor', 'nombreproveedor', 'domicilio', 'localidad', 'telefono'];
+		$columns = ['proveedor.id', 'proveedor.codigo', 'proveedor.nombre', 'proveedor.nroinscripcion', 'proveedor.domicilio', 'localidad.nombre', 'proveedor.telefono'];
+		$columnsOut = ['proveedor_id', 'codigoproveedor', 'nombreproveedor', 'cuit', 'domicilio', 'localidad', 'telefono'];
 
         $count = count($columns);
         $consulta = trim((string) $consulta);
@@ -127,7 +127,8 @@ class ProveedorQuery implements ProveedorQueryInterface
         $filtroEmpresaAplicado = config('proveedor.filtro_empresa') && $empresaId !== null && $empresaId > 0;
 
         $query = $this->model->select('proveedor.id as proveedor_id', 'proveedor.codigo as codigoproveedor',
-                'proveedor.nombre as nombreproveedor', 'proveedor.domicilio as domicilio', 'localidad.nombre as localidad',
+                'proveedor.nombre as nombreproveedor', 'proveedor.nroinscripcion as cuit',
+                'proveedor.domicilio as domicilio', 'localidad.nombre as localidad',
                 'proveedor.telefono as telefono', 'proveedor.estado as estado')
 				->leftJoin('localidad', 'proveedor.localidad_id', '=', 'localidad.id')
                 ->whereIn('proveedor.estado', ProveedorTrait::$estadosHabilitadosOperacion);
@@ -137,9 +138,17 @@ class ProveedorQuery implements ProveedorQueryInterface
         }
 
         if ($consulta !== '') {
-            $query->where(function ($q) use ($count, $consulta, $columns) {
+            $digitosCuit = preg_replace('/\D+/', '', $consulta) ?? '';
+            $query->where(function ($q) use ($count, $consulta, $columns, $digitosCuit) {
                 for ($i = 0; $i < $count; $i++) {
                     $q->orWhere($columns[$i], 'LIKE', '%'.$consulta.'%');
+                }
+                // 30-71419817-9 también se encuentra escribiendo 30714198179.
+                if ($digitosCuit !== '') {
+                    $q->orWhereRaw(
+                        "REPLACE(REPLACE(REPLACE(IFNULL(proveedor.nroinscripcion, ''), '-', ''), '.', ''), ' ', '') LIKE ?",
+                        ['%'.$digitosCuit.'%']
+                    );
                 }
             });
         }
@@ -168,7 +177,7 @@ class ProveedorQuery implements ProveedorQueryInterface
                 $output['data'] .= '</tr>';
 			}
             if (count($rows) >= $limite) {
-                $output['data'] .= '<tr><td colspan="8" class="text-muted small">Mostrando los primeros '
+                $output['data'] .= '<tr><td colspan="9" class="text-muted small">Mostrando los primeros '
                     .$limite.' resultados. Escribí en Buscar para acotar.</td></tr>';
             }
 		}
@@ -176,12 +185,12 @@ class ProveedorQuery implements ProveedorQueryInterface
         if ($flSinDatos)
 		{
             if ($filtroEmpresaAplicado) {
-                $output['data'] .= '<tr><td colspan="8">Sin proveedores para la empresa seleccionada (id '
+                $output['data'] .= '<tr><td colspan="9">Sin proveedores para la empresa seleccionada (id '
                     .(int) $empresaId
                     .'). Si es una OC Surmar, elegí la empresa <strong>SURMAR</strong> en la cabecera: '
                     .'los proveedores importados están asociados a esa empresa.</td></tr>';
             } else {
-                $output['data'] .= '<tr><td colspan="8">Sin resultados</td></tr>';
+                $output['data'] .= '<tr><td colspan="9">Sin resultados</td></tr>';
             }
 		}
 

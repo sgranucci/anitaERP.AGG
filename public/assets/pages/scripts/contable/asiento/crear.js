@@ -111,12 +111,8 @@
 		}
 		var $tr = ptrAsientoDetalleLineaRow;
 		var texto = $('#asiento_detalle_linea_editor').val() || '';
-		var esPrimera = $tr.is($('#tbody-cuenta-table tr.item-cuenta').first());
 		$tr.find('.asiento-ta-detalle').val(texto);
 		asientoRefreshDetallePreview($tr);
-		if (esPrimera) {
-			asientoPropagarDetallePrimeraLinea(texto);
-		}
 		$('#modalAsientoDetalleLinea').one('hidden.bs.modal.asientoDetalle', function () {
 			if (!continuar) {
 				return;
@@ -145,25 +141,6 @@
 		}
 		$prev.text(t).removeClass('is-empty').attr('title', t);
 		$btn.addClass('has-detalle').attr('title', 'Editar detalle de la línea');
-	}
-
-	function asientoPropagarDetallePrimeraLinea(texto) {
-		var t = (texto || '').trim();
-		if (!t.length) {
-			return;
-		}
-		$('#tbody-cuenta-table tr.item-cuenta').each(function (idx) {
-			if (idx === 0) {
-				return;
-			}
-			var $row = $(this);
-			var actual = (($row.find('.asiento-ta-detalle').val() || '') + '').trim();
-			if (actual.length) {
-				return;
-			}
-			$row.find('.asiento-ta-detalle').val(texto);
-			asientoRefreshDetallePreview($row);
-		});
 	}
 
 	function activa_eventos(flInicio)
@@ -277,15 +254,16 @@
     	}
     	let renglon = $('#template-renglon-cuenta').html();
 		let $primera = $("#tbody-cuenta-table tr.item-cuenta").first();
+		let $anterior = $("#tbody-cuenta-table tr.item-cuenta").last();
 		let monedaDefault = $primera.find('.moneda').val();
-		let detalleDefault = $primera.find('.asiento-ta-detalle').val() || '';
+		let detalleDefault = $anterior.find('.asiento-ta-detalle').val() || '';
 
     	$("#tbody-cuenta-table").append(renglon);
     	actualizaRenglonesCuenta();
 
 		let $nuevo = $("#tbody-cuenta-table tr.item-cuenta").last();
 
-		// Asigna default de moneda y detalle (leyenda 1ª línea)
+		// Moneda de la 1ª línea; leyenda de la línea anterior
 		$nuevo.find('.moneda').val(monedaDefault);
 		if ($nuevo.is($('#tbody-cuenta-table tr.item-cuenta').first())) {
 			predefinirMonedaPrimeraLinea();

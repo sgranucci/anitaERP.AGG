@@ -14,7 +14,7 @@
           <div class="col">
             <input type="text" name="consultaproveedor" id="consultaproveedor" class="form-control form-control-sm" autofocus
               autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off"
-              placeholder="Código, nombre, domicilio…"
+              placeholder="Código, nombre, CUIT, domicilio…"
               role="searchbox" data-lpignore="true" data-1p-ignore="true">
           </div>
         </div>
@@ -27,6 +27,7 @@
                 <th>ID</th>
                 <th>Código</th>
                 <th>Nombre</th>
+                <th>CUIT</th>
                 <th>Dirección</th>
                 <th>Localidad</th>
                 <th>Teléfono</th>
@@ -35,7 +36,7 @@
               </tr>
             </thead>
             <tbody id="datosproveedor">
-              <tr><td colspan="8" class="text-muted">Abrí la consulta o escribí para buscar…</td></tr>
+              <tr><td colspan="9" class="text-muted">Abrí la consulta o escribí para buscar…</td></tr>
             </tbody>
           </table>
         </div>

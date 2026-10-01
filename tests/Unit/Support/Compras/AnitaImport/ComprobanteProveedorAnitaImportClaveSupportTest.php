@@ -31,6 +31,19 @@ class ComprobanteProveedorAnitaImportClaveSupportTest extends TestCase
         );
     }
 
+    public function test_clave_de_orden_de_pago_ignora_la_letra(): void
+    {
+        $conA = ComprobanteProveedorAnitaImportClaveSupport::clave('329', 'OPP', 'A', 3, 68386);
+        $sinLetra = ComprobanteProveedorAnitaImportClaveSupport::clave('329', 'OPP', ' ', 3, 68386);
+
+        $this->assertSame('000329|OPP| |3|68386', $conA);
+        $this->assertSame($conA, $sinLetra);
+        $this->assertSame(
+            'FAC|A|3|68386',
+            ComprobanteProveedorAnitaImportClaveSupport::claveDocumento('FAC', 'A', 3, 68386)
+        );
+    }
+
     public function test_clave_desde_compra(): void
     {
         $this->assertSame('003593|NCA|A|3|99', ComprobanteProveedorAnitaImportClaveSupport::claveDesdeCompra([

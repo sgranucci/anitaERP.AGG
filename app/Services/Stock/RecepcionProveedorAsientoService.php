@@ -291,6 +291,61 @@ class RecepcionProveedorAsientoService
     }
 
     /**
+     * Actualiza la cotización de las líneas que tenían la tasa anterior y replica ctamov.
+     * No rearma el asiento: un recuadre vuelve a elegir anticipo o provisión según el saldo
+     * de Anita y pisa una imputación ya corregida (COM 167828, OC 223891).
+     */
+    public function actualizarCotizacionAsientoExistente(
+        Recepcion_Proveedor $recepcion,
+        float $cotizacionAnterior,
+        float $nuevaCotizacion,
+    ): void {
+        $asientoId = (int) ($recepcion->asiento_id ?? 0);
+        if ($asientoId <= 0) {
+            throw new \RuntimeException('La recepción no tiene asiento contable asociado.');
+        }
+
+        if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
+            return;
+        }
+
+        $nuevaCotizacion = round($nuevaCotizacion, 6);
+        $actualizadas = 0;
+        $movimientos = Asiento_Movimiento::query()
+            ->where('asiento_id', $asientoId)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($movimientos as $movimiento) {
+            $cotizacionLinea = round((float) ($movimiento->cotizacion ?: 0), 6);
+            if (abs($cotizacionLinea - round($cotizacionAnterior, 6)) >= 0.0005) {
+                continue;
+            }
+
+            $movimiento->cotizacion = $nuevaCotizacion;
+            $movimiento->save();
+            $actualizadas++;
+        }
+
+        if ($actualizadas === 0) {
+            throw new \RuntimeException(
+                'El asiento '.$asientoId.' no tiene líneas con la cotización anterior de la recepción.'
+            );
+        }
+
+        $recepcion->unsetRelation('asientos');
+        $recepcion->load(['asientos.asiento_movimientos']);
+        $totales = RecepcionProveedorCuadreContableSupport::totalesDesdeMovimientos(
+            $recepcion->asientos?->asiento_movimientos ?? collect()
+        );
+
+        $this->sincronizarCtamovAnitaRecepcion($recepcion, [
+            'total_debe' => round((float) ($totales['debe'] ?? 0), 2),
+            'total_haber' => round((float) ($totales['haber'] ?? 0), 2),
+        ]);
+    }
+
+    /**
      * Empuja a Anita contab.ctamov el asiento de la recepción (delete + insert por numeroasiento).
      *
      * @param  array{payload_asiento: array<string, mixed>}|null  $preview

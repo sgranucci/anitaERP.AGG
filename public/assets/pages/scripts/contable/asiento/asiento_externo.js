@@ -154,9 +154,22 @@ var totalHaberAsiento = 0;
 		}).length > 0;
 	}
 
+	function centrocostoAsientoPendiente($tr) {
+		if (!centrocostoAsientoRequiereEleccion($tr)) {
+			return false;
+		}
+		var cc = String($tr.find('.centrocostoasiento').val() || '').trim();
+		return cc === '' || cc === '0';
+	}
+
 	function enfocarSiguienteTrasCuentaAsiento($tr) {
-		if (centrocostoAsientoRequiereEleccion($tr)) {
-			enfocarCampoAsiento($tr.find('.centrocostoasiento').get(0));
+		if (centrocostoAsientoPendiente($tr)) {
+			var elCc = $tr.find('.centrocostoasiento').get(0);
+			if (typeof window.abrirListaCentroCosto === 'function') {
+				window.abrirListaCentroCosto(elCc);
+			} else {
+				enfocarCampoAsiento(elCc);
+			}
 			return;
 		}
 		var moneda = $tr.find('.monedaasiento').get(0);
@@ -574,13 +587,32 @@ var totalHaberAsiento = 0;
 				if (modalConsultaCuentaAsientoAbierto()) {
 					return;
 				}
-				var codigoActual = String($input.val() || '').trim();
-				var codigoPrevio = String($input.closest('tr').find('.codigo_previo_cuentacontable').val() || '').trim();
-				if (codigoActual === codigoPrevio) {
+				var pegado = $input.data('cta-pegado-codigo') === 1;
+				if (pegado) {
+					$input.removeData('cta-pegado-codigo');
+				}
+				if ($input.data('asiento-validar-pendiente')) {
 					return;
 				}
-				event.preventDefault();
-				resolverCodigoAsiento($input, { alertar: false, avanzar: false });
+				$input.data('asiento-validar-pendiente', 1);
+				window.setTimeout(function () {
+					$input.removeData('asiento-validar-pendiente');
+					if (!document.contains($input[0])) {
+						return;
+					}
+					if (!pegado && (!document.hasFocus() || document.activeElement === $input[0])) {
+						return;
+					}
+					if (modalConsultaCuentaAsientoAbierto()) {
+						return;
+					}
+					var codigoActual = String($input.val() || '').trim();
+					var codigoPrevio = String($input.closest('tr').find('.codigo_previo_cuentacontable').val() || '').trim();
+					if (codigoActual === codigoPrevio) {
+						return;
+					}
+					resolverCodigoAsiento($input, { alertar: false, avanzar: false });
+				}, 0);
 			});
 
 		$(document)
@@ -777,13 +809,18 @@ var totalHaberAsiento = 0;
     function agregaRenglonCuentaAsiento(event){
     	event.preventDefault();
     	let renglon = $('#template-renglon-cuenta-asiento').html();
-		let monedaDefault = $("#tbody-cuenta-asiento-table").children(':first').find('.monedaasiento').val();
+		let $filasAsiento = $("#tbody-cuenta-asiento-table tr.item-cuenta-asiento");
+		let monedaDefault = $filasAsiento.first().find('.monedaasiento').val();
+		let detalleDefault = $filasAsiento.last().find('.observacionasiento').val() || '';
 
     	$("#tbody-cuenta-asiento-table").append(renglon);
     	actualizaRenglonesCuentaAsiento();
 
 		// Default de moneda = 1.er renglón (sin bloquear mezcla: pantallas de proceso / otros sistemas)
 		let $nuevo = $("#tbody-cuenta-asiento-table").children().last();
+		if ((detalleDefault || '').trim().length) {
+			$nuevo.find('.observacionasiento').val(detalleDefault);
+		}
 		if (monedaDefault) {
 			$nuevo.find('.monedaasiento').val(monedaDefault);
 			var cotDefault = $("#tbody-cuenta-asiento-table").children(':first').find('.cotizacionasiento').val();
@@ -840,6 +877,10 @@ var totalHaberAsiento = 0;
 	}
 
 	function llenarSelectCentroCostoAsiento($sel, data, centrocosto_id) {
+		if (typeof window.llenarSelectCentrosCostoCuenta === 'function') {
+			return window.llenarSelectCentrosCostoCuenta($sel, data, centrocosto_id);
+		}
+
 		if (data === "No maneja centro de costo" || data === "Cuenta inexistente") {
 			$sel.empty();
 			$sel.append('<option value="0" selected>Sin CC</option>');
@@ -861,6 +902,11 @@ var totalHaberAsiento = 0;
 				$sel.append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
 			}
 		});
+		if (!seleccionado && cta.length === 1) {
+			$sel.find('option[value=""]').remove();
+			$sel.append('<option value="'+cta[0].id+'" selected>'+cta[0].codigo+'-'+cta[0].nombre+'</option>');
+			seleccionado = true;
+		}
 		if (!seleccionado && parseInt(centrocosto_id || '0', 10) > 0) {
 			$sel.append('<option value="'+centrocosto_id+'" selected>'+centrocosto_id+'</option>');
 		}
