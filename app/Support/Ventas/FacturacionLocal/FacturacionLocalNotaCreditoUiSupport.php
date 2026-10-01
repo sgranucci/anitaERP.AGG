@@ -23,6 +23,11 @@ final class FacturacionLocalNotaCreditoUiSupport
             return false;
         }
 
+        // Sin fila persistida (Facturante / marketplace histórico): se consulta, no se acredita desde acá.
+        if (! $emision->exists) {
+            return false;
+        }
+
         $ventaId = $ventaIdViendo ?? (int) $venta->id;
         if (FacturacionLocalFacturaMedioPagoUiSupport::esComprobanteNotaCredito($emision, $ventaId)) {
             return false;

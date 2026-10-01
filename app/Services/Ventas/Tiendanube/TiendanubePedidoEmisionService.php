@@ -16,6 +16,7 @@ use App\Support\Ventas\Tiendanube\TiendanubePedidoDescuentoPrecioSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoEstadoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoListoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoMaestrosSupport;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\Tiendanube\TiendanubePedidoReceptorSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -92,6 +93,8 @@ final class TiendanubePedidoEmisionService
                 if (! $venta) {
                     throw new InvalidArgumentException('No se obtuvo la venta emitida.');
                 }
+
+                FacturacionLocalEmisionVinculoSupport::vincularVenta((int) $venta->id, 'tiendanube');
 
                 $this->registrarCobranza($venta, $input['medios_pago'] ?? []);
                 $this->registrarCantidadesFacturadas($pedido, $seleccion['lineas'], $venta, $seleccion['total']);

@@ -23,6 +23,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\ApiAnita;
+use App\Support\Ventas\FacturacionLocal\FacturacionLocalEmisionVinculoSupport;
 use App\Support\Ventas\TipotransaccionOperacionStockSupport;
 use Exception;
 use SoapClient;
@@ -249,11 +250,21 @@ class FacturanteService
 		}
 		$dataFactura = [];
 
-		if (is_object($arrayItems->ComprobanteItem))
-			Self::procesaUnItem($arrayItems->ComprobanteItem, $dataFactura);
-		else
-			foreach ($arrayItems->ComprobanteItem as $item)
-				Self::procesaUnItem($item, $dataFactura);
+		try {
+			if (is_object($arrayItems->ComprobanteItem))
+				$this->procesaUnItem($arrayItems->ComprobanteItem, $dataFactura);
+			else
+				foreach ($arrayItems->ComprobanteItem as $item)
+					$this->procesaUnItem($item, $dataFactura);
+		} catch (\Throwable $e) {
+			$numeroItem = $tipocomprobante.' '.$prefijo.'-'.$numero;
+			Log::warning('facturante.item', [
+				'comprobante' => $numeroItem,
+				'mensaje' => $e->getMessage(),
+			]);
+
+			return ['error' => 'No se pudo leer un item de '.$numeroItem.': '.$e->getMessage()];
+		}
 
 		$cuentaVenta = '411000003';
 		$contrapartida = '114110007';
@@ -337,14 +348,11 @@ class FacturanteService
 				} 
 			}
 
-			// Tiene que buscar el articulo en base al SKU
-			$codigo = explode("-", $item->Codigo);
-			$sku = $codigo[0];
-			$codigoCombinacion = $codigo[1];
-			if (isset($codigo[2]))
-				$talle = $codigo[2];
-			else	
-				$talle = '0';
+			// SKU-combinacion-talle. Facturante tambien manda conceptos sin guion (shipping).
+			$partes = explode('-', trim((string) ($item->Codigo ?? '')));
+			$sku = $partes[0] ?? '';
+			$codigoCombinacion = $partes[1] ?? '';
+			$talle = $partes[2] ?? '0';
 
 			// Busca el articulo
 			$articulo = $this->articuloQuery->traeArticuloPorSku($sku);
@@ -359,10 +367,12 @@ class FacturanteService
 				if ($categoria)
 					$codigoCategoria = $categoria->codigo;
 				
-				$combinacion = Combinacion::where('articulo_id', $articulo->id)
-									->where('codigo', $codigoCombinacion)->first();
-				if ($combinacion)
-					$combinacion_id = $combinacion->id;
+				if ($codigoCombinacion !== '') {
+					$combinacion = Combinacion::where('articulo_id', $articulo->id)
+										->where('codigo', $codigoCombinacion)->first();
+					if ($combinacion)
+						$combinacion_id = $combinacion->id;
+				}
 
 				$talle = Talle::where('nombre', $talle)->first();
 
@@ -373,8 +383,8 @@ class FacturanteService
 				}
 				else
 				{
-					$talle_id = $codigo[2];
-					$talle_nombre = $codigo[2];
+					$talle_id = $partes[2] ?? 0;
+					$talle_nombre = isset($partes[2]) ? (string) $partes[2] : '0';
 				}
 
 				$articulo_id = $articulo->id;
@@ -417,6 +427,7 @@ class FacturanteService
 				'loteimportacion_id' => null,
 				'ordentrabajo_id' => 0,
 				'pedido_combinacion_id' => 0,
+				'omitir_stock_linea' => $articulo_id === '' || $articulo_id === 0,
 				'medidas' => $medida
 			];
 		}
@@ -1235,6 +1246,8 @@ class FacturanteService
 				'fechavencimientocae' => Carbon::parse($fechaVencimientoCae)->format('Y-m-d'),
 			], $ventaId);
 		}
+
+		FacturacionLocalEmisionVinculoSupport::vincularVenta($ventaId, 'facturante');
 
 		return $ventaId;
 	}
