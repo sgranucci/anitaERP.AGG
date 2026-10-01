@@ -311,7 +311,8 @@ class FacturacionServiceFerli extends FacturacionService
                         'listaprecio_id' => $linea->listaprecio_id,
                         'despacho' => $this->numeroDespacho,
                         'loteimportacion_id' => $loteimportacion_id,
-                        'ordentrabajo_id' => $ordenestrabajo_id[$off],
+                        // Picking de lote importado no tiene OT: 0 viola fk_venta_emision_ordentrabajo.
+                        'ordentrabajo_id' => $ordenestrabajo_id[$off] > 0 ? $ordenestrabajo_id[$off] : null,
                         'pedido_combinacion_id' => $pedido_combinacion_id,
                         'cuentacontable_id' => $articulo->cuentacontableventa_id,
                         'medidas' => [$medidaRow],

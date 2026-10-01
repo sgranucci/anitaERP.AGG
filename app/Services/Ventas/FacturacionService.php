@@ -4244,13 +4244,16 @@ class FacturacionService
 					$dataArticuloMovimiento = [];
 					foreach ($dataFactura as $item)
 					{
+						$ordentrabajoEmisionId = (int) ($item['ordentrabajo_id'] ?? 0);
+						$ordentrabajoEmisionId = $ordentrabajoEmisionId > 0 ? $ordentrabajoEmisionId : null;
+
 						$dataArticuloMovimiento = [
 							'fecha' => $fechaFactura,
 							'fechajornada' => $fechaFactura,
 							'tipotransaccion_id' => $tipoTransaccion_id,
 							'venta_id' => $vta->id,
 							'pedido_combinacion_id' => $item['pedido_combinacion_id'],
-							'ordentrabajo_id' => $item['ordentrabajo_id'],
+							'ordentrabajo_id' => $ordentrabajoEmisionId,
 							'lote' => 0,
 							'articulo_id' => $item['articulo_id'],
 							'combinacion_id' => $item['combinacion_id'],
@@ -4295,7 +4298,7 @@ class FacturacionService
 								'venta_id' => $vta->id,
 								'numeroitem' => ++$numeroItem, 
 								'pedido_combinacion_id' => $item['pedido_combinacion_id'], 
-								'ordentrabajo_id' => $item['ordentrabajo_id'], 
+								'ordentrabajo_id' => $ordentrabajoEmisionId, 
 								'lotestock' => 0,
 								'articulo_id' => $item['articulo_id'],
 								'combinacion_id' => $item['combinacion_id'],
