@@ -6,7 +6,6 @@ namespace App\Support\Ventas\Gastronomia;
 
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
-use App\Models\Contable\Cuentacontable;
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Repositories\Contable\AsientoRepository;
@@ -69,8 +68,7 @@ final class CorregirImporteAsientoTotemVsVentaSupport
         $datos = CierreJornadaFacturadoAnitaSupport::datosAsientoVentasJornadaSoloTotem($empresaId, $fechaJornada);
         $totalErp = round((float) ($datos['total'] ?? 0), 2);
         $cantidadEmisiones = (int) ($datos['cantidad_emisiones'] ?? 0);
-        // Neto 0 con factura y nota de crédito: el asiento de ventas queda en cero.
-        // El puente conserva el cobro del medio (informe Z) y la diferencia va a partidas pendientes.
+        // Neto 0 con factura y nota de crédito: ventas y puente quedan en cero.
         // Sin emisiones no hay base para recuadrar.
         if ($totalErp <= self::TOLERANCIA && $cantidadEmisiones === 0) {
             throw new RuntimeException('No hay facturación TOTEM ERP para recalcular (empresa '.$empresaId.', '.$fechaJornada.').');
@@ -237,76 +235,34 @@ final class CorregirImporteAsientoTotemVsVentaSupport
     }
 
     /**
-     * El débito de Mercado Pago (y el resto de medios reales) queda en el cobro ya contabilizado.
-     * El crédito al puente tótem baja al neto de la venta. La diferencia se acredita a partidas pendientes.
+     * Mercado Pago y el puente tótem bajan al neto facturado. La línea de partidas pendientes, si quedó, se saca.
      *
      * @return array<string, mixed>
      */
     private function planPuente(Asiento $asiento, float $totalErp): array
     {
-        $partidasId = (int) Cuentacontable::query()
-            ->where('empresa_id', (int) $asiento->empresa_id)
-            ->where('codigo', self::CUENTA_PARTIDAS_PENDIENTES)
-            ->value('id');
-        if ($partidasId <= 0) {
-            throw new RuntimeException(
-                'Falta la cuenta '.self::CUENTA_PARTIDAS_PENDIENTES.' en la empresa '.$asiento->empresa_id.'.',
-            );
-        }
-
-        $cobro = 0.0;
-        $partidasMov = null;
         $cambios = [];
         foreach ($asiento->asiento_movimientos as $mov) {
             $cta = $mov->cuentacontables;
             $codigoCuenta = trim((string) ($cta->codigo ?? ''));
             $montoActual = round((float) ($mov->monto ?? 0), 2);
-            $cuentaId = (int) ($mov->cuentacontable_id ?? 0);
 
             if ($codigoCuenta === self::CUENTA_PARTIDAS_PENDIENTES) {
-                $partidasMov = $mov;
+                $cambios[] = $this->cambioLinea($mov, 0.0) + ['eliminar' => true];
                 continue;
             }
 
-            if ($codigoCuenta === self::CUENTA_PUENTE_TOTEM) {
-                $esperado = round(-1 * $totalErp, 2);
-                if (abs($montoActual - $esperado) > self::TOLERANCIA) {
-                    $cambios[] = $this->cambioLinea($mov, $esperado);
-                }
+            $esperado = $montoActual >= 0 ? $totalErp : round(-1 * $totalErp, 2);
+            if (abs($totalErp) <= self::TOLERANCIA) {
+                $esperado = 0.0;
+            }
+            if (abs($montoActual - $esperado) <= self::TOLERANCIA) {
                 continue;
             }
-
-            if ($montoActual > self::TOLERANCIA) {
-                $cobro = round($cobro + $montoActual, 2);
-            }
+            $cambios[] = $this->cambioLinea($mov, $esperado);
         }
 
-        $gap = round($cobro - $totalErp, 2);
-        if ($gap < -self::TOLERANCIA) {
-            throw new RuntimeException(
-                'Asiento puente #'.$asiento->id.' tiene cobro '.$cobro.' menor que la venta neta '.$totalErp.'.',
-            );
-        }
-
-        $esperadoPartidas = round(-1 * max($gap, 0.0), 2);
-        if ($partidasMov !== null) {
-            $actual = round((float) $partidasMov->monto, 2);
-            if (abs($actual - $esperadoPartidas) > self::TOLERANCIA) {
-                $cambios[] = $this->cambioLinea($partidasMov, $esperadoPartidas);
-            }
-        } elseif ($esperadoPartidas < -self::TOLERANCIA) {
-            $cambios[] = [
-                'movimiento_id' => 0,
-                'insertar' => true,
-                'asiento_id' => (int) $asiento->id,
-                'cuentacontable_id' => $partidasId,
-                'cuenta' => self::CUENTA_PARTIDAS_PENDIENTES.' PARTID.PENDIENTES D IMPUTACION',
-                'monto_actual' => 0.0,
-                'monto_esperado' => $esperadoPartidas,
-            ];
-        }
-
-        return $this->armarPlanAsiento($asiento, 'totem_puente', round(max($cobro, 0.0), 2), $cambios);
+        return $this->armarPlanAsiento($asiento, 'totem_puente', $totalErp, $cambios);
     }
 
     /**
@@ -386,6 +342,11 @@ final class CorregirImporteAsientoTotemVsVentaSupport
     {
         $n = 0;
         foreach ($asientoPlan['cambios'] as $cambio) {
+            if (! empty($cambio['eliminar'])) {
+                Asiento_Movimiento::query()->whereKey((int) $cambio['movimiento_id'])->delete();
+                $n++;
+                continue;
+            }
             if (! empty($cambio['insertar'])) {
                 Asiento_Movimiento::query()->create([
                     'asiento_id' => (int) $cambio['asiento_id'],

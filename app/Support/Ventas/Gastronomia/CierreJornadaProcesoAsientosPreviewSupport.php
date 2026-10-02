@@ -616,10 +616,8 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 'etiqueta' => 'Facturado Anita — cobro TOTEM (tramo Waitry)',
             ],
             'totem_puente' => [
-                // El puente puede ser mayor que la venta neta: el cobro del informe Z
-                // queda en el medio y la nota de crédito va a partidas pendientes.
-                'total' => null,
-                'etiqueta' => 'Cobro del medio (informe Z), no la venta neta',
+                'total' => $totalTotem,
+                'etiqueta' => 'Facturado Anita — cobro TOTEM (contrapartida puente)',
             ],
             'compensacion_efectivo_no_facturado' => [
                 'total' => self::totalEfectivoNoFacturadoProceso($movimientos),
@@ -1587,11 +1585,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                     return false;
                 }
 
-                // La venta va al neto. El cobro del puente sigue el bruto (informe Z),
-                // aunque la factura haya quedado anulada por nota de crédito.
-                $neto = self::importeContableMovimiento($m, $totalesVentaPorId, $notasCreditoPorVentaId);
-
-                return $neto > 0.0001 || round((float) ($m['total'] ?? 0), 2) > 0.0001;
+                return self::importeContableMovimiento($m, $totalesVentaPorId, $notasCreditoPorVentaId) > 0.0001;
             },
         ));
         if ($movs === []) {
@@ -1617,7 +1611,6 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         foreach ($movs as $mov) {
             $totalWaitry = round((float) ($mov['total'] ?? 0), 2);
             $total = self::importeContableMovimiento($mov, $totalesVentaPorId, $notasCreditoPorVentaId);
-            $brutoCobro = $totalWaitry > 0.0001 ? $totalWaitry : $total;
             if ($total > 0.0001) {
                 $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
                 $impuestoInterno = self::impuestoInternoDesdeMov($mov, $empresaId, $importeCigarrillos);
@@ -1649,7 +1642,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 }
             }
 
-            foreach (self::mediosPuenteTotem($mov, $brutoCobro, $empresaId) as $medio) {
+            foreach (self::mediosPuenteTotem($mov, $total, $empresaId) as $medio) {
                 $cuentaId = (int) ($medio['cuentacaja_id'] ?? 0);
                 $monto = round((float) ($medio['monto'] ?? 0), 2);
                 if ($monto <= 0.0001) {
@@ -1682,62 +1675,40 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             ),
         );
 
-        $totalFacturado = round($totalFacturado, 2);
-        $totalCobro = 0.0;
         $lineasPuente = [];
         foreach ($debePuentePorCuenta as $ln) {
-            $totalCobro += (float) $ln['debe'];
             $lineasPuente[] = self::lineaDebe($ln['concepto'], $ln['cuenta_id'], $ln['debe']);
         }
-        $totalCobro = round($totalCobro, 2);
-        if ($totalFacturado > 0.02) {
-            $lineasPuente[] = self::lineaHaber('Contra TOTEM (puente a cero)', $totemId, $totalFacturado);
-        }
-        $gapCobro = round($totalCobro - $totalFacturado, 2);
-        if ($gapCobro > 0.02) {
-            $lineasPuente[] = self::lineaHaberContable(
-                'Cobro sin venta (nota de crédito tótem)',
-                self::cuentaPartidasPendientesId($empresaId),
-                $gapCobro,
-            );
-        }
+        $lineasPuente[] = self::lineaHaber('Contra TOTEM (puente a cero)', $totemId, round($totalFacturado, 2));
 
         $meta = [
             'cantidad_facturas' => count($movs),
-            'total' => $totalFacturado,
+            'total' => round($totalFacturado, 2),
             'impuesto_interno_total' => round($impuestoInternoTotal, 2),
             'facturas_con_impuesto_interno' => $conImpuestoInterno,
         ];
 
-        $asientos = [];
-        if ($totalFacturado > 0.02) {
-            $asientos[] = self::armarAsientoConsolidado(
+        return self::alinearAsientosTotemAlNetoFacturado([
+            self::armarAsientoConsolidado(
                 0,
                 'totem_ventas_iva',
                 '3 — TOTEM → ventas / IVA / kiosco',
                 $lineasPrincipal,
                 $meta,
-            );
-        }
-        if ($lineasPuente !== []) {
-            $metaPuente = $meta;
-            $metaPuente['total'] = $totalCobro;
-            $asientos[] = self::armarAsientoConsolidado(
+            ),
+            self::armarAsientoConsolidado(
                 0,
                 'totem_puente',
                 '4 — Puente TOTEM (medio real → TOTEM)',
                 $lineasPuente,
-                $metaPuente,
-            );
-        }
-
-        return self::alinearAsientosTotemAlNetoFacturado($asientos, $empresaId, $fechaJornada);
+                $meta,
+            ),
+        ], $empresaId, $fechaJornada);
     }
 
     /**
-     * La venta de tótem queda en el neto facturado. El débito del medio (Mercado Pago)
-     * queda en el cobro bruto: la diferencia se acredita a partidas pendientes, que no es un medio.
-     * Sin fecha de jornada no hay neto de referencia y se dejan los asientos del movimiento.
+     * Factura y puente quedan en el neto (factura menos nota de crédito).
+     * Neto cero: no se generan asientos de tótem. Sin fecha, se dejan los del movimiento.
      *
      * @param  list<array<string, mixed>>  $asientos
      * @return list<array<string, mixed>>
@@ -1748,119 +1719,22 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         if ($neto === null) {
             return $asientos;
         }
+        if ($neto <= 0.02) {
+            return [];
+        }
 
         $out = [];
         foreach ($asientos as $asiento) {
-            $codigo = (string) ($asiento['codigo'] ?? '');
-            if ($codigo === 'totem_ventas_iva') {
-                if ($neto <= 0.02) {
-                    continue;
-                }
-                $actual = round((float) ($asiento['total'] ?? 0), 2);
-                if ($actual > 0.02 && abs($actual - $neto) > 0.02) {
-                    $escalados = self::escalarAsientosAlTotal([$asiento], $neto / $actual, $neto);
-                    $out[] = $escalados[0];
-                } else {
-                    $out[] = $asiento;
-                }
-                continue;
-            }
-            if ($codigo === 'totem_puente') {
-                $out[] = self::rebalancearPuenteAlNeto($asiento, $neto, $empresaId);
+            $actual = round((float) ($asiento['total'] ?? 0), 2);
+            if ($actual > 0.02 && abs($actual - $neto) > 0.02) {
+                $escalados = self::escalarAsientosAlTotal([$asiento], $neto / $actual, $neto);
+                $out[] = $escalados[0];
                 continue;
             }
             $out[] = $asiento;
         }
 
         return $out;
-    }
-
-    /**
-     * Mantiene los débitos de medios y acredita (cobro − neto) a partidas pendientes.
-     *
-     * @param  array<string, mixed>  $asiento
-     * @return array<string, mixed>
-     */
-    private static function rebalancearPuenteAlNeto(array $asiento, float $neto, int $empresaId): array
-    {
-        $lineas = [];
-        $debe = 0.0;
-        $indiceHaber = null;
-        foreach ($asiento['lineas'] ?? [] as $ln) {
-            if (! is_array($ln) || ! empty($ln['cuenta_es_contable'])) {
-                continue;
-            }
-            $lineas[] = $ln;
-            $debe += (float) ($ln['debe'] ?? 0);
-            if ((float) ($ln['haber'] ?? 0) > 0.0001) {
-                $indiceHaber = count($lineas) - 1;
-            }
-        }
-        $debe = round($debe, 2);
-        $neto = round(max(0.0, $neto), 2);
-        if ($neto > $debe + 0.02) {
-            $neto = $debe;
-        }
-        if ($neto > 0.02 && $indiceHaber !== null) {
-            $lineas[$indiceHaber]['haber'] = $neto;
-        } elseif ($indiceHaber !== null && $neto <= 0.02) {
-            array_splice($lineas, $indiceHaber, 1);
-        }
-        $gap = round($debe - $neto, 2);
-        if ($gap > 0.02) {
-            $lineas[] = self::lineaHaberContable(
-                'Cobro sin venta (nota de crédito tótem)',
-                self::cuentaPartidasPendientesId($empresaId),
-                $gap,
-            );
-        }
-
-        return self::armarAsientoConsolidado(
-            (int) ($asiento['numero'] ?? 0),
-            (string) ($asiento['codigo'] ?? 'totem_puente'),
-            (string) ($asiento['titulo'] ?? ''),
-            $lineas,
-            [
-                'cantidad_facturas' => $asiento['cantidad_facturas'] ?? 0,
-                'total' => $debe,
-                'impuesto_interno_total' => $asiento['impuesto_interno_total'] ?? 0,
-                'facturas_con_impuesto_interno' => $asiento['facturas_con_impuesto_interno'] ?? 0,
-            ],
-        );
-    }
-
-    private static function cuentaPartidasPendientesId(int $empresaId): int
-    {
-        static $cache = [];
-        if (isset($cache[$empresaId])) {
-            return $cache[$empresaId];
-        }
-
-        $id = (int) Cuentacontable::query()
-            ->where('empresa_id', $empresaId)
-            ->where('codigo', '211010018')
-            ->value('id');
-        if ($id <= 0) {
-            throw new \RuntimeException(
-                'Falta la cuenta 211010018 Partidas pendientes de imputación en la empresa '.$empresaId.'.',
-            );
-        }
-
-        return $cache[$empresaId] = $id;
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function lineaHaberContable(string $concepto, int $cuentaId, float $monto): array
-    {
-        return [
-            'concepto' => $concepto,
-            'cuenta_id' => $cuentaId,
-            'debe' => 0.,
-            'haber' => round($monto, 2),
-            'cuenta_es_contable' => true,
-        ];
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Ventas\Gastronomia\CierreJornadaFacturadoAnitaSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use App\Support\Ventas\Waitry\WaitryCierreJornadaDiscrepanciaSupport;
@@ -1706,7 +1707,8 @@ final class GastronomiaCierreTotemJornadaService
                     ? trim($cuentaEsperada['codigo'].' — '.$cuentaEsperada['nombre'])
                     : null,
                 'importada_erp' => $cuenta !== null,
-                'facturada_erp' => $emision !== null,
+                'facturada_erp' => $emision !== null
+                    && ! ($anitaEsTotem && CierreJornadaFacturadoAnitaSupport::emisionAnuladaPorNotaCredito($emision)),
                 'cuenta_id' => $cuenta?->id,
                 'cuenta_estado' => $cuenta?->estado,
                 'waitry_cobro_totem' => (bool) ($cuenta?->waitry_cobro_totem ?? $emision?->cuenta?->waitry_cobro_totem),

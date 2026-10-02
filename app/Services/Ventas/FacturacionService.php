@@ -1568,7 +1568,8 @@ class FacturacionService
 
 					// C/E: no ctamov hasta CAE. Diferido Bierzo: ctamov con venta/vencae post-respuesta.
 					$omitirAnitaAsiento = $deferAnitaPedido
-						|| in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true);
+						|| in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)
+						|| ! $this->replicaVentaAdministrativaEnAnita();
 					PedidoFacturacionProfiler::etapa($omitirAnitaAsiento ? 'asiento_erp_sin_anita_inicio' : 'asiento_erp_anita_inicio');
 					Self::grabaAsientoContable($asientoContable, $empresa_id, $fechaFactura, $vta->id, $detalleContable, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
@@ -1636,8 +1637,9 @@ class FacturacionService
 						$anitaPedidoId = (int) ($pedidoIdMarcar ?: 0);
 						$codigoPuntoventaRemito = $emiteRemito ? ($puntoventaremito->codigo ?? 0) : 0;
 						$numeroremito = $emiteRemito ? $numeroremito : 0;
+						$replicaAnitaPedido = $this->replicaVentaAdministrativaEnAnita();
 
-						if ($deferAnitaPedido) {
+						if ($replicaAnitaPedido && $deferAnitaPedido) {
 							$anitaPendientePedido = [
 								'puntoventa_codigo' => $puntoventa->codigo,
 								'letra' => $letra,
@@ -1656,7 +1658,7 @@ class FacturacionService
 								'modo_facturacion_puntoventa' => $puntoventa->modofacturacion ?? null,
 								'path_sistema' => PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($puntoventa->codigo),
 							];
-						} else {
+						} elseif ($replicaAnitaPedido) {
 							$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $codigoPuntoventaRemito, $numeroremito,
 										$venta, $dataCAE, $conceptosTotales, $cuentaCorriente, $dataFactura, $signo,
 										$codigoTipoTransaccion, $anitaPedidoId,
@@ -1677,10 +1679,10 @@ class FacturacionService
 						PedidoFacturacionProfiler::etapa('arca_caea_inicio');
 						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
 							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
-							$deferAnitaPedido);
+							$deferAnitaPedido && $replicaAnitaPedido);
 						PedidoFacturacionProfiler::etapa('arca_caea_fin');
 
-						if ($omitirAnitaAsiento && ! $deferAnitaPedido) {
+						if ($omitirAnitaAsiento && ! $deferAnitaPedido && $replicaAnitaPedido) {
 							$this->sincronizarCtamovAnitaDeVenta(
 								(int) $vta->id,
 								substr((string) $venta['codigo'], 0, 3),
@@ -1690,7 +1692,7 @@ class FacturacionService
 							);
 						}
 
-						if ($deferAnitaPedido) {
+						if ($deferAnitaPedido && $replicaAnitaPedido) {
 							$vencaePendientePedido = $this->armarVencaePendienteDesdeCaePendiente([
 								'venta_id' => $vta->id,
 								'tipo_anita' => substr($venta['codigo'], 0, 3),
@@ -2435,7 +2437,8 @@ class FacturacionService
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
 											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
 											$puntoventa->modofacturacion ?? null,
-											isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null);
+											isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null,
+											! $this->replicaVentaAdministrativaEnAnita());
 
 					// Marca Orden de venta como facturada
 					$ordenventa_cuota_id = 0;
@@ -2445,20 +2448,22 @@ class FacturacionService
 
 					if ($puntoventa->modofacturacion != 'M')
 					{
-						// Graba anita factura por orden de venta
-						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
-									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
-									$codigoTipoTransaccion, null,
-									true, $numeroOrdenventa, $codigoCentrocosto, '', $empresa->codigo,
-									null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
+						if ($this->replicaVentaAdministrativaEnAnita()) {
+							// Graba anita factura por orden de venta
+							$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
+										$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
+										$codigoTipoTransaccion, null,
+										true, $numeroOrdenventa, $codigoCentrocosto, '', $empresa->codigo,
+										null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
 
-						if (isset($anita['error']))
-						{
-							if ($anita['error'] == 'Error')
-								throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+							if (isset($anita['error']))
+							{
+								if ($anita['error'] == 'Error')
+									throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
 
-							if ($anita['error'] == 'Errvend')
-								throw new Exception('No tiene vendedor asignado.');
+								if ($anita['error'] == 'Errvend')
+									throw new Exception('No tiene vendedor asignado.');
+							}
 						}
 
 						// Solicita generacion comprobante ARCA
@@ -4359,7 +4364,8 @@ class FacturacionService
 										//$dataArticuloMovimiento, $dataTalle);
 					}
 					// Graba contabilidad (ERP; ctamov Anita diferido en C/E hasta CAE post-commit)
-					$omitirAnitaAsiento = in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true);
+					$omitirAnitaAsiento = in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)
+						|| ! $this->replicaVentaAdministrativaEnAnita();
 					Self::grabaAsientoContable(
 						$asientoContable,
 						$puntoventa->empresa_id,
@@ -4472,7 +4478,7 @@ class FacturacionService
 
 				// Post-commit: ERP ya tiene CAE/venta. Fallos Anita no deben parecer "no hay factura"
 				// ni disparar rollback/borraAnita como si la emisión hubiera fallado.
-				if ((! $numeraFerliRinErp && $puntoventa->modofacturacion != 'M') && $vta) {
+				if ((! $numeraFerliRinErp && $puntoventa->modofacturacion != 'M') && $vta && $this->replicaVentaAdministrativaEnAnita()) {
 					try {
 						$this->asegurarMventaIdParaAnitaOt($dataFactura, $pedido);
 
@@ -4690,6 +4696,9 @@ class FacturacionService
 		$omitirCuentaCorriente = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_cuenta_corriente']);
 		$omitirSolicitudArcaCae = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_solicitud_arca_cae']);
 		$omitirSincronizacionAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_sincronizacion_anita']);
+		if (! $omitirSincronizacionAnita && ! $this->replicaVentaAdministrativaEnAnita()) {
+			$omitirSincronizacionAnita = true;
+		}
 		$omitirStkmovAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_stkmov_anita']);
 		$omitirNumeraAnitaFin = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_numera_anita_fin']);
 		$this->activarGrabacionAnitaVillafrancaSiSignoDivision((int) ($puntoventa->id ?? 0), $signo);
@@ -5116,7 +5125,8 @@ class FacturacionService
 							'opciones_emision_arca' => is_array($opcionesEmision) ? $opcionesEmision : [],
 						];
 					} else {
-						$deferVencaeAnita = $deferAnitaTrasCommit || $deferAnitaMostrador;
+						$deferVencaeAnita = ! $omitirSincronizacionAnita
+							&& ($deferAnitaTrasCommit || $deferAnitaMostrador);
 						// Solicita CAE/CAEA en ARCA (último paso del flujo estándar).
 						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
 							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
@@ -5333,6 +5343,10 @@ class FacturacionService
 		bool $sinCuentaCorrienteAnita = true,
 		bool $omitirStkmovAnita = false,
 	) {
+		if (! $this->replicaVentaAdministrativaEnAnita()) {
+			return [];
+		}
+
 		$this->descuentoPie = $descuentoPie;
 
 		$fechaVencimiento = $ventaArray['fecha'] ?? date('Y-m-d');
@@ -7041,6 +7055,15 @@ class FacturacionService
 	}
 
 	/**
+	 * En AGG ninguna factura (administración, gastronomía, estacionamiento, facturación local) va a Anita.
+	 * El Bierzo y el resto de instalaciones no cambian.
+	 */
+	private function replicaVentaAdministrativaEnAnita(): bool
+	{
+		return ! EntornoEmpresaSupport::esAgg();
+	}
+
+	/**
 	 * Graba en Anita; si el número ya existe (huérfano tras rollback), lo borra y reintenta una vez.
 	 * Si el reintento también falla dejando parciales, vuelve a borrar para no dejar climov/venta huérfanos.
 	 * No consulta Anita antes de grabar (evita latencia en cada factura).
@@ -7743,6 +7766,10 @@ class FacturacionService
 
 	public function ejecutarAnitaPendienteGastronomia(array $anitaPendiente): void
 	{
+		if (! $this->replicaVentaAdministrativaEnAnita()) {
+			return;
+		}
+
 		$venta = $anitaPendiente['venta'] ?? null;
 		if (! is_array($venta)) {
 			throw new \InvalidArgumentException('anita_pendiente sin datos de venta.');
@@ -9527,6 +9554,10 @@ class FacturacionService
 	 */
 	public function ejecutarVencaePendienteGastronomia(array $vencaePendiente): void
 	{
+		if (! $this->replicaVentaAdministrativaEnAnita()) {
+			return;
+		}
+
 		PedidoFacturacionProfiler::etapa('anita_vencae_inicio');
 
 		$resultado = $this->grabaVenCae(
@@ -9699,7 +9730,7 @@ class FacturacionService
 			});
 		}
 
-		if ($puntoventa->modofacturacion != 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita)
+		if ($puntoventa->modofacturacion != 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita && $this->replicaVentaAdministrativaEnAnita())
 		{
 			PedidoFacturacionProfiler::etapa('anita_vencae_inicio');
 			// Graba cae en Anita
@@ -9751,7 +9782,7 @@ class FacturacionService
 			'fechavencimientocae' => $fechaVto,
 		], $ventaId);
 
-		if ($puntoventa !== null && ($puntoventa->modofacturacion ?? '') !== 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita) {
+		if ($puntoventa !== null && ($puntoventa->modofacturacion ?? '') !== 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita && $this->replicaVentaAdministrativaEnAnita()) {
 			PedidoFacturacionProfiler::etapa('anita_vencae_inicio');
 			$vencae = Self::grabaVenCae(
 				$tipoAnita,
@@ -9768,7 +9799,7 @@ class FacturacionService
 			}
 		}
 
-		if ($deferVencaeAnita && ! $omitirVencaeAnita) {
+		if ($deferVencaeAnita && ! $omitirVencaeAnita && $this->replicaVentaAdministrativaEnAnita()) {
 			return $this->armarVencaePendienteDesdeCaePendiente($caePendiente);
 		}
 

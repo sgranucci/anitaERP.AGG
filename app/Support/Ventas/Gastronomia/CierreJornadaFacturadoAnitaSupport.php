@@ -10,6 +10,7 @@ use App\Support\Ventas\GastronomiaCuentacajaEfectivo;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Total facturado Anita en jornada (fechajornada), alineado a Facturas del día / cierre de turno.
@@ -599,6 +600,29 @@ final class CierreJornadaFacturadoAnitaSupport
         int $totemId,
     ): bool {
         return self::esFacturaCobroTotem($emision, $empresaId, $totemId);
+    }
+
+    /**
+     * La nota de crédito dejó la factura en cero: para el cierre la comanda vuelve a «sin facturar».
+     */
+    public static function emisionAnuladaPorNotaCredito(VentaGastronomiaEmision $emision): bool
+    {
+        if (($emision->venta_factura_origen_id ?? null) !== null) {
+            return false;
+        }
+
+        $ventaId = (int) ($emision->venta_id ?? 0);
+        $total = round((float) ($emision->venta->total ?? 0), 2);
+        if ($ventaId <= 0 || $total <= 0.02) {
+            return false;
+        }
+
+        $notas = round((float) DB::table('venta_gastronomia_emision as e')
+            ->join('venta as v', 'v.id', '=', 'e.venta_id')
+            ->where('e.venta_factura_origen_id', $ventaId)
+            ->sum('v.total'), 2);
+
+        return $notas < -0.02 && round($total + $notas, 2) <= 0.02;
     }
 
     /**
