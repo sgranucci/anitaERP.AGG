@@ -659,6 +659,11 @@
     #tabla-items-movimientostock:not(.ms-pide-precio) td.ms-col-pide-precio {
         display: none;
     }
+    /* Canje: la columna Sentido nace oculta. Sin esto, el renglón clonado
+       deja el td en display:none y el resto de celdas se corre una columna. */
+    #tabla-items-movimientostock.ms-modo-canje .ms-col-canje-sentido {
+        display: table-cell !important;
+    }
     #tabla-items-movimientostock .ms-insumo-destino-sku {
         max-width: 100%;
         overflow: hidden;

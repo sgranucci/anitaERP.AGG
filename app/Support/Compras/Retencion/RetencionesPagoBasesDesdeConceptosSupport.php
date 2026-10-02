@@ -5,6 +5,7 @@ namespace App\Support\Compras\Retencion;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorProvinciaDestinoSupport;
+use App\Support\Compras\ConceptoIvacompraFormulaSupport;
 use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
 
 /**
@@ -12,8 +13,10 @@ use App\Support\Compras\PagoproveedorAplicacionLadoSupport;
  *
  * - Ganancias / IIBB: líneas con retieneganancia=S / retieneIIBB=S
  * - IIBB ARBA: solo facturas con destino Buenos Aires (provincia_destino_id)
- * - SUSS / IVA-sobre-neto: tipoconcepto G (gravado); IVA discriminado = tipoconcepto I
- * - Exento / no gravado: tipoconcepto E / N (para documental y SUSS si se amplía)
+ * - SUSS: importe aplicado menos IVA líquido (tipoconcepto I o fórmula con(código)*alícuota).
+ *   Anita deja el IVA en tipoconcepto N; sin esa fórmula la base incluye el IVA.
+ * - IVA-sobre-neto: tipoconcepto G (gravado); IVA discriminado = tipoconcepto I
+ * - Exento / no gravado: tipoconcepto E / N
  *
  * Prorratea por monto aplicado / total del comprobante y convierte a moneda de pago
  * con la cotización de la aplicación (misma lógica que el desembolso).
@@ -42,6 +45,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
         $netoExe = 0.0;
         $netoNg = 0.0;
         $iva = 0.0;
+        $ivaDiscriminado = 0.0;
         $bruto = 0.0;
         $brutoIibbBa = 0.0;
         $detalle = [];
@@ -145,6 +149,10 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                     $iva = round($iva + $porcionPago, 2);
                 }
 
+                if (self::conceptoEsIvaDiscriminado($tipo, (string) ($concepto->formula ?? ''))) {
+                    $ivaDiscriminado = round($ivaDiscriminado + $porcionPago, 2);
+                }
+
                 $detalle[] = [
                     'cc_id' => $ccId,
                     'comprobante_id' => (int) $cp->id,
@@ -180,6 +188,7 @@ final class RetencionesPagoBasesDesdeConceptosSupport
                 brutoAplicado: $bruto,
                 origen: $soloOpa ? 'opa_omitida' : 'fallback_bruto',
                 detalle: $detalle,
+                ivaDiscriminado: $ivaDiscriminado,
             );
         }
 
@@ -193,7 +202,20 @@ final class RetencionesPagoBasesDesdeConceptosSupport
             brutoAplicado: $bruto,
             origen: 'conceptos',
             detalle: $detalle,
+            ivaDiscriminado: $ivaDiscriminado,
         );
+    }
+
+    /**
+     * IVA de la factura: tipo I, o alícuota Anita con(código)*coef aunque el maestro diga N.
+     */
+    public static function conceptoEsIvaDiscriminado(?string $tipoconcepto, ?string $formula): bool
+    {
+        if (strtoupper(trim((string) $tipoconcepto)) === 'I') {
+            return true;
+        }
+
+        return ConceptoIvacompraFormulaSupport::parse($formula) !== null;
     }
 
     /**

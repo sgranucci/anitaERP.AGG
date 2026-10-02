@@ -12,7 +12,9 @@ use App\Support\Stock\AltaNpuMovimientoStockSupport;
 use App\Support\Stock\BajaNpuMovimientoStockSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\MovimientoStockVisibilidadSupport;
+use App\Support\Stock\TransferenciaMercaderiaDetalleFerliSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
+use App\Support\Stock\TransferenciaMercaderiaLineaReversoSupport;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +38,7 @@ class MovimientoStockRevertirService
             ->with([
                 'tipotransaccion_stock',
                 'articulos_movimiento.articulos',
+                'articulos_movimiento.articulo_movimiento_talles.talles',
                 'asientos',
             ])
             ->findOrFail($id);
@@ -189,13 +192,26 @@ class MovimientoStockRevertirService
         $precios = [];
         $numeropartes = [];
         $items = [];
+        $combinaciones = [];
+        $modulos = [];
+        $medidas = [];
+        $colores = [];
+        $talles = [];
 
-        foreach ($lineas as $i => $linea) {
+        $detalleFerli = array_values(TransferenciaMercaderiaDetalleFerliSupport::lineasPayloadDesdeMovimiento($movimiento));
+
+        foreach ($lineas->values() as $i => $linea) {
+            $detalle = $detalleFerli[$i] ?? [];
             $articulosId[] = (int) $linea->articulo_id;
             $cantidades[] = abs((float) $linea->cantidad);
             $precios[] = (float) ($linea->precio ?? $linea->costo ?? 0);
             $numeropartes[] = trim((string) ($linea->numeroparte ?? ''));
             $items[] = $i;
+            $combinaciones[] = (int) ($detalle['combinacion_id'] ?? $linea->combinacion_id ?? 0) ?: null;
+            $modulos[] = (int) ($detalle['modulo_id'] ?? $linea->modulo_id ?? 0) ?: null;
+            $medidas[] = TransferenciaMercaderiaLineaReversoSupport::medidasJson($detalle['medidas'] ?? '');
+            $colores[] = (int) ($linea->color_id ?? 0) ?: null;
+            $talles[] = (int) ($linea->talle_id ?? 0) ?: null;
         }
 
         $codigoReverso = trim((string) $movimiento->codigo).'-RV-'.Carbon::now()->format('His');
@@ -228,8 +244,8 @@ class MovimientoStockRevertirService
             'omitir_surmar_etiquetas' => true,
             'articulos_id' => $articulosId,
             'skus' => array_fill(0, $n, ''),
-            'combinaciones_id' => array_fill(0, $n, null),
-            'modulos_id' => array_fill(0, $n, null),
+            'combinaciones_id' => $combinaciones,
+            'modulos_id' => $modulos,
             'items' => $items,
             'cantidades' => $cantidades,
             'cajas' => array_fill(0, $n, 0),
@@ -240,8 +256,10 @@ class MovimientoStockRevertirService
             'monedas_id' => array_fill(0, $n, null),
             'descuentos' => array_fill(0, $n, 0),
             'loteids' => array_fill(0, $n, 0),
-            'medidas' => [],
+            'medidas' => $medidas,
             'numeropartes' => $numeropartes,
+            'colores_id' => $colores,
+            'talles_id' => $talles,
         ];
 
         $movimiento->loadMissing('tipotransaccion_stock');

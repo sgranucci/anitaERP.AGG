@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Support\Compras\Retencion;
 
+use App\Support\Compras\Retencion\RetencionesPagoBasesDesdeConceptosSupport;
 use App\Support\Compras\Retencion\RetencionesPagoBasesResultado;
 use App\Support\Compras\Retencion\RetencionesPagoInput;
 use App\Models\Compras\Proveedor;
@@ -32,7 +33,29 @@ class RetencionesPagoBasesYNetsSeparadosTest extends TestCase
         );
 
         $this->assertEqualsWithDelta(16612.78, $b->netoDocumental(), 0.01);
+        $this->assertEqualsWithDelta(16462.78, $b->netoParaSuss(), 0.01);
         $this->assertSame('conceptos', $b->toArray()['origen']);
+    }
+
+    public function test_suss_descuenta_iva_aunque_el_maestro_lo_tenga_como_no_gravado(): void
+    {
+        // Factura A: compras 3.500.723 + IVA 21% 735.151,83 = 4.235.874,83
+        $b = new RetencionesPagoBasesResultado(
+            netoGanancias: 3500723.00,
+            netoIibb: 0.0,
+            netoGravado: 0.0,
+            netoExento: 0.0,
+            netoNogravado: 4235874.83,
+            importeIva: 0.0,
+            brutoAplicado: 4235874.83,
+            origen: 'conceptos',
+            ivaDiscriminado: 735151.83,
+        );
+
+        $this->assertEqualsWithDelta(3500723.00, $b->netoParaSuss(), 0.01);
+        $this->assertTrue(RetencionesPagoBasesDesdeConceptosSupport::conceptoEsIvaDiscriminado('N', 'con(2)*0.21'));
+        $this->assertFalse(RetencionesPagoBasesDesdeConceptosSupport::conceptoEsIvaDiscriminado('N', ' '));
+        $this->assertTrue(RetencionesPagoBasesDesdeConceptosSupport::conceptoEsIvaDiscriminado('I', ''));
     }
 
     public function test_orquestador_usa_bases_especificas_por_impuesto(): void

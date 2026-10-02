@@ -20,7 +20,23 @@ final class RetencionesPagoBasesResultado
         public readonly float $brutoAplicado,
         public readonly string $origen,
         public readonly array $detalle = [],
+        /**
+         * IVA líquido de la factura (alícuota), aunque el maestro lo tenga como no gravado.
+         * Sirve para la base SUSS: importe a pagar − este IVA.
+         */
+        public readonly float $ivaDiscriminado = 0.0,
     ) {
+    }
+
+    /**
+     * Base SUSS (seguridad y limpieza): importe aplicado menos el IVA de la factura.
+     * Si el IVA no está discriminado, queda el importe aplicado.
+     */
+    public function netoParaSuss(): float
+    {
+        $iva = $this->ivaDiscriminado > 0 ? $this->ivaDiscriminado : $this->importeIva;
+
+        return round($this->brutoAplicado - $iva, 2);
     }
 
     /**
@@ -45,6 +61,8 @@ final class RetencionesPagoBasesResultado
             'importe_iva' => $this->importeIva,
             'bruto_aplicado' => $this->brutoAplicado,
             'neto_documental' => $this->netoDocumental(),
+            'iva_discriminado' => $this->ivaDiscriminado,
+            'neto_suss' => $this->netoParaSuss(),
             'origen' => $this->origen,
             'detalle' => $this->detalle,
         ];

@@ -933,6 +933,9 @@
 		activa_eventos(false);
 
 		var $nueva = $('#tbody-tabla tr.item-pedido').last();
+		if (typeof window.msActualizarModoCanje === 'function') {
+			window.msActualizarModoCanje();
+		}
 		if (typeof window.msAplicarVisibilidadPrecioFerli === 'function') {
 			window.msAplicarVisibilidadPrecioFerli();
 		}

@@ -6,7 +6,7 @@ use App\Models\Stock\MovimientoStock;
 
 /**
  * Reverso de transferencia: cada movimiento se deshace solo
- * (mismo artículo, depósito y cantidad; signo invertido).
+ * (mismo artículo, depósito, combinación, módulo, talles y cantidad; signo invertido).
  * No se reconstruye una TRA dest→origen ni se reaplica conversión de fórmula.
  */
 final class TransferenciaMercaderiaLineaReversoSupport
@@ -24,6 +24,9 @@ final class TransferenciaMercaderiaLineaReversoSupport
      */
     public static function desdeMovimientos(MovimientoStock $salidaOriginal, MovimientoStock $entradaOriginal): array
     {
+        $salidaOriginal->loadMissing(['articulos_movimiento.articulo_movimiento_talles.talles']);
+        $entradaOriginal->loadMissing(['articulos_movimiento.articulo_movimiento_talles.talles']);
+
         $lineasSalida = self::normalizarLineas($salidaOriginal);
         $lineasEntrada = self::normalizarLineas($entradaOriginal);
 
@@ -97,6 +100,9 @@ final class TransferenciaMercaderiaLineaReversoSupport
         $numeropartes = [];
         $colores = [];
         $talles = [];
+        $combinaciones = [];
+        $modulos = [];
+        $medidas = [];
 
         foreach ($lineas as $i => $linea) {
             $articulosId[] = (int) ($linea['articulo_id'] ?? 0);
@@ -108,6 +114,9 @@ final class TransferenciaMercaderiaLineaReversoSupport
             $numeropartes[] = (string) ($linea['numeroparte'] ?? '');
             $colores[] = (int) ($linea['color_id'] ?? 0) ?: null;
             $talles[] = (int) ($linea['talle_id'] ?? 0) ?: null;
+            $combinaciones[] = (int) ($linea['combinacion_id'] ?? 0) ?: null;
+            $modulos[] = (int) ($linea['modulo_id'] ?? 0) ?: null;
+            $medidas[] = self::medidasJson($linea['medidas'] ?? '');
         }
 
         $n = count($articulosId);
@@ -115,8 +124,8 @@ final class TransferenciaMercaderiaLineaReversoSupport
         return [
             'articulos_id' => $articulosId,
             'skus' => array_fill(0, $n, ''),
-            'combinaciones_id' => array_fill(0, $n, null),
-            'modulos_id' => array_fill(0, $n, null),
+            'combinaciones_id' => $combinaciones,
+            'modulos_id' => $modulos,
             'items' => $items,
             'cantidades' => $cantidades,
             'cajas' => $cajas,
@@ -127,7 +136,7 @@ final class TransferenciaMercaderiaLineaReversoSupport
             'monedas_id' => array_fill(0, $n, null),
             'descuentos' => array_fill(0, $n, 0),
             'loteids' => array_fill(0, $n, 0),
-            'medidas' => [],
+            'medidas' => $medidas,
             'numeropartes' => $numeropartes,
             'colores_id' => $colores,
             'talles_id' => $talles,
@@ -156,9 +165,44 @@ final class TransferenciaMercaderiaLineaReversoSupport
                 'pieza' => (float) ($linea->pieza ?? 0),
                 'color_id' => (int) ($linea->color_id ?? 0),
                 'talle_id' => (int) ($linea->talle_id ?? 0),
+                'combinacion_id' => (int) ($linea->combinacion_id ?? 0),
+                'modulo_id' => (int) ($linea->modulo_id ?? 0),
+                'medidas' => self::medidasDesdeTalles($linea),
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * Curva de talles en valor absoluto. El grabado del movimiento aplica el signo de la pata.
+     *
+     * @return list<array{medida:string,cantidad:float,precio:float,talle_id:int}>
+     */
+    public static function medidasDesdeTalles(object $linea): array
+    {
+        $medidas = [];
+        foreach ($linea->articulo_movimiento_talles ?? [] as $talle) {
+            $medidas[] = [
+                'medida' => (string) (optional($talle->talles)->nombre ?? ''),
+                'cantidad' => abs((float) ($talle->cantidad ?? 0)),
+                'precio' => (float) ($talle->precio ?? 0),
+                'talle_id' => (int) ($talle->talle_id ?? 0),
+            ];
+        }
+
+        return $medidas;
+    }
+
+    public static function medidasJson(mixed $medidas): string
+    {
+        if (is_string($medidas)) {
+            return trim($medidas);
+        }
+        if (! is_array($medidas) || $medidas === []) {
+            return '';
+        }
+
+        return json_encode($medidas, JSON_UNESCAPED_UNICODE) ?: '';
     }
 }

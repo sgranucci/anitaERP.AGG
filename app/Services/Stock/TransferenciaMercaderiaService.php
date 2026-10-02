@@ -2091,10 +2091,10 @@ class TransferenciaMercaderiaService
         }
 
         $salidaOriginal = MovimientoStock::query()
-            ->with('articulos_movimiento')
+            ->with(['articulos_movimiento.articulo_movimiento_talles.talles'])
             ->find((int) $transferencia->movimientostock_salida_id);
         $entradaOriginal = MovimientoStock::query()
-            ->with('articulos_movimiento')
+            ->with(['articulos_movimiento.articulo_movimiento_talles.talles'])
             ->find((int) $transferencia->movimientostock_entrada_id);
         if ($salidaOriginal === null || $entradaOriginal === null) {
             throw new \RuntimeException('No se encontraron los movimientos de la transferencia para revertir.');

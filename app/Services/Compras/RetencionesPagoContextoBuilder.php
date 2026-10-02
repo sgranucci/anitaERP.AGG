@@ -78,10 +78,12 @@ class RetencionesPagoContextoBuilder
             $retAcum = $acumMeta['retenido'];
         }
 
-        // IVA y SUSS: neto gravado (+ exento no gravado documental para SUSS = gravado).
-        $netoIvaSuss = $bases->netoGravado > 0
+        // Retención de IVA: neto gravado; si no hay, documental.
+        // SUSS (seguridad y limpieza): importe a pagar menos el IVA de la factura.
+        $netoIva = $bases->netoGravado > 0
             ? $bases->netoGravado
             : $bases->netoDocumental();
+        $netoSuss = $bases->netoParaSuss();
 
         $exclusiones = ProveedorExclusionRetencionSupport::mapaVigentes((int) $proveedor->id, $fecha);
         $pctG = (float) ($exclusiones[ProveedorExclusionRetencionSupport::TIPO_GANANCIAS]['porcentaje'] ?? 0);
@@ -91,7 +93,7 @@ class RetencionesPagoContextoBuilder
 
         $input = new RetencionesPagoInput(
             proveedor: $proveedor,
-            importeNetoPago: $netoIvaSuss,
+            importeNetoPago: $netoIva,
             importeIvaPago: $bases->importeIva,
             fecha: $fecha,
             retenciongananciaIdPago: isset($overrides['retencionganancia_id']) ? (int) $overrides['retencionganancia_id'] : null,
@@ -108,7 +110,7 @@ class RetencionesPagoContextoBuilder
             empresaId: $empresaId,
             importeNetoGanancias: $bases->netoGanancias,
             importeNetoIibb: $bases->netoIibb,
-            importeNetoSuss: $netoIvaSuss,
+            importeNetoSuss: $netoSuss,
             ivaExcluido: $pctI >= 100.0,
             porcentajeExclusionIva: $pctI,
             porcentajeExclusionSuss: $pctS,
