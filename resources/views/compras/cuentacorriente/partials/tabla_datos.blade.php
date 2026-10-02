@@ -39,8 +39,8 @@
         <th class="{{ $clsTexto }}" style="width: 11%;">Empresa</th>
         <th class="{{ $clsNowrap }}" style="width: 8%;">Fecha</th>
         <th class="{{ $clsNowrap }}" style="width: 8%;">Vencimiento</th>
-        <th class="{{ $clsTexto }}" style="width: {{ $enPesos ? '18%' : '22%' }};">Comprobante</th>
-        <th class="{{ $clsNowrap }}" style="width: {{ $enPesos ? '8%' : '6%' }};">Moneda</th>
+        <th class="{{ $clsTexto }}" style="width: {{ $enPesos ? '13%' : '22%' }};">Comprobante</th>
+        <th class="col-moneda" style="width: {{ $enPesos ? '13%' : '6%' }};">Moneda</th>
         @if ($modoDeuda)
             <th class="text-right" style="width: 10%; text-align: right;">Importe</th>
             <th class="text-right" style="width: 10%; text-align: right;">Aplicado</th>
@@ -100,7 +100,7 @@
             <td class="{{ $clsNowrap }}">{{ $fechaComp ? date('d/m/Y', strtotime((string) $fechaComp)) : '' }}</td>
             <td class="{{ $clsNowrap }}">{{ $fechaVto ? date('d/m/Y', strtotime((string) $fechaVto)) : '' }}</td>
             <td class="{{ $clsTexto }}">{{ $etiquetaComprobante }}</td>
-            <td class="{{ $clsNowrap }}">{{ $importes['etiqueta_moneda'] }}</td>
+            <td class="col-moneda">{!! $paraExcel ? e($importes['etiqueta_moneda']) : CuentacorrienteSaldosPorMoneda::etiquetaMonedaHtml($importes['etiqueta_moneda']) !!}</td>
             @if ($modoDeuda)
                 <td class="text-right" style="text-align: right;">{{ $formatearMonto($totalMostrar, $abreviaturaFila) }}</td>
                 <td class="text-right" style="text-align: right;">

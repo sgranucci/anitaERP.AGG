@@ -420,6 +420,14 @@ final class CircuitoComprasDocumentosRelacionadosSupport
                     ->whereNotNull('pagoproveedor_id')
                     ->where('pagoproveedor_id', '>', 0)
                     ->pluck('pagoproveedor_id')
+                    ->all(),
+                // Import Anita: la aplicación no guarda pagoproveedor_id; la OP
+                // está en la CC crédito apuntada por proveedor_cuentacorriente_aplicado_id.
+                DB::table('proveedor_cuentacorriente_aplicacion as app')
+                    ->join('proveedor_cuentacorriente as credito', 'credito.id', '=', 'app.proveedor_cuentacorriente_aplicado_id')
+                    ->whereIn('app.proveedor_cuentacorriente_id', $ccIds)
+                    ->where('credito.pagoproveedor_id', '>', 0)
+                    ->pluck('credito.pagoproveedor_id')
                     ->all()
             );
         }
@@ -431,6 +439,12 @@ final class CircuitoComprasDocumentosRelacionadosSupport
                 ->whereNotNull('pagoproveedor_id')
                 ->where('pagoproveedor_id', '>', 0)
                 ->pluck('pagoproveedor_id')
+                ->all(),
+            DB::table('proveedor_cuentacorriente_aplicacion as app')
+                ->join('proveedor_cuentacorriente as credito', 'credito.id', '=', 'app.proveedor_cuentacorriente_id')
+                ->where('app.comprobante_proveedor_aplicado_id', $comprobanteId)
+                ->where('credito.pagoproveedor_id', '>', 0)
+                ->pluck('credito.pagoproveedor_id')
                 ->all()
         );
 

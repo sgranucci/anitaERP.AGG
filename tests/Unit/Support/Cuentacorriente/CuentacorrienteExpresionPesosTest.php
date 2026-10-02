@@ -70,6 +70,16 @@ class CuentacorrienteExpresionPesosTest extends TestCase
             CuentacorrienteSaldosPorMoneda::etiquetaMonedaFila($usd, true)
         );
         $this->assertSame(
+            'DOL → '.$local.' · TC 1.050,50',
+            CuentacorrienteSaldosPorMoneda::etiquetaConversion('DOL', 1050.5)
+        );
+        $this->assertSame(
+            'DOL → '.e($local).'<br>TC 1.050,50',
+            CuentacorrienteSaldosPorMoneda::etiquetaMonedaHtml(
+                CuentacorrienteSaldosPorMoneda::etiquetaConversion('DOL', 1050.5)
+            )
+        );
+        $this->assertSame(
             $local,
             CuentacorrienteSaldosPorMoneda::etiquetaMonedaFila(
                 (object) ['moneda_id' => 1, 'abreviatura' => 'ARS', 'cotizacion' => 1],

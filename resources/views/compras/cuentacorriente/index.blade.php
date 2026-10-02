@@ -18,6 +18,11 @@
         vertical-align: middle;
         margin: 0 2px;
     }
+    #tabla-paginada td.col-moneda-cc {
+        white-space: normal;
+        line-height: 1.2;
+        min-width: 7.5rem;
+    }
 </style>
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
@@ -214,8 +219,8 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                             'etiquetaComprobante' => $etiquetaComprobante,
                                         ])
                                     </td>
-                                    <td>
-                                        {{ $etiquetaMoneda }}
+                                    <td class="col-moneda-cc">
+                                        {!! CuentacorrienteSaldosPorMoneda::etiquetaMonedaHtml($etiquetaMoneda) !!}
                                         <input type="hidden" name="moneda" class="form-control moneda" value="{{ $data->monedas->id ?? '' }}">
                                     </td>
                                     @if ($modoCuentaCorriente)

@@ -254,6 +254,11 @@
                         #tabla-cc-proveedores-reporte .cc-rep-apl { color: #555; font-style: italic; }
                         #tabla-cc-proveedores-reporte .cc-rep-saldo-ant { background: #f4f6f7; }
                         #tabla-cc-proveedores-reporte .text-right { text-align: right; }
+                        #tabla-cc-proveedores-reporte td.col-moneda {
+                            white-space: normal;
+                            line-height: 1.2;
+                            min-width: 7.5rem;
+                        }
                     </style>
 
                     <div class="table-responsive">
