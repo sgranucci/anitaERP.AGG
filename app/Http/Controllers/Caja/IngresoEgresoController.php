@@ -24,6 +24,7 @@ use App\Services\Caja\IngresoEgresoComprobanteIvaPdfIaService;
 use App\Services\Caja\IngresoEgresoComprobanteIvaService;
 use App\Services\Caja\IngresoEgresoCanjeChequeDetalleIaService;
 use App\Services\Caja\IngresoEgresoService;
+use App\Services\Compras\PagoproveedorComprobantePdfService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
@@ -466,6 +467,15 @@ class IngresoEgresoController extends Controller
         IngresoEgresoVisibilidadSupport::abortSiNoAccesible($id);
 
         $movimiento = $this->caja_movimientoRepository->find($id);
+
+        // La OP de proveedores guarda el asiento, las retenciones y las facturas
+        // aplicadas en pagoproveedor (el asiento no lleva caja_movimiento_id).
+        // El comprobante de caja no los ve y sale incompleto.
+        $pagoId = (int) ($movimiento->pagoproveedor_id ?? 0);
+        if ($pagoId > 0) {
+            return app(PagoproveedorComprobantePdfService::class)->generarRespuesta($pagoId);
+        }
+
         $movimiento->loadMissing([
             'solicitudpagos.conceptos',
             'solicitudpagos.centrocostos',

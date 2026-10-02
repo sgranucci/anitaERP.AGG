@@ -102,27 +102,53 @@
             border-top: 2px solid #ced4da;
             vertical-align: middle;
         }
+        .asiento-cuentas-scroll {
+            overflow-x: auto;
+            max-width: 100%;
+        }
+        #cuenta-table {
+            width: max-content;
+            min-width: 100%;
+            margin-bottom: 0;
+        }
         #cuenta-table tfoot.asiento-totales-pie .asiento-total-celda {
             background-color: #e9ecef !important;
             color: #495057;
             border: 0;
             box-shadow: none;
             font-weight: 700;
-            font-size: 1.05rem;
         }
         #cuenta-table .debe,
-        #cuenta-table .haber {
-            font-size: 1.05rem;
+        #cuenta-table .haber,
+        #cuenta-table .asiento-total-celda {
+            font-variant-numeric: tabular-nums;
+            font-size: 0.95rem;
             font-weight: 600;
-            min-width: 7.5rem;
-            letter-spacing: 0.01em;
+            letter-spacing: 0;
+            width: 100%;
+            min-width: calc(17ch + 1rem);
+            padding-left: 0.4rem;
+            padding-right: 0.45rem;
+        }
+        #cuenta-table .asiento-total-celda {
+            font-weight: 700;
         }
         #cuenta-table .cotizacion {
+            font-variant-numeric: tabular-nums;
             font-size: 0.95rem;
-            min-width: 5.5rem;
+            min-width: 7.5rem;
+            padding-left: 0.35rem;
+            padding-right: 0.4rem;
         }
+        #cuenta-table th.asiento-monto-col,
         #cuenta-table td.asiento-monto-celda {
-            min-width: 8rem;
+            min-width: calc(17ch + 1.35rem);
+            width: 14%;
+        }
+        #cuenta-table .nombrecuentacontable {
+            width: 15.5rem;
+            max-width: 18rem;
+            height: 38px;
         }
         #cuenta-table .asiento-detalle-celda {
             max-width: 11rem;
@@ -157,16 +183,17 @@
             <h3 class="card-title mb-0"><i class="fa fa-list"></i> Cuentas</h3>
         </div>
         <div class="card-body">
+        <div class="asiento-cuentas-scroll">
         <table class="table table-sm table-bordered" id="cuenta-table">
             <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
                     <th style="width: 12%;">C&oacute;digo</th>
-                    <th style="width: 18%;">Descripci&oacute;n</th>
-                    <th style="width: 13%;">Centro de costo</th>
+                    <th style="width: 16%;">Descripci&oacute;n</th>
+                    <th style="width: 11%;">Centro de costo</th>
                     <th style="width: 6%;">Moneda</th>
                     <th style="width: 9%;" class="text-right">Cotizaci&oacute;n</th>
-                    <th style="width: 12%;" class="text-right">Debe</th>
-                    <th style="width: 12%;" class="text-right">Haber</th>
+                    <th class="text-right asiento-monto-col">Debe</th>
+                    <th class="text-right asiento-monto-col">Haber</th>
                     <th style="width: 12%;">Detalle</th>
                     <th style="width: 11%;">Comprobante</th>
                     <th style="width: 8%;">O.Compra</th>
@@ -205,8 +232,9 @@
                             </div>
                         </td>
                         <td>
-                            <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombrecuentacontable form-control" name="nombres[]"
-                                   value="{{$cuenta->cuentacontables->nombre ?? ''}}" readonly placeholder="Descripci&oacute;n">
+                            <input type="text" class="nombrecuentacontable form-control" name="nombres[]"
+                                   value="{{$cuenta->cuentacontables->nombre ?? ''}}" readonly placeholder="Descripci&oacute;n"
+                                   title="{{ $cuenta->cuentacontables->nombre ?? '' }}">
                         </td>
                         <td>
                             @php
@@ -291,6 +319,7 @@
                 </tr>
             </tfoot>
         </table>
+        </div>
         @include('contable.asiento.template')
         <div class="row mt-2">
             <div class="col-sm-12">

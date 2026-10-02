@@ -24,7 +24,7 @@
             </div>
         </td>
         <td>
-            <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombrecuentacontable form-control" name="nombres[]"
+            <input type="text" class="nombrecuentacontable form-control" name="nombres[]"
                    value="" readonly placeholder="Descripci&oacute;n">
         </td>
         <td>
