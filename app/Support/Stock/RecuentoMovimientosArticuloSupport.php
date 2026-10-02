@@ -206,6 +206,96 @@ final class RecuentoMovimientosArticuloSupport
         return '—';
     }
 
+    /**
+     * Saldo después de cada movimiento. El ancla es el saldo vigente: si la suma
+     * de movimientos no cierra con ese saldo, la diferencia queda en el arranque.
+     *
+     * @param  iterable<int, object>  $filas
+     */
+    public static function aplicarSaldoParcial(iterable $filas, float $saldoCierre, float $sumaMovimientos): void
+    {
+        $base = $saldoCierre - $sumaMovimientos;
+        foreach ($filas as $fila) {
+            $saldo = $base + (float) ($fila->saldo_acumulado_movimientos ?? 0);
+            $fila->saldo_parcial = $saldo;
+            $fila->saldo_parcial_fmt = self::formatearNumero($saldo);
+        }
+    }
+
+    public static function sumaCantidades(Builder $query): float
+    {
+        return (float) $query->clone()->reorder()->sum('am.cantidad');
+    }
+
+    /**
+     * El cierre total mueve stock de artículos que no están en la planilla.
+     * El concepto guardado no lo dice; acá se aclara y se enlaza el recuento.
+     *
+     * @param  iterable<int, object>  $filas
+     */
+    public static function anotarRecuentosDelArticulo(iterable $filas, int $articuloId): void
+    {
+        $codigos = [];
+        foreach ($filas as $fila) {
+            if (preg_match('/\b(RC-\d+)\b/', (string) ($fila->concepto ?? ''), $coincidencia)) {
+                $codigos[$coincidencia[1]] = true;
+            }
+        }
+        if ($codigos === [] || $articuloId <= 0) {
+            return;
+        }
+
+        $lista = array_keys($codigos);
+        $enConteo = array_fill_keys(
+            DB::table('recuento as r')
+                ->join('recuento_item as ri', function ($join) use ($articuloId) {
+                    $join->on('ri.recuento_id', '=', 'r.id')
+                        ->where('ri.articulo_id', '=', $articuloId);
+                })
+                ->whereIn('r.codigo', $lista)
+                ->pluck('r.codigo')
+                ->all(),
+            true
+        );
+        $ids = DB::table('recuento')->whereIn('codigo', $lista)->pluck('id', 'codigo');
+        $puedeVer = function_exists('can') && can('ver-recuento', false);
+
+        foreach ($filas as $fila) {
+            $concepto = (string) ($fila->concepto ?? '');
+            if (! preg_match('/\b(RC-\d+)\b/', $concepto, $coincidencia)) {
+                continue;
+            }
+            $codigo = $coincidencia[1];
+            $fila->concepto_display = self::aclaracionConceptoRecuento(
+                (string) ($fila->concepto_display ?? $concepto),
+                isset($enConteo[$codigo])
+            );
+            if ($puedeVer && isset($ids[$codigo])) {
+                $fila->url_recuento = route('ver_recuento', ['id' => (int) $ids[$codigo]]);
+            }
+        }
+    }
+
+    public static function aclaracionConceptoRecuento(string $concepto, bool $articuloEnConteo): string
+    {
+        if ($articuloEnConteo || ! preg_match('/\bRC-\d+\b/', $concepto)) {
+            return $concepto;
+        }
+        if (str_contains($concepto, 'no contado')
+            || str_contains($concepto, 'no está en el conteo')
+            || str_contains($concepto, 'no figura en las líneas')) {
+            return $concepto;
+        }
+        if (str_contains($concepto, 'cierre total')) {
+            return $concepto.' — no está en el conteo; el cierre total lo ajusta a cero';
+        }
+        if (str_contains($concepto, 'Anulación cierre recuento') || str_contains($concepto, 'Recuento ')) {
+            return $concepto.' — no figura en las líneas de ese recuento';
+        }
+
+        return $concepto;
+    }
+
     public static function formatearNumero(float $n): string
     {
         if (abs($n - round($n)) < 1e-9) {
@@ -268,6 +358,7 @@ final class RecuentoMovimientosArticuloSupport
                 DB::raw('COALESCE(ts.abreviatura, tt.abreviatura) AS tipo_abreviatura'),
                 'ms.codigo AS movimiento_codigo',
                 'ms.leyenda AS movimiento_leyenda',
+                DB::raw('SUM(am.cantidad) OVER (ORDER BY am.fecha ASC, am.id ASC) AS saldo_acumulado_movimientos'),
             ])))
             ->leftJoin('depmae as dep', 'dep.id', '=', 'am.deposito_id')
             ->leftJoin('empresa as emp', 'emp.id', '=', 'dep.empresa_id')

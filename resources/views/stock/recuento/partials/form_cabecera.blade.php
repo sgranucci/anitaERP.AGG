@@ -61,8 +61,11 @@
             <div class="{{ $colInput }}">
                 <input type="date" name="fecha" id="recuento_fecha" class="form-control"
                     style="max-width: 11rem;"
+                    min="{{ sprintf('%04d', \App\Support\Stock\RecuentoModoCierreSupport::anioMinimoFecha()) }}-01-01"
+                    max="{{ sprintf('%04d', \App\Support\Stock\RecuentoModoCierreSupport::anioMaximoFecha()) }}-12-31"
                     value="{{ old('fecha', isset($recuento) ? optional($recuento->fecha)->format('Y-m-d') : date('Y-m-d')) }}"
                     @if ($soloLectura) readonly @endif required>
+                <small class="form-text text-muted">Año con 4 dígitos (por ejemplo {{ date('Y') }}).</small>
             </div>
         </div>
 

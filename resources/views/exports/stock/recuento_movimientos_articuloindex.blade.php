@@ -13,7 +13,7 @@
         : 'Depósito';
     $sufijoUm = \App\Support\Stock\MovimientosArticuloDepositoSupport::sufijoColumnaCantidad($art['unidad_medida'] ?? '');
     $mostrarCajaPieza = (bool) ($contexto['mostrar_caja_pieza'] ?? false);
-    $colspan = ($modoTodos ? 9 : 8) + ($mostrarCajaPieza ? 4 : 0);
+    $colspan = ($modoTodos ? 10 : 9) + ($mostrarCajaPieza ? 4 : 0);
 @endphp
 <table>
     @if (!empty($reservarFilaLogoExcel))
@@ -60,6 +60,7 @@
             <th>Caja S</th>
             <th>Pieza S</th>
             @endif
+            <th>Saldo{{ $sufijoUm }}</th>
             <th>Precio unit.</th>
             <th>Concepto</th>
             <th>Mov. stock</th>
@@ -84,6 +85,7 @@
                 <td>@if ($m->salida_caja !== null){{ $m->salida_caja }}@endif</td>
                 <td>@if ($m->salida_pieza !== null){{ $m->salida_pieza }}@endif</td>
                 @endif
+                <td>@if (isset($m->saldo_parcial)){{ $m->saldo_parcial }}@endif</td>
                 <td>{{ $m->precio_unitario_fmt ?? '' }}</td>
                 <td>{{ $m->concepto_display ?? $m->concepto ?? '' }}</td>
                 <td>{{ $m->movimiento_codigo ?: ($m->movimientostock_id ?? '') }}</td>

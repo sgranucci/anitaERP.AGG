@@ -3,6 +3,7 @@
 namespace Tests\Unit\Support\Stock;
 
 use App\Support\Stock\RecuentoModoCierreSupport;
+use Carbon\Carbon;
 use Tests\TestCase;
 
 class RecuentoModoCierreSupportTest extends TestCase
@@ -25,5 +26,18 @@ class RecuentoModoCierreSupportTest extends TestCase
             'Al saldo actual',
             RecuentoModoCierreSupport::etiqueta(RecuentoModoCierreSupport::MODO_SALDO_ACTUAL)
         );
+    }
+
+    public function test_rechaza_fecha_con_anio_de_dos_digitos(): void
+    {
+        Carbon::setTestNow('2026-10-02');
+
+        $mensaje = RecuentoModoCierreSupport::mensajeFechaNoGrabable('0026-10-01');
+
+        $this->assertNotNull($mensaje);
+        $this->assertStringContainsString('01/10/0026', $mensaje);
+        $this->assertNull(RecuentoModoCierreSupport::mensajeFechaNoGrabable('2026-10-01'));
+
+        Carbon::setTestNow();
     }
 }

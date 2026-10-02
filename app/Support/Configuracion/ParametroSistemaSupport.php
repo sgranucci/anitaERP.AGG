@@ -50,7 +50,7 @@ final class ParametroSistemaSupport
             self::CLAVE_FCE_CUENTACAJA_ID => [
                 'grupo' => 'Facturación ARCA',
                 'etiqueta' => 'Cuenta de caja FCE (CBU emisor)',
-                'ayuda' => 'Cuenta cuyo CBU se envía a ARCA en FCE (dato adicional 21). En Anita era tesmae 00000032. F1 o lupa abren la consulta.',
+                'ayuda' => 'Cuenta cuyo CBU se envía a ARCA en FCE (dato adicional 21). Si queda vacía, cada empresa usa su cuenta en pesos de Banco Macro Gerli. F1 o lupa abren la consulta.',
                 'tipo' => 'cuentacaja',
                 'orden' => 30,
             ],

@@ -58,7 +58,12 @@ class RecuentoListadoFiltros
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
     {
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            $filtros = self::filtrosVacios();
+            if ($request->has('ver_todos_recuentos')) {
+                $filtros['ver_todos_recuentos'] = $request->boolean('ver_todos_recuentos');
+            }
+
+            return $filtros;
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -188,11 +193,52 @@ class RecuentoListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
-        if (! empty($filtros['ver_todos_recuentos'])) {
-            $params['ver_todos_recuentos'] = '1';
-        }
+        $params['ver_todos_recuentos'] = ! empty($filtros['ver_todos_recuentos']) ? '1' : '0';
 
         return $params;
+    }
+
+    /**
+     * @param  array<string, mixed>  $sesion
+     * @return array<string, mixed>
+     */
+    public static function desdeSesion(array $sesion): array
+    {
+        $filtros = self::filtrosVacios();
+        $modo = (string) ($sesion['modo'] ?? self::MODO_TODOS);
+        $filtros['modo'] = in_array($modo, [self::MODO_TODOS, self::MODO_CAMPO], true)
+            ? $modo
+            : self::MODO_TODOS;
+        $campo = (string) ($sesion['campo'] ?? 'codigo');
+        $filtros['campo'] = isset(self::CAMPOS[$campo]) ? $campo : 'codigo';
+        $filtros['operador'] = self::normalizarOperador(
+            (string) ($sesion['operador'] ?? 'contiene'),
+            $filtros['modo'] === self::MODO_CAMPO ? $filtros['campo'] : 'codigo'
+        );
+        $valor = trim((string) ($sesion['valor'] ?? $sesion['busqueda'] ?? ''));
+        $filtros['valor'] = $valor;
+        $filtros['busqueda'] = $valor;
+        $filtros['valor_hasta'] = trim((string) ($sesion['valor_hasta'] ?? ''));
+        $filtros['ver_todos_recuentos'] = ! empty($sesion['ver_todos_recuentos']);
+
+        return $filtros;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function paraSesion(array $filtros): array
+    {
+        return [
+            'modo' => $filtros['modo'] ?? self::MODO_TODOS,
+            'campo' => $filtros['campo'] ?? 'codigo',
+            'operador' => $filtros['operador'] ?? 'contiene',
+            'valor' => $filtros['valor'] ?? '',
+            'valor_hasta' => $filtros['valor_hasta'] ?? '',
+            'busqueda' => $filtros['busqueda'] ?? '',
+            'ver_todos_recuentos' => ! empty($filtros['ver_todos_recuentos']),
+        ];
     }
 
     /**
@@ -202,11 +248,7 @@ class RecuentoListadoFiltros
     public static function paraQueryStringAlternarAlcance(array $filtros, bool $verTodos): array
     {
         $params = self::paraQueryString($filtros);
-        if ($verTodos) {
-            $params['ver_todos_recuentos'] = '1';
-        } else {
-            unset($params['ver_todos_recuentos']);
-        }
+        $params['ver_todos_recuentos'] = $verTodos ? '1' : '0';
 
         return $params;
     }

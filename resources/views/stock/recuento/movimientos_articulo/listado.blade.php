@@ -75,6 +75,7 @@
         <strong>Depósito:</strong> {{ $depEtiqueta }}<br>
         <strong>Unidad de medida:</strong> {{ ! empty($art['unidad_medida']) ? $art['unidad_medida'] : '—' }}<br>
         <strong>{{ $modoTodos ? 'Saldo total' : 'Saldo actual' }}:</strong> {{ $contexto['saldo_fmt'] ?? '0' }}{{ $sufijoUm }}
+        <br>La columna Saldo es el stock después de cada movimiento. El primer renglón es el más nuevo.
         @if ($mostrarCajaPieza)
             <br><em>Tres cantidades en paralelo (kilos, caja y pieza), como pedido y factura. El ATP es kilos.</em>
         @endif
@@ -97,6 +98,7 @@
                 <th class="num" style="width: 5%;">Caja S</th>
                 <th class="num" style="width: 5%;">Pieza S</th>
                 @endif
+                <th class="num" style="width: 8%;">Saldo{{ $sufijoUm }}</th>
                 <th class="num" style="width: 9%;">Precio unit.</th>
                 <th style="width: 18%;">Concepto</th>
                 <th style="width: 8%;">Mov. stock</th>
@@ -121,6 +123,7 @@
                     <td class="num">{{ $m->salida_caja_fmt ?? '' }}</td>
                     <td class="num">{{ $m->salida_pieza_fmt ?? '' }}</td>
                     @endif
+                    <td class="num">{{ $m->saldo_parcial_fmt ?? '' }}</td>
                     <td class="num">{{ $m->precio_unitario_fmt ?? '' }}</td>
                     <td>{{ $m->concepto_display ?? $m->concepto ?? '' }}</td>
                     <td>{{ $m->movimiento_codigo ?: ($m->movimientostock_id ?? '') }}</td>

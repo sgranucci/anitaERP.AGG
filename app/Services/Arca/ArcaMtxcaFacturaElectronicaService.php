@@ -592,9 +592,11 @@ class ArcaMtxcaFacturaElectronicaService
             $req['fechaVencimientoPago'] = $this->formatFechaSalida($datos['fechavencimiento'] ?? $datos['fechacomprobante']);
         }
 
-        // FCE MiPyME (201/206/…): fechaVencimientoPago es obligatoria aunque el concepto sea Productos.
-        if (in_array($cbteTipo, [201, 206, 211], true) && ! isset($req['fechaVencimientoPago'])) {
-            $req['fechaVencimientoPago'] = $this->formatFechaSalida($datos['fechavencimiento'] ?? $datos['fechacomprobante']);
+        // FCE MiPyME (201/206/211): fechaVencimientoPago es obligatoria aunque el concepto sea Productos (obs. 10163).
+        if (ArcaFceDatosAdicionalesSupport::requiereCbuEmisor($cbteTipo)) {
+            $req['fechaVencimientoPago'] = $this->formatFechaSalida(
+                ArcaFceDatosAdicionalesSupport::fechaVencimientoPago($datos)
+            );
         }
 
         // RG 5782 / CAEA contingencia: fechaHoraGen obligatoria (equivalente WSFE CbteFchHsGen).

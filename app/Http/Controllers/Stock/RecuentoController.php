@@ -90,13 +90,62 @@ class RecuentoController extends Controller
     }
 
     /**
+     * Si el listado llega con una selección (filtros o «ver todos»), la guarda.
+     * Al volver desde editar, la URL no trae parámetros y se restaura la última.
+     *
      * @return array<string, mixed>
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $filtros = RecuentoListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $usuarioId = (int) auth()->id();
 
-        return RecuentoListadoFiltros::aplicarAlcanceUsuario($filtros, (int) auth()->id());
+        if ($this->requestTraeSeleccionListado($request, $busquedaRuta)) {
+            $filtros = RecuentoListadoFiltros::aplicarAlcanceUsuario(
+                RecuentoListadoFiltros::resolverDesdeRequest($request, $busquedaRuta),
+                $usuarioId
+            );
+            session(['recuento_listado_filtros' => RecuentoListadoFiltros::paraSesion($filtros)]);
+
+            return $filtros;
+        }
+
+        $sesion = session('recuento_listado_filtros');
+        if (is_array($sesion) && $sesion !== []) {
+            return RecuentoListadoFiltros::aplicarAlcanceUsuario(
+                RecuentoListadoFiltros::desdeSesion($sesion),
+                $usuarioId
+            );
+        }
+
+        return RecuentoListadoFiltros::aplicarAlcanceUsuario(
+            RecuentoListadoFiltros::resolverDesdeRequest($request, $busquedaRuta),
+            $usuarioId
+        );
+    }
+
+    private function requestTraeSeleccionListado(Request $request, ?string $busquedaRuta): bool
+    {
+        if ($busquedaRuta !== null && $busquedaRuta !== '') {
+            return true;
+        }
+
+        foreach ([
+            'filtro_limpiar',
+            'ver_todos_recuentos',
+            'filtro_valor',
+            'filtro_modo',
+            'filtro_campo',
+            'filtro_operador',
+            'filtro_valor_hasta',
+            'filtro_busqueda_rapida',
+            'busqueda',
+        ] as $clave) {
+            if ($request->has($clave)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function crear(Request $request)
@@ -186,8 +235,9 @@ class RecuentoController extends Controller
         can('ver-recuento');
         $recuento = $this->service->buscar($id);
         $puede_ver_kardex = MovimientosArticuloDepositoSupport::puedeConsultar();
+        $ajustesFueraDeConteo = $this->service->articulosAjustadosFueraDeConteo($recuento);
 
-        return view('stock.recuento.ver', compact('recuento', 'puede_ver_kardex'));
+        return view('stock.recuento.ver', compact('recuento', 'puede_ver_kardex', 'ajustesFueraDeConteo'));
     }
 
     public function suspender(Request $request, int $id)

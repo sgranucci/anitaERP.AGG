@@ -178,9 +178,11 @@ return [
         'informe_max_lotes_job' => (int) env('ARCA_CAEA_INFORME_MAX_LOTES_JOB', 50),
         /**
          * Datos adicionales FCE (MTXCA t=21 CBU emisor, t=27 opción transferencia).
-         * Anita (a-comprob.c): tesmae cuenta 00000032 → tesm_nro_cbu.
-         * Override: ARCA_FCE_CBU_EMPRESA_{id} / ARCA_FCE_CBU_EMISOR; si vacío, tesmae/cuentacaja.
-         * cbu_por_empresa: JSON {"1":"0170..."} o ARCA_FCE_CBU_EMPRESA_{id}.
+         * Prioridad: cuenta de Configuración general (si es de esa empresa) →
+         * ARCA_FCE_CBU_EMPRESA_{id} / ARCA_FCE_CBU_EMISOR → cuentacaja de la empresa
+         * (cuenta_codigo_por_empresa) → tesmae/tesmcbu 00000032 (El Bierzo).
+         * En AGG la 00000032 no existe: el default es la CC pesos Banco Macro Gerli
+         * de cada empresa (mismo débito que p-enviamacro / config macro.cuentas_debito).
          */
         'fce' => [
             'cbu_emisor' => env('ARCA_FCE_CBU_EMISOR', ''),
@@ -189,8 +191,15 @@ return [
                 is_array($decoded = json_decode((string) env('ARCA_FCE_CBU_POR_EMPRESA', '{}'), true)) ? $decoded : [],
                 array_filter([
                     1 => env('ARCA_FCE_CBU_EMPRESA_1') ?: null,
+                    2 => env('ARCA_FCE_CBU_EMPRESA_2') ?: null,
+                    3 => env('ARCA_FCE_CBU_EMPRESA_3') ?: null,
                 ]),
             ),
+            'cuenta_codigo_por_empresa' => array_filter([
+                1 => env('ARCA_FCE_CUENTA_EMPRESA_1', '127') ?: null,
+                2 => env('ARCA_FCE_CUENTA_EMPRESA_2', '226') ?: null,
+                3 => env('ARCA_FCE_CUENTA_EMPRESA_3', '326') ?: null,
+            ]),
         ],
     ],
 

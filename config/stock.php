@@ -150,6 +150,13 @@ return [
     'recuento_dias_bloqueo_fecha_antigua' => (int) env('STOCK_RECUENTO_DIAS_BLOQUEO_FECHA_ANTIGUA', 15),
 
     /*
+    | Rango de año aceptado al grabar la fecha del recuento.
+    | Evita que el navegador persista un año de 2 dígitos como 0026.
+    */
+    'recuento_fecha_anio_minimo' => (int) env('STOCK_RECUENTO_FECHA_ANIO_MINIMO', 2000),
+    'recuento_fecha_anios_futuro' => (int) env('STOCK_RECUENTO_FECHA_ANIOS_FUTURO', 1),
+
+    /*
     | Precio unitario de última compra (costo) para recuentos, transferencias y mov. stock.
     | Resolución en ArticuloPrecioUltimaCompraSupport (gana la fuente con fecha más reciente):
     |   1) ERP COM: historia OC / recepción confirmada

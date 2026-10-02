@@ -143,6 +143,63 @@ Recuento {{ $recuento->codigo }}
                     Al cerrar, el ajuste real depende del modo elegido abajo (fecha del recuento o saldo actual).
                 </p>
 
+                @if (($ajustesFueraDeConteo ?? collect())->isNotEmpty())
+                    <h4 class="mt-4">Art&iacute;culos no contados, ajustados por el cierre total</h4>
+                    <p class="small text-muted">
+                        Estos art&iacute;culos no est&aacute;n en la planilla de arriba. El cierre total los toma como contados en cero
+                        y por eso figuran en el kardex de este recuento.
+                    </p>
+                    <input type="search" class="form-control form-control-sm mb-2" style="max-width: 24rem;"
+                        placeholder="Buscar SKU o descripci&oacute;n"
+                        oninput="var q=this.value.toLowerCase(); document.querySelectorAll('#ajustes-fuera-conteo tbody tr').forEach(function (tr) { tr.hidden = q !== '' && tr.innerText.toLowerCase().indexOf(q) === -1; });">
+                    <table class="table table-bordered table-striped table-sm" id="ajustes-fuera-conteo">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Descripci&oacute;n</th>
+                                <th>UM</th>
+                                <th class="text-right">Ajuste</th>
+                                @if ($puede_ver_kardex ?? false)
+                                <th class="text-center" style="width:3rem;">Kardex</th>
+                                @endif
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($ajustesFueraDeConteo as $mov)
+                                @php
+                                    $articuloId = (int) ($mov->articulo_id ?? 0);
+                                    $depositoId = (int) ($recuento->deposito_id ?? 0);
+                                    $urlKardex = null;
+                                    if (($puede_ver_kardex ?? false) && $articuloId > 0 && $depositoId > 0) {
+                                        $urlKardex = route('recuento_movimientos_articulo', array_filter([
+                                            'articulo_id' => $articuloId,
+                                            'deposito_id' => $depositoId,
+                                            'empresa_id' => (int) ($recuento->empresa_id ?? 0) ?: null,
+                                            'vista' => 'consulta',
+                                            'volver' => request()->getRequestUri(),
+                                        ]));
+                                    }
+                                @endphp
+                                <tr>
+                                    <td>{{ optional($mov->articulos)->sku }}</td>
+                                    <td>{{ optional($mov->articulos)->descripcion }}</td>
+                                    <td>{{ optional($mov->articulos?->unidadesdemedidas)->abreviatura }}</td>
+                                    <td class="text-right text-danger">{{ rtrim(rtrim(number_format((float) $mov->cantidad, 6, '.', ''), '0'), '.') }}</td>
+                                    @if ($puede_ver_kardex ?? false)
+                                    <td class="text-center">
+                                        @if ($urlKardex)
+                                        <a href="{{ $urlKardex }}" class="btn-accion-tabla" title="Kardex de stock" target="_blank" rel="noopener">
+                                            <i class="fa fa-list-alt text-info"></i>
+                                        </a>
+                                        @endif
+                                    </td>
+                                    @endif
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                @endif
+
                 <h4 class="mt-4">Historial de estados</h4>
                 <table class="table table-sm table-bordered">
                     <thead>
@@ -191,10 +248,17 @@ Recuento {{ $recuento->codigo }}
                     @endif
 
                     @if ($recuento->estaCerrado() && can('anular-cierre-recuento', false))
-                    <form action="{{ route('anular_cierre_recuento', ['id' => $recuento->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Anular el cierre? Se revertirán los movimientos de stock y el recuento volverá a PENDIENTE.');">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-warning btn-sm"><i class="fa fa-undo"></i> Anular cierre</button>
-                    </form>
+                        @php
+                            $bloqueoAnulacionCierre = \App\Support\Stock\RecuentoModoCierreSupport::mensajeAnulacionBloqueadaPorCierreContable($recuento);
+                        @endphp
+                        @if ($bloqueoAnulacionCierre)
+                        <span class="text-muted small d-inline-block align-middle">{{ $bloqueoAnulacionCierre }}</span>
+                        @else
+                        <form action="{{ route('anular_cierre_recuento', ['id' => $recuento->id]) }}" method="POST" class="d-inline" onsubmit="return confirm('¿Anular el cierre? Se revertirán los movimientos de stock y el recuento volverá a PENDIENTE.');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-warning btn-sm"><i class="fa fa-undo"></i> Anular cierre</button>
+                        </form>
+                        @endif
                     @endif
                 </div>
             </div>

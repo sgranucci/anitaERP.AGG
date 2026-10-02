@@ -80,9 +80,9 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
             ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id')
             ->leftJoin('ordencompra', 'ordencompra.id', '=', 'comprobante_proveedor.ordencompra_id')
             ->with(['empresas', 'proveedores', 'tipotransaccion_compras', 'ordencompras:id,numeroordencompra'])
-            // Por id desc: lo recién cargado (ERP) aparece primero. El histórico
-            // Anita tiene ids altos pero fechas viejas; si hace falta orden por
-            // fecha de comprobante, volver a orderByDesc(fechacomprobante)+id.
+            // Más nuevo a más viejo por fecha de contabilización (IVA). El histórico
+            // Anita tiene ids altos y fechas viejas, así que el id solo desempata.
+            ->orderByDesc('comprobante_proveedor.fechaiva')
             ->orderByDesc('comprobante_proveedor.id');
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'comprobante_proveedor.empresa_id');

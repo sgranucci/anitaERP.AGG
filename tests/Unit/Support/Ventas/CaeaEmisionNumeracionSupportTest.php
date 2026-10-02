@@ -56,4 +56,11 @@ final class CaeaEmisionNumeracionSupportTest extends TestCase
         $this->assertSame(0, CaeaEmisionNumeracionSupport::aplicarPisoCaea(3, 0, 201));
         $this->assertSame(12, CaeaEmisionNumeracionSupport::aplicarPisoCaea(3, 12, 206));
     }
+
+    public function test_piso_caea_no_mezcla_nota_de_credito_con_factura(): void
+    {
+        $this->assertSame(27, CaeaEmisionNumeracionSupport::aplicarPisoCaea(4, 27, 8));
+        $this->assertSame(25, CaeaEmisionNumeracionSupport::aplicarPisoCaea(4, 25, 3));
+        $this->assertSame(2, CaeaEmisionNumeracionSupport::aplicarPisoCaea(4, 2, 7));
+    }
 }

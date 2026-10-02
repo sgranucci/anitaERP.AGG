@@ -7,6 +7,7 @@ use App\Models\Stock\Depmae;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\RecuentoItemsRequestSupport;
+use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 use InvalidArgumentException;
@@ -48,7 +49,16 @@ class ValidacionRecuento extends FormRequest
     public function rules(): array
     {
         return [
-            'fecha' => 'required|date',
+            'fecha' => [
+                'required',
+                'date',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $mensaje = RecuentoModoCierreSupport::mensajeFechaNoGrabable($value);
+                    if ($mensaje !== null) {
+                        $fail($mensaje);
+                    }
+                },
+            ],
             'deposito_id' => 'required|integer|exists:depmae,id',
             'comentario' => 'nullable|string|max:5000',
             'articulo_ids' => 'nullable|array',

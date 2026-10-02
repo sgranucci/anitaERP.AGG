@@ -101,7 +101,7 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
 
     private function cantidadColumnas(): int
     {
-        return ($this->modoTodosDepositos ? 9 : 8) + ($this->mostrarCajaPieza ? 4 : 0);
+        return ($this->modoTodosDepositos ? 10 : 9) + ($this->mostrarCajaPieza ? 4 : 0);
     }
 
     private function letraColumna(int $indiceCero): string
@@ -115,7 +115,7 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
     private function columnasCantidad(): array
     {
         $desde = $this->modoTodosDepositos ? 3 : 2;
-        $cuantas = $this->mostrarCajaPieza ? 6 : 2;
+        $cuantas = ($this->mostrarCajaPieza ? 6 : 2) + 1;
         $letras = [];
         for ($i = 0; $i < $cuantas; $i++) {
             $letras[] = $this->letraColumna($desde + $i);
@@ -129,7 +129,7 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
      */
     private function columnasPrecio(): array
     {
-        $indice = ($this->modoTodosDepositos ? 5 : 4) + ($this->mostrarCajaPieza ? 4 : 0);
+        $indice = ($this->modoTodosDepositos ? 6 : 5) + ($this->mostrarCajaPieza ? 4 : 0);
 
         return [$this->letraColumna($indice)];
     }
@@ -170,6 +170,7 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
             $anchos[$this->letraColumna($i++)] = 8;
             $anchos[$this->letraColumna($i++)] = 8;
         }
+        $anchos[$this->letraColumna($i++)] = 10;
         $anchos[$this->letraColumna($i++)] = 11;
         $anchos[$this->letraColumna($i++)] = 22;
         $anchos[$this->letraColumna($i++)] = 12;

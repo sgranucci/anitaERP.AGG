@@ -9,7 +9,13 @@ Recuento de inventario
 <script src="{{ asset('assets/pages/scripts/stock/recuento/filtro.js') }}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Support\Stock\RecuentoListadoFiltros; ?>
+<?php
+use App\Support\Stock\RecuentoListadoFiltros;
+$limpiarListadoUrl = route('recuento', [
+    'filtro_limpiar' => 1,
+    'ver_todos_recuentos' => ! empty($ver_todos_recuentos) ? 1 : 0,
+]);
+?>
 
 @section('contenido')
 <div class="row">
@@ -24,7 +30,7 @@ Recuento de inventario
                         'formId' => 'form-filtros-recuento',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => RecuentoListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('recuento'),
+                        'limpiarUrl' => $limpiarListadoUrl,
                         'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-recuento',
                         'toggleId' => 'btn-toggle-filtros-recuento',
@@ -35,11 +41,9 @@ Recuento de inventario
                 </div>
             </div>
             <form method="get" action="{{ route('recuento') }}" id="form-filtros-recuento" class="mb-0">
-                @if (! empty($ver_todos_recuentos))
-                    <input type="hidden" name="ver_todos_recuentos" value="1">
-                @endif
+                <input type="hidden" name="ver_todos_recuentos" value="{{ ! empty($ver_todos_recuentos) ? 1 : 0 }}">
                 @include('stock.recuento.partials.filtros_listado', [
-                    'limpiarUrl' => route('recuento'),
+                    'limpiarUrl' => $limpiarListadoUrl,
                 ])
             </form>
             @if ($ver_todos_recuentos ?? false)

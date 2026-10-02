@@ -55,7 +55,7 @@ Configuración general del sistema
                                         <input type="text" id="fce_cbu_preview" class="form-control" readonly
                                             value="{{ $cuenta['cbu'] ?? '' }}"
                                             placeholder="Se completa al elegir la cuenta">
-                                        <small class="form-text text-muted">ARCA FCE dato adicional 21. Si la cuenta no tiene CBU, se usa tesmae 00000032.</small>
+                                        <small class="form-text text-muted">ARCA FCE dato adicional 21. Si queda vacío, cada empresa usa su cuenta en pesos de Banco Macro Gerli.</small>
                                     </div>
                                 </div>
                             @elseif ($parametro['tipo'] === 'boolean')

@@ -42,13 +42,14 @@ class RecuentoMovimientosArticuloController extends Controller
         $queryParams = $this->queryParamsDesdeRequest($request, $articuloId, $depositoId, $empresaId, $combinacionId);
         $modoTodosDepositos = (bool) ($contexto['modo_todos_depositos'] ?? false);
 
-        $movimientos = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId, $combinacionId)
-            ->paginate(50)
-            ->appends($queryParams);
+        $query = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId, $combinacionId);
+        $sumaMovimientos = RecuentoMovimientosArticuloSupport::sumaCantidades($query);
+        $movimientos = $query->paginate(50)->appends($queryParams);
 
-        $movimientos->getCollection()->transform(
+        $filas = $movimientos->getCollection()->transform(
             fn ($row) => RecuentoMovimientosArticuloSupport::enriquecerFila($row, $modoTodosDepositos)
         );
+        $this->completarFilasKardex($filas, $contexto, $sumaMovimientos, $combinacionId, $articuloId);
 
         return view('stock.recuento.movimientos_articulo.index', [
             'movimientos' => $movimientos,
@@ -83,9 +84,11 @@ class RecuentoMovimientosArticuloController extends Controller
 
         $modoTodosDepositos = (bool) ($contexto['modo_todos_depositos'] ?? false);
 
-        $rows = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId, $combinacionId)
-            ->get()
+        $query = RecuentoMovimientosArticuloSupport::query($articuloId, $depositoId, $empresaId, $combinacionId);
+        $sumaMovimientos = RecuentoMovimientosArticuloSupport::sumaCantidades($query);
+        $rows = $query->get()
             ->map(fn ($row) => RecuentoMovimientosArticuloSupport::enriquecerFila($row, $modoTodosDepositos));
+        $this->completarFilasKardex($rows, $contexto, $sumaMovimientos, $combinacionId, $articuloId);
 
         $sku = preg_replace('/[^\w\-]+/', '_', (string) ($contexto['articulo']['sku'] ?? 'articulo'));
         $baseNombre = $modoTodosDepositos
@@ -119,6 +122,17 @@ class RecuentoMovimientosArticuloController extends Controller
         }
 
         return redirect()->route('recuento_movimientos_articulo', $this->queryParamsDesdeRequest($request, $articuloId, $depositoId, $empresaId, $combinacionId));
+    }
+
+    /**
+     * @param  iterable<int, object>  $filas
+     * @param  array<string, mixed>  $contexto
+     */
+    private function completarFilasKardex(iterable $filas, array $contexto, float $sumaMovimientos, int $combinacionId, int $articuloId): void
+    {
+        $saldoCierre = $combinacionId > 0 ? $sumaMovimientos : (float) ($contexto['saldo'] ?? 0);
+        RecuentoMovimientosArticuloSupport::aplicarSaldoParcial($filas, $saldoCierre, $sumaMovimientos);
+        RecuentoMovimientosArticuloSupport::anotarRecuentosDelArticulo($filas, $articuloId);
     }
 
     private function resolverEmpresaIdFiltrada(Request $request): ?int

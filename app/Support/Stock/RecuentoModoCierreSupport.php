@@ -4,7 +4,9 @@ namespace App\Support\Stock;
 
 use App\Models\Stock\Recuento;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 
 final class RecuentoModoCierreSupport
 {
@@ -63,6 +65,43 @@ final class RecuentoModoCierreSupport
         return max(1, (int) config('stock.recuento_dias_bloqueo_fecha_antigua', 15));
     }
 
+    public static function anioMinimoFecha(): int
+    {
+        return max(1900, (int) config('stock.recuento_fecha_anio_minimo', 2000));
+    }
+
+    public static function anioMaximoFecha(): int
+    {
+        return (int) now()->year + max(0, (int) config('stock.recuento_fecha_anios_futuro', 1));
+    }
+
+    /**
+     * Null si la fecha se puede grabar. Rechaza años imposibles (p. ej. 0026 por tipear 26).
+     */
+    public static function mensajeFechaNoGrabable(mixed $fecha): ?string
+    {
+        if ($fecha === null || $fecha === '') {
+            return null;
+        }
+
+        try {
+            $carbon = $fecha instanceof Carbon ? $fecha->copy() : Carbon::parse((string) $fecha);
+        } catch (\Throwable) {
+            return 'La fecha del recuento no es válida.';
+        }
+
+        $anio = (int) $carbon->year;
+        $min = self::anioMinimoFecha();
+        $max = self::anioMaximoFecha();
+        if ($anio >= $min && $anio <= $max) {
+            return null;
+        }
+
+        return 'La fecha del recuento ('.$carbon->format('d/m/Y').') no es válida. '
+            .'Indique el día real del conteo con el año completo de 4 dígitos, entre '.$min.' y '.$max
+            .' (por ejemplo '.now()->format('d/m/Y').').';
+    }
+
     public static function debeAvisarFechaAntigua(?Carbon $fechaRecuento): bool
     {
         return self::diasAntiguedadFecha($fechaRecuento) >= self::diasAvisoFechaAntigua();
@@ -75,6 +114,60 @@ final class RecuentoModoCierreSupport
         }
 
         return self::diasAntiguedadFecha($fechaRecuento) >= self::diasBloqueoFechaAntigua();
+    }
+
+    /**
+     * Fecha del movimiento de cierre (o la del recuento si no hubo ajuste).
+     * Es la que se compara con el cierre contable del módulo de stock.
+     */
+    public static function fechaOperacionCierre(Recuento $recuento): ?Carbon
+    {
+        $movimiento = $recuento->relationLoaded('movimientoCierre')
+            ? $recuento->movimientoCierre
+            : ($recuento->movimientostock_cierre_id ? $recuento->movimientoCierre()->first() : null);
+
+        if ($movimiento && $movimiento->fecha) {
+            return Carbon::parse($movimiento->fecha)->startOfDay();
+        }
+
+        return $recuento->fecha ? $recuento->fecha->copy()->startOfDay() : null;
+    }
+
+    /**
+     * Null si se puede anular. La fecha del movimiento de cierre no puede caer
+     * dentro del cierre contable de stock (general, módulo o movimientos).
+     * Una apertura programada vigente lo habilita. El permiso de operar en
+     * período cerrado no alcanza: anular reescribe el stock de ese período.
+     */
+    public static function mensajeAnulacionBloqueadaPorCierreContable(Recuento $recuento): ?string
+    {
+        $fecha = self::fechaOperacionCierre($recuento);
+        if (! $fecha) {
+            return null;
+        }
+
+        $empresaId = (int) $recuento->empresa_id;
+        $alcance = PeriodoContableCierreSupport::ALCANCE_STOCK;
+        if (! PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fecha->toDateString(), $alcance)) {
+            return null;
+        }
+
+        $usuarioId = (int) (Auth::id() ?? 0);
+        if ($usuarioId > 0 && PeriodoContableCierreSupport::tieneAperturaActiva($empresaId, $usuarioId, $fecha, $alcance)) {
+            return null;
+        }
+
+        $fechaCierre = PeriodoContableCierreSupport::fechaCierreVigente($empresaId, $alcance);
+        if (! $fechaCierre) {
+            return null;
+        }
+
+        return 'No se puede anular el cierre. '.PeriodoContableCierreSupport::mensajeBloqueo(
+            $fecha,
+            $fechaCierre,
+            $alcance,
+            PeriodoContableCierreSupport::detalleAperturaUsuario($empresaId, $usuarioId, $fecha, $alcance)
+        );
     }
 
     public static function mensajeBloqueoFechaAntigua(Recuento $recuento): string

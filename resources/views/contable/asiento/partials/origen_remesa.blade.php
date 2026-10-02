@@ -1,7 +1,7 @@
 @php
     use App\Support\Contable\AsientoOrigenProcesoSupport;
 
-    $fks = AsientoOrigenProcesoSupport::fksActivas($data ?? []);
+    $fks = AsientoOrigenProcesoSupport::fksOrigenProceso($data ?? []);
     $chips = [];
     foreach ($fks as $fk => $id) {
         $meta = AsientoOrigenProcesoSupport::FKS[$fk] ?? null;

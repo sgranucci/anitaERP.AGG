@@ -119,6 +119,74 @@ class RecuentoMovimientosArticuloSupportTest extends TestCase
         $this->assertSame(12, RecuentoMovimientosArticuloSupport::resolverDepositoIdDesdeRequest('12'));
     }
 
+    public function test_saldo_parcial_ancla_el_cierre_al_saldo_vigente(): void
+    {
+        $filas = [
+            (object) ['saldo_acumulado_movimientos' => 40],
+            (object) ['saldo_acumulado_movimientos' => 113],
+            (object) ['saldo_acumulado_movimientos' => 0],
+        ];
+
+        RecuentoMovimientosArticuloSupport::aplicarSaldoParcial($filas, 40, 40);
+
+        $this->assertSame(40.0, $filas[0]->saldo_parcial);
+        $this->assertSame('40', $filas[0]->saldo_parcial_fmt);
+        $this->assertSame(113.0, $filas[1]->saldo_parcial);
+        $this->assertSame(0.0, $filas[2]->saldo_parcial);
+    }
+
+    public function test_saldo_parcial_arrastra_diferencia_si_la_suma_no_cierra(): void
+    {
+        $filas = [
+            (object) ['saldo_acumulado_movimientos' => 10],
+        ];
+
+        RecuentoMovimientosArticuloSupport::aplicarSaldoParcial($filas, 15, 10);
+
+        $this->assertSame(15.0, $filas[0]->saldo_parcial);
+    }
+
+    public function test_cierre_total_sin_linea_aclara_que_no_esta_en_el_conteo(): void
+    {
+        $texto = RecuentoMovimientosArticuloSupport::aclaracionConceptoRecuento(
+            'Recuento RC-000148 - cierre total',
+            false
+        );
+
+        $this->assertStringContainsString('no está en el conteo', $texto);
+        $this->assertStringContainsString('RC-000148', $texto);
+    }
+
+    public function test_cierre_total_ya_aclarado_no_se_duplica(): void
+    {
+        $original = 'Recuento RC-000148 - cierre total (no contado, saldo a cero)';
+
+        $this->assertSame(
+            $original,
+            RecuentoMovimientosArticuloSupport::aclaracionConceptoRecuento($original, false)
+        );
+    }
+
+    public function test_articulo_en_el_conteo_no_agrega_aclaracion(): void
+    {
+        $original = 'Recuento RC-000149 - cierre parcial';
+
+        $this->assertSame(
+            $original,
+            RecuentoMovimientosArticuloSupport::aclaracionConceptoRecuento($original, true)
+        );
+    }
+
+    public function test_anulacion_sin_linea_indica_que_no_figura_en_el_recuento(): void
+    {
+        $texto = RecuentoMovimientosArticuloSupport::aclaracionConceptoRecuento(
+            'Anulación cierre recuento RC-000148',
+            false
+        );
+
+        $this->assertStringContainsString('no figura en las líneas', $texto);
+    }
+
     public function test_enriquecer_fila_agrega_precio_unitario(): void
     {
         $row = (object) [

@@ -25,7 +25,7 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
     $sufijoUm = \App\Support\Stock\MovimientosArticuloDepositoSupport::sufijoColumnaCantidad($art['unidad_medida'] ?? '');
     $empresaIdFiltrada = (int) ($empresaIdFiltrada ?? ($contexto['empresa_id'] ?? 0));
     $mostrarCajaPieza = (bool) ($contexto['mostrar_caja_pieza'] ?? false);
-    $colspanKardex = ($modoTodosDepositos ? 9 : 8) + ($mostrarCajaPieza ? 4 : 0);
+    $colspanKardex = ($modoTodosDepositos ? 10 : 9) + ($mostrarCajaPieza ? 4 : 0);
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -72,6 +72,7 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                     </dt>
                     <dd class="col-sm-10 text-monospace">
                         {{ $contexto['saldo_fmt'] ?? '0' }}{{ $sufijoUm }}
+                        <span class="d-block text-muted font-weight-normal">La columna Saldo es el stock después de cada movimiento. El primer renglón es el más nuevo y cierra con este saldo.</span>
                         @if ($mostrarCajaPieza)
                             <span class="d-block text-muted font-weight-normal">Tres cantidades en paralelo (como pedido/factura): kilos, caja y pieza. El ATP es kilos; caja y pieza no se convierten.</span>
                         @endif
@@ -146,6 +147,7 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             <th class="text-right" style="width:6%">Caja S</th>
                             <th class="text-right" style="width:6%">Pieza S</th>
                             @endif
+                            <th class="text-right" style="width:8%" title="Stock después de este movimiento">Saldo{!! $sufijoUm !!}</th>
                             <th class="text-right" style="width:9%" title="Precio de venta en facturas; costo unitario (última compra) en el resto">Precio unit.</th>
                             <th style="width:18%">Concepto</th>
                             <th style="width:8%">Mov. stock</th>
@@ -170,13 +172,14 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                                 <td class="text-right text-monospace text-danger">{{ $m->salida_caja_fmt ?: '—' }}</td>
                                 <td class="text-right text-monospace text-danger">{{ $m->salida_pieza_fmt ?: '—' }}</td>
                                 @endif
+                                <td class="text-right text-monospace font-weight-bold @if (($m->saldo_parcial ?? 0) < -1e-9) text-danger @endif">{{ $m->saldo_parcial_fmt ?? '—' }}</td>
                                 <td class="text-right text-monospace" title="{{ $m->precio_unitario_etiqueta ?? '' }}">
                                     {{ $m->precio_unitario_fmt ?: '—' }}
                                 </td>
                                 <td>
                                     @include('stock.recuento.movimientos_articulo.partials.celda_enlace_consulta', [
                                         'texto' => $m->concepto_display ?? $m->concepto ?? '—',
-                                        'url' => $m->url_factura ?? null,
+                                        'url' => $m->url_factura ?? ($m->url_recuento ?? null),
                                     ])
                                 </td>
                                 <td class="text-monospace">

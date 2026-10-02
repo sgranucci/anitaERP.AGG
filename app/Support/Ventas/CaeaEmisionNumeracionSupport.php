@@ -10,12 +10,12 @@ use App\Support\Ventas\VentaNumeradorFiscalSupport;
 use InvalidArgumentException;
 
 /**
- * Numeración CAEA (PV mod A).
+ * Numeración CAEA (PV mod A), siempre desde el ERP.
  *
- * AGG / gastronomía: reserva en ERP (max venta.numerocomprobante).
- * El Bierzo: solo venta_serie_numerador. No lee el último de Anita: un máximo
- * de otra sucursal corría la serie (FAC A PV 8, 109 → 134414, 29/sep/2026).
- * Al grabar se sigue enviando la venta, el remito y el asiento a Anita.
+ * Cada serie es venta.codigo_afip + punto de venta. codigo_afip es el tipo AFIP
+ * (1/2/3 factura-ND-NC A, 6/7/8 factura-ND-NC B, 11/12/13 letra C). No hay un
+ * numerador único del PV y no se lee el último de Anita.
+ * El Bierzo reserva en venta_serie_numerador con esa misma clave.
  */
 final class CaeaEmisionNumeracionSupport
 {
@@ -71,17 +71,10 @@ final class CaeaEmisionNumeracionSupport
             $totalComprobante,
         );
 
-        // AGG: ventas con codigo_afip NULL no entran al max por serie, pero cobranza sí
-        // choca por B-000XX-N. Incluir max del PV evita reemitir un número ya usado.
-        if (EntornoEmpresaSupport::esAgg()) {
-            $ultimoErp = max(
-                $ultimoErp,
-                VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpPorPuntoventa(
-                    $puntoventaId,
-                    $empresaId,
-                ),
-            );
-        }
+        // La serie es por codigo_afip (FAC B = 6, NCB = 8). No subir al máximo de
+        // todo el PV: una NC tomaría el siguiente de la factura y ARCA frena las
+        // dos correlatividades (Rebisco PV 00030, sep/2026: NCB 54768/54769 con
+        // último autorizado 25 y hueco en FAC 54768).
 
         if (EntornoEmpresaSupport::esElBierzo()) {
             // Reserva atómica en venta_serie_numerador. El piso es el máximo
@@ -101,12 +94,12 @@ final class CaeaEmisionNumeracionSupport
     }
 
     /**
-     * Piso operativo FAC/CAEA del PV (hueco Anita): el próximo es max(ERP, piso)+1.
-     * FCE/NCE/DCE (codigo_afip >= 200) no usan ese piso: solo la última de su serie.
+     * Piso operativo solo de facturas A/B/C (AFIP 1, 6 y 11).
+     * ND, NC, exportación y FCE siguen el máximo de su propio codigo_afip.
      */
     public static function aplicarPisoCaea(int $puntoventaId, int $ultimoErp, ?int $codigoAfip = null): int
     {
-        if ($codigoAfip !== null && $codigoAfip >= 200) {
+        if ($codigoAfip !== null && ! in_array($codigoAfip, [1, 6, 11], true)) {
             return $ultimoErp;
         }
 

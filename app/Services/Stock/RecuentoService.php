@@ -50,6 +50,37 @@ class RecuentoService
         return $this->recuentoRepository->findConRelaciones($id);
     }
 
+    /**
+     * Líneas del movimiento de cierre total cuyo artículo no está en la planilla.
+     * El cierre total los toma como contados en cero.
+     *
+     * @return \Illuminate\Support\Collection<int, Articulo_Movimiento>
+     */
+    public function articulosAjustadosFueraDeConteo(Recuento $recuento): \Illuminate\Support\Collection
+    {
+        if ($recuento->estado !== Recuento::ESTADO_CERRADO_TOTAL || ! $recuento->movimientostock_cierre_id) {
+            return collect();
+        }
+
+        $idsContados = $recuento->items
+            ->pluck('articulo_id')
+            ->map(static fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+
+        $query = Articulo_Movimiento::query()
+            ->with(['articulos:id,sku,descripcion,unidadmedida_id', 'articulos.unidadesdemedidas:id,abreviatura'])
+            ->where('movimientostock_id', (int) $recuento->movimientostock_cierre_id)
+            ->orderBy('articulo_id');
+
+        if ($idsContados !== []) {
+            $query->whereNotIn('articulo_id', $idsContados);
+        }
+
+        return $query->get();
+    }
+
     public function guardar(array $data, $request = null): Recuento
     {
         $this->validarDatosBasicos($data);
@@ -304,12 +335,15 @@ class RecuentoService
                 if (abs($delta) < 1e-9) {
                     continue;
                 }
+                $estabaEnConteo = array_key_exists($clave, $conteos);
                 $ajustes[] = [
                     'articulo_id' => $articuloId,
                     'color_id' => $colorId,
                     'talle_id' => $talleId,
                     'delta' => $delta,
-                    'concepto' => "Recuento {$recuento->codigo} - cierre total",
+                    'concepto' => $estabaEnConteo
+                        ? "Recuento {$recuento->codigo} - cierre total"
+                        : "Recuento {$recuento->codigo} - cierre total (no contado, saldo a cero)",
                 ];
             }
 
@@ -341,8 +375,17 @@ class RecuentoService
         if (! $recuento->estaCerrado()) {
             throw new \RuntimeException('Solo se puede anular el cierre de un recuento cerrado.');
         }
+        $bloqueoPeriodo = RecuentoModoCierreSupport::mensajeAnulacionBloqueadaPorCierreContable($recuento);
+        if ($bloqueoPeriodo !== null) {
+            throw new \RuntimeException($bloqueoPeriodo);
+        }
         if (! $recuento->movimientostock_cierre_id) {
-            throw new \RuntimeException('El recuento no tiene movimiento de cierre asociado.');
+            return DB::transaction(function () use ($recuento, $obs) {
+                return $this->reabrirTrasAnularCierre(
+                    $recuento,
+                    $obs ?? 'Cierre anulado (no había diferencias de stock); recuento reabierto'
+                );
+            });
         }
 
         return DB::transaction(function () use ($recuento, $obs) {
@@ -370,23 +413,37 @@ class RecuentoService
                 ? \Carbon\Carbon::parse($movCierre->fecha)->toDateString()
                 : now()->toDateString();
 
-            $movAnulacionId = $this->generarMovimientoAjuste(
+            $movAnulacionId = $ajustesReverso === []
+                ? null
+                : $this->generarMovimientoAjuste(
+                    $recuento,
+                    $ajustesReverso,
+                    'Anulación de cierre de recuento',
+                    'RCAJR',
+                    $fechaReverso
+                );
+
+            return $this->reabrirTrasAnularCierre(
                 $recuento,
-                $ajustesReverso,
-                'Anulación de cierre de recuento',
-                'RCAJR',
-                $fechaReverso
+                $obs ?? 'Cierre anulado; recuento reabierto',
+                $movAnulacionId
             );
-            $estadoAnterior = $recuento->estado;
-            $recuento->movimientostock_anulacion_id = $movAnulacionId;
-            $recuento->modo_cierre = null;
-            $recuento->estado = Recuento::ESTADO_PENDIENTE;
-            $recuento->save();
-
-            $this->logEstado($recuento, $estadoAnterior, Recuento::ESTADO_PENDIENTE, $obs ?? 'Cierre anulado; recuento reabierto');
-
-            return $recuento->fresh();
         });
+    }
+
+    private function reabrirTrasAnularCierre(Recuento $recuento, string $obs, ?int $movAnulacionId = null): Recuento
+    {
+        $estadoAnterior = $recuento->estado;
+        if ($movAnulacionId) {
+            $recuento->movimientostock_anulacion_id = $movAnulacionId;
+        }
+        $recuento->modo_cierre = null;
+        $recuento->estado = Recuento::ESTADO_PENDIENTE;
+        $recuento->save();
+
+        $this->logEstado($recuento, $estadoAnterior, Recuento::ESTADO_PENDIENTE, $obs);
+
+        return $recuento->fresh();
     }
 
     /**
@@ -937,6 +994,11 @@ class RecuentoService
             if (empty($data[$campo])) {
                 throw new \RuntimeException("Campo requerido: {$campo}");
             }
+        }
+
+        $mensajeFecha = RecuentoModoCierreSupport::mensajeFechaNoGrabable($data['fecha'] ?? null);
+        if ($mensajeFecha !== null) {
+            throw new \RuntimeException($mensajeFecha);
         }
     }
 

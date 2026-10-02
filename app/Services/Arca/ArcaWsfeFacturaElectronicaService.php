@@ -834,6 +834,11 @@ class ArcaWsfeFacturaElectronicaService
             $det['FchVtoPago'] = $datos['fechavencimiento'] ?? $datos['fechacomprobante'];
         }
 
+        // FCE MiPyME (201/206/211): FchVtoPago es obligatorio aunque el concepto sea Productos (obs. 10163).
+        if (ArcaFceDatosAdicionalesSupport::requiereCbuEmisor($cbteTipo)) {
+            $det['FchVtoPago'] = ArcaFceDatosAdicionalesSupport::fechaVencimientoPago($datos);
+        }
+
         if ($condIvaRec !== null) {
             $det['CondicionIVAReceptorId'] = $condIvaRec;
         }
@@ -869,7 +874,9 @@ class ArcaWsfeFacturaElectronicaService
             if (! is_array($row)) {
                 continue;
             }
-            $id = (int) ($row['t'] ?? $row['codigo'] ?? $row['Id'] ?? 0);
+            $id = ArcaFceDatosAdicionalesSupport::idOpcionalWsfe(
+                (int) ($row['t'] ?? $row['codigo'] ?? $row['Id'] ?? 0)
+            );
             $valor = trim((string) ($row['c1'] ?? $row['valor'] ?? $row['Valor'] ?? ''));
             if ($id <= 0 || $valor === '') {
                 continue;

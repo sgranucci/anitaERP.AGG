@@ -8,11 +8,15 @@ namespace App\Support\Contable;
  * FKs de asiento que apuntan a la operación de un subsistema.
  * Esos asientos no deben revertirse/borrarse desde el ABM de asientos:
  * la anulación corresponde al proceso origen (remesa, IE, cobranza, etc.).
+ *
+ * ordencompra_id es una referencia (también acompaña recepción o comprobante).
+ * Un asiento contable puede quedar asociado a una OC anterior sin que la OC
+ * lo haya generado: en ese caso se revierte y se borra desde Contable.
  */
 final class AsientoOrigenProcesoSupport
 {
     /**
-     * @var array<string, array{label: string, route: string|null, permiso: list<string>}>
+     * @var array<string, array{label: string, route: string|null, permiso: list<string>, bloquea?: bool}>
      */
     public const FKS = [
         'remesa_id' => [
@@ -75,11 +79,12 @@ final class AsientoOrigenProcesoSupport
             'route' => 'editar_comprobante_proveedor',
             'permiso' => ['listar-comprobante-proveedor', 'editar-comprobante-proveedor'],
         ],
-        // ordencompra_id puede acompañar recepción/CP; solo cuenta como origen si no hay otra FK más específica
+        // Referencia del asiento, no el proceso que lo genera. No bloquea revertir/borrar.
         'ordencompra_id' => [
             'label' => 'Orden de compra',
             'route' => 'editar_ordencompra',
             'permiso' => ['listar-ordencompra', 'editar-ordencompra'],
+            'bloquea' => false,
         ],
         'compra_id' => [
             'label' => 'Compra',
@@ -101,10 +106,12 @@ final class AsientoOrigenProcesoSupport
      */
     public static function tieneOrigenProceso(object|array $asiento): bool
     {
-        return self::fksActivas($asiento) !== [];
+        return self::fksOrigenProceso($asiento) !== [];
     }
 
     /**
+     * FKs con id, incluidas las de referencia (orden de compra).
+     *
      * @param  object|array<string, mixed>  $asiento
      * @return array<string, int> fk => id
      */
@@ -122,11 +129,31 @@ final class AsientoOrigenProcesoSupport
     }
 
     /**
+     * FKs del proceso que generó el asiento. La orden de compra no entra:
+     * es referencia de un asiento contable o acompañante de recepción/CP.
+     *
+     * @param  object|array<string, mixed>  $asiento
+     * @return array<string, int> fk => id
+     */
+    public static function fksOrigenProceso(object|array $asiento): array
+    {
+        $out = [];
+        foreach (self::fksActivas($asiento) as $fk => $id) {
+            if ((self::FKS[$fk]['bloquea'] ?? true) === false) {
+                continue;
+            }
+            $out[$fk] = $id;
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  object|array<string, mixed>  $asiento
      */
     public static function mensajeBloqueo(object|array $asiento, string $accion = 'revertir'): string
     {
-        $activas = self::fksActivas($asiento);
+        $activas = self::fksOrigenProceso($asiento);
         if ($activas === []) {
             return '';
         }
