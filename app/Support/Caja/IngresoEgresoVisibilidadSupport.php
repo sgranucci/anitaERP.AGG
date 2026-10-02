@@ -19,6 +19,8 @@ use Illuminate\Support\Facades\DB;
  * - usuario-ingresos-egresos-rol: movimientos cargados por usuarios de su rol
  *   (más chico que el centro de costo; en Administración el CC lo comparten muchos roles)
  * - usuario-ingresos-egresos-centrocosto: movimientos cargados por usuarios de su CC
+ * - usuario-ingresos-egresos-oc-centrocosto: además, órdenes de pago de compras
+ *   cuya orden de compra es de su centro de costo (no mira quién las cargó)
  * - solo listar: únicamente los propios
  */
 final class IngresoEgresoVisibilidadSupport
@@ -28,6 +30,8 @@ final class IngresoEgresoVisibilidadSupport
     public const PERMISO_ROL = 'usuario-ingresos-egresos-rol';
 
     public const PERMISO_CENTROCOSTO = 'usuario-ingresos-egresos-centrocosto';
+
+    public const PERMISO_OC_CENTROCOSTO = 'usuario-ingresos-egresos-oc-centrocosto';
 
     public static function puedeVerTodos(): bool
     {
@@ -42,6 +46,11 @@ final class IngresoEgresoVisibilidadSupport
     public static function puedeVerCentrocosto(): bool
     {
         return can(self::PERMISO_CENTROCOSTO, false);
+    }
+
+    public static function puedeVerOcDeSuCentrocosto(): bool
+    {
+        return can(self::PERMISO_OC_CENTROCOSTO, false);
     }
 
     public static function centrocostoFiltroUsuario(): ?int
@@ -76,43 +85,7 @@ final class IngresoEgresoVisibilidadSupport
             return null;
         }
 
-        if (self::puedeVerRol()) {
-            $rolIds = self::rolIdsFiltroUsuario();
-            if ($rolIds !== []) {
-                $nombres = DB::table('rol')
-                    ->whereIn('id', $rolIds)
-                    ->orderBy('nombre')
-                    ->pluck('nombre')
-                    ->map(fn ($nombre) => trim((string) $nombre))
-                    ->filter(fn (string $nombre) => $nombre !== '')
-                    ->values()
-                    ->all();
-
-                if ($nombres !== []) {
-                    return 'Movimientos de los usuarios del rol '.implode(', ', $nombres);
-                }
-
-                return 'Movimientos de los usuarios de su rol';
-            }
-
-            return 'Solo movimientos cargados por usted';
-        }
-
-        if (self::puedeVerCentrocosto()) {
-            $centrocostoId = self::centrocostoFiltroUsuario();
-            if ($centrocostoId === null) {
-                return 'Solo movimientos cargados por usted (sin centro de costo asignado)';
-            }
-
-            $centrocosto = Centrocosto::query()->find($centrocostoId);
-            if ($centrocosto === null) {
-                return 'Centro de costo #'.$centrocostoId;
-            }
-
-            return trim($centrocosto->codigo.' — '.$centrocosto->nombre);
-        }
-
-        return 'Solo movimientos cargados por usted';
+        return self::conEtiquetaOrdenesCompra(self::etiquetaAlcancePorQuienCargo());
     }
 
     /**
@@ -139,43 +112,45 @@ final class IngresoEgresoVisibilidadSupport
             return;
         }
 
-        if (self::puedeVerRol()) {
-            $rolIds = self::rolIdsFiltroUsuario();
-            if ($rolIds !== []) {
-                $usuarioId = (int) (Auth::id() ?? 0);
-                $query->where(function ($q) use ($alias, $rolIds, $usuarioId) {
-                    $q->whereIn("{$alias}.usuario_id", function ($sub) use ($rolIds) {
-                        $sub->from('usuario_rol')
-                            ->whereIn('rol_id', $rolIds)
-                            ->select('usuario_id');
-                    });
-                    if ($usuarioId > 0) {
-                        $q->orWhere("{$alias}.usuario_id", $usuarioId);
-                    }
-                });
-
-                return;
-            }
-
+        $restricciones = self::restriccionesDeAlcance($alias);
+        if ($restricciones === []) {
             self::restringirAlUsuarioActual($query, $alias);
 
             return;
         }
 
-        if (self::puedeVerCentrocosto()) {
-            $centrocostoId = self::centrocostoFiltroUsuario();
-            if ($centrocostoId !== null) {
-                $query->whereIn("{$alias}.usuario_id", function ($sub) use ($centrocostoId) {
-                    $sub->from('usuario')
-                        ->where('centrocosto_id', $centrocostoId)
-                        ->select('id');
+        $query->where(function ($q) use ($restricciones) {
+            foreach ($restricciones as $i => $aplicar) {
+                $q->{$i === 0 ? 'where' : 'orWhere'}(function ($inner) use ($aplicar) {
+                    $aplicar($inner);
                 });
-
-                return;
             }
+        });
+    }
+
+    /**
+     * Órdenes de pago cuya factura está imputada a una orden de compra del centro de costo.
+     *
+     * @param  Builder<\App\Models\Caja\Caja_Movimiento>  $query
+     */
+    public static function aplicarFiltroOcDelCentrocosto(Builder $query, string $alias, int $centrocostoId): void
+    {
+        if ($centrocostoId <= 0) {
+            $query->whereRaw('1 = 0');
+
+            return;
         }
 
-        self::restringirAlUsuarioActual($query, $alias);
+        $query->whereExists(function ($sub) use ($alias, $centrocostoId) {
+            $sub->select(DB::raw('1'))
+                ->from('pagoproveedor as pp_oc_alc')
+                ->join('pagoproveedor_comprobante as ppc_oc_alc', 'ppc_oc_alc.pagoproveedor_id', '=', 'pp_oc_alc.id')
+                ->join('proveedor_cuentacorriente as pcc_oc_alc', 'pcc_oc_alc.id', '=', 'ppc_oc_alc.proveedor_cuentacorriente_id')
+                ->join('comprobante_proveedor as cp_oc_alc', 'cp_oc_alc.id', '=', 'pcc_oc_alc.comprobante_proveedor_id')
+                ->join('ordencompra as oc_alc', 'oc_alc.id', '=', 'cp_oc_alc.ordencompra_id')
+                ->whereColumn('pp_oc_alc.id', $alias.'.pagoproveedor_id')
+                ->where('oc_alc.centrocosto_id', $centrocostoId);
+        });
     }
 
     /**
@@ -216,6 +191,140 @@ final class IngresoEgresoVisibilidadSupport
         }
 
         return array_values(array_unique($ids));
+    }
+
+    private static function etiquetaAlcancePorQuienCargo(): string
+    {
+        if (self::puedeVerRol()) {
+            $rolIds = self::rolIdsFiltroUsuario();
+            if ($rolIds !== []) {
+                $nombres = DB::table('rol')
+                    ->whereIn('id', $rolIds)
+                    ->orderBy('nombre')
+                    ->pluck('nombre')
+                    ->map(fn ($nombre) => trim((string) $nombre))
+                    ->filter(fn (string $nombre) => $nombre !== '')
+                    ->values()
+                    ->all();
+
+                if ($nombres !== []) {
+                    return 'Movimientos de los usuarios del rol '.implode(', ', $nombres);
+                }
+
+                return 'Movimientos de los usuarios de su rol';
+            }
+
+            return 'Solo movimientos cargados por usted';
+        }
+
+        if (self::puedeVerCentrocosto()) {
+            $centrocostoId = self::centrocostoFiltroUsuario();
+            if ($centrocostoId === null) {
+                return 'Solo movimientos cargados por usted (sin centro de costo asignado)';
+            }
+
+            $centrocosto = Centrocosto::query()->find($centrocostoId);
+            if ($centrocosto === null) {
+                return 'Centro de costo #'.$centrocostoId;
+            }
+
+            return trim($centrocosto->codigo.' — '.$centrocosto->nombre);
+        }
+
+        return 'Solo movimientos cargados por usted';
+    }
+
+    private static function conEtiquetaOrdenesCompra(string $base): string
+    {
+        $oc = self::etiquetaOrdenesCompraCentrocosto();
+        if ($oc === null) {
+            return $base;
+        }
+
+        if ($base === 'Solo movimientos cargados por usted') {
+            return $oc;
+        }
+
+        return $base.' · '.$oc;
+    }
+
+    private static function etiquetaOrdenesCompraCentrocosto(): ?string
+    {
+        if (! self::puedeVerOcDeSuCentrocosto()) {
+            return null;
+        }
+
+        $centrocostoId = self::centrocostoDelUsuario();
+        if ($centrocostoId === null) {
+            return null;
+        }
+
+        $centrocosto = Centrocosto::query()->find($centrocostoId);
+        $nombre = $centrocosto === null
+            ? 'Centro de costo #'.$centrocostoId
+            : trim($centrocosto->codigo.' — '.$centrocosto->nombre);
+
+        return 'Órdenes de pago de compras del centro de costo '.$nombre;
+    }
+
+    /**
+     * @return list<\Closure(Builder<\App\Models\Caja\Caja_Movimiento>): void>
+     */
+    private static function restriccionesDeAlcance(string $alias): array
+    {
+        $restricciones = [];
+        $tieneAlcancePorQuienCargo = false;
+
+        if (self::puedeVerRol()) {
+            $rolIds = self::rolIdsFiltroUsuario();
+            if ($rolIds !== []) {
+                $usuarioId = (int) (Auth::id() ?? 0);
+                $restricciones[] = function ($q) use ($alias, $rolIds, $usuarioId) {
+                    $q->whereIn("{$alias}.usuario_id", function ($sub) use ($rolIds) {
+                        $sub->from('usuario_rol')
+                            ->whereIn('rol_id', $rolIds)
+                            ->select('usuario_id');
+                    });
+                    if ($usuarioId > 0) {
+                        $q->orWhere("{$alias}.usuario_id", $usuarioId);
+                    }
+                };
+                $tieneAlcancePorQuienCargo = true;
+            }
+        } elseif (self::puedeVerCentrocosto()) {
+            $centrocostoId = self::centrocostoFiltroUsuario();
+            if ($centrocostoId !== null) {
+                $restricciones[] = function ($q) use ($alias, $centrocostoId) {
+                    $q->whereIn("{$alias}.usuario_id", function ($sub) use ($centrocostoId) {
+                        $sub->from('usuario')
+                            ->where('centrocosto_id', $centrocostoId)
+                            ->select('id');
+                    });
+                };
+                $tieneAlcancePorQuienCargo = true;
+            }
+        }
+
+        $centrocostoOc = self::puedeVerOcDeSuCentrocosto() ? self::centrocostoDelUsuario() : null;
+        if ($centrocostoOc !== null) {
+            $restricciones[] = function ($q) use ($alias, $centrocostoOc) {
+                self::aplicarFiltroOcDelCentrocosto($q, $alias, $centrocostoOc);
+            };
+            if (! $tieneAlcancePorQuienCargo) {
+                $restricciones[] = function ($q) use ($alias) {
+                    self::restringirAlUsuarioActual($q, $alias);
+                };
+            }
+        }
+
+        return $restricciones;
+    }
+
+    private static function centrocostoDelUsuario(): ?int
+    {
+        $id = (int) (Auth::user()->centrocosto_id ?? 0);
+
+        return $id > 0 ? $id : null;
     }
 
     /**
