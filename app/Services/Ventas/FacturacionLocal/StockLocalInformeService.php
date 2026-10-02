@@ -385,18 +385,8 @@ final class StockLocalInformeService
             if (abs($cantidad) < 0.000001) {
                 continue;
             }
-            $medidaNorm = StockLocalErpMovimientosSupport::normalizarMedida(
-                $row->medida ?? null,
-                $row->medida_nombre ?? null
-            );
-            $medida = is_numeric($medidaNorm) ? (int) $medidaNorm : 0;
-            if (! is_numeric($medidaNorm) && $medidaNorm !== 0 && $medidaNorm !== '0') {
-                // Medida no numérica: usar hash estable en string key, columna como 0 en orden
-                $medidaKey = (string) $medidaNorm;
-            } else {
-                $medidaKey = (string) ($medida > 0 ? $medida : 0);
-                $medida = (int) $medidaKey;
-            }
+            $medidaKey = StockLocalErpMovimientosSupport::medidaKeyDesdeFila($row);
+            $medida = is_numeric($medidaKey) ? (int) $medidaKey : 0;
             $medidasVistas[$medida] = true;
 
             [$colorCodigo, $colorDesc] = StockLocalErpMovimientosSupport::colorDesdeFila($row);
@@ -590,17 +580,8 @@ final class StockLocalInformeService
             if (abs($cantidad) < 0.000001) {
                 continue;
             }
-            $medidaNorm = StockLocalErpMovimientosSupport::normalizarMedida(
-                $row->medida ?? null,
-                $row->medida_nombre ?? null
-            );
-            $medida = is_numeric($medidaNorm) ? (int) $medidaNorm : 0;
-            if (! is_numeric($medidaNorm) && $medidaNorm !== 0 && $medidaNorm !== '0') {
-                $medidaKey = (string) $medidaNorm;
-            } else {
-                $medidaKey = (string) ($medida > 0 ? $medida : 0);
-                $medida = (int) $medidaKey;
-            }
+            $medidaKey = StockLocalErpMovimientosSupport::medidaKeyDesdeFila($row);
+            $medida = is_numeric($medidaKey) ? (int) $medidaKey : 0;
             $medidasVistas[$medida] = true;
 
             [$colorCodigo, $colorDesc] = StockLocalErpMovimientosSupport::colorDesdeFila($row);

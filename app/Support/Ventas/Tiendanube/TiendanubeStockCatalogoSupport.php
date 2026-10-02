@@ -6,6 +6,7 @@ use App\Models\Ventas\TiendanubeConfiguracion;
 use App\Models\Ventas\TiendanubeStockSubida;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\PrecioListaVigenteSupport;
+use App\Support\Ventas\FacturacionLocal\StockLocalErpMovimientosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -134,7 +135,8 @@ final class TiendanubeStockCatalogoSupport
     }
 
     /**
-     * Stock sumado de los depósitos, clave articulo|COMB|TALLE => unidades (mínimo 0).
+     * Stock del informe de stock del local, sumado en cada depósito elegido.
+     * Clave articulo|COLOR|TALLE. El talle "0" (sin talle) no arma variante.
      *
      * @param  list<int>  $depositoIds
      * @param  list<int>  $articuloIds
@@ -142,43 +144,39 @@ final class TiendanubeStockCatalogoSupport
      */
     public static function stockPorVariante(array $depositoIds, array $articuloIds): array
     {
-        $depositoIds = array_values(array_filter(array_map('intval', $depositoIds)));
+        $depositoIds = array_values(array_unique(array_filter(array_map('intval', $depositoIds))));
         $articuloIds = array_values(array_unique(array_filter(array_map('intval', $articuloIds))));
         if ($depositoIds === [] || $articuloIds === []) {
             return [];
         }
 
+        $hasta = Carbon::today()->toDateString();
         $mapa = [];
-        foreach (array_chunk($articuloIds, 400) as $lote) {
-            $rows = DB::table('articulo_movimiento as am')
-                ->join('articulo_movimiento_talle as amt', 'amt.articulo_movimiento_id', '=', 'am.id')
-                ->join('talle as t', 't.id', '=', 'amt.talle_id')
-                ->leftJoin('combinacion as c', 'c.id', '=', 'am.combinacion_id')
-                ->whereIn('am.deposito_id', $depositoIds)
-                ->whereIn('am.articulo_id', $lote)
-                ->groupBy('am.articulo_id', 'c.codigo', 't.nombre', 't.codigo')
-                ->get([
-                    'am.articulo_id',
-                    'c.codigo as combinacion_codigo',
-                    't.nombre as talle_nombre',
-                    't.codigo as talle_codigo',
-                    DB::raw('SUM(amt.cantidad) as cantidad'),
-                ]);
-
-            foreach ($rows as $row) {
-                $comb = trim((string) $row->combinacion_codigo);
-                if ($comb === '') {
-                    continue;
-                }
-                $cantidad = (int) round(max(0, (float) $row->cantidad));
-                foreach (self::etiquetasTalle((string) $row->talle_nombre, (string) $row->talle_codigo) as $talle) {
-                    $clave = self::claveStock((int) $row->articulo_id, $comb, $talle);
-                    $mapa[$clave] = max($mapa[$clave] ?? 0, $cantidad);
+        foreach ($depositoIds as $depositoId) {
+            foreach (array_chunk($articuloIds, 400) as $lote) {
+                $rows = StockLocalErpMovimientosSupport::filasPorDepositoYArticulos($depositoId, $lote, $hasta);
+                foreach ($rows as $row) {
+                    $cantidad = (float) $row->cantidad;
+                    if (abs($cantidad) < 0.000001) {
+                        continue;
+                    }
+                    [$color] = StockLocalErpMovimientosSupport::colorDesdeFila($row);
+                    $talle = StockLocalErpMovimientosSupport::medidaKeyDesdeFila($row);
+                    if ($color === '' || $talle === '' || $talle === '0') {
+                        continue;
+                    }
+                    $clave = self::claveStock((int) $row->articulo_id, $color, $talle);
+                    $mapa[$clave] = ($mapa[$clave] ?? 0.0) + $cantidad;
                 }
             }
         }
 
-        return $mapa;
+        $out = [];
+        foreach ($mapa as $clave => $cantidad) {
+            $out[$clave] = (int) round($cantidad);
+        }
+
+        return $out;
     }
 
     /**
@@ -294,19 +292,4 @@ final class TiendanubeStockCatalogoSupport
         return strtoupper(trim($valor));
     }
 
-    /**
-     * @return list<string>
-     */
-    private static function etiquetasTalle(string $nombre, string $codigo): array
-    {
-        $out = [];
-        foreach ([$nombre, $codigo] as $valor) {
-            $valor = trim($valor);
-            if ($valor !== '' && ! in_array($valor, $out, true)) {
-                $out[] = $valor;
-            }
-        }
-
-        return $out;
-    }
 }

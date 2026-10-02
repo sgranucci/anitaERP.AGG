@@ -20,8 +20,8 @@
     <div class="card-body">
         @if ($esAlta)
         <div class="alert alert-info py-2 small mb-3">
-            Alta sin ID todav&iacute;a: adjunte la <strong>factura PDF</strong> y otros respaldos abajo.
-            Se guardan al grabar el comprobante; despu&eacute;s podr&aacute; abrir la vista PDF desde esta solapa.
+            Alta sin ID todav&iacute;a: puede adjuntar la factura PDF y otros respaldos abajo.
+            No es obligatorio. Se guardan al grabar el comprobante; despu&eacute;s podr&aacute; abrir la vista PDF desde esta solapa.
         </div>
         @else
         <p class="text-muted small mb-2">
@@ -114,8 +114,8 @@
     <div class="card-body">
         @if ((int) ($data->ordencompra_id ?? 0) <= 0)
         <p class="text-muted small mb-2">
-            Sin orden de compra, el <strong>primer archivo</strong> es el PDF de la factura.
-            Se guarda como el scan y se abre desde la cuenta corriente y el resto de las consultas.
+            Sin orden de compra el PDF es opcional. Si el primer archivo es el PDF de la factura,
+            se guarda como el scan y se abre desde la cuenta corriente y el resto de las consultas.
             Los renglones siguientes son remitos u otros respaldos.
         </p>
         @else

@@ -27,7 +27,7 @@ class Comprobante_Proveedor_ArchivoRepository implements Comprobante_Proveedor_A
         $nombrearchivos = $request->file('nombrearchivos');
         if ($nombrearchivos) {
             foreach ($nombrearchivos as $i => $archivo) {
-                if (! $archivo) {
+                if (! $archivo || ! $archivo->isValid()) {
                     continue;
                 }
 

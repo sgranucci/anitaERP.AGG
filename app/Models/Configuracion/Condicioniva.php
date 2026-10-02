@@ -13,7 +13,7 @@ class Condicioniva extends Model implements Auditable
 	use \OwenIt\Auditing\Auditable;
 	use CondicionivaTrait;
 
-    protected $fillable = ['nombre', 'letra', 'coniva', 'coniibb', 'codigoexterno'];
+    protected $fillable = ['nombre', 'letra', 'letra_compras', 'coniva', 'coniibb', 'codigoexterno'];
     protected $table = 'condicioniva';
 
 	public function getDescConIvaAttribute()

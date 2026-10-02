@@ -46,8 +46,10 @@
             <form method="get" action="{{ route($ruta_index ?? 'comision_vendedor_detalle') }}" id="form-comision-vendedor" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Facturas y notas con vendedor asignado. La comisi&oacute;n usa el % de ventas del maestro
-                        (<em>Sobre Neto</em> o <em>Sobre Bruto</em>). Las NC restan. Sin anulados ni presupuestos.
+                        Facturas y notas de la f&aacute;brica (pedidos, mostrador y picking) con vendedor asignado.
+                        La comisi&oacute;n usa el % de ventas del maestro (<em>Sobre Neto</em> o <em>Sobre Bruto</em>).
+                        Las NC restan. Quedan afuera locales, remitos internos, anulados, presupuestos
+                        y comprobantes sin web service o que no van a IVA ventas.
                     </p>
                     @include('ventas.comision_vendedor.partials.filtros_form', [
                         'filtros' => $filtros,

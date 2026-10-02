@@ -310,6 +310,21 @@ final class StockLocalErpMovimientosSupport
     }
 
     /**
+     * Columna de talle del informe de stock del local.
+     * "0" es sin talle. Una medida no numérica conserva el texto.
+     */
+    public static function medidaKeyDesdeFila(object $row): string
+    {
+        $medidaNorm = self::normalizarMedida($row->medida ?? null, $row->medida_nombre ?? null);
+        $medida = is_numeric($medidaNorm) ? (int) $medidaNorm : 0;
+        if (! is_numeric($medidaNorm) && $medidaNorm !== 0 && $medidaNorm !== '0') {
+            return (string) $medidaNorm;
+        }
+
+        return (string) ($medida > 0 ? $medida : 0);
+    }
+
+    /**
      * Tipo de comprobante (misma lógica que kardex / RecuentoMovimientosArticuloSupport).
      */
     public static function tipoComprobanteDesdeFila(object $row): string

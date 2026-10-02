@@ -12,7 +12,7 @@ use Throwable;
 
 /**
  * Sube stock y precios a Tiendanube de los artículos marcados en el marketplace configurado.
- * El stock es la suma por combinación y talle de los depósitos de la tienda.
+ * El stock es el del informe de stock del local, sumado en cada depósito configurado.
  * El precio es la lista de precio; si la lista de oferta difiere, va como precio promocional.
  */
 final class TiendanubeStockSubidaService

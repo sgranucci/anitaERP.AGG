@@ -13,7 +13,7 @@
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-apoc-validacion-abm.js') }}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/compras/proveedor/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/proveedor/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/imprimirHtml.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/autorizar.js') }}" type="text/javascript"></script>

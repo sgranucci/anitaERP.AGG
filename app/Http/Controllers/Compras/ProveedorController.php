@@ -817,7 +817,7 @@ class ProveedorController extends Controller
         $provincia_query = Provincia::orderBy('nombre')->get();
         $tipoempresa_query = $this->tipoempresaRepository->all();
         $tiposervicio_proveedor_query = $this->tiposervicio_proveedorRepository->all();
-        // Compras: Monotributo → letra C (ventas sigue con A en el maestro condicioniva).
+        // Compras: monotributo y exento → letra C (el maestro ventas no se toca).
         $condicioniva_query = CondicionivaLetraComprasSupport::coleccionConLetraCompras(
             Condicioniva::orderBy('nombre')->get()
         );
@@ -1078,7 +1078,7 @@ class ProveedorController extends Controller
     }
 
     /**
-     * En compras, Monotributo expone letra C (el maestro ventas queda en A).
+     * En compras, monotributo y exento exponen letra C (el maestro ventas no cambia).
      *
      * @return array<string, mixed>|null
      */

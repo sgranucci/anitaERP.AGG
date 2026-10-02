@@ -14,6 +14,7 @@ use App\Services\Ventas\ComisionVendedorReporteService;
 use App\Support\Reportes\DompdfListadoSupport;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use App\Support\Ventas\ComisionVendedorListadoFiltros;
+use App\Support\Ventas\TipotransaccionIvaVentasSupport;
 use Illuminate\Http\Request;
 use Maatwebsite\Excel\Excel;
 
@@ -300,6 +301,13 @@ class ComisionVendedorReporteController extends Controller
     {
         return $this->tipotransaccionRepository
             ->all(['V', 'C', 'U'])
+            ->filter(static function ($tipo): bool {
+                if (! TipotransaccionIvaVentasSupport::vaAlIvaVentas($tipo)) {
+                    return false;
+                }
+
+                return strtoupper(trim((string) ($tipo->abreviatura ?? ''))) !== 'PRE';
+            })
             ->sortBy(fn ($t) => (string) ($t->abreviatura ?? $t->nombre))
             ->values();
     }

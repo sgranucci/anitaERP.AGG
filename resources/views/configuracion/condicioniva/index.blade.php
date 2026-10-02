@@ -30,7 +30,8 @@ Condiciones de Iva
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
-                            <th>Letra</th>
+                            <th>Letra ventas</th>
+                            <th>Letra compras</th>
                             <th>Iva</th>
                             <th>Ingresos brutos</th>
                             <th>Código ARCA</th>
@@ -43,6 +44,7 @@ Condiciones de Iva
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->letra}}</td>
+                            <td>{{$data->letra_compras}}</td>
                             <td>{{$data->desc_con_iva}}</td>
                             <td>{{$data->desc_con_iibb}}</td>
                             <td>{{$data->codigoexterno}}</td>

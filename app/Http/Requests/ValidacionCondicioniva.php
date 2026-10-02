@@ -28,6 +28,7 @@ class ValidacionCondicioniva extends FormRequest
         return [
             'nombre' => 'required|max:50|unique:condicioniva,nombre,' . $this->route('id'),
             'letra' => ['required', new RuleCondicioniva(Condicioniva::$enumLetra)],
+            'letra_compras' => ['required', new RuleCondicioniva(Condicioniva::$enumLetra)],
             'coniva' => ['required', new RuleCondicioniva(Condicioniva::$enumIva)],
             'coniibb' => ['required', new RuleCondicioniva(Condicioniva::$enumIibb)],
         ];

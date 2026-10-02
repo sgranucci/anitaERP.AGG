@@ -2662,36 +2662,6 @@ $(function () {
         var accionContabilizar = submitter
             && String($(submitter).attr('name') || '') === 'accion'
             && String($(submitter).val() || '') === 'contabilizar';
-        if (!tieneOrdenCompra()) {
-            var archivoScan = null;
-            $('#cp-tbody-tabla-archivo tr.item-archivo-cp').each(function () {
-                var input = $(this).find('.cp-nombrearchivos').get(0);
-                if (input && input.files && input.files[0]) {
-                    archivoScan = input.files[0];
-                    return false;
-                }
-            });
-            var scanOk = false;
-            if (archivoScan) {
-                var nombreScan = String(archivoScan.name || '').toLowerCase();
-                var mimeScan = String(archivoScan.type || '').toLowerCase();
-                scanOk = nombreScan.slice(-4) === '.pdf' || mimeScan.indexOf('pdf') >= 0;
-                if (!scanOk) {
-                    e.preventDefault();
-                    mostrarSolapa('#cp-solapa-archivos');
-                    marcarTabActivo('cp-boton-archivos');
-                    alert('Sin orden de compra, el primer archivo tiene que ser el PDF de la factura. Ese scan es el que se ve en la cuenta corriente.');
-                    return;
-                }
-            }
-            if (accionContabilizar && !scanOk && String($form.attr('data-tiene-scan') || '') !== '1') {
-                e.preventDefault();
-                mostrarSolapa('#cp-solapa-archivos');
-                marcarTabActivo('cp-boton-archivos');
-                alert('Sin orden de compra hay que adjuntar el PDF de la factura como primer archivo antes de contabilizar. Ese scan es el que se ve en la cuenta corriente.');
-                return;
-            }
-        }
         if (accionContabilizar && !tieneOrdenCompra() && modo !== 'ASIGNA_RECEPCION') {
             var hayDebeGastoConCuenta = false;
             leerDebeGastoDesdeTabla().forEach(function (l) {

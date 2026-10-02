@@ -14,9 +14,9 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Factura cargada sin orden de compra: el primer archivo es el scan de la factura.
- * Se copia a Facturas_scan con el nombre canónico y queda como PDF del comprobante,
- * el mismo que abre la cuenta corriente, el tracking y el resto de las consultas.
+ * Factura cargada sin orden de compra: si el primer archivo es un PDF, se copia a
+ * Facturas_scan y queda como scan del comprobante (cuenta corriente, tracking y
+ * el resto de las consultas). No es obligatorio para guardar ni para contabilizar.
  */
 class ComprobanteProveedorScanManualService
 {
@@ -40,10 +40,7 @@ class ComprobanteProveedorScanManualService
 
         $primerUpload = $this->primerUpload($request);
         if ($primerUpload !== null && ! $this->esPdfUpload($primerUpload)) {
-            throw new RuntimeException(
-                'Sin orden de compra, el primer archivo tiene que ser el PDF de la factura. '
-                .'Ese scan es el que se ve en la cuenta corriente y en el resto de las consultas.'
-            );
+            return;
         }
 
         if ($this->scanYaLegible($comprobante)) {
@@ -73,27 +70,6 @@ class ComprobanteProveedorScanManualService
         if ($nombreOriginal !== '') {
             $this->quitarCopiaLocal($comprobante, $nombreOriginal, $origen);
         }
-    }
-
-    public function exigeScanParaContabilizar(Comprobante_Proveedor $comprobante): void
-    {
-        if ((int) ($comprobante->ordencompra_id ?? 0) > 0) {
-            return;
-        }
-
-        $comprobante->loadMissing([
-            'comprobante_proveedor_archivos',
-            'precarga_comprobante_proveedores',
-        ]);
-
-        if ($this->scanYaLegible($comprobante) || $this->primerPdfLocal($comprobante) !== null) {
-            return;
-        }
-
-        throw new RuntimeException(
-            'Sin orden de compra hay que adjuntar el PDF de la factura como primer archivo. '
-            .'Ese scan es el que se ve en la cuenta corriente y en el resto de las consultas.'
-        );
     }
 
     /**
@@ -187,14 +163,14 @@ class ComprobanteProveedorScanManualService
     {
         $archivos = $request->file('nombrearchivos');
         if ($archivos instanceof UploadedFile) {
-            return $archivos;
+            return $archivos->isValid() ? $archivos : null;
         }
         if (! is_array($archivos)) {
             return null;
         }
 
         foreach ($archivos as $archivo) {
-            if ($archivo instanceof UploadedFile) {
+            if ($archivo instanceof UploadedFile && $archivo->isValid()) {
                 return $archivo;
             }
         }
@@ -204,10 +180,16 @@ class ComprobanteProveedorScanManualService
 
     private function esPdfUpload(UploadedFile $archivo): bool
     {
-        $ext = strtolower((string) $archivo->getClientOriginalExtension());
-        $mime = strtolower((string) $archivo->getMimeType());
+        $nombre = strtolower((string) $archivo->getClientOriginalName());
+        if (str_ends_with($nombre, '.pdf')) {
+            return true;
+        }
 
-        return $ext === 'pdf' || str_contains($mime, 'pdf');
+        // El mime del cliente no abre el temporal. getMimeType() sí, y falla
+        // cuando el archivo ya se movió a la carpeta del comprobante.
+        $mime = strtolower((string) $archivo->getClientMimeType());
+
+        return str_contains($mime, 'pdf');
     }
 
     /**

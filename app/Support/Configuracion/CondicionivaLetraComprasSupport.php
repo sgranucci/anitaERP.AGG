@@ -8,10 +8,9 @@ use Illuminate\Support\Collection;
 /**
  * Letra de comprobante según condición IVA en contexto COMPRAS / proveedor.
  *
- * Ventas: Monotributo = A (nosotros emitimos FAC A al monotributista).
- * Compras: Monotributo = C (el proveedor monotributista nos emite FAC C).
- *
- * No modificar condicioniva.letra del maestro (compartido con clientes).
+ * condicioniva.letra es la de ventas (lo que nosotros emitimos al cliente).
+ * condicioniva.letra_compras es la que emite el proveedor (RG AFIP 1415, arts. 15 y 16):
+ * monotributista y exento emiten C. No pisar letra: la comparten los clientes.
  */
 final class CondicionivaLetraComprasSupport
 {
@@ -26,9 +25,30 @@ final class CondicionivaLetraComprasSupport
             return '';
         }
 
-        $letra = strtoupper(substr(trim((string) ($condicioniva->letra ?? '')), 0, 1));
+        $guardada = strtoupper(substr(trim((string) ($condicioniva->letra_compras ?? '')), 0, 1));
+        if ($guardada !== '') {
+            return $guardada;
+        }
 
-        if (self::esMonotributo($condicioniva)) {
+        return self::letraComprasPorNombre(
+            (string) ($condicioniva->nombre ?? ''),
+            (string) ($condicioniva->letra ?? '')
+        );
+    }
+
+    /**
+     * Valor inicial de letra_compras a partir del nombre y de la letra de ventas.
+     */
+    public static function letraComprasPorNombre(string $nombre, string $letraVentas): string
+    {
+        $nombreNorm = mb_strtolower(trim($nombre));
+        $letra = strtoupper(substr(trim($letraVentas), 0, 1));
+
+        if (str_contains($nombreNorm, 'monotribut')) {
+            return 'C';
+        }
+
+        if ($nombreNorm !== '' && ! str_contains($nombreNorm, 'export') && str_contains($nombreNorm, 'exento')) {
             return 'C';
         }
 
@@ -59,6 +79,23 @@ final class CondicionivaLetraComprasSupport
         $nombre = mb_strtolower(trim((string) ($condicioniva->nombre ?? '')));
 
         return str_contains($nombre, 'monotribut');
+    }
+
+    /**
+     * Exento en IVA emite comprobante C. «Exento exportación» queda en E.
+     */
+    public static function esExento(?Condicioniva $condicioniva): bool
+    {
+        if ($condicioniva === null) {
+            return false;
+        }
+
+        $nombre = mb_strtolower(trim((string) ($condicioniva->nombre ?? '')));
+        if ($nombre === '' || str_contains($nombre, 'export')) {
+            return false;
+        }
+
+        return str_contains($nombre, 'exento');
     }
 
     /**

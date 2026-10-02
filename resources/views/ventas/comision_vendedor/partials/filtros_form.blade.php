@@ -77,6 +77,7 @@
                     {{ trim(($tipo->abreviatura ?? '').' — '.($tipo->nombre ?? '')) }}
                 </option>
             @endforeach
-        </select>
+            </select>
+            <p class="text-muted small mb-0 mt-1">Solo tipos que van a IVA ventas. Vac&iacute;o = todos esos tipos.</p>
+        </div>
     </div>
-</div>

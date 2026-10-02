@@ -8,8 +8,11 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\Vendedor;
 use App\Support\Ventas\ComisionVendedorListadoFiltros;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ComisionVendedorReporteService
 {
@@ -93,21 +96,17 @@ class ComisionVendedorReporteService
             ->with(['venta_impuestos', 'tipotransacciones', 'clientes', 'puntoventas.empresas'])
             ->whereNotNull('vendedor_id')
             ->where('vendedor_id', '>', 0)
-            ->whereHas('puntoventas', static function ($q) use ($empresaId) {
-                $q->where('empresa_id', $empresaId);
-            })
             ->whereDate('fecha', '>=', $desde)
             ->whereDate('fecha', '<=', $hasta)
             ->where(function ($q) {
                 $q->whereNull('nombre')
                     ->orWhereRaw("UPPER(TRIM(nombre)) NOT LIKE 'ANULADA%'");
             })
-            ->whereHas('tipotransacciones', static function ($q) {
-                $q->whereRaw("UPPER(TRIM(COALESCE(abreviatura, ''))) <> 'PRE'");
-            })
             ->orderBy('vendedor_id')
             ->orderBy('fecha')
             ->orderBy('id');
+
+        $this->aplicarAlcanceFabrica($query, $empresaId);
 
         if ($vendedorId > 0) {
             $query->where('vendedor_id', $vendedorId);
@@ -192,6 +191,42 @@ class ComisionVendedorReporteService
         });
 
         return $movimientos;
+    }
+
+    /**
+     * Fábrica (pedidos, mostrador y picking): punto de venta con web service,
+     * que entra a IVA ventas, y que no está asignado a un local.
+     * El tipo de comprobante también tiene que ir a IVA ventas (queda afuera el RIN).
+     */
+    private function aplicarAlcanceFabrica(Builder $query, int $empresaId): void
+    {
+        $filtraIvaPv = Schema::hasColumn('puntoventa', 'iva_ventas');
+        $filtraIvaTipo = Schema::hasColumn('tipotransaccion', 'iva_ventas');
+        $excluyeLocal = Schema::hasTable('local_venta_puntoventa');
+
+        $query->whereHas('puntoventas', function (Builder $q) use ($empresaId, $filtraIvaPv, $excluyeLocal) {
+            $q->where('empresa_id', $empresaId);
+            if ($filtraIvaPv) {
+                $q->where('iva_ventas', true);
+            }
+            $q->whereNotNull('webservice')
+                ->where('webservice', '!=', '')
+                ->whereRaw("UPPER(TRIM(webservice)) <> 'NULL'");
+            if ($excluyeLocal) {
+                $q->whereNotExists(function ($sub) {
+                    $sub->select(DB::raw('1'))
+                        ->from('local_venta_puntoventa as lvp')
+                        ->whereColumn('lvp.puntoventa_id', 'puntoventa.id');
+                });
+            }
+        });
+
+        $query->whereHas('tipotransacciones', function (Builder $q) use ($filtraIvaTipo) {
+            $q->whereRaw("UPPER(TRIM(COALESCE(abreviatura, ''))) <> 'PRE'");
+            if ($filtraIvaTipo) {
+                $q->where('iva_ventas', true);
+            }
+        });
     }
 
     /**

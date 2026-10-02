@@ -38,6 +38,14 @@
         return (($('#letra').val() || '').toString().trim().toUpperCase() === 'C');
     }
 
+    function esCondicionMonotributo() {
+        var cfg = document.getElementById('proveedor-arca-validacion-config');
+        var monoId = cfg ? (cfg.getAttribute('data-condicioniva-monotributo-id') || '') : '';
+        var actual = ($('#condicioniva_id').val() || '').toString();
+
+        return monoId !== '' && actual === monoId;
+    }
+
     function estadoCampoRetencionImpuestos(campo) {
         var esLetraC = esLetraFacturaC();
         var condicionGanancia = ($selectRetencionProveedor('condicionganancia').val() || '').toString();
@@ -51,14 +59,14 @@
             case 'retieneiva':
                 return esLetraC ? { bloqueado: true, valor: 'N' } : { bloqueado: false };
             case 'condicionganancia':
-                return esLetraC ? { bloqueado: true, valor: 'N' } : { bloqueado: false };
+                return esCondicionMonotributo() ? { bloqueado: true, valor: 'N' } : { bloqueado: false };
             case 'retieneganancia':
-                if (esLetraC || condicionGanancia === 'N') {
+                if (esCondicionMonotributo() || condicionGanancia === 'N') {
                     return { bloqueado: true, valor: 'N' };
                 }
                 return { bloqueado: false };
             case 'retencionganancia_id':
-                if (esLetraC || noRetieneGanancia) {
+                if (esCondicionMonotributo() || noRetieneGanancia) {
                     return { bloqueado: true, valor: sinCodigo.retencionganancia_id || '' };
                 }
                 return { bloqueado: false };
